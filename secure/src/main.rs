@@ -16,6 +16,8 @@ macro_rules! secure_log {
 mod boot_ns;
 mod crypto;
 mod host_rng;
+#[cfg(feature = "pka-accel")]
+mod hw;
 mod nsc;
 mod pin;
 mod sau;
@@ -227,6 +229,14 @@ fn main() -> ! {
         } else {
             secure_log!("[S] Device already provisioned");
         }
+    }
+
+    // Initialize PKA hardware accelerator for BLS12-381 field arithmetic.
+    // Preloads the Fp modulus into PKA RAM (stays resident for all operations).
+    #[cfg(feature = "pka-accel")]
+    unsafe {
+        hw::pka::init();
+        secure_log!("[S] PKA initialized (BLS12-381 Fp accelerated)");
     }
 
     nsc::init_gateway();

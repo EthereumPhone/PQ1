@@ -76,7 +76,7 @@ run-tropic01: setup-serial
 # This target only BUILDS — flashing is done with probe-rs / openocd / etc.
 # It will not link until secure/src/hw/stm32u585.rs is filled in.
 run-hw:
-	$(MAKE) FEATURES=tropic01-se,ui-oled all
+	$(MAKE) FEATURES=tropic01-se,ui-oled,pka-accel all
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

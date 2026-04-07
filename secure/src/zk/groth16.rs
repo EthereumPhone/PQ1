@@ -14,7 +14,7 @@
 //! Uses the `bls12_381` crate for all elliptic curve and pairing operations.
 //! Individual pairings avoid the need for alloc (no multi_miller_loop).
 
-use bls12_381::{pairing, G1Affine, G1Projective, G2Affine, Gt, Scalar};
+use bls12_381::{miller_loop_4, G1Affine, G1Projective, G2Affine, Gt, Scalar};
 use sha2::{Digest, Sha256};
 
 use super::poseidon::poseidon_bytes;
@@ -118,16 +118,20 @@ fn groth16_verify(proof: &Groth16Proof, vk: &VerificationKey, pub0: Scalar, pub1
         G1Affine::from(ic0 + ic1 * pub0 + ic2 * pub1)
     };
 
-    // Compute 4 individual pairings.
-    // In `bls12_381`, Gt uses additive notation where Gt::identity() is the
-    // multiplicative identity of Fp12. The `+` operator on Gt corresponds to
-    // multiplication of the underlying Fp12 elements.
-    let e1 = pairing(&proof.a, &proof.b);
-    let e2 = pairing(&(-vk.alpha_g1), &vk.beta_g2);
-    let e3 = pairing(&(-vk_x), &vk.gamma_g2);
-    let e4 = pairing(&(-proof.c), &vk.delta_g2);
+    // Combined Miller loop for all 4 pairs, followed by a single final
+    // exponentiation. This is ~2x faster than 4 individual pairing() calls
+    // because the expensive final exponentiation runs only once.
+    let neg_alpha = -vk.alpha_g1;
+    let neg_vk_x = -vk_x;
+    let neg_c = -proof.c;
 
-    let result = e1 + e2 + e3 + e4;
+    let result = miller_loop_4([
+        (&proof.a, &proof.b),
+        (&neg_alpha, &vk.beta_g2),
+        (&neg_vk_x, &vk.gamma_g2),
+        (&neg_c, &vk.delta_g2),
+    ])
+    .final_exponentiation();
 
     // Check if result is the identity element in GT
     result == Gt::identity()

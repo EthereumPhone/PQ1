@@ -6,7 +6,7 @@
 //!
 //! Test vector: ZKlarity "supply 1000 USDC" proof (proof_supply.json).
 
-use bls12_381::{pairing, G1Affine, G1Projective, G2Affine, Gt, Scalar};
+use bls12_381::{miller_loop_4, pairing, G1Affine, G1Projective, G2Affine, Gt, Scalar};
 use sha2::{Digest, Sha256};
 use std::time::Instant;
 
@@ -249,7 +249,7 @@ fn main() {
     println!("      VK: alpha, beta, gamma, delta, IC[0..2] — OK\n");
 
     // ── Step 5: Groth16 pairing check ──
-    println!("[5/5] Running Groth16 verification (4 pairings)...");
+    println!("[5/6] Running Groth16 verification (4 individual pairings)...");
     println!("      e(pi.A, pi.B) . e(-alpha, beta) . e(-vk_x, gamma) . e(-pi.C, delta) == 1?");
     let t0 = Instant::now();
 
@@ -259,29 +259,44 @@ fn main() {
     );
 
     let e1 = pairing(&proof_a, &proof_b);
-    println!("      e1 = e(pi.A, pi.B)        ({:.1}ms)", t0.elapsed().as_secs_f64() * 1000.0);
-
-    let t1 = Instant::now();
     let e2 = pairing(&(-alpha), &beta);
-    println!("      e2 = e(-alpha, beta)       ({:.1}ms)", t1.elapsed().as_secs_f64() * 1000.0);
-
-    let t1 = Instant::now();
     let e3 = pairing(&(-vk_x), &gamma);
-    println!("      e3 = e(-vk_x, gamma)       ({:.1}ms)", t1.elapsed().as_secs_f64() * 1000.0);
-
-    let t1 = Instant::now();
     let e4 = pairing(&(-proof_c), &delta);
-    println!("      e4 = e(-pi.C, delta)       ({:.1}ms)", t1.elapsed().as_secs_f64() * 1000.0);
 
     let result = e1 + e2 + e3 + e4;
     let valid = result == Gt::identity();
 
-    let total = t0.elapsed();
-    println!("\n      Result: {} (total: {:.1}ms)",
+    let time_individual = t0.elapsed();
+    println!("      Result: {} ({:.1}ms with 4 individual pairings)",
         if valid { "VALID" } else { "INVALID" },
-        total.as_secs_f64() * 1000.0);
+        time_individual.as_secs_f64() * 1000.0);
+    assert!(valid, "Groth16 verification FAILED (individual pairings)!");
 
-    assert!(valid, "Groth16 verification FAILED! Proof is invalid.");
+    // ── Step 6: Multi-Miller loop (2x optimization) ──
+    println!("\n[6/6] Running Groth16 verification (multi-Miller loop, 1 final exp)...");
+    let t0 = Instant::now();
+
+    let neg_alpha = -alpha;
+    let neg_vk_x = -vk_x;
+    let neg_c = -proof_c;
+
+    let result_multi = miller_loop_4([
+        (&proof_a, &proof_b),
+        (&neg_alpha, &beta),
+        (&neg_vk_x, &gamma),
+        (&neg_c, &delta),
+    ])
+    .final_exponentiation();
+
+    let valid_multi = result_multi == Gt::identity();
+    let time_multi = t0.elapsed();
+    println!("      Result: {} ({:.1}ms with multi-Miller loop)",
+        if valid_multi { "VALID" } else { "INVALID" },
+        time_multi.as_secs_f64() * 1000.0);
+    assert!(valid_multi, "Groth16 verification FAILED (multi-Miller loop)!");
+
+    let speedup = time_individual.as_secs_f64() / time_multi.as_secs_f64();
+    println!("      Speedup: {:.1}x", speedup);
 
     println!("\n=== ALL CHECKS PASSED ===");
     println!("  Poseidon(calldata)  matches ZKlarity circuit output");

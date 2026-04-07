@@ -20,8 +20,9 @@ hmac = { version = "0.12", default-features = false }
 zerocopy = { version = "0.8", default-features = false }
 zeroize = { version = "1.8", default-features = false }
 
-# BLS12-381 pairing for Groth16 ZK proof verification (no_std, no alloc)
-bls12_381 = { version = "0.8", default-features = false, features = ["groups", "pairings"] }
+# BLS12-381 pairing for Groth16 ZK proof verification (no_std, no alloc).
+# Uses our fork which adds a `pka` feature for STM32U585 hardware acceleration.
+bls12_381 = { package = "bls12_381_pka", path = "../bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
 
 # TROPIC01 secure element (for real chip mode)
 tropic01 = { git = "https://github.com/tropicsquare/libtropic-rs", rev = "0cacb5ed94e5df491bfbb39e8702cc47598f7d63", features = ["keys"], optional = true }
@@ -39,3 +40,4 @@ mock-se = []
 tropic01-se = ["dep:tropic01", "dep:x25519-dalek", "dep:embedded-hal"]
 ui-semihosting = []
 ui-oled = ["dep:ssd1306", "dep:embedded-graphics", "dep:embedded-hal"]
+pka-accel = ["bls12_381/pka"]  # STM32U585 PKA hardware acceleration for BLS12-381 Fp arithmetic
