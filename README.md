@@ -164,11 +164,120 @@ sphincs_rust/
 | `mock-se` | Mock secure element in SRAM (default, for QEMU testing) |
 | `tropic01-se` | Real TROPIC01 chip via semihosting SPI bridge |
 | `debug-log` | Enable semihosting debug output (remove for production) |
+| `pka-accel` (secure) | Route BLS12-381 Fp arithmetic through the STM32U585 PKA |
+| `e2e-test` | Non-interactive scripted test mode — **never ship in production** |
 
 Build without debug output for production:
 ```bash
 make FEATURES=tropic01-se all
 ```
+
+## On-device databases (ERC20 + ZK VK)
+
+The wallet ships two embedded read-only databases in **non-secure
+firmware rodata**, both Merkle-anchored to 32-byte roots pinned in
+secure flash. Everything the trusted UI displays for a known token or
+a clear-signed DeFi action comes from these DBs.
+
+| DB | Source | Built artifact (NS side) | Secure-side anchor |
+|---|---|---|---|
+| ERC20 metadata | `secure/data/erc20.json` | `nonsecure/src/erc20_db.bin` | `ERC20_DB_ROOT` in `secure/src/db_roots.rs` |
+| ZK clear-signing VKs | `secure/data/vks.json` + `secure/data/vks/*.vk.bin` | `nonsecure/src/vk_db.bin` | `VK_DB_ROOT` in `secure/src/db_roots.rs` |
+
+Both DBs are built by a single host-side tool:
+
+```bash
+cargo run -p dbgen
+```
+
+This reads the JSON sources, sorts entries by `(chain_id, contract)`,
+interns strings (for the ERC20 DB) and dedups VKs (for the VK DB),
+builds a SHA-256 Merkle tree over the canonical leaf encodings,
+appends per-entry Merkle proofs to each `.bin` blob, and writes:
+
+- `nonsecure/src/erc20_db.bin` — full ERC20 DB + per-entry proofs, `include_bytes!`d into the NS firmware image
+- `nonsecure/src/vk_db.bin` — same for the VK DB
+- `secure/src/db_roots.rs` — the two 32-byte roots, `include!`d into the secure firmware image
+- `secure/data/vks.review.txt` — a human-readable manifest of `(protocol, chain_id, contract, sha256(vk))` triples that the release reviewer audits against on-chain governance before signing a firmware release
+
+Every generated file is **checked into the repo** (same pattern as
+`tools/export_zk_constants.js`) so downstream builds do not need the
+Rust host toolchain — only a fresh JSON edit requires rerunning
+`dbgen`.
+
+### Adding an ERC20 token
+
+1. Edit `secure/data/erc20.json`:
+   ```json
+   { "chain_id": 42161, "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+     "name": "USD Coin", "symbol": "USDC", "decimals": 6 }
+   ```
+2. Run `cargo run -p dbgen`.
+3. Commit the JSON source AND the regenerated
+   `nonsecure/src/erc20_db.bin` + `secure/src/db_roots.rs`.
+
+The tool hard-errors on `name`/`symbol` strings over 255 bytes,
+duplicate `(chain_id, contract)` keys, and the same contract appearing
+on multiple chains with different metadata (typical copy-paste bug).
+
+### Adding a ZK clear-signing protocol
+
+1. Drop the 960-byte Groth16 verification key file into
+   `secure/data/vks/<protocol>.vk.bin`.
+2. Add a protocol block to `secure/data/vks.json` listing every
+   `(chain_id, contract)` deployment that shares this VK:
+   ```json
+   {
+     "protocol": "aave-v3-supply-v1",
+     "vk_file": "aave_v3_supply.vk.bin",
+     "deployments": [
+       { "chain_id": 1,     "address": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+         "label": "Aave V3 Pool, Mainnet" }
+     ]
+   }
+   ```
+3. Run `cargo run -p dbgen`.
+4. **Audit the diff of `secure/data/vks.review.txt`** — the release
+   reviewer MUST compare every new `(chain_id, contract, sha256(vk))`
+   triple against the on-chain `clearSigningVKHash` (or equivalent
+   governance source) for that protocol on that chain, BEFORE signing
+   the firmware release that includes the new root. This is the trust
+   anchor for the whole local-VK story.
+5. Commit all four: the new `vks/*.vk.bin`, the updated `vks.json`,
+   the regenerated `nonsecure/src/vk_db.bin`, and both of the
+   regenerated `secure/src/db_roots.rs` and `secure/data/vks.review.txt`.
+
+### Sanity guards
+
+- **Round-trip test** — `dbgen` parses every `.bin` it just wrote back
+  through its own host-side mirror of the runtime parser and walks
+  every generated Merkle proof up to the root. Any writer/reader
+  drift fails the build immediately.
+- **Magic-bytes validator** — `nonsecure/build.rs` sniffs the first
+  four bytes of `erc20_db.bin` (`b"ERC2"`) and `vk_db.bin` (`b"VKDB"`)
+  on every NS build. If the JSON was edited but `dbgen` was never
+  rerun, the secure firmware still links fine but the non-secure
+  build panics at compile time with a clear "run `cargo run -p dbgen`"
+  message.
+- **Release-review manifest** — `secure/data/vks.review.txt` is a
+  build-artifact (checked in alongside the binary) that lists every
+  pinned VK with its SHA-256 for human inspection at
+  firmware-signing time.
+
+### Regenerating + running the automated tests
+
+```bash
+cargo run -p dbgen     # regenerate all four outputs from source JSON
+make all               # build both worlds
+make e2e               # scripted end-to-end: all four trust levels in QEMU
+```
+
+`make e2e` compiles both worlds with the `e2e-test` cargo feature
+(deterministic provisioning + auto-confirm + dispatch logging), runs
+QEMU with stdin closed, and asserts every scenario routed to the
+right `TxKind` variant AND returned `NscStatus::Ok`. See
+[docs/architecture.md](docs/architecture.md) for the full test
+spec and the four scenarios it runs.
 
 ## Cryptographic Primitives
 

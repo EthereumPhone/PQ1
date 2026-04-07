@@ -840,6 +840,317 @@ Generates `secure/src/zk/poseidon_constants.rs` from the
 Run only when bumping the upstream package — the generated file is
 checked in so the secure-world build does not require Node.js.
 
+## Building the ERC20 + VK databases
+
+The two on-device databases (ERC20 metadata, ZK clear-signing VKs)
+are built by the `dbgen` workspace crate from JSON source files
+checked into `secure/data/`. This section documents the source
+schema, the tooling, the generated artifacts, the trust-anchor
+workflow, and the sanity guards. For a quick-start "how do I add a
+token" guide see the corresponding section in the top-level README.
+
+### Source-data layout
+
+```
+secure/data/
+├── erc20.json              # curated ERC20 metadata — sorted by (chain_id, address)
+├── vks.json                # VK manifest (one block per protocol + its deployments)
+├── vks/                    # raw 960-byte Groth16 verification keys
+│   └── aave_v3_supply.vk.bin
+└── vks.review.txt          # GENERATED — release-review manifest (checked in)
+```
+
+#### `secure/data/erc20.json`
+
+A JSON array of records, one per `(chain_id, contract)` the wallet
+should recognise. All fields are required except `flags`.
+
+```json
+[
+  { "chain_id": 1, "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "name": "USD Coin", "symbol": "USDC", "decimals": 6 },
+  { "chain_id": 8453, "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "name": "USD Coin", "symbol": "USDC", "decimals": 6 }
+]
+```
+
+| Field | Type | Constraint |
+|---|---|---|
+| `chain_id` | u64 | EIP-155 chain id, matches what the EIP-1559 envelope encodes |
+| `address` | hex string | 20 bytes, with or without `0x` prefix; case insensitive |
+| `name` | UTF-8 string | 1–255 bytes. `dbgen` hard-errors if longer |
+| `symbol` | UTF-8 string | 1–255 bytes |
+| `decimals` | u8 | Token decimals used by `U256::format_decimal_fixed` |
+| `flags` | u8 (optional, default 0) | Reserved per-entry flags |
+
+#### `secure/data/vks.json`
+
+A JSON array where each element describes one protocol (i.e. one
+circuit + VK) plus every chain/contract deployment that shares that
+VK. Dedup happens at the protocol level: the Aave V3 supply VK is
+identical across Mainnet/Base/Arbitrum/Optimism/Polygon, so all five
+deployments ride on a single 960-byte entry in the VK pool.
+
+```json
+[
+  {
+    "protocol": "aave-v3-supply-v1",
+    "vk_file": "aave_v3_supply.vk.bin",
+    "deployments": [
+      { "chain_id": 1,     "address": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+        "label": "Aave V3 Pool, Mainnet" },
+      { "chain_id": 8453,  "address": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
+        "label": "Aave V3 Pool, Base" }
+    ]
+  }
+]
+```
+
+`vk_file` is a path relative to `secure/data/vks/` pointing at a raw
+960-byte Groth16 VK blob. `dbgen` rejects any file that's not exactly
+`VK_BLOB_LEN` bytes (960). The `label` is purely cosmetic and only
+appears in the release-review manifest.
+
+### Canonical leaf encoding
+
+The Merkle leaf hash for each entry is `sha256(0x00 || canonical)`,
+where `canonical` is the exact byte sequence reconstructed at both
+ends of the wire. The dbgen writer emits these bytes into the tree;
+the secure-world verifier re-emits the same bytes from the bundle
+received via the gateway before hashing. Both implementations share
+the layout via `sphincs_tz_shared::db_format` constants.
+
+**ERC20 canonical leaf:**
+
+```
+chain_id      u64 LE            (8 B)
+contract      [u8; 20]          (20 B)
+decimals      u8                (1 B)
+name_len      u8                (1 B)
+name          [u8; name_len]
+symbol_len    u8                (1 B)
+symbol        [u8; symbol_len]
+```
+
+**VK canonical leaf:**
+
+```
+chain_id      u64 LE            (8 B)
+contract      [u8; 20]          (20 B)
+vk_bytes      [u8; 960]         (960 B)
+```
+
+Internal Merkle nodes use `sha256(0x01 || left || right)`. The
+`0x00`/`0x01` domain separation prefix stops an attacker who controls
+the entry encoding from crafting bytes that look like an
+internal-node concatenation, which would otherwise break
+second-preimage resistance for the tree.
+
+### dbgen pipeline
+
+`cargo run -p dbgen` (a new workspace member) runs a single
+host-side pipeline that produces all four generated outputs:
+
+```
+secure/data/erc20.json                     ─┐
+                                            ├─► erc20::build_db()
+                                            │    ├─ parse + validate rows
+                                            │    ├─ sort by (chain_id, contract)
+                                            │    ├─ intern name + symbol into pool
+                                            │    ├─ compute leaf hashes from canonical encoding
+                                            │    ├─ build Merkle tree (pad to pow-2 by dup)
+                                            │    └─ emit blob + per-entry proofs
+                                            ▼
+                                  nonsecure/src/erc20_db.bin   (include_bytes! in NS)
+                                  ERC20_DB_ROOT: [u8; 32]      (→ secure/src/db_roots.rs)
+
+secure/data/vks.json                       ─┐
+secure/data/vks/*.vk.bin                    ├─► vks::build_db()
+                                            │    ├─ load each VK, validate 960 B
+                                            │    ├─ dedup VKs by sha256(vk_bytes)
+                                            │    ├─ flatten (chain_id, contract) → vk_id
+                                            │    ├─ same canonical leaf + Merkle build
+                                            │    └─ emit blob + per-entry proofs + review text
+                                            ▼
+                                  nonsecure/src/vk_db.bin      (include_bytes! in NS)
+                                  VK_DB_ROOT: [u8; 32]         (→ secure/src/db_roots.rs)
+                                  secure/data/vks.review.txt   (human-reviewable manifest)
+```
+
+All four outputs are **checked into the repo** so downstream builds
+need only `cargo` (no Node.js, no network access). Rerun `dbgen`
+whenever the JSON source changes, and commit the regenerated
+outputs alongside the source diff.
+
+### Blob format (generated on-disk layout)
+
+Both blobs share a 32-byte header, a sorted entry array, a
+secondary pool (strings for ERC20, VK bytes for VK), and a
+per-entry proofs section. Constants live in
+`shared/src/db_format.rs`.
+
+**`erc20_db.bin` (`b"ERC2"`):**
+
+```
+Header (32 B):
+  magic        [u8; 4] = b"ERC2"
+  version      u32 LE  = 1
+  flags        u32 LE
+  entry_cnt    u32 LE
+  pool_off     u32 LE    // byte offset of string pool from blob start
+  pool_size    u32 LE
+  proof_depth  u32 LE    // sibling hashes per proof (= log2(padded n))
+  proofs_off   u32 LE    // byte offset of per-entry proofs array
+
+Entries (entry_cnt × 40 B, sorted by (chain_id, contract)):
+  chain_id     u64 LE
+  contract     [u8; 20]
+  name_off     u32 LE     // offset into string pool
+  symbol_off   u32 LE
+  decimals     u8
+  flags        u8
+  _pad         [u8; 2]
+
+String pool:
+  Length-prefixed: [u8 len][bytes]. Strings are interned at build
+  time so "USD Coin" appears once even if 10 chains have a USDC.
+
+Proofs:
+  entry_cnt × (proof_depth × 32 B). Proof[i] is the list of sibling
+  hashes from leaf i up to the root, ordered leaf-up. The direction
+  at each level is implicit from the bits of i.
+```
+
+**`vk_db.bin` (`b"VKDB"`):**
+
+Same header shape with `VK_BLOB_LEN = 960`. Entries are 32 B each
+(`chain_id`, `contract`, `vk_id: u8`, `vk_sha_pfx: [u8; 3]` — a
+defense-in-depth SHA-256 prefix the verifier cross-checks against
+the pool entry it indexes). The secondary pool holds `vk_count ×
+960` bytes of unique VKs. The `vk_sha_pfx` catches any drift
+between the entry's `vk_id` and the pool contents that survived
+dbgen's internal checks.
+
+### Round-trip self-test
+
+After writing a blob, `dbgen` immediately opens it through its
+host-side mirror of the runtime parser, re-derives the canonical
+leaf bytes for every source row, walks the appended Merkle proof up
+to the just-computed root, and asserts match. Any drift between the
+writer and the reader — which would silently break the secure-world
+verifier — fails `dbgen` loudly with a precise error pointing at the
+specific row.
+
+The parser mirror lives in `dbgen/src/{erc20.rs,vks.rs}` as
+`HostErc20Db` and `HostVkDb`. It deliberately mimics the structure
+the **non-secure-side** parser (`nonsecure/src/erc20_db.rs`,
+`nonsecure/src/vk_db.rs`) uses so the two can't drift.
+
+### Secure-side Merkle verifier
+
+`secure/src/erc20/merkle.rs` exposes one function, shared by both
+DBs:
+
+```rust
+pub fn verify_proof(
+    canonical: &[u8],
+    leaf_index: usize,
+    proof_bytes: &[u8],
+    proof_depth: usize,
+    expected_root: &[u8; 32],
+) -> bool;
+```
+
+It walks the supplied sibling hashes from `sha256(0x00 || canonical)`
+to the root, picking left/right at each level by bit `i` of
+`leaf_index`. No heap, no allocation, no panics on bad input — a
+bad bundle just returns `false` and the gateway surfaces
+`CryptoError` to NS.
+
+### Stale-blob protection
+
+`nonsecure/build.rs` panics at compile time if either of its
+`include_bytes!`'d blobs doesn't start with the expected magic. The
+common failure mode — "edited `erc20.json`, forgot to run `dbgen`"
+— fails the build with a clear "run `cargo run -p dbgen`" message
+instead of silently shipping stale data.
+
+```rust
+// nonsecure/build.rs
+check_db_magic("src/erc20_db.bin", b"ERC2");
+check_db_magic("src/vk_db.bin", b"VKDB");
+```
+
+The secure-side counterpart is implicit: `secure/src/db_roots.rs`
+is generated by `dbgen` as regular Rust source, so any format
+mismatch would be caught by the compiler rather than by magic-byte
+sniffing.
+
+### Release-review workflow (VK DB only)
+
+`dbgen` also writes `secure/data/vks.review.txt`, a
+human-readable manifest that lists the VK DB Merkle root plus every
+`(protocol, chain_id, contract, sha256(vk))` triple in the DB:
+
+```
+=== ZK Clear-Signing VK Manifest (firmware build artifact) ===
+...
+Merkle root (VK_DB_ROOT) = db0bddf81091a9fee79a028e3e5a258204d73eda1109e3d97a123cf420661471
+
+aave-v3-supply-v1
+  sha256(vk) = f36a73b5bb084a9800ceff63e33e061d182af2b09f6bcef20d441c68fd80292e
+  chain      1, contract 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2 (Aave V3 Pool, Mainnet)
+  chain   8453, contract 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5 (Aave V3 Pool, Base)
+  ...
+```
+
+**This file is the trust anchor for the whole local-VK lookup
+story.** Before signing a firmware release, a human reviewer MUST
+compare every `(chain_id, contract, sha256(vk))` row against the
+on-chain `clearSigningVKHash` (or equivalent governance source) for
+that protocol on that chain. The wallet trusts the firmware-signing
+key to attest that this comparison was done — without this
+artifact, "local VK lookup" is just "trust the repo maintainer," not
+"trust the protocol's on-chain governance."
+
+Concretely, the release-signing checklist adds one step:
+
+```
+[ ] git diff secure/data/vks.review.txt
+    for every added or modified row:
+      [ ] Fetch clearSigningVKHash from the protocol's governance
+          contract on the listed chain
+      [ ] Confirm it matches sha256(vk) in the manifest
+      [ ] Record the verification in the release notes
+```
+
+### Putting it all together
+
+```bash
+# 1. Edit source data
+$EDITOR secure/data/erc20.json
+# or drop a new VK and update secure/data/vks.json
+cp new_protocol.vk.bin secure/data/vks/
+$EDITOR secure/data/vks.json
+
+# 2. Regenerate all four outputs
+cargo run -p dbgen
+
+# 3. Review the diff (critical for VK changes)
+git diff secure/data/vks.review.txt
+# [release reviewer compares new rows against on-chain values]
+
+# 4. Sanity-build both worlds (magic-bytes validator runs here)
+make all
+
+# 5. Run the scripted e2e suite
+make e2e
+
+# 6. Commit source + all regenerated outputs atomically
+git add secure/data/ nonsecure/src/{erc20,vk}_db.bin secure/src/db_roots.rs
+git commit -m "..."
+```
+
 ## QEMU Limitations
 
 ### MPC S-Alias Bug (QEMU 8.2.2)
