@@ -108,6 +108,7 @@ e2e:
 		-M mps2-an505 \
 		-monitor null \
 		-serial null \
+                -nographic \
 		-chardev null,id=hostio \
 		-semihosting-config enable=on,target=native,chardev=hostio \
 		-kernel $(SECURE_ELF) \
