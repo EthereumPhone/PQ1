@@ -1,5 +1,7 @@
 #![no_std]
 
+pub mod db_format;
+
 // ---------------------------------------------------------------------------
 // SLH-DSA-SHA2-128f sizes
 // ---------------------------------------------------------------------------
@@ -38,16 +40,20 @@ pub const ZK_VK_LEN: usize = 960;
 
 /// Total size of the fixed portion of a clear-sign request payload in NS SRAM.
 ///
+/// The VK is no longer supplied by NS — the secure world looks it up
+/// from its embedded VK DB by `(chain_id, to)` after parsing the tx
+/// envelope. The on-chain `clearSigningVKHash` mechanism is gone; the
+/// trust anchor is the firmware-signing key plus the
+/// `secure/data/vks.review.txt` artifact reviewed at release time.
+///
 /// Layout:
-///   [0..960)                     : Verification key (protocol-specific)
-///   [960..1344)                  : Groth16 proof (π.A || π.B || π.C)
-///   [1344..1508)                 : calldata (164 bytes, zero-padded)
-///   [1508..1572)                 : readable string (64 bytes, null-padded)
-///   [1572..1604)                 : vk_hash (32 bytes, expected SHA-256 of VK from on-chain)
-///   [1604..1608)                 : tx_len (u32 little-endian)
-///   [1608..1608+tx_len)          : unsigned EIP-1559 transaction envelope
+///   [0..384)                     : Groth16 proof (π.A || π.B || π.C)
+///   [384..548)                   : calldata (164 bytes, right-zero-padded)
+///   [548..612)                   : readable string (64 bytes, null-padded)
+///   [612..616)                   : tx_len (u32 little-endian)
+///   [616..616+tx_len)            : unsigned EIP-1559 transaction envelope
 pub const ZK_HEADER_LEN: usize =
-    ZK_VK_LEN + ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + 32 + 4;
+    ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + 4;
 
 // ---------------------------------------------------------------------------
 // Non-secure SRAM boundaries (mps2-an505)

@@ -15,6 +15,8 @@ macro_rules! secure_log {
 
 mod boot_ns;
 mod crypto;
+mod db_roots;
+mod erc20;
 mod host_rng;
 #[cfg(feature = "pka-accel")]
 mod hw;
@@ -177,7 +179,44 @@ fn main() -> ! {
     ui::init();
     secure_log!("[S] UI initialized");
 
+    // ---- e2e-test fast-path ----
+    //
+    // Skip the entire interactive seed wizard + PIN entry. Provision
+    // deterministically with a fixed test mnemonic and PIN, then mark
+    // PIN_VERIFIED true so the gateway is callable immediately. Every
+    // confirm() / enter_pin() dialog is also short-circuited under
+    // the same feature flag.
+    #[cfg(feature = "e2e-test")]
+    unsafe {
+        use sphincs_tz_bip39::Mnemonic;
+        secure_log!("[S][e2e] auto-provisioning with fixed test mnemonic");
+
+        // 24 BIP-39 words from a known test vector. Determined entirely
+        // by this constant — restore on a clean device with these words
+        // gives the same SLH-DSA keypair.
+        const TEST_WORDS: [&str; 24] = [
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+            "abandon", "abandon", "abandon", "abandon", "abandon", "art",
+        ];
+        let mnemonic = Mnemonic::from_words(&TEST_WORDS)
+            .expect("e2e: fixed test mnemonic must parse");
+        let pin: [u8; 8] = *b"00000000";
+
+        crypto::provision_with_mnemonic(&mut SE, &mnemonic, &pin);
+
+        // Run the verify path so MASTER_SECRET + PIN_VERIFIED end up
+        // in the same state as a real unlock.
+        match crate::pin::verify_pin(&mut SE, &pin) {
+            Ok(master) => nsc::set_e2e_unlocked(master),
+            Err(_) => panic!("e2e: verify_pin failed after provision"),
+        }
+        secure_log!("[S][e2e] gateway pre-unlocked, ready for tests");
+    }
+
     // Provision on first boot only.
+    #[cfg(not(feature = "e2e-test"))]
     unsafe {
         if !is_provisioned(&mut SE) {
             secure_log!("[S] Unprovisioned — running first-boot wizard");

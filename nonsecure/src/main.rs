@@ -8,10 +8,30 @@ use sphincs_tz_shared::{
     ZK_STRING_LEN,
 };
 
+mod erc20_db;
+#[cfg(feature = "e2e-test")]
+mod e2e_test;
 mod nsc_api;
+mod vk_db;
 
 // Static signature buffer (17KB is too large for stack)
 static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
+
+/// Scratch buffer for sign() payloads. Sized to hold:
+///   has_bundle (1) + tx_len (4) + max EIP-1559 tx + bundle_len (4) + max ERC20 bundle.
+/// MAX_TX_LEN (4096) + MAX_ERC20_BUNDLE_LEN (1120) + slop = ~5300 bytes.
+const SIGN_PAYLOAD_BUF_LEN: usize = 1 + 4 + 4096 + 4 + 1120 + 64;
+static mut SIGN_PAYLOAD_BUF: [u8; SIGN_PAYLOAD_BUF_LEN] = [0u8; SIGN_PAYLOAD_BUF_LEN];
+
+/// Scratch buffer for an ERC20 bundle assembled by the NS-side DB lookup.
+static mut ERC20_BUNDLE_BUF: [u8; 1120] = [0u8; 1120];
+
+/// Scratch buffer for a clear-sign payload (header + tx + length-prefixed VK bundle).
+const CLEAR_SIGN_BUF_LEN: usize = ZK_HEADER_LEN + 4096 + 4 + 2048;
+static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
+
+/// Scratch buffer for the VK bundle the NS DB returns.
+static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
 
 /// A complete unsigned EIP-1559 transaction envelope (50 bytes), built by hand:
 ///
@@ -47,6 +67,7 @@ static UNSIGNED_TX: [u8; 50] = [
     0xc0,                                                       // access_list = empty
 ];
 
+#[cfg(not(feature = "e2e-test"))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS] Non-secure world started!");
@@ -71,10 +92,12 @@ fn main() -> ! {
     hprintln!("[NS] Unlock: {:?}", NscStatus::from(status));
     assert_eq!(status, NscStatus::Ok as u32);
 
-    // Test 4: Sign an EIP-1559 transaction
+    // Test 4: Sign an EIP-1559 transaction (plain ETH transfer; no
+    // calldata, so no metadata bundle needed). Wraps the tx in the
+    // new (has_bundle = 0) wrapper.
     hprintln!("[NS] Sending EIP-1559 envelope ({} bytes) for signing...", UNSIGNED_TX.len());
     hprintln!("[NS]   On the trusted UI, scroll with 'l' / 'h', long-press 'L' to confirm");
-    let status = unsafe { nsc_api::sign(&UNSIGNED_TX, &mut SIG_BUF) };
+    let status = unsafe { nsc_api::sign(&UNSIGNED_TX, &mut SIG_BUF, &mut SIGN_PAYLOAD_BUF) };
     hprintln!("[NS] Sign: {:?}", NscStatus::from(status));
     assert_eq!(status, NscStatus::Ok as u32);
     hprintln!("[NS] Sig[0..8]: {:02x?}", unsafe { &SIG_BUF[..8] });
@@ -179,43 +202,45 @@ fn main() -> ! {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
         ];
 
-        // VK for ZKlarity Aave V3 circuit (960 bytes) + its SHA-256 hash (32 bytes).
-        // In production, the companion reads the VK from the protocol's registry and
-        // the vk_hash from the on-chain clearSigningVKHash governance slot.
-        static VK: [u8; 960] = *include_bytes!("../../secure/src/zk/test_data/vk_bytes.bin");
-        static VK_HASH: [u8; 32] = *include_bytes!("../../secure/src/zk/test_data/vk_hash.bin");
+        // The Aave V3 Pool address on Mainnet — this is what the
+        // EIP-1559 envelope above targets. The NS-side VK DB lookup
+        // keys on (chain_id=1, contract=AAVE_V3_POOL) and returns
+        // the matching VK bundle, which the secure world Merkle-
+        // verifies against its embedded VK_DB_ROOT.
+        const CHAIN_ID: u64 = 1;
+        const AAVE_V3_POOL: [u8; 20] = [
+            0x87, 0x87, 0x0b, 0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f,
+            0x4c, 0xe8, 0x39, 0x2d, 0x69, 0x35, 0x0b, 0x4f, 0xa4, 0xe2,
+        ];
 
-        // Assemble the clear-sign payload with new layout:
-        //   vk(960) + proof(384) + calldata(164) + readable(64) + vk_hash(32) + tx_len(4) + tx(177)
-        const PAYLOAD_LEN: usize = ZK_HEADER_LEN + TX.len();
-        static mut PAYLOAD: [u8; PAYLOAD_LEN] = [0u8; PAYLOAD_LEN];
         unsafe {
-            let mut off = 0usize;
-            // VK (960 bytes)
-            PAYLOAD[off..off + 960].copy_from_slice(&VK);
-            off += 960;
-            // Proof (384 bytes)
-            PAYLOAD[off..off + 384].copy_from_slice(&PROOF);
-            off += 384;
-            // Calldata (164 bytes)
-            PAYLOAD[off..off + 164].copy_from_slice(&CALLDATA);
-            off += 164;
-            // Readable (64 bytes)
-            PAYLOAD[off..off + 64].copy_from_slice(&READABLE);
-            off += 64;
-            // VK hash (32 bytes, from on-chain governance)
-            PAYLOAD[off..off + 32].copy_from_slice(&VK_HASH);
-            off += 32;
-            // tx_len (4 bytes LE)
-            let tx_len_bytes = (TX.len() as u32).to_le_bytes();
-            PAYLOAD[off..off + 4].copy_from_slice(&tx_len_bytes);
-            off += 4;
-            // EIP-1559 tx envelope
-            PAYLOAD[off..off + TX.len()].copy_from_slice(&TX);
+            // 1. Build the VK bundle from the embedded NS-side DB.
+            let vk_bundle_len = vk_db::build_bundle(CHAIN_ID, &AAVE_V3_POOL, &mut VK_BUNDLE_BUF)
+                .expect("vk_db: aave v3 mainnet not found in DB");
+            let vk_bundle = &VK_BUNDLE_BUF[..vk_bundle_len];
+            hprintln!("[NS] VK bundle: {} bytes (Merkle-verified by S)", vk_bundle.len());
 
-            hprintln!("[NS] Clear sign payload: {} bytes", PAYLOAD.len());
+            // 2. Assemble the clear-sign payload with the post-Merkle layout:
+            //    proof(384) + calldata(164) + readable(64) + tx_len(4) + tx + bundle_len(4) + vk_bundle
+            let mut p = 0usize;
+            CLEAR_SIGN_BUF[p..p + 384].copy_from_slice(&PROOF);
+            p += 384;
+            CLEAR_SIGN_BUF[p..p + 164].copy_from_slice(&CALLDATA);
+            p += 164;
+            CLEAR_SIGN_BUF[p..p + 64].copy_from_slice(&READABLE);
+            p += 64;
+            CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(TX.len() as u32).to_le_bytes());
+            p += 4;
+            CLEAR_SIGN_BUF[p..p + TX.len()].copy_from_slice(&TX);
+            p += TX.len();
+            CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
+            p += 4;
+            CLEAR_SIGN_BUF[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
+            p += vk_bundle.len();
+
+            hprintln!("[NS] Clear sign payload: {} bytes", p);
             hprintln!("[NS]   On the trusted UI: ZK proof verification, then confirm");
-            let status = nsc_api::clear_sign(&PAYLOAD, &mut SIG_BUF);
+            let status = nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF);
             hprintln!("[NS] Clear sign: {:?}", NscStatus::from(status));
         }
     }

@@ -100,6 +100,18 @@ pub fn is_unlocked() -> bool {
     unsafe { PIN_VERIFIED }
 }
 
+/// Test-only helper: stamp the secure-side `MASTER_SECRET` and
+/// `PIN_VERIFIED` directly without going through the trusted PIN
+/// dialog. Used by the `e2e-test` boot path to skip the interactive
+/// wizard. Compiled out of every other configuration.
+#[cfg(feature = "e2e-test")]
+pub fn set_e2e_unlocked(master: [u8; 32]) {
+    unsafe {
+        MASTER_SECRET = master;
+        PIN_VERIFIED = true;
+    }
+}
+
 /// Zeroize all sensitive global state. Called from panic handler and
 /// inactivity wipe.
 pub fn zeroize_sensitive_state() {
@@ -314,36 +326,76 @@ unsafe fn cmd_get_pubkey(args: &GatewayArgs) -> u32 {
 // ---------------------------------------------------------------------------
 
 unsafe fn cmd_sign(args: &GatewayArgs) -> u32 {
-    use crate::tx::{display::render_pages, eip1559};
+    use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
+    use crate::erc20::{dispatch_tx, TxKind};
+    use crate::tx::{
+        display::{
+            render_blind_sign_pages, render_contract_creation_pages, render_erc20_known_pages,
+            render_erc20_unknown_pages, render_pages,
+        },
+        eip1559,
+    };
     use crate::ui::confirm::{confirm, ConfirmResult};
 
     if !PIN_VERIFIED {
         return NscStatus::NotInitialized as u32;
     }
 
-    let tx_ptr = args.arg0 as *const u8;
+    let payload_ptr = args.arg0 as *const u8;
     let sig_ptr = args.arg1 as *mut u8;
-    let tx_len = args.arg2 as usize;
+    let total_len = args.arg2 as usize;
 
-    // 1. Validate sizes and pointers
-    if tx_len == 0 || tx_len > MAX_TX_LEN {
+    // CMD_SIGN payload layout (post-Merkle-DB rework):
+    //
+    //   [0]              has_bundle u8        (0 or 1)
+    //   [1..5]           tx_len     u32 LE
+    //   [5..5+tx_len]    EIP-1559 envelope
+    //   [5+tx_len..]     optional bundle (only if has_bundle == 1)
+    //                    [bundle_len u32 LE][bundle bytes]
+    //
+    // The bundle is the ERC20 metadata triple `(canonical_bytes,
+    // merkle_proof, leaf_index)` produced by the non-secure-side
+    // lookup. The secure world re-derives the leaf hash and verifies
+    // the proof against `db_roots::ERC20_DB_ROOT`. If the bundle is
+    // missing, malformed, or fails Merkle verification, the secure
+    // world falls back to the unknown-token / blind-sign path — it
+    // never aborts on a bad bundle (a hostile NS shouldn't be able to
+    // DoS the wallet by sending garbage).
+    let header_min = 1 + 4;
+    if total_len < header_min + 1 || total_len > header_min + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN {
         return NscStatus::InvalidPointer as u32;
     }
-    if !validate_ns_read_ptr(args.arg0, tx_len) {
+    if !validate_ns_read_ptr(args.arg0, total_len) {
         return NscStatus::InvalidPointer as u32;
     }
     if !validate_ns_write_ptr(args.arg1, SIGNATURE_LEN) {
         return NscStatus::InvalidPointer as u32;
     }
 
-    // 2. Copy unsigned tx into a secure-stack buffer (TOCTOU defense)
-    let mut tx_buf = [0u8; MAX_TX_LEN];
-    for i in 0..tx_len {
-        tx_buf[i] = core::ptr::read_volatile(tx_ptr.add(i));
+    // 2. Copy entire payload into a secure-stack buffer (TOCTOU defense).
+    //    Buffer is sized for the worst case (header + max tx + max bundle).
+    let mut buf = [0u8; 1 + 4 + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN];
+    if total_len > buf.len() {
+        return NscStatus::InvalidPointer as u32;
     }
-    let tx_bytes = &tx_buf[..tx_len];
+    for i in 0..total_len {
+        buf[i] = core::ptr::read_volatile(payload_ptr.add(i));
+    }
 
-    // 3. Parse the EIP-1559 envelope
+    // 3. Parse the wrapper.
+    let has_bundle = buf[0] == 1;
+    let tx_len_bytes: [u8; 4] = buf[1..5].try_into().unwrap();
+    let tx_len = u32::from_le_bytes(tx_len_bytes) as usize;
+    if tx_len == 0 || tx_len > MAX_TX_LEN {
+        return NscStatus::InvalidPointer as u32;
+    }
+    let tx_end = 5 + tx_len;
+    if tx_end > total_len {
+        return NscStatus::InvalidPointer as u32;
+    }
+    let tx_bytes = &buf[5..tx_end];
+
+    // 4. Parse the EIP-1559 envelope.
     let parsed = match eip1559::parse(tx_bytes) {
         Ok(t) => t,
         Err(_) => {
@@ -352,8 +404,76 @@ unsafe fn cmd_sign(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // 4. Render pages and ask the user
-    let pages = render_pages(&parsed);
+    // 5. If a metadata bundle was attached, verify it Merkle-up to
+    //    ERC20_DB_ROOT and cross-check that its (chain_id, contract)
+    //    matches the parsed envelope. Anything wrong → fall through to
+    //    "unknown token" instead of aborting.
+    let verified_meta: Option<Erc20Metadata<'_>> = if has_bundle {
+        if tx_end + 4 > total_len {
+            None
+        } else {
+            let blen_bytes: [u8; 4] = buf[tx_end..tx_end + 4].try_into().unwrap();
+            let bundle_len = u32::from_le_bytes(blen_bytes) as usize;
+            let bundle_start = tx_end + 4;
+            let bundle_end = bundle_start + bundle_len;
+            if bundle_len == 0 || bundle_len > MAX_ERC20_BUNDLE_LEN || bundle_end > total_len {
+                None
+            } else {
+                match verify_erc20_bundle(&buf[bundle_start..bundle_end]) {
+                    Some(meta) => {
+                        // Cross-check: the bundle is verified against
+                        // the firmware DB but says nothing about which
+                        // tx it belongs to. The (chain_id, contract)
+                        // it carries MUST match the envelope being
+                        // signed.
+                        let to_match = match parsed.tx.to {
+                            Some(addr) => addr == meta.contract,
+                            None => false,
+                        };
+                        if meta.chain_id == parsed.tx.chain_id && to_match {
+                            Some(meta)
+                        } else {
+                            None
+                        }
+                    }
+                    None => None,
+                }
+            }
+        }
+    } else {
+        None
+    };
+
+    // 6. Pick a trust level for the trusted UI display:
+    //    - empty calldata        → existing 5-page value transfer flow
+    //    - known ERC20 method
+    //      + verified bundle      → decoded token-aware display
+    //      + no bundle            → structurally decoded with warning
+    //    - non-ERC20 calldata    → Ledger-style BLIND SIGNING banner
+    //    - contract creation     → CONTRACT CREATION warning
+    let kind = dispatch_tx(&parsed, verified_meta);
+
+    // Test-mode: log the routing decision so the e2e harness can
+    // assert which trust level the dispatcher chose for each request.
+    #[cfg(feature = "e2e-test")]
+    {
+        let kind_name: &str = match &kind {
+            TxKind::ValueTransfer => "ValueTransfer",
+            TxKind::Erc20Known(_, _) => "Erc20Known",
+            TxKind::Erc20Unknown(_) => "Erc20Unknown",
+            TxKind::ContractCall => "ContractCall",
+            TxKind::ContractCreation => "ContractCreation",
+        };
+        cortex_m_semihosting::hprintln!("[S][e2e] cmd_sign dispatch = {}", kind_name);
+    }
+
+    let pages = match kind {
+        TxKind::ValueTransfer => render_pages(&parsed.tx),
+        TxKind::Erc20Known(call, meta) => render_erc20_known_pages(&parsed.tx, &call, &meta),
+        TxKind::Erc20Unknown(call) => render_erc20_unknown_pages(&parsed.tx, &call),
+        TxKind::ContractCall => render_blind_sign_pages(&parsed.tx, parsed.data),
+        TxKind::ContractCreation => render_contract_creation_pages(&parsed.tx, parsed.data),
+    };
     let confirm_result = confirm(pages.as_slice());
     match confirm_result {
         ConfirmResult::Confirmed => {}
@@ -414,13 +534,13 @@ unsafe fn cmd_sign(args: &GatewayArgs) -> u32 {
     // 8. Hedged sign: pass the secure-element's encrypted-seed-derived
     //    randomizer as opt_rand to avoid pure-deterministic signatures.
     let mut rand_buf = [0u8; 16];
-    derive_sign_randomizer(&parsed.signing_hash, &mut rand_buf);
+    derive_sign_randomizer(&parsed.tx.signing_hash, &mut rand_buf);
 
     use slh_dsa::Sha2_128f;
     use slh_dsa::SigningKey as Sk;
     let sig = match <Sk<Sha2_128f>>::try_sign_with_context(
         &signing_key,
-        &parsed.signing_hash,
+        &parsed.tx.signing_hash,
         &[],
         Some(&rand_buf),
     ) {
@@ -451,10 +571,10 @@ unsafe fn cmd_sign(args: &GatewayArgs) -> u32 {
 // ---------------------------------------------------------------------------
 
 unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
-    use crate::tx::{display::render_pages, eip1559};
+    use crate::tx::eip1559;
     use crate::ui::confirm::{confirm, ConfirmResult};
-    use crate::zk::{Groth16Proof, VerificationKey, verify_clear_signing_proof};
-    use sphincs_tz_shared::ZK_VK_LEN;
+    use crate::zk::vk_bundle::MAX_VK_BUNDLE_LEN;
+    use crate::zk::{verify_vk_bundle, Groth16Proof, VerificationKey, verify_clear_signing_proof};
 
     if !PIN_VERIFIED {
         return NscStatus::NotInitialized as u32;
@@ -464,8 +584,26 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
     let sig_ptr = args.arg1 as *mut u8;
     let total_len = args.arg2 as usize;
 
-    // 1. Validate sizes — payload must be at least header + 1 byte of tx
-    if total_len < ZK_HEADER_LEN + 1 || total_len > ZK_HEADER_LEN + MAX_TX_LEN {
+    // CMD_CLEAR_SIGN payload layout (post-Merkle-DB rework):
+    //
+    //   [0..384)         proof (π.A || π.B || π.C)
+    //   [384..548)       calldata (164 bytes, right-zero-padded)
+    //   [548..612)       readable string (64 bytes, null-padded)
+    //   [612..616)       tx_len u32 LE
+    //   [616..616+tx_len) EIP-1559 envelope
+    //   then [bundle_len u32 LE][vk bundle bytes]
+    //
+    // The VK bundle carries the 960-byte VK plus a Merkle proof up to
+    // the embedded VK_DB_ROOT. The secure world re-derives the leaf
+    // hash from (chain_id, contract, vk_bytes) and verifies the proof
+    // against the embedded root before letting the VK touch the
+    // Groth16 verifier. If the bundle is missing/wrong, the request
+    // is rejected with `Unsupported protocol` and the companion is
+    // expected to retry as `cmd_sign`.
+    //
+    // 1. Size + pointer validation
+    if total_len < ZK_HEADER_LEN + 1 || total_len > ZK_HEADER_LEN + MAX_TX_LEN + 4 + MAX_VK_BUNDLE_LEN
+    {
         return NscStatus::InvalidPointer as u32;
     }
     if !validate_ns_read_ptr(args.arg0, total_len) {
@@ -475,56 +613,107 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
         return NscStatus::InvalidPointer as u32;
     }
 
-    // 2. Copy entire payload into secure-stack buffer (TOCTOU defense)
-    let mut buf = [0u8; ZK_HEADER_LEN + MAX_TX_LEN];
+    // 2. Copy entire payload into a secure-stack buffer (TOCTOU defense).
+    let mut buf = [0u8; ZK_HEADER_LEN + MAX_TX_LEN + 4 + MAX_VK_BUNDLE_LEN];
+    if total_len > buf.len() {
+        return NscStatus::InvalidPointer as u32;
+    }
     for i in 0..total_len {
         buf[i] = core::ptr::read_volatile(payload_ptr.add(i));
     }
 
-    // 3. Parse the payload layout:
-    //    [0..960)        VK (protocol-specific verification key)
-    //    [960..1344)     proof (π.A || π.B || π.C)
-    //    [1344..1508)    calldata (164 bytes)
-    //    [1508..1572)    readable (64 bytes)
-    //    [1572..1604)    vk_hash (expected SHA-256 of VK, from on-chain governance)
-    //    [1604..1608)    tx_len (u32 LE)
-    //    [1608..)        EIP-1559 tx envelope
+    // 3. Parse the fixed header.
     let mut off = 0usize;
-
-    let vk_bytes: &[u8; ZK_VK_LEN] = buf[off..off + ZK_VK_LEN].try_into().unwrap();
-    off += ZK_VK_LEN;
-
     let proof_bytes: &[u8; 384] = buf[off..off + ZK_PROOF_LEN].try_into().unwrap();
     off += ZK_PROOF_LEN;
-
     let calldata: &[u8; ZK_MAX_CALLDATA] = buf[off..off + ZK_MAX_CALLDATA].try_into().unwrap();
     off += ZK_MAX_CALLDATA;
-
     let readable: &[u8; ZK_STRING_LEN] = buf[off..off + ZK_STRING_LEN].try_into().unwrap();
     off += ZK_STRING_LEN;
-
-    let expected_vk_hash: &[u8; 32] = buf[off..off + 32].try_into().unwrap();
-    off += 32;
-
-    let tx_len =
-        u32::from_le_bytes(buf[off..off + 4].try_into().unwrap()) as usize;
+    let tx_len = u32::from_le_bytes(buf[off..off + 4].try_into().unwrap()) as usize;
     off += 4;
-
     if tx_len == 0 || tx_len > MAX_TX_LEN || off + tx_len > total_len {
         return NscStatus::InvalidPointer as u32;
     }
-    let tx_bytes = &buf[off..off + tx_len];
+    let tx_end = off + tx_len;
+    let tx_bytes = &buf[off..tx_end];
 
-    // 4. Authenticate the VK: hash it and compare against the expected hash
-    //    (which the companion read from the protocol's on-chain clearSigningVKHash).
-    let actual_vk_hash = VerificationKey::hash(vk_bytes);
-    if actual_vk_hash != *expected_vk_hash {
-        ui::show_status("Bad VK", "(hash mismatch)");
+    // 4. Parse the EIP-1559 envelope FIRST so we can cross-check
+    //    everything against the actual tx being signed.
+    let parsed = match eip1559::parse(tx_bytes) {
+        Ok(t) => t,
+        Err(_) => {
+            ui::show_status("Bad tx", "(parse fail)");
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    // 4a. Cross-check: contract creation makes no sense for clear sign.
+    let target = match parsed.tx.to {
+        Some(a) => a,
+        None => {
+            ui::show_status("Bad clear-sign", "(no `to`)");
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    // 4b. Cross-check: v1 protocols don't bind value; reject any tx
+    //     that moves ETH. A future protocol can opt in via a per-entry
+    //     flag in the VK DB.
+    if !parsed.tx.value.is_zero() {
+        ui::show_status("Bad clear-sign", "(value > 0)");
         return NscStatus::CryptoError as u32;
     }
 
-    // 5. Deserialize the VK and proof
-    let vk = match VerificationKey::from_bytes(vk_bytes) {
+    // 4c. Cross-check: the 164-byte calldata field in the payload must
+    //     equal `parsed.data` right-zero-padded to 164 bytes. Closes the
+    //     "prove A while signing B" gap.
+    if parsed.data.len() > ZK_MAX_CALLDATA {
+        ui::show_status("Bad clear-sign", "(calldata>164)");
+        return NscStatus::CryptoError as u32;
+    }
+    if calldata[..parsed.data.len()] != *parsed.data {
+        ui::show_status("Bad clear-sign", "(calldata!=tx)");
+        return NscStatus::CryptoError as u32;
+    }
+    if calldata[parsed.data.len()..].iter().any(|&b| b != 0) {
+        ui::show_status("Bad clear-sign", "(bad padding)");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // 5. Parse the trailing VK bundle.
+    if tx_end + 4 > total_len {
+        ui::show_status("Unsupported", "protocol");
+        return NscStatus::CryptoError as u32;
+    }
+    let blen_bytes: [u8; 4] = buf[tx_end..tx_end + 4].try_into().unwrap();
+    let bundle_len = u32::from_le_bytes(blen_bytes) as usize;
+    let bundle_start = tx_end + 4;
+    let bundle_end = bundle_start + bundle_len;
+    if bundle_len == 0 || bundle_len > MAX_VK_BUNDLE_LEN || bundle_end != total_len {
+        ui::show_status("Unsupported", "protocol");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // 6. Merkle-verify the VK bundle against the embedded VK_DB_ROOT.
+    let verified = match verify_vk_bundle(&buf[bundle_start..bundle_end]) {
+        Some(v) => v,
+        None => {
+            ui::show_status("Unsupported", "protocol");
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    // 6a. Cross-check: the bundle must describe THIS chain and THIS
+    //     contract — otherwise NS could substitute a valid VK from a
+    //     different deployment.
+    if verified.chain_id != parsed.tx.chain_id || verified.contract != target {
+        ui::show_status("Bad clear-sign", "(vk!=target)");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // 7. Deserialize the verified VK + proof for Groth16.
+    let vk = match VerificationKey::from_bytes(verified.vk) {
         Some(v) => v,
         None => {
             ui::show_status("Bad VK", "(deserialize)");
@@ -542,7 +731,10 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
 
     ui::show_status("Verifying", "ZK proof...");
 
-    // 6. Verify the ZK clear signing proof against the dynamic VK.
+    #[cfg(feature = "e2e-test")]
+    cortex_m_semihosting::hprintln!("[S][e2e] cmd_clear_sign dispatch = ZkClearSign");
+
+    // 7. Verify the ZK clear signing proof against the LOCAL VK.
     //    Computes Poseidon(calldata) and Poseidon(readable), then runs
     //    the Groth16 pairing check.
     if !verify_clear_signing_proof(calldata, readable, &proof, &vk) {
@@ -550,7 +742,7 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
         return NscStatus::CryptoError as u32;
     }
 
-    // 6. Proof valid! Display ZK-verified readable string on trusted UI.
+    // 8. Proof valid! Display ZK-verified readable string on trusted UI.
     //    Build pages in the format confirm() expects: [[u8; 16]; 4] per page.
     let readable_len = readable.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
 
@@ -596,15 +788,6 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
 
     ui::show_status("Signing...", "");
 
-    // 7. Parse the EIP-1559 envelope (validation that it's a well-formed tx)
-    let parsed = match eip1559::parse(tx_bytes) {
-        Ok(t) => t,
-        Err(_) => {
-            ui::show_status("Bad tx", "(parse fail)");
-            return NscStatus::CryptoError as u32;
-        }
-    };
-
     // 8. Read encrypted entropy, decrypt, derive signing key, sign
     //    (Same flow as cmd_sign steps 5-10)
     let mut entropy_blob = [0u8; 64];
@@ -643,13 +826,13 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
     entropy.zeroize();
 
     let mut rand_buf = [0u8; 16];
-    derive_sign_randomizer(&parsed.signing_hash, &mut rand_buf);
+    derive_sign_randomizer(&parsed.tx.signing_hash, &mut rand_buf);
 
     use slh_dsa::Sha2_128f;
     use slh_dsa::SigningKey as Sk;
     let sig = match <Sk<Sha2_128f>>::try_sign_with_context(
         &signing_key,
-        &parsed.signing_hash,
+        &parsed.tx.signing_hash,
         &[],
         Some(&rand_buf),
     ) {

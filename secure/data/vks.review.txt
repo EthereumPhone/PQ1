@@ -1,0 +1,25 @@
+=== ZK Clear-Signing VK Manifest (firmware build artifact) ===
+Built from secure/data/vks.json by `cargo run -p dbgen`.
+
+The wallet's secure world holds only the Merkle ROOT below; the
+full VK pool lives in non-secure firmware rodata. At sign time the
+non-secure world supplies (vk_bytes, merkle_proof) and the secure
+world re-derives the leaf hash from (chain_id, contract, vk_bytes)
+and walks the proof up to this root.
+
+Merkle root (VK_DB_ROOT) = db0bddf81091a9fee79a028e3e5a258204d73eda1109e3d97a123cf420661471
+
+Before signing a firmware release, a human reviewer MUST compare
+every (chain_id, contract, sha256(vk)) triple below against the
+on-chain `clearSigningVKHash` (or equivalent governance source)
+for that protocol on that chain. The wallet trusts the firmware-
+signing key to attest that this comparison was done.
+
+aave-v3-supply-v1
+  sha256(vk) = f36a73b5bb084a9800ceff63e33e061d182af2b09f6bcef20d441c68fd80292e
+  chain      1, contract 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2 (Aave V3 Pool, Mainnet)
+  chain   8453, contract 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5 (Aave V3 Pool, Base)
+  chain  42161, contract 0x794a61358D6845594F94dc1DB02A252b5b4814aD (Aave V3 Pool, Arbitrum)
+  chain     10, contract 0x794a61358D6845594F94dc1DB02A252b5b4814aD (Aave V3 Pool, Optimism)
+  chain    137, contract 0x794a61358D6845594F94dc1DB02A252b5b4814aD (Aave V3 Pool, Polygon)
+

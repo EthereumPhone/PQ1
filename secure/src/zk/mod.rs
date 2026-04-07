@@ -16,11 +16,11 @@ pub mod poseidon;
 mod poseidon_constants;
 #[cfg(feature = "debug-log")]
 pub mod test_vectors;
-#[cfg(feature = "debug-log")]
-pub mod vk_data;
+pub mod vk_bundle;
 
 pub use groth16::{Groth16Proof, VerificationKey, verify_clear_signing_proof};
 pub use poseidon::poseidon_bytes;
+pub use vk_bundle::{verify_vk_bundle, VerifiedVk};
 
 /// Maximum calldata size (must match ZKlarity circuit MAX_CALLDATA = 164)
 pub const MAX_CALLDATA: usize = 164;

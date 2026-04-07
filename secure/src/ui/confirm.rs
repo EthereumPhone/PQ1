@@ -26,34 +26,51 @@ pub fn confirm(pages: &[Page]) -> ConfirmResult {
         return ConfirmResult::Cancelled;
     }
 
-    let mut idx: usize = 0;
+    // ---- e2e-test fast-path ----
+    //
+    // Render every page (so the test harness can scrape the framebox
+    // log lines if it wants to assert page content), then auto-confirm
+    // without reading stdin. This is the only place the secure world
+    // would block on user input during a sign request, so this single
+    // bypass is enough to make every cmd_* path non-interactive.
+    #[cfg(feature = "e2e-test")]
+    {
+        for (idx, page) in pages.iter().enumerate() {
+            render_page(page, idx, pages.len());
+        }
+        return ConfirmResult::Confirmed;
+    }
 
-    timeout::reset_activity();
-
-    loop {
-        render_page(&pages[idx], idx, pages.len());
-
-        let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
-            Some(ev) => ev,
-            None => return ConfirmResult::IdleWipe,
-        };
-
+    #[cfg(not(feature = "e2e-test"))]
+    {
+        let mut idx: usize = 0;
         timeout::reset_activity();
 
-        match event {
-            (Button::Right, Press::Short) => {
-                if idx + 1 < pages.len() {
-                    idx += 1;
+        loop {
+            render_page(&pages[idx], idx, pages.len());
+
+            let mut idle = || timeout::is_idle();
+            let event = match input().wait_button(&mut idle) {
+                Some(ev) => ev,
+                None => return ConfirmResult::IdleWipe,
+            };
+
+            timeout::reset_activity();
+
+            match event {
+                (Button::Right, Press::Short) => {
+                    if idx + 1 < pages.len() {
+                        idx += 1;
+                    }
                 }
-            }
-            (Button::Left, Press::Short) => {
-                if idx > 0 {
-                    idx -= 1;
+                (Button::Left, Press::Short) => {
+                    if idx > 0 {
+                        idx -= 1;
+                    }
                 }
+                (Button::Right, Press::Long) => return ConfirmResult::Confirmed,
+                (Button::Left, Press::Long) => return ConfirmResult::Cancelled,
             }
-            (Button::Right, Press::Long) => return ConfirmResult::Confirmed,
-            (Button::Left, Press::Long) => return ConfirmResult::Cancelled,
         }
     }
 }

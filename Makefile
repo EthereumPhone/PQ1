@@ -10,7 +10,7 @@ NONSECURE_ELF = target/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure
 # Remove it for production builds to eliminate all debug strings.
 FEATURES ?= mock-se,debug-log,ui-semihosting
 
-.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial
+.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e
 
 all: secure nonsecure
 
@@ -77,6 +77,65 @@ run-tropic01: setup-serial
 # It will not link until secure/src/hw/stm32u585.rs is filled in.
 run-hw:
 	$(MAKE) FEATURES=tropic01-se,ui-oled,pka-accel all
+
+# Non-interactive automated end-to-end test for the sign dispatch logic.
+# Builds both worlds with the `e2e-test` cargo feature, runs them in QEMU
+# with stdin closed (no semihosting input needed), captures stdout, and
+# asserts that the secure-world dispatcher routed each scenario to the
+# right TxKind variant + that every scenario returned NscStatus::Ok.
+#
+# Scenarios:
+#   1. value_transfer  → ValueTransfer
+#   2. erc20_known     → Erc20Known     (USDC mainnet, bundle from NS DB)
+#   3. blind_sign      → ContractCall   (Uniswap router selector only)
+#   4. zk_clear_sign   → ZkClearSign    (Aave V3 supply, VK bundle from NS DB)
+#
+# Pass → exits 0. Any missing assertion or non-zero status → exits 1.
+e2e:
+	@echo "==> Building secure + nonsecure with e2e-test feature"
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+		cargo build --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-semihosting,e2e-test
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features e2e-test
+	@echo "==> Running e2e suite under QEMU"
+	@out=$$(qemu-system-arm \
+		-M mps2-an505 \
+		-monitor null \
+		-serial null \
+		-chardev null,id=hostio \
+		-semihosting-config enable=on,target=native,chardev=hostio \
+		-kernel $(SECURE_ELF) \
+		-device loader,file=$(NONSECURE_ELF) 2>&1); \
+	echo "$$out"; \
+	echo "===================================="; \
+	fail=0; \
+	for line in \
+		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ValueTransfer" \
+		"\\[S\\]\\[e2e\\] cmd_sign dispatch = Erc20Known" \
+		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ContractCall" \
+		"\\[S\\]\\[e2e\\] cmd_clear_sign dispatch = ZkClearSign" \
+		"\\[E2E\\] value_transfer = PASS" \
+		"\\[E2E\\] erc20_known = PASS" \
+		"\\[E2E\\] blind_sign = PASS" \
+		"\\[E2E\\] zk_clear_sign = PASS" \
+		"\\[E2E\\] ALL TESTS PASSED"; do \
+		if echo "$$out" | grep -q "$$line"; then \
+			echo "  PASS  $$line"; \
+		else \
+			echo "  MISS  $$line"; \
+			fail=1; \
+		fi; \
+	done; \
+	if [ $$fail -eq 0 ]; then \
+		echo "==> e2e: ALL ASSERTIONS PASSED"; \
+		exit 0; \
+	else \
+		echo "==> e2e: ASSERTIONS FAILED"; \
+		exit 1; \
+	fi
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

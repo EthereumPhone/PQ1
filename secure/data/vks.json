@@ -1,0 +1,13 @@
+[
+  {
+    "protocol": "aave-v3-supply-v1",
+    "vk_file": "aave_v3_supply.vk.bin",
+    "deployments": [
+      { "chain_id": 1,     "address": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2", "label": "Aave V3 Pool, Mainnet" },
+      { "chain_id": 8453,  "address": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5", "label": "Aave V3 Pool, Base" },
+      { "chain_id": 42161, "address": "0x794a61358D6845594F94dc1DB02A252b5b4814aD", "label": "Aave V3 Pool, Arbitrum" },
+      { "chain_id": 10,    "address": "0x794a61358D6845594F94dc1DB02A252b5b4814aD", "label": "Aave V3 Pool, Optimism" },
+      { "chain_id": 137,   "address": "0x794a61358D6845594F94dc1DB02A252b5b4814aD", "label": "Aave V3 Pool, Polygon" }
+    ]
+  }
+]

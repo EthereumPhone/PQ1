@@ -3,6 +3,15 @@ name = "sphincs-tz-nonsecure"
 version = "0.1.0"
 edition.workspace = true
 
+[features]
+default = []
+# Non-interactive automated end-to-end test mode. Replaces the
+# default interactive main() with a scripted runner that exercises
+# all four trust levels (value transfer, ERC20 known, BLIND SIGN,
+# ZK clear sign) in sequence and prints PASS/FAIL lines a host
+# harness can grep.
+e2e-test = []
+
 [dependencies]
 sphincs-tz-shared = { path = "../shared" }
 cortex-m = "0.7"
