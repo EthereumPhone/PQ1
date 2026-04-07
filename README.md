@@ -198,7 +198,7 @@ appends per-entry Merkle proofs to each `.bin` blob, and writes:
 - `nonsecure/src/erc20_db.bin` — full ERC20 DB + per-entry proofs, `include_bytes!`d into the NS firmware image
 - `nonsecure/src/vk_db.bin` — same for the VK DB
 - `secure/src/db_roots.rs` — the two 32-byte roots, `include!`d into the secure firmware image
-- `secure/data/vks.review.txt` — a human-readable manifest of `(protocol, chain_id, contract, sha256(vk))` triples that the release reviewer audits against on-chain governance before signing a firmware release
+- `secure/data/vks.review.txt` — a human-readable build-traceability manifest of `(protocol, chain_id, contract, sha256(vk))` triples. The release reviewer diffs this against the previous release before signing; the trust chain is entirely offline (no `clearSigningVKHash` lookups, no governance RPCs)
 
 Every generated file is **checked into the repo** (same pattern as
 `tools/export_zk_constants.js`) so downstream builds do not need the
@@ -222,14 +222,18 @@ on multiple chains with different metadata (typical copy-paste bug).
 
 ### Adding a ZK clear-signing protocol
 
-1. Drop the 960-byte Groth16 verification key file into
-   `secure/data/vks/<protocol>.vk.bin`.
+1. Produce the 960-byte Groth16 verification key via the in-tree
+   Circom toolchain: add a row to `circuits/circuits.json`, drop the
+   `.circom` source under `circuits/<protocol>/`, then run
+   `tools/build_vks.sh <id>`. See `circuits/README.md` for the full
+   authoring workflow and `circuits/UPSTREAM.md` for the Aave V3
+   provenance. The script writes directly into `secure/data/vks/`.
 2. Add a protocol block to `secure/data/vks.json` listing every
    `(chain_id, contract)` deployment that shares this VK:
    ```json
    {
-     "protocol": "aave-v3-supply-v1",
-     "vk_file": "aave_v3_supply.vk.bin",
+     "protocol": "aave-v3-pool-v1",
+     "vk_file": "aave_v3_pool.vk.bin",
      "deployments": [
        { "chain_id": 1,     "address": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
          "label": "Aave V3 Pool, Mainnet" }
@@ -237,15 +241,17 @@ on multiple chains with different metadata (typical copy-paste bug).
    }
    ```
 3. Run `cargo run -p dbgen`.
-4. **Audit the diff of `secure/data/vks.review.txt`** — the release
-   reviewer MUST compare every new `(chain_id, contract, sha256(vk))`
-   triple against the on-chain `clearSigningVKHash` (or equivalent
-   governance source) for that protocol on that chain, BEFORE signing
-   the firmware release that includes the new root. This is the trust
-   anchor for the whole local-VK story.
-5. Commit all four: the new `vks/*.vk.bin`, the updated `vks.json`,
-   the regenerated `nonsecure/src/vk_db.bin`, and both of the
-   regenerated `secure/src/db_roots.rs` and `secure/data/vks.review.txt`.
+4. **Audit the diff of `secure/data/vks.review.txt`** — this file is a
+   build-traceability artifact, NOT a governance comparison sheet.
+   The reviewer diffs it against the previous release to confirm no
+   unexpected `(chain_id, contract, sha256(vk))` triples were added,
+   then signs the firmware release. The trust chain is entirely
+   offline: firmware-signing key → `VK_DB_ROOT` in secure flash →
+   Merkle proof walk → Groth16 verification. No on-chain comparison.
+5. Commit the new `circuits/<protocol>/` sources, the new
+   `vks/*.vk.bin`, the updated `vks.json`, the regenerated
+   `nonsecure/src/vk_db.bin`, and the regenerated
+   `secure/src/db_roots.rs` and `secure/data/vks.review.txt`.
 
 ### Sanity guards
 
@@ -304,7 +310,7 @@ Every primitive that touches a secret is listed below with its post-quantum stat
 | **Recovery encoding** | BIP-39 24 words ↔ 256-bit entropy | 32 B | ✅ PQ | 256 bits ≥ 128-bit PQ security |
 | **ZK clear-sign verifier** | Groth16 over BLS12-381 (4 pairings, no alloc) | proof 384 B, vk 960 B | ❌ classical | Verifies that a human-readable string is a faithful ABI interpretation of the calldata. Not part of the seed/recovery contract — only gates *what gets displayed before signing*. A CRQC break of BLS12-381 would let an attacker forge a proof for a misleading display string, but cannot leak the seed. Migration target: STARKs / Plonky3 once the proof sizes fit in flash |
 | **ZK public-signal binding** | Poseidon over BLS12-381 scalar field (alpha=5, Hades) | digest 32 B | ❌ classical | Binds calldata + readable string into the Groth16 public inputs. Same threat model as the verifier itself |
-| **ZK VK authentication** | SHA-256 Merkle tree over pinned (chain_id, contract, vk) leaves; 32-byte root embedded in secure flash | root 32 B | ✅ PQ | Trust anchor is the firmware-signing key itself: the release reviewer compares `secure/data/vks.review.txt` against on-chain governance values before signing. NS provides the VK + proof at sign time; S verifies the proof against its embedded root before Groth16 ever runs |
+| **ZK VK authentication** | SHA-256 Merkle tree over pinned (chain_id, contract, vk) leaves; 32-byte root embedded in secure flash | root 32 B | ✅ PQ | Trust anchor is the firmware-signing key itself: the release reviewer diffs `secure/data/vks.review.txt` against the previous release and confirms the added rows correspond to circuits actually authored under `circuits/`. Fully offline — no on-chain governance lookups anywhere in the project. NS provides the VK + proof at sign time; S verifies the Merkle proof against its embedded root before Groth16 ever runs |
 | **ERC20 metadata authentication** | SHA-256 Merkle tree over pinned (chain_id, contract, name, symbol, decimals) leaves; 32-byte root in secure flash | root 32 B | ✅ PQ | Same Merkle anchor as the VK DB. Stops NS from lying about "this is USDC" — trusted-display text only renders if the proof walks cleanly up to the embedded root |
 
 **Frozen choices** (part of the recovery contract — changing any of these means the same 24 words produce a different keypair):
@@ -542,7 +548,7 @@ A single secure element is a single point of trust. Whether the failure mode is 
 
 The cost is one extra I²C peripheral, ~$3 BOM, and ~50 ms added unlock latency.
 
-See [docs/architecture.md](docs/architecture.md) for the technical design and [docs/HARDENING.md](docs/HARDENING.md) for the consolidated hardening requirements.
+See [docs/architecture.md](docs/architecture.md) for the technical design, [docs/HARDENING.md](docs/HARDENING.md) for the consolidated hardening requirements, and [docs/m4-cowswap-eip712.md](docs/m4-cowswap-eip712.md) for the CowSwap EIP-712 order clear-signing handoff (deferred M4 milestone — read this before attempting that work).
 
 ## Implementation Status
 

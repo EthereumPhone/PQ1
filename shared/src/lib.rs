@@ -34,17 +34,19 @@ pub const ZK_PROOF_LEN: usize = 384;
 
 /// Groth16 verification key size: alpha(96) + beta(192) + gamma(192) +
 /// delta(192) + 3×IC(288) = 960 bytes.
-/// The VK is protocol-specific — each smart contract publishes its own VK
-/// and stores `clearSigningVKHash` on-chain via governance.
+/// The VK is protocol-specific — one VK per circuit under `circuits/`,
+/// produced by the in-tree `tools/build_vks.sh` pipeline and folded
+/// into the firmware DB by `dbgen`.
 pub const ZK_VK_LEN: usize = 960;
 
 /// Total size of the fixed portion of a clear-sign request payload in NS SRAM.
 ///
 /// The VK is no longer supplied by NS — the secure world looks it up
 /// from its embedded VK DB by `(chain_id, to)` after parsing the tx
-/// envelope. The on-chain `clearSigningVKHash` mechanism is gone; the
-/// trust anchor is the firmware-signing key plus the
-/// `secure/data/vks.review.txt` artifact reviewed at release time.
+/// envelope. The trust anchor is the firmware-signing key: the release
+/// reviewer diffs `secure/data/vks.review.txt` against the previous
+/// release before signing. Fully offline — no on-chain lookups
+/// anywhere in the project.
 ///
 /// Layout:
 ///   [0..384)                     : Groth16 proof (π.A || π.B || π.C)

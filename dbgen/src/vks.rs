@@ -5,11 +5,12 @@
 //! mappings, and emits `secure/src/zk/vk_db.bin` plus a human-readable
 //! `secure/data/vks.review.txt` for the firmware-signing reviewer.
 //!
-//! The release-review manifest is the trust anchor for the local-VK
-//! lookup story: without it, the firmware build process is just trusted
-//! by name; with it, the reviewer can audit each (chain_id, contract,
-//! sha256(vk)) triple against on-chain `clearSigningVKHash` values
-//! before signing the release.
+//! The release-review manifest is a pure build-traceability artifact:
+//! it records which (chain_id, contract, sha256(vk)) triples were
+//! folded into the VK_DB_ROOT for a given release, so a human reviewer
+//! can diff successive releases and notice unexpected additions. There
+//! is NO on-chain comparison anywhere — the trust chain is entirely
+//! offline (firmware-signing key → VK_DB_ROOT → Merkle → Groth16).
 
 use crate::merkle::{leaf_hash, verify_proof, MerkleTree};
 use crate::{load_vk_protocols, parse_hex_address, sha256, write_u32_le, write_u64_le};
@@ -285,11 +286,13 @@ fn render_review(protocols: &[ReviewProtocol], root: &[u8; 32]) -> String {
     s.push_str("\n");
     s.push_str(&format!("Merkle root (VK_DB_ROOT) = {}\n", hex::encode(root)));
     s.push_str("\n");
-    s.push_str("Before signing a firmware release, a human reviewer MUST compare\n");
-    s.push_str("every (chain_id, contract, sha256(vk)) triple below against the\n");
-    s.push_str("on-chain `clearSigningVKHash` (or equivalent governance source)\n");
-    s.push_str("for that protocol on that chain. The wallet trusts the firmware-\n");
-    s.push_str("signing key to attest that this comparison was done.\n");
+    s.push_str("This file is a build-traceability artifact. It records which\n");
+    s.push_str("(chain_id, contract, sha256(vk)) triples were folded into the\n");
+    s.push_str("VK_DB_ROOT above, so a release reviewer can diff it against the\n");
+    s.push_str("previous release and confirm nothing unexpected was added.\n");
+    s.push_str("The trust chain is entirely offline: firmware-signing key →\n");
+    s.push_str("VK_DB_ROOT in secure flash → Merkle proof → Groth16 verification.\n");
+    s.push_str("No on-chain comparison is performed, ever.\n");
     s.push_str("\n");
     for p in protocols {
         s.push_str(&format!("{}\n", p.protocol));

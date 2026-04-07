@@ -609,21 +609,33 @@ NS World                          Secure World                        TROPIC01 C
 
 ## ZK Clear Signing
 
-For supported DeFi protocols (Aave V3 today), the secure world refuses to
-display a "human-readable" action string on the trusted UI unless a
-**Groth16 zero-knowledge proof** cryptographically certifies that the
-string is a faithful ABI interpretation of the raw calldata being signed.
-This closes a long-standing trust hole in hardware wallets: today, the
-companion app on the host is free to render `swap 1 ETH for 3000 USDC`
-while the chip is asked to sign a calldata blob that actually drains the
-caller's balance to an attacker.
+For supported DeFi protocols (Aave V3 and CowSwap `setPreSignature` today),
+the secure world refuses to display a "human-readable" action string on
+the trusted UI unless a **Groth16 zero-knowledge proof** cryptographically
+certifies that the string is a faithful ABI interpretation of the raw
+calldata being signed. This closes a long-standing trust hole in hardware
+wallets: today, the companion app on the host is free to render `swap 1 ETH
+for 3000 USDC` while the chip is asked to sign a calldata blob that
+actually drains the caller's balance to an attacker.
 
 The architecture follows the [ZKNOX clear-signing
-proposal](https://zknox.org) and reuses the [ZKlarity Circom
-circuit](https://github.com/zklarity/zklarity-circuits): the proving side
-runs off-device, on either a watchtower service or the user's companion;
-the wallet only ever runs the **verifier**, which is small enough
-(`#![no_std]`, no `alloc`) to fit inside the secure world.
+proposal](https://zknox.org). The Aave V3 circuit is a byte-identical copy
+of [ZKNoxHQ/ZKlarity](https://github.com/ZKNoxHQ/ZKlarity) (see
+`circuits/UPSTREAM.md` for provenance and the unresolved license note);
+the CowSwap `setPreSignature` circuit is written in-tree under
+`circuits/cowswap/set_pre_signature/`. Proving runs off-device, on either
+a watchtower service or the user's companion; the wallet only ever runs
+the **verifier**, which is small enough (`#![no_std]`, no `alloc`) to fit
+inside the secure world.
+
+> **Future work — CowSwap EIP-712 order clear-signing**: the current
+> CowSwap circuit only covers the on-chain `setPreSignature` wrapper, not
+> direct EIP-712 `GPv2Order` signing. The latter is tracked as milestone
+> M4 and deferred. See **[docs/m4-cowswap-eip712.md](./m4-cowswap-eip712.md)**
+> for a full handoff note covering the design sketch, gotchas learned
+> during the M0–M3 rollout, the "keccak stays out of the circuit" key
+> insight that sidesteps a `pot18` trusted-setup requirement, and a
+> step-by-step quick-start checklist for when M4 is picked up.
 
 ### Verification chain
 
@@ -856,9 +868,20 @@ secure/data/
 ├── erc20.json              # curated ERC20 metadata — sorted by (chain_id, address)
 ├── vks.json                # VK manifest (one block per protocol + its deployments)
 ├── vks/                    # raw 960-byte Groth16 verification keys
-│   └── aave_v3_supply.vk.bin
-└── vks.review.txt          # GENERATED — release-review manifest (checked in)
+│   ├── aave_v3_pool.vk.bin
+│   └── cowswap_set_pre_signature.vk.bin
+└── vks.review.txt          # GENERATED — build-traceability manifest (checked in)
 ```
+
+VKs are produced by the in-tree Circom pipeline under `circuits/`
+(see `circuits/README.md` and `circuits/UPSTREAM.md`). The host-side
+driver `tools/build_vks.sh` compiles the `.circom` sources, runs the
+`snarkjs` trusted setup, and writes the 960-byte files into
+`secure/data/vks/`. `cargo run -p dbgen` then folds them into the
+Merkle-rooted firmware DB. The two pipelines are decoupled: `dbgen`
+is cargo-only and does not shell out to Node or circom, so a clean
+clone with only cargo can rebuild the firmware DB from the committed
+`.vk.bin` files.
 
 #### `secure/data/erc20.json`
 
@@ -887,20 +910,32 @@ should recognise. All fields are required except `flags`.
 
 A JSON array where each element describes one protocol (i.e. one
 circuit + VK) plus every chain/contract deployment that shares that
-VK. Dedup happens at the protocol level: the Aave V3 supply VK is
-identical across Mainnet/Base/Arbitrum/Optimism/Polygon, so all five
-deployments ride on a single 960-byte entry in the VK pool.
+VK. Dedup happens at the protocol level: the Aave V3 Pool circuit
+covers four actions (supply / borrow / repay / withdraw) via an
+internal `action_type` mux and is identical across
+Mainnet/Base/Arbitrum/Optimism/Polygon, so all five deployments ride
+on a single 960-byte entry in the VK pool. Similarly the CowSwap
+`setPreSignature` VK covers every chain where `GPv2Settlement` is
+deployed at the canonical CREATE2 address.
 
 ```json
 [
   {
-    "protocol": "aave-v3-supply-v1",
-    "vk_file": "aave_v3_supply.vk.bin",
+    "protocol": "aave-v3-pool-v1",
+    "vk_file": "aave_v3_pool.vk.bin",
     "deployments": [
       { "chain_id": 1,     "address": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
         "label": "Aave V3 Pool, Mainnet" },
       { "chain_id": 8453,  "address": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
         "label": "Aave V3 Pool, Base" }
+    ]
+  },
+  {
+    "protocol": "cowswap-set-pre-signature-v1",
+    "vk_file": "cowswap_set_pre_signature.vk.bin",
+    "deployments": [
+      { "chain_id": 1,   "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41",
+        "label": "GPv2Settlement, Mainnet" }
     ]
   }
 ]
@@ -1095,50 +1130,73 @@ human-readable manifest that lists the VK DB Merkle root plus every
 ```
 === ZK Clear-Signing VK Manifest (firmware build artifact) ===
 ...
-Merkle root (VK_DB_ROOT) = db0bddf81091a9fee79a028e3e5a258204d73eda1109e3d97a123cf420661471
+Merkle root (VK_DB_ROOT) = 89ccb93ed5034a90b48ae07bc10694e2ab7da74b8f8cef3af840d563b943f12a
 
-aave-v3-supply-v1
+aave-v3-pool-v1
   sha256(vk) = f36a73b5bb084a9800ceff63e33e061d182af2b09f6bcef20d441c68fd80292e
   chain      1, contract 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2 (Aave V3 Pool, Mainnet)
   chain   8453, contract 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5 (Aave V3 Pool, Base)
   ...
+cowswap-set-pre-signature-v1
+  sha256(vk) = 5114d50fc022a64aaa199dec0c130a4b27e859714d5f03ba14ef5a8406c1a236
+  chain      1, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Mainnet)
+  ...
 ```
 
-**This file is the trust anchor for the whole local-VK lookup
-story.** Before signing a firmware release, a human reviewer MUST
-compare every `(chain_id, contract, sha256(vk))` row against the
-on-chain `clearSigningVKHash` (or equivalent governance source) for
-that protocol on that chain. The wallet trusts the firmware-signing
-key to attest that this comparison was done — without this
-artifact, "local VK lookup" is just "trust the repo maintainer," not
-"trust the protocol's on-chain governance."
+**This file is a pure build-traceability artifact.** It records
+which `(chain_id, contract, sha256(vk))` triples were folded into
+`VK_DB_ROOT` for a given release, so the release reviewer can diff
+successive releases and notice any unexpected additions. The trust
+chain is entirely offline:
 
-Concretely, the release-signing checklist adds one step:
+```
+firmware-signing key
+      ↓  signs
+firmware release (containing VK_DB_ROOT in secure flash)
+      ↓  anchors
+VK_DB_ROOT                          [32 bytes in secure/src/db_roots.rs]
+      ↓  Merkle-proves
+(chain_id, contract, vk_bytes)      [NS-supplied bundle at sign time]
+      ↓  Groth16-verifies
+proof π binds calldata → readable   [displayed on trusted UI]
+```
+
+There is **no** on-chain `clearSigningVKHash` comparison anywhere in
+this project. The wallet trusts its own Merkle root, the reviewer
+trusts the firmware-signing key, and neither the firmware nor the
+tooling ever reads from an RPC. If a future plan wants to add an
+optional governance-comparison script as a reviewer convenience, it
+will be a strict opt-in on top of this hardware-only baseline.
+
+Release-signing checklist simply becomes:
 
 ```
 [ ] git diff secure/data/vks.review.txt
-    for every added or modified row:
-      [ ] Fetch clearSigningVKHash from the protocol's governance
-          contract on the listed chain
-      [ ] Confirm it matches sha256(vk) in the manifest
-      [ ] Record the verification in the release notes
+    — confirm that every added or modified row corresponds to a
+      Circom circuit you actually intended to add in this release,
+      authored in circuits/, and that no unexpected rows appeared.
+    — no external lookups required.
 ```
 
 ### Putting it all together
 
 ```bash
-# 1. Edit source data
+# 1a. Edit ERC20 source data
 $EDITOR secure/data/erc20.json
-# or drop a new VK and update secure/data/vks.json
-cp new_protocol.vk.bin secure/data/vks/
-$EDITOR secure/data/vks.json
+
+# 1b. OR: author a new ZK clear-signing circuit and produce its VK
+$EDITOR circuits/circuits.json                         # add a row
+mkdir -p circuits/myproto/myaction
+$EDITOR circuits/myproto/myaction/circuit.circom       # write the circuit
+head -c 32 /dev/urandom > circuits/myproto/myaction/contribution.seed
+tools/build_vks.sh myproto_myaction                    # compile → .vk.bin
+$EDITOR secure/data/vks.json                           # add deployment rows
 
 # 2. Regenerate all four outputs
 cargo run -p dbgen
 
-# 3. Review the diff (critical for VK changes)
+# 3. Review the diff (build-traceability only — no external lookups)
 git diff secure/data/vks.review.txt
-# [release reviewer compares new rows against on-chain values]
 
 # 4. Sanity-build both worlds (magic-bytes validator runs here)
 make all
@@ -1147,9 +1205,14 @@ make all
 make e2e
 
 # 6. Commit source + all regenerated outputs atomically
-git add secure/data/ nonsecure/src/{erc20,vk}_db.bin secure/src/db_roots.rs
+git add circuits/ secure/data/ nonsecure/src/{erc20,vk}_db.bin \
+        secure/src/db_roots.rs secure/src/zk/vk_data.rs
 git commit -m "..."
 ```
+
+See `circuits/README.md` for the full circuit-authoring workflow
+and `circuits/UPSTREAM.md` for the provenance of any Circom sources
+imported from third-party repositories.
 
 ## QEMU Limitations
 

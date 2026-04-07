@@ -7,19 +7,28 @@ non-secure world supplies (vk_bytes, merkle_proof) and the secure
 world re-derives the leaf hash from (chain_id, contract, vk_bytes)
 and walks the proof up to this root.
 
-Merkle root (VK_DB_ROOT) = db0bddf81091a9fee79a028e3e5a258204d73eda1109e3d97a123cf420661471
+Merkle root (VK_DB_ROOT) = 81f81fafb279f1b8dfb47b87e255795eb1f91d6546ae17be44796d427146dc6c
 
-Before signing a firmware release, a human reviewer MUST compare
-every (chain_id, contract, sha256(vk)) triple below against the
-on-chain `clearSigningVKHash` (or equivalent governance source)
-for that protocol on that chain. The wallet trusts the firmware-
-signing key to attest that this comparison was done.
+This file is a build-traceability artifact. It records which
+(chain_id, contract, sha256(vk)) triples were folded into the
+VK_DB_ROOT above, so a release reviewer can diff it against the
+previous release and confirm nothing unexpected was added.
+The trust chain is entirely offline: firmware-signing key →
+VK_DB_ROOT in secure flash → Merkle proof → Groth16 verification.
+No on-chain comparison is performed, ever.
 
-aave-v3-supply-v1
+aave-v3-pool-v1
   sha256(vk) = f36a73b5bb084a9800ceff63e33e061d182af2b09f6bcef20d441c68fd80292e
   chain      1, contract 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2 (Aave V3 Pool, Mainnet)
   chain   8453, contract 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5 (Aave V3 Pool, Base)
   chain  42161, contract 0x794a61358D6845594F94dc1DB02A252b5b4814aD (Aave V3 Pool, Arbitrum)
   chain     10, contract 0x794a61358D6845594F94dc1DB02A252b5b4814aD (Aave V3 Pool, Optimism)
   chain    137, contract 0x794a61358D6845594F94dc1DB02A252b5b4814aD (Aave V3 Pool, Polygon)
+
+cowswap-set-pre-signature-v1
+  sha256(vk) = f1c3f903a0bcf73ad0c5f853d7ee8cfd02f801bac8d36ab4d9f95e31ce8cfe44
+  chain      1, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Mainnet)
+  chain    100, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Gnosis Chain)
+  chain  42161, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Arbitrum)
+  chain   8453, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Base)
 

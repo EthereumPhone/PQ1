@@ -301,7 +301,7 @@ fn main() {
     println!("\n=== ALL CHECKS PASSED ===");
     println!("  Poseidon(calldata)  matches ZKlarity circuit output");
     println!("  Poseidon(readable)  matches ZKlarity circuit output");
-    println!("  VK hash             matches on-chain commitment");
+    println!("  VK hash             matches committed vk_data::VK_HASH");
     println!("  Groth16 proof       VALID — \"{}\" is a faithful", readable_str);
     println!("                      representation of the Aave supply calldata");
     println!("\nThis is exactly what the secure world would execute for CMD_CLEAR_SIGN.");

@@ -5,11 +5,13 @@
 //!
 //! where vk_x = IC[0] + pub[0]·IC[1] + pub[1]·IC[2]
 //!
-//! The verification key is NOT hardcoded — it is received at runtime as part
-//! of the clear-sign payload. Each protocol (Aave, Uniswap, etc.) publishes
-//! its own circuit and VK. The wallet authenticates the VK by hashing it and
-//! comparing against `clearSigningVKHash` read from the protocol's on-chain
-//! governance contract.
+//! The verification key is NOT hardcoded — it is received at runtime in
+//! the NS → S bundle. Each protocol (Aave, CowSwap, etc.) has its own
+//! Circom circuit under `circuits/` and its own 960-byte VK in the
+//! non-secure VK DB. The wallet authenticates the VK by walking a
+//! SHA-256 Merkle proof up to `secure::db_roots::VK_DB_ROOT`, which is
+//! anchored by the firmware-signing key. Fully offline — no on-chain
+//! governance comparison.
 //!
 //! Uses the `bls12_381` crate for all elliptic curve and pairing operations.
 //! Individual pairings avoid the need for alloc (no multi_miller_loop).
@@ -88,9 +90,11 @@ impl VerificationKey {
         })
     }
 
-    /// Compute SHA-256 hash of the serialized VK. This is compared against
-    /// `clearSigningVKHash` stored on-chain by the protocol's governance to
-    /// authenticate the VK without trusting the companion device.
+    /// Compute SHA-256 hash of the serialized VK. Used by the Merkle
+    /// verifier in `vk_bundle` to derive the canonical leaf hash for
+    /// proof walking, and by the host-side `zk-test` as a lightweight
+    /// integrity check that the committed `vk_data::VK_BYTES` blob
+    /// matches `vk_data::VK_HASH`.
     pub fn hash(vk_bytes: &[u8; VK_LEN]) -> [u8; 32] {
         let mut h = Sha256::new();
         h.update(vk_bytes);
@@ -145,8 +149,11 @@ fn groth16_verify(proof: &Groth16Proof, vk: &VerificationKey, pub0: Scalar, pub1
 ///   2. Computes H_str = Poseidon(readable, 64)
 ///   3. Verifies the Groth16 proof against (H_tx, H_str) using the given VK
 ///
-/// The caller is responsible for authenticating the VK (e.g. by checking
-/// `VerificationKey::hash(vk_bytes)` against the on-chain `clearSigningVKHash`).
+/// The caller is responsible for authenticating the VK before calling
+/// this function (in the firmware flow, that happens via
+/// `vk_bundle::verify_vk_bundle`, which walks the Merkle proof up to
+/// the embedded `VK_DB_ROOT`). This function only runs the pairing
+/// check — it does not re-verify trust in the VK bytes.
 ///
 /// Returns true if the proof is valid — meaning the readable string
 /// is a cryptographically verified faithful representation of the calldata.

@@ -1,13 +1,23 @@
 [
   {
-    "protocol": "aave-v3-supply-v1",
-    "vk_file": "aave_v3_supply.vk.bin",
+    "protocol": "aave-v3-pool-v1",
+    "vk_file": "aave_v3_pool.vk.bin",
     "deployments": [
       { "chain_id": 1,     "address": "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2", "label": "Aave V3 Pool, Mainnet" },
       { "chain_id": 8453,  "address": "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5", "label": "Aave V3 Pool, Base" },
       { "chain_id": 42161, "address": "0x794a61358D6845594F94dc1DB02A252b5b4814aD", "label": "Aave V3 Pool, Arbitrum" },
       { "chain_id": 10,    "address": "0x794a61358D6845594F94dc1DB02A252b5b4814aD", "label": "Aave V3 Pool, Optimism" },
       { "chain_id": 137,   "address": "0x794a61358D6845594F94dc1DB02A252b5b4814aD", "label": "Aave V3 Pool, Polygon" }
+    ]
+  },
+  {
+    "protocol": "cowswap-set-pre-signature-v1",
+    "vk_file": "cowswap_set_pre_signature.vk.bin",
+    "deployments": [
+      { "chain_id": 1,     "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", "label": "GPv2Settlement, Mainnet" },
+      { "chain_id": 100,   "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", "label": "GPv2Settlement, Gnosis Chain" },
+      { "chain_id": 42161, "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", "label": "GPv2Settlement, Arbitrum" },
+      { "chain_id": 8453,  "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", "label": "GPv2Settlement, Base" }
     ]
   }
 ]

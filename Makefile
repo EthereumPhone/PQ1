@@ -85,10 +85,13 @@ run-hw:
 # right TxKind variant + that every scenario returned NscStatus::Ok.
 #
 # Scenarios:
-#   1. value_transfer  → ValueTransfer
-#   2. erc20_known     → Erc20Known     (USDC mainnet, bundle from NS DB)
-#   3. blind_sign      → ContractCall   (Uniswap router selector only)
-#   4. zk_clear_sign   → ZkClearSign    (Aave V3 supply, VK bundle from NS DB)
+#   1. value_transfer   → ValueTransfer
+#   2. erc20_known      → Erc20Known     (USDC mainnet, bundle from NS DB)
+#   3. blind_sign       → ContractCall   (Uniswap router selector only)
+#   4. zk_clear_sign    → ZkClearSign    (Aave V3 supply, VK bundle from NS DB)
+#   5. cowswap_pre_sign → ZkClearSign    (GPv2Settlement.setPreSignature,
+#                                         in-tree Circom circuit, VK bundle
+#                                         from NS DB)
 #
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
 e2e:
@@ -121,6 +124,7 @@ e2e:
 		"\\[E2E\\] erc20_known = PASS" \
 		"\\[E2E\\] blind_sign = PASS" \
 		"\\[E2E\\] zk_clear_sign = PASS" \
+		"\\[E2E\\] cowswap_pre_sign = PASS" \
 		"\\[E2E\\] ALL TESTS PASSED"; do \
 		if echo "$$out" | grep -q "$$line"; then \
 			echo "  PASS  $$line"; \

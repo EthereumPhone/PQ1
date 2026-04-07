@@ -1,0 +1,17 @@
+{
+  "name": "sphincs-rust-circuits",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZK clear-signing Circom sources for the sphincs_rust firmware. See README.md for the build workflow and UPSTREAM.md for provenance.",
+  "scripts": {
+    "build": "../tools/build_vks.sh",
+    "vk-json-to-bin": "node scripts/vk_json_to_bin.js"
+  },
+  "dependencies": {
+    "circomlib": "2.0.5",
+    "circomlibjs": "0.1.7",
+    "poseidon-bls12381": "1.0.2",
+    "poseidon-bls12381-circom": "1.0.0",
+    "snarkjs": "0.7.4"
+  }
+}

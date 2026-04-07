@@ -1,0 +1,22 @@
+[
+  {
+    "id": "aave_v3_pool",
+    "src": "aave_v3/clear_signing_proof.circom",
+    "domain": "poseidon_calldata",
+    "ptau": "pot14_bls12_381_final.ptau",
+    "out": "aave_v3_pool.vk.bin",
+    "n_public": 2,
+    "constraint_budget": 4000,
+    "_note": "Aave V3 Pool clear-signing circuit. Covers 4 actions (supply / borrow / repay / withdraw) via an internal action_type mux; one VK verifies any of them. File name reflects that this is the Pool-wide VK, not supply-specific."
+  },
+  {
+    "id": "cowswap_set_pre_signature",
+    "src": "cowswap/set_pre_signature/circuit.circom",
+    "domain": "poseidon_calldata",
+    "ptau": "pot14_bls12_381_final.ptau",
+    "out": "cowswap_set_pre_signature.vk.bin",
+    "n_public": 2,
+    "constraint_budget": 2000,
+    "_note": "CowSwap GPv2Settlement.setPreSignature(bytes orderUid, bool signed) clear-signing circuit. Binds calldata to a static readable string 'Pre-sign CowSwap order'. Does NOT decode orderUid internals (orderDigest/owner/validTo) — a richer follow-up can add hex formatting. See circuits/cowswap/set_pre_signature/circuit.circom for the full rationale."
+  }
+]
