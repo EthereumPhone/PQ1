@@ -135,9 +135,28 @@ pub const VK_DB_VERSION: u32 = 1;
 pub const VK_DB_HEADER_LEN: usize = 32;
 pub const VK_DB_ENTRY_LEN: usize = 32;
 
-/// Single VK size in bytes (BLS12-381 Groth16 verification key,
-/// uncompressed). Matches `crate::ZK_VK_LEN`.
-pub const VK_BLOB_LEN: usize = 960;
+/// Single VK pool slot size in bytes. Every pool entry is padded to
+/// this width so the on-disk layout stays fixed-stride regardless of
+/// which Groth16 protocol owns the slot:
+///
+///   960 bytes = legacy 2-public-signal VK (alpha + 3 G2 + 3 IC).
+///               Used by Aave v3 and CowSwap setPreSignature.
+///   1056 bytes = 3-public-signal VK (alpha + 3 G2 + 4 IC).
+///               Used by CowSwap EIP-712 v3 (H_tx, H_str, H_root).
+///
+/// Pool slots larger than the real VK are zero-padded by `dbgen`; the
+/// Merkle leaf hashes the full padded slot, so the trailing zeros are
+/// bound into the firmware trust anchor just like the meaningful
+/// bytes. The secure-side parser then dispatches by sentinel and
+/// deserializes either the first 960 or all 1056 bytes.
+pub const VK_BLOB_LEN: usize = 1056;
+
+/// Size of a 2-public-signal VK (Aave v3, CowSwap setPreSignature).
+/// First `VK_BLOB_LEN_2PUB` bytes of a pool slot for those protocols.
+pub const VK_BLOB_LEN_2PUB: usize = 960;
+
+/// Size of a 3-public-signal VK (CowSwap EIP-712 v3).
+pub const VK_BLOB_LEN_3PUB: usize = 1056;
 
 pub const VK_HDR_OFF_MAGIC: usize = 0;
 pub const VK_HDR_OFF_VERSION: usize = 4;

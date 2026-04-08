@@ -29,6 +29,16 @@ pub fn canonical_erc20_leaf(
 pub struct Erc20BuildResult {
     pub blob: Vec<u8>,
     pub root: [u8; 32],
+    /// Poseidon-Merkle root over the same sorted entry set. Bound into
+    /// the CowSwap EIP-712 v3 Groth16 circuit as a public input. Only
+    /// entries with `symbol_len ≤ MAX_SYMBOL_LEN` (6) are included;
+    /// longer-symbol tokens are absent from the Poseidon tree but still
+    /// present in the SHA-256 tree for the ERC-20 transfer display path.
+    pub poseidon_root: [u8; 32],
+    /// The exported per-entry Poseidon Merkle proofs + root, as JSON,
+    /// written verbatim to `circuits/generated/erc20_poseidon_tree.json`
+    /// for consumption by the host-side witness generator.
+    pub poseidon_tree_json: String,
 }
 
 pub fn build_db(json_path: &Path) -> Result<Erc20BuildResult, String> {
@@ -216,7 +226,113 @@ pub fn build_db(json_path: &Path) -> Result<Erc20BuildResult, String> {
 
     assert_eq!(blob.len(), total_size);
 
-    Ok(Erc20BuildResult { blob, root })
+    // 8. Build the parallel Poseidon-Merkle tree over the same sorted
+    //    entry set. Entries whose symbol is longer than
+    //    `erc20_poseidon::MAX_SYMBOL_LEN` are excluded from the
+    //    Poseidon tree (they stay in the SHA-256 tree and remain
+    //    usable for the ERC-20 transfer display path, just not for
+    //    CowSwap EIP-712 v3 clear-signing). The filter keeps the
+    //    Poseidon tree's (chain_id, address) → leaf_idx mapping
+    //    predictable for the witness generator.
+    let (poseidon_root, poseidon_tree_json) = build_poseidon_side(&prepared)?;
+
+    Ok(Erc20BuildResult {
+        blob,
+        root,
+        poseidon_root,
+        poseidon_tree_json,
+    })
+}
+
+/// Build the parallel Poseidon-Merkle tree + export artifact.
+///
+/// Returns `(root_le_bytes, tree_json_string)`. The root is the
+/// 32-byte little-endian canonical encoding of the top-level Poseidon
+/// field element. The JSON string has the shape
+/// `{ root, depth, entries: [{ chain_id, address, symbol, decimals,
+/// leaf_idx, leaf, proof: [..] }] }` with all field elements rendered
+/// as decimal bigint strings (what snarkjs's `input.json` expects).
+fn build_poseidon_side(prepared: &[PreparedRow]) -> Result<([u8; 32], String), String> {
+    use crate::erc20_poseidon::{
+        canonical_erc20_poseidon_leaf, leaf_hash, scalar_to_dec, scalar_to_le32, ExportedEntry,
+        ExportedTree, PoseidonMerkleTree, MAX_SYMBOL_LEN,
+    };
+
+    // Filter to entries whose symbol fits the circuit's fixed-width
+    // leaf encoding. Anything longer gets dropped from the Poseidon
+    // tree (and therefore can't be clear-signed via CowSwap EIP-712 v3).
+    // The SHA-256 side still has them.
+    let filtered: Vec<(usize, &PreparedRow)> = prepared
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.symbol.len() <= MAX_SYMBOL_LEN)
+        .collect();
+
+    if filtered.is_empty() {
+        return Err("Poseidon tree build: no eligible ERC20 entries".to_string());
+    }
+
+    // Compute the 6-field leaf for every eligible row, then its
+    // Poseidon leaf hash.
+    let mut leaf_hashes: Vec<bls12_381::Scalar> = Vec::with_capacity(filtered.len());
+    let mut leaves_fields: Vec<[bls12_381::Scalar; 6]> = Vec::with_capacity(filtered.len());
+    for (_orig_idx, row) in filtered.iter() {
+        let fields = canonical_erc20_poseidon_leaf(
+            row.chain_id,
+            &row.contract,
+            row.decimals,
+            row.symbol.as_bytes(),
+        )?;
+        leaf_hashes.push(leaf_hash(&fields));
+        leaves_fields.push(fields);
+    }
+
+    // Build the tree.
+    let tree = PoseidonMerkleTree::build(leaf_hashes.clone());
+    let root_scalar = tree.root();
+    let depth = tree.depth();
+
+    // Host-side round-trip sanity check: every pre-padding leaf
+    // should verify against the root via its proof.
+    for (i, leaf) in leaf_hashes.iter().enumerate() {
+        let proof = tree.proof(i);
+        if !crate::erc20_poseidon::verify_proof(leaf, i, &proof, &root_scalar) {
+            return Err(format!(
+                "Poseidon tree round-trip failed for leaf {} (row {}, symbol {:?})",
+                i,
+                filtered[i].0,
+                filtered[i].1.symbol,
+            ));
+        }
+    }
+
+    // Export entries for the witness generator.
+    let mut entries: Vec<ExportedEntry> = Vec::with_capacity(filtered.len());
+    for (leaf_idx, (_orig_idx, row)) in filtered.iter().enumerate() {
+        let proof = tree.proof(leaf_idx);
+        let proof_dec: Vec<String> = proof.iter().map(scalar_to_dec).collect();
+        entries.push(ExportedEntry {
+            chain_id: row.chain_id,
+            address: hex::encode(row.contract),
+            symbol: row.symbol.clone(),
+            decimals: row.decimals,
+            leaf_idx,
+            leaf: scalar_to_dec(&leaf_hashes[leaf_idx]),
+            proof: proof_dec,
+        });
+    }
+    let _ = leaves_fields; // fields kept for symmetry; not serialized (circuit rebuilds them)
+
+    let exported = ExportedTree {
+        root: scalar_to_dec(&root_scalar),
+        depth,
+        entries,
+    };
+
+    let json = serde_json::to_string_pretty(&exported)
+        .map_err(|e| format!("serialize erc20_poseidon_tree.json: {e}"))?;
+
+    Ok((scalar_to_le32(&root_scalar), json))
 }
 
 /// Round-trip every input row through a host-side mirror of the

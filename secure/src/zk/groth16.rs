@@ -157,6 +157,114 @@ pub fn verify_with_public_signals(
     groth16_verify(proof, vk, pub0, pub1)
 }
 
+// ===========================================================================
+// 3-public-signal Groth16 (CowSwap EIP-712 v3)
+// ===========================================================================
+//
+// The CowSwap EIP-712 v3 circuit binds a third public input `H_root` —
+// the Poseidon Merkle root of the device's ERC20 metadata registry
+// (`crate::db_roots::ERC20_POSEIDON_ROOT`). Growing the IC array from
+// 3 to 4 slots bumps `VK_LEN` from 960 to 1056 bytes, so we give this
+// protocol its own `VerificationKeyV3` type + verifier. Aave v3 and
+// CowSwap setPreSignature continue to use the unchanged 2-pub path
+// above, so their committed zkeys don't need to be re-run.
+
+/// Size of a 3-public-signal verification key: alpha(96) + beta(192)
+/// + gamma(192) + delta(192) + 4·IC(96) = 1056 bytes.
+pub const VK_V3_LEN: usize = 96 + 192 + 192 + 192 + 4 * 96;
+
+/// Groth16 verification key for circuits with 3 public signals.
+/// Identical structure to `VerificationKey` except for the IC array
+/// length. Deserialized at runtime from a VK-bundle slot that was
+/// zero-padded to the on-disk `VK_BLOB_LEN` (1056 B).
+pub struct VerificationKeyV3 {
+    pub alpha_g1: G1Affine,
+    pub beta_g2: G2Affine,
+    pub gamma_g2: G2Affine,
+    pub delta_g2: G2Affine,
+    pub ic: [G1Affine; 4], // IC[0..3] for 3 public signals
+}
+
+impl VerificationKeyV3 {
+    /// Deserialize a 3-public-signal VK from 1056 bytes.
+    ///
+    /// Layout:
+    ///   [0..96)      alpha_g1  (G1 uncompressed)
+    ///   [96..288)    beta_g2   (G2 uncompressed)
+    ///   [288..480)   gamma_g2  (G2 uncompressed)
+    ///   [480..672)   delta_g2  (G2 uncompressed)
+    ///   [672..768)   IC[0]     (G1 uncompressed)
+    ///   [768..864)   IC[1]     (G1 uncompressed)
+    ///   [864..960)   IC[2]     (G1 uncompressed)
+    ///   [960..1056)  IC[3]     (G1 uncompressed)
+    pub fn from_bytes(bytes: &[u8; VK_V3_LEN]) -> Option<Self> {
+        let alpha_g1 = Option::from(G1Affine::from_uncompressed(bytes[0..96].try_into().ok()?))?;
+        let beta_g2 =
+            Option::from(G2Affine::from_uncompressed(bytes[96..288].try_into().ok()?))?;
+        let gamma_g2 =
+            Option::from(G2Affine::from_uncompressed(bytes[288..480].try_into().ok()?))?;
+        let delta_g2 =
+            Option::from(G2Affine::from_uncompressed(bytes[480..672].try_into().ok()?))?;
+        let ic0 = Option::from(G1Affine::from_uncompressed(bytes[672..768].try_into().ok()?))?;
+        let ic1 = Option::from(G1Affine::from_uncompressed(bytes[768..864].try_into().ok()?))?;
+        let ic2 = Option::from(G1Affine::from_uncompressed(bytes[864..960].try_into().ok()?))?;
+        let ic3 = Option::from(G1Affine::from_uncompressed(bytes[960..1056].try_into().ok()?))?;
+
+        Some(VerificationKeyV3 {
+            alpha_g1,
+            beta_g2,
+            gamma_g2,
+            delta_g2,
+            ic: [ic0, ic1, ic2, ic3],
+        })
+    }
+}
+
+fn groth16_verify_3pub(
+    proof: &Groth16Proof,
+    vk: &VerificationKeyV3,
+    pub0: Scalar,
+    pub1: Scalar,
+    pub2: Scalar,
+) -> bool {
+    // vk_x = IC[0] + pub0·IC[1] + pub1·IC[2] + pub2·IC[3]
+    let vk_x: G1Affine = {
+        let ic0 = G1Projective::from(vk.ic[0]);
+        let ic1 = G1Projective::from(vk.ic[1]);
+        let ic2 = G1Projective::from(vk.ic[2]);
+        let ic3 = G1Projective::from(vk.ic[3]);
+        G1Affine::from(ic0 + ic1 * pub0 + ic2 * pub1 + ic3 * pub2)
+    };
+
+    let neg_alpha = -vk.alpha_g1;
+    let neg_vk_x = -vk_x;
+    let neg_c = -proof.c;
+
+    let result = miller_loop_4([
+        (&proof.a, &proof.b),
+        (&neg_alpha, &vk.beta_g2),
+        (&neg_vk_x, &vk.gamma_g2),
+        (&neg_c, &vk.delta_g2),
+    ])
+    .final_exponentiation();
+
+    result == Gt::identity()
+}
+
+/// 3-public-signal Groth16 verification entry point. Mirrors
+/// `verify_with_public_signals` but for the CowSwap EIP-712 v3
+/// circuit. Used by `cmd_clear_sign_msg` when the VK bundle sentinel
+/// identifies the EIP-712 protocol.
+pub fn verify_with_public_signals_3pub(
+    proof: &Groth16Proof,
+    vk: &VerificationKeyV3,
+    pub0: Scalar,
+    pub1: Scalar,
+    pub2: Scalar,
+) -> bool {
+    groth16_verify_3pub(proof, vk, pub0, pub1, pub2)
+}
+
 /// Verify a ZK clear signing proof with a dynamically-provided verification key.
 ///
 /// Given raw calldata, a human-readable string, a Groth16 proof, and the

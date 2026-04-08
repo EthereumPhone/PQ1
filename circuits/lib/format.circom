@@ -218,12 +218,17 @@ template FormatTrimmedAmount(MAX_INT_DIGITS, FRAC_DIGITS, MAX_DECIMALS) {
     //   raw_amount * scale_factor
     //     == int_value * pow_max + frac_value * pow_skip + remainder
     //
-    //   0 <= remainder < pow_skip
+    //   remainder === 0   (STRICT: v3 rejects sub-FRAC_DIGITS precision)
     //
-    // We must bound `remainder` to keep the equation 1:1 (otherwise
-    // a malicious prover could shift bits between frac_value and
-    // remainder). pow_skip is at most 10^14 < 2^47, so a 48-bit range
-    // check is plenty.
+    // v2 allowed `0 ≤ remainder < pow_skip`, which silently truncated
+    // sub-10^-4 precision and rendered it as "0.0000". That's a
+    // clear-signing footgun — a user confirming "0.0000 WETH" would be
+    // signing any amount below 10^-4 WETH. v3 enforces `remainder === 0`
+    // so the prover has to round-to-FRAC_DIGITS explicitly (or the proof
+    // construction fails).
+    //
+    // `remainder` is still declared as a signal so existing callers
+    // don't break; it's simply constrained to 0 below.
     signal scaled;
     scaled <== raw_amount * scale_factor;
 
@@ -238,12 +243,11 @@ template FormatTrimmedAmount(MAX_INT_DIGITS, FRAC_DIGITS, MAX_DECIMALS) {
     signal recomp_ok;
     recomp_ok <== recomp_isz.out;
 
-    // remainder < pow_skip
-    component rem_lt = LessThan(48);
-    rem_lt.in[0] <== remainder;
-    rem_lt.in[1] <== pow_skip;
+    // Force the hidden sub-frac residue to exactly zero.
+    component rem_isz = IsZero();
+    rem_isz.in <== remainder;
     signal rem_ok;
-    rem_ok <== rem_lt.out;
+    rem_ok <== rem_isz.out;
 
     // ── 5. Leading-zero count + blank-out selector ──────────────────
     component count_lz = CountLeadingZeros(MAX_INT_DIGITS);

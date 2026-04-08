@@ -119,16 +119,32 @@ pub const CMD_CLEAR_SIGN: u32 = 5;
 pub const CMD_CLEAR_SIGN_MSG: u32 = 6;
 
 // ---------------------------------------------------------------------------
-// EIP-712 clear signing constants (M4 — CowSwap GPv2Order)
+// EIP-712 clear signing constants (M4 — CowSwap GPv2Order, v3)
 // ---------------------------------------------------------------------------
 
-/// Canonical (packed) GPv2Order encoding length, sized to match the
-/// existing 164-byte calldata slot so the same `poseidon6` instance
-/// can hash it without expanding the firmware Poseidon footprint.
-pub const EIP712_CANONICAL_LEN: usize = 164;
+/// Canonical (packed) GPv2Order encoding length.
+///
+/// v3 layout (204 bytes):
+///
+///   [  0..  8)  chain_id          (u64 BE)         ← NEW in v3
+///   [  8.. 28)  sellToken
+///   [ 28.. 48)  buyToken
+///   [ 48.. 68)  receiver
+///   [ 68..100)  sellAmount        (uint256 BE)
+///   [100..132)  buyAmount
+///   [132..164)  feeAmount
+///   [164..168)  validTo           (u32 BE)
+///   [168]       kind
+///   [169]       partiallyFillable
+///   [170]       sellTokenBalance
+///   [171]       buyTokenBalance
+///   [172..204)  appData           (bytes32)        ← NEW in v3
+pub const EIP712_CANONICAL_LEN: usize = 204;
 
-/// Same readable-string length as the EIP-1559 clear-sign path.
-pub const EIP712_STRING_LEN: usize = 64;
+/// Readable-string length (8 lines × 16 cols = 128). Wider than the
+/// EIP-1559 clear-sign path because v3 splits the amount and symbol
+/// onto separate lines, enabling MAX_INT_DIGITS=10 + 6-char symbols.
+pub const EIP712_STRING_LEN: usize = 128;
 
 /// Same Groth16 proof size as the EIP-1559 clear-sign path.
 pub const EIP712_PROOF_LEN: usize = 384;

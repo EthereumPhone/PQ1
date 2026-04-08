@@ -1,29 +1,35 @@
 //! CowSwap GPv2Order — EIP-712 typed-data clear-signing protocol.
 //!
 //! See `docs/m4-cowswap-eip712-impl.md` for the rationale behind the
-//! 164-byte packed canonical encoding (which is shared with the
+//! 204-byte packed canonical encoding (which is shared with the
 //! Groth16 circuit at `circuits/cowswap/eip712_order/circuit.circom`).
 //!
-//! ## Canonical layout (164 bytes — UNCHANGED across M4 v1/v2)
+//! ## Canonical layout (204 bytes — v3)
 //!
 //! ```text
-//!   [  0..  20)  sellToken          (20 B address)
-//!   [ 20..  40)  buyToken           (20 B address)
-//!   [ 40..  60)  receiver           (20 B address)
-//!   [ 60..  92)  sellAmount         (uint256 BE)
-//!   [ 92.. 124)  buyAmount          (uint256 BE)
-//!   [124.. 156)  feeAmount          (uint256 BE)
-//!   [156.. 160)  validTo            (uint32 BE)
-//!   [160]        kind               (0 = sell, 1 = buy)
-//!   [161]        partiallyFillable  (0 / 1)
-//!   [162]        sellTokenBalance   (0 / 1 / 2)
-//!   [163]        buyTokenBalance    (0 / 1)
+//!   [  0..  8 )  chain_id           (u64 BE)          ← NEW in v3
+//!   [  8..  28)  sellToken          (20 B address)
+//!   [ 28..  48)  buyToken           (20 B address)
+//!   [ 48..  68)  receiver           (20 B address)
+//!   [ 68..  100) sellAmount         (uint256 BE)
+//!   [100.. 132)  buyAmount          (uint256 BE)
+//!   [132.. 164)  feeAmount          (uint256 BE)
+//!   [164.. 168)  validTo            (uint32 BE)
+//!   [168]        kind               (0 = sell, 1 = buy)
+//!   [169]        partiallyFillable  (0 / 1)
+//!   [170]        sellTokenBalance   (0 / 1 / 2)
+//!   [171]        buyTokenBalance    (0 / 1)
+//!   [172.. 204)  appData            (bytes32)         ← NEW in v3
 //! ```
 //!
-//! `appData` is forced to `bytes32(0)` (the empty-metadata default
-//! most CowSwap orders use). v3 can either grow the canonical buffer
-//! to 217 B + add `poseidon7`, or shuttle `appData` over a separate
-//! non-Poseidon-bound channel.
+//! `chain_id` is bound via Poseidon so a single proof can't be
+//! replayed across chains (the Merkle lookup in the circuit also
+//! cross-checks that the resolved token entry came from the same
+//! chain). `compute_digest` further verifies that `canonical.chain_id
+//! === verified.chain_id` from the VK bundle before deriving the
+//! EIP-712 digest, so NS can't supply a mismatched VK.
+//!
+//! `appData` is now genuinely bound — v2 pinned it to `bytes32(0)`.
 
 use super::{eip712_domain_separator, final_digest, keccak, Eip712Error};
 
@@ -70,6 +76,7 @@ const COWSWAP_DOMAIN_VERSION: &[u8] = b"v2";
 /// Decoded GPv2Order fields. Borrows nothing — every field is owned.
 #[derive(Clone, Copy, Debug)]
 pub struct GpV2Order {
+    pub chain_id: u64,
     pub sell_token: [u8; 20],
     pub buy_token: [u8; 20],
     pub receiver: [u8; 20],
@@ -81,38 +88,44 @@ pub struct GpV2Order {
     pub partially_fillable: u8,
     pub sell_token_balance: u8,
     pub buy_token_balance: u8,
+    pub app_data: [u8; 32],
 }
 
-/// Parse the 164-byte canonical packed encoding into structured
+/// Parse the 204-byte canonical packed encoding into structured
 /// fields. Validates the small-enum byte ranges (kind,
 /// partiallyFillable, balance kinds) so an out-of-range NS payload
 /// is rejected before it can produce a digest.
-pub fn decode_canonical(canonical: &[u8; 164]) -> Result<GpV2Order, Eip712Error> {
-    let mut sell_token = [0u8; 20];
-    sell_token.copy_from_slice(&canonical[0..20]);
-    let mut buy_token = [0u8; 20];
-    buy_token.copy_from_slice(&canonical[20..40]);
-    let mut receiver = [0u8; 20];
-    receiver.copy_from_slice(&canonical[40..60]);
-
-    let mut sell_amount = [0u8; 32];
-    sell_amount.copy_from_slice(&canonical[60..92]);
-    let mut buy_amount = [0u8; 32];
-    buy_amount.copy_from_slice(&canonical[92..124]);
-    let mut fee_amount = [0u8; 32];
-    fee_amount.copy_from_slice(&canonical[124..156]);
-
-    let valid_to = u32::from_be_bytes([
-        canonical[156],
-        canonical[157],
-        canonical[158],
-        canonical[159],
+pub fn decode_canonical(canonical: &[u8; 204]) -> Result<GpV2Order, Eip712Error> {
+    let chain_id = u64::from_be_bytes([
+        canonical[0], canonical[1], canonical[2], canonical[3],
+        canonical[4], canonical[5], canonical[6], canonical[7],
     ]);
 
-    let kind = canonical[160];
-    let partially_fillable = canonical[161];
-    let sell_token_balance = canonical[162];
-    let buy_token_balance = canonical[163];
+    let mut sell_token = [0u8; 20];
+    sell_token.copy_from_slice(&canonical[8..28]);
+    let mut buy_token = [0u8; 20];
+    buy_token.copy_from_slice(&canonical[28..48]);
+    let mut receiver = [0u8; 20];
+    receiver.copy_from_slice(&canonical[48..68]);
+
+    let mut sell_amount = [0u8; 32];
+    sell_amount.copy_from_slice(&canonical[68..100]);
+    let mut buy_amount = [0u8; 32];
+    buy_amount.copy_from_slice(&canonical[100..132]);
+    let mut fee_amount = [0u8; 32];
+    fee_amount.copy_from_slice(&canonical[132..164]);
+
+    let valid_to = u32::from_be_bytes([
+        canonical[164],
+        canonical[165],
+        canonical[166],
+        canonical[167],
+    ]);
+
+    let kind = canonical[168];
+    let partially_fillable = canonical[169];
+    let sell_token_balance = canonical[170];
+    let buy_token_balance = canonical[171];
 
     if kind > 1
         || partially_fillable > 1
@@ -122,7 +135,11 @@ pub fn decode_canonical(canonical: &[u8; 164]) -> Result<GpV2Order, Eip712Error>
         return Err(Eip712Error::EnumOutOfRange);
     }
 
+    let mut app_data = [0u8; 32];
+    app_data.copy_from_slice(&canonical[172..204]);
+
     Ok(GpV2Order {
+        chain_id,
         sell_token,
         buy_token,
         receiver,
@@ -134,6 +151,7 @@ pub fn decode_canonical(canonical: &[u8; 164]) -> Result<GpV2Order, Eip712Error>
         partially_fillable,
         sell_token_balance,
         buy_token_balance,
+        app_data,
     })
 }
 
@@ -165,7 +183,9 @@ fn balance_hash(b: u8, is_sell_side: bool) -> [u8; 32] {
 }
 
 /// Compute the GPv2Order EIP-712 struct hash from a decoded order.
-/// `appData` is fixed at `bytes32(0)` for v1.
+/// `appData` is now bound from the canonical buffer (v3) — v2 pinned
+/// it to `bytes32(0)`, which meant orders with non-empty appCode
+/// couldn't be clear-signed.
 pub fn struct_hash(order: &GpV2Order) -> [u8; 32] {
     // 13 fields × 32 bytes = 416 bytes.
     let mut buf = [0u8; 32 * 13];
@@ -185,7 +205,8 @@ pub fn struct_hash(order: &GpV2Order) -> [u8; 32] {
     buf[160..192].copy_from_slice(&order.buy_amount);
     // [6] validTo (uint32 left-padded)
     buf[192 + 28..192 + 32].copy_from_slice(&order.valid_to.to_be_bytes());
-    // [7] appData = bytes32(0) → already zero
+    // [7] appData (bytes32) — bound verbatim from canonical in v3.
+    buf[224..256].copy_from_slice(&order.app_data);
     // [8] feeAmount
     buf[256..288].copy_from_slice(&order.fee_amount);
     // [9] kind
@@ -205,10 +226,20 @@ pub fn struct_hash(order: &GpV2Order) -> [u8; 32] {
 // ---------------------------------------------------------------------------
 
 /// Compute the EIP-712 digest the wallet signs for a CowSwap
-/// GPv2Order, given the 164-byte canonical bytes the Groth16 proof
+/// GPv2Order, given the 204-byte canonical bytes the Groth16 proof
 /// has already bound and the chain id from the verified VK bundle.
-pub fn compute_digest(canonical: &[u8; 164], chain_id: u64) -> Result<[u8; 32], Eip712Error> {
+///
+/// Cross-checks that `canonical.chain_id === verified_chain_id`: the
+/// Groth16 proof binds the chain_id inside the canonical buffer via
+/// Poseidon, and this check prevents NS from pairing a legitimate
+/// proof with a mismatched VK bundle (e.g. mainnet proof + Gnosis
+/// bundle — the digest would otherwise be signed against the wrong
+/// domain separator).
+pub fn compute_digest(canonical: &[u8; 204], chain_id: u64) -> Result<[u8; 32], Eip712Error> {
     let order = decode_canonical(canonical)?;
+    if order.chain_id != chain_id {
+        return Err(Eip712Error::ChainIdMismatch);
+    }
     let name_hash = keccak(COWSWAP_DOMAIN_NAME);
     let version_hash = keccak(COWSWAP_DOMAIN_VERSION);
     let dom = eip712_domain_separator(&name_hash, &version_hash, chain_id, &GPV2_SETTLEMENT_ADDRESS);

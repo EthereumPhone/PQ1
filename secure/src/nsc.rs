@@ -715,7 +715,13 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
     }
 
     // 7. Deserialize the verified VK + proof for Groth16.
-    let vk = match VerificationKey::from_bytes(verified.vk) {
+    //
+    // Aave v3 / CowSwap setPreSignature are both 2-public-signal
+    // protocols — we slice off the first 960 bytes of the padded
+    // VK pool slot and hand that to the legacy `VerificationKey`
+    // deserializer. The padding bytes beyond 960 are zero-filled by
+    // `dbgen` and ignored here.
+    let vk = match VerificationKey::from_bytes(verified.vk_as_2pub()) {
         Some(v) => v,
         None => {
             ui::show_status("Bad VK", "(deserialize)");
@@ -863,7 +869,7 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
 unsafe fn cmd_clear_sign_msg(args: &GatewayArgs) -> u32 {
     use crate::tx::eip712;
     use crate::ui::confirm::{confirm, ConfirmResult};
-    use crate::zk::groth16::{Groth16Proof, VerificationKey};
+    use crate::zk::groth16::{Groth16Proof, VerificationKeyV3};
     use crate::zk::poseidon::poseidon_bytes;
     use crate::zk::vk_bundle::MAX_VK_BUNDLE_LEN;
     use crate::zk::verify_vk_bundle;
@@ -965,7 +971,11 @@ unsafe fn cmd_clear_sign_msg(args: &GatewayArgs) -> u32 {
     }
 
     // 5. Deserialize the verified VK + proof for Groth16.
-    let vk = match VerificationKey::from_bytes(verified.vk) {
+    //
+    // CowSwap EIP-712 v3 uses a 3-public-signal circuit (H_tx, H_str,
+    // H_root) with a 4-IC VK = 1056 bytes, so we unpack the full
+    // 1056-byte pool slot via `vk_as_3pub`.
+    let vk = match VerificationKeyV3::from_bytes(verified.vk_as_3pub()) {
         Some(v) => v,
         None => {
             ui::show_status("Bad VK", "(deserialize)");
@@ -986,11 +996,20 @@ unsafe fn cmd_clear_sign_msg(args: &GatewayArgs) -> u32 {
     cortex_m_semihosting::hprintln!("[S][e2e] cmd_clear_sign_msg dispatch = ZkClearSignMsg");
 
     // 6. Verify the Groth16 proof against (Poseidon(canonical),
-    //    Poseidon(readable)). The proof attests that `readable` is a
-    //    cryptographically faithful interpretation of `canonical`.
+    //    Poseidon(readable), ERC20_POSEIDON_ROOT). The proof attests
+    //    that `readable` is a cryptographically faithful interpretation
+    //    of `canonical` AND that the sell + buy tokens referenced in
+    //    `canonical` live in the device's Poseidon-rooted ERC20 registry.
     let h_order = poseidon_bytes(canonical, EIP712_CANONICAL_LEN);
     let h_str = poseidon_bytes(readable, EIP712_STRING_LEN);
-    if !crate::zk::groth16::verify_with_public_signals(&proof, &vk, h_order, h_str) {
+    let h_root = {
+        use bls12_381::Scalar;
+        Option::from(Scalar::from_bytes(&crate::db_roots::ERC20_POSEIDON_ROOT))
+            .expect("ERC20_POSEIDON_ROOT is a valid BLS12-381 scalar (dbgen invariant)")
+    };
+    if !crate::zk::groth16::verify_with_public_signals_3pub(
+        &proof, &vk, h_order, h_str, h_root,
+    ) {
         ui::show_status("ZK INVALID", "proof failed");
         return NscStatus::CryptoError as u32;
     }
@@ -1014,34 +1033,14 @@ unsafe fn cmd_clear_sign_msg(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // 8. Render the readable string on the trusted UI and ask for
-    //    confirmation. Same 3-page layout as cmd_clear_sign.
-    let readable_len = readable.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
-
-    let mut confirm_pages: [[[u8; 16]; 4]; 3] = [[[b' '; 16]; 4]; 3];
-
-    confirm_pages[0][0][..16].copy_from_slice(b"ZK Clear Sign   ");
-    confirm_pages[0][1][..16].copy_from_slice(b"EIP-712 verified");
-    confirm_pages[0][2][..16].copy_from_slice(b"                ");
-    confirm_pages[0][3][..16].copy_from_slice(b"  [scroll ->]   ");
-
-    for (i, chunk) in readable[..readable_len].chunks(16).enumerate() {
-        if i >= 4 {
-            break;
-        }
-        for (j, &byte) in chunk.iter().enumerate() {
-            if byte >= 0x20 && byte < 0x7F {
-                confirm_pages[1][i][j] = byte;
-            }
-        }
-    }
-
-    confirm_pages[2][0][..16].copy_from_slice(b"                ");
-    confirm_pages[2][1][..16].copy_from_slice(b"  Long-press:   ");
-    confirm_pages[2][2][..16].copy_from_slice(b"  L=Cancel      ");
-    confirm_pages[2][3][..16].copy_from_slice(b"  R=Confirm     ");
-
-    let confirm_result = confirm(&confirm_pages);
+    // 8. Render the 8-page confirmation flow and ask the user.
+    //    `render_cowswap_pages` consumes both the circuit-bound
+    //    `readable` (amounts + symbols) and the Poseidon-bound
+    //    `canonical` (everything else: receiver, expiry, fee,
+    //    partial, balance kinds, appData) and produces the full
+    //    page sequence.
+    let pages = eip712::cowswap_display::render_cowswap_pages(canonical, readable);
+    let confirm_result = confirm(pages.as_slice());
     match confirm_result {
         ConfirmResult::Confirmed => {}
         ConfirmResult::Cancelled => {

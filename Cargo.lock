@@ -564,6 +564,7 @@ dependencies = [
 name = "dbgen"
 version = "0.1.0"
 dependencies = [
+ "bls12_381_pka",
  "hex",
  "serde",
  "serde_json",

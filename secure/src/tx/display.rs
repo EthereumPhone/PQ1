@@ -26,7 +26,11 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 /// recipient + raw contract anti-spoof page + amount + chain/gas + fees
 /// + nonce + buttons) and BLIND SIGNING (banner + warning text +
 /// to + value + selector/length + gas/fees + nonce + buttons).
-pub const MAX_PAGES: usize = 8;
+/// Bumped again to 10 for the CowSwap EIP-712 v3 render path, which
+/// splits across: header + two pages of circuit-bound readable
+/// (kind/sell/symbol + at-least/buy/symbol) + receiver + expiry+partial
+/// + fee+balance + appData + confirm.
+pub const MAX_PAGES: usize = 10;
 
 pub struct Pages {
     buf: [Page; MAX_PAGES],
@@ -45,11 +49,40 @@ impl Pages {
         }
     }
 
-    fn with_len(len: usize) -> Self {
+    /// Construct a page bundle with exactly `len` visible pages,
+    /// pre-filled with ASCII space. Used both internally by the
+    /// EIP-1559 renderers in this file and externally by the
+    /// CowSwap EIP-712 renderer in
+    /// `crate::tx::eip712::cowswap_display`.
+    pub fn empty_with_len(len: usize) -> Self {
+        assert!(len <= MAX_PAGES, "Pages::empty_with_len: len > MAX_PAGES");
         Pages {
             buf: [[[b' '; DISPLAY_COLS]; DISPLAY_ROWS]; MAX_PAGES],
             len,
         }
+    }
+
+    /// Mutable access to a single row within a single page. Bounds-
+    /// checked; panics on out-of-range indices (which would indicate
+    /// a firmware bug since both come from compile-time constants).
+    pub fn row_mut(&mut self, page: usize, row: usize) -> &mut [u8; DISPLAY_COLS] {
+        assert!(page < self.len);
+        assert!(row < DISPLAY_ROWS);
+        &mut self.buf[page][row]
+    }
+
+    /// Mutable access to the full row array of one page. Used by
+    /// renderers that need to mutate two rows of the same page
+    /// simultaneously (via `split_at_mut`), which the row-at-a-time
+    /// `row_mut` helper above can't express without tripping the
+    /// borrow checker.
+    pub fn page_mut(&mut self, page: usize) -> &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS] {
+        assert!(page < self.len);
+        &mut self.buf[page]
+    }
+
+    fn with_len(len: usize) -> Self {
+        Self::empty_with_len(len)
     }
 }
 
