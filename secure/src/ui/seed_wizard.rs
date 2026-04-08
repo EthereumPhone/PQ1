@@ -22,7 +22,7 @@
 //! | long-Left  | cancel / back                                |
 
 use super::{display, input, show_status, Button, Press, DISPLAY_COLS, DISPLAY_ROWS};
-use crate::host_rng;
+use crate::rng;
 use crate::timeout;
 use sphincs_tz_bip39::{lookup_prefix, Mnemonic, PrefixLookup, WORDLIST, WORD_COUNT};
 use zeroize::Zeroize;
@@ -241,7 +241,7 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
 fn pick_three_distinct(out: &mut [u8; 3]) {
     let mut count = 0usize;
     while count < 3 {
-        let candidate = host_rng::byte() % (WORD_COUNT as u8);
+        let candidate = rng::byte() % (WORD_COUNT as u8);
         if out[..count].iter().any(|&c| c == candidate) {
             continue;
         }

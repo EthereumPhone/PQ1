@@ -1,7 +1,12 @@
 //! Hardware peripheral drivers for STM32U585.
 //!
-//! These modules are only compiled when targeting real hardware
-//! (feature `pka-accel` for the PKA crypto accelerator).
+//! These modules are compiled when targeting real hardware.
 
 #[cfg(feature = "pka-accel")]
 pub mod pka;
+
+#[cfg(feature = "stm32u585")]
+pub mod rcc;
+
+#[cfg(feature = "stm32u585")]
+pub mod rng;

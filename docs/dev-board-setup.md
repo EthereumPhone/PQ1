@@ -227,9 +227,9 @@ What it switches:
   - Wire up real **GPIO buttons + OLED display** (`ui-oled` feature)
   - Use **GDB with OpenOCD** which has full semihosting support
 
-- **SysTick at 4 MHz.** The default MSI clock is 4 MHz after reset. No PLL configuration is done yet. This means the inactivity timer ticks at the same rate (2 minutes) but all crypto operations run ~6x slower than at the maximum 160 MHz. Clock configuration is a future task.
+- **Running at 16 MHz (HSI16).** The firmware switches from the default 4 MHz MSI to HSI16 (16 MHz) at boot. PLL configuration for 160 MHz is not yet working due to a PWR VOS register write issue (likely GTZC/TZSC privilege configuration). The 16 MHz clock is a 4x speedup over the default and within VOS Range 4 limits.
 
-- **RNG uses semihosting.** The `host_rng` module reads `/dev/urandom` via semihosting. This works with probe-rs but should be replaced with the STM32U585's hardware TRNG (`RNG` peripheral at `0x420C0800`) for production.
+- **Hardware TRNG.** The `hw::rng` module uses the STM32U585's True Random Number Generator peripheral, clocked by HSI48. This replaces the semihosting `/dev/urandom` backend used on QEMU.
 
 ---
 

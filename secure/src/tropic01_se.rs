@@ -5,7 +5,7 @@
 /// through the encrypted tunnel — the SPHINCS+ private key never travels
 /// in plaintext over the SPI bus.
 
-use crate::host_rng;
+use crate::rng;
 use crate::semihosting_spi::SemihostingSpi;
 use crate::secure_element::{SecureElement, SeError};
 use sphincs_tz_shared::MAX_ATTEMPTS;
@@ -21,7 +21,7 @@ const DEVICE_PATH: &[u8] = b"/dev/ttyACM0\0";
 /// Generate an ephemeral X25519 keypair using host randomness.
 fn generate_ephemeral() -> Result<(PublicKey, StaticSecret), SeError> {
     let mut key_bytes = [0u8; 32];
-    host_rng::fill(&mut key_bytes).map_err(|_| SeError::InternalError)?;
+    rng::fill(&mut key_bytes).map_err(|_| SeError::InternalError)?;
     let secret = StaticSecret::from(key_bytes);
     let public = PublicKey::from(&secret);
     Ok((public, secret))

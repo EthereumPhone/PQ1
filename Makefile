@@ -115,8 +115,9 @@ flash-hw: build-hw
 		-c "stm32l4x option_write 0 0x40 0x9feff8aa 0x80000000" \
 		-c "stm32l4x option_load 0" \
 		-c "exit"
-	@echo "==> Running firmware (Ctrl-C to quit)..."
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Resetting and attaching (Ctrl-C to quit)..."
+	probe-rs reset --chip STM32U585AIIx
+	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
 
 # Non-interactive automated end-to-end test for the sign dispatch logic.
 # Builds both worlds with the `e2e-test` cargo feature, runs them in QEMU

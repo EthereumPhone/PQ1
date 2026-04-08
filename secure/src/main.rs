@@ -17,10 +17,12 @@ mod boot_ns;
 mod crypto;
 mod db_roots;
 mod erc20;
+#[cfg(not(feature = "stm32u585"))]
 mod host_rng;
-#[cfg(feature = "pka-accel")]
+#[cfg(any(feature = "pka-accel", feature = "stm32u585"))]
 mod hw;
 mod nsc;
+mod rng;
 mod pin;
 mod sau;
 mod secure_element;
@@ -54,12 +56,12 @@ static mut SE: MockSecureElement = MockSecureElement::new();
 static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureElement::new();
 
 /// SysTick reload value for ~1 ms tick.
-/// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585 reset default: MSI 4 MHz → 4_000.
+/// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: HSI16 = 16 MHz → 16_000.
 /// `timeout::TIMEOUT_TICKS = 120_000` therefore corresponds to 2 minutes.
 #[cfg(not(feature = "stm32u585"))]
 const SYSTICK_RELOAD: u32 = 25_000;
 #[cfg(feature = "stm32u585")]
-const SYSTICK_RELOAD: u32 = 4_000;
+const SYSTICK_RELOAD: u32 = 16_000;
 
 fn setup_systick() {
     unsafe {
@@ -123,7 +125,7 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
                 // /dev/urandom on QEMU; will be the on-board hardware RNG on
                 // STM32U585 — see docs/architecture.md "Porting to STM32U585").
                 let mut entropy = [0u8; 32];
-                if host_rng::fill(&mut entropy).is_err() {
+                if rng::fill(&mut entropy).is_err() {
                     let mut p = pin;
                     p.zeroize();
                     ui::show_status("RNG failed", "retry...");
@@ -182,6 +184,15 @@ fn main() -> ! {
 
     sau::init();
     secure_log!("[S] SAU + MPC configured");
+
+    // STM32U585: switch to HSI16 (16 MHz) + enable hardware RNG.
+    #[cfg(feature = "stm32u585")]
+    unsafe {
+        hw::rcc::init();
+        secure_log!("[S] RCC: HSI16 (16 MHz) + HSI48 configured");
+        hw::rng::init();
+        secure_log!("[S] Hardware TRNG initialized");
+    }
 
     ui::init();
     secure_log!("[S] UI initialized");

@@ -60,8 +60,8 @@ mod qemu {
 // ---------------------------------------------------------------------------
 #[cfg(feature = "stm32u585")]
 mod stm32 {
-    // RCC AHB1ENR — enable GTZC1 clock
-    const RCC_AHB1ENR: *mut u32 = 0x5002_1088 as *mut u32;
+    // RCC AHB1ENR — enable GTZC1 clock (RCC is on AHB3 at 0x56020C00)
+    const RCC_AHB1ENR: *mut u32 = (0x5602_0C00 + 0x88) as *mut u32;
 
     // GTZC1 MPCBB base addresses (S alias, AHB2)
     const MPCBB1_BASE: u32 = 0x5003_2C00; // SRAM1 (192 KB)
