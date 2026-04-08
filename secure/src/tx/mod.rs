@@ -11,4 +11,5 @@ pub mod eip712;
 pub mod hash;
 pub mod rlp;
 
-pub use eip1559::{Eip1559Tx, TxError, U256};
+// No flat re-exports of `eip1559::*` — call sites import through the
+// `eip1559::` sub-path so accidentally-dead items surface as warnings.

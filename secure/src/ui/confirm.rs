@@ -8,7 +8,12 @@
 //!   * long right   → confirm
 //!   * long left    → cancel
 
-use super::{display, input, Button, Press, DISPLAY_COLS, DISPLAY_ROWS};
+use super::{display, DISPLAY_COLS, DISPLAY_ROWS};
+// The interactive event loop below is compiled out in `e2e-test` builds,
+// so its imports are gated the same way to avoid unused-import warnings.
+#[cfg(not(feature = "e2e-test"))]
+use super::{input, Button, Press};
+#[cfg(not(feature = "e2e-test"))]
 use crate::timeout;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

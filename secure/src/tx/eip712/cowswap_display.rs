@@ -27,7 +27,6 @@
 //!   7: ""                / "L=Cancel  "  / "R=Confirm    " / (buttons)
 
 use crate::tx::display::{Pages, MAX_PAGES};
-use crate::ui::confirm::Page;
 use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 
 // ---------------------------------------------------------------------------

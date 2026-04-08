@@ -4,11 +4,11 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-sphincs-tz-shared = { path = "../shared" }
-sphincs-tz-bip39 = { path = "../bip39" }
-cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
-cortex-m-rt = "0.7"
-cortex-m-semihosting = "0.5"
+sphincs-tz-shared = { workspace = true }
+sphincs-tz-bip39  = { workspace = true }
+cortex-m = { workspace = true, features = ["critical-section-single-core"] }
+cortex-m-rt          = { workspace = true }
+cortex-m-semihosting = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 slh-dsa = { version = "0.2.0-rc.4", default-features = false }
@@ -16,13 +16,15 @@ signature = { version = "3.0.0-rc.10", default-features = false }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
 sha2 = { version = "0.10", default-features = false }
 sha3 = { version = "0.10", default-features = false }
-hmac = { version = "0.12", default-features = false }
+hmac    = { workspace = true }
 zerocopy = { version = "0.8", default-features = false }
-zeroize = { version = "1.8", default-features = false }
+zeroize = { workspace = true }
 
 # BLS12-381 pairing for Groth16 ZK proof verification (no_std, no alloc).
 # Uses our fork which adds a `pka` feature for STM32U585 hardware acceleration.
-bls12_381 = { package = "bls12_381_pka", path = "../bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
+# Base features `groups` + `pairings` come from the workspace dep; the `pka`
+# feature is layered in by the `pka-accel` Cargo feature below.
+bls12_381 = { workspace = true }
 
 # TROPIC01 secure element (for real chip mode)
 tropic01 = { git = "https://github.com/tropicsquare/libtropic-rs", rev = "0cacb5ed94e5df491bfbb39e8702cc47598f7d63", features = ["keys"], optional = true }

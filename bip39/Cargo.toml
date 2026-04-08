@@ -8,9 +8,9 @@ edition.workspace = true
 # while still being usable from the no_std secure-world firmware.
 
 [dependencies]
-sha2 = { version = "0.10", default-features = false }
-hmac = { version = "0.12", default-features = false }
-zeroize = { version = "1.8", default-features = false }
+sha2    = { version = "0.10", default-features = false }
+hmac    = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4"
+hex = { workspace = true }

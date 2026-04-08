@@ -1,6 +1,11 @@
 #![no_std]
 #![no_main]
 #![feature(cmse_nonsecure_entry)]
+// The `e2e-test` build intentionally bypasses the interactive UI paths
+// (wizard, pin entry confirm, interactive main()). Silence the resulting
+// dead-code noise ONLY in that build so production builds still surface
+// genuinely unused symbols.
+#![cfg_attr(feature = "e2e-test", allow(dead_code))]
 
 /// Conditional debug logging macro. Compiles to no-op without the `debug-log` feature,
 /// ensuring no semihosting output in production builds.
@@ -223,11 +228,15 @@ fn main() -> ! {
             .expect("e2e: fixed test mnemonic must parse");
         let pin: [u8; 8] = *b"00000000";
 
-        crypto::provision_with_mnemonic(&mut SE, &mnemonic, &pin);
+        // Use `addr_of_mut!` instead of `&mut SE` to avoid materialising a
+        // raw mutable reference to a `static mut`. The single-threaded
+        // boot sequence makes aliasing impossible by construction; this
+        // is the same pattern the `nsc::cmd_*` handlers use.
+        crypto::provision_with_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
         // Run the verify path so MASTER_SECRET + PIN_VERIFIED end up
         // in the same state as a real unlock.
-        match crate::pin::verify_pin(&mut SE, &pin) {
+        match crate::pin::verify_pin(&mut *core::ptr::addr_of_mut!(SE), &pin) {
             Ok(master) => nsc::set_e2e_unlocked(master),
             Err(_) => panic!("e2e: verify_pin failed after provision"),
         }
@@ -237,7 +246,7 @@ fn main() -> ! {
     // Provision on first boot only.
     #[cfg(not(feature = "e2e-test"))]
     unsafe {
-        if !is_provisioned(&mut SE) {
+        if !is_provisioned(&mut *core::ptr::addr_of_mut!(SE)) {
             secure_log!("[S] Unprovisioned — running first-boot wizard");
             let (mnemonic, mut pin) = run_first_boot_wizard();
 
@@ -255,10 +264,11 @@ fn main() -> ! {
             ui::show_status("Provisioning", "...");
 
             #[cfg(feature = "mock-se")]
-            crypto::provision_with_mnemonic(&mut SE, &mnemonic, &pin);
+            crypto::provision_with_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
             #[cfg(feature = "tropic01-se")]
-            SE.provision(&mnemonic, &pin, sphincs_tz_shared::MAX_ATTEMPTS)
+            (&mut *core::ptr::addr_of_mut!(SE))
+                .provision(&mnemonic, &pin, sphincs_tz_shared::MAX_ATTEMPTS)
                 .expect("TROPIC01 provisioning failed");
 
             // Debug-only: log the verifying key the SE just stored. This is
@@ -267,7 +277,9 @@ fn main() -> ! {
             #[cfg(feature = "debug-log")]
             {
                 let mut vk_buf = [0u8; 64];
-                if let Ok(_) = SE.r_mem_read(crypto::RMEM_VERIFYING_KEY, &mut vk_buf) {
+                if let Ok(_) =
+                    (&mut *core::ptr::addr_of_mut!(SE)).r_mem_read(crypto::RMEM_VERIFYING_KEY, &mut vk_buf)
+                {
                     cortex_m_semihosting::hprintln!("[S] vk (DEBUG):");
                     for chunk in vk_buf[..32].chunks(8) {
                         cortex_m_semihosting::hprintln!(

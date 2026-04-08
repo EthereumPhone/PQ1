@@ -1,3 +1,11 @@
+// This file uses raw `static mut` scratch buffers throughout — they
+// hold multi-kilobyte signing payloads the embedded-target stack can't
+// accommodate, and the e2e runner is single-threaded and non-reentrant
+// so aliasing is impossible by construction. Silencing the
+// static_mut_refs lint ONLY for this test file keeps production NS
+// code still honest about raw static refs.
+#![allow(static_mut_refs)]
+
 //! Non-interactive end-to-end test runner for the secure-world sign
 //! dispatch logic.
 //!

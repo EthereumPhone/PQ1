@@ -1,8 +1,20 @@
 #![no_std]
 #![no_main]
+// The `e2e-test` build swaps out the interactive main() for a scripted
+// runner in e2e_test.rs that only exercises a subset of the nsc_api
+// surface. Silence the resulting dead-code noise ONLY in that build so
+// production builds still surface genuinely unused symbols.
+#![cfg_attr(feature = "e2e-test", allow(dead_code))]
 
-use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
+
+// NOTE: the interactive demo (`main.rs::main`) and the automated runner
+// (`e2e_test.rs::main`) each own their own imports and scratch statics.
+// Everything below this line is the interactive-only side, gated off so
+// the `e2e-test` build doesn't spew "never used" warnings.
+#[cfg(not(feature = "e2e-test"))]
+use cortex_m_semihosting::{debug, hprintln};
+#[cfg(not(feature = "e2e-test"))]
 use sphincs_tz_shared::{
     NscStatus, SIGNATURE_LEN, VERIFYING_KEY_LEN, ZK_HEADER_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN,
     ZK_STRING_LEN,
@@ -15,22 +27,29 @@ mod nsc_api;
 mod vk_db;
 
 // Static signature buffer (17KB is too large for stack)
+#[cfg(not(feature = "e2e-test"))]
 static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
 
 /// Scratch buffer for sign() payloads. Sized to hold:
 ///   has_bundle (1) + tx_len (4) + max EIP-1559 tx + bundle_len (4) + max ERC20 bundle.
 /// MAX_TX_LEN (4096) + MAX_ERC20_BUNDLE_LEN (1120) + slop = ~5300 bytes.
+#[cfg(not(feature = "e2e-test"))]
 const SIGN_PAYLOAD_BUF_LEN: usize = 1 + 4 + 4096 + 4 + 1120 + 64;
+#[cfg(not(feature = "e2e-test"))]
 static mut SIGN_PAYLOAD_BUF: [u8; SIGN_PAYLOAD_BUF_LEN] = [0u8; SIGN_PAYLOAD_BUF_LEN];
 
 /// Scratch buffer for an ERC20 bundle assembled by the NS-side DB lookup.
+#[cfg(not(feature = "e2e-test"))]
 static mut ERC20_BUNDLE_BUF: [u8; 1120] = [0u8; 1120];
 
 /// Scratch buffer for a clear-sign payload (header + tx + length-prefixed VK bundle).
+#[cfg(not(feature = "e2e-test"))]
 const CLEAR_SIGN_BUF_LEN: usize = ZK_HEADER_LEN + 4096 + 4 + 2048;
+#[cfg(not(feature = "e2e-test"))]
 static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
 
 /// Scratch buffer for the VK bundle the NS DB returns.
+#[cfg(not(feature = "e2e-test"))]
 static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
 
 /// A complete unsigned EIP-1559 transaction envelope (50 bytes), built by hand:
@@ -51,6 +70,7 @@ static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
 ///
 /// The secure world parses this, displays the fields on the trusted UI,
 /// waits for the user to confirm via the buttons, then signs.
+#[cfg(not(feature = "e2e-test"))]
 static UNSIGNED_TX: [u8; 50] = [
     0x02,                                                       // EIP-2718 type 2
     0xf0,                                                       // RLP list header (0xc0 + 48)
