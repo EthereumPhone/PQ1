@@ -11,6 +11,7 @@ const CMD_REQUEST_UNLOCK: u32 = 2;
 const CMD_GET_PUBKEY: u32 = 3;
 const CMD_SIGN: u32 = 4;
 const CMD_CLEAR_SIGN: u32 = 5;
+const CMD_CLEAR_SIGN_MSG: u32 = 6;
 
 unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
     core::ptr::write_volatile(SHARED_DONE, 0);
@@ -116,6 +117,34 @@ pub fn clear_sign(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
     unsafe {
         gateway_call(
             CMD_CLEAR_SIGN,
+            payload.as_ptr() as u32,
+            sig_buf.as_mut_ptr() as u32,
+            payload.len() as u32,
+        )
+    }
+}
+
+/// EIP-712 typed-data clear signing (M4 — CowSwap GPv2Order).
+///
+/// The payload layout is:
+///
+/// ```text
+///   [0..384)         Groth16 proof (π.A || π.B || π.C)
+///   [384..548)       canonical bytes (164 bytes, packed GPv2Order)
+///   [548..612)       readable string (64 bytes, null-padded)
+///   [612..616)       bundle_len u32 LE
+///   [616..)          VK bundle bytes
+/// ```
+///
+/// The secure world Merkle-verifies the VK bundle, runs Groth16 to
+/// confirm `Poseidon(canonical) ‖ Poseidon(readable)` are the bound
+/// public signals, recomputes the EIP-712 digest natively from the
+/// SAME canonical bytes, displays the readable string on the trusted
+/// UI, and signs the digest with SLH-DSA.
+pub fn clear_sign_msg(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
+    unsafe {
+        gateway_call(
+            CMD_CLEAR_SIGN_MSG,
             payload.as_ptr() as u32,
             sig_buf.as_mut_ptr() as u32,
             payload.len() as u32,

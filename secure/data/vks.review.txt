@@ -7,7 +7,7 @@ non-secure world supplies (vk_bytes, merkle_proof) and the secure
 world re-derives the leaf hash from (chain_id, contract, vk_bytes)
 and walks the proof up to this root.
 
-Merkle root (VK_DB_ROOT) = 81f81fafb279f1b8dfb47b87e255795eb1f91d6546ae17be44796d427146dc6c
+Merkle root (VK_DB_ROOT) = 9a210e825cbe45cd537c6148f86afded2d47d0380ed50cc6c7d55dde41e730d7
 
 This file is a build-traceability artifact. It records which
 (chain_id, contract, sha256(vk)) triples were folded into the
@@ -31,4 +31,11 @@ cowswap-set-pre-signature-v1
   chain    100, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Gnosis Chain)
   chain  42161, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Arbitrum)
   chain   8453, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, Base)
+
+cowswap-eip712-order-v1
+  sha256(vk) = 41e47b3160dd07be4b707fa216ea52526c1a05ed324c1e6ed1e7383b86d4a71d
+  chain      1, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab42 (GPv2Settlement EIP-712 (sentinel), Mainnet)
+  chain    100, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab42 (GPv2Settlement EIP-712 (sentinel), Gnosis Chain)
+  chain  42161, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab42 (GPv2Settlement EIP-712 (sentinel), Arbitrum)
+  chain   8453, contract 0x9008D19f58AAbD9eD0D60971565AA8510560ab42 (GPv2Settlement EIP-712 (sentinel), Base)
 

@@ -20,9 +20,10 @@ use crate::secure_element::SecureElement;
 use crate::timeout;
 use crate::ui;
 use sphincs_tz_shared::{
-    NscStatus, CMD_CLEAR_SIGN, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_NONE, CMD_REQUEST_UNLOCK,
-    CMD_SIGN, MAX_ATTEMPTS, MAX_TX_LEN, NS_FLASH_BASE, NS_FLASH_END, NS_SRAM_BASE, NS_SRAM_END,
-    SHARED_MAILBOX_BASE, SHARED_MAILBOX_END, SIGNATURE_LEN, VERIFYING_KEY_LEN,
+    NscStatus, CMD_CLEAR_SIGN, CMD_CLEAR_SIGN_MSG, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_NONE,
+    CMD_REQUEST_UNLOCK, CMD_SIGN, EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN,
+    EIP712_STRING_LEN, MAX_ATTEMPTS, MAX_TX_LEN, NS_FLASH_BASE, NS_FLASH_END, NS_SRAM_BASE,
+    NS_SRAM_END, SHARED_MAILBOX_BASE, SHARED_MAILBOX_END, SIGNATURE_LEN, VERIFYING_KEY_LEN,
     ZK_HEADER_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN,
 };
 use zeroize::Zeroize;
@@ -160,6 +161,7 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_GET_PUBKEY => cmd_get_pubkey(args),
         CMD_SIGN => cmd_sign(args),
         CMD_CLEAR_SIGN => cmd_clear_sign(args),
+        CMD_CLEAR_SIGN_MSG => cmd_clear_sign_msg(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -851,6 +853,260 @@ unsafe fn cmd_clear_sign(args: &GatewayArgs) -> u32 {
     rand_buf.zeroize();
     timeout::reset_activity();
     ui::show_status("ZK Signed", "");
+    NscStatus::Ok as u32
+}
+
+// ---------------------------------------------------------------------------
+// CMD_CLEAR_SIGN_MSG — EIP-712 typed-data clear signing (M4)
+// ---------------------------------------------------------------------------
+
+unsafe fn cmd_clear_sign_msg(args: &GatewayArgs) -> u32 {
+    use crate::tx::eip712;
+    use crate::ui::confirm::{confirm, ConfirmResult};
+    use crate::zk::groth16::{Groth16Proof, VerificationKey};
+    use crate::zk::poseidon::poseidon_bytes;
+    use crate::zk::vk_bundle::MAX_VK_BUNDLE_LEN;
+    use crate::zk::verify_vk_bundle;
+
+    if !PIN_VERIFIED {
+        return NscStatus::NotInitialized as u32;
+    }
+
+    let payload_ptr = args.arg0 as *const u8;
+    let sig_ptr = args.arg1 as *mut u8;
+    let total_len = args.arg2 as usize;
+
+    // CMD_CLEAR_SIGN_MSG payload layout:
+    //
+    //   [0..384)         proof (π.A || π.B || π.C)
+    //   [384..548)       canonical bytes (164 bytes, packed GPv2Order)
+    //   [548..612)       readable string (64 bytes, null-padded)
+    //   [612..616)       bundle_len u32 LE
+    //   [616..616+blen)  VK bundle bytes
+    //
+    // No EIP-1559 envelope. The "transaction" the user signs is an
+    // EIP-712 typed-data digest computed natively from the canonical
+    // bytes after the Groth16 proof has bound them to the readable
+    // string the user actually sees.
+
+    if total_len < EIP712_HEADER_LEN + 4 + 1
+        || total_len > EIP712_HEADER_LEN + 4 + MAX_VK_BUNDLE_LEN
+    {
+        return NscStatus::InvalidPointer as u32;
+    }
+    if !validate_ns_read_ptr(args.arg0, total_len) {
+        return NscStatus::InvalidPointer as u32;
+    }
+    if !validate_ns_write_ptr(args.arg1, SIGNATURE_LEN) {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // 1. Copy the entire payload into a secure-stack TOCTOU buffer.
+    let mut buf = [0u8; EIP712_HEADER_LEN + 4 + MAX_VK_BUNDLE_LEN];
+    if total_len > buf.len() {
+        return NscStatus::InvalidPointer as u32;
+    }
+    for i in 0..total_len {
+        buf[i] = core::ptr::read_volatile(payload_ptr.add(i));
+    }
+
+    // 2. Parse the fixed header.
+    let mut off = 0usize;
+    let proof_bytes: &[u8; EIP712_PROOF_LEN] =
+        buf[off..off + EIP712_PROOF_LEN].try_into().unwrap();
+    off += EIP712_PROOF_LEN;
+    let canonical: &[u8; EIP712_CANONICAL_LEN] =
+        buf[off..off + EIP712_CANONICAL_LEN].try_into().unwrap();
+    off += EIP712_CANONICAL_LEN;
+    let readable: &[u8; EIP712_STRING_LEN] =
+        buf[off..off + EIP712_STRING_LEN].try_into().unwrap();
+    off += EIP712_STRING_LEN;
+
+    // 3. Parse the trailing VK bundle.
+    if off + 4 > total_len {
+        ui::show_status("Unsupported", "protocol");
+        return NscStatus::CryptoError as u32;
+    }
+    let blen_bytes: [u8; 4] = buf[off..off + 4].try_into().unwrap();
+    let bundle_len = u32::from_le_bytes(blen_bytes) as usize;
+    off += 4;
+    let bundle_start = off;
+    let bundle_end = bundle_start + bundle_len;
+    if bundle_len == 0 || bundle_len > MAX_VK_BUNDLE_LEN || bundle_end != total_len {
+        ui::show_status("Unsupported", "protocol");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // 4. Merkle-verify the VK bundle against the embedded VK_DB_ROOT.
+    let verified = match verify_vk_bundle(&buf[bundle_start..bundle_end]) {
+        Some(v) => v,
+        None => {
+            ui::show_status("Unsupported", "protocol");
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    // 4a. Cross-check: the bundle MUST be a CowSwap EIP-712 sentinel
+    //     entry, NOT a regular calldata-bound entry from the same DB
+    //     (e.g. the M3 setPreSignature VK). Without this check NS
+    //     could substitute any in-DB VK and trick the firmware into
+    //     running an EIP-712 keccak digest over a buffer the proof
+    //     was built for a completely different protocol.
+    if verified.contract != eip712::COWSWAP_EIP712_SENTINEL {
+        ui::show_status("Bad clear-sign", "(not CowSwap)");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // 5. Deserialize the verified VK + proof for Groth16.
+    let vk = match VerificationKey::from_bytes(verified.vk) {
+        Some(v) => v,
+        None => {
+            ui::show_status("Bad VK", "(deserialize)");
+            return NscStatus::CryptoError as u32;
+        }
+    };
+    let proof = match Groth16Proof::from_bytes(proof_bytes) {
+        Some(p) => p,
+        None => {
+            ui::show_status("Bad proof", "(deserialize)");
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    ui::show_status("Verifying", "ZK proof...");
+
+    #[cfg(feature = "e2e-test")]
+    cortex_m_semihosting::hprintln!("[S][e2e] cmd_clear_sign_msg dispatch = ZkClearSignMsg");
+
+    // 6. Verify the Groth16 proof against (Poseidon(canonical),
+    //    Poseidon(readable)). The proof attests that `readable` is a
+    //    cryptographically faithful interpretation of `canonical`.
+    let h_order = poseidon_bytes(canonical, EIP712_CANONICAL_LEN);
+    let h_str = poseidon_bytes(readable, EIP712_STRING_LEN);
+    if !crate::zk::groth16::verify_with_public_signals(&proof, &vk, h_order, h_str) {
+        ui::show_status("ZK INVALID", "proof failed");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // 7. Native EIP-712 digest computation. The proof has bound
+    //    `canonical` ↔ `readable`; here we re-derive the actual
+    //    EIP-712 message digest from the SAME bytes the proof
+    //    verified, so what we sign matches what the user is about to
+    //    confirm on the trusted UI.
+    let digest = match eip712::eip712_digest(canonical, verified.chain_id) {
+        Ok(d) => d,
+        Err(_) => {
+            ui::show_status("Bad order", "(decode)");
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    // 8. Render the readable string on the trusted UI and ask for
+    //    confirmation. Same 3-page layout as cmd_clear_sign.
+    let readable_len = readable.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
+
+    let mut confirm_pages: [[[u8; 16]; 4]; 3] = [[[b' '; 16]; 4]; 3];
+
+    confirm_pages[0][0][..16].copy_from_slice(b"ZK Clear Sign   ");
+    confirm_pages[0][1][..16].copy_from_slice(b"EIP-712 verified");
+    confirm_pages[0][2][..16].copy_from_slice(b"                ");
+    confirm_pages[0][3][..16].copy_from_slice(b"  [scroll ->]   ");
+
+    for (i, chunk) in readable[..readable_len].chunks(16).enumerate() {
+        if i >= 4 {
+            break;
+        }
+        for (j, &byte) in chunk.iter().enumerate() {
+            if byte >= 0x20 && byte < 0x7F {
+                confirm_pages[1][i][j] = byte;
+            }
+        }
+    }
+
+    confirm_pages[2][0][..16].copy_from_slice(b"                ");
+    confirm_pages[2][1][..16].copy_from_slice(b"  Long-press:   ");
+    confirm_pages[2][2][..16].copy_from_slice(b"  L=Cancel      ");
+    confirm_pages[2][3][..16].copy_from_slice(b"  R=Confirm     ");
+
+    let confirm_result = confirm(&confirm_pages);
+    match confirm_result {
+        ConfirmResult::Confirmed => {}
+        ConfirmResult::Cancelled => {
+            ui::show_status("Cancelled", "");
+            return NscStatus::UserRejected as u32;
+        }
+        ConfirmResult::IdleWipe => {
+            zeroize_sensitive_state();
+            ui::show_status("Locked", "(idle wipe)");
+            return NscStatus::IdleWipe as u32;
+        }
+    }
+
+    ui::show_status("Signing...", "");
+
+    // 9. Read encrypted entropy, decrypt, derive signing key, sign
+    //    the EIP-712 digest. Mirrors cmd_clear_sign steps 5-10.
+    let mut entropy_blob = [0u8; 64];
+    let entropy_blob_len = {
+        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+        #[cfg(feature = "tropic01-se")]
+        {
+            let mut vk_ignore = [0u8; 64];
+            match se.batch_read_entropy_and_vk(&mut entropy_blob, &mut vk_ignore) {
+                Ok((entropy_len, _)) => entropy_len,
+                Err(_) => return NscStatus::InternalError as u32,
+            }
+        }
+        #[cfg(not(feature = "tropic01-se"))]
+        {
+            match se.r_mem_read(crate::crypto::RMEM_ENCRYPTED_ENTROPY, &mut entropy_blob) {
+                Ok(len) => len,
+                Err(_) => return NscStatus::InternalError as u32,
+            }
+        }
+    };
+
+    let mut entropy = match crate::crypto::decrypt_entropy_blob(
+        &entropy_blob[..entropy_blob_len],
+        &*core::ptr::addr_of!(MASTER_SECRET),
+    ) {
+        Ok(e) => e,
+        Err(_) => {
+            entropy_blob.zeroize();
+            return NscStatus::CryptoError as u32;
+        }
+    };
+    entropy_blob.zeroize();
+
+    let signing_key = crate::crypto::derive_signing_key_from_entropy(&entropy);
+    entropy.zeroize();
+
+    let mut rand_buf = [0u8; 16];
+    derive_sign_randomizer(&digest, &mut rand_buf);
+
+    use slh_dsa::Sha2_128f;
+    use slh_dsa::SigningKey as Sk;
+    let sig = match <Sk<Sha2_128f>>::try_sign_with_context(
+        &signing_key,
+        &digest,
+        &[],
+        Some(&rand_buf),
+    ) {
+        Ok(s) => s,
+        Err(_) => {
+            rand_buf.zeroize();
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    let sig_bytes = sig.to_bytes();
+    for i in 0..SIGNATURE_LEN {
+        core::ptr::write_volatile(sig_ptr.add(i), sig_bytes[i]);
+    }
+
+    rand_buf.zeroize();
+    timeout::reset_activity();
+    ui::show_status("ZK Msg Signed", "");
     NscStatus::Ok as u32
 }
 

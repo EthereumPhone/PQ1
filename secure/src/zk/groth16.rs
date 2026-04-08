@@ -141,6 +141,22 @@ fn groth16_verify(proof: &Groth16Proof, vk: &VerificationKey, pub0: Scalar, pub1
     result == Gt::identity()
 }
 
+/// Verify a Groth16 proof against precomputed public signals.
+///
+/// Used by the EIP-712 clear-sign path (`cmd_clear_sign_msg`) which
+/// supplies its own canonical-bytes Poseidon hash as `pub0` and the
+/// readable-string Poseidon hash as `pub1`. The standard ZK clear
+/// signing flow goes through `verify_clear_signing_proof` instead,
+/// which expects a fixed-size 164-byte calldata buffer.
+pub fn verify_with_public_signals(
+    proof: &Groth16Proof,
+    vk: &VerificationKey,
+    pub0: Scalar,
+    pub1: Scalar,
+) -> bool {
+    groth16_verify(proof, vk, pub0, pub1)
+}
+
 /// Verify a ZK clear signing proof with a dynamically-provided verification key.
 ///
 /// Given raw calldata, a human-readable string, a Groth16 proof, and the

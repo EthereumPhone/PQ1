@@ -19,5 +19,16 @@
       { "chain_id": 42161, "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", "label": "GPv2Settlement, Arbitrum" },
       { "chain_id": 8453,  "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab41", "label": "GPv2Settlement, Base" }
     ]
+  },
+  {
+    "protocol": "cowswap-eip712-order-v1",
+    "vk_file": "cowswap_eip712_order.vk.bin",
+    "_address_note": "The address below is a SENTINEL — the trailing 0xab42 byte differs from the real GPv2Settlement (...ab41) so the (chain_id, contract) lookup key remains unique across both CowSwap protocol entries. The EIP-712 flow does not actually call any contract; the firmware hardcodes the real GPv2Settlement address (0x9008D19f...560ab41) as the verifyingContract in the domain separator. See secure/src/tx/eip712.rs::GPV2_SETTLEMENT_ADDRESS.",
+    "deployments": [
+      { "chain_id": 1,     "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab42", "label": "GPv2Settlement EIP-712 (sentinel), Mainnet" },
+      { "chain_id": 100,   "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab42", "label": "GPv2Settlement EIP-712 (sentinel), Gnosis Chain" },
+      { "chain_id": 42161, "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab42", "label": "GPv2Settlement EIP-712 (sentinel), Arbitrum" },
+      { "chain_id": 8453,  "address": "0x9008D19f58AAbD9eD0D60971565AA8510560ab42", "label": "GPv2Settlement EIP-712 (sentinel), Base" }
+    ]
   }
 ]

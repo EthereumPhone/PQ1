@@ -7,6 +7,7 @@
 
 pub mod display;
 pub mod eip1559;
+pub mod eip712;
 pub mod hash;
 pub mod rlp;
 

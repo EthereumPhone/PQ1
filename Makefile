@@ -92,6 +92,13 @@ run-hw:
 #   5. cowswap_pre_sign → ZkClearSign    (GPv2Settlement.setPreSignature,
 #                                         in-tree Circom circuit, VK bundle
 #                                         from NS DB)
+#   6. cowswap_eip712_order → ZkClearSignMsg
+#                                       (CowSwap GPv2Order EIP-712 typed-data
+#                                        message signing — M4. Native keccak
+#                                        digest in the secure world, bound
+#                                        to a Poseidon-hashed canonical
+#                                        encoding via Groth16. No on-chain
+#                                        tx envelope.)
 #
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
 e2e:
@@ -121,11 +128,13 @@ e2e:
 		"\\[S\\]\\[e2e\\] cmd_sign dispatch = Erc20Known" \
 		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ContractCall" \
 		"\\[S\\]\\[e2e\\] cmd_clear_sign dispatch = ZkClearSign" \
+		"\\[S\\]\\[e2e\\] cmd_clear_sign_msg dispatch = ZkClearSignMsg" \
 		"\\[E2E\\] value_transfer = PASS" \
 		"\\[E2E\\] erc20_known = PASS" \
 		"\\[E2E\\] blind_sign = PASS" \
 		"\\[E2E\\] zk_clear_sign = PASS" \
 		"\\[E2E\\] cowswap_pre_sign = PASS" \
+		"\\[E2E\\] cowswap_eip712_order = PASS" \
 		"\\[E2E\\] ALL TESTS PASSED"; do \
 		if echo "$$out" | grep -q "$$line"; then \
 			echo "  PASS  $$line"; \
