@@ -1,10 +1,11 @@
-// Shared memory gateway (must match secure/src/nsc.rs)
-const SHARED_CMD: *mut u32 = 0x2802_FF00 as *mut u32;
-const SHARED_ARG0: *mut u32 = 0x2802_FF04 as *mut u32;
-const SHARED_ARG1: *mut u32 = 0x2802_FF08 as *mut u32;
-const SHARED_ARG2: *mut u32 = 0x2802_FF0C as *mut u32;
-const SHARED_RESULT: *const u32 = 0x2802_FF10 as *const u32;
-const SHARED_DONE: *mut u32 = 0x2802_FF14 as *mut u32;
+// Shared memory gateway (derived from shared crate constants)
+use sphincs_tz_shared::SHARED_MAILBOX_BASE;
+const SHARED_CMD: *mut u32 = SHARED_MAILBOX_BASE as *mut u32;
+const SHARED_ARG0: *mut u32 = (SHARED_MAILBOX_BASE + 4) as *mut u32;
+const SHARED_ARG1: *mut u32 = (SHARED_MAILBOX_BASE + 8) as *mut u32;
+const SHARED_ARG2: *mut u32 = (SHARED_MAILBOX_BASE + 12) as *mut u32;
+const SHARED_RESULT: *const u32 = (SHARED_MAILBOX_BASE + 16) as *const u32;
+const SHARED_DONE: *mut u32 = (SHARED_MAILBOX_BASE + 20) as *mut u32;
 
 const CMD_GET_REMAINING: u32 = 1;
 const CMD_REQUEST_UNLOCK: u32 = 2;

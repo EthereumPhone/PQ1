@@ -36,7 +36,10 @@ mod zk;
 use crypto::{RMEM_ENCRYPTED_ENTROPY, RMEM_PIN_STATE, RMEM_VERIFYING_KEY};
 use secure_element::{MockSecureElement, SecureElement};
 
-const NS_FLASH_BASE: u32 = 0x0020_0000;
+#[cfg(not(feature = "stm32u585"))]
+const NS_FLASH_BASE: u32 = 0x0020_0000; // QEMU mps2-an505: NS alias of SSRAM-0
+#[cfg(feature = "stm32u585")]
+const NS_FLASH_BASE: u32 = 0x0810_0000; // STM32U585: flash bank 2 NS alias
 
 const SYST_CSR: *mut u32 = 0xE000_E010 as *mut u32;
 const SYST_RVR: *mut u32 = 0xE000_E014 as *mut u32;
@@ -50,9 +53,13 @@ static mut SE: MockSecureElement = MockSecureElement::new();
 #[cfg(feature = "tropic01-se")]
 static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureElement::new();
 
-/// SysTick reload value. mps2-an505 default is 25 MHz, so 25_000 cycles ≈ 1 ms.
+/// SysTick reload value for ~1 ms tick.
+/// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585 reset default: MSI 4 MHz → 4_000.
 /// `timeout::TIMEOUT_TICKS = 120_000` therefore corresponds to 2 minutes.
+#[cfg(not(feature = "stm32u585"))]
 const SYSTICK_RELOAD: u32 = 25_000;
+#[cfg(feature = "stm32u585")]
+const SYSTICK_RELOAD: u32 = 4_000;
 
 fn setup_systick() {
     unsafe {

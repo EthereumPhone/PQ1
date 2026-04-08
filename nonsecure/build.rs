@@ -3,9 +3,12 @@ use std::path::PathBuf;
 
 fn main() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
-    std::fs::copy("memory.x", out_dir.join("memory.x")).unwrap();
+    let stm32u585 = env::var_os("CARGO_FEATURE_STM32U585").is_some();
+    let mem_x = if stm32u585 { "memory-stm32u585.x" } else { "memory.x" };
+    std::fs::copy(mem_x, out_dir.join("memory.x")).unwrap();
     println!("cargo:rustc-link-search={}", out_dir.display());
     println!("cargo:rerun-if-changed=memory.x");
+    println!("cargo:rerun-if-changed=memory-stm32u585.x");
 
     // Stale-blob protection. The ERC20 + VK databases are generated
     // by `cargo run -p dbgen` and checked in. The classic failure

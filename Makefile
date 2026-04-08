@@ -10,7 +10,15 @@ NONSECURE_ELF = target/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure
 # Remove it for production builds to eliminate all debug strings.
 FEATURES ?= mock-se,debug-log,ui-semihosting
 
-.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e
+# Extract features relevant to the nonsecure crate (it doesn't know about
+# mock-se, debug-log, ui-semihosting, etc. — only e2e-test and stm32u585).
+NS_FEATURES_LIST := $(strip $(foreach f,stm32u585 e2e-test,$(if $(findstring $(f),$(FEATURES)),$(f))))
+comma := ,
+empty :=
+space := $(empty) $(empty)
+NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
+
+.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e build-hw flash-hw
 
 all: secure nonsecure
 
@@ -22,7 +30,7 @@ secure:
 
 nonsecure: secure
 	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
 	@echo "==> Non-secure world built."
 
 # Run with mock SE (no real TROPIC01 chip needed).
@@ -72,11 +80,43 @@ run-tropic01: setup-serial
 		-kernel $(SECURE_ELF) \
 		-device loader,file=$(NONSECURE_ELF)
 
-# Real STM32U585 hardware build: real chip + real OLED + real buttons.
+# Real STM32U585 hardware build (full): real chip + real OLED + real buttons.
 # This target only BUILDS — flashing is done with probe-rs / openocd / etc.
-# It will not link until secure/src/hw/stm32u585.rs is filled in.
+# It will not link until the ui-oled backend is fully wired up.
 run-hw:
-	$(MAKE) FEATURES=tropic01-se,ui-oled,pka-accel all
+	$(MAKE) FEATURES=tropic01-se,ui-oled,pka-accel,stm32u585 all
+
+# Real STM32U585 hardware build (semihosting): mock SE + semihosting UI.
+# Uses probe-rs semihosting for I/O — same interactive model as QEMU
+# but running on the real Cortex-M33.
+build-hw:
+	$(MAKE) FEATURES=mock-se,debug-log,ui-semihosting,stm32u585 all
+
+# Flash and run on real STM32U585 via probe-rs + OpenOCD.
+# Requires: ST-LINK connected, openocd installed.
+#
+# Workflow:
+#   1. Flash both ELFs via probe-rs (it may clear TZEN during flash)
+#   2. (Re-)configure TrustZone option bytes via OpenOCD
+#   3. Run the secure world with semihosting I/O
+#
+# The option byte setup (TZEN, SECWM, SECBOOTADD0) only needs to be done
+# once after a chip erase. Subsequent flashes can skip step 2 if OBs are
+# already configured.
+flash-hw: build-hw
+	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	openocd -f interface/stlink.cfg -f target/stm32u5x.cfg \
+		-c "init; halt" \
+		-c "stm32l4x option_write 0 0x50 0x007F0000 0x007F007F" \
+		-c "stm32l4x option_write 0 0x60 0x0000007F 0x007F007F" \
+		-c "stm32l4x option_write 0 0x4C 0x00180000 0x01FFFFFF" \
+		-c "stm32l4x option_write 0 0x40 0x9feff8aa 0x80000000" \
+		-c "stm32l4x option_load 0" \
+		-c "exit"
+	@echo "==> Running firmware (Ctrl-C to quit)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 # Non-interactive automated end-to-end test for the sign dispatch logic.
 # Builds both worlds with the `e2e-test` cargo feature, runs them in QEMU

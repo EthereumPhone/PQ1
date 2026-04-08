@@ -3,5 +3,9 @@ name = "sphincs-tz-shared"
 version = "0.1.0"
 edition.workspace = true
 
+[features]
+default = []
+stm32u585 = []  # Real STM32U585 hardware target (vs QEMU mps2-an505)
+
 [dependencies]
 # Zero dependencies — pure #![no_std] types only.

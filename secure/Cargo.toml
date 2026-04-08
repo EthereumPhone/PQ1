@@ -41,6 +41,7 @@ tropic01-se = ["dep:tropic01", "dep:x25519-dalek", "dep:embedded-hal"]
 ui-semihosting = []
 ui-oled = ["dep:ssd1306", "dep:embedded-graphics", "dep:embedded-hal"]
 pka-accel = ["bls12_381/pka"]  # STM32U585 PKA hardware acceleration for BLS12-381 Fp arithmetic
+stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 # Non-interactive automated end-to-end test mode. Provisions a fixed
 # test mnemonic + PIN at boot, marks PIN as verified, and short-circuits
 # every confirm() / enter_pin() dialog so no stdin input is needed.

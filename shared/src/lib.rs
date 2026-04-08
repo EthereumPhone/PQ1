@@ -58,26 +58,36 @@ pub const ZK_HEADER_LEN: usize =
     ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + 4;
 
 // ---------------------------------------------------------------------------
-// Non-secure SRAM boundaries (mps2-an505)
-// Used by secure world to validate NS pointers.
+// Non-secure memory boundaries — used by secure world to validate NS pointers.
 // ---------------------------------------------------------------------------
 
-/// mps2-an505: SSRAM-1 NS alias, offset 128KB (secure stack in first 128KB)
-pub const NS_SRAM_BASE: u32 = 0x2802_0000;
-pub const NS_SRAM_END: u32 = 0x2822_0000;
+#[cfg(not(feature = "stm32u585"))]
+mod mem_layout {
+    /// mps2-an505: SSRAM-1 NS alias, offset 128KB
+    pub const NS_SRAM_BASE: u32 = 0x2802_0000;
+    pub const NS_SRAM_END: u32 = 0x2822_0000;
+    /// mps2-an505: SSRAM-0 NS alias starting at offset 2 MB
+    pub const NS_FLASH_BASE: u32 = 0x0020_0000;
+    pub const NS_FLASH_END: u32 = 0x0040_0000;
+    /// Shared-memory gateway mailbox (end of NS SRAM)
+    pub const SHARED_MAILBOX_BASE: u32 = 0x2802_FF00;
+    pub const SHARED_MAILBOX_END: u32 = 0x2802_FF18;
+}
 
-/// mps2-an505: SSRAM-0 NS alias starting at offset 2 MB (first 2 MB are
-/// secure flash). NS firmware code + read-only data lives here. The secure
-/// gateway accepts NS-flash pointers as read-only inputs (e.g. an unsigned
-/// tx envelope embedded as a `static`), but never as a write target.
-pub const NS_FLASH_BASE: u32 = 0x0020_0000;
-pub const NS_FLASH_END: u32 = 0x0040_0000;
+#[cfg(feature = "stm32u585")]
+mod mem_layout {
+    /// STM32U585: SRAM2 NS alias (64 KB)
+    pub const NS_SRAM_BASE: u32 = 0x2003_0000;
+    pub const NS_SRAM_END: u32 = 0x2004_0000;
+    /// STM32U585: flash bank 2 NS alias (1 MB)
+    pub const NS_FLASH_BASE: u32 = 0x0810_0000;
+    pub const NS_FLASH_END: u32 = 0x0820_0000;
+    /// Shared-memory gateway mailbox (end of SRAM2)
+    pub const SHARED_MAILBOX_BASE: u32 = 0x2003_FF00;
+    pub const SHARED_MAILBOX_END: u32 = 0x2003_FF18;
+}
 
-/// Shared-memory gateway mailbox region (must be excluded from NS pointer
-/// validation so NS cannot trick the secure handler into reading from /
-/// writing to its own command buffer).
-pub const SHARED_MAILBOX_BASE: u32 = 0x2802_FF00;
-pub const SHARED_MAILBOX_END: u32 = 0x2802_FF18;
+pub use mem_layout::*;
 
 // ---------------------------------------------------------------------------
 // Gateway command IDs

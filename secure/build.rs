@@ -14,19 +14,26 @@ fn main() {
     }
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let stm32u585 = env::var_os("CARGO_FEATURE_STM32U585").is_some();
 
-    // Copy memory.x
-    fs::copy("memory.x", out_dir.join("memory.x")).unwrap();
+    // Copy the appropriate memory.x for QEMU or real STM32U585
+    let mem_x = if stm32u585 { "memory-stm32u585.x" } else { "memory.x" };
+    fs::copy(mem_x, out_dir.join("memory.x")).unwrap();
     println!("cargo:rerun-if-changed=memory.x");
+    println!("cargo:rerun-if-changed=memory-stm32u585.x");
 
-    // Find cortex-m-rt's link.x and modify it to place .gnu.sgstubs in NSC region
-    // instead of FLASH. This is needed because QEMU 8.2.2's SG instruction check
-    // reads through the MPC NS alias, so the veneers must be in NS MPC blocks.
+    // Find cortex-m-rt's link.x. On QEMU we redirect .gnu.sgstubs to a
+    // separate NSC region (QEMU 8.2.2 SG workaround). On real STM32U585
+    // the veneers stay in FLASH and the SAU marks them NSC — no patching.
     let link_x = find_link_x(&out_dir);
-    let modified = link_x.replace(
-        "} > FLASH\n  /* Place `__veneer_limit`",
-        "} > NSC\n  /* Place `__veneer_limit`",
-    );
+    let modified = if stm32u585 {
+        link_x // no patching needed on real hardware
+    } else {
+        link_x.replace(
+            "} > FLASH\n  /* Place `__veneer_limit`",
+            "} > NSC\n  /* Place `__veneer_limit`",
+        )
+    };
     fs::write(out_dir.join("link.x"), modified).unwrap();
 
     println!("cargo:rustc-link-search={}", out_dir.display());

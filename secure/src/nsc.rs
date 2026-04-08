@@ -28,13 +28,13 @@ use sphincs_tz_shared::{
 };
 use zeroize::Zeroize;
 
-// Shared memory layout (in NS SRAM)
-const SHARED_CMD: *mut u32 = 0x2802_FF00 as *mut u32;
-const SHARED_ARG0: *mut u32 = 0x2802_FF04 as *mut u32;
-const SHARED_ARG1: *mut u32 = 0x2802_FF08 as *mut u32;
-const SHARED_ARG2: *mut u32 = 0x2802_FF0C as *mut u32;
-const SHARED_RESULT: *mut u32 = 0x2802_FF10 as *mut u32;
-const SHARED_DONE: *mut u32 = 0x2802_FF14 as *mut u32;
+// Shared memory layout (in NS SRAM, derived from shared crate constants)
+const SHARED_CMD: *mut u32 = SHARED_MAILBOX_BASE as *mut u32;
+const SHARED_ARG0: *mut u32 = (SHARED_MAILBOX_BASE + 4) as *mut u32;
+const SHARED_ARG1: *mut u32 = (SHARED_MAILBOX_BASE + 8) as *mut u32;
+const SHARED_ARG2: *mut u32 = (SHARED_MAILBOX_BASE + 12) as *mut u32;
+const SHARED_RESULT: *mut u32 = (SHARED_MAILBOX_BASE + 16) as *mut u32;
+const SHARED_DONE: *mut u32 = (SHARED_MAILBOX_BASE + 20) as *mut u32;
 
 // Secure state
 static mut REMAINING_ATTEMPTS: u8 = MAX_ATTEMPTS;

@@ -11,6 +11,7 @@ default = []
 # ZK clear sign) in sequence and prints PASS/FAIL lines a host
 # harness can grep.
 e2e-test = []
+stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 
 [dependencies]
 sphincs-tz-shared = { path = "../shared" }
