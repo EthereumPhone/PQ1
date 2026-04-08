@@ -56,12 +56,11 @@ static mut SE: MockSecureElement = MockSecureElement::new();
 static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureElement::new();
 
 /// SysTick reload value for ~1 ms tick.
-/// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: HSI16 = 16 MHz → 16_000.
-/// `timeout::TIMEOUT_TICKS = 120_000` therefore corresponds to 2 minutes.
+/// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: set dynamically from rcc::init().
 #[cfg(not(feature = "stm32u585"))]
 const SYSTICK_RELOAD: u32 = 25_000;
 #[cfg(feature = "stm32u585")]
-const SYSTICK_RELOAD: u32 = 16_000;
+static mut SYSTICK_RELOAD: u32 = 16_000; // overwritten by rcc::init() result
 
 fn setup_systick() {
     unsafe {
@@ -180,21 +179,21 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
+    // STM32U585: configure clocks BEFORE any semihosting output.
+    // Semihosting BKPT halts the CPU when no debugger is attached, so
+    // clock/RNG init must happen first to allow standalone boot testing.
+    #[cfg(feature = "stm32u585")]
+    unsafe {
+        let mhz = hw::rcc::init();
+        SYSTICK_RELOAD = mhz * 1_000;
+        hw::rng::init();
+        secure_log!("[S] RCC: {} MHz + HSI48 + TRNG configured", mhz);
+    }
+
     secure_log!("[S] Secure world starting...");
-
-
 
     sau::init();
     secure_log!("[S] SAU + MPC configured");
-
-    // STM32U585: switch to HSI16 (16 MHz) + enable hardware RNG.
-    #[cfg(feature = "stm32u585")]
-    unsafe {
-        hw::rcc::init();
-        secure_log!("[S] RCC: HSI16 (16 MHz) + HSI48 configured");
-        hw::rng::init();
-        secure_log!("[S] Hardware TRNG initialized");
-    }
 
     ui::init();
     secure_log!("[S] UI initialized");
