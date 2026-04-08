@@ -20,6 +20,7 @@ use sphincs_tz_shared::{
     ZK_STRING_LEN,
 };
 
+mod aa;
 mod erc20_db;
 #[cfg(feature = "e2e-test")]
 mod e2e_test;

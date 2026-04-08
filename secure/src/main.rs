@@ -18,6 +18,7 @@ macro_rules! secure_log {
     ($($arg:tt)*) => {};
 }
 
+mod aa;
 mod boot_ns;
 mod crypto;
 mod db_roots;

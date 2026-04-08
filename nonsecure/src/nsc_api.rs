@@ -35,6 +35,7 @@ mod transport {
     const CMD_SIGN: u32 = 4;
     const CMD_CLEAR_SIGN: u32 = 5;
     const CMD_CLEAR_SIGN_MSG: u32 = 6;
+    const CMD_SIGN_USEROP: u32 = 7;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -88,6 +89,17 @@ mod transport {
             gateway_call(CMD_CLEAR_SIGN_MSG, payload_ptr as u32, sig_ptr as u32, total_len)
         }
     }
+
+    #[inline]
+    pub(super) fn sign_userop_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_SIGN_USEROP, payload_ptr as u32, sig_ptr as u32, total_len)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +120,7 @@ mod transport {
         fn nsc_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_clear_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_clear_sign_msg(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
     }
 
     #[inline]
@@ -146,6 +159,15 @@ mod transport {
         total_len: u32,
     ) -> u32 {
         unsafe { nsc_clear_sign_msg(payload_ptr as u32, sig_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn sign_userop_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe { nsc_sign_userop(payload_ptr as u32, sig_ptr as u32, total_len) }
     }
 }
 
@@ -256,6 +278,23 @@ pub fn clear_sign(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
 /// UI, and signs the digest with SLH-DSA.
 pub fn clear_sign_msg(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
     transport::clear_sign_msg_call(
+        payload.as_ptr(),
+        sig_buf.as_mut_ptr(),
+        payload.len() as u32,
+    )
+}
+
+/// ERC-4337 v0.6 UserOperation signing.
+///
+/// The payload is the wire-format buffer produced by
+/// [`crate::aa::build_userop_payload`] (or
+/// [`crate::aa::build_userop_payload_with_bundle`]). The secure world
+/// validates pointers, parses the AA header + inner EIP-1559 envelope,
+/// reconstructs the canonical `execute(...)` callData itself, computes
+/// the EntryPoint v0.6 `userOpHash` natively, displays the inner tx on
+/// the trusted UI, and signs the resulting hash with SLH-DSA.
+pub fn sign_userop(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
+    transport::sign_userop_call(
         payload.as_ptr(),
         sig_buf.as_mut_ptr(),
         payload.len() as u32,

@@ -25,11 +25,11 @@
 //! `[S][e2e] cmd_sign dispatch = <variant>` to verify the dispatcher
 //! picked the right TxKind for each request.
 
-use crate::{erc20_db, nsc_api, vk_db};
+use crate::{aa, erc20_db, nsc_api, vk_db};
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
     EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN, NscStatus,
-    SIGNATURE_LEN, ZK_HEADER_LEN,
+    SIGNATURE_LEN, USEROP_PREFIX_LEN, ZK_HEADER_LEN,
 };
 
 // === Scratch buffers ========================================================
@@ -45,6 +45,90 @@ const CLEAR_SIGN_BUF_LEN: usize = ZK_HEADER_LEN + 4096 + 4 + 2048;
 static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
 
 static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
+
+// Scratch buffer for an ERC-4337 UserOp wrapper payload. Sized to hold:
+//   USEROP_PREFIX_LEN (273+4) + max EIP-1559 tx + bundle_len (4) + max ERC20 bundle.
+const USEROP_PAYLOAD_BUF_LEN: usize = USEROP_PREFIX_LEN + 4096 + 4 + 1120 + 64;
+static mut USEROP_PAYLOAD_BUF: [u8; USEROP_PAYLOAD_BUF_LEN] = [0u8; USEROP_PAYLOAD_BUF_LEN];
+
+// Deterministic test fixtures for the AA wrapper. None of these need to
+// match a real chain — the secure world only verifies internal
+// consistency between the wrapper chain id and the inner tx chain id.
+
+/// Sender = arbitrary deterministic PQ wallet address (this is what the
+/// PQCoinbaseSmartWalletFactory would CREATE2 to for our test owner).
+static AA_SENDER: [u8; 20] = [
+    0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
+    0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
+];
+/// EntryPoint v0.6 mainnet address (same as upstream Coinbase Smart Wallet).
+static AA_ENTRY_POINT: [u8; 20] = [
+    0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+    0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
+];
+/// Nonce = 1 (key=0 || seq=1).
+static AA_NONCE: [u8; 32] = {
+    let mut n = [0u8; 32];
+    n[31] = 1;
+    n
+};
+/// Gas params: 100_000 / 200_000 / 21_000 / 50 gwei / 2 gwei.
+static AA_CALL_GAS: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 100_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_VERIFICATION_GAS: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 200_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_PRE_VERIFICATION_GAS: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 21_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_MAX_FEE: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 50_000_000_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_MAX_PRIO: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 2_000_000_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+
+fn aa_wrapper() -> aa::UserOpWrapper<'static> {
+    aa::UserOpWrapper {
+        sender: &AA_SENDER,
+        entry_point: &AA_ENTRY_POINT,
+        chain_id: 1,
+        nonce: &AA_NONCE,
+        call_gas_limit: &AA_CALL_GAS,
+        verification_gas_limit: &AA_VERIFICATION_GAS,
+        pre_verification_gas: &AA_PRE_VERIFICATION_GAS,
+        max_fee_per_gas: &AA_MAX_FEE,
+        max_priority_fee_per_gas: &AA_MAX_PRIO,
+        init_code_hash: &aa::KECCAK_EMPTY,
+        paymaster_and_data_hash: &aa::KECCAK_EMPTY,
+    }
+}
 
 // === Scenario 1: simple ETH value transfer (empty calldata) =================
 //
@@ -615,6 +699,59 @@ fn main() -> ! {
             }
         };
         report("cowswap_eip712_order", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 7: ERC-4337 UserOp wrapping plain value transfer -----
+    //
+    // The non-secure side wraps the existing SCENARIO_VALUE_TRANSFER
+    // envelope as a UserOperation: same inner tx, with AA wrapper
+    // params built from the deterministic test fixtures above. The
+    // secure world parses the AA header, parses the inner tx,
+    // dispatches it through the same trust ladder as cmd_sign
+    // (expected: ValueTransfer), reconstructs the canonical
+    // execute(target,value,data) callData, computes the EntryPoint
+    // v0.6 userOpHash natively, and signs that hash with SLH-DSA.
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_VALUE_TRANSFER,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report("userop_value_transfer", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 8: ERC-4337 UserOp wrapping ERC20 (USDC) transfer -----
+    //
+    // Same as scenario 2 (Erc20Known dispatch via the NS DB lookup),
+    // but routed through cmd_sign_userop with an attached ERC-20
+    // metadata bundle so the trusted UI still decodes the inner
+    // ERC-20 call before the secure world hashes the wrapper.
+    {
+        let bundle_len = unsafe {
+            erc20_db::build_bundle(1, &USDC_MAINNET_ADDR, &mut ERC20_BUNDLE_BUF)
+        };
+        let status = match bundle_len {
+            Some(n) => unsafe {
+                let bundle = &ERC20_BUNDLE_BUF[..n];
+                let payload_len = aa::build_userop_payload_with_bundle(
+                    &aa_wrapper(),
+                    &SCENARIO_USDC_TRANSFER,
+                    bundle,
+                    &mut USEROP_PAYLOAD_BUF,
+                );
+                nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+            },
+            None => {
+                hprintln!("[E2E] userop_erc20: NS DB lookup MISS for USDC mainnet");
+                NscStatus::CryptoError as u32
+            }
+        };
+        report("userop_erc20", status, &mut pass_count, &mut fail_count);
     }
 
     // ----- Summary -----

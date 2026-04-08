@@ -118,6 +118,58 @@ pub const CMD_CLEAR_SIGN: u32 = 5;
 ///   [612..)          : [bundle_len u32 LE][VK bundle]
 pub const CMD_CLEAR_SIGN_MSG: u32 = 6;
 
+/// CMD_SIGN_USEROP — ERC-4337 Account Abstraction UserOperation signing.
+///
+/// The non-secure world hands the secure world an inner EIP-1559 envelope
+/// (the "intent" tx) plus the AA wrapper parameters that are needed to
+/// reconstruct an EntryPoint v0.6 `getUserOpHash`. The secure world:
+///
+///   1. Re-builds the canonical `execute(target, value, data)` callData
+///      from the inner tx (so a hostile NS cannot replace the callData
+///      with something the user did not authorise via the trusted UI).
+///   2. Computes the EntryPoint v0.6 `userOpHash` natively from the
+///      caller-supplied `(sender, nonce, gas params, init code hash,
+///      paymaster hash, entry point, chain id)` plus the reconstructed
+///      callData hash.
+///   3. Displays the *inner* EIP-1559 transaction on the trusted UI
+///      (so the user sees the actual money flow, not the AA wrapper).
+///   4. Signs `userOpHash` with SLH-DSA-SHA2-128f.
+///
+/// Payload wire format (all integers big-endian unless noted):
+///
+/// ```text
+///   [  0]                       has_bundle u8        (0 or 1)
+///   [  1.. 21)  sender                              (20 bytes)
+///   [ 21.. 41)  entry_point                         (20 bytes)
+///   [ 41.. 49)  aa_chain_id     u64 BE              (chainid hashed by EntryPoint)
+///   [ 49.. 81)  nonce           u256 BE
+///   [ 81..113)  call_gas_limit          u256 BE
+///   [113..145)  verification_gas_limit  u256 BE
+///   [145..177)  pre_verification_gas    u256 BE
+///   [177..209)  max_fee_per_gas         u256 BE
+///   [209..241)  max_priority_fee_per_gas u256 BE
+///   [241..273)  init_code_hash          32 bytes (keccak256)
+///   [273..305)  paymaster_and_data_hash 32 bytes (keccak256)
+///   [305..309)  tx_len u32 LE
+///   [309..309+tx_len)  inner unsigned EIP-1559 envelope
+///   [309+tx_len..]     optional [bundle_len u32 LE][ERC20 metadata bundle]
+/// ```
+///
+/// On success the secure world writes a 17,088-byte SLH-DSA signature
+/// over `userOpHash` into the NS-supplied output buffer.
+pub const CMD_SIGN_USEROP: u32 = 7;
+
+// ---------------------------------------------------------------------------
+// CMD_SIGN_USEROP fixed-header layout offsets
+// ---------------------------------------------------------------------------
+
+/// Length of the fixed header that precedes the `tx_len` field.
+pub const USEROP_HEADER_LEN: usize =
+    1 + 20 + 20 + 8 + 32 + 32 + 32 + 32 + 32 + 32 + 32 + 32;
+
+/// Total fixed prefix length (header + 4-byte `tx_len`).
+pub const USEROP_PREFIX_LEN: usize = USEROP_HEADER_LEN + 4;
+
 // ---------------------------------------------------------------------------
 // EIP-712 clear signing constants (M4 — CowSwap GPv2Order, v3)
 // ---------------------------------------------------------------------------

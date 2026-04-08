@@ -2,6 +2,19 @@ TARGET = thumbv8m.main-none-eabi
 RUSTFLAGS_VAR = CARGO_TARGET_THUMBV8M_MAIN_NONE_EABI_RUSTFLAGS
 VENEERS = $(CURDIR)/target/veneers.o
 
+# CMSE veneers only exist on the real STM32U585 build path (the QEMU
+# `mps2-an505` transport uses a shared-memory mailbox instead). The
+# linker rejects `--cmse-implib` if no `cmse-nonsecure-entry` symbols
+# are present in the secure binary, so we only emit the implib when the
+# `stm32u585` cargo feature is selected.
+ifneq (,$(findstring stm32u585,$(FEATURES)))
+SECURE_CMSE_FLAGS = -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)
+NS_VENEERS_FLAG   = -C link-arg=$(VENEERS)
+else
+SECURE_CMSE_FLAGS =
+NS_VENEERS_FLAG   =
+endif
+
 SECURE_ELF   = target/secure/$(TARGET)/release/sphincs-tz-secure
 NONSECURE_ELF = target/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure
 
@@ -23,13 +36,13 @@ NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),
 all: secure nonsecure
 
 secure:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(SECURE_CMSE_FLAGS)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features $(FEATURES)
-	@echo "==> Secure world built (features: $(FEATURES)). Veneers: $(VENEERS)"
+	@echo "==> Secure world built (features: $(FEATURES))."
 
 nonsecure: secure
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(NS_VENEERS_FLAG)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
 	@echo "==> Non-secure world built."
 
@@ -138,12 +151,12 @@ flash-hw: build-hw
 #
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
 e2e:
-	@echo "==> Building secure + nonsecure with e2e-test feature"
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	@echo "==> Building secure + nonsecure with e2e-test feature (QEMU mailbox transport)"
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test
 	@echo "==> Running e2e suite under QEMU"
@@ -165,12 +178,16 @@ e2e:
 		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ContractCall" \
 		"\\[S\\]\\[e2e\\] cmd_clear_sign dispatch = ZkClearSign" \
 		"\\[S\\]\\[e2e\\] cmd_clear_sign_msg dispatch = ZkClearSignMsg" \
+		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = ValueTransfer" \
+		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = Erc20Known" \
 		"\\[E2E\\] value_transfer = PASS" \
 		"\\[E2E\\] erc20_known = PASS" \
 		"\\[E2E\\] blind_sign = PASS" \
 		"\\[E2E\\] zk_clear_sign = PASS" \
 		"\\[E2E\\] cowswap_pre_sign = PASS" \
 		"\\[E2E\\] cowswap_eip712_order = PASS" \
+		"\\[E2E\\] userop_value_transfer = PASS" \
+		"\\[E2E\\] userop_erc20 = PASS" \
 		"\\[E2E\\] ALL TESTS PASSED"; do \
 		if echo "$$out" | grep -q "$$line"; then \
 			echo "  PASS  $$line"; \

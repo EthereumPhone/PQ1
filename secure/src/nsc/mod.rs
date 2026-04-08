@@ -51,6 +51,7 @@ mod cmd_get_pubkey;
 mod cmd_get_remaining;
 mod cmd_request_unlock;
 mod cmd_sign;
+mod cmd_sign_userop;
 mod ptr_validate;
 mod sign_and_emit;
 mod state;
@@ -58,7 +59,7 @@ mod state;
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
     NscStatus, CMD_CLEAR_SIGN, CMD_CLEAR_SIGN_MSG, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_NONE,
-    CMD_REQUEST_UNLOCK, CMD_SIGN, SHARED_MAILBOX_BASE,
+    CMD_REQUEST_UNLOCK, CMD_SIGN, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -169,6 +170,7 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_SIGN => cmd_sign::run(args),
         CMD_CLEAR_SIGN => cmd_clear_sign::run(args),
         CMD_CLEAR_SIGN_MSG => cmd_clear_sign_msg::run(args),
+        CMD_SIGN_USEROP => cmd_sign_userop::run(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -246,4 +248,16 @@ pub extern "cmse-nonsecure-entry" fn nsc_clear_sign_msg(
 ) -> u32 {
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
     unsafe { cmd_clear_sign_msg::run(&args) }
+}
+
+/// CMD_SIGN_USEROP — wrap inner EIP-1559 tx as ERC-4337 UserOp, sign userOpHash.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_sign_userop(
+    payload_ptr: u32,
+    sig_out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
+    unsafe { cmd_sign_userop::run(&args) }
 }
