@@ -1,6 +1,17 @@
-# M4 handoff — CowSwap EIP-712 order clear-signing
+# M4 handoff — CowSwap EIP-712 order clear-signing  *(historical)*
 
-> **Purpose of this document**: M4 was deferred during the M0–M5 execution
+> **STATUS — 2026-04-08: M4 is shipped.** This file is preserved as a
+> historical design note. The implementation that actually landed
+> follows the "keccak stays out of the circuit" insight from §3.3 but
+> diverges from the design in several ways (164-byte canonical instead
+> of 384-byte ABI encoding, sentinel-address VK DB key instead of
+> domain-byte format change, no token registry / amount formatter in
+> v1, etc.). For the **as-built** description, read
+> [`docs/m4-cowswap-eip712-impl.md`](./m4-cowswap-eip712-impl.md). The
+> "Gotchas" section below is still useful as background for future
+> circuit work.
+
+> **Original purpose of this document**: M4 was deferred during the M0–M5 execution
 > round that shipped the in-tree Circom toolchain (`circuits/`), the
 > `aave_v3_pool` baseline, and the CowSwap `setPreSignature` on-chain
 > circuit. This file captures everything learned during that round so

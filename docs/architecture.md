@@ -609,13 +609,14 @@ NS World                          Secure World                        TROPIC01 C
 
 ## ZK Clear Signing
 
-For supported DeFi protocols (Aave V3 and CowSwap `setPreSignature` today),
-the secure world refuses to display a "human-readable" action string on
-the trusted UI unless a **Groth16 zero-knowledge proof** cryptographically
-certifies that the string is a faithful ABI interpretation of the raw
-calldata being signed. This closes a long-standing trust hole in hardware
-wallets: today, the companion app on the host is free to render `swap 1 ETH
-for 3000 USDC` while the chip is asked to sign a calldata blob that
+For supported DeFi protocols (Aave V3, CowSwap `setPreSignature`, and
+CowSwap EIP-712 `GPv2Order` typed-data signing), the secure world
+refuses to display a "human-readable" action string on the trusted UI
+unless a **Groth16 zero-knowledge proof** cryptographically certifies
+that the string is a faithful interpretation of the raw bytes being
+signed. This closes a long-standing trust hole in hardware wallets:
+today, the companion app on the host is free to render `swap 1 ETH for
+3000 USDC` while the chip is asked to sign a calldata blob that
 actually drains the caller's balance to an attacker.
 
 The architecture follows the [ZKNOX clear-signing
@@ -623,19 +624,28 @@ proposal](https://zknox.org). The Aave V3 circuit is a byte-identical copy
 of [ZKNoxHQ/ZKlarity](https://github.com/ZKNoxHQ/ZKlarity) (see
 `circuits/UPSTREAM.md` for provenance and the unresolved license note);
 the CowSwap `setPreSignature` circuit is written in-tree under
-`circuits/cowswap/set_pre_signature/`. Proving runs off-device, on either
-a watchtower service or the user's companion; the wallet only ever runs
-the **verifier**, which is small enough (`#![no_std]`, no `alloc`) to fit
-inside the secure world.
+`circuits/cowswap/set_pre_signature/`, and the M4 EIP-712 GPv2Order
+circuit lives at `circuits/cowswap/eip712_order/`. Proving runs
+off-device, on either a watchtower service or the user's companion;
+the wallet only ever runs the **verifier**, which is small enough
+(`#![no_std]`, no `alloc`) to fit inside the secure world.
 
-> **Future work — CowSwap EIP-712 order clear-signing**: the current
-> CowSwap circuit only covers the on-chain `setPreSignature` wrapper, not
-> direct EIP-712 `GPv2Order` signing. The latter is tracked as milestone
-> M4 and deferred. See **[docs/m4-cowswap-eip712.md](./m4-cowswap-eip712.md)**
-> for a full handoff note covering the design sketch, gotchas learned
-> during the M0–M3 rollout, the "keccak stays out of the circuit" key
-> insight that sidesteps a `pot18` trusted-setup requirement, and a
-> step-by-step quick-start checklist for when M4 is picked up.
+The wallet supports two distinct sign-time payload shapes:
+
+| Command | Payload | Wraps | Signed bytes |
+|---|---|---|---|
+| `CMD_CLEAR_SIGN` (5) | proof ‖ calldata(164) ‖ readable(64) ‖ tx_len ‖ EIP-1559 envelope ‖ vk_bundle | EIP-1559 transaction | `keccak256(unsigned_envelope)` |
+| `CMD_CLEAR_SIGN_MSG` (6) | proof ‖ canonical(164) ‖ readable(64) ‖ vk_bundle | EIP-712 typed data (no on-chain tx) | `keccak256(0x1901 ‖ domain_separator ‖ struct_hash)` |
+
+The **M4 / EIP-712 path** sidesteps keccak-in-circom by hashing the
+canonical bytes with Poseidon inside the circuit and recomputing the
+EIP-712 keccak digest natively in the secure world from the **same
+164-byte buffer** the proof bound. The circuit only needs to certify
+the human-readable summary; the firmware does the EIP-712 keccak
+work at zero proving cost. See `secure/src/tx/eip712.rs` and
+**[docs/m4-cowswap-eip712-impl.md](./m4-cowswap-eip712-impl.md)** for
+implementation notes; **[docs/m4-cowswap-eip712.md](./m4-cowswap-eip712.md)**
+captures the original handoff design sketch.
 
 ### Verification chain
 
@@ -837,6 +847,8 @@ for every one:
 | erc20_known (USDC mainnet, bundle attached) | `CMD_SIGN` | `Erc20Known` |
 | blind_sign (Uniswap router selector only) | `CMD_SIGN` | `ContractCall` |
 | zk_clear_sign (Aave V3 supply, VK bundle attached) | `CMD_CLEAR_SIGN` | `ZkClearSign` |
+| cowswap_pre_sign (GPv2Settlement.setPreSignature, in-tree circuit, VK bundle) | `CMD_CLEAR_SIGN` | `ZkClearSign` |
+| cowswap_eip712_order (GPv2Order EIP-712 typed data, in-tree M4 circuit, VK bundle) | `CMD_CLEAR_SIGN_MSG` | `ZkClearSignMsg` |
 
 The runner exits 0 only if every assertion holds. Total runtime
 ~20 seconds including QEMU's software BLS12-381 pairing.
