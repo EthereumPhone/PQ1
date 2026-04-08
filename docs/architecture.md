@@ -642,7 +642,11 @@ canonical bytes with Poseidon inside the circuit and recomputing the
 EIP-712 keccak digest natively in the secure world from the **same
 164-byte buffer** the proof bound. The circuit only needs to certify
 the human-readable summary; the firmware does the EIP-712 keccak
-work at zero proving cost. See `secure/src/tx/eip712.rs` and
+work at zero proving cost. The EIP-712 dispatch is generic: each
+protocol implements `Eip712Protocol` in a sibling submodule under
+`secure/src/tx/eip712/` and registers itself in the static
+`PROTOCOLS` table; adding a second EIP-712 protocol is a sibling
+file plus a VK row, no edits to `nsc.rs`. See `secure/src/tx/eip712/` and
 **[docs/m4-cowswap-eip712-impl.md](./m4-cowswap-eip712-impl.md)** for
 implementation notes; **[docs/m4-cowswap-eip712.md](./m4-cowswap-eip712.md)**
 captures the original handoff design sketch.

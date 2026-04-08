@@ -26,7 +26,7 @@
     "ptau": "pot14_bls12_381_final.ptau",
     "out": "cowswap_eip712_order.vk.bin",
     "n_public": 2,
-    "constraint_budget": 4000,
-    "_note": "CowSwap EIP-712 GPv2Order clear-signing circuit (M4). Binds a 164-byte packed canonical encoding of the GPv2Order struct to a 64-byte readable string of the form 'CowSwap SELL    exp 0xXXXXXXXX  ' (or BUY). The secure world re-keccaks the same canonical bytes (re-expanded into the full 416-byte abi.encode of all 12 fields with appData=0) to produce the actual EIP-712 digest the user signs with SLH-DSA. See circuits/cowswap/eip712_order/circuit.circom and docs/m4-cowswap-eip712.md for the full rationale."
+    "constraint_budget": 5000,
+    "_note": "CowSwap EIP-712 GPv2Order clear-signing circuit (M4 v2). Binds a 164-byte packed canonical encoding of the GPv2Order struct to a 64-byte 4-line × 16-char readable layout of the form 'CowSwap SELL    | <amt> <SYM>     |for at least:   |<amt> <SYM>     ' decoded via the shared in-tree ERC20 registry at circuits/lib/erc20_registry.circom. Amounts are formatted by circuits/lib/format.circom (FormatTrimmedAmount with MAX_INT_DIGITS=6, FRAC_DIGITS=4, leading-zero trimming). The secure world re-keccaks the same canonical bytes (re-expanded into the full 416-byte abi.encode of all 12 fields with appData=0) to produce the actual EIP-712 digest the user signs with SLH-DSA. See circuits/cowswap/eip712_order/circuit.circom and docs/m4-cowswap-eip712-impl.md for the full rationale."
   }
 ]

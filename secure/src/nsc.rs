@@ -946,14 +946,21 @@ unsafe fn cmd_clear_sign_msg(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // 4a. Cross-check: the bundle MUST be a CowSwap EIP-712 sentinel
-    //     entry, NOT a regular calldata-bound entry from the same DB
-    //     (e.g. the M3 setPreSignature VK). Without this check NS
-    //     could substitute any in-DB VK and trick the firmware into
+    // 4a. Cross-check: the bundle's contract field MUST match a
+    //     known EIP-712 protocol sentinel — NOT a regular
+    //     calldata-bound entry from the same DB (e.g. the M3
+    //     setPreSignature VK). Without this check NS could
+    //     substitute any in-DB VK and trick the firmware into
     //     running an EIP-712 keccak digest over a buffer the proof
     //     was built for a completely different protocol.
-    if verified.contract != eip712::COWSWAP_EIP712_SENTINEL {
-        ui::show_status("Bad clear-sign", "(not CowSwap)");
+    //
+    //     The protocol dispatch table lives in
+    //     `secure/src/tx/eip712/mod.rs::PROTOCOLS`. Adding a new
+    //     EIP-712 protocol means writing a sibling submodule under
+    //     `secure/src/tx/eip712/` and appending it to that table —
+    //     no edits to this file are required.
+    if !eip712::is_known_sentinel(&verified.contract) {
+        ui::show_status("Bad clear-sign", "(unknown proto)");
         return NscStatus::CryptoError as u32;
     }
 
@@ -992,11 +999,17 @@ unsafe fn cmd_clear_sign_msg(args: &GatewayArgs) -> u32 {
     //    `canonical` ↔ `readable`; here we re-derive the actual
     //    EIP-712 message digest from the SAME bytes the proof
     //    verified, so what we sign matches what the user is about to
-    //    confirm on the trusted UI.
-    let digest = match eip712::eip712_digest(canonical, verified.chain_id) {
+    //    confirm on the trusted UI. Dispatch to the protocol
+    //    submodule keyed by the sentinel address from the verified
+    //    VK bundle.
+    let digest = match eip712::dispatch_for_sentinel(
+        &verified.contract,
+        canonical,
+        verified.chain_id,
+    ) {
         Ok(d) => d,
         Err(_) => {
-            ui::show_status("Bad order", "(decode)");
+            ui::show_status("Bad msg", "(decode)");
             return NscStatus::CryptoError as u32;
         }
     };
