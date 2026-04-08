@@ -177,21 +177,73 @@ Everything not covered by an SAU region defaults to Secure.
 
 ### Design
 
-The gateway provides 5 operations across the TrustZone boundary:
+The gateway provides 6 operations across the TrustZone boundary:
 
 | Command | ID | NS → S Args | S → NS Result |
 |---------|-----|-------------|---------------|
 | `GET_REMAINING` | 1 | — | Remaining PIN attempts (u32) |
 | `REQUEST_UNLOCK` | 2 | — (PIN entered on trusted UI) | NscStatus |
-| `GET_PUBKEY` | 3 | ptr to 32-byte output buf | NscStatus |
-| `SIGN` | 4 | ptr to unsigned EIP-1559 tx, ptr to 17088-byte sig buf, tx_len | NscStatus |
-| `CLEAR_SIGN` | 5 | ptr to ZK payload (VK ‖ proof ‖ calldata ‖ string ‖ vk_hash ‖ tx_len ‖ tx), ptr to sig buf, total_len | NscStatus |
+| `GET_PUBKEY` | 3 | ptr to 32-byte output buf, buf_len | NscStatus |
+| `SIGN` | 4 | ptr to has_bundle-wrapped EIP-1559 payload, ptr to 17088-byte sig buf, total_len | NscStatus |
+| `CLEAR_SIGN` | 5 | ptr to ZK calldata payload (proof ‖ calldata ‖ string ‖ tx_len ‖ tx ‖ vk_bundle), ptr to sig buf, total_len | NscStatus |
+| `CLEAR_SIGN_MSG` | 6 | ptr to EIP-712 payload (proof ‖ canonical ‖ string ‖ vk_bundle), ptr to sig buf, total_len | NscStatus |
 
-### Implementation (QEMU workaround)
+The same six `cmd_*::run` handlers run under both transports described
+below. Only the trigger differs: the QEMU build reads command + args
+out of a shared mailbox in SysTick, and the STM32U585 build enters
+them via CMSE SG veneers.
 
-On QEMU mps2-an505, the ARM CMSE `SG` instruction veneers do not work due to a bug
-where the SG instruction check reads through the MPC NS alias, failing for S-marked blocks
-(see "QEMU Limitations" below). The workaround uses **shared memory + secure SysTick polling**:
+### Transport A: STM32U585 — CMSE veneers (production path)
+
+On real STM32U585 silicon the gateway uses proper ARMv8-M Security
+Extension veneers. `secure/src/nsc/mod.rs` exports all six entry
+points with `extern "cmse-nonsecure-entry"`:
+
+```rust
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32;
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_request_unlock() -> u32;
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_pubkey(out_ptr: u32, out_len: u32) -> u32;
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_clear_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_clear_sign_msg(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+```
+
+All six are gated on `#[cfg(feature = "stm32u585")]`. The secure
+`build.rs` runs `--cmse-implib` to emit SG stubs for every one of
+them into `target/veneers.o`, which the non-secure crate links
+against (`-C link-arg=…/veneers.o`). On the NS side
+(`nonsecure/src/nsc_api.rs`) the symbols resolve as plain
+`extern "C"` functions:
+
+```rust
+extern "C" {
+    fn nsc_get_remaining_attempts() -> u32;
+    fn nsc_request_unlock() -> u32;
+    fn nsc_get_pubkey(out_ptr: u32, out_len: u32) -> u32;
+    fn nsc_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+    fn nsc_clear_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+    fn nsc_clear_sign_msg(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+}
+```
+
+Each call is a synchronous `BLXNS` → SG stub → secure handler →
+`BXNS`. No shared memory, no polling, no SysTick involvement — the
+secure `SysTick` handler only services `timeout::tick()` and the
+idle-wipe check on this transport. End-to-end sign flows pass under
+`make e2e-hw` driving a real ST-LINK/STM32U585AI.
+
+### Transport B: QEMU mps2-an505 — shared-memory mailbox (workaround)
+
+On QEMU mps2-an505 the CMSE `SG` check reads through the MPC NS
+alias of the stub block and fails with `SFSR.INVEP` (see "QEMU
+Limitations" below). The QEMU build therefore uses a shared mailbox
+in NS SRAM driven by secure-side SysTick polling:
 
 ```
          NON-SECURE                                SECURE
@@ -220,23 +272,11 @@ Shared memory layout at `0x2802FF00`:
 | +0x10  | RESULT | 4    | S→NS     | Return value (NscStatus) |
 | +0x14  | DONE   | 4    | S→NS     | 1 = result ready |
 
-### On Real Hardware (STM32U585)
-
-Replace the shared memory gateway with proper CMSE veneers:
-
-```rust
-#[no_mangle]
-pub extern "cmse-nonsecure-entry" fn nsc_request_unlock() -> u32;
-pub extern "cmse-nonsecure-entry" fn nsc_sign(tx_ptr: u32, sig_ptr: u32, tx_len: u32) -> u32;
-pub extern "cmse-nonsecure-entry" fn nsc_clear_sign(payload_ptr: u32, sig_ptr: u32, total_len: u32) -> u32;
-pub extern "cmse-nonsecure-entry" fn nsc_get_pubkey(out_ptr: u32, out_len: u32) -> u32;
-pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32;
-```
-
-The `secure/src/nsc.rs` already exports `nsc_get_remaining_attempts` as a CMSE veneer.
-The secure `build.rs` generates `veneers.o` via `--cmse-implib`, and the non-secure
-build links against it. When the QEMU bug is not present (real hardware), these
-veneers work directly.
+`init_gateway`, `poll_gateway`, and `dispatch` in
+`secure/src/nsc/mod.rs` are all gated
+`#[cfg(not(feature = "stm32u585"))]` and exist solely for this
+transport. When the `stm32u585` feature is enabled they're compiled
+out entirely.
 
 ## TROPIC01 Integration
 
@@ -559,8 +599,12 @@ The secure world must build first because the non-secure world links against `ve
          to compute the verifying key for caching in slot 2
        - MACD chain initialized, encrypted ENTROPY (not seed) and
          verifying key written to r-mem (mock or TROPIC01 e2e session)
-    g. Initialize shared memory gateway (clear command buffer)
-    h. Enable secure SysTick (1000-cycle interval)
+    g. Initialize gateway transport:
+         - QEMU: clear shared-memory CMD/RESULT/DONE mailbox words
+         - STM32U585: no-op (CMSE veneers are statically linked)
+    h. Enable secure SysTick (1 ms interval). On QEMU this drives
+       poll_gateway() plus the idle-wipe check; on STM32U585 only
+       the idle-wipe check runs.
     i. Set VTOR_NS = 0x00200000
     j. Set MSP_NS from NS vector table[0]
     k. BXNS to NS reset handler
@@ -571,11 +615,18 @@ The secure world must build first because the non-secure world links against `ve
 
 ## Sign Transaction Flow (End-to-End)
 
+The diagram below uses the QEMU mailbox transport for clarity
+(`CMD=…, DONE=1` etc.). On STM32U585 the transition arrows labelled
+`──►` / `◄──` are CMSE `nsc_*` veneer calls instead: NS executes
+`BLXNS` into the SG stub, the secure handler runs synchronously, and
+control returns via `BXNS`. Everything between the two arrows is
+identical.
+
 ```
 NS World                          Secure World                        TROPIC01 Chip
 ────────                          ────────────                        ─────────────
 1. Write PIN to NS SRAM
-2. CMD=ENTER_PIN, ARG0=&pin  ──►  SysTick fires
+2. CMD=ENTER_PIN, ARG0=&pin  ──►  [QEMU: SysTick poll / HW: SG stub]
                                   Read PIN from NS memory
                                   [tropic01-se: open e2e session] ──► X25519 handshake
                                   mac_and_destroy(slot, pin_in) ─E2E─► HMAC + destroy
@@ -586,7 +637,7 @@ NS World                          Secure World                        TROPIC01 C
 3. Read RESULT=Ok            ◄──
 
 4. Write tx_hash to NS SRAM
-5. CMD=SIGN, ARG0=&hash,     ──►  SysTick fires
+5. CMD=SIGN, ARG0=&hash,     ──►  [QEMU: SysTick poll / HW: SG stub]
    ARG1=&sig_buf, ARG2=17088     Read tx_hash from NS memory
                                   [tropic01-se: open e2e session] ──► X25519 handshake
                                   Read encrypted ENTROPY (60 B) ─E2E─► r_mem_data_read slot 0
@@ -1243,9 +1294,11 @@ bytes are verified present.
 path reads through this broken path, so it cannot read the SG opcode and reports INVEP.
 On real hardware, secure code can access both S and NS memory regardless of MPC settings.
 
-**Workaround:** Shared memory gateway with secure SysTick polling (see "Secure Gateway"
-section above). The CMSE veneers are still generated and linked — they will work on
-real STM32U585 hardware.
+**Workaround:** Shared memory gateway with secure SysTick polling (see
+"Transport B" under "Secure Gateway" above). The CMSE veneer path
+(Transport A) is used on the STM32U585 build and is exercised end-to-end
+under `make e2e-hw` on real silicon — it is only absent from the QEMU
+build because of the MPC bug described here.
 
 **Note:** Secure code CAN read/write NS memory through the NS alias
 (`0x0xxx_xxxx` / `0x2xxx_xxxx`). Only the S-alias of NS-MPC blocks is broken.
@@ -1258,10 +1311,13 @@ When the STM32U585 board arrives:
    The SAU programming model is identical (standard ARMv8-M). The MPC is replaced
    by STM32's GTZC (Global TrustZone Security Controller).
 
-2. **Gateway:** Replace the shared memory gateway with proper CMSE veneers
-   (`extern "cmse-nonsecure-entry"`). The veneer generation already works; only the
-   NS-side call mechanism changes from shared memory to direct function calls through
-   `veneers.o` symbols. The QEMU MPC/SG bug does not affect real hardware.
+2. **Gateway:** Done. The STM32U585 build uses proper CMSE veneers
+   (`extern "cmse-nonsecure-entry"`) for all six gateway commands; NS
+   resolves them as `extern "C"` symbols through `veneers.o`. The
+   shared-memory mailbox + SysTick poll path is compiled out on this
+   target — see "Transport A" under "Secure Gateway" above.
+   `make e2e-hw` runs the full sign-dispatch suite over this path on
+   real silicon.
 
 3. **SPI transport:** Replace `SemihostingSpi` with a real `embedded_hal::spi::SpiDevice`
    implementation using Embassy's SPI driver. The `Tropic01SecureElement` and its

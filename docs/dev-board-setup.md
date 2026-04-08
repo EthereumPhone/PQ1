@@ -192,7 +192,7 @@ Expected output:
 | SRAM2   | 64 KB  | Non-secure  | `0x20030000`   |
 | SRAM3   | 832 KB | Non-secure  | (unused)       |
 
-The shared-memory gateway mailbox is at the end of NS SRAM (`0x2003FF00` on STM32U585, `0x2802FF00` on QEMU).
+The shared-memory gateway mailbox is at the end of NS SRAM (`0x2802FF00` on QEMU). It is only used by the QEMU transport — on STM32U585 the gateway runs through CMSE `cmse-nonsecure-entry` veneers and the mailbox region is unused (the `SHARED_MAILBOX_BASE = 0x2003FF00` constant is still kept in `sphincs_tz_shared` so `ptr_validate` can exclude the range as a belt-and-braces measure, but no code reads or writes it).
 
 ---
 

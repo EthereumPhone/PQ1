@@ -309,6 +309,11 @@ fn main() -> ! {
         secure_log!("[S] PKA initialized (BLS12-381 Fp accelerated)");
     }
 
+    // The mailbox transport (QEMU) needs its CMD/RESULT/DONE words
+    // cleared before SysTick starts polling. On STM32U585 the transport
+    // is CMSE veneers — there's nothing to initialise, NS calls land
+    // synchronously via the SG stubs.
+    #[cfg(not(feature = "stm32u585"))]
     nsc::init_gateway();
     setup_systick();
     secure_log!("[S] Gateway ready");
@@ -330,6 +335,10 @@ fn SysTick() {
         ui::show_status("Locked", "(idle wipe)");
     }
 
+    // QEMU-only: drain the shared-memory mailbox. On STM32U585 the
+    // gateway is driven synchronously by CMSE veneers, so SysTick only
+    // services the timeout/idle-wipe bookkeeping above.
+    #[cfg(not(feature = "stm32u585"))]
     nsc::poll_gateway();
 }
 

@@ -49,14 +49,14 @@ This is the *target architecture* for the production wallet. Every bullet here i
 - **Post-quantum transaction signatures** — SLH-DSA-SHA2-192f (FIPS 205), ~192-bit PQ security. Hash-based, no number-theoretic assumptions, no known quantum speedup beyond Grover (factored into the parameter choice). *(Currently SHA2-128f in QEMU; 192f migration is part of the production bring-up.)*
 - **Post-quantum firmware signing** — A custom OEMiROT verifies every secure-world and non-secure-world image with **ML-DSA-65 (FIPS 204) + Ed25519 hybrid**. Both signatures must verify; the classical leg is a transitional safety net while ML-DSA matures. *(Not yet implemented — target for STM32 bring-up.)*
 - **Post-quantum confidentiality of all SE traffic** — both halves of the entropy are **ML-KEM-1024-encapsulated + AES-256-GCM-sealed** *before* they ever touch the I²C/SPI bus. The classical Noise_KK1 / SCP03 layers carry only opaque ciphertext. *(Inner-wrap layer not yet implemented — target for STM32 bring-up.)*
-- **TrustZone isolation** — signing key, PIN state, ML-KEM secret key, and crypto ops confined to the secure world. *(Implemented in QEMU mps2-an505 via shared-memory gateway as a workaround for a QEMU MPC bug; will switch to proper CMSE veneers on real STM32U585 silicon.)*
+- **TrustZone isolation** — signing key, PIN state, ML-KEM secret key, and crypto ops confined to the secure world. *(On real STM32U585 silicon the six-command gateway runs through proper ARMv8-M CMSE `cmse-nonsecure-entry` veneers — exercised end-to-end under `make e2e-hw`. The QEMU mps2-an505 build uses a shared-memory mailbox + SysTick poll instead, as a workaround for a QEMU 8.2.2 MPC S-alias bug that breaks the SG instruction check.)*
 - **Dual secure elements (split entropy)** — BIP-39 entropy is XOR-split across a Tropic01 and an NXP SE050. Compromising either chip in isolation reveals **zero** bits of the seed. *(Currently single-SE on Tropic01 only — split logic and SE050 driver are unwritten.)*
 - **Boot-time attestation of both chips** — fresh nonce signed by each SE's factory attestation key, verified against pinned vendor roots and pinned per-device UIDs. The classical SE attestation is treated as *proof of presence*; the cryptographic root of device identity is the ML-DSA-signed device certificate pinned in HDPL1 OEMiROT at provisioning. *(Not yet implemented — both attestation paths and the ML-DSA device cert are target.)*
 - **Mixed-RNG generation** — wallet entropy is `STM32_TRNG ⊕ Tropic01_TRNG ⊕ SE050_TRNG`. All three are post-quantum (Grover offers no meaningful speedup against true randomness). *(Currently uses host `/dev/urandom` via semihosting under QEMU.)*
 - **MAC-and-Destroy + AES-Auth retry limits** — 9 wrong PIN attempts on either chip permanently destroys its half. Counters are kept in lockstep via an intent log in S-flash so a power glitch grants neither free retries nor an accidental brick. *(MACD chain implemented for the Tropic01 path in QEMU; cross-chip lockstep / intent log not yet written.)*
 - **PQ-safe symmetric crypto throughout** — AES-256-GCM, SHA-256, SHA-512, HMAC-SHA256, HKDF-SHA256, PBKDF2-HMAC-SHA512, Argon2id. Every key, MAC tag, and hash is sized so that Grover's algorithm leaves ≥ 128-bit effective security. *(Implemented in QEMU.)*
 - **No heap** — `#![no_std]`, stack-only allocation, no allocator attack surface. *(Implemented.)*
-- **Hardened gateway** — NS pointer validation, TOCTOU defense, sensitive memory zeroization, custom panic handler that clears secrets before halting. *(Implemented in QEMU; CMSE veneer hardening will need re-review on real silicon.)*
+- **Hardened gateway** — NS pointer validation, TOCTOU defense, sensitive memory zeroization, custom panic handler that clears secrets before halting. *(The same `cmd_*::run` handlers are shared across both transports — only the entry point differs. Exercised on QEMU and on real STM32U585 under `make e2e-hw`.)*
 - **ZK clear signing** — for supported DeFi protocols (Aave V3 today), the wallet refuses to display a human-readable action string unless a Groth16 proof over BLS12-381 cryptographically certifies that the string is a faithful ABI interpretation of the raw calldata. The full VK pool lives in non-secure firmware rodata; the secure world only embeds a 32-byte Merkle root of the VK DB and re-verifies every supplied VK against that root before running Groth16, so neither the companion app nor a compromised non-secure world can substitute a malicious VK. *(Implemented in QEMU via `CMD_CLEAR_SIGN` (5); host-side `zk-test` crate verifies the Aave V3 supply proof in ~3.3 ms; automated `make e2e` suite exercises all four sign-dispatch levels end-to-end.)*
 - **ERC20-aware trusted display** — for transactions whose recipient contract is in the firmware's pinned ERC20 DB, the trusted UI renders "Send 100.000000 USDC to 0xabc..." with symbol and decimals from a Merkle-verified metadata bundle. Unknown contracts fall through to a Ledger-style "⚠ BLIND SIGNING" warning. The ERC20 DB is in non-secure rodata (Merkle-anchored the same way as the VK DB), so adding tokens does not cost any secure flash. *(Implemented in QEMU; `dbgen` crate builds the Merkle trees at build time.)*
 
@@ -555,17 +555,18 @@ See [docs/architecture.md](docs/architecture.md) for the technical design, [docs
 **Legend**
 
 - 🟢 **QEMU-tested** — runs and is exercised end-to-end on QEMU mps2-an505
+- 🟢 **HW-tested** — runs and is exercised end-to-end on a real STM32U585 devkit via ST-LINK + probe-rs (`make e2e-hw`)
 - 🟡 **QEMU + USB devkit** — runs in QEMU, driven against a real Tropic01 TS1302 USB devkit bridged in via host semihosting (i.e. *not* connected to a real STM32)
 - 🔵 **Code exists, untested** — written but not exercised end-to-end
 - ⏳ **Not started** — target architecture, not yet written
 - 🚫 **Blocked on hardware** — cannot be implemented or validated until a real PCB exists
 
-> Nothing in this table has run on a real STM32U585. The "QEMU-tested" rows describe behaviour that *should* port to silicon once the bring-up starts, but every one of them will need to be re-validated against actual hardware before it counts as "working".
+> STM32U585 bring-up is in progress on a B-U585I-IOT02A devkit driven via ST-LINK + probe-rs. Rows tagged 🟢 HW-tested run end-to-end under `make e2e-hw` on real silicon (TrustZone partitioning, GTZC, CMSE veneer gateway, clock/RCC, TRNG, mock SE path). Rows that are still purely 🟢 QEMU-tested describe behaviour that *should* port to silicon but has not yet been re-validated — assume it is untested on real hardware until proven otherwise.
 
 | Component | Status | Where it runs today |
 |---|---|---|
-| TrustZone partitioning (SAU + IDAU + MPC) | 🟢 QEMU-tested | mps2-an505, with a shared-memory gateway workaround for a QEMU MPC bug |
-| NSC gateway (5 commands, NS pointer validation) | 🟢 QEMU-tested | mps2-an505, shared-memory polling — *not* CMSE veneers |
+| TrustZone partitioning (SAU + IDAU + MPC/GTZC) | 🟢 QEMU-tested, 🟢 HW-tested | mps2-an505 MPC in QEMU; GTZC MPCBB1/MPCBB2 on real STM32U585 (SRAM1 secure, SRAM2 non-secure) |
+| NSC gateway (6 commands, NS pointer validation) | 🟢 QEMU-tested, 🟢 HW-tested | On STM32U585: real ARMv8-M CMSE `cmse-nonsecure-entry` veneers driven by `BLXNS`/SG/`BXNS`, exercised by `make e2e-hw`. On QEMU: shared-memory mailbox + SysTick poll as a workaround for the QEMU MPC S-alias bug. |
 | BIP-39 → SLH-DSA-SHA2-128f deterministic key derivation | 🟢 QEMU-tested | mps2-an505 (will migrate to 192f for production — recovery contract bump v1→v2) |
 | MAC-and-Destroy PIN with 9-attempt brick (Tropic01 path) | 🟡 QEMU + USB devkit | Logic in QEMU, MACD slot ops against a TS1302 dongle on `/dev/ttyACM0` |
 | Tropic01 e2e encrypted (Noise_KK1) sessions | 🟡 QEMU + USB devkit | Tropic01 chip is real, host is QEMU. **Has never spoken to a Tropic01 wired to a real STM32 SPI bus.** |
@@ -581,7 +582,7 @@ See [docs/architecture.md](docs/architecture.md) for the technical design, [docs
 | Automated end-to-end test (`make e2e`) | 🟢 QEMU-tested | Non-interactive; exercises all four sign-dispatch levels back-to-back; no stdin input required |
 | **STM32U585 silicon bring-up (any form)** | ⏳ not started | — |
 | **Custom PCB with Tropic01 + SE050 + U585** | ⏳ not started | — |
-| **CMSE veneer gateway (real one, not the shared-memory shim)** | 🔵 code exists, untested | `secure/build.rs` produces `veneers.o`; blocked on real silicon to actually exercise |
+| **CMSE veneer gateway (real one, not the shared-memory shim)** | 🟢 HW-tested | All six `nsc_*` `cmse-nonsecure-entry` veneers emitted into `veneers.o`, linked into the NS image, and exercised end-to-end under `make e2e-hw` on a real STM32U585. No mailbox, no poll — NS calls enter via `BLXNS` → SG → secure handler → `BXNS`. |
 | **SSD1306 OLED driver on real I²C** | 🔵 code exists, untested | `secure/src/ui/oled.rs` compiles, no hardware to run it |
 | **Migrate transaction signing to SLH-DSA-SHA2-192f** | ⏳ not started | — |
 | **SE050 SCP03 integration** | ⏳ not started | — |
@@ -614,7 +615,7 @@ Goal: get the existing QEMU code running on a real ST eval board, with no SE050,
 1. Order a **B-U585I-IOT02A** discovery kit and a separate Tropic01 TS1302 devkit
 2. Update `memory.x` with STM32U585 flash and SRAM addresses (768 KB SRAM, 2 MB flash)
 3. Switch from the QEMU mps2-an505 runtime to **Embassy / `embassy-stm32`** for clocks, GPIO, SPI, I²C, USART
-4. Replace the shared-memory gateway shim with **proper CMSE veneers** (the build.rs already produces `veneers.o`; the QEMU MPC bug that forced the workaround does not exist on real silicon)
+4. ~~Replace the shared-memory gateway shim with **proper CMSE veneers**~~ **DONE** — the STM32U585 build compiles out the mailbox entirely and routes all six gateway commands through `extern "cmse-nonsecure-entry"` veneers. `make e2e-hw` drives all six sign-dispatch scenarios end-to-end through the real SG stubs on a B-U585I-IOT02A.
 5. Replace `host_rng` with the **STM32U585 TRNG** peripheral
 6. Replace `SemihostingSpi` with the Embassy SPI driver, wired to the Tropic01 dongle's SPI interface (or to a SPI-over-USB bridge while you wait for a custom PCB)
 7. Wire the SSD1306 OLED to the U585's I²C and confirm the existing `oled.rs` backend works on real glass

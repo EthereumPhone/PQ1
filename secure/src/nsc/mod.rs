@@ -1,10 +1,21 @@
 //! Secure gateway with trusted-UI sign confirmation.
 //!
-//! Today this runs as a SysTick-polled shared-memory mailbox (a QEMU
-//! workaround for the broken SG instruction check on mps2-an505). On real
-//! STM32U585 hardware the same dispatch logic will be invoked from CMSE
-//! `cmse-nonsecure-entry` veneers — the only difference is who pulls the
-//! trigger (poll vs direct call).
+//! Two transports, selected at compile time by the `stm32u585` feature:
+//!
+//!   * **QEMU mps2-an505** (`not(feature = "stm32u585")`): SysTick-polled
+//!     shared-memory mailbox. This is the workaround for QEMU 8.2.2's
+//!     broken SG instruction check — `poll_gateway()` runs from the
+//!     SysTick handler, reads `CMD`/`ARG0..2` out of NS SRAM, runs
+//!     [`dispatch`], writes `RESULT`, and raises `DONE`.
+//!   * **Real STM32U585** (`feature = "stm32u585"`): proper ARMv8-M
+//!     CMSE `cmse-nonsecure-entry` veneers. The `--cmse-implib` linker
+//!     pass emits SG stubs for every `nsc_*` entry point below into
+//!     `veneers.o`; the non-secure crate links against that implib and
+//!     calls them as regular `extern "C"` functions. There is no
+//!     mailbox and no SysTick poll — NS issues `BLXNS` → SG →
+//!     secure-state-handler → `BXNS` synchronously. The `cmd_*`
+//!     handlers are shared across both transports; the only thing that
+//!     changes is who pulls the trigger.
 //!
 //! Gateway commands (see `sphincs_tz_shared::CMD_*`):
 //!
@@ -44,25 +55,37 @@ mod ptr_validate;
 mod sign_and_emit;
 mod state;
 
+#[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
     NscStatus, CMD_CLEAR_SIGN, CMD_CLEAR_SIGN_MSG, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_NONE,
     CMD_REQUEST_UNLOCK, CMD_SIGN, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
-// Shared-memory mailbox layout (NS SRAM, derived from shared crate constants)
+// Shared-memory mailbox layout (QEMU NS SRAM, derived from shared crate
+// constants). Only used on the QEMU transport; the STM32U585 build uses
+// CMSE veneers and never touches the mailbox.
 // ---------------------------------------------------------------------------
 
+#[cfg(not(feature = "stm32u585"))]
 const SHARED_CMD: *mut u32 = SHARED_MAILBOX_BASE as *mut u32;
+#[cfg(not(feature = "stm32u585"))]
 const SHARED_ARG0: *mut u32 = (SHARED_MAILBOX_BASE + 4) as *mut u32;
+#[cfg(not(feature = "stm32u585"))]
 const SHARED_ARG1: *mut u32 = (SHARED_MAILBOX_BASE + 8) as *mut u32;
+#[cfg(not(feature = "stm32u585"))]
 const SHARED_ARG2: *mut u32 = (SHARED_MAILBOX_BASE + 12) as *mut u32;
+#[cfg(not(feature = "stm32u585"))]
 const SHARED_RESULT: *mut u32 = (SHARED_MAILBOX_BASE + 16) as *mut u32;
+#[cfg(not(feature = "stm32u585"))]
 const SHARED_DONE: *mut u32 = (SHARED_MAILBOX_BASE + 20) as *mut u32;
 
-/// Snapshot of shared memory arguments, read atomically in [`poll_gateway`]
-/// before dispatch() runs, to prevent TOCTOU races where NS modifies args
-/// between the secure-side validation and use.
+/// Arguments handed to a `cmd_*` handler. On the QEMU transport these
+/// are read out of the shared mailbox in [`poll_gateway`] before
+/// dispatch runs (a TOCTOU snapshot so NS can't race the validator).
+/// On the STM32U585 CMSE transport they're just the three `u32`
+/// register arguments of the `nsc_*` veneer wrapped into a struct so
+/// the shared `cmd_*::run` bodies can stay identical across transports.
 pub(super) struct GatewayArgs {
     pub(super) arg0: u32,
     pub(super) arg1: u32,
@@ -94,7 +117,9 @@ pub fn zeroize_sensitive_state() {
 }
 
 /// Initialize the shared-memory mailbox by clearing CMD/RESULT/DONE.
-/// Must be called once during boot before [`poll_gateway`].
+/// Must be called once during boot before [`poll_gateway`]. QEMU-only;
+/// the STM32U585 CMSE path has no mailbox and no boot-time init.
+#[cfg(not(feature = "stm32u585"))]
 pub fn init_gateway() {
     unsafe {
         core::ptr::write_volatile(SHARED_CMD, CMD_NONE);
@@ -107,6 +132,8 @@ pub fn init_gateway() {
 /// the right `cmd_*` handler, write the result word, raise DONE, and
 /// clear CMD. The dispatch runs to completion without yielding — the
 /// single-threaded invariant the whole state/sign machinery relies on.
+/// QEMU-only; never called on the STM32U585 CMSE path.
+#[cfg(not(feature = "stm32u585"))]
 pub fn poll_gateway() {
     unsafe {
         let cmd = core::ptr::read_volatile(SHARED_CMD);
@@ -130,9 +157,10 @@ pub fn poll_gateway() {
     }
 }
 
-/// Route a single gateway command to its handler. All commands run with
+/// Route a single mailbox command to its handler. All commands run with
 /// exclusive access to `SecureState` for the duration of dispatch (see
 /// the non-reentrant invariant on [`poll_gateway`]).
+#[cfg(not(feature = "stm32u585"))]
 unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
     match cmd {
         CMD_GET_REMAINING => cmd_get_remaining::run(),
@@ -146,10 +174,76 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// CMSE veneer kept for real hardware (bypasses QEMU's broken SG check)
+// CMSE veneers — STM32U585 hardware transport
 // ---------------------------------------------------------------------------
+//
+// Each function below is an ARMv8-M Security Extension entry point. The
+// linker's `--cmse-implib` pass emits an SG stub for every one into
+// `veneers.o`; that implib gets linked into the non-secure world, so NS
+// resolves a normal `extern "C"` symbol at the stub address and calls it
+// with `BLXNS`. The stub issues `SG`, switches to secure state, clears
+// caller-saved registers, and transfers control here. On return the
+// compiler emits `BXNS` back to NS.
+//
+// The bodies are intentionally thin: each one constructs a `GatewayArgs`
+// snapshot and delegates straight to the same `cmd_*::run` handler the
+// QEMU `dispatch()` path uses, so handler semantics stay identical
+// across transports.
 
+/// CMD_GET_REMAINING — returns the remaining PIN attempts.
+#[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32 {
-    state::peek_state(|s| s.remaining_attempts as u32)
+    unsafe { cmd_get_remaining::run() }
+}
+
+/// CMD_REQUEST_UNLOCK — secure UI prompts for PIN, never crosses NS.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_request_unlock() -> u32 {
+    unsafe { cmd_request_unlock::run() }
+}
+
+/// CMD_GET_PUBKEY — copy the 32-byte verifying key into the NS buffer.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_pubkey(out_ptr: u32, out_len: u32) -> u32 {
+    let args = GatewayArgs { arg0: 0, arg1: out_ptr, arg2: out_len };
+    unsafe { cmd_get_pubkey::run(&args) }
+}
+
+/// CMD_SIGN — parse EIP-1559 envelope, confirm, sign.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_sign(
+    payload_ptr: u32,
+    sig_out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
+    unsafe { cmd_sign::run(&args) }
+}
+
+/// CMD_CLEAR_SIGN — ZK-verified calldata clear signing.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_clear_sign(
+    payload_ptr: u32,
+    sig_out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
+    unsafe { cmd_clear_sign::run(&args) }
+}
+
+/// CMD_CLEAR_SIGN_MSG — EIP-712 typed-data clear signing.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_clear_sign_msg(
+    payload_ptr: u32,
+    sig_out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
+    unsafe { cmd_clear_sign_msg::run(&args) }
 }
