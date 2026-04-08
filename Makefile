@@ -107,14 +107,9 @@ flash-hw: build-hw
 	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
-	openocd -f interface/stlink.cfg -f target/stm32u5x.cfg \
-		-c "init; halt" \
-		-c "stm32l4x option_write 0 0x50 0x007F0000 0x007F007F" \
-		-c "stm32l4x option_write 0 0x60 0x0000007F 0x007F007F" \
-		-c "stm32l4x option_write 0 0x4C 0x00180000 0x01FFFFFF" \
-		-c "stm32l4x option_write 0 0x40 0x9feff8aa 0x80000000" \
-		-c "stm32l4x option_load 0" \
-		-c "exit"
+	STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Resetting and attaching (Ctrl-C to quit)..."
 	probe-rs reset --chip STM32U585AIIx
 	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)

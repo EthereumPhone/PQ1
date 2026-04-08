@@ -182,6 +182,8 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
 fn main() -> ! {
     secure_log!("[S] Secure world starting...");
 
+
+
     sau::init();
     secure_log!("[S] SAU + MPC configured");
 

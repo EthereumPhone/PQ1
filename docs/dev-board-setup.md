@@ -54,13 +54,15 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 **Unplug and re-plug the Micro-USB cable** after installing the rules.
 
-### OpenOCD (option byte configuration)
+### STM32CubeProgrammer (option byte configuration)
+
+Download from [st.com/en/development-tools/stm32cubeprog.html](https://www.st.com/en/development-tools/stm32cubeprog.html) (free ST account required), then run the Linux installer. Ensure `STM32_Programmer_CLI` is on your PATH:
 
 ```bash
-sudo apt install openocd
+export PATH="$PATH:$HOME/STMicroelectronics/STM32Cube/STM32CubeProgrammer/bin"
 ```
 
-OpenOCD is needed specifically for TrustZone option byte programming. probe-rs handles flashing but cannot write to secure flash registers when TZEN=1.
+STM32CubeProgrammer is needed for TrustZone option byte programming. It uses the ST-LINK's proprietary protocol for full secure access — probe-rs and OpenOCD cannot write secure option bytes (SECWM, SECBOOTADD0) when TZEN=1.
 
 ### Verify connectivity
 
@@ -126,20 +128,17 @@ The option bytes to set:
 | SECWM2R1      | 0x60   | `0x0000007F` | Bank 2 all non-secure (PSTRT > PEND) |
 | SECBOOTADD0R  | 0x4C   | `0x00180000` | Secure boot from `0x0C000000`        |
 
-Run with OpenOCD (**order matters** — set SECWM/SECBOOTADD before TZEN):
+Run with STM32CubeProgrammer:
 
 ```bash
-openocd -f interface/stlink.cfg -f target/stm32u5x.cfg \
-  -c "init; halt" \
-  -c "stm32l4x option_write 0 0x50 0x007F0000 0x007F007F" \
-  -c "stm32l4x option_write 0 0x60 0x0000007F 0x007F007F" \
-  -c "stm32l4x option_write 0 0x4C 0x00180000 0x01FFFFFF" \
-  -c "stm32l4x option_write 0 0x40 0x9feff8aa 0x80000000" \
-  -c "stm32l4x option_load 0" \
-  -c "exit"
+STM32_Programmer_CLI --connect port=SWD \
+  --optionbytes TZEN=1 \
+  SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+  SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 \
+  SECBOOTADD0=0x180000
 ```
 
-You should see `TZEN = 1 : TrustZone enabled by option bytes` and `option load completed` in the output.
+You should see `Option Bytes successfully programmed` in the output.
 
 ---
 
@@ -252,9 +251,9 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ### Option bytes not taking effect
 
-- Ensure you run the OpenOCD `option_load` command after all writes
-- If `probe-rs download` was used after setting OBs, re-run the OpenOCD option byte commands (probe-rs may clear TZEN during flash programming)
-- Verify with: `openocd -f interface/stlink.cfg -f target/stm32u5x.cfg -c "init; halt" -c "stm32l4x option_read 0 0x40" -c "exit"` — should show `0x9feff8aa`
+- Use STM32CubeProgrammer (not OpenOCD) for option byte programming — OpenOCD's HLA transport cannot write secure option bytes when TZEN=1
+- After `probe-rs download`, re-run the STM32CubeProgrammer option byte command (probe-rs may clear TZEN during flash programming)
+- Verify with: `STM32_Programmer_CLI --connect port=SWD --optionbytes displ | grep -E "TZEN|SECWM2"`
 
 ### Firmware crashes or HardFault after flash
 
