@@ -46,18 +46,18 @@ const INS_CRYPTO: u8 = 0x03;
 const INS_MGMT: u8 = 0x04;
 const INS_PROCESS: u8 = 0x05;
 
-// P1 values
-const P1_BINARY: u8 = 0x03; // Binary file object
-const P1_SYMM_KEY: u8 = 0x04; // Symmetric key
-const P1_MAC: u8 = 0x09; // MAC operation
+// P1 values (from kSE05x_P1_* in se05x_types.h)
 const P1_DEFAULT: u8 = 0x00;
+const P1_BINARY: u8 = 0x06; // Binary file object
+const P1_HMAC: u8 = 0x05; // HMAC key
+const P1_MAC: u8 = 0x0D; // MAC operation
 
-// P2 values
+// P2 values (from kSE05x_P2_* in se05x_types.h)
 const P2_DEFAULT: u8 = 0x00;
-const P2_DELETE_OBJECT: u8 = 0x02;
-const P2_EXIST: u8 = 0x03;
-const P2_ONESHOT: u8 = 0x0E;
 const P2_GENERATE: u8 = 0x03;
+const P2_ONESHOT: u8 = 0x0E;
+const P2_EXIST: u8 = 0x27;
+const P2_DELETE_OBJECT: u8 = 0x28;
 
 // TLV tags (SE05x specific)
 const TAG_SESSION_ID: u8 = 0x10;
@@ -77,8 +77,8 @@ const TAG_5: u8 = 0x45;
 const TAG_6: u8 = 0x46;
 const TAG_7: u8 = 0x47;
 
-// HMAC-SHA256 algorithm identifier
-const HMAC_SHA256: u8 = 0x18;
+// HMAC-SHA256 algorithm identifier (kSE05x_MACAlgo_HMAC_SHA256)
+const HMAC_SHA256: u8 = 0x19;
 
 // Object types
 const OBJ_HMAC_KEY: u8 = 0x14;
@@ -162,6 +162,17 @@ pub unsafe fn send_apdu(
     apdu: &[u8],
     resp_buf: &mut [u8],
 ) -> Result<usize, ApduError> {
+    #[cfg(feature = "debug-log")]
+    {
+        let show = apdu.len().min(20);
+        if show >= 5 {
+            cortex_m_semihosting::hprintln!(
+                "[SE050] TX CLA={:02x} INS={:02x} P1={:02x} P2={:02x} Lc={:02x} len={}",
+                apdu[0], apdu[1], apdu[2], apdu[3], apdu[4], apdu.len()
+            );
+        }
+    }
+
     let mut raw_resp = [0u8; MAX_APDU];
     let n = t1.transceive(apdu, &mut raw_resp)?;
 
@@ -170,6 +181,12 @@ pub unsafe fn send_apdu(
     }
 
     let sw = ((raw_resp[n - 2] as u16) << 8) | (raw_resp[n - 1] as u16);
+
+    #[cfg(feature = "debug-log")]
+    if sw != SW_OK {
+        cortex_m_semihosting::hprintln!("[SE050] RX SW=0x{:04x} (len={})", sw, n);
+    }
+
     if sw != SW_OK {
         return Err(ApduError::Status(sw));
     }
@@ -215,11 +232,15 @@ pub unsafe fn write_binary(
     apdu[2] = P1_BINARY; // P1 = binary
     apdu[3] = P2_DEFAULT; // P2
 
-    // TLV payload
+    // TLV payload: TAG_1(objectID), TAG_3(fileLength), TAG_4(data).
+    // TAG_3 is REQUIRED when creating a new binary file object —
+    // without it the SE050 creates an unreadable object.
     let mut o = 7; // skip CLA+INS+P1+P2+Lc(3 bytes for extended)
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
-    o = tlv_put_u8(&mut apdu, o, TAG_2, 0x00); // offset = 0
-    o = tlv_put(&mut apdu, o, TAG_3, data);
+    // TAG_3: 2-byte file length (max allocation size)
+    let file_len = data.len() as u16;
+    o = tlv_put(&mut apdu, o, TAG_3, &file_len.to_be_bytes());
+    o = tlv_put(&mut apdu, o, TAG_4, data);
 
     // Encode Lc (extended length if needed)
     let lc = o - 7;
@@ -272,6 +293,8 @@ pub unsafe fn read_object(
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
     let lc = o - 5;
     apdu[4] = lc as u8;
+    apdu[o] = 0x00; // Le: expect response data
+    o += 1;
 
     let mut resp = [0u8; MAX_APDU];
     let n = send_apdu(t1, &apdu[..o], &mut resp)?;
@@ -326,6 +349,8 @@ pub unsafe fn check_object_exists(t1: &mut T1State, object_id: u32) -> Result<bo
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
     let lc = o - 5;
     apdu[4] = lc as u8;
+    apdu[o] = 0x00; // Le
+    o += 1;
 
     let mut resp = [0u8; 64];
     match send_apdu(t1, &apdu[..o], &mut resp) {
@@ -351,7 +376,7 @@ pub unsafe fn write_hmac_key(
     let mut apdu = [0u8; 128];
     apdu[0] = 0x80;
     apdu[1] = INS_WRITE;
-    apdu[2] = P1_SYMM_KEY;
+    apdu[2] = P1_HMAC;
     apdu[3] = P2_DEFAULT;
 
     let mut o = 5;
@@ -377,7 +402,7 @@ pub unsafe fn mac_oneshot(
     apdu[0] = 0x80;
     apdu[1] = INS_CRYPTO;
     apdu[2] = P1_MAC;
-    apdu[3] = P2_ONESHOT;
+    apdu[3] = P2_GENERATE; // Generate MAC (0x03)
 
     let mut o = 5;
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, key_object_id);
@@ -385,6 +410,9 @@ pub unsafe fn mac_oneshot(
     o = tlv_put(&mut apdu, o, TAG_3, data); // data to MAC
     let lc = o - 5;
     apdu[4] = lc as u8;
+    // Append Le=0x00 (expect response data — the MAC result)
+    apdu[o] = 0x00;
+    o += 1;
 
     let mut resp = [0u8; 128];
     let n = send_apdu(t1, &apdu[..o], &mut resp)?;

@@ -40,8 +40,8 @@ const NAD_HOST_TO_SE: u8 = 0x5A;
 /// Max information field size per I-frame.
 const IFSC: usize = 254;
 
-/// Max frame size: NAD(1) + PCB(1) + LEN(1) + INF(254) + CRC(2) = 259.
-const MAX_FRAME: usize = IFSC + 5;
+/// Max frame size: NAD(1) + PCB(1) + LEN(2, GP1.0) + INF(254) + CRC(2) = 260.
+const MAX_FRAME: usize = IFSC + 6;
 
 /// Max WTX (Waiting Time Extension) retries before giving up.
 const MAX_WTX_RETRIES: u32 = 500;
@@ -333,7 +333,9 @@ impl T1State {
         // I2C transaction: PCB(1) + LEN(1) + INF(up to 254) + CRC(2).
         // We read a generous fixed size; trailing bytes beyond the frame
         // will be 0x00 or garbage — we parse only up to LEN+CRC.
-        let read_len = 64; // enough for most responses (ATR, short APDUs)
+        // Read remaining frame: PCB(1) + LEN(2) + INF(up to 254) + CRC(2).
+        // Max = 259 bytes. Read the full possible frame.
+        let read_len = MAX_FRAME - 1; // everything after NAD
         i2c::read(&mut buf[1..1 + read_len])?;
 
         // buf[0]=NAD(0xA5), buf[1]=PCB, buf[2]=LEN, buf[3..]=INF+CRC
