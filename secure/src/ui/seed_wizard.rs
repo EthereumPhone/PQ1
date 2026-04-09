@@ -217,12 +217,10 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
     pick_three_distinct(&mut indices);
 
     for &probe in &indices {
-        // Prompt: "Enter word 7"
         let title_buf = build_check_title(probe + 1);
         let title_s = unsafe { core::str::from_utf8_unchecked(&title_buf) };
-        show_status(title_s, "");
 
-        match enter_single_word() {
+        match enter_single_word(title_s) {
             EnterWordResult::Word(idx) => {
                 if idx != m.word_index(probe as usize) {
                     show_status("Wrong word", "retrying...");
@@ -275,12 +273,10 @@ pub fn enter_mnemonic() -> Result<Mnemonic, WizardError> {
     let mut i = 0usize;
 
     while i < WORD_COUNT {
-        // Title flashes briefly: "Word 7 of 24"
         let title = build_word_progress_title(i + 1);
         let title_s = unsafe { core::str::from_utf8_unchecked(&title) };
-        show_status(title_s, "");
 
-        match enter_single_word() {
+        match enter_single_word(title_s) {
             EnterWordResult::Word(idx) => {
                 indices[i] = idx;
                 i += 1;
@@ -341,7 +337,7 @@ enum EnterWordResult {
 
 const MAX_LETTERS: usize = 4;
 
-fn enter_single_word() -> EnterWordResult {
+fn enter_single_word(title: &str) -> EnterWordResult {
     let mut buf = [b'a'; MAX_LETTERS];
     let mut len: usize = 0;
     timeout::reset_activity();
@@ -350,7 +346,7 @@ fn enter_single_word() -> EnterWordResult {
         // Compute current prefix lookup. If we have at least one letter
         // committed, look up. If zero letters, treat as "Multiple" over the
         // entire wordlist.
-        render_letter_screen(&buf, len);
+        render_letter_screen(title, &buf, len);
 
         let mut idle = || timeout::is_idle();
         let event = match input().wait_button(&mut idle) {
@@ -400,7 +396,7 @@ fn enter_single_word() -> EnterWordResult {
                         // candidate mode here for short words like "act" whose
                         // exact 3-letter prefix matches multiple longer words.
                         if len >= MAX_LETTERS || prefix_is_exact_word(prefix) {
-                            match pick_candidate(start, end) {
+                            match pick_candidate(title, start, end) {
                                 CandidateResult::Picked(i) => {
                                     return EnterWordResult::Word(i);
                                 }
@@ -444,10 +440,10 @@ fn prefix_is_exact_word(p: &str) -> bool {
     false
 }
 
-fn render_letter_screen(buf: &[u8; MAX_LETTERS], len: usize) {
+fn render_letter_screen(title: &str, buf: &[u8; MAX_LETTERS], len: usize) {
     let d = display();
     d.clear();
-    d.draw_line(0, "Type word");
+    d.draw_line(0, title);
 
     // Row 1: letters with cursor mark on the active position.
     // Layout: " a _ _ _ "
@@ -491,12 +487,12 @@ enum CandidateResult {
     IdleWipe,
 }
 
-fn pick_candidate(start: usize, end: usize) -> CandidateResult {
+fn pick_candidate(title: &str, start: usize, end: usize) -> CandidateResult {
     let mut cur = start;
     timeout::reset_activity();
 
     loop {
-        render_candidate_screen(start, end, cur);
+        render_candidate_screen(title, start, end, cur);
 
         let mut idle = || timeout::is_idle();
         let event = match input().wait_button(&mut idle) {
@@ -522,10 +518,10 @@ fn pick_candidate(start: usize, end: usize) -> CandidateResult {
     }
 }
 
-fn render_candidate_screen(start: usize, end: usize, cur: usize) {
+fn render_candidate_screen(title: &str, start: usize, end: usize, cur: usize) {
     let d = display();
     d.clear();
-    d.draw_line(0, "Pick word");
+    d.draw_line(0, title);
 
     // Show 1-3 candidates centered on `cur`.
     let total = end - start;
