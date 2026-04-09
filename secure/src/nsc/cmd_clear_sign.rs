@@ -246,5 +246,5 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // 12. Hand off to the shared UserOp signing tail: reconstruct
     //     execute() callData, compute userOpHash, sign with SLH-DSA.
-    super::userop_tail::sign_userop_hash(&aa, &parsed.tx, parsed.data, sig_ptr, "ZK Signed")
+    super::userop_tail::sign_userop_hash(&aa, &parsed.tx, parsed.data, sig_ptr, "Signed")
 }

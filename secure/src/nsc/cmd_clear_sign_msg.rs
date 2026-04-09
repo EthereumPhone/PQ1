@@ -204,5 +204,5 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_status("Signing...", "");
 
     // 10. Hand off to the shared sign-and-emit tail.
-    state::peek_state(|s| decrypt_and_sign(s, &digest, sig_ptr, "ZK Msg Signed"))
+    state::peek_state(|s| decrypt_and_sign(s, &digest, sig_ptr, "Signed"))
 }
