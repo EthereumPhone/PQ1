@@ -12,9 +12,14 @@ contract ERC1271Test is Base {
 
     function test_replaySafeHash_perAccount() public {
         // Deploy a second wallet with a different bootstrap key
-        bytes memory otherBootstrapPk = hex"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-        bytes memory dummySig = new bytes(17088);
-        PQCoinbaseSmartWallet w2 = factory.createAccount(otherBootstrapPk, TEST_MAIN_PK, dummySig);
+        bytes32 otherSeed = bytes32(uint256(0xeeeeeeee));
+        bytes32 otherRoot = bytes32(uint256(0xdddddddd));
+        bytes memory dummySig = new bytes(3704);
+        PQCoinbaseSmartWallet w2 = factory.createAccount(
+            otherSeed, otherRoot,
+            TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT,
+            dummySig
+        );
         bytes32 h = keccak256("test");
         assertTrue(wallet.replaySafeHash(h) != w2.replaySafeHash(h));
     }
@@ -32,7 +37,7 @@ contract ERC1271Test is Base {
     function test_isValidSignature_mainSigner_magic() public {
         bytes32 h = keccak256("message");
         bytes32 replaySafe = wallet.replaySafeHash(h);
-        bytes memory sig = _wrapMainSignature(TEST_MAIN_PK);
+        bytes memory sig = _wrapMainSignature(TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT);
         bytes4 result = wallet.isValidSignature(replaySafe, sig);
         assertEq(result, bytes4(0x1626ba7e));
     }
@@ -40,7 +45,7 @@ contract ERC1271Test is Base {
     function test_isValidSignature_bootstrapSigner_magic() public view {
         bytes32 h = keccak256("message");
         bytes32 replaySafe = wallet.replaySafeHash(h);
-        bytes memory sig = _wrapBootstrapSignature(TEST_BOOTSTRAP_PK);
+        bytes memory sig = _wrapBootstrapSignature(TEST_BOOTSTRAP_PK_SEED, TEST_BOOTSTRAP_PK_ROOT);
         bytes4 result = wallet.isValidSignature(replaySafe, sig);
         assertEq(result, bytes4(0x1626ba7e));
     }
@@ -49,7 +54,7 @@ contract ERC1271Test is Base {
         mockVerifier.setShouldVerify(false);
         bytes32 h = keccak256("message");
         bytes32 replaySafe = wallet.replaySafeHash(h);
-        bytes memory sig = _wrapMainSignature(TEST_MAIN_PK);
+        bytes memory sig = _wrapMainSignature(TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT);
         bytes4 result = wallet.isValidSignature(replaySafe, sig);
         assertEq(result, bytes4(0xffffffff));
     }

@@ -5,31 +5,34 @@ import {Test} from "forge-std/Test.sol";
 import {UserOperation} from "account-abstraction/interfaces/UserOperation.sol";
 import {PQCoinbaseSmartWallet} from "../src/PQCoinbaseSmartWallet.sol";
 import {PQCoinbaseSmartWalletFactory} from "../src/PQCoinbaseSmartWalletFactory.sol";
-import {MockSLHDSAVerifier} from "./mocks/MockSLHDSAVerifier.sol";
+import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 
 /// @notice Shared test fixture. Deploys a mock verifier, implementation,
 ///         factory, and a single proxy wallet for use by all test files.
 abstract contract Base is Test {
-    MockSLHDSAVerifier internal mockVerifier;
+    MockSPHINCSVerifier internal mockVerifier;
     PQCoinbaseSmartWallet internal implementation;
     PQCoinbaseSmartWalletFactory internal factory;
     PQCoinbaseSmartWallet internal wallet;
 
     address internal constant ENTRY_POINT = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
 
-    /// @dev Deterministic 32-byte test bootstrap public key.
-    bytes internal constant TEST_BOOTSTRAP_PK = hex"0102030405060708091011121314151617181920212223242526272829303132";
-    /// @dev Deterministic 32-byte test main signer public key.
-    bytes internal constant TEST_MAIN_PK = hex"aabbccdd01020304050607080910111213141516171819202122232425262728";
+    /// @dev Deterministic test bootstrap public key (pkSeed, pkRoot).
+    bytes32 internal constant TEST_BOOTSTRAP_PK_SEED = bytes32(uint256(0x0102030405060708091011121314151600000000000000000000000000000000));
+    bytes32 internal constant TEST_BOOTSTRAP_PK_ROOT = bytes32(uint256(0x1718192021222324252627282930313200000000000000000000000000000000));
+
+    /// @dev Deterministic test main signer public key (pkSeed, pkRoot).
+    bytes32 internal constant TEST_MAIN_PK_SEED = bytes32(uint256(0xaabbccdd0102030405060708091011120000000000000000000000000000000));
+    bytes32 internal constant TEST_MAIN_PK_ROOT = bytes32(uint256(0x1314151617181920212223242526272800000000000000000000000000000000));
 
     bytes32 internal testBootstrapKeyHash;
     bytes32 internal testMainKeyHash;
 
     function setUp() public virtual {
-        testBootstrapKeyHash = sha256(TEST_BOOTSTRAP_PK);
-        testMainKeyHash = keccak256(TEST_MAIN_PK);
+        testBootstrapKeyHash = keccak256(abi.encodePacked(TEST_BOOTSTRAP_PK_SEED, TEST_BOOTSTRAP_PK_ROOT));
+        testMainKeyHash = keccak256(abi.encodePacked(TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT));
 
-        mockVerifier = new MockSLHDSAVerifier(true);
+        mockVerifier = new MockSPHINCSVerifier(true);
         vm.label(address(mockVerifier), "MockVerifier");
 
         implementation = new PQCoinbaseSmartWallet(mockVerifier);
@@ -39,8 +42,12 @@ abstract contract Base is Test {
         vm.label(address(factory), "Factory");
 
         // Deploy wallet via factory with bootstrap-sig-gated createAccount
-        bytes memory dummySig = new bytes(17088);
-        wallet = factory.createAccount(TEST_BOOTSTRAP_PK, TEST_MAIN_PK, dummySig);
+        bytes memory dummySig = new bytes(3704);
+        wallet = factory.createAccount(
+            TEST_BOOTSTRAP_PK_SEED, TEST_BOOTSTRAP_PK_ROOT,
+            TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT,
+            dummySig
+        );
         vm.label(address(wallet), "Wallet");
 
         // Fund the wallet and the EntryPoint for gas prefund.
@@ -49,27 +56,29 @@ abstract contract Base is Test {
     }
 
     /// @dev Build an ABI-encoded PQSignatureWrapper for MAIN signer with
-    ///      the given pk and a dummy 17088-byte signature. Uses keyIndex=0,
-    ///      otsIndex=<current>.
-    function _wrapMainSignature(bytes memory pk) internal view returns (bytes memory) {
-        bytes memory dummySig = new bytes(17088);
+    ///      the given pk and a dummy 3704-byte signature. Uses keyIndex=current,
+    ///      otsIndex=current.
+    function _wrapMainSignature(bytes32 pkSeed, bytes32 pkRoot) internal view returns (bytes memory) {
+        bytes memory dummySig = new bytes(3704);
         return abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
             signerType: PQCoinbaseSmartWallet.SignerType.MAIN,
             keyIndex: wallet.currentKeyIndex(),
             otsIndex: wallet.currentOTSIndex(),
-            pk: pk,
+            pkSeed: pkSeed,
+            pkRoot: pkRoot,
             signature: dummySig
         }));
     }
 
     /// @dev Build an ABI-encoded PQSignatureWrapper for BOOTSTRAP signer.
-    function _wrapBootstrapSignature(bytes memory pk) internal pure returns (bytes memory) {
-        bytes memory dummySig = new bytes(17088);
+    function _wrapBootstrapSignature(bytes32 pkSeed, bytes32 pkRoot) internal view returns (bytes memory) {
+        bytes memory dummySig = new bytes(3704);
         return abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
             signerType: PQCoinbaseSmartWallet.SignerType.BOOTSTRAP,
             keyIndex: 0,
-            otsIndex: 0,
-            pk: pk,
+            otsIndex: wallet.bootstrapOTSIndex(),
+            pkSeed: pkSeed,
+            pkRoot: pkRoot,
             signature: dummySig
         }));
     }
@@ -86,12 +95,12 @@ abstract contract Base is Test {
         op.maxFeePerGas = 50 gwei;
         op.maxPriorityFeePerGas = 2 gwei;
         op.paymasterAndData = "";
-        op.signature = _wrapMainSignature(TEST_MAIN_PK);
+        op.signature = _wrapMainSignature(TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT);
     }
 
     /// @dev Build a UserOperation using BOOTSTRAP signer.
-    function _buildBootstrapUserOp(bytes memory callData) internal pure returns (UserOperation memory op) {
-        op.sender = address(0); // will be overridden
+    function _buildBootstrapUserOp(bytes memory callData) internal view returns (UserOperation memory op) {
+        op.sender = address(wallet);
         op.nonce = 0;
         op.initCode = "";
         op.callData = callData;
@@ -101,6 +110,6 @@ abstract contract Base is Test {
         op.maxFeePerGas = 50 gwei;
         op.maxPriorityFeePerGas = 2 gwei;
         op.paymasterAndData = "";
-        op.signature = _wrapBootstrapSignature(TEST_BOOTSTRAP_PK);
+        op.signature = _wrapBootstrapSignature(TEST_BOOTSTRAP_PK_SEED, TEST_BOOTSTRAP_PK_ROOT);
     }
 }

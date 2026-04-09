@@ -5,10 +5,9 @@ pragma solidity 0.8.23;
 ///
 /// @custom:storage-location erc7201:pqsigner.storage.PQOwnable
 struct PQSignerStorage {
-    /// @dev SHA-256 hash of the bootstrap public key (ML-DSA-44 recommended,
-    ///      SLH-DSA-SHA2-128f as interim). Set at init, immutable for the
-    ///      lifetime of the wallet. The bootstrap key is global (not per-chain)
-    ///      and never rotates.
+    /// @dev Keccak256 hash of the bootstrap public key (pkSeed || pkRoot).
+    ///      Set at init, immutable for the lifetime of the wallet.
+    ///      The bootstrap key is global (not per-chain) and never rotates.
     bytes32 bootstrapPubKeyHash;
 
     /// @dev Current main signer epoch index. Starts at 0, increments by 1
@@ -16,14 +15,19 @@ struct PQSignerStorage {
     ///      tracks its own epoch independently.
     uint32 currentKeyIndex;
 
-    /// @dev Keccak256 hash of the current main signer's public key.
-    ///      Updated on every rotation via `rotateMainSigner`.
+    /// @dev Keccak256 hash of the current main signer's public key
+    ///      (pkSeed || pkRoot). Updated on every rotation via `rotateMainSigner`.
     bytes32 currentMainPubKeyHash;
 
     /// @dev Next unused OTS leaf index for the current main key. Incremented
     ///      atomically with each successful main-signer signature validation.
     ///      Reset to 0 on every rotation.
     uint32 currentOTSIndex;
+
+    /// @dev Next unused OTS leaf index for the bootstrap key. Incremented
+    ///      atomically with each successful bootstrap-signer UserOp validation.
+    ///      Never reset (bootstrap key never rotates).
+    uint32 bootstrapOTSIndex;
 
     /// @dev `true` once the account has been initialised.
     bool initialized;
@@ -37,9 +41,9 @@ struct PQSignerStorage {
 ///         The wallet has two classes of signer, both derived from the same
 ///         BIP-39 seed:
 ///
-///         - **Bootstrap signer**: a single, stateless PQ keypair used only
-///           for administrative operations (initial deployment, emergency
-///           rotation). Never rotates. One key for the lifetime of the wallet.
+///         - **Bootstrap signer**: a single, stateful hash-based PQ keypair
+///           used for administrative operations (initial deployment, main
+///           signer rotation). Never rotates. OTS-tracked per wallet.
 ///
 ///         - **Main signer**: the active signing key for day-to-day transactions.
 ///           Stateful hash-based, rotates every ~1M signatures. Per-chain
@@ -79,13 +83,16 @@ abstract contract PQOwnable {
     /// @notice Emitted on every successful main-signer signature validation.
     event OTSConsumed(uint32 indexed keyIndex, uint32 indexed otsIndex);
 
+    /// @notice Emitted on every successful bootstrap-signer UserOp validation.
+    event BootstrapOTSConsumed(uint32 indexed otsIndex);
+
     /// @notice Reverts unless `msg.sender` is the account itself.
     modifier onlyOwner() virtual {
         _checkOwner();
         _;
     }
 
-    /// @notice Returns the SHA-256 commitment to the bootstrap public key.
+    /// @notice Returns the keccak256 commitment to the bootstrap public key.
     function bootstrapPubKeyHash() public view virtual returns (bytes32) {
         return _getStorage().bootstrapPubKeyHash;
     }
@@ -106,26 +113,31 @@ abstract contract PQOwnable {
         return _getStorage().currentOTSIndex;
     }
 
+    /// @notice Returns the next unused OTS index for the bootstrap key.
+    function bootstrapOTSIndex() public view virtual returns (uint32) {
+        return _getStorage().bootstrapOTSIndex;
+    }
+
     /// @notice Returns whether the wallet has been initialised.
     function isInitialized() public view virtual returns (bool) {
         return _getStorage().initialized;
     }
 
-    /// @notice Verify that `pk` matches the bootstrap key commitment.
-    function isBootstrapKey(bytes calldata pk) public view virtual returns (bool) {
-        return sha256(pk) == _getStorage().bootstrapPubKeyHash;
+    /// @notice Verify that (pkSeed, pkRoot) matches the bootstrap key commitment.
+    function isBootstrapKey(bytes32 pkSeed, bytes32 pkRoot) public view virtual returns (bool) {
+        return keccak256(abi.encodePacked(pkSeed, pkRoot)) == _getStorage().bootstrapPubKeyHash;
     }
 
-    /// @notice Verify that `pk` matches the current main signer commitment.
-    function isMainKey(bytes calldata pk) public view virtual returns (bool) {
-        return keccak256(pk) == _getStorage().currentMainPubKeyHash;
+    /// @notice Verify that (pkSeed, pkRoot) matches the current main signer commitment.
+    function isMainKey(bytes32 pkSeed, bytes32 pkRoot) public view virtual returns (bool) {
+        return keccak256(abi.encodePacked(pkSeed, pkRoot)) == _getStorage().currentMainPubKeyHash;
     }
 
     /// @notice One-shot initialiser. Called by the factory immediately
     ///         after the proxy is deployed.
     ///
-    /// @param bootstrapPubKeyHash_ SHA-256 hash of the bootstrap public key.
-    /// @param initialMainPubKeyHash_ Keccak256 hash of the initial main signer.
+    /// @param bootstrapPubKeyHash_ Keccak256 hash of the bootstrap public key (pkSeed || pkRoot).
+    /// @param initialMainPubKeyHash_ Keccak256 hash of the initial main signer (pkSeed || pkRoot).
     function _initializeOwner(
         bytes32 bootstrapPubKeyHash_,
         bytes32 initialMainPubKeyHash_
@@ -137,6 +149,7 @@ abstract contract PQOwnable {
         $.currentKeyIndex = 0;
         $.currentMainPubKeyHash = initialMainPubKeyHash_;
         $.currentOTSIndex = 0;
+        $.bootstrapOTSIndex = 0;
         $.initialized = true;
         emit WalletInitialized(bootstrapPubKeyHash_, initialMainPubKeyHash_);
     }
@@ -146,19 +159,20 @@ abstract contract PQOwnable {
     ///         happens in `validateUserOp` (either main or bootstrap path).
     ///
     /// @param newKeyIndex Must be `currentKeyIndex + 1` (sequential only).
-    /// @param newMainPubKey The raw public key bytes of the new main signer.
+    /// @param newMainPubKeyHash Keccak256 hash of the new main signer's
+    ///        public key (pkSeed || pkRoot).
     function _rotateMainSigner(
         uint32 newKeyIndex,
-        bytes calldata newMainPubKey
+        bytes32 newMainPubKeyHash
     ) internal virtual {
         PQSignerStorage storage $ = _getStorage();
         require(newKeyIndex == $.currentKeyIndex + 1, "sequential only");
 
         $.currentKeyIndex = newKeyIndex;
-        $.currentMainPubKeyHash = keccak256(newMainPubKey);
+        $.currentMainPubKeyHash = newMainPubKeyHash;
         $.currentOTSIndex = 0;
 
-        emit MainSignerRotated(newKeyIndex, $.currentMainPubKeyHash);
+        emit MainSignerRotated(newKeyIndex, newMainPubKeyHash);
     }
 
     /// @notice Consume an OTS index atomically with signature validation.
@@ -172,6 +186,20 @@ abstract contract PQOwnable {
         $.currentOTSIndex = consumed + 1;
 
         emit OTSConsumed($.currentKeyIndex, consumed);
+        return consumed;
+    }
+
+    /// @notice Consume a bootstrap OTS index atomically with signature
+    ///         validation.
+    function _consumeBootstrapOTS(uint32 expectedOTSIndex) internal virtual returns (uint32) {
+        PQSignerStorage storage $ = _getStorage();
+        require(expectedOTSIndex == $.bootstrapOTSIndex, "wrong bootstrap ots index");
+        require(expectedOTSIndex <= MAX_OTS_INDEX, "bootstrap key exhausted");
+
+        uint32 consumed = $.bootstrapOTSIndex;
+        $.bootstrapOTSIndex = consumed + 1;
+
+        emit BootstrapOTSConsumed(consumed);
         return consumed;
     }
 

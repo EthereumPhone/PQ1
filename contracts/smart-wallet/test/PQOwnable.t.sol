@@ -5,29 +5,29 @@ import {Base} from "./Base.t.sol";
 
 contract PQOwnableTest is Base {
     function test_bootstrapPubKeyHash_matches() public view {
-        assertEq(wallet.bootstrapPubKeyHash(), sha256(TEST_BOOTSTRAP_PK));
+        assertEq(wallet.bootstrapPubKeyHash(), testBootstrapKeyHash);
     }
 
     function test_isBootstrapKey_true() public view {
-        assertTrue(wallet.isBootstrapKey(TEST_BOOTSTRAP_PK));
+        assertTrue(wallet.isBootstrapKey(TEST_BOOTSTRAP_PK_SEED, TEST_BOOTSTRAP_PK_ROOT));
     }
 
     function test_isBootstrapKey_false() public view {
-        bytes memory wrongPk = hex"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        assertFalse(wallet.isBootstrapKey(wrongPk));
+        bytes32 wrongSeed = bytes32(uint256(0xffff));
+        assertFalse(wallet.isBootstrapKey(wrongSeed, TEST_BOOTSTRAP_PK_ROOT));
     }
 
     function test_currentMainPubKeyHash_matches() public view {
-        assertEq(wallet.currentMainPubKeyHash(), keccak256(TEST_MAIN_PK));
+        assertEq(wallet.currentMainPubKeyHash(), testMainKeyHash);
     }
 
     function test_isMainKey_true() public view {
-        assertTrue(wallet.isMainKey(TEST_MAIN_PK));
+        assertTrue(wallet.isMainKey(TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT));
     }
 
     function test_isMainKey_false() public view {
-        bytes memory wrongPk = hex"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        assertFalse(wallet.isMainKey(wrongPk));
+        bytes32 wrongSeed = bytes32(uint256(0xffff));
+        assertFalse(wallet.isMainKey(wrongSeed, TEST_MAIN_PK_ROOT));
     }
 
     function test_currentKeyIndex_initial() public view {
@@ -39,8 +39,9 @@ contract PQOwnableTest is Base {
     }
 
     function test_initialize_revert_alreadyInitialized() public {
-        bytes memory pk = hex"0102030405060708091011121314151617181920212223242526272829303132";
+        bytes32 seed = bytes32(uint256(1));
+        bytes32 root = bytes32(uint256(2));
         vm.expectRevert(abi.encodeWithSignature("Initialized()"));
-        wallet.initialize(pk, pk);
+        wallet.initialize(seed, root, seed, root);
     }
 }
