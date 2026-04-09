@@ -119,6 +119,12 @@ pub unsafe fn init() -> UsbStack {
         .unwrap()
         .build();
 
+    // Force B-session valid now that the driver has completed its core
+    // soft-reset (which clears GOTGCTL).  Without this the DWC2 core
+    // does not recognise the STM32U5 and VBUS sensing silently fails,
+    // preventing enumeration on USB-C to USB-C connections.
+    configure_vbus_u5();
+
     UsbStack {
         device: usb_dev,
         transport: transport::Transport::new(hid_class),

@@ -158,8 +158,8 @@ pub unsafe fn init() {
     }
 
     // ---- 8. Enable TCPP03 (PB5 HIGH) ----
-    // With JP4 on 5V_UCPD, the TCPP03 controls the VBUS path from the
-    // USB-C connector.  Enabling it activates CC routing through the chip.
+    // The TCPP03-M20 (U8) provides ESD protection and CC routing for the
+    // USB-C connector (CN1).  Must be enabled for both USB-A→C and C→C cables.
     enable_tcpp03();
 
     // ---- 9. UCPD1 CC detection (PA15/PB15) ----
@@ -222,8 +222,19 @@ unsafe fn init_ucpd() {
     // UCPD1 CR: enable CC PHYs and connect Rd pull-downs (sink mode).
     // Bit 9:     ANAMODE = 1 (sink → connects 5.1kΩ Rd on CC lines)
     // Bits 11:10 CCENABLE = 11 (both CC1 and CC2 PHYs enabled)
+    // Bits 21:20 CC2TCDIS:CC1TCDIS = 11 (disable dead-battery pull-downs)
+    //
+    // Dead-battery Rd pull-downs are active by default after reset so that
+    // a USB-C host can detect the sink even before firmware runs.  Once we
+    // configure the UCPD controller with its own Rd (ANAMODE=1) we must
+    // disable the dead-battery resistors — they add a parallel path that
+    // shifts the CC voltage and can cause mis-detection with USB-C to USB-C
+    // cables (where the host Rp is driven by a UCPD controller, not a
+    // fixed 56 kΩ pull-up in the cable plug as with USB-A to USB-C).
     let cr: u32 = (0b11 << 10)  // CCENABLE: both CC lines enabled
-        | (1 << 9);              // ANAMODE: sink (Rd pull-down)
+        | (1 << 9)               // ANAMODE: sink (Rd pull-down)
+        | (1 << 20)              // CC1TCDIS: disable CC1 dead-battery
+        | (1 << 21);             // CC2TCDIS: disable CC2 dead-battery
     write_volatile(UCPD1_CR, cr);
     cortex_m::asm::dsb();
 

@@ -346,7 +346,7 @@ impl CommandRouter {
         SIGN_PAYLOAD_BUF[p..p + tx_len].copy_from_slice(tx_data);
         p += tx_len;
 
-        let status = nsc_api::sign_raw(&SIGN_PAYLOAD_BUF[..p], &mut SIG_BUF[..SIGNATURE_LEN]);
+        let status = nsc_api::sign_userop(&SIGN_PAYLOAD_BUF[..p], &mut SIG_BUF[..SIGNATURE_LEN]);
         self.sign_result(status)
     }
 
@@ -385,7 +385,7 @@ impl CommandRouter {
         SIGN_PAYLOAD_BUF[p..p + msg_len].copy_from_slice(msg_data);
         p += msg_len;
 
-        let status = nsc_api::sign_raw(&SIGN_PAYLOAD_BUF[..p], &mut SIG_BUF[..SIGNATURE_LEN]);
+        let status = nsc_api::sign_userop(&SIGN_PAYLOAD_BUF[..p], &mut SIG_BUF[..SIGNATURE_LEN]);
         self.sign_result(status)
     }
 

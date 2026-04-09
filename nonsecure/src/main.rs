@@ -13,11 +13,6 @@ use panic_semihosting as _;
 #[cfg(feature = "usb")]
 use panic_halt as _;
 
-use sphincs_tz_shared::{
-    NscStatus, SIGNATURE_LEN, VERIFYING_KEY_LEN, ZK_HEADER_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN,
-    ZK_STRING_LEN,
-};
-
 // NOTE: the interactive demo (`main.rs::main`) and the automated runner
 // (`e2e_test.rs::main`) each own their own imports and scratch statics.
 // Everything below this line is the interactive-only side, gated off so
@@ -25,7 +20,10 @@ use sphincs_tz_shared::{
 #[cfg(not(feature = "e2e-test"))]
 use cortex_m_semihosting::{debug, hprintln};
 #[cfg(not(feature = "e2e-test"))]
-use sphincs_tz_shared::{NscStatus, SIGNATURE_LEN, USEROP_PREFIX_LEN, VERIFYING_KEY_LEN};
+use sphincs_tz_shared::{
+    NscStatus, SIGNATURE_LEN, USEROP_PREFIX_LEN, VERIFYING_KEY_LEN, ZK_HEADER_LEN,
+    ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN,
+};
 
 mod aa;
 mod erc20_db;

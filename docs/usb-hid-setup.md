@@ -18,7 +18,11 @@ You need **two cables** connected simultaneously:
 | Port | Cable | Purpose |
 |------|-------|---------|
 | **CN8** (micro-USB) | USB-A to micro-B | ST-LINK: flashing + debug + VDDUSB power |
-| **CN1** (USB-C) | USB-C to USB-A | USB HID: host communication |
+| **CN1** (USB-C) | USB-C to USB-A **or** USB-C to USB-C | USB HID: host communication |
+
+Both USB-A to USB-C and USB-C to USB-C cables are supported on CN1.
+With JP4 on 5V_USB_STLK the ST-LINK provides VDDUSB power regardless
+of cable type.
 
 ## Building
 
@@ -161,6 +165,7 @@ world only handles cryptographic operations via the existing NSC gateway.
 - Check JP4 is on 5V_USB_STLK
 - Unplug and replug USB-C cable after flashing
 - Verify ST-LINK micro-USB is also connected (powers VDDUSB)
+- USB-C to USB-C: ensure the cable supports data (not charge-only)
 
 **Chrome says "no compatible devices"**:
 - Install udev rules and replug the cable
