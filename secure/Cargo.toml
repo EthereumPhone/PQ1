@@ -57,6 +57,7 @@ stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (v
 # NEVER ship in production: it disables every meaningful trust gate.
 e2e-test = []
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
+se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
 
 [dev-dependencies]
 hex = { workspace = true }

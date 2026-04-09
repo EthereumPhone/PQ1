@@ -476,7 +476,7 @@ pub fn deserialize_pin_state(blob: &[u8], blob_len: usize) -> Result<PinState, (
 /// SPHINCS+ keypair on any device running this firmware. That is the
 /// recovery guarantee — if the device is lost or bricked, restoring from the
 /// 24 written-down words on a replacement unit yields the identical wallet.
-#[cfg(feature = "mock-se")]
+#[cfg(any(feature = "mock-se", feature = "se050"))]
 pub fn provision_with_mnemonic(
     se: &mut impl SecureElement,
     mnemonic: &sphincs_tz_bip39::Mnemonic,

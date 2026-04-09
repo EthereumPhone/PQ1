@@ -50,6 +50,8 @@ mod pin;
 mod sau;
 #[cfg(not(test))]
 mod secure_element;
+#[cfg(all(feature = "se050", not(test)))]
+mod se050;
 #[cfg(all(feature = "tropic01-se", not(test)))]
 mod semihosting_spi;
 #[cfg(not(test))]
@@ -87,6 +89,10 @@ static mut SE: MockSecureElement = MockSecureElement::new();
 // Global TROPIC01 SE (used when tropic01-se feature is active)
 #[cfg(all(feature = "tropic01-se", not(test)))]
 static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureElement::new();
+
+// Global SE050 SE (used when se050 feature is active)
+#[cfg(all(feature = "se050", not(test)))]
+static mut SE: se050::Se050SecureElement = se050::Se050SecureElement::new();
 
 /// SysTick reload value for ~1 ms tick.
 /// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: set dynamically from rcc::init().
@@ -235,6 +241,14 @@ fn main() -> ! {
     sau::init();
     secure_log!("[S] SAU + MPC configured");
 
+    // Initialize I2C1 for SE050 secure element BEFORE any SE operations.
+    // Must come after rcc::init() (clocks) and sau::init() (peripherals).
+    #[cfg(all(feature = "stm32u585", feature = "se050"))]
+    unsafe {
+        hw::i2c_hw::init();
+        secure_log!("[S] I2C1 initialized for SE050 (PB8/PB9, 400 kHz)");
+    }
+
     ui::init();
     secure_log!("[S] UI initialized");
 
@@ -298,7 +312,7 @@ fn main() -> ! {
 
             ui::show_status("Provisioning", "...");
 
-            #[cfg(feature = "mock-se")]
+            #[cfg(any(feature = "mock-se", feature = "se050"))]
             crypto::provision_with_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
             #[cfg(feature = "tropic01-se")]
