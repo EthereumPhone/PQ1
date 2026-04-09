@@ -22,6 +22,11 @@ mod oled;
 #[cfg(feature = "ui-oled")]
 pub use oled::{Display, Input};
 
+#[cfg(feature = "ui-noop")]
+mod noop;
+#[cfg(feature = "ui-noop")]
+pub use noop::{Display, Input};
+
 pub mod confirm;
 pub mod pin_entry;
 pub mod seed_wizard;

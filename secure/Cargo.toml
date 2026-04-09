@@ -40,6 +40,7 @@ mock-se = []
 tropic01-se = ["dep:tropic01", "dep:x25519-dalek", "dep:embedded-hal"]
 ui-semihosting = []
 ui-oled = ["dep:ssd1306", "dep:embedded-graphics", "dep:embedded-hal"]
+ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger/OLED)
 pka-accel = ["bls12_381/pka"]  # STM32U585 PKA hardware acceleration for BLS12-381 Fp arithmetic
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 # Non-interactive automated end-to-end test mode. Provisions a fixed
@@ -48,3 +49,4 @@ stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (v
 # Logs the chosen TxKind variant on every cmd_sign for assertions.
 # NEVER ship in production: it disables every meaningful trust gate.
 e2e-test = []
+usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication

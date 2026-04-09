@@ -138,6 +138,57 @@ pub const EIP712_HEADER_LEN: usize =
     EIP712_PROOF_LEN + EIP712_CANONICAL_LEN + EIP712_STRING_LEN;
 
 // ---------------------------------------------------------------------------
+// USB APDU protocol constants (Keycard Shell compatible)
+// ---------------------------------------------------------------------------
+
+/// APDU class byte — matches Keycard Shell / Ledger convention.
+pub const APDU_CLA: u8 = 0xE0;
+
+/// APDU instruction codes — Keycard Shell compatible command set.
+pub const INS_GET_PUBLIC: u8 = 0x02;
+pub const INS_SIGN_ETH_TX: u8 = 0x04;
+pub const INS_GET_APP_CONF: u8 = 0x06;
+pub const INS_SIGN_ETH_MSG: u8 = 0x08;
+pub const INS_SIGN_EIP712: u8 = 0x0C;
+pub const INS_GET_RESPONSE: u8 = 0xC0;
+
+/// PQSigner extensions (not in Keycard Shell)
+pub const INS_GET_PIN_REMAINING: u8 = 0x10;
+pub const INS_UNLOCK: u8 = 0x12;
+
+/// APDU P1 values for command chaining (Keycard Shell convention).
+/// Chain terminates when Lc < APDU_MAX_DATA (short last chunk).
+pub const P1_FIRST: u8 = 0x00;
+pub const P1_MORE: u8 = 0x01;
+
+/// ISO 7816-4 status words
+pub const SW_OK: u16 = 0x9000;
+pub const SW_MORE_DATA: u8 = 0x61; // SW1=0x61, SW2=remaining (0xFF if >255)
+pub const SW_CONDITIONS_NOT_SATISFIED: u16 = 0x6985;
+pub const SW_SECURITY_NOT_SATISFIED: u16 = 0x6982;
+pub const SW_WRONG_DATA: u16 = 0x6A80;
+pub const SW_WRONG_LENGTH: u16 = 0x6700;
+pub const SW_INS_NOT_SUPPORTED: u16 = 0x6D00;
+pub const SW_CLA_NOT_SUPPORTED: u16 = 0x6E00;
+pub const SW_FEATURE_NOT_SUPPORTED: u16 = 0x6501;
+pub const SW_INTERNAL_ERROR: u16 = 0x6F00;
+
+/// Maximum data bytes per APDU (short form Lc, 1 byte).
+pub const APDU_MAX_DATA: usize = 255;
+
+/// Maximum response data per APDU (before SW bytes).
+pub const APDU_MAX_RESP: usize = 253;
+
+/// HID report size (USB Full-Speed interrupt endpoint).
+pub const HID_REPORT_SIZE: usize = 64;
+
+/// HID framing tag for APDU data (Ledger-compatible).
+pub const HID_TAG_APDU: u8 = 0x05;
+
+/// HID framing tag for PING echo.
+pub const HID_TAG_PING: u8 = 0x02;
+
+// ---------------------------------------------------------------------------
 // NSC return status codes
 // ---------------------------------------------------------------------------
 

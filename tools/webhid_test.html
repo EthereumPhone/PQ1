@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>PQSigner WebHID Test</title>
+<style>
+  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 2em; }
+  h2 { color: #0fbcf9; }
+  button { margin: 4px; padding: 8px 16px; background: #0fbcf9; border: none; cursor: pointer; font-family: monospace; }
+  button:disabled { background: #444; color: #888; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: #0dd; }
+  #log { background: #0d0d1a; color: #0f0; padding: 1em; min-height: 400px; font-size: 13px; overflow-y: auto; max-height: 600px; white-space: pre-wrap; }
+  .section { margin-top: 1em; border-top: 1px solid #333; padding-top: 0.5em; }
+  .section-title { color: #0fbcf9; font-weight: bold; }
+</style>
+</head>
+<body>
+<h2>PQSigner WebHID Test (Keycard Shell Compatible)</h2>
+
+<div>
+  <button id="connect">Connect to PQSigner</button>
+  <span id="status" style="color:#666">Not connected</span>
+</div>
+
+<div class="section">
+  <span class="section-title">Device Info</span><br>
+  <button id="getAppConf" disabled>GET_APP_CONF (0x06)</button>
+  <button id="getPinRemaining" disabled>GET_PIN_REMAINING (0x10)</button>
+</div>
+
+<div class="section">
+  <span class="section-title">Key Management</span><br>
+  <button id="unlock" disabled>UNLOCK (0x12)</button>
+  <button id="getPubkey" disabled>GET_PUBLIC (0x02)</button>
+  <button id="getPubkeyExt" disabled>GET_PUBLIC extended (0x02, P2=1)</button>
+</div>
+
+<div class="section">
+  <span class="section-title">Signing</span><br>
+  <button id="signTx" disabled>SIGN_ETH_TX (0x04) — test tx</button>
+</div>
+
+<pre id="log"></pre>
+
+<script>
+const VID = 0x1209;
+const PID = 0x7051;
+const REPORT_SIZE = 64;
+const TAG_APDU = 0x05;
+const TAG_PING = 0x02;
+const CLA = 0xE0;
+
+// INS codes (Keycard Shell compatible)
+const INS_GET_PUBLIC     = 0x02;
+const INS_SIGN_ETH_TX   = 0x04;
+const INS_GET_APP_CONF   = 0x06;
+const INS_SIGN_ETH_MSG   = 0x08;
+const INS_SIGN_EIP712    = 0x0C;
+const INS_GET_RESPONSE   = 0xC0;
+const INS_GET_PIN_REMAINING = 0x10;
+const INS_UNLOCK         = 0x12;
+
+let device = null;
+let channelId = 0x0101;
+const logEl = document.getElementById('log');
+
+function log(msg) {
+    logEl.textContent += msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function hex(arr) {
+    return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join(' ');
+}
+
+// BIP44 Ethereum path: m/44'/60'/0'/0/0
+const ETH_PATH = new Uint8Array([
+    0x05,                                     // 5 elements
+    0x80, 0x00, 0x00, 0x2C,                  // 44' (hardened)
+    0x80, 0x00, 0x00, 0x3C,                  // 60' (hardened)
+    0x80, 0x00, 0x00, 0x00,                  // 0'  (hardened)
+    0x00, 0x00, 0x00, 0x00,                  // 0
+    0x00, 0x00, 0x00, 0x00                   // 0
+]);
+
+// Simple unsigned EIP-1559 tx (send 0.001 ETH)
+const TEST_TX = new Uint8Array([
+    0x02, 0xf0, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00,
+    0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00, 0x82, 0x52, 0x08,
+    0x94, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a,
+    0xbc, 0xde, 0xf1, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
+    0xef, 0x12, 0x34, 0x88, 0x0d, 0xe0, 0xb6, 0xb3, 0xa7,
+    0x64, 0x00, 0x00, 0x80, 0xc0
+]);
+
+function buildApdu(ins, p1, p2, data = new Uint8Array(0)) {
+    const apdu = new Uint8Array(5 + data.length);
+    apdu[0] = CLA;
+    apdu[1] = ins;
+    apdu[2] = p1;
+    apdu[3] = p2;
+    apdu[4] = data.length;
+    apdu.set(data, 5);
+    return apdu;
+}
+
+function frameApdu(apdu) {
+    const frames = [];
+    let offset = 0, seq = 0;
+
+    const first = new Uint8Array(REPORT_SIZE);
+    first[0] = (channelId >> 8) & 0xFF;
+    first[1] = channelId & 0xFF;
+    first[2] = TAG_APDU;
+    first[3] = 0; first[4] = 0;
+    first[5] = (apdu.length >> 8) & 0xFF;
+    first[6] = apdu.length & 0xFF;
+    const firstChunk = Math.min(57, apdu.length);
+    first.set(apdu.subarray(0, firstChunk), 7);
+    frames.push(first);
+    offset = firstChunk;
+    seq = 1;
+
+    while (offset < apdu.length) {
+        const frame = new Uint8Array(REPORT_SIZE);
+        frame[0] = (channelId >> 8) & 0xFF;
+        frame[1] = channelId & 0xFF;
+        frame[2] = TAG_APDU;
+        frame[3] = (seq >> 8) & 0xFF;
+        frame[4] = seq & 0xFF;
+        const chunk = Math.min(59, apdu.length - offset);
+        frame.set(apdu.subarray(offset, offset + chunk), 5);
+        frames.push(frame);
+        offset += chunk;
+        seq++;
+    }
+    return frames;
+}
+
+async function receiveHidApdu() {
+    let buf = [];
+    let expectedLen = 0;
+    let seq = 0;
+
+    while (true) {
+        const report = await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Timeout (10s)')), 10000);
+            device.addEventListener('inputreport', (e) => {
+                clearTimeout(timeout);
+                resolve(new Uint8Array(e.data.buffer));
+            }, { once: true });
+        });
+
+        const rTag = report[2];
+        const rSeq = (report[3] << 8) | report[4];
+        if (rTag !== TAG_APDU) continue;
+        if (rSeq !== seq) { log(`ERROR: expected seq ${seq}, got ${rSeq}`); break; }
+
+        if (seq === 0) {
+            expectedLen = (report[5] << 8) | report[6];
+            const chunk = Math.min(57, expectedLen);
+            buf.push(...report.slice(7, 7 + chunk));
+        } else {
+            const remaining = expectedLen - buf.length;
+            const chunk = Math.min(59, remaining);
+            buf.push(...report.slice(5, 5 + chunk));
+        }
+        seq++;
+        if (buf.length >= expectedLen) break;
+    }
+    return new Uint8Array(buf.slice(0, expectedLen));
+}
+
+// Send APDU and receive response, handling GET_RESPONSE chaining
+async function sendApdu(ins, p1, p2, data) {
+    const apdu = buildApdu(ins, p1, p2, data);
+    log(`>> APDU [${apdu.length}B]: ${hex(apdu.slice(0, 30))}${apdu.length > 30 ? '...' : ''}`);
+
+    for (const frame of frameApdu(apdu)) {
+        await device.sendReport(0, frame);
+    }
+
+    let fullData = [];
+    let response = await receiveHidApdu();
+
+    while (true) {
+        const sw1 = response[response.length - 2];
+        const sw2 = response[response.length - 1];
+        const sw = (sw1 << 8) | sw2;
+        const payload = response.slice(0, response.length - 2);
+        fullData.push(...payload);
+
+        if (sw1 === 0x61) {
+            // More data — send GET_RESPONSE
+            log(`   ... SW=0x${sw.toString(16)}, ${fullData.length} bytes so far, fetching more...`);
+            const getResp = buildApdu(INS_GET_RESPONSE, 0, 0);
+            for (const frame of frameApdu(getResp)) {
+                await device.sendReport(0, frame);
+            }
+            response = await receiveHidApdu();
+        } else {
+            const preview = fullData.length > 64 ? hex(fullData.slice(0, 64)) + '...' : hex(fullData);
+            log(`<< SW: 0x${sw.toString(16).padStart(4, '0')}  Data[${fullData.length}B]: ${preview}`);
+            return { sw, data: new Uint8Array(fullData) };
+        }
+    }
+}
+
+// --- Button handlers ---
+
+document.getElementById('connect').onclick = async () => {
+    try {
+        const devices = await navigator.hid.requestDevice({
+            filters: [{ vendorId: VID, productId: PID }]
+        });
+        if (devices.length === 0) { log('No device selected'); return; }
+        device = devices[0];
+        await device.open();
+        document.getElementById('status').textContent = `Connected: ${device.productName}`;
+        document.getElementById('status').style.color = '#0f0';
+        log(`Connected: ${device.productName} (VID ${device.vendorId.toString(16)}, PID ${device.productId.toString(16)})`);
+        document.querySelectorAll('button:not(#connect)').forEach(b => b.disabled = false);
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('getAppConf').onclick = async () => {
+    try {
+        const { sw, data } = await sendApdu(INS_GET_APP_CONF, 0x80, 0x00);
+        if (sw === 0x9000 && data.length >= 23) {
+            log(`  FW version: ${data[0]}.${data[1]}.${data[2]}`);
+            const dbVer = (data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6];
+            log(`  DB version: ${dbVer.toString(16)}`);
+            log(`  Device UID: ${hex(data.slice(7, 23))}`);
+            if (data.length >= 55) {
+                log(`  Public key: ${hex(data.slice(23, 55))}`);
+            }
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('getPinRemaining').onclick = async () => {
+    try {
+        const { sw, data } = await sendApdu(INS_GET_PIN_REMAINING, 0x80, 0x00);
+        if (sw === 0x9000) log(`  PIN attempts remaining: ${data[0]}`);
+        else log(`  Error: SW=0x${sw.toString(16)}`);
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('unlock').onclick = async () => {
+    try {
+        log('  Waiting for PIN entry on device display...');
+        const { sw } = await sendApdu(INS_UNLOCK, 0x80, 0x00);
+        log(`  Unlock result: SW=0x${sw.toString(16).padStart(4, '0')} ${sw === 0x9000 ? '(OK)' : '(FAILED)'}`);
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('getPubkey').onclick = async () => {
+    try {
+        const { sw, data } = await sendApdu(INS_GET_PUBLIC, 0x80, 0x00, ETH_PATH);
+        if (sw === 0x9000 && data.length >= 6) {
+            const fpLen = data[0];
+            const fp = hex(data.slice(1, 1 + fpLen));
+            const pkLen = data[1 + fpLen];
+            const pk = hex(data.slice(2 + fpLen, 2 + fpLen + pkLen));
+            log(`  Fingerprint: ${fp}`);
+            log(`  Public key [${pkLen}B]: ${pk}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('getPubkeyExt').onclick = async () => {
+    try {
+        const { sw, data } = await sendApdu(INS_GET_PUBLIC, 0x80, 0x01, ETH_PATH);
+        if (sw === 0x9000 && data.length >= 6) {
+            const fpLen = data[0];
+            const fp = hex(data.slice(1, 1 + fpLen));
+            const off = 1 + fpLen;
+            const pkLen = data[off];
+            const pk = hex(data.slice(off + 1, off + 1 + pkLen));
+            const ccOff = off + 1 + pkLen;
+            const ccLen = data[ccOff];
+            log(`  Fingerprint: ${fp}`);
+            log(`  Public key [${pkLen}B]: ${pk}`);
+            log(`  Chain code [${ccLen}B]: ${ccLen > 0 ? hex(data.slice(ccOff + 1, ccOff + 1 + ccLen)) : '(none)'}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('signTx').onclick = async () => {
+    try {
+        log('  Sending BIP32 path + test EIP-1559 tx for signing...');
+        const payload = new Uint8Array(ETH_PATH.length + TEST_TX.length);
+        payload.set(ETH_PATH);
+        payload.set(TEST_TX, ETH_PATH.length);
+
+        // Single chunk (fits in one APDU), P1=0x00 (first = last since Lc < 255)
+        const { sw, data } = await sendApdu(INS_SIGN_ETH_TX, 0x00, 0x00, payload);
+        if (sw === 0x9000) {
+            log(`  Signature received: ${data.length} bytes`);
+            log(`  Sig[0..32]: ${hex(data.slice(0, 32))}`);
+            if (data.length > 32) log(`  Sig[32..64]: ${hex(data.slice(32, 64))}`);
+        } else {
+            log(`  Sign failed: SW=0x${sw.toString(16)}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ default = []
 # harness can grep.
 e2e-test = []
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
+usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
 
 [dependencies]
 sphincs-tz-shared = { path = "../shared" }
@@ -19,3 +20,8 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5"
 panic-semihosting = "0.6"
+panic-halt = "1.0"
+
+# USB HID (optional, for hardware builds with host communication)
+usb-device = { version = "0.3", default-features = false, optional = true }
+synopsys-usb-otg = { version = "0.4", features = ["cortex-m", "fs"], optional = true }

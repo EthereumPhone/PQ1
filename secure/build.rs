@@ -6,11 +6,13 @@ fn main() {
     // Mutually-exclusive UI backend check
     let ui_semihosting = env::var_os("CARGO_FEATURE_UI_SEMIHOSTING").is_some();
     let ui_oled = env::var_os("CARGO_FEATURE_UI_OLED").is_some();
-    if ui_semihosting && ui_oled {
-        panic!("features `ui-semihosting` and `ui-oled` are mutually exclusive");
+    let ui_noop = env::var_os("CARGO_FEATURE_UI_NOOP").is_some();
+    let ui_count = ui_semihosting as u32 + ui_oled as u32 + ui_noop as u32;
+    if ui_count > 1 {
+        panic!("UI backends (`ui-semihosting`, `ui-oled`, `ui-noop`) are mutually exclusive");
     }
-    if !ui_semihosting && !ui_oled {
-        panic!("must enable exactly one UI backend (`ui-semihosting` or `ui-oled`)");
+    if ui_count == 0 {
+        panic!("must enable exactly one UI backend (`ui-semihosting`, `ui-oled`, or `ui-noop`)");
     }
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());

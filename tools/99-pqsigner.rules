@@ -1,0 +1,5 @@
+# PQSigner USB HID — allow non-root access for WebHID and hidapi
+# Install: sudo cp tools/99-pqsigner.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
+# Then unplug and replug the device.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7051", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7051", MODE="0666", TAG+="uaccess"

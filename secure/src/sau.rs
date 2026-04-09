@@ -71,6 +71,12 @@ mod stm32 {
     const MPCBB_CR: u32 = 0x00;
     const MPCBB_SECCFGR0: u32 = 0x100;
 
+    // GTZC1 TZSC base address (S alias, AHB1)
+    const TZSC_BASE: u32 = 0x5003_2800;
+    const TZSC_SECCFGR1: *mut u32 = (TZSC_BASE + 0x10) as *mut u32;
+    const TZSC_SECCFGR2: *mut u32 = (TZSC_BASE + 0x14) as *mut u32;
+    const TZSC_SECCFGR3: *mut u32 = (TZSC_BASE + 0x18) as *mut u32;
+
     pub unsafe fn configure_gtzc() {
         // Enable GTZC1 clock
         let ahb1enr = core::ptr::read_volatile(RCC_AHB1ENR);
@@ -97,6 +103,21 @@ mod stm32 {
                 (MPCBB2_BASE + MPCBB_SECCFGR0 + i * 4) as *mut u32,
                 0x0000_0000, // all blocks non-secure
             );
+        }
+
+        // ---- GTZC1 TZSC: mark USB-related peripherals as NS ----
+        //
+        // For USB operation, GPIOA (PA11/PA12), GPIOB (PB6/PB7 UCPD CC),
+        // USB OTG FS, and UCPD1 must be non-secure.
+        //
+        // Mark all AHB2 and APB peripherals as NS for now. Production
+        // builds should restrict this to only the needed peripherals.
+        #[cfg(feature = "usb")]
+        {
+            core::ptr::write_volatile(TZSC_SECCFGR1, 0x0000_0000);
+            core::ptr::write_volatile(TZSC_SECCFGR2, 0x0000_0000);
+            core::ptr::write_volatile(TZSC_SECCFGR3, 0x0000_0000);
+            cortex_m::asm::dsb();
         }
     }
 }

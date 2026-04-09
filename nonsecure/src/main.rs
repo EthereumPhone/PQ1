@@ -1,8 +1,13 @@
 #![no_std]
 #![no_main]
 
+#[cfg(not(feature = "usb"))]
 use cortex_m_semihosting::{debug, hprintln};
+#[cfg(not(feature = "usb"))]
 use panic_semihosting as _;
+#[cfg(feature = "usb")]
+use panic_halt as _;
+
 use sphincs_tz_shared::{
     NscStatus, SIGNATURE_LEN, VERIFYING_KEY_LEN, ZK_HEADER_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN,
     ZK_STRING_LEN,
@@ -12,6 +17,8 @@ mod erc20_db;
 #[cfg(feature = "e2e-test")]
 mod e2e_test;
 mod nsc_api;
+#[cfg(feature = "usb")]
+mod usb;
 mod vk_db;
 
 // Static signature buffer (17KB is too large for stack)
@@ -67,7 +74,32 @@ static UNSIGNED_TX: [u8; 50] = [
     0xc0,                                                       // access_list = empty
 ];
 
-#[cfg(not(feature = "e2e-test"))]
+// ---------------------------------------------------------------------------
+// USB main loop: polls USB HID, dispatches APDUs to the NSC gateway.
+// Active when the `usb` feature is enabled (hardware builds with host comms).
+// ---------------------------------------------------------------------------
+#[cfg(all(feature = "usb", not(feature = "e2e-test")))]
+#[cortex_m_rt::entry]
+fn main() -> ! {
+    let mut stack = unsafe { usb::init() };
+
+    loop {
+        if stack.device.poll(&mut [&mut stack.transport.hid]) {
+            if !stack.transport.is_tx_active() {
+                if let Some(apdu) = stack.transport.try_receive() {
+                    let resp = unsafe { stack.commands.dispatch(apdu) };
+                    unsafe { stack.transport.queue_response(resp.ptr, resp.len) };
+                }
+            }
+        }
+        stack.transport.poll_tx();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Interactive test harness (default, non-USB mode for QEMU testing).
+// ---------------------------------------------------------------------------
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS] Non-secure world started!");

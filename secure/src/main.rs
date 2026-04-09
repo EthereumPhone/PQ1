@@ -297,6 +297,15 @@ fn main() -> ! {
         secure_log!("[S] PKA initialized (BLS12-381 Fp accelerated)");
     }
 
+    // Initialize USB OTG FS hardware (clocks, GPIO, UCPD) when targeting
+    // real hardware with USB enabled.  Must run after rcc::init() and
+    // sau::init() (GTZC has marked USB OTG as NS by this point).
+    #[cfg(all(feature = "stm32u585", feature = "usb"))]
+    unsafe {
+        hw::usb_hw::init();
+        secure_log!("[S] USB OTG FS hardware initialized (GPIO, UCPD, VDDUSB)");
+    }
+
     nsc::init_gateway();
     setup_systick();
     secure_log!("[S] Gateway ready");
