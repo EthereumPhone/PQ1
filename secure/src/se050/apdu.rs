@@ -294,6 +294,11 @@ pub unsafe fn read_object(
 
     let mut o = 5;
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
+    // TAG_2 (offset=0) + TAG_3 (length=0x7FFF = max) — required for
+    // binary files on the SE050-E GP 1.0 variant. Using 0x7FFF reads
+    // the entire file; the SE050 returns only what's stored.
+    o = tlv_put(&mut apdu, o, TAG_2, &[0x00, 0x00]); // offset = 0
+    o = tlv_put(&mut apdu, o, TAG_3, &[0x7F, 0xFF]); // length = max
     let lc = o - 5;
     apdu[4] = lc as u8;
     apdu[o] = 0x00; // Le: expect response data

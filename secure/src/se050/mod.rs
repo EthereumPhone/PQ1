@@ -117,8 +117,13 @@ impl SecureElement for Se050SecureElement {
             self.ensure_init()?;
             let obj_id = RMEM_OBJ_BASE + slot as u32;
 
-            // Delete existing object if present (overwrite semantics)
-            let _ = apdu::delete_object(&mut self.t1, obj_id);
+            // Check if object exists — if so, delete first (can't resize).
+            // If it doesn't exist, WriteBinary will create it with TAG_3.
+            let exists = apdu::check_object_exists(&mut self.t1, obj_id)
+                .unwrap_or(false);
+            if exists {
+                let _ = apdu::delete_object(&mut self.t1, obj_id);
+            }
 
             apdu::write_binary(&mut self.t1, obj_id, data)
                 .map_err(|_| SeError::InternalError)
