@@ -61,6 +61,7 @@ const P2_DELETE_OBJECT: u8 = 0x28;
 
 // TLV tags (SE05x specific)
 const TAG_SESSION_ID: u8 = 0x10;
+/// Object access policy (kSE05x_TAG_POLICY).
 const TAG_POLICY: u8 = 0x11;
 const TAG_MAX_ATTEMPTS: u8 = 0x12;
 const TAG_OBJECT_ID: u8 = 0x41;
@@ -183,9 +184,7 @@ pub unsafe fn send_apdu(
     let sw = ((raw_resp[n - 2] as u16) << 8) | (raw_resp[n - 1] as u16);
 
     #[cfg(feature = "debug-log")]
-    if sw != SW_OK {
-        cortex_m_semihosting::hprintln!("[SE050] RX SW=0x{:04x} (len={})", sw, n);
-    }
+    cortex_m_semihosting::hprintln!("[SE050] RX SW=0x{:04x} (len={})", sw, n);
 
     if sw != SW_OK {
         return Err(ApduError::Status(sw));
@@ -232,9 +231,9 @@ pub unsafe fn write_binary(
     apdu[2] = P1_BINARY; // P1 = binary
     apdu[3] = P2_DEFAULT; // P2
 
-    // TLV payload: TAG_1(objectID), TAG_3(fileLength), TAG_4(data).
-    // TAG_3 is REQUIRED when creating a new binary file object —
-    // without it the SE050 creates an unreadable object.
+    // TLV payload: TAG_1(objectID) + TAG_3(fileLength) + TAG_4(data).
+    // TAG_3 is REQUIRED when creating a new binary file object.
+    // No explicit policy — use SE050 default (allow all without auth).
     let mut o = 7; // skip CLA+INS+P1+P2+Lc(3 bytes for extended)
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
     // TAG_3: 2-byte file length (max allocation size)
