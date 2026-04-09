@@ -209,25 +209,86 @@ impl Display {
 }
 
 // ---------------------------------------------------------------------------
-// Input (stub — no physical buttons wired)
+// Input — semihosting file I/O for button input via probe-rs
 // ---------------------------------------------------------------------------
+//
+// probe-rs does not support SYS_READC (0x07), but it does support file-based
+// semihosting (SYS_OPEN / SYS_READ) via `--semihosting-file`.
+//
+// When `debug-log` is active, init() opens "/input" through semihosting.
+// The host side (wallet_run_hw.py) maps this to a TCP socket:
+//   probe-rs run --semihosting-file /input=tcp:127.0.0.1:PORT ...
+//
+// SYS_READ blocks until the host sends a button character, so the target
+// halts cleanly between presses (no busy-loop, no READC spam).
 
-pub struct Input;
+pub struct Input {
+    /// Semihosting file descriptor for button input (-1 = not opened).
+    #[cfg(feature = "debug-log")]
+    fd: usize,
+}
 
 impl Input {
     pub const fn new() -> Self {
-        Self
+        Self {
+            #[cfg(feature = "debug-log")]
+            fd: usize::MAX,
+        }
     }
 
     pub fn init(&mut self) {
-        // No GPIO buttons connected.
+        #[cfg(feature = "debug-log")]
+        {
+            use cortex_m_semihosting::syscall;
+            let path = b"/input\0";
+            let fd = unsafe {
+                syscall!(OPEN, path.as_ptr(), 0usize, path.len() - 1)
+            };
+            if fd != usize::MAX {
+                self.fd = fd;
+                secure_log!("[S][OLED] button input ready (fd={})", fd);
+            } else {
+                secure_log!("[S][OLED] no button input (semihosting OPEN failed)");
+                secure_log!("[S][OLED]   use `make play-hw-display` for interactive mode");
+            }
+        }
     }
 
-    /// Without physical buttons this loops on WFE until the idle timer fires.
-    /// In `e2e-test` builds this function is never called (auto-confirm).
-    pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
+    /// Read a button press.
+    ///
+    /// When `debug-log` is enabled and the semihosting input file was
+    /// opened successfully, blocks on SYS_READ until the host sends a
+    /// button character (`h`/`l` = short, `H`/`L` = long — same protocol
+    /// as the semihosting UI backend).
+    ///
+    /// Without semihosting input, loops on WFE until the idle timer fires
+    /// (stub for future GPIO buttons).
+    pub fn wait_button(&mut self, _idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
+        #[cfg(feature = "debug-log")]
+        if self.fd != usize::MAX {
+            use cortex_m_semihosting::syscall;
+            loop {
+                let mut buf = [0u8; 1];
+                let not_read = unsafe {
+                    syscall!(READ, self.fd, buf.as_mut_ptr(), 1usize)
+                };
+                if not_read == 0 {
+                    // 1 byte read successfully.
+                    match buf[0] {
+                        b'h' | b'a' => return Some((Button::Left, Press::Short)),
+                        b'l' | b'd' => return Some((Button::Right, Press::Short)),
+                        b'H' | b'A' => return Some((Button::Left, Press::Long)),
+                        b'L' | b'D' => return Some((Button::Right, Press::Long)),
+                        _ => continue,
+                    }
+                }
+                // SYS_READ returned non-zero — EOF or error. Should not
+                // happen on a live TCP socket; retry.
+            }
+        }
+        // Fallback: no semihosting input — WFE until idle timer fires.
         loop {
-            if idle_check() {
+            if _idle_check() {
                 return None;
             }
             cortex_m::asm::wfe();

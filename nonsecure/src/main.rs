@@ -17,7 +17,7 @@ use panic_halt as _;
 // (`e2e_test.rs::main`) each own their own imports and scratch statics.
 // Everything below this line is the interactive-only side, gated off so
 // the `e2e-test` build doesn't spew "never used" warnings.
-#[cfg(not(feature = "e2e-test"))]
+#[cfg(all(not(feature = "e2e-test"), feature = "usb"))]
 use cortex_m_semihosting::{debug, hprintln};
 #[cfg(not(feature = "e2e-test"))]
 use sphincs_tz_shared::{
