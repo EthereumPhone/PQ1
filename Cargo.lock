@@ -1715,6 +1715,7 @@ dependencies = [
  "cortex-m-semihosting",
  "embedded-graphics",
  "embedded-hal 1.0.0",
+ "hex",
  "hmac 0.12.1",
  "sha2 0.10.9",
  "sha3 0.10.8",

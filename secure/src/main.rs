@@ -1,73 +1,101 @@
-#![no_std]
-#![no_main]
-#![feature(cmse_nonsecure_entry)]
+// In test mode (#[cfg(test)]), the test harness provides std and main.
+// The ARM-specific crate attributes are disabled so pure-logic modules
+// (aa, tx) can be unit-tested on the host with `cargo test --lib`.
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
+#![cfg_attr(not(test), feature(cmse_nonsecure_entry))]
 // The `e2e-test` build intentionally bypasses the interactive UI paths
 // (wizard, pin entry confirm, interactive main()). Silence the resulting
 // dead-code noise ONLY in that build so production builds still surface
 // genuinely unused symbols.
 #![cfg_attr(feature = "e2e-test", allow(dead_code))]
 
-/// Conditional debug logging macro. Compiles to no-op without the `debug-log` feature,
+/// Conditional debug logging macro. Compiles to no-op without the `debug-log` feature
+/// and in host-side test builds (where cortex-m-semihosting is unavailable),
 /// ensuring no semihosting output in production builds.
-#[cfg(feature = "debug-log")]
+#[cfg(all(feature = "debug-log", not(test)))]
 macro_rules! secure_log {
     ($($arg:tt)*) => { cortex_m_semihosting::hprintln!($($arg)*) };
 }
-#[cfg(not(feature = "debug-log"))]
+#[cfg(any(not(feature = "debug-log"), test))]
 macro_rules! secure_log {
     ($($arg:tt)*) => {};
 }
 
+// Pure-logic modules: no hardware dependencies, testable on the host.
 mod aa;
-mod boot_ns;
-mod crypto;
-mod db_roots;
-mod erc20;
-#[cfg(not(feature = "stm32u585"))]
-mod host_rng;
-#[cfg(any(feature = "pka-accel", feature = "stm32u585"))]
-mod hw;
-mod nsc;
-mod rng;
-mod pin;
-mod sau;
-mod secure_element;
-#[cfg(feature = "tropic01-se")]
-mod semihosting_spi;
-mod timeout;
-#[cfg(feature = "tropic01-se")]
-mod tropic01_se;
 mod tx;
+
+// Hardware-dependent modules: gated out in test builds so `cargo test`
+// compiles only the pure logic on x86_64.
+#[cfg(not(test))]
+mod boot_ns;
+#[cfg(not(test))]
+mod crypto;
+#[cfg(not(test))]
+mod db_roots;
+#[cfg(not(test))]
+mod erc20;
+#[cfg(all(not(feature = "stm32u585"), not(test)))]
+mod host_rng;
+#[cfg(all(any(feature = "pka-accel", feature = "stm32u585"), not(test)))]
+mod hw;
+#[cfg(not(test))]
+mod nsc;
+#[cfg(not(test))]
+mod rng;
+#[cfg(not(test))]
+mod pin;
+#[cfg(not(test))]
+mod sau;
+#[cfg(not(test))]
+mod secure_element;
+#[cfg(all(feature = "tropic01-se", not(test)))]
+mod semihosting_spi;
+#[cfg(not(test))]
+mod timeout;
+#[cfg(all(feature = "tropic01-se", not(test)))]
+mod tropic01_se;
+#[cfg(not(test))]
 mod ui;
+#[cfg(not(test))]
 mod zk;
 
+// Everything below this point is firmware infrastructure — gated out in
+// host test builds where only the pure aa/tx logic is exercised.
+#[cfg(not(test))]
 use crypto::{RMEM_ENCRYPTED_ENTROPY, RMEM_PIN_STATE, RMEM_VERIFYING_KEY};
+#[cfg(not(test))]
 use secure_element::{MockSecureElement, SecureElement};
 
-#[cfg(not(feature = "stm32u585"))]
+#[cfg(all(not(feature = "stm32u585"), not(test)))]
 const NS_FLASH_BASE: u32 = 0x0020_0000; // QEMU mps2-an505: NS alias of SSRAM-0
-#[cfg(feature = "stm32u585")]
+#[cfg(all(feature = "stm32u585", not(test)))]
 const NS_FLASH_BASE: u32 = 0x0810_0000; // STM32U585: flash bank 2 NS alias
 
+#[cfg(not(test))]
 const SYST_CSR: *mut u32 = 0xE000_E010 as *mut u32;
+#[cfg(not(test))]
 const SYST_RVR: *mut u32 = 0xE000_E014 as *mut u32;
+#[cfg(not(test))]
 const SYST_CVR: *mut u32 = 0xE000_E018 as *mut u32;
 
 // Global mock SE (used when mock-se feature is active)
-#[cfg(feature = "mock-se")]
+#[cfg(all(feature = "mock-se", not(test)))]
 static mut SE: MockSecureElement = MockSecureElement::new();
 
 // Global TROPIC01 SE (used when tropic01-se feature is active)
-#[cfg(feature = "tropic01-se")]
+#[cfg(all(feature = "tropic01-se", not(test)))]
 static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureElement::new();
 
 /// SysTick reload value for ~1 ms tick.
 /// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: set dynamically from rcc::init().
-#[cfg(not(feature = "stm32u585"))]
+#[cfg(all(not(feature = "stm32u585"), not(test)))]
 const SYSTICK_RELOAD: u32 = 25_000;
-#[cfg(feature = "stm32u585")]
+#[cfg(all(feature = "stm32u585", not(test)))]
 static mut SYSTICK_RELOAD: u32 = 16_000; // overwritten by rcc::init() result
 
+#[cfg(not(test))]
 fn setup_systick() {
     unsafe {
         core::ptr::write_volatile(SYST_RVR, SYSTICK_RELOAD);
@@ -78,6 +106,7 @@ fn setup_systick() {
 
 /// Returns true if the secure element already holds an encrypted seed,
 /// PIN state, and verifying key. Used to skip re-provisioning on every boot.
+#[cfg(not(test))]
 fn is_provisioned(se: &mut impl SecureElement) -> bool {
     let mut buf = [0u8; 128];
     se.r_mem_read(RMEM_ENCRYPTED_ENTROPY, &mut buf).is_ok()
@@ -97,6 +126,7 @@ fn is_provisioned(se: &mut impl SecureElement) -> bool {
 ///
 /// On any cancel/idle-wipe/mismatch the wizard restarts from PIN entry —
 /// there is no other recovery from a bricked first boot.
+#[cfg(not(test))]
 fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
     use ui::pin_entry::{enter_pin_with_confirm, PinEntryResult};
     use ui::seed_wizard::{
@@ -183,6 +213,7 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
     }
 }
 
+#[cfg(not(test))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     // STM32U585: configure clocks BEFORE any semihosting output.
@@ -325,6 +356,7 @@ fn main() -> ! {
     unsafe { boot_ns::boot(NS_FLASH_BASE) }
 }
 
+#[cfg(not(test))]
 #[cortex_m_rt::exception]
 fn SysTick() {
     timeout::tick();
@@ -345,6 +377,7 @@ fn SysTick() {
 
 /// Custom panic handler: zeroizes all sensitive state before halting.
 /// This ensures secrets don't persist in RAM after a crash.
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     nsc::zeroize_sensitive_state();

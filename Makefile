@@ -31,7 +31,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e e2e-hw build-hw flash-hw
+.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e e2e-hw build-hw flash-hw test test-unit test-solidity
 
 all: secure nonsecure
 
@@ -188,6 +188,12 @@ e2e:
 		"\\[E2E\\] cowswap_eip712_order = PASS" \
 		"\\[E2E\\] userop_value_transfer = PASS" \
 		"\\[E2E\\] userop_erc20 = PASS" \
+		"\\[E2E\\] neg_chain_id_mismatch = PASS" \
+		"\\[E2E\\] neg_tx_len_zero = PASS" \
+		"\\[E2E\\] neg_tx_len_overflow = PASS" \
+		"\\[E2E\\] neg_truncated_payload = PASS" \
+		"\\[E2E\\] neg_contract_creation = PASS" \
+		"\\[E2E\\] neg_bad_envelope = PASS" \
 		"\\[E2E\\] ALL TESTS PASSED"; do \
 		if echo "$$out" | grep -q "$$line"; then \
 			echo "  PASS  $$line"; \
@@ -225,6 +231,21 @@ e2e-hw:
 	@echo "==> Running e2e on hardware (Ctrl-C to abort)..."
 	@probe-rs reset --chip STM32U585AIIx
 	@probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+
+# Run all three test layers: Rust unit tests, Foundry Solidity tests, and
+# the full e2e suite under QEMU.
+test: test-unit test-solidity e2e
+	@echo "==> ALL TEST LAYERS PASSED"
+
+# Host-side Rust unit tests for pure logic (aa, tx modules).
+test-unit:
+	@echo "==> Running Rust unit tests (host)"
+	@cargo test -p sphincs-tz-secure
+
+# Foundry tests for the PQ smart-wallet contracts.
+test-solidity:
+	@echo "==> Running Foundry tests"
+	@cd contracts/smart-wallet && forge test
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

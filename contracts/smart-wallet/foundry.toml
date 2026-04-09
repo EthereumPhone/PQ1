@@ -2,6 +2,13 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+test = "test"
+solc_version = "0.8.23"
+evm_version = "prague"
+via_ir = true
+optimizer = true
+optimizer_runs = 200
+memory_limit = 1073741824
 
 [profile.deploy]
 optimizer = true

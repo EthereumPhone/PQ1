@@ -6,9 +6,6 @@ edition.workspace = true
 [dependencies]
 sphincs-tz-shared = { workspace = true }
 sphincs-tz-bip39  = { workspace = true }
-cortex-m = { workspace = true, features = ["critical-section-single-core"] }
-cortex-m-rt          = { workspace = true }
-cortex-m-semihosting = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 slh-dsa = { version = "0.2.0-rc.4", default-features = false }
@@ -35,6 +32,14 @@ embedded-hal = { version = "1", optional = true }
 ssd1306 = { version = "0.10", default-features = false, optional = true }
 embedded-graphics = { version = "0.8", default-features = false, optional = true }
 
+# ARM-only: these crates don't compile on x86_64, so they're gated to the
+# ARM target. This lets `cargo test -p sphincs-tz-secure` run the
+# pure-logic unit tests (aa, tx) on the host without pulling in hardware deps.
+[target.'cfg(target_arch = "arm")'.dependencies]
+cortex-m = { workspace = true, features = ["critical-section-single-core"] }
+cortex-m-rt          = { workspace = true }
+cortex-m-semihosting = { workspace = true }
+
 [features]
 default = ["mock-se", "debug-log", "ui-semihosting"]
 debug-log = []
@@ -50,3 +55,6 @@ stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (v
 # Logs the chosen TxKind variant on every cmd_sign for assertions.
 # NEVER ship in production: it disables every meaningful trust gate.
 e2e-test = []
+
+[dev-dependencies]
+hex = { workspace = true }

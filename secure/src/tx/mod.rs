@@ -5,8 +5,12 @@
 //! copied into a secure stack buffer, parsed here, displayed for user
 //! confirmation, and only then hashed + signed.
 
+// display and eip712 depend on crate::ui (hardware), so they're gated
+// out in host test builds. eip1559, hash, and rlp are pure logic.
+#[cfg(not(test))]
 pub mod display;
 pub mod eip1559;
+#[cfg(not(test))]
 pub mod eip712;
 pub mod hash;
 pub mod rlp;

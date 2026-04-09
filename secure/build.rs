@@ -3,6 +3,15 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
+    let target = env::var("TARGET").unwrap_or_default();
+
+    // When building for the host (cargo test), skip all ARM-specific linker
+    // script setup. The unit tests only exercise pure logic (aa, tx) and
+    // don't need memory.x or cortex-m-rt's link.x.
+    if !target.contains("thumbv") {
+        return;
+    }
+
     // Mutually-exclusive UI backend check
     let ui_semihosting = env::var_os("CARGO_FEATURE_UI_SEMIHOSTING").is_some();
     let ui_oled = env::var_os("CARGO_FEATURE_UI_OLED").is_some();

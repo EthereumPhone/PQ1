@@ -2,6 +2,9 @@
 cache/
 out/
 
+# Foundry dependencies (install via `forge install` or `git submodule update --init`)
+lib/
+
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*/31337/

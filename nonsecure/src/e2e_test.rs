@@ -754,6 +754,151 @@ fn main() -> ! {
         report("userop_erc20", status, &mut pass_count, &mut fail_count);
     }
 
+    // ===================================================================
+    // Negative scenarios — exercise error paths in cmd_sign_userop.
+    // Each expects a specific non-zero NscStatus.
+    // ===================================================================
+
+    // ----- Scenario 9: chain_id mismatch between AA header and inner tx ---
+    //
+    // Build a normal UserOp for SCENARIO_VALUE_TRANSFER (inner chain_id=1),
+    // then patch the AA header's chain_id to 5. The secure world cross-checks
+    // these at cmd_sign_userop.rs:126 and rejects with CryptoError.
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_VALUE_TRANSFER,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        // Patch the AA chain_id field (offset 1+20+20 = 41, 8 bytes BE) to 5.
+        unsafe {
+            let chain_id_off = 1 + 20 + 20;
+            USEROP_PAYLOAD_BUF[chain_id_off..chain_id_off + 8]
+                .copy_from_slice(&5u64.to_be_bytes());
+        }
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report_expect("neg_chain_id_mismatch", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 10: tx_len = 0 ----------------------------------------
+    //
+    // Valid AA header but the tx_len field is zero. The secure world rejects
+    // at cmd_sign_userop.rs:104 with InvalidPointer.
+    {
+        let wrap = aa_wrapper();
+        // Build a minimal payload: header + tx_len(0) + 1 dummy byte
+        let min_len = USEROP_PREFIX_LEN + 1;
+        unsafe {
+            USEROP_PAYLOAD_BUF[..min_len].fill(0);
+            USEROP_PAYLOAD_BUF[0] = 0; // has_bundle = false
+            // Write a valid header
+            aa::build_userop_payload(&wrap, &[0x02], &mut USEROP_PAYLOAD_BUF);
+            // Overwrite tx_len to 0
+            let tl_off = sphincs_tz_shared::USEROP_HEADER_LEN;
+            USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&0u32.to_le_bytes());
+        }
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut SIG_BUF)
+        };
+        report_expect("neg_tx_len_zero", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 11: tx_len > MAX_TX_LEN --------------------------------
+    //
+    // tx_len claims 4097 bytes but total_len is small. The secure world
+    // rejects at cmd_sign_userop.rs:104 with InvalidPointer.
+    {
+        let wrap = aa_wrapper();
+        let min_len = USEROP_PREFIX_LEN + 1;
+        unsafe {
+            aa::build_userop_payload(&wrap, &[0x02], &mut USEROP_PAYLOAD_BUF);
+            // Overwrite tx_len to MAX_TX_LEN + 1 = 4097
+            let tl_off = sphincs_tz_shared::USEROP_HEADER_LEN;
+            USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&4097u32.to_le_bytes());
+        }
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut SIG_BUF)
+        };
+        report_expect("neg_tx_len_overflow", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 12: truncated payload ----------------------------------
+    //
+    // Build a valid UserOp but pass fewer bytes than tx_len claims. The
+    // secure world rejects at cmd_sign_userop.rs:109 with InvalidPointer.
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_VALUE_TRANSFER,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        // Pass 10 fewer bytes than the full payload — tx_end > total_len.
+        let truncated = payload_len - 10;
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..truncated], &mut SIG_BUF)
+        };
+        report_expect("neg_truncated_payload", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 13: contract creation (to = absent) --------------------
+    //
+    // An EIP-1559 envelope with no `to` field (contract creation). The
+    // secure world parses it, dispatches as ContractCreation, and rejects
+    // at cmd_sign_userop.rs:186 with CryptoError.
+    #[rustfmt::skip]
+    static SCENARIO_CONTRACT_CREATION: [u8; 13] = [
+        0x02,                           // EIP-1559 type byte
+        0xcb,                           // RLP list, 11-byte body
+        0x01,                           // chain_id = 1
+        0x80,                           // nonce = 0
+        0x80,                           // max_priority_fee = 0
+        0x80,                           // max_fee = 0
+        0x82, 0x52, 0x08,               // gas_limit = 21000
+        0x80,                           // to = ABSENT (contract creation)
+        0x80,                           // value = 0
+        0x80,                           // data = empty
+        0xc0,                           // access_list = empty
+    ];
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_CONTRACT_CREATION,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report_expect("neg_contract_creation", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 14: garbage envelope -----------------------------------
+    //
+    // Random bytes in the inner tx position — not valid RLP, not starting
+    // with 0x02. The secure world rejects at cmd_sign_userop.rs:117 with
+    // CryptoError.
+    {
+        static GARBAGE: [u8; 10] = [0xFF; 10];
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &GARBAGE,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report_expect("neg_bad_envelope", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    }
+
     // ----- Summary -----
     hprintln!("[E2E] summary: {} passed, {} failed", pass_count, fail_count);
     if fail_count == 0 {
@@ -772,6 +917,18 @@ fn report(name: &str, status: u32, pass: &mut u32, fail: &mut u32) {
         *pass += 1;
     } else {
         hprintln!("[E2E] {} = FAIL (status {})", name, status);
+        *fail += 1;
+    }
+}
+
+/// Like `report` but expects a specific *non-Ok* status. Used for negative
+/// test scenarios that exercise error paths in the secure-world gateway.
+fn report_expect(name: &str, status: u32, expected: NscStatus, pass: &mut u32, fail: &mut u32) {
+    if status == expected as u32 {
+        hprintln!("[E2E] {} = PASS (expected status {})", name, status);
+        *pass += 1;
+    } else {
+        hprintln!("[E2E] {} = FAIL (got {}, expected {})", name, status, expected as u32);
         *fail += 1;
     }
 }

@@ -446,11 +446,6 @@ contract SLHDSAVerifier is ISLHDSAVerifier {
         for (uint256 i = 0; i < len; ++i) out[i] = src[off + i];
     }
 
-    function _slice(bytes calldata src, uint256 off, uint256 len) internal pure returns (bytes memory out) {
-        out = new bytes(len);
-        for (uint256 i = 0; i < len; ++i) out[i] = src[off + i];
-    }
-
     function _zeroPad(uint256 n) internal pure returns (bytes memory) {
         return new bytes(n);
     }
