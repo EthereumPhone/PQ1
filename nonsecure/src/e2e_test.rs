@@ -1,3 +1,11 @@
+// This file uses raw `static mut` scratch buffers throughout — they
+// hold multi-kilobyte signing payloads the embedded-target stack can't
+// accommodate, and the e2e runner is single-threaded and non-reentrant
+// so aliasing is impossible by construction. Silencing the
+// static_mut_refs lint ONLY for this test file keeps production NS
+// code still honest about raw static refs.
+#![allow(static_mut_refs)]
+
 //! Non-interactive end-to-end test runner for the secure-world sign
 //! dispatch logic.
 //!
@@ -17,26 +25,109 @@
 //! `[S][e2e] cmd_sign dispatch = <variant>` to verify the dispatcher
 //! picked the right TxKind for each request.
 
-use crate::{erc20_db, nsc_api, vk_db};
+use crate::{aa, erc20_db, nsc_api, vk_db};
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
     EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN, NscStatus,
-    SIGNATURE_LEN, ZK_HEADER_LEN,
+    SIGNATURE_LEN, USEROP_PREFIX_LEN,
 };
 
 // === Scratch buffers ========================================================
 
 static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
 
-const SIGN_PAYLOAD_BUF_LEN: usize = 1 + 4 + 4096 + 4 + 1120 + 64;
-static mut SIGN_PAYLOAD_BUF: [u8; SIGN_PAYLOAD_BUF_LEN] = [0u8; SIGN_PAYLOAD_BUF_LEN];
-
 static mut ERC20_BUNDLE_BUF: [u8; 1120] = [0u8; 1120];
 
-const CLEAR_SIGN_BUF_LEN: usize = ZK_HEADER_LEN + 4096 + 4 + 2048;
+// Sized for the largest clear-sign payload: ZK header (921) + max tx
+// (4096) + bundle_len (4) + max VK bundle (2048).
+const CLEAR_SIGN_BUF_LEN: usize = 921 + 4096 + 4 + 2048;
 static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
 
 static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
+
+// Scratch buffer for an ERC-4337 UserOp wrapper payload. Sized to hold:
+//   USEROP_PREFIX_LEN (273+4) + max EIP-1559 tx + bundle_len (4) + max ERC20 bundle.
+const USEROP_PAYLOAD_BUF_LEN: usize = USEROP_PREFIX_LEN + 4096 + 4 + 1120 + 64;
+static mut USEROP_PAYLOAD_BUF: [u8; USEROP_PAYLOAD_BUF_LEN] = [0u8; USEROP_PAYLOAD_BUF_LEN];
+
+// Deterministic test fixtures for the AA wrapper. None of these need to
+// match a real chain — the secure world only verifies internal
+// consistency between the wrapper chain id and the inner tx chain id.
+
+/// Sender = arbitrary deterministic PQ wallet address (this is what the
+/// PQCoinbaseSmartWalletFactory would CREATE2 to for our test owner).
+static AA_SENDER: [u8; 20] = [
+    0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
+    0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
+];
+/// EntryPoint v0.6 mainnet address (same as upstream Coinbase Smart Wallet).
+static AA_ENTRY_POINT: [u8; 20] = [
+    0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+    0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
+];
+/// Nonce = 1 (key=0 || seq=1).
+static AA_NONCE: [u8; 32] = {
+    let mut n = [0u8; 32];
+    n[31] = 1;
+    n
+};
+/// Gas params: 100_000 / 200_000 / 21_000 / 50 gwei / 2 gwei.
+static AA_CALL_GAS: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 100_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_VERIFICATION_GAS: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 200_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_PRE_VERIFICATION_GAS: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 21_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_MAX_FEE: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 50_000_000_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+static AA_MAX_PRIO: [u8; 32] = {
+    let mut v = [0u8; 32];
+    let g: u64 = 2_000_000_000;
+    let b = g.to_be_bytes();
+    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
+    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
+    v
+};
+
+fn aa_wrapper() -> aa::UserOpWrapper<'static> {
+    aa::UserOpWrapper {
+        sender: &AA_SENDER,
+        entry_point: &AA_ENTRY_POINT,
+        chain_id: 1,
+        nonce: &AA_NONCE,
+        call_gas_limit: &AA_CALL_GAS,
+        verification_gas_limit: &AA_VERIFICATION_GAS,
+        pre_verification_gas: &AA_PRE_VERIFICATION_GAS,
+        max_fee_per_gas: &AA_MAX_FEE,
+        max_priority_fee_per_gas: &AA_MAX_PRIO,
+        init_code_hash: &aa::KECCAK_EMPTY,
+        paymaster_and_data_hash: &aa::KECCAK_EMPTY,
+    }
+}
 
 // === Scenario 1: simple ETH value transfer (empty calldata) =================
 //
@@ -91,28 +182,6 @@ static SCENARIO_USDC_TRANSFER: [u8; 113] = [
 const USDC_MAINNET_ADDR: [u8; 20] = [
     0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1,
     0x9d, 0x4a, 0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
-];
-
-// === Scenario 3: arbitrary contract call (BLIND SIGNING) ====================
-//
-// chain_id = 1, to = Uniswap V2 Router 02, value = 0,
-// data = swapExactETHForTokens selector only (4 bytes). Selector
-// doesn't match any ERC20 method, and even if it did the contract is
-// not in the NS DB. Expected dispatch: `ContractCall`.
-static SCENARIO_BLIND_SIGN: [u8; 47] = [
-    0x02,
-    0xed,                                                       // outer list, short form, 45 bytes
-    0x01,                                                       // chain_id = 1
-    0x80,                                                       // nonce = 0
-    0x84, 0x77, 0x35, 0x94, 0x00,                               // max_priority = 2 gwei
-    0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00,                         // max_fee = 50 gwei
-    0x83, 0x01, 0x86, 0xa0,                                     // gas_limit = 100000
-    0x94, 0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53, 0x97,
-    0x39, 0xdf, 0x2c, 0x5d, 0xac, 0xb4, 0xc6, 0x59, 0xf2, 0x48,
-    0x8d,                                                       // to = Uniswap V2 Router 02
-    0x80,                                                       // value = 0
-    0x84, 0x7f, 0xf3, 0x6a, 0xb5,                               // data: 4-byte swap selector
-    0xc0,                                                       // access_list = empty
 ];
 
 // === Scenario 4: ZK clear-sign (Aave V3 supply) =============================
@@ -370,79 +439,89 @@ const COWSWAP_GPV2_SETTLEMENT_MAINNET: [u8; 20] = [
 
 // ── AUTO-GENERATED EIP712 BEGIN (gen_cowswap_eip712_e2e_vector.js) ──
 // Inputs:
-//   sellToken = 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 (USDC)
-//   buyToken  = 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2 (WETH)
-//   receiver  = 0x742d35cc6634c0532925a3b844bc454e4438f44e
-//   sellAmount = 1000.0000 USDC  (raw 1000000000)
-//   buyAmount  =    0.5000 WETH  (raw 500000000000000000)
+//   chain_id   = 1
+//   sellToken  = 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 (USDC)
+//   buyToken   = 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2  (WETH)
+//   receiver   = 0x742d35cc6634c0532925a3b844bc454e4438f44e
+//   sellAmount = 1000000000  (1000.0000 USDC)
+//   buyAmount  = 500000000000000000  (0.5000 WETH)
 //   feeAmount  = 0
 //   validTo    = 0x68000000
 //   kind       = SELL
-//   readable   = "CowSwap SELL      1000.0000 USDCfor at least:        0.5000 WETH"
+//   appData    = 0x83b9dcb2316e54fc04c10f74c9a3d5dd66a9e4c43c04ccefb9c0c03e61e5fb28
+//   readable   = "CowSwap SELL    SELL:                  1000.0000          USDC  for at least:             0.5000          WETH                  "
 //   sentinel addr (DB lookup key) = 0x9008D19f58AAbD9eD0D60971565AA8510560ab42
 
 #[rustfmt::skip]
 static EIP712_PROOF: [u8; 384] = [
-    0x19, 0xce, 0xc5, 0x18, 0xd3, 0xff, 0x2c, 0xdf, 0xd6, 0x23, 0xac, 0x3f,
-    0x50, 0x1b, 0x90, 0x06, 0x3f, 0x34, 0x32, 0xd4, 0x88, 0xbc, 0xc7, 0xb5,
-    0x69, 0xda, 0x11, 0x91, 0xf9, 0xf5, 0x5c, 0x76, 0x08, 0xf2, 0x2c, 0x09,
-    0xdd, 0x47, 0x73, 0x91, 0x3c, 0x88, 0x9e, 0xf2, 0xe8, 0x2c, 0xc6, 0xcd,
-    0x15, 0x70, 0x84, 0xb9, 0x10, 0xe9, 0x23, 0xb5, 0x49, 0x19, 0x4f, 0x7f,
-    0x09, 0x90, 0xdc, 0x73, 0x53, 0xe0, 0x35, 0x98, 0x32, 0x3f, 0xc5, 0xd6,
-    0xfb, 0x45, 0x06, 0xcf, 0xe1, 0xc3, 0xb8, 0x45, 0x2d, 0xc0, 0x35, 0xd9,
-    0x89, 0xd4, 0xbd, 0xa7, 0xdf, 0xa2, 0xdb, 0xee, 0xfa, 0x75, 0x2e, 0xdb,
-    0x12, 0x35, 0x29, 0x73, 0xce, 0xb3, 0x33, 0x10, 0xd4, 0x52, 0x9a, 0x94,
-    0x9f, 0xc4, 0x56, 0x4f, 0x75, 0xc6, 0x81, 0x35, 0x16, 0x6e, 0xb7, 0x3b,
-    0x12, 0xa5, 0x00, 0xa4, 0x86, 0x0b, 0xcf, 0x5d, 0xa1, 0x6b, 0x7b, 0x82,
-    0x3a, 0xfe, 0xe0, 0x33, 0xee, 0x22, 0x79, 0x4b, 0x39, 0x73, 0xc5, 0x1b,
-    0x19, 0xc5, 0xae, 0x47, 0x44, 0xaa, 0xbb, 0xcb, 0x98, 0x9a, 0x6f, 0x98,
-    0x47, 0x21, 0x56, 0xb3, 0xdd, 0x65, 0x08, 0xe4, 0x07, 0x74, 0x03, 0xfa,
-    0x73, 0xac, 0xc7, 0x16, 0x3e, 0x03, 0xad, 0x6c, 0xd2, 0xca, 0x79, 0x1c,
-    0x73, 0x5e, 0x4c, 0x1c, 0x09, 0xf8, 0x20, 0xd0, 0x43, 0xec, 0x4f, 0x41,
-    0x05, 0x45, 0xbf, 0x1f, 0x21, 0xeb, 0x12, 0x4f, 0x87, 0x6a, 0x06, 0x76,
-    0x4b, 0x3e, 0x57, 0xbb, 0xa1, 0x0b, 0x67, 0x00, 0xc6, 0xa3, 0x6d, 0x87,
-    0xd0, 0x23, 0x8c, 0xcd, 0xae, 0xde, 0x7d, 0x5b, 0x28, 0x80, 0xea, 0xb2,
-    0x70, 0x49, 0x72, 0x75, 0x2c, 0x84, 0x13, 0x4b, 0xab, 0x22, 0x98, 0x16,
-    0x19, 0x74, 0x4e, 0x0c, 0xe4, 0x70, 0xc2, 0x0e, 0x34, 0xa6, 0x64, 0xa2,
-    0x12, 0x92, 0x67, 0x60, 0xd2, 0x68, 0x9b, 0x33, 0x33, 0x32, 0x18, 0x3b,
-    0x73, 0xcf, 0xef, 0x9a, 0xeb, 0x1f, 0xf8, 0x91, 0xcf, 0x24, 0x13, 0xe5,
-    0xb7, 0x34, 0x31, 0x92, 0x9d, 0xfe, 0xc5, 0xc6, 0x1b, 0x39, 0x36, 0xaa,
-    0x0f, 0x1c, 0x8e, 0x8c, 0xbf, 0x4b, 0xfc, 0x55, 0x07, 0x13, 0x3c, 0x82,
-    0x09, 0xd7, 0xb3, 0x99, 0x8f, 0xde, 0xfc, 0xe2, 0x4e, 0x68, 0x4d, 0x99,
-    0x44, 0x71, 0x2b, 0xc0, 0x4c, 0x8b, 0xee, 0xad, 0xb8, 0x52, 0xd3, 0x5a,
-    0x1c, 0xe2, 0xf2, 0x70, 0x2a, 0x0b, 0xa0, 0x0e, 0xac, 0x6a, 0x54, 0x24,
-    0x01, 0x82, 0x6b, 0xc1, 0x99, 0xbf, 0x53, 0x8d, 0xce, 0x5b, 0xe6, 0x35,
-    0x25, 0xd7, 0x64, 0xfc, 0x9c, 0x8f, 0x80, 0xe7, 0xcc, 0x2c, 0x19, 0x21,
-    0xc7, 0x48, 0x84, 0x24, 0x59, 0xd9, 0xfb, 0xa8, 0x90, 0x93, 0xb4, 0xfc,
-    0x2d, 0xcf, 0xba, 0x55, 0x5c, 0x29, 0xf7, 0x05, 0x10, 0x2f, 0x0b, 0x18,
+    0x13, 0x2d, 0xb4, 0x01, 0xfa, 0xb4, 0x78, 0xea, 0x6a, 0xd4, 0x8f, 0xd6,
+    0xe9, 0x44, 0xfd, 0xfc, 0xeb, 0x4f, 0x01, 0x2d, 0x86, 0x7a, 0x86, 0x34,
+    0x58, 0x8e, 0x60, 0xd0, 0x43, 0x15, 0x51, 0x0e, 0x18, 0x3b, 0x19, 0x54,
+    0xb0, 0x14, 0x55, 0x5d, 0x92, 0x8f, 0x84, 0xd9, 0x6e, 0x27, 0xf1, 0xae,
+    0x13, 0x8b, 0xb9, 0x7b, 0x70, 0x8f, 0xd7, 0x7b, 0x7b, 0xca, 0x82, 0x30,
+    0x97, 0x18, 0xdc, 0x0b, 0xc1, 0x68, 0x0c, 0x16, 0xd6, 0x71, 0x57, 0xa0,
+    0xac, 0xdb, 0x2a, 0xe4, 0x92, 0xca, 0x54, 0xb4, 0x9e, 0x8e, 0x93, 0x65,
+    0xe7, 0x72, 0x23, 0xf9, 0xa2, 0x1e, 0xc6, 0x96, 0x9c, 0x10, 0x48, 0x1c,
+    0x11, 0x2a, 0x97, 0x8b, 0x30, 0x7a, 0xec, 0xfe, 0xf9, 0x53, 0x7f, 0x41,
+    0x99, 0x3f, 0x72, 0xa3, 0xf4, 0x13, 0x38, 0x8e, 0xdc, 0xa8, 0xd7, 0xd4,
+    0xa4, 0xce, 0x52, 0x66, 0x48, 0xa0, 0xf5, 0x09, 0xf0, 0x69, 0x03, 0x07,
+    0xa5, 0xfb, 0x47, 0xc4, 0xc2, 0x60, 0xef, 0x72, 0x11, 0x48, 0x23, 0xaf,
+    0x0b, 0xe6, 0x75, 0x12, 0x5c, 0x62, 0x00, 0x76, 0x0c, 0xa4, 0x41, 0xec,
+    0x93, 0xad, 0x95, 0xac, 0x8c, 0xa1, 0xd1, 0x9a, 0xc9, 0x98, 0xf6, 0x62,
+    0xb8, 0xea, 0x10, 0xa7, 0x74, 0x08, 0x9b, 0xbb, 0xad, 0x1d, 0xd6, 0xa7,
+    0x00, 0x61, 0xb7, 0x8e, 0x19, 0x7a, 0x29, 0x04, 0x5b, 0x92, 0xd2, 0x58,
+    0x04, 0x62, 0xb7, 0x3b, 0xa2, 0x87, 0xf8, 0xb8, 0xfa, 0x70, 0xe8, 0xe2,
+    0x15, 0xfd, 0xd3, 0x2b, 0xaa, 0x92, 0x23, 0x5a, 0x42, 0xb2, 0x9a, 0xaa,
+    0x04, 0xb3, 0x9a, 0x4f, 0xdf, 0x93, 0xb9, 0x75, 0x49, 0xd9, 0x20, 0x59,
+    0x77, 0x96, 0xc9, 0x9c, 0xa7, 0x57, 0x36, 0x9c, 0x04, 0xf1, 0xf8, 0xe5,
+    0x10, 0x8c, 0xe0, 0x37, 0x2a, 0x82, 0xbd, 0x8c, 0x98, 0xe8, 0x1a, 0x31,
+    0x48, 0x78, 0x46, 0x40, 0xb3, 0x51, 0x8a, 0x20, 0xc0, 0x8d, 0x6f, 0x97,
+    0x81, 0x95, 0xf2, 0x92, 0x9c, 0x94, 0xd7, 0xd3, 0xa9, 0x80, 0xcc, 0x9a,
+    0xaf, 0x20, 0x38, 0x18, 0x7a, 0x9c, 0x3d, 0x89, 0x33, 0x68, 0x08, 0x8b,
+    0x07, 0xd5, 0xfc, 0x85, 0x1d, 0x59, 0x8b, 0x3d, 0x66, 0x88, 0x9d, 0x2e,
+    0x78, 0x72, 0xb4, 0x8f, 0x2f, 0x10, 0x46, 0x1c, 0xd3, 0xd5, 0x79, 0xe2,
+    0x83, 0xa0, 0xfa, 0xc8, 0x20, 0x1c, 0x67, 0x4a, 0xaa, 0x3c, 0x11, 0x53,
+    0xee, 0x34, 0x38, 0x36, 0x76, 0x9b, 0xec, 0xf7, 0xca, 0x71, 0xda, 0x24,
+    0x06, 0x5e, 0x8b, 0xe0, 0x1c, 0x47, 0x23, 0x98, 0x3c, 0xd6, 0xb0, 0xbf,
+    0x74, 0x44, 0x00, 0xc6, 0xf0, 0x2f, 0x76, 0xdb, 0x8a, 0x92, 0x4f, 0xe6,
+    0x59, 0x18, 0xd2, 0x27, 0x95, 0x9d, 0xe2, 0xaf, 0xf4, 0xe1, 0x9d, 0x63,
+    0xe4, 0x07, 0x73, 0x92, 0x51, 0xf2, 0xec, 0x8a, 0xfb, 0x6d, 0xc0, 0x74,
 ];
 
 #[rustfmt::skip]
-static EIP712_CANONICAL: [u8; 164] = [
-    0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-    0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, 0xc0, 0x2a, 0xaa, 0x39,
-    0xb2, 0x23, 0xfe, 0x8d, 0x0a, 0x0e, 0x5c, 0x4f, 0x27, 0xea, 0xd9, 0x08,
-    0x3c, 0x75, 0x6c, 0xc2, 0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53,
-    0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
+static EIP712_CANONICAL: [u8; 204] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xa0, 0xb8, 0x69, 0x91,
+    0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a, 0x2e, 0x9e, 0xb0, 0xce,
+    0x36, 0x06, 0xeb, 0x48, 0xc0, 0x2a, 0xaa, 0x39, 0xb2, 0x23, 0xfe, 0x8d,
+    0x0a, 0x0e, 0x5c, 0x4f, 0x27, 0xea, 0xd9, 0x08, 0x3c, 0x75, 0x6c, 0xc2,
+    0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
+    0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x3b, 0x9a, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x3b, 0x9a, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0xf0, 0x5b, 0x59,
-    0xd3, 0xb2, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x06, 0xf0, 0x5b, 0x59, 0xd3, 0xb2, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x68, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x83, 0xb9, 0xdc, 0xb2, 0x31, 0x6e, 0x54, 0xfc,
+    0x04, 0xc1, 0x0f, 0x74, 0xc9, 0xa3, 0xd5, 0xdd, 0x66, 0xa9, 0xe4, 0xc4,
+    0x3c, 0x04, 0xcc, 0xef, 0xb9, 0xc0, 0xc0, 0x3e, 0x61, 0xe5, 0xfb, 0x28,
 ];
 
 #[rustfmt::skip]
-static EIP712_READABLE: [u8; 64] = [
+static EIP712_READABLE: [u8; 128] = [
     0x43, 0x6f, 0x77, 0x53, 0x77, 0x61, 0x70, 0x20, 0x53, 0x45, 0x4c, 0x4c,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30,
-    0x30, 0x30, 0x30, 0x20, 0x55, 0x53, 0x44, 0x43, 0x66, 0x6f, 0x72, 0x20,
-    0x61, 0x74, 0x20, 0x6c, 0x65, 0x61, 0x73, 0x74, 0x3a, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2e, 0x35, 0x30, 0x30, 0x30, 0x20,
-    0x57, 0x45, 0x54, 0x48,
+    0x20, 0x20, 0x20, 0x20, 0x53, 0x45, 0x4c, 0x4c, 0x3a, 0x20, 0x20, 0x20,
+    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+    0x20, 0x20, 0x20, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30, 0x30, 0x30, 0x30,
+    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x55, 0x53,
+    0x44, 0x43, 0x20, 0x20, 0x66, 0x6f, 0x72, 0x20, 0x61, 0x74, 0x20, 0x6c,
+    0x65, 0x61, 0x73, 0x74, 0x3a, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2e, 0x35, 0x30, 0x30, 0x30,
+    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x57, 0x45,
+    0x54, 0x48, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
 ];
 
 const COWSWAP_EIP712_SENTINEL_MAINNET: [u8; 20] = [
@@ -460,46 +539,7 @@ fn main() -> ! {
     let mut pass_count = 0u32;
     let mut fail_count = 0u32;
 
-    // ----- Scenario 1: simple ETH value transfer -----
-    {
-        let status = unsafe {
-            nsc_api::sign(&SCENARIO_VALUE_TRANSFER, &mut SIG_BUF, &mut SIGN_PAYLOAD_BUF)
-        };
-        report("value_transfer", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 2: ERC20 transfer (USDC mainnet, in NS DB) -----
-    {
-        let bundle_len = unsafe {
-            erc20_db::build_bundle(1, &USDC_MAINNET_ADDR, &mut ERC20_BUNDLE_BUF)
-        };
-        let status = match bundle_len {
-            Some(n) => unsafe {
-                let bundle = &ERC20_BUNDLE_BUF[..n];
-                nsc_api::sign_with_bundle(
-                    &SCENARIO_USDC_TRANSFER,
-                    bundle,
-                    &mut SIG_BUF,
-                    &mut SIGN_PAYLOAD_BUF,
-                )
-            },
-            None => {
-                hprintln!("[E2E] erc20_known: NS DB lookup MISS for USDC mainnet");
-                NscStatus::CryptoError as u32
-            }
-        };
-        report("erc20_known", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 3: arbitrary contract call → BLIND SIGNING -----
-    {
-        let status = unsafe {
-            nsc_api::sign(&SCENARIO_BLIND_SIGN, &mut SIG_BUF, &mut SIGN_PAYLOAD_BUF)
-        };
-        report("blind_sign", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 4: ZK clear-sign (Aave V3 supply) -----
+    // ----- Scenario 1: ZK clear-sign (Aave V3 supply) -----
     {
         let bundle_len = unsafe {
             vk_db::build_bundle(1, &AAVE_V3_POOL_MAINNET, &mut VK_BUNDLE_BUF)
@@ -507,21 +547,15 @@ fn main() -> ! {
         let status = match bundle_len {
             Some(n) => unsafe {
                 let vk_bundle = &VK_BUNDLE_BUF[..n];
-                let mut p = 0usize;
-                CLEAR_SIGN_BUF[p..p + 384].copy_from_slice(&AAVE_PROOF);
-                p += 384;
-                CLEAR_SIGN_BUF[p..p + 164].copy_from_slice(&AAVE_CALLDATA);
-                p += 164;
-                CLEAR_SIGN_BUF[p..p + 64].copy_from_slice(&AAVE_READABLE);
-                p += 64;
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(AAVE_TX.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + AAVE_TX.len()].copy_from_slice(&AAVE_TX);
-                p += AAVE_TX.len();
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
-                p += vk_bundle.len();
+                let p = aa::build_clear_sign_userop_payload(
+                    &aa_wrapper(),
+                    &AAVE_PROOF,
+                    &AAVE_CALLDATA,
+                    &AAVE_READABLE,
+                    &AAVE_TX,
+                    vk_bundle,
+                    &mut CLEAR_SIGN_BUF,
+                );
                 nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF)
             },
             None => {
@@ -532,7 +566,7 @@ fn main() -> ! {
         report("zk_clear_sign", status, &mut pass_count, &mut fail_count);
     }
 
-    // ----- Scenario 5: ZK clear-sign (CowSwap setPreSignature) -----
+    // ----- Scenario 2: ZK clear-sign (CowSwap setPreSignature) -----
     {
         let bundle_len = unsafe {
             vk_db::build_bundle(1, &COWSWAP_GPV2_SETTLEMENT_MAINNET, &mut VK_BUNDLE_BUF)
@@ -540,21 +574,15 @@ fn main() -> ! {
         let status = match bundle_len {
             Some(n) => unsafe {
                 let vk_bundle = &VK_BUNDLE_BUF[..n];
-                let mut p = 0usize;
-                CLEAR_SIGN_BUF[p..p + 384].copy_from_slice(&COWSWAP_PROOF);
-                p += 384;
-                CLEAR_SIGN_BUF[p..p + 164].copy_from_slice(&COWSWAP_CALLDATA);
-                p += 164;
-                CLEAR_SIGN_BUF[p..p + 64].copy_from_slice(&COWSWAP_READABLE);
-                p += 64;
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(COWSWAP_TX.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + COWSWAP_TX.len()].copy_from_slice(&COWSWAP_TX);
-                p += COWSWAP_TX.len();
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
-                p += vk_bundle.len();
+                let p = aa::build_clear_sign_userop_payload(
+                    &aa_wrapper(),
+                    &COWSWAP_PROOF,
+                    &COWSWAP_CALLDATA,
+                    &COWSWAP_READABLE,
+                    &COWSWAP_TX,
+                    vk_bundle,
+                    &mut CLEAR_SIGN_BUF,
+                );
                 nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF)
             },
             None => {
@@ -599,6 +627,204 @@ fn main() -> ! {
         report("cowswap_eip712_order", status, &mut pass_count, &mut fail_count);
     }
 
+    // ----- Scenario 7: ERC-4337 UserOp wrapping plain value transfer -----
+    //
+    // The non-secure side wraps the existing SCENARIO_VALUE_TRANSFER
+    // envelope as a UserOperation: same inner tx, with AA wrapper
+    // params built from the deterministic test fixtures above. The
+    // secure world parses the AA header, parses the inner tx,
+    // dispatches it through the same trust ladder as cmd_sign
+    // (expected: ValueTransfer), reconstructs the canonical
+    // execute(target,value,data) callData, computes the EntryPoint
+    // v0.6 userOpHash natively, and signs that hash with SLH-DSA.
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_VALUE_TRANSFER,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report("userop_value_transfer", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 8: ERC-4337 UserOp wrapping ERC20 (USDC) transfer -----
+    //
+    // Same as scenario 2 (Erc20Known dispatch via the NS DB lookup),
+    // but routed through cmd_sign_userop with an attached ERC-20
+    // metadata bundle so the trusted UI still decodes the inner
+    // ERC-20 call before the secure world hashes the wrapper.
+    {
+        let bundle_len = unsafe {
+            erc20_db::build_bundle(1, &USDC_MAINNET_ADDR, &mut ERC20_BUNDLE_BUF)
+        };
+        let status = match bundle_len {
+            Some(n) => unsafe {
+                let bundle = &ERC20_BUNDLE_BUF[..n];
+                let payload_len = aa::build_userop_payload_with_bundle(
+                    &aa_wrapper(),
+                    &SCENARIO_USDC_TRANSFER,
+                    bundle,
+                    &mut USEROP_PAYLOAD_BUF,
+                );
+                nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+            },
+            None => {
+                hprintln!("[E2E] userop_erc20: NS DB lookup MISS for USDC mainnet");
+                NscStatus::CryptoError as u32
+            }
+        };
+        report("userop_erc20", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ===================================================================
+    // Negative scenarios — exercise error paths in cmd_sign_userop.
+    // Each expects a specific non-zero NscStatus.
+    // ===================================================================
+
+    // ----- Scenario 9: chain_id mismatch between AA header and inner tx ---
+    //
+    // Build a normal UserOp for SCENARIO_VALUE_TRANSFER (inner chain_id=1),
+    // then patch the AA header's chain_id to 5. The secure world cross-checks
+    // these at cmd_sign_userop.rs:126 and rejects with CryptoError.
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_VALUE_TRANSFER,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        // Patch the AA chain_id field (offset 1+20+20 = 41, 8 bytes BE) to 5.
+        unsafe {
+            let chain_id_off = 1 + 20 + 20;
+            USEROP_PAYLOAD_BUF[chain_id_off..chain_id_off + 8]
+                .copy_from_slice(&5u64.to_be_bytes());
+        }
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report_expect("neg_chain_id_mismatch", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 10: tx_len = 0 ----------------------------------------
+    //
+    // Valid AA header but the tx_len field is zero. The secure world rejects
+    // at cmd_sign_userop.rs:104 with InvalidPointer.
+    {
+        let wrap = aa_wrapper();
+        // Build a minimal payload: header + tx_len(0) + 1 dummy byte
+        let min_len = USEROP_PREFIX_LEN + 1;
+        unsafe {
+            USEROP_PAYLOAD_BUF[..min_len].fill(0);
+            USEROP_PAYLOAD_BUF[0] = 0; // has_bundle = false
+            // Write a valid header
+            aa::build_userop_payload(&wrap, &[0x02], &mut USEROP_PAYLOAD_BUF);
+            // Overwrite tx_len to 0
+            let tl_off = sphincs_tz_shared::USEROP_HEADER_LEN;
+            USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&0u32.to_le_bytes());
+        }
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut SIG_BUF)
+        };
+        report_expect("neg_tx_len_zero", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 11: tx_len > MAX_TX_LEN --------------------------------
+    //
+    // tx_len claims 4097 bytes but total_len is small. The secure world
+    // rejects at cmd_sign_userop.rs:104 with InvalidPointer.
+    {
+        let wrap = aa_wrapper();
+        let min_len = USEROP_PREFIX_LEN + 1;
+        unsafe {
+            aa::build_userop_payload(&wrap, &[0x02], &mut USEROP_PAYLOAD_BUF);
+            // Overwrite tx_len to MAX_TX_LEN + 1 = 4097
+            let tl_off = sphincs_tz_shared::USEROP_HEADER_LEN;
+            USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&4097u32.to_le_bytes());
+        }
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut SIG_BUF)
+        };
+        report_expect("neg_tx_len_overflow", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 12: truncated payload ----------------------------------
+    //
+    // Build a valid UserOp but pass fewer bytes than tx_len claims. The
+    // secure world rejects at cmd_sign_userop.rs:109 with InvalidPointer.
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_VALUE_TRANSFER,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        // Pass 10 fewer bytes than the full payload — tx_end > total_len.
+        let truncated = payload_len - 10;
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..truncated], &mut SIG_BUF)
+        };
+        report_expect("neg_truncated_payload", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 13: contract creation (to = absent) --------------------
+    //
+    // An EIP-1559 envelope with no `to` field (contract creation). The
+    // secure world parses it, dispatches as ContractCreation, and rejects
+    // at cmd_sign_userop.rs:186 with CryptoError.
+    #[rustfmt::skip]
+    static SCENARIO_CONTRACT_CREATION: [u8; 13] = [
+        0x02,                           // EIP-1559 type byte
+        0xcb,                           // RLP list, 11-byte body
+        0x01,                           // chain_id = 1
+        0x80,                           // nonce = 0
+        0x80,                           // max_priority_fee = 0
+        0x80,                           // max_fee = 0
+        0x82, 0x52, 0x08,               // gas_limit = 21000
+        0x80,                           // to = ABSENT (contract creation)
+        0x80,                           // value = 0
+        0x80,                           // data = empty
+        0xc0,                           // access_list = empty
+    ];
+    {
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &SCENARIO_CONTRACT_CREATION,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report_expect("neg_contract_creation", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 14: garbage envelope -----------------------------------
+    //
+    // Random bytes in the inner tx position — not valid RLP, not starting
+    // with 0x02. The secure world rejects at cmd_sign_userop.rs:117 with
+    // CryptoError.
+    {
+        static GARBAGE: [u8; 10] = [0xFF; 10];
+        let payload_len = unsafe {
+            aa::build_userop_payload(
+                &aa_wrapper(),
+                &GARBAGE,
+                &mut USEROP_PAYLOAD_BUF,
+            )
+        };
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        report_expect("neg_bad_envelope", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    }
+
     // ----- Summary -----
     hprintln!("[E2E] summary: {} passed, {} failed", pass_count, fail_count);
     if fail_count == 0 {
@@ -617,6 +843,18 @@ fn report(name: &str, status: u32, pass: &mut u32, fail: &mut u32) {
         *pass += 1;
     } else {
         hprintln!("[E2E] {} = FAIL (status {})", name, status);
+        *fail += 1;
+    }
+}
+
+/// Like `report` but expects a specific *non-Ok* status. Used for negative
+/// test scenarios that exercise error paths in the secure-world gateway.
+fn report_expect(name: &str, status: u32, expected: NscStatus, pass: &mut u32, fail: &mut u32) {
+    if status == expected as u32 {
+        hprintln!("[E2E] {} = PASS (expected status {})", name, status);
+        *pass += 1;
+    } else {
+        hprintln!("[E2E] {} = FAIL (got {}, expected {})", name, status, expected as u32);
         *fail += 1;
     }
 }

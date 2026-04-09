@@ -13,14 +13,19 @@
 
 pub mod groth16;
 pub mod poseidon;
+/// Generated Poseidon round constants + MDS matrices (BLS12-381 Scalar field).
+/// Emitted by `tools/export_poseidon_constants.js` and lives under `generated/`
+/// so grep/readers can tell at a glance this is machine-written code.
+#[path = "generated/poseidon_constants.rs"]
 mod poseidon_constants;
 #[cfg(feature = "debug-log")]
 pub mod test_vectors;
 pub mod vk_bundle;
 
 pub use groth16::{Groth16Proof, VerificationKey, verify_clear_signing_proof};
-pub use poseidon::poseidon_bytes;
-pub use vk_bundle::{verify_vk_bundle, VerifiedVk};
+// Deeper items (`poseidon::poseidon_bytes`, `vk_bundle::{verify_vk_bundle,
+// VerifiedVk}`) are imported through their sub-path at the call site so
+// the compiler can flag dead code — no flat re-exports.
 
 /// Maximum calldata size (must match ZKlarity circuit MAX_CALLDATA = 164)
 pub const MAX_CALLDATA: usize = 164;

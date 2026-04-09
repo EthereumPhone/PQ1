@@ -2,19 +2,20 @@
 //
 // vk_json_to_bin.js
 //
-// Convert a snarkjs `verification_key.json` (Groth16, BLS12-381, 2 public
-// signals) into the 960-byte uncompressed binary layout consumed by the
-// firmware's secure-world Groth16 verifier.
+// Convert a snarkjs `verification_key.json` (Groth16, BLS12-381, N public
+// signals) into the fixed-width uncompressed binary layout consumed by
+// the firmware's secure-world Groth16 verifier.
 //
-//   alpha   ( 96 B)  G1 uncompressed:  Fp(x, BE48) || Fp(y, BE48)
-//   beta    (192 B)  G2 uncompressed:  Fq2(x).c1 || Fq2(x).c0 ||
-//                                      Fq2(y).c1 || Fq2(y).c0   (each BE48)
-//   gamma   (192 B)  G2 uncompressed: same layout
-//   delta   (192 B)  G2 uncompressed: same layout
-//   IC[0]   ( 96 B)  G1 uncompressed
-//   IC[1]   ( 96 B)  G1 uncompressed
-//   IC[2]   ( 96 B)  G1 uncompressed
-//   total   (960 B)
+//   alpha      ( 96 B)  G1 uncompressed:  Fp(x, BE48) || Fp(y, BE48)
+//   beta       (192 B)  G2 uncompressed:  Fq2(x).c1 || Fq2(x).c0 ||
+//                                         Fq2(y).c1 || Fq2(y).c0   (each BE48)
+//   gamma      (192 B)  G2 uncompressed: same layout
+//   delta      (192 B)  G2 uncompressed: same layout
+//   IC[0..N]   (96 × (N+1) B)  G1 uncompressed
+//   total = 672 + 96 * (N + 1) bytes
+//
+//   N=2 → 960 B   (legacy — Aave v3 + CowSwap setPreSignature)
+//   N=3 → 1056 B  (CowSwap EIP-712 v3 — H_tx, H_str, H_root)
 //
 // The c1-first ordering for G2 matches the `bls12_381` Rust crate's
 // `G2Affine::from_uncompressed`. This is the same byte order used by
@@ -169,36 +170,38 @@ function main() {
     );
   }
 
-  // For the firmware's existing 960-byte layout, n_public must be exactly 2
-  // (alpha, beta, gamma, delta + 3 IC = 96 + 192*3 + 96*3 = 960). Other
-  // shapes need a different binary layout and a different parser on the
-  // secure side.
-  if (opts.nPublic !== 2) {
+  // The firmware supports both 2-public (n_public=2, 960 B) and
+  // 3-public (n_public=3, 1056 B) VKs. The secure-side dispatcher in
+  // cmd_clear_sign_msg picks the right deserializer based on the
+  // sentinel address in the VK bundle; see secure/src/zk/groth16.rs.
+  if (opts.nPublic < 2 || opts.nPublic > 3) {
     throw new Error(
-      `n_public = ${opts.nPublic} not yet supported by the firmware verifier ` +
-      `(layout assumes n_public == 2; sizes wouldn't be 960 B)`
+      `n_public = ${opts.nPublic} not supported by the firmware verifier ` +
+      `(must be 2 or 3 — see secure/src/zk/groth16.rs)`,
     );
   }
 
-  const alpha = g1Bytes(vk.vk_alpha_1);   //  96 B
-  const beta  = g2Bytes(vk.vk_beta_2);    // 192 B
-  const gamma = g2Bytes(vk.vk_gamma_2);   // 192 B
-  const delta = g2Bytes(vk.vk_delta_2);   // 192 B
-  const ic0   = g1Bytes(vk.IC[0]);        //  96 B
-  const ic1   = g1Bytes(vk.IC[1]);        //  96 B
-  const ic2   = g1Bytes(vk.IC[2]);        //  96 B
+  const parts = [
+    g1Bytes(vk.vk_alpha_1),  //  96 B
+    g2Bytes(vk.vk_beta_2),   // 192 B
+    g2Bytes(vk.vk_gamma_2),  // 192 B
+    g2Bytes(vk.vk_delta_2),  // 192 B
+  ];
+  for (let i = 0; i < vk.IC.length; i++) {
+    parts.push(g1Bytes(vk.IC[i])); // 96 B each
+  }
 
-  const blob = concat([alpha, beta, gamma, delta, ic0, ic1, ic2]);
-
-  if (blob.length !== 960) {
-    throw new Error(`internal: blob.length = ${blob.length}, expected 960`);
+  const blob = concat(parts);
+  const expectedLen = 672 + 96 * (opts.nPublic + 1);
+  if (blob.length !== expectedLen) {
+    throw new Error(`internal: blob.length = ${blob.length}, expected ${expectedLen}`);
   }
 
   fs.mkdirSync(path.dirname(opts.out), { recursive: true });
   fs.writeFileSync(opts.out, blob);
 
   const sha = crypto.createHash("sha256").update(blob).digest("hex");
-  process.stdout.write(`wrote ${opts.out} 960 B sha256=${sha}\n`);
+  process.stdout.write(`wrote ${opts.out} ${blob.length} B sha256=${sha}\n`);
 }
 
 try {

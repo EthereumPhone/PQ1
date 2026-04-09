@@ -30,7 +30,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod erc20;
+mod erc20_poseidon;
 mod merkle;
+#[path = "../../secure/src/zk/poseidon_constants.rs"]
+mod poseidon_constants;
+mod poseidon;
 mod vks;
 
 const REPO_ROOT_CARGO: &str = env!("CARGO_MANIFEST_DIR");
@@ -58,6 +62,11 @@ fn main() {
     let vk_out = root.join("nonsecure/src/vk_db.bin");
     let roots_out = root.join("secure/src/db_roots.rs");
     let review_out = root.join("secure/data/vks.review.txt");
+    // The Poseidon-Merkle tree export is consumed by the off-device
+    // witness generator that builds CowSwap EIP-712 v3 proofs. It's
+    // committed into the repo so `make e2e-hw` remains deterministic
+    // without requiring a live dbgen run.
+    let poseidon_tree_out = root.join("circuits/generated/erc20_poseidon_tree.json");
 
     // ----- ERC20 metadata DB -----
     let erc20_res = erc20::build_db(&erc20_json).expect("erc20 db build failed");
@@ -69,6 +78,17 @@ fn main() {
         erc20_out.display(),
         erc20_res.blob.len(),
         hex::encode(erc20_res.root),
+    );
+    // ERC20 Poseidon-Merkle companion artifact.
+    if let Some(parent) = poseidon_tree_out.parent() {
+        fs::create_dir_all(parent).expect("create circuits/generated");
+    }
+    fs::write(&poseidon_tree_out, &erc20_res.poseidon_tree_json)
+        .expect("write erc20_poseidon_tree.json");
+    println!(
+        "dbgen: wrote {} (poseidon root = {})",
+        poseidon_tree_out.display(),
+        hex::encode(erc20_res.poseidon_root),
     );
 
     // ----- VK DB -----
@@ -88,17 +108,22 @@ fn main() {
     // ----- secure/src/db_roots.rs -----
     //
     // This is the only file the secure-world build sees from the DBs.
-    // Two 32-byte Merkle roots are baked into the secure image; the
-    // verifier in `secure/src/erc20/merkle.rs` walks proofs supplied
-    // by the non-secure world up to these roots.
-    let roots_rs = render_db_roots(&erc20_res.root, &vk_res.root);
+    // Three 32-byte Merkle roots are baked into the secure image: the
+    // SHA-256 ERC-20 + VK roots (for the existing transfer display /
+    // VK bundle verifier paths) and the Poseidon ERC-20 root (used as
+    // the third public input for the CowSwap EIP-712 v3 Groth16 proof).
+    let roots_rs = render_db_roots(&erc20_res.root, &vk_res.root, &erc20_res.poseidon_root);
     fs::write(&roots_out, &roots_rs).expect("write db_roots.rs");
     println!("dbgen: wrote {}", roots_out.display());
 
     println!("dbgen: ok");
 }
 
-fn render_db_roots(erc20_root: &[u8; 32], vk_root: &[u8; 32]) -> String {
+fn render_db_roots(
+    erc20_root: &[u8; 32],
+    vk_root: &[u8; 32],
+    erc20_poseidon_root: &[u8; 32],
+) -> String {
     let mut s = String::new();
     s.push_str("//! Merkle roots of the embedded ERC20 + VK databases.\n");
     s.push_str("//!\n");
@@ -106,8 +131,15 @@ fn render_db_roots(erc20_root: &[u8; 32], vk_root: &[u8; 32]) -> String {
     s.push_str("//! and secure/data/vks.json. DO NOT EDIT BY HAND.\n");
     s.push_str("//!\n");
     s.push_str("//! The full DB blobs live in non-secure rodata. The secure world\n");
-    s.push_str("//! only holds these two roots; everything received from NS is\n");
+    s.push_str("//! only holds these roots; everything received from NS is\n");
     s.push_str("//! verified against them via `crate::erc20::merkle::verify_proof`.\n");
+    s.push_str("//!\n");
+    s.push_str("//! `ERC20_POSEIDON_ROOT` is the parallel BLS12-381 Poseidon-Merkle\n");
+    s.push_str("//! tree over the same sorted (chain_id, contract) entry set that\n");
+    s.push_str("//! the CowSwap EIP-712 v3 Groth16 circuit consumes as its third\n");
+    s.push_str("//! public input. It's stored as the 32-byte little-endian canonical\n");
+    s.push_str("//! encoding of the root scalar, ready to be fed into\n");
+    s.push_str("//! `bls12_381::Scalar::from_bytes`.\n");
     s.push_str("\n");
     s.push_str("pub static ERC20_DB_ROOT: [u8; 32] = [");
     for (i, b) in erc20_root.iter().enumerate() {
@@ -119,6 +151,14 @@ fn render_db_roots(erc20_root: &[u8; 32], vk_root: &[u8; 32]) -> String {
     s.push_str("\n];\n\n");
     s.push_str("pub static VK_DB_ROOT: [u8; 32] = [");
     for (i, b) in vk_root.iter().enumerate() {
+        if i % 8 == 0 {
+            s.push_str("\n    ");
+        }
+        s.push_str(&format!("0x{:02x}, ", b));
+    }
+    s.push_str("\n];\n\n");
+    s.push_str("pub static ERC20_POSEIDON_ROOT: [u8; 32] = [");
+    for (i, b) in erc20_poseidon_root.iter().enumerate() {
         if i % 8 == 0 {
             s.push_str("\n    ");
         }

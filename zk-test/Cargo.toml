@@ -5,5 +5,5 @@ edition = "2021"
 publish = false
 
 [dependencies]
-bls12_381 = { package = "bls12_381_pka", path = "../bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
+bls12_381 = { workspace = true }
 sha2 = "0.10"

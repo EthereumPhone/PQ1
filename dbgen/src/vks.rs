@@ -21,6 +21,11 @@ use std::path::Path;
 
 /// Build the canonical leaf-hash input bytes for one VK entry. MUST
 /// match the secure-world verifier's reconstruction byte-for-byte.
+///
+/// `vk` is always exactly `VK_BLOB_LEN` bytes (1056 B) — VKs shorter
+/// than that are zero-padded on the right by the caller so the leaf
+/// hash binds the padding too. Dispatch by protocol sentinel decides
+/// how much of the slot is "real": 960 B for 2-pub, 1056 B for 3-pub.
 pub fn canonical_vk_leaf(chain_id: u64, contract: &[u8; 20], vk: &[u8; VK_BLOB_LEN]) -> Vec<u8> {
     let mut buf = Vec::with_capacity(8 + 20 + VK_BLOB_LEN);
     buf.extend_from_slice(&chain_id.to_le_bytes());
@@ -43,7 +48,7 @@ pub fn build_db(json_path: &Path, vks_dir: &Path) -> Result<VkBuildResult, Strin
 
     // 1. Load each protocol's VK file. Dedup by sha256(vk_bytes); each
     //    unique VK gets a vk_id (u8). Build the per-deployment entry list.
-    let mut unique_vks: Vec<[u8; 960]> = Vec::new();
+    let mut unique_vks: Vec<[u8; VK_BLOB_LEN]> = Vec::new();
     let mut sha_to_id: HashMap<[u8; 32], u8> = HashMap::new();
     let mut entries: Vec<PreparedVkEntry> = Vec::new();
     let mut review_protocols: Vec<ReviewProtocol> = Vec::new();
@@ -52,16 +57,22 @@ pub fn build_db(json_path: &Path, vks_dir: &Path) -> Result<VkBuildResult, Strin
         let vk_path = vks_dir.join(&proto.vk_file);
         let vk_bytes = fs::read(&vk_path)
             .map_err(|e| format!("read {}: {e}", vk_path.display()))?;
-        if vk_bytes.len() != VK_BLOB_LEN {
+        // A VK file can be either a 2-public-signal blob (960 B) or a
+        // 3-public-signal blob (1056 B = VK_BLOB_LEN). Anything else is
+        // malformed. Shorter blobs are zero-padded on the right into
+        // the fixed-stride pool slot, and the trailing zeros are bound
+        // into the leaf hash.
+        if vk_bytes.len() != VK_BLOB_LEN_2PUB && vk_bytes.len() != VK_BLOB_LEN_3PUB {
             return Err(format!(
-                "VK file {} is {} bytes, expected {}",
+                "VK file {} is {} bytes, expected {} or {}",
                 vk_path.display(),
                 vk_bytes.len(),
-                VK_BLOB_LEN
+                VK_BLOB_LEN_2PUB,
+                VK_BLOB_LEN_3PUB,
             ));
         }
         let mut vk_arr = [0u8; VK_BLOB_LEN];
-        vk_arr.copy_from_slice(&vk_bytes);
+        vk_arr[..vk_bytes.len()].copy_from_slice(&vk_bytes);
         let vk_sha = sha256(&vk_arr);
 
         let vk_id = if let Some(id) = sha_to_id.get(&vk_sha) {
@@ -236,11 +247,17 @@ pub fn round_trip_check(
         let vk_path = vks_dir.join(&proto.vk_file);
         let vk_bytes = fs::read(&vk_path)
             .map_err(|e| format!("read {}: {e}", vk_path.display()))?;
-        if vk_bytes.len() != VK_BLOB_LEN {
-            return Err(format!("VK file {} bad size", vk_path.display()));
+        if vk_bytes.len() != VK_BLOB_LEN_2PUB && vk_bytes.len() != VK_BLOB_LEN_3PUB {
+            return Err(format!(
+                "VK file {} bad size ({} B, expected {} or {})",
+                vk_path.display(),
+                vk_bytes.len(),
+                VK_BLOB_LEN_2PUB,
+                VK_BLOB_LEN_3PUB,
+            ));
         }
         let mut vk_arr = [0u8; VK_BLOB_LEN];
-        vk_arr.copy_from_slice(&vk_bytes);
+        vk_arr[..vk_bytes.len()].copy_from_slice(&vk_bytes);
 
         for dep in &proto.deployments {
             let contract = parse_hex_address(&dep.address)?;
@@ -250,7 +267,7 @@ pub fn round_trip_check(
                     dep.chain_id, dep.address
                 )
             })?;
-            if found.vk != vk_bytes.as_slice() {
+            if found.vk != vk_arr.as_slice() {
                 return Err(format!(
                     "round-trip: VK byte mismatch for chain={} addr={}",
                     dep.chain_id, dep.address

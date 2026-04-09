@@ -2,6 +2,19 @@ TARGET = thumbv8m.main-none-eabi
 RUSTFLAGS_VAR = CARGO_TARGET_THUMBV8M_MAIN_NONE_EABI_RUSTFLAGS
 VENEERS = $(CURDIR)/target/veneers.o
 
+# CMSE veneers only exist on the real STM32U585 build path (the QEMU
+# `mps2-an505` transport uses a shared-memory mailbox instead). The
+# linker rejects `--cmse-implib` if no `cmse-nonsecure-entry` symbols
+# are present in the secure binary, so we only emit the implib when the
+# `stm32u585` cargo feature is selected.
+ifneq (,$(findstring stm32u585,$(FEATURES)))
+SECURE_CMSE_FLAGS = -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)
+NS_VENEERS_FLAG   = -C link-arg=$(VENEERS)
+else
+SECURE_CMSE_FLAGS =
+NS_VENEERS_FLAG   =
+endif
+
 SECURE_ELF   = target/secure/$(TARGET)/release/sphincs-tz-secure
 NONSECURE_ELF = target/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure
 
@@ -18,18 +31,18 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e e2e-hw build-hw flash-hw
+.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e e2e-hw build-hw flash-hw test test-unit test-solidity
 
 all: secure nonsecure
 
 secure:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(SECURE_CMSE_FLAGS)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features $(FEATURES)
-	@echo "==> Secure world built (features: $(FEATURES)). Veneers: $(VENEERS)"
+	@echo "==> Secure world built (features: $(FEATURES))."
 
 nonsecure: secure
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(NS_VENEERS_FLAG)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
 	@echo "==> Non-secure world built."
 
@@ -138,12 +151,12 @@ flash-hw: build-hw
 #
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
 e2e:
-	@echo "==> Building secure + nonsecure with e2e-test feature"
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	@echo "==> Building secure + nonsecure with e2e-test feature (QEMU mailbox transport)"
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test
 	@echo "==> Running e2e suite under QEMU"
@@ -160,17 +173,21 @@ e2e:
 	echo "===================================="; \
 	fail=0; \
 	for line in \
-		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ValueTransfer" \
-		"\\[S\\]\\[e2e\\] cmd_sign dispatch = Erc20Known" \
-		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ContractCall" \
 		"\\[S\\]\\[e2e\\] cmd_clear_sign dispatch = ZkClearSign" \
 		"\\[S\\]\\[e2e\\] cmd_clear_sign_msg dispatch = ZkClearSignMsg" \
-		"\\[E2E\\] value_transfer = PASS" \
-		"\\[E2E\\] erc20_known = PASS" \
-		"\\[E2E\\] blind_sign = PASS" \
+		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = ValueTransfer" \
+		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = Erc20Known" \
 		"\\[E2E\\] zk_clear_sign = PASS" \
 		"\\[E2E\\] cowswap_pre_sign = PASS" \
 		"\\[E2E\\] cowswap_eip712_order = PASS" \
+		"\\[E2E\\] userop_value_transfer = PASS" \
+		"\\[E2E\\] userop_erc20 = PASS" \
+		"\\[E2E\\] neg_chain_id_mismatch = PASS" \
+		"\\[E2E\\] neg_tx_len_zero = PASS" \
+		"\\[E2E\\] neg_tx_len_overflow = PASS" \
+		"\\[E2E\\] neg_truncated_payload = PASS" \
+		"\\[E2E\\] neg_contract_creation = PASS" \
+		"\\[E2E\\] neg_bad_envelope = PASS" \
 		"\\[E2E\\] ALL TESTS PASSED"; do \
 		if echo "$$out" | grep -q "$$line"; then \
 			echo "  PASS  $$line"; \
@@ -249,6 +266,21 @@ flash-hw-usb: build-hw-usb
 	@echo "==> Resetting and attaching (Ctrl-C to quit)..."
 	probe-rs reset --chip STM32U585AIIx
 	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+
+# Run all three test layers: Rust unit tests, Foundry Solidity tests, and
+# the full e2e suite under QEMU.
+test: test-unit test-solidity e2e
+	@echo "==> ALL TEST LAYERS PASSED"
+
+# Host-side Rust unit tests for pure logic (aa, tx modules).
+test-unit:
+	@echo "==> Running Rust unit tests (host)"
+	@cargo test -p sphincs-tz-secure
+
+# Foundry tests for the PQ smart-wallet contracts.
+test-solidity:
+	@echo "==> Running Foundry tests"
+	@cd contracts/smart-wallet && forge test
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

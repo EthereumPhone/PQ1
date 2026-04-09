@@ -38,6 +38,7 @@
 use sha3::{Digest, Keccak256};
 
 pub mod cowswap;
+pub mod cowswap_display;
 
 // ---------------------------------------------------------------------------
 // Keccak primitive
@@ -112,19 +113,24 @@ pub enum Eip712Error {
     /// The verified VK bundle's contract field did not match any
     /// known EIP-712 protocol sentinel.
     UnknownSentinel,
+    /// The `chain_id` bound inside the canonical buffer does not
+    /// match the `chain_id` from the verified VK bundle. Prevents NS
+    /// from pairing a legitimate cross-chain proof with a mismatched
+    /// domain-separator bundle.
+    ChainIdMismatch,
 }
 
 /// One protocol's contribution to the EIP-712 dispatcher.
 ///
 /// `name` is for human-readable status logging. `sentinel` is what
 /// the VK bundle's `contract` field is matched against. `compute`
-/// takes the 164-byte canonical buffer (already verified by the
+/// takes the 204-byte canonical buffer (already verified by the
 /// Groth16 proof) and the chain id (also verified by the bundle)
 /// and returns the EIP-712 digest the wallet should sign.
 pub struct Eip712ProtocolEntry {
     pub name: &'static str,
     pub sentinel: [u8; 20],
-    pub compute: fn(canonical: &[u8; 164], chain_id: u64) -> Result<[u8; 32], Eip712Error>,
+    pub compute: fn(canonical: &[u8; 204], chain_id: u64) -> Result<[u8; 32], Eip712Error>,
 }
 
 /// Static dispatch table. Add a new protocol by writing a sibling
@@ -140,7 +146,7 @@ pub static PROTOCOLS: &[Eip712ProtocolEntry] = &[Eip712ProtocolEntry {
 /// computation. Returns `Err(UnknownSentinel)` if no entry matches.
 pub fn dispatch_for_sentinel(
     sentinel: &[u8; 20],
-    canonical: &[u8; 164],
+    canonical: &[u8; 204],
     chain_id: u64,
 ) -> Result<[u8; 32], Eip712Error> {
     for p in PROTOCOLS {

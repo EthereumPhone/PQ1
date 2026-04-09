@@ -27,6 +27,9 @@ pub mod calldata;
 pub mod dispatch;
 pub mod merkle;
 
-pub use bundle::{verify_erc20_bundle, Erc20Metadata};
-pub use calldata::{parse_erc20_calldata, Erc20Call};
+// NOTE: no flat re-exports of `bundle::*` / `calldata::*`. Internal
+// callers (`nsc`, `tx::display`) import what they need via the
+// `bundle::`/`calldata::` sub-paths so the compiler flags any
+// accidentally-dead item. Only `dispatch::{dispatch_tx, TxKind}` is
+// re-exported, since it's the module's outward-facing entry point.
 pub use dispatch::{dispatch_tx, TxKind};
