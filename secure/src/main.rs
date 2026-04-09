@@ -64,7 +64,7 @@ mod zk;
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(not(test))]
-use crypto::{RMEM_ENCRYPTED_ENTROPY, RMEM_PIN_STATE, RMEM_VERIFYING_KEY};
+use crypto::{RMEM_BOOTSTRAP_VK, RMEM_ENCRYPTED_ENTROPY, RMEM_PIN_STATE, RMEM_VERIFYING_KEY};
 #[cfg(not(test))]
 use secure_element::{MockSecureElement, SecureElement};
 
@@ -112,6 +112,9 @@ fn is_provisioned(se: &mut impl SecureElement) -> bool {
     se.r_mem_read(RMEM_ENCRYPTED_ENTROPY, &mut buf).is_ok()
         && se.r_mem_read(RMEM_PIN_STATE, &mut buf).is_ok()
         && se.r_mem_read(RMEM_VERIFYING_KEY, &mut buf).is_ok()
+        // Bootstrap VK may not exist on older provisioned devices;
+        // don't require it for backward compat. New provisions always
+        // write it (see crypto::provision_with_mnemonic).
 }
 
 /// Run the first-boot interactive wizard. Loops until the user successfully:

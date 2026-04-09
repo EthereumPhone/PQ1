@@ -22,9 +22,9 @@ contract PQCoinbaseSmartWalletTest is Base {
         vm.label(address(counter), "Counter");
     }
 
-    // ── validateUserOp ──────────────────────────────────────────────
+    // ── validateUserOp (MAIN signer) ───────────────────────────────
 
-    function test_validateUserOp_validSig() public {
+    function test_validateUserOp_mainSigner_validSig() public {
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, abi.encodeCall(Counter.increment, ())))
         );
@@ -33,7 +33,63 @@ contract PQCoinbaseSmartWalletTest is Base {
         assertEq(result, 0); // success
     }
 
-    function test_validateUserOp_invalidSig() public {
+    function test_validateUserOp_mainSigner_incrementsOTS() public {
+        assertEq(wallet.currentOTSIndex(), 0);
+
+        UserOperation memory op = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, abi.encodeCall(Counter.increment, ())))
+        );
+        vm.prank(ENTRY_POINT);
+        wallet.validateUserOp(op, keccak256("hash"), 0);
+
+        assertEq(wallet.currentOTSIndex(), 1);
+    }
+
+    function test_validateUserOp_mainSigner_secondSigUsesNextOTS() public {
+        // First sig
+        UserOperation memory op1 = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, abi.encodeCall(Counter.increment, ())))
+        );
+        vm.prank(ENTRY_POINT);
+        wallet.validateUserOp(op1, keccak256("hash1"), 0);
+        assertEq(wallet.currentOTSIndex(), 1);
+
+        // Second sig — must use otsIndex=1
+        UserOperation memory op2 = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, abi.encodeCall(Counter.increment, ())))
+        );
+        vm.prank(ENTRY_POINT);
+        uint256 result = wallet.validateUserOp(op2, keccak256("hash2"), 0);
+        assertEq(result, 0);
+        assertEq(wallet.currentOTSIndex(), 2);
+    }
+
+    function test_validateUserOp_mainSigner_wrongOTSIndex() public {
+        // Consume OTS 0
+        UserOperation memory op1 = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
+        );
+        vm.prank(ENTRY_POINT);
+        wallet.validateUserOp(op1, keccak256("h1"), 0);
+
+        // Try to replay OTS 0 — should fail
+        bytes memory wrongSig = abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
+            signerType: PQCoinbaseSmartWallet.SignerType.MAIN,
+            keyIndex: 0,
+            otsIndex: 0, // already consumed
+            pk: TEST_MAIN_PK,
+            signature: new bytes(17088)
+        }));
+        UserOperation memory op2 = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
+        );
+        op2.signature = wrongSig;
+        vm.prank(ENTRY_POINT);
+        uint256 result = wallet.validateUserOp(op2, keccak256("h2"), 0);
+        assertEq(result, 1); // sig failure
+    }
+
+    function test_validateUserOp_mainSigner_invalidSig() public {
         mockVerifier.setShouldVerify(false);
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
@@ -43,45 +99,160 @@ contract PQCoinbaseSmartWalletTest is Base {
         assertEq(result, 1); // sig failure
     }
 
-    function test_validateUserOp_wrongOwnerKey() public {
+    function test_validateUserOp_mainSigner_wrongPk() public {
         bytes memory wrongPk = hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
         );
-        op.signature = _wrapSignature(wrongPk);
+        op.signature = _wrapMainSignature(wrongPk);
         vm.prank(ENTRY_POINT);
         uint256 result = wallet.validateUserOp(op, keccak256("hash"), 0);
         assertEq(result, 1);
     }
 
-    function test_validateUserOp_wrongPkLength() public {
-        bytes memory shortPk = hex"0102030405";
+    function test_validateUserOp_mainSigner_wrongKeyIndex() public {
+        bytes memory wrongSig = abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
+            signerType: PQCoinbaseSmartWallet.SignerType.MAIN,
+            keyIndex: 99, // wrong epoch
+            otsIndex: 0,
+            pk: TEST_MAIN_PK,
+            signature: new bytes(17088)
+        }));
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
         );
-        op.signature = _wrapSignature(shortPk);
+        op.signature = wrongSig;
         vm.prank(ENTRY_POINT);
         uint256 result = wallet.validateUserOp(op, keccak256("hash"), 0);
         assertEq(result, 1);
     }
 
-    function test_validateUserOp_wrongSigLength() public {
-        bytes memory dummySig = new bytes(100); // wrong length, should be 17088
+    function test_validateUserOp_mainSigner_wrongSigLength() public {
+        bytes memory wrongSig = abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
+            signerType: PQCoinbaseSmartWallet.SignerType.MAIN,
+            keyIndex: 0,
+            otsIndex: 0,
+            pk: TEST_MAIN_PK,
+            signature: new bytes(100) // wrong length
+        }));
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
         );
-        op.signature = abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({pk: TEST_PK, signature: dummySig}));
+        op.signature = wrongSig;
         vm.prank(ENTRY_POINT);
         uint256 result = wallet.validateUserOp(op, keccak256("hash"), 0);
         assertEq(result, 1);
     }
 
-    function test_validateUserOp_revert_notEntryPoint() public {
-        UserOperation memory op = _buildUserOp(
+    // ── validateUserOp (BOOTSTRAP signer) ──────────────────────────
+
+    function test_validateUserOp_bootstrapSigner_validSig() public {
+        UserOperation memory op = _buildBootstrapUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, abi.encodeCall(Counter.increment, ())))
+        );
+        op.sender = address(wallet);
+        op.signature = _wrapBootstrapSignature(TEST_BOOTSTRAP_PK);
+        vm.prank(ENTRY_POINT);
+        uint256 result = wallet.validateUserOp(op, keccak256("hash"), 0);
+        assertEq(result, 0);
+    }
+
+    function test_validateUserOp_bootstrapSigner_doesNotConsumeOTS() public {
+        assertEq(wallet.currentOTSIndex(), 0);
+        UserOperation memory op = _buildBootstrapUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
         );
-        vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
+        op.sender = address(wallet);
+        op.signature = _wrapBootstrapSignature(TEST_BOOTSTRAP_PK);
+        vm.prank(ENTRY_POINT);
         wallet.validateUserOp(op, keccak256("hash"), 0);
+        // Bootstrap does NOT consume OTS
+        assertEq(wallet.currentOTSIndex(), 0);
+    }
+
+    function test_validateUserOp_bootstrapSigner_wrongPk() public {
+        bytes memory wrongPk = hex"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        UserOperation memory op = _buildBootstrapUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
+        );
+        op.sender = address(wallet);
+        op.signature = _wrapBootstrapSignature(wrongPk);
+        vm.prank(ENTRY_POINT);
+        uint256 result = wallet.validateUserOp(op, keccak256("hash"), 0);
+        assertEq(result, 1);
+    }
+
+    // ── rotateMainSigner ───────────────────────────────────────────
+
+    function test_rotateMainSigner() public {
+        bytes memory newMainPk = hex"deadbeef01020304050607080910111213141516171819202122232425262728";
+        vm.prank(address(wallet));
+        wallet.rotateMainSigner(1, newMainPk);
+
+        assertEq(wallet.currentKeyIndex(), 1);
+        assertEq(wallet.currentMainPubKeyHash(), keccak256(newMainPk));
+        assertEq(wallet.currentOTSIndex(), 0); // reset
+    }
+
+    function test_rotateMainSigner_mustBeSequential() public {
+        bytes memory newMainPk = hex"deadbeef01020304050607080910111213141516171819202122232425262728";
+        vm.prank(address(wallet));
+        vm.expectRevert("sequential only");
+        wallet.rotateMainSigner(2, newMainPk); // skip index 1
+    }
+
+    function test_rotateMainSigner_onlySelf() public {
+        bytes memory newMainPk = hex"deadbeef01020304050607080910111213141516171819202122232425262728";
+        vm.prank(address(0xdead));
+        vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
+        wallet.rotateMainSigner(1, newMainPk);
+    }
+
+    function test_rotateMainSigner_signingWithNewKeyAfterRotation() public {
+        // Rotate
+        bytes memory newMainPk = hex"deadbeef01020304050607080910111213141516171819202122232425262728";
+        vm.prank(address(wallet));
+        wallet.rotateMainSigner(1, newMainPk);
+
+        // Sign with the new key at epoch 1, otsIndex 0
+        bytes memory sig = abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
+            signerType: PQCoinbaseSmartWallet.SignerType.MAIN,
+            keyIndex: 1,
+            otsIndex: 0,
+            pk: newMainPk,
+            signature: new bytes(17088)
+        }));
+        UserOperation memory op = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, abi.encodeCall(Counter.increment, ())))
+        );
+        op.signature = sig;
+        vm.prank(ENTRY_POINT);
+        uint256 result = wallet.validateUserOp(op, keccak256("hash"), 0);
+        assertEq(result, 0);
+        assertEq(wallet.currentOTSIndex(), 1);
+    }
+
+    function test_rotateMainSigner_oldKeyRejectedAfterRotation() public {
+        // Rotate
+        bytes memory newMainPk = hex"deadbeef01020304050607080910111213141516171819202122232425262728";
+        vm.prank(address(wallet));
+        wallet.rotateMainSigner(1, newMainPk);
+
+        // Try to sign with the OLD key at old epoch 0
+        bytes memory sig = abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
+            signerType: PQCoinbaseSmartWallet.SignerType.MAIN,
+            keyIndex: 0,
+            otsIndex: 0,
+            pk: TEST_MAIN_PK,
+            signature: new bytes(17088)
+        }));
+        UserOperation memory op = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
+        );
+        op.signature = sig;
+        vm.prank(ENTRY_POINT);
+        uint256 result = wallet.validateUserOp(op, keccak256("hash"), 0);
+        assertEq(result, 1); // rejected
     }
 
     // ── execute ─────────────────────────────────────────────────────
@@ -147,5 +318,15 @@ contract PQCoinbaseSmartWalletTest is Base {
         vm.prank(address(wallet));
         vm.expectRevert();
         wallet.upgradeToAndCall(empty, "");
+    }
+
+    // ── validateUserOp revert ───────────────────────────────────────
+
+    function test_validateUserOp_revert_notEntryPoint() public {
+        UserOperation memory op = _buildUserOp(
+            abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
+        );
+        vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
+        wallet.validateUserOp(op, keccak256("hash"), 0);
     }
 }

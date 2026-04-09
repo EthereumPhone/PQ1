@@ -46,7 +46,12 @@ use zeroize::Zeroize;
 // r-mem slot assignments
 pub const RMEM_ENCRYPTED_ENTROPY: u16 = 0;
 pub const RMEM_PIN_STATE: u16 = 1;
+/// Legacy slot: stores the "default" verifying key (the old single-signer VK).
+/// Kept for backward compatibility; new code should use RMEM_BOOTSTRAP_VK.
 pub const RMEM_VERIFYING_KEY: u16 = 2;
+/// Bootstrap signer verifying key (32 bytes). Set at provisioning, never
+/// changes. Used by CMD_GET_BOOTSTRAP_PUBKEY.
+pub const RMEM_BOOTSTRAP_VK: u16 = 3;
 
 /// Length of the SLH-DSA-Sha2_128f seed material:
 /// `sk_seed (16) ‖ sk_prf (16) ‖ pk_seed (16)`. Computed from the BIP-39
@@ -277,6 +282,135 @@ pub fn derive_keypair_from_entropy(
 }
 
 // ---------------------------------------------------------------------------
+// Two-tier key derivation: bootstrap + per-chain main signers
+// ---------------------------------------------------------------------------
+//
+// Both key classes derive from the same BIP-39 entropy via domain-separated
+// KDFs that mirror the BIP-85 path structure:
+//
+//   bootstrap         = derive(seed, "pqwallet-bootstrap", 0)
+//   chain-main-key_i  = derive(seed, "pqwallet-main", chainId, keyIndex)
+//
+// Using SLH-DSA-SHA2-128f for both until ML-DSA-44 is available for the
+// bootstrap signer. The domain separation ensures the bootstrap key and
+// all per-chain main keys are cryptographically independent.
+
+/// Derive the bootstrap signer's SLH-DSA seed (48 bytes) from the BIP-39
+/// seed. The bootstrap signer is global (not per-chain), stateless, and
+/// never rotates.
+pub fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
+    let mut out = [0u8; SEED_LEN];
+    let chunk0 = kdf(b"pqwallet-bootstrap-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf(b"pqwallet-bootstrap-sk-prf", bip39_seed, 0);
+    let chunk2 = kdf(b"pqwallet-bootstrap-pk-seed", bip39_seed, 0);
+    out[0..16].copy_from_slice(&chunk0[..16]);
+    out[16..32].copy_from_slice(&chunk1[..16]);
+    out[32..48].copy_from_slice(&chunk2[..16]);
+    out
+}
+
+/// Derive a per-chain main signer's SLH-DSA seed (48 bytes) from the
+/// BIP-39 seed, chain ID, and key epoch index.
+///
+/// Each (chain_id, key_index) pair produces a cryptographically
+/// independent keypair. Keys on different chains cannot collide even if
+/// the key indices match, because the chain ID is part of the KDF input.
+pub fn main_signer_seed_from_bip39(
+    bip39_seed: &[u8; 64],
+    chain_id: u64,
+    key_index: u32,
+) -> [u8; SEED_LEN] {
+    // Build a domain-specific input: bip39_seed ‖ chain_id BE ‖ key_index BE
+    let mut input = [0u8; 64 + 8 + 4];
+    input[..64].copy_from_slice(bip39_seed);
+    input[64..72].copy_from_slice(&chain_id.to_be_bytes());
+    input[72..76].copy_from_slice(&key_index.to_be_bytes());
+
+    let mut out = [0u8; SEED_LEN];
+    let chunk0 = kdf(b"pqwallet-main-sk-seed", &input, 0);
+    let chunk1 = kdf(b"pqwallet-main-sk-prf", &input, 0);
+    let chunk2 = kdf(b"pqwallet-main-pk-seed", &input, 0);
+    out[0..16].copy_from_slice(&chunk0[..16]);
+    out[16..32].copy_from_slice(&chunk1[..16]);
+    out[32..48].copy_from_slice(&chunk2[..16]);
+    out
+}
+
+/// Derive the bootstrap signing key from BIP-39 entropy.
+pub fn derive_bootstrap_key_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+) -> SigningKey<Sha2_128f> {
+    let mnemonic = Mnemonic::from_entropy(entropy);
+    let mut bip39_seed = mnemonic.to_seed("");
+    let mut seed = bootstrap_seed_from_bip39(&bip39_seed);
+    bip39_seed.zeroize();
+    let sk = derive_signing_key(&seed);
+    seed.zeroize();
+    sk
+}
+
+/// Derive the bootstrap keypair (signing key + 32-byte verifying key).
+pub fn derive_bootstrap_keypair_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+) -> (SigningKey<Sha2_128f>, [u8; 32]) {
+    use signature::Keypair;
+    let sk = derive_bootstrap_key_from_entropy(entropy);
+    let vk_array = sk.verifying_key().to_bytes();
+    let mut vk_bytes = [0u8; 32];
+    vk_bytes.copy_from_slice(vk_array.as_slice());
+    (sk, vk_bytes)
+}
+
+/// Derive a per-chain main signing key from BIP-39 entropy.
+pub fn derive_main_key_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+    chain_id: u64,
+    key_index: u32,
+) -> SigningKey<Sha2_128f> {
+    let mnemonic = Mnemonic::from_entropy(entropy);
+    let mut bip39_seed = mnemonic.to_seed("");
+    let mut seed = main_signer_seed_from_bip39(&bip39_seed, chain_id, key_index);
+    bip39_seed.zeroize();
+    let sk = derive_signing_key(&seed);
+    seed.zeroize();
+    sk
+}
+
+/// Derive a per-chain main keypair (signing key + 32-byte verifying key).
+pub fn derive_main_keypair_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+    chain_id: u64,
+    key_index: u32,
+) -> (SigningKey<Sha2_128f>, [u8; 32]) {
+    use signature::Keypair;
+    let sk = derive_main_key_from_entropy(entropy, chain_id, key_index);
+    let vk_array = sk.verifying_key().to_bytes();
+    let mut vk_bytes = [0u8; 32];
+    vk_bytes.copy_from_slice(vk_array.as_slice());
+    (sk, vk_bytes)
+}
+
+/// Derive the bootstrap verifying key bytes only (no signing key retained).
+pub fn derive_bootstrap_vk_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+) -> [u8; 32] {
+    let (sk, vk) = derive_bootstrap_keypair_from_entropy(entropy);
+    drop(sk);
+    vk
+}
+
+/// Derive a per-chain main verifying key bytes only.
+pub fn derive_main_vk_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+    chain_id: u64,
+    key_index: u32,
+) -> [u8; 32] {
+    let (sk, vk) = derive_main_keypair_from_entropy(entropy, chain_id, key_index);
+    drop(sk);
+    vk
+}
+
+// ---------------------------------------------------------------------------
 // PIN state serialization (unchanged)
 // ---------------------------------------------------------------------------
 
@@ -366,8 +500,11 @@ pub fn provision_with_mnemonic(
     // 3. Run the full BIP-39 → SLH-DSA chain ONCE so we can cache the
     //    32-byte verifying key in r-mem. After this, the SigningKey is
     //    immediately dropped and only the entropy survives in encrypted form.
+    //    Also derive the bootstrap VK for the two-tier architecture.
     let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
     drop(sk);
+
+    let bootstrap_vk = derive_bootstrap_vk_from_entropy(&entropy);
 
     // 4. Encrypt the entropy under the master-derived wrap key.
     let entropy_blob = encrypt_entropy_blob(&entropy, &master_secret);
@@ -402,6 +539,9 @@ pub fn provision_with_mnemonic(
 
     se.r_mem_erase(RMEM_VERIFYING_KEY).ok();
     se.r_mem_write(RMEM_VERIFYING_KEY, &vk_bytes).unwrap();
+
+    se.r_mem_erase(RMEM_BOOTSTRAP_VK).ok();
+    se.r_mem_write(RMEM_BOOTSTRAP_VK, &bootstrap_vk).unwrap();
 
     // 7. Wipe sensitive intermediates from the stack.
     entropy.zeroize();
