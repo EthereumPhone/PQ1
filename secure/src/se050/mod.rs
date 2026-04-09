@@ -14,20 +14,6 @@ pub mod apdu;
 use crate::secure_element::{SeError, SecureElement};
 use t1oi2c::T1State;
 
-/// HMAC-SHA256 computed in software (same as MockSecureElement).
-/// The SE050 provides tamper-resistant storage for the state; the
-/// HMAC computation itself runs on the MCU.
-fn hmac_sha256(key: &[u8; 32], data: &[u8; 32]) -> [u8; 32] {
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
-    let mut mac = Hmac::<Sha256>::new_from_slice(key).unwrap();
-    mac.update(data);
-    let result = mac.finalize();
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&result.into_bytes());
-    out
-}
-
 // ---------------------------------------------------------------------------
 // Object ID allocation on the SE050
 // ---------------------------------------------------------------------------
@@ -179,9 +165,14 @@ impl SecureElement for Se050SecureElement {
             return Err(SeError::SlotNotFound);
         }
 
-        // MACD state is stored as a Binary object on the SE050 (tamper-
-        // resistant). HMAC-SHA256 is computed in software — identical to
-        // MockSecureElement, but with hardware-protected state storage.
+        // MACD uses the SE050's HMAC-SHA256 engine. The 32-byte slot
+        // state is stored as an HMAC key object — the key material
+        // NEVER leaves the SE050.
+        //
+        // Flow:
+        // 1. If HMAC key exists → MACGenerate(key, data_in) → output
+        //    If not exists → create key with data_in, MAC(key, data_in)
+        // 2. "Destroy": delete key, re-create with data_in as new key
         unsafe {
             self.ensure_init()?;
             let obj_id = MACD_OBJ_BASE + slot as u32;
@@ -189,25 +180,29 @@ impl SecureElement for Se050SecureElement {
             let exists = apdu::check_object_exists(&mut self.t1, obj_id)
                 .map_err(|_| SeError::InternalError)?;
 
-            let output = if exists {
-                // Read current 32-byte state. If the object is a stale
-                // HMAC key from a previous firmware version, ReadObject
-                // will fail — delete it and treat as fresh.
-                let mut state = [0u8; 32];
-                match apdu::read_object(&mut self.t1, obj_id, &mut state) {
-                    Ok(n) if n >= 32 => hmac_sha256(data_in, &state),
-                    _ => {
-                        let _ = apdu::delete_object(&mut self.t1, obj_id);
-                        hmac_sha256(data_in, data_in)
-                    }
-                }
+            if !exists {
+                // First call: create HMAC key with data_in
+                apdu::write_hmac_key(&mut self.t1, obj_id, data_in)
+                    .map_err(|_| SeError::InternalError)?;
             } else {
-                hmac_sha256(data_in, data_in)
-            };
+                // Stale object from previous firmware may not be an HMAC key.
+                // Try MAC — if it fails, delete and recreate.
+                let mut probe = [0u8; 32];
+                if apdu::mac_oneshot(&mut self.t1, obj_id, data_in, &mut probe).is_err() {
+                    let _ = apdu::delete_object(&mut self.t1, obj_id);
+                    apdu::write_hmac_key(&mut self.t1, obj_id, data_in)
+                        .map_err(|_| SeError::InternalError)?;
+                }
+            }
 
-            // "Destroy": overwrite state with data_in
+            // Compute HMAC(key, data_in) on the SE050
+            let mut output = [0u8; 32];
+            apdu::mac_oneshot(&mut self.t1, obj_id, data_in, &mut output)
+                .map_err(|_| SeError::InternalError)?;
+
+            // "Destroy": replace key with data_in
             let _ = apdu::delete_object(&mut self.t1, obj_id);
-            apdu::write_binary(&mut self.t1, obj_id, data_in)
+            apdu::write_hmac_key(&mut self.t1, obj_id, data_in)
                 .map_err(|_| SeError::InternalError)?;
 
             Ok(output)

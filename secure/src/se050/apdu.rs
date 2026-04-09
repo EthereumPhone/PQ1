@@ -56,6 +56,7 @@ const P1_MAC: u8 = 0x0D; // MAC operation
 const P2_DEFAULT: u8 = 0x00;
 const P2_GENERATE: u8 = 0x03;
 const P2_ONESHOT: u8 = 0x0E;
+const P2_GENERATE_ONESHOT: u8 = 0x45; // MAC one-shot generate
 const P2_EXIST: u8 = 0x27;
 const P2_DELETE_OBJECT: u8 = 0x28;
 
@@ -165,11 +166,14 @@ pub unsafe fn send_apdu(
 ) -> Result<usize, ApduError> {
     #[cfg(feature = "debug-log")]
     {
-        let show = apdu.len().min(20);
-        if show >= 5 {
+        if apdu.len() >= 5 {
+            // Extract object ID from first TLV (TAG_1 at offset 5) if present
+            let obj_id = if apdu.len() >= 11 && apdu[5] == 0x41 && apdu[6] == 0x04 {
+                u32::from_be_bytes([apdu[7], apdu[8], apdu[9], apdu[10]])
+            } else { 0 };
             cortex_m_semihosting::hprintln!(
-                "[SE050] TX CLA={:02x} INS={:02x} P1={:02x} P2={:02x} Lc={:02x} len={}",
-                apdu[0], apdu[1], apdu[2], apdu[3], apdu[4], apdu.len()
+                "[SE050] TX INS={:02x} P1={:02x} P2={:02x} Lc={:02x} obj=0x{:08x} len={}",
+                apdu[1], apdu[2], apdu[3], apdu[4], obj_id, apdu.len()
             );
         }
     }
@@ -401,7 +405,7 @@ pub unsafe fn mac_oneshot(
     apdu[0] = 0x80;
     apdu[1] = INS_CRYPTO;
     apdu[2] = P1_MAC;
-    apdu[3] = P2_GENERATE; // Generate MAC (0x03)
+    apdu[3] = P2_GENERATE_ONESHOT;
 
     let mut o = 5;
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, key_object_id);
@@ -409,8 +413,7 @@ pub unsafe fn mac_oneshot(
     o = tlv_put(&mut apdu, o, TAG_3, data); // data to MAC
     let lc = o - 5;
     apdu[4] = lc as u8;
-    // Append Le=0x00 (expect response data — the MAC result)
-    apdu[o] = 0x00;
+    apdu[o] = 0x00; // Le: expect MAC result
     o += 1;
 
     let mut resp = [0u8; 128];
