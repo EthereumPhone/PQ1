@@ -31,7 +31,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e e2e-hw build-hw flash-hw test test-unit test-solidity
+.PHONY: all clean secure nonsecure run play run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity
 
 all: secure nonsecure
 
@@ -223,8 +223,31 @@ e2e-hw:
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running e2e on hardware (Ctrl-C to abort)..."
-	@probe-rs reset --chip STM32U585AIIx
-	@probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# Same e2e suite on real STM32U585, but with OLED display output.
+# The SSD1306 128x64 OLED is driven via I2C1 (PB8=SCL, PB9=SDA).
+# Uses ui-oled instead of ui-semihosting so the UI renders on the
+# physical display rather than the probe-rs console.
+# Requires: ST-LINK connected, SSD1306 OLED wired to PB8/PB9/3V3/GND.
+e2e-hw-display:
+	@echo "==> Building e2e + stm32u585 + OLED display"
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+		cargo build --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-oled,e2e-test,stm32u585
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running e2e on hardware with OLED display (Ctrl-C to abort)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 # Real STM32U585 hardware build with USB HID host communication.
 # Uses mock SE + semihosting debug output + USB transport.

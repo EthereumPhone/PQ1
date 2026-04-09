@@ -233,6 +233,8 @@ fn main() -> ! {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
         hw::rng::init();
+        #[cfg(feature = "ui-oled")]
+        hw::i2c::init(mhz);
         secure_log!("[S] RCC: {} MHz + HSI48 + TRNG configured", mhz);
     }
 

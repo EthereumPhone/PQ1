@@ -11,6 +11,9 @@ pub mod rcc;
 #[cfg(feature = "stm32u585")]
 pub mod rng;
 
+#[cfg(all(feature = "stm32u585", feature = "ui-oled"))]
+pub mod i2c;
+
 #[cfg(all(feature = "stm32u585", feature = "usb"))]
 pub mod usb_hw;
 
