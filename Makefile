@@ -173,16 +173,10 @@ e2e:
 	echo "===================================="; \
 	fail=0; \
 	for line in \
-		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ValueTransfer" \
-		"\\[S\\]\\[e2e\\] cmd_sign dispatch = Erc20Known" \
-		"\\[S\\]\\[e2e\\] cmd_sign dispatch = ContractCall" \
 		"\\[S\\]\\[e2e\\] cmd_clear_sign dispatch = ZkClearSign" \
 		"\\[S\\]\\[e2e\\] cmd_clear_sign_msg dispatch = ZkClearSignMsg" \
 		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = ValueTransfer" \
 		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = Erc20Known" \
-		"\\[E2E\\] value_transfer = PASS" \
-		"\\[E2E\\] erc20_known = PASS" \
-		"\\[E2E\\] blind_sign = PASS" \
 		"\\[E2E\\] zk_clear_sign = PASS" \
 		"\\[E2E\\] cowswap_pre_sign = PASS" \
 		"\\[E2E\\] cowswap_eip712_order = PASS" \

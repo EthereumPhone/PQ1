@@ -24,9 +24,9 @@
 //! | 1  | GET_REMAINING   | —                                        | reads chip; returns u32 |
 //! | 2  | REQUEST_UNLOCK  | —                                        | secure UI prompts for PIN |
 //! | 3  | GET_PUBKEY      | out_ptr, out_len                         | reads slot 2 |
-//! | 4  | SIGN            | unsigned_tx_ptr, sig_out_ptr, total_len  | parse → confirm → sign |
-//! | 5  | CLEAR_SIGN      | payload_ptr, sig_out_ptr, total_len      | ZK verify → display → sign |
+//! | 5  | CLEAR_SIGN      | payload_ptr, sig_out_ptr, total_len      | ZK verify → display → UserOp sign |
 //! | 6  | CLEAR_SIGN_MSG  | payload_ptr, sig_out_ptr, total_len      | ZK verify → EIP-712 → sign |
+//! | 7  | SIGN_USEROP     | payload_ptr, sig_out_ptr, total_len      | parse AA + inner tx → confirm → UserOp sign |
 //!
 //! ## Layout
 //!
@@ -42,24 +42,27 @@
 //!   * [`ptr_validate`]  — NS SRAM/flash pointer + length validators.
 //!   * [`sign_and_emit`] — shared "decrypt entropy → derive SK → hedged
 //!     SLH-DSA sign → write to NS" tail used by every signing command.
+//!   * [`userop_tail`]  — shared "reconstruct execute() callData →
+//!     compute userOpHash → decrypt_and_sign" tail used by every
+//!     UserOp signing command.
 //!   * [`cmd_get_remaining`], [`cmd_request_unlock`], [`cmd_get_pubkey`],
-//!     [`cmd_sign`], [`cmd_clear_sign`], [`cmd_clear_sign_msg`].
+//!     [`cmd_clear_sign`], [`cmd_clear_sign_msg`], [`cmd_sign_userop`].
 
 mod cmd_clear_sign;
 mod cmd_clear_sign_msg;
 mod cmd_get_pubkey;
 mod cmd_get_remaining;
 mod cmd_request_unlock;
-mod cmd_sign;
 mod cmd_sign_userop;
 mod ptr_validate;
 mod sign_and_emit;
 mod state;
+mod userop_tail;
 
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
     NscStatus, CMD_CLEAR_SIGN, CMD_CLEAR_SIGN_MSG, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_NONE,
-    CMD_REQUEST_UNLOCK, CMD_SIGN, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
+    CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -167,7 +170,6 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_GET_REMAINING => cmd_get_remaining::run(),
         CMD_REQUEST_UNLOCK => cmd_request_unlock::run(),
         CMD_GET_PUBKEY => cmd_get_pubkey::run(args),
-        CMD_SIGN => cmd_sign::run(args),
         CMD_CLEAR_SIGN => cmd_clear_sign::run(args),
         CMD_CLEAR_SIGN_MSG => cmd_clear_sign_msg::run(args),
         CMD_SIGN_USEROP => cmd_sign_userop::run(args),
@@ -214,19 +216,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_pubkey(out_ptr: u32, out_len: u32) 
     unsafe { cmd_get_pubkey::run(&args) }
 }
 
-/// CMD_SIGN — parse EIP-1559 envelope, confirm, sign.
-#[cfg(feature = "stm32u585")]
-#[no_mangle]
-pub extern "cmse-nonsecure-entry" fn nsc_sign(
-    payload_ptr: u32,
-    sig_out_ptr: u32,
-    total_len: u32,
-) -> u32 {
-    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
-    unsafe { cmd_sign::run(&args) }
-}
-
-/// CMD_CLEAR_SIGN — ZK-verified calldata clear signing.
+/// CMD_CLEAR_SIGN — ZK-verified calldata clear signing (UserOp).
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_clear_sign(

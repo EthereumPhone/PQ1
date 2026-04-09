@@ -32,7 +32,6 @@ mod transport {
     const CMD_GET_REMAINING: u32 = 1;
     const CMD_REQUEST_UNLOCK: u32 = 2;
     const CMD_GET_PUBKEY: u32 = 3;
-    const CMD_SIGN: u32 = 4;
     const CMD_CLEAR_SIGN: u32 = 5;
     const CMD_CLEAR_SIGN_MSG: u32 = 6;
     const CMD_SIGN_USEROP: u32 = 7;
@@ -63,11 +62,6 @@ mod transport {
     #[inline]
     pub(super) fn get_pubkey(out_ptr: *mut u8, out_len: u32) -> u32 {
         unsafe { gateway_call(CMD_GET_PUBKEY, 0, out_ptr as u32, out_len) }
-    }
-
-    #[inline]
-    pub(super) fn sign_call(payload_ptr: *const u8, sig_ptr: *mut u8, total_len: u32) -> u32 {
-        unsafe { gateway_call(CMD_SIGN, payload_ptr as u32, sig_ptr as u32, total_len) }
     }
 
     #[inline]
@@ -117,7 +111,6 @@ mod transport {
         fn nsc_get_remaining_attempts() -> u32;
         fn nsc_request_unlock() -> u32;
         fn nsc_get_pubkey(out_ptr: u32, out_len: u32) -> u32;
-        fn nsc_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_clear_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_clear_sign_msg(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
@@ -136,11 +129,6 @@ mod transport {
     #[inline]
     pub(super) fn get_pubkey(out_ptr: *mut u8, out_len: u32) -> u32 {
         unsafe { nsc_get_pubkey(out_ptr as u32, out_len) }
-    }
-
-    #[inline]
-    pub(super) fn sign_call(payload_ptr: *const u8, sig_ptr: *mut u8, total_len: u32) -> u32 {
-        unsafe { nsc_sign(payload_ptr as u32, sig_ptr as u32, total_len) }
     }
 
     #[inline]
@@ -189,72 +177,15 @@ pub fn get_pubkey(buf: &mut [u8; 32]) -> u32 {
     transport::get_pubkey(buf.as_mut_ptr(), 32)
 }
 
-/// Send a CMD_SIGN request whose payload is already laid out in the
-/// new wrapper format expected by the secure world:
+/// ZK clear-sign (UserOp): forward a Groth16 proof + AA header + an
+/// inner EIP-1559 envelope + a Merkle-verified VK bundle for an
+/// Aave-style protocol. The secure world verifies the ZK proof,
+/// displays the circuit-attested readable string, reconstructs the
+/// `execute()` callData from the inner tx, computes the EntryPoint
+/// v0.6 `userOpHash`, and signs that hash with SLH-DSA.
 ///
-/// ```text
-///   [0]              has_bundle u8        (0 or 1)
-///   [1..5]           tx_len     u32 LE
-///   [5..5+tx_len]    EIP-1559 envelope
-///   [5+tx_len..]     optional [bundle_len u32 LE][bundle bytes]
-/// ```
-///
-/// Most callers should go through [`sign`] / [`sign_with_bundle`]
-/// rather than building this layout themselves.
-pub fn sign_raw(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
-    transport::sign_call(payload.as_ptr(), sig_buf.as_mut_ptr(), payload.len() as u32)
-}
-
-/// Sign an EIP-1559 envelope with no metadata bundle attached. The
-/// secure world will fall through to plain value-transfer rendering
-/// (or to BLIND SIGNING if calldata is non-empty and no bundle is
-/// supplied).
-pub fn sign(unsigned_tx: &[u8], sig_buf: &mut [u8], payload_buf: &mut [u8]) -> u32 {
-    let mut p = 0usize;
-    payload_buf[p] = 0u8; // has_bundle = false
-    p += 1;
-    let tx_len_bytes = (unsigned_tx.len() as u32).to_le_bytes();
-    payload_buf[p..p + 4].copy_from_slice(&tx_len_bytes);
-    p += 4;
-    payload_buf[p..p + unsigned_tx.len()].copy_from_slice(unsigned_tx);
-    p += unsigned_tx.len();
-    sign_raw(&payload_buf[..p], sig_buf)
-}
-
-/// Sign an EIP-1559 envelope and attach an ERC20 metadata bundle for
-/// the recipient contract. The bundle was already built by the
-/// non-secure DB lookup; the secure world Merkle-verifies it before
-/// trusting any of the bytes for trusted-UI display.
-pub fn sign_with_bundle(
-    unsigned_tx: &[u8],
-    bundle: &[u8],
-    sig_buf: &mut [u8],
-    payload_buf: &mut [u8],
-) -> u32 {
-    let mut p = 0usize;
-    payload_buf[p] = 1u8; // has_bundle = true
-    p += 1;
-    let tx_len_bytes = (unsigned_tx.len() as u32).to_le_bytes();
-    payload_buf[p..p + 4].copy_from_slice(&tx_len_bytes);
-    p += 4;
-    payload_buf[p..p + unsigned_tx.len()].copy_from_slice(unsigned_tx);
-    p += unsigned_tx.len();
-    let blen_bytes = (bundle.len() as u32).to_le_bytes();
-    payload_buf[p..p + 4].copy_from_slice(&blen_bytes);
-    p += 4;
-    payload_buf[p..p + bundle.len()].copy_from_slice(bundle);
-    p += bundle.len();
-    sign_raw(&payload_buf[..p], sig_buf)
-}
-
-/// ZK clear-sign: forward a Groth16 proof + a (Merkle-verified by S)
-/// VK bundle for an Aave-style protocol. The secure world walks the
-/// VK bundle's proof up to its embedded `VK_DB_ROOT`, runs Groth16
-/// verification with the verified VK, displays the
-/// circuit-attested readable string, and signs.
-///
-/// The fixed header layout (proof || calldata || readable || tx_len ||
-/// tx) is followed by `[bundle_len u32 LE][vk bundle bytes]`.
+/// Wire format: proof(384) || calldata(164) || readable(64) ||
+/// AA_HEADER(305) || tx_len(4) || tx || bundle_len(4) || vk_bundle.
 pub fn clear_sign(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
     transport::clear_sign_call(payload.as_ptr(), sig_buf.as_mut_ptr(), payload.len() as u32)
 }

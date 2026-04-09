@@ -29,19 +29,18 @@ use crate::{aa, erc20_db, nsc_api, vk_db};
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
     EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN, NscStatus,
-    SIGNATURE_LEN, USEROP_PREFIX_LEN, ZK_HEADER_LEN,
+    SIGNATURE_LEN, USEROP_PREFIX_LEN,
 };
 
 // === Scratch buffers ========================================================
 
 static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
 
-const SIGN_PAYLOAD_BUF_LEN: usize = 1 + 4 + 4096 + 4 + 1120 + 64;
-static mut SIGN_PAYLOAD_BUF: [u8; SIGN_PAYLOAD_BUF_LEN] = [0u8; SIGN_PAYLOAD_BUF_LEN];
-
 static mut ERC20_BUNDLE_BUF: [u8; 1120] = [0u8; 1120];
 
-const CLEAR_SIGN_BUF_LEN: usize = ZK_HEADER_LEN + 4096 + 4 + 2048;
+// Sized for the largest clear-sign payload: ZK header (921) + max tx
+// (4096) + bundle_len (4) + max VK bundle (2048).
+const CLEAR_SIGN_BUF_LEN: usize = 921 + 4096 + 4 + 2048;
 static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
 
 static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
@@ -183,28 +182,6 @@ static SCENARIO_USDC_TRANSFER: [u8; 113] = [
 const USDC_MAINNET_ADDR: [u8; 20] = [
     0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1,
     0x9d, 0x4a, 0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
-];
-
-// === Scenario 3: arbitrary contract call (BLIND SIGNING) ====================
-//
-// chain_id = 1, to = Uniswap V2 Router 02, value = 0,
-// data = swapExactETHForTokens selector only (4 bytes). Selector
-// doesn't match any ERC20 method, and even if it did the contract is
-// not in the NS DB. Expected dispatch: `ContractCall`.
-static SCENARIO_BLIND_SIGN: [u8; 47] = [
-    0x02,
-    0xed,                                                       // outer list, short form, 45 bytes
-    0x01,                                                       // chain_id = 1
-    0x80,                                                       // nonce = 0
-    0x84, 0x77, 0x35, 0x94, 0x00,                               // max_priority = 2 gwei
-    0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00,                         // max_fee = 50 gwei
-    0x83, 0x01, 0x86, 0xa0,                                     // gas_limit = 100000
-    0x94, 0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53, 0x97,
-    0x39, 0xdf, 0x2c, 0x5d, 0xac, 0xb4, 0xc6, 0x59, 0xf2, 0x48,
-    0x8d,                                                       // to = Uniswap V2 Router 02
-    0x80,                                                       // value = 0
-    0x84, 0x7f, 0xf3, 0x6a, 0xb5,                               // data: 4-byte swap selector
-    0xc0,                                                       // access_list = empty
 ];
 
 // === Scenario 4: ZK clear-sign (Aave V3 supply) =============================
@@ -562,46 +539,7 @@ fn main() -> ! {
     let mut pass_count = 0u32;
     let mut fail_count = 0u32;
 
-    // ----- Scenario 1: simple ETH value transfer -----
-    {
-        let status = unsafe {
-            nsc_api::sign(&SCENARIO_VALUE_TRANSFER, &mut SIG_BUF, &mut SIGN_PAYLOAD_BUF)
-        };
-        report("value_transfer", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 2: ERC20 transfer (USDC mainnet, in NS DB) -----
-    {
-        let bundle_len = unsafe {
-            erc20_db::build_bundle(1, &USDC_MAINNET_ADDR, &mut ERC20_BUNDLE_BUF)
-        };
-        let status = match bundle_len {
-            Some(n) => unsafe {
-                let bundle = &ERC20_BUNDLE_BUF[..n];
-                nsc_api::sign_with_bundle(
-                    &SCENARIO_USDC_TRANSFER,
-                    bundle,
-                    &mut SIG_BUF,
-                    &mut SIGN_PAYLOAD_BUF,
-                )
-            },
-            None => {
-                hprintln!("[E2E] erc20_known: NS DB lookup MISS for USDC mainnet");
-                NscStatus::CryptoError as u32
-            }
-        };
-        report("erc20_known", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 3: arbitrary contract call → BLIND SIGNING -----
-    {
-        let status = unsafe {
-            nsc_api::sign(&SCENARIO_BLIND_SIGN, &mut SIG_BUF, &mut SIGN_PAYLOAD_BUF)
-        };
-        report("blind_sign", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 4: ZK clear-sign (Aave V3 supply) -----
+    // ----- Scenario 1: ZK clear-sign (Aave V3 supply) -----
     {
         let bundle_len = unsafe {
             vk_db::build_bundle(1, &AAVE_V3_POOL_MAINNET, &mut VK_BUNDLE_BUF)
@@ -609,21 +547,15 @@ fn main() -> ! {
         let status = match bundle_len {
             Some(n) => unsafe {
                 let vk_bundle = &VK_BUNDLE_BUF[..n];
-                let mut p = 0usize;
-                CLEAR_SIGN_BUF[p..p + 384].copy_from_slice(&AAVE_PROOF);
-                p += 384;
-                CLEAR_SIGN_BUF[p..p + 164].copy_from_slice(&AAVE_CALLDATA);
-                p += 164;
-                CLEAR_SIGN_BUF[p..p + 64].copy_from_slice(&AAVE_READABLE);
-                p += 64;
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(AAVE_TX.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + AAVE_TX.len()].copy_from_slice(&AAVE_TX);
-                p += AAVE_TX.len();
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
-                p += vk_bundle.len();
+                let p = aa::build_clear_sign_userop_payload(
+                    &aa_wrapper(),
+                    &AAVE_PROOF,
+                    &AAVE_CALLDATA,
+                    &AAVE_READABLE,
+                    &AAVE_TX,
+                    vk_bundle,
+                    &mut CLEAR_SIGN_BUF,
+                );
                 nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF)
             },
             None => {
@@ -634,7 +566,7 @@ fn main() -> ! {
         report("zk_clear_sign", status, &mut pass_count, &mut fail_count);
     }
 
-    // ----- Scenario 5: ZK clear-sign (CowSwap setPreSignature) -----
+    // ----- Scenario 2: ZK clear-sign (CowSwap setPreSignature) -----
     {
         let bundle_len = unsafe {
             vk_db::build_bundle(1, &COWSWAP_GPV2_SETTLEMENT_MAINNET, &mut VK_BUNDLE_BUF)
@@ -642,21 +574,15 @@ fn main() -> ! {
         let status = match bundle_len {
             Some(n) => unsafe {
                 let vk_bundle = &VK_BUNDLE_BUF[..n];
-                let mut p = 0usize;
-                CLEAR_SIGN_BUF[p..p + 384].copy_from_slice(&COWSWAP_PROOF);
-                p += 384;
-                CLEAR_SIGN_BUF[p..p + 164].copy_from_slice(&COWSWAP_CALLDATA);
-                p += 164;
-                CLEAR_SIGN_BUF[p..p + 64].copy_from_slice(&COWSWAP_READABLE);
-                p += 64;
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(COWSWAP_TX.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + COWSWAP_TX.len()].copy_from_slice(&COWSWAP_TX);
-                p += COWSWAP_TX.len();
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
-                p += vk_bundle.len();
+                let p = aa::build_clear_sign_userop_payload(
+                    &aa_wrapper(),
+                    &COWSWAP_PROOF,
+                    &COWSWAP_CALLDATA,
+                    &COWSWAP_READABLE,
+                    &COWSWAP_TX,
+                    vk_bundle,
+                    &mut CLEAR_SIGN_BUF,
+                );
                 nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF)
             },
             None => {

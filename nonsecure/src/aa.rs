@@ -94,6 +94,78 @@ pub fn build_userop_payload_with_bundle(
     need
 }
 
+/// Pack a ZK clear-sign payload with AA header for UserOp signing.
+///
+/// Wire format:
+///   proof(384) || calldata(164) || readable(64) ||
+///   AA_HEADER(305, has_bundle=0) || tx_len(4) || tx ||
+///   bundle_len(4) || vk_bundle
+///
+/// Returns the number of bytes written to `out`.
+pub fn build_clear_sign_userop_payload(
+    wrap: &UserOpWrapper<'_>,
+    proof: &[u8],
+    calldata: &[u8],
+    readable: &[u8],
+    unsigned_tx: &[u8],
+    vk_bundle: &[u8],
+    out: &mut [u8],
+) -> usize {
+    use sphincs_tz_shared::{ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN};
+
+    let need = ZK_PROOF_LEN
+        + ZK_MAX_CALLDATA
+        + ZK_STRING_LEN
+        + USEROP_HEADER_LEN
+        + 4
+        + unsigned_tx.len()
+        + 4
+        + vk_bundle.len();
+    assert!(out.len() >= need, "build_clear_sign_userop_payload: out too small");
+
+    let mut p = 0usize;
+
+    // ZK header: proof, calldata, readable
+    assert_eq!(proof.len(), ZK_PROOF_LEN);
+    out[p..p + ZK_PROOF_LEN].copy_from_slice(proof);
+    p += ZK_PROOF_LEN;
+
+    assert!(calldata.len() <= ZK_MAX_CALLDATA);
+    out[p..p + calldata.len()].copy_from_slice(calldata);
+    // Zero-pad to ZK_MAX_CALLDATA
+    for b in &mut out[p + calldata.len()..p + ZK_MAX_CALLDATA] {
+        *b = 0;
+    }
+    p += ZK_MAX_CALLDATA;
+
+    assert!(readable.len() <= ZK_STRING_LEN);
+    out[p..p + readable.len()].copy_from_slice(readable);
+    for b in &mut out[p + readable.len()..p + ZK_STRING_LEN] {
+        *b = 0;
+    }
+    p += ZK_STRING_LEN;
+
+    // AA header (has_bundle = 0)
+    out[p] = 0u8;
+    write_header(wrap, &mut out[p..p + USEROP_HEADER_LEN]);
+    p += USEROP_HEADER_LEN;
+
+    // tx_len + tx
+    out[p..p + 4].copy_from_slice(&(unsigned_tx.len() as u32).to_le_bytes());
+    p += 4;
+    out[p..p + unsigned_tx.len()].copy_from_slice(unsigned_tx);
+    p += unsigned_tx.len();
+
+    // VK bundle
+    out[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
+    p += 4;
+    out[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
+    p += vk_bundle.len();
+
+    debug_assert_eq!(p, need);
+    p
+}
+
 fn write_header(w: &UserOpWrapper<'_>, out: &mut [u8]) {
     debug_assert_eq!(out.len(), USEROP_HEADER_LEN);
     let mut p = 1usize; // skip has_bundle

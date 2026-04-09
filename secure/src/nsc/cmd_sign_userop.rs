@@ -34,14 +34,11 @@ use sphincs_tz_shared::{
 };
 
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
-use super::sign_and_emit::decrypt_and_sign;
-use super::{state, GatewayArgs};
+use super::GatewayArgs;
 use crate::ui;
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
-    use crate::aa::userop::{
-        compute_user_op_hash, parse_header, reconstruct_execute_calldata,
-    };
+    use crate::aa::userop::parse_header;
     use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
     use crate::erc20::{dispatch_tx, TxKind};
     use crate::tx::{
@@ -50,11 +47,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             render_erc20_unknown_pages, render_pages,
         },
         eip1559,
-        hash::keccak256,
     };
     use crate::ui::confirm::{confirm, ConfirmResult};
 
-    if !state::peek_state(|s| s.pin_verified) {
+    if !super::state::peek_state(|s| s.pin_verified) {
         return NscStatus::NotInitialized as u32;
     }
 
@@ -210,34 +206,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // 8. Reconstruct the canonical `execute(target, value, data)`
-    //    callData from the inner tx the user just confirmed. This is
-    //    what the EntryPoint will pass to `userOp.sender.call(...)` on
-    //    chain.
-    let exec_call = match reconstruct_execute_calldata(&parsed.tx, parsed.data) {
-        Ok(c) => c,
-        Err(_) => {
-            ui::show_status("UserOp", "encode fail");
-            return NscStatus::CryptoError as u32;
-        }
-    };
-    let call_data_hash = keccak256(exec_call.as_slice());
-
-    // 9. Compute userOpHash from the trusted reconstruction + the
-    //    NS-supplied AA wrapper params.
-    let user_op_hash = compute_user_op_hash(&aa, &call_data_hash);
-
-    #[cfg(feature = "e2e-test")]
-    {
-        cortex_m_semihosting::hprintln!(
-            "[S][e2e] cmd_sign_userop userOpHash[..4] = {:02x}{:02x}{:02x}{:02x}",
-            user_op_hash[0], user_op_hash[1], user_op_hash[2], user_op_hash[3]
-        );
-    }
-
-    ui::show_status("Signing UserOp", "");
-
-    // 10. Hand off to the shared "decrypt entropy → derive SK → hedged
-    //     SLH-DSA sign → write to NS" tail.
-    state::peek_state(|s| decrypt_and_sign(s, &user_op_hash, sig_ptr, "Signed"))
+    // 8. Hand off to the shared UserOp signing tail: reconstruct
+    //    execute() callData, compute userOpHash, sign with SLH-DSA.
+    super::userop_tail::sign_userop_hash(&aa, &parsed.tx, parsed.data, sig_ptr, "Signed")
 }

@@ -39,23 +39,17 @@ pub const ZK_PROOF_LEN: usize = 384;
 /// into the firmware DB by `dbgen`.
 pub const ZK_VK_LEN: usize = 960;
 
-/// Total size of the fixed portion of a clear-sign request payload in NS SRAM.
+/// Total size of the fixed portion of a clear-sign request payload.
 ///
-/// The VK is no longer supplied by NS — the secure world looks it up
-/// from its embedded VK DB by `(chain_id, to)` after parsing the tx
-/// envelope. The trust anchor is the firmware-signing key: the release
-/// reviewer diffs `secure/data/vks.review.txt` against the previous
-/// release before signing. Fully offline — no on-chain lookups
-/// anywhere in the project.
-///
-/// Layout:
-///   [0..384)                     : Groth16 proof (π.A || π.B || π.C)
-///   [384..548)                   : calldata (164 bytes, right-zero-padded)
-///   [548..612)                   : readable string (64 bytes, null-padded)
-///   [612..616)                   : tx_len (u32 little-endian)
-///   [616..616+tx_len)            : unsigned EIP-1559 transaction envelope
+/// Layout (v2 — includes AA header for UserOp signing):
+///   [0..384)                               : Groth16 proof (π.A || π.B || π.C)
+///   [384..548)                             : calldata (164 bytes, right-zero-padded)
+///   [548..612)                             : readable string (64 bytes, null-padded)
+///   [612..612+USEROP_HEADER_LEN)           : AA header (same as CMD_SIGN_USEROP)
+///   [612+USEROP_HEADER_LEN..+4)            : tx_len (u32 little-endian)
+///   [612+USEROP_HEADER_LEN+4..+tx_len)     : unsigned EIP-1559 transaction envelope
 pub const ZK_HEADER_LEN: usize =
-    ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + 4;
+    ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + USEROP_HEADER_LEN + 4;
 
 // ---------------------------------------------------------------------------
 // Non-secure memory boundaries — used by secure world to validate NS pointers.
@@ -97,7 +91,6 @@ pub const CMD_NONE: u32 = 0;
 pub const CMD_GET_REMAINING: u32 = 1;
 pub const CMD_REQUEST_UNLOCK: u32 = 2;
 pub const CMD_GET_PUBKEY: u32 = 3;
-pub const CMD_SIGN: u32 = 4;
 pub const CMD_CLEAR_SIGN: u32 = 5;
 /// CMD_CLEAR_SIGN_MSG — EIP-712 typed-data clear signing (M4).
 ///

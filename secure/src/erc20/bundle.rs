@@ -1,5 +1,5 @@
 //! Wire format and verifier for the ERC20 metadata bundle that the
-//! non-secure world attaches to a `CMD_SIGN` request when its local
+//! non-secure world attaches to a `CMD_SIGN_USEROP` request when its local
 //! ERC20 DB has a hit on `(chain_id, contract)`.
 //!
 //! The bundle is what makes "trust the firmware DB" meet "store the

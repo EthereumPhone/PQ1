@@ -15,10 +15,7 @@ use panic_semihosting as _;
 #[cfg(not(feature = "e2e-test"))]
 use cortex_m_semihosting::{debug, hprintln};
 #[cfg(not(feature = "e2e-test"))]
-use sphincs_tz_shared::{
-    NscStatus, SIGNATURE_LEN, VERIFYING_KEY_LEN, ZK_HEADER_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN,
-    ZK_STRING_LEN,
-};
+use sphincs_tz_shared::{NscStatus, SIGNATURE_LEN, USEROP_PREFIX_LEN, VERIFYING_KEY_LEN};
 
 mod aa;
 mod erc20_db;
@@ -31,21 +28,15 @@ mod vk_db;
 #[cfg(not(feature = "e2e-test"))]
 static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
 
-/// Scratch buffer for sign() payloads. Sized to hold:
-///   has_bundle (1) + tx_len (4) + max EIP-1559 tx + bundle_len (4) + max ERC20 bundle.
-/// MAX_TX_LEN (4096) + MAX_ERC20_BUNDLE_LEN (1120) + slop = ~5300 bytes.
+/// Scratch buffer for ERC-4337 UserOp signing payloads.
 #[cfg(not(feature = "e2e-test"))]
-const SIGN_PAYLOAD_BUF_LEN: usize = 1 + 4 + 4096 + 4 + 1120 + 64;
+const USEROP_PAYLOAD_BUF_LEN: usize = USEROP_PREFIX_LEN + 4096 + 4 + 1120 + 64;
 #[cfg(not(feature = "e2e-test"))]
-static mut SIGN_PAYLOAD_BUF: [u8; SIGN_PAYLOAD_BUF_LEN] = [0u8; SIGN_PAYLOAD_BUF_LEN];
+static mut USEROP_PAYLOAD_BUF: [u8; USEROP_PAYLOAD_BUF_LEN] = [0u8; USEROP_PAYLOAD_BUF_LEN];
 
-/// Scratch buffer for an ERC20 bundle assembled by the NS-side DB lookup.
+/// Scratch buffer for a clear-sign payload (ZK header + AA header + tx + VK bundle).
 #[cfg(not(feature = "e2e-test"))]
-static mut ERC20_BUNDLE_BUF: [u8; 1120] = [0u8; 1120];
-
-/// Scratch buffer for a clear-sign payload (header + tx + length-prefixed VK bundle).
-#[cfg(not(feature = "e2e-test"))]
-const CLEAR_SIGN_BUF_LEN: usize = ZK_HEADER_LEN + 4096 + 4 + 2048;
+const CLEAR_SIGN_BUF_LEN: usize = 921 + 4096 + 4 + 2048;
 #[cfg(not(feature = "e2e-test"))]
 static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
 
@@ -113,18 +104,51 @@ fn main() -> ! {
     hprintln!("[NS] Unlock: {:?}", NscStatus::from(status));
     assert_eq!(status, NscStatus::Ok as u32);
 
-    // Test 4: Sign an EIP-1559 transaction (plain ETH transfer; no
-    // calldata, so no metadata bundle needed). Wraps the tx in the
-    // new (has_bundle = 0) wrapper.
-    hprintln!("[NS] Sending EIP-1559 envelope ({} bytes) for signing...", UNSIGNED_TX.len());
+    // Test 4: Sign an EIP-1559 transaction as an ERC-4337 UserOp.
+    // The secure world parses the inner tx, displays it, reconstructs
+    // execute() callData, computes userOpHash, and signs with SLH-DSA.
+    hprintln!("[NS] Wrapping EIP-1559 envelope as UserOp for signing...");
     hprintln!("[NS]   On the trusted UI, scroll with 'l' / 'h', long-press 'L' to confirm");
-    let status = unsafe { nsc_api::sign(&UNSIGNED_TX, &mut SIG_BUF, &mut SIGN_PAYLOAD_BUF) };
-    hprintln!("[NS] Sign: {:?}", NscStatus::from(status));
-    assert_eq!(status, NscStatus::Ok as u32);
-    hprintln!("[NS] Sig[0..8]: {:02x?}", unsafe { &SIG_BUF[..8] });
-    hprintln!("[NS] Sig len: {} bytes", SIGNATURE_LEN);
+    {
+        let wrap = aa::UserOpWrapper {
+            sender: &[0x42; 20],
+            entry_point: &[
+                0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+                0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
+            ],
+            chain_id: 1,
+            nonce: &{ let mut n = [0u8; 32]; n[31] = 1; n },
+            call_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x01; v[30] = 0x86; v[31] = 0xa0; v },
+            verification_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x03; v[30] = 0x0d; v[31] = 0x40; v },
+            pre_verification_gas: &{ let mut v = [0u8; 32]; v[30] = 0x52; v[31] = 0x08; v },
+            max_fee_per_gas: &{
+                let mut v = [0u8; 32];
+                let b = 50_000_000_000u64.to_be_bytes();
+                v[24..32].copy_from_slice(&b); v
+            },
+            max_priority_fee_per_gas: &{
+                let mut v = [0u8; 32];
+                let b = 2_000_000_000u64.to_be_bytes();
+                v[24..32].copy_from_slice(&b); v
+            },
+            init_code_hash: &aa::KECCAK_EMPTY,
+            paymaster_and_data_hash: &aa::KECCAK_EMPTY,
+        };
+        let payload_len = unsafe {
+            aa::build_userop_payload(&wrap, &UNSIGNED_TX, &mut USEROP_PAYLOAD_BUF)
+        };
+        let status = unsafe {
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+        };
+        hprintln!("[NS] UserOp sign: {:?}", NscStatus::from(status));
+        assert_eq!(status, NscStatus::Ok as u32);
+        hprintln!("[NS] Sig[0..8]: {:02x?}", unsafe { &SIG_BUF[..8] });
+        hprintln!("[NS] Sig len: {} bytes", SIGNATURE_LEN);
+    }
 
-    // Test 5: ZK Clear Sign — verify Groth16 proof, display ZK-verified string, sign
+    // Test 5: ZK Clear Sign — verify Groth16 proof, display ZK-verified
+    // string, then sign as UserOp (reconstruct execute() callData,
+    // compute userOpHash, sign with SLH-DSA).
     hprintln!("[NS] Testing ZK clear signing (Aave V3 supply 1000 USDC)...");
     hprintln!("[NS]   This verifies a Groth16 proof that the displayed string");
     hprintln!("[NS]   faithfully represents the Aave calldata being signed.");
@@ -132,7 +156,6 @@ fn main() -> ! {
         // Groth16 proof (π.A || π.B || π.C) from ZKlarity proof_supply.json
         #[rustfmt::skip]
         static PROOF: [u8; 384] = [
-            // π.A (G1, 96 bytes)
             0x0d, 0x5f, 0xe2, 0xf5, 0x09, 0x8c, 0x66, 0x6c, 0x7f, 0xb4, 0x09, 0xba,
             0xe4, 0x69, 0xa8, 0x85, 0xc9, 0x0b, 0x81, 0x7e, 0x0f, 0x3b, 0x54, 0x33,
             0x24, 0x7d, 0x3d, 0xb2, 0x0d, 0x2f, 0xb7, 0xd5, 0x21, 0xc0, 0x29, 0xa0,
@@ -141,7 +164,6 @@ fn main() -> ! {
             0x6d, 0x27, 0x51, 0x0c, 0x19, 0xee, 0xcd, 0xd8, 0x36, 0x4d, 0xc1, 0x6c,
             0x3b, 0xb1, 0x4d, 0x5d, 0x4b, 0x15, 0x6c, 0x9d, 0xa5, 0xff, 0x8a, 0x3e,
             0x68, 0xf9, 0x76, 0x9c, 0xb8, 0x05, 0x6e, 0x2e, 0x01, 0x74, 0x81, 0xaa,
-            // π.B (G2, 192 bytes)
             0x04, 0x99, 0xb1, 0x98, 0xae, 0x51, 0x4d, 0x30, 0x79, 0x11, 0x53, 0x79,
             0x00, 0x36, 0xf9, 0xa0, 0x1d, 0xdc, 0x9d, 0x94, 0x70, 0x89, 0x89, 0xaa,
             0x61, 0x84, 0xe0, 0xd9, 0xc5, 0x0e, 0x85, 0x83, 0x82, 0x56, 0x80, 0x12,
@@ -158,7 +180,6 @@ fn main() -> ! {
             0x50, 0xea, 0xf6, 0x11, 0xd7, 0x7d, 0x2f, 0x13, 0xa3, 0xc8, 0x09, 0x3c,
             0x2b, 0x17, 0x21, 0x64, 0xdd, 0xef, 0x14, 0x7d, 0x06, 0x77, 0xa7, 0x7e,
             0xb9, 0x0e, 0xd3, 0x4a, 0x17, 0x37, 0x1a, 0xb7, 0xc6, 0x69, 0xb9, 0xcd,
-            // π.C (G1, 96 bytes)
             0x0f, 0x11, 0xcd, 0x45, 0x15, 0x10, 0xec, 0x5e, 0x92, 0x6a, 0x46, 0x9d,
             0x1b, 0xab, 0x95, 0xc2, 0xe6, 0xf3, 0xe9, 0xe2, 0x85, 0xb8, 0x05, 0x80,
             0x15, 0x06, 0x55, 0x72, 0x75, 0x52, 0x0e, 0x27, 0xfa, 0x7f, 0x37, 0x72,
@@ -169,32 +190,28 @@ fn main() -> ! {
             0x37, 0xe2, 0x0b, 0x79, 0x96, 0x62, 0x7b, 0x01, 0x38, 0xb7, 0x6a, 0x2c,
         ];
 
-        // Aave V3 supply(1000 USDC) calldata, padded to 164 bytes
         #[rustfmt::skip]
         static CALLDATA: [u8; 164] = [
-            0x61, 0x7b, 0xa0, 0x37, // selector: supply(address,uint256,address,uint16)
+            0x61, 0x7b, 0xa0, 0x37,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, // asset = USDC
+            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x3b, 0x9a, 0xca, 0x00, // amount = 1000 USDC
+            0x00, 0x00, 0x00, 0x00, 0x3b, 0x9a, 0xca, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
-            0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e, // onBehalfOf
+            0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // referralCode = 0
-            // Padding to 164 bytes (MAX_CALLDATA)
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        // Human-readable string (ZK-verified to match calldata)
         #[rustfmt::skip]
         static READABLE: [u8; 64] = [
-            // "Supply 0000001000.000000000000000000 USDC" + null padding
             0x53, 0x75, 0x70, 0x70, 0x6c, 0x79, 0x20, 0x30, 0x30, 0x30, 0x30, 0x30,
             0x30, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
             0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
@@ -203,7 +220,6 @@ fn main() -> ! {
             0x00, 0x00, 0x00, 0x00,
         ];
 
-        // EIP-1559 unsigned tx envelope wrapping the Aave supply calldata
         #[rustfmt::skip]
         static TX: [u8; 177] = [
             0x02, 0xf8, 0xae, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00, 0x85, 0x0b,
@@ -223,42 +239,45 @@ fn main() -> ! {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
         ];
 
-        // The Aave V3 Pool address on Mainnet — this is what the
-        // EIP-1559 envelope above targets. The NS-side VK DB lookup
-        // keys on (chain_id=1, contract=AAVE_V3_POOL) and returns
-        // the matching VK bundle, which the secure world Merkle-
-        // verifies against its embedded VK_DB_ROOT.
-        const CHAIN_ID: u64 = 1;
         const AAVE_V3_POOL: [u8; 20] = [
             0x87, 0x87, 0x0b, 0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f,
             0x4c, 0xe8, 0x39, 0x2d, 0x69, 0x35, 0x0b, 0x4f, 0xa4, 0xe2,
         ];
 
+        let wrap = aa::UserOpWrapper {
+            sender: &[0x42; 20],
+            entry_point: &[
+                0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+                0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
+            ],
+            chain_id: 1,
+            nonce: &{ let mut n = [0u8; 32]; n[31] = 1; n },
+            call_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x01; v[30] = 0x86; v[31] = 0xa0; v },
+            verification_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x03; v[30] = 0x0d; v[31] = 0x40; v },
+            pre_verification_gas: &{ let mut v = [0u8; 32]; v[30] = 0x52; v[31] = 0x08; v },
+            max_fee_per_gas: &{
+                let mut v = [0u8; 32];
+                let b = 50_000_000_000u64.to_be_bytes();
+                v[24..32].copy_from_slice(&b); v
+            },
+            max_priority_fee_per_gas: &{
+                let mut v = [0u8; 32];
+                let b = 2_000_000_000u64.to_be_bytes();
+                v[24..32].copy_from_slice(&b); v
+            },
+            init_code_hash: &aa::KECCAK_EMPTY,
+            paymaster_and_data_hash: &aa::KECCAK_EMPTY,
+        };
+
         unsafe {
-            // 1. Build the VK bundle from the embedded NS-side DB.
-            let vk_bundle_len = vk_db::build_bundle(CHAIN_ID, &AAVE_V3_POOL, &mut VK_BUNDLE_BUF)
+            let vk_bundle_len = vk_db::build_bundle(1, &AAVE_V3_POOL, &mut VK_BUNDLE_BUF)
                 .expect("vk_db: aave v3 mainnet not found in DB");
             let vk_bundle = &VK_BUNDLE_BUF[..vk_bundle_len];
             hprintln!("[NS] VK bundle: {} bytes (Merkle-verified by S)", vk_bundle.len());
 
-            // 2. Assemble the clear-sign payload with the post-Merkle layout:
-            //    proof(384) + calldata(164) + readable(64) + tx_len(4) + tx + bundle_len(4) + vk_bundle
-            let mut p = 0usize;
-            CLEAR_SIGN_BUF[p..p + 384].copy_from_slice(&PROOF);
-            p += 384;
-            CLEAR_SIGN_BUF[p..p + 164].copy_from_slice(&CALLDATA);
-            p += 164;
-            CLEAR_SIGN_BUF[p..p + 64].copy_from_slice(&READABLE);
-            p += 64;
-            CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(TX.len() as u32).to_le_bytes());
-            p += 4;
-            CLEAR_SIGN_BUF[p..p + TX.len()].copy_from_slice(&TX);
-            p += TX.len();
-            CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
-            p += 4;
-            CLEAR_SIGN_BUF[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
-            p += vk_bundle.len();
-
+            let p = aa::build_clear_sign_userop_payload(
+                &wrap, &PROOF, &CALLDATA, &READABLE, &TX, vk_bundle, &mut CLEAR_SIGN_BUF,
+            );
             hprintln!("[NS] Clear sign payload: {} bytes", p);
             hprintln!("[NS]   On the trusted UI: ZK proof verification, then confirm");
             let status = nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF);
