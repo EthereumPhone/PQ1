@@ -152,6 +152,47 @@ pub const CMD_CLEAR_SIGN_MSG: u32 = 6;
 /// over `userOpHash` into the NS-supplied output buffer.
 pub const CMD_SIGN_USEROP: u32 = 7;
 
+/// CMD_GET_BOOTSTRAP_PUBKEY — return the 32-byte bootstrap signer's
+/// verifying key (derived from the global BIP-85 bootstrap path).
+///
+/// The bootstrap signer is a stateless PQ key used only for administrative
+/// operations (initial deployment on new chains, emergency rotation).
+///
+/// Args: out_ptr, out_len (same as CMD_GET_PUBKEY).
+pub const CMD_GET_BOOTSTRAP_PUBKEY: u32 = 8;
+
+/// CMD_GET_MAIN_PUBKEY — return the 32-byte main signer's verifying key
+/// for a specific chain and key epoch.
+///
+/// Args: out_ptr, out_len encoded in arg1/arg2; chain_id (u64 BE) and
+/// key_index (u32 BE) are passed in the payload buffer at arg0.
+///
+/// Payload at arg0:
+///   [0..8)   chain_id   (u64 BE)
+///   [8..12)  key_index  (u32 BE)
+///
+/// On success the secure world writes the 32-byte verifying key to the
+/// NS output buffer.
+pub const CMD_GET_MAIN_PUBKEY: u32 = 9;
+
+/// CMD_SIGN_BOOTSTRAP — sign a 32-byte message hash with the bootstrap
+/// signer. Used for factory deployment authorization and emergency
+/// rotation authorization.
+///
+/// Payload wire format:
+///   [0..32)  message hash (the bytes32 to sign)
+///
+/// On success the secure world writes a 17,088-byte SLH-DSA signature
+/// into the NS output buffer.
+pub const CMD_SIGN_BOOTSTRAP: u32 = 10;
+
+// ---------------------------------------------------------------------------
+// CMD_GET_MAIN_PUBKEY wire format
+// ---------------------------------------------------------------------------
+
+/// Length of the CMD_GET_MAIN_PUBKEY payload: chain_id (8) + key_index (4).
+pub const MAIN_PUBKEY_PAYLOAD_LEN: usize = 12;
+
 // ---------------------------------------------------------------------------
 // CMD_SIGN_USEROP fixed-header layout offsets
 // ---------------------------------------------------------------------------

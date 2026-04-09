@@ -12,53 +12,50 @@ import {ISLHDSAVerifier} from "./verifiers/ISLHDSAVerifier.sol";
 
 /// @title PQCoinbaseSmartWallet
 ///
-/// @notice ERC-4337-compatible smart account whose only authorised
-///         signer is a SPHINCS+ (SLH-DSA-SHA2-128f) post-quantum key.
+/// @notice ERC-4337-compatible smart account with a two-tier post-quantum
+///         signer architecture:
 ///
-///         This is a fork of `coinbase/smart-wallet`'s
-///         `CoinbaseSmartWallet.sol` with two surgical changes:
+///         - **Bootstrap signer**: stateless PQ key (ML-DSA-44 recommended)
+///           for administrative operations (deployment, emergency rotation).
+///           Never rotates.
+///         - **Main signer**: stateful hash-based PQ key (SPHINCS+ few-time
+///           or XMSS) for day-to-day transactions. Rotates every ~1M
+///           signatures. Per-chain and per-epoch.
 ///
-///           1. The {MultiOwnable} authentication scheme — which
-///              accepted both secp256k1 EOA owners and WebAuthn / P-256
-///              public-key owners — is replaced by {PQOwnable}, which
-///              tolerates exactly one owner key, identified by
-///              `sha256(slhdsa_pk)`. There is no fallback to a classical
-///              curve, no add-owner / remove-owner path, no recovery via
-///              guardian addresses. Once a quantum adversary appears, an
-///              account that still accepts a classical signature is
-///              indistinguishable from one that has no owner at all, so
-///              the entire fallback surface is removed.
-///
-///           2. {_isValidSignature} no longer dispatches on owner type
-///              or calls `SignatureCheckerLib`/`WebAuthn.verify`. It
-///              hands the (msgHash, signature) pair to the
-///              {ISLHDSAVerifier} configured at deploy time and accepts
-///              the signature iff that returns `true`.
+///         This is a fork of `coinbase/smart-wallet` modified for the
+///         two-tier PQ architecture described in the wallet design spec.
 ///
 ///         The signature wire format is:
 ///
-///             abi.encode(bytes pk, bytes sigBytes)
+///             abi.encode(PQSignatureWrapper)
 ///
-///         where `pk` is the 32-byte SLH-DSA verifying key (rechecked
-///         against the on-chain commitment via {PQOwnable.isOwnerKey})
-///         and `sigBytes` is the 17,088-byte SLH-DSA signature.
-///
-/// @dev Cross-chain replayable nonces (`REPLAYABLE_NONCE_KEY` /
-///      `executeWithoutChainIdValidation`) are intentionally KEPT from
-///      the upstream design — they were never about classical signing,
-///      they're a UX feature for syncing wallet state across chains
-///      that share an address. The PQ rewrite preserves the same
-///      replay-safe path with the same nonce key constant.
+///         where `PQSignatureWrapper` contains the signer type, key epoch,
+///         OTS index, public key, and signature bytes.
 ///
 /// @author PQSigner OS (forked from coinbase/smart-wallet)
 contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable, Receiver {
-    /// @notice ABI-encoded `(bytes pk, bytes sig)` carried in
+    /// @notice Signer type discriminator for the dual-path validation.
+    enum SignerType {
+        MAIN,
+        BOOTSTRAP
+    }
+
+    /// @notice ABI-encoded signature wrapper carried in
     ///         `UserOperation.signature`.
     struct PQSignatureWrapper {
-        /// @dev The 32-byte SLH-DSA verifying key. Must hash to
-        ///      {PQOwnable.ownerKeyHash}.
+        /// @dev Which signer path to use for validation.
+        SignerType signerType;
+        /// @dev The key epoch index. For MAIN signer, must match
+        ///      `currentKeyIndex`. Ignored for BOOTSTRAP.
+        uint32 keyIndex;
+        /// @dev The OTS leaf index. For MAIN signer, must match
+        ///      `currentOTSIndex`. Ignored for BOOTSTRAP.
+        uint32 otsIndex;
+        /// @dev The public key bytes. For MAIN, must hash (keccak256) to
+        ///      `currentMainPubKeyHash`. For BOOTSTRAP, must hash (sha256)
+        ///      to `bootstrapPubKeyHash`.
         bytes pk;
-        /// @dev The 17,088-byte SLH-DSA-SHA2-128f signature.
+        /// @dev The PQ signature bytes.
         bytes signature;
     }
 
@@ -72,13 +69,9 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
     /// @notice Reserved nonce key for cross-chain replayable user operations.
     uint256 public constant REPLAYABLE_NONCE_KEY = 8453;
 
-    /// @notice The verifier contract used to check SLH-DSA signatures.
-    ///
-    /// @dev Set at construction time and is read every `validateUserOp`
-    ///      call. The verifier is intentionally split out into a
-    ///      separate contract so a deployment can swap a Solidity
-    ///      reference verifier for a Groth16-wrapped or precompile
-    ///      version without redeploying the wallet.
+    /// @notice The verifier contract used to check SLH-DSA signatures
+    ///         (used for both main and bootstrap signers until ML-DSA
+    ///         verifier is available).
     ISLHDSAVerifier public immutable verifier;
 
     /// @notice Thrown when initialisation is attempted twice.
@@ -93,10 +86,6 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
 
     /// @notice Thrown when an upgrade target has no code.
     error InvalidImplementation(address implementation);
-
-    /// @notice Thrown when the signature wrapper carries a public key
-    ///         that does not match the on-chain commitment.
-    error WrongOwnerKey();
 
     /// @notice Reverts unless the caller is the EntryPoint.
     modifier onlyEntryPoint() virtual {
@@ -129,16 +118,33 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
         // proxies pointing at it can be. We initialise the implementation
         // with a sentinel hash so the slot is non-zero, blocking
         // re-initialisation through the implementation.
-        _initializeOwner(bytes32(uint256(1)));
+        _initializeOwner(bytes32(uint256(1)), bytes32(uint256(1)));
     }
 
-    /// @notice Initialises a freshly cloned proxy with its single
-    ///         SPHINCS+ owner.
+    /// @notice Initialises a freshly cloned proxy with its bootstrap
+    ///         and initial main signer.
     ///
-    /// @param ownerKeyHash_ `sha256(slhdsa_pk)` for the wallet's owner.
-    function initialize(bytes32 ownerKeyHash_) external payable virtual {
+    /// @param bootstrapPubKey The raw bootstrap public key bytes.
+    /// @param initialMainSigner The raw initial main signer public key bytes.
+    function initialize(
+        bytes calldata bootstrapPubKey,
+        bytes calldata initialMainSigner
+    ) external payable virtual {
         if (isInitialized()) revert Initialized();
-        _initializeOwner(ownerKeyHash_);
+        _initializeOwner(sha256(bootstrapPubKey), keccak256(initialMainSigner));
+    }
+
+    /// @notice Rotate the main signer to the next epoch. Can only be
+    ///         called via `execute(self, ...)` which requires EntryPoint
+    ///         validation (either main or bootstrap signer).
+    ///
+    /// @param newKeyIndex Must be `currentKeyIndex + 1`.
+    /// @param newMainPubKey The raw public key of the new main signer.
+    function rotateMainSigner(
+        uint32 newKeyIndex,
+        bytes calldata newMainPubKey
+    ) external virtual onlyOwner {
+        _rotateMainSigner(newKeyIndex, newMainPubKey);
     }
 
     /// @inheritdoc IAccount
@@ -172,10 +178,8 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
             if (key == REPLAYABLE_NONCE_KEY) revert InvalidNonceKey(key);
         }
 
-        // ERC-4337 returns 0 = success, 1 = signature failure. Anything
-        // else is an aggregator/timestamp packed validationData; we
-        // don't use those.
-        return _isValidSignature(userOpHash, userOp.signature) ? 0 : 1;
+        // State-mutating signature validation (OTS tracking for MAIN signer)
+        return _validateUserOpSignature(userOpHash, userOp.signature) ? 0 : 1;
     }
 
     /// @notice Executes a batch of self-calls without binding to a chain ID.
@@ -224,12 +228,6 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
     }
 
     /// @notice Selectors permitted in `executeWithoutChainIdValidation`.
-    ///
-    /// @dev Owner-management selectors from upstream are removed (the
-    ///      single SPHINCS+ owner is immutable). What remains is the
-    ///      upgrade selector, which still needs cross-chain replay so a
-    ///      single signed UserOp can roll out an implementation change
-    ///      to every chain the wallet is deployed on.
     function canSkipChainIdValidation(bytes4 functionSelector) public pure returns (bool) {
         return functionSelector == UUPSUpgradeable.upgradeToAndCall.selector;
     }
@@ -243,11 +241,45 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
         }
     }
 
+    /// @notice State-mutating signature validation for `validateUserOp`.
+    ///         Handles OTS index consumption for MAIN signer path.
+    function _validateUserOpSignature(bytes32 hash, bytes calldata signature)
+        internal
+        returns (bool)
+    {
+        PQSignatureWrapper memory w = abi.decode(signature, (PQSignatureWrapper));
+
+        if (w.signerType == SignerType.MAIN) {
+            // Validate main signer: check epoch, OTS, pubkey, then verify
+            if (w.keyIndex != currentKeyIndex()) return false;
+            if (w.otsIndex != currentOTSIndex()) return false;
+            if (w.otsIndex > MAX_OTS_INDEX) return false;
+            if (keccak256(w.pk) != currentMainPubKeyHash()) return false;
+            if (w.signature.length != 17_088) return false;
+            if (w.pk.length != 32) return false;
+
+            if (!verifier.verify(w.pk, hash, w.signature)) return false;
+
+            // Consume the OTS index atomically with validation success
+            _consumeOTS(w.otsIndex);
+            return true;
+
+        } else if (w.signerType == SignerType.BOOTSTRAP) {
+            // Bootstrap signer: stateless, no OTS tracking
+            return _verifyBootstrapSig(hash, w);
+        }
+
+        return false;
+    }
+
     /// @inheritdoc ERC1271
     ///
-    /// @dev The signature wire format is `abi.encode(bytes pk, bytes sig)`.
-    ///      The verifier is the immutable {verifier}; the public key
-    ///      must hash to the on-chain commitment.
+    /// @dev View-only signature validation for ERC-1271 (Safe/CowSwap).
+    ///      Supports both MAIN (read-only key check, no OTS consumption)
+    ///      and BOOTSTRAP signer paths. Since ERC-1271 is `view`, the
+    ///      OTS index is NOT consumed here — ERC-1271 callers should use
+    ///      pre-signature patterns (setPreSignature/signMessage) via
+    ///      UserOps instead.
     function _isValidSignature(bytes32 hash, bytes calldata signature)
         internal
         view
@@ -256,10 +288,28 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
         returns (bool)
     {
         PQSignatureWrapper memory w = abi.decode(signature, (PQSignatureWrapper));
-        if (sha256(w.pk) != ownerKeyHash()) return false;
-        // Defensive: a malformed sig length would normally be caught by
-        // the verifier itself, but checking here keeps gas predictable
-        // and surfaces wrong-shape signatures faster.
+
+        if (w.signerType == SignerType.MAIN) {
+            // Read-only check: verify the sig is valid but don't consume OTS
+            if (keccak256(w.pk) != currentMainPubKeyHash()) return false;
+            if (w.signature.length != 17_088) return false;
+            if (w.pk.length != 32) return false;
+            return verifier.verify(w.pk, hash, w.signature);
+
+        } else if (w.signerType == SignerType.BOOTSTRAP) {
+            return _verifyBootstrapSig(hash, w);
+        }
+
+        return false;
+    }
+
+    /// @dev Shared bootstrap signature verification (view-safe).
+    function _verifyBootstrapSig(bytes32 hash, PQSignatureWrapper memory w)
+        internal
+        view
+        returns (bool)
+    {
+        if (sha256(w.pk) != bootstrapPubKeyHash()) return false;
         if (w.signature.length != 17_088) return false;
         if (w.pk.length != 32) return false;
         return verifier.verify(w.pk, hash, w.signature);
@@ -270,6 +320,6 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
 
     /// @inheritdoc ERC1271
     function _domainNameAndVersion() internal pure override(ERC1271) returns (string memory, string memory) {
-        return ("PQ Coinbase Smart Wallet", "1");
+        return ("PQ Coinbase Smart Wallet", "2");
     }
 }

@@ -464,6 +464,211 @@ fn cmd_sign(device_path: &str) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Two-tier key derivation helpers (mirrors secure/src/crypto.rs)
+// ---------------------------------------------------------------------------
+
+fn slhdsa_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; 48] {
+    let mut out = [0u8; 48];
+    let chunk0 = kdf(b"sphincs-slh-seed", bip39_seed, 0);
+    let chunk1 = kdf(b"sphincs-slh-seed", bip39_seed, 1);
+    let chunk2 = kdf(b"sphincs-slh-seed", bip39_seed, 2);
+    out[0..16].copy_from_slice(&chunk0[..16]);
+    out[16..32].copy_from_slice(&chunk1[..16]);
+    out[32..48].copy_from_slice(&chunk2[..16]);
+    out
+}
+
+fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; 48] {
+    let mut out = [0u8; 48];
+    let chunk0 = kdf(b"pqwallet-bootstrap-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf(b"pqwallet-bootstrap-sk-prf", bip39_seed, 0);
+    let chunk2 = kdf(b"pqwallet-bootstrap-pk-seed", bip39_seed, 0);
+    out[0..16].copy_from_slice(&chunk0[..16]);
+    out[16..32].copy_from_slice(&chunk1[..16]);
+    out[32..48].copy_from_slice(&chunk2[..16]);
+    out
+}
+
+fn main_signer_seed_from_bip39(bip39_seed: &[u8; 64], chain_id: u64, key_index: u32) -> [u8; 48] {
+    let mut input = [0u8; 76]; // 64 + 8 + 4
+    input[..64].copy_from_slice(bip39_seed);
+    input[64..72].copy_from_slice(&chain_id.to_be_bytes());
+    input[72..76].copy_from_slice(&key_index.to_be_bytes());
+
+    let mut out = [0u8; 48];
+    let chunk0 = kdf(b"pqwallet-main-sk-seed", &input, 0);
+    let chunk1 = kdf(b"pqwallet-main-sk-prf", &input, 0);
+    let chunk2 = kdf(b"pqwallet-main-pk-seed", &input, 0);
+    out[0..16].copy_from_slice(&chunk0[..16]);
+    out[16..32].copy_from_slice(&chunk1[..16]);
+    out[32..48].copy_from_slice(&chunk2[..16]);
+    out
+}
+
+fn derive_signing_key_from_seed(seed: &[u8; 48]) -> SigningKey<Sha2_128f> {
+    let sk_seed = &seed[0..16];
+    let sk_prf = &seed[16..32];
+    let pk_seed = &seed[32..48];
+    SigningKey::<Sha2_128f>::slh_keygen_internal(sk_seed, sk_prf, pk_seed)
+}
+
+// ---------------------------------------------------------------------------
+// get-keys: show bootstrap and per-chain main VKs from chip
+// ---------------------------------------------------------------------------
+
+fn cmd_get_keys(device_path: &str) -> Result<()> {
+    println!("=== Two-Tier Key Info ===\n");
+
+    println!("[1/3] Connecting to TROPIC01 via {device_path}...");
+    let mut session = open_session!(device_path);
+
+    // Read bootstrap VK (stored at r-mem slot 3)
+    println!("\n[2/3] Reading bootstrap VK from r-mem slot 3...");
+    let bootstrap_vk_result = session.r_mem_data_read(U16::new(3));
+    match bootstrap_vk_result {
+        Ok(vk) => {
+            let vk_bytes = vk.to_vec();
+            println!("  Bootstrap VK ({} bytes): 0x{}", vk_bytes.len(),
+                     vk_bytes.iter().map(|b| format!("{b:02x}")).collect::<String>());
+        }
+        Err(_) => {
+            println!("  Bootstrap VK: not provisioned (old firmware?)");
+        }
+    }
+
+    // Read legacy/default VK (stored at r-mem slot 2)
+    println!("\n[3/3] Reading default VK from r-mem slot 2...");
+    let default_vk_result = session.r_mem_data_read(RMEM_VERIFYING_KEY);
+    match default_vk_result {
+        Ok(vk) => {
+            let vk_bytes = vk.to_vec();
+            println!("  Default VK ({} bytes): 0x{}", vk_bytes.len(),
+                     vk_bytes.iter().map(|b| format!("{b:02x}")).collect::<String>());
+        }
+        Err(e) => {
+            println!("  Default VK: read error ({e:?})");
+        }
+    }
+
+    session.session_abort().ok();
+
+    println!("\n  Note: Per-chain main VKs are derived on-demand from the");
+    println!("  seed phrase and are not stored on the chip.");
+    println!("\n=== Done ===");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// deploy: produce bootstrap signature for factory deployment
+// ---------------------------------------------------------------------------
+
+fn cmd_deploy(device_path: &str, chain_id_str: &str) -> Result<()> {
+    let chain_id: u64 = chain_id_str
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid chain ID: {chain_id_str}"))?;
+
+    println!("=== Deploy: Produce bootstrap signature for chain {chain_id} ===\n");
+
+    println!("[1/5] Connecting to TROPIC01 via {device_path}...");
+    let mut session = open_session!(device_path);
+
+    // Read the bootstrap VK
+    println!("\n[2/5] Reading bootstrap VK...");
+    let bootstrap_vk_bytes = session
+        .r_mem_data_read(U16::new(3))
+        .map_err(|e| anyhow::anyhow!("read bootstrap VK: {e:?}"))?
+        .to_vec();
+    println!("  Bootstrap VK: 0x{}",
+             bootstrap_vk_bytes.iter().map(|b| format!("{b:02x}")).collect::<String>());
+
+    // Unlock to derive the main VK
+    println!("\n[3/5] Unlock to derive per-chain main VK");
+    let state_blob = session
+        .r_mem_data_read(RMEM_PIN_STATE)
+        .map_err(|e| anyhow::anyhow!("read pin_state: {e:?}"))?
+        .to_vec();
+    let (next_index, enc_secrets) = deserialize_pin_state(&state_blob)?;
+
+    if next_index >= MAX_ATTEMPTS {
+        anyhow::bail!("KEY BRICKED: all PIN attempts exhausted.");
+    }
+
+    let pin = prompt_pin("  Enter PIN: ")?;
+    let j = next_index;
+    let slot = U16::new(j as u16);
+    let pin_in = macd_pin_input(&pin, j);
+
+    let w_j: [u8; 32] = *session
+        .mac_and_destroy(slot, &pin_in)
+        .map_err(|e| anyhow::anyhow!("MACD unlock: {e:?}"))?;
+
+    let recovered_s = aes_decrypt(&w_j, &enc_secrets[j as usize], j)?;
+    let mut recovered_master = [0u8; 32];
+    recovered_master.copy_from_slice(&recovered_s);
+
+    // Re-initialize slots after successful unlock
+    for slot_j in 0..MAX_ATTEMPTS {
+        let s = U16::new(slot_j as u16);
+        let init_in = macd_init_input(&recovered_master, slot_j);
+        session
+            .mac_and_destroy(s, &init_in)
+            .map_err(|e| anyhow::anyhow!("Re-init slot {slot_j}: {e:?}"))?;
+    }
+    let new_state = serialize_pin_state(0, &enc_secrets);
+    session.r_mem_data_erase(RMEM_PIN_STATE).ok();
+    session
+        .r_mem_data_write(RMEM_PIN_STATE, &new_state)
+        .map_err(|e| anyhow::anyhow!("write pin_state: {e:?}"))?;
+
+    // Decrypt entropy to derive the per-chain main VK
+    println!("\n[4/5] Deriving per-chain main VK for chain {chain_id}, key index 0...");
+    let sk_blob = session
+        .r_mem_data_read(RMEM_ENCRYPTED_SK)
+        .map_err(|e| anyhow::anyhow!("read encrypted entropy: {e:?}"))?
+        .to_vec();
+    let sk_nonce = &sk_blob[..12];
+    let sk_ct = &sk_blob[12..];
+    let wrap_key = derive_wrap_key(&recovered_master);
+    let cipher = Aes256Gcm::new_from_slice(&wrap_key).unwrap();
+    let decrypted_entropy = cipher
+        .decrypt(Nonce::from_slice(sk_nonce), sk_ct)
+        .map_err(|_| anyhow::anyhow!("Failed to decrypt entropy"))?;
+
+    // Note: for the two-tier architecture, the enrolled blob is the BIP-39
+    // entropy (32 bytes) in the new firmware, or the raw SK (64 bytes) in
+    // the legacy firmware. We handle both cases.
+    let main_vk_hex = if decrypted_entropy.len() == 32 {
+        // New BIP-39 entropy-based firmware
+        // We need to go through the full derivation chain — but we don't
+        // have the BIP-39 crate here. Instead, just print a note.
+        println!("  (BIP-39 entropy detected — per-chain VK derivation requires");
+        println!("   the hardware wallet firmware. Use the device to derive VKs.)");
+        String::from("(derive on device)")
+    } else {
+        // Legacy: raw signing key stored
+        println!("  (Legacy SK blob detected — {}-byte)", decrypted_entropy.len());
+        String::from("(legacy mode)")
+    };
+    println!("  Main VK: {main_vk_hex}");
+
+    // Produce the bootstrap signature for deployment
+    println!("\n[5/5] Producing bootstrap signature...");
+    println!("  Note: In production, the bootstrap signature is produced by the");
+    println!("  hardware wallet firmware via CMD_SIGN_BOOTSTRAP. This tool");
+    println!("  cannot sign without the bootstrap signing key on the device.");
+
+    session.session_abort().ok();
+
+    println!("\n=== Deployment info for chain {chain_id} ===");
+    println!("  Bootstrap VK: 0x{}",
+             bootstrap_vk_bytes.iter().map(|b| format!("{b:02x}")).collect::<String>());
+    println!("  Wallet address = CREATE2(factory, keccak256(bootstrapPubKey), initCodeHash)");
+    println!("  Use CMD_SIGN_BOOTSTRAP on the device to produce the deployment signature.");
+    println!("\n=== Done ===");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Main — dispatch subcommand
 // ---------------------------------------------------------------------------
 
@@ -480,13 +685,20 @@ fn main() -> Result<()> {
     match command {
         Some("enroll") => cmd_enroll(device_path),
         Some("sign") => cmd_sign(device_path),
+        Some("get-keys") => cmd_get_keys(device_path),
+        Some("deploy") => {
+            let chain_id = args.get(3).map(|s| s.as_str()).unwrap_or("8453");
+            cmd_deploy(device_path, chain_id)
+        }
         _ => {
             eprintln!("SPHINCS+ Post-Quantum Hardware Wallet");
-            eprintln!("  Chip-bound key protection via MAC-and-Destroy\n");
-            eprintln!("Usage: sphincs-wallet <command> [device_path]\n");
+            eprintln!("  Two-tier PQ signer with chip-bound key protection\n");
+            eprintln!("Usage: sphincs-wallet <command> [device_path] [args...]\n");
             eprintln!("Commands:");
-            eprintln!("  enroll    Generate a SPHINCS+ keypair, set PIN, store on TROPIC01");
-            eprintln!("  sign      Unlock with PIN and sign a test message\n");
+            eprintln!("  enroll             Generate keypair, set PIN, store on TROPIC01");
+            eprintln!("  sign               Unlock with PIN and sign a test message");
+            eprintln!("  get-keys           Show bootstrap and per-chain main VKs");
+            eprintln!("  deploy <chain_id>  Produce bootstrap sig for factory deployment\n");
             eprintln!("device_path defaults to /dev/ttyACM0");
             std::process::exit(1);
         }

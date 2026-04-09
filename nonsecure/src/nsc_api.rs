@@ -35,6 +35,9 @@ mod transport {
     const CMD_CLEAR_SIGN: u32 = 5;
     const CMD_CLEAR_SIGN_MSG: u32 = 6;
     const CMD_SIGN_USEROP: u32 = 7;
+    const CMD_GET_BOOTSTRAP_PUBKEY: u32 = 8;
+    const CMD_GET_MAIN_PUBKEY: u32 = 9;
+    const CMD_SIGN_BOOTSTRAP: u32 = 10;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -94,6 +97,33 @@ mod transport {
             gateway_call(CMD_SIGN_USEROP, payload_ptr as u32, sig_ptr as u32, total_len)
         }
     }
+
+    #[inline]
+    pub(super) fn get_bootstrap_pubkey(out_ptr: *mut u8, out_len: u32) -> u32 {
+        unsafe { gateway_call(CMD_GET_BOOTSTRAP_PUBKEY, 0, out_ptr as u32, out_len) }
+    }
+
+    #[inline]
+    pub(super) fn get_main_pubkey(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        out_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_GET_MAIN_PUBKEY, payload_ptr as u32, out_ptr as u32, out_len)
+        }
+    }
+
+    #[inline]
+    pub(super) fn sign_bootstrap_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_SIGN_BOOTSTRAP, payload_ptr as u32, sig_ptr as u32, total_len)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +144,9 @@ mod transport {
         fn nsc_clear_sign(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_clear_sign_msg(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_get_bootstrap_pubkey(out_ptr: u32, out_len: u32) -> u32;
+        fn nsc_get_main_pubkey(payload_ptr: u32, out_ptr: u32, out_len: u32) -> u32;
+        fn nsc_sign_bootstrap(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
     }
 
     #[inline]
@@ -156,6 +189,29 @@ mod transport {
         total_len: u32,
     ) -> u32 {
         unsafe { nsc_sign_userop(payload_ptr as u32, sig_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn get_bootstrap_pubkey(out_ptr: *mut u8, out_len: u32) -> u32 {
+        unsafe { nsc_get_bootstrap_pubkey(out_ptr as u32, out_len) }
+    }
+
+    #[inline]
+    pub(super) fn get_main_pubkey(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        out_len: u32,
+    ) -> u32 {
+        unsafe { nsc_get_main_pubkey(payload_ptr as u32, out_ptr as u32, out_len) }
+    }
+
+    #[inline]
+    pub(super) fn sign_bootstrap_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe { nsc_sign_bootstrap(payload_ptr as u32, sig_ptr as u32, total_len) }
     }
 }
 
@@ -229,5 +285,32 @@ pub fn sign_userop(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
         payload.as_ptr(),
         sig_buf.as_mut_ptr(),
         payload.len() as u32,
+    )
+}
+
+/// Read the 32-byte bootstrap signer's verifying key. No unlock required.
+pub fn get_bootstrap_pubkey(buf: &mut [u8; 32]) -> u32 {
+    transport::get_bootstrap_pubkey(buf.as_mut_ptr(), 32)
+}
+
+/// Derive and read the 32-byte main signer's verifying key for a specific
+/// chain and key epoch. Requires PIN unlock.
+///
+/// The `chain_id` and `key_index` are packed into a 12-byte payload and
+/// passed to the secure world.
+pub fn get_main_pubkey(chain_id: u64, key_index: u32, buf: &mut [u8; 32]) -> u32 {
+    let mut payload = [0u8; 12];
+    payload[0..8].copy_from_slice(&chain_id.to_be_bytes());
+    payload[8..12].copy_from_slice(&key_index.to_be_bytes());
+    transport::get_main_pubkey(payload.as_ptr(), buf.as_mut_ptr(), 32)
+}
+
+/// Sign a 32-byte message hash with the bootstrap signer. Used for
+/// factory deployment authorization and emergency rotation.
+pub fn sign_bootstrap(msg_hash: &[u8; 32], sig_buf: &mut [u8]) -> u32 {
+    transport::sign_bootstrap_call(
+        msg_hash.as_ptr(),
+        sig_buf.as_mut_ptr(),
+        32,
     )
 }

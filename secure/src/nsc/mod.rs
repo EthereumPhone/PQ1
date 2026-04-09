@@ -50,9 +50,12 @@
 
 mod cmd_clear_sign;
 mod cmd_clear_sign_msg;
+mod cmd_get_bootstrap_pubkey;
+mod cmd_get_main_pubkey;
 mod cmd_get_pubkey;
 mod cmd_get_remaining;
 mod cmd_request_unlock;
+mod cmd_sign_bootstrap;
 mod cmd_sign_userop;
 mod ptr_validate;
 mod sign_and_emit;
@@ -61,8 +64,9 @@ mod userop_tail;
 
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
-    NscStatus, CMD_CLEAR_SIGN, CMD_CLEAR_SIGN_MSG, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_NONE,
-    CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
+    NscStatus, CMD_CLEAR_SIGN, CMD_CLEAR_SIGN_MSG, CMD_GET_BOOTSTRAP_PUBKEY,
+    CMD_GET_MAIN_PUBKEY, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_NONE,
+    CMD_REQUEST_UNLOCK, CMD_SIGN_BOOTSTRAP, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -173,6 +177,9 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_CLEAR_SIGN => cmd_clear_sign::run(args),
         CMD_CLEAR_SIGN_MSG => cmd_clear_sign_msg::run(args),
         CMD_SIGN_USEROP => cmd_sign_userop::run(args),
+        CMD_GET_BOOTSTRAP_PUBKEY => cmd_get_bootstrap_pubkey::run(args),
+        CMD_GET_MAIN_PUBKEY => cmd_get_main_pubkey::run(args),
+        CMD_SIGN_BOOTSTRAP => cmd_sign_bootstrap::run(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -250,4 +257,36 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop(
 ) -> u32 {
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
     unsafe { cmd_sign_userop::run(&args) }
+}
+
+/// CMD_GET_BOOTSTRAP_PUBKEY — return the bootstrap signer's VK.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_bootstrap_pubkey(out_ptr: u32, out_len: u32) -> u32 {
+    let args = GatewayArgs { arg0: 0, arg1: out_ptr, arg2: out_len };
+    unsafe { cmd_get_bootstrap_pubkey::run(&args) }
+}
+
+/// CMD_GET_MAIN_PUBKEY — derive and return per-chain main VK.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_main_pubkey(
+    payload_ptr: u32,
+    out_ptr: u32,
+    out_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: out_ptr, arg2: out_len };
+    unsafe { cmd_get_main_pubkey::run(&args) }
+}
+
+/// CMD_SIGN_BOOTSTRAP — sign with bootstrap key (admin ops).
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_sign_bootstrap(
+    payload_ptr: u32,
+    sig_out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
+    unsafe { cmd_sign_bootstrap::run(&args) }
 }
