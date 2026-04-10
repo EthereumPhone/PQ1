@@ -411,7 +411,54 @@ fn main() -> ! {
             ui::show_status("Unlocked", "");
             secure_log!("[S] Provisioned + unlocked");
         } else {
-            secure_log!("[S] Device already provisioned");
+            secure_log!("[S] Device already provisioned — requesting PIN unlock");
+
+            // Prompt for PIN and unlock via the SE / MACD path.
+            // Loop until the user enters the correct PIN or the device
+            // locks out (SE050: 9 attempts, MACD: 13 attempts).
+            use ui::pin_entry::{enter_pin, PinEntryResult};
+            use zeroize::Zeroize;
+
+            loop {
+                ui::show_status("Enter PIN", "to unlock");
+                let mut pin = match enter_pin() {
+                    PinEntryResult::Pin(p) => p,
+                    PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {
+                        ui::show_status("Locked", "");
+                        continue;
+                    }
+                    PinEntryResult::Mismatch => continue,
+                };
+
+                #[cfg(feature = "se050")]
+                let result = crypto::verify_pin_se050(
+                    &mut *core::ptr::addr_of_mut!(SE), &pin,
+                );
+                #[cfg(not(feature = "se050"))]
+                let result = crate::pin::verify_pin(
+                    &mut *core::ptr::addr_of_mut!(SE), &pin,
+                );
+
+                pin.zeroize();
+
+                match result {
+                    Ok(master) => {
+                        nsc::unlock_with_master(master);
+                        ui::show_status("Unlocked", "");
+                        secure_log!("[S] PIN verified — unlocked");
+                        break;
+                    }
+                    Err(sphincs_tz_shared::NscStatus::PinLocked) => {
+                        ui::show_status("PIN locked", "factory reset");
+                        secure_log!("[S] PIN locked out");
+                        break;
+                    }
+                    Err(_) => {
+                        ui::show_status("Wrong PIN", "try again");
+                        secure_log!("[S] Wrong PIN");
+                    }
+                }
+            }
         }
     }
 
