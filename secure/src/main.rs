@@ -408,7 +408,7 @@ fn main() -> ! {
             // mnemonic drops here → indices zeroed.
             use zeroize::Zeroize;
             pin.zeroize();
-            ui::show_status("Unlocked", "");
+            ui::show_status("PQSigner OS", "Ready");
             secure_log!("[S] Provisioned + unlocked");
         } else {
             secure_log!("[S] Device already provisioned — requesting PIN unlock");
@@ -430,6 +430,8 @@ fn main() -> ! {
                     PinEntryResult::Mismatch => continue,
                 };
 
+                ui::show_status("Verifying...", "");
+
                 #[cfg(feature = "se050")]
                 let result = crypto::verify_pin_se050(
                     &mut *core::ptr::addr_of_mut!(SE), &pin,
@@ -444,7 +446,7 @@ fn main() -> ! {
                 match result {
                     Ok(master) => {
                         nsc::unlock_with_master(master);
-                        ui::show_status("Unlocked", "");
+                        ui::show_status("PQSigner OS", "Ready");
                         secure_log!("[S] PIN verified — unlocked");
                         break;
                     }
@@ -504,6 +506,14 @@ fn SysTick() {
     if timeout::is_idle() && nsc::is_unlocked() {
         nsc::zeroize_sensitive_state();
         ui::show_status("Locked", "(idle wipe)");
+
+        // Trigger PendSV to run the re-unlock flow outside the ISR.
+        // PendSV has the lowest priority so it won't block SysTick.
+        #[cfg(feature = "stm32u585")]
+        unsafe {
+            const ICSR: *mut u32 = 0xE000_ED04 as *mut u32;
+            core::ptr::write_volatile(ICSR, 1 << 28); // PENDSVSET
+        }
     }
 
     // QEMU-only: drain the shared-memory mailbox. On STM32U585 the
@@ -511,6 +521,75 @@ fn SysTick() {
     // services the timeout/idle-wipe bookkeeping above.
     #[cfg(not(feature = "stm32u585"))]
     nsc::poll_gateway();
+}
+
+/// PendSV handler — runs the PIN re-unlock flow after an idle wipe.
+///
+/// Triggered by SysTick when it detects idle timeout. Runs at the lowest
+/// exception priority so it doesn't block SysTick ticks or CMSE veneers.
+/// The blocking PIN entry UI is safe here.
+#[cfg(all(not(test), feature = "stm32u585"))]
+#[cortex_m_rt::exception]
+fn PendSV() {
+    // Only run if we're actually locked (avoids spurious re-entry)
+    if nsc::is_unlocked() {
+        return;
+    }
+
+    unsafe {
+        use ui::pin_entry::{enter_pin, PinEntryResult};
+        use zeroize::Zeroize;
+
+        loop {
+            ui::show_status("Press button", "to unlock");
+
+            // Wait for any button press before showing PIN entry
+            let _ = ui::input().wait_button(&mut timeout::idle_check);
+
+            timeout::reset_activity();
+
+            let mut pin = match enter_pin() {
+                PinEntryResult::Pin(p) => p,
+                PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {
+                    ui::show_status("Locked", "");
+                    continue;
+                }
+                PinEntryResult::Mismatch => continue,
+            };
+
+            ui::show_status("Verifying...", "");
+
+            #[cfg(feature = "se050")]
+            let result = crypto::verify_pin_se050(
+                &mut *core::ptr::addr_of_mut!(SE), &pin,
+            );
+            #[cfg(not(feature = "se050"))]
+            let result = crate::pin::verify_pin(
+                &mut *core::ptr::addr_of_mut!(SE), &pin,
+            );
+
+            pin.zeroize();
+
+            match result {
+                Ok(master) => {
+                    nsc::unlock_with_master(master);
+                    timeout::reset_activity();
+                    ui::show_status("PQSigner OS", "Ready");
+                    secure_log!("[S] Re-unlocked after idle wipe");
+                    break;
+                }
+                Err(sphincs_tz_shared::NscStatus::PinLocked) => {
+                    ui::show_status("PIN locked", "factory reset");
+                    secure_log!("[S] PIN locked out");
+                    break;
+                }
+                Err(_) => {
+                    ui::show_status("Wrong PIN", "try again");
+                    secure_log!("[S] Wrong PIN on re-unlock");
+                }
+            }
+        }
+    }
 }
 
 /// Custom panic handler: zeroizes all sensitive state before halting.
