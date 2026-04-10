@@ -157,29 +157,50 @@ fn tlv_parse(data: &[u8]) -> Option<(u8, &[u8], &[u8])> {
 /// Maximum APDU buffer size (command or response).
 const MAX_APDU: usize = 1024;
 
+/// SCP03 session reference for MAC wrapping.
+/// When `Some`, APDUs are wrapped with C-MAC before sending.
+pub static mut SCP03_SESSION: Option<*mut super::scp03::Scp03Session> = None;
+
 /// Send an APDU and return the response data (without SW).
-/// Checks the status word and returns `ApduError::Status` on failure.
+/// If an SCP03 session is active, the APDU is MAC-wrapped before sending.
 pub unsafe fn send_apdu(
     t1: &mut T1State,
     apdu: &[u8],
     resp_buf: &mut [u8],
 ) -> Result<usize, ApduError> {
+    // Wrap with SCP03 MAC if session is active
+    let (final_apdu, final_len) = if let Some(session_ptr) = SCP03_SESSION {
+        let session = &mut *session_ptr;
+        if session.active {
+            let mut wrapped = [0u8; MAX_APDU];
+            let wlen = super::scp03::wrap_apdu(session, apdu, &mut wrapped);
+            (wrapped, wlen)
+        } else {
+            let mut buf = [0u8; MAX_APDU];
+            buf[..apdu.len()].copy_from_slice(apdu);
+            (buf, apdu.len())
+        }
+    } else {
+        let mut buf = [0u8; MAX_APDU];
+        buf[..apdu.len()].copy_from_slice(apdu);
+        (buf, apdu.len())
+    };
+
     #[cfg(feature = "debug-log")]
     {
-        if apdu.len() >= 5 {
-            // Extract object ID from first TLV (TAG_1 at offset 5) if present
-            let obj_id = if apdu.len() >= 11 && apdu[5] == 0x41 && apdu[6] == 0x04 {
-                u32::from_be_bytes([apdu[7], apdu[8], apdu[9], apdu[10]])
+        if final_len >= 5 {
+            let obj_id = if final_len >= 11 && final_apdu[5] == 0x41 && final_apdu[6] == 0x04 {
+                u32::from_be_bytes([final_apdu[7], final_apdu[8], final_apdu[9], final_apdu[10]])
             } else { 0 };
             cortex_m_semihosting::hprintln!(
                 "[SE050] TX INS={:02x} P1={:02x} P2={:02x} Lc={:02x} obj=0x{:08x} len={}",
-                apdu[1], apdu[2], apdu[3], apdu[4], obj_id, apdu.len()
+                final_apdu[1], final_apdu[2], final_apdu[3], final_apdu[4], obj_id, final_len
             );
         }
     }
 
     let mut raw_resp = [0u8; MAX_APDU];
-    let n = t1.transceive(apdu, &mut raw_resp)?;
+    let n = t1.transceive(&final_apdu[..final_len], &mut raw_resp)?;
 
     if n < 2 {
         return Err(ApduError::Short);

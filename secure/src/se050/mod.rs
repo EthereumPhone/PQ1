@@ -10,6 +10,7 @@
 pub mod i2c;
 pub mod t1oi2c;
 pub mod apdu;
+pub mod scp03;
 
 use crate::secure_element::{SeError, SecureElement};
 use t1oi2c::T1State;
@@ -42,6 +43,7 @@ const NUM_MACD_SLOTS: u16 = 16;
 /// The applet is selected on the first operation (lazy init).
 pub struct Se050SecureElement {
     t1: T1State,
+    scp03: scp03::Scp03Session,
     initialized: bool,
 }
 
@@ -49,6 +51,7 @@ impl Se050SecureElement {
     pub const fn new() -> Self {
         Self {
             t1: T1State::new(),
+            scp03: scp03::Scp03Session::new(),
             initialized: false,
         }
     }
@@ -94,6 +97,24 @@ impl Se050SecureElement {
                 Err(ref e) => {
                     #[cfg(feature = "debug-log")]
                     cortex_m_semihosting::hprintln!("[S][SE050] Applet select FAILED: {:?}", e);
+                    return Err(SeError::InternalError);
+                }
+            }
+
+            // Establish SCP03 authenticated session
+            #[cfg(feature = "debug-log")]
+            cortex_m_semihosting::hprintln!("[S][SE050] Establishing SCP03 session...");
+
+            match scp03::establish(&mut self.scp03, &mut self.t1) {
+                Ok(()) => {
+                    // Set the global SCP03 session pointer so send_apdu wraps APDUs
+                    apdu::SCP03_SESSION = Some(&mut self.scp03 as *mut _);
+                    #[cfg(feature = "debug-log")]
+                    cortex_m_semihosting::hprintln!("[S][SE050] SCP03 session established");
+                }
+                Err(ref e) => {
+                    #[cfg(feature = "debug-log")]
+                    cortex_m_semihosting::hprintln!("[S][SE050] SCP03 FAILED: {:?}", e);
                     return Err(SeError::InternalError);
                 }
             }

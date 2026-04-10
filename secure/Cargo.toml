@@ -11,6 +11,8 @@ sphincs-tz-bip39  = { workspace = true }
 slh-dsa = { version = "0.2.0-rc.4", default-features = false }
 signature = { version = "3.0.0-rc.10", default-features = false }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+aes = { version = "0.8", default-features = false }
+cmac = { version = "0.7", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 sha3 = { version = "0.10", default-features = false }
 hmac    = { workspace = true }
