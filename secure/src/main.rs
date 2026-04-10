@@ -65,9 +65,9 @@ mod zk;
 
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
-#[cfg(not(test))]
+#[cfg(all(not(test), not(feature = "se050")))]
 use crypto::{RMEM_BOOTSTRAP_VK, RMEM_ENCRYPTED_ENTROPY, RMEM_PIN_STATE, RMEM_VERIFYING_KEY};
-#[cfg(not(test))]
+#[cfg(all(not(test), not(feature = "se050")))]
 use secure_element::{MockSecureElement, SecureElement};
 
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
@@ -92,7 +92,7 @@ static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureE
 
 // Global SE050 SE (used when se050 feature is active)
 #[cfg(all(feature = "se050", not(test)))]
-static mut SE: se050::Se050SecureElement = se050::Se050SecureElement::new();
+static mut SE: se050::Se050 = se050::Se050::new();
 
 /// SysTick reload value for ~1 ms tick.
 /// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: set dynamically from rcc::init().
@@ -123,23 +123,12 @@ fn is_provisioned(se: &mut impl SecureElement) -> bool {
         // write it (see crypto::provision_with_mnemonic).
 }
 
-/// SE050 provisioning check: UserID-gated objects don't support
-/// unauthenticated reads, so we check via CheckObjectExists instead.
+/// SE050 provisioning check: UserID object existence means provisioned.
 #[cfg(all(not(test), feature = "se050"))]
-fn is_provisioned(_se: &mut se050::Se050SecureElement) -> bool {
-    // Check if the UserID object exists on the SE050.
-    // If it does, the device has been provisioned.
+fn is_provisioned(_se: &mut se050::Se050) -> bool {
     unsafe {
         let se = &mut *core::ptr::addr_of_mut!(SE);
-        se.ensure_init_pub().is_ok()
-            && apdu_check_exists(se, 0x7B00_2000)
-    }
-}
-
-#[cfg(all(not(test), feature = "se050"))]
-fn apdu_check_exists(se: &mut se050::Se050SecureElement, obj_id: u32) -> bool {
-    unsafe {
-        se050::apdu::check_object_exists(se.t1_mut(), obj_id).unwrap_or(false)
+        se.is_provisioned()
     }
 }
 
@@ -253,7 +242,10 @@ fn main() -> ! {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
         hw::rng::init();
-        #[cfg(feature = "ui-oled")]
+        // When SE050 is also active, its i2c_hw::init() configures I2C1 at
+        // 400 kHz after SAU init — skip the OLED's 100 kHz init to avoid
+        // a redundant peripheral reset.  SSD1306 supports 400 kHz.
+        #[cfg(all(feature = "ui-oled", not(feature = "se050")))]
         hw::i2c::init(mhz);
         secure_log!("[S] RCC: {} MHz + HSI48 + TRNG configured", mhz);
     }
@@ -273,6 +265,26 @@ fn main() -> ! {
 
     ui::init();
     secure_log!("[S] UI initialized");
+
+    // ---- SE050 factory reset ----
+    // Wipes all user objects (UserID, entropy, VKs) then halts.
+    // Triggered by: make se050-reset
+    #[cfg(feature = "se050-factory-reset")]
+    unsafe {
+        ui::show_status("SE050 reset", "...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        match se.factory_reset() {
+            Ok(()) => {
+                secure_log!("[S] SE050 factory reset OK");
+                ui::show_status("SE050 reset", "OK - reflash");
+            }
+            Err(_e) => {
+                secure_log!("[S] SE050 factory reset FAILED");
+                ui::show_status("SE050 reset", "FAILED");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
 
     // ---- e2e-test fast-path ----
     //
@@ -354,10 +366,10 @@ fn main() -> ! {
                 .provision(&mnemonic, &pin, sphincs_tz_shared::MAX_ATTEMPTS)
                 .expect("TROPIC01 provisioning failed");
 
-            // Debug-only: log the verifying key the SE just stored. This is
-            // the regression guard for the recovery promise — same mnemonic
-            // must always produce the same VK.
-            #[cfg(feature = "debug-log")]
+            // Debug-only: log the verifying key the SE just stored.
+            // SE050 objects require an authenticated session to read, so
+            // we skip this readback for the se050 feature.
+            #[cfg(all(feature = "debug-log", not(feature = "se050")))]
             {
                 let mut vk_buf = [0u8; 64];
                 if let Ok(_) =
@@ -374,11 +386,30 @@ fn main() -> ! {
                 }
             }
 
+            // Auto-unlock with the PIN the user just entered so the device
+            // is immediately usable (caches entropy blob + VK for signing).
+            #[cfg(feature = "se050")]
+            match crypto::verify_pin_se050(&mut *core::ptr::addr_of_mut!(SE), &pin) {
+                Ok(master) => {
+                    nsc::unlock_with_master(master);
+                    secure_log!("[S] Auto-unlocked after provisioning");
+                }
+                Err(_) => secure_log!("[S] WARNING: auto-unlock failed after provision"),
+            }
+            #[cfg(not(feature = "se050"))]
+            match crate::pin::verify_pin(&mut *core::ptr::addr_of_mut!(SE), &pin) {
+                Ok(master) => {
+                    nsc::unlock_with_master(master);
+                    secure_log!("[S] Auto-unlocked after provisioning");
+                }
+                Err(_) => secure_log!("[S] WARNING: auto-unlock failed after provision"),
+            }
+
             // mnemonic drops here → indices zeroed.
             use zeroize::Zeroize;
             pin.zeroize();
-            ui::show_status("Wallet ready", "");
-            secure_log!("[S] Provisioned");
+            ui::show_status("Unlocked", "");
+            secure_log!("[S] Provisioned + unlocked");
         } else {
             secure_log!("[S] Device already provisioned");
         }

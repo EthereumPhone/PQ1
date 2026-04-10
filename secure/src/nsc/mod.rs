@@ -117,11 +117,19 @@ pub fn set_e2e_unlocked(master: [u8; 32]) {
     state::with_state(|s| s.mark_unlocked(master));
 }
 
+/// Set the gateway to "unlocked" state with the given master secret.
+/// Used by the first-boot wizard to auto-unlock after provisioning.
+pub fn unlock_with_master(master: [u8; 32]) {
+    state::with_state(|s| s.mark_unlocked(master));
+}
+
 /// Zeroize all sensitive global state. Called from the panic handler,
 /// the inactivity wipe, and the cancel/idle-wipe branches of every
 /// interactive dialog.
 pub fn zeroize_sensitive_state() {
     state::with_state(|s| s.zeroize_sensitive());
+    #[cfg(feature = "se050")]
+    crate::crypto::se050_zeroize_caches();
 }
 
 /// Initialize the shared-memory mailbox by clearing CMD/RESULT/DONE.

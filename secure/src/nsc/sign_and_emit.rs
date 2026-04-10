@@ -55,7 +55,15 @@ pub(super) unsafe fn decrypt_and_sign(
                 Err(_) => return NscStatus::InternalError as u32,
             }
         }
-        #[cfg(not(feature = "tropic01-se"))]
+        #[cfg(feature = "se050")]
+        {
+            let _ = se;
+            match crate::crypto::se050_read_cached_entropy_blob(&mut entropy_blob) {
+                Ok(len) => len,
+                Err(_) => return NscStatus::InternalError as u32,
+            }
+        }
+        #[cfg(not(any(feature = "tropic01-se", feature = "se050")))]
         {
             use crate::secure_element::SecureElement;
             match se.r_mem_read(crate::crypto::RMEM_ENCRYPTED_ENTROPY, &mut entropy_blob) {

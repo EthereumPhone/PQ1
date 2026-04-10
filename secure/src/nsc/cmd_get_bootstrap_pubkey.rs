@@ -22,10 +22,34 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     let mut vk_buf = [0u8; 64];
-    let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-
-    use crate::secure_element::SecureElement;
-    let read_result = se.r_mem_read(crate::crypto::RMEM_BOOTSTRAP_VK, &mut vk_buf);
+    let read_result = {
+        #[cfg(feature = "se050")]
+        {
+            // Bootstrap VK is cached after unlock on the SE050 path.
+            // For now, re-derive from the cached entropy blob.
+            let master_secret = super::state::peek_state(|s| s.master_secret);
+            let mut blob = [0u8; 64];
+            match crate::crypto::se050_read_cached_entropy_blob(&mut blob) {
+                Ok(len) => {
+                    match crate::crypto::decrypt_entropy_blob(&blob[..len], &master_secret) {
+                        Ok(entropy) => {
+                            let bvk = crate::crypto::derive_bootstrap_vk_from_entropy(&entropy);
+                            vk_buf[..32].copy_from_slice(&bvk);
+                            Ok(32)
+                        }
+                        Err(_) => Err(crate::secure_element::SeError::InternalError),
+                    }
+                }
+                Err(_) => Err(crate::secure_element::SeError::InternalError),
+            }
+        }
+        #[cfg(not(feature = "se050"))]
+        {
+            let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+            use crate::secure_element::SecureElement;
+            se.r_mem_read(crate::crypto::RMEM_BOOTSTRAP_VK, &mut vk_buf)
+        }
+    };
 
     match read_result {
         Ok(vk_len) => {

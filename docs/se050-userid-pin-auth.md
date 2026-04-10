@@ -112,40 +112,44 @@ protection to AES-GCM encryption.
 
 ## Code Structure
 
-### `secure/src/se050/apdu.rs` — Low-level APDU encoding
+### `secure/src/se050/mod.rs` — Public API (`Se050` struct)
 
-- `write_user_id()` — INS=0x41 (WRITE | AUTH_OBJECT), creates the hardware
-  PIN with max_attempts counter.
-- `write_binary_with_policy()` — creates binary objects with a policy TLV
-  referencing the UserID.
-- `create_session()` — INS=0x04 P2=0x1B, returns an 8-byte session handle.
-- `verify_session_user_id()` — INS_PROCESS wrapped, sends PIN for hardware
-  verification.
-- `read_object_authed()` — INS_PROCESS wrapped, reads gated objects through
-  the verified session.
-- `close_session()` — INS_PROCESS wrapped, cleans up the session.
+- `Se050::init()` — T1oI2C reset, applet SELECT, SCP03 establish.
+- `Se050::is_provisioned()` — checks UserID object existence.
+- `Se050::provision(pin, max_attempts, entropy, vk, bootstrap_vk)` —
+  creates UserID + 3 binary objects with UserID policy. Idempotent.
+- `Se050::unlock(pin) -> [u8; 32]` — CreateSession + VerifySession +
+  ReadAuthed(entropy) + CloseSession. Returns raw entropy.
 
-### `secure/src/se050/mod.rs` — Se050SecureElement methods
+### `secure/src/se050/apdu.rs` — APDU commands (8 total)
 
-- `provision_userid()` — skip-if-exists pattern (auth objects can't be
-  deleted on SE050E after creation).
-- `write_binary_userid_gated()` — creates objects with UserID policy,
-  skip-if-exists for idempotent reprovisioning.
-- `authenticate_userid()` — full CreateSession + VerifySession flow.
-- `read_authed()` / `close_userid_session()` — session-gated data access.
+- `select_applet()` — GP SELECT with SE050 AID.
+- `check_exists()` — object existence check.
+- `write_userid()` — INS=0x41, creates hardware PIN.
+- `write_binary_gated()` — binary object with UserID policy.
+- `create_session()` — returns 8-byte session handle.
+- `verify_session()` — INS_PROCESS wrapped PIN verification.
+- `read_authed()` — INS_PROCESS wrapped object read.
+- `close_session()` — INS_PROCESS wrapped session cleanup.
 
-### `secure/src/crypto.rs` — High-level provisioning and unlock
+### `secure/src/se050/scp03.rs` — SCP03 session
 
-- `provision_with_mnemonic_se050()` — replaces the MACD provisioning for
-  the `se050` feature flag.
-- `verify_pin_se050()` — replaces `pin::verify_pin` for the `se050`
-  feature flag.
+- `establish()` — INITIALIZE UPDATE + EXTERNAL AUTHENTICATE (P1=0x03).
+- `wrap_apdu()` — C-MAC + C-DEC wrapping for all commands.
+
+### `secure/src/crypto.rs` — Provisioning, unlock, and caching
+
+- `provision_with_mnemonic_se050()` — provisions SE050 and caches VK.
+- `verify_pin_se050()` — unlocks SE050 and caches encrypted entropy
+  blob + VK in secure SRAM for signing operations.
+- `se050_read_cached_entropy_blob()` / `se050_read_cached_vk()` —
+  read from SRAM cache (used by signing code).
+- `se050_zeroize_caches()` — clear caches on idle wipe.
 
 ### Feature gating
 
-The SE050 UserID path is gated behind `#[cfg(feature = "se050")]`. The
-mock-SE MACD path (`mock-se` feature) is completely unchanged for QEMU
-testing.
+The SE050 path is gated behind `#[cfg(feature = "se050")]`. The mock-SE
+MACD path (`mock-se` feature) is completely unchanged for QEMU testing.
 
 ## APDU Reference
 

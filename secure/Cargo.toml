@@ -60,6 +60,7 @@ stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (v
 e2e-test = []
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
 se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
+se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 
 [dev-dependencies]
 hex = { workspace = true }

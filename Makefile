@@ -344,6 +344,41 @@ flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
 	probe-rs reset --chip STM32U585AIIx
 	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
 
+# SE050 factory reset: wipe all objects, then halt.
+# Run this once to clear stale SE050 state, then flash normal firmware.
+se050-reset:
+	@echo "==> Building SE050 factory-reset firmware..."
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050-factory-reset,ui-noop,stm32u585,debug-log
+	@echo "==> Flashing reset firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Running factory reset (watch semihosting output)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# SE050 + OLED interactive build (real SE050, real OLED display, real buttons).
+# Full first-boot wizard: user enters PIN and creates/restores mnemonic.
+# Both the SSD1306 OLED and SE050 share I2C1 (PB8/PB9) at 400 kHz.
+build-hw-se050-oled:
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050,ui-oled,stm32u585,usb,debug-log
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> SE050 + OLED interactive build ready."
+
+flash-hw-se050-oled: build-hw-se050-oled
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Starting interactive SE050 wallet (Ctrl-C to quit)..."
+	@echo "    Button input via keyboard: h/l=short left/right, H/L=long left/right"
+	@python3 tools/wallet_run_hw.py
+
 # Flash USB-enabled build to real STM32U585.
 flash-hw-usb: build-hw-usb
 	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)

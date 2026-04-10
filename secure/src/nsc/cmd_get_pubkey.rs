@@ -28,7 +28,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             se.batch_read_entropy_and_vk(&mut entropy_blob, &mut vk_buf)
                 .map(|(_, vk_len)| vk_len)
         }
-        #[cfg(not(feature = "tropic01-se"))]
+        #[cfg(feature = "se050")]
+        {
+            let _ = se;
+            crate::crypto::se050_read_cached_vk(&mut vk_buf)
+        }
+        #[cfg(not(any(feature = "tropic01-se", feature = "se050")))]
         {
             use crate::secure_element::SecureElement;
             se.r_mem_read(crate::crypto::RMEM_VERIFYING_KEY, &mut vk_buf)
