@@ -1,0 +1,8 @@
+lldb ../venv/bin/python devSSSCLI.py generate ecc 0x13222 256
+
+image add ../../../simw-top/tools/libsssapisw.dylib
+b sss_session_open
+r
+gui
+
+# b smComJRCP_Open

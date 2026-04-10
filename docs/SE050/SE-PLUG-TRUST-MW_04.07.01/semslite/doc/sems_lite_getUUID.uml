@@ -1,0 +1,16 @@
+@startuml
+
+    title Get SE UUID
+
+    participant app as "Application"
+    participant SEMSLiteAgent as "SEMS_Lite_MW"
+    === Connect SE ==
+    participant "Secure Element" as se
+
+    app -> SEMSLiteAgent : get SE UUID
+	SEMSLiteAgent -> se : get UUID
+    SEMSLiteAgent \-- se : returns
+	=== Disconnect SE ==
+    app \-- SEMSLiteAgent : returns
+	
+@enduml

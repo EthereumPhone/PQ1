@@ -1,0 +1,56 @@
+
+
+'
+' Recovery during Recovery
+'
+'TODO : Double check when recovery during recovery is needed ??? 
+
+@startuml
+
+title Recovery duing Recovery
+
+participant APP as "Application"
+participant SEMS_Lite as "SEMS Lite Lib"
+participant SE as "Secure Element"
+
+autonumber "<b>[00]"
+
+APP -> SEMS_Lite : sems_lite_agent_load_package(Recovery Script)
+
+activate SEMS_Lite
+SEMS_Lite -> SE : sems_lite_check_Tear
+SEMS_Lite <-- SE : TearingStatus
+
+SEMS_Lite -> SEMS_Lite : Update Progress Flag in MW
+
+SEMS_Lite -> SE : Run Script(Recovery Script)
+
+SEMS_Lite <-- SE : ReturnStatus
+
+alt ReturnStatus == 6A82/6A88/6999/6A80/6982/
+
+	note over SE, APP
+		Stop script execution and report error.
+	end note
+else ReturnStatus = Other SW
+	SEMS_Lite -> SE : Check Update session in progress
+
+	SEMS_Lite <-- SE : Session progress
+	alt Session progress = TRUE
+		alt ReturnStatus == 6200/02/03
+		note over SE, APP
+			Report Recovery in Recovery.
+		end note
+	end
+	else alt Session progress = false
+		note over SE, APP
+			Stop script execution and report error.
+		end note
+	
+	end
+	
+end 	
+
+deactivate SEMS_Lite
+
+@enduml

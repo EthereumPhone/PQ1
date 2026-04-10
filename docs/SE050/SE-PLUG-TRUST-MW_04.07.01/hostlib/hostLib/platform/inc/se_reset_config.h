@@ -1,0 +1,35 @@
+/* Copyright 2018-2019 NXP
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef _SE_RESET_CONFIG_H
+#define _SE_RESET_CONFIG_H
+
+#if defined(CPU_MPC5748G)
+#else
+#include "board.h"
+#endif
+
+/*
+ * Platform based definitions for Enable pin
+ * Define GPIO port for enable pin
+ * Define Pin number on GPIO port for enable pin
+ */
+#if defined(FRDM_K64F)
+#define SE05X_ENA_HOST_PORT GPIOA
+#define SE05X_ENA_HOST_PIN 2U
+#elif defined(CPU_MIMXRT1062DVL6A) || defined (CPU_MIMXRT1062DVL6B)
+#define SE05X_ENA_HOST_PORT BOARD_USER_LED_GPIO
+#define SE05X_ENA_HOST_PIN 10U
+#elif defined(CPU_MIMXRT1176DVMAA_cm7)
+#define SE05X_ENA_HOST_PORT GPIO9
+#define SE05X_ENA_HOST_PIN 4U
+#elif defined(LPC_55x)
+#define SE05X_ENA_HOST_PORT BOARD_SW2_GPIO_PORT
+#define SE05X_ENA_HOST_PIN 4U
+#elif defined(NORDIC_MCU)
+/* To Do se05x ena pin*/
+#define SE05X_ENA_HOST_PIN NRF_GPIO_PIN_MAP(0,20)
+#endif
+
+#endif // _SE_RESET_CONFIG_H

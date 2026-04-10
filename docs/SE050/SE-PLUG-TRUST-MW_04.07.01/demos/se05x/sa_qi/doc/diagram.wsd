@@ -1,0 +1,16 @@
+@startuml
+
+!include power_receiver.wsd
+!include power_transmitter.wsd
+' a : <img:doc/diagram.png>
+
+skinparam ArrowThickness 2
+skinparam ArrowFontSize 22
+
+PowerTransmitter -[hidden]-> PowerReceiver
+
+PowerReceiver -> GetCertificateChainDigest : GET_DIGESTS
+PowerReceiver -> ReadCertificates : GET_CERTIFICATE
+PowerReceiver -> Authenticate : CHALLENGE
+
+@enduml

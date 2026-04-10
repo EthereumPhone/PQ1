@@ -1,0 +1,45 @@
+/*!
+@page driver_log Driver Change Log
+@section clock CLOCK
+  The current CLOCK driver version is 1.0.1.
+
+  - 1.0.1
+    - Improvements
+      - Added Clock ip name array for SINC.
+
+  - 1.0.0
+    - initial version.
+
+@section reset RESET
+  The current RESET driver version is 2.4.0.
+
+  - 2.4.0
+    - Improvements
+      - Add RESET_ReleasePeripheralReset API.
+
+  - 1.0.0
+    - Initial version.
+
+@section power RESET
+  The current RESET driver version is 2.4.0.
+
+  - 2.4.0
+    - Improvements
+      - Add RESET_ReleasePeripheralReset API.
+
+  - 1.0.0
+    - Initial version.
+
+@section edma_soc EDMA_SOC
+  The current EDMA_SOC driver version is 1.0.0.
+
+  - 1.0.0
+    - Initial version.
+
+@section trdc_soc TRDC_SOC
+  The current TRDC_SOC driver version is 1.0.0.
+
+  - 1.0.0
+    - Initial version.
+
+*/

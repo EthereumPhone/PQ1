@@ -1,0 +1,38 @@
+# Copyright 2024 NXP
+# SPDX-License-Identifier: Apache-2.0
+
+source "Kconfig.zephyr"
+
+config AWS_SERVICE_KEY_PAIR_ID
+    hex "AWS Key Pair ID"
+    default 0x0
+    help
+        AWS key pair ID for el2go_agent.
+
+config AWS_SERVICE_DEVICE_CERT_ID
+    hex "AWS Certificate"
+    default 0x0
+    help
+        AWS certificate ID.
+
+config AZURE_SERVICE_KEY_PAIR_ID
+    hex "AZURE Key Pair ID"
+    default 0x0
+    help
+        AZURE key pair ID for el2go_agent.
+
+config AZURE_SERVICE_DEVICE_CERT_ID
+    hex "AZURE Certificate"
+    default 0x0
+    help
+        AZURE certificate ID.
+
+config AP_SSID
+    string "SSID"
+    help
+        The SSID the agent connects to.
+
+config AP_PASSWORD
+    string "WIFI Password"
+    help
+        The password for wifi with given SSID.

@@ -1,0 +1,9 @@
+
+; Copyright 2018,2019 NXP
+;
+; SPDX-License-Identifier: Apache-2.0
+
+LIBRARY   sssapisw
+EXPORTS
+    Se05x_API_PBKDF2_extended
+

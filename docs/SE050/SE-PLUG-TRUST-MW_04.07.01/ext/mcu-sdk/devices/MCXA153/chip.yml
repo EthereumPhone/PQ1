@@ -1,0 +1,75 @@
+---
+
+device.hardware_data:
+  section-type: "manifest_content"
+  belong_to: set.device.MCXA153
+  contents:
+    generated_from_chip_model: "yes"
+    devices:
+      - id: "MCXA153"
+        full_name: "MCXA153"
+        name: "MCXA153"
+        platform: "MCX"
+        series: "MCXA"
+        family: "MCXA1XX"
+        subfamily: "MCXA153"
+        frequency_mhz: 96
+        core:
+          - name: "Cortex-M33"
+            type: "cm33"
+            id: "cm33_core0"
+            description: "M33 core"
+            fpu: "NO_FPU"
+            dsp: false
+            mpu: false
+            sau: false
+        memory:
+          memoryBlock:
+            - id: "PROGRAM_FLASH"
+              name: "PROGRAM_FLASH"
+              addr: 0x0
+              size: 0x20000
+              type: "Flash"
+              access: "RO"
+              default: true
+              startup: true
+            - id: "SRAM"
+              name: "SRAM"
+              addr: 0x20000000
+              size: 0x6000
+              type: "RAM"
+              access: "RW"
+              default: true
+            - id: "SRAMX0"
+              name: "SRAMX0"
+              addr: 0x4000000
+              size: 0x2000
+              type: "RAM"
+              access: "RW"
+              default: true
+            - id: "SRAMX1"
+              name: "SRAMX1"
+              addr: 0x4002000
+              size: 0x1000
+              type: "RAM"
+              access: "RW"
+              default: true
+            - id: "BootROM"
+              name: "BootROM"
+              addr: 0x3000000
+              size: 0x2000
+              type: "ROM"
+              access: "RO"
+        total_memory:
+          ram_size_kb: 36
+          flash_size_kb: 128
+        part:
+          - name: "MCXA153VLH"
+          - name: "MCXA153VFT"
+          - name: "MCXA153VFM"
+          - name: "MCXA153VLF"
+        modules:
+          - name: "USB"
+            feature: "KHCI_COUNT"
+            value: "1"
+...

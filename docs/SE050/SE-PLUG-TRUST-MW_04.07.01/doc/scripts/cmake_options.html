@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<!--
+Copyright 2019 NXP
+-->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>4.7. CMake Options &#8212; Plug &amp; Trust MW v04.07.01 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/bootstrap-sphinx.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="5. Demo and Examples" href="../demos/index.html" />
+    <link rel="prev" title="4.6. CMake" href="../building/cmake.html" />
+<meta charset='utf-8'>
+<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="text/javascript" src="../_static/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="../_static/js/jquery-fix.js"></script>
+<script type="text/javascript" src="../_static/bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="../_static/bootstrap-sphinx.js"></script>
+
+  </head><body>
+
+  <div id="navbar" class="navbar navbar-inverse navbar-default navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="../toc.html"><span><img src="../_static/NXP_logo_JPG.jpg"></span>
+          MW</a>
+        <span class="navbar-text navbar-version pull-left"><b>v04.07.01</b></span>
+      </div>
+
+        <div class="collapse navbar-collapse nav-collapse">
+          <ul class="nav navbar-nav">
+            
+            
+              <li class="dropdown globaltoc-container">
+  <a role="button"
+     id="dLabelGlobalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="../toc.html">TOC <b class="caret"></b></a>
+  <ul class="dropdown-menu globaltoc"
+      role="menu"
+      aria-labelledby="dLabelGlobalToc"><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../index.html">1. NXP Plug &amp; Trust Middleware</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../organization-of-documentation.html">1.1. Organization of Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../folder-structure.html">1.2. Folder Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sw-prerequisites.html">1.3. List of Platform Prerequisites</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../changes/index.html">2. Changes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../changes/pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_14_00.html">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss-apis.html">3.3. SSS APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/i2cm.html">3.6. I2CM / Secure Sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/logging.html">3.7. Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/scp03/index.html">3.9. Platform SCP03 Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/secure_boot.html">3.19. Secure Boot</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="../building/index.html">4. Building / Compiling</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">4.7. CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../demos/index.html">5. Demo and Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_package.html">7.2. Update Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../plugins/index.html">8. Plugins / Add-ins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/openssl/scripts/readme.html">8.1. Introduction on OpenSSL engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/Provisioning/readme.html">9.5. CLI Provisioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_data_format.html">9.8. CLI Data formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../appendix.html">10. Appendix</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/api_list.html">10.13. Plug &amp; Trust MW APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Revision_history.html">12. Revision history</a></li>
+</ul>
+</ul>
+</li>
+              
+                <li class="dropdown">
+  <a role="button"
+     id="dLabelLocalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">Page <b class="caret"></b></a>
+  <ul class="dropdown-menu localtoc"
+      role="menu"
+      aria-labelledby="dLabelLocalToc"><ul>
+<li><a class="reference internal" href="#">4.7. CMake Options</a><ul>
+<li><a class="reference internal" href="#ptmw-applet">4.7.1. PTMW_Applet</a></li>
+<li><a class="reference internal" href="#ptmw-se05x-ver">4.7.2. PTMW_SE05X_Ver</a></li>
+<li><a class="reference internal" href="#ptmw-host">4.7.3. PTMW_Host</a></li>
+<li><a class="reference internal" href="#ptmw-smcom">4.7.4. PTMW_SMCOM</a></li>
+<li><a class="reference internal" href="#ptmw-hostcrypto">4.7.5. PTMW_HostCrypto</a></li>
+<li><a class="reference internal" href="#ptmw-rtos">4.7.6. PTMW_RTOS</a></li>
+<li><a class="reference internal" href="#ptmw-mbedtls-alt">4.7.7. PTMW_mbedTLS_ALT</a></li>
+<li><a class="reference internal" href="#ptmw-scp">4.7.8. PTMW_SCP</a></li>
+<li><a class="reference internal" href="#ptmw-fips">4.7.9. PTMW_FIPS</a></li>
+<li><a class="reference internal" href="#ptmw-sbl">4.7.10. PTMW_SBL</a></li>
+<li><a class="reference internal" href="#ptmw-se05x-auth">4.7.11. PTMW_SE05X_Auth</a></li>
+<li><a class="reference internal" href="#ptmw-log">4.7.12. PTMW_Log</a></li>
+<li><a class="reference internal" href="#cmake-build-type">4.7.13. CMAKE_BUILD_TYPE</a></li>
+<li><a class="reference internal" href="#ptmw-openssl">4.7.14. PTMW_OpenSSL</a></li>
+<li><a class="reference internal" href="#ptmw-mbedtls">4.7.15. PTMW_MBedTLS</a></li>
+<li><a class="reference internal" href="#ptmw-se-reset-logic">4.7.16. PTMW_SE_RESET_LOGIC</a></li>
+<li><a class="reference internal" href="#feature-control">4.7.17. Feature Control</a></li>
+<li><a class="reference internal" href="#deprecated-defines">4.7.18. Deprecated Defines</a></li>
+<li><a class="reference internal" href="#nxp-internal-options">4.7.19. NXP Internal Options</a></li>
+<li><a class="reference internal" href="#other-variables">4.7.20. Other Variables</a></li>
+</ul>
+</li>
+</ul>
+</ul>
+</li>
+              
+            
+            
+              
+                
+  <li>
+    <a href="../building/cmake.html" title="Previous Chapter: 4.6. CMake"><span class="glyphicon glyphicon-chevron-left visible-sm"></span><span class="hidden-sm hidden-tablet">&laquo; 4.6. CMake</span>
+    </a>
+  </li>
+  <li>
+    <a href="../demos/index.html" title="Next Chapter: 5. Demo and Examples"><span class="glyphicon glyphicon-chevron-right visible-sm"></span><span class="hidden-sm hidden-tablet">5. Demo and Examples &raquo;</span>
+    </a>
+  </li>
+              
+            
+            
+            
+            
+          </ul>
+
+          
+
+        </div>
+    </div>
+  </div>
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+
+<div class="sidebar-header">
+    <h3>Plug &amp; Trust MW</h3>
+</div>
+
+<div class="row">
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changes/index.html">2. Changes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stack/index.html">3. Plug &amp; Trust MW Stack</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../building/index.html">4. Building / Compiling</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">4.7. CMake Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-applet">4.7.1. PTMW_Applet</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-se05x-ver">4.7.2. PTMW_SE05X_Ver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-host">4.7.3. PTMW_Host</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-smcom">4.7.4. PTMW_SMCOM</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-hostcrypto">4.7.5. PTMW_HostCrypto</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-rtos">4.7.6. PTMW_RTOS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-mbedtls-alt">4.7.7. PTMW_mbedTLS_ALT</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-scp">4.7.8. PTMW_SCP</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-fips">4.7.9. PTMW_FIPS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-sbl">4.7.10. PTMW_SBL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-se05x-auth">4.7.11. PTMW_SE05X_Auth</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-log">4.7.12. PTMW_Log</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cmake-build-type">4.7.13. CMAKE_BUILD_TYPE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-openssl">4.7.14. PTMW_OpenSSL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-mbedtls">4.7.15. PTMW_MBedTLS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ptmw-se-reset-logic">4.7.16. PTMW_SE_RESET_LOGIC</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#feature-control">4.7.17. Feature Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#deprecated-defines">4.7.18. Deprecated Defines</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#nxp-internal-options">4.7.19. NXP Internal Options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-variables">4.7.20. Other Variables</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../demos/index.html">5. Demo and Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../semslite/doc/index.html">7. SEMS Lite Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../plugins/index.html">8. Plugins / Add-ins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-tool.html">9. CLI Tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../appendix.html">10. Appendix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Revision_history.html">12. Revision history</a></li>
+</ul>
+
+</div>
+<div class="row">
+    <form class="form" action="../search.html" method="get">
+     <div class="form-group">
+      <label for="Search">Search:</label>
+      <input type="text" name="q" class="form-control" placeholder="Search" />
+     </div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+        </div>
+      </div>
+    <div class="body col-md-9 content" role="main">
+      
+  <section id="cmake-options">
+<span id="se05x-cmake-options"></span><h1><span class="section-number">4.7. </span>CMake Options<a class="headerlink" href="#cmake-options" title="Permalink to this headline">¶</a></h1>
+<section id="ptmw-applet">
+<span id="cmake-option-ptmw-applet"></span><h2><span class="section-number">4.7.1. </span>PTMW_Applet<a class="headerlink" href="#ptmw-applet" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_Applet">
+<span id="cmdoption-arg-ptmw-applet"></span><span class="sig-name descname"><span class="pre">PTMW_Applet</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_Applet" title="Permalink to this definition">¶</a></dt>
+<dd><p>The Secure Element Applet</p>
+<p>You can compile host library for different Applets listed below.
+Please note, some of these Applets may be for NXP Internal use only.</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Applet=None</span></code>: Compiling without any Applet Support</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Applet=SE05X_A</span></code>: SE050 Type A (ECC)</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Applet=SE05X_B</span></code>: SE050 Type B (RSA)</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Applet=SE05X_C</span></code>: SE050 (Super set of A + B), SE051, SE052</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Applet=SE051_H</span></code>: SE051 with SPAKE Support</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Applet=AUTH</span></code>: AUTH</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Applet=SE050_E</span></code>: SE050E</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-se05x-ver">
+<span id="cmake-option-ptmw-se05x-ver"></span><h2><span class="section-number">4.7.2. </span>PTMW_SE05X_Ver<a class="headerlink" href="#ptmw-se05x-ver" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_SE05X_Ver">
+<span id="cmdoption-arg-ptmw-se05x-ver"></span><span class="sig-name descname"><span class="pre">PTMW_SE05X_Ver</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_SE05X_Ver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Configures supported applet version.
+Set it to match the version used on the SE.
+Examples: for SE050A/B/C/F set 03_XX, for SE050E/51/A5000/SE052 set 07_02.</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Ver=03_XX</span></code>: SE050A/B/C/F</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Ver=07_02</span></code>: SE050E/51/A5000/SE052</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-host">
+<span id="cmake-option-ptmw-host"></span><h2><span class="section-number">4.7.3. </span>PTMW_Host<a class="headerlink" href="#ptmw-host" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_Host">
+<span id="cmdoption-arg-ptmw-host"></span><span class="sig-name descname"><span class="pre">PTMW_Host</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_Host" title="Permalink to this definition">¶</a></dt>
+<dd><p>Host where the software stack is running</p>
+<p>e.g. Windows, PC Linux, Embedded Linux, Kinetis like embedded platform</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=Darwin</span></code>: OS X / Macintosh</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=PCLinux32</span></code>: PC/Laptop Linux with 32bit libraries</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=PCLinux64</span></code>: PC/Laptop Linux with 64bit libraries</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=PCWindows</span></code>: PC/Laptop Windows</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=Cygwin</span></code>: Using Cygwin</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=frdmk64f</span></code>: Embedded Kinetis Freedom K64F</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=evkmimxrt1060</span></code>: Embedded Kinetis i.MX RT 1060</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=evkmimxrt1170</span></code>: Embedded Kinetis i.MX RT1170</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=frdmmcxn947</span></code>: Embedded Kinetis Freedom MCXN947</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=frdmmcxa153</span></code>: Embedded Kinetis Freedom MCXA153</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=lpcxpresso55s</span></code>: Embedded LPCXpresso55s (No demarcation of secure/non-secure world)</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=lpcxpresso55s_ns</span></code>: Non Secure world of LPCXpresso55s</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=lpcxpresso55s_s</span></code>: Secure world of LPCXpresso55s</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=iMXLinux</span></code>: Embedded Linux on i.MX</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=Raspbian</span></code>: Embedded Linux on RaspBerry PI</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Host=Android</span></code>: Android</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-smcom">
+<span id="cmake-option-ptmw-smcom"></span><h2><span class="section-number">4.7.4. </span>PTMW_SMCOM<a class="headerlink" href="#ptmw-smcom" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_SMCOM">
+<span id="cmdoption-arg-ptmw-smcom"></span><span class="sig-name descname"><span class="pre">PTMW_SMCOM</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_SMCOM" title="Permalink to this definition">¶</a></dt>
+<dd><p>Communication Interface</p>
+<p>How the host library communicates to the Secure Element.
+This may be directly over an I2C interface on embedded platform.
+Or sometimes over Remote protocol like JRCP_V1 / JRCP_V1_AM / JRCP_V2 / VCOM from PC.</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=None</span></code>: Not using any Communication layer</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=JRCP_V2</span></code>: Socket Interface New Implementation</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=JRCP_V1</span></code>: Socket Interface Old Implementation.</dt><dd><p>This is the interface used from Host PC when when we run jrcpv1_server
+from the linux PC.</p>
+</dd>
+</dl>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=JRCP_V1_AM</span></code>: JRCP_V1 extended with Access manager features</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=VCOM</span></code>: Virtual COM Port</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=T1oI2C</span></code>: T=1 over I2C for SE050</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=T1oI2C_GP1_0</span></code>: GP Spec</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SMCOM=PCSC</span></code>: CCID PC/SC reader interface</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-hostcrypto">
+<span id="cmake-option-ptmw-hostcrypto"></span><h2><span class="section-number">4.7.5. </span>PTMW_HostCrypto<a class="headerlink" href="#ptmw-hostcrypto" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_HostCrypto">
+<span id="cmdoption-arg-ptmw-hostcrypto"></span><span class="sig-name descname"><span class="pre">PTMW_HostCrypto</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_HostCrypto" title="Permalink to this definition">¶</a></dt>
+<dd><p>Counterpart Crypto on Host</p>
+<p>What is being used as a cryptographic library on the host.
+As of now only OpenSSL / mbedTLS is supported</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_HostCrypto=MBEDTLS</span></code>: Use mbedTLS as host crypto</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_HostCrypto=OPENSSL</span></code>: Use OpenSSL as host crypto</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">-DPTMW_HostCrypto=User</span></code>: User Implementation of Host Crypto</dt><dd><p>e.g. Files at <code class="docutils literal notranslate"><span class="pre">sss/src/user/crypto</span></code> have low level AES/CMAC primitives.
+The files at <code class="docutils literal notranslate"><span class="pre">sss/src/user</span></code> use those primitives.
+This becomes an example for users with their own AES Implementation
+This then becomes integration without mbedTLS/OpenSSL for SCP03 / AESKey.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>ECKey abstraction is not implemented/available yet.</p>
+</div>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-DPTMW_HostCrypto=None</span></code>: NO Host Crypto</dt><dd><p>Note, this is unsecure and only provided for experimentation
+on platforms that do not have an mbedTLS PORT
+Many <a class="reference internal" href="#sssftr-control"><span class="std std-ref">Feature Control</span></a> have to be disabled to have a valid build.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="ptmw-rtos">
+<span id="cmake-option-ptmw-rtos"></span><h2><span class="section-number">4.7.6. </span>PTMW_RTOS<a class="headerlink" href="#ptmw-rtos" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_RTOS">
+<span id="cmdoption-arg-ptmw-rtos"></span><span class="sig-name descname"><span class="pre">PTMW_RTOS</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_RTOS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Choice of Operating system</p>
+<p>Default would mean nothing special.
+i.e. Without any RTOS on embedded system, or default APIs on PC/Linux</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_RTOS=Default</span></code>: No specific RTOS. Either bare matal on embedded system or native linux or Windows OS</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_RTOS=FreeRTOS</span></code>: Free RTOS for embedded systems</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-mbedtls-alt">
+<span id="cmake-option-ptmw-mbedtls-alt"></span><h2><span class="section-number">4.7.7. </span>PTMW_mbedTLS_ALT<a class="headerlink" href="#ptmw-mbedtls-alt" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_mbedTLS_ALT">
+<span id="cmdoption-arg-ptmw-mbedtls-alt"></span><span class="sig-name descname"><span class="pre">PTMW_mbedTLS_ALT</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_mbedTLS_ALT" title="Permalink to this definition">¶</a></dt>
+<dd><p>ALT Engine implementation for mbedTLS</p>
+<p>When set to None, mbedTLS would not use ALT Implementation to connect to / use Secure Element.
+This needs to be set to SSS for Cloud Demos over SSS APIs</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_mbedTLS_ALT=SSS</span></code>: Use SSS Layer ALT implementation</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_mbedTLS_ALT=PSA</span></code>: Enable TF-M based on PSA as ALT</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_mbedTLS_ALT=None</span></code>: Not using any mbedTLS_ALT</p>
+<blockquote>
+<div><p>When this is selected, cloud demos can not work with mbedTLS</p>
+</div></blockquote>
+</dd></dl>
+
+</section>
+<section id="ptmw-scp">
+<span id="cmake-option-ptmw-scp"></span><h2><span class="section-number">4.7.8. </span>PTMW_SCP<a class="headerlink" href="#ptmw-scp" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_SCP">
+<span id="cmdoption-arg-ptmw-scp"></span><span class="sig-name descname"><span class="pre">PTMW_SCP</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_SCP" title="Permalink to this definition">¶</a></dt>
+<dd><p>Secure Channel Protocol</p>
+<p>In case we enable secure channel to Secure Element, which interface to be used.</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SCP=None</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SCP=SCP03_SSS</span></code>: Use SSS Layer for SCP.  Used for SE050 family.</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-fips">
+<span id="cmake-option-ptmw-fips"></span><h2><span class="section-number">4.7.9. </span>PTMW_FIPS<a class="headerlink" href="#ptmw-fips" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_FIPS">
+<span id="cmdoption-arg-ptmw-fips"></span><span class="sig-name descname"><span class="pre">PTMW_FIPS</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_FIPS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable or disable FIPS</p>
+<p>This selection mostly impacts tests, and generally not the actual Middleware</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_FIPS=None</span></code>: NO FIPS</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_FIPS=SE050</span></code>: SE050 IC FIPS</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-sbl">
+<span id="cmake-option-ptmw-sbl"></span><h2><span class="section-number">4.7.10. </span>PTMW_SBL<a class="headerlink" href="#ptmw-sbl" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_SBL">
+<span id="cmdoption-arg-ptmw-sbl"></span><span class="sig-name descname"><span class="pre">PTMW_SBL</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_SBL" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enable/Disable SBL Bootable support</p>
+<p>This option is to enable/disable boot from SBL by switching linker address</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SBL=None</span></code>: Not SBL bootable</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SBL=SBL_LPC55S</span></code>: SE050 based LPC55S SBL bootable</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-se05x-auth">
+<span id="cmake-option-ptmw-se05x-auth"></span><h2><span class="section-number">4.7.11. </span>PTMW_SE05X_Auth<a class="headerlink" href="#ptmw-se05x-auth" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_SE05X_Auth">
+<span id="cmdoption-arg-ptmw-se05x-auth"></span><span class="sig-name descname"><span class="pre">PTMW_SE05X_Auth</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_SE05X_Auth" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE050 Authentication</p>
+<p>This settings is used by examples to connect using various options
+to authenticate with the Applet.
+The SE05X_Auth options can be changed for MCU-SDK Demos and Examples.
+To change SE05X_Auth option follow below steps.
+Set flag <code class="docutils literal notranslate"><span class="pre">SSS_HAVE_SCP_SCP03_SSS</span></code> to 1 and Reset flag <code class="docutils literal notranslate"><span class="pre">SSS_HAVE_SCP_NONE</span></code> to 0.
+To change SE05X_Auth option other than <code class="docutils literal notranslate"><span class="pre">None</span></code> and  <code class="docutils literal notranslate"><span class="pre">PlatfSCP03</span></code>,
+execute se05x_Delete_and_test_provision.exe in order to provision the Authentication Key.
+To change SE05X_Auth option to <code class="docutils literal notranslate"><span class="pre">ECKey</span></code> or <code class="docutils literal notranslate"><span class="pre">ECKey_PlatfSCP03</span></code>,
+Set additional flag <code class="docutils literal notranslate"><span class="pre">SSS_HAVE_HOSTCRYPTO_ANY</span></code> to 1.</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=None</span></code>: Use the default session (i.e. session less) login</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=UserID</span></code>: Do User Authentication with UserID</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=PlatfSCP03</span></code>: Use Platform SCP for connection to SE</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=AESKey</span></code>: Do User Authentication with AES Key</dt><dd><p>Earlier this was called AppletSCP03</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=ECKey</span></code>: Do User Authentication with EC Key</dt><dd><p>Earlier this was called FastSCP</p>
+</dd>
+</dl>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=UserID_PlatfSCP03</span></code>: UserID and PlatfSCP03</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=AESKey_PlatfSCP03</span></code>: AESKey and PlatfSCP03</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE05X_Auth=ECKey_PlatfSCP03</span></code>: ECKey and PlatfSCP03</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-log">
+<span id="cmake-option-ptmw-log"></span><h2><span class="section-number">4.7.12. </span>PTMW_Log<a class="headerlink" href="#ptmw-log" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_Log">
+<span id="cmdoption-arg-ptmw-log"></span><span class="sig-name descname"><span class="pre">PTMW_Log</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_Log" title="Permalink to this definition">¶</a></dt>
+<dd><p>Logging</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Log=Default</span></code>: Default Logging</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Log=Verbose</span></code>: Very Verbose logging</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_Log=Silent</span></code>: Totally silent logging</p>
+</dd></dl>
+
+</section>
+<section id="cmake-build-type">
+<span id="cmake-option-cmake-build-type"></span><h2><span class="section-number">4.7.13. </span>CMAKE_BUILD_TYPE<a class="headerlink" href="#cmake-build-type" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-CMAKE_BUILD_TYPE">
+<span id="cmdoption-arg-cmake-build-type"></span><span class="sig-name descname"><span class="pre">CMAKE_BUILD_TYPE</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-CMAKE_BUILD_TYPE" title="Permalink to this definition">¶</a></dt>
+<dd><p>See <a class="reference external" href="https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html">https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html</a></p>
+<p>For embedded builds, this choices sets optimization levels.
+For MSVC builds, build type is selected from IDE As well</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DCMAKE_BUILD_TYPE=Debug</span></code>: For developer</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DCMAKE_BUILD_TYPE=Release</span></code>: Optimization enabled and debug symbols removed</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DCMAKE_BUILD_TYPE=RelWithDebInfo</span></code>: Optimization enabled but with debug symbols</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DCMAKE_BUILD_TYPE=</span></code>: Empty Allowed</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-openssl">
+<span id="cmake-option-ptmw-openssl"></span><h2><span class="section-number">4.7.14. </span>PTMW_OpenSSL<a class="headerlink" href="#ptmw-openssl" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_OpenSSL">
+<span id="cmdoption-arg-ptmw-openssl"></span><span class="sig-name descname"><span class="pre">PTMW_OpenSSL</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_OpenSSL" title="Permalink to this definition">¶</a></dt>
+<dd><p>For PC, which OpenSSL to pick up</p>
+<p>On Linux based builds, this option has no impact, because the build system
+picks up the default available/installed OpenSSL from the system directly.</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_OpenSSL=1_1_1</span></code>: Use 1.1.1 version (Only applicable on PC)</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_OpenSSL=3_0</span></code>: Use 3.0 version (Only applicable on PC)</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-mbedtls">
+<span id="cmake-option-ptmw-mbedtls"></span><h2><span class="section-number">4.7.15. </span>PTMW_MBedTLS<a class="headerlink" href="#ptmw-mbedtls" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_MBedTLS">
+<span id="cmdoption-arg-ptmw-mbedtls"></span><span class="sig-name descname"><span class="pre">PTMW_MBedTLS</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_MBedTLS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Which MBedTLS version to choose</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_MBedTLS=2_X</span></code>: Use 2.X version</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_MBedTLS=3_X</span></code>: Use 3.X version</p>
+</dd></dl>
+
+</section>
+<section id="ptmw-se-reset-logic">
+<span id="cmake-option-ptmw-se-reset-logic"></span><h2><span class="section-number">4.7.16. </span>PTMW_SE_RESET_LOGIC<a class="headerlink" href="#ptmw-se-reset-logic" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-PTMW_SE_RESET_LOGIC">
+<span id="cmdoption-arg-ptmw-se-reset-logic"></span><span class="sig-name descname"><span class="pre">PTMW_SE_RESET_LOGIC</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-PTMW_SE_RESET_LOGIC" title="Permalink to this definition">¶</a></dt>
+<dd><p>Reset logic of Secure Element. The value of this will be used for ‘SE_RESET_LOGIC’ define in ‘se05x_ic_reset’ function. Select 1 (Active High) for SE050 and 51. Select 0 (Active low) for SE052.</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE_RESET_LOGIC=1</span></code>: reset logic is set to 1</p>
+<p><code class="docutils literal notranslate"><span class="pre">-DPTMW_SE_RESET_LOGIC=0</span></code>: reset logic is set to 0</p>
+</dd></dl>
+
+</section>
+<section id="feature-control">
+<span id="sssftr-control"></span><h2><span class="section-number">4.7.17. </span>Feature Control<a class="headerlink" href="#feature-control" title="Permalink to this headline">¶</a></h2>
+<p>Using these options, you can enable/disable individual features.</p>
+<p>See <a class="reference internal" href="../stack/feature-file.html#ftr-file-reduce-code-size"><span class="std std-numref">Section 3.8.4</span></a> <a class="reference internal" href="../stack/feature-file.html#ftr-file-reduce-code-size"><span class="std std-ref">Using feature file to reduce code size</span></a>
+for details on it’s usage and relevance.</p>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_AES">
+<span id="cmdoption-arg-sssftr-se05x-aes"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_AES</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_AES" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : Symmetric AES</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_ECC">
+<span id="cmdoption-arg-sssftr-se05x-ecc"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_ECC</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_ECC" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : Elliptic Curve Cryptography</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_RSA">
+<span id="cmdoption-arg-sssftr-se05x-rsa"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_RSA</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_RSA" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : RSA</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_KEY_SET">
+<span id="cmdoption-arg-sssftr-se05x-key-set"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_KEY_SET</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_KEY_SET" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : KEY operations : SET Key</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_KEY_GET">
+<span id="cmdoption-arg-sssftr-se05x-key-get"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_KEY_GET</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_KEY_GET" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : KEY operations : GET Key</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_AuthECKey">
+<span id="cmdoption-arg-sssftr-se05x-autheckey"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_AuthECKey</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_AuthECKey" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : Authenticate via ECKey</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_AuthSession">
+<span id="cmdoption-arg-sssftr-se05x-authsession"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_AuthSession</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_AuthSession" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : Allow creation of user/authenticated session.</p>
+<p>If the intended deployment only uses Platform SCP
+Or it is a pure session less integration, this can
+save some code size.</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SE05X_CREATE_DELETE_CRYPTOOBJ">
+<span id="cmdoption-arg-sssftr-se05x-create-delete-cryptoobj"></span><span class="sig-name descname"><span class="pre">SSSFTR_SE05X_CREATE_DELETE_CRYPTOOBJ</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SE05X_CREATE_DELETE_CRYPTOOBJ" title="Permalink to this definition">¶</a></dt>
+<dd><p>SE05X Secure Element : Allow creation/deletion of Crypto Objects</p>
+<p>If disabled, new Crytpo Objects are neither created and
+old/existing Crypto Objects are not deleted.
+It is assumed that during provisioning phase, the required
+Crypto Objects are pre-created or they are never going to
+be needed.</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SW_AES">
+<span id="cmdoption-arg-sssftr-sw-aes"></span><span class="sig-name descname"><span class="pre">SSSFTR_SW_AES</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SW_AES" title="Permalink to this definition">¶</a></dt>
+<dd><p>Software : Symmetric AES</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SW_ECC">
+<span id="cmdoption-arg-sssftr-sw-ecc"></span><span class="sig-name descname"><span class="pre">SSSFTR_SW_ECC</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SW_ECC" title="Permalink to this definition">¶</a></dt>
+<dd><p>Software : Elliptic Curve Cryptography</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SW_RSA">
+<span id="cmdoption-arg-sssftr-sw-rsa"></span><span class="sig-name descname"><span class="pre">SSSFTR_SW_RSA</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SW_RSA" title="Permalink to this definition">¶</a></dt>
+<dd><p>Software : RSA</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SW_KEY_SET">
+<span id="cmdoption-arg-sssftr-sw-key-set"></span><span class="sig-name descname"><span class="pre">SSSFTR_SW_KEY_SET</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SW_KEY_SET" title="Permalink to this definition">¶</a></dt>
+<dd><p>Software : KEY operations : SET Key</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SW_KEY_GET">
+<span id="cmdoption-arg-sssftr-sw-key-get"></span><span class="sig-name descname"><span class="pre">SSSFTR_SW_KEY_GET</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SW_KEY_GET" title="Permalink to this definition">¶</a></dt>
+<dd><p>Software : KEY operations : GET Key</p>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SSSFTR_SW_TESTCOUNTERPART">
+<span id="cmdoption-arg-sssftr-sw-testcounterpart"></span><span class="sig-name descname"><span class="pre">SSSFTR_SW_TESTCOUNTERPART</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SSSFTR_SW_TESTCOUNTERPART" title="Permalink to this definition">¶</a></dt>
+<dd><p>Software : Used as a test counterpart</p>
+<p>e.g. Major part of the mebdTLS SSS layer is purely used for
+testing of Secure Element implementation, and can be avoided
+fully during many production scenarios.</p>
+</dd></dl>
+
+</section>
+<section id="deprecated-defines">
+<span id="id1"></span><h2><span class="section-number">4.7.18. </span>Deprecated Defines<a class="headerlink" href="#deprecated-defines" title="Permalink to this headline">¶</a></h2>
+<p>Keept and for time being for backwards compatibility.  They will be removed in
+some future release.</p>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-WithNXPNFCRdLib">
+<span id="cmdoption-arg-withnxpnfcrdlib"></span><span class="sig-name descname"><span class="pre">WithNXPNFCRdLib</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-WithNXPNFCRdLib" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Compile in NXP NFC RdLib support</p></li>
+<li><p>Default is OFF</p></li>
+<li><p>Use NXP NFC RdLib. This is used mainly for RC663 + SAM Use Cases. Package available under NDA is needed to use this feature</p></li>
+</ul>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-WithOPCUA_open62541">
+<span id="cmdoption-arg-withopcua-open62541"></span><span class="sig-name descname"><span class="pre">WithOPCUA_open62541</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-WithOPCUA_open62541" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Compile With open62541 Support</p></li>
+<li><p>Default is OFF</p></li>
+<li><p>Compile with OPC UA.  By default it is disabled from compilation.</p></li>
+</ul>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-WithSharedLIB">
+<span id="cmdoption-arg-withsharedlib"></span><span class="sig-name descname"><span class="pre">WithSharedLIB</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-WithSharedLIB" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Create and use shared libraries</p></li>
+<li><p>Default is OFF</p></li>
+<li><p>Create shared libraries.  Applicable for Engine DLL and other use cases.</p></li>
+</ul>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-WithAccessMgr_UnixSocket">
+<span id="cmdoption-arg-withaccessmgr-unixsocket"></span><span class="sig-name descname"><span class="pre">WithAccessMgr_UnixSocket</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-WithAccessMgr_UnixSocket" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Compile Access Manager with UNIX socket support (Default is STREAM sockets).</p></li>
+<li><p>Default is OFF</p></li>
+<li><p>Compile Access Manager with unix socket support.</p></li>
+</ul>
+</dd></dl>
+
+</section>
+<section id="nxp-internal-options">
+<h2><span class="section-number">4.7.19. </span>NXP Internal Options<a class="headerlink" href="#nxp-internal-options" title="Permalink to this headline">¶</a></h2>
+<p>These options are not supported outside NXP.</p>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-NXPInternal">
+<span id="cmdoption-arg-nxpinternal"></span><span class="sig-name descname"><span class="pre">NXPInternal</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-NXPInternal" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>NXP Internal</p></li>
+<li><p>Default is OFF. (ON only within NXP)</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For deliveries outside NXP, this option is disabled.</p>
+</div>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-WithCodeCoverage">
+<span id="cmdoption-arg-withcodecoverage"></span><span class="sig-name descname"><span class="pre">WithCodeCoverage</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-WithCodeCoverage" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Compile with Code Coverage</p></li>
+<li><p>Default is OFF</p></li>
+</ul>
+</dd></dl>
+
+</section>
+<section id="other-variables">
+<h2><span class="section-number">4.7.20. </span>Other Variables<a class="headerlink" href="#other-variables" title="Permalink to this headline">¶</a></h2>
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-WithExtCustomerTPMCode">
+<span id="cmdoption-arg-withextcustomertpmcode"></span><span class="sig-name descname"><span class="pre">WithExtCustomerTPMCode</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-WithExtCustomerTPMCode" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Include code from ../customer/tpm2</p></li>
+<li><p>Default is OFF</p></li>
+<li><p>Include code from external tpm2 folder. This way, TPM code can be included in build from outside the simw-top repository.</p></li>
+</ul>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SIMW_INSTALL_INC_DIR">
+<span id="cmdoption-arg-simw-install-inc-dir"></span><span class="sig-name descname"><span class="pre">SIMW_INSTALL_INC_DIR</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SIMW_INSTALL_INC_DIR" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Location where library header files are installed for linux based targets. (Used for iMX Linux)</p></li>
+<li><p>Default location is <code class="docutils literal notranslate"><span class="pre">&lt;/usr/local/&gt;include/se05x</span></code></p></li>
+</ul>
+</dd></dl>
+
+<dl class="std option">
+<dt class="sig sig-object std" id="cmdoption-arg-SIMW_INSTALL_SHARE_DIR">
+<span id="cmdoption-arg-simw-install-share-dir"></span><span class="sig-name descname"><span class="pre">SIMW_INSTALL_SHARE_DIR</span></span><span class="sig-prename descclassname"></span><a class="headerlink" href="#cmdoption-arg-SIMW_INSTALL_SHARE_DIR" title="Permalink to this definition">¶</a></dt>
+<dd><ul class="simple">
+<li><p>Location where miscellaneous scripts
+get copiled for linux based targets. (Used for iMX Linux)</p></li>
+<li><p>e.g. <code class="docutils literal notranslate"><span class="pre">cmake_options.mak</span></code> which has current cmake build settings.</p></li>
+<li><p>Default location is <code class="docutils literal notranslate"><span class="pre">&lt;/usr/local/&gt;share/se05x</span></code></p></li>
+</ul>
+</dd></dl>
+
+</section>
+</section>
+
+
+    </div>
+      
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-right">
+      <a href="#">Back to top</a>
+      
+    </p>
+    <p>
+        &copy; Copyright 2018-2020, NXP.<br/>
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.5.0.<br/>
+    </p>
+  </div>
+</footer>
+  </body>
+</html>

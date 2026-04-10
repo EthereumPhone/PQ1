@@ -1,0 +1,23 @@
+{
+    "Copyright": "Copyright 2020 NXP",
+    "TargetCommercialName": "SE051P2HQ1/Z011A",
+    "Target12nc": "123456789012",
+    "TargetEntityID": "00000000000000000063709317141879",
+    "requiredFreeBytesNonVolatileMemory": 0,
+    "requiredFreeBytesTransientMemory": 0,
+    "MulticastPackageName": "DeleteInstance_NXP-IoTApplet",
+    "MulticastPackageDescription": "Package to delete the instance of the NXP IoT Applet. Generated with SEMS-Lite script generator version 0.9.15.",
+    "SubComponentMetaData": [
+        {
+            "name": "NXP-IoT-Applet",
+            "aid": "A0000003965453000000010300FE00",
+            "version": "0.1"
+        },
+        {
+            "name": "NXP-IoT-Applet",
+            "aid": "A0000003965453000000010300FF00",
+            "version": "0.1"
+        }
+    ],
+    "MulticastPackageVersion": "1.0"
+}

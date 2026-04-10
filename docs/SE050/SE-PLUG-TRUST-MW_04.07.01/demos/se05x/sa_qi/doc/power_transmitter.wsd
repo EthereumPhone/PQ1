@@ -1,0 +1,28 @@
+skinparam ObjectFontSize 26
+skinparam ObjectAttributeFontSize 20
+skinparam PackageFontSize 30
+skinparam ArrowThickness 2
+skinparam ArrowFontSize 22
+
+package PowerTransmitter {
+    object GetCertificateChainDigest {
+        input : GET_DIGESTS request
+        output : DIGESTS response
+    }
+    object ReadCertificates {
+        input : GET_CERTIFICATE request
+        output : CERTIFICATE response
+    }
+    object Authenticate {
+        input : CHALLENGE request
+        output : CHALLENGE_AUTH response
+    }
+}
+
+GetCertificateChainDigest -[hidden]-> ReadCertificates
+GetCertificateChainDigest -[hidden]-> ReadCertificates
+GetCertificateChainDigest -[hidden]-> ReadCertificates
+ReadCertificates -[hidden]-> Authenticate
+ReadCertificates -[hidden]-> Authenticate
+ReadCertificates -[hidden]-> Authenticate
+

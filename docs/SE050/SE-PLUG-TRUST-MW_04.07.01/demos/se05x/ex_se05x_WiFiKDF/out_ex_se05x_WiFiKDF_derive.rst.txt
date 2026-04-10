@@ -1,0 +1,20 @@
+App   :INFO :PlugAndTrust_v02.13.00_20200208
+App   :INFO :Running ..\..\..\simw-top_build\se_x86\bin\Debug\ex_se05x_WiFiKDF_derive.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+sss   :INFO :atr (Len=0)
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Deriving PBKDF2 for wifi_ssid='some-wifi-ssid', WIFI_COUNT='4096'
+App   :INFO :wifi_derivedKey (Len=32)
+      C9 A6 69 F9    6D A2 74 A1    41 43 A9 ED    D1 8F 68 1B 
+      B1 3E 6B 8B    F0 16 02 7A    7D 72 BF 0E    0C 53 CD 7C 
+
+# Data for /etc/wpa_supplicant/wpa_supplicant.conf
+network={
+    ssid="some-wifi-ssid"
+    psk=c9a669f96da274a14143a9edd18f681bb13e6b8bf01627a7d72bfec53cd7c
+}
+App   :INFO :Done
+App   :INFO :ex_sss Finished

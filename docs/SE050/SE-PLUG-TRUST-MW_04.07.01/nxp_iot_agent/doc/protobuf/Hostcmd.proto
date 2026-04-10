@@ -1,0 +1,23 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2018-2022 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.hostcmd";
+option java_multiple_files = true;
+
+/* doc:host-cmd:start */
+message HostControlCmdRequest {
+  enum eControlCmd {
+    RESET_SE = 10;
+  }
+
+  optional eControlCmd hostControlCmd = 1;
+}
+/* doc:host-cmd:end */

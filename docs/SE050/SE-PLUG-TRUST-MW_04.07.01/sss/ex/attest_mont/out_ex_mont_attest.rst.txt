@@ -1,0 +1,39 @@
+App   :INFO :PlugAndTrust_v02.14.00_20200331
+App   :INFO :Running ..\..\..\simw-top_build\se_x86\bin\Debug\ex_attest_mont.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Running ECC key attestation example ex_sss_attest_mont.c
+App   :INFO :Inject ECC Montgomery key pair - 'ecc_mont_key'
+sss   :WARN :nxEnsure:'ret == SM_OK' failed. At Line:5621 Function:sss_se05x_TXn
+App   :INFO :Create a attestation ECC key pair - 'attestation_ecc_key'
+App   :INFO :Read public key from ECC key pair 'ecc_key' with attestation
+App   :INFO :Attested Key -->
+App   :INFO :Public Key (Little endian format) (Len=44)
+      30 2A 30 05    06 03 2B 65    6E 03 21 00    85 20 F0 09
+      89 30 A7 54    74 8B 7D DC    B4 3E F7 5A    0D BF 3A 0D
+      26 38 1A F4    EB A4 A9 8E    AA 9B 4E 6A
+App   :INFO :Attribute (Len=17)
+      EF 00 00 8A    01 01 00 00    00 00 00 00    00 00 01 00
+      00
+App   :INFO :Time Stamp (Len=12)
+      00 00 00 18    FF FF FF ED    00 01 30 B0
+App   :INFO :Out Random Value (Len=16)
+      01 02 03 04    05 06 07 08    09 01 02 03    04 05 06 07
+App   :INFO :Chip Id (Len=18)
+      04 0D 0F 00    39 67 C2 C1    CE 41 1B 9A    76 F5 B7 AB
+      D0 CD
+App   :INFO :Signature (Len=71)
+      30 45 02 20    7A F8 E5 21    E7 0D 01 A9    9A AC 99 2A
+      AA 36 3A 89    C0 A7 CE 43    2B 85 CC FB    6E 98 A1 9C
+      2A E8 BC 4B    02 21 00 E7    0F 82 DD F2    43 C3 B2 CD
+      54 26 61 F0    06 AE 98 5B    2C 95 89 D7    A2 F3 4A 6E
+      13 12 A4 82    23 FF BD
+App   :INFO :Verify attestation signature using 'attestation_ecc_key' key
+App   :INFO :Singing is done on public key without header and with key in big endian format
+App   :INFO :Covert the key to big endian format for verification of signature
+App   :INFO :Verification success
+App   :INFO :ex_sss_attest_mont Example Success !!!...
+App   :INFO :ex_sss Finished

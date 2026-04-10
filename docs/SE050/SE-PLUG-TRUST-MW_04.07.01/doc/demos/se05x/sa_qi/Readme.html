@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<!--
+Copyright 2019 NXP
+-->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>5.7.31. Secure Authenticator (Qi) Authentication demo &#8212; Plug &amp; Trust MW v04.07.01 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/bootstrap-sphinx.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css" />
+    <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="5.7.32. SE052 Reset Example" href="../se052_reset_example/readme.html" />
+    <link rel="prev" title="5.7.30. SE05X SCP03 BOOT Example" href="../se05x_scp03_boot/readme.html" />
+<meta charset='utf-8'>
+<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="text/javascript" src="../../../_static/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="../../../_static/js/jquery-fix.js"></script>
+<script type="text/javascript" src="../../../_static/bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="../../../_static/bootstrap-sphinx.js"></script>
+
+  </head><body>
+
+  <div id="navbar" class="navbar navbar-inverse navbar-default navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="../../../toc.html"><span><img src="../../../_static/NXP_logo_JPG.jpg"></span>
+          MW</a>
+        <span class="navbar-text navbar-version pull-left"><b>v04.07.01</b></span>
+      </div>
+
+        <div class="collapse navbar-collapse nav-collapse">
+          <ul class="nav navbar-nav">
+            
+            
+              <li class="dropdown globaltoc-container">
+  <a role="button"
+     id="dLabelGlobalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="../../../toc.html">TOC <b class="caret"></b></a>
+  <ul class="dropdown-menu globaltoc"
+      role="menu"
+      aria-labelledby="dLabelGlobalToc"><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../index.html">1. NXP Plug &amp; Trust Middleware</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../organization-of-documentation.html">1.1. Organization of Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../folder-structure.html">1.2. Folder Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sw-prerequisites.html">1.3. List of Platform Prerequisites</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changes/index.html">2. Changes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_14_00.html">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../changes/v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss-apis.html">3.3. SSS APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/i2cm.html">3.6. I2CM / Secure Sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/logging.html">3.7. Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/scp03/index.html">3.9. Platform SCP03 Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../stack/secure_boot.html">3.19. Secure Boot</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../building/index.html">4. Building / Compiling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../scripts/cmake_options.html">4.7. CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">5. Demo and Examples</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/sems_lite_package.html">7.2. Update Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../plugins/index.html">8. Plugins / Add-ins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/plugin/openssl/scripts/readme.html">8.1. Introduction on OpenSSL engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/plugin/openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/plugin/mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/plugin/mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/plugin/psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../sss/plugin/open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/Provisioning/readme.html">9.5. CLI Provisioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/cli_data_format.html">9.8. CLI Data formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../appendix.html">10. Appendix</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/api_list.html">10.13. Plug &amp; Trust MW APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../Revision_history.html">12. Revision history</a></li>
+</ul>
+</ul>
+</li>
+              
+                <li class="dropdown">
+  <a role="button"
+     id="dLabelLocalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">Page <b class="caret"></b></a>
+  <ul class="dropdown-menu localtoc"
+      role="menu"
+      aria-labelledby="dLabelLocalToc"><ul>
+<li><a class="reference internal" href="#">5.7.31. Secure Authenticator (Qi) Authentication demo</a><ul>
+<li><a class="reference internal" href="#pre-requisites">5.7.31.1. Pre-requisites</a></li>
+<li><a class="reference internal" href="#getcertificatechaindigest-get-digests">5.7.31.2. GetCertificateChainDigest (GET_DIGESTS)</a></li>
+<li><a class="reference internal" href="#readcertificates-get-certificate">5.7.31.3. ReadCertificates (GET_CERTIFICATE)</a></li>
+<li><a class="reference internal" href="#authenticate-challenge">5.7.31.4. Authenticate (CHALLENGE)</a></li>
+<li><a class="reference internal" href="#building-the-demo">5.7.31.5. Building the Demo</a></li>
+<li><a class="reference internal" href="#running-the-example">5.7.31.6. Running the Example</a></li>
+<li><a class="reference internal" href="#porting">5.7.31.7. Porting</a></li>
+</ul>
+</li>
+</ul>
+</ul>
+</li>
+              
+            
+            
+              
+                
+  <li>
+    <a href="../se05x_scp03_boot/readme.html" title="Previous Chapter: 5.7.30. SE05X SCP03 BOOT Example"><span class="glyphicon glyphicon-chevron-left visible-sm"></span><span class="hidden-sm hidden-tablet">&laquo; 5.7.30. SE05X...</span>
+    </a>
+  </li>
+  <li>
+    <a href="../se052_reset_example/readme.html" title="Next Chapter: 5.7.32. SE052 Reset Example"><span class="glyphicon glyphicon-chevron-right visible-sm"></span><span class="hidden-sm hidden-tablet">5.7.32. SE052... &raquo;</span>
+    </a>
+  </li>
+              
+            
+            
+            
+            
+          </ul>
+
+          
+
+        </div>
+    </div>
+  </div>
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+
+<div class="sidebar-header">
+    <h3>Plug &amp; Trust MW</h3>
+</div>
+
+<div class="row">
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changes/index.html">2. Changes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../stack/index.html">3. Plug &amp; Trust MW Stack</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../building/index.html">4. Building / Compiling</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">5. Demo and Examples</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html#se05x-examples">5.7. SE05X Examples</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../se05x_Minimal/readme.html">5.7.1. SE05X Minimal example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_GetInfo/Readme.html">5.7.2. SE05X Get Info example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../apdu_player/Readme.html">5.7.3. APDU Player Demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_policy/Readme.html">5.7.4. Using policies for secure objects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_GetCertificate/Readme.html">5.7.5. Get Certificate from the SE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_RotatePlatformSCP03Keys/Readme.html">5.7.6. SE05X Rotate PlatformSCP Keys Demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_I2cMaster/readme.html">5.7.7. I2C Master Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../ex_se05x_WiFiKDF/Readme.html">5.7.8. SE05X WiFi KDF Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_export/readme.html">5.7.9. SE05X Export Transient objects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_import/readme.html">5.7.10. SE05X Import Transient objects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_ImportExternalObjectPrepare/Readme.html">5.7.11. Import External Object Prepare</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_MandatePlatformSCP/Readme.html">5.7.12. SE05X Mandate SCP example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_ReadWithAttestation/Readme.html">5.7.13. Read object with Attestation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_TransportLock/readme.html">5.7.14. SE05X Transport Lock example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_TransportUnLock/readme.html">5.7.15. SE05X Transport UnLock example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_TimeStamp/Readme.html">5.7.16. SE05X Timestamp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_PCR/Readme.html">5.7.17. SE05X PCR example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_SetAppletFeatures/Readme.html">5.7.18. Configuring Applet Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_InjectCertificate/Readme.html">5.7.19. Inject Certificate into SE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_ReadState/Readme.html">5.7.20. SE05X Read State example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_Perso_Delete_Mod_RSAKeyGen/readme.html">5.7.21. SE05X Personalization Remove RSA Key Generation Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_Personalization/readme.html">5.7.22. DEMO for Personalization of SE051</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_MultiThread/Readme.html">5.7.23. SE05X MultiThread demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_InvokeGarbageCollection/readme.html">5.7.24. SE05X Invoke Garbage Collection Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_ConcurrentEcc/readme.html">5.7.25. ECC Concurrent Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_ConcurrentSymm/readme.html">5.7.26. Symmetric Multi Step Concurrent Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_Delete_and_test_provision/Readme.html">5.7.27. Delete and Test Provision</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_MultipleDigestCryptoObj/Readme.html">5.7.28. se05x Multiple Digest Crypto Objects example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_AllowWithoutPlatformSCP/Readme.html">5.7.29. SE05X Allow Without SCP example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_scp03_boot/readme.html">5.7.30. SE05X SCP03 BOOT Example</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">5.7.31. Secure Authenticator (Qi) Authentication demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se052_reset_example/readme.html">5.7.32. SE052 Reset Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se052_deep_pwr_down/readme.html">5.7.33. SE052 Deep Power down example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_multi_thread_multi_session/readme.html">5.7.34. SE05X Multi Thread and Multi session example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../se05x_am_reset_ex/readme.html">5.7.35. SE05X Access Manager Reset example</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../semslite/doc/index.html">7. SEMS Lite Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../plugins/index.html">8. Plugins / Add-ins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cli-tool.html">9. CLI Tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../appendix.html">10. Appendix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../Revision_history.html">12. Revision history</a></li>
+</ul>
+
+</div>
+<div class="row">
+    <form class="form" action="../../../search.html" method="get">
+     <div class="form-group">
+      <label for="Search">Search:</label>
+      <input type="text" name="q" class="form-control" placeholder="Search" />
+     </div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+        </div>
+      </div>
+    <div class="body col-md-9 content" role="main">
+      
+  <section id="secure-authenticator-qi-authentication-demo">
+<span id="ex-se05x-qi-auth"></span><h1><span class="section-number">5.7.31. </span>Secure Authenticator (Qi) Authentication demo<a class="headerlink" href="#secure-authenticator-qi-authentication-demo" title="Permalink to this headline">¶</a></h1>
+<div class="contents local topic" id="contents">
+<ul class="simple">
+<li><p><a class="reference internal" href="#pre-requisites" id="id1">Pre-requisites</a></p></li>
+<li><p><a class="reference internal" href="#getcertificatechaindigest-get-digests" id="id2">GetCertificateChainDigest (GET_DIGESTS)</a></p></li>
+<li><p><a class="reference internal" href="#readcertificates-get-certificate" id="id3">ReadCertificates (GET_CERTIFICATE)</a></p></li>
+<li><p><a class="reference internal" href="#authenticate-challenge" id="id4">Authenticate (CHALLENGE)</a></p></li>
+<li><p><a class="reference internal" href="#building-the-demo" id="id5">Building the Demo</a></p></li>
+<li><p><a class="reference internal" href="#running-the-example" id="id6">Running the Example</a></p></li>
+<li><p><a class="reference internal" href="#porting" id="id7">Porting</a></p></li>
+</ul>
+</div>
+<p>This project is used to demonstrate the Qi authentication flow between a Power Transmitter and
+a Power Receiver. The Power Transmitter implements 3 functions for the 3 authentication requests
+a Receiver can issue to the Transmitter : <code class="docutils literal notranslate"><span class="pre">GetCertificateChainDigest</span></code>, <code class="docutils literal notranslate"><span class="pre">ReadCertificates</span></code>, <code class="docutils literal notranslate"><span class="pre">Authenticate</span></code>.</p>
+<img alt="doc/diagram.jpeg" src="doc/diagram.jpeg" />
+<section id="pre-requisites">
+<h2><span class="section-number">5.7.31.1. </span>Pre-requisites<a class="headerlink" href="#pre-requisites" title="Permalink to this headline">¶</a></h2>
+<ul>
+<li><p>The secure element should be trust provisioned with correct keys and
+certificates for Qi Authentication. Keys and certificates can be provisioned
+for test purpose by updating keys in <code class="file docutils literal notranslate"><span class="pre">demos/se05x/sa_qi_provisioning/sa_qi_credentials.c</span></code>
+and running example <a class="reference internal" href="sa_qi_provisioning/Readme.html#ex-se05x-qi-provisioning"><span class="std std-ref">Secure Authenticator (Qi) Provisioning demo</span></a>.</p></li>
+<li><p>By default WPC Root certificate is used in the certificate chain.
+If example <a class="reference internal" href="sa_qi_provisioning/Readme.html#ex-se05x-qi-provisioning"><span class="std std-ref">Secure Authenticator (Qi) Provisioning demo</span></a> is run, you would need to disable
+macro <code class="docutils literal notranslate"><span class="pre">USE_ROOT_WPCCA</span></code> in <code class="file docutils literal notranslate"><span class="pre">sa_qi_rootcert.c</span></code> to use test RootCA:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="cp">#ifndef USE_ROOT_WPCCA</span>
+<span class="cp">#define USE_ROOT_WPCCA 1</span>
+<span class="cp">#endif</span>
+</pre></div>
+</div>
+</li>
+</ul>
+</section>
+<section id="getcertificatechaindigest-get-digests">
+<h2><span class="section-number">5.7.31.2. </span>GetCertificateChainDigest (GET_DIGESTS)<a class="headerlink" href="#getcertificatechaindigest-get-digests" title="Permalink to this headline">¶</a></h2>
+<p>This function reads the digests of certificate chains stored inside the secure element
+and returns all the digests as requested by the Power Receiver.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span> <span class="nf">GetCertificateChainDigest</span><span class="p">(</span><span class="k">const</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pGetDigestRequest</span><span class="p">,</span>
+    <span class="k">const</span> <span class="kt">size_t</span> <span class="n">getDigestRequestLen</span><span class="p">,</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pDigestResponse</span><span class="p">,</span>
+    <span class="kt">size_t</span> <span class="o">*</span><span class="n">pDigestResponseLen</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">smStatus_t</span> <span class="n">retStatus</span>        <span class="o">=</span> <span class="n">SM_NOT_OK</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">certChainId</span>        <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">objectSize</span>         <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">readSize</span>             <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pData</span>              <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="n">pSe05xSession_t</span> <span class="n">session_ctx</span> <span class="o">=</span> <span class="n">pgSe05xSessionctx</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pDigestPtr</span>         <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="n">qi_error_code_t</span> <span class="n">errorCode</span>  <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">authMsgHeader</span>      <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">requestedSlotMask</span>  <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">slotsPopulated</span>     <span class="o">=</span> <span class="mh">0x00</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">slotsReturned</span>      <span class="o">=</span> <span class="mh">0x00</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">slotsReturnedCount</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nb">NULL</span> <span class="o">==</span> <span class="n">pGetDigestRequest</span> <span class="o">||</span> <span class="nb">NULL</span> <span class="o">==</span> <span class="n">pDigestResponse</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Null buffer&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">authMsgHeader</span> <span class="o">=</span> <span class="n">pGetDigestRequest</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">getDigestRequestLen</span> <span class="o">!=</span> <span class="n">GET_DIGESTS_CMD_LEN</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Invalid request length&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">requestedSlotMask</span> <span class="o">=</span> <span class="n">pGetDigestRequest</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0x0F</span><span class="p">;</span>
+
+    <span class="cm">/* Invalid slot requested */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">requestedSlotMask</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;No slot requested&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Get all populated slots */</span>
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">getPopulatedSlots</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">slotsPopulated</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">SM_OK</span> <span class="o">!=</span> <span class="n">retStatus</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Failed to retrieve populated slots&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Is Slot 0 empty? - Return error as slot 0 must always be populated */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">slotsPopulated</span> <span class="o">&amp;</span> <span class="mh">0x01</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* We will return slots which were requested AND are provisioned */</span>
+    <span class="n">slotsReturned</span> <span class="o">=</span> <span class="n">requestedSlotMask</span> <span class="o">&amp;</span> <span class="n">slotsPopulated</span><span class="p">;</span>
+    <span class="n">pDigestPtr</span>    <span class="o">=</span> <span class="o">&amp;</span><span class="n">pDigestResponse</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+
+    <span class="cm">/* Validate response buffer size */</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">MAX_SLOTS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">slotsReturned</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="mh">0x01</span> <span class="o">&lt;&lt;</span> <span class="n">i</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">slotsReturnedCount</span><span class="o">++</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">pDigestResponseLen</span> <span class="o">&lt;</span> <span class="p">(</span><span class="kt">size_t</span><span class="p">)((</span><span class="n">slotsReturnedCount</span> <span class="o">*</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">)</span> <span class="o">+</span> <span class="mi">2</span><span class="p">))</span> <span class="p">{</span>
+        <span class="cm">/* Response buffer size too less */</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">pData</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="p">)</span><span class="n">SSS_MALLOC</span><span class="p">(</span><span class="n">slotsReturnedCount</span> <span class="o">*</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pData</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">MAX_SLOTS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">slotsReturned</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="mh">0x01</span> <span class="o">&lt;&lt;</span> <span class="n">i</span><span class="p">))</span> <span class="p">{</span>
+            <span class="n">certChainId</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">QI_SLOT_ID_TO_CERT_ID</span><span class="p">(</span><span class="n">i</span><span class="p">);</span>
+            <span class="cm">/* Read size of object to allocate necessary memory </span>
+<span class="cm">             * so that we can read the complete object */</span>
+            <span class="n">retStatus</span> <span class="o">=</span> <span class="n">Se05x_API_ReadSize</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">certChainId</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">objectSize</span><span class="p">);</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+                <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Failed Se05x_API_ReadSize&quot;</span><span class="p">);</span>
+                <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="cm">/* Size of binary object cannot be less than Digest size */</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">objectSize</span> <span class="o">&lt;</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+                <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="n">readSize</span>  <span class="o">=</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">;</span>
+            <span class="n">retStatus</span> <span class="o">=</span> <span class="n">Se05x_API_ReadObject</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">certChainId</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">,</span> <span class="n">pData</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">readSize</span><span class="p">);</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+                <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+                <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Failed Se05x_API_ReadObject&quot;</span><span class="p">);</span>
+                <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+            <span class="p">}</span>
+            <span class="n">memcpy</span><span class="p">(</span><span class="n">pDigestPtr</span><span class="p">,</span> <span class="n">pData</span><span class="p">,</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">);</span>
+            <span class="n">pDigestPtr</span> <span class="o">+=</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">;</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Successfully filled all digests - fill response buffer header now */</span>
+    <span class="n">pDigestResponse</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">authMsgHeader</span> <span class="o">&amp;</span> <span class="mh">0xF0</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">kQiResponseDigest</span><span class="p">);</span>
+    <span class="n">pDigestResponse</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">slotsPopulated</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">slotsReturned</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">pDigestResponseLen</span> <span class="o">=</span> <span class="p">(</span><span class="n">slotsReturnedCount</span> <span class="o">*</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">)</span> <span class="o">+</span> <span class="mi">2</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">pData</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">SSS_FREE</span><span class="p">(</span><span class="n">pData</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span><span class="p">;</span>
+
+<span class="nl">error</span><span class="p">:</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pData</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">SSS_FREE</span><span class="p">(</span><span class="n">pData</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pDigestResponse</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">pDigestResponse</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">authMsgHeader</span> <span class="o">&amp;</span> <span class="mh">0xF0</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">kQiResponseError</span><span class="p">);</span>
+        <span class="n">pDigestResponse</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">errorCode</span><span class="p">);</span>
+        <span class="n">pDigestResponse</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>  <span class="o">=</span> <span class="mh">0x00</span><span class="p">;</span>
+        <span class="o">*</span><span class="n">pDigestResponseLen</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="readcertificates-get-certificate">
+<h2><span class="section-number">5.7.31.3. </span>ReadCertificates (GET_CERTIFICATE)<a class="headerlink" href="#readcertificates-get-certificate" title="Permalink to this headline">¶</a></h2>
+<p>This function reads the certificate chain on the provided slot ID starting
+from the provided offset and reading provided length bytes.</p>
+<p>If the provided offset exceeds <code class="docutils literal notranslate"><span class="pre">0x600</span></code> then that indicates the power
+transmitter to offset from the Product Unit Certificate. Otherwise the offset
+starts from the beginning of the certificate chain.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span> <span class="nf">ReadCertificates</span><span class="p">(</span><span class="k">const</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pGetCertificateRequest</span><span class="p">,</span>
+    <span class="k">const</span> <span class="kt">size_t</span> <span class="n">getCertificateRequestLen</span><span class="p">,</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pCertificateResponse</span><span class="p">,</span>
+    <span class="kt">size_t</span> <span class="o">*</span><span class="n">pCertificateResponseLen</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">smStatus_t</span> <span class="n">retStatus</span>        <span class="o">=</span> <span class="n">SM_NOT_OK</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">objectSize</span>         <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">pSe05xSession_t</span> <span class="n">session_ctx</span> <span class="o">=</span> <span class="n">pgSe05xSessionctx</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">certChainId</span>        <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">readSize</span>             <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pData</span>              <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+
+    <span class="n">qi_error_code_t</span> <span class="n">errorCode</span>   <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">authMsgHeader</span>       <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">requestedslots</span>      <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">certificateOffsetA8</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">certificateOffset70</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">certificateLengthA8</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">certificateLength70</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">certificateOffset</span>  <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">certificatelength</span>  <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="cm">/* Offset first DIGEST bytes to skip certificate chain hash */</span>
+    <span class="kt">uint16_t</span> <span class="n">offset</span>      <span class="o">=</span> <span class="p">(</span><span class="kt">uint16_t</span><span class="p">)</span><span class="n">DIGEST_SIZE_BYTES</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">N_MC</span>        <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">bytesToRead</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nb">NULL</span> <span class="o">==</span> <span class="n">pGetCertificateRequest</span> <span class="o">||</span> <span class="nb">NULL</span> <span class="o">==</span> <span class="n">pCertificateResponse</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Null buffer&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">authMsgHeader</span> <span class="o">=</span> <span class="n">pGetCertificateRequest</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">getCertificateRequestLen</span> <span class="o">!=</span> <span class="n">GET_CERTIFICATE_CMD_LEN</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Invalid request length&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">requestedslots</span>      <span class="o">=</span> <span class="n">pGetCertificateRequest</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0x03</span><span class="p">;</span>
+    <span class="n">certificateOffsetA8</span> <span class="o">=</span> <span class="p">(</span><span class="n">pGetCertificateRequest</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0xE0</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">5</span><span class="p">;</span>
+    <span class="n">certificateOffset70</span> <span class="o">=</span> <span class="n">pGetCertificateRequest</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+    <span class="n">certificateLengthA8</span> <span class="o">=</span> <span class="p">(</span><span class="n">pGetCertificateRequest</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0x1C</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">2</span><span class="p">;</span>
+    <span class="n">certificateLength70</span> <span class="o">=</span> <span class="n">pGetCertificateRequest</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span>
+    <span class="n">certificateOffset</span>   <span class="o">=</span> <span class="n">certificateOffsetA8</span> <span class="o">*</span> <span class="mi">256</span> <span class="o">+</span> <span class="n">certificateOffset70</span><span class="p">;</span>
+    <span class="n">certificatelength</span>   <span class="o">=</span> <span class="n">certificateLengthA8</span> <span class="o">*</span> <span class="mi">256</span> <span class="o">+</span> <span class="n">certificateLength70</span><span class="p">;</span>
+
+    <span class="n">certChainId</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">QI_SLOT_ID_TO_CERT_ID</span><span class="p">(</span><span class="n">requestedslots</span><span class="p">);</span>
+
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">Se05x_API_ReadSize</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">certChainId</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">objectSize</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Se05x_API_ReadSize failed&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Read length of manufacturer certificate to determine the offset for PUC */</span>
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">getManufacturerCertificateLength</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">certChainId</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">N_MC</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Failed to read manufacturer certificate length&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">certificateOffset</span> <span class="o">&gt;=</span> <span class="n">MAXIMUM_CERT_OFFSET</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_D</span><span class="p">(</span><span class="s">&quot;Read PUC&quot;</span><span class="p">);</span>
+        <span class="cm">/* N_RH is length of root Hash Certificate and </span>
+<span class="cm">         * N_MC is length of Manufacturer Certificate </span>
+<span class="cm">         */</span>
+        <span class="n">offset</span> <span class="o">+=</span> <span class="mi">2</span> <span class="cm">/* Length of length field */</span>
+                  <span class="cm">/* Length of RootHash */</span>
+                  <span class="o">+</span> <span class="n">DIGEST_SIZE_BYTES</span>
+                  <span class="cm">/* Length of Manufacturer certificate */</span>
+                  <span class="o">+</span> <span class="n">N_MC</span>
+                  <span class="cm">/* Offset from Product Unit Certificate */</span>
+                  <span class="o">+</span> <span class="n">certificateOffset</span> <span class="o">-</span> <span class="n">MAXIMUM_CERT_OFFSET</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">offset</span> <span class="o">+=</span> <span class="n">certificateOffset</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Calculate actual bytes to read */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">certificatelength</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">bytesToRead</span> <span class="o">=</span> <span class="n">objectSize</span> <span class="o">-</span> <span class="n">offset</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">else</span> <span class="p">{</span>
+        <span class="n">bytesToRead</span> <span class="o">=</span> <span class="n">certificatelength</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">bytesToRead</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="cm">/* Cannot read 0 bytes */</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Bytes to read cannot exceed the total object size */</span>
+    <span class="k">if</span> <span class="p">((</span><span class="n">offset</span> <span class="o">+</span> <span class="n">bytesToRead</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">objectSize</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">readSize</span> <span class="o">=</span> <span class="n">bytesToRead</span><span class="p">;</span>
+    <span class="n">pData</span>    <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="p">)</span><span class="n">SSS_MALLOC</span><span class="p">(</span><span class="n">bytesToRead</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">uint8_t</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pData</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">pCertificateResponseLen</span> <span class="o">&lt;</span> <span class="p">(</span><span class="kt">size_t</span><span class="p">)(</span><span class="n">bytesToRead</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Insufficient buffer&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Read certificate chain */</span>
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">readCertificateChain</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">certChainId</span><span class="p">,</span> <span class="n">offset</span><span class="p">,</span> <span class="n">bytesToRead</span><span class="p">,</span> <span class="n">pData</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">readSize</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Se05x_API_ReadObject failed&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">LOG_MAU8_D</span><span class="p">(</span><span class="s">&quot;ReadCertificate object&quot;</span><span class="p">,</span> <span class="n">pData</span><span class="p">,</span> <span class="n">readSize</span><span class="p">);</span>
+
+    <span class="cm">/* Copy the data read out to response buffer */</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pCertificateResponse</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">pData</span><span class="p">,</span> <span class="n">readSize</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pData</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">SSS_FREE</span><span class="p">(</span><span class="n">pData</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">pCertificateResponse</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">authMsgHeader</span> <span class="o">&amp;</span> <span class="mh">0xF0</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">kQiResponseCertificate</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">pCertificateResponseLen</span> <span class="o">=</span> <span class="p">(</span><span class="n">bytesToRead</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span>
+
+    <span class="k">return</span><span class="p">;</span>
+
+<span class="nl">error</span><span class="p">:</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pData</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">SSS_FREE</span><span class="p">(</span><span class="n">pData</span><span class="p">);</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pCertificateResponse</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">pCertificateResponse</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">authMsgHeader</span> <span class="o">&amp;</span> <span class="mh">0xF0</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">kQiResponseError</span><span class="p">);</span>
+        <span class="n">pCertificateResponse</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">errorCode</span><span class="p">);</span>
+        <span class="n">pCertificateResponse</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>  <span class="o">=</span> <span class="mh">0x00</span><span class="p">;</span>
+        <span class="o">*</span><span class="n">pCertificateResponseLen</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="authenticate-challenge">
+<h2><span class="section-number">5.7.31.4. </span>Authenticate (CHALLENGE)<a class="headerlink" href="#authenticate-challenge" title="Permalink to this headline">¶</a></h2>
+<p>This function performs the CHALLENGE operation and returns the signature <code class="docutils literal notranslate"><span class="pre">R</span></code>
+and signature <code class="docutils literal notranslate"><span class="pre">S</span></code> values to the power receiver.</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">void</span> <span class="nf">Authenticate</span><span class="p">(</span><span class="k">const</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pChallengeRequest</span><span class="p">,</span>
+    <span class="k">const</span> <span class="kt">size_t</span> <span class="n">challengeRequestLen</span><span class="p">,</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pChallengeAuthResponse</span><span class="p">,</span>
+    <span class="kt">size_t</span> <span class="o">*</span><span class="n">pChallengeAuthResponseLen</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">smStatus_t</span> <span class="n">retStatus</span>                     <span class="o">=</span> <span class="n">SM_NOT_OK</span><span class="p">;</span>
+    <span class="kt">uint16_t</span> <span class="n">objectSize</span>                      <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">pSe05xSession_t</span> <span class="n">session_ctx</span>              <span class="o">=</span> <span class="n">pgSe05xSessionctx</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pTbsAuthPtr</span>                     <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">readSize</span>                          <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">certChainHash</span><span class="p">[</span><span class="n">DIGEST_SIZE_BYTES</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+    <span class="kt">uint8_t</span> <span class="n">hash</span><span class="p">[</span><span class="n">DIGEST_SIZE_BYTES</span><span class="p">]</span>          <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+    <span class="kt">size_t</span> <span class="n">hashLen</span>                           <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">hash</span><span class="p">);</span>
+
+    <span class="kt">uint8_t</span> <span class="n">authMsgHeader</span>                <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">requestedSlot</span>                <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">slotsPopulated</span>               <span class="o">=</span> <span class="mh">0x00</span><span class="p">;</span>
+    <span class="kt">uint8_t</span> <span class="n">tbsAuth</span><span class="p">[</span><span class="n">TBSAUTH_MAX_SIZE</span><span class="p">]</span>    <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+    <span class="kt">size_t</span> <span class="n">tbsAuthlen</span>                    <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">tbsAuth</span><span class="p">);</span>
+    <span class="kt">uint8_t</span> <span class="n">signature</span><span class="p">[</span><span class="n">MAX_SIGNATURE_LEN</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+    <span class="kt">size_t</span> <span class="n">sigLen</span>                        <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">signature</span><span class="p">);</span>
+    <span class="n">qi_error_code_t</span> <span class="n">errorCode</span>            <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">certChainId</span>                 <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">keyId</span>                       <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nb">NULL</span> <span class="o">==</span> <span class="n">pChallengeRequest</span> <span class="o">||</span> <span class="nb">NULL</span> <span class="o">==</span> <span class="n">pChallengeAuthResponse</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Null buffer&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">authMsgHeader</span> <span class="o">=</span> <span class="n">pChallengeRequest</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="n">challengeRequestLen</span> <span class="o">!=</span> <span class="n">CHALLENGE_CMD_LEN</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Invalid request length&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">requestedSlot</span> <span class="o">=</span> <span class="n">pChallengeRequest</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&amp;</span> <span class="mh">0x03</span><span class="p">;</span>
+    <span class="n">certChainId</span>   <span class="o">=</span> <span class="p">(</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">QI_SLOT_ID_TO_CERT_ID</span><span class="p">(</span><span class="n">requestedSlot</span><span class="p">);</span>
+    <span class="n">keyId</span>         <span class="o">=</span> <span class="p">(</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">QI_SLOT_ID_TO_KEY_ID</span><span class="p">(</span><span class="n">requestedSlot</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">pChallengeAuthResponseLen</span> <span class="o">&lt;</span> <span class="n">CHALLENGE_AUTH_RESPONSE_LEN</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Insufficient buffer&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">getPopulatedSlots</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">slotsPopulated</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">SM_OK</span> <span class="o">!=</span> <span class="n">retStatus</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Failed to retrieve populated slots&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">slotsPopulated</span> <span class="o">&amp;</span> <span class="mh">0x01</span><span class="p">))</span> <span class="p">{</span>
+        <span class="cm">/* Slot 0 is empty */</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="cm">/* Check if the requested slot is populated */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">((</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">requestedSlot</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">slotsPopulated</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorInvalidRequest</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Requested slot not populated&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">Se05x_API_ReadSize</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">certChainId</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">objectSize</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Se05x_API_ReadSize failed&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Certificate chain size cannot be less than DIGEST_SIZE_BYTES */</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">objectSize</span> <span class="o">&lt;</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Read Certificate chain hash value */</span>
+    <span class="n">pTbsAuthPtr</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">tbsAuth</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+    <span class="n">readSize</span>    <span class="o">=</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">;</span>
+    <span class="n">retStatus</span>   <span class="o">=</span> <span class="n">Se05x_API_ReadObject</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">certChainId</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">,</span> <span class="n">certChainHash</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">readSize</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Se05x_API_ReadObject failed&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">pTbsAuthPtr</span><span class="p">,</span> <span class="n">certChainHash</span><span class="p">,</span> <span class="n">DIGEST_SIZE_BYTES</span><span class="p">);</span>
+
+    <span class="cm">/* Copy Challenge request to TBS Auth */</span>
+    <span class="n">pTbsAuthPtr</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">tbsAuth</span><span class="p">[</span><span class="n">TBSAUTH_CHALLENGE_REQ_OFFSET</span><span class="p">];</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">pTbsAuthPtr</span><span class="p">,</span> <span class="n">pChallengeRequest</span><span class="p">,</span> <span class="n">challengeRequestLen</span><span class="p">);</span>
+
+    <span class="n">pChallengeAuthResponse</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">authMsgHeader</span> <span class="o">&amp;</span> <span class="mh">0xF0</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">kQiResponseChallengeAuth</span><span class="p">);</span>
+    <span class="n">pChallengeAuthResponse</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">AUTH_PROTOCOL_VERSION</span> <span class="o">&lt;&lt;</span> <span class="mi">4</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">slotsPopulated</span><span class="p">);</span>
+    <span class="n">pChallengeAuthResponse</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">certChainHash</span><span class="p">[</span><span class="n">DIGEST_SIZE_BYTES</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]);</span>
+
+    <span class="n">tbsAuth</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">CHALLENGE_AUTH_RESPONSE_PREFIX</span><span class="p">;</span> <span class="c1">// ASCII representation of A</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tbsAuth</span><span class="p">[</span><span class="n">TBSAUTH_CHALLENGE_AUTH_RESP_OFFSET</span><span class="p">],</span> <span class="n">pChallengeAuthResponse</span><span class="p">,</span> <span class="mi">3</span><span class="p">);</span>
+
+    <span class="cm">/* Calculate SHA256 of TBSAuth for signature */</span>
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">getSha256Hash</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">tbsAuth</span><span class="p">,</span> <span class="n">tbsAuthlen</span><span class="p">,</span> <span class="n">hash</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">hashLen</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot;Failed getSha256Hash&quot;</span><span class="p">);</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Calculate signature */</span>
+    <span class="n">retStatus</span> <span class="o">=</span>
+        <span class="n">Se05x_API_ECDSASign</span><span class="p">(</span><span class="n">session_ctx</span><span class="p">,</span> <span class="n">keyId</span><span class="p">,</span> <span class="n">kSE05x_ECSignatureAlgo_SHA_256</span><span class="p">,</span> <span class="n">hash</span><span class="p">,</span> <span class="n">hashLen</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">signature</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">&amp;</span><span class="n">sigLen</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot; sss_asymmetric_sign_digest Failed...&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="cm">/* Extract R and S values from signature */</span>
+    <span class="n">retStatus</span> <span class="o">=</span> <span class="n">EcSignatureToRandS</span><span class="p">(</span><span class="n">signature</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">sigLen</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">retStatus</span> <span class="o">!=</span> <span class="n">SM_OK</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">LOG_E</span><span class="p">(</span><span class="s">&quot; EcSignatureToRandS Failed...&quot;</span><span class="p">);</span>
+        <span class="n">errorCode</span> <span class="o">=</span> <span class="n">kQiErrorUnspecified</span><span class="p">;</span>
+        <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="o">*</span><span class="n">pChallengeAuthResponseLen</span> <span class="o">=</span> <span class="p">(</span><span class="n">sigLen</span><span class="p">)</span> <span class="o">+</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pChallengeAuthResponse</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">signature</span><span class="p">,</span> <span class="n">sigLen</span><span class="p">);</span>
+
+    <span class="k">return</span><span class="p">;</span>
+
+<span class="nl">error</span><span class="p">:</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">pChallengeAuthResponse</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">pChallengeAuthResponse</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">authMsgHeader</span> <span class="o">&amp;</span> <span class="mh">0xF0</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">kQiResponseError</span><span class="p">);</span>
+        <span class="n">pChallengeAuthResponse</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="o">=</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)(</span><span class="n">errorCode</span><span class="p">);</span>
+        <span class="n">pChallengeAuthResponse</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>  <span class="o">=</span> <span class="mh">0x00</span><span class="p">;</span>
+        <span class="o">*</span><span class="n">pChallengeAuthResponseLen</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="building-the-demo">
+<h2><span class="section-number">5.7.31.5. </span>Building the Demo<a class="headerlink" href="#building-the-demo" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Build Plug &amp; Trust middleware stack. (Refer <a class="reference internal" href="../../../building/index.html#building"><span class="std std-ref">Building / Compiling</span></a>)</p></li>
+</ul>
+<p>Select CMake options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SE05X_Ver=07_02</span></code></p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If you have run <a class="reference internal" href="sa_qi_provisioning/Readme.html#ex-se05x-qi-provisioning"><span class="std std-ref">Secure Authenticator (Qi) Provisioning demo</span></a>, do not select
+<code class="docutils literal notranslate"><span class="pre">PTMW_SE05X_Auth=AESKey</span></code></p>
+</div>
+<p>Build project:</p>
+<ul class="simple">
+<li><p>Project: <code class="docutils literal notranslate"><span class="pre">sa_qi_auth</span></code></p></li>
+</ul>
+</section>
+<section id="running-the-example">
+<h2><span class="section-number">5.7.31.6. </span>Running the Example<a class="headerlink" href="#running-the-example" title="Permalink to this headline">¶</a></h2>
+<p>If you have built a binary, flash the binary on to the board and reset
+the board.</p>
+<p>If you have built an <em>exe</em> to be run from Windows using VCOM, run as:</p>
+<div class="highlight-bat notranslate"><div class="highlight"><pre><span></span>sa_qi_auth.exe <span class="p">&lt;</span>PORT NAME&gt;
+</pre></div>
+</div>
+<p>Where <strong>&lt;PORT NAME&gt;</strong> is the VCOM COM port.</p>
+<p>On successful execution you should be able to see logs as:</p>
+<div class="highlight-bat notranslate"><div class="highlight"><pre><span></span>App   :INFO :PlugAndTrust_v04.01.01_20220112
+sss   :INFO :atr (Len=35)
+      01 A0 00 00 03 96 04 03 E8 00 FE 02 0B 03 E8 00
+      01 00 00 00 00 64 13 88 0A 00 65 53 45 30 35 31
+      00 00 00
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Send command GET_DIGESTS
+App   :INFO :Retrieved digest (Len=32)
+      46 29 65 3A    D1 CE B3 7C    6A 36 F0 CC    11 B4 29 16
+      86 39 27 85    F0 F8 26 DF    DE D3 5E AC    5F CC 50 FC
+App   :INFO :Send command GET_CERTIFICATE
+App   :INFO :Certificate chain digest successfully verified
+App   :INFO :Retrieved PUC (Len=442)
+      30 82 01 B6    30 82 01 5B    A0 03 02 01    02 02 0A 00
+      B0 9B 9F 24    00 A7 9E A0    AE 30 0A 06    08 2A 86 48
+      CE 3D 04 03    02 30 12 31    10 30 0E 06    03 55 04 03
+      0C 07 43 41    43 41 2D 58    31 30 22 18    0F 32 30 32
+      31 30 38 32    33 31 35 35    31 35 33 5A    18 0F 32 30
+      32 31 30 38    32 34 31 35    35 31 35 33    5A 30 81 8B
+      31 2C 30 2A    06 03 55 04    03 0C 23 30    30 30 31 32
+      33 2D 52 61    70 69 64 20    63 68 61 72    67 69 6E 67
+      20 62 61 67    65 6C 20 74    6F 61 73 74    65 72 31 29
+      30 27 06 03    55 04 5C 04    20 53 58 4D    67 64 47 68
+      70 63 79 42    68 62 69 42    46 59 58 4E    30 5A 58 49
+      67 52 57 64    6E 50 77 3D    3D 31 30 30    2E 06 0A 09
+      92 26 89 93    F2 2C 64 01    01 0C 20 44    6F 20 6E 6F
+      74 20 75 73    65 20 61 73    20 61 20 66    6C 6F 74 61
+      74 69 6F 6E    20 64 65 76    69 63 65 30    59 30 13 06
+      07 2A 86 48    CE 3D 02 01    06 08 2A 86    48 CE 3D 03
+      01 07 03 42    00 04 07 7B    1F 30 E5 D7    9A 63 FB CC
+      35 DE 84 36    E4 5D 89 C1    5F 99 98 E8    B8 F2 C6 00
+      1C AE DA E5    F8 59 3A 50    76 D2 C7 A4    AF 0B C5 6B
+      47 9D E1 6A    DA 11 0C 0A    EF D7 39 E1    F0 4D 0D D7
+      65 7E B9 32    13 53 A3 1B    30 19 30 17    06 05 67 81
+      14 01 02 01    01 FF 04 0B    04 09 F1 02    D3 C4 15 06
+      E7 68 79 30    0A 06 08 2A    86 48 CE 3D    04 03 02 03
+      49 00 30 46    02 21 00 A8    29 0E C3 C9    AF DC 08 52
+      58 CB B4 7A    B7 02 3A BC    D5 CD 36 78    F4 1D CE 2F
+      7C 4C CC 95    46 FC 56 02    21 00 FA EB    67 F9 14 79
+      DE 6D 31 DE    E7 0B 0C 51    3E 0A 36 1D    C4 49 F7 FA
+      F4 E9 33 FE    90 49 57 AD    EC 10
+App   :INFO :PUC successfully verified
+App   :INFO :Manufacturer certificate successfully verified
+App   :INFO :Certificate chain successfully verified
+App   :INFO :Retrieved PUC public key (Len=65)
+      04 07 7B 1F    30 E5 D7 9A    63 FB CC 35    DE 84 36 E4
+      5D 89 C1 5F    99 98 E8 B8    F2 C6 00 1C    AE DA E5 F8
+      59 3A 50 76    D2 C7 A4 AF    0B C5 6B 47    9D E1 6A DA
+      11 0C 0A EF    D7 39 E1 F0    4D 0D D7 65    7E B9 32 13
+      53
+App   :INFO :Send command CHALLENGE
+App   :INFO :Challenge Signature (Len=64)
+      7E B0 82 D3    3D 91 02 37    AA FE 81 15    DF 02 A2 57
+      D1 8C D6 A1    BB C0 20 DE    CF E2 69 B0    57 35 93 5E
+      62 E1 E6 37    E0 64 92 5A    D8 BB 7E 92    FB 52 1E 84
+      F9 DD A1 43    F9 7B 11 48    0B 1C F9 CD    31 40 77 AD
+App   :INFO :TBSAuth (Len=54)
+      41 46 29 65    3A D1 CE B3    7C 6A 36 F0    CC 11 B4 29
+      16 86 39 27    85 F0 F8 26    DF DE D3 5E    AC 5F CC 50
+      FC 1B 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+      00 00 00 13    11 FC
+App   :INFO :Challenge successfully verified
+App   :INFO :ex_sss Finished
+</pre></div>
+</div>
+</section>
+<section id="porting">
+<h2><span class="section-number">5.7.31.7. </span>Porting<a class="headerlink" href="#porting" title="Permalink to this headline">¶</a></h2>
+<p>The example allows porting of host verification and host RNG functions
+in case mbedTLS is not available. If you want to add your own implementation
+of these operations, update the following APIs in <code class="file docutils literal notranslate"><span class="pre">sa_qi_auth/port/sa_qi_helper_port.c</span></code>:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="cm">/* Port to implement RNG to get 16 byte nonce value</span>
+<span class="cm"> * for authentication operation.</span>
+<span class="cm"> * This API does not guarantee the randomness of the RNG.</span>
+<span class="cm"> * User should make sure that the RNG seed is from a trusted source</span>
+<span class="cm"> * and that the randomness of the source is NIST compliant</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="nf">port_getRandomNonce</span><span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="n">nonce</span><span class="p">,</span> <span class="kt">size_t</span> <span class="o">*</span><span class="n">pNonceLen</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">ret</span>              <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">random_length</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">pNonceLen</span> <span class="o">&gt;</span> <span class="n">NONCE_LEN</span><span class="p">)</span> <span class="o">?</span> <span class="nl">NONCE_LEN</span> <span class="p">:</span> <span class="p">(</span><span class="o">*</span><span class="n">pNonceLen</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">pNonceLen</span>           <span class="o">=</span> <span class="n">random_length</span><span class="p">;</span>
+    <span class="n">ret</span>                  <span class="o">=</span> <span class="n">getRandom</span><span class="p">(</span><span class="n">nonce</span><span class="p">,</span> <span class="n">random_length</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="mi">0</span> <span class="o">!=</span> <span class="n">ret</span><span class="p">)</span> <span class="p">{</span>
+        <span class="o">*</span><span class="n">pNonceLen</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cm">/* Port to implement function which will</span>
+<span class="cm"> * parse an X.509 certificate and extract the public key</span>
+<span class="cm"> * from it.</span>
+<span class="cm"> */</span>
+<span class="kt">void</span> <span class="nf">port_parseCertGetPublicKey</span><span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pCert</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">certLen</span><span class="p">,</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pPublicKey</span><span class="p">,</span> <span class="kt">size_t</span> <span class="o">*</span><span class="n">publicKeylen</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">parseCertGetPublicKey</span><span class="p">(</span><span class="n">pCert</span><span class="p">,</span> <span class="n">certLen</span><span class="p">,</span> <span class="n">pPublicKey</span><span class="p">,</span> <span class="n">publicKeylen</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/* Port to implement function which will</span>
+<span class="cm"> * verify the complete certificate chain as passed in certificate_chain</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="nf">port_hostVerifyCertificateChain</span><span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="n">certificate_chain</span><span class="p">,</span>
+    <span class="kt">size_t</span> <span class="n">certificate_chain_size</span><span class="p">,</span>
+    <span class="kt">uint16_t</span> <span class="n">pucCertOffset</span><span class="p">,</span>
+    <span class="kt">uint16_t</span> <span class="n">manufacturerCertLenOffset</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">hostVerifyCertificateChain</span><span class="p">(</span>
+        <span class="n">certificate_chain</span><span class="p">,</span> <span class="n">certificate_chain_size</span><span class="p">,</span> <span class="n">pucCertOffset</span><span class="p">,</span> <span class="n">manufacturerCertLenOffset</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="cm">/* Port to implement function which will</span>
+<span class="cm"> * verify CHALLENGE on host</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="nf">port_hostVerifyChallenge</span><span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pPublicKey</span><span class="p">,</span>
+    <span class="kt">size_t</span> <span class="n">publicKeyLen</span><span class="p">,</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pCertificateChainHash</span><span class="p">,</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pChallengeRequest</span><span class="p">,</span>
+    <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">pChallengeResponse</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">return</span> <span class="n">hostVerifyChallenge</span><span class="p">(</span><span class="n">pPublicKey</span><span class="p">,</span> <span class="n">publicKeyLen</span><span class="p">,</span> <span class="n">pCertificateChainHash</span><span class="p">,</span> <span class="n">pChallengeRequest</span><span class="p">,</span> <span class="n">pChallengeResponse</span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+    </div>
+      
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-right">
+      <a href="#">Back to top</a>
+      
+    </p>
+    <p>
+        &copy; Copyright 2018-2020, NXP.<br/>
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.5.0.<br/>
+    </p>
+  </div>
+</footer>
+  </body>
+</html>

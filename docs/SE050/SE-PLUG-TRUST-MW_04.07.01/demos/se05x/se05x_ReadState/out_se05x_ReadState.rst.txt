@@ -1,0 +1,33 @@
+App   :INFO :PlugAndTrust_v02.15.00_20200522
+App   :INFO :Running C:\_ddm\develop\simw-top_build\se_x86\bin\Debug\se05x_ReadState.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+smCom :DEBUG:Opening connection to JRCP successful
+smCom :DEBUG:Tx> (Len=5)
+      00 A4 04 00    00
+smCom :DEBUG:<Rx (Len=20)
+      6F 10 84 08    A0 00 00 01    51 00 00 00    A5 04 9F 65
+      01 FF 90 00
+smCom :DEBUG:Tx> (Len=21)
+      00 A4 04 00    0F A0 00 00    03 96 54 53    00 00 00 01
+      03 00 00 00    00
+smCom :DEBUG:<Rx (Len=9)
+      05 08 00 3F    FF FF FF 90    00
+smCom :INFO :selectResponseData (Len=7)
+      05 08 00 3F    FF FF FF
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+
+APDU  :DEBUG:ReadState []
+smCom :DEBUG:Tx> (Len=5)
+      80 02 00 5B    00
+smCom :DEBUG:<Rx (Len=9)
+      41 82 00 03    02 00 02 90    00
+App   :INFO :SE05x Read State Successfully!!!
+App   :INFO :Following is the SE05x Read State status
+App   :INFO :SE05x Lock State = 0x2  i.e. SE05x is Unlocked!!!
+App   :INFO :SE05x Restrict Mode = 0x0  i.e. No Restriction is applied for object creation!!!
+App   :INFO :SE05x Platform SCP Request = 0x2  i.e. Platform SCP is not required for Communication!!!
+App   :INFO :ex_sss Finished
+Press any key to continue . . .

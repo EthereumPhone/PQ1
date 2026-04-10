@@ -1,0 +1,16 @@
+sample:
+  name: EL2GO Claimcode Encryption
+  description: The EdgeLock 2GO claimcode encryption sample demonstrates how to encrypt a claimcode for onboarding a device with the EdgeLock 2GO cloud service
+tests:
+  sample.nxp_iot_agent.el2go_claimcode_encryption.pytest:
+    extra_args:
+      - OVERLAY_CONFIG="overlay.conf"
+    tags:
+      - crypto
+      - el2go
+      - els_pkc
+    platform_allow:
+      - frdm_rw612
+      - rd_rw612_bga
+    harness: pytest
+    timeout: 100

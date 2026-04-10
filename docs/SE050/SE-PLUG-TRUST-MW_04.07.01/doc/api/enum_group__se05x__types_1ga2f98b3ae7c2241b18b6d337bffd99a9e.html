@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<!--
+Copyright 2019 NXP
+-->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>10.13.4.2.55. Enum SE05x_SecObjTyp_t &#8212; Plug &amp; Trust MW v04.07.01 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/bootstrap-sphinx.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="10.13.4.2.56. Enum SE05x_SetIndicator_t" href="enum_group__se05x__types_1ga0d27d74953c1752202bb4148bd80c3e6.html" />
+    <link rel="prev" title="10.13.4.2.54. Enum SE05x_RSASignatureAlgo_t" href="enum_group__se05x__types_1ga5a27bb9401adf12452da900bae711160.html" />
+<meta charset='utf-8'>
+<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="text/javascript" src="../_static/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="../_static/js/jquery-fix.js"></script>
+<script type="text/javascript" src="../_static/bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="../_static/bootstrap-sphinx.js"></script>
+
+  </head><body>
+
+  <div id="navbar" class="navbar navbar-inverse navbar-default navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="../toc.html"><span><img src="../_static/NXP_logo_JPG.jpg"></span>
+          MW</a>
+        <span class="navbar-text navbar-version pull-left"><b>v04.07.01</b></span>
+      </div>
+
+        <div class="collapse navbar-collapse nav-collapse">
+          <ul class="nav navbar-nav">
+            
+            
+              <li class="dropdown globaltoc-container">
+  <a role="button"
+     id="dLabelGlobalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="../toc.html">TOC <b class="caret"></b></a>
+  <ul class="dropdown-menu globaltoc"
+      role="menu"
+      aria-labelledby="dLabelGlobalToc"><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../index.html">1. NXP Plug &amp; Trust Middleware</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../organization-of-documentation.html">1.1. Organization of Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../folder-structure.html">1.2. Folder Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sw-prerequisites.html">1.3. List of Platform Prerequisites</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../changes/index.html">2. Changes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../changes/pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_14_00.html">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../changes/v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss-apis.html">3.3. SSS APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/i2cm.html">3.6. I2CM / Secure Sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/logging.html">3.7. Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/scp03/index.html">3.9. Platform SCP03 Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/secure_boot.html">3.19. Secure Boot</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../building/index.html">4. Building / Compiling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../scripts/cmake_options.html">4.7. CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../demos/index.html">5. Demo and Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_package.html">7.2. Update Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../plugins/index.html">8. Plugins / Add-ins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/openssl/scripts/readme.html">8.1. Introduction on OpenSSL engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/Provisioning/readme.html">9.5. CLI Provisioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_data_format.html">9.8. CLI Data formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="../appendix.html">10. Appendix</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="api_list.html">10.13. Plug &amp; Trust MW APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Revision_history.html">12. Revision history</a></li>
+</ul>
+</ul>
+</li>
+              
+                <li class="dropdown">
+  <a role="button"
+     id="dLabelLocalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">Page <b class="caret"></b></a>
+  <ul class="dropdown-menu localtoc"
+      role="menu"
+      aria-labelledby="dLabelLocalToc"><ul>
+<li><a class="reference internal" href="#">10.13.4.2.55. Enum SE05x_SecObjTyp_t</a><ul>
+<li><a class="reference internal" href="#enum-documentation">10.13.4.2.55.1. Enum Documentation</a></li>
+</ul>
+</li>
+</ul>
+</ul>
+</li>
+              
+            
+            
+              
+                
+  <li>
+    <a href="enum_group__se05x__types_1ga5a27bb9401adf12452da900bae711160.html" title="Previous Chapter: 10.13.4.2.54. Enum SE05x_RSASignatureAlgo_t"><span class="glyphicon glyphicon-chevron-left visible-sm"></span><span class="hidden-sm hidden-tablet">&laquo; 10.13.4.2.54....</span>
+    </a>
+  </li>
+  <li>
+    <a href="enum_group__se05x__types_1ga0d27d74953c1752202bb4148bd80c3e6.html" title="Next Chapter: 10.13.4.2.56. Enum SE05x_SetIndicator_t"><span class="glyphicon glyphicon-chevron-right visible-sm"></span><span class="hidden-sm hidden-tablet">10.13.4.2.56.... &raquo;</span>
+    </a>
+  </li>
+              
+            
+            
+            
+            
+          </ul>
+
+          
+
+        </div>
+    </div>
+  </div>
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+
+<div class="sidebar-header">
+    <h3>Plug &amp; Trust MW</h3>
+</div>
+
+<div class="row">
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changes/index.html">2. Changes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stack/index.html">3. Plug &amp; Trust MW Stack</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../building/index.html">4. Building / Compiling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../demos/index.html">5. Demo and Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../semslite/doc/index.html">7. SEMS Lite Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../plugins/index.html">8. Plugins / Add-ins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-tool.html">9. CLI Tool</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../appendix.html">10. Appendix</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="api_list.html">10.13. Plug &amp; Trust MW APIs</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="api_list.html#page-hierarchy">10.13.1. Page Hierarchy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api_list.html#class-hierarchy">10.13.2. Class Hierarchy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api_list.html#file-hierarchy">10.13.3. File Hierarchy</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="api_list.html#full-api">10.13.4. Full API</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Revision_history.html">12. Revision history</a></li>
+</ul>
+
+</div>
+<div class="row">
+    <form class="form" action="../search.html" method="get">
+     <div class="form-group">
+      <label for="Search">Search:</label>
+      <input type="text" name="q" class="form-control" placeholder="Search" />
+     </div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+        </div>
+      </div>
+    <div class="body col-md-9 content" role="main">
+      
+  <section id="enum-se05x-secobjtyp-t">
+<span id="exhale-enum-group-se05x-types-1ga2f98b3ae7c2241b18b6d337bffd99a9e"></span><h1><span class="section-number">10.13.4.2.55. </span>Enum SE05x_SecObjTyp_t<a class="headerlink" href="#enum-se05x-secobjtyp-t" title="Permalink to this headline">¶</a></h1>
+<ul class="simple">
+<li><p>Defined in <a class="reference internal" href="file_hostlib_hostLib_inc_se05x_enums.h.html#file-hostlib-hostlib-inc-se05x-enums-h"><span class="std std-ref">File se05x_enums.h</span></a></p></li>
+</ul>
+<section id="enum-documentation">
+<h2><span class="section-number">10.13.4.2.55.1. </span>Enum Documentation<a class="headerlink" href="#enum-documentation" title="Permalink to this headline">¶</a></h2>
+<dl class="cpp enum">
+<dt class="sig sig-object cpp" id="_CPPv417SE05x_SecObjTyp_t">
+<span id="_CPPv317SE05x_SecObjTyp_t"></span><span id="_CPPv217SE05x_SecObjTyp_t"></span><span class="target" id="group__se05x__types_1ga2f98b3ae7c2241b18b6d337bffd99a9e"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SE05x_SecObjTyp_t</span></span></span><a class="headerlink" href="#_CPPv417SE05x_SecObjTyp_t" title="Permalink to this definition">¶</a><br /></dt>
+<dd><p>Type of Object </p>
+<p><em>Values:</em></p>
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t19kSE05x_SecObjTyp_NAE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t19kSE05x_SecObjTyp_NAE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t19kSE05x_SecObjTyp_NAE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaad629ce1fb32f4cccf6c6ee9b4b6de27"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_NA</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t19kSE05x_SecObjTyp_NAE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_KEY_PAIRE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_KEY_PAIRE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_KEY_PAIRE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea78c852d5b56f35bb089dbf00144cd4e6"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_KEY_PAIRE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_PRIV_KEYE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_PRIV_KEYE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_PRIV_KEYE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea13d15e7f530f97fb1685fe2c042589a2"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_EC_PRIV_KEYE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t27kSE05x_SecObjTyp_EC_PUB_KEYE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t27kSE05x_SecObjTyp_EC_PUB_KEYE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t27kSE05x_SecObjTyp_EC_PUB_KEYE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaa76fd60ff4e0204272258d2044b3b224"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t27kSE05x_SecObjTyp_EC_PUB_KEYE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_KEY_PAIRE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_KEY_PAIRE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_KEY_PAIRE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea37356fbaaacd975a1472ef5b51c09a4d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_RSA_KEY_PAIR</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_KEY_PAIRE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_KEY_PAIR_CRTE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_KEY_PAIR_CRTE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_KEY_PAIR_CRTE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea33c0a5832885c14a1e9def7392e7604d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_RSA_KEY_PAIR_CRT</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_KEY_PAIR_CRTE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_PRIV_KEYE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_PRIV_KEYE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_PRIV_KEYE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea0931549eb85acdd8d1f71f62619bfb69"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_RSA_PRIV_KEY</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t29kSE05x_SecObjTyp_RSA_PRIV_KEYE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_PRIV_KEY_CRTE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_PRIV_KEY_CRTE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_PRIV_KEY_CRTE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea165ebe147cc19168af3f213139a74bbe"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_RSA_PRIV_KEY_CRT</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t33kSE05x_SecObjTyp_RSA_PRIV_KEY_CRTE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_RSA_PUB_KEYE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_RSA_PUB_KEYE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_RSA_PUB_KEYE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eab0cec0e426428a799709be673b05be04"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_RSA_PUB_KEY</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_RSA_PUB_KEYE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_AES_KEYE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_AES_KEYE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_AES_KEYE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eade1f84f2208f3cbfc91d0c1008a8cd31"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_AES_KEY</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_AES_KEYE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_DES_KEYE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_DES_KEYE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_DES_KEYE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea1aa371d9207ada5dbed299799dcc7023"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_DES_KEY</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_DES_KEYE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_BINARY_FILEE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_BINARY_FILEE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_BINARY_FILEE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea9f975ac6597b87c47b408a835c888732"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_BINARY_FILE</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t28kSE05x_SecObjTyp_BINARY_FILEE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t23kSE05x_SecObjTyp_UserIDE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t23kSE05x_SecObjTyp_UserIDE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t23kSE05x_SecObjTyp_UserIDE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eada0224ab6521a984ca4c1a81ad998945"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_UserID</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t23kSE05x_SecObjTyp_UserIDE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_COUNTERE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_COUNTERE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_COUNTERE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea149e57529f2145fbbb080524a672f640"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_COUNTER</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t24kSE05x_SecObjTyp_COUNTERE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t20kSE05x_SecObjTyp_PCRE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t20kSE05x_SecObjTyp_PCRE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t20kSE05x_SecObjTyp_PCRE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea579e51960e8746dbaaeb60762cf7834c"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_PCR</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t20kSE05x_SecObjTyp_PCRE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t22kSE05x_SecObjTyp_CURVEE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t22kSE05x_SecObjTyp_CURVEE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t22kSE05x_SecObjTyp_CURVEE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea4aee0bb722429e87f8dbfec9c9df560b"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_CURVE</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t22kSE05x_SecObjTyp_CURVEE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t25kSE05x_SecObjTyp_HMAC_KEYE">
+<span id="_CPPv3N17SE05x_SecObjTyp_t25kSE05x_SecObjTyp_HMAC_KEYE"></span><span id="_CPPv2N17SE05x_SecObjTyp_t25kSE05x_SecObjTyp_HMAC_KEYE"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea2785d04d05915e89667bddd323085e1f"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_HMAC_KEY</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t25kSE05x_SecObjTyp_HMAC_KEYE" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P192E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P192E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P192E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eac31b1067939c78911a4662482b1e87a9"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P192</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P192E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P192E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P192E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P192E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaef8c915fde5fa5aadbf463f2a7bca862"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P192</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P192E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P192E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P192E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P192E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea364fb2da2cc312e5d4cb66383cd7cdca"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P192</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P192E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P224E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P224E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P224E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea8bd80fe4305fcbea22fbe65192965b30"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P224</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P224E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P224E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P224E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P224E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eadb9e5ad77ea5ad4faf7390f7037c0232"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P224</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P224E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P224E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P224E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P224E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaf6088eb6547c8a721e1cc9fcf66f424e"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P224</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P224E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea01e44b45512d0a37d0d6629252f033fe"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eababf1f8462f27205bab7c812130c42a1"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea589c6f109c310cdd2b70e740b3bf08bb"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P384E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P384E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P384E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea8a3425e76cb8410305ff7afae27ac34d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P384</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P384E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P384E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P384E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P384E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eacc92192de462d62616963e4c66c7349f"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P384</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P384E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P384E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P384E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P384E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea5ef244d275a779713a84815db10e0514"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P384</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P384E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P521E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P521E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P521E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea4ad6997a74cd5c3de13e48adec625870"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P521</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_NIST_P521E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P521E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P521E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P521E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea611e3595f8cfec2d19e1ca1bb5c32920"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P521</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_NIST_P521E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P521E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P521E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P521E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea41020bc186f3b48031021b866b9579fb"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P521</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_NIST_P521E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool160E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool160E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool160E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea0cfdc2c742a50505bd222f64a286874e"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool160</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool160E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool160E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool160E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool160E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea338b969aaed79398b2254804ef8291ad"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool160</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool160E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool160E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool160E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool160E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea7d233a80caf577bcf89f98ac0b38556f"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool160</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool160E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool192E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool192E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool192E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaccc07fa738be2b8209c3671a91a9a6e8"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool192</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool192E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool192E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool192E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool192E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea663276e2f37625aff2404e7b77efbceb"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool192</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool192E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool192E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool192E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool192E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea3ef3125d278b8a7201b0c20545744259"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool192</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool192E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool224E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool224E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool224E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea3f7e8cc678445d4cf8f7e2041c7b9085"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool224</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool224E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool224E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool224E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool224E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaf4778d72e892e95aaa18166abe722458"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool224</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool224E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool224E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool224E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool224E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ead3d1f43dce13587c533eb58c8bcd639d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool224</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool224E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea3e23d2b9b87d03b3e68fe3b931518640"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea60830f8054f24c2312afade040439d2b"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea4f35035d5fe428772594d377c2750de9"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool320E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool320E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool320E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eae2a65339d72f53cbaca9e2968eab3e1b"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool320</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool320E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool320E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool320E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool320E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea1d9abebc59cc30ca308d8884c2e61003"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool320</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool320E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool320E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool320E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool320E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eab2948041ea528b836c148a6d3de34b09"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool320</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool320E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool384E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool384E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool384E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea9c33e433c347c08165ed303f791b273e"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool384</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool384E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool384E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool384E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool384E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eae9849bb06fa0a33f2211afaf2b6b56e0"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool384</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool384E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool384E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool384E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool384E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea2d93e4c747e1742c290395a305fd2046"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool384</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool384E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool512E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool512E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool512E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea574e111d6a93bdfd6971bba6a63df8cd"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool512</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_KEY_PAIR_Brainpool512E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool512E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool512E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool512E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea428019e590b69b711824091648bed075"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool512</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PRIV_KEY_Brainpool512E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool512E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool512E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool512E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaae446de81bef01ef9ecf61bf0c8c3a5c"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool512</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PUB_KEY_Brainpool512E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp160k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp160k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp160k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea140e2c07e9183dcc188faa039b2581ce"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Secp160k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp160k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp160k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp160k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp160k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea7dacfd1bc86f9d5c30c50599e6b8ad68"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Secp160k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp160k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp160k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp160k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp160k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eae37d4356bc61606a8c45841c83a27d13"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Secp160k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp160k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp192k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp192k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp192k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eace06807979ab3166dede4f4d1728b3d1"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Secp192k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp192k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp192k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp192k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp192k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea4ae1ae5c9e4f767ac4e5a5eab38176f2"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Secp192k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp192k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp192k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp192k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp192k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea7a39d658055d4c423593bcfd15b74add"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Secp192k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp192k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp224k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp224k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp224k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea5d24bae6e48ffd3668900fe5f203ce71"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Secp224k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp224k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp224k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp224k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp224k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea3a3275dcf8a6562e4ad5671e0fcd3b95"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Secp224k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp224k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp224k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp224k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp224k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eac7aa0c8486f49409928e16c47e99048b"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Secp224k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp224k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp256k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp256k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp256k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea843e94f07b56182970de95072476c950"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_Secp256k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_KEY_PAIR_Secp256k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp256k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp256k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp256k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eac1df6cbb75c1b60abb34464079becf95"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_Secp256k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t38kSE05x_SecObjTyp_EC_PRIV_KEY_Secp256k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp256k1E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp256k1E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp256k1E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea5ce0471d2bfdcaf1287df87fe8dd5739"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_Secp256k1</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t37kSE05x_SecObjTyp_EC_PUB_KEY_Secp256k1E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_BN_P256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_BN_P256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_BN_P256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea8105fca34bc0668f05927bf175332181"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_BN_P256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_BN_P256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_BN_P256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_BN_P256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_BN_P256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea9deeecf25bf8b896fce09c897efa10ab"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_BN_P256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_BN_P256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_BN_P256E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_BN_P256E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_BN_P256E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eaafbff1e632f7a049f6ef642855eb748c"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_BN_P256</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_BN_P256E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_ED25519E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_ED25519E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_ED25519E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea617cbcf8e709f2116192021fa4922cfa"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_ED25519</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_KEY_PAIR_ED25519E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_ED25519E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_ED25519E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_ED25519E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea7bf89cbf105b25bc20a6ddd6ae141606"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_ED25519</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t36kSE05x_SecObjTyp_EC_PRIV_KEY_ED25519E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_ED25519E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_ED25519E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_ED25519E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eadd53129b3408d6eacd0ce2a12815b744"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_ED25519</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t35kSE05x_SecObjTyp_EC_PUB_KEY_ED25519E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_25519E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_25519E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_25519E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eacd1d20da552dd0d4c59c128826dd1a79"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_25519</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_25519E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_25519E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_25519E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_25519E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea41d4a15bad859399544bc244dcad3dea"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_25519</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t42kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_25519E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_25519E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_25519E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_25519E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ead47775b44c3354067b7b6ebec5694ea4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_25519</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t41kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_25519E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_448E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_448E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_448E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eafc454c68ddb42740eb7c47aa5dd6d04e"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_448</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_KEY_PAIR_MONT_DH_448E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_448E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_448E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_448E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9ea5891e42247e8bae9f536af9d315ba964"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_448</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t40kSE05x_SecObjTyp_EC_PRIV_KEY_MONT_DH_448E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+<dl class="cpp enumerator">
+<dt class="sig sig-object cpp" id="_CPPv4N17SE05x_SecObjTyp_t39kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_448E">
+<span id="_CPPv3N17SE05x_SecObjTyp_t39kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_448E"></span><span id="_CPPv2N17SE05x_SecObjTyp_t39kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_448E"></span><span class="target" id="group__se05x__types_1gga2f98b3ae7c2241b18b6d337bffd99a9eafb0b0fc177efb1442320dbe5777662b5"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_448</span></span></span><a class="headerlink" href="#_CPPv4N17SE05x_SecObjTyp_t39kSE05x_SecObjTyp_EC_PUB_KEY_MONT_DH_448E" title="Permalink to this definition">¶</a><br /></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+    </div>
+      
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-right">
+      <a href="#">Back to top</a>
+      
+    </p>
+    <p>
+        &copy; Copyright 2018-2020, NXP.<br/>
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.5.0.<br/>
+    </p>
+  </div>
+</footer>
+  </body>
+</html>

@@ -1,0 +1,64 @@
+App   :INFO :PlugAndTrust_v04.01.01_20220112
+sss   :INFO :atr (Len=35)
+      01 A0 00 00 03 96 04 03 E8 00 FE 02 0B 03 E8 00
+      01 00 00 00 00 64 13 88 0A 00 65 53 45 30 35 31
+      00 00 00
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Send command GET_DIGESTS
+App   :INFO :Retrieved digest (Len=32)
+      46 29 65 3A    D1 CE B3 7C    6A 36 F0 CC    11 B4 29 16
+      86 39 27 85    F0 F8 26 DF    DE D3 5E AC    5F CC 50 FC
+App   :INFO :Send command GET_CERTIFICATE
+App   :INFO :Certificate chain digest successfully verified
+App   :INFO :Retrieved PUC (Len=442)
+      30 82 01 B6    30 82 01 5B    A0 03 02 01    02 02 0A 00
+      B0 9B 9F 24    00 A7 9E A0    AE 30 0A 06    08 2A 86 48
+      CE 3D 04 03    02 30 12 31    10 30 0E 06    03 55 04 03
+      0C 07 43 41    43 41 2D 58    31 30 22 18    0F 32 30 32
+      31 30 38 32    33 31 35 35    31 35 33 5A    18 0F 32 30
+      32 31 30 38    32 34 31 35    35 31 35 33    5A 30 81 8B
+      31 2C 30 2A    06 03 55 04    03 0C 23 30    30 30 31 32
+      33 2D 52 61    70 69 64 20    63 68 61 72    67 69 6E 67
+      20 62 61 67    65 6C 20 74    6F 61 73 74    65 72 31 29
+      30 27 06 03    55 04 5C 04    20 53 58 4D    67 64 47 68
+      70 63 79 42    68 62 69 42    46 59 58 4E    30 5A 58 49
+      67 52 57 64    6E 50 77 3D    3D 31 30 30    2E 06 0A 09
+      92 26 89 93    F2 2C 64 01    01 0C 20 44    6F 20 6E 6F
+      74 20 75 73    65 20 61 73    20 61 20 66    6C 6F 74 61
+      74 69 6F 6E    20 64 65 76    69 63 65 30    59 30 13 06
+      07 2A 86 48    CE 3D 02 01    06 08 2A 86    48 CE 3D 03
+      01 07 03 42    00 04 07 7B    1F 30 E5 D7    9A 63 FB CC
+      35 DE 84 36    E4 5D 89 C1    5F 99 98 E8    B8 F2 C6 00
+      1C AE DA E5    F8 59 3A 50    76 D2 C7 A4    AF 0B C5 6B
+      47 9D E1 6A    DA 11 0C 0A    EF D7 39 E1    F0 4D 0D D7
+      65 7E B9 32    13 53 A3 1B    30 19 30 17    06 05 67 81
+      14 01 02 01    01 FF 04 0B    04 09 F1 02    D3 C4 15 06
+      E7 68 79 30    0A 06 08 2A    86 48 CE 3D    04 03 02 03
+      49 00 30 46    02 21 00 A8    29 0E C3 C9    AF DC 08 52
+      58 CB B4 7A    B7 02 3A BC    D5 CD 36 78    F4 1D CE 2F
+      7C 4C CC 95    46 FC 56 02    21 00 FA EB    67 F9 14 79
+      DE 6D 31 DE    E7 0B 0C 51    3E 0A 36 1D    C4 49 F7 FA
+      F4 E9 33 FE    90 49 57 AD    EC 10
+App   :INFO :PUC successfully verified
+App   :INFO :Manufacturer certificate successfully verified
+App   :INFO :Certificate chain successfully verified
+App   :INFO :Retrieved PUC public key (Len=65)
+      04 07 7B 1F    30 E5 D7 9A    63 FB CC 35    DE 84 36 E4
+      5D 89 C1 5F    99 98 E8 B8    F2 C6 00 1C    AE DA E5 F8
+      59 3A 50 76    D2 C7 A4 AF    0B C5 6B 47    9D E1 6A DA
+      11 0C 0A EF    D7 39 E1 F0    4D 0D D7 65    7E B9 32 13
+      53
+App   :INFO :Send command CHALLENGE
+App   :INFO :Challenge Signature (Len=64)
+      7E B0 82 D3    3D 91 02 37    AA FE 81 15    DF 02 A2 57
+      D1 8C D6 A1    BB C0 20 DE    CF E2 69 B0    57 35 93 5E
+      62 E1 E6 37    E0 64 92 5A    D8 BB 7E 92    FB 52 1E 84
+      F9 DD A1 43    F9 7B 11 48    0B 1C F9 CD    31 40 77 AD
+App   :INFO :TBSAuth (Len=54)
+      41 46 29 65    3A D1 CE B3    7C 6A 36 F0    CC 11 B4 29
+      16 86 39 27    85 F0 F8 26    DF DE D3 5E    AC 5F CC 50
+      FC 1B 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+      00 00 00 13    11 FC
+App   :INFO :Challenge successfully verified
+App   :INFO :ex_sss Finished

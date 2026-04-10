@@ -1,0 +1,40 @@
+
+'
+' Basic operation in case of upgrade successfully.
+'
+' In case everything runs well, update should run successfully。
+'
+
+@startuml
+
+title Basic operation
+
+participant APP as "Application"
+participant SEMS_Lite as "SEMS Lite Lib"
+participant SE as "Secure Element"
+
+autonumber "<b>[00]"
+
+APP -> SEMS_Lite : sems_lite_agent_init_context()
+
+APP -> SEMS_Lite : sems_lite_agent_session_open()
+
+APP -> SEMS_Lite : sems_lite_agent_load_package()
+
+activate SEMS_Lite
+
+SEMS_Lite -> SE : Run Script()
+
+SEMS_Lite <-- SE : Se_ReturnStatus
+
+note over SEMS_Lite, SE
+	Return Code Checking
+end note
+
+APP <-- SEMS_Lite : Success
+
+APP -> SEMS_Lite : sems_lite_agent_session_close()
+
+deactivate SEMS_Lite
+
+@enduml

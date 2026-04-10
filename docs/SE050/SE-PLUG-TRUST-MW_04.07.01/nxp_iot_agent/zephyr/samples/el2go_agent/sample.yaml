@@ -1,0 +1,98 @@
+sample:
+  name: EL2GO Agent
+  description: The EdgeLock 2GO agent sample demonstrates how to connect to EdgeLock 2GO and provision secure objects to the chip
+tests:
+  sample.nxp_iot_agent.el2go_agent_whitelisting:
+    tags:
+      - el2go
+      - trusted-firmware-m
+      - net
+      - wifi
+      - cloud
+      - mqtt
+    platform_allow:
+      - rd_rw612_bga/rw612/ns
+      - frdm_rw612/rw612/ns
+    timeout: 150
+    harness: console
+    harness_config:
+      type: multi_line
+      fixture: fixture_el2go
+      regex:
+        - "Successfully connected to WIFI"
+        - "The device update was successful"
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+  sample.nxp_iot_agent.el2go_agent_claimcode_mqtt:
+    extra_args:
+      - OVERLAY_CONFIG="overlay-el2go-claimcode-mqtt-rw61x.conf"
+    tags:
+      - el2go
+      - trusted-firmware-m
+      - net
+      - wifi
+      - cloud
+      - mqtt
+    platform_allow:
+      - rd_rw612_bga/rw612/ns
+      - frdm_rw612/rw612/ns
+    timeout: 200
+    harness: console
+    harness_config:
+      type: multi_line
+      fixture: fixture_el2go
+      regex:
+        - "Successfully connected to WIFI"
+        - "Claimcode imported into psa its with object id (0[xX]([0-9a-fA-F]){8})"
+        - "The device update was successful"
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "Attempting to connect to service 'awstest(.+)'"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Attempting to register service 'azuretest(.+)'"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+  sample.nxp_iot_agent.el2go_agent_whitelisting_mqtt:
+    extra_args:
+      - OVERLAY_CONFIG="overlay-el2go-whitelisting-mqtt-rw61x.conf"
+    tags:
+      - el2go
+      - trusted-firmware-m
+      - net
+      - wifi
+      - cloud
+      - mqtt
+    platform_allow:
+      - rd_rw612_bga/rw612/ns
+      - frdm_rw612/rw612/ns
+    timeout: 200
+    harness: console
+    harness_config:
+      type: multi_line
+      fixture: fixture_el2go
+      regex:
+        - "Successfully connected to WIFI"
+        - "The device update was successful"
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "On endpoint (0[xX]([0-9a-fA-F]){8}), for object (0[xX]([0-9a-fA-F]){8}), status: 0x0001: SUCCESS."
+        - "Attempting to connect to service 'awstest(.+)'"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Attempting to register service 'azuretest(.+)'"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"

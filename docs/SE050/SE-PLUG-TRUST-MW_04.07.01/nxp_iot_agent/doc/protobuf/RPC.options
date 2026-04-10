@@ -1,0 +1,39 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2019 NXP                                                         */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+// Allow static allocation of the arguments by defining all of
+// their sizes.
+
+// TODO: how big shall that be? Perhaps we need to have an
+// RSA key as argument in the worst case? The biggest possible
+// thing then would be a PCKS#8 encoded RSA private key with:
+// RSAPrivateKey ::= SEQUENCE {
+//   version           Version,
+//   modulus           INTEGER,  -- n
+//   publicExponent    INTEGER,  -- e
+//   privateExponent   INTEGER,  -- d
+//   prime1            INTEGER,  -- p
+//   prime2            INTEGER,  -- q
+//   exponent1         INTEGER,  -- d mod (p-1)
+//   exponent2         INTEGER,  -- d mod (q-1)
+//   coefficient       INTEGER,  -- (inverse of q) mod p
+//   otherPrimeInfos   OtherPrimeInfos OPTIONAL
+// }
+// where modulus and privateExponent had 4096 bits. In total such
+// a key would have ca. 2400 bytes. Perhaps we do not want to
+// reserve 2400 bytes for EVERY callback argument, so I would
+// propose to maybe do chaining in multiple arguments on those
+// worst case scenarios?
+
+// Since they are overlayed, it makes sense to use the same size
+// for all, memory consumption will always be for the biggest.
+
+nxp.iot.ArgumentPayload.bytes_arg                 max_size: 1024
+nxp.iot.ArgumentPayload.string_arg                max_size: 1024
+
+nxp.iot.RpcRequest.arg                            max_count: 6
+nxp.iot.RpcResponse.arg                           max_count: 6

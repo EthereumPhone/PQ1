@@ -1,0 +1,50 @@
+# Copyright 2024 NXP
+# SPDX-License-Identifier: Apache-2.0
+
+config EL2GO_COMMON
+    bool "Include EL2GO common configuration"
+    help
+        Includes the common EL2GO headers and defines in the app.
+
+config EL2GO_AGENT_LIBRARY_SOURCES
+    bool "Build EL2GO Agent library sources"
+    select EL2GO_COMMON
+    depends on BUILD_WITH_TFM && NET_SOCKETS && MBEDTLS && HWINFO
+    help
+        Include the EdgeLock 2GO agent library sources in the app.
+
+config EL2GO_MQTT_LIBRARY_SOURCES
+    bool "Build EL2GO MQTT library sources"
+    select EL2GO_COMMON
+    depends on BUILD_WITH_TFM && NET_SOCKETS && MBEDTLS && !EL2GO_AGENT_LIBRARY_SOURCES
+    help
+        Include the EdgeLock 2GO MQTT library sources in the app.
+
+config EL2GO_TFM_LEGACY_CRYPTO_ENABLE
+    bool "Enable EL2GO TF-M legacy crypto"
+    depends on BUILD_WITH_TFM
+    help
+        Enables usage of legacy crypto inside TF-M (e.g. SHA-1 hashes) by EL2GO.
+
+config EL2GO_TFM_DATA_IMPORT_REGION
+    bool "Configure EL2GO TF-M data import region"
+    depends on BUILD_WITH_TFM
+    help
+        Configure the flash memory region of the EL2GO offline provisioned blobs to be accessible from EL2GO NSPE apps.
+
+config EL2GO_SIGN_USING_NXPIMAGE
+    bool "Sign s/ns binaries using nxpimage"
+    help
+        Sign s/ns binaries using SPSDK nxpimage tool.
+
+config EL2GO_PRIVATE_KEY
+    string "Private key input"
+    depends on EL2GO_SIGN_USING_NXPIMAGE
+    help
+        Private key input to sign merged s/ns image.
+
+config EL2GO_CERT_BLOCK
+    string "Certificate file"
+    depends on EL2GO_SIGN_USING_NXPIMAGE
+    help
+        Certificate input for the keys.

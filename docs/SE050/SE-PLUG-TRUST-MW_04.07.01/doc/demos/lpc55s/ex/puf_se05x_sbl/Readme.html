@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<!--
+Copyright 2019 NXP
+-->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>5.13.3. Secure Boot Demo &#8212; Plug &amp; Trust MW v04.07.01 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sphinx.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css" />
+    <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+    <script src="../../../../_static/jquery.js"></script>
+    <script src="../../../../_static/underscore.js"></script>
+    <script src="../../../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="6. NXP EdgeLock 2GO Agent" href="../../../../edgelock2go-agent.html" />
+    <link rel="prev" title="5.13.2. Key Rotation using PUF" href="../puf_rotate_scp03/Readme.html" />
+<meta charset='utf-8'>
+<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="text/javascript" src="../../../../_static/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="../../../../_static/js/jquery-fix.js"></script>
+<script type="text/javascript" src="../../../../_static/bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="../../../../_static/bootstrap-sphinx.js"></script>
+
+  </head><body>
+
+  <div id="navbar" class="navbar navbar-inverse navbar-default navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="../../../../toc.html"><span><img src="../../../../_static/NXP_logo_JPG.jpg"></span>
+          MW</a>
+        <span class="navbar-text navbar-version pull-left"><b>v04.07.01</b></span>
+      </div>
+
+        <div class="collapse navbar-collapse nav-collapse">
+          <ul class="nav navbar-nav">
+            
+            
+              <li class="dropdown globaltoc-container">
+  <a role="button"
+     id="dLabelGlobalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="../../../../toc.html">TOC <b class="caret"></b></a>
+  <ul class="dropdown-menu globaltoc"
+      role="menu"
+      aria-labelledby="dLabelGlobalToc"><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../index.html">1. NXP Plug &amp; Trust Middleware</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../organization-of-documentation.html">1.1. Organization of Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../folder-structure.html">1.2. Folder Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sw-prerequisites.html">1.3. List of Platform Prerequisites</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../changes/index.html">2. Changes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_14_00.html">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss-apis.html">3.3. SSS APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/i2cm.html">3.6. I2CM / Secure Sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/logging.html">3.7. Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/scp03/index.html">3.9. Platform SCP03 Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/secure_boot.html">3.19. Secure Boot</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../building/index.html">4. Building / Compiling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../scripts/cmake_options.html">4.7. CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">5. Demo and Examples</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_package.html">7.2. Update Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins/index.html">8. Plugins / Add-ins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/plugin/openssl/scripts/readme.html">8.1. Introduction on OpenSSL engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/plugin/openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/plugin/mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/plugin/mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/plugin/psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss/plugin/open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/Provisioning/readme.html">9.5. CLI Provisioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/cli_data_format.html">9.8. CLI Data formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../appendix.html">10. Appendix</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../api/api_list.html">10.13. Plug &amp; Trust MW APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Revision_history.html">12. Revision history</a></li>
+</ul>
+</ul>
+</li>
+              
+                <li class="dropdown">
+  <a role="button"
+     id="dLabelLocalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">Page <b class="caret"></b></a>
+  <ul class="dropdown-menu localtoc"
+      role="menu"
+      aria-labelledby="dLabelLocalToc"><ul>
+<li><a class="reference internal" href="#">5.13.3. Secure Boot Demo</a><ul>
+<li><a class="reference internal" href="#secondary-bootloader-sbl">5.13.3.1. Secondary Bootloader (SBL)</a></li>
+<li><a class="reference internal" href="#secure-application">5.13.3.2. Secure Application</a></li>
+<li><a class="reference internal" href="#non-secure-application">5.13.3.3. Non-Secure Application</a></li>
+<li><a class="reference internal" href="#prerequisites">5.13.3.4. Prerequisites</a></li>
+<li><a class="reference internal" href="#how-to-build">5.13.3.5. How to build</a></li>
+<li><a class="reference internal" href="#how-to-run">5.13.3.6. How to run</a></li>
+</ul>
+</li>
+</ul>
+</ul>
+</li>
+              
+            
+            
+              
+                
+  <li>
+    <a href="../puf_rotate_scp03/Readme.html" title="Previous Chapter: 5.13.2. Key Rotation using PUF"><span class="glyphicon glyphicon-chevron-left visible-sm"></span><span class="hidden-sm hidden-tablet">&laquo; 5.13.2. Key R...</span>
+    </a>
+  </li>
+  <li>
+    <a href="../../../../edgelock2go-agent.html" title="Next Chapter: 6. NXP EdgeLock 2GO Agent"><span class="glyphicon glyphicon-chevron-right visible-sm"></span><span class="hidden-sm hidden-tablet">6. NXP EdgeLo... &raquo;</span>
+    </a>
+  </li>
+              
+            
+            
+            
+            
+          </ul>
+
+          
+
+        </div>
+    </div>
+  </div>
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+
+<div class="sidebar-header">
+    <h3>Plug &amp; Trust MW</h3>
+</div>
+
+<div class="row">
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../changes/index.html">2. Changes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../stack/index.html">3. Plug &amp; Trust MW Stack</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../building/index.html">4. Building / Compiling</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">5. Demo and Examples</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html#puf-examples">5.13. PUF examples</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../puf_inject_scp03/Readme.html">5.13.1. Key Injection to PUF</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../puf_rotate_scp03/Readme.html">5.13.2. Key Rotation using PUF</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">5.13.3. Secure Boot Demo</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../semslite/doc/index.html">7. SEMS Lite Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins/index.html">8. Plugins / Add-ins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli-tool.html">9. CLI Tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../appendix.html">10. Appendix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Revision_history.html">12. Revision history</a></li>
+</ul>
+
+</div>
+<div class="row">
+    <form class="form" action="../../../../search.html" method="get">
+     <div class="form-group">
+      <label for="Search">Search:</label>
+      <input type="text" name="q" class="form-control" placeholder="Search" />
+     </div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+        </div>
+      </div>
+    <div class="body col-md-9 content" role="main">
+      
+  <section id="secure-boot-demo">
+<span id="se05x-puf-secure-binding"></span><h1><span class="section-number">5.13.3. </span>Secure Boot Demo<a class="headerlink" href="#secure-boot-demo" title="Permalink to this headline">¶</a></h1>
+<p>This example is to demonstrate how secure binding is achieved
+between LPC55S and SE05X using PUF for secure storage of PlatformSCP
+keys on the MCU. For details on secure boot process, refer to
+<a class="reference internal" href="../../../../stack/secure_boot.html#secure-boot"><span class="std std-numref">Section 3.19</span></a> <a class="reference internal" href="../../../../stack/secure_boot.html#secure-boot"><span class="std std-ref">Secure Boot</span></a></p>
+<section id="secondary-bootloader-sbl">
+<h2><span class="section-number">5.13.3.1. </span>Secondary Bootloader (SBL)<a class="headerlink" href="#secondary-bootloader-sbl" title="Permalink to this headline">¶</a></h2>
+<p>Refer to <a class="reference internal" href="../../../../stack/secure_boot.html#secondary-bootloader"><span class="std std-numref">Section 3.19.2</span></a>
+<a class="reference internal" href="../../../../stack/secure_boot.html#secondary-bootloader"><span class="std std-ref">Secondary Bootloader</span></a> for details on operations performed
+by the Secondary Bootloader (SBL).</p>
+</section>
+<section id="secure-application">
+<h2><span class="section-number">5.13.3.2. </span>Secure Application<a class="headerlink" href="#secure-application" title="Permalink to this headline">¶</a></h2>
+<p>The secure application is verified by SBL using RSA2k public
+key stored at KeyID <code class="docutils literal notranslate"><span class="pre">K_PUB_OEM_ID</span></code>. Secure application
+will have the reference to keyCodes prepared by SBL, using which
+PlatformSCP session can be established.</p>
+<p>In this example, secure application is opening a PlatformSCP03
+session using keyCodes prepared by SBL and transfers the control to
+non-secure application which will open an Applet session
+and test communication.</p>
+</section>
+<section id="non-secure-application">
+<h2><span class="section-number">5.13.3.3. </span>Non-Secure Application<a class="headerlink" href="#non-secure-application" title="Permalink to this headline">¶</a></h2>
+<p>The non-secure application used in this example is used to
+establish an Applet session and use non-secure callable
+APIs provided in secure application to wrap data with PlatformSCP
+context before sending to the SE.</p>
+</section>
+<section id="prerequisites">
+<h2><span class="section-number">5.13.3.4. </span>Prerequisites<a class="headerlink" href="#prerequisites" title="Permalink to this headline">¶</a></h2>
+<ul>
+<li><p><a class="reference internal" href="../../../../dev-platforms/platform_lpc55s.html#platform-lpc55s69"><span class="std std-numref">Section 10.6.5</span></a> <a class="reference internal" href="../../../../dev-platforms/platform_lpc55s.html#platform-lpc55s69"><span class="std std-ref">LPC55S69</span></a></p></li>
+<li><p><a class="reference internal" href="../../../../building/frdm-k64f-sdk.html#logging-on-console"><span class="std std-numref">Section 4.2.4</span></a> <a class="reference internal" href="../../../../building/frdm-k64f-sdk.html#logging-on-console"><span class="std std-ref">Logging on console</span></a></p></li>
+<li><p>Building Plug &amp; Trust middleware stack. (Refer <a class="reference internal" href="../../../../building/index.html#building"><span class="std std-ref">Building / Compiling</span></a>)</p></li>
+<li><p>PUF must be enrolled first and original SCP03 keys must be
+provisioned and ActivationCode and KeyCodes must be updated in
+<code class="file docutils literal notranslate"><span class="pre">ex_scp03_puf.h</span></code>. SBL and secure app should be
+compiled with the correct AC and KCs.
+See <a class="reference internal" href="../puf_inject_scp03/Readme.html#puf-inject-scp03"><span class="std std-numref">Section 5.13.1</span></a> <a class="reference internal" href="../puf_inject_scp03/Readme.html#puf-inject-scp03"><span class="std std-ref">Key Injection to PUF</span></a> on how to
+provision PUF with PlatformSCP03 keys.</p></li>
+<li><p>Secure application verification public key must be provisioned at
+keyID <code class="docutils literal notranslate"><span class="pre">K_PUB_OEM_ID</span></code> and updated in <code class="file docutils literal notranslate"><span class="pre">puf_se05x_sbl_s.c</span></code> at:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="cp">#define K_PUB_OEM_ID 0xA55A</span>
+</pre></div>
+</div>
+<p>Refer to <a class="reference internal" href="../../../../cli-tool.html#cli-tool"><span class="std std-ref">CLI Tool</span></a> for details on how to provision keys into
+SE05x.</p>
+</li>
+<li><p>New PlatformSCP03 keys updated in <code class="file docutils literal notranslate"><span class="pre">puf_se05x_sbl_s.c</span></code> at:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="kt">uint8_t</span> <span class="n">newScpKeyENC</span><span class="p">[</span><span class="n">PUF_INTRINSIC_KEY_SIZE</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+<span class="kt">uint8_t</span> <span class="n">newScpKeyMAC</span><span class="p">[</span><span class="n">PUF_INTRINSIC_KEY_SIZE</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+<span class="kt">uint8_t</span> <span class="n">newScpKeyDEK</span><span class="p">[</span><span class="n">PUF_INTRINSIC_KEY_SIZE</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+
+<span class="n">status</span> <span class="o">=</span> <span class="n">getHostAesKeys</span><span class="p">(</span><span class="n">pCtx</span><span class="p">,</span> <span class="n">newScpKeyENC</span><span class="p">,</span> <span class="n">PUF_INTRINSIC_KEY_SIZE</span><span class="p">);</span>
+<span class="n">ENSURE_OR_GO_CLEANUP</span><span class="p">(</span><span class="n">status</span> <span class="o">==</span> <span class="n">kStatus_SSS_Success</span><span class="p">);</span>
+<span class="c1">// LOG_MAU8_W(&quot;Random ENC Key&quot;, newScpKeyENC, PUF_INTRINSIC_KEY_SIZE);</span>
+
+<span class="n">status</span> <span class="o">=</span> <span class="n">getHostAesKeys</span><span class="p">(</span><span class="n">pCtx</span><span class="p">,</span> <span class="n">newScpKeyMAC</span><span class="p">,</span> <span class="n">PUF_INTRINSIC_KEY_SIZE</span><span class="p">);</span>
+<span class="n">ENSURE_OR_GO_CLEANUP</span><span class="p">(</span><span class="n">status</span> <span class="o">==</span> <span class="n">kStatus_SSS_Success</span><span class="p">);</span>
+<span class="c1">// LOG_MAU8_W(&quot;Random MAC Key&quot;, newScpKeyMAC, PUF_INTRINSIC_KEY_SIZE);</span>
+
+<span class="n">status</span> <span class="o">=</span> <span class="n">getHostAesKeys</span><span class="p">(</span><span class="n">pCtx</span><span class="p">,</span> <span class="n">newScpKeyDEK</span><span class="p">,</span> <span class="n">PUF_INTRINSIC_KEY_SIZE</span><span class="p">);</span>
+<span class="n">ENSURE_OR_GO_CLEANUP</span><span class="p">(</span><span class="n">status</span> <span class="o">==</span> <span class="n">kStatus_SSS_Success</span><span class="p">);</span>
+<span class="c1">// LOG_MAU8_W(&quot;Random DEK Key&quot;, newScpKeyDEK, PUF_INTRINSIC_KEY_SIZE);</span>
+
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The SBL performs key rotation when run first time with randomized
+keys. If required for development, the user should change this to known keys
+so that in case of failure recovering SE050 is easy.</p>
+</div>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">elftosb</span></code> tool from <a class="reference external" href="https://www.nxp.com/webapp/Download?colCode=elftosb_gui_1.0.12&amp;appType=license&amp;location=null">ELF to Secure Binary GUI</a> to prepare signed
+images.</p></li>
+<li><p>Also see <a class="reference internal" href="../../../../stack/secure_boot.html#secure-boot"><span class="std std-numref">Section 3.19</span></a> <a class="reference internal" href="../../../../stack/secure_boot.html#secure-boot"><span class="std std-ref">Secure Boot</span></a></p></li>
+<li><p>Refer AppNote <a class="reference external" href="https://www.nxp.com/docs/en/application-note/AN12283.pdf">AN12283</a>.</p></li>
+</ul>
+</section>
+<section id="how-to-build">
+<h2><span class="section-number">5.13.3.5. </span>How to build<a class="headerlink" href="#how-to-build" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic">
+<li><p>Compile the SBL with the following CMake options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_Host=lpcxpresso55s_s</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SCP=SCP03_SSS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SE05X_Auth=PlatfSCP03</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SBL:STRING=None</span></code></p></li>
+<li><p>Project:<code class="docutils literal notranslate"><span class="pre">puf_se05x_sbl_s</span></code></p></li>
+</ul>
+</li>
+<li><p>To complete the build process, you also need to sign the image
+for Bootloader verification. For this, you need to use
+<a class="reference external" href="https://www.nxp.com/webapp/Download?colCode=elftosb_gui_1.0.12&amp;appType=license&amp;location=null">ELF to Secure Binary GUI</a>.</p>
+<p>Configure elftosb GUI tool as:</p>
+<a class="reference internal image-reference" href="img/SBL_signed_binary_creation_config.jpeg"><img alt="img/SBL_signed_binary_creation_config.jpeg" class="align-center" src="img/SBL_signed_binary_creation_config.jpeg" style="width: 270px;" /></a>
+<ol class="arabic simple">
+<li><p>Select your SBL input binary</p></li>
+<li><p>Add certificate chain and signing key (Refer <strong>Chapter 3. Keys and certificates</strong> in <a class="reference external" href="https://www.nxp.com/docs/en/application-note/AN12283.pdf">AN12283</a>)</p></li>
+<li><p>Select your output signed SBL binary</p></li>
+</ol>
+<p>Press <code class="docutils literal notranslate"><span class="pre">Process</span></code> button to create signed image.</p>
+<p>You should be able to see the log generated on right window
+containing RKTH as highlighted:</p>
+<a class="reference internal image-reference" href="img/SBL_signed_binary_creation.jpeg"><img alt="img/SBL_signed_binary_creation.jpeg" class="align-center" src="img/SBL_signed_binary_creation.jpeg" style="width: 270px;" /></a>
+<p>Note this value for next step.</p>
+</li>
+<li><p>We will configure CMPA and CFPA pages in next 2 steps. These
+pages are required to configure LPC55S registers before boot.
+We can configure boot config, boot speed, debugging registers,
+RKTH, etc (See <a class="reference external" href="https://www.nxp.com/docs/en/application-note/AN12283.pdf">AN12283</a> and <a class="reference external" href="https://www.nxp.com/docs/en/application-note/AN13037.pdf">AN13037</a> for more details).
+In this example, we configure CMPA page with RKTH value and
+CFPA with RoT Keys enabled. RKTH value is checked from CMPA
+while verifying the image to ensure that a different certificate
+chain was not used to create the signed binary. CFPA page is used
+to check if any key used in signed image preparation is enabled
+or revoked.</p>
+<p>In <code class="docutils literal notranslate"><span class="pre">Device</span></code> tab, configure the following settings:</p>
+<a class="reference internal image-reference" href="img/CMPA_config.jpeg"><img alt="img/CMPA_config.jpeg" class="align-center" src="img/CMPA_config.jpeg" style="width: 270px;" /></a>
+<p>In place of RKTH, enter your RKTH that you noted in the previous
+step.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Do <strong>NOT</strong> Seal Security configuration</p>
+</div>
+<p>Enter ISP mode by holding ISP button on the device and
+pressing Reset button.</p>
+<p>Update the COMPort and press <code class="docutils literal notranslate"><span class="pre">Process</span></code>. This will update
+CMPA page with this RKTH value which will allow ROM Bootloader
+to successfully verify SBL image.
+On successful programming of CMPA page, you should be able to see
+logs like this:</p>
+<a class="reference internal image-reference" href="img/CMPA.jpeg"><img alt="img/CMPA.jpeg" class="align-center" src="img/CMPA.jpeg" style="width: 270px;" /></a>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This will allow to boot only signed images. You won’t be
+able to boot plain images. To revert this setting to boot
+plain images, change Secure Boot setting to <strong>Boot plain images</strong>
+and update the CMPA page again.</p>
+</div>
+</li>
+<li><p>Update CFPA page using <code class="docutils literal notranslate"><span class="pre">blhost</span></code> utility available in <code class="docutils literal notranslate"><span class="pre">elftosb</span></code>
+package:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>blhost.exe -p COM54 write-memory 0x9DE00 C:<span class="se">\_</span>ddm<span class="se">\P</span>nT<span class="se">\r</span>andom<span class="se">\s</span>ecure_boot<span class="se">\A</span>N12283<span class="se">\C</span>FPA_0x9de00.bin
+</pre></div>
+</div>
+<a class="reference internal image-reference" href="img/blhost_flash_CFPA.jpeg"><img alt="img/blhost_flash_CFPA.jpeg" class="align-center" src="img/blhost_flash_CFPA.jpeg" style="width: 270px;" /></a>
+<p>Sample CFPA page is available with this demo which can be
+directly flashed. If you want to update the CFPA page again, you
+need to increment the CFPA version. See <a class="reference external" href="https://www.nxp.com/docs/en/application-note/AN12283.pdf">AN12283</a> for more details.</p>
+</li>
+<li><p>Compile SBL bootable secure application with the following CMake options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_Host=lpcxpresso55s_s</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SCP=SCP03_SSS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SE05X_Auth=PlatfSCP03</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SBL=SBL_LPC55S</span></code></p></li>
+<li><p>Project:<code class="docutils literal notranslate"><span class="pre">sbl_app_s</span></code></p></li>
+</ul>
+</li>
+<li><p>To prepare Secure application signed image, configure elftosb as:</p>
+<a class="reference internal image-reference" href="img/S_APP_signed_binary_creation_config.jpeg"><img alt="img/S_APP_signed_binary_creation_config.jpeg" class="align-center" src="img/S_APP_signed_binary_creation_config.jpeg" style="width: 270px;" /></a>
+<p>Run process to create signed secure application image.</p>
+</li>
+<li><p>Compile non-secure application with the following CMake options:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_Host=lpcxpresso55s_ns</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SCP=SCP03_SSS</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_SE05X_Auth=PlatfSCP03</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">PTMW_Log=Silent</span></code></p></li>
+<li><p>Project:<code class="docutils literal notranslate"><span class="pre">sbl_app_ns</span></code></p></li>
+</ul>
+</li>
+</ol>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This process creates a signed image for SBL. However, there
+is an option to create signed + encrypted image. In that, the
+encrypted image is first decrypted by symmetric key provisioned
+in PUF, then the decrypted image is loaded in flash for signature
+verification. Refer to section 5.6 in <a class="reference external" href="https://www.nxp.com/docs/en/application-note/AN12283.pdf">AN12283</a> for details on
+creating Secure Binary (Signed + Encrypted).</p>
+<p>A “Secure” Binary in this case means it is signed and encrypted,
+it is not related to Secure Boot or LPC55S TrustZone.</p>
+<p>Using a Secure Binary would also disable debugging.
+Refer to <a class="reference external" href="https://www.nxp.com/docs/en/application-note/AN13037.pdf">AN13037</a> for details on how to update <strong>CC_SOCU</strong>
+registers in CMPA and CFPA pages to enable debugging.</p>
+</div>
+</section>
+<section id="how-to-run">
+<h2><span class="section-number">5.13.3.6. </span>How to run<a class="headerlink" href="#how-to-run" title="Permalink to this headline">¶</a></h2>
+<p>Enter ISP mode by holding ISP button on the device and pressing Reset button.
+Flash the built images with these commands:</p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>blhost.exe -p COMxx flash-erase-region 0x10000000 0x3F000 <span class="o">&amp;&amp;</span> blhost.exe -p COMxx write-memory 0x10000000 puf_se05x_sbl_s_SIGNED.bin
+
+blhost.exe -p COMxx flash-erase-region 0x10040000 0x30000 <span class="o">&amp;&amp;</span> blhost.exe -p COMxx write-memory 0x10040000 sbl_app_s_SIGNED.bin
+
+blhost.exe -p COMxx flash-erase-region 0x70000 0x28000 <span class="o">&amp;&amp;</span> blhost.exe -p COMxx write-memory 0x70000 sbl_app_ns.bin
+</pre></div>
+</div>
+<a class="reference internal image-reference" href="img/flashing_images.jpeg"><img alt="img/flashing_images.jpeg" class="align-center" src="img/flashing_images.jpeg" style="width: 270px;" /></a>
+<p>Press the Reset button after completion. On successful execution you should
+be able to see these logs:</p>
+<p><strong>First boot log:</strong></p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>App   :INFO :PlugAndTrust_v03.01.00_20210102
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet selection successful!
+App   :INFO :Random <span class="nb">test</span> was successful with default SCP03 keys
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet deselection successful!
+App   :INFO :Key Rotation was successful!
+App   :INFO :NewKeyCode_ENC <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">52</span><span class="o">)</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span> <span class="m">02</span>     E2 <span class="m">26</span> <span class="m">23</span> <span class="m">39</span>     CB 6F D3 <span class="m">57</span>     <span class="m">46</span> <span class="m">75</span> 7D 7E
+                <span class="m">47</span> 9C F4 <span class="m">68</span>     D6 <span class="m">65</span> D4 8C     3D CF <span class="m">28</span> 4F     1F 3F 9D 4A
+                <span class="m">66</span> 1F E3 D1     BB B0 0A D7     <span class="m">57</span> C3 <span class="m">35</span> 3B     <span class="m">48</span> <span class="m">17</span> 1B AF
+                <span class="m">33</span> AE 2C A6
+App   :INFO :NewKeyCode_MAC <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">52</span><span class="o">)</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span> <span class="m">02</span>     <span class="m">10</span> F9 <span class="m">83</span> 8B     <span class="m">91</span> BD <span class="m">14</span> 5E     6D <span class="m">57</span> 4A C2
+                <span class="m">46</span> <span class="m">13</span> 7A <span class="m">71</span>     <span class="m">38</span> 8D <span class="m">14</span> <span class="m">05</span>     <span class="m">99</span> B3 <span class="m">08</span> <span class="m">13</span>     EE 1B <span class="m">68</span> 9E
+                <span class="m">36</span> E6 <span class="m">99</span> 4B     EC 1B BB <span class="m">48</span>     2D <span class="m">50</span> <span class="m">58</span> D1     <span class="m">16</span> 6E F3 3D
+                8D 2F <span class="m">18</span> <span class="m">41</span>
+App   :INFO :NewKeyCode_DEK <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">52</span><span class="o">)</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span> <span class="m">02</span>     4D F1 <span class="m">02</span> <span class="m">83</span>     E7 B9 C5 <span class="m">30</span>     <span class="m">66</span> DB <span class="m">92</span> <span class="m">43</span>
+                <span class="m">86</span> 7E 3C E2     A3 <span class="m">61</span> FF <span class="m">48</span>     <span class="m">72</span> C9 AE <span class="m">68</span>     <span class="m">03</span> <span class="m">31</span> 6C 7B
+                6F C9 5C E4     <span class="m">28</span> BC D1 3F     B6 DD 6C C9     AF <span class="m">65</span> D8 B0
+                0B <span class="m">38</span> E2 E6
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet selection successful!
+App   :INFO :Session Open successful
+App   :INFO :Random <span class="nb">test</span> was successful with new SCP03 keys
+App   :INFO :Image verification successful, booting the application now!
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet deselection successful!
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet selection successful!
+App   :INFO :Random <span class="nb">test</span> was successful from secure application
+App   :INFO :Entering normal world see you there.
+
+Non-secure entry
+NS Channel initialize successful
+sss:WARN :Communication channel is Plain.
+sss:WARN :!!!Not recommended <span class="k">for</span> production use.!!!
+NS Session open is Successful
+sss_rng_get_random successful
+</pre></div>
+</div>
+<p><strong>Next boot log:</strong></p>
+<div class="highlight-shell notranslate"><div class="highlight"><pre><span></span>App   :INFO :PlugAndTrust_v03.01.00_20210102
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet selection successful!
+App   :INFO :Random <span class="nb">test</span> was successful, with KCs loaded from Flash!
+App   :INFO :Image verification successful, booting the application now!
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet deselection successful!
+sss   :INFO :atr <span class="o">(</span><span class="nv">Len</span><span class="o">=</span><span class="m">35</span><span class="o">)</span>
+                <span class="m">01</span> A0 <span class="m">00</span> <span class="m">00</span>     <span class="m">03</span> <span class="m">96</span> <span class="m">04</span> <span class="m">03</span>     E8 <span class="m">00</span> FE <span class="m">02</span>     0B <span class="m">03</span> E8 <span class="m">00</span>
+                <span class="m">01</span> <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>     <span class="m">00</span> <span class="m">64</span> <span class="m">13</span> <span class="m">88</span>     0A <span class="m">00</span> <span class="m">65</span> <span class="m">53</span>     <span class="m">45</span> <span class="m">30</span> <span class="m">35</span> <span class="m">31</span>
+                <span class="m">00</span> <span class="m">00</span> <span class="m">00</span>
+App   :INFO :Applet selection successful!
+App   :INFO :Random <span class="nb">test</span> was successful from secure application
+App   :INFO :Entering normal world see you there.
+
+Non-secure entry
+NS Channel initialize successful
+sss:WARN :Communication channel is Plain.
+sss:WARN :!!!Not recommended <span class="k">for</span> production use.!!!
+NS Session open is Successful
+sss_rng_get_random successful
+</pre></div>
+</div>
+</section>
+</section>
+
+
+    </div>
+      
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-right">
+      <a href="#">Back to top</a>
+      
+    </p>
+    <p>
+        &copy; Copyright 2018-2020, NXP.<br/>
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.5.0.<br/>
+    </p>
+  </div>
+</footer>
+  </body>
+</html>

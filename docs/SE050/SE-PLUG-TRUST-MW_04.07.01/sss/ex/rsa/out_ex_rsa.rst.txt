@@ -1,0 +1,36 @@
+App   :INFO :PlugAndTrust_v04.03.00_20221122
+App   :INFO :Running C:\_ddm\simw-top_build\se_x86\bin\Debug\ex_rsa.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+App   :INFO :Using default PlatfSCP03 keys. You can use keys from file using ENV=EX_SSS_BOOT_SCP03_PATH
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+App   :INFO :Running RSA Example ex_sss_rsa.c
+sss   :WARN :nxEnsure:'ret == SM_OK' failed. At Line:7013 Function:sss_se05x_TXn
+sss   :WARN :Could not delete Key id EF000044
+App   :INFO :Delete key succeeds only if key exists, ignore error message if any
+App   :INFO :Do Signing
+App   :INFO :digest (Len=32)
+      00 01 02 03    04 05 06 07    08 09 0A 0B    0C 0D 0E 0F
+      10 11 12 13    14 15 16 17    18 19 1A 1B    1C 1D 1E 1F
+App   :INFO :Signing successful !!!
+App   :INFO :signature (Len=256)
+      DE 04 B0 8F    CD 35 E1 01    2D 16 48 69    28 41 E6 0A
+      73 C2 E2 0E    16 9C 79 6F    02 40 A7 73    17 33 7E 12
+      7B C6 F7 E2    CB F1 3D EF    9B 45 9A 02    89 9A 6E FA
+      8E 41 A9 B2    59 A8 AB CD    A6 C6 20 2F    FE 66 4D 2D
+      3F FF 74 0C    B9 AB 84 A8    1C 52 8B 59    27 4D 26 F3
+      29 9E DC B0    56 F7 46 F6    89 C7 BC 95    2A 21 6E 13
+      DC BF AB A6    2C 04 9F CB    92 FE 20 58    59 5F 05 CB
+      8A 35 44 98    47 3F B2 FC    BC A1 16 1F    06 68 03 17
+      F1 9B BE 7C    95 05 1B A6    BE 07 4E 22    DF 61 0F A3
+      C0 B8 BA 17    6F 97 7C C8    03 51 F9 30    DB F0 6F 28
+      E0 3A 1C E7    FE E9 4C 3B    DA 5E 16 A9    2B C1 23 27
+      A2 AB 9D 45    64 8F AE EB    A5 C7 85 53    23 FF E9 3E
+      57 68 BA 3C    51 E1 94 8E    9E E2 7C 6E    B6 20 3E 4C
+      22 A1 4D E8    97 73 FC 96    5B 41 B0 8C    72 54 41 81
+      3E D0 52 5D    19 06 62 5A    B4 93 8F 28    8C E0 6E 62
+      8E FF AB AD    C6 B4 5C 57    78 6D 2A 0B    3C C1 57 09
+App   :INFO :Do Verification
+App   :INFO :Verification successful !!!
+App   :INFO :ex_sss_RSA Example Success !!!...
+App   :INFO :ex_sss Finished

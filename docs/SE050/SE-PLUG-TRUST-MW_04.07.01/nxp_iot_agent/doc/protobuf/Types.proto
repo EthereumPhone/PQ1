@@ -1,0 +1,87 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2018-2021 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option csharp_namespace = "Nxp.Protobuf.Types";
+option cc_enable_arenas = true;
+option java_package = "com.nxp.iot.proto.types";
+option java_multiple_files = true;
+
+enum EndpointType {
+  /* Used as invalid value. */
+  INVALID      =   0;
+
+  /* This endpoint represents the EdgeLock 2GO agent that is managing connections to EdgeLock 2GO
+   * cloud service. */
+  AGENT        =   1;  
+
+  /* Keystores 10..49 */
+
+  /* This endpoint represents a key store implemented by A71CH applet. 
+   *
+   * This keystore type is deprecated. */
+  KS_SSS_A71CH = 10 [deprecated = true];   
+
+  /* This endpoint represents a key store implemented by SE05X family of applets. */
+  KS_SSS_SE05X = 11;  
+
+  /* This endpoint represents a key store accessible via RPCs on an SSS API. 
+   *
+   * This keystore type is unsupported. */
+  KS_SSS_RPC = 20;
+
+  KS_PSA = 21;     
+
+  /* Data Stores 50..99 */
+
+  /* This endpoint represents a datastore in the filesystem of the device. */
+  DS_FS        = 50;   
+
+  /* This endpoint represents a datastore in the plain/raw memory of the device. */
+  DS_PLAIN     = 51;   
+
+  /* Code Stores 100..149 */
+
+  /* Attestation Agents 150..199 */
+
+}
+
+
+enum ServiceType
+{
+    AWSSERVICE = 0;
+
+    GOOGLESERVICE = 1;
+
+    AZURESERVICE = 2;
+
+    IBMSERVICE = 3;
+
+    CUSTOMSERVICE = 15;
+
+    EL2GOSERVICE = 500;
+}
+
+
+enum ServiceProtocolType
+{
+    HTTPS = 1;
+
+    MQTTS = 2;
+
+    AMQPS = 3;
+
+    XMPP = 4;
+
+    DDS = 5;
+
+    COAP = 6;
+}
+

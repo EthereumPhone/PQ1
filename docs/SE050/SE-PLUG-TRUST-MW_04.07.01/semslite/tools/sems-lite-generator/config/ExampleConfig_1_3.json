@@ -1,0 +1,26 @@
+{
+    "Copyright": "Copyright 2020 NXP",
+    "TargetCommercialName": "SE051P2HQ1/Z011A",
+    "Target12nc": "123456789012",
+    "TargetEntityID": "00000000000000000063709317141879",
+    "requiredFreeBytesNonVolatileMemory": 0,
+    "requiredFreeBytesTransientMemory": 0,
+    "MulticastPackageName": "DeleteInstance_NXP-IoTApplet",
+    "MulticastPackageDescription": "Package to delete the instance of the NXP IoT Applet. Generated with SEMS-Lite script generator version 0.9.15.",
+    "SubComponentMetaData": [
+        {
+            "name": "NXP-IoT-Applet",
+            "aid": "A0000003965453000000010300FE00",
+            "version": "0.1",
+            "SWContentRegister": "NXP Software Content Register\n\n Package: Update NXP-IoT-Applet\n Version: 7.2\n Outgoing License: LA_OPT_NXP_Software_License - Additional distribution license granted\n License File: LA_OPT_NXP_Software_License.pdf\n Type of content: file including the NXP-IoT-Applet as an encrypted binary file\n Description and comments: Multicast Package to update the NXP SE051 IoT Applet for OEF B501 to version 7.2\n Release Location: NXP EdgeLock 2GO portal www.edgelock2go.com\n\n Origin: NXP (proprietary)"
+        },
+        {
+            "name": "NXP-IoT-Applet",
+            "aid": "A0000003965453000000010300FF00",
+            "version": "0.1",
+            "SWContentRegister": "NXP Software Content Register\n\n Package: Update NXP-IoT-Applet\n Version: 7.2\n Outgoing License: LA_OPT_NXP_Software_License - Additional distribution license granted\n License File: LA_OPT_NXP_Software_License.pdf\n Type of content: file including the NXP-IoT-Applet as an encrypted binary file\n Description and comments: Multicast Package to update the NXP SE051 IoT Applet for OEF B501 to version 7.2\n Release Location: NXP EdgeLock 2GO portal www.edgelock2go.com\n\n Origin: NXP (proprietary)"
+        }
+    ],
+    "MulticastPackageVersion": "1.0",
+    "PkSemsCaAut": "045C6ED56C52D3211A7C42A4DE315F629625BB4841E534AFF4D09B9FD83B055BF6019BE65EB66F11733A9BCD2027D9833B73C72CBF9C034142708B4790246661E1"
+}

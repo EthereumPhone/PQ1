@@ -1,0 +1,7 @@
+
+.. |SEMS_LITE_AGENT_PRODUCT_NAME|   replace:: :samp:`SEMS_Lite_Agent`
+.. |SEMS_LITE_AGENT_VER_STR|        replace:: :samp:`v01.00.00`
+.. |SEMS_LITE_AGENT_VER_STR_FULL|   replace:: :samp:`v01.00.00_20200723`
+.. |SEMS_LITE_AGENT_MAJOR|          replace:: :samp:`01`
+.. |SEMS_LITE_AGENT_MINOR|          replace:: :samp:`00`
+.. |SEMS_LITE_AGENT_DEV|            replace:: :samp:`00`

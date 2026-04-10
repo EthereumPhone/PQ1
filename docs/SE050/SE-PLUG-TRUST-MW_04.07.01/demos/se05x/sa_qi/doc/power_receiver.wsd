@@ -1,0 +1,12 @@
+
+skinparam ObjectFontSize 26
+skinparam ObjectAttributeFontSize 20
+skinparam PackageFontSize 30
+skinparam ArrowThickness 2
+skinparam ArrowFontSize 22
+
+package PowerReceiver {
+    object main {
+        
+    }
+}

@@ -1,0 +1,48 @@
+{
+  "sourcePath": "<path to project root, e.g. C:/Users/foobar/iot-reference-nxp-rt1060>",
+  "freeRTOSTestParamConfigPath": "{{testData.sourcePath}}/examples/evkbmimxrt1060/test/include/test_param_config.h",
+  "freeRTOSTestExecutionConfigPath": "{{testData.sourcePath}}/examples/evkbmimxrt1060/test/include/test_execution_config.h",
+  "freeRTOSVersion": "202210.01-LTS",
+  "buildTool": {
+    "name": "nxp-build",
+    "version": "1.0.0",
+    "command": [
+      "{{config.idtRootPath}}/configs/build.bat {{testData.sourcePath}}"
+    ]
+  },
+  "flashTool": {
+    "name": "nxp-flash",
+    "version": "1.0.0",
+    "command": [
+      "{{config.idtRootPath}}/configs/flash.bat {{testData.sourcePath}}"
+    ]
+  },
+  "testStartDelayms": 5000,
+  "echoServerCertificateConfiguration": {
+    "certificateGenerationMethod": "Automatic"
+  },
+  "echoServerConfiguration": {
+    "keyGenerationMethod": "EC",
+    "serverPort": 9000
+  },
+  "otaConfiguration": {
+  "otaPALCertificatePath": "sss:00223346",
+  "otaE2EFirmwarePath":"{{testData.sourcePath}}/projects/evkmimxrt1060/test/Debug/aws_iot_qual_test_signed_OTA.bin",
+  "deviceFirmwarePath":"NA",
+    "codeSigningConfiguration": {
+      "signingMethod": "AWS",
+      "signerHashingAlgorithm": "SHA256",
+      "signerSigningAlgorithm": "ECDSA",
+      "signerCertificate": "<ARN of certificate made in section 6.2>",
+      "untrustedSignerCertificate": "<ARN of any untrusted certificate>",
+      "signerCertificateFileName": "sss:00223344",
+      "compileSignerCertificate": false,
+      "signerPlatform": "AmazonFreeRTOS-Default"
+    }
+  },
+  "pkcs11LabelConfiguration":{
+    "pkcs11LabelPreProvisionedECDevicePrivateKeyForTLS": "\"sss:F0000000\"",
+    "pkcs11LabelPreProvisionedECDevicePublicKeyForTLS": "\"sss:00223345\"",
+    "pkcs11LabelPreProvisionedECDeviceCertificateForTLS": "\"sss:F0000001\""
+  }
+}

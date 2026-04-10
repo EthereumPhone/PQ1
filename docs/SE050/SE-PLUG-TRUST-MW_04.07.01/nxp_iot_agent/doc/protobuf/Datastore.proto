@@ -1,0 +1,86 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2018-2021 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.datastore";
+option java_multiple_files = true;
+
+enum DatastoreOperation {
+    /* Before an update to a datastore, the EdgeLock 2GO cloud service requests the datastore to
+     * allocate the memory that is required. This operation also indicates the start of a
+     * transaction.
+     *
+     * A request containing an ALLOCATE operation does use the \p length field to indicate the total
+     * amount of memory required for the data to be written to the datastore. */
+    ALLOCATE = 1;
+
+    /* The EdgeLock 2GO cloud service might need to read data from a datastore to determine its
+     * current state.
+     *
+     * A request containing a READ operation does use the \p offset and \p length fields to indicate
+     * where to start and how many bytes to read from the datastore. */
+    READ = 2;
+
+    /* To fill the datastore with contents, the EdgeLock 2GO cloud service is using this operation.
+     * Note that several writes might be used to fill the datastore (depending on the buffer sizes
+     * for communication).
+     *
+     * A request containing a WRITE operation does use the \p offset and \p data fields of the
+     * message to indicate where in the datastore to start and what data to write. */
+    WRITE = 3;
+
+    /* If the datastore indicates that it supports transactions, after all necessary writes are
+     * done, the EdgeLock 2GO cloud service does indicate that with this operation. This is the
+     * indication to the datastore to invalidate old contents and from that point in time onwards
+     * use the data that was updated with transaction that is committed.
+     *
+     * A request containing a COMMIT operation does not use any message fields. */
+    COMMIT = 4; 
+
+}
+
+
+enum DatastoreStatus
+{
+    OK = 1;
+    ERROR = 2;
+}
+
+
+enum DatastoreIdentifiers {
+    /* If a datastore has this ID, it will be used to store the information to connect to the
+     * EdgeLock 2GO cloud service itself. It will not be used to store other cloud service
+     * connection information unless it is the only datastore available. */
+    DATASTORE_EDGELOCK2GO_ID = 0x70000000; }
+
+message DatastoreAdditionalData {
+    /* Datastore writes might be done in chunks (using several WRITE operations). Since the
+     * connection to EdgeLock 2GO could be interrupted at any point in time, it could happen that
+     * some chunks of the datastore have been written already while others have not, resulting in an
+     * unusable datastore.
+     *
+     * To protect from that situation, a datastore can implement a simple transaction interface. In
+     * this case it can signal to use transactions to the EdgeLock 2GO cloud service with this
+     * field. This will make the EdgeLock 2GO cloud service indicate that all datastore writes that
+     * it needs to do to one datastore are complete with an additional commit operation. */
+    optional bool supportsTransactions = 1; }
+
+message DatastoreRequest {
+    optional DatastoreOperation operation = 1;
+    optional int32 offset = 2;
+    optional int32 length = 3;
+    optional bytes data = 10;
+}
+
+message DatastoreResponse {
+    optional DatastoreStatus status = 1;
+    optional int32 length = 2;
+    optional bytes data = 10;
+}

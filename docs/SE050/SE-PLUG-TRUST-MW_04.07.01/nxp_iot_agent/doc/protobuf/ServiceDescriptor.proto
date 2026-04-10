@@ -1,0 +1,50 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2019-2021 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.servicedescriptor";
+option java_multiple_files = true;
+
+import "Types.proto";
+
+message SssObjectReference {
+    optional EndpointType type = 1;
+    optional uint32 endpoint_id = 2;
+    optional uint32 object_id = 3;
+}
+
+message ServiceDescriptor {
+    required fixed64 identifier = 1;
+    optional ServiceType service_type = 2;
+    optional string hostname = 10;
+    optional uint32 port = 11;
+    optional uint32 timeout_ms = 12;
+    optional ServiceProtocolType protocol = 13;
+    optional string client_id = 14;
+    optional string username = 15;
+    optional string password = 16;
+    
+    optional bytes client_certificate = 20;
+    optional bytes server_certificate = 21;
+    optional bytes client_key = 22;
+
+    optional SssObjectReference client_certificate_sss_ref = 50;
+    optional SssObjectReference server_certificate_sss_ref = 51;
+    optional SssObjectReference client_key_sss_ref = 52;
+    
+    optional string customer_metadata_json = 30;
+    
+    // AZURE specific:
+    optional string azure_id_scope = 100;
+    optional string azure_registration_id = 101;
+    optional string azure_global_device_endpoint = 102;
+}
+

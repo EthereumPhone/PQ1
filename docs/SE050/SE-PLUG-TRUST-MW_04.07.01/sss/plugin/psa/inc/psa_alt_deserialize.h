@@ -1,0 +1,87 @@
+/* Copyright 2020 NXP
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef __PSA_ALT_DESERIALIZE_H__
+#define __PSA_ALT_DESERIALIZE_H__
+
+#include "psa/crypto.h"
+#include "psa/crypto_se_driver.h"
+#include "psa/crypto_types.h"
+#include "psa/crypto_values.h"
+#include "psa_crypto_storage.h"
+#include "mbedtls/entropy.h"
+
+#include "psa_alt_serialize_struct.h"
+
+psa_status_t veneer_psa_import_key_into_slot(psa_import_key_into_slot_struct_t *psa_import_key_into_slot_struct);
+psa_status_t veneer_psa_wipe_key_slot(psa_wipe_key_slot_struct_t *psa_wipe_key_slot_struct);
+psa_status_t veneer_psa_destroy_key(psa_destroy_key_struct_t *psa_destroy_key_struct);
+psa_status_t veneer_psa_set_key_domain_parameters(
+    psa_set_key_domain_parameters_struct_t *psa_set_key_domain_parameters_struct);
+psa_status_t veneer_psa_get_key_domain_parameters(
+    psa_get_key_domain_parameters_struct_t *psa_get_key_domain_parameters_struct);
+psa_status_t veneer_psa_get_key_attributes(psa_get_key_attributes_struct_t *psa_get_key_attributes_struct);
+psa_status_t veneer_psa_get_key_slot_number(psa_get_key_slot_number_struct_t *psa_get_key_slot_number_struct);
+psa_status_t veneer_psa_export_key(psa_export_key_struct_t *psa_export_key_struct);
+psa_status_t veneer_psa_export_public_key(psa_export_public_key_struct_t *psa_export_public_key_struct);
+psa_status_t veneer_psa_import_key(psa_import_key_struct_t *psa_import_key_struct);
+psa_status_t veneer_mbedtls_psa_register_se_key(
+    mbedtls_psa_register_se_key_struct_t *mbedtls_psa_register_se_key_struct);
+psa_status_t veneer_psa_copy_key(psa_copy_key_struct_t *psa_copy_key_struct);
+psa_status_t veneer_psa_hash_abort(psa_hash_abort_struct_t *psa_hash_abort_struct);
+psa_status_t veneer_psa_hash_setup(psa_hash_setup_struct_t *psa_hash_setup_struct);
+psa_status_t veneer_psa_hash_update(psa_hash_update_struct_t *psa_hash_update_struct);
+psa_status_t veneer_psa_hash_finish(psa_hash_finish_struct_t *psa_hash_finish_struct);
+psa_status_t veneer_psa_hash_verify(psa_hash_verify_struct_t *psa_hash_verify_struct);
+psa_status_t veneer_psa_hash_clone(psa_hash_clone_struct_t *psa_hash_clone_struct);
+psa_status_t veneer_psa_mac_abort(psa_mac_abort_struct_t *psa_mac_abort_struct);
+psa_status_t veneer_psa_mac_sign_setup(psa_mac_sign_setup_struct_t *psa_mac_sign_setup_struct);
+psa_status_t veneer_psa_mac_verify_setup(psa_mac_verify_setup_struct_t *psa_mac_verify_setup_struct);
+psa_status_t veneer_psa_mac_update(psa_mac_update_struct_t *psa_mac_update_struct);
+psa_status_t veneer_psa_mac_sign_finish(psa_mac_sign_finish_struct_t *psa_mac_sign_finish_struct);
+psa_status_t veneer_psa_mac_verify_finish(psa_mac_verify_finish_struct_t *psa_mac_verify_finish_struct);
+psa_status_t veneer_psa_sign_hash(psa_sign_hash_struct_t *psa_sign_hash_struct);
+psa_status_t veneer_psa_verify_hash(psa_verify_hash_struct_t *psa_verify_hash_struct);
+psa_status_t veneer_psa_asymmetric_encrypt(psa_asymmetric_encrypt_struct_t *psa_asymmetric_encrypt_struct);
+psa_status_t veneer_psa_asymmetric_decrypt(psa_asymmetric_decrypt_struct_t *psa_asymmetric_decrypt_struct);
+psa_status_t veneer_psa_cipher_encrypt_setup(psa_cipher_encrypt_setup_struct_t *psa_cipher_encrypt_setup_struct);
+psa_status_t veneer_psa_cipher_decrypt_setup(psa_cipher_decrypt_setup_struct_t *psa_cipher_decrypt_setup_struct);
+psa_status_t veneer_psa_cipher_generate_iv(psa_cipher_generate_iv_struct_t *psa_cipher_generate_iv_struct);
+psa_status_t veneer_psa_cipher_set_iv(psa_cipher_set_iv_struct_t *psa_cipher_set_iv_struct);
+psa_status_t veneer_psa_cipher_update(psa_cipher_update_struct_t *psa_cipher_update_struct);
+psa_status_t veneer_psa_cipher_finish(psa_cipher_finish_struct_t *psa_cipher_finish_struct);
+psa_status_t veneer_psa_cipher_abort(psa_cipher_abort_struct_t *psa_cipher_abort_struct);
+psa_status_t veneer_psa_aead_encrypt(psa_aead_encrypt_struct_t *psa_aead_encrypt_struct);
+psa_status_t veneer_psa_aead_decrypt(psa_aead_decrypt_struct_t *psa_aead_decrypt_struct);
+psa_status_t veneer_psa_key_derivation_abort(psa_key_derivation_abort_struct_t *psa_key_derivation_abort_struct);
+psa_status_t veneer_psa_key_derivation_get_capacity(
+    psa_key_derivation_get_capacity_struct_t *psa_key_derivation_get_capacity_struct);
+psa_status_t veneer_psa_key_derivation_set_capacity(
+    psa_key_derivation_set_capacity_struct_t *psa_key_derivation_set_capacity_struct);
+psa_status_t veneer_psa_key_derivation_output_bytes(
+    psa_key_derivation_output_bytes_struct_t *psa_key_derivation_output_bytes_struct);
+psa_status_t veneer_psa_key_derivation_output_key(
+    psa_key_derivation_output_key_struct_t *psa_key_derivation_output_key_struct);
+psa_status_t veneer_psa_key_derivation_setup(psa_key_derivation_setup_struct_t *psa_key_derivation_setup_struct);
+psa_status_t veneer_psa_key_derivation_input_bytes(
+    psa_key_derivation_input_bytes_struct_t *psa_key_derivation_input_bytes_struct);
+psa_status_t veneer_psa_key_derivation_input_key(
+    psa_key_derivation_input_key_struct_t *psa_key_derivation_input_key_struct);
+psa_status_t veneer_psa_key_derivation_key_agreement(
+    psa_key_derivation_key_agreement_struct_t *psa_key_derivation_key_agreement_struct);
+psa_status_t veneer_psa_raw_key_agreement(psa_raw_key_agreement_struct_t *psa_raw_key_agreement_struct);
+psa_status_t veneer_psa_generate_random(psa_generate_random_struct_t *psa_generate_random_struct);
+psa_status_t veneer_mbedtls_psa_inject_entropy(mbedtls_psa_inject_entropy_struct_t *mbedtls_psa_inject_entropy_struct);
+psa_status_t veneer_psa_generate_key(psa_generate_key_struct_t *psa_generate_key_struct);
+psa_status_t veneer_mbedtls_psa_crypto_configure_entropy_sources(
+    mbedtls_psa_crypto_configure_entropy_sources_struct_t *mbedtls_psa_crypto_configure_entropy_sources_struct);
+psa_status_t veneer_psa_crypto_init(void);
+psa_status_t veneer_psa_close_key(psa_close_key_struct_t *psa_close_key_struct);
+psa_status_t veneer_psa_open_key(psa_open_key_struct_t *psa_open_key_struct);
+psa_status_t veneer_psa_get_empty_key_slot(psa_get_empty_key_slot_struct_t *psa_get_empty_key_slot_struct);
+void veneer_psa_wipe_all_key_slots(void);
+psa_status_t veneer_psa_initialize_key_slots(void);
+
+#endif // __PSA_ALT_DESERIALIZE_H__

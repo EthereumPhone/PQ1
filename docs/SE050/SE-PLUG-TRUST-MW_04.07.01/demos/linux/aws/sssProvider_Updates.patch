@@ -1,0 +1,85 @@
+diff --git a/network/OpenSSL/OpenSSLConnection.cpp b/network/OpenSSL/OpenSSLConnection.cpp
+index 4a53917..a15e49e 100644
+--- a/network/OpenSSL/OpenSSLConnection.cpp
++++ b/network/OpenSSL/OpenSSLConnection.cpp
+@@ -38,6 +38,12 @@
+ 
+ #define OPENSSL_WRAPPER_LOG_TAG "[OpenSSL Wrapper]"
+ 
++typedef struct sss_pw_cb_data
++{
++    const void *password;
++    const char *prompt_info;
++} sss_PW_CB_DATA;
++
+ namespace awsiotsdk {
+     namespace network {
+         OpenSSLInitializer::~OpenSSLInitializer() {
+@@ -168,7 +174,7 @@ namespace awsiotsdk {
+ 
+             if (!is_lib_initialized) {
+                 OpenSSL_add_all_algorithms();
+-                ERR_load_BIO_strings();
++                //ERR_load_BIO_strings();
+                 ERR_load_crypto_strings();
+                 SSL_load_error_strings();
+ #ifndef WIN32
+@@ -374,12 +380,43 @@ namespace awsiotsdk {
+                     return ResponseCode::NETWORK_SSL_DEVICE_CRT_PARSE_ERROR;
+                 }
+                 AWS_LOG_DEBUG(OPENSSL_WRAPPER_LOG_TAG, "Device privkey : %s", device_private_key_location_.c_str());
+-                if (1 != SSL_CTX_use_PrivateKey_file(p_ssl_context_,
+-                                                     device_private_key_location_.c_str(),
+-                                                     SSL_FILETYPE_PEM)) {
++                // if (1 != SSL_CTX_use_PrivateKey_file(p_ssl_context_,
++                //                                      device_private_key_location_.c_str(),
++                //                                      SSL_FILETYPE_PEM)) {
++                //     AWS_LOG_ERROR(OPENSSL_WRAPPER_LOG_TAG, " Device Private Key Loading error");
++                //     return ResponseCode::NETWORK_SSL_KEY_PARSE_ERROR;
++                // }
++
++                EVP_PKEY *p_client_pkey     = NULL;
++                EVP_PKEY **pp_client_pkey   = &p_client_pkey;
++                const OSSL_PARAM *params = NULL;
++                OSSL_STORE_CTX *ctx      = NULL;
++                static OSSL_LIB_CTX *app_libctx = NULL;
++                static const char *app_propq    = NULL;
++                static UI_METHOD *ui_method     = NULL;
++                OSSL_LIB_CTX *libctx     = app_libctx;
++                const char *propq        = app_propq;
++                sss_PW_CB_DATA uidata;
++
++                uidata.password    = NULL;
++                uidata.prompt_info = device_private_key_location_.c_str();
++
++                ctx = OSSL_STORE_open_ex(device_private_key_location_.c_str(), libctx, propq, ui_method, &uidata, params, NULL, NULL);
++                OSSL_STORE_expect(ctx, OSSL_STORE_INFO_PKEY);
++
++                OSSL_STORE_INFO *info = OSSL_STORE_load(ctx);
++                *pp_client_pkey       = OSSL_STORE_INFO_get1_PKEY(info);
++                OSSL_STORE_INFO_free(info);
++                OSSL_STORE_close(ctx);
++
++                if (SSL_CTX_use_PrivateKey(p_ssl_context_, p_client_pkey) <= 0) {
+                     AWS_LOG_ERROR(OPENSSL_WRAPPER_LOG_TAG, " Device Private Key Loading error");
+                     return ResponseCode::NETWORK_SSL_KEY_PARSE_ERROR;
+                 }
++                if (!SSL_CTX_check_private_key(p_ssl_context_)) {
++                    AWS_LOG_ERROR(OPENSSL_WRAPPER_LOG_TAG, " Private Key does ot match the certificate public key");
++                    return ResponseCode::NETWORK_SSL_KEY_PARSE_ERROR;
++                }
+             }
+ 
+             certificates_read_flag_ = true;
+diff --git a/network/OpenSSL/OpenSSLConnection.hpp b/network/OpenSSL/OpenSSLConnection.hpp
+index 201d132..ef93449 100644
+--- a/network/OpenSSL/OpenSSLConnection.hpp
++++ b/network/OpenSSL/OpenSSLConnection.hpp
+@@ -43,6 +43,7 @@
+ #include <openssl/x509.h>
+ #include <openssl/x509v3.h>
+ #include <openssl/x509_vfy.h>
++#include <openssl/store.h>
+ #include <string.h>
+ 
+ #include "NetworkConnection.hpp"

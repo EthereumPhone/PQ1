@@ -1,0 +1,37 @@
+usage: openssl_provisionEC_mont.py [-h] --key_type KEY_TYPE
+                                   [--connection_type CONNECTION_TYPE]
+                                   [--connection_data CONNECTION_DATA]
+                                   [--subsystem SUBSYSTEM]
+                                   [--auth_type AUTH_TYPE]
+                                   [--scpkey SCPKEY]
+
+Provision attached secure element with EC montogomery keys
+
+This example generates EC montogomery key files (*.pem) (existing ones overwritten).
+Performs debug reset the attached secure element.
+Attached secure element provisioned with EC montogomery key.
+Creates reference key from the injected EC montogomery key.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+required arguments:
+  --key_type KEY_TYPE   Supported key types => ``x25519``, ``x448``
+
+optional arguments:
+  --connection_type CONNECTION_TYPE
+                        Supported connection types => ``t1oi2c``, ``sci2c``, ``vcom``, ``jrcpv1``, ``jrcpv2``, ``pcsc``. Default: ``t1oi2c``
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+  --subsystem SUBSYSTEM
+                        Supported subsystem => ``se050``, ``mbedtls``. Default: ``se050``
+  --auth_type AUTH_TYPE
+                        Supported subsystem => ``None``, ``PlatformSCP``, ``UserID``, ``ECKey``, ``AESKey``. Default: ``None``
+  --scpkey SCPKEY
+
+Example invocation::
+
+    python openssl_provisionEC_mont.py --key_type x25519
+    python openssl_provisionEC_mont.py --key_type x25519 --connection_data 169.254.0.1:8050
+    python openssl_provisionEC_mont.py --key_type x448  --connection_type jrcpv2 --connection_data 127.0.0.1:8050
+    python openssl_provisionEC_mont.py --key_type x448 --connection_data COM3

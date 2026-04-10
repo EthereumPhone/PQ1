@@ -1,0 +1,50 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2018-2021 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.apdu";
+option java_multiple_files = true;
+
+/* doc:apdu-reqeuest:start */
+message ApduRequest {
+
+    /* Array of bytes to be sent to the SE */
+    optional bytes message = 100;
+
+    /* What response is expected from the SE for this APDU?
+     *
+     * If this field is skipped from protobuf, then,
+     * only 0x9000 is expected from the SE
+     *
+     * There are potentially multiple distinct values
+     * are expected the from the SE, then this
+     * can be an array of those values.
+     *
+     *      e.g.    expectation: [ 0x9000, 0x6A82 ]
+     *
+     * For complex schems where a every big range/mask
+     * is expected, e.g. 6AXX, 6DXX then the upper
+     * 16 bits are treated as mask.
+     *
+     *      e.g.    expectation: [ 0x00FF6A00, 0x00FF6D00 ]
+     *
+     * This field is unused by EdgeLock 2GO cloud service.
+     */
+    repeated uint32 expectation = 101;
+}
+
+
+/* Response from the SE to host */
+message ApduResponse {
+    /* Byte array */
+    optional bytes message = 100;
+}
+
+/* doc:apdu-reqeuest:end */

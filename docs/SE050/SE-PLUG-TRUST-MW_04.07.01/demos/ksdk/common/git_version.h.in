@@ -1,0 +1,31 @@
+
+// git_version.h.in
+
+#pragma once
+
+/** Convention
+ *
+ * Folders / Repos:
+ *      TOP ==> Top level REPO
+ *
+ * Values:
+ *      SHA1 ==> 16 bytes of SHA1 ID
+ *      TAG ==> Last known tag
+ *      Branch ==> Working branch
+ *      Dirty ==> Dirty / Ongoing changes
+ *
+ */
+
+#define BUILD_GIT_VERSION_TOP_SHA1 "@BUILD_GIT_VERSION_TOP_SHA1@"
+
+#define BUILD_GIT_VERSION_TOP_TAG "@BUILD_GIT_VERSION_TOP_TAG@"
+
+#define BUILD_GIT_VERSION_TOP_BRANCH "@BUILD_GIT_VERSION_TOP_BRANCH@"
+
+#define BUILD_GIT_VERSION_TOP_IS_DIRTY @BUILD_GIT_VERSION_TOP_IS_DIRTY@
+
+#define BUILD_GIT_VERSION_TOP_SZ_DIRTY "@BUILD_GIT_VERSION_TOP_SZ_DIRTY@"
+
+#define BUILD_GIT_VERSION_TOP_DESCRIBE "@BUILD_GIT_VERSION_TOP_DESCRIBE@"
+
+#define BUILD_BOARD_INFO "@BUILD_BOARD_INFO@"

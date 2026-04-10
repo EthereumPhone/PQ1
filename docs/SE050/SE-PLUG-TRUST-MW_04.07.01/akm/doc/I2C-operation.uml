@@ -1,0 +1,26 @@
+@startuml
+
+    title T1oI2C data Transreceive
+
+    I2C_Master ->  I2C_Slave : Write T=1 frame (W)
+    I2C_Master <-  I2C_Slave : Acknowledgement (ACK)
+    
+    loop polling
+    
+    I2C_Master ->  I2C_Slave : 2 Byte Read (R)
+    I2C_Master <-  I2C_Slave : Acknowledgement (NACK)
+    
+    I2C_Master ->  I2C_Slave : 2 Byte Read (R)
+    I2C_Master <-  I2C_Slave : Acknowledgement (NACK)
+                      ...    
+    I2C_Master ->  I2C_Slave : 2 Byte Read (R)
+    I2C_Master <-  I2C_Slave : Acknowledgement (ACK)
+    end
+    
+    
+    I2C_Master ->  I2C_Slave : 1 Byte Read (R)
+    I2C_Master <-  I2C_Slave : Acknowledgement (ACK)
+    
+    I2C_Master ->  I2C_Slave : Payload Read (R)
+    I2C_Master <-  I2C_Slave : Acknowledgement (ACK)
+@enduml

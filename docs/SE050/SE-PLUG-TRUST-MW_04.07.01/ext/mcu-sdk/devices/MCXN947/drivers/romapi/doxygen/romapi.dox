@@ -1,0 +1,59 @@
+/*!
+@defgroup romapi ROMAPI Driver
+@details The ROMAPI driver provides the functionalities to operate the internal
+         and external Flash; In addition, security-related functions are also provided.
+*/
+
+/*!
+@defgroup flash_driver FLASH Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup flash_ffr_driver IAP_FFR Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup flexspi_nor_flash_driver FLEXSPI FLASH Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup efuse_driver EFUSE Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup memory_interface MEM Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup sbloader SBLOADER Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup nboot NBOOT Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup nbot_hal NBOOT_HAL Driver
+@ingroup romapi
+@details
+*/
+
+/*!
+@defgroup runbootloader RUNBOOTLOADER Driver
+@ingroup romapi
+@details
+*/

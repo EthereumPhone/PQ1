@@ -1,0 +1,64 @@
+
+@startuml
+
+    title With RTOS On Embedded Systems
+
+    participant main
+    participant Platform
+    participant RTOS
+    participant rtos_task
+    participant ex_boot as "ex_sss_boot"
+    participant ex_sss as "The Example"
+    participant sss
+
+    group Initial code needed for embedded platforms
+        main -> Platform : PIN/Clock/Peripheral Config
+        main -> RTOS : RTOS::Init()
+        main -> RTOS : RTOS::CreateTask()
+        main -> RTOS : RTOS::StartTaskScheduler()
+        activate RTOS
+    end
+    group In RTOS Context
+        RTOS -> rtos_task ** : ex_sss_rtos_task()
+        activate rtos_task
+        group Pre-requisites under RTOS Task
+            rtos_task -> Platform : Peripheral Config()
+            note left
+                Initialize peripherals
+                that need RTOS
+            end note
+        end
+
+        group Connect to SE
+            rtos_task -> ex_boot : ex_sss_boot_open()
+            ex_boot -> sss : sss_session_open();
+        end
+        group Format the IC
+            rtos_task -> ex_boot : ex_sss_boot_factory_reset();
+            note right : if EX_SSS_BOOT_DO_ERASE_ALL
+            ex_boot -> sss : Native APIs
+        end
+        group Setup KeyStore
+            rtos_task -> ex_boot : ex_sss_key_store_and_object_init
+            ex_boot -> sss : sss_key_store_init();\nsss_key_object_init();
+        end
+        group Actual Example
+            rtos_task -> ex_sss ** : ex_sss_entry(&exContext)
+            activate ex_sss
+                ex_sss -> sss : Example API Calls
+                ...
+                ex_sss -> sss : Example API Calls
+                rtos_task <-- ex_sss
+            deactivate ex_sss
+        end
+
+        group Clean Up
+            rtos_task -> ex_boot : ex_sss_session_close
+            ex_boot -> sss : sss_key_object_free();\nsss_key_store_free();\nsss_session_close();
+        end
+
+
+        ...
+    end
+
+@enduml

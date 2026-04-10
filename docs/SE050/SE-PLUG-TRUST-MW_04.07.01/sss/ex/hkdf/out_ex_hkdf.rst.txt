@@ -1,0 +1,38 @@
+App   :INFO :PlugAndTrust_v02.13.00_20200208
+App   :INFO :Running ..\..\..\simw-top_build\se_x86\bin\Debug\ex_hkdf.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+sss   :INFO :atr (Len=0)
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Running HMAC Key Derivation Function Example ex_sss_hkdf.c
+App   :INFO :Do Key Derivation
+App   :INFO :salt (Len=32)
+      AA 1A 2A E3    B2 76 15 4D    67 F9 D8 4C    B9 35 54 56 
+      BB 1B 2B 03    04 05 06 07    08 09 0A 0B    0C 0D 0E 0F 
+App   :INFO :info (Len=192)
+      00 01 02 03    04 05 06 07    08 09 0A 0B    0C 0D 0E 0F 
+      10 11 12 13    14 15 16 17    18 19 1A 1B    1C 1D 1E 1F 
+      20 21 22 23    24 25 26 27    28 29 2A 2B    2C 2D 2E 2F 
+      30 31 32 33    34 35 36 37    38 39 3A 3B    3C 3D 3E 3F 
+      40 41 42 43    44 45 46 47    48 49 4A 4B    4C 4D 4E 4F 
+      50 51 52 53    54 55 56 57    58 59 5A 5B    5C 5D 5E 5F 
+      60 61 62 63    64 65 66 67    68 69 6A 6B    6C 6D 6E 6F 
+      70 71 72 73    74 75 76 77    78 79 7A 7B    7C 7D 7E 7F 
+      80 81 82 83    84 85 86 87    88 89 8A 8B    8C 8D 8E 8F 
+      90 91 92 93    94 95 96 97    98 99 9A 9B    9C 9D 9E 9F 
+      A0 A1 A2 A3    A4 A5 A6 A7    A8 A9 AA AB    AC AD AE AF 
+      B0 B1 B2 B3    B4 B5 B6 B7    B8 B9 BA BB    BC BD BE BF 
+App   :INFO : Key Derivation successful !!!
+App   :INFO :hkdfOutput (Len=128)
+      6E 69 25 DB    1D D7 37 64    3C 9F F5 02    0D 54 B1 0A 
+      97 FF 80 78    36 A6 86 80    6D B5 77 5C    89 DD 61 53 
+      E3 69 58 67    6B 41 EB 4A    8B 10 01 F6    BB 67 7C A4 
+      26 F7 87 DE    03 A1 18 B1    D3 ED 11 38    CA 0A AA 02 
+      0A C2 A0 B1    65 7D 80 83    23 7C 8B EA    58 EE E4 DF 
+      DF 17 49 59    8B 66 62 7F    C7 EE 63 87    5A 1A F4 C3 
+      BB 97 3F 35    47 06 4A EA    15 DA 15 21    5B 87 DA AA 
+      81 1F 1F B0    D7 95 4E F4    25 5D C6 75    34 2B 0C 40 
+App   :INFO :ex_sss_hkdf Example Success !!!...
+App   :INFO :ex_sss Finished

@@ -1,0 +1,34 @@
+sample:
+  name: EL2GO MQTT Demo
+  description: The EdgeLock 2GO MQTT demo sample demonstrates a connection to AWS or Azure MQTT services with preprovisioned EL2GO objects
+tests:
+  sample.nxp_iot_agent.el2go_mqtt_demo:
+    extra_args:
+      - OVERLAY_CONFIG="overlay-el2go-rw61x.conf"
+    tags:
+      - el2go
+      - trusted-firmware-m
+      - net
+      - wifi
+      - cloud
+      - mqtt
+    platform_allow:
+      - rd_rw612_bga/rw612/ns
+      - frdm_rw612/rw612/ns
+    harness: console
+    harness_config:
+      fixture: fixture_el2go
+      type: multi_line
+      regex:
+        - "Successfully connected to WIFI"
+        - "Attempting to connect to service 'awstest(.+)'"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Attempting to register service 'azuretest(.+)'"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "Successfully published"
+        - "EL2GO MQTT Client successfully finished"

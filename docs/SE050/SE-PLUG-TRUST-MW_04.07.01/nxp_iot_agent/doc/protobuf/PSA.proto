@@ -1,0 +1,162 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2021-2022 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.psa";
+option java_multiple_files = true;
+
+enum KeyDataFormat {
+    UNKNOWN = 0;
+    S50 = 1;
+}
+
+enum StatusCode {
+    PSA_SUCCESS = 0;
+    PSA_ERROR_GENERIC_ERROR = -132;
+    PSA_ERROR_NOT_SUPPORTED = -134;
+    PSA_ERROR_NOT_PERMITTED = -133;
+    PSA_ERROR_BUFFER_TOO_SMALL = -138;
+    PSA_ERROR_ALREADY_EXISTS = -139;
+    PSA_ERROR_DOES_NOT_EXIST = -140;
+    PSA_ERROR_BAD_STATE = -137;
+    PSA_ERROR_INVALID_ARGUMENT = -135;
+    PSA_ERROR_INSUFFICIENT_MEMORY = -141;
+    PSA_ERROR_INSUFFICIENT_STORAGE = -142;
+    PSA_ERROR_COMMUNICATION_FAILURE = -145;
+    PSA_ERROR_STORAGE_FAILURE = -146;
+    PSA_ERROR_DATA_CORRUPT = -152;
+    PSA_ERROR_DATA_INVALID = -153;
+    PSA_ERROR_HARDWARE_FAILURE = -147;
+    PSA_ERROR_CORRUPTION_DETECTED = -151;
+    PSA_ERROR_INSUFFICIENT_ENTROPY = -148;
+    PSA_ERROR_INVALID_SIGNATURE = -149;
+    PSA_ERROR_INVALID_PADDING = -150;
+    PSA_ERROR_INSUFFICIENT_DATA = -143;
+    PSA_ERROR_INVALID_HANDLE = -136;
+}
+
+message GetVersionRequest {
+}
+
+message GetVersionResponse {
+    /* Convey information about the version of a particular service. Encoded in 3 bytes, starting
+     * from LSB: patch version, minor version, major version (e.g. version 1.2.3 = 0x00010203). */    
+    optional fixed32 crypto_api_version = 1;
+    optional fixed32 storage_api_version = 2;
+
+    /* Notify the server about supported key data formats. In case the field is omitted, no
+     * restrictions on key data formats do apply. */
+    repeated KeyDataFormat supported_key_data_formats = 4;
+
+    optional uint32 max_raw_key_size = 5;
+}
+
+message DestroyKeyRequest {
+    optional uint32 identifier = 1;
+}
+
+message DestroyKeyResponse {
+    optional StatusCode status = 1;
+}
+
+message ImportKeyRequest {
+    // Key attributes. The values allowed in these fields follow the 
+    // PSA Cryptography API specification.
+    optional uint32 identifier = 1;
+    optional uint32 type = 2;
+    optional uint32 usage = 3;
+    optional uint32 algorithm = 4;
+    optional uint32 lifetime = 5;
+    optional uint32 key_bits = 6;
+
+    // This is an opaque key-blob.
+    optional bytes data = 10;   
+    optional KeyDataFormat key_data_format = 11;
+}
+
+message ImportKeyResponse {
+    optional StatusCode status = 1;
+}
+
+message CreateObjectRequest {
+    // Note, the PSA Storage API does take a 64 bit int here. However, we are only concerned about
+    // the object id within one partition.
+    optional uint32 identifier = 1;
+    optional uint32 create_flags = 2;
+    optional bytes data = 10;   
+}
+
+message CreateObjectResponse {
+    optional StatusCode status = 1;
+}
+
+message WriteObjectRequest {
+    // Note, the PSA Storage API does take a 64 bit int here. However, we are only concerned about
+    // the object id within one partition.
+    optional uint32 identifier = 1;
+    optional uint32 offset = 2;
+    optional bytes data = 10;   
+}
+
+message WriteObjectResponse {
+    optional StatusCode status = 1;
+}
+
+message ReadObjectRequest {
+    // Note, the PSA Storage API does take a 64 bit int here. However, we are only concerned about
+    // the object id within one partition.
+    optional uint32 identifier = 1;
+    optional uint32 offset = 2;
+    optional uint32 length = 3;
+}
+
+message ReadObjectResponse {
+    optional StatusCode status = 1;
+    optional bytes data = 10;
+}
+
+message RemoveObjectRequest {
+    // Note, the PSA Storage API does take a 64 bit int here. However, we are only concerned about
+    // the object id within one partition.
+    optional uint32 identifier = 1;
+}
+
+message RemoveObjectResponse {
+    optional StatusCode status = 1;
+}
+
+message PsaAdditionalData {
+}
+
+message PsaRequest {
+     oneof command {
+        GetVersionRequest get_version     = 1;
+        DestroyKeyRequest destroy_key     = 2;
+        ImportKeyRequest import_key       = 3;
+        CreateObjectRequest create_object = 4;
+        WriteObjectRequest write_object   = 5;
+        ReadObjectRequest read_object     = 6;
+        RemoveObjectRequest remove_object = 7;
+    }
+}
+
+message PsaResponse {
+    oneof response {
+        GetVersionResponse get_version     = 1;
+        DestroyKeyResponse destroy_key     = 2;
+        ImportKeyResponse import_key       = 3;
+        CreateObjectResponse create_object = 4;
+        WriteObjectResponse write_object   = 5;
+        ReadObjectResponse read_object     = 6;
+        RemoveObjectResponse remove_object = 7;
+    }
+}
+
+

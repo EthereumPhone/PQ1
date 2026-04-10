@@ -1,0 +1,18 @@
+App   :INFO :PlugAndTrust_v02.13.00_20200208
+App   :INFO :Running ..\..\..\simw-top_build\se_x86\bin\Debug\ex_md.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+sss   :INFO :atr (Len=0)
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Running Message Digest Example ex_sss_md.c
+App   :INFO :Do Digest
+App   :INFO :input (Len=10)
+      48 65 6C 6C    6F 57 6F 72    6C 64 
+App   :INFO :Message Digest successful !!!
+App   :INFO :digest (Len=32)
+      87 2E 4E 50    CE 99 90 D8    B0 41 33 0C    47 C9 DD D1 
+      1B EC 6B 50    3A E9 38 6A    99 DA 85 84    E9 BB 12 C4 
+App   :INFO :ex_sss_digest Example Success !!!...
+App   :INFO :ex_sss Finished

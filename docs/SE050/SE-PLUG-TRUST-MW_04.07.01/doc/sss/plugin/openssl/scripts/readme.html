@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<!--
+Copyright 2019 NXP
+-->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>8.1. Introduction on OpenSSL engine &#8212; Plug &amp; Trust MW v04.07.01 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/bootstrap-sphinx.css" />
+    <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css" />
+    <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+    <script src="../../../../_static/jquery.js"></script>
+    <script src="../../../../_static/underscore.js"></script>
+    <script src="../../../../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="8.2. Introduction on OpenSSL provider" href="../../openssl_provider/scripts/readme.html" />
+    <link rel="prev" title="8. Plugins / Add-ins" href="../../../../plugins/index.html" />
+<meta charset='utf-8'>
+<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="text/javascript" src="../../../../_static/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="../../../../_static/js/jquery-fix.js"></script>
+<script type="text/javascript" src="../../../../_static/bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="../../../../_static/bootstrap-sphinx.js"></script>
+
+  </head><body>
+
+  <div id="navbar" class="navbar navbar-inverse navbar-default navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="../../../../toc.html"><span><img src="../../../../_static/NXP_logo_JPG.jpg"></span>
+          MW</a>
+        <span class="navbar-text navbar-version pull-left"><b>v04.07.01</b></span>
+      </div>
+
+        <div class="collapse navbar-collapse nav-collapse">
+          <ul class="nav navbar-nav">
+            
+            
+              <li class="dropdown globaltoc-container">
+  <a role="button"
+     id="dLabelGlobalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="../../../../toc.html">TOC <b class="caret"></b></a>
+  <ul class="dropdown-menu globaltoc"
+      role="menu"
+      aria-labelledby="dLabelGlobalToc"><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../index.html">1. NXP Plug &amp; Trust Middleware</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../organization-of-documentation.html">1.1. Organization of Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../folder-structure.html">1.2. Folder Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sw-prerequisites.html">1.3. List of Platform Prerequisites</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../changes/index.html">2. Changes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_14_00.html">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../changes/v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../sss-apis.html">3.3. SSS APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/i2cm.html">3.6. I2CM / Secure Sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/logging.html">3.7. Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/scp03/index.html">3.9. Platform SCP03 Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../stack/secure_boot.html">3.19. Secure Boot</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../building/index.html">4. Building / Compiling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../scripts/cmake_options.html">4.7. CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../demos/index.html">5. Demo and Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_package.html">7.2. Update Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../plugins/index.html">8. Plugins / Add-ins</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">8.1. Introduction on OpenSSL engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/Provisioning/readme.html">9.5. CLI Provisioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/cli_data_format.html">9.8. CLI Data formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../appendix.html">10. Appendix</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../demos/Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../api/api_list.html">10.13. Plug &amp; Trust MW APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Revision_history.html">12. Revision history</a></li>
+</ul>
+</ul>
+</li>
+              
+                <li class="dropdown">
+  <a role="button"
+     id="dLabelLocalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">Page <b class="caret"></b></a>
+  <ul class="dropdown-menu localtoc"
+      role="menu"
+      aria-labelledby="dLabelLocalToc"><ul>
+<li><a class="reference internal" href="#">8.1. Introduction on OpenSSL engine</a><ul>
+<li><a class="reference internal" href="#general">8.1.1. General</a><ul>
+<li><a class="reference internal" href="#openssl-versions">8.1.1.1. OpenSSL versions</a></li>
+<li><a class="reference internal" href="#openssl-configuration-file">8.1.1.2. OpenSSL Configuration file</a></li>
+<li><a class="reference internal" href="#platforms">8.1.1.3. Platforms</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#keys">8.1.2. Keys</a><ul>
+<li><a class="reference internal" href="#key-management">8.1.2.1. Key Management</a></li>
+<li><a class="reference internal" href="#ec-reference-key-format">8.1.2.2. EC Reference key format</a></li>
+<li><a class="reference internal" href="#rsa-reference-key-format">8.1.2.3. RSA Reference key format</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#building-the-openssl-engine">8.1.3. Building the OpenSSL engine</a></li>
+<li><a class="reference internal" href="#sample-scripts-to-demo-openssl-engine">8.1.4. Sample scripts to demo OpenSSL Engine</a><ul>
+<li><a class="reference internal" href="#openssl-rnd-py">8.1.4.1. openssl_rnd.py</a></li>
+<li><a class="reference internal" href="#openssl-provisionec-py">8.1.4.2. openssl_provisionEC.py</a></li>
+<li><a class="reference internal" href="#openssl-eccsign-py">8.1.4.3. openssl_EccSign.py</a></li>
+<li><a class="reference internal" href="#openssl-ecdh-py">8.1.4.4. openssl_Ecdh.py</a></li>
+<li><a class="reference internal" href="#ecc-all-py">8.1.4.5. ecc_all.py</a></li>
+<li><a class="reference internal" href="#openssl-provisionrsa-py">8.1.4.6. openssl_provisionRSA.py</a></li>
+<li><a class="reference internal" href="#openssl-rsa-py">8.1.4.7. openssl_RSA.py</a></li>
+<li><a class="reference internal" href="#rsa-all-py">8.1.4.8. rsa_all.py</a></li>
+<li><a class="reference internal" href="#openssl-provisionec-mont-py">8.1.4.9. openssl_provisionEC_mont.py</a></li>
+<li><a class="reference internal" href="#openssl-ecdh-mont-py">8.1.4.10. openssl_Ecdh_mont.py</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</ul>
+</li>
+              
+            
+            
+              
+                
+  <li>
+    <a href="../../../../plugins/index.html" title="Previous Chapter: 8. Plugins / Add-ins"><span class="glyphicon glyphicon-chevron-left visible-sm"></span><span class="hidden-sm hidden-tablet">&laquo; 8. Plugins / Add-ins</span>
+    </a>
+  </li>
+  <li>
+    <a href="../../openssl_provider/scripts/readme.html" title="Next Chapter: 8.2. Introduction on OpenSSL provider"><span class="glyphicon glyphicon-chevron-right visible-sm"></span><span class="hidden-sm hidden-tablet">8.2. Introduc... &raquo;</span>
+    </a>
+  </li>
+              
+            
+            
+            
+            
+          </ul>
+
+          
+
+        </div>
+    </div>
+  </div>
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+
+<div class="sidebar-header">
+    <h3>Plug &amp; Trust MW</h3>
+</div>
+
+<div class="row">
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../changes/index.html">2. Changes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../stack/index.html">3. Plug &amp; Trust MW Stack</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../building/index.html">4. Building / Compiling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../demos/index.html">5. Demo and Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../semslite/doc/index.html">7. SEMS Lite Agent</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../plugins/index.html">8. Plugins / Add-ins</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">8.1. Introduction on OpenSSL engine</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#general">8.1.1. General</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#keys">8.1.2. Keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#building-the-openssl-engine">8.1.3. Building the OpenSSL engine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sample-scripts-to-demo-openssl-engine">8.1.4. Sample scripts to demo OpenSSL Engine</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli-tool.html">9. CLI Tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../appendix.html">10. Appendix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../Revision_history.html">12. Revision history</a></li>
+</ul>
+
+</div>
+<div class="row">
+    <form class="form" action="../../../../search.html" method="get">
+     <div class="form-group">
+      <label for="Search">Search:</label>
+      <input type="text" name="q" class="form-control" placeholder="Search" />
+     </div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+        </div>
+      </div>
+    <div class="body col-md-9 content" role="main">
+      
+  <section id="introduction-on-openssl-engine">
+<span id="intro-openssl-engine"></span><h1><span class="section-number">8.1. </span>Introduction on OpenSSL engine<a class="headerlink" href="#introduction-on-openssl-engine" title="Permalink to this headline">¶</a></h1>
+<p>Starting with OpenSSL 0.9.6 an ‘Engine interface’ was added to OpenSSL allowing support
+for alternative cryptographic implementations. This Engine interface can be
+used to interface with external crypto devices. The key injection process is
+secure module specific and is not covered by the Engine interface.</p>
+<p>Depending on the capabilities of the attached secure element (e.g. SE050_C, …)
+the following functionality can be made available over the OpenSSL Engine interface:</p>
+<ul class="simple">
+<li><p>EC crypto</p>
+<ul>
+<li><p>EC sign/verify</p></li>
+<li><p>ECDH compute key</p></li>
+<li><p>Montgomery ECDH</p></li>
+</ul>
+</li>
+<li><p>RSA crypto</p>
+<ul>
+<li><p>RSA sign/verify</p></li>
+<li><p>RSA priv_key_decrypt/pub_key_encrypt</p></li>
+</ul>
+</li>
+<li><p>Fetching random data</p></li>
+</ul>
+<section id="general">
+<h2><span class="section-number">8.1.1. </span>General<a class="headerlink" href="#general" title="Permalink to this headline">¶</a></h2>
+<section id="openssl-versions">
+<h3><span class="section-number">8.1.1.1. </span>OpenSSL versions<a class="headerlink" href="#openssl-versions" title="Permalink to this headline">¶</a></h3>
+<p>The OpenSSL Engine is compatible with OpenSSL versions 1.0.2 or 1.1.1.</p>
+</section>
+<section id="openssl-configuration-file">
+<h3><span class="section-number">8.1.1.2. </span>OpenSSL Configuration file<a class="headerlink" href="#openssl-configuration-file" title="Permalink to this headline">¶</a></h3>
+<p>It’s possible to add OpenSSL engine specific extensions to the OpenSSL configuration file.
+Using these extensions one can control whether the supported crypto functionality is delegated to
+the Secure Element or whether it is handled by the OpenSSL SW implementation.</p>
+<p>The actual contents of the configuration file depends on the OpenSSL version and the attached
+secure element (SE050, SE051, or SE052). The <code class="docutils literal notranslate"><span class="pre">demos/linux/common</span> <span class="pre">folder</span></code> of this SW package contains
+4 reference configuration files covering SE050 for the two supported OpenSSL versions.</p>
+<p>The following configuration file fragment (extracted from <code class="docutils literal notranslate"><span class="pre">openssl11_sss_se050.cnf</span></code>) highlights
+the required changes to enable the full functionality of the SE050_C OpenSSL Engine on an iMX Linux system:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>...
+# System default
+openssl_conf = nxp_engine
+...
+
+...
+[nxp_engine]
+engines = engine_section
+
+[engine_section]
+e4sss_se050 = e4sss_se050_section
+
+[e4sss_se050_section]
+engine_id = e4sss
+dynamic_path = /usr/local/lib/libsss_engine.so
+init = 1
+default_algorithms = RAND,RSA,EC
+</pre></div>
+</div>
+<p>One overrules the default OpenSSL configuration file by setting the environment variable
+<code class="docutils literal notranslate"><span class="pre">OPENSSL_CONF</span></code> to the path of the custom configuration file.</p>
+</section>
+<section id="platforms">
+<h3><span class="section-number">8.1.1.3. </span>Platforms<a class="headerlink" href="#platforms" title="Permalink to this headline">¶</a></h3>
+<p>The OpenSSL engine can be used on iMX boards (running Linux) or on Raspberry Pi (running Raspbian).</p>
+</section>
+</section>
+<section id="keys">
+<h2><span class="section-number">8.1.2. </span>Keys<a class="headerlink" href="#keys" title="Permalink to this headline">¶</a></h2>
+<section id="key-management">
+<h3><span class="section-number">8.1.2.1. </span>Key Management<a class="headerlink" href="#key-management" title="Permalink to this headline">¶</a></h3>
+<p>The cryptographic functionality offered by the OpenSSL engine requires a
+reference to a key stored inside the Secure Element (exception is
+RAND_Method). These keys are typically inserted into the Secure Element in a
+secured environment during production.</p>
+<p>OpenSSL requires a key pair, consisting of a private and a public key, to be
+loaded before the cryptographic operations can be executed. This creates a
+challenge when OpenSSL is used in combination with a secure element as the
+private key cannot be extracted out from the Secure Element.</p>
+<p>The solution is to populate the OpenSSL Key data structure with only a
+reference to the Private Key inside the Secure Element instead of the actual
+Private Key. The public key as read from the Secure Element can still be
+inserted into the key structure.</p>
+<p>OpenSSL crypto API’s are then invoked with these data structure objects as
+parameters. When the crypto API is routed to the Engine, the OpenSSL engine
+implementation decodes these key references and invokes the SSS API with
+correct Key references for a cryptographic operation. If the input key is not
+reference key, execution will roll back to openssl software implementation</p>
+</section>
+<section id="ec-reference-key-format">
+<span id="id1"></span><h3><span class="section-number">8.1.2.2. </span>EC Reference key format<a class="headerlink" href="#ec-reference-key-format" title="Permalink to this headline">¶</a></h3>
+<p>The following provides an example of an EC reference key. The value reserved
+for the private key has been used to contain:</p>
+<ul class="simple">
+<li><p>a pattern of <code class="docutils literal notranslate"><span class="pre">0x10..00</span></code> to fill up the data structure MSB side to the
+desired key length</p></li>
+<li><p>a 32 bit key identifier (in the example below <code class="docutils literal notranslate"><span class="pre">0x7DCCBBAA</span></code>)</p></li>
+<li><p>a 64 bit magic number (always <code class="docutils literal notranslate"><span class="pre">0xA5A6B5B6A5A6B5B6</span></code>)</p></li>
+<li><p>a byte to describe the key class (<code class="docutils literal notranslate"><span class="pre">0x10</span></code> for Key pair and <code class="docutils literal notranslate"><span class="pre">0x20</span></code> for
+Public key)</p></li>
+<li><p>a byte to describe the key index (use a reserved value <code class="docutils literal notranslate"><span class="pre">0x00</span></code>)</p></li>
+</ul>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Private-Key: (256 bit)
+priv:
+    10:00:00:00:00:00:00:00:00:00:00:00:00:00:00:
+    00:00:00:7D:CC:BB:AA:A5:A6:B5:B6:A5:A6:B5:B6:
+    kk:ii
+pub:
+    04:1C:93:08:8B:26:27:BA:EA:03:D1:BE:DB:1B:DF:
+    8E:CC:87:EF:95:D2:9D:FC:FC:3A:82:6F:C6:E1:70:
+    A0:50:D4:B7:1F:F2:A3:EC:F8:92:17:41:60:48:74:
+    F2:DB:3D:B4:BC:2B:F8:FA:E8:54:72:F6:72:74:8C:
+    9E:5F:D3:D6:D4
+ASN1 OID: prime256v1
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>The key identifier <code class="docutils literal notranslate"><span class="pre">0x7DCCBBAA</span></code> (stored in big-endian convention) is in
+front of the magic number <code class="docutils literal notranslate"><span class="pre">0xA5A6B5B6A5A6B5B6</span></code></p></li>
+<li><p>The padding of the private key value and the magic number make it
+unlikely a normal private key value matches a reference key.</p></li>
+<li><p>Ensure the value reserved for public key and ASN1 OID contain the values
+matching the stored key.</p></li>
+</ul>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>For EC Montgomery curves, openssl allows only the private key to be set.
+So the reference key created will not have the valid public key.</p></li>
+</ul>
+</div>
+</section>
+<section id="rsa-reference-key-format">
+<span id="id2"></span><h3><span class="section-number">8.1.2.3. </span>RSA Reference key format<a class="headerlink" href="#rsa-reference-key-format" title="Permalink to this headline">¶</a></h3>
+<p>The following provides an example of an RSA reference key.</p>
+<ul class="simple">
+<li><p>The value reserved for ‘p’ (aka ‘prime1’) is used as a magic number and is
+set to ‘1’</p></li>
+<li><p>The value reserved for ‘q’ (aka ‘prime2’) is used to store the 32 bit key
+identifier (in the example below 0x6DCCBB11)</p></li>
+<li><p>The value reserved for ‘(inverse of q) mod p’ (aka ‘IQMP’ or ‘coefficient’)
+is used to store the magic number 0xA5A6B5B6</p></li>
+</ul>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Private-Key: (2048 bit)
+modulus:
+    00:b5:48:67:f8:84:ca:51:ac:a0:fb:d8:e0:c9:a7:
+    72:2a:bc:cb:bc:93:3a:18:6a:0f:a1:ae:d4:73:e6:
+    ...
+publicExponent: 65537 (0x10001)
+privateExponent:
+    58:7a:24:39:90:f4:13:ff:bf:2c:00:11:eb:f5:38:
+    b1:77:dd:3a:54:3c:f0:d5:27:35:0b:ab:8d:94:93:
+    ...
+prime1: 1 (0x1)
+prime2: 1842133777(0x6DCCBB11)
+exponent1:
+    00:c1:c9:0a:cc:9f:1a:c5:1c:53:e6:c1:3f:ab:09:
+    db:fb:20:04:38:2a:26:d5:71:33:cd:17:a0:94:bd:
+    ...
+exponent2:
+    24:95:f0:0b:b0:78:a9:d9:f6:5c:4c:e0:67:d8:89:
+    c1:eb:df:43:54:74:a0:1c:43:e3:6f:d5:97:88:55:
+    ...
+coefficient: 2779166134 (0xA5A6B5B6)
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<ul class="simple">
+<li><p>Ensure keylength, the value reserved for (private key) modulus and
+public exponent match the stored key.</p></li>
+<li><p>The mathematical relation between the different key components is not
+preserved.</p></li>
+<li><p>Setting prime1 to ‘1’ makes it impossible that a normal private key
+matches a reference key.</p></li>
+</ul>
+</div>
+</section>
+</section>
+<section id="building-the-openssl-engine">
+<h2><span class="section-number">8.1.3. </span>Building the OpenSSL engine<a class="headerlink" href="#building-the-openssl-engine" title="Permalink to this headline">¶</a></h2>
+<p>The cmake build system will create an OpenSSL engine for supported platforms.
+The resulting OpenSSL engine will be copied to the SW tree in directory
+<code class="docutils literal notranslate"><span class="pre">simw-top/sss/plugin/openssl/bin</span></code>.</p>
+<p>A subsequent <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">install</span></code> will copy the
+OpenSSL engine to a standard directory on the file system, in case of iMX Linux e.g.
+<code class="docutils literal notranslate"><span class="pre">/usr/local/lib</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Ensure the following flag is defined when building an application that will be linked against the engine:
+<code class="docutils literal notranslate"><span class="pre">-DOPENSSL_LOAD_CONF</span></code></p>
+</div>
+</section>
+<section id="sample-scripts-to-demo-openssl-engine">
+<h2><span class="section-number">8.1.4. </span>Sample scripts to demo OpenSSL Engine<a class="headerlink" href="#sample-scripts-to-demo-openssl-engine" title="Permalink to this headline">¶</a></h2>
+<p>The directory <code class="docutils literal notranslate"><span class="pre">simw-top/sss/plugin/openssl/scripts</span></code> contains a set of python
+scripts. These scripts use the OpenSSL Engine in the context of standard
+OpenSSL utilities. They illustrate using the OpenSSL Engine for fetching
+random data, EC or RSA crypto operations. The scripts that illustrate EC or
+RSA crypto operations depend on prior provisioning of the secure element.</p>
+<p>As an example, the following set of commands first creates and provisions EC key
+material. Then it invokes the OpenSSL Engine for ECDSA sign / verify
+operations and ECDH calculations. It assumes an SE050 is connected via I2C to
+an iMX6UL-EVK board:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python3 openssl_provisionEC.py --key_type prime256v1
+python3 openssl_EccSign.py --key_type prime256v1
+python3 openssl_Ecdh.py --key_type prime256v1
+</pre></div>
+</div>
+<p>Further details on using these scripts can be found in the following:</p>
+<section id="openssl-rnd-py">
+<h3><span class="section-number">8.1.4.1. </span>openssl_rnd.py<a class="headerlink" href="#openssl-rnd-py" title="Permalink to this headline">¶</a></h3>
+<p>usage: openssl_rnd.py [-h] [–connection_data CONNECTION_DATA]</p>
+<p>Generate few random numbers from the attached secure element.</p>
+<dl>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_rnd.py --connection_data 127.0.0.1:8050
+</pre></div>
+</div>
+</section>
+<section id="openssl-provisionec-py">
+<h3><span class="section-number">8.1.4.2. </span>openssl_provisionEC.py<a class="headerlink" href="#openssl-provisionec-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: openssl_provisionEC.py [-h] –key_type KEY_TYPE</dt><dd><p>[–connection_type CONNECTION_TYPE]
+[–connection_data CONNECTION_DATA]
+[–subsystem SUBSYSTEM] [–auth_type AUTH_TYPE]
+[–scpkey SCPKEY]</p>
+</dd>
+</dl>
+<p>Provision attached secure element with EC keys</p>
+<p>This example generates a complete set of ECC key files (<a href="#id3"><span class="problematic" id="id4">*</span></a>.pem) (existing ones overwritten).
+Performs debug reset the attached secure element.
+Attached secure element provisioned with EC key.
+Creates reference key from the injected EC key.</p>
+<dl>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+</dl>
+</dd>
+<dt>required arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--key_type <var>KEY_TYPE</var></span></kbd></dt>
+<dd><p>Supported key types =&gt; <code class="docutils literal notranslate"><span class="pre">prime192v1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp224r1</span></code>, <code class="docutils literal notranslate"><span class="pre">prime256v1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp384r1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp521r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP160r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP192r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP224r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP256r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP320r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP384r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP512r1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp160k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp192k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp224k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp256k1</span></code></p>
+</dd>
+</dl>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--connection_type <var>CONNECTION_TYPE</var></span></kbd></dt>
+<dd><p>Supported connection types =&gt; <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code>, <code class="docutils literal notranslate"><span class="pre">sci2c</span></code>, <code class="docutils literal notranslate"><span class="pre">vcom</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv1</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv2</span></code>, <code class="docutils literal notranslate"><span class="pre">pcsc</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code></p>
+</dd>
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--subsystem <var>SUBSYSTEM</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">se050</span></code>, <code class="docutils literal notranslate"><span class="pre">mbedtls</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">se050</span></code></p>
+</dd>
+<dt><kbd><span class="option">--auth_type <var>AUTH_TYPE</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">None</span></code>, <code class="docutils literal notranslate"><span class="pre">PlatformSCP</span></code>, <code class="docutils literal notranslate"><span class="pre">UserID</span></code>, <code class="docutils literal notranslate"><span class="pre">ECKey</span></code>, <code class="docutils literal notranslate"><span class="pre">AESKey</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p>
+</dd>
+</dl>
+<p>–scpkey SCPKEY</p>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_provisionEC.py --key_type prime256v1
+python openssl_provisionEC.py --key_type prime256v1 --connection_data 169.254.0.1:8050
+python openssl_provisionEC.py --key_type secp224k1  --connection_type jrcpv2 --connection_data 127.0.0.1:8050
+python openssl_provisionEC.py --key_type brainpoolP256r1 --connection_data COM3
+</pre></div>
+</div>
+</section>
+<section id="openssl-eccsign-py">
+<h3><span class="section-number">8.1.4.3. </span>openssl_EccSign.py<a class="headerlink" href="#openssl-eccsign-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: openssl_EccSign.py [-h] –key_type KEY_TYPE</dt><dd><p>[–connection_data CONNECTION_DATA]
+[–disable_sha1 DISABLE_SHA1]</p>
+</dd>
+</dl>
+<p>Validation of Sign Verify with OpenSSL engine using EC Keys</p>
+<p>This example showcases sign using reference key, then verify using openssl and vice versa.</p>
+<dl>
+<dt>Precondition:</dt><dd><ul class="simple">
+<li><p>Inject keys using <code class="docutils literal notranslate"><span class="pre">openssl_provisionEC.py</span></code>.</p></li>
+</ul>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+</dl>
+</dd>
+<dt>required arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--key_type <var>KEY_TYPE</var></span></kbd></dt>
+<dd><p>Supported key types =&gt; <code class="docutils literal notranslate"><span class="pre">prime192v1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp224r1</span></code>, <code class="docutils literal notranslate"><span class="pre">prime256v1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp384r1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp521r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP160r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP192r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP224r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP256r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP320r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP384r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP512r1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp160k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp192k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp224k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp256k1</span></code></p>
+</dd>
+</dl>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--disable_sha1 <var>DISABLE_SHA1</var></span></kbd></dt>
+<dd><p>Parameter to disable SHA1 =&gt; eg. <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">False</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_EccSign.py --key_type prime256v1
+python openssl_EccSign.py --key_type secp160k1 --connection_data 127.0.0.1:8050
+</pre></div>
+</div>
+</section>
+<section id="openssl-ecdh-py">
+<h3><span class="section-number">8.1.4.4. </span>openssl_Ecdh.py<a class="headerlink" href="#openssl-ecdh-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: openssl_Ecdh.py [-h] –key_type KEY_TYPE</dt><dd><p>[–connection_data CONNECTION_DATA]
+[–disable_sha1 DISABLE_SHA1]</p>
+</dd>
+</dl>
+<p>Validation of ECDH with OpenSSL engine using EC keys</p>
+<p>This example showcases ECDH between openssl engine and openssl.</p>
+<dl>
+<dt>Precondition:</dt><dd><ul class="simple">
+<li><p>Inject keys using <code class="docutils literal notranslate"><span class="pre">openssl_provisionEC.py</span></code>.</p></li>
+</ul>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+</dl>
+</dd>
+<dt>required arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--key_type <var>KEY_TYPE</var></span></kbd></dt>
+<dd><p>Supported key types =&gt; <code class="docutils literal notranslate"><span class="pre">prime192v1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp224r1</span></code>, <code class="docutils literal notranslate"><span class="pre">prime256v1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp384r1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp521r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP160r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP192r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP224r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP256r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP320r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP384r1</span></code>, <code class="docutils literal notranslate"><span class="pre">brainpoolP512r1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp160k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp192k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp224k1</span></code>, <code class="docutils literal notranslate"><span class="pre">secp256k1</span></code></p>
+</dd>
+</dl>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--disable_sha1 <var>DISABLE_SHA1</var></span></kbd></dt>
+<dd><p>Parameter to disable SHA1 =&gt; eg. <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">False</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_Ecdh.py --key_type prime256v1
+python openssl_Ecdh.py --key_type secp160k1 --connection_data 127.0.0.1:8050
+</pre></div>
+</div>
+</section>
+<section id="ecc-all-py">
+<h3><span class="section-number">8.1.4.5. </span>ecc_all.py<a class="headerlink" href="#ecc-all-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: ecc_all.py [-h] [–connection_type CONNECTION_TYPE]</dt><dd><p>[–connection_data CONNECTION_DATA] [–subsystem SUBSYSTEM]
+[–auth_type AUTH_TYPE] [–scpkey SCPKEY]
+[–disable_sha1 DISABLE_SHA1] [–fips FIPS]</p>
+</dd>
+</dl>
+<p>Validation of OpenSSL Engine using EC keys</p>
+<p>This example injects keys with different supported EC Curves,
+then showcases ECDH &amp; ECDSA using those keys.</p>
+<dl>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+<dt><kbd><span class="option">--connection_type <var>CONNECTION_TYPE</var></span></kbd></dt>
+<dd><p>Supported connection types =&gt; <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code>, <code class="docutils literal notranslate"><span class="pre">sci2c</span></code>, <code class="docutils literal notranslate"><span class="pre">vcom</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv1</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv2</span></code>, <code class="docutils literal notranslate"><span class="pre">pcsc</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code></p>
+</dd>
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--subsystem <var>SUBSYSTEM</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">se051</span></code>, <code class="docutils literal notranslate"><span class="pre">se050</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">se050</span></code></p>
+</dd>
+<dt><kbd><span class="option">--auth_type <var>AUTH_TYPE</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">None</span></code>, <code class="docutils literal notranslate"><span class="pre">PlatformSCP</span></code>, <code class="docutils literal notranslate"><span class="pre">UserID</span></code>, <code class="docutils literal notranslate"><span class="pre">ECKey</span></code>, <code class="docutils literal notranslate"><span class="pre">AESKey</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p>
+</dd>
+</dl>
+<p>–scpkey SCPKEY
+–disable_sha1 DISABLE_SHA1</p>
+<blockquote>
+<div><p>Parameter to disable SHA1 =&gt; eg. <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">False</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</div></blockquote>
+<dl class="option-list">
+<dt><kbd><span class="option">--fips <var>FIPS</var></span></kbd></dt>
+<dd><p>FIPS Testing =&gt; eg. <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">False</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python ecc_all.py
+python ecc_all.py --connection_data 169.254.0.1:8050
+python ecc_all.py --connection_data 127.0.0.1:8050 --connection_type jrcpv2
+python ecc_all.py --connection_data COM3
+</pre></div>
+</div>
+</section>
+<section id="openssl-provisionrsa-py">
+<h3><span class="section-number">8.1.4.6. </span>openssl_provisionRSA.py<a class="headerlink" href="#openssl-provisionrsa-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: openssl_provisionRSA.py [-h] –key_type KEY_TYPE</dt><dd><p>[–connection_type CONNECTION_TYPE]
+[–connection_data CONNECTION_DATA]
+[–subsystem SUBSYSTEM] [–auth_type AUTH_TYPE]
+[–scpkey SCPKEY]</p>
+</dd>
+</dl>
+<p>Provision attached secure element with RSA keys</p>
+<p>This example generates a complete set of RSA key files (<a href="#id5"><span class="problematic" id="id6">*</span></a>.pem) (existing ones overwritten).
+Performs debug reset the attached secure element.
+Attached secure element provisioned with RSA key.
+Creates reference key from the injected RSA key.</p>
+<dl>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+</dl>
+</dd>
+<dt>required arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--key_type <var>KEY_TYPE</var></span></kbd></dt>
+<dd><p>Supported key types =&gt; <code class="docutils literal notranslate"><span class="pre">rsa1024</span></code>, <code class="docutils literal notranslate"><span class="pre">rsa2048</span></code>, <code class="docutils literal notranslate"><span class="pre">rsa3072</span></code>, <code class="docutils literal notranslate"><span class="pre">rsa4096</span></code></p>
+</dd>
+</dl>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--connection_type <var>CONNECTION_TYPE</var></span></kbd></dt>
+<dd><p>Supported connection types =&gt; <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code>, <code class="docutils literal notranslate"><span class="pre">sci2c</span></code>, <code class="docutils literal notranslate"><span class="pre">vcom</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv1</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv2</span></code>, <code class="docutils literal notranslate"><span class="pre">pcsc</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code></p>
+</dd>
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--subsystem <var>SUBSYSTEM</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">se050</span></code>, <code class="docutils literal notranslate"><span class="pre">mbedtls</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">se050</span></code></p>
+</dd>
+<dt><kbd><span class="option">--auth_type <var>AUTH_TYPE</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">None</span></code>, <code class="docutils literal notranslate"><span class="pre">PlatformSCP</span></code>, <code class="docutils literal notranslate"><span class="pre">UserID</span></code>, <code class="docutils literal notranslate"><span class="pre">ECKey</span></code>, <code class="docutils literal notranslate"><span class="pre">AESKey</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p>
+</dd>
+</dl>
+<p>–scpkey SCPKEY</p>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_provisionRSA.py --key_type rsa1024
+python openssl_provisionRSA.py --key_type rsa2048 --connection_data 169.254.0.1:8050
+python openssl_provisionRSA.py --key_type rsa2048 --connection_data 127.0.0.1:8050 --connection_type jrcpv2
+python openssl_provisionRSA.py --key_type rsa2048 --connection_data COM3
+</pre></div>
+</div>
+</section>
+<section id="openssl-rsa-py">
+<h3><span class="section-number">8.1.4.7. </span>openssl_RSA.py<a class="headerlink" href="#openssl-rsa-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: openssl_RSA.py [-h] –key_type KEY_TYPE</dt><dd><p>[–connection_data CONNECTION_DATA]
+[–disable_sha1 DISABLE_SHA1]</p>
+</dd>
+</dl>
+<p>Validation of OpenSSL Engine using RSA keys</p>
+<p>This example showcases crypto operations and sign verify operations using RSA keys.</p>
+<dl>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+</dl>
+</dd>
+<dt>required arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--key_type <var>KEY_TYPE</var></span></kbd></dt>
+<dd><p>Supported key types =&gt;  <code class="docutils literal notranslate"><span class="pre">rsa1024</span></code>, <code class="docutils literal notranslate"><span class="pre">rsa2048</span></code>, <code class="docutils literal notranslate"><span class="pre">rsa3072</span></code>, <code class="docutils literal notranslate"><span class="pre">rsa4096</span></code></p>
+</dd>
+</dl>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--disable_sha1 <var>DISABLE_SHA1</var></span></kbd></dt>
+<dd><p>Parameter to disable SHA1 =&gt; eg. <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">False</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_RSA.py --key_type rsa2048
+python openssl_RSA.py --key_type rsa4096 --connection_data 127.0.0.1:8050
+</pre></div>
+</div>
+</section>
+<section id="rsa-all-py">
+<h3><span class="section-number">8.1.4.8. </span>rsa_all.py<a class="headerlink" href="#rsa-all-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: rsa_all.py [-h] [–connection_data CONNECTION_DATA]</dt><dd><p>[–connection_type CONNECTION_TYPE] [–subsystem SUBSYSTEM]
+[–auth_type AUTH_TYPE] [–scpkey SCPKEY]
+[–disable_sha1 DISABLE_SHA1] [–fips FIPS]</p>
+</dd>
+</dl>
+<p>Validation of OpenSSL Engine using RSA keys</p>
+<p>This example injects keys with different supported RSA keys,
+then showcases Crypto &amp; sign verify operations using those keys.</p>
+<dl>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--connection_type <var>CONNECTION_TYPE</var></span></kbd></dt>
+<dd><p>Supported connection types =&gt; <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code>, <code class="docutils literal notranslate"><span class="pre">sci2c</span></code>, <code class="docutils literal notranslate"><span class="pre">vcom</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv1</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv2</span></code>, <code class="docutils literal notranslate"><span class="pre">pcsc</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code></p>
+</dd>
+<dt><kbd><span class="option">--subsystem <var>SUBSYSTEM</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">se050</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">se050</span></code></p>
+</dd>
+<dt><kbd><span class="option">--auth_type <var>AUTH_TYPE</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">None</span></code>, <code class="docutils literal notranslate"><span class="pre">PlatformSCP</span></code>, <code class="docutils literal notranslate"><span class="pre">UserID</span></code>, <code class="docutils literal notranslate"><span class="pre">ECKey</span></code>, <code class="docutils literal notranslate"><span class="pre">AESKey</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p>
+</dd>
+</dl>
+<p>–scpkey SCPKEY
+–disable_sha1 DISABLE_SHA1</p>
+<blockquote>
+<div><p>Parameter to disable SHA1 =&gt; eg. <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">False</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</div></blockquote>
+<dl class="option-list">
+<dt><kbd><span class="option">--fips <var>FIPS</var></span></kbd></dt>
+<dd><p>FIPS Testing =&gt; eg. <code class="docutils literal notranslate"><span class="pre">True</span></code>, <code class="docutils literal notranslate"><span class="pre">False</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">False</span></code></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python rsa_all.py
+python rsa_all.py --connection_data 169.254.0.1:8050
+python rsa_all.py --connection_data 127.0.0.1:8050 --connection_type jrcpv2
+python rsa_all.py --connection_data COM3
+</pre></div>
+</div>
+</section>
+<section id="openssl-provisionec-mont-py">
+<h3><span class="section-number">8.1.4.9. </span>openssl_provisionEC_mont.py<a class="headerlink" href="#openssl-provisionec-mont-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: openssl_provisionEC_mont.py [-h] –key_type KEY_TYPE</dt><dd><p>[–connection_type CONNECTION_TYPE]
+[–connection_data CONNECTION_DATA]
+[–subsystem SUBSYSTEM]
+[–auth_type AUTH_TYPE]
+[–scpkey SCPKEY]</p>
+</dd>
+</dl>
+<p>Provision attached secure element with EC montogomery keys</p>
+<p>This example generates EC montogomery key files (<a href="#id7"><span class="problematic" id="id8">*</span></a>.pem) (existing ones overwritten).
+Performs debug reset the attached secure element.
+Attached secure element provisioned with EC montogomery key.
+Creates reference key from the injected EC montogomery key.</p>
+<dl>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+</dl>
+</dd>
+<dt>required arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--key_type <var>KEY_TYPE</var></span></kbd></dt>
+<dd><p>Supported key types =&gt; <code class="docutils literal notranslate"><span class="pre">x25519</span></code>, <code class="docutils literal notranslate"><span class="pre">x448</span></code></p>
+</dd>
+</dl>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--connection_type <var>CONNECTION_TYPE</var></span></kbd></dt>
+<dd><p>Supported connection types =&gt; <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code>, <code class="docutils literal notranslate"><span class="pre">sci2c</span></code>, <code class="docutils literal notranslate"><span class="pre">vcom</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv1</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv2</span></code>, <code class="docutils literal notranslate"><span class="pre">pcsc</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code></p>
+</dd>
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+<dt><kbd><span class="option">--subsystem <var>SUBSYSTEM</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">se050</span></code>, <code class="docutils literal notranslate"><span class="pre">mbedtls</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">se050</span></code></p>
+</dd>
+<dt><kbd><span class="option">--auth_type <var>AUTH_TYPE</var></span></kbd></dt>
+<dd><p>Supported subsystem =&gt; <code class="docutils literal notranslate"><span class="pre">None</span></code>, <code class="docutils literal notranslate"><span class="pre">PlatformSCP</span></code>, <code class="docutils literal notranslate"><span class="pre">UserID</span></code>, <code class="docutils literal notranslate"><span class="pre">ECKey</span></code>, <code class="docutils literal notranslate"><span class="pre">AESKey</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">None</span></code></p>
+</dd>
+</dl>
+<p>–scpkey SCPKEY</p>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_provisionEC_mont.py --key_type x25519
+python openssl_provisionEC_mont.py --key_type x25519 --connection_data 169.254.0.1:8050
+python openssl_provisionEC_mont.py --key_type x448  --connection_type jrcpv2 --connection_data 127.0.0.1:8050
+python openssl_provisionEC_mont.py --key_type x448 --connection_data COM3
+</pre></div>
+</div>
+</section>
+<section id="openssl-ecdh-mont-py">
+<h3><span class="section-number">8.1.4.10. </span>openssl_Ecdh_mont.py<a class="headerlink" href="#openssl-ecdh-mont-py" title="Permalink to this headline">¶</a></h3>
+<dl class="simple">
+<dt>usage: openssl_Ecdh_mont.py [-h] –key_type KEY_TYPE</dt><dd><p>[–connection_type CONNECTION_TYPE]
+[–connection_data CONNECTION_DATA]</p>
+</dd>
+</dl>
+<p>Validation of Montgomery ECDH with OpenSSL engine using EC mont keys</p>
+<p>This example showcases montogomery ECDH between openssl engine and openssl.</p>
+<dl>
+<dt>Precondition:</dt><dd><ul class="simple">
+<li><p>Inject keys using <code class="docutils literal notranslate"><span class="pre">openssl_provisionEC_mont.py</span></code>.</p></li>
+</ul>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">-h</span>, <span class="option">--help</span></kbd></dt>
+<dd><p>show this help message and exit</p>
+</dd>
+</dl>
+</dd>
+<dt>required arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--key_type <var>KEY_TYPE</var></span></kbd></dt>
+<dd><p>Supported key types =&gt; <code class="docutils literal notranslate"><span class="pre">x25519</span></code>, <code class="docutils literal notranslate"><span class="pre">x448</span></code></p>
+</dd>
+</dl>
+</dd>
+<dt>optional arguments:</dt><dd><dl class="option-list">
+<dt><kbd><span class="option">--connection_type <var>CONNECTION_TYPE</var></span></kbd></dt>
+<dd><p>Supported connection types =&gt; <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code>, <code class="docutils literal notranslate"><span class="pre">sci2c</span></code>, <code class="docutils literal notranslate"><span class="pre">vcom</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv1</span></code>, <code class="docutils literal notranslate"><span class="pre">jrcpv2</span></code>, <code class="docutils literal notranslate"><span class="pre">pcsc</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">t1oi2c</span></code></p>
+</dd>
+<dt><kbd><span class="option">--connection_data <var>CONNECTION_DATA</var></span></kbd></dt>
+<dd><p>Parameter to connect to SE =&gt; eg. <code class="docutils literal notranslate"><span class="pre">COM3</span></code>, <code class="docutils literal notranslate"><span class="pre">127.0.0.1:8050</span></code>, <code class="docutils literal notranslate"><span class="pre">none</span></code>. Default: <code class="docutils literal notranslate"><span class="pre">none</span></code></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p>Example invocation:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>python openssl_Ecdh_mont.py --key_type x448
+python openssl_Ecdh_mont.py --key_type x25519 --connection_type jrcpv2 --connection_data 127.0.0.1:8050
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+    </div>
+      
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-right">
+      <a href="#">Back to top</a>
+      
+    </p>
+    <p>
+        &copy; Copyright 2018-2020, NXP.<br/>
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.5.0.<br/>
+    </p>
+  </div>
+</footer>
+  </body>
+</html>

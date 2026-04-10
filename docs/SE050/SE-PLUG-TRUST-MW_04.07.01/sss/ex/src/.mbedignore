@@ -1,0 +1,10 @@
+ex_sss_boot_direct.c
+ex_a71ch_scp03.c
+ex_sss_a71ch.c
+ex_sss_boot_connectstring.c
+ex_sss_boot_direct.c
+ex_sss_boot_freertos.c
+ex_sss_boot_sw.c
+ex_sss_scp03_auth.c
+ex_sss_se.c
+ex_sss_se_auth.c

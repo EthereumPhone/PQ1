@@ -1,0 +1,295 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "http://example.com/example.json",
+    "type": "object",
+    "readOnly": false,
+    "writeOnly": false,
+    "minProperties": 0,
+    "title": "The MulticastPackage Schema",
+    "description": "The MulticastPackage schema describes the storage of multicast packages for the Multicast Applet Loader SEMS-Lite.",
+    "additionalProperties": true,
+    "required": [
+        "Copyright",
+        "MulticastPackageFormatVersion",
+        "TargetCommercialName",
+        "Target12nc",
+        "TargetEntityID",
+        "requiredFreeBytesNonVolatileMemory",
+        "requiredFreeBytesTransientMemory",
+        "MulticastPackageName",
+        "MulticastPackageVersion",
+        "MulticastPackageDescription",
+        "SubComponentMetaData",
+        "SignatureOverCommands",
+        "MulticastCommands"
+    ],
+    "properties": {
+        "Copyright": {
+            "$id": "#/properties/Copyright",
+            "type": "string",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 16,
+            "title": "The Copyright Schema",
+            "description": "Copyright of this Multicast Software package.",
+            "default": "Copyright 2020  NXP",
+            "examples": [
+                "Copyright 2020  NXP",
+                "Copyright 2020,2021  NXP",
+                "Copyright 2020-2025  NXP"
+            ]
+        },
+        "MulticastPackageFormatVersion": {
+            "$id": "#/properties/MulticastPackageFormatVersion",
+            "type": "string",
+            "pattern": "^(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])\\.(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])$",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 3,
+            "title": "The Multicastpackageformatversion Schema",
+            "description": "Version information of this json Format for MulticastPackages. Version information major.minor, both values in range 0 to 127.",
+            "default": "1.2"
+        },
+        "TargetCommercialName": {
+            "$id": "#/properties/TargetCommercialName",
+            "type": "string",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 8,
+            "maxLength": 32,
+            "title": "The Targetcommercialname Schema",
+            "description": "Commercial Name of the target device where this MulticastPackage is intended to be executed on, as known to customers and used on EdgeLock2Go to identify device types.",
+            "default": "",
+            "examples": [
+                "SE051C2HQ1/Z01XD",
+                "SE051A2HQ1/Z01XE",
+                "SE051P2HQ1/Z011A"
+            ]
+        },
+        "Target12nc": {
+            "$id": "#/properties/Target12nc",
+            "type": "string",
+            "pattern": "^[\\d]+$",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 12,
+            "maxLength": 12,
+            "title": "The Target12nc Schema",
+            "description": "Target 12nc is a 12 digit numerical code identifying the target device where this MulticastPackage is intended to be executed on, as known to customers and used on EdgeLock2Go to identify device types.",
+            "default": "",
+            "examples": [
+                "935414457472",
+                "935414458472",
+                "935409596472"
+            ]
+        },
+        "TargetEntityID": {
+            "$id": "#/properties/TargetEntityID",
+            "type": "string",
+            "pattern": "^[0-9]+",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 32,
+            "maxLength": 32,
+            "title": "The Targetentityid Schema",
+            "description": "Entity ID, 16bytes long Binary Coded Decimal, of the target device where this MulticastPackage is intended to be executed on. It is an identifier of the key-set of the Multicast Applet Loader. As the key-set and related Entity ID can change over the lifetime of the device it is separated from the Commercial Name. This is stored to have it formatted in the BCD encoded and therefore recognizable form.",
+            "default": "",
+            "examples": [
+                "00000000000000000063709317141886"
+            ]
+        },
+        "requiredFreeBytesNonVolatileMemory": {
+            "$id": "#/properties/requiredFreeBytesNonVolatileMemory",
+            "type": "integer",
+            "readOnly": false,
+            "writeOnly": false,
+            "minimum": 0,
+            "title": "The Requiredfreebytesnonvolatilememory Schema",
+            "description": "Minimum required free Non Volatile memory in bytes that have to be available on the target device before execution of this MulticastPackage.",
+            "default": 0,
+            "examples": [
+                7775
+            ]
+        },
+        "requiredFreeBytesTransientMemory": {
+            "$id": "#/properties/requiredFreeBytesTransientMemory",
+            "type": "integer",
+            "readOnly": false,
+            "writeOnly": false,
+            "minimum": 0,
+            "title": "The Requiredfreebytestransientmemory Schema",
+            "description": "Minimum required free transient (RAM) memory in bytes that have to be available on the target device before execution of this MulticastPackage.",
+            "default": 0,
+            "examples": [
+                556
+            ]
+        },
+        "MulticastPackageName": {
+            "$id": "#/properties/MulticastPackageName",
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9\\-\\_]+",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 8,
+            "maxLength": 42,
+            "title": "The Multicastpackagename Schema",
+            "description": "Giving a descriptive name to the complete Multicast Package. This name is constant over different versions. It is possible that one Multicast Package contains multiple Applet binaries and also that a Multicast Package contains no Applet binary at all (e.g. for deletion).",
+            "default": "",
+            "examples": [
+                "IotPackage"
+            ]
+        },
+        "MulticastPackageVersion": {
+            "$id": "#/properties/MulticastPackageVersion",
+            "type": "string",
+            "pattern": "^(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])\\.(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])$",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 3,
+            "title": "The Multicastpackageversion Schema",
+            "description": "Version information of this MulticastPackage, describing the sum version over all contained content. In case exactly one SubComponent is contained this version is equal to the version of this SubComponent. Version information major.minor, both values in range 0 to 127.",
+            "default": "",
+            "examples": [
+                "4.12"
+            ]
+        },
+        "MulticastPackageDescription": {
+            "$id": "#/properties/MulticastPackageDescription",
+            "type": "string",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 0,
+            "title": "The Multicastpackagedescription Schema",
+            "description": "Short Description of what the Multicast Package is intended to do.",
+            "default": "",
+            "examples": [
+                "This multicast package upgrades the IoT Applet related content.",
+                "This multicast package will delete the PersoApplet from the target device."
+            ]
+        },
+        "SubComponentMetaData": {
+            "$id": "#/properties/SubComponentMetaData",
+            "type": "array",
+            "readOnly": false,
+            "writeOnly": false,
+            "uniqueItems": false,
+            "minItems": 0,
+            "minContains": 1,
+            "title": "The Subcomponentmetadata Schema",
+            "description": "A list of subcomponents of this MulticastPackage, designating all Executable Load Files (ELFs) Contained. It usually contains one entry, but can have multiple in the case multiple dependent ELFs get modified. This list can be empty, e.g. for a KeyRotation or deletion of content.",
+            "default": [],
+            "additionalItems": true,
+            "items": {
+                "$id": "#/properties/SubComponentMetaData/items",
+                "type": "object",
+                "readOnly": false,
+                "writeOnly": false,
+                "minProperties": 0,
+                "title": "The Items Schema",
+                "description": "Each subcomponent is described by a human readable name, a machine readable AID and a version number unique for this subcomponent name. As well as the minimum previous version of the subcomponent which has to be present on the device such that it can be upgraded to the version contained in this package.",
+                "default": {},
+                "examples": [
+                    {
+                        "name": "NXP-IoTApplet",
+                        "aid": "A00000039654530000000103000200",
+                        "version": "4.12",
+                        "minimumPreviousVersion": "4.11"
+                    }
+                ],
+                "additionalProperties": true,
+                "required": [
+                    "name",
+                    "aid",
+                    "version"
+                ],
+                "properties": {
+                    "name": {
+                        "$id": "#/properties/SubComponentMetaData/items/properties/name",
+                        "type": "string",
+                        "readOnly": false,
+                        "writeOnly": false,
+                        "minLength": 8,
+                        "maxLength": 42,
+                        "title": "The Name Schema",
+                        "description": "A human readable name for this subcomponent. This name is constant over different versions.",
+                        "default": "",
+                        "examples": [
+                            "NXP-IoTApplet"
+                        ]
+                    },
+                    "aid": {
+                        "$id": "#/properties/SubComponentMetaData/items/properties/aid",
+                        "type": "string",
+                        "pattern": "^[A-F0-9]+",
+                        "readOnly": false,
+                        "writeOnly": false,
+                        "minLength": 12,
+                        "maxLength": 100,
+                        "title": "The AID Schema",
+                        "description": "The Application Identifier (AID) of the Executable Load File (ELF) which makes up the content of this subcomponent. This is stored as string to have it formatted in upper-case hexadecimal and therefore recognizable form.",
+                        "default": "",
+                        "examples": [
+                            "A00000039654530000000103000200"
+                        ]
+                    },
+                    "version": {
+                        "$id": "#/properties/SubComponentMetaData/items/properties/version",
+                        "type": "string",
+                        "pattern": "^(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])\\.(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])$",
+                        "readOnly": false,
+                        "writeOnly": false,
+                        "minLength": 3,
+                        "title": "The Version Schema",
+                        "description": "Version information of this subcomponent. Version information major.minor, according to java card virtual machine package versions, both values in range 0 to 127.",
+                        "default": "",
+                        "examples": [
+                            "4.12"
+                        ]
+                    },
+                    "minimumPreviousVersion": {
+                        "$id": "#/properties/SubComponentMetaData/items/properties/minimumPreviousVersion",
+                        "type": "string",
+                        "pattern": "^(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])\\.(0|[1-9]|[1-9]\\d|1[0-1]\\d|12[0-7])$",
+                        "readOnly": false,
+                        "writeOnly": false,
+                        "minLength": 3,
+                        "title": "The minimumPreviousVersion Schema",
+                        "description": "Minimum version number of this subcomponent as installed on the secure element before this script is executed. If this field is omitted there is no minimum version requirement, e.g. initial Installation of an applet. If the minimumPreviousVersion is 4.11 but the secure element contains version 3.2, the intermediate update packages need to be applied to reach version 4.11 before this package. Version information major.minor, according to java card virtual machine package versions, both values in range 0 to 127.",
+                        "default": "",
+                        "examples": [
+                            "4.11"
+                        ]
+                    }
+                }
+            }
+        },
+        "SignatureOverCommands": {
+            "$id": "#/properties/SignatureOverCommands",
+            "type": "string",
+            "pattern": "^[A-F0-9]+",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 140,
+            "maxLength": 144,
+            "title": "The Signatureovercommands Schema",
+            "description": "The signature over the multicast commands in an machine readable form. So it does not have to be parsed form the script commands. String encoding (upper-case hexadecimal) is chosen here, as many json parsers can not handle such large integer values.",
+            "default": "",
+            "examples": [
+                "B304402201C1A124C4210CD47D4B90367962FBCD16D30E385BF9B5FAAED94CB4F22D6C050022031583CE3C4771320D3B53C8BA3B3DBBAEDDEECABB22DD69D3509EEE791FBF558"
+            ]
+        },
+        "MulticastCommands": {
+            "$id": "#/properties/MulticastCommands",
+            "type": "string",
+            "readOnly": false,
+            "writeOnly": false,
+            "minLength": 0,
+            "title": "The Multicastcommands Schema",
+            "description": "The complete Multicast Applet Loader Script (certificate, signature, encrypted and signed commands) in ls-cgt format, encoded in base64.",
+            "default": "",
+            "examples": [
+                "N2YyMTgxZWU5MzEwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDE0MjEwMDAwMDAwMDAwMDAwMDAwMDAwNjM3MDkzMTcxNDE4ODM1ZjIwMTA1MzQ1MzAzNTMxNGQ0MTRjNTM0MzQ1NTM0NDY1NmQ2Zjk1MDE4MjQ1MDgwMDYzNzA5MzE3MTQxODgzNTMxZjQ4MDgwMDAxMDAwMDAwMDIwMDAxNGMwMTAzNGQxMDA3YTAwMDAwMDM5NjU0NTMwMDAwMDAwMTAzMDAwMjAwNWYzNzQwNjczM2Y2N2JlZjdkYzk3N2I5ZWUxMzQ3OTU2NWJlNDNiYjA0OWQxNzg0ZjA5NmVmMWVjODM5MmZlNmY2MzI4YzA3NWY5ZTlmNWIyMjdlMWIwOWViMWQ5Mjk2OWRmODljOGRkMmRlZDNjODA5Y2E0N2Q1OGVhZTk2NDEyMmUwZDI3ZjQ5NDM4NjQxMDQ0ZGYxMDVjOGExYTY4MzdmMDgwMjViZmVjYTBkNDZjOGY3M2NmOGE4MThmZWNkNzljMGJmNTMzZTA2YjFiMmY2MjdhZTEzOTRmOWQ3OWU0Zjg3OGQxNDNiNGRkMmI4MTk1OTZmNjIyYjM5YjY4OTMxMDM4NWY0OGFmYjA0ZDEyNwo2MDgxYmE0MTgxYjcwNDE5NDQyNGVkMGJlZGE3MDRkMjczZTlmOTA3YzI0ZGQ1NzYzODg2NDU1NTJlN2EzNTIyODVmODg2YzRmNjM4MzEzMjRkYTFkNmEwZWI5MzhkZTg1ZTlhMzgzMWI2MmVjMzM1ODg4YTVhZmE3YmMxOTRhM2ZlMDJhMmY2ODg3NzZjNjg1Yzg5YjRmZjZjOWFjMDgxNWM2OTUxZDNkYzI5MzAzZGIxYjk1YzhkZThmZTVjOTc4YzE0MDhhOTZkMzNhNTQ2MjdlMDMyOWM0MmQxNmNhMGQ3YzJiYzU5MTU4NTcwMzA0NDAyMjAyMzVkZGYzMzE3MzJkNmI4ODkyNDliYmEzZjlmMGE5NGVlYWI4Yzc2YjlkMWRmMDk2Mjc1MDc5OTBjMTMxYjJiMDIyMGExM2Y0ZTU1OWRiODU1OGNlMzZkMzkwODdhYjljNDRmZGIyZDg1MDkzODc1NDQzZWJiNmY2ZWYxNWI4ZGY1MDcKNDA0NTgwYTAwMDAwNDAzOTIzYWFkM2NhMDRmM2FlMmU4MGQxNDNiMWU0MjlmNDYzODJjMDg2MDU4Mjk3NmFlMzFjMjRmYWUwYTk2NDkwNWQ0OWJiNzk3NjQ5ZTFmZDNmOTdiODU5YTVkNTJiMWJjYmQzOTNlNzAyNDZlMDcwZjhmOWVmY2VjMThmZTVmNgo0MDQ1ODBhMDAwMDA0MDViNGQ0Zjk0ZGEzNmU3Yzg3MmY3ZDI2YzZlYWRlMWZmYmUxNTUxM2Q1Nzc1YTYwOWE3ZDUxOTMzY2YxYzYzNjQwOTFmMjAyM2FkZmVlMDg1NGJjZjZlMzM1MWIzYTdkZThjNzcyYTYzMDFiYTQ0ZjgxOWFjZjI2ZmU0ZGE1MDI3CjQwNjU4MGEwMDAwMDYwZjIwYTAxYTlmNGE2MWFmNjllODFlZTcyZjg1M2YzM2U4OWI2MWNhNTc4NjI4YjNjZjc4NWRhYTMwODRiN2MwMDI2ZjU3YWE0YjUyNTRkNDViYjI3YWVjNDk5ZWE2NTI4NWU1YTAwYTA0OWNlOWVhYjM1NWViZGUyYzQ1NjVjZjk1YTM5YTE2ZGI0ZjY3YzNkZmVhODBiZDgwNWMxOTM2MGIyNWIyNGQxYWM0YWJiZjUxZDRmNDNkNDNkNTIyNTI3CjQwNTU4MGEwMDAwMDUwYjE5YTEzYzBkZmNiOWUwNGIzMjlkMTBlOTQ0ZGUxYjk5NTBiNmNiZDliNjNmYzkyMDczZjI3NGUyOTA1ZDJkYWRmOGFlYWI2MWJmMjEwNzdkZWE2MTg4ZmM2NmZhOTBhOGI4MmZmNjAwZTFmNDU2ZDRhZjFmNTA4YWZkMjQ5NzQxNzNlNTI3YTRkOTk2YTY2ZTg4YTE2N2YwMDJhOGQ4YQo0MDQ1ODBhMDAwMDA0MGZhMDgwOWFmNzAwNmFjYTU3MWRjNzM1MmRhZTdjZGNhMWZjNWNmYThmNGFkYWQyNGFhYmMxMWIyMDE4ZTVjM2MxZTZiZjRhNGI0OWI0ZmRlMGJiZmIyNmU0Mjk5MDUzOTk4M2YxZTg5ZGQzMzhhYjUxYTA2OTYyOWFlMzMwNzI4CjQwNjU4MGEwMDAwMDYwMTAzNDkxODg5OTU1NjU3YzBkZjY4MTAyZWYxOTIwNWMxMzczY2Q2OGRjMjYxNGJjMzg4MjUzMmFhYzE4NzQzNzdhNWJlMDgwNjJhMjU4YjI2Mzg2MGNkNTkyYmYxZmI1OWQwNDhkOWE0Zjc2MDdkNGMwNDQyODdkMWMyNmRjOWI2N2FkYmNmYmJlZTJkZjBiOWE1ZWRiZGFlOWMxYmQ4MTQ4YWVlZDkwYmUyZmQyMGUyM2YyNWNmZDhmMGQ3ZWM1CjQwODFmNTgwYTAwMDAwZjBjNjVhMjc5MTM4MmQzYjIzMjEyNjA5YTBhZTk1ZTY5YzIyOTIwMDY3ZGMzNjBjMzRlZWYyZGMzNDhlMjJlYTZjN2Q5M2UzY2Q2ZTAwNDQwMjRmMDExM2ZhYjRjMDA5MTkyY2RmMmY0YmVkMWJlMTMzYWQxNzNhMTE0MTdkYThhM2ZjNDNjZDA2NjE3NWNiMzNmYTg5Mzg1NmRkZDAzMzY5NzU4ZTg4M2MxMjg2YTUyNGU3NDIxOGEyYzljOGExNTY2ZTZmMjVjNmIyY2M2NDVhYjAyMjNlY2E0ZmY2MjI2Y2VmMDU1NDc4OWExMTRmNzIwMTkxYzlhYzc0YjMxMDZlYTQ1ZjAyZjZjN2IwZGEwOTJhNDk3NzE0NDdiY2I2ZTUxNDUyMzc2OGMyZjQxMTcwMTQ1MzIyMjEzMmRiMjg2NmFmMDQ4NzA3YzNmYThlNDQxODZhM2ZkMjg0M2RiYmJmYjFmYzczOTk4YjJiMTRlYWJlZWQxNDEyYjQ2NzI3MmFmMjY3YThmZmE5NTk2YzQyYWMzMWFmZWQyNjgwNWI4MjFkYWRl"
+            ]
+        }
+    }
+}

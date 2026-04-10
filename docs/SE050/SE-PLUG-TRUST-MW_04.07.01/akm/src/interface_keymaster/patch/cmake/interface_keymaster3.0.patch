@@ -1,0 +1,159 @@
+diff --git a/keymaster/3.0/default/Android.mk b/keymaster/3.0/default/Android.mk
+old mode 100644
+new mode 100755
+index 87ad245..f12c950
+--- a/keymaster/3.0/default/Android.mk
++++ b/keymaster/3.0/default/Android.mk
+@@ -4,12 +4,24 @@ include $(CLEAR_VARS)
+ LOCAL_MODULE := android.hardware.keymaster@3.0-impl
+ LOCAL_PROPRIETARY_MODULE := true
+ LOCAL_MODULE_RELATIVE_PATH := hw
++LOCAL_CFLAGS +=-DSSS_USE_FTR_FILE \
++              -I $(ANDROID_ROOT)/../simw-top_build/android_arm64/ \
++              -I $(ANDROID_ROOT)/../simw-top/sss/inc/ \
++          -I $(ANDROID_ROOT)/../simw-top/sss/ex/inc/ \
++          -I $(ANDROID_ROOT)/../simw-top/hostlib/hostLib/inc \
++              -I $(ANDROID_ROOT)/../simw-top/hostlib/hostLib/libCommon/infra/ \
++              -I $(ANDROID_ROOT)/../simw-top/hostlib/hostLib/libCommon/log/ \
++          -I $(ANDROID_ROOT)/../simw-top/sss/port/default/ \
++          -I $(ANDROID_ROOT)/../simw-top/ext/mbedtls/include/ \
++              -I $(ANDROID_ROOT)/../simw-top/hostlib/hostLib/se05x_03_xx_xx/ \
++
+ LOCAL_SRC_FILES := \
+     KeymasterDevice.cpp \
+
+ LOCAL_SHARED_LIBRARIES := \
+     liblog \
+     libsoftkeymasterdevice \
++    libse050keymasterdevice \
+     libcrypto \
+     libkeymaster_portable \
+     libkeymaster_staging \
+@@ -26,6 +38,7 @@ LOCAL_MODULE_RELATIVE_PATH := hw
+ LOCAL_PROPRIETARY_MODULE := true
+ LOCAL_MODULE := android.hardware.keymaster@3.0-service
+ LOCAL_INIT_RC := android.hardware.keymaster@3.0-service.rc
++LOCAL_C_INCLUDES := $(LOCAL_PATH)
+ LOCAL_SRC_FILES := \
+     service.cpp
+
+@@ -40,4 +53,6 @@ LOCAL_SHARED_LIBRARIES := \
+     libhidltransport \
+     android.hardware.keymaster@3.0
+
++
++
+ include $(BUILD_EXECUTABLE)
+diff --git a/keymaster/3.0/default/KeymasterDevice.cpp b/keymaster/3.0/default/KeymasterDevice.cpp
+index d83963f..d42c86d 100644
+--- a/keymaster/3.0/default/KeymasterDevice.cpp
++++ b/keymaster/3.0/default/KeymasterDevice.cpp
+@@ -24,6 +24,7 @@
+ #include <hardware/keymaster_defs.h>
+ #include <keymaster/keymaster_configuration.h>
+ #include <keymaster/soft_keymaster_device.h>
++#include <keymaster/se050_keymaster_device.h>
+
+ namespace android {
+ namespace hardware {
+@@ -31,6 +32,7 @@ namespace keymaster {
+ namespace V3_0 {
+ namespace implementation {
+
++using ::keymaster::Se050KeymasterDevice;
+ using ::keymaster::SoftKeymasterDevice;
+
+ class SoftwareOnlyHidlKeymasterEnforcement : public ::keymaster::KeymasterEnforcement {
+@@ -161,14 +163,16 @@ err:
+ static int keymaster_device_initialize(keymaster2_device_t** dev, uint32_t* version,
+                                        bool* supports_ec, bool* supports_all_digests) {
+     const hw_module_t* mod;
+-
+     *supports_ec = true;
+
++    ALOGI("keymaster device initialization info version=%u support_ec=%d supports_all_diests=%d ",*version,*supports_ec,*supports_all_digests);
+     int rc = hw_get_module_by_class(KEYSTORE_HARDWARE_MODULE_ID, NULL, &mod);
++    ALOGI("keystore hardware module id =%s", KEYSTORE_HARDWARE_MODULE_ID);
+     if (rc) {
+-        ALOGI("Could not find any keystore module, using software-only implementation.");
++        ALOGI("Could not find any keystore module, using Se050 based implementation.");
+         // SoftKeymasterDevice will be deleted by keymaster_device_release()
+-        *dev = (new SoftKeymasterDevice(new SoftwareOnlyHidlKeymasterContext))->keymaster2_device();
++        //*dev = (new SoftKeymasterDevice(new SoftwareOnlyHidlKeymasterContext))->keymaster2_device();
++        *dev = (new Se050KeymasterDevice(new SoftwareOnlyHidlKeymasterContext))->keymaster2_device();
+         *version = -1;
+         return 0;
+     }
+@@ -220,7 +224,6 @@ inline static keymaster_key_format_t legacy_enum_conversion(const KeyFormat valu
+ inline static ErrorCode legacy_enum_conversion(const keymaster_error_t value) {
+     return ErrorCode(value);
+ }
+-
+ class KmParamSet : public keymaster_key_param_set_t {
+   public:
+     KmParamSet(const hidl_vec<KeyParameter>& keyParams) {
+@@ -400,6 +403,7 @@ Return<void> KeymasterDevice::generateKey(const hidl_vec<KeyParameter>& keyParam
+
+     if (rc == KM_ERROR_OK) {
+         // on success convert the result to wire format
++        ALOGI("Key generation success");
+         resultKeyBlob = kmBlob2hidlVec(key_blob);
+         resultCharacteristics.softwareEnforced = kmParamSet2Hidl(key_characteristics.sw_enforced);
+         resultCharacteristics.teeEnforced = kmParamSet2Hidl(key_characteristics.hw_enforced);
+@@ -411,7 +415,7 @@ Return<void> KeymasterDevice::generateKey(const hidl_vec<KeyParameter>& keyParam
+     // free buffers that we are responsible for
+     if (key_blob.key_material) free(const_cast<uint8_t*>(key_blob.key_material));
+     keymaster_free_characteristics(&key_characteristics);
+-
++    ALOGI("generateKey exit");
+     return Void();
+ }
+
+@@ -486,13 +490,17 @@ Return<void> KeymasterDevice::exportKey(KeyFormat exportFormat, const hidl_vec<u
+
+     // result variables for the wire
+     hidl_vec<uint8_t> resultKeyBlob;
+-
++    ALOGI("insde keymasterexport ");
+     // result variables the backend understands
+     keymaster_blob_t out_blob{nullptr, 0};
+
+     auto kmKeyBlob = hidlVec2KmKeyBlob(keyBlob);
++    ALOGI("insde keymasterexport 1 size :%zu",keyBlob.size());
+     auto kmClientId = hidlVec2KmBlob(clientId);
++    ALOGI("insde keymasterexport 2 client %zu",clientId.size());
+     auto kmAppData = hidlVec2KmBlob(appData);
++    ALOGI("insde keymasterexport 3  appData %zu",appData.size());
++
+
+     auto rc = keymaster_device_->export_key(keymaster_device_, legacy_enum_conversion(exportFormat),
+                                             keyBlob.size() ? &kmKeyBlob : nullptr,
+@@ -730,17 +738,27 @@ IKeymasterDevice* HIDL_FETCH_IKeymasterDevice(const char* name) {
+
+     if (name && strcmp(name, "softwareonly") == 0) {
+         dev = (new SoftKeymasterDevice(new SoftwareOnlyHidlKeymasterContext))->keymaster2_device();
++    }else if(name && strcmp(name , "se050KeymasterImpl")==0){
++        dev = (new Se050KeymasterDevice(new SoftwareOnlyHidlKeymasterContext))->keymaster2_device();
+     } else if (name && strcmp(name, "default") == 0) {
++        dev = (new Se050KeymasterDevice(new SoftwareOnlyHidlKeymasterContext))->keymaster2_device();
++        version = 2;
++        supports_ec = true;
++        supports_all_digests = true;
++    }else{
+         auto rc = keymaster_device_initialize(&dev, &version, &supports_ec, &supports_all_digests);
+         if (rc) return nullptr;
+     }
+-
++    ALOGW("keymaster device initialization passed");
+     auto kmrc = ::keymaster::ConfigureDevice(dev);
++
++    ALOGW("kmrc =%d",kmrc);
+     if (kmrc != KM_ERROR_OK) {
+         dev->common.close(&dev->common);
+         return nullptr;
+     }
+
++    ALOGI("keymaster device info before calling keymaster device function name=%s version=%u support_ec=%d supports_all_diests=%d ",name,version,supports_ec,supports_all_digests);
+     return new KeymasterDevice(dev, version, supports_ec, supports_all_digests);
+ }
+

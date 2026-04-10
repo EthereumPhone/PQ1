@@ -1,0 +1,15 @@
+Android.mk
+CMakeLists.txt
+a70cm/*
+a71ch/*
+a71cl/*
+amgr/*
+api/*
+ccid/*
+embSeEngine/*
+kinetis/*
+mbedtls/*
+rjct/*
+tstUtil/*
+utest/*
+vcom/*

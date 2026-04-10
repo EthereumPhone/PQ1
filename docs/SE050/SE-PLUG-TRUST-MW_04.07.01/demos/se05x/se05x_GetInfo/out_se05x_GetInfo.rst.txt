@@ -1,0 +1,99 @@
+App   :INFO :PlugAndTrust_v04.02.00_20220524
+App   :INFO :Running C:\_ddm\simw-top_build\se_x86\bin\Debug\se05x_GetInfo.exe
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+App   :WARN :#####################################################
+App   :INFO :uid (Len=18)
+      A0 A1 A2 A3    A4 A5 A6 A7    A8 A9 AA AB    AC AD AE AF
+      B0 B1
+App   :INFO :Running C:\_ddm\simw-top_build\se_x86\bin\Debug\se05x_GetInfo.exe
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :WARN :#####################################################
+App   :INFO :Applet Major = 7
+App   :INFO :Applet Minor = 2
+App   :INFO :Applet patch = 0
+App   :INFO :AppletConfig = 3FFF
+App   :INFO :With    ECDSA_ECDH_ECDHE
+App   :INFO :With    EDDSA
+App   :INFO :With    DH_MONT
+App   :INFO :With    HMAC
+App   :INFO :With    RSA_PLAIN
+App   :INFO :With    RSA_CRT
+App   :INFO :With    AES
+App   :INFO :With    DES
+App   :INFO :With    PBKDF
+App   :INFO :With    TLS
+App   :INFO :With    MIFARE
+App   :INFO :With    I2CM
+App   :INFO :Internal = FFFF
+App   :WARN :#####################################################
+App   :INFO :Tag value - proprietary data 0xFE = 0xFE
+App   :INFO :Length of following data 0x45 = 0x45
+App   :INFO :Tag card identification data (Len=2)
+      DF 28
+App   :INFO :Length of card identification data = 0x42
+App   :INFO :Tag configuration ID (Must be 0x01) = 0x01
+App   :INFO :Configuration ID (Len=12)
+      00 01 A8 78    80 10 29 0E    F3 33 19 C1
+App   :INFO :OEF ID (Len=2)
+      A8 78
+App   :INFO :Tag patch ID (Must be 0x02) = 0x02
+App   :INFO :Patch ID (Len=8)
+      00 00 00 00    00 00 00 00
+App   :INFO :Tag platform build ID1 (Must be 0x03) = 0x03
+App   :INFO :Platform build ID (Len=24)
+      4A 33 52 33    35 31 30 32    39 42 34 31    31 31 30 30
+      30 30 30 30    30 30 30 30
+App   :INFO :JCOP Platform ID = J3R351029B411100
+App   :INFO :Tag FIPS mode (Must be 0x05) = 0x05
+App   :INFO :FIPS mode var = 0x00
+App   :INFO :Tag pre-perso state (Must be 0x07) = 0x07
+App   :INFO :Bit mask of pre-perso state var = 0x01
+App   :INFO :Tag ROM ID (Must be 0x08) = 0x08
+App   :INFO :ROM ID (Len=8)
+      52 4F 4D 5F    5F 5F 49 44
+App   :INFO :Status Word (SW) (Len=2)
+      90 00
+App   :INFO :se05x_GetInfoPlainApplet Example Success !!!...
+App   :WARN :#####################################################
+App   :INFO :cplc_data.IC_fabricator (Len=2)
+      47 90
+App   :INFO :cplc_data.IC_type1 (Len=2)
+      D3 21
+App   :INFO :cplc_data.Operating_system_identifier (Len=2)
+      47 00
+App   :INFO :cplc_data.Operating_system_release_date (Len=2)
+      00 00
+App   :INFO :cplc_data.Operating_system_release_level (Len=2)
+      00 00
+App   :INFO :cplc_data.IC_fabrication_date (Len=2)
+      74 74
+App   :INFO :cplc_data.IC_Serial_number (Len=4)
+      6E 6E 6E 62
+App   :INFO :cplc_data.IC_Batch_identifier (Len=2)
+      62 62
+App   :INFO :cplc_data.IC_module_fabricator (Len=2)
+      00 00
+App   :INFO :cplc_data.IC_module_packaging_date (Len=2)
+      00 00
+App   :INFO :cplc_data.ICC_manufacturer (Len=2)
+      00 00
+App   :INFO :cplc_data.IC_embedding_date (Len=2)
+      00 00
+App   :INFO :cplc_data.IC_OS_initializer (Len=2)
+      57 58
+App   :INFO :cplc_data.IC_OS_initialization_date (Len=2)
+      59 4E
+App   :INFO :cplc_data.IC_OS_initialization_equipment (Len=4)
+      4E 4E 4E 4E
+App   :INFO :cplc_data.IC_personalizer (Len=2)
+      00 00
+App   :INFO :cplc_data.IC_personalization_date (Len=2)
+      00 00
+App   :INFO :cplc_data.IC_personalization_equipment_ID (Len=4)
+      00 00 00 00
+App   :INFO :cplc_data.SW (Len=2)
+      90 00
+App   :INFO :ex_sss Finished
+

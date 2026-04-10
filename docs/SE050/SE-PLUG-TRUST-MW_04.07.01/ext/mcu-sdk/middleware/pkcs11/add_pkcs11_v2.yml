@@ -1,0 +1,57 @@
+---
+
+middleware.pkcs11.ui_control:
+  section-type: component_support
+  component_info:
+    common:
+      fixed_id: oasis_pkcs11
+      manifest_name: pkcs11
+      version: 2.40.1
+      ui_category: Middleware
+      ui_control: true
+      ui_control_default: true
+      ui_name: pkcs11
+      ui_description: 'Public Key Cryptography Standard #11 defines generic cryptographic token interface.'
+      ui_release_specific: true
+      component_set_path:
+        repo_base_path: middleware/pkcs11
+
+bundles.pkcs11:
+  section-type: component_support
+  __requires__:
+  - middleware.pkcs11.ui_control
+  component_info:
+    common:
+      full_name: 'OASIS PKCS #11'
+      description: 'Public Key Cryptography Standard #11 defines generic cryptographic token interface.'
+      version: 2.40.1
+      class: AWS IoT
+      cmsis_bundle: AWS
+  bundle: true
+
+middleware.pkcs11:
+  section-type: component
+  contents:
+    repo_base_path: middleware/pkcs11
+    project_base_path: pkcs11
+    cc-include:
+    - repo_relative_path: ./
+    files:
+    - source: README.md
+    - source: pkcs11t.h
+    - source: pkcs11f.h
+    - source: pkcs11.h
+    - source: LICENSE.md
+    - source: CONTRIBUTING.md
+  component_info:
+    common:
+      type: middleware
+      full_name: pkcs11
+      manifest_name: pkcs11
+      description: 'Public Key Cryptography Standard #11 defines generic cryptographic token interface.'
+      version: 2.40.1
+      vendor: OASIS TC
+      user_visible: true
+      change_log: "./ChangeLogKSDK.txt"
+      component_bundle: bundles.pkcs11
+      belong_to: middleware.pkcs11.ui_control

@@ -1,0 +1,12 @@
+usage: openssl_rnd.py [-h] [--connection_data CONNECTION_DATA]
+
+Generate few random numbers from the attached secure element.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+
+Example invocation::
+
+    python openssl_rnd.py --connection_data 127.0.0.1:8050

@@ -1,0 +1,27 @@
+App   :INFO :PlugAndTrust_v02.13.00_20200208
+App   :INFO :Running ..\..\..\simw-top_build\se_x86\bin\Debug\ex_symmetric.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+sss   :INFO :atr (Len=0)
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Running AES symmetric Example ex_sss_symmetric.c
+App   :INFO :Do Encryption
+App   :INFO :iv (Len=16)
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00 
+App   :INFO :srcData (Len=16)
+      48 45 4C 4C    4F 48 45 4C    4C 4F 48 45    4C 4C 4F 31 
+App   :INFO :Encryption successful !!!
+App   :INFO :encrypted data (Len=16)
+      32 A6 04 88    C5 B3 FF 40    50 AF 56 A5    68 AE D1 05 
+App   :INFO :Do Decryption
+App   :INFO :iv (Len=16)
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00 
+App   :INFO :Encrypted data (Len=16)
+      32 A6 04 88    C5 B3 FF 40    50 AF 56 A5    68 AE D1 05 
+App   :INFO :Decryption successful !!!
+App   :INFO :decrypted data (Len=16)
+      48 45 4C 4C    4F 48 45 4C    4C 4F 48 45    4C 4C 4F 31 
+App   :INFO :ex_sss_symmetric Example Success !!!...
+App   :INFO :ex_sss Finished

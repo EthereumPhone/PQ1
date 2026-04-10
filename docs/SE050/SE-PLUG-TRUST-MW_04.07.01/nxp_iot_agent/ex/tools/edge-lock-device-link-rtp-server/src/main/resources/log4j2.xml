@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+	<Appenders>
+		<Console name="stdout" target="SYSTEM_OUT">
+			<PatternLayout
+				pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %X{correlation-id} %X{deviceId} %c{1}:%L - %m %n" />
+		</Console>
+	</Appenders>
+	<Loggers>
+		<Root level="info">
+			<AppenderRef ref="stdout" />
+		</Root>
+		<logger level="info"
+			name="com.nxp.iot.devicelink.RtpServer"
+			additivity="false">
+			<AppenderRef ref="stdout"/>
+		</logger>
+	</Loggers>
+</Configuration>

@@ -1,0 +1,9 @@
+Generate random number from the secure element
+
+Arguments:
+   --connection_data CONNECTION_DATA
+
+                     CONNECTION_DATA ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+
+Example:
+   python openssl_rand.py --connection_data 127.0.0.1:8050

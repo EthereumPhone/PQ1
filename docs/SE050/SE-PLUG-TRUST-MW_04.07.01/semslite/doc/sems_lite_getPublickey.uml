@@ -1,0 +1,16 @@
+@startuml
+
+    title Get Public key
+
+    participant app as "Application"
+    participant SEMSLiteAgent as "SEMS_Lite_MW"
+    === Connect SE ==
+    participant "Secure Element" as se
+
+    app -> SEMSLiteAgent : get Public key
+	SEMSLiteAgent -> se : get Public key
+    SEMSLiteAgent \-- se : returns
+	=== Disconnect SE ==
+    app \-- SEMSLiteAgent : returns
+	
+@enduml

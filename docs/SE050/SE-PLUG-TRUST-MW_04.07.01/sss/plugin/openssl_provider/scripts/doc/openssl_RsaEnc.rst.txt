@@ -1,0 +1,19 @@
+usage: openssl_RsaEnc.py [-h] --key_type KEY_TYPE
+                      [--connection_data CONNECTION_DATA]
+
+This example performs Encrypt Decrypt operations using RSA keys.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+required arguments:
+  --key_type KEY_TYPE   Supported key types =>  ``rsa1024``, ``rsa2048``, ``rsa3072``, ``rsa4096``
+
+optional arguments:
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+
+Example invocation::
+
+    python openssl_RSA.py --key_type rsa2048
+    python openssl_RSA.py --key_type rsa4096 --connection_data 127.0.0.1:8050

@@ -1,0 +1,27 @@
+usage: openssl_Ecdh_mont.py [-h] --key_type KEY_TYPE
+                            [--connection_type CONNECTION_TYPE]
+                            [--connection_data CONNECTION_DATA]
+
+Validation of Montgomery ECDH with OpenSSL engine using EC mont keys
+
+This example showcases montogomery ECDH between openssl engine and openssl.
+
+Precondition:
+    - Inject keys using ``openssl_provisionEC_mont.py``.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+required arguments:
+  --key_type KEY_TYPE   Supported key types => ``x25519``, ``x448``
+
+optional arguments:
+  --connection_type CONNECTION_TYPE
+                        Supported connection types => ``t1oi2c``, ``sci2c``, ``vcom``, ``jrcpv1``, ``jrcpv2``, ``pcsc``. Default: ``t1oi2c``
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+
+Example invocation::
+
+    python openssl_Ecdh_mont.py --key_type x448
+    python openssl_Ecdh_mont.py --key_type x25519 --connection_type jrcpv2 --connection_data 127.0.0.1:8050

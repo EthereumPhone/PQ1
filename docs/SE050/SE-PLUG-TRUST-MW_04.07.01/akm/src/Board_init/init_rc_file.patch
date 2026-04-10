@@ -1,0 +1,24 @@
+diff --git a/rootdir/init.rc b/rootdir/init.rc
+index d3504ad..377336c 100644
+--- a/rootdir/init.rc
++++ b/rootdir/init.rc
+@@ -204,6 +204,9 @@ on init
+     chmod 0664 /dev/cpuset/top-app/tasks
+     chmod 0664 /dev/cpuset/tasks
+ 
++    # set system access to /dev/i2c-0 module
++    chmod 0660 /dev/i2c-0
++    chown root system /dev/i2c-0
+ 
+     # qtaguid will limit access to specific data based on group memberships.
+     #   net_bw_acct grants impersonation of socket owners.
+@@ -454,6 +457,9 @@ on post-fs-data
+     mkdir /data/vendor 0771 root root
+     mkdir /data/vendor/hardware 0771 root root
+ 
++    # create secure iot folder for fat files
++    mkdir /data/vendor/SE05x 0771 root system
++
+     # For security reasons, /data/local/tmp should always be empty.
+     # Do not place files or directories in /data/local/tmp
+     mkdir /data/local/tmp 0771 shell shell

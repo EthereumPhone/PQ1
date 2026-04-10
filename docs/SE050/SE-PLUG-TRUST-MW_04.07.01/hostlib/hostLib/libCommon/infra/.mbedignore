@@ -1,0 +1,14 @@
+a71_debug*
+app_boot*
+nxLog_Android.c
+nxLog_Gen.bat
+nxLog_Gen.py
+nxLog_README.txt
+nxLog_UseCases.h
+sm_api.h
+sm_app_boot.c
+sm_demo_utils.c
+sm_demo_utils.h
+sm_demo_utils_rtos.c
+sm_errors.c
+sm_errors.h

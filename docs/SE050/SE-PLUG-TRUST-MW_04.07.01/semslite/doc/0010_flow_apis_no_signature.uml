@@ -1,0 +1,63 @@
+
+
+'
+' Since we do not know the signature of the incoming script
+' we just run it blindly.... Host can not take too much 
+' decisions
+'
+
+@startuml
+
+title We do not know signature of the input Script
+
+participant APP as "Application"
+participant SEMS_Lite as "SEMS Lite Lib"
+participant SE as "Secure Element"
+
+autonumber "<b>[00]"
+
+APP -> SEMS_Lite : sems_lite_agent_init_context()
+
+APP -> SEMS_Lite : sems_lite_agent_session_open()
+
+APP -> SEMS_Lite : sems_lite_agent_load_package()
+
+activate SEMS_Lite
+
+SEMS_Lite -> SE : Run Script()
+
+SEMS_Lite <-- SE : SE_ReturnStatus
+'To do , how to detect error
+alt ReturnStatus == Success
+	APP <-- SEMS_Lite : Success
+else ReturnStatus == Recovery
+		note over APP, SE
+			SEMS Lite has explicity requested to run a recovery script.
+			So, we have to run recovery script. This is explained in other image
+		end note
+else ReturnStatus == Failed
+	note over APP, SE
+		Any kind of failure code that does not match above.
+		
+		This can be due to may reasons...  even may be because previous script got aborted/interrupted, etc.
+	end note
+	SEMS_Lite -> SE : Check TearStatus
+	SEMS_Lite <-- SE: TearStatus
+	alt if TearStatus == No Tear
+		note over APP, SE
+			SE returns failure, without tearing. Something bad must have happened
+		end note
+	else TearStatus == HasTear
+		note over APP, SE
+			We have to re-run the same script
+		end note
+	end
+end
+
+APP -> SEMS_Lite : sems_lite_agent_session_close()
+
+	
+
+deactivate SEMS_Lite
+
+@enduml

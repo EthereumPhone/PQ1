@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<!--
+Copyright 2019 NXP
+-->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Contents &#8212; Plug &amp; Trust MW v04.07.01 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/bootstrap-sphinx.css" />
+    <link rel="stylesheet" type="text/css" href="_static/graphviz.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="1. NXP Plug &amp; Trust Middleware" href="index.html" />
+<meta charset='utf-8'>
+<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="text/javascript" src="_static/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="_static/js/jquery-fix.js"></script>
+<script type="text/javascript" src="_static/bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="_static/bootstrap-sphinx.js"></script>
+
+  </head><body>
+
+  <div id="navbar" class="navbar navbar-inverse navbar-default navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="#"><span><img src="_static/NXP_logo_JPG.jpg"></span>
+          MW</a>
+        <span class="navbar-text navbar-version pull-left"><b>v04.07.01</b></span>
+      </div>
+
+        <div class="collapse navbar-collapse nav-collapse">
+          <ul class="nav navbar-nav">
+            
+            
+              <li class="dropdown globaltoc-container">
+  <a role="button"
+     id="dLabelGlobalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">TOC <b class="caret"></b></a>
+  <ul class="dropdown-menu globaltoc"
+      role="menu"
+      aria-labelledby="dLabelGlobalToc"><ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">1. NXP Plug &amp; Trust Middleware</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="organization-of-documentation.html">1.1. Organization of Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="folder-structure.html">1.2. Folder Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sw-prerequisites.html">1.3. List of Platform Prerequisites</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="changes/index.html">2. Changes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="changes/pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_14_00.html">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss-apis.html">3.3. SSS APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/i2cm.html">3.6. I2CM / Secure Sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/logging.html">3.7. Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/scp03/index.html">3.9. Platform SCP03 Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/secure_boot.html">3.19. Secure Boot</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="building/index.html">4. Building / Compiling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="scripts/cmake_options.html">4.7. CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="demos/index.html">5. Demo and Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_package.html">7.2. Update Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plugins/index.html">8. Plugins / Add-ins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/openssl/scripts/readme.html">8.1. Introduction on OpenSSL engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/Provisioning/readme.html">9.5. CLI Provisioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/cli_data_format.html">9.8. CLI Data formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="appendix.html">10. Appendix</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/api_list.html">10.13. Plug &amp; Trust MW APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Revision_history.html">12. Revision history</a></li>
+</ul>
+</ul>
+</li>
+              
+                <li class="dropdown">
+  <a role="button"
+     id="dLabelLocalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">Page <b class="caret"></b></a>
+  <ul class="dropdown-menu localtoc"
+      role="menu"
+      aria-labelledby="dLabelLocalToc"><ul>
+<li><a class="reference internal" href="#">Contents</a><ul>
+<li><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
+</ul>
+</li>
+</ul>
+</ul>
+</li>
+              
+            
+            
+              
+                
+  <li>
+    <a href="index.html" title="Next Chapter: 1. NXP Plug & Trust Middleware"><span class="glyphicon glyphicon-chevron-right visible-sm"></span><span class="hidden-sm hidden-tablet">1. NXP Plug &... &raquo;</span>
+    </a>
+  </li>
+              
+            
+            
+            
+            
+          </ul>
+
+          
+
+        </div>
+    </div>
+  </div>
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+
+<div class="sidebar-header">
+    <h3>Plug &amp; Trust MW</h3>
+</div>
+
+<div class="row">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes/index.html">2. Changes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stack/index.html">3. Plug &amp; Trust MW Stack</a></li>
+<li class="toctree-l1"><a class="reference internal" href="building/index.html">4. Building / Compiling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="demos/index.html">5. Demo and Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="semslite/doc/index.html">7. SEMS Lite Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins/index.html">8. Plugins / Add-ins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-tool.html">9. CLI Tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="appendix.html">10. Appendix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Revision_history.html">12. Revision history</a></li>
+</ul>
+
+</div>
+<div class="row">
+    <form class="form" action="search.html" method="get">
+     <div class="form-group">
+      <label for="Search">Search:</label>
+      <input type="text" name="q" class="form-control" placeholder="Search" />
+     </div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+        </div>
+      </div>
+    <div class="body col-md-9 content" role="main">
+      
+  <section id="contents">
+<h1>Contents<a class="headerlink" href="#contents" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1"><a class="reference internal" href="changes/index.html">2. Changes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="changes/pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#external-module-update">2.4.1. External module update</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#new-platform-support">2.4.2. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#ssscli-changes">2.4.3. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#functional-changes-new-feature-support">2.4.4. Functional Changes / New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#sems-lite-change">2.4.5. SEMS Lite Change</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#file-folder-relocation">2.4.6. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#build-system-changes">2.4.7. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#apis-enum-types-changes">2.4.8. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_07_00.html#edgelock-2go-agent-changes">2.4.9. EdgeLock 2GO Agent Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_05_00.html#build-system-changes">2.9.1. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_05_00.html#functional-changes">2.9.2. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_05_00.html#examples-demo-updates">2.9.3. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_05_00.html#apis-enum-types-changes">2.9.4. APIs &amp; enum/types Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_04_02.html#changes">2.10.1. Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_04_01.html#changes">2.11.1. Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_03.html#changes">2.12.1. Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_02.html#functional-updates">2.13.1. Functional Updates</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_01.html#important-security-updates">2.14.1. Important Security Updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_01.html#other-miscellaneous-changes">2.14.2. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_00.html#build-system-changes">2.15.1. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_00.html#apis-enum-types-changes">2.15.2. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_00.html#functional-changes">2.15.3. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_00.html#new-feature-support">2.15.4. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_00.html#ssscli-changes">2.15.5. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_00.html#examples-demo-updates">2.15.6. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_03_00.html#other-miscellaneous-changes">2.15.7. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_02_00.html#build-system-changes">2.16.1. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_02_00.html#apis-enum-types-changes">2.16.2. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_02_00.html#functional-changes">2.16.3. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_02_00.html#new-feature-support">2.16.4. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_02_00.html#ssscli-changes">2.16.5. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_02_00.html#examples-demo-updates">2.16.6. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_02_00.html#other-miscellaneous-changes">2.16.7. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_01_03.html#other-miscellaneous-changes">2.17.1. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_01_01.html#semslite">2.18.1. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_01_01.html#other-miscellaneous-changes">2.18.2. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_01_00.html#semslite">2.19.1. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_01_00.html#examples-demo-updates">2.19.2. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_01_00.html#other-miscellaneous-changes">2.19.3. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_01.html#build-system-changes">2.20.1. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_01.html#functional-changes">2.20.2. Functional Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#file-folder-relocation">2.21.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#build-system-changes">2.21.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#apis-enum-types-changes">2.21.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#functional-changes">2.21.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#new-platform-support">2.21.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#new-feature-support">2.21.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#semslite">2.21.7. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#ssscli-changes">2.21.8. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#documentation-changes">2.21.9. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#examples-demo-updates">2.21.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#communication-layer-changes">2.21.11. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#edgelock-2go-agent">2.21.12. EdgeLock 2GO agent</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#user-interface-changes">2.21.13. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#external-modules-changes">2.21.14. External modules Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v04_00_00.html#other-miscellaneous-changes">2.21.15. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#file-folder-relocation">2.22.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#build-system-changes">2.22.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#apis-enum-types-changes">2.22.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#functional-changes">2.22.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#new-platform-support">2.22.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#new-feature-support">2.22.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#semslite">2.22.7. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#ssscli-changes">2.22.8. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#documentation-changes">2.22.9. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#examples-demo-updates">2.22.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#communication-layer-changes">2.22.11. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#edgelock-2go-agent">2.22.12. EdgeLock 2GO agent</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#user-interface-changes">2.22.13. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#external-modules-changes">2.22.14. External modules Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_03_00.html#other-miscellaneous-changes">2.22.15. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#file-folder-relocation">2.23.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#build-system-changes">2.23.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#apis-enum-types-changes">2.23.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#functional-changes">2.23.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#new-platform-support">2.23.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#new-feature-support">2.23.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#semslite">2.23.7. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#ssscli-changes">2.23.8. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#documentation-changes">2.23.9. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#examples-demo-updates">2.23.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#communication-layer-changes">2.23.11. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#edgelock-2go-agent">2.23.12. EdgeLock 2GO agent</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#user-interface-changes">2.23.13. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#external-modules-changes">2.23.14. External modules Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_01.html#other-miscellaneous-changes">2.23.15. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#file-folder-relocation">2.24.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#build-system-changes">2.24.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#apis-enum-types-changes">2.24.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#functional-changes">2.24.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#new-platform-support">2.24.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#new-feature-support">2.24.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#semslite">2.24.7. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#ssscli-changes">2.24.8. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#documentation-changes">2.24.9. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#examples-demo-updates">2.24.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#communication-layer-changes">2.24.11. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#edgelock-2go-agent">2.24.12. EdgeLock 2GO agent</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#user-interface-changes">2.24.13. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#external-modules-changes">2.24.14. External modules Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_01_00.html#other-miscellaneous-changes">2.24.15. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_06.html#examples-demo-updates">2.25.1. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_06.html#edgelock-2go-agent">2.25.2. EdgeLock 2GO agent</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_05.html#functional-changes">2.26.1. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_05.html#new-feature-support">2.26.2. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_05.html#ssscli-changes">2.26.3. SSSCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_05.html#documentation-changes">2.26.4. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_05.html#examples-demo-updates">2.26.5. Examples / DEMO updates</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#file-folder-relocation">2.27.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#build-system-changes">2.27.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#apis-enum-types-changes">2.27.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#functional-changes">2.27.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#new-platform-support">2.27.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#new-feature-support">2.27.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#semslite">2.27.7. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#ssscli-pycli-changes">2.27.8. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#documentation-changes">2.27.9. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#examples-demo-updates">2.27.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#communication-layer-changes">2.27.11. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#user-interface-changes">2.27.12. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#external-modules-changes">2.27.13. External modules Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_04.html#other-miscellaneous-changes">2.27.14. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#file-folder-relocation">2.28.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#build-system-changes">2.28.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#apis-enum-types-changes">2.28.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#functional-changes">2.28.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#new-platform-support">2.28.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#new-feature-support">2.28.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#semslite">2.28.7. SEMSLite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#ssscli-pycli-changes">2.28.8. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#documentation-changes">2.28.9. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#examples-demo-updates">2.28.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#communication-layer-changes">2.28.11. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#user-interface-changes">2.28.12. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#external-modules-changes">2.28.13. External modules Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_03.html#other-miscellaneous-changes">2.28.14. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#file-folder-relocation">2.29.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#build-system-changes">2.29.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#apis-enum-types-changes">2.29.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#functional-changes">2.29.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#new-platform-support">2.29.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#new-feature-support">2.29.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#ssscli-pycli-changes">2.29.7. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#documentation-changes">2.29.8. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#examples-demo-updates">2.29.9. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#communication-layer-changes">2.29.10. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#user-interface-changes">2.29.11. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v03_00_02.html#other-miscellaneous-changes">2.29.12. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_01.html#apis-enum-types-changes">2.30.1. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_01.html#documentation-changes">2.30.2. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_01.html#other-miscellaneous-changes">2.30.3. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#file-folder-relocation">2.31.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#build-system-changes">2.31.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#apis-enum-types-changes">2.31.3. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#functional-changes">2.31.4. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#new-platform-support">2.31.5. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#new-feature-support">2.31.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#ssscli-pycli-changes">2.31.7. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#documentation-changes">2.31.8. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#examples-demo-updates">2.31.9. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#communication-layer-changes">2.31.10. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#user-interface-changes">2.31.11. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_16_00.html#other-miscellaneous-changes">2.31.12. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_15_00.html#build-system-changes">2.32.1. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_15_00.html#apis-enum-types-changes">2.32.2. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_15_00.html#functional-changes">2.32.3. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_15_00.html#new-feature-support">2.32.4. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_15_00.html#documentation-changes">2.32.5. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_15_00.html#examples-demo-updates">2.32.6. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_15_00.html#other-miscellaneous-changes">2.32.7. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_14_00.html">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#file-folder-relocation">2.33.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#build-system-changes">2.33.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#new-platform-support">2.33.3. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#apis-enum-types-changes">2.33.4. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#functional-changes">2.33.5. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#new-feature-support">2.33.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#ssscli-pycli-changes">2.33.7. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#communication-layer-changes">2.33.8. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#id1">2.33.9. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#examples-demo-updates">2.33.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#documentation-changes">2.33.11. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_14_00.html#other-miscellaneous-changes">2.33.12. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#akm-specific-changes">2.37.1. AKM Specific changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#example-updates">2.37.2. Example Updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#other-miscellaneous-changes">2.37.3. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#id1">2.38.1. AKM Specific changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#new-example-example-updates">2.38.2. New example / example updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#id2">2.38.3. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#new-feature-support">2.39.1. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#ssscli-pycli-changes">2.39.2. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_12_00.html#documentation-changes">2.39.3. Documentation Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_03.html#file-folder-relocation">2.40.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_03.html#new-feature-support">2.40.2. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_03.html#scripts-and-build-changes">2.40.3. Scripts and Build changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_03.html#documentation-changes">2.40.4. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_03.html#other-miscellaneous-changes">2.40.5. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#apis-enum-types-changes">2.41.1. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#functional-changes">2.41.2. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#new-feature-support">2.41.3. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#scripts-and-build-changes">2.41.4. Scripts and Build changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#documentation-changes">2.41.5. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#communication-layer-changes">2.41.6. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#user-interface-changes">2.41.7. User Interface Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_01.html#other-miscellaneous-changes">2.41.8. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#file-folder-relocation">2.42.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#apis-enum-types-changes">2.42.2. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#functional-changes">2.42.3. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#new-platform-support">2.42.4. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#scripts-and-build-changes">2.42.5. Scripts and Build changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#ssscli-pycli-changes">2.42.6. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#documentation-changes">2.42.7. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#communication-layer-changes">2.42.8. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_11_00.html#other-miscellaneous-changes">2.42.9. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_10_00.html#apis-enum-types-changes">2.43.1. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_10_00.html#new-platform-support">2.43.2. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_10_00.html#scripts-and-build-changes">2.43.3. Scripts and Build changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_10_00.html#ssscli-pycli-changes">2.43.4. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_10_00.html#other-miscellaneous-changes">2.43.5. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_09_00.html#middleware">2.44.1. Middleware</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_09_00.html#cli-tool">2.44.2. CLI Tool</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_07_00.html#middleware">2.45.1. Middleware</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_07_00.html#smcom">2.45.2. SMCom</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_07_00.html#sss-apis">2.45.3. SSS APIs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_07_00.html#cli-tool">2.45.4. CLI Tool</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_07_00.html#development-platform">2.45.5. Development Platform</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_06_00.html#demos">2.46.1. Demos</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_06_00.html#plug-trust-middleware">2.46.2. Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_06_00.html#documentation">2.46.3. Documentation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="changes/v02_06_00.html#development-platform">2.46.4. Development Platform</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="changes/v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss-apis.html">3.3. SSS APIs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/introduction.html">3.3.1. SSS: Introduction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_session.html">3.3.2. Session</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_key_store.html">3.3.3. Key Store</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_key_object.html">3.3.4. Key Object</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_asymmetric.html">3.3.5. Asymmetric</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_policy.html">3.3.6. Policies</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/ex/doc/ex-boot.html">3.3.7. Example Boot-Up</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_key-format.html">3.3.8. SSS api key format (asymmetric keys)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_all_types.html">3.3.9. List of all SSS APIs and structures</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/doc/apis-sss_se05x_all_types.html">3.3.10. List of all SSS SE05x APIs and structures</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/param_checks.html#parameter-convention">3.5.1. Parameter Convention</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/param_checks.html#helper-macros">3.5.2. Helper Macros</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/param_checks.html#apis">3.5.3. Apis</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/i2cm.html">3.6. I2CM / Secure Sensor</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/i2cm.html#normal-read-write">3.6.1. Normal Read/Write</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/i2cm.html#attested-read">3.6.2. Attested Read</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/i2cm.html#transaction">3.6.3. Transaction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/i2cm.html#read-with-attestation">3.6.4. Read with Attestation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/i2cm.html#i2c-master-apis">3.6.5. I2C Master APIs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/logging.html">3.7. Logging</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/logging.html#logging-level">3.7.1. Logging level</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/logging.html#adding-log-messages-into-the-source-code">3.7.2. Adding log messages into the source code</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/logging.html#logging-apis">3.7.3. Logging APIs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/logging.html#logging-header-files">3.7.4. Logging Header Files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/logging.html#changing-logging-level">3.7.5. Changing logging level</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/feature-file.html#when-using-cmake">3.8.1. When Using CMake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/feature-file.html#when-using-mcuxpresso-ide">3.8.2. When Using MCUXpresso IDE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/feature-file.html#fsl-sss-ftr-default-h">3.8.3. <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr_default.h</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/feature-file.html#using-feature-file-to-reduce-code-size">3.8.4. Using feature file to reduce code size</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/feature-file.html#sss-have-applet-se05x-a">3.8.5. SSS_HAVE_APPLET_SE05X_A</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/feature-file.html#sss-have-applet-se05x-b">3.8.6. SSS_HAVE_APPLET_SE05X_B</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/feature-file.html#sss-have-applet-se05x-c">3.8.7. SSS_HAVE_APPLET_SE05X_C</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/scp03/index.html">3.9. Platform SCP03 Authentication</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/scp03/platformscp03.html">3.9.1. MW Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/scp03/platf-scp-from-fs.html">3.9.2. Using Platform SCP Keys from File System</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/auth/auth-objects-userid.html#user-id-provisioning-injection">3.11.1. User ID - Provisioning / Injection</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/auth/auth-objects-userid.html#user-id-use-for-connection-authentication">3.11.2. User ID - Use for connection / authentication</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/auth/auth-objects-userid.html#user-id-applet-spec-notes">3.11.3. User ID - Applet Spec Notes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/auth/auth-objects-eckey.html#eckey-keys-used">3.13.1. ECKey - Keys Used</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/auth/auth-objects-eckey.html#eckey-use-for-connection-authentication">3.13.2. ECKey - Use for connection / authentication</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/ex/doc/puf-scp03.html#activation-code">3.17.1. Activation Code</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/ex/doc/puf-scp03.html#key-code">3.17.2. Key Code</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/ex/doc/puf-scp03.html#using-with-lpc55s">3.17.3. Using with LPC55S</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="sss/doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stack/secure_boot.html">3.19. Secure Boot</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="stack/secure_boot.html#secure-boot-flow">3.19.1. Secure Boot flow</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/secure_boot.html#secondary-bootloader">3.19.2. Secondary Bootloader</a></li>
+<li class="toctree-l3"><a class="reference internal" href="stack/secure_boot.html#secure-binding">3.19.3. Secure Binding</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="building/index.html">4. Building / Compiling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="building/windows.html">4.1. Windows Build</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="building/windows.html#prerequisite">4.1.1. Prerequisite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/windows.html#create-build-files">4.1.2. Create Build files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/windows.html#sss-examples">4.1.3. SSS Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-sdk.html#prerequisite">4.2.1. Prerequisite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-sdk.html#importing-an-example">4.2.2. Importing an example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-sdk.html#running-debugging-example">4.2.3. Running / Debugging example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-sdk.html#logging-on-console">4.2.4. Logging on console</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-cmake.html#prerequisite">4.3.1. Prerequisite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-cmake.html#importing-the-project">4.3.2. Importing the Project</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-cmake.html#running-debugging-example">4.3.3. Running / Debugging example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/frdm-k64f-cmake.html#logging-on-console">4.3.4. Logging on console</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="building/imx6.html">4.4. i.MX Linux Build</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="building/imx6.html#prerequisite">4.4.1. Prerequisite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/imx6.html#build-instructions">4.4.2. Build Instructions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/imx6.html#sss-examples">4.4.3. SSS Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="building/rpi3.html">4.5. Raspberry Pi Build</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="building/rpi3.html#prerequisite">4.5.1. Prerequisite</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/rpi3.html#connecting-se05x-with-raspberrypi">4.5.2. Connecting SE05X with RaspberryPi</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/rpi3.html#enable-pin-configuration-for-se05x">4.5.3. Enable Pin configuration for SE05X</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/rpi3.html#build-instructions">4.5.4. Build Instructions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/rpi3.html#sss-examples">4.5.5. SSS Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="building/cmake.html">4.6. CMake</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="building/cmake.html#reference-commands">4.6.1. Reference Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="building/cmake.html#cmake-cross-compiling">4.6.2. CMake - Cross compiling</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="scripts/cmake_options.html">4.7. CMake Options</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-applet">4.7.1. PTMW_Applet</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-se05x-ver">4.7.2. PTMW_SE05X_Ver</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-host">4.7.3. PTMW_Host</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-smcom">4.7.4. PTMW_SMCOM</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-hostcrypto">4.7.5. PTMW_HostCrypto</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-rtos">4.7.6. PTMW_RTOS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-mbedtls-alt">4.7.7. PTMW_mbedTLS_ALT</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-scp">4.7.8. PTMW_SCP</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-fips">4.7.9. PTMW_FIPS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-sbl">4.7.10. PTMW_SBL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-se05x-auth">4.7.11. PTMW_SE05X_Auth</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-log">4.7.12. PTMW_Log</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#cmake-build-type">4.7.13. CMAKE_BUILD_TYPE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-openssl">4.7.14. PTMW_OpenSSL</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-mbedtls">4.7.15. PTMW_MBedTLS</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#ptmw-se-reset-logic">4.7.16. PTMW_SE_RESET_LOGIC</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#feature-control">4.7.17. Feature Control</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#deprecated-defines">4.7.18. Deprecated Defines</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#nxp-internal-options">4.7.19. NXP Internal Options</a></li>
+<li class="toctree-l3"><a class="reference internal" href="scripts/cmake_options.html#other-variables">4.7.20. Other Variables</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="demos/index.html">5. Demo and Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#demo-list">5.1. Demo List</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/demo-list.html">5.1.1. DEMO List</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#sss-api-examples">5.2. SSS API Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/ex/doc/sss-api-examples.html">5.2.1. SSS API Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#cloud-demos">5.3. Cloud Demos</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/ksdk/aws_jitr/readme.html">5.3.1. AWS Demo for MCU-SDK</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/linux/aws/readme.html">5.3.2. AWS Demo for iMX Linux / RaspberryPi</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/ksdk/azure/Readme.html">5.3.3. Azure Demo for MCU-SDK</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/linux/azure/readme.html">5.3.4. Azure Demo for iMX Linux / Raspberry Pi</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#linux-specific-demos">5.4. Linux Specific Demos</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/linux/tls_client/tls_client_demo.html">5.4.1. OpenSSL Engine / Provider: TLS Client example for iMX/Rpi3</a></li>
+<li class="toctree-l3"><a class="reference internal" href="hostlib/hostLib/accessManager/doc/accessManager.html">5.4.2. Access Manager: Manage access from multiple (Linux) processes to an SE05x IoT Applet</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#opc-ua-example">5.5. OPC-UA Example</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/opc_ua/doc/readme.html">5.5.1. OPC UA (Open62541) Demo</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#arm-psa-example">5.6. ARM PSA Example</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/psa_nonsecure/Readme.html">5.6.1. PSA Non Secure Example</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#se05x-examples">5.7. SE05X Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_Minimal/readme.html">5.7.1. SE05X Minimal example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_GetInfo/Readme.html">5.7.2. SE05X Get Info example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/apdu_player/Readme.html">5.7.3. APDU Player Demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_policy/Readme.html">5.7.4. Using policies for secure objects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_GetCertificate/Readme.html">5.7.5. Get Certificate from the SE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_RotatePlatformSCP03Keys/Readme.html">5.7.6. SE05X Rotate PlatformSCP Keys Demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_I2cMaster/readme.html">5.7.7. I2C Master Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/ex_se05x_WiFiKDF/Readme.html">5.7.8. SE05X WiFi KDF Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_export/readme.html">5.7.9. SE05X Export Transient objects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_import/readme.html">5.7.10. SE05X Import Transient objects</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_ImportExternalObjectPrepare/Readme.html">5.7.11. Import External Object Prepare</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_MandatePlatformSCP/Readme.html">5.7.12. SE05X Mandate SCP example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_ReadWithAttestation/Readme.html">5.7.13. Read object with Attestation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_TransportLock/readme.html">5.7.14. SE05X Transport Lock example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_TransportUnLock/readme.html">5.7.15. SE05X Transport UnLock example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_TimeStamp/Readme.html">5.7.16. SE05X Timestamp</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_PCR/Readme.html">5.7.17. SE05X PCR example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_SetAppletFeatures/Readme.html">5.7.18. Configuring Applet Features</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_InjectCertificate/Readme.html">5.7.19. Inject Certificate into SE</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_ReadState/Readme.html">5.7.20. SE05X Read State example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_Perso_Delete_Mod_RSAKeyGen/readme.html">5.7.21. SE05X Personalization Remove RSA Key Generation Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_Personalization/readme.html">5.7.22. DEMO for Personalization of SE051</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_MultiThread/Readme.html">5.7.23. SE05X MultiThread demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_InvokeGarbageCollection/readme.html">5.7.24. SE05X Invoke Garbage Collection Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_ConcurrentEcc/readme.html">5.7.25. ECC Concurrent Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_ConcurrentSymm/readme.html">5.7.26. Symmetric Multi Step Concurrent Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_Delete_and_test_provision/Readme.html">5.7.27. Delete and Test Provision</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_MultipleDigestCryptoObj/Readme.html">5.7.28. se05x Multiple Digest Crypto Objects example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_AllowWithoutPlatformSCP/Readme.html">5.7.29. SE05X Allow Without SCP example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_scp03_boot/readme.html">5.7.30. SE05X SCP03 BOOT Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/sa_qi/Readme.html">5.7.31. Secure Authenticator (Qi) Authentication demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se052_reset_example/readme.html">5.7.32. SE052 Reset Example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se052_deep_pwr_down/readme.html">5.7.33. SE052 Deep Power down example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_multi_thread_multi_session/readme.html">5.7.34. SE05X Multi Thread and Multi session example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/se05x_am_reset_ex/readme.html">5.7.35. SE05X Access Manager Reset example</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#openssl-examples">5.8. OpenSSL Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/seTool/Readme.html">5.8.1. Tool to create Reference key file</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/se05x/certificate_demo/Readme.html">5.8.2. Building a self-signed certificate</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/test_Crypto/readme.html">5.9.1. Tests for User Crypto</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a><ul class="simple">
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/eou_config_azure.html">5.11.1. Ease of Use configuration - Azure IoT Hub</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/eou_config_aws.html">5.11.2. Ease of Use configuration - AWS IoT Console</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#semslite-examples">5.12. Semslite examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="semslite/ex/sems_lite_ex_update/readme.html">5.12.1. SEMS Lite Agent Demo (sems_lite_ex_update)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/ex/sems_lite_cli_app/readme.html">5.12.2. SEMS Lite CLI APP</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="demos/index.html#puf-examples">5.13. PUF examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/lpc55s/ex/puf_inject_scp03/Readme.html">5.13.1. Key Injection to PUF</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/lpc55s/ex/puf_rotate_scp03/Readme.html">5.13.2. Key Rotation using PUF</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/lpc55s/ex/puf_se05x_sbl/Readme.html">5.13.3. Secure Boot Demo</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#building-compiling-the-edgelock-2go-agent">6.2.1. Building / Compiling the EdgeLock 2GO agent</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#registering-the-device-to-the-edgelock-2go-service">6.2.2. Registering the device to the EdgeLock 2GO service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#connecting-the-device-to-the-edgelock-2go-service">6.2.3. Connecting the device to the EdgeLock 2GO service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#openssl-engine-provider-configuration">6.2.4. OpenSSL engine/provider configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#re-provisioning-of-objects">6.2.5. Re-provisioning of objects</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#transport-layer-security">6.4.1. Transport layer security</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#client-authentication">6.4.2. Client authentication</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#server-authentication">6.4.3. Server authentication</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#application-layer-protocol">6.4.4. Application layer protocol</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#parameters-for-the-connection-to-edgelock-2go-cloud-service">6.4.5. Parameters for the connection to EdgeLock 2GO cloud service</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#offline-remote-trust-provisioning-server-rtp-server">6.6.1. Offline Remote Trust Provisioning Server (RTP Server)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/introduction.html#offline-remote-trust-provisioning-client-rtp-client">6.6.2. Offline Remote Trust Provisioning Client (RTP Client)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html#edgelock-2go-main">6.7.1. EdgeLock 2GO Main</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html#edgelock-2go-datastore">6.7.2. EdgeLock 2GO Datastore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html#edgelock-2go-keystore">6.7.3. EdgeLock 2GO Keystore</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html#edgelock-2go-session">6.7.4. EdgeLock 2GO Session</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html#edgelock-2go-service">6.7.5. EdgeLock 2GO Service</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html#edgelock-2go-dispatcher">6.7.6. EdgeLock 2GO Dispatcher</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/edgelock2go_agent_apis.html#edgelock-2go-utils">6.7.7. EdgeLock 2GO Utils</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/readme_usage_examples.html#initializaton-of-context-and-updating-device-configuration">6.8.1. Initializaton of context and updating device configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/readme_usage_examples.html#mqtt-connection-tests-with-cloud-onboarding-provisioning">6.8.2. MQTT connection tests with Cloud Onboarding Provisioning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="nxp_iot_agent/doc/readme_usage_examples.html#mqtt-connection-tests-with-remote-trust-provisioning">6.8.3. MQTT connection tests with Remote Trust Provisioning</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_overview.html#update-manager-from-customer">7.1.1. Update Manager (from customer)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_overview.html#sems-lite-agent-from-nxp">7.1.2. SEMS Lite Agent (from NXP)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_package.html">7.2. Update Package</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_package.html#package-meta-data">7.2.1. Package Meta Data</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_package.html#multicastcommands-in-protocol-buffer-format">7.2.2. MulticastCommands In Protocol Buffer Format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_package.html#generator-tools">7.2.3. Generator Tools</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_usage.html#case-1-basic-usage">7.3.1. Case 1: Basic Usage</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_usage.html#case-2-in-case-there-was-a-tearing">7.3.2. Case 2: In case there was a tearing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_usage.html#case-3-doing-a-recovery-after-a-failed-update">7.3.3. Case 3: Doing a recovery after a failed update</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_usage.html#case-4-tearing-during-recovery">7.3.4. Case 4: Tearing during recovery</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_usage.html#case-5-load-key-rotate-script-encounter-se-unexpected-power-off">7.3.5. Case 5: Load Key rotate script encounter SE unexpected power off</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_usage.html#api-calls-for-usage-of-sems-lite-agent">7.3.6. API Calls for Usage of SEMS Lite Agent</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_mgmt_api.html#get-uuid">7.4.1. Get UUID</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_mgmt_api.html#get-public-key">7.4.2. Get Public Key</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_mgmt_api.html#get-card-contents">7.4.3. Get Card contents</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_api.html#semslite-agent-types">7.6.1. SEMSLite Agent Types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_api.html#semslite-agent-apis">7.6.2. SEMSLite Agent APIs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="semslite/doc/sems_lite_known_issue.html#signature-for-rerun-script-is-incorrect-occasionally">7.7.1. Signature for rerun script is incorrect occasionally</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="plugins/index.html">8. Plugins / Add-ins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/openssl/scripts/readme.html">8.1. Introduction on OpenSSL engine</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl/scripts/readme.html#general">8.1.1. General</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl/scripts/readme.html#keys">8.1.2. Keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl/scripts/readme.html#building-the-openssl-engine">8.1.3. Building the OpenSSL engine</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl/scripts/readme.html#sample-scripts-to-demo-openssl-engine">8.1.4. Sample scripts to demo OpenSSL Engine</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html#openssl-versions">8.2.1. OpenSSL versions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html#platforms">8.2.2. Platforms</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html#key-formats-supported">8.2.3. Key formats supported</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html#building-the-openssl-provider">8.2.4. Building the OpenSSL provider</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html#sample-scripts-to-demo-openssl-provider">8.2.5. Sample scripts to demo OpenSSL provider</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/openssl_provider/scripts/readme.html#ossl-algorithms-property-definitions">8.2.6. OSSL Algorithms property definitions</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#se05x-usage-in-tls-handshake-ecc-cipher-suites">8.3.1. SE05X usage in TLS handshake (ECC Cipher suites)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#se05x-usage-in-tls-handshake-rsa-cipher-suites">8.3.2. SE05X usage in TLS handshake (RSA Cipher suites)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#using-se05x-for-all-public-key-ecdsa-verify-operation">8.3.3. Using SE05X for all Public key ECDSA verify operation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#using-mbedtls-alt">8.3.4. Using mbedTLS ALT</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#testing-on-x86-linux">8.3.5. Testing on x86 / Linux</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#testing-mbedtls-client-on-frdm-k64">8.3.6. Testing mbedTLS client on frdm-k64</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#se050-performance-measurements">8.3.7. SE050 Performance Measurements</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls/scripts/readme.html#mbedtls-alt-apis">8.3.8. mbedTLS ALT APIs</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls3x/scripts/readme.html#key-management">8.4.1. Key Management</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls3x/scripts/readme.html#build-configuration-of-mbed-tls-alt-files">8.4.2. Build / Configuration of Mbed TLS ALT files</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls3x/scripts/readme.html#se05x-usage-in-tls-handshake">8.4.3. SE05X usage in TLS handshake</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/mbedtls3x/scripts/readme.html#testing-mbed-tls-alt-windows">8.4.4. Testing Mbed TLS ALT (Windows)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/psa/Readme.html">8.5. Platform Security Architecture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/psa/Readme.html#psa-se-driver-interface">8.5.1. PSA SE Driver Interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/psa/Readme.html#psa-concepts">8.5.2. PSA Concepts</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/psa/Readme.html#managing-keyids">8.5.3. Managing KeyIDs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/psa/Readme.html#building-psa-for-trustzone">8.5.4. Building PSA for TrustZone</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sss/plugin/open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="sss/plugin/open62541/readme.html#integrating-se050-in-open62541">8.7.1. Integrating SE050 in Open62541</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plugins/wifiEAP/wifiEAP.html#prerequisites">8.8.1. Prerequisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/wifiEAP/wifiEAP.html#introduction">8.8.2. Introduction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/wifiEAP/wifiEAP.html#setting-up-access-point">8.8.3. Setting up Access point</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/wifiEAP/wifiEAP.html#setting-up-freeradius-server-on-ubuntu">8.8.4. Setting up freeradius Server on Ubuntu</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/wifiEAP/wifiEAP.html#setting-up-raspberry-pi3">8.8.5. Setting up Raspberry Pi3</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="plugins/pkcs11.html#pkcs-11-label-handling">8.9.1. PKCS#11 Label Handling</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/pkcs11.html#pkcs-11-object-caching">8.9.2. PKCS#11 Object caching</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/pkcs11.html#pkcs-11-specifications">8.9.3. PKCS#11 specifications</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/pkcs11.html#building-on-linux-raspberry-pi">8.9.4. Building on Linux / Raspberry-Pi</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/pkcs11.html#using-with-pkcs11-tool">8.9.5. Using with pkcs11-tool</a></li>
+<li class="toctree-l3"><a class="reference internal" href="plugins/pkcs11.html#notes">8.9.6. Notes</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/pre-steps.html#once-per-installation">9.3.1. Once per installation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/pre-steps.html#communication-interface-cmake-smcom-setting">9.3.2. Communication interface (cmake SMCOM setting)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/Provisioning/readme.html">9.5. CLI Provisioning</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="pycli/Provisioning/readme.html#generating-keys-and-certificates">9.5.1. Generating keys and certificates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/Provisioning/readme.html#provisioning-for-the-demo">9.5.2. Provisioning for the demo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/Provisioning/readme.html#steps-to-provision-your-device-for-demo-on-windows">9.5.3. Steps to provision your device for demo on Windows</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/Provisioning/readme.html#steps-to-provision-your-device-for-demo-on-imx-or-raspberry-pi">9.5.4. Steps to provision your device for demo on iMX or Raspberry Pi</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/readme_usage_examples.html#se05x-vcom-interface">9.6.1. SE05X: VCOM Interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/readme_usage_examples.html#se05x-pcsc-interface">9.6.2. SE05X: PCSC interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/readme_usage_examples.html#se05x-jrcpv2-interface">9.6.3. se05x: JRCPV2 interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/readme_usage_examples.html#mbedtls">9.6.4. MBEDTLS</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_commands_list.html#ssscli-commands">9.7.1. ssscli Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_commands_list.html#set-commands">9.7.2. Set Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_commands_list.html#get-commands">9.7.3. Get Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_commands_list.html#generate-commands">9.7.4. Generate Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_commands_list.html#refpem-commands">9.7.5. Refpem Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_commands_list.html#se05x-commands">9.7.6. Se05x Commands</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_commands_list.html#policy-commands">9.7.7. POLICY Commands</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/cli_data_format.html">9.8. CLI Data formats</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_data_format.html#der">9.8.1. DER</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_data_format.html#pem">9.8.2. PEM</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_data_format.html#hex">9.8.3. HEX</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_data_format.html#reference-key">9.8.4. REFERENCE KEY</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_object_policy.html#create-object-policy">9.9.1. Create object policy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="pycli/doc/cli_object_policy.html#attach-policy-to-object">9.9.2. Attach policy to object</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="appendix.html">10. Appendix</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="hostlib/hostLib/vcom/doc/vcom.html#steps-to-use-vcom-for-running-the-examples-pc-frdm-k64f">10.2.1. Steps to use VCOM for running the examples - PC &amp; FRDM-K64F</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/vcom.html">10.3. APDU Commands over VCOM</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="appendix/vcom.html#com-port-parameters">10.3.1. COM port parameters</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/vcom.html#vcom-format">10.3.2. VCOM Format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/vcom.html#example-commands">10.3.3. Example Commands</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="appendix/vs2019-setup.html#prerequisites">10.4.1. Prerequisites</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/vs2019-setup.html#installing-the-components">10.4.2. Installing the components</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="appendix/ide_mcux.html#to-download-and-install-mcuxpresso-ide">10.5.1. To Download and install MCUXpresso IDE:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/ide_mcux.html#to-install-board-specific-sdk-in-mcuxpresso">10.5.2. To Install board specific SDK in MCUXpresso</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dev-platforms.html">10.6. Development Platforms</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_imx8_linux.html">10.6.1. Setup <code class="samp docutils literal notranslate"><span class="pre">i.MX</span> <span class="pre">8MQuad</span></code> - <code class="samp docutils literal notranslate"><span class="pre">MCIMX8M-EVK</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_imx6_linux.html">10.6.2. Setup <code class="samp docutils literal notranslate"><span class="pre">i.MX6UL</span></code> - <code class="samp docutils literal notranslate"><span class="pre">MCIMX6UL-EVK</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_frdm_k64f.html">10.6.3. Freedom K64F</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_1060rt.html">10.6.4. i.MX RT 1060</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_lpc55s.html">10.6.5. LPC55S69</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_imxrt1170.html">10.6.6. MIMXRT1170</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_mcxa.html">10.6.7. FRDM-MCXA153</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_mcxn.html">10.6.8. FRDM-MCXN947</a></li>
+<li class="toctree-l3"><a class="reference internal" href="dev-platforms/platform_android.html">10.6.9. Android: Hikey960</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se_uid.html#using-teraterm-and-pre-built-binary">10.7.1. Using TeraTerm and pre-built binary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se_uid.html#using-vcom-and-binary">10.7.2. Using VCOM and binary</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se_uid.html#using-ssscli-tool">10.7.3. Using ssscli Tool</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se_uid.html#se-platform-information-on-android-platform">10.7.4. SE Platform Information on Android platform</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="demos/Certificate_Chains/Readme.html">10.9. Certificate Chains</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="demos/Certificate_Chains/Readme.html#se050-certificate-chains">10.9.1. SE050 Certificate Chains</a></li>
+<li class="toctree-l3"><a class="reference internal" href="demos/Certificate_Chains/Readme.html#se051-certificate-chains">10.9.2. SE051 Certificate Chains</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/rjct_server.html">10.10. JRCP_v1 Server</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="appendix/rjct_server.html#introduction">10.10.1. Introduction</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/rjct_server.html#using-the-jrcp-v1-server">10.10.2. Using the JRCP_v1 server</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/api_list.html">10.13. Plug &amp; Trust MW APIs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="api/api_list.html#page-hierarchy">10.13.1. Page Hierarchy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/api_list.html#class-hierarchy">10.13.2. Class Hierarchy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/api_list.html#file-hierarchy">10.13.3. File Hierarchy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="api/api_list.html#full-api">10.13.4. Full API</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="appendix/se052_notes.html">10.14. SE052 specific notes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se052_notes.html#cmake-options-required-for-se052">10.14.1. Cmake options required for SE052</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se052_notes.html#runtime-identification-of-se051-vs-se052">10.14.2. Runtime identification of SE051 vs SE052</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se052_notes.html#api-updates">10.14.3. API Updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se052_notes.html#demo-updates">10.14.4. Demo updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se052_notes.html#self-test-trigger">10.14.5. Self-Test trigger</a></li>
+<li class="toctree-l3"><a class="reference internal" href="appendix/se052_notes.html#apdu-throughput-limitation">10.14.6. APDU throughput Limitation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="Revision_history.html">12. Revision history</a></li>
+</ul>
+</div>
+<section id="indices-and-tables">
+<h2>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
+<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
+</ul>
+</section>
+</section>
+
+
+    </div>
+      
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-right">
+      <a href="#">Back to top</a>
+      
+    </p>
+    <p>
+        &copy; Copyright 2018-2020, NXP.<br/>
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.5.0.<br/>
+    </p>
+  </div>
+</footer>
+  </body>
+</html>

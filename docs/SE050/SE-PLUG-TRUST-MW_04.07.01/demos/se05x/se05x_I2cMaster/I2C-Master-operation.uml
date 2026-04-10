@@ -1,0 +1,15 @@
+@startuml
+
+    title I2C Master example to read Accelerometer value
+
+    FrdmK64F ->  SE050 : I2CM configure slave device
+    SE050 -> Accelerometer : Acknowledge slave address
+    SE050 <- Accelerometer : Response
+    FrdmK64F <-> SE050 : I2CM Response
+
+    FrdmK64F ->  SE050 : I2CM read request
+    SE050 -> Accelerometer : Read Accelerometer data
+    SE050 <- Accelerometer : Response
+    FrdmK64F <-> SE050 : I2CM Response
+
+@enduml

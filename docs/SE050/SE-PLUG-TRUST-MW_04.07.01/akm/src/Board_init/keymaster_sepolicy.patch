@@ -1,0 +1,48 @@
+diff --git a/vendor/file.te b/vendor/file.te
+index 4de29c3..4b3d066 100644
+--- a/vendor/file.te
++++ b/vendor/file.te
+@@ -2,3 +2,6 @@
+ type hostapd_socket, file_type, data_file_type, core_data_file_type;
+ # Hostapd conf files
+ type hostapd_data_file, file_type, data_file_type;
++
++#config for /data/vendor/SE05x
++type se05x_vendor_data_file, file_type, data_file_type;
+diff --git a/vendor/file_contexts b/vendor/file_contexts
+old mode 100644
+new mode 100755
+index ded356d..421b653
+--- a/vendor/file_contexts
++++ b/vendor/file_contexts
+@@ -52,6 +52,8 @@
+ /(vendor|system/vendor)/bin/hw/wpa_supplicant                                 u:object_r:hal_wifi_supplicant_default_exec:s0
+ /(vendor|system/vendor)/bin/vndservicemanager                                 u:object_r:vndservicemanager_exec:s0
+ 
++/dev/i2c-0  u:object_r:i2c_device:s0
++
+ #############################
+ # Same process HALs installed by platform into /vendor
+ #
+@@ -64,3 +66,4 @@
+ #
+ /data/vendor/wifi/hostapd(/.*)?                                               u:object_r:hostapd_data_file:s0
+ /data/misc/wifi/hostapd(/.*)?   u:object_r:hostapd_socket:s0
++/data/vendor/SE05x(/.*)?	u:object_r:se05x_vendor_data_file:s0
+diff --git a/vendor/hal_keymaster_default.te b/vendor/hal_keymaster_default.te
+old mode 100644
+new mode 100755
+index 82a5a20..1f0a210
+--- a/vendor/hal_keymaster_default.te
++++ b/vendor/hal_keymaster_default.te
+@@ -2,4 +2,10 @@ type hal_keymaster_default, domain;
+ hal_server_domain(hal_keymaster_default, hal_keymaster)
+ 
+ type hal_keymaster_default_exec, exec_type, vendor_file_type, file_type;
++
++allow hal_keymaster_default i2c_device:chr_file { open read write ioctl};
++
++allow hal_keymaster_default se05x_vendor_data_file:dir { getattr setattr add_name read write search remove_name};
++allow hal_keymaster_default se05x_vendor_data_file:file { getattr open read write };
++
+ init_daemon_domain(hal_keymaster_default)

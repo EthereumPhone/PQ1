@@ -1,0 +1,7 @@
+/*!
+@section romapi ROMAPI
+  The current IAP driver version is 1.0.0.
+
+  - 1.0.0
+    - Initial version.
+*/

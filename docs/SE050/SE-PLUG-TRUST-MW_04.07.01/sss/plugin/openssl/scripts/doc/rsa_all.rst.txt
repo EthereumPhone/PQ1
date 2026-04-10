@@ -1,0 +1,31 @@
+usage: rsa_all.py [-h] [--connection_data CONNECTION_DATA]
+                  [--connection_type CONNECTION_TYPE] [--subsystem SUBSYSTEM]
+                  [--auth_type AUTH_TYPE] [--scpkey SCPKEY]
+                  [--disable_sha1 DISABLE_SHA1] [--fips FIPS]
+
+Validation of OpenSSL Engine using RSA keys
+
+This example injects keys with different supported RSA keys,
+then showcases Crypto & sign verify operations using those keys.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+  --connection_type CONNECTION_TYPE
+                        Supported connection types => ``t1oi2c``, ``sci2c``, ``vcom``, ``jrcpv1``, ``jrcpv2``, ``pcsc``. Default: ``t1oi2c``
+  --subsystem SUBSYSTEM
+                        Supported subsystem => ``se050``. Default: ``se050``
+  --auth_type AUTH_TYPE
+                        Supported subsystem => ``None``, ``PlatformSCP``, ``UserID``, ``ECKey``, ``AESKey``. Default: ``None``
+  --scpkey SCPKEY
+  --disable_sha1 DISABLE_SHA1
+                        Parameter to disable SHA1 => eg. ``True``, ``False``. Default: ``False``
+  --fips FIPS           FIPS Testing => eg. ``True``, ``False``. Default: ``False``
+
+Example invocation::
+
+    python rsa_all.py
+    python rsa_all.py --connection_data 169.254.0.1:8050
+    python rsa_all.py --connection_data 127.0.0.1:8050 --connection_type jrcpv2
+    python rsa_all.py --connection_data COM3

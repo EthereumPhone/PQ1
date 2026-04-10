@@ -1,0 +1,43 @@
+#
+# Copyright 2021 NXP
+# SPDX-License-Identifier: Apache-2.0
+#
+#
+
+PROJECT(se051w_fira)
+
+FILE(
+    GLOB
+    sources
+    src/*.c
+)
+
+IF(SSS_HAVE_HOST_ANDROID)
+    ADD_LIBRARY(${PROJECT_NAME} STATIC ${sources})
+ELSE()
+    ADD_LIBRARY(${PROJECT_NAME} ${sources})
+ENDIF()
+
+TARGET_LINK_LIBRARIES(
+    ${PROJECT_NAME} smCom
+)
+
+TARGET_INCLUDE_DIRECTORIES(
+    ${PROJECT_NAME}
+    PUBLIC inc/
+    PUBLIC ../inc
+    PUBLIC ${SIMW_TOP_DIR}/sss/inc
+)
+
+IF(UWBIOT_HOST_LINUX_LIKE)
+    INSTALL(
+        FILES
+        inc/se_FiRaLite_API.h
+        inc/sus_APDU.h
+        DESTINATION
+        ${UWBIOT_INSTALL_INC_DIR}
+    )
+    UWBIOT_INSTALL_LIBRARY(${PROJECT_NAME})
+ELSEIF(SSS_HAVE_HOST_LINUX_LIKE)
+    INSTALL(TARGETS ${PROJECT_NAME} DESTINATION lib)
+ENDIF()

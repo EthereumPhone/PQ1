@@ -1,0 +1,422 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2018-2021,2023 NXP                                               */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.agent";
+option java_multiple_files = true;
+
+import "Types.proto";
+
+message EndpointInformation {
+
+    optional EndpointType type = 1;
+
+    /* Theoretically there can be multiple endpoints of the same type registered with one EdgeLock
+     * 2GO agent. In order to distinguish them, they need to get an endpoint identifier. Every
+     * endpoint needs to have a unique identifier (unique on that device/EdgeLock 2GO agent
+     * instance). */
+    optional uint32 endpointId = 2;
+
+    /* Convey information about the version of a particular endpoint implementation. Note: a version
+     * is always defined as W.X.Y.Z, where all letters represent a number from 0-255 with W|X being
+     * the major version, Y the minor version, Z, the patch version. */
+    optional fixed32 version = 3;
+
+    /* Used to deploy state information from an endpoint to the EdgeLock 2GO cloud service.
+     * Interpretation of the value is specific to the particular endpoint driver. */
+    optional int32 state = 4;
+
+    /* Additional meta-data from an endpoint to the EdgeLock 2GO cloud service. Interpretation of
+     * the value is specific to the particular endpoint driver. */
+    optional bytes additionalData = 5;
+
+    /* A configuration state of an endpoint - allows for optimization of update detection of an
+     * Interpretation of the value is specific to the particular endpoint driver.*/
+    optional bytes configurationState = 6;
+
+}
+
+
+message AgentHelloRequest {
+
+    enum DeviceState {
+        /* The state of the configuration of the data managed by EdgeLock 2GO cloud service is OK. 
+         * A regular check for required updates is done.*/
+        OK = 0;
+
+        /* The EdgeLock 2GO agent reports problems with connecting to a provisioned cloud service to
+         * the EdgeLock 2GO cloud service. */
+        CLOUD_ERROR = 10;
+
+        /* Force execution of all actions for a device. This is useful mainly for testing. */
+        FORCE_UPDATE = 100;
+
+    }
+
+    /* Convey information about the version of the EdgeLock 2GO cloud service implementation (mainly
+     * for informative purpouse). Note: a version is always defined as W.X.Y.Z, where all letters
+     * represent a number from 0-255 with W|X being the major version, Y the minor version, Z, the
+     * patch version. */
+    optional fixed32 version = 1;
+
+    /* Some state information about the device. Most importantly this is used to force an in-depth
+     * check on the endpoint states by the EdgeLock 2GO cloud service.
+     *
+     * No state handling is implemented in the EdgeLock 2GO cloud service for now. */
+    optional DeviceState state = 2;
+
+    /* What follows is a list of parameters of the communication channel.
+     * Note: future server implementations may send additional parameters
+     * which older clients would simply ignore. */
+
+    /* The maximum size of the message that the server can receive from the client. */
+    optional int32 communicationBufferSize = 20;
+
+}
+
+/* Indicated the version/structure of the service descriptor that the client is supporting. */
+enum ServiceDescriptorVersion {
+    /* Use c struct for serialization of a service descriptor. This is not supported by the EdgeLock
+     * 2GO cloud service any longer. */
+    C_STRUCTURE_01 = 0 [deprecated = true];
+
+    /* Use protobuf encoding for serialization of a service descriptor. */
+    PROTOBUF = 10;
+
+}
+
+
+message AgentHelloResponse {
+    /* The version of the EdgeLock 2GO agent that is running. Note: a version is always defined as
+     * W.X.Y.Z, where all letters represent a number from 0-255 with W|X being the major version, Y
+     * the minor version, Z, the patch version. */
+    optional fixed32 version = 1;
+
+    /* The size of the buffer used for assembling a response from the client to the server (a.k.a.
+     * the maximal size that the responses of ALL endpoint requests (accumulated) can take).
+     *
+     * The default value given here is a fallback. The real situation does depend on the system
+     * configuration (e.g., it is not clever/possible to chain response APDUs, the size needs to be
+     * adapted for that on the client side).
+     */
+    optional int32 communicationBufferSizeResponses = 2 [default = 1024];
+
+    /* The size of the buffer used for decoding requests from the server. */
+    optional int32 communicationBufferSizeRequests = 3 [default = 1024];
+
+    /* If this is enabled, the EdgeLock 2GO cloud service combines multiple requests in one message
+     * to the EdgeLock 2GO agent. 
+     *
+     * It does pre-calculate the max required space for a response. Based on this calculation it
+     * knows how many responses fit into the response buffer and will send an according number of
+     * requests in a single message.
+     */
+    optional bool useMultipleRequestsPerMessage = 5 [default = false];
+
+    /* The layout of the service descriptor structure that is understood by the agent. Deprecated -
+     * replaced by serviceDescriptorVersion in AgentAdditionalData. */
+    optional ServiceDescriptorVersion serviceDescriptorVersion = 4 [deprecated = true, default = PROTOBUF];
+
+    /* Information about all endpoints that are available. */
+    repeated EndpointInformation endpoints = 10;
+}
+
+
+message AgentAdditionalData {
+    /* The layout of the service descriptor structure that is understood by the agent. */
+    optional ServiceDescriptorVersion serviceDescriptorVersion = 1 [default = PROTOBUF];
+
+    /* Shall the server send a message containing a CRL. */
+    optional bool requestCrl = 2;
+
+    /* Shall the server include metadata with requests. This allows to get a
+     * detailed picture on the individual steps taken by the orchestration logic
+     * and can aid in debugging/logging. */
+    optional bool sendRequestMetadata = 3;
+}
+
+message AgentClaimStatus {
+
+    /* By convention status codes < 0x10 indicate success,
+     * status codes >= 0x10 indicate errors. */
+    enum ClaimStatus {
+        UNKNOWN = 0x00;
+
+        /* The device was successfully claimed. */
+        SUCCESS = 0x01;
+
+        // Error codes have values >= 0x10
+
+        /* The claim code is unknown or the UID of the device is not in the system. */
+        ERR_NOT_FOUND = 0x10;
+
+        /* The claim code belongs to a device group that does not match the product
+         * type of the device. */
+        ERR_WRONG_PRODUCT_TYPE = 0x11;
+
+        /* The claim code is known but has been revoked and therefore is not usable. */
+        ERR_CLAIM_CODE_REVOKED = 0x13;
+
+        /* The claim code is no longer usable as it has reached the usage limit. */
+        ERR_CLAIM_CODE_LIMIT_REACHED = 0x14;
+
+        /* This device has been claimed with this claim code already. Claiming it
+         * another time is not allowed. */
+        ERR_CLAIM_CODE_REUSE_PROHIBITED = 0x15;
+
+        /* The claim code is not readable. */
+        ERR_CLAIM_CODE_READ = 0x16;
+
+        /* The claim code on the secure subsystem has invalid policies, either they are too
+         * strict (EdgeLock 2GO cloud service is not able to read the claim code) or too
+         * loose (anybody can read the claim code and hence it has to be considered leaked). */
+        ERR_CLAIM_CODE_POLICIES = 0x17;
+
+        /* The claim code on the secure subsystem has an invalid object type. */
+        ERR_CLAIM_CODE_TYPE = 0x18;
+
+        /* The claim code on the secure subsystem has an invalid format and failed validation. */
+        ERR_CLAIM_CODE_FORMAT = 0x19;
+
+        /* The claim code could not be deleted. */
+        ERR_CLAIM_CODE_DELETE = 0x1A;
+
+        /* One ore more claim code errors happened. More details can be found
+         * in the details messages. */
+        ERR_CLAIM_FAILED = 0x40;
+
+        /* An internal error occurred on the EdgeLock 2GO cloud service. */
+        ERR_INTERNAL = 0x50;
+
+        /* A timeout happened on the EdgeLock 2GO cloud service. */
+        ERR_TIMEOUT = 0x51;
+    }
+
+    message DetailedClaimStatus {
+        optional ClaimStatus status = 1;
+        optional uint32 endpointId = 2;
+    }
+
+    optional ClaimStatus status = 1;
+    repeated DetailedClaimStatus details = 2;
+}
+
+message AgentRtpStatus {
+
+    /* By convention status codes < 0x10 indicate success,
+     * status codes >= 0x10 indicate errors. */
+    enum RtpStatus {
+        UNKNOWN = 0x00;
+
+        /* Remote trust provisioning was successful. */
+        SUCCESS = 0x01;
+
+        /* The object remained unchanged. It has been provisioned before, no
+         * attempt to provision it again has been made. */
+        SUCCESS_NO_CHANGE = 0x02;
+
+        // Error codes have values >= 0x10
+
+        /* Reading the attributes of an already existing object failed. */
+        ERR_OBJECT_ATTRIBUTES_READ_FAILED = 0x10;
+
+        /* Deletion of an existing object failed. */
+        ERR_OBJECT_DELETE_FAILED = 0x11;
+
+        /* Writing an object failed. */
+        ERR_OBJECT_WRITE_FAILED = 0x12;
+
+        /* The object is defective. A previous provisioning attempt failed, the object is marked
+         * as defective in the EdgeLock 2GO cloud service. No further attempt will be made until the
+         * object is reconfigured. */
+        ERR_DEFECTIVE = 0x13;
+
+        /* Installation of EC curve failed.*/
+        ERR_CURVE_INSTALLATION_FAILED = 0x14;
+
+        /* Provisioning of one or more objects failed. Details can be found in
+         * the details messages. */
+        ERR_RTP_FAILED = 0x40;
+
+        /* An internal error occurred on the EdgeLock 2GO cloud service. */
+        ERR_INTERNAL = 0x50;
+
+        /* A timeout happened on the EdgeLock 2GO cloud service. */
+        ERR_TIMEOUT = 0x51;
+    }
+
+    message RtpObjectStatus {
+        optional RtpStatus status = 1;
+        optional uint32 endpointId = 2;
+        optional uint32 objectId = 3;
+    }
+
+    optional RtpStatus status = 1;
+    repeated RtpObjectStatus details = 2;
+}
+
+
+message AgentCspStatus {
+
+    /* By convention status codes < 0x10 indicate success,
+     * status codes >= 0x10 indicate errors. */
+    enum CspStatus {
+        UNKNOWN = 0x00;
+
+        /* The service was successfully provisioned (or no change to the provisioning was required). */
+        SUCCESS = 0x01;
+
+        /* The service remained unchanged. */
+        SUCCESS_NO_CHANGE = 0x02;
+
+        // Error codes have values >= 0x10
+
+        /* The service was successfully revoked. */
+        SUCCESS_REVOKED = 0x03;
+
+        /* The key slot for the key of a service is occupied and can not be re-used. */
+        ERR_KEY_SLOT_OCCUPIED = 0x10;
+
+        /* Generation of a key required for cloud service provisioning failed. */
+        ERR_KEY_GENERATION_FAILED = 0x11;
+
+        /* Read out of the public key (in order to certify it) failed. */
+        ERR_KEY_READOUT_FAILED = 0x12;
+
+        /* Reading memory from a datastore failed. */
+        ERR_MEMORY_READ_FAILED = 0x13;
+
+        /* Allocation of memory for writing to a datastore failed. */
+        ERR_MEMORY_ALLOCATION_FAILED = 0x14;
+
+        /* Writing to a datastore failed. */
+        ERR_SERVICE_DESCRIPTOR_WRITE_FAILED = 0x15;
+
+        /* Committing data to a datastore failed. */
+        ERR_MEMORY_COMMIT_FAILED = 0x17;
+
+        /* The service is defective. A previous provisioning attempt failed, the service is marked
+         * as defective in the EdgeLock 2GO cloud service. No further attempt will be made until the
+         * service is reconfigured. */
+        ERR_DEFECTIVE = 0x16;
+
+        /* One or more services failed to provision. Details can be found in
+         * the details messages. */
+        ERR_CSP_FAILED = 0x40;
+
+        /* An internal error occurred on the EdgeLock 2GO cloud service. */
+        ERR_INTERNAL = 0x50;
+
+        /* A timeout happened on the EdgeLock 2GO cloud service. */
+        ERR_TIMEOUT = 0x51;
+    }
+
+    message CspServiceStatus {
+        optional CspStatus status = 1;
+        optional uint32 endpointId = 2;
+        optional uint64 serviceId = 3;
+    }
+
+    optional CspStatus status = 1;
+    repeated CspServiceStatus details = 2;
+}
+
+message UpdateStatusReport {
+
+    /* By convention status codes < 0x10 indicate success,
+     * status codes >= 0x10 indicate errors. */
+    enum UpdateStatus {
+        UNKNOWN = 0;
+
+        /* Update was successful. */
+        SUCCESS = 0x01;
+
+        // Error codes have values >= 0x10
+
+        /* The response is malformed and cannot be decoded as protobuf message. */
+        ERR_ENCODING = 0x10;
+
+        /* The response is not expected according to the protocol. */
+        ERR_PROTOCOL = 0x11;
+
+        /* Reading memory failed. */
+        ERR_MEMORY_READ = 0x12;
+
+        /* Writing to memory failed. */
+        ERR_MEMORY_WRITE = 0x13;
+
+        /* Communication to a secure subsystem failed. */
+        ERR_SSS_COMMUNICATION = 0x14;
+
+        /* The version of a secure subsystem is not supported. */
+        ERR_SSS_VERSION = 0x15;
+
+        /* Unable to establish a secure channel to the secure subsystem. */
+        ERR_SSS_SECURE_CHANNEL = 0x16;
+
+        /* The endpoint configuration of the EdgeLock 2 GO agent is invalid. */
+        ERR_CONFIGURATION = 0x20;
+
+        /* There are more than one datastore endpoints registered for cloud service provisioning. */
+        ERR_CONFIGURATION_TOO_MANY_DATASTORES = 0x21;
+
+        /* There are more than one datastore endpoints registered for cloud service provisioning. */
+        ERR_CONFIGURATION_TOO_MANY_KEYSTORES = 0x22;
+
+        /* The TLS handshake was OK, but no Server Name Indication (SNI) was used. */
+        ERR_CONFIGURATION_SNI_MISSING = 0x32;
+
+        /* The Server Name Indication sent during TLS handshake does not contain a valid hostname. */
+        ERR_CONFIGURATION_SNI_INVALID = 0x33;
+
+        /* The connection quota has been exceeded. */
+        ERR_CONNECTION_QUOTA_EXCEEDED = 0x34;
+
+        /* The device is not part of any device-group. While this means it is a genuine device,
+         * perhaps it has not (yet) been whitelisted or it has been removed from all groups. It is
+         * currently not managed by EdgeLock 2GO cloud service. */
+        ERR_DEVICE_NOT_WHITELISTED = 0x35;
+
+
+        /* Errors happened in one or more of the requested services.
+         * Please check in claimStatus, rtpStatus, ... for more details. */
+        ERR_UPDATE_FAILED = 0x40;
+
+        /* An internal error happened on the EdgeLock 2GO cloud service. Please report
+         * a short description on what caused the issue and the correlationId that was
+         * sent as to part of the error notification to edgelock2go.support@nxp.com. */
+        ERR_INTERNAL = 0x50;
+
+        /* A timeout happened on the EdgeLock 2GO cloud service. */
+        ERR_TIMEOUT = 0x51;
+
+    }
+    optional UpdateStatus status = 1;
+    optional AgentClaimStatus claimStatus = 2;
+    optional AgentRtpStatus rtpStatus = 3;
+    optional AgentCspStatus cspStatus = 4;
+
+    /* A unique identifier for this device update attempt. in case of a failure, this eases debugging
+    * by allowing to identify all log messages that belong to this attempt in
+    * the EdgeLock 2GO cloud service. */
+    optional string correlationId = 5;
+}
+
+message AgentGoodbyeRequest {
+    optional UpdateStatusReport status = 1;
+}
+
+message AgentCrlRequest {
+    optional bytes crl = 1;
+}
+
+message AgentCrlResponse {
+    optional fixed32 error = 1;
+}

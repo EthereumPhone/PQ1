@@ -1,0 +1,52 @@
+diff --git a/demos/CMakeLists.txt b/demos/CMakeLists.txt
+index 8fda1c7..38c560d 100644
+--- a/demos/CMakeLists.txt
++++ b/demos/CMakeLists.txt
+@@ -65,6 +65,15 @@ foreach( i RANGE ${DEMO_COUNT} )
+                     ${DEMO_COMMON_HEADERS}
+                     ${CONFIG_HEADER} )
+ 
++    FIND_PACKAGE(OpenSSL) # Find the OpenSSL Package
++    IF(OPENSSL_FOUND)
++        MESSAGE("Found: " ${OPENSSL_LIBRARIES})
++        INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
++	TARGET_COMPILE_DEFINITIONS(${DEMO_EXE_NAME} PUBLIC OPENSSL_LOAD_CONF)
++	TARGET_LINK_LIBRARIES(${DEMO_EXE_NAME} PUBLIC ${OPENSSL_LIBRARIES})
++    ELSE()
++        MESSAGE(WARNING "Building with OpenSSL Engine expected to fail")
++    ENDIF()
+     # Set the demo function to run.
+     target_compile_definitions( ${DEMO_EXE_NAME}
+                                 PRIVATE RunDemo=${CURRENT_DEMO_FUNCTION} )
+diff --git a/demos/app/iot_demo.c b/demos/app/iot_demo.c
+index 27b7dd5..337e587 100644
+--- a/demos/app/iot_demo.c
++++ b/demos/app/iot_demo.c
+@@ -37,7 +37,11 @@
+ 
+ /* Error handling include. */
+ #include "iot_error.h"
+-
++#include "openssl/conf.h"
++#include "openssl/err.h"
++#include "openssl/ssl.h"
++#include "openssl/ec.h"
++#include "openssl/evp.h"
+ /* Common demo includes. */
+ #include "iot_demo_arguments.h"
+ #include "iot_demo_logging.h"
+@@ -135,6 +139,14 @@ int main( int argc,
+         pCredentials = &credentials;
+     }
+ 
++#if (OPENSSL_VERSION_NUMBER < 0x10100000L)
++    OPENSSL_config(NULL);
++#else
++    OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, NULL);
++#endif
++
++    OpenSSL_add_all_algorithms();
++
+     /* Call the SDK initialization function. */
+     sdkInitialized = IotSdk_Init();
+ 

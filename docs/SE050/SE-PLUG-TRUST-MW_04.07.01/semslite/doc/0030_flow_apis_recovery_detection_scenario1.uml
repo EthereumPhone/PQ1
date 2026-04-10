@@ -1,0 +1,48 @@
+
+
+'
+' Recovery Detection
+'
+
+
+@startuml
+
+title Recovery Detection
+
+participant SEMS_Lite as "SEMS Lite Lib"
+participant SE as "Secure Element"
+
+autonumber "<b>[00]"
+
+activate SEMS_Lite
+
+SEMS_Lite -> SE : Run Script()
+
+SEMS_Lite <-- SE : ReturnStatus
+
+alt ReturnStatus == 6A82/6A88/6999/6A80/6982
+	note over SE, SEMS_Lite
+		Stop script execution and report error.
+	end note
+else ReturnStatus = Other SW
+	SEMS_Lite -> SE : Check Update session in progress
+
+	SEMS_Lite <-- SE : Session progress
+	alt Session progress = TRUE
+		alt ReturnStatus == 6200/02/03
+		note over SE, SEMS_Lite
+			Report Recovery.
+		end note
+	end
+	else alt Session progress = false
+		note over SE, SEMS_Lite
+			Stop script execution and report error.
+		end note
+	
+	end
+	
+end 	
+
+deactivate SEMS_Lite
+
+@enduml

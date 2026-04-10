@@ -1,0 +1,8 @@
+App   :INFO :PlugAndTrust_v02.15.00_20200522
+App   :INFO :Running se05x_Perso_Delete_Mod_RSAKeyGen.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+App   :INFO :# Running Remove Module RSAKEYGEN : On chip generation of RSA keys.
+App   :INFO :# Remove Module RSAKEYGEN is complete.
+App   :INFO :ex_sss Finished

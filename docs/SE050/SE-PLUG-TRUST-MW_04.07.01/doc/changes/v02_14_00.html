@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<!--
+Copyright 2019 NXP
+-->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>2.33. Release v02.14.00 &#8212; Plug &amp; Trust MW v04.07.01 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/bootstrap-sphinx.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="2.34. Release v02.12.05" href="v02_12_00.html" />
+    <link rel="prev" title="2.32. Release v02.15.00" href="v02_15_00.html" />
+<meta charset='utf-8'>
+<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1'>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script type="text/javascript" src="../_static/js/jquery-1.12.4.min.js"></script>
+<script type="text/javascript" src="../_static/js/jquery-fix.js"></script>
+<script type="text/javascript" src="../_static/bootstrap-3.4.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="../_static/bootstrap-sphinx.js"></script>
+
+  </head><body>
+
+  <div id="navbar" class="navbar navbar-inverse navbar-default navbar-fixed-top">
+    <div class="container">
+      <div class="navbar-header">
+        <!-- .btn-navbar is used as the toggle for collapsed navbar content -->
+        <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".nav-collapse">
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+          <span class="icon-bar"></span>
+        </button>
+        <a class="navbar-brand" href="../toc.html"><span><img src="../_static/NXP_logo_JPG.jpg"></span>
+          MW</a>
+        <span class="navbar-text navbar-version pull-left"><b>v04.07.01</b></span>
+      </div>
+
+        <div class="collapse navbar-collapse nav-collapse">
+          <ul class="nav navbar-nav">
+            
+            
+              <li class="dropdown globaltoc-container">
+  <a role="button"
+     id="dLabelGlobalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="../toc.html">TOC <b class="caret"></b></a>
+  <ul class="dropdown-menu globaltoc"
+      role="menu"
+      aria-labelledby="dLabelGlobalToc"><ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../index.html">1. NXP Plug &amp; Trust Middleware</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../organization-of-documentation.html">1.1. Organization of Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../folder-structure.html">1.2. Folder Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sw-prerequisites.html">1.3. List of Platform Prerequisites</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">2. Changes</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../stack/index.html">3. Plug &amp; Trust MW Stack</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../stack/features.html">3.1. Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/features.html#plug-trust-mw-block-diagram">3.2. Plug &amp; Trust MW : Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss-apis.html">3.3. SSS APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/se05xfeatures.html">3.4. SSS APIs: SE051 vs SE050</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/param_checks.html">3.5. Parameter Check &amp; Conventions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/i2cm.html">3.6. I2CM / Secure Sensor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/logging.html">3.7. Logging</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/feature-file.html">3.8. Feature File - <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/scp03/index.html">3.9. Platform SCP03 Authentication</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects.html">3.10. Auth Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-userid.html">3.11. Auth Objects : UserID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-aeskey.html">3.12. Auth Objects : AESKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/auth/auth-objects-eckey.html">3.13. Auth Objects : ECKey</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html">3.14. Key Id Range and Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html#authentication-keys">3.15. Authentication Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/key-id-range.html#trust-provisioned-keyids">3.16. Trust provisioned KeyIDs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/ex/doc/puf-scp03.html">3.17. SCP03 with PUF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/doc/sss_heap_management.html">3.18. SSS Heap Management</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../stack/secure_boot.html">3.19. Secure Boot</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../building/index.html">4. Building / Compiling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../building/windows.html">4.1. Windows Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-sdk.html">4.2. Import MCUXPresso projects from SDK</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/frdm-k64f-cmake.html">4.3. Freedom K64F (and Other MCUs) Build (CMake - Advanced)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/imx6.html">4.4. i.MX Linux Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/rpi3.html">4.5. Raspberry Pi Build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../building/cmake.html">4.6. CMake</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../scripts/cmake_options.html">4.7. CMake Options</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../demos/index.html">5. Demo and Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#demo-list">5.1. Demo List</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#sss-api-examples">5.2. SSS API Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#cloud-demos">5.3. Cloud Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#linux-specific-demos">5.4. Linux Specific Demos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#opc-ua-example">5.5. OPC-UA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#arm-psa-example">5.6. ARM PSA Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#se05x-examples">5.7. SE05X Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#openssl-examples">5.8. OpenSSL Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#tests-for-user-crypto">5.9. Tests for User Crypto</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#nxpnfcrdlib-examples">5.10. NXPNFCRDLIB examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#ease-of-use-examples">5.11. Ease-of-Use examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#semslite-examples">5.12. Semslite examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/index.html#puf-examples">5.13. PUF examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html">6.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#building-and-running-the-edgelock-2go-agent">6.2. Building and running the EdgeLock 2GO agent</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#datastore-keystore">6.3. Datastore / Keystore</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#connection-to-the-edgelock-2go-cloud-service">6.4. Connection to the EdgeLock 2GO cloud service</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#claim-codes">6.5. Claim Codes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/introduction.html#offline-provisioning-of-secure-objects">6.6. Offline Provisioning of Secure Objects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/edgelock2go_agent_apis.html">6.7. API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../nxp_iot_agent/doc/readme_usage_examples.html">6.8. EdgeLock 2GO Agent Examples</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../semslite/doc/index.html">7. SEMS Lite Agent</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_overview.html">7.1. SEMS Lite Overview (Only for SE051)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_package.html">7.2. Update Package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_usage.html">7.3. SEMS Lite Agent Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_mgmt_api.html">7.4. SEMS Lite management APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_process.html">7.5. SEMS Lite Agent Package Load Process</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_api.html">7.6. SEMSLite Types and APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/sems_lite_known_issue.html">7.7. SEMS Lite Known Issue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../semslite/doc/demo_update.html">7.8. SEMS Lite DEMOs</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../plugins/index.html">8. Plugins / Add-ins</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/openssl/scripts/readme.html">8.1. Introduction on OpenSSL engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/openssl_provider/scripts/readme.html">8.2. Introduction on OpenSSL provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/mbedtls/scripts/readme.html">8.3. Introduction on MbedTLS ALT (2.x) Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/mbedtls3x/scripts/readme.html">8.4. Introduction on Mbed TLS (3.x) ALT Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/psa/Readme.html">8.5. Platform Security Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/akm.html">8.6. Android Key master</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../sss/plugin/open62541/readme.html">8.7. Introduction on Open62541 (OPC UA stack)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/wifiEAP/wifiEAP.html">8.8. WiFi EAP Demo with Raspberry Pi3</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../plugins/pkcs11.html">8.9. PKCS#11 Standalone Library</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-tool.html">9. CLI Tool</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/introduction.html">9.1. Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/block-diagram.html">9.2. Block Diagram</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/pre-steps.html">9.3. Steps needed before running <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/running.html">9.4. Running the <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> tool - Windows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/Provisioning/readme.html">9.5. CLI Provisioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/readme_usage_examples.html">9.6. Usage Examples</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_commands_list.html">9.7. List of <code class="docutils literal notranslate"><span class="pre">ssscli</span></code> commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_data_format.html">9.8. CLI Data formats</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../pycli/doc/cli_object_policy.html">9.9. Object Policies Through ssscli</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/upload_se05x_using_pycli.html">9.10. Upload keys and certificates to SE05X using ssscli tool</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../appendix.html">10. Appendix</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/glossary.html">10.1. Glossary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hostlib/hostLib/vcom/doc/vcom.html">10.2. VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vcom.html">10.3. APDU Commands over VCOM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/vs2019-setup.html">10.4. Visual Studio 2019 Setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/ide_mcux.html">10.5. Setting up MCUXPresso IDE</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../dev-platforms.html">10.6. Development Platforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se_uid.html">10.7. How to get SE Platform Information and UID</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/version_info.html">10.8. Version Information</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../demos/Certificate_Chains/Readme.html">10.9. Certificate Chains</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/rjct_server.html">10.10. JRCP_v1 Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/platfscp.html">10.11. Using own Platform SCP03 Keys</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/apdu_write_to_buffer.html">10.12. Write APDU to buffer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/api_list.html">10.13. Plug &amp; Trust MW APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../appendix/se052_notes.html">10.14. SE052 specific notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Revision_history.html">12. Revision history</a></li>
+</ul>
+</ul>
+</li>
+              
+                <li class="dropdown">
+  <a role="button"
+     id="dLabelLocalToc"
+     data-toggle="dropdown"
+     data-target="#"
+     href="#">Page <b class="caret"></b></a>
+  <ul class="dropdown-menu localtoc"
+      role="menu"
+      aria-labelledby="dLabelLocalToc"><ul>
+<li><a class="reference internal" href="#">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a><ul>
+<li><a class="reference internal" href="#file-folder-relocation">2.33.1. File/Folder relocation</a></li>
+<li><a class="reference internal" href="#build-system-changes">2.33.2. Build system changes</a></li>
+<li><a class="reference internal" href="#new-platform-support">2.33.3. New platform support</a></li>
+<li><a class="reference internal" href="#apis-enum-types-changes">2.33.4. APIs &amp; enum/types Changes</a></li>
+<li><a class="reference internal" href="#functional-changes">2.33.5. Functional Changes</a></li>
+<li><a class="reference internal" href="#new-feature-support">2.33.6. New feature support</a></li>
+<li><a class="reference internal" href="#ssscli-pycli-changes">2.33.7. SSSCLI / PyCLI Changes</a></li>
+<li><a class="reference internal" href="#communication-layer-changes">2.33.8. Communication Layer Changes</a></li>
+<li><a class="reference internal" href="#id1">2.33.9. APIs &amp; enum/types Changes</a></li>
+<li><a class="reference internal" href="#examples-demo-updates">2.33.10. Examples / DEMO updates</a></li>
+<li><a class="reference internal" href="#documentation-changes">2.33.11. Documentation Changes</a></li>
+<li><a class="reference internal" href="#other-miscellaneous-changes">2.33.12. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+</ul>
+</ul>
+</li>
+              
+            
+            
+              
+                
+  <li>
+    <a href="v02_15_00.html" title="Previous Chapter: 2.32. Release v02.15.00"><span class="glyphicon glyphicon-chevron-left visible-sm"></span><span class="hidden-sm hidden-tablet">&laquo; 2.32. Release...</span>
+    </a>
+  </li>
+  <li>
+    <a href="v02_12_00.html" title="Next Chapter: 2.34. Release v02.12.05"><span class="glyphicon glyphicon-chevron-right visible-sm"></span><span class="hidden-sm hidden-tablet">2.34. Release... &raquo;</span>
+    </a>
+  </li>
+              
+            
+            
+            
+            
+          </ul>
+
+          
+
+        </div>
+    </div>
+  </div>
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-3">
+        <div id="sidebar" class="bs-sidenav" role="complementary">
+
+<div class="sidebar-header">
+    <h3>Plug &amp; Trust MW</h3>
+</div>
+
+<div class="row">
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../index.html">1. NXP Plug &amp; Trust Middleware</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">2. Changes</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="pending.html">2.1. Pending Refactoring items</a></li>
+<li class="toctree-l2"><a class="reference internal" href="pending.html#known-limitations">2.2. Known limitations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_07_01.html">2.3. Release <code class="docutils literal notranslate"><span class="pre">v04.07.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_07_00.html">2.4. Release <code class="docutils literal notranslate"><span class="pre">v04.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_06_00.html">2.5. Release <code class="docutils literal notranslate"><span class="pre">v04.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_03.html">2.6. Release <code class="docutils literal notranslate"><span class="pre">v04.05.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_02.html">2.7. Release <code class="docutils literal notranslate"><span class="pre">v04.05.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_01.html">2.8. Release <code class="docutils literal notranslate"><span class="pre">v04.05.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_05_00.html">2.9. Release <code class="docutils literal notranslate"><span class="pre">v04.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_04_02.html">2.10. Release <code class="docutils literal notranslate"><span class="pre">v04.04.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_04_01.html">2.11. Release <code class="docutils literal notranslate"><span class="pre">v04.04.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_03.html">2.12. Release <code class="docutils literal notranslate"><span class="pre">v04.03.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_02.html">2.13. Release <code class="docutils literal notranslate"><span class="pre">v04.03.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_01.html">2.14. Release <code class="docutils literal notranslate"><span class="pre">v04.03.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_03_00.html">2.15. Release <code class="docutils literal notranslate"><span class="pre">v04.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_02_00.html">2.16. Release <code class="docutils literal notranslate"><span class="pre">v04.02.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_01_03.html">2.17. Release <code class="docutils literal notranslate"><span class="pre">v04.01.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_01_01.html">2.18. Release <code class="docutils literal notranslate"><span class="pre">v04.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_01_00.html">2.19. Release <code class="docutils literal notranslate"><span class="pre">v04.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_00_01.html">2.20. Release <code class="docutils literal notranslate"><span class="pre">v04.00.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v04_00_00.html">2.21. Release <code class="docutils literal notranslate"><span class="pre">v04.00.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_03_00.html">2.22. Release <code class="docutils literal notranslate"><span class="pre">v03.03.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_01_01.html">2.23. Release <code class="docutils literal notranslate"><span class="pre">v03.01.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_01_00.html">2.24. Release <code class="docutils literal notranslate"><span class="pre">v03.01.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_06.html">2.25. Release <code class="docutils literal notranslate"><span class="pre">v03.00.06</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_05.html">2.26. Release <code class="docutils literal notranslate"><span class="pre">v03.00.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_04.html">2.27. Release <code class="docutils literal notranslate"><span class="pre">v03.00.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_03.html">2.28. Release <code class="docutils literal notranslate"><span class="pre">v03.00.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v03_00_02.html">2.29. Release <code class="docutils literal notranslate"><span class="pre">v03.00.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_16_01.html">2.30. Release <code class="docutils literal notranslate"><span class="pre">v02.16.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_16_00.html">2.31. Release <code class="docutils literal notranslate"><span class="pre">v02.16.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_15_00.html">2.32. Release <code class="docutils literal notranslate"><span class="pre">v02.15.00</span></code></a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">2.33. Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#file-folder-relocation">2.33.1. File/Folder relocation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#build-system-changes">2.33.2. Build system changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#new-platform-support">2.33.3. New platform support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#apis-enum-types-changes">2.33.4. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#functional-changes">2.33.5. Functional Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#new-feature-support">2.33.6. New feature support</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ssscli-pycli-changes">2.33.7. SSSCLI / PyCLI Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#communication-layer-changes">2.33.8. Communication Layer Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#id1">2.33.9. APIs &amp; enum/types Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#examples-demo-updates">2.33.10. Examples / DEMO updates</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#documentation-changes">2.33.11. Documentation Changes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-miscellaneous-changes">2.33.12. Other Miscellaneous Changes</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html">2.34. Release <code class="docutils literal notranslate"><span class="pre">v02.12.05</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-04">2.35. Release <code class="docutils literal notranslate"><span class="pre">v02.12.04</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-03">2.36. Release <code class="docutils literal notranslate"><span class="pre">v02.12.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-02">2.37. Release <code class="docutils literal notranslate"><span class="pre">v02.12.02</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-01">2.38. Release <code class="docutils literal notranslate"><span class="pre">v02.12.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_12_00.html#release-v02-12-00">2.39. Release <code class="docutils literal notranslate"><span class="pre">v02.12.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_11_03.html">2.40. Release <code class="docutils literal notranslate"><span class="pre">v02.11.03</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_11_01.html">2.41. Internal Release <code class="docutils literal notranslate"><span class="pre">v02.11.01</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_11_00.html">2.42. Release <code class="docutils literal notranslate"><span class="pre">v02.11.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_10_00.html">2.43. Release <code class="docutils literal notranslate"><span class="pre">v02.10.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_09_00.html">2.44. Release <code class="docutils literal notranslate"><span class="pre">v02.09.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_07_00.html">2.45. Release <code class="docutils literal notranslate"><span class="pre">v02.07.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_06_00.html">2.46. Release <code class="docutils literal notranslate"><span class="pre">v02.06.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_05_00_to_v02_03_00.html">2.47. Release <code class="docutils literal notranslate"><span class="pre">v02.05.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_05_00_to_v02_03_00.html#release-v02-04-00">2.48. Release <code class="docutils literal notranslate"><span class="pre">v02.04.00</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="v02_05_00_to_v02_03_00.html#release-02-03-00">2.49. Release <code class="docutils literal notranslate"><span class="pre">02.03.00</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../stack/index.html">3. Plug &amp; Trust MW Stack</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../building/index.html">4. Building / Compiling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../demos/index.html">5. Demo and Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../edgelock2go-agent.html">6. NXP EdgeLock 2GO Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../semslite/doc/index.html">7. SEMS Lite Agent</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../plugins/index.html">8. Plugins / Add-ins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-tool.html">9. CLI Tool</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../appendix.html">10. Appendix</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Note.html">11. Note about the source code in the document</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../Revision_history.html">12. Revision history</a></li>
+</ul>
+
+</div>
+<div class="row">
+    <form class="form" action="../search.html" method="get">
+     <div class="form-group">
+      <label for="Search">Search:</label>
+      <input type="text" name="q" class="form-control" placeholder="Search" />
+     </div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+        </div>
+      </div>
+    <div class="body col-md-9 content" role="main">
+      
+  <section id="release-v02-14-00">
+<h1><span class="section-number">2.33. </span>Release <code class="docutils literal notranslate"><span class="pre">v02.14.00</span></code><a class="headerlink" href="#release-v02-14-00" title="Permalink to this headline">¶</a></h1>
+<section id="file-folder-relocation">
+<h2><span class="section-number">2.33.1. </span>File/Folder relocation<a class="headerlink" href="#file-folder-relocation" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Renamed DTLS/SSL2 Server and client executables.  New names are:</p>
+<ul>
+<li><p>mbedtls_ex_orig_ssl_server2</p></li>
+<li><p>mbedtls_ex_sss_dtls_client</p></li>
+<li><p>mbedtls_ex_orig_dtls_server</p></li>
+<li><p>mbedtls_ex_sss_ssl2_client</p></li>
+</ul>
+</li>
+</ul>
+<ul class="simple">
+<li><p>Renamed project <code class="docutils literal notranslate"><span class="pre">greengrass</span></code> to <code class="docutils literal notranslate"><span class="pre">sss_pkcs11</span></code></p></li>
+</ul>
+<ul class="simple">
+<li><p>Renamed file <code class="docutils literal notranslate"><span class="pre">greengrass.c</span></code> to <code class="docutils literal notranslate"><span class="pre">sss_pkcs11.c</span></code></p></li>
+</ul>
+<ul class="simple">
+<li><p>Renamed folders of Reader Library examples.</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">ex_prepare_MFDFEV2</span></code> =&gt; <code class="docutils literal notranslate"><span class="pre">ex_Ev2Prepare_Card</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ex_prepare_se05x</span></code> =&gt; <code class="docutils literal notranslate"><span class="pre">ex_Ev2Prepare_se05x</span></code></p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="build-system-changes">
+<h2><span class="section-number">2.33.2. </span>Build system changes<a class="headerlink" href="#build-system-changes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Extensively revamped <code class="docutils literal notranslate"><span class="pre">fsl_sss_ftr.h</span></code> file for finer control of build
+configuration selection.  This design will be extended extensively in
+future releases.</p></li>
+</ul>
+<ul class="simple">
+<li><p>On LPC55S with FreeRTOS, using native malloc instead of Heap_4.c for
+mbedTLS</p></li>
+</ul>
+<ul class="simple">
+<li><p>Compile time asserts added for sizes of structures.</p></li>
+</ul>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">scripts/env_setup.sh</span></code>, <code class="docutils literal notranslate"><span class="pre">scripts/env_setup.sh</span></code> prints info on which
+tools are used from which paths.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Changed Applet selection in CMake (See  <a class="reference internal" href="../scripts/cmake_options.html#cmake-option-ptmw-applet"><span class="std std-numref">Section 4.7.1</span></a>
+<a class="reference internal" href="../scripts/cmake_options.html#cmake-option-ptmw-applet"><span class="std std-ref">PTMW_Applet</span></a>). We no longer use name <code class="docutils literal notranslate"><span class="pre">SE050_A</span></code>, <code class="docutils literal notranslate"><span class="pre">SE050_B</span></code>
+or <code class="docutils literal notranslate"><span class="pre">SE050_C</span></code> for builds / Applet selection. New names are <code class="docutils literal notranslate"><span class="pre">SE05X_A</span></code>,
+<code class="docutils literal notranslate"><span class="pre">SE05X_B</span></code> or <code class="docutils literal notranslate"><span class="pre">SE05X_C</span></code></p></li>
+</ul>
+<ul class="simple">
+<li><p>CMake Option <code class="docutils literal notranslate"><span class="pre">Applet_SE05X_Ver</span></code> is no longer used. Instead,
+<a class="reference internal" href="../scripts/cmake_options.html#cmake-option-ptmw-se05x-ver"><span class="std std-numref">Section 4.7.2</span></a> <a class="reference internal" href="../scripts/cmake_options.html#cmake-option-ptmw-se05x-ver"><span class="std std-ref">PTMW_SE05X_Ver</span></a> is introduced for future use.</p></li>
+</ul>
+<ul class="simple">
+<li><p>See <a class="reference internal" href="../scripts/cmake_options.html#cmake-option-ptmw-se05x-auth"><span class="std std-numref">Section 4.7.11</span></a> <a class="reference internal" href="../scripts/cmake_options.html#cmake-option-ptmw-se05x-auth"><span class="std std-ref">PTMW_SE05X_Auth</span></a></p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">FastSCP</span></code> is now called <code class="docutils literal notranslate"><span class="pre">ECKey</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">AppletSCP</span></code> is now called <code class="docutils literal notranslate"><span class="pre">AESKey</span></code>.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="new-platform-support">
+<h2><span class="section-number">2.33.3. </span>New platform support<a class="headerlink" href="#new-platform-support" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>i.MX8 support added (<a class="reference internal" href="../dev-platforms/platform_imx8_linux.html#platform-imx-linux"><span class="std std-ref">Setup i.MX 8MQuad - MCIMX8M-EVK</span></a>)</p></li>
+</ul>
+</section>
+<section id="apis-enum-types-changes">
+<h2><span class="section-number">2.33.4. </span>APIs &amp; enum/types Changes<a class="headerlink" href="#apis-enum-types-changes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Use <a class="reference internal" href="../api/function_se05x___a_p_d_u__apis_8h_1a69a93e0300eb3b1baf99c1d71be414f5.html#_CPPv428Se05x_API_ReadObject_W_Attst15pSe05xSession_t8uint32_t8uint16_t8uint16_t8uint32_t23SE05x_AttestationAlgo_tPK7uint8_t6size_tP7uint8_tP6size_tP7uint8_tP6size_tP17SE05x_TimeStamp_tP7uint8_tP6size_tP7uint8_tP6size_tP7uint8_tP6size_t" title="Se05x_API_ReadObject_W_Attst"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">Se05x_API_ReadObject_W_Attst()</span></code></a> instead of
+<a class="reference internal" href="../api/function_group__se05x__attest_1gae4a625829184d750e0fc87debb0a0ae9.html#_CPPv433sss_se05x_key_store_get_key_attstP21sss_se05x_key_store_tP18sss_se05x_object_tP7uint8_tP6size_tP6size_tP18sss_se05x_object_t15sss_algorithm_tP7uint8_t6size_tP22sss_se05x_attst_data_t" title="sss_se05x_key_store_get_key_attst"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">sss_se05x_key_store_get_key_attst()</span></code></a> to read with attestation large
+binary files greater than 500 bytes. See example <a class="reference internal" href="../demos/se05x/se05x_ReadWithAttestation/Readme.html#read-large-bin-obj"><span class="std std-ref">Reading large binary objects with attestation</span></a></p></li>
+</ul>
+<ul class="simple">
+<li><p>For Montgomery curves the key arguments, DH Shared secret and Signature are
+passed in Little Endian Convention.  Refer to <a class="reference internal" href="../sss/doc/apis-sss_key-format.html#apis-sss-key-format"><span class="std std-ref">SSS api key format (asymmetric keys)</span></a> for
+details on Endianness.</p></li>
+</ul>
+<ul class="simple">
+<li><p><a class="reference internal" href="../api/function_group__sss__crypto__derive__key_1ga68653b528082a1a224ca1800574833d0.html#_CPPv417sss_derive_key_goP16sss_derive_key_tPK7uint8_t6size_tPK7uint8_t6size_tP12sss_object_t8uint16_tP7uint8_tP6size_t" title="sss_derive_key_go"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">sss_derive_key_go()</span></code></a> is deprecated and is replaced by
+<a class="reference internal" href="../api/function_group__sss__crypto__derive__key_1ga88d54f237e98dc97cf45a50e73045f41.html#_CPPv421sss_derive_key_one_goP16sss_derive_key_tPK7uint8_t6size_tPK7uint8_t6size_tP12sss_object_t8uint16_t" title="sss_derive_key_one_go"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">sss_derive_key_one_go()</span></code></a></p></li>
+</ul>
+<ul class="simple">
+<li><p>Added <a class="reference internal" href="../api/function_group__sss__str__log_1ga404488d695c5b745b247a8be46f3fff2.html#_CPPv413sss_status_sz12sss_status_t" title="sss_status_sz"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">sss_status_sz()</span></code></a> to convert SSS API Return code to string.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Updated Enumeration from <a class="reference internal" href="../api/enum_group__se05x__types_1ga202ced344a51f00a1524777edfaabfd2.html#_CPPv421SE05x_TransientType_t" title="SE05x_TransientType_t"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">SE05x_TransientType_t</span></code></a> to <a class="reference internal" href="../api/enum_group__se05x__types_1ga9e91e20fb323024062e0a54e6470fe0c.html#_CPPv411SE05x_INS_t" title="SE05x_INS_t"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">SE05x_INS_t</span></code></a> in the following API’s:</p>
+<ul>
+<li><p><a class="reference internal" href="../api/function_se05x___a_p_d_u__apis_8h_1a9ba9088d55e89347f3ae7c26b4b8f3c7.html#_CPPv420Se05x_API_WriteECKey15pSe05xSession_t14pSe05xPolicy_t18SE05x_MaxAttemps_t8uint32_t15SE05x_ECCurve_tPK7uint8_t6size_tPK7uint8_t6size_tK11SE05x_INS_tK15SE05x_KeyPart_t" title="Se05x_API_WriteECKey"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">Se05x_API_WriteECKey</span></code></a></p></li>
+<li><p><a class="reference internal" href="../api/function_se05x___a_p_d_u__apis_8h_1a037f8a52afe767977d6f84293d29dada.html#_CPPv421Se05x_API_WriteRSAKey15pSe05xSession_t14pSe05xPolicy_t8uint32_t8uint16_tPK7uint8_t6size_tPK7uint8_t6size_tPK7uint8_t6size_tPK7uint8_t6size_tPK7uint8_t6size_tPK7uint8_t6size_tPK7uint8_t6size_tPK7uint8_t6size_tK11SE05x_INS_tK15SE05x_KeyPart_tK20SE05x_RSAKeyFormat_t" title="Se05x_API_WriteRSAKey"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">Se05x_API_WriteRSAKey</span></code></a></p></li>
+<li><p><a class="reference internal" href="../api/function_se05x___a_p_d_u__apis_8h_1a4d0d3a61dd6f1f0363fa9d29db1f795b.html#_CPPv422Se05x_API_WriteSymmKey15pSe05xSession_t14pSe05xPolicy_t18SE05x_MaxAttemps_t8uint32_t13SE05x_KeyID_tPK7uint8_t6size_tK11SE05x_INS_tK19SE05x_SymmKeyType_t" title="Se05x_API_WriteSymmKey"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">Se05x_API_WriteSymmKey</span></code></a></p></li>
+</ul>
+</li>
+</ul>
+<ul class="simple">
+<li><p>Define <code class="docutils literal notranslate"><span class="pre">T1oI2C_UM1225_SE050</span></code> is no longer applicable, use  <code class="docutils literal notranslate"><span class="pre">T1oI2C_UM11225_SE05X</span></code> instead.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added SE050 APIs <a class="reference internal" href="../api/function_se05x___a_p_d_u__apis_8h_1aca7f71ba4533e3002f5f1ee42fb1c557.html#_CPPv423Se05x_API_CreateCounter15pSe05xSession_t14pSe05xPolicy_t8uint32_t8uint16_t" title="Se05x_API_CreateCounter"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">Se05x_API_CreateCounter</span></code></a>, <a class="reference internal" href="../api/function_se05x___a_p_d_u__apis_8h_1aaa962cfe5e37d0666cf502edb56a7672.html#_CPPv425Se05x_API_SetCounterValue15pSe05xSession_t8uint32_t8uint16_t8uint64_t" title="Se05x_API_SetCounterValue"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">Se05x_API_SetCounterValue</span></code></a>, <a class="reference internal" href="../api/function_se05x___a_p_d_u__apis_8h_1aaddeedb7081e58db80671e156405d5f9.html#_CPPv420Se05x_API_IncCounter15pSe05xSession_t8uint32_t" title="Se05x_API_IncCounter"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">Se05x_API_IncCounter</span></code></a></p></li>
+</ul>
+<ul>
+<li><p>smCom Layer is refactored so that Application send down
+the connection handles/parameters to lower layer.</p>
+<p>e.g. SSCLI and Demos on PC which can take command line
+argument can now use the I2C device over
+command line at run time without recompiling the
+middleware/example.</p>
+</li>
+</ul>
+</section>
+<section id="functional-changes">
+<h2><span class="section-number">2.33.5. </span>Functional Changes<a class="headerlink" href="#functional-changes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Extensive support for <span class="xref std std-ref">A71CH</span>.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added enable pin support for SE05X on Raspberry Pi</p></li>
+</ul>
+<ul class="simple">
+<li><p>Modified SE policy of keymaster HAL in Android</p></li>
+</ul>
+<ul class="simple">
+<li><p>Updated RSA reference key format for Android Key Master.  It now uses prefix A5 to
+import import Key ID 00000001.</p></li>
+</ul>
+</section>
+<section id="new-feature-support">
+<h2><span class="section-number">2.33.6. </span>New feature support<a class="headerlink" href="#new-feature-support" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Added tool se05x_setAppletFeatures to configure applet features</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added support to use Platform SCP keys from file system</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added support to retrieve existing certificates in pem format</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added tool to mandate Platform SCP03</p></li>
+</ul>
+<ul class="simple">
+<li><p>Integrated mBED Crypto PSA interface</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added Secure-NonSecure example based on PSA for LPC55S</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added examples of SE05X Import Transient objects, SE05X Export Transient objects, Import External Object Prepare and Import External Object Create</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added example to demonstrate object read with attestation</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added example to demonstrate how timestamp is incremented in SE</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added example to demonstrate how to create APDU buffer to import external key objects.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Lock and unlock secure element using transport key</p></li>
+</ul>
+<ul class="simple">
+<li><p>Upgraded mbedTLS to version 2.16</p></li>
+</ul>
+</section>
+<section id="ssscli-pycli-changes">
+<h2><span class="section-number">2.33.7. </span>SSSCLI / PyCLI Changes<a class="headerlink" href="#ssscli-pycli-changes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Added support for ECC ED25519 and MONTH DH 25519 curves</p></li>
+</ul>
+<ul class="simple">
+<li><p>Fixed sign and verify operation for ED25519.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added API to inject HMAC key</p></li>
+</ul>
+<ul class="simple">
+<li><p>Endianness of ed25519 and mont_dh_25519 keys, signature and shared secret
+are updated to little endian.</p></li>
+</ul>
+</section>
+<section id="communication-layer-changes">
+<h2><span class="section-number">2.33.8. </span>Communication Layer Changes<a class="headerlink" href="#communication-layer-changes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>VCOM Interface updates on OSX and PC Linux</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added connection handle in smCom layer. This allows connection data to be
+passed from application. Tested on windows, raspberry pi and imx platform.</p></li>
+</ul>
+</section>
+<section id="id1">
+<h2><span class="section-number">2.33.9. </span>APIs &amp; enum/types Changes<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Re-Wrote (internal) low level Tx/Rx APIs for APDU TxRx.</p>
+<ol class="arabic simple">
+<li><p>DoAPDUTxRx_s_Case2</p></li>
+<li><p>DoAPDUTx_s_Case3</p></li>
+<li><p>DoAPDUTxRx_s_Case4</p></li>
+<li><p>DoAPDUTxRx_s_Case4E</p></li>
+</ol>
+</li>
+</ul>
+<ul class="simple">
+<li><p>Define <code class="docutils literal notranslate"><span class="pre">T1oI2C_UM1225_SE05X</span></code> is no longer applicable, use
+<code class="docutils literal notranslate"><span class="pre">T1oI2C_UM11225</span></code> instead.</p></li>
+</ul>
+<ul>
+<li><p><a class="reference internal" href="../api/union_s_e05x___crypto_mode_sub_type__t.html#_CPPv425SE05x_CryptoModeSubType_t" title="SE05x_CryptoModeSubType_t"><code class="xref cpp cpp-type docutils literal notranslate"><span class="pre">SE05x_CryptoModeSubType_t</span></code></a></p>
+<p><code class="docutils literal notranslate"><span class="pre">SE05x_CryptoModeSubType_t::u8</span></code> renamed to <code class="docutils literal notranslate"><span class="pre">SE05x_CryptoModeSubType_t::union_8bit</span></code></p>
+</li>
+</ul>
+<ul class="simple">
+<li><p>Endianness of ed25519 and mont_dh_25519 signature and shared secret are
+updated to little endian.</p></li>
+</ul>
+</section>
+<section id="examples-demo-updates">
+<h2><span class="section-number">2.33.10. </span>Examples / DEMO updates<a class="headerlink" href="#examples-demo-updates" title="Permalink to this headline">¶</a></h2>
+<p>Updated Examples:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../demos/se05x/se05x_GetInfo/Readme.html#ex-se05x-info"><span class="std std-numref">Section 5.7.2</span></a> <a class="reference internal" href="../demos/se05x/se05x_GetInfo/Readme.html#ex-se05x-info"><span class="std std-ref">SE05X Get Info example</span></a>  Updated to show CPLC data.</p></li>
+</ul>
+<p>New Examples:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="../demos/se05x/se05x_ImportExternalObjectPrepare/Readme.html#import-external-obj-prepare"><span class="std std-numref">Section 5.7.11</span></a> <a class="reference internal" href="../demos/se05x/se05x_ImportExternalObjectPrepare/Readme.html#import-external-obj-prepare"><span class="std std-ref">Import External Object Prepare</span></a></p></li>
+</ul>
+<ul class="simple">
+<li><p><code class="xref std std-numref docutils literal notranslate"><span class="pre">import-external-obj-create</span></code> <span class="xref std std-ref">import-external-obj-create</span></p></li>
+</ul>
+<ul class="simple">
+<li><p><a class="reference internal" href="../demos/se05x/se05x_ReadWithAttestation/Readme.html#read-with-attestation"><span class="std std-numref">Section 5.7.13</span></a> <a class="reference internal" href="../demos/se05x/se05x_ReadWithAttestation/Readme.html#read-with-attestation"><span class="std std-ref">Read object with Attestation</span></a></p></li>
+</ul>
+<ul class="simple">
+<li><p><a class="reference internal" href="../demos/se05x/se05x_TransportLock/readme.html#transport-lock"><span class="std std-numref">Section 5.7.14</span></a> <a class="reference internal" href="../demos/se05x/se05x_TransportLock/readme.html#transport-lock"><span class="std std-ref">SE05X Transport Lock example</span></a></p></li>
+</ul>
+<ul class="simple">
+<li><p><a class="reference internal" href="../demos/se05x/se05x_TransportUnLock/readme.html#transport-unlock"><span class="std std-numref">Section 5.7.15</span></a> <a class="reference internal" href="../demos/se05x/se05x_TransportUnLock/readme.html#transport-unlock"><span class="std std-ref">SE05X Transport UnLock example</span></a></p></li>
+</ul>
+<ul class="simple">
+<li><p><a class="reference internal" href="../demos/se05x/se05x_TimeStamp/Readme.html#se05x-time-stamp"><span class="std std-numref">Section 5.7.16</span></a> <a class="reference internal" href="../demos/se05x/se05x_TimeStamp/Readme.html#se05x-time-stamp"><span class="std std-ref">SE05X Timestamp</span></a></p></li>
+</ul>
+<ul class="simple">
+<li><p><code class="xref std std-numref docutils literal notranslate"><span class="pre">write-apdu-to-buf</span></code> <span class="xref std std-ref">write-apdu-to-buf</span></p></li>
+</ul>
+</section>
+<section id="documentation-changes">
+<h2><span class="section-number">2.33.11. </span>Documentation Changes<a class="headerlink" href="#documentation-changes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Updated notes on <code class="docutils literal notranslate"><span class="pre">ssscli</span> <span class="pre">se05x</span> <span class="pre">reset</span></code>  and
+<a class="reference internal" href="../api/function_group__se05x__apis_1ga7c2c73fead6ff5f36a04e83a1198243e.html#_CPPv429Se05x_API_DeleteAll_Iterative15pSe05xSession_t" title="Se05x_API_DeleteAll_Iterative"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">Se05x_API_DeleteAll_Iterative()</span></code></a></p></li>
+</ul>
+<ul class="simple">
+<li><p>Updated documentation of SE05X layer of SSS APIs, e.g.
+<a class="reference internal" href="../api/function_group__sss__se05x__keystore_1gac37b86b58ce16f7978c028c22dc842a9.html#_CPPv424sss_se05x_key_store_loadP21sss_se05x_key_store_t" title="sss_se05x_key_store_load"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">sss_se05x_key_store_load()</span></code></a> now mentions that this
+API does not do anything special on SE05X.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Updated wifi-eap document.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Changed logging styles and updated misc documentation with the same information.</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added documentation for PKCS#11 standalone library</p></li>
+</ul>
+<ul class="simple">
+<li><p>Updated Greengrass documentation with new PKCS#11 project name</p></li>
+</ul>
+<ul class="simple">
+<li><p>Added documentation for Import External Object example</p></li>
+</ul>
+<ul class="simple">
+<li><p>Extended API Documentation for SE05X Low Level APIs</p></li>
+</ul>
+</section>
+<section id="other-miscellaneous-changes">
+<h2><span class="section-number">2.33.12. </span>Other Miscellaneous Changes<a class="headerlink" href="#other-miscellaneous-changes" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Bug fix: Remaining cache data and input data handled in <a class="reference internal" href="../api/function_group__sss__crypto__symmetric_1ga89b63c9120a50c28f65a3ef5f2fc307e.html#_CPPv417sss_cipher_finishP15sss_symmetric_tPK7uint8_t6size_tP7uint8_tP6size_t" title="sss_cipher_finish"><code class="xref cpp cpp-func docutils literal notranslate"><span class="pre">sss_cipher_finish()</span></code></a> API</p></li>
+</ul>
+<ul class="simple">
+<li><p>OPC-UA Example enabled for compilation/running
+from Raspberry PI</p></li>
+</ul>
+<ul class="simple">
+<li><p>mbedTLS Upgraded to <code class="docutils literal notranslate"><span class="pre">v02.16.02</span></code></p></li>
+</ul>
+<ul class="simple">
+<li><p>Added mbedCrypto for LPC55S / TF-M related work.  (Ongoing, NXP Internal work)</p></li>
+</ul>
+</section>
+</section>
+
+
+    </div>
+      
+  </div>
+</div>
+<footer class="footer">
+  <div class="container">
+    <p class="pull-right">
+      <a href="#">Back to top</a>
+      
+    </p>
+    <p>
+        &copy; Copyright 2018-2020, NXP.<br/>
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 4.5.0.<br/>
+    </p>
+  </div>
+</footer>
+  </body>
+</html>

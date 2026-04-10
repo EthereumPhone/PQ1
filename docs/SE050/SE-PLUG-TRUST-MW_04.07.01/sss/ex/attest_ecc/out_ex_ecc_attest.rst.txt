@@ -1,0 +1,39 @@
+App   :INFO :PlugAndTrust_v02.14.00_20200331
+App   :INFO :Running ..\..\..\simw-top_build\se_x86\bin\Debug\attest_ecc.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Running ECC key attestation example ex_sss_attest_ecc.c
+App   :INFO :Inject ECC key pair - 'ecc_key'
+App   :INFO :Create a attestation ECC key pair - 'attestation_ecc_key'
+App   :INFO :Read public key from ECC key pair 'ecc_key' with attestation
+App   :INFO :Attested Key -->
+App   :INFO :Public Key (Len=91)
+      30 59 30 13    06 07 2A 86    48 CE 3D 02    01 06 08 2A
+      86 48 CE 3D    03 01 07 03    42 00 04 ED    A7 E9 0B F9
+      20 CF FB 9D    F6 DB CE F7    20 E1 23 8B    3C EE 84 86
+      D2 50 E4 DF    30 11 50 1A    15 08 A6 2E    D7 49 52 78
+      63 6E 61 E8    5F ED B0 6D    87 92 0A 04    19 14 FE 76
+      63 55 DF BD    68 61 59 31    8E 68 7C
+App   :INFO :Attribute (Len=17)
+      EF 00 00 92    01 01 00 00    00 00 00 00    00 00 01 00
+      00
+App   :INFO :Time Stamp (Len=12)
+      00 00 00 0F    FF FF FF FA    00 01 2C C8
+App   :INFO :Out Random Value (Len=16)
+      01 02 03 04    05 06 07 08    09 01 02 03    04 05 06 07
+App   :INFO :Chip Id (Len=18)
+      04 0D 0F 00    39 67 C2 C1    CE 41 1B 9A    76 F5 B7 AB
+      D0 CD
+App   :INFO :Signature (Len=71)
+      30 45 02 21    00 8E 09 C2    BD 27 45 7B    0A 6E 2C 70
+      48 00 B0 D7    AC 7D FA 70    03 7B 21 A5    BF 0B 40 8B
+      C8 99 76 B0    03 02 20 6F    F0 22 37 24    43 22 0C 7B
+      99 2A DA DA    0D D6 BF AD    A6 B3 09 81    0A 2D 0A BD
+      5D 59 17 39    EC 24 93
+App   :INFO :Verify attestation signature using 'attestation_ecc_key' key
+App   :INFO :Verification success
+App   :INFO :ex_sss_attest_ecc Example Success !!!...
+App   :INFO :ex_sss Finished

@@ -1,0 +1,21 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2019 NXP                                                         */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+nxp.iot.ServiceDescriptor.hostname                     type: FT_POINTER
+nxp.iot.ServiceDescriptor.client_id                    type: FT_POINTER
+nxp.iot.ServiceDescriptor.username                     type: FT_POINTER
+nxp.iot.ServiceDescriptor.password                     type: FT_POINTER
+
+nxp.iot.ServiceDescriptor.client_certificate           type: FT_POINTER
+nxp.iot.ServiceDescriptor.server_certificate           type: FT_POINTER
+
+nxp.iot.ServiceDescriptor.azure_id_scope               type: FT_POINTER
+nxp.iot.ServiceDescriptor.azure_registration_id        type: FT_POINTER
+nxp.iot.ServiceDescriptor.azure_global_device_endpoint type: FT_POINTER
+
+nxp.iot.ServiceDescriptor.customer_metadata_json       type: FT_POINTER
+

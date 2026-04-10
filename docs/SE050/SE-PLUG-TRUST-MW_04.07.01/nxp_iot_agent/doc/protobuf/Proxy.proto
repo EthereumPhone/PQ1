@@ -1,0 +1,31 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2023 NXP                                                         */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.proxy";
+option java_multiple_files = true;
+
+import "Agent.proto";
+
+message HelloProxyRequest {
+
+}
+
+message HelloProxyResponse {
+    optional bytes clientCertificateChain = 1;
+    optional bytes serverCertificateChain = 2;
+    optional bytes protocol = 3;
+    optional bytes cipherSuite = 4;
+    optional bytes serverHostname = 5;
+    optional bytes correlationId = 6;
+	/* Add connection Status to the Hello Proxy response to communicate Device Link the status of the connection*/
+    optional UpdateStatusReport.UpdateStatus connectionStatus = 7;
+    optional bytes customerId = 8;
+}

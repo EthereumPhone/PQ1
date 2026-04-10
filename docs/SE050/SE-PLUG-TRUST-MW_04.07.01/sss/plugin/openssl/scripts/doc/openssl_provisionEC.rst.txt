@@ -1,0 +1,36 @@
+usage: openssl_provisionEC.py [-h] --key_type KEY_TYPE
+                              [--connection_type CONNECTION_TYPE]
+                              [--connection_data CONNECTION_DATA]
+                              [--subsystem SUBSYSTEM] [--auth_type AUTH_TYPE]
+                              [--scpkey SCPKEY]
+
+Provision attached secure element with EC keys
+
+This example generates a complete set of ECC key files (*.pem) (existing ones overwritten).
+Performs debug reset the attached secure element.
+Attached secure element provisioned with EC key.
+Creates reference key from the injected EC key.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+required arguments:
+  --key_type KEY_TYPE   Supported key types => ``prime192v1``, ``secp224r1``, ``prime256v1``, ``secp384r1``, ``secp521r1``, ``brainpoolP160r1``, ``brainpoolP192r1``, ``brainpoolP224r1``, ``brainpoolP256r1``, ``brainpoolP320r1``, ``brainpoolP384r1``, ``brainpoolP512r1``, ``secp160k1``, ``secp192k1``, ``secp224k1``, ``secp256k1``
+
+optional arguments:
+  --connection_type CONNECTION_TYPE
+                        Supported connection types => ``t1oi2c``, ``sci2c``, ``vcom``, ``jrcpv1``, ``jrcpv2``, ``pcsc``. Default: ``t1oi2c``
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+  --subsystem SUBSYSTEM
+                        Supported subsystem => ``se050``, ``mbedtls``. Default: ``se050``
+  --auth_type AUTH_TYPE
+                        Supported subsystem => ``None``, ``PlatformSCP``, ``UserID``, ``ECKey``, ``AESKey``. Default: ``None``
+  --scpkey SCPKEY
+
+Example invocation::
+
+    python openssl_provisionEC.py --key_type prime256v1
+    python openssl_provisionEC.py --key_type prime256v1 --connection_data 169.254.0.1:8050
+    python openssl_provisionEC.py --key_type secp224k1  --connection_type jrcpv2 --connection_data 127.0.0.1:8050
+    python openssl_provisionEC.py --key_type brainpoolP256r1 --connection_data COM3

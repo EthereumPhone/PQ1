@@ -1,0 +1,20 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2019-2022 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+// Allow static allocation of the endpoint information by defining all of
+// its sizes. Attention, these multiply, so a max number of 5
+// endpoints with additional data 64 and configuration state 64 result in
+// more than 5 * 128 bytes of ram consumption.
+
+nxp.iot.AgentHelloResponse.endpoints            max_count: 5
+nxp.iot.EndpointInformation.additionalData      max_size: 64
+nxp.iot.EndpointInformation.configurationState  max_size: 64
+nxp.iot.AgentCrlRequest.crl                     type: FT_POINTER
+nxp.iot.AgentClaimStatus.details                type: FT_POINTER
+nxp.iot.AgentRtpStatus.details                  type: FT_POINTER
+nxp.iot.AgentCspStatus.details                  type: FT_POINTER
+nxp.iot.UpdateStatusReport.correlationId        max_size: 37 

@@ -1,0 +1,16 @@
+@startuml
+
+    title Get SE Card contents
+
+    participant app as "Application"
+    participant SEMSLiteAgent as "SEMS_Lite_MW"
+    === Connect SE ==
+    participant "Secure Element" as se
+
+    app -> SEMSLiteAgent : get SE Card contents
+	SEMSLiteAgent -> se : get SE Card contents
+    SEMSLiteAgent \-- se : returns
+	=== Disconnect SE ==
+    app \-- SEMSLiteAgent : returns
+	
+@enduml

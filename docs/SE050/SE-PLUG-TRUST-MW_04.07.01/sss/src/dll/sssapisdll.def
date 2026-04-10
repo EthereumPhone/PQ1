@@ -1,0 +1,68 @@
+
+; Copyright 2019 NXP
+;
+; SPDX-License-Identifier: Apache-2.0
+
+
+LIBRARY   sssapisw
+EXPORTS
+    sss_asymmetric_context_free
+    sss_asymmetric_context_init
+    sss_asymmetric_decrypt
+    sss_derive_key_dh
+    sss_asymmetric_encrypt
+    sss_asymmetric_sign_digest
+    sss_asymmetric_verify_digest
+    sss_cipher_crypt_ctr
+    sss_cipher_finish
+    sss_cipher_init
+    sss_cipher_one_go
+    sss_cipher_update
+    sss_session_open
+    sss_session_close
+    sss_derive_key_go
+    sss_derive_key_context_free
+    sss_derive_key_context_init
+    sss_digest_context_free
+    sss_digest_context_init
+    ;sss_digest_finish
+    ;sss_digest_init
+    sss_digest_one_go
+    ;sss_digest_update
+    ;sss_free_tunnel_context
+    ;sss_init_tunnel_context
+    sss_key_object_allocate_handle
+    sss_key_object_free
+    sss_key_object_get_access
+    sss_key_object_get_handle
+    sss_key_object_get_purpose
+    sss_key_object_get_user
+    sss_key_object_init
+    sss_key_object_set_access
+    sss_key_object_set_eccgfp_group
+    sss_key_object_set_purpose
+    sss_key_object_set_user
+    sss_key_store_allocate
+    sss_key_store_context_free
+    sss_key_store_context_init
+    sss_key_store_erase_key
+    sss_key_store_freeze_key
+    sss_key_store_generate_key
+    sss_key_store_get_key
+    sss_key_store_load
+    sss_key_store_open_key
+    sss_key_store_save
+    sss_key_store_set_key
+    sss_mac_context_free
+    sss_mac_context_init
+    sss_mac_finish
+    sss_mac_init
+    sss_mac_one_go
+    sss_mac_update
+    sss_session_open
+    sss_rng_context_free
+    sss_rng_context_init
+    sss_rng_get_random
+    sss_symmetric_context_free
+    sss_symmetric_context_init
+	;Se05x_API_DeleteAll_Iterative

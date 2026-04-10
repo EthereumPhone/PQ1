@@ -1,0 +1,17 @@
+i2c_iicbird.c
+i2c_tda8029.c
+iicbird*
+sci2c*
+scspi*
+smComAlpar*
+smComIpc*
+smComJRCP*
+smComPCSC*
+smComPN7150*
+smComSCI2C*
+smComSerial*
+smComSocket*
+smComThread*
+smUart*
+smUart_linux*
+smComSCSPI*

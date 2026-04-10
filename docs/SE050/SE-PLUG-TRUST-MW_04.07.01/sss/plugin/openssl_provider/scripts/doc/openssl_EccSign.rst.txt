@@ -1,0 +1,27 @@
+Perofrms Sign Verify with Openssl Provider with EC Keys
+
+usage: openssl_EccSign.py [-h] --key_type KEY_TYPE
+                          [--connection_data CONNECTION_DATA]
+                          [--disable_sha1 DISABLE_SHA1]
+
+example showcases how to sign using Provider, then verify using openssl and vice versa.
+
+Precondition:
+    - Inject keys using ``openssl_provisionEC.py``.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+required arguments:
+  --key_type KEY_TYPE   Supported key types => ``prime192v1``, ``secp224r1``, ``prime256v1``, ``secp384r1``, ``secp521r1``, ``brainpoolP160r1``, ``brainpoolP192r1``, ``brainpoolP224r1``, ``brainpoolP256r1``, ``brainpoolP320r1``, ``brainpoolP384r1``, ``brainpoolP512r1``, ``secp160k1``, ``secp192k1``, ``secp224k1``, ``secp256k1``
+
+optional arguments:
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+  --disable_sha1 DISABLE_SHA1
+                        Parameter to disable SHA1 => eg. ``True``, ``False``. Default: ``False``
+
+Example invocation::
+
+    python openssl_EccSign.py --key_type prime256v1
+    python openssl_EccSign.py --key_type secp160k1 --connection_data 127.0.0.1:8050

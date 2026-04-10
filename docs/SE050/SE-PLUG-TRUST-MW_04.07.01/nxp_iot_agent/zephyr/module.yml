@@ -1,0 +1,8 @@
+name: nxp_iot_agent
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig
+samples:
+  - zephyr/samples
+tests:
+  - zephyr/tests

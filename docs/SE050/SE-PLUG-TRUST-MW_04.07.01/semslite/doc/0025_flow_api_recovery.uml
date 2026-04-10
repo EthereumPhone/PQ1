@@ -1,0 +1,67 @@
+
+'
+' Recover system in case of upgrade failed.
+'
+' In some case, update can not complete. SE would require 
+' the user to do recovery.
+'
+
+@startuml
+
+title Process recovery
+
+participant APP as "Application"
+participant SEMS_Lite as "SEMS Lite Lib"
+participant SE as "Secure Element"
+
+autonumber "<b>[00]"
+
+APP -> SEMS_Lite : sems_lite_agent_init_context()
+
+APP -> SEMS_Lite : sems_lite_agent_session_open()
+
+APP -> SEMS_Lite : sems_lite_agent_load_package()
+
+activate SEMS_Lite
+
+note over APP, SE
+	Tear handling
+end note
+
+SEMS_Lite -> SE : Run Script()
+
+SEMS_Lite <-- SE : Se_ReturnStatus
+
+note over SEMS_Lite, SE
+	Return Code Checking
+end note
+
+APP <-- SEMS_Lite : DoRecovery
+
+APP -> SEMS_Lite : sems_lite_agent_session_close()
+
+APP --> APP : Get Recovery Script
+
+APP -> SEMS_Lite : sems_lite_agent_session_open()
+
+APP -> SEMS_Lite : sems_lite_agent_load_package(Recovery Script)
+
+note over APP, SE
+	Tear handling
+end note
+
+SEMS_Lite -> SE : Run Script()
+
+SEMS_Lite <-- SE : Se_ReturnStatus
+
+note over SEMS_Lite, SE
+	Return Code Checking
+end note
+
+APP <-- SEMS_Lite : Success
+
+APP -> SEMS_Lite : sems_lite_agent_session_close()
+
+deactivate SEMS_Lite
+
+@enduml

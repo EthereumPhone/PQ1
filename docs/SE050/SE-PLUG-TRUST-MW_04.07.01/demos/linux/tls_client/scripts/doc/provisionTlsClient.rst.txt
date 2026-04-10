@@ -1,0 +1,38 @@
+usage: provisionTlsClient.py [-h] --key_type KEY_TYPE
+                             [--connection_data CONNECTION_DATA]
+                             [--connection_type CONNECTION_TYPE]
+                             [--subsystem SUBSYSTEM]
+
+Provision attached secure element with ECC/RSA keys
+
+Preconditions:
+    - Secure element attached
+    - Virtual environment should be activated (not for iMX platform.
+      Refer ssscli installation steps: Plug & Trust MW, Section 8.3 :ref:`cli-doc-pre-steps`)
+
+Postconditions:
+    - Key pair injected on id referred by KEYPAIR_INDEX_CLIENT_PRIVATE variable
+    - Ref pem created
+    - Client certificate injected on id referred by CERTIFICATE_INDEX variable.
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+required arguments:
+  --key_type KEY_TYPE   Supported key types => ``ecc``, ``rsa``
+
+optional arguments:
+  --connection_data CONNECTION_DATA
+                        Parameter to connect to SE => eg. ``COM3``, ``127.0.0.1:8050``, ``none``. Default: ``none``
+  --connection_type CONNECTION_TYPE
+                        Supported connection types => ``t1oi2c``, ``sci2c``, ``vcom``, ``jrcpv1``, ``jrcpv2``, ``pcsc``. Default: ``t1oi2c``
+  --subsystem SUBSYSTEM
+                        Supported subsystem => ``se050``. Default: ``se050``
+
+Example invocation::
+    
+    python provisionTlsClient.py --key_type ecc
+    python provisionTlsClient.py --key_type ecc --connection_data 169.254.0.1:8050
+    python provisionTlsClient.py --key_type rsa --connection_data 127.0.0.1:8050 --connection_type jrcpv2
+    python provisionTlsClient.py --key_type rsa --connection_data COM3
+

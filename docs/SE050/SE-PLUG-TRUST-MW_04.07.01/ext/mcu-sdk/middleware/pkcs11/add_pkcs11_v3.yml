@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=../../bin/generator/sdk_generator/data/sdk_data_schema/v3/software_set_and_project_schema.json
+
+middleware.pkcs11:
+  section-type: component
+  contents:
+    repo_base_path: middleware/pkcs11
+    project_base_path: pkcs11
+    cc-include:
+    - repo_relative_path: "./"
+    files:
+    - source: README.md
+    - source: pkcs11t.h
+    - source: pkcs11f.h
+    - source: pkcs11.h
+    - source: LICENSE.md
+    - source: CONTRIBUTING.md
+  belong_to: set.middleware.pkcs11
+  section_info:
+    type: middleware
+    full_name: pkcs11
+    description: 'Public Key Cryptography Standard #11 defines generic cryptographic
+      token interface.'
+    version: 2.40.1
+    vendor: NXP
+    user_visible: always
+    taxonomy:
+      csub: pkcs11
+      belong_to: pkcs11
+    display_name: pkcs11
+
+set.middleware.pkcs11:
+  section-type: set
+  belong_to: set.middleware.pkcs11
+  section_info:
+    fixed_id: oasis_pkcs11
+    version: 2.40.1
+    display_name: pkcs11
+    description: 'Public Key Cryptography Standard #11 defines generic cryptographic
+      token interface.'
+    set_location:
+      repo_base_path: middleware/pkcs11
+    type: middleware
+    vendor: NXP
+    product:
+      kex_package:
+        kex_web_ui:
+          ui_control: true
+          ui_release_specific: true
+          ui_control_default: true
+          ui_category: Middleware
+        scr:
+        - scr.middleware.pkcs11
+      cmsis_pack:
+        vendor: NXP
+        supported: true
+        scr:
+        - scr.middleware.pkcs11
+        pack_root:
+          pack_type: SWP
+          pack_name: PKCS11
+          pack_version: 1.0.0
+    component_taxonomy:
+      pkcs11:
+        cclass: AWS IoT
+        cgroup: 'OASIS PKCS Standard 11'
+        cbundle: AWS IoT NXP
+        cbundle_version: 1.0.0
+
+license.pkcs11:
+  section-type: license
+  belong_to: set.middleware.pkcs11
+  contents:
+    repo_base_path: middleware/pkcs11
+    files:
+    - source: LICENSE.md
+  section_info:
+    Outgoing License: MIT
+scr.middleware.pkcs11:
+  belong_to: set.middleware.pkcs11
+  section-type: scr
+  contents:
+    license:
+    - license.pkcs11
+    Name: OASIS TC pkcs11
+    Version: 2.40.1
+    Format: source code
+    Description: 'Public Key Cryptography Standard #11 defines generic cryptographic
+      token interface.'
+    Location: middleware/pkcs11
+    Origin: OASIS TC, Amazon (MIT)
+    Url: https://github.com/amazon-freertos/pkcs11

@@ -1,0 +1,1 @@
+File to ensure this directory is created (to contain key material used by validation scripts)

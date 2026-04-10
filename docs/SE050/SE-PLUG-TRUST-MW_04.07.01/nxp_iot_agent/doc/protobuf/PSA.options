@@ -1,0 +1,14 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2021-2022 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+nxp.iot.GetVersionResponse.supported_key_data_formats    max_count: 1
+nxp.iot.GetVersionResponse.supported_key_data_formats    type: FT_STATIC
+
+nxp.iot.ImportKeyRequest.data                            type: FT_POINTER
+nxp.iot.ReadObjectResponse.data                          type: FT_POINTER
+
+

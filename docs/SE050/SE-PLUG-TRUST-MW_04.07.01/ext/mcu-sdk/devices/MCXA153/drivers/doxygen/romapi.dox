@@ -1,0 +1,4 @@
+/*!
+@defgroup romapi ROMAPI Driver
+@details The ROMAPI driver provides the functionalities to operate the internal Flash.
+*/

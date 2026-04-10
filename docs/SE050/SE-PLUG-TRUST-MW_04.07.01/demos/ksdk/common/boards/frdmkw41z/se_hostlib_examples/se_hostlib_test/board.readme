@@ -1,0 +1,10 @@
+Hardware requirements
+=====================
+- Mini/micro USB cable
+- FRDM-K64F board
+- Personal Computer
+- Network cable RJ45 standard (Network with Internet access)
+
+Board settings
+==============
+Connect OM3710/A71CHARD to the board.

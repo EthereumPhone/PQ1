@@ -1,0 +1,210 @@
+/*
+ * Copyright 2020-2021 NXP
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
+#include "fsl_enet_mdio.h"
+
+/*******************************************************************************
+ * Definitions
+ ******************************************************************************/
+
+/*******************************************************************************
+ * Prototypes
+ ******************************************************************************/
+
+static void ENET_MDIO_Init(mdio_handle_t *handle);
+static status_t ENET_MDIO_Write(mdio_handle_t *handle, uint8_t phyAddr, uint8_t regAddr, uint16_t data);
+static status_t ENET_MDIO_Read(mdio_handle_t *handle, uint8_t phyAddr, uint8_t regAddr, uint16_t *pData);
+#if defined(FSL_FEATURE_ENET_HAS_EXTEND_MDIO) && FSL_FEATURE_ENET_HAS_EXTEND_MDIO
+static status_t ENET_MDIO_WriteExt(
+    mdio_handle_t *handle, uint8_t portAddr, uint8_t devAddr, uint16_t regAddr, uint16_t data);
+static status_t ENET_MDIO_ReadExt(
+    mdio_handle_t *handle, uint8_t portAddr, uint8_t devAddr, uint16_t regAddr, uint16_t *pData);
+#endif
+static status_t ENET_MDIO_WaitTransferOver(ENET_Type *base);
+
+/*******************************************************************************
+ * Variables
+ ******************************************************************************/
+
+const mdio_operations_t enet_ops = {.mdioInit  = ENET_MDIO_Init,
+                                    .mdioWrite = ENET_MDIO_Write,
+                                    .mdioRead  = ENET_MDIO_Read,
+#if defined(FSL_FEATURE_ENET_HAS_EXTEND_MDIO) && FSL_FEATURE_ENET_HAS_EXTEND_MDIO
+                                    .mdioWriteExt = ENET_MDIO_WriteExt,
+                                    .mdioReadExt  = ENET_MDIO_ReadExt};
+#else
+                                    .mdioWriteExt = NULL,
+                                    .mdioReadExt  = NULL};
+#endif
+
+/*******************************************************************************
+ * Code
+ ******************************************************************************/
+
+static void ENET_MDIO_Init(mdio_handle_t *handle)
+{
+    mdio_resource_t *resource = (mdio_resource_t *)&handle->resource;
+    ENET_Type *base           = (ENET_Type *)resource->base;
+
+#if !(defined(FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL) && FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL)
+    uint32_t instance = ENET_GetInstance(base);
+
+    /* Set SMI first. */
+    (void)CLOCK_EnableClock(s_enetClock[instance]);
+#if defined(FSL_FEATURE_ENET_HAS_EXTRA_CLOCK_GATE) && FSL_FEATURE_ENET_HAS_EXTRA_CLOCK_GATE
+    (void)CLOCK_EnableClock(s_enetExtraClock[instance]);
+#endif
+#endif /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL */
+    /* Set MDIO first. */
+    ENET_SetSMI(base, resource->csrClock_Hz, false);
+}
+
+static status_t ENET_MDIO_Write(mdio_handle_t *handle, uint8_t phyAddr, uint8_t regAddr, uint16_t data)
+{
+    mdio_resource_t *resource = (mdio_resource_t *)&handle->resource;
+    ENET_Type *base           = (ENET_Type *)resource->base;
+    status_t result           = kStatus_Success;
+
+    /* Clear the MDIO interrupt event. */
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+
+    /* Starts a MDIO write command. */
+    ENET_StartSMIWrite(base, phyAddr, regAddr, kENET_MiiWriteValidFrame, data);
+
+    result = ENET_MDIO_WaitTransferOver(base);
+    if (result != kStatus_Success)
+    {
+        return result;
+    }
+
+    /* Clear MDIO interrupt event. */
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+
+    return result;
+}
+
+static status_t ENET_MDIO_Read(mdio_handle_t *handle, uint8_t phyAddr, uint8_t regAddr, uint16_t *pData)
+{
+    assert(pData != NULL);
+
+    mdio_resource_t *resource = (mdio_resource_t *)&handle->resource;
+    ENET_Type *base           = (ENET_Type *)resource->base;
+    status_t result           = kStatus_Success;
+
+    /* Clear the MDIO interrupt event. */
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+
+    /* Starts a MDIO read command operation. */
+    ENET_StartSMIRead(base, phyAddr, regAddr, kENET_MiiReadValidFrame);
+
+    result = ENET_MDIO_WaitTransferOver(base);
+    if (result != kStatus_Success)
+    {
+        return result;
+    }
+
+    /* Get data from MDIO register. */
+    *pData = ENET_ReadSMIData(base);
+
+    /* Clear MDIO interrupt event. */
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+
+    return result;
+}
+
+#if defined(FSL_FEATURE_ENET_HAS_EXTEND_MDIO) && FSL_FEATURE_ENET_HAS_EXTEND_MDIO
+static status_t ENET_MDIO_WriteExt(
+    mdio_handle_t *handle, uint8_t portAddr, uint8_t devAddr, uint16_t regAddr, uint16_t data)
+{
+    mdio_resource_t *resource = (mdio_resource_t *)&handle->resource;
+    ENET_Type *base           = (ENET_Type *)resource->base;
+    status_t result           = kStatus_Success;
+    uint32_t devPhyAddr       = (devAddr << 16U) | regAddr;
+
+    /* Write the register address */
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+    ENET_StartExtC45SMIWriteReg(base, portAddr, devPhyAddr, regAddr);
+    result = ENET_MDIO_WaitTransferOver(base);
+    if (result != kStatus_Success)
+    {
+        return result;
+    }
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+
+    /* Write data to the specified register address */
+    ENET_StartExtC45SMIWriteData(base, portAddr, devPhyAddr, data);
+    result = ENET_MDIO_WaitTransferOver(base);
+    if (result != kStatus_Success)
+    {
+        return result;
+    }
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+
+    return result;
+}
+
+static status_t ENET_MDIO_ReadExt(
+    mdio_handle_t *handle, uint8_t portAddr, uint8_t devAddr, uint16_t regAddr, uint16_t *pData)
+{
+    assert(pData != NULL);
+
+    mdio_resource_t *resource = (mdio_resource_t *)&handle->resource;
+    ENET_Type *base           = (ENET_Type *)resource->base;
+    status_t result           = kStatus_Success;
+    uint32_t devPhyAddr       = (devAddr << 16U) | regAddr;
+
+    /* Write the register address */
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+    ENET_StartExtC45SMIWriteReg(base, portAddr, devPhyAddr, regAddr);
+    result = ENET_MDIO_WaitTransferOver(base);
+    if (result != kStatus_Success)
+    {
+        return result;
+    }
+
+    /* Read data from the specified register address */
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+    ENET_StartExtC45SMIReadData(base, portAddr, devPhyAddr);
+    result = ENET_MDIO_WaitTransferOver(base);
+    if (result != kStatus_Success)
+    {
+        return result;
+    }
+    ENET_ClearInterruptStatus(base, ENET_EIR_MII_MASK);
+    *pData = ENET_ReadSMIData(base);
+    return result;
+}
+#endif
+
+static status_t ENET_MDIO_WaitTransferOver(ENET_Type *base)
+{
+    status_t result = kStatus_Success;
+#ifdef MDIO_TIMEOUT_COUNT
+    uint32_t counter;
+#endif
+
+    /* Wait for MDIO complete. */
+#ifdef MDIO_TIMEOUT_COUNT
+    for (counter = MDIO_TIMEOUT_COUNT; counter > 0U; counter--)
+    {
+        if (ENET_EIR_MII_MASK == (ENET_GetInterruptStatus(base) & ENET_EIR_MII_MASK))
+        {
+            break;
+        }
+    }
+    /* Check for timeout. */
+    if (0U == counter)
+    {
+        result = kStatus_PHY_MDIOVisitTimeout;
+    }
+#else
+    while (ENET_EIR_MII_MASK != (ENET_GetInterruptStatus(base) & ENET_EIR_MII_MASK))
+    {
+    }
+#endif
+    return result;
+}

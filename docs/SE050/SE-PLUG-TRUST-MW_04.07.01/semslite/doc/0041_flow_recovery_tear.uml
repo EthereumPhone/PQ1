@@ -1,0 +1,37 @@
+
+
+'
+' Recovery Script and Tear
+'
+
+@startuml
+
+title Tear duing Recovery
+
+participant APP as "Application"
+participant SEMS_Lite as "SEMS Lite Lib"
+participant SE as "Secure Element"
+
+autonumber "<b>[00]"
+
+
+APP -> SEMS_Lite : sems_lite_agent_load_package(Recovery Script)
+
+activate SEMS_Lite
+
+SEMS_Lite -> SE : sems_lite_check_Tear
+SEMS_Lite <-- SE : TearingStatus
+	alt if TearStatus == No Tear
+		note over SEMS_Lite, SE
+			Run the Recovery Script
+		end note	
+			SEMS_Lite -> SE : Run script(recovery)
+			SEMS_Lite <-- SE : Status
+	else TearStatus == HasTear
+		note over APP, SE
+			Re-run the same script
+		end note
+	end
+deactivate SEMS_Lite
+
+@enduml

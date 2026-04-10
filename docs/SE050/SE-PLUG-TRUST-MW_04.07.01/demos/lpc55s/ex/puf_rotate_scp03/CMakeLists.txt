@@ -1,0 +1,11 @@
+#
+# Copyright 2021 NXP
+# SPDX-License-Identifier: Apache-2.0
+#
+
+IF(SSS_HAVE_HOST_LPCXPRESSO55S_S)
+    ADD_SUBDIRECTORY(secure)
+ENDIF()
+IF(SSS_HAVE_HOST_LPCXPRESSO55S_NS)
+    ADD_SUBDIRECTORY(nonsecure)
+ENDIF()

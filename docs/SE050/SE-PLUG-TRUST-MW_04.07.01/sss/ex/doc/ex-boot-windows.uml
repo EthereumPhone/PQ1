@@ -1,0 +1,43 @@
+
+@startuml
+
+    title On Windows / Linux
+
+    participant main
+    participant ex_boot as "ex_sss_boot"
+    participant ex_sss as "The Example"
+    participant sss
+
+    group Parse CLI arguments / ENV for portName
+        main -> ex_boot : ex_sss_boot_connectstring()
+    end
+    group Connect to SE
+        main -> ex_boot : ex_sss_boot_open()
+        ex_boot -> sss : sss_session_open();
+    end
+    group Format the IC
+        main -> ex_boot : ex_sss_boot_factory_reset();
+        note right : if EX_SSS_BOOT_DO_ERASE_ALL
+        ex_boot -> sss : Native APIs
+    end
+    group Setup KeyStore
+        main -> ex_boot : ex_sss_key_store_and_object_init
+        ex_boot -> sss : sss_key_store_init();\nsss_key_object_init();
+    end
+    group Actual Example
+        main -> ex_sss ** : ex_sss_entry(&exContext)
+        activate ex_sss
+            ex_sss -> sss : Example API Calls
+            ...
+            ex_sss -> sss : Example API Calls
+            main <-- ex_sss
+        deactivate ex_sss
+    end
+
+    group Clean Up
+        main -> ex_boot : ex_sss_session_close
+        ex_boot -> sss : sss_key_object_free();\nsss_key_store_free();\nsss_session_close();
+    end
+
+@enduml
+

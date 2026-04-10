@@ -1,0 +1,38 @@
+----------------------------------
+NXP Software Content Register
+Release: Plug&Trust SW
+Version: 04.07.01
+Outgoing License: LA_OPT_NXP_Software_License v60 February 2025
+License File: LA_OPT_NXP_Software_License.pdf - Additional Distribution License granted, license in Section 2.3 applies
+Description and comments: Plug and Trust Middleware
+Release Location: https://www.nxp.com/
+Origin: NXP (proprietary)
+            Mbed-TLS (Apache-2.0) Version: 2.28.5 - https://github.com/Mbed-TLS/mbedtls
+            Mbed-TLS (Apache-2.0) Version: 3.6.2  - https://github.com/Mbed-TLS/mbedtls
+            OpenSSL 1.1 (OpenSSL License) - https://github.com/openssl/openssl/tree/OpenSSL_1_1_1-stable
+            openssl-3.0 (Apache 2.0) Version: OpenSSL 3.0.14 - https://github.com/openssl/openssl/tree/openssl-3.0.14
+            psa (Apache 2.0) https://github.com/Mbed-TLS/TF-PSA-Crypto
+            freertos (MIT License) Version V10.5.1 - https://github.com/FreeRTOS
+            SeggerRtt (BSD 1-Clause License) - https://github.com/adfernandes/segger-rtt/
+            Unity (MIT Licese) - https://github.com/ThrowTheSwitch/Unity
+            iot-reference-nxp-rt1060 (MIT License) - https://github.com/FreeRTOS/iot-reference-nxp-rt1060
+            freertos (MIT License) Version V10.5.1 - https://github.com/FreeRTOS
+            open62541 (Mozilla Public License Version 2.0) - https://github.com/open62541/open62541
+            paho.mqtt.c (Eclipse Public License - v 2.0) - https://github.com/eclipse-paho/paho.mqtt.c
+            TraceRecorder (Apache-2.0) - https://github.com/percepio/TraceRecorderSource
+            Android Key Master (Apache-2.0) - The Android Open Source Project
+            nanopb ( zlib ) - https://github.com/nanopb/nanopb/tree/nanopb-0.3.9.8
+                
+            Pre-compiled python libraries for pycli (python 32 bit version) :
+               PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2 - https://www.python.org/downloads/release/python-3100/ 
+               cryptography (Apache 2.0) Version:44.0.0 - https://pypi.org/project/cryptography/
+               cffi (MIT License) - https://pypi.org/project/cffi/
+
+            mcu-sdk - https://mcuxpresso.nxp.com/en/select
+                CMSIS (Apache 2.0) Version:  5.9.0 - https://github.com/ARM-software/CMSIS_5/releases/tag/5.9.0
+                lwIP TCP/IP Stack Version: lwIP git repository (2024-02-19)
+                                    (BSD-3-Clause) - http://savannah.nongnu.org/projects/lwip
+                pkcs11 (MIT License) Version: 2.40.1 - https://github.com/oasis-tcs/pkcs11
+                mmcau (BSD 3 Clause License) - https://github.com/nxp-mcuxpresso/mcuxsdk-middleware-usb
+                usb (BSD 3 Clause License) - https://github.com/nxp-mcuxpresso/mcuxsdk-middleware-usb
+                

@@ -1,0 +1,14 @@
+# Copyright 2024 NXP
+# SPDX-License-Identifier: Apache-2.0
+
+source "Kconfig.zephyr"
+
+config RUN_VERIFIED_ONLY
+    default y
+    bool "Only run testcases that are expected to pass"
+
+config LARGE_BLOBS_ENABLED
+    bool "Enable testing of blobs with a key size larger than 2783 bytes"
+
+config RTP_JSON
+    string "Path to the RTP JSON file from EdgeLock 2GO"

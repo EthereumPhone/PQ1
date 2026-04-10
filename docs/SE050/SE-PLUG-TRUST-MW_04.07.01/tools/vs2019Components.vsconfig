@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "components": [
+    "Microsoft.VisualStudio.Component.CoreEditor",
+    "Microsoft.VisualStudio.Workload.CoreEditor",
+    "Microsoft.VisualStudio.Component.Roslyn.Compiler",
+    "Microsoft.Net.Component.4.7.2.SDK",
+    "Microsoft.Net.Component.4.7.2.TargetingPack",
+    "Microsoft.VisualStudio.Component.JavaScript.Diagnostics",
+    "Microsoft.Component.MSBuild",
+    "Microsoft.VisualStudio.Component.TextTemplating",
+    "Microsoft.VisualStudio.Component.DiagnosticTools",
+    "Microsoft.VisualStudio.Component.AspNet45",
+    "Microsoft.VisualStudio.Component.VC.CoreIde",
+    "Microsoft.VisualStudio.Component.Windows10SDK",
+    "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+    "Microsoft.VisualStudio.Component.Debugger.JustInTime",
+    "Microsoft.VisualStudio.Component.VC.Redist.14.Latest",
+    "Microsoft.Component.NetFX.Native",
+    "Microsoft.VisualStudio.Component.Windows10SDK.18362",
+    "Microsoft.NetCore.1x.ComponentGroup.Web"
+  ]
+}

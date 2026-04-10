@@ -1,0 +1,110 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2018-2023 NXP                                                    */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.dispatcher";
+option java_multiple_files = true;
+
+import "Types.proto";
+import "Agent.proto";
+import "Apdu.proto";
+import "Datastore.proto";
+import "RPC.proto";
+import "Hostcmd.proto";
+import "PSA.proto";
+import "Proxy.proto";
+
+/*
+ * Attention when changing messages on this level. In order to be able to fit data to communication
+ * buffer sizes, on the EdgeLock 2GO cloud service, upper bounds for encoding penalties of message
+ * encapsulation are calculated. Changes to message structures here might influence those and must
+ * be done with care!
+ */
+
+/* doc:request-response-payload:start */
+/* The request payload would be either of these */
+message RequestPayload {
+  oneof payload {
+    /* Hello from EdgeLock 2GO cloud service to the EdgeLock 2GO agent.
+     *
+     * Used only by EdgeLock 2GO agent. */
+    AgentHelloRequest hello = 1;
+    /** Good Bye from EdgeLock 2GO cloud service to the EdgeLock 2GO agent.
+     *
+     * Used only by EdgeLock 2GO agent. */
+    AgentGoodbyeRequest goodbye = 2;
+    AgentCrlRequest crl = 3;
+    /* An APDU to a SE.
+     *
+     * Used both by EdgeLock 2GO agent and SEMS Lite agent. */
+    ApduRequest apdu = 20;
+    /* Message to read and write configuration data.
+     *
+     * Used only by EdgeLock 2GO agent. */
+    DatastoreRequest datastore = 30;
+    /* Message to contol the host software on the device.
+     *
+     * Not implemented. */
+    RpcRequest rpc = 40;
+    /*
+     *
+     * Used only by SEMS Lite Agent */
+    HostControlCmdRequest hostCmd = 50;
+
+    /* Contains requests for a keystore implementing a PSA-style interface 
+     *
+     * Used only by EdgeLock 2GO agent. */
+    PsaRequest psa = 60;
+
+    /* Contains requests for the Proxy hello message 
+     *
+     * Used only by EdgeLock 2GO agent. */
+    HelloProxyRequest helloProxy = 70;
+  }
+}
+/* doc:request-response-payload:end */
+
+message ResponsePayload {
+  oneof message {
+    AgentHelloResponse hello = 1;
+    AgentCrlResponse crl = 3;
+    ApduResponse apdu = 20;
+    DatastoreResponse datastore = 30;
+    RpcResponse rpc = 40;
+    PsaResponse psa = 60;
+    HelloProxyResponse helloProxy = 70;
+  }
+}
+
+message EndpointRequest {
+
+  optional EndpointType type = 1;
+  optional uint32 endpointId = 2;
+
+  optional RequestPayload payload = 100;
+}
+
+message EndpointRequests {
+  repeated EndpointRequest requests = 1;
+}
+
+/* doc:request-response:start */
+/* Full request from cloud/host to the agent */
+message Requests {
+  /* An array of RequestPayload */
+  repeated RequestPayload payload = 1;
+}
+
+/* Consolidated response from the agent to the cloud/host */
+message Responses {
+  /* An array of ResponsePayload */
+  repeated ResponsePayload responses = 1;
+}
+/* doc:request-response:end */

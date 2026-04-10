@@ -1,0 +1,17 @@
+App   :INFO :PlugAndTrust_v03.00.02_20200826
+sss   :INFO :atr (Len=0)
+sss   :WARN :Communication channel is with Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+sss   :WARN :Communication channel is with Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+App   :INFO :Key Store Generate Key success user 2!!!
+App   :INFO :Key Store Generate Key success user 1!!!
+App   :INFO :sss_asymmetric_sign_digest success user 2
+App   :INFO :sss_asymmetric_sign_digest success user 1
+App   :INFO :Set public key success user 2
+App   :INFO :Set public key success user 1
+App   :INFO :sss_asymmetric_verify_digest success user 2
+App   :INFO :Done User 2
+App   :INFO :sss_asymmetric_verify_digest success user 1
+App   :INFO :Done User 1
+App   :INFO :SE05x Multithreaded example finished

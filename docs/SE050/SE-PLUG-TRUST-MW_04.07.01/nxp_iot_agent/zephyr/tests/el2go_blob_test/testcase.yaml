@@ -1,0 +1,18 @@
+tests:
+  nxp_iot_agent.el2go_blob_test:
+    tags:
+      - crypto
+      - el2go
+      - trusted-firmware-m
+    platform_allow:
+      - rd_rw612_bga/rw612/ns
+      - frdm_rw612/rw612/ns
+    timeout: 1500
+    harness: console
+    harness_config:
+      fixture: fixture_el2go
+      type: multi_line
+      regex:
+        - "\\#\\#\\#\\# Start EL2GO blob tests \\#\\#\\#\\#"
+        - "Test suite GENERIC \\((.+)\\) - PASSED"
+        - "\\#\\#\\#\\# EL2GO blob tests finished \\#\\#\\#\\#"

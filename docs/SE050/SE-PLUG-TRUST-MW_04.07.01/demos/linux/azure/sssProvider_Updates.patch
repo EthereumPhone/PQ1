@@ -1,0 +1,98 @@
+diff --git a/src/SSLSocket.c b/src/SSLSocket.c
+index a4941b6..dd51fb7 100644
+--- a/src/SSLSocket.c
++++ b/src/SSLSocket.c
+@@ -43,6 +43,7 @@
+ #include <openssl/err.h>
+ #include <openssl/crypto.h>
+ #include <openssl/x509v3.h>
++#include <openssl/store.h>
+ 
+ extern Sockets mod_s;
+ 
+@@ -85,6 +86,12 @@ static int tls_ex_index_ssl_opts;
+ #define snprintf _snprintf
+ #endif
+ 
++typedef struct sss_pw_cb_data
++{
++    const void *password;
++    const char *prompt_info;
++} sss_PW_CB_DATA;
++
+ /**
+  * Gets the specific error corresponding to SOCKET_ERROR
+  * @param aString the function that was being used when the error occurred
+@@ -620,18 +627,60 @@ int SSLSocket_createContext(networkHandles* net, MQTTClient_SSLOptions* opts)
+ 		}
+ 
+ 		/* support for ASN.1 == DER format? DER can contain only one certificate? */
+-		rc = SSL_CTX_use_PrivateKey_file(net->ctx, opts->privateKey, SSL_FILETYPE_PEM);
+-		if (opts->privateKey == opts->keyStore)
+-			opts->privateKey = NULL;
+-		if (rc != 1)
+-		{
+-			if (opts->struct_version >= 3)
+-				SSLSocket_error("SSL_CTX_use_PrivateKey_file", NULL, net->socket, rc, opts->ssl_error_cb, opts->ssl_error_context);
+-			else
+-				SSLSocket_error("SSL_CTX_use_PrivateKey_file", NULL, net->socket, rc, NULL, NULL);
+-			goto free_ctx;
+-		}
+-	}
++		// rc = SSL_CTX_use_PrivateKey_file(net->ctx, opts->privateKey, SSL_FILETYPE_PEM);
++		// if (opts->privateKey == opts->keyStore)
++		// 	opts->privateKey = NULL;
++		// if (rc != 1)
++		// {
++		// 	if (opts->struct_version >= 3)
++		// 		SSLSocket_error("SSL_CTX_use_PrivateKey_file", NULL, net->socket, rc, opts->ssl_error_cb, opts->ssl_error_context);
++		// 	else
++		// 		SSLSocket_error("SSL_CTX_use_PrivateKey_file", NULL, net->socket, rc, NULL, NULL);
++		// 	goto free_ctx;
++		// }
++
++        EVP_PKEY *p_client_pkey     = NULL;
++        EVP_PKEY **pp_client_pkey   = &p_client_pkey;
++        const OSSL_PARAM *params = NULL;
++        OSSL_STORE_CTX *ctx      = NULL;
++        static OSSL_LIB_CTX *app_libctx = NULL;
++        static const char *app_propq    = NULL;
++        static UI_METHOD *ui_method     = NULL;
++        OSSL_LIB_CTX *libctx     = app_libctx;
++        const char *propq        = app_propq;
++        sss_PW_CB_DATA uidata;
++
++        uidata.password    = NULL;
++        uidata.prompt_info = opts->privateKey;
++
++        ctx = OSSL_STORE_open_ex(opts->privateKey, libctx, propq, ui_method, &uidata, params, NULL, NULL);
++        OSSL_STORE_expect(ctx, OSSL_STORE_INFO_PKEY);
++
++        OSSL_STORE_INFO *info = OSSL_STORE_load(ctx);
++        *pp_client_pkey       = OSSL_STORE_INFO_get1_PKEY(info);
++        OSSL_STORE_INFO_free(info);
++        OSSL_STORE_close(ctx);
++
++        if (SSL_CTX_use_PrivateKey(net->ctx, p_client_pkey) <= 0) {
++            if (opts->struct_version >= 3) {
++                SSLSocket_error("SSL_CTX_use_PrivateKey_file", NULL, net->socket, rc, opts->ssl_error_cb, opts->ssl_error_context);
++            }
++            else {
++                SSLSocket_error("SSL_CTX_use_PrivateKey_file", NULL, net->socket, rc, NULL, NULL);
++            }
++            goto free_ctx;
++        }
++
++        if (!SSL_CTX_check_private_key(net->ctx)) {
++            if (opts->struct_version >= 3) {
++                SSLSocket_error("SSL_CTX_check_PrivateKey_file", NULL, net->socket, rc, opts->ssl_error_cb, opts->ssl_error_context);
++            }
++            else {
++                SSLSocket_error("SSL_CTX_check_PrivateKey_file", NULL, net->socket, rc, NULL, NULL);
++            }
++            goto free_ctx;
++        }
++    }
+ 
+ 	if (opts->trustStore || opts->CApath)
+ 	{

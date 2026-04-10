@@ -1,0 +1,470 @@
+
+.. _cmake-option-PTMW_Applet:
+
+PTMW_Applet
+===============================
+
+.. option:: PTMW_Applet
+
+    The Secure Element Applet
+    
+    You can compile host library for different Applets listed below.
+    Please note, some of these Applets may be for NXP Internal use only.
+
+    ``-DPTMW_Applet=None``: Compiling without any Applet Support
+
+    ``-DPTMW_Applet=SE05X_A``: SE050 Type A (ECC)
+
+    ``-DPTMW_Applet=SE05X_B``: SE050 Type B (RSA)
+
+    ``-DPTMW_Applet=SE05X_C``: SE050 (Super set of A + B), SE051, SE052
+
+
+
+    ``-DPTMW_Applet=SE051_H``: SE051 with SPAKE Support
+
+    ``-DPTMW_Applet=AUTH``: AUTH
+
+    ``-DPTMW_Applet=SE050_E``: SE050E
+
+
+
+
+.. _cmake-option-PTMW_SE05X_Ver:
+
+PTMW_SE05X_Ver
+==================================
+
+.. option:: PTMW_SE05X_Ver
+
+    Configures supported applet version.
+    Set it to match the version used on the SE.
+    Examples: for SE050A/B/C/F set 03_XX, for SE050E/51/A5000/SE052 set 07_02.
+    
+    
+
+    ``-DPTMW_SE05X_Ver=03_XX``: SE050A/B/C/F
+
+    ``-DPTMW_SE05X_Ver=07_02``: SE050E/51/A5000/SE052
+
+
+.. _cmake-option-PTMW_Host:
+
+PTMW_Host
+=============================
+
+.. option:: PTMW_Host
+
+    Host where the software stack is running
+    
+    e.g. Windows, PC Linux, Embedded Linux, Kinetis like embedded platform
+
+    ``-DPTMW_Host=Darwin``: OS X / Macintosh
+
+    ``-DPTMW_Host=PCLinux32``: PC/Laptop Linux with 32bit libraries
+
+    ``-DPTMW_Host=PCLinux64``: PC/Laptop Linux with 64bit libraries
+
+    ``-DPTMW_Host=PCWindows``: PC/Laptop Windows
+
+    ``-DPTMW_Host=Cygwin``: Using Cygwin
+
+    ``-DPTMW_Host=frdmk64f``: Embedded Kinetis Freedom K64F
+
+    ``-DPTMW_Host=evkmimxrt1060``: Embedded Kinetis i.MX RT 1060
+
+    ``-DPTMW_Host=evkmimxrt1170``: Embedded Kinetis i.MX RT1170
+
+    ``-DPTMW_Host=frdmmcxn947``: Embedded Kinetis Freedom MCXN947
+
+    ``-DPTMW_Host=frdmmcxa153``: Embedded Kinetis Freedom MCXA153
+
+    ``-DPTMW_Host=lpcxpresso55s``: Embedded LPCXpresso55s (No demarcation of secure/non-secure world)
+
+    ``-DPTMW_Host=lpcxpresso55s_ns``: Non Secure world of LPCXpresso55s
+
+    ``-DPTMW_Host=lpcxpresso55s_s``: Secure world of LPCXpresso55s
+
+    ``-DPTMW_Host=iMXLinux``: Embedded Linux on i.MX
+
+    ``-DPTMW_Host=Raspbian``: Embedded Linux on RaspBerry PI
+
+    ``-DPTMW_Host=Android``: Android
+
+
+
+
+.. _cmake-option-PTMW_SMCOM:
+
+PTMW_SMCOM
+==============================
+
+.. option:: PTMW_SMCOM
+
+    Communication Interface
+    
+    How the host library communicates to the Secure Element.
+    This may be directly over an I2C interface on embedded platform.
+    Or sometimes over Remote protocol like JRCP_V1 / JRCP_V1_AM / JRCP_V2 / VCOM from PC.
+
+    ``-DPTMW_SMCOM=None``: Not using any Communication layer
+
+    ``-DPTMW_SMCOM=JRCP_V2``: Socket Interface New Implementation
+
+    ``-DPTMW_SMCOM=JRCP_V1``: Socket Interface Old Implementation.
+        This is the interface used from Host PC when when we run jrcpv1_server
+        from the linux PC.
+
+    ``-DPTMW_SMCOM=JRCP_V1_AM``: JRCP_V1 extended with Access manager features
+
+    ``-DPTMW_SMCOM=VCOM``: Virtual COM Port
+
+    ``-DPTMW_SMCOM=T1oI2C``: T=1 over I2C for SE050
+
+    ``-DPTMW_SMCOM=T1oI2C_GP1_0``: GP Spec
+
+
+
+
+
+
+
+    ``-DPTMW_SMCOM=PCSC``: CCID PC/SC reader interface
+
+
+.. _cmake-option-PTMW_HostCrypto:
+
+PTMW_HostCrypto
+===================================
+
+.. option:: PTMW_HostCrypto
+
+    Counterpart Crypto on Host
+    
+    What is being used as a cryptographic library on the host.
+    As of now only OpenSSL / mbedTLS is supported
+
+    ``-DPTMW_HostCrypto=MBEDTLS``: Use mbedTLS as host crypto
+
+    ``-DPTMW_HostCrypto=OPENSSL``: Use OpenSSL as host crypto
+
+    ``-DPTMW_HostCrypto=User``: User Implementation of Host Crypto
+        e.g. Files at ``sss/src/user/crypto`` have low level AES/CMAC primitives.
+        The files at ``sss/src/user`` use those primitives.
+        This becomes an example for users with their own AES Implementation
+        This then becomes integration without mbedTLS/OpenSSL for SCP03 / AESKey.
+        
+        .. note:: ECKey abstraction is not implemented/available yet.
+
+    ``-DPTMW_HostCrypto=None``: NO Host Crypto
+        Note, this is unsecure and only provided for experimentation
+        on platforms that do not have an mbedTLS PORT
+        Many :ref:`sssftr-control` have to be disabled to have a valid build.
+
+
+.. _cmake-option-PTMW_RTOS:
+
+PTMW_RTOS
+=============================
+
+.. option:: PTMW_RTOS
+
+    Choice of Operating system
+    
+    Default would mean nothing special.
+    i.e. Without any RTOS on embedded system, or default APIs on PC/Linux
+
+    ``-DPTMW_RTOS=Default``: No specific RTOS. Either bare matal on embedded system or native linux or Windows OS
+
+    ``-DPTMW_RTOS=FreeRTOS``: Free RTOS for embedded systems
+
+
+.. _cmake-option-PTMW_mbedTLS_ALT:
+
+PTMW_mbedTLS_ALT
+====================================
+
+.. option:: PTMW_mbedTLS_ALT
+
+    ALT Engine implementation for mbedTLS
+    
+    When set to None, mbedTLS would not use ALT Implementation to connect to / use Secure Element.
+    This needs to be set to SSS for Cloud Demos over SSS APIs
+
+    ``-DPTMW_mbedTLS_ALT=SSS``: Use SSS Layer ALT implementation
+
+    ``-DPTMW_mbedTLS_ALT=PSA``: Enable TF-M based on PSA as ALT
+
+    ``-DPTMW_mbedTLS_ALT=None``: Not using any mbedTLS_ALT
+        
+        When this is selected, cloud demos can not work with mbedTLS
+
+
+.. _cmake-option-PTMW_SCP:
+
+PTMW_SCP
+============================
+
+.. option:: PTMW_SCP
+
+    Secure Channel Protocol
+    
+    In case we enable secure channel to Secure Element, which interface to be used.
+
+    ``-DPTMW_SCP=None``
+
+    ``-DPTMW_SCP=SCP03_SSS``: Use SSS Layer for SCP.  Used for SE050 family.
+
+
+.. _cmake-option-PTMW_FIPS:
+
+PTMW_FIPS
+=============================
+
+.. option:: PTMW_FIPS
+
+    Enable or disable FIPS
+    
+    This selection mostly impacts tests, and generally not the actual Middleware
+
+    ``-DPTMW_FIPS=None``: NO FIPS
+
+    ``-DPTMW_FIPS=SE050``: SE050 IC FIPS
+
+
+
+
+
+
+.. _cmake-option-PTMW_SBL:
+
+PTMW_SBL
+============================
+
+.. option:: PTMW_SBL
+
+    Enable/Disable SBL Bootable support
+    
+    This option is to enable/disable boot from SBL by switching linker address
+
+    ``-DPTMW_SBL=None``: Not SBL bootable
+
+    ``-DPTMW_SBL=SBL_LPC55S``: SE050 based LPC55S SBL bootable
+
+
+.. _cmake-option-PTMW_SE05X_Auth:
+
+PTMW_SE05X_Auth
+===================================
+
+.. option:: PTMW_SE05X_Auth
+
+    SE050 Authentication
+    
+    This settings is used by examples to connect using various options
+    to authenticate with the Applet.
+    The SE05X_Auth options can be changed for MCU-SDK Demos and Examples.
+    To change SE05X_Auth option follow below steps.
+    Set flag ``SSS_HAVE_SCP_SCP03_SSS`` to 1 and Reset flag ``SSS_HAVE_SCP_NONE`` to 0.
+    To change SE05X_Auth option other than ``None`` and  ``PlatfSCP03``,
+    execute se05x_Delete_and_test_provision.exe in order to provision the Authentication Key.
+    To change SE05X_Auth option to ``ECKey`` or ``ECKey_PlatfSCP03``,
+    Set additional flag ``SSS_HAVE_HOSTCRYPTO_ANY`` to 1.
+
+    ``-DPTMW_SE05X_Auth=None``: Use the default session (i.e. session less) login
+
+    ``-DPTMW_SE05X_Auth=UserID``: Do User Authentication with UserID
+
+    ``-DPTMW_SE05X_Auth=PlatfSCP03``: Use Platform SCP for connection to SE
+
+    ``-DPTMW_SE05X_Auth=AESKey``: Do User Authentication with AES Key
+        Earlier this was called AppletSCP03
+
+    ``-DPTMW_SE05X_Auth=ECKey``: Do User Authentication with EC Key
+        Earlier this was called FastSCP
+
+    ``-DPTMW_SE05X_Auth=UserID_PlatfSCP03``: UserID and PlatfSCP03
+
+    ``-DPTMW_SE05X_Auth=AESKey_PlatfSCP03``: AESKey and PlatfSCP03
+
+    ``-DPTMW_SE05X_Auth=ECKey_PlatfSCP03``: ECKey and PlatfSCP03
+
+
+.. _cmake-option-PTMW_Log:
+
+PTMW_Log
+============================
+
+.. option:: PTMW_Log
+
+    Logging
+
+    ``-DPTMW_Log=Default``: Default Logging
+
+    ``-DPTMW_Log=Verbose``: Very Verbose logging
+
+    ``-DPTMW_Log=Silent``: Totally silent logging
+
+
+
+
+.. _cmake-option-CMAKE_BUILD_TYPE:
+
+CMAKE_BUILD_TYPE
+====================================
+
+.. option:: CMAKE_BUILD_TYPE
+
+    See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html
+    
+    For embedded builds, this choices sets optimization levels.
+    For MSVC builds, build type is selected from IDE As well
+
+    ``-DCMAKE_BUILD_TYPE=Debug``: For developer
+
+    ``-DCMAKE_BUILD_TYPE=Release``: Optimization enabled and debug symbols removed
+
+    ``-DCMAKE_BUILD_TYPE=RelWithDebInfo``: Optimization enabled but with debug symbols
+
+    ``-DCMAKE_BUILD_TYPE=``: Empty Allowed
+
+
+.. _cmake-option-PTMW_OpenSSL:
+
+PTMW_OpenSSL
+================================
+
+.. option:: PTMW_OpenSSL
+
+    For PC, which OpenSSL to pick up
+    
+    On Linux based builds, this option has no impact, because the build system
+    picks up the default available/installed OpenSSL from the system directly.
+
+    ``-DPTMW_OpenSSL=1_1_1``: Use 1.1.1 version (Only applicable on PC)
+
+    ``-DPTMW_OpenSSL=3_0``: Use 3.0 version (Only applicable on PC)
+
+
+.. _cmake-option-PTMW_MBedTLS:
+
+PTMW_MBedTLS
+================================
+
+.. option:: PTMW_MBedTLS
+
+    Which MBedTLS version to choose
+
+    ``-DPTMW_MBedTLS=2_X``: Use 2.X version
+
+    ``-DPTMW_MBedTLS=3_X``: Use 3.X version
+
+
+.. _cmake-option-PTMW_SE_RESET_LOGIC:
+
+PTMW_SE_RESET_LOGIC
+=======================================
+
+.. option:: PTMW_SE_RESET_LOGIC
+
+    Reset logic of Secure Element. The value of this will be used for 'SE_RESET_LOGIC' define in 'se05x_ic_reset' function. Select 1 (Active High) for SE050 and 51. Select 0 (Active low) for SE052.
+
+    ``-DPTMW_SE_RESET_LOGIC=1``: reset logic is set to 1
+
+    ``-DPTMW_SE_RESET_LOGIC=0``: reset logic is set to 0
+
+
+
+.. _sssftr-control:
+
+Feature Control
+=========================
+
+Using these options, you can enable/disable individual features.
+
+See :numref:`ftr-file-reduce-code-size` :ref:`ftr-file-reduce-code-size`
+for details on it's usage and relevance.
+
+.. option:: SSSFTR_SE05X_AES
+
+    SE05X Secure Element : Symmetric AES
+
+.. option:: SSSFTR_SE05X_ECC
+
+    SE05X Secure Element : Elliptic Curve Cryptography
+
+.. option:: SSSFTR_SE05X_RSA
+
+    SE05X Secure Element : RSA
+
+.. option:: SSSFTR_SE05X_KEY_SET
+
+    SE05X Secure Element : KEY operations : SET Key
+
+.. option:: SSSFTR_SE05X_KEY_GET
+
+    SE05X Secure Element : KEY operations : GET Key
+
+.. option:: SSSFTR_SE05X_AuthECKey
+
+    SE05X Secure Element : Authenticate via ECKey
+
+.. option:: SSSFTR_SE05X_AuthSession
+
+    SE05X Secure Element : Allow creation of user/authenticated session.
+
+    If the intended deployment only uses Platform SCP
+    Or it is a pure session less integration, this can
+    save some code size.
+
+.. option:: SSSFTR_SE05X_CREATE_DELETE_CRYPTOOBJ
+
+    SE05X Secure Element : Allow creation/deletion of Crypto Objects
+
+    If disabled, new Crytpo Objects are neither created and
+    old/existing Crypto Objects are not deleted.
+    It is assumed that during provisioning phase, the required
+    Crypto Objects are pre-created or they are never going to
+    be needed.
+
+.. option:: SSSFTR_SW_AES
+
+    Software : Symmetric AES
+
+.. option:: SSSFTR_SW_ECC
+
+    Software : Elliptic Curve Cryptography
+
+.. option:: SSSFTR_SW_RSA
+
+    Software : RSA
+
+.. option:: SSSFTR_SW_KEY_SET
+
+    Software : KEY operations : SET Key
+
+.. option:: SSSFTR_SW_KEY_GET
+
+    Software : KEY operations : GET Key
+
+.. option:: SSSFTR_SW_TESTCOUNTERPART
+
+    Software : Used as a test counterpart
+
+    e.g. Major part of the mebdTLS SSS layer is purely used for
+    testing of Secure Element implementation, and can be avoided
+    fully during many production scenarios.
+
+
+
+
+.. _deprecated-defines:
+
+Deprecated Defines
+========================
+
+Keept and for time being for backwards compatibility.  They will be removed in
+some future release.
+
+
+

@@ -1,0 +1,169 @@
+App   :INFO :PlugAndTrust_v02.14.00_20200331
+App   :INFO :Running C:\_ddm\develop\simw-top_build\se_x86\bin\Debug\se05x_PCR.exe
+App   :INFO :Using PortName='127.0.0.1:8050' (gszSocketPortDefault)
+App   :INFO :If you want to over-ride the selection, use ENV=EX_SSS_BOOT_SSS_PORT or pass in command line arguments.
+smCom :INFO :Opening connection to JRCP server on 127.0.0.1:8050
+smCom :DEBUG:Opening connection to JRCP successful
+smCom :DEBUG:Tx> (Len=5)
+      00 A4 04 00    00
+smCom :DEBUG:<Rx (Len=20)
+      6F 10 84 08    A0 00 00 01    51 00 00 00    A5 04 9F 65
+      01 FF 90 00
+smCom :DEBUG:Tx> (Len=21)
+      00 A4 04 00    0F A0 00 00    03 96 54 53    00 00 00 01
+      03 00 00 00    00
+smCom :DEBUG:<Rx (Len=9)
+      05 06 FE 3F    FF FF FF 90    00
+smCom :INFO :selectResponseData (Len=7)
+      05 06 FE 3F    FF FF FF
+sss   :INFO :Newer version of Applet Found
+sss   :INFO :Compiled for 0x30100. Got newer 0x506FE
+sss   :WARN :Communication channel is Plain.
+sss   :WARN :!!!Not recommended for production use.!!!
+
+APDU  :DEBUG:CheckObjectExists []
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0xEF000040
+smCom :DEBUG:Tx> (Len=11)
+      80 04 00 27    06 41 04 EF    00 00 40
+smCom :DEBUG:<Rx (Len=5)
+      41 01 02 90    00
+sss   :DEBUG:sss_key_store_generate_key(@EF000040, cipherType=kSSS_CipherType_EC_NIST_P, keyBitLen=256)
+
+APDU  :DEBUG:ReadECCurveList []
+smCom :DEBUG:Tx> (Len=5)
+      80 02 0B 25    00
+smCom :DEBUG:<Rx (Len=23)
+      41 82 00 11    01 01 02 01    01 01 01 01    01 01 01 01
+      01 01 01 01    01 90 00
+
+APDU  :DEBUG:CheckObjectExists []
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0xEF000040
+smCom :DEBUG:Tx> (Len=11)
+      80 04 00 27    06 41 04 EF    00 00 40
+smCom :DEBUG:<Rx (Len=5)
+      41 01 02 90    00
+
+APDU  :DEBUG:WriteECKey []
+APDU  :DEBUG:kSE05x_TAG_POLICY
+APDU  :DEBUG:policy (Len=45)
+      2C 00 00 00    00 1F FD 90    00 7F FF FF    FF 87 D3 E3
+      93 19 8F 5C    80 E0 BC 9B    C9 82 00 1F    B0 EE 20 1C
+      27 0B 6D C8    84 52 E4 13    A3 25 56 81    75
+APDU  :DEBUG:kSE05x_TAG_MAX_ATTEMPTS [maxAttempt] = 0x0
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0xEF000040
+APDU  :DEBUG:kSE05x_TAG_2 [curveID] = 0x3
+APDU  :DEBUG:kSE05x_TAG_3 [privKey] (Len=0)
+APDU  :DEBUG:kSE05x_TAG_4 [pubKey] (Len=0)
+smCom :DEBUG:Tx> (Len=61)
+      80 01 61 00    38 11 2D 2C    00 00 00 00    1F FD 90 00
+      7F FF FF FF    87 D3 E3 93    19 8F 5C 80    E0 BC 9B C9
+      82 00 1F B0    EE 20 1C 27    0B 6D C8 84    52 E4 13 A3
+      25 56 81 75    41 04 EF 00    00 40 42 01    03
+smCom :DEBUG:<Rx (Len=2)
+      90 00
+
+APDU  :DEBUG:ECDSASign []
+APDU  :DEBUG:kSE05x_TAG_1 [objectID] = 0xEF000040
+APDU  :DEBUG:kSE05x_TAG_2 [ecSignAlgo] = 0x21
+APDU  :DEBUG:kSE05x_TAG_3 [inputData] (Len=32)
+      48 65 6C 6C    6F 20 57 6F    72 6C 64 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+smCom :DEBUG:Tx> (Len=48)
+      80 03 0C 09    2B 41 04 EF    00 00 40 42    01 21 43 20
+      48 65 6C 6C    6F 20 57 6F    72 6C 64 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+smCom :DEBUG:<Rx (Len=2)
+      69 85
+sss   :WARN :nxEnsure:'ret == SM_OK' failed. At Line:5601 Function:sss_se05x_TXn
+App   :INFO :Sign failed due to PCR expected value mismatch!!!
+
+APDU  :DEBUG:CheckObjectExists []
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0x7FFFFFFF
+smCom :DEBUG:Tx> (Len=11)
+      80 04 00 27    06 41 04 7F    FF FF FF
+smCom :DEBUG:<Rx (Len=5)
+      41 01 02 90    00
+
+APDU  :DEBUG:WritePCR []
+APDU  :INFO :Policy is NULL
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0x7FFFFFFF
+APDU  :DEBUG:kSE05x_TAG_2 [initialValue] (Len=32)
+      12 A1 49 82    32 00 00 00    00 00 00 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+APDU  :DEBUG:kSE05x_TAG_3 [inputData] (Len=0)
+smCom :DEBUG:Tx> (Len=45)
+      80 01 09 00    28 41 04 7F    FF FF FF 42    20 12 A1 49
+      82 32 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00
+smCom :DEBUG:<Rx (Len=2)
+      90 00
+
+APDU  :DEBUG:WritePCR []
+APDU  :INFO :Policy is NULL
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0x7FFFFFFF
+APDU  :DEBUG:kSE05x_TAG_2 [initialValue] (Len=0)
+APDU  :DEBUG:kSE05x_TAG_3 [inputData] (Len=5)
+      12 A1 49 82    32
+smCom :DEBUG:Tx> (Len=18)
+      80 01 09 00    0D 41 04 7F    FF FF FF 43    05 12 A1 49
+      82 32
+smCom :DEBUG:<Rx (Len=2)
+      90 00
+
+APDU  :DEBUG:ECDSASign []
+APDU  :DEBUG:kSE05x_TAG_1 [objectID] = 0xEF000040
+APDU  :DEBUG:kSE05x_TAG_2 [ecSignAlgo] = 0x21
+APDU  :DEBUG:kSE05x_TAG_3 [inputData] (Len=32)
+      48 65 6C 6C    6F 20 57 6F    72 6C 64 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+smCom :DEBUG:Tx> (Len=48)
+      80 03 0C 09    2B 41 04 EF    00 00 40 42    01 21 43 20
+      48 65 6C 6C    6F 20 57 6F    72 6C 64 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+smCom :DEBUG:<Rx (Len=76)
+      41 82 00 46    30 44 02 20    50 06 84 FF    D1 CE 87 E7
+      F6 89 BE 6C    5B 93 EE EB    26 FB 9D 86    01 25 4F C5
+      CE EF 4E 0D    68 9A 64 D9    02 20 6A 4F    27 D0 95 CC
+      BD D4 20 66    60 B2 9E 52    26 96 A1 31    3C 1F 7D 77
+      E3 16 02 AA    B2 E3 36 61    05 70 90 00
+
+APDU  :DEBUG:ECDSAVerify []
+APDU  :DEBUG:kSE05x_TAG_1 [objectID] = 0xEF000040
+APDU  :DEBUG:kSE05x_TAG_2 [ecSignAlgo] = 0x21
+APDU  :DEBUG:kSE05x_TAG_3 [inputData] (Len=32)
+      48 65 6C 6C    6F 20 57 6F    72 6C 64 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+APDU  :DEBUG:kSE05x_TAG_5 [signature] (Len=70)
+      30 44 02 20    50 06 84 FF    D1 CE 87 E7    F6 89 BE 6C
+      5B 93 EE EB    26 FB 9D 86    01 25 4F C5    CE EF 4E 0D
+      68 9A 64 D9    02 20 6A 4F    27 D0 95 CC    BD D4 20 66
+      60 B2 9E 52    26 96 A1 31    3C 1F 7D 77    E3 16 02 AA
+      B2 E3 36 61    05 70
+smCom :DEBUG:Tx> (Len=120)
+      80 03 0C 0A    73 41 04 EF    00 00 40 42    01 21 43 20
+      48 65 6C 6C    6F 20 57 6F    72 6C 64 00    00 00 00 00
+      00 00 00 00    00 00 00 00    00 00 00 00    00 00 00 00
+      45 46 30 44    02 20 50 06    84 FF D1 CE    87 E7 F6 89
+      BE 6C 5B 93    EE EB 26 FB    9D 86 01 25    4F C5 CE EF
+      4E 0D 68 9A    64 D9 02 20    6A 4F 27 D0    95 CC BD D4
+      20 66 60 B2    9E 52 26 96    A1 31 3C 1F    7D 77 E3 16
+      02 AA B2 E3    36 61 05 70
+smCom :DEBUG:<Rx (Len=5)
+      41 01 01 90    00
+App   :INFO :Sign & Verify is Success with Expected PCR value!!!
+
+APDU  :DEBUG:DeleteSecureObject []
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0xEF000040
+smCom :DEBUG:Tx> (Len=11)
+      80 04 00 28    06 41 04 EF    00 00 40
+smCom :DEBUG:<Rx (Len=2)
+      90 00
+
+APDU  :DEBUG:DeleteSecureObject []
+APDU  :DEBUG:kSE05x_TAG_1 [object id] = 0x7FFFFFFF
+smCom :DEBUG:Tx> (Len=11)
+      80 04 00 28    06 41 04 7F    FF FF FF
+smCom :DEBUG:<Rx (Len=2)
+      90 00
+App   :INFO :ex_sss Finished
+Press any key to continue . . .

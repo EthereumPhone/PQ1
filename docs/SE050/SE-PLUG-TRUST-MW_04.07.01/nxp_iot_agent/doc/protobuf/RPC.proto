@@ -1,0 +1,38 @@
+/*----------------------------------------------------------------------------*/
+/* Copyright 2018, 2019, 2021 NXP                                             */
+/*                                                                            */
+/* SPDX-License-Identifier: Apache-2.0                                        */
+/*                                                                            */
+/*----------------------------------------------------------------------------*/
+
+syntax = "proto2";
+
+package nxp.iot;
+
+option java_package = "com.nxp.iot.proto.rpc";
+option java_multiple_files = true;
+
+message ArgumentPayload {
+    oneof data {
+        uint32 uint32_arg = 2;
+        int32 int32_arg = 3;
+        bytes bytes_arg = 4;
+        string string_arg = 5;
+    }
+}
+
+message Argument {
+	optional int32 pos = 1;
+  optional ArgumentPayload payload = 10;
+}
+
+message RpcRequest {
+  optional int32 id = 1;
+  repeated Argument arg = 10;
+}
+
+
+message RpcResponse {
+  optional int32 id = 1;
+  repeated Argument arg = 10;
+}
