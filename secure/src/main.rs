@@ -112,7 +112,7 @@ fn setup_systick() {
 
 /// Returns true if the secure element already holds an encrypted seed,
 /// PIN state, and verifying key. Used to skip re-provisioning on every boot.
-#[cfg(not(test))]
+#[cfg(all(not(test), not(feature = "se050")))]
 fn is_provisioned(se: &mut impl SecureElement) -> bool {
     let mut buf = [0u8; 128];
     se.r_mem_read(RMEM_ENCRYPTED_ENTROPY, &mut buf).is_ok()
@@ -121,6 +121,26 @@ fn is_provisioned(se: &mut impl SecureElement) -> bool {
         // Bootstrap VK may not exist on older provisioned devices;
         // don't require it for backward compat. New provisions always
         // write it (see crypto::provision_with_mnemonic).
+}
+
+/// SE050 provisioning check: UserID-gated objects don't support
+/// unauthenticated reads, so we check via CheckObjectExists instead.
+#[cfg(all(not(test), feature = "se050"))]
+fn is_provisioned(_se: &mut se050::Se050SecureElement) -> bool {
+    // Check if the UserID object exists on the SE050.
+    // If it does, the device has been provisioned.
+    unsafe {
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        se.ensure_init_pub().is_ok()
+            && apdu_check_exists(se, 0x7B00_2000)
+    }
+}
+
+#[cfg(all(not(test), feature = "se050"))]
+fn apdu_check_exists(se: &mut se050::Se050SecureElement, obj_id: u32) -> bool {
+    unsafe {
+        se050::apdu::check_object_exists(se.t1_mut(), obj_id).unwrap_or(false)
+    }
 }
 
 /// Run the first-boot interactive wizard. Loops until the user successfully:
@@ -283,10 +303,19 @@ fn main() -> ! {
         // raw mutable reference to a `static mut`. The single-threaded
         // boot sequence makes aliasing impossible by construction; this
         // is the same pattern the `nsc::cmd_*` handlers use.
+        #[cfg(feature = "se050")]
+        crypto::provision_with_mnemonic_se050(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
+        #[cfg(not(feature = "se050"))]
         crypto::provision_with_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
         // Run the verify path so MASTER_SECRET + PIN_VERIFIED end up
         // in the same state as a real unlock.
+        #[cfg(feature = "se050")]
+        match crypto::verify_pin_se050(&mut *core::ptr::addr_of_mut!(SE), &pin) {
+            Ok(master) => nsc::set_e2e_unlocked(master),
+            Err(_) => panic!("e2e: verify_pin failed after provision"),
+        }
+        #[cfg(not(feature = "se050"))]
         match crate::pin::verify_pin(&mut *core::ptr::addr_of_mut!(SE), &pin) {
             Ok(master) => nsc::set_e2e_unlocked(master),
             Err(_) => panic!("e2e: verify_pin failed after provision"),
@@ -314,8 +343,11 @@ fn main() -> ! {
 
             ui::show_status("Provisioning", "...");
 
-            #[cfg(any(feature = "mock-se", feature = "se050"))]
+            #[cfg(feature = "mock-se")]
             crypto::provision_with_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
+
+            #[cfg(feature = "se050")]
+            crypto::provision_with_mnemonic_se050(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
             #[cfg(feature = "tropic01-se")]
             (&mut *core::ptr::addr_of_mut!(SE))

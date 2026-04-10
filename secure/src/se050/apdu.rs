@@ -50,6 +50,7 @@ const INS_PROCESS: u8 = 0x05;
 const P1_DEFAULT: u8 = 0x00;
 const P1_BINARY: u8 = 0x06; // Binary file object
 const P1_HMAC: u8 = 0x05; // HMAC key
+const P1_USERID: u8 = 0x07; // UserID authentication object
 const P1_MAC: u8 = 0x0D; // MAC operation
 
 // P2 values (from kSE05x_P2_* in se05x_types.h)
@@ -57,8 +58,11 @@ const P2_DEFAULT: u8 = 0x00;
 const P2_GENERATE: u8 = 0x03;
 const P2_ONESHOT: u8 = 0x0E;
 const P2_GENERATE_ONESHOT: u8 = 0x45; // MAC one-shot generate
+const P2_CREATE_SESSION: u8 = 0x1B;
+const P2_CLOSE_SESSION: u8 = 0x1C;
 const P2_EXIST: u8 = 0x27;
 const P2_DELETE_OBJECT: u8 = 0x28;
+const P2_VERIFY_SESSION_USERID: u8 = 0x2C;
 
 // TLV tags (SE05x specific)
 const TAG_SESSION_ID: u8 = 0x10;
@@ -168,12 +172,41 @@ pub unsafe fn send_apdu(
     apdu: &[u8],
     resp_buf: &mut [u8],
 ) -> Result<usize, ApduError> {
-    // Wrap with SCP03 MAC if session is active
+    // Wrap with SCP03 MAC if session is active.
+    //
+    // ISO 7816-4 Case 4 APDUs have a trailing Le byte after the data
+    // (CLA INS P1 P2 Lc Data Le). Le must NOT be included in the MAC
+    // computation — strip it before wrapping and re-append after the MAC.
+    //
+    // Extended-length APDUs use a 3-byte Lc: [0x00, hi, lo] starting at
+    // byte 4. Detect this to correctly locate data and Le.
     let (final_apdu, final_len) = if let Some(session_ptr) = SCP03_SESSION {
         let session = &mut *session_ptr;
         if session.active {
+            // Determine Lc encoding and data boundaries
+            let (hdr_len, lc_val) = if apdu.len() >= 7 && apdu[4] == 0x00 {
+                // Extended Lc: [CLA INS P1 P2 0x00 Lc_hi Lc_lo Data...]
+                let lc = ((apdu[5] as usize) << 8) | (apdu[6] as usize);
+                (7, lc)
+            } else if apdu.len() >= 5 {
+                // Short Lc: [CLA INS P1 P2 Lc Data...]
+                (5, apdu[4] as usize)
+            } else {
+                (apdu.len(), 0)
+            };
+
+            // Detect Le: present if APDU is longer than header + data
+            let has_le = apdu.len() > hdr_len + lc_val;
+            let apdu_no_le = if has_le { &apdu[..apdu.len() - 1] } else { apdu };
+
             let mut wrapped = [0u8; MAX_APDU];
-            let wlen = super::scp03::wrap_apdu(session, apdu, &mut wrapped);
+            let mut wlen = super::scp03::wrap_apdu(session, apdu_no_le, &mut wrapped);
+
+            // Re-append Le after the MAC
+            if has_le {
+                wrapped[wlen] = 0x00;
+                wlen += 1;
+            }
             (wrapped, wlen)
         } else {
             let mut buf = [0u8; MAX_APDU];
@@ -256,10 +289,21 @@ pub unsafe fn write_binary(
     apdu[2] = P1_BINARY; // P1 = binary
     apdu[3] = P2_DEFAULT; // P2
 
-    // TLV payload: TAG_1(objectID) + TAG_3(fileLength) + TAG_4(data).
-    // TAG_3 is REQUIRED when creating a new binary file object.
-    // No explicit policy — use SE050 default (allow all without auth).
+    // TLV payload: [TAG_POLICY] + TAG_1(objectID) + TAG_3(fileLength) + TAG_4(data).
+    // TAG_POLICY can only be set on CREATE (not update). Including it on
+    // an existing object causes 0x6A80. So we check first.
     let mut o = 7; // skip CLA+INS+P1+P2+Lc(3 bytes for extended)
+
+    if !check_object_exists(t1, object_id).unwrap_or(true) {
+        // New object: set policy requiring Platform SCP for all access.
+        // NXP policy format: [entry_len(1)] [ar_header(4)] [auth_obj_id(4)]
+        let policy: [u8; 9] = [
+            0x08,                      // entry length: 8 bytes follow
+            0x00, 0x3C, 0x00, 0x00,    // READ + WRITE + GEN + DELETE
+            0x00, 0x00, 0x00, 0x00,    // no auth required (diagnostic)
+        ];
+        o = tlv_put(&mut apdu, o, TAG_POLICY, &policy);
+    }
     o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
     // TAG_3: 2-byte file length (max allocation size)
     let file_len = data.len() as u16;
@@ -459,4 +503,307 @@ pub unsafe fn mac_oneshot(
     } else {
         Err(ApduError::Short)
     }
+}
+
+// ---------------------------------------------------------------------------
+// SE050 UserID authentication commands
+// ---------------------------------------------------------------------------
+
+/// Write a UserID authentication object on the SE050.
+///
+/// The UserID object holds a PIN/password that the SE050 verifies internally.
+/// Objects with a policy referencing this UserID require a verified session
+/// before they can be read/written.
+///
+/// INS = 0x01 (WRITE), P1 = 0x07 (UserID)
+///
+/// TLV payload:
+///   TAG_POLICY(0x11) = entry_len(1) ‖ ar_header(4) ‖ auth_obj_id(4)
+///   TAG_MAX_ATTEMPTS(0x12) = max_attempts (2 bytes BE)
+///   TAG_1(0x41) = object_id (4 bytes)
+///   TAG_2(0x42) = PIN value
+/// INS_AUTH_OBJECT flag — OR'd into INS_WRITE for auth object creation.
+const INS_AUTH_OBJECT: u8 = 0x40;
+
+pub unsafe fn write_user_id(
+    t1: &mut T1State,
+    object_id: u32,
+    pin: &[u8],
+    max_attempts: u16,
+) -> Result<(), ApduError> {
+    let mut apdu = [0u8; 128];
+    apdu[0] = 0x80;
+    apdu[1] = INS_WRITE | INS_AUTH_OBJECT; // 0x41 — required for auth objects
+    apdu[2] = P1_USERID;
+    apdu[3] = P2_DEFAULT;
+
+    let mut o = 5;
+
+    // No policy on the UserID object itself (NXP passes NULL).
+
+    // Max attempts before lockout (2-byte big-endian, 0 = no limit)
+    if max_attempts > 0 {
+        o = tlv_put(&mut apdu, o, TAG_MAX_ATTEMPTS, &max_attempts.to_be_bytes());
+    }
+
+    // Object ID
+    o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
+
+    // PIN value
+    o = tlv_put(&mut apdu, o, TAG_2, pin);
+
+    let lc = o - 5;
+    apdu[4] = lc as u8;
+
+    let mut resp = [0u8; 64];
+    let _ = send_apdu(t1, &apdu[..o], &mut resp)?;
+    Ok(())
+}
+
+/// Write a binary file object with a policy requiring UserID authentication.
+///
+/// Objects written with this function can only be read after creating a
+/// session authenticated against the specified `auth_obj_id` (UserID object).
+pub unsafe fn write_binary_with_policy(
+    t1: &mut T1State,
+    object_id: u32,
+    data: &[u8],
+    auth_obj_id: u32,
+) -> Result<(), ApduError> {
+    let mut apdu = [0u8; MAX_APDU];
+    apdu[0] = 0x80;
+    apdu[1] = INS_WRITE;
+    apdu[2] = P1_BINARY;
+    apdu[3] = P2_DEFAULT;
+
+    // Build TLV payload at offset 7 (extended Lc position),
+    // we'll fix up the Lc encoding after.
+    let mut o = 7;
+
+    // Policy: NXP format is [entry_len] [auth_obj_id(4)] [ar_header(4)]
+    // Note: auth_obj_id comes BEFORE ar_header in the SE050 policy buffer.
+    let auth_bytes = auth_obj_id.to_be_bytes();
+    let policy: [u8; 9] = [
+        0x08,                      // entry length: 8 bytes follow
+        auth_bytes[0], auth_bytes[1], auth_bytes[2], auth_bytes[3],
+        0x00, 0x36, 0x00, 0x00,    // READ + WRITE + DELETE + REQUIRE_SM
+    ];
+    o = tlv_put(&mut apdu, o, TAG_POLICY, &policy);
+
+    // Object ID
+    o = tlv_put_obj_id(&mut apdu, o, TAG_1, object_id);
+
+    // File length (max allocation)
+    let file_len = data.len() as u16;
+    o = tlv_put(&mut apdu, o, TAG_3, &file_len.to_be_bytes());
+
+    // Data
+    o = tlv_put(&mut apdu, o, TAG_4, data);
+
+    // Encode Lc
+    let lc = o - 7;
+    if lc < 256 {
+        let mut cmd = [0u8; MAX_APDU];
+        cmd[0] = 0x80;
+        cmd[1] = INS_WRITE;
+        cmd[2] = P1_BINARY;
+        cmd[3] = P2_DEFAULT;
+        cmd[4] = lc as u8;
+        cmd[5..5 + lc].copy_from_slice(&apdu[7..7 + lc]);
+
+        let mut resp = [0u8; 64];
+        let _ = send_apdu(t1, &cmd[..5 + lc], &mut resp)?;
+    } else {
+        let mut cmd = [0u8; MAX_APDU];
+        cmd[0] = 0x80;
+        cmd[1] = INS_WRITE;
+        cmd[2] = P1_BINARY;
+        cmd[3] = P2_DEFAULT;
+        cmd[4] = 0x00;
+        cmd[5] = (lc >> 8) as u8;
+        cmd[6] = (lc & 0xFF) as u8;
+        cmd[7..7 + lc].copy_from_slice(&apdu[7..7 + lc]);
+
+        let mut resp = [0u8; 64];
+        let _ = send_apdu(t1, &cmd[..7 + lc], &mut resp)?;
+    }
+
+    Ok(())
+}
+
+/// Create a session authenticated against a UserID object.
+///
+/// Returns a 4-byte session ID that must be passed to subsequent commands
+/// (via TAG_SESSION_ID) to benefit from the UserID's authorization.
+///
+/// INS = 0x04 (MGMT), P2 = 0x1B (CreateSession)
+pub unsafe fn create_session(
+    t1: &mut T1State,
+    auth_obj_id: u32,
+) -> Result<[u8; 8], ApduError> {
+    let mut apdu = [0u8; 32];
+    apdu[0] = 0x80;
+    apdu[1] = INS_MGMT;
+    apdu[2] = P1_DEFAULT;
+    apdu[3] = P2_CREATE_SESSION;
+
+    let mut o = 5;
+    o = tlv_put_obj_id(&mut apdu, o, TAG_1, auth_obj_id);
+    let lc = o - 5;
+    apdu[4] = lc as u8;
+    apdu[o] = 0x00; // Le
+    o += 1;
+
+    let mut resp = [0u8; 64];
+    let n = send_apdu(t1, &apdu[..o], &mut resp)?;
+
+    // Response: TAG_1(session_id, 8 bytes)
+    let mut session_id = [0u8; 8];
+    if let Some((_, value, _)) = tlv_parse(&resp[..n]) {
+        if value.len() >= 8 {
+            session_id.copy_from_slice(&value[..8]);
+            return Ok(session_id);
+        }
+    }
+    if n >= 8 {
+        session_id.copy_from_slice(&resp[..8]);
+        Ok(session_id)
+    } else {
+        Err(ApduError::Short)
+    }
+}
+
+/// Verify a session against a UserID object by providing the PIN.
+///
+/// The SE050 requires this to be wrapped in an INS_PROCESS envelope:
+///   Outer APDU: CLA=0x80, INS=0x05 (PROCESS), P1=0x00, P2=0x00
+///   Payload: TAG_SESSION_ID(8) + TAG_1(inner command)
+///
+/// The inner command is: INS_MGMT, P1=0x00, P2=0x2C + TAG_1(PIN)
+pub unsafe fn verify_session_user_id(
+    t1: &mut T1State,
+    session_id: &[u8; 8],
+    pin: &[u8],
+) -> Result<(), ApduError> {
+    // Build the inner command TLV: header(4) + Lc(1) + TAG_1(PIN)
+    let mut inner = [0u8; 64];
+    // Inner header: CLA INS P1 P2
+    inner[0] = 0x80;
+    inner[1] = INS_MGMT;
+    inner[2] = P1_DEFAULT;
+    inner[3] = P2_VERIFY_SESSION_USERID;
+    // Inner payload: TAG_1(PIN)
+    let mut io = 5;
+    io = tlv_put(&mut inner, io, TAG_1, pin);
+    let inner_lc = io - 5;
+    inner[4] = inner_lc as u8;
+    let inner_len = io; // total inner command length
+
+    // Build the outer PROCESS APDU
+    let mut apdu = [0u8; 128];
+    apdu[0] = 0x80;
+    apdu[1] = INS_PROCESS;
+    apdu[2] = P1_DEFAULT;
+    apdu[3] = P2_DEFAULT;
+
+    let mut o = 5;
+    // TAG_SESSION_ID with the 8-byte session handle
+    o = tlv_put(&mut apdu, o, TAG_SESSION_ID, session_id);
+    // TAG_1 with the inner command
+    o = tlv_put(&mut apdu, o, TAG_1, &inner[..inner_len]);
+    let lc = o - 5;
+    apdu[4] = lc as u8;
+
+    let mut resp = [0u8; 64];
+    let _ = send_apdu(t1, &apdu[..o], &mut resp)?;
+    Ok(())
+}
+
+/// Read a binary object using a session authenticated via UserID.
+///
+/// All session-based commands use INS_PROCESS (0x05) wrapping.
+/// The inner read command does NOT include Le — Le goes on the outer.
+pub unsafe fn read_object_authed(
+    t1: &mut T1State,
+    session_id: &[u8; 8],
+    object_id: u32,
+    buf: &mut [u8],
+) -> Result<usize, ApduError> {
+    // Build inner read command.
+    // For commands expecting response data (hasle=1), the NXP code uses
+    // extended Lc (3 bytes: 0x00 || hi || lo) even for short payloads.
+    let mut inner = [0u8; 64];
+    inner[0] = 0x80;
+    inner[1] = INS_READ;
+    inner[2] = P1_DEFAULT;
+    inner[3] = P2_DEFAULT;
+
+    let mut io = 5; // short Lc
+    io = tlv_put_obj_id(&mut inner, io, TAG_1, object_id);
+    // Omit TAG_2 (offset) and TAG_3 (length) — read entire object
+    let inner_lc = io - 5;
+    inner[4] = inner_lc as u8;
+    // Le INSIDE the inner command
+    inner[io] = 0x00;
+    io += 1;
+    let inner_len = io;
+
+    // Build outer PROCESS APDU
+    let mut apdu = [0u8; 128];
+    apdu[0] = 0x80;
+    apdu[1] = INS_PROCESS;
+    apdu[2] = P1_DEFAULT;
+    apdu[3] = P2_DEFAULT;
+
+    let mut o = 5;
+    o = tlv_put(&mut apdu, o, TAG_SESSION_ID, session_id);
+    o = tlv_put(&mut apdu, o, TAG_1, &inner[..inner_len]);
+    let lc = o - 5;
+    apdu[4] = lc as u8;
+    apdu[o] = 0x00; // Le
+    o += 1;
+
+    let mut resp = [0u8; MAX_APDU];
+    let n = send_apdu(t1, &apdu[..o], &mut resp)?;
+
+    // Response contains TLV with the data
+    if let Some((_tag, value, _rest)) = tlv_parse(&resp[..n]) {
+        if value.len() > buf.len() {
+            return Err(ApduError::Overflow);
+        }
+        buf[..value.len()].copy_from_slice(value);
+        Ok(value.len())
+    } else if n > 0 && n <= buf.len() {
+        buf[..n].copy_from_slice(&resp[..n]);
+        Ok(n)
+    } else {
+        Ok(0)
+    }
+}
+
+/// Close a session on the SE050.
+///
+/// Wrapped in INS_PROCESS like all session commands.
+pub unsafe fn close_session(
+    t1: &mut T1State,
+    session_id: &[u8; 8],
+) -> Result<(), ApduError> {
+    // Inner close command: just CLA INS P1 P2 (no payload)
+    let inner: [u8; 4] = [0x80, INS_MGMT, P1_DEFAULT, P2_CLOSE_SESSION];
+
+    let mut apdu = [0u8; 64];
+    apdu[0] = 0x80;
+    apdu[1] = INS_PROCESS;
+    apdu[2] = P1_DEFAULT;
+    apdu[3] = P2_DEFAULT;
+
+    let mut o = 5;
+    o = tlv_put(&mut apdu, o, TAG_SESSION_ID, session_id);
+    o = tlv_put(&mut apdu, o, TAG_1, &inner);
+    let lc = o - 5;
+    apdu[4] = lc as u8;
+
+    let mut resp = [0u8; 64];
+    let _ = send_apdu(t1, &apdu[..o], &mut resp)?;
+    Ok(())
 }

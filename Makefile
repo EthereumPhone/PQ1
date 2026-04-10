@@ -324,6 +324,26 @@ flash-hw-se050-usb-test: build-hw-se050-usb-test
 	probe-rs reset --chip STM32U585AIIx
 	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
 
+# SE050 + USB test with semihosting debug output (requires probe-rs attach).
+build-hw-se050-usb-test-debug:
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,debug-log
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> SE050 + USB test (debug) build ready."
+
+flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
+	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting and attaching with semihosting (Ctrl-C to quit)..."
+	probe-rs reset --chip STM32U585AIIx
+	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
+
 # Flash USB-enabled build to real STM32U585.
 flash-hw-usb: build-hw-usb
 	probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)

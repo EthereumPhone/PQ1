@@ -65,7 +65,36 @@ unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
             Err(_) => NscStatus::InternalError as u32,
         }
     }
-    #[cfg(not(feature = "tropic01-se"))]
+    #[cfg(feature = "se050")]
+    {
+        let _ = MAX_ATTEMPTS;
+        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+        match crate::crypto::verify_pin_se050(se, pin) {
+            Ok(master) => {
+                state::with_state(|s| s.mark_unlocked(master));
+                timeout::reset_activity();
+                ui::show_status("Unlocked", "");
+                NscStatus::Ok as u32
+            }
+            Err(NscStatus::PinIncorrect) => {
+                // SE050 hardware enforces attempt counter — no software
+                // decrement needed, but update the UI state.
+                state::with_state(|s| {
+                    if s.remaining_attempts > 0 {
+                        s.remaining_attempts -= 1;
+                    }
+                });
+                ui::show_status("Wrong PIN", "");
+                NscStatus::PinIncorrect as u32
+            }
+            Err(NscStatus::PinLocked) => {
+                ui::show_status("PIN locked", "");
+                NscStatus::PinLocked as u32
+            }
+            Err(status) => status as u32,
+        }
+    }
+    #[cfg(not(any(feature = "tropic01-se", feature = "se050")))]
     {
         let _ = MAX_ATTEMPTS;
         let se = &mut *core::ptr::addr_of_mut!(crate::SE);

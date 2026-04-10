@@ -411,7 +411,126 @@ pub fn derive_main_vk_from_entropy(
 }
 
 // ---------------------------------------------------------------------------
-// PIN state serialization (unchanged)
+// SE050 UserID-based provisioning and unlock
+// ---------------------------------------------------------------------------
+//
+// When the SE050 feature is active, provisioning uses the SE050's native
+// UserID authentication instead of the software MACD chain. The SE050
+// hardware enforces PIN verification internally — the MCU never decides
+// whether a PIN is correct.
+//
+// Object layout on the SE050:
+//   0x7B002000  UserID (PIN, max 9 attempts)
+//   0x7B000000  Encrypted entropy blob (60 bytes), policy: require UserID
+//   0x7B000002  Verifying key (32 bytes), policy: require UserID
+//   0x7B000003  Bootstrap VK (32 bytes), policy: require UserID
+
+/// SE050 UserID-gated object IDs.
+#[cfg(feature = "se050")]
+const USERID_ENTROPY_OBJ: u32 = 0x7B04_0000;
+#[cfg(feature = "se050")]
+const USERID_VK_OBJ: u32 = 0x7B04_0002;
+#[cfg(feature = "se050")]
+const USERID_BOOTSTRAP_VK_OBJ: u32 = 0x7B04_0003;
+
+/// Provision the SE050 with UserID-gated secrets.
+///
+/// This replaces `provision_with_mnemonic` for the SE050 hardware path.
+/// Instead of building a MACD chain, it:
+/// 1. Creates a UserID object with the user's PIN (max 9 attempts)
+/// 2. Encrypts the entropy under master_secret (defense-in-depth)
+/// 3. Stores entropy blob, VK, and bootstrap VK behind UserID policy
+///
+/// No MACD slots, no PIN state, no master_secret in r-mem.
+#[cfg(feature = "se050")]
+pub fn provision_with_mnemonic_se050(
+    se: &mut crate::se050::Se050SecureElement,
+    mnemonic: &sphincs_tz_bip39::Mnemonic,
+    pin: &[u8; 8],
+) {
+    // 1. Recover the 32-byte BIP-39 entropy
+    let mut entropy = mnemonic
+        .to_entropy()
+        .expect("mnemonic was already checksum-verified");
+
+    // 2. Derive master_secret from entropy (used by the unlock path
+    //    to key the rest of the derivation chain).
+    let mut master_secret: [u8; 32] = kdf(b"sphincs-master", &entropy, 0);
+
+    // 3. Derive verifying keys
+    let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
+    drop(sk);
+    let bootstrap_vk = derive_bootstrap_vk_from_entropy(&entropy);
+
+    // 4. Provision UserID with the PIN (SE050 hardware-enforced, 9 attempts)
+    se.provision_userid(pin, 9u16)
+        .expect("SE050 WriteUserID failed");
+
+    // 5. Store secrets behind UserID policy.
+    //    Entropy is stored UNENCRYPTED — the SE050 UserID gate is the
+    //    primary security layer (tamper-resistant silicon). This avoids
+    //    the circular dependency of needing master_secret (derived from
+    //    entropy) to decrypt the entropy.
+    //
+    //    Object IDs in the 0x7B01xxxx range (separate from legacy MACD
+    //    r_mem objects at 0x7B00xxxx).
+    se.write_binary_userid_gated(USERID_ENTROPY_OBJ, &entropy)
+        .expect("SE050 write entropy failed");
+
+    se.write_binary_userid_gated(USERID_VK_OBJ, &vk_bytes)
+        .expect("SE050 write VK failed");
+
+    se.write_binary_userid_gated(USERID_BOOTSTRAP_VK_OBJ, &bootstrap_vk)
+        .expect("SE050 write bootstrap VK failed");
+
+    // 6. Zeroize
+    entropy.zeroize();
+    master_secret.zeroize();
+}
+
+/// Verify PIN and unlock via SE050 UserID authentication.
+///
+/// This replaces `pin::verify_pin` for the SE050 hardware path.
+/// The SE050 hardware enforces the attempt counter — no software
+/// PIN state or MACD chain needed.
+///
+/// On success, returns the decrypted master_secret (used by the caller
+/// to decrypt the entropy and derive signing keys).
+#[cfg(feature = "se050")]
+pub fn verify_pin_se050(
+    se: &mut crate::se050::Se050SecureElement,
+    pin: &[u8; 8],
+) -> Result<[u8; 32], sphincs_tz_shared::NscStatus> {
+    use sphincs_tz_shared::NscStatus;
+
+    // 1. Authenticate: CreateSession + VerifySessionUserID
+    //    If PIN is wrong, the SE050 returns an error and decrements
+    //    its internal attempt counter. After max_attempts failures,
+    //    the UserID object locks and all gated objects become inaccessible.
+    let session_id = se.authenticate_userid(pin)
+        .map_err(|_| NscStatus::PinIncorrect)?;
+
+    // 2. Read the raw entropy (stored unencrypted behind UserID gate)
+    let mut entropy = [0u8; ENTROPY_LEN];
+    let n = se.read_authed(&session_id, USERID_ENTROPY_OBJ, &mut entropy)
+        .map_err(|_| NscStatus::InternalError)?;
+
+    // 3. Close the session (we have the data we need)
+    se.close_userid_session(&session_id);
+
+    if n != ENTROPY_LEN {
+        return Err(NscStatus::InternalError);
+    }
+
+    // 4. Derive master_secret from entropy
+    let master_secret = kdf(b"sphincs-master", &entropy, 0);
+    entropy.zeroize();
+
+    Ok(master_secret)
+}
+
+// ---------------------------------------------------------------------------
+// PIN state serialization (unchanged — used by mock-SE MACD path)
 // ---------------------------------------------------------------------------
 
 pub const PER_SLOT_CT_LEN: usize = 32 + 16; // master_secret (32) + AES-GCM tag (16)

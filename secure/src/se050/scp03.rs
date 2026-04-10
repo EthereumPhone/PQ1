@@ -20,21 +20,24 @@ use cmac::Cmac;
 use cmac::Mac as CmacMac;
 
 // ---------------------------------------------------------------------------
-// SE050E platform keys (OEF 0x0001A921, from ex_sss_tp_scp03_keys.h)
+// SE050E platform keys (OEF 0xA921, from ex_sss_tp_scp03_keys.h)
 // ---------------------------------------------------------------------------
-// GlobalPlatform default SCP03 keys (used on many SE050 evaluation boards)
+// Factory-provisioned SCP03 keys for the SE050E variant.  The OM-SE050ARD
+// dev-kit board is marked SE050C2HQ1/Z01V3 but its firmware reports OEF
+// 0xA921 (SE050E) — confirmed by key-scan against all known key sets.
+// See plug-and-trust/sss/ex/inc/ex_sss_tp_scp03_keys.h for the full list.
 const PLATFORM_ENC: [u8; 16] = [
-    0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
-    0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
+    0xD2, 0xDB, 0x63, 0xE7, 0xA0, 0xA5, 0xAE, 0xD7,
+    0x2A, 0x64, 0x60, 0xC4, 0xDF, 0xDC, 0xAF, 0x64,
 ];
 const PLATFORM_MAC: [u8; 16] = [
-    0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
-    0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
+    0x73, 0x8D, 0x5B, 0x79, 0x8E, 0xD2, 0x41, 0xB0,
+    0xB2, 0x47, 0x68, 0x51, 0x4B, 0xFB, 0xA9, 0x5B,
 ];
 #[allow(dead_code)]
 const PLATFORM_DEK: [u8; 16] = [
-    0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
-    0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F,
+    0x67, 0x02, 0xDA, 0xC3, 0x09, 0x42, 0xB2, 0xC8,
+    0x5E, 0x7F, 0x47, 0xB4, 0x2C, 0xED, 0x4E, 0x7F,
 ];
 
 const KEY_VERSION: u8 = 0x0B;
@@ -60,6 +63,8 @@ pub struct Scp03Session {
     pub counter: [u8; 16],
     /// Whether the session is established.
     pub active: bool,
+    /// Whether C-DEC (command encryption) is enabled (P1 bit 1).
+    pub c_dec: bool,
 }
 
 impl Scp03Session {
@@ -71,6 +76,7 @@ impl Scp03Session {
             mcv: [0; 16],
             counter: [0; 16],
             active: false,
+            c_dec: false,
         }
     }
 
@@ -274,8 +280,10 @@ pub unsafe fn establish(
     session.s_rmac = kdf(&PLATFORM_MAC, &dd_rmac);
 
     // --- Verify card cryptogram ---
+    // Per GP SCP03 spec §6.2.2: card cryptogram is derived using the
+    // *session* S-MAC key, NOT the static platform key.
     let dd_card_crypto = build_derivation_data(DD_CARD_CRYPTOGRAM, 0x0040, &host_challenge, &card_challenge);
-    let card_crypto_full = kdf(&PLATFORM_MAC, &dd_card_crypto);
+    let card_crypto_full = kdf(&session.s_mac, &dd_card_crypto);
 
     #[cfg(feature = "debug-log")]
     {
@@ -309,17 +317,18 @@ pub unsafe fn establish(
     cortex_m_semihosting::hprintln!("[SCP03] Card cryptogram verified OK");
 
     // --- Compute host cryptogram ---
+    // Per GP SCP03 spec §6.2.2: host cryptogram also uses session S-MAC key.
     let dd_host_crypto = build_derivation_data(DD_HOST_CRYPTOGRAM, 0x0040, &host_challenge, &card_challenge);
-    let host_crypto_full = kdf(&PLATFORM_MAC, &dd_host_crypto);
+    let host_crypto_full = kdf(&session.s_mac, &dd_host_crypto);
     let host_cryptogram = &host_crypto_full[..8];
 
     // --- EXTERNAL AUTHENTICATE ---
-    // CLA=0x84, INS=0x82, P1=0x33 (C-DEC + R-ENC + C-MAC + R-MAC), P2=0x00
+    // CLA=0x84, INS=0x82, P1=security_level, P2=0x00
     // Lc = 16 (8 host cryptogram + 8 MAC)
     // Build the command: header + host_cryptogram, then compute MAC
-
-    // MAC input: MCV(16 zeros) || CLA(0x84) || INS(0x82) || P1(0x33) || P2(0x00) || Lc(0x10) || hostCryptogram(8)
-    let header = [0x84u8, 0x82, 0x33, 0x00, 0x10];
+    //
+    // P1 = 0x03 → C-MAC + C-DEC (required by SE050E for session operations).
+    let header = [0x84u8, 0x82, 0x03, 0x00, 0x10];
     session.mcv = [0; 16]; // Initialize MCV to zeros
     let mac_full = cmac_aes128(&session.s_mac, &[&session.mcv, &header, host_cryptogram]);
     session.mcv = mac_full; // Update MCV
@@ -328,7 +337,7 @@ pub unsafe fn establish(
     let mut ext_auth = [0u8; 21]; // 5 header + 8 host_crypto + 8 MAC
     ext_auth[0] = 0x84; // CLA with security bit
     ext_auth[1] = 0x82; // INS_EXTERNAL_AUTHENTICATE
-    ext_auth[2] = 0x33; // P1 = full security
+    ext_auth[2] = 0x03; // P1 = C-MAC + C-DEC
     ext_auth[3] = 0x00; // P2
     ext_auth[4] = 0x10; // Lc = 16
     ext_auth[5..13].copy_from_slice(host_cryptogram);
@@ -353,6 +362,7 @@ pub unsafe fn establish(
     session.counter = [0; 16];
     session.counter[15] = 0x01; // Start at 1
     session.active = true;
+    session.c_dec = ext_auth[2] & 0x02 != 0; // P1 bit 1 = C-DEC
 
     #[cfg(feature = "debug-log")]
     cortex_m_semihosting::hprintln!("[SCP03] Session established!");
@@ -364,10 +374,15 @@ pub unsafe fn establish(
 // APDU MAC wrapping
 // ---------------------------------------------------------------------------
 
-/// Wrap an APDU with SCP03 C-MAC.
+/// Wrap an APDU with SCP03 C-MAC and C-DEC (command encryption).
 ///
 /// Takes a plain APDU (CLA, INS, P1, P2, [Lc, Data]) and produces
-/// a MAC'd APDU with the security bit set in CLA and 8-byte MAC appended.
+/// a wrapped APDU with the security bit set in CLA, command data
+/// encrypted (ISO 7816-4 padded, AES-CBC with S-ENC), and 8-byte
+/// C-MAC appended.
+///
+/// Handles both short-form Lc (1 byte) and extended-length Lc (3 bytes:
+/// 0x00 || Lc_hi || Lc_lo).
 ///
 /// Returns the total length of the wrapped APDU in `out`.
 pub fn wrap_apdu(
@@ -381,36 +396,94 @@ pub fn wrap_apdu(
         return apdu.len();
     }
 
-    let has_data = apdu.len() > 5;
-    let data_len = if has_data { apdu.len() - 5 } else { 0 };
+    // Detect extended-length Lc: byte 4 == 0x00 and enough bytes for 3-byte Lc
+    let extended = apdu.len() >= 7 && apdu[4] == 0x00;
+    let (hdr_len, data_len) = if extended {
+        let lc = ((apdu[5] as usize) << 8) | (apdu[6] as usize);
+        (7, lc)
+    } else if apdu.len() > 5 {
+        (5, apdu.len() - 5)
+    } else {
+        (apdu.len(), 0)
+    };
+    let has_data = data_len > 0;
+
+    // --- C-DEC: encrypt command data if session has C-DEC enabled ---
+    let enc_len = if has_data && session.c_dec {
+        // Copy plaintext data into a temp buffer for padding + encryption
+        let mut enc_buf = [0u8; 1024];
+        enc_buf[..data_len].copy_from_slice(&apdu[hdr_len..hdr_len + data_len]);
+        // ISO 7816-4 padding: 0x80 then zeros to next 16-byte boundary
+        let mut padded_len = data_len;
+        enc_buf[padded_len] = 0x80;
+        padded_len += 1;
+        while padded_len % 16 != 0 {
+            enc_buf[padded_len] = 0x00;
+            padded_len += 1;
+        }
+        // ICV = AES-ECB(S-ENC, counter)
+        let icv = command_icv(session);
+        // AES-CBC encrypt in-place
+        aes128_cbc_encrypt(&session.s_enc, &icv, &mut enc_buf[..padded_len]);
+        // Increment counter for next command
+        session.inc_counter();
+        // Copy encrypted data to output (after header, filled below)
+        // Store temporarily; we'll place it at the right offset after building the header
+        out[7..7 + padded_len].copy_from_slice(&enc_buf[..padded_len]);
+        padded_len
+    } else if has_data {
+        // C-MAC only: copy plaintext data to output (no encryption)
+        out[7..7 + data_len].copy_from_slice(&apdu[hdr_len..hdr_len + data_len]);
+        data_len
+    } else {
+        0
+    };
+
+    // New Lc = encrypted data length + 8 (MAC)
+    let new_lc = enc_len + 8;
+    let use_extended = extended || new_lc >= 256;
+    let out_hdr_len = if use_extended { 7 } else { 5 };
 
     // Build the MAC'd APDU header
+    // If we used offset 7 for encrypted data but need short header (offset 5),
+    // shift the encrypted data left by 2.
+    if has_data && !use_extended {
+        // Shift encrypted data from offset 7 to offset 5
+        for i in 0..enc_len {
+            out[5 + i] = out[7 + i];
+        }
+    }
+
     out[0] = apdu[0] | 0x04; // Set CLA security bit
     out[1] = apdu[1]; // INS
     out[2] = apdu[2]; // P1
     out[3] = apdu[3]; // P2
 
-    // New Lc = original data + 8 (MAC)
-    let new_lc = data_len + 8;
-    out[4] = new_lc as u8;
-
-    // Copy data if present
-    if has_data {
-        out[5..5 + data_len].copy_from_slice(&apdu[5..5 + data_len]);
+    if use_extended {
+        out[4] = 0x00;
+        out[5] = (new_lc >> 8) as u8;
+        out[6] = (new_lc & 0xFF) as u8;
+    } else {
+        out[4] = new_lc as u8;
     }
 
-    // Compute C-MAC: CMAC(S-MAC, MCV || header+Lc || data)
-    let mac_header = &out[0..5]; // CLA|INS|P1|P2|Lc (with security bit and new Lc)
-    let mac_data = if has_data { &out[5..5 + data_len] } else { &[] as &[u8] };
+    // Compute C-MAC: CMAC(S-MAC, MCV || header+Lc || encrypted_data)
+    let mac_header = &out[0..out_hdr_len];
+    let mac_data = if has_data {
+        &out[out_hdr_len..out_hdr_len + enc_len]
+    } else {
+        &[] as &[u8]
+    };
     let mac_full = cmac_aes128(&session.s_mac, &[&session.mcv, mac_header, mac_data]);
 
     // Append 8-byte MAC
-    out[5 + data_len..5 + data_len + 8].copy_from_slice(&mac_full[..8]);
+    let mac_offset = out_hdr_len + enc_len;
+    out[mac_offset..mac_offset + 8].copy_from_slice(&mac_full[..8]);
 
     // Update MCV
     session.mcv = mac_full;
 
-    5 + data_len + 8 // total output length
+    mac_offset + 8 // total output length
 }
 
 /// Compute the command ICV (Initial Chaining Value) for AES-CBC encryption.
