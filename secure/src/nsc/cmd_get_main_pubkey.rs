@@ -59,21 +59,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     let mut entropy_blob = [0u8; 64];
     let entropy_blob_len = {
-        #[cfg(feature = "se050")]
-        {
-            match crate::crypto::se050_read_cached_entropy_blob(&mut entropy_blob) {
-                Ok(len) => len,
-                Err(_) => return NscStatus::InternalError as u32,
-            }
-        }
-        #[cfg(not(feature = "se050"))]
-        {
-            let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-            use crate::secure_element::SecureElement;
-            match se.r_mem_read(crate::crypto::RMEM_ENCRYPTED_ENTROPY, &mut entropy_blob) {
-                Ok(len) => len,
-                Err(_) => return NscStatus::InternalError as u32,
-            }
+        use crate::secure_element::WalletStore;
+        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+        match se.read_entropy_blob(&mut entropy_blob) {
+            Ok(len) => len,
+            Err(_) => return NscStatus::InternalError as u32,
         }
     };
 

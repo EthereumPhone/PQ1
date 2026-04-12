@@ -65,10 +65,10 @@ mod zk;
 
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
-#[cfg(all(not(test), not(feature = "se050")))]
-use crypto::{RMEM_BOOTSTRAP_VK, RMEM_ENCRYPTED_ENTROPY, RMEM_PIN_STATE, RMEM_VERIFYING_KEY};
-#[cfg(all(not(test), not(feature = "se050")))]
-use secure_element::{MockSecureElement, SecureElement};
+#[cfg(all(feature = "mock-se", not(test)))]
+use secure_element::MockSecureElement;
+#[cfg(not(test))]
+use secure_element::WalletStore;
 
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
 const NS_FLASH_BASE: u32 = 0x0020_0000; // QEMU mps2-an505: NS alias of SSRAM-0
@@ -110,26 +110,11 @@ fn setup_systick() {
     }
 }
 
-/// Returns true if the secure element already holds an encrypted seed,
-/// PIN state, and verifying key. Used to skip re-provisioning on every boot.
-#[cfg(all(not(test), not(feature = "se050")))]
-fn is_provisioned(se: &mut impl SecureElement) -> bool {
-    let mut buf = [0u8; 128];
-    se.r_mem_read(RMEM_ENCRYPTED_ENTROPY, &mut buf).is_ok()
-        && se.r_mem_read(RMEM_PIN_STATE, &mut buf).is_ok()
-        && se.r_mem_read(RMEM_VERIFYING_KEY, &mut buf).is_ok()
-        // Bootstrap VK may not exist on older provisioned devices;
-        // don't require it for backward compat. New provisions always
-        // write it (see crypto::provision_with_mnemonic).
-}
-
-/// SE050 provisioning check: UserID object existence means provisioned.
-#[cfg(all(not(test), feature = "se050"))]
-fn is_provisioned(_se: &mut se050::Se050) -> bool {
-    unsafe {
-        let se = &mut *core::ptr::addr_of_mut!(SE);
-        se.is_provisioned()
-    }
+/// Returns true if the SE backend has been provisioned.
+/// Each backend (Mock, SE050, Tropic01) checks via its WalletStore impl.
+#[cfg(not(test))]
+fn is_provisioned(se: &mut impl WalletStore) -> bool {
+    se.is_provisioned()
 }
 
 /// Run the first-boot interactive wizard. Loops until the user successfully:
@@ -315,20 +300,11 @@ fn main() -> ! {
         // raw mutable reference to a `static mut`. The single-threaded
         // boot sequence makes aliasing impossible by construction; this
         // is the same pattern the `nsc::cmd_*` handlers use.
-        #[cfg(feature = "se050")]
-        crypto::provision_with_mnemonic_se050(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
-        #[cfg(not(feature = "se050"))]
-        crypto::provision_with_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
+        crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
         // Run the verify path so MASTER_SECRET + PIN_VERIFIED end up
         // in the same state as a real unlock.
-        #[cfg(feature = "se050")]
-        match crypto::verify_pin_se050(&mut *core::ptr::addr_of_mut!(SE), &pin) {
-            Ok(master) => nsc::set_e2e_unlocked(master),
-            Err(_) => panic!("e2e: verify_pin failed after provision"),
-        }
-        #[cfg(not(feature = "se050"))]
-        match crate::pin::verify_pin(&mut *core::ptr::addr_of_mut!(SE), &pin) {
+        match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
             Ok(master) => nsc::set_e2e_unlocked(master),
             Err(_) => panic!("e2e: verify_pin failed after provision"),
         }
@@ -355,25 +331,14 @@ fn main() -> ! {
 
             ui::show_status("Provisioning", "...");
 
-            #[cfg(feature = "mock-se")]
-            crypto::provision_with_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
-
-            #[cfg(feature = "se050")]
-            crypto::provision_with_mnemonic_se050(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
-
-            #[cfg(feature = "tropic01-se")]
-            (&mut *core::ptr::addr_of_mut!(SE))
-                .provision(&mnemonic, &pin, sphincs_tz_shared::MAX_ATTEMPTS)
-                .expect("TROPIC01 provisioning failed");
+            crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
             // Debug-only: log the verifying key the SE just stored.
-            // SE050 objects require an authenticated session to read, so
-            // we skip this readback for the se050 feature.
-            #[cfg(all(feature = "debug-log", not(feature = "se050")))]
+            #[cfg(feature = "debug-log")]
             {
                 let mut vk_buf = [0u8; 64];
                 if let Ok(_) =
-                    (&mut *core::ptr::addr_of_mut!(SE)).r_mem_read(crypto::RMEM_VERIFYING_KEY, &mut vk_buf)
+                    (&mut *core::ptr::addr_of_mut!(SE)).read_vk(&mut vk_buf)
                 {
                     cortex_m_semihosting::hprintln!("[S] vk (DEBUG):");
                     for chunk in vk_buf[..32].chunks(8) {
@@ -388,21 +353,14 @@ fn main() -> ! {
 
             // Auto-unlock with the PIN the user just entered so the device
             // is immediately usable (caches entropy blob + VK for signing).
-            #[cfg(feature = "se050")]
-            match crypto::verify_pin_se050(&mut *core::ptr::addr_of_mut!(SE), &pin) {
+            match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
                 Ok(master) => {
                     nsc::unlock_with_master(master);
                     secure_log!("[S] Auto-unlocked after provisioning");
                 }
-                Err(_) => secure_log!("[S] WARNING: auto-unlock failed after provision"),
-            }
-            #[cfg(not(feature = "se050"))]
-            match crate::pin::verify_pin(&mut *core::ptr::addr_of_mut!(SE), &pin) {
-                Ok(master) => {
-                    nsc::unlock_with_master(master);
-                    secure_log!("[S] Auto-unlocked after provisioning");
+                Err(_) => {
+                    secure_log!("[S] WARNING: auto-unlock failed after provision");
                 }
-                Err(_) => secure_log!("[S] WARNING: auto-unlock failed after provision"),
             }
 
             // mnemonic drops here → indices zeroed.
@@ -432,14 +390,7 @@ fn main() -> ! {
 
                 ui::show_status("Verifying...", "");
 
-                #[cfg(feature = "se050")]
-                let result = crypto::verify_pin_se050(
-                    &mut *core::ptr::addr_of_mut!(SE), &pin,
-                );
-                #[cfg(not(feature = "se050"))]
-                let result = crate::pin::verify_pin(
-                    &mut *core::ptr::addr_of_mut!(SE), &pin,
-                );
+                let result = (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin);
 
                 pin.zeroize();
 
@@ -450,7 +401,7 @@ fn main() -> ! {
                         secure_log!("[S] PIN verified — unlocked");
                         break;
                     }
-                    Err(sphincs_tz_shared::NscStatus::PinLocked) => {
+                    Err(secure_element::UnlockError::PinLocked) => {
                         ui::show_status("PIN locked", "factory reset");
                         secure_log!("[S] PIN locked out");
                         break;
@@ -559,14 +510,7 @@ fn PendSV() {
 
             ui::show_status("Verifying...", "");
 
-            #[cfg(feature = "se050")]
-            let result = crypto::verify_pin_se050(
-                &mut *core::ptr::addr_of_mut!(SE), &pin,
-            );
-            #[cfg(not(feature = "se050"))]
-            let result = crate::pin::verify_pin(
-                &mut *core::ptr::addr_of_mut!(SE), &pin,
-            );
+            let result = (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin);
 
             pin.zeroize();
 
@@ -578,7 +522,7 @@ fn PendSV() {
                     secure_log!("[S] Re-unlocked after idle wipe");
                     break;
                 }
-                Err(sphincs_tz_shared::NscStatus::PinLocked) => {
+                Err(secure_element::UnlockError::PinLocked) => {
                     ui::show_status("PIN locked", "factory reset");
                     secure_log!("[S] PIN locked out");
                     break;

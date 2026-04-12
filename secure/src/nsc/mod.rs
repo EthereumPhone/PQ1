@@ -128,8 +128,10 @@ pub fn unlock_with_master(master: [u8; 32]) {
 /// interactive dialog.
 pub fn zeroize_sensitive_state() {
     state::with_state(|s| s.zeroize_sensitive());
-    #[cfg(feature = "se050")]
-    crate::crypto::se050_zeroize_caches();
+    unsafe {
+        use crate::secure_element::WalletStore;
+        (&mut *core::ptr::addr_of_mut!(crate::SE)).zeroize_caches();
+    }
 }
 
 /// Initialize the shared-memory mailbox by clearing CMD/RESULT/DONE.

@@ -411,135 +411,6 @@ pub fn derive_main_vk_from_entropy(
 }
 
 // ---------------------------------------------------------------------------
-// SE050 UserID-based provisioning and unlock
-// ---------------------------------------------------------------------------
-//
-// The SE050 stores entropy behind a UserID gate (requires PIN to read).
-// After unlock we cache an encrypted entropy blob + the VK in secure SRAM
-// so that signing operations don't require re-authentication.
-
-/// Cached encrypted entropy blob (populated by verify_pin_se050).
-/// The signing code reads from here instead of from the SE050 directly.
-#[cfg(feature = "se050")]
-static mut SE050_ENTROPY_BLOB_CACHE: [u8; ENTROPY_BLOB_LEN] = [0; ENTROPY_BLOB_LEN];
-#[cfg(feature = "se050")]
-static mut SE050_BLOB_CACHED: bool = false;
-
-/// Cached verifying key (populated during provisioning and unlock).
-#[cfg(feature = "se050")]
-static mut SE050_VK_CACHE: [u8; 32] = [0; 32];
-#[cfg(feature = "se050")]
-static mut SE050_VK_CACHED: bool = false;
-
-/// Read the cached encrypted entropy blob (SE050 path).
-/// Returns the blob length on success.
-#[cfg(feature = "se050")]
-pub fn se050_read_cached_entropy_blob(buf: &mut [u8]) -> Result<usize, ()> {
-    unsafe {
-        if !SE050_BLOB_CACHED || buf.len() < ENTROPY_BLOB_LEN {
-            return Err(());
-        }
-        buf[..ENTROPY_BLOB_LEN].copy_from_slice(&SE050_ENTROPY_BLOB_CACHE);
-        Ok(ENTROPY_BLOB_LEN)
-    }
-}
-
-/// Read the cached verifying key (SE050 path).
-/// Returns the VK length on success.
-#[cfg(feature = "se050")]
-pub fn se050_read_cached_vk(buf: &mut [u8]) -> Result<usize, ()> {
-    unsafe {
-        if !SE050_VK_CACHED || buf.len() < 32 {
-            return Err(());
-        }
-        buf[..32].copy_from_slice(&SE050_VK_CACHE);
-        Ok(32)
-    }
-}
-
-/// Zeroize the SE050 caches (called on idle wipe / lock).
-#[cfg(feature = "se050")]
-pub fn se050_zeroize_caches() {
-    unsafe {
-        SE050_ENTROPY_BLOB_CACHE.zeroize();
-        SE050_BLOB_CACHED = false;
-        SE050_VK_CACHE.zeroize();
-        SE050_VK_CACHED = false;
-    }
-}
-
-/// Provision the SE050 with the user's mnemonic entropy, gated by PIN.
-///
-/// The SE050 hardware enforces PIN verification internally (max 9 attempts
-/// before permanent lockout).  Entropy is stored unencrypted — the SE050's
-/// tamper-resistant silicon IS the protection.
-#[cfg(feature = "se050")]
-pub fn provision_with_mnemonic_se050(
-    se: &mut crate::se050::Se050,
-    mnemonic: &sphincs_tz_bip39::Mnemonic,
-    pin: &[u8; 8],
-) {
-    let mut entropy = mnemonic
-        .to_entropy()
-        .expect("mnemonic was already checksum-verified");
-
-    let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
-    drop(sk);
-    let bootstrap_vk = derive_bootstrap_vk_from_entropy(&entropy);
-
-    se.provision(pin, 9, &entropy, &vk_bytes, &bootstrap_vk)
-        .expect("SE050 provision failed");
-
-    // Cache the VK so cmd_get_pubkey works before first unlock
-    unsafe {
-        SE050_VK_CACHE.copy_from_slice(&vk_bytes);
-        SE050_VK_CACHED = true;
-    }
-
-    entropy.zeroize();
-}
-
-/// Verify PIN and unlock via SE050 UserID authentication.
-///
-/// On success returns master_secret derived from the stored entropy.
-/// Also caches an encrypted entropy blob and VK in secure SRAM so that
-/// signing operations work without re-authenticating against the SE050.
-#[cfg(feature = "se050")]
-pub fn verify_pin_se050(
-    se: &mut crate::se050::Se050,
-    pin: &[u8; 8],
-) -> Result<[u8; 32], sphincs_tz_shared::NscStatus> {
-    use crate::se050::apdu::Se050Error;
-    use sphincs_tz_shared::NscStatus;
-
-    let mut entropy = se.unlock(pin).map_err(|e| match e {
-        Se050Error::PinIncorrect => NscStatus::PinIncorrect,
-        _ => NscStatus::InternalError,
-    })?;
-
-    let master_secret = kdf(b"sphincs-master", &entropy, 0);
-
-    // Cache encrypted entropy blob for the signing code
-    let blob = encrypt_entropy_blob(&entropy, &master_secret);
-    unsafe {
-        SE050_ENTROPY_BLOB_CACHE.copy_from_slice(&blob);
-        SE050_BLOB_CACHED = true;
-    }
-
-    // Cache VK (derive from entropy)
-    let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
-    drop(sk);
-    unsafe {
-        SE050_VK_CACHE.copy_from_slice(&vk_bytes);
-        SE050_VK_CACHED = true;
-    }
-
-    entropy.zeroize();
-
-    Ok(master_secret)
-}
-
-// ---------------------------------------------------------------------------
 // PIN state serialization (unchanged — used by mock-SE MACD path)
 // ---------------------------------------------------------------------------
 
@@ -588,61 +459,62 @@ pub fn deserialize_pin_state(blob: &[u8], blob_len: usize) -> Result<PinState, (
 }
 
 // ---------------------------------------------------------------------------
-// First-boot provisioning (mock SE path)
+// WalletStore provisioning helpers
 // ---------------------------------------------------------------------------
 
-/// Provision the (mock) secure element from a user-supplied BIP-39 mnemonic.
+/// Provision a `WalletStore` backend from a user-supplied BIP-39 mnemonic.
 ///
-/// This is the entry point for both the "new wallet" and "restore from seed
-/// phrase" wizard branches. The mnemonic itself is **not** persisted; only
-/// the **32-byte BIP-39 entropy** (encrypted under the master_secret), the
-/// PIN-gated MAC-and-Destroy chain, and the cached verifying key are
-/// written to r-mem. The 48-byte SLH-DSA seed and the SigningKey itself
-/// are never stored — they are recomputed on every unlock by running the
-/// full BIP-39 → SLH-DSA chain.
+/// This is the single entry point for both the "new wallet" and "restore
+/// from seed phrase" wizard branches. Handles the shared key derivation
+/// (the "recovery contract") and delegates storage to `store.provision()`.
 ///
 /// Determinism: the same `(mnemonic, pin)` pair always produces the same
-/// SPHINCS+ keypair on any device running this firmware. That is the
-/// recovery guarantee — if the device is lost or bricked, restoring from the
-/// 24 written-down words on a replacement unit yields the identical wallet.
-#[cfg(any(feature = "mock-se", feature = "se050"))]
-pub fn provision_with_mnemonic(
-    se: &mut impl SecureElement,
+/// SPHINCS+ keypair on any device running this firmware.
+pub fn provision_from_mnemonic(
+    store: &mut impl crate::secure_element::WalletStore,
     mnemonic: &sphincs_tz_bip39::Mnemonic,
     pin: &[u8; 8],
 ) {
-    // 1. Recover the 32-byte BIP-39 entropy from the mnemonic. The mnemonic
-    //    was either freshly generated from this entropy (new-wallet flow,
-    //    same bytes round-trip) or parsed from user input (restore flow,
-    //    BIP-39 checksum already verified by Mnemonic::from_indices).
     let mut entropy = mnemonic
         .to_entropy()
         .expect("mnemonic was already checksum-verified");
 
-    // 2. Master secret is derived directly from the entropy — no PBKDF2
-    //    needed at provisioning time. This means the unlock path (which
-    //    recovers master_secret from the PIN-gated MACD chain) doesn't have
-    //    to re-derive it from the post-PBKDF2 SLH-DSA seed; PBKDF2 only runs
-    //    when actually computing a SigningKey for signing.
     let mut master_secret: [u8; 32] = kdf(b"sphincs-master", &entropy, 0);
 
-    // 3. Run the full BIP-39 → SLH-DSA chain ONCE so we can cache the
-    //    32-byte verifying key in r-mem. After this, the SigningKey is
-    //    immediately dropped and only the entropy survives in encrypted form.
-    //    Also derive the bootstrap VK for the two-tier architecture.
     let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
     drop(sk);
-
     let bootstrap_vk = derive_bootstrap_vk_from_entropy(&entropy);
 
-    // 4. Encrypt the entropy under the master-derived wrap key.
-    let entropy_blob = encrypt_entropy_blob(&entropy, &master_secret);
+    store
+        .provision(&entropy, &master_secret, &vk_bytes, &bootstrap_vk, pin)
+        .expect("provisioning failed");
 
-    // 5. Initialize MACD slots and build the per-slot encrypted
+    entropy.zeroize();
+    master_secret.zeroize();
+}
+
+/// Store pre-derived entropy, VK, and PIN state via the MACD chain on an
+/// r-mem-capable secure element. Used by backends that support the
+/// `SecureElement` trait (Mock, Tropic01 on the generic path).
+///
+/// The mnemonic-to-entropy derivation is NOT done here — the caller must
+/// pass pre-derived `(entropy, master_secret, vk, bootstrap_vk)`.
+pub fn store_macd_encrypted(
+    se: &mut impl SecureElement,
+    entropy: &[u8; ENTROPY_LEN],
+    master_secret: &[u8; 32],
+    vk: &[u8; 32],
+    bootstrap_vk: &[u8; 32],
+    pin: &[u8; 8],
+) {
+    // 1. Encrypt the entropy under the master-derived wrap key.
+    let entropy_blob = encrypt_entropy_blob(entropy, master_secret);
+
+    // 2. Initialize MACD slots and build the per-slot encrypted
     //    master_secret blobs (one per allowed PIN attempt).
     let mut encrypted_secrets = [[0u8; PER_SLOT_CT_LEN]; MAX_ATTEMPTS as usize];
     for j in 0..MAX_ATTEMPTS {
-        let init_in = macd_init_input(&master_secret, j);
+        let init_in = macd_init_input(master_secret, j);
         let pin_in = macd_pin_input(pin, j);
 
         se.mac_and_destroy(j as u16, &init_in).unwrap();
@@ -650,15 +522,16 @@ pub fn provision_with_mnemonic(
         se.mac_and_destroy(j as u16, &init_in).unwrap();
 
         let mut ct_buf = [0u8; PER_SLOT_CT_LEN];
-        ct_buf[..32].copy_from_slice(&master_secret);
+        ct_buf[..32].copy_from_slice(master_secret);
         aes_encrypt_inplace(&w_j, &mut ct_buf, 32, j);
         encrypted_secrets[j as usize] = ct_buf;
         w_j.zeroize();
     }
 
-    // 6. Store everything in r-mem.
+    // 3. Store everything in r-mem.
     se.r_mem_erase(RMEM_ENCRYPTED_ENTROPY).ok();
-    se.r_mem_write(RMEM_ENCRYPTED_ENTROPY, &entropy_blob).unwrap();
+    se.r_mem_write(RMEM_ENCRYPTED_ENTROPY, &entropy_blob)
+        .unwrap();
 
     let mut pin_state_buf = [0u8; PIN_STATE_MAX_LEN];
     let ps_len = serialize_pin_state(0, &encrypted_secrets, &mut pin_state_buf);
@@ -667,12 +540,8 @@ pub fn provision_with_mnemonic(
         .unwrap();
 
     se.r_mem_erase(RMEM_VERIFYING_KEY).ok();
-    se.r_mem_write(RMEM_VERIFYING_KEY, &vk_bytes).unwrap();
+    se.r_mem_write(RMEM_VERIFYING_KEY, vk).unwrap();
 
     se.r_mem_erase(RMEM_BOOTSTRAP_VK).ok();
-    se.r_mem_write(RMEM_BOOTSTRAP_VK, &bootstrap_vk).unwrap();
-
-    // 7. Wipe sensitive intermediates from the stack.
-    entropy.zeroize();
-    master_secret.zeroize();
+    se.r_mem_write(RMEM_BOOTSTRAP_VK, bootstrap_vk).unwrap();
 }

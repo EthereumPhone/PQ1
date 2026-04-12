@@ -244,6 +244,10 @@ cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
 - **Do not skip signature verification before releasing it.** The verify-before-release check is a fault-injection guard. Removing it opens a glitch attack.
 - **Do not add `debug-log` or `e2e-test` features to production builds.** CI must gate on this.
 
+## Work Tracking
+
+After completing any implementation task, check `docs/work-todo.md` to see if the work corresponds to a tracked item. If it does, mark the relevant checkbox(es) as done and add a row to the Completion Log table at the bottom with the date and a one-line summary.
+
 ## Deep-Dive Docs
 
 For full details beyond this summary, read:
@@ -255,3 +259,4 @@ For full details beyond this summary, read:
 - `docs/dev-board-setup.md` -- B-U585I-IOT02A devkit setup
 - `docs/hardware_requirements.md` -- BOM and hardware requirements
 - `docs/m4-cowswap-eip712.md` -- CowSwap EIP-712 clear-signing design (future M4)
+- `docs/work-todo.md` -- Gap analysis: what's missing for full E2E hardware wallet

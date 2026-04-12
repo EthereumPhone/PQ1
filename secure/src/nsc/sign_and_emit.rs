@@ -46,30 +46,11 @@ pub(super) unsafe fn decrypt_and_sign(
     // 1. Read the encrypted entropy blob from the SE.
     let mut entropy_blob = [0u8; 64];
     let entropy_blob_len = {
+        use crate::secure_element::WalletStore;
         let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-        #[cfg(feature = "tropic01-se")]
-        {
-            let mut vk_ignore = [0u8; 64];
-            match se.batch_read_entropy_and_vk(&mut entropy_blob, &mut vk_ignore) {
-                Ok((entropy_len, _)) => entropy_len,
-                Err(_) => return NscStatus::InternalError as u32,
-            }
-        }
-        #[cfg(feature = "se050")]
-        {
-            let _ = se;
-            match crate::crypto::se050_read_cached_entropy_blob(&mut entropy_blob) {
-                Ok(len) => len,
-                Err(_) => return NscStatus::InternalError as u32,
-            }
-        }
-        #[cfg(not(any(feature = "tropic01-se", feature = "se050")))]
-        {
-            use crate::secure_element::SecureElement;
-            match se.r_mem_read(crate::crypto::RMEM_ENCRYPTED_ENTROPY, &mut entropy_blob) {
-                Ok(len) => len,
-                Err(_) => return NscStatus::InternalError as u32,
-            }
+        match se.read_entropy_blob(&mut entropy_blob) {
+            Ok(len) => len,
+            Err(_) => return NscStatus::InternalError as u32,
         }
     };
 

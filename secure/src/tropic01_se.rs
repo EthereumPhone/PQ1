@@ -122,63 +122,37 @@ impl SecureElement for Tropic01SecureElement {
 /// Batch operations that need multiple commands in one session.
 /// These avoid the overhead of re-establishing a session for each command.
 impl Tropic01SecureElement {
-    /// One-shot provisioning from a user-supplied BIP-39 mnemonic. Stores
-    /// the **32-byte BIP-39 entropy** (encrypted under master_secret), the
-    /// PIN-gated MACD chain, and the cached verifying key. All in a single
-    /// e2e-encrypted session.
+    /// Store pre-derived entropy, VK, bootstrap VK, and MACD PIN chain in a
+    /// single e2e-encrypted session.
     ///
-    /// The mnemonic itself is **never** persisted on the chip — only the
-    /// 32-byte raw entropy that the user's 24-word phrase encodes. The
-    /// 48-byte SLH-DSA seed and the SigningKey are recomputed on every
-    /// unlock by running the full BIP-39 → SLH-DSA chain in the secure world.
-    ///
-    /// The mnemonic is the user's recovery secret and must be written down
-    /// on paper.
-    ///
-    /// Must only be called when the device is unprovisioned. The caller is
-    /// responsible for the `is_provisioned()` check on every boot.
-    pub fn provision(
+    /// The caller has already run the key derivation chain (entropy,
+    /// master_secret, VK, bootstrap VK). This method encrypts the entropy,
+    /// initialises MACD slots, and writes everything to r-mem.
+    fn store_data_session(
         &mut self,
-        mnemonic: &sphincs_tz_bip39::Mnemonic,
+        entropy: &[u8; 32],
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
         pin: &[u8; 8],
-        max_attempts: u8,
     ) -> Result<(), SeError> {
         use crate::crypto::{
-            aes_encrypt_inplace, derive_keypair_from_entropy, encrypt_entropy_blob, kdf,
+            aes_encrypt_inplace, encrypt_entropy_blob,
             macd_init_input, macd_pin_input, PER_SLOT_CT_LEN,
         };
 
-        // Recover the 32-byte BIP-39 entropy from the mnemonic. The mnemonic
-        // was either freshly generated from this entropy (new-wallet) or
-        // parsed from user input (restore) — checksum already verified.
-        let mut entropy = mnemonic
-            .to_entropy()
-            .map_err(|_| SeError::InternalError)?;
-
-        // Derive the master_secret directly from the entropy. The unlock
-        // path recovers it from the PIN-gated MACD chain and uses it to
-        // unwrap the encrypted entropy below.
-        let mut master_secret: [u8; 32] = kdf(b"sphincs-master", &entropy, 0);
-
-        // Run the full BIP-39 → SLH-DSA chain ONCE to compute the cached
-        // verifying key. The SigningKey is dropped immediately afterwards;
-        // only the 32-byte entropy survives in encrypted form on the chip.
-        let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
-        drop(sk);
-
-        // Encrypt the entropy under the master-derived wrap key.
-        let entropy_blob = encrypt_entropy_blob(&entropy, &master_secret);
+        let entropy_blob = encrypt_entropy_blob(entropy, master_secret);
 
         with_session!(session, {
             secure_log!("  [T01] Session established (e2e encrypted)");
-            secure_log!("  [T01] Provisioning from BIP-39 entropy");
+            secure_log!("  [T01] Provisioning from pre-derived data");
 
             // Initialize MAC-and-Destroy slots and build the per-slot encrypted
             // master_secret blobs.
             let mut encrypted_secrets = [[0u8; PER_SLOT_CT_LEN]; MAX_ATTEMPTS as usize];
 
-            for j in 0..max_attempts {
-                let init_in = macd_init_input(&master_secret, j);
+            for j in 0..MAX_ATTEMPTS {
+                let init_in = macd_init_input(master_secret, j);
                 let pin_in = macd_pin_input(pin, j);
 
                 session
@@ -192,24 +166,24 @@ impl Tropic01SecureElement {
                     .map_err(|_| SeError::InternalError)?;
 
                 let mut ct_buf = [0u8; PER_SLOT_CT_LEN];
-                ct_buf[..32].copy_from_slice(&master_secret);
+                ct_buf[..32].copy_from_slice(master_secret);
                 aes_encrypt_inplace(&w_j, &mut ct_buf, 32, j);
                 encrypted_secrets[j as usize] = ct_buf;
                 w_j.zeroize();
             }
-            secure_log!("  [T01] MACD slots initialized ({} attempts)", max_attempts);
+            secure_log!("  [T01] MACD slots initialized ({} attempts)", MAX_ATTEMPTS);
 
-            // Store encrypted entropy (slot 0)
+            // Slot 0: encrypted entropy blob
             session.r_mem_data_erase(U16::new(0)).ok();
             session
                 .r_mem_data_write(U16::new(0), &entropy_blob)
                 .map_err(|_| SeError::InternalError)?;
 
-            // Store PIN state (slot 1)
+            // Slot 1: PIN state (attempt counter + encrypted secrets)
             let mut pin_state = [0u8; 512];
             pin_state[0] = 0;
             let mut offset = 1;
-            for j in 0..max_attempts as usize {
+            for j in 0..MAX_ATTEMPTS as usize {
                 pin_state[offset..offset + PER_SLOT_CT_LEN].copy_from_slice(&encrypted_secrets[j]);
                 offset += PER_SLOT_CT_LEN;
             }
@@ -218,15 +192,17 @@ impl Tropic01SecureElement {
                 .r_mem_data_write(U16::new(1), &pin_state[..offset])
                 .map_err(|_| SeError::InternalError)?;
 
-            // Store verifying key (slot 2)
+            // Slot 2: default verifying key
             session.r_mem_data_erase(U16::new(2)).ok();
             session
-                .r_mem_data_write(U16::new(2), &vk_bytes)
+                .r_mem_data_write(U16::new(2), vk)
                 .map_err(|_| SeError::InternalError)?;
 
-            // Wipe sensitive intermediates
-            entropy.zeroize();
-            master_secret.zeroize();
+            // Slot 3: bootstrap verifying key
+            session.r_mem_data_erase(U16::new(3)).ok();
+            session
+                .r_mem_data_write(U16::new(3), bootstrap_vk)
+                .map_err(|_| SeError::InternalError)?;
 
             secure_log!("  [T01] Provisioned (e2e encrypted)");
             Ok(())
@@ -374,5 +350,73 @@ impl Tropic01SecureElement {
             }
             Ok(())
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WalletStore implementation
+// ---------------------------------------------------------------------------
+
+use crate::secure_element::{UnlockError, WalletStore};
+
+impl WalletStore for Tropic01SecureElement {
+    fn is_provisioned(&mut self) -> bool {
+        use crate::crypto::{RMEM_ENCRYPTED_ENTROPY, RMEM_PIN_STATE, RMEM_VERIFYING_KEY};
+        let mut buf = [0u8; 128];
+        self.r_mem_read(RMEM_ENCRYPTED_ENTROPY, &mut buf).is_ok()
+            && self.r_mem_read(RMEM_PIN_STATE, &mut buf).is_ok()
+            && self.r_mem_read(RMEM_VERIFYING_KEY, &mut buf).is_ok()
+    }
+
+    fn provision(
+        &mut self,
+        entropy: &[u8; 32],
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        self.store_data_session(entropy, master_secret, vk, bootstrap_vk, pin)
+    }
+
+    fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+        self.batch_verify_pin(pin, MAX_ATTEMPTS).map_err(|e| match e {
+            SeError::SlotExpired => UnlockError::PinLocked,
+            SeError::InvalidParameter => UnlockError::PinIncorrect,
+            _ => UnlockError::InternalError,
+        })
+    }
+
+    fn read_entropy_blob(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
+        let mut vk_ignore = [0u8; 64];
+        self.batch_read_entropy_and_vk(buf, &mut vk_ignore)
+            .map(|(entropy_len, _)| entropy_len)
+    }
+
+    fn read_vk(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
+        let mut entropy_ignore = [0u8; 64];
+        self.batch_read_entropy_and_vk(&mut entropy_ignore, buf)
+            .map(|(_, vk_len)| vk_len)
+    }
+
+    fn read_bootstrap_vk(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
+        self.r_mem_read(crate::crypto::RMEM_BOOTSTRAP_VK, buf)
+    }
+
+    fn remaining_attempts(&mut self) -> u8 {
+        match self.batch_read_pin_state() {
+            Ok(next_index) => {
+                if next_index >= MAX_ATTEMPTS {
+                    0
+                } else {
+                    MAX_ATTEMPTS - next_index
+                }
+            }
+            Err(_) => MAX_ATTEMPTS,
+        }
+    }
+
+    fn zeroize_caches(&mut self) {
+        // Tropic01 re-reads from chip every time — no caching.
     }
 }

@@ -37,10 +37,22 @@ const BOOTSTRAP_VK_OBJ: u32 = 0x7B06_0003;
 // ---------------------------------------------------------------------------
 
 /// SE050 secure element driver.
+///
+/// Caches the encrypted entropy blob, VK, and bootstrap VK in struct fields
+/// after provisioning or unlock, so signing operations don't require
+/// re-authenticating against the SE050 hardware.
 pub struct Se050 {
     t1: T1State,
     scp03: Scp03Session,
     ready: bool,
+    // Caches populated on provision/unlock, cleared on zeroize.
+    entropy_blob_cache: [u8; crate::crypto::ENTROPY_BLOB_LEN],
+    blob_cached: bool,
+    vk_cache: [u8; 32],
+    vk_cached: bool,
+    bootstrap_vk_cache: [u8; 32],
+    bootstrap_vk_cached: bool,
+    remaining: u8,
 }
 
 impl Se050 {
@@ -49,6 +61,13 @@ impl Se050 {
             t1: T1State::new(),
             scp03: Scp03Session::new(),
             ready: false,
+            entropy_blob_cache: [0; crate::crypto::ENTROPY_BLOB_LEN],
+            blob_cached: false,
+            vk_cache: [0; 32],
+            vk_cached: false,
+            bootstrap_vk_cache: [0; 32],
+            bootstrap_vk_cached: false,
+            remaining: sphincs_tz_shared::MAX_ATTEMPTS,
         }
     }
 
@@ -114,7 +133,7 @@ impl Se050 {
     }
 
     /// Check if the device has been provisioned (UserID object exists).
-    pub fn is_provisioned(&mut self) -> bool {
+    fn check_provisioned(&mut self) -> bool {
         if self.init().is_err() {
             return false;
         }
@@ -124,14 +143,12 @@ impl Se050 {
         }
     }
 
-    /// Provision the SE050 with a PIN-gated entropy, VK, and bootstrap VK.
+    /// Store objects on the SE050 behind a UserID PIN gate.
     ///
-    /// Creates a UserID object with the PIN (HW lesson #4: can't be deleted
-    /// after creation), then stores three binary objects behind a policy
-    /// that requires UserID authentication to read.
-    ///
-    /// Skips creation of any object that already exists (idempotent).
-    pub fn provision(
+    /// Creates a UserID object with the PIN (can't be deleted after creation),
+    /// then stores three binary objects behind a policy that requires UserID
+    /// authentication to read. Skips creation of any existing object.
+    fn store_objects(
         &mut self,
         pin: &[u8],
         max_attempts: u16,
@@ -185,11 +202,11 @@ impl Se050 {
         Ok(())
     }
 
-    /// Authenticate with PIN and read the stored entropy.
+    /// Authenticate with PIN and read the stored entropy from hardware.
     ///
     /// On success returns the 32-byte entropy. On PIN failure the SE050
     /// hardware decrements its attempt counter internally.
-    pub fn unlock(&mut self, pin: &[u8]) -> Result<[u8; 32], Se050Error> {
+    fn authenticate_and_read(&mut self, pin: &[u8]) -> Result<[u8; 32], Se050Error> {
         self.init()?;
 
         unsafe {
@@ -226,5 +243,115 @@ impl Se050 {
                 Err(e) => Err(e),
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WalletStore implementation
+// ---------------------------------------------------------------------------
+
+use crate::secure_element::{SeError, UnlockError, WalletStore};
+
+impl WalletStore for Se050 {
+    fn is_provisioned(&mut self) -> bool {
+        self.check_provisioned()
+    }
+
+    fn provision(
+        &mut self,
+        entropy: &[u8; 32],
+        _master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        self.store_objects(pin, 9, entropy, vk, bootstrap_vk)
+            .map_err(|_| SeError::InternalError)?;
+
+        // Cache VK + bootstrap VK so cmd_get_pubkey works before first unlock.
+        self.vk_cache.copy_from_slice(vk);
+        self.vk_cached = true;
+        self.bootstrap_vk_cache.copy_from_slice(bootstrap_vk);
+        self.bootstrap_vk_cached = true;
+        self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
+
+        Ok(())
+    }
+
+    fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+        use zeroize::Zeroize;
+
+        let mut entropy = self.authenticate_and_read(pin).map_err(|e| match e {
+            Se050Error::PinIncorrect => {
+                if self.remaining > 0 {
+                    self.remaining -= 1;
+                }
+                UnlockError::PinIncorrect
+            }
+            _ => UnlockError::InternalError,
+        })?;
+
+        // Successful unlock — reset attempt counter.
+        self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
+
+        let master_secret = crate::crypto::kdf(b"sphincs-master", &entropy, 0);
+
+        // Cache encrypted entropy blob for the signing code.
+        let blob = crate::crypto::encrypt_entropy_blob(&entropy, &master_secret);
+        self.entropy_blob_cache.copy_from_slice(&blob);
+        self.blob_cached = true;
+
+        // Cache VK + bootstrap VK.
+        let (sk, vk_bytes) = crate::crypto::derive_keypair_from_entropy(&entropy);
+        drop(sk);
+        self.vk_cache.copy_from_slice(&vk_bytes);
+        self.vk_cached = true;
+
+        let bvk = crate::crypto::derive_bootstrap_vk_from_entropy(&entropy);
+        self.bootstrap_vk_cache.copy_from_slice(&bvk);
+        self.bootstrap_vk_cached = true;
+
+        entropy.zeroize();
+
+        Ok(master_secret)
+    }
+
+    fn read_entropy_blob(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
+        if !self.blob_cached || buf.len() < crate::crypto::ENTROPY_BLOB_LEN {
+            return Err(SeError::SlotNotFound);
+        }
+        buf[..crate::crypto::ENTROPY_BLOB_LEN]
+            .copy_from_slice(&self.entropy_blob_cache);
+        Ok(crate::crypto::ENTROPY_BLOB_LEN)
+    }
+
+    fn read_vk(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
+        if !self.vk_cached || buf.len() < 32 {
+            return Err(SeError::SlotNotFound);
+        }
+        buf[..32].copy_from_slice(&self.vk_cache);
+        Ok(32)
+    }
+
+    fn read_bootstrap_vk(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
+        if !self.bootstrap_vk_cached || buf.len() < 32 {
+            return Err(SeError::SlotNotFound);
+        }
+        buf[..32].copy_from_slice(&self.bootstrap_vk_cache);
+        Ok(32)
+    }
+
+    fn remaining_attempts(&mut self) -> u8 {
+        self.remaining
+    }
+
+    fn zeroize_caches(&mut self) {
+        use zeroize::Zeroize;
+        self.entropy_blob_cache.zeroize();
+        self.blob_cached = false;
+        self.vk_cache.zeroize();
+        self.vk_cached = false;
+        self.bootstrap_vk_cache.zeroize();
+        self.bootstrap_vk_cached = false;
     }
 }

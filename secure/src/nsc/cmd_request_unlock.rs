@@ -2,10 +2,11 @@
 //! never touches NS RAM, and on success the unwrapped master secret
 //! is stamped into the shared `SecureState`.
 
-use sphincs_tz_shared::{NscStatus, MAX_ATTEMPTS};
+use sphincs_tz_shared::NscStatus;
 use zeroize::Zeroize;
 
 use super::state;
+use crate::secure_element::UnlockError;
 use crate::timeout;
 use crate::ui;
 
@@ -38,87 +39,32 @@ pub(super) unsafe fn run() -> u32 {
 }
 
 unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
-    #[cfg(feature = "tropic01-se")]
-    {
-        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-        match se.batch_verify_pin(pin, MAX_ATTEMPTS) {
-            Ok(master) => {
-                state::with_state(|s| s.mark_unlocked(master));
-                timeout::reset_activity();
-                ui::show_status("Unlocked", "");
-                NscStatus::Ok as u32
-            }
-            Err(crate::secure_element::SeError::SlotExpired) => {
-                state::with_state(|s| s.remaining_attempts = 0);
-                ui::show_status("PIN locked", "");
-                NscStatus::PinLocked as u32
-            }
-            Err(crate::secure_element::SeError::InvalidParameter) => {
-                state::with_state(|s| {
-                    if s.remaining_attempts > 0 {
-                        s.remaining_attempts -= 1;
-                    }
-                });
-                ui::show_status("Wrong PIN", "");
-                NscStatus::PinIncorrect as u32
-            }
-            Err(_) => NscStatus::InternalError as u32,
+    use crate::secure_element::WalletStore;
+
+    let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+    match se.unlock(pin) {
+        Ok(master) => {
+            state::with_state(|s| s.mark_unlocked(master));
+            timeout::reset_activity();
+            ui::show_status("Unlocked", "");
+            NscStatus::Ok as u32
         }
-    }
-    #[cfg(feature = "se050")]
-    {
-        let _ = MAX_ATTEMPTS;
-        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-        match crate::crypto::verify_pin_se050(se, pin) {
-            Ok(master) => {
-                state::with_state(|s| s.mark_unlocked(master));
-                timeout::reset_activity();
-                ui::show_status("Unlocked", "");
-                NscStatus::Ok as u32
-            }
-            Err(NscStatus::PinIncorrect) => {
-                // SE050 hardware enforces attempt counter — no software
-                // decrement needed, but update the UI state.
-                state::with_state(|s| {
-                    if s.remaining_attempts > 0 {
-                        s.remaining_attempts -= 1;
-                    }
-                });
-                ui::show_status("Wrong PIN", "");
-                NscStatus::PinIncorrect as u32
-            }
-            Err(NscStatus::PinLocked) => {
-                ui::show_status("PIN locked", "");
-                NscStatus::PinLocked as u32
-            }
-            Err(status) => status as u32,
+        Err(UnlockError::PinIncorrect) => {
+            state::with_state(|s| {
+                if s.remaining_attempts > 0 {
+                    s.remaining_attempts -= 1;
+                }
+            });
+            ui::show_status("Wrong PIN", "");
+            NscStatus::PinIncorrect as u32
         }
-    }
-    #[cfg(not(any(feature = "tropic01-se", feature = "se050")))]
-    {
-        let _ = MAX_ATTEMPTS;
-        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-        match crate::pin::verify_pin(se, pin) {
-            Ok(master) => {
-                state::with_state(|s| s.mark_unlocked(master));
-                timeout::reset_activity();
-                ui::show_status("Unlocked", "");
-                NscStatus::Ok as u32
-            }
-            Err(NscStatus::PinIncorrect) => {
-                state::with_state(|s| {
-                    if s.remaining_attempts > 0 {
-                        s.remaining_attempts -= 1;
-                    }
-                });
-                ui::show_status("Wrong PIN", "");
-                NscStatus::PinIncorrect as u32
-            }
-            Err(NscStatus::PinLocked) => {
-                ui::show_status("PIN locked", "");
-                NscStatus::PinLocked as u32
-            }
-            Err(status) => status as u32,
+        Err(UnlockError::PinLocked) => {
+            state::with_state(|s| s.remaining_attempts = 0);
+            ui::show_status("PIN locked", "");
+            NscStatus::PinLocked as u32
+        }
+        Err(UnlockError::InternalError) => {
+            NscStatus::InternalError as u32
         }
     }
 }
