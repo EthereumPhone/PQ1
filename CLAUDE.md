@@ -1,0 +1,257 @@
+# PQSigner OS -- LLM Context
+
+Post-quantum ERC-4337 hardware wallet. Target: **STM32U585 (Cortex-M33, TrustZone) + Tropic01 + NXP SE050**. Every primitive protecting the seed is PQ or symmetric with >=256-bit keys. No classical signature fallback for transactions. The wallet is an account-abstraction smart account with only post-quantum signers.
+
+Status: early hardware. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. SE050 driver written but dual-SE split not yet wired. Tropic01 tested via USB devkit.
+
+## Non-Negotiable Invariants
+
+**Every change to ANY subsystem must respect ALL five of these. Violating any one is a critical security bug.**
+
+1. **Dual-chip seed split.** BIP-39 entropy is XOR-split: `half_T` on Tropic01, `half_E` on SE050. Neither chip alone reveals any bit of the seed. Code that stores the full entropy on a single chip, or transmits one half to the other chip, breaks the design.
+
+2. **Hardware-level PIN gating.** The PIN decision is made by the secure element silicon, never by MCU firmware. SE050 uses UserID auth (object `0x7B06_0000`, max 9 attempts, hardware constant-time comparison). Tropic01 uses a MAC-and-Destroy chain (13 slots). Firmware that compares PINs in software, or bypasses the SE's auth gate to read secrets, breaks the design.
+
+3. **E2E encrypted tunnel between TrustZone secure world and each SE.** Tropic01: Noise_KK1 (X25519 + AES-256-GCM) per session; pairing keys HUK-SAES-wrapped. SE050: SCP03 (AES-CMAC + AES-CBC) authenticated+encrypted channel. Planned: ML-KEM-1024 inner wrap so even a CRQC break of the classical channels reveals only opaque PQ ciphertext. No plaintext secret ever touches an I2C/SPI bus.
+
+4. **All secrets live ONLY in TrustZone secure world.** Non-secure world never sees a PIN digit, entropy byte, signing key, or derived secret. The NSC gateway exposes only opaque commands (unlock, get_pubkey, sign) that return non-secret data. Pointer validation on every call. TOCTOU defense: NS buffers copied to secure stack before parsing.
+
+5. **Post-quantum only for transaction signing.** SLH-DSA-SHA2-128f today (migrating to 192f for production). Hash-based, no lattice assumptions. The on-chain wallet contract has no secp256k1/P-256 signer -- only PQ. ML-DSA-44 is the bootstrap signer (admin ops, never rotates). Adding a classical signer path is a design violation.
+
+## Architecture at a Glance
+
+```
+  Tropic01 ----[Noise_KK1 E2E]----> STM32U585 SECURE WORLD <----[SCP03 E2E]---- SE050
+  (half_T, PIN-gated)                 |  Argon2id(PIN) -> K_T, K_E             (half_E, PIN-gated)
+                                      |  Reconstruct: E = HKDF(half_T XOR half_E)
+                                      |  BIP-39(E) -> PBKDF2 -> SLH-DSA keygen -> sign
+                                      |  Zeroize everything after sign
+                                      |
+                                      +--[NSC gateway, 6 cmds]---> NON-SECURE WORLD
+                                                                    UI, USB, tx parsing
+                                                                    no secrets, ever
+```
+
+**Lifecycle:** Boot -> SAU/GTZC config -> (attest both SEs) -> PIN entry in S-world -> unlock both SEs -> reconstruct seed in S-SRAM -> active signing window (120s idle timeout) -> zeroize on lock/tamper/brownout/inactivity.
+
+## Subsystem Guides
+
+### Tropic01 Integration
+
+**What:** Stores `half_T` of the XOR-split entropy. Communicates over SPI via Noise_KK1 encrypted sessions. MAC-and-Destroy chain enforces PIN retry limits (13 slots).
+**Key files:** `secure/src/tropic01_se.rs`, `secure/src/pin.rs`, `secure/src/semihosting_spi.rs`
+**Cross-cutting constraints:**
+- Must store ONLY its half, never the full entropy
+- PIN verification happens via MACD chain on-chip, not firmware comparison
+- Every read/write wrapped in a Noise_KK1 session (plaintext never on SPI)
+- Pairing keys must be HUK-SAES-wrapped at rest (not yet implemented)
+- ML-KEM-1024 inner wrap planned: the blob stored on-chip will be `ct || aead`, not plaintext
+- RNG contribution: Tropic01 TRNG XORed with STM32 TRNG + SE050 TRNG (not yet implemented)
+**Status:** Noise_KK1 sessions work against TS1302 USB devkit via semihosting. MACD PIN chain implemented. Never connected to a real STM32 SPI bus.
+
+### SE050 Integration
+
+**What:** Stores `half_E` of the XOR-split entropy. Communicates over I2C via SCP03 authenticated+encrypted channel. UserID PIN auth with 9-attempt hardware limit.
+**Key files:** `secure/src/se050/mod.rs`, `secure/src/se050/scp03.rs`, `secure/src/se050/apdu.rs`, `secure/src/se050/t1oi2c.rs`, `secure/src/se050/i2c.rs`, `docs/se050-userid-pin-auth.md`
+**Object IDs:**
+- `0x7B06_0000` -- UserID (hardware PIN, max 9 attempts, non-deletable)
+- `0x7B06_0001` -- Raw entropy (32 B, policy: requires UserID auth)
+- `0x7B06_0002` -- Main verifying key (32 B, policy: requires UserID auth)
+- `0x7B06_0003` -- Bootstrap VK (32 B, policy: requires UserID auth)
+**Cross-cutting constraints:**
+- Must store ONLY its half, never the full entropy
+- UserID auth is hardware-enforced: SE050 does constant-time PIN comparison, firmware never decides
+- All APDUs inside SCP03 session (C-MAC + C-DEC), never plaintext
+- ML-KEM-1024 inner wrap planned: SE050 stores PQ ciphertext, not plaintext half
+- Boot-time attestation: verify SE050 cert chain against pinned NXP root + pinned UID (not yet implemented)
+- NO `ALLOW_READ` for pseudo-ID `0x00000000` -- only the specific auth object
+**Status:** Driver written (I2C -> T1oI2C -> APDU -> SCP03). Provisioning + unlock via UserID PIN auth implemented. Not yet wired into the dual-SE split path.
+
+### TrustZone / NSC Gateway
+
+**What:** ARM TrustZone-M splits the MCU into secure world (all crypto, PIN, signing) and non-secure world (UI, USB, tx parsing). The NSC gateway is the only crossing point.
+**Key files:** `secure/src/main.rs`, `secure/src/sau.rs`, `secure/src/nsc/mod.rs`, `secure/src/nsc/state.rs`, `secure/src/nsc/ptr_validate.rs`, `secure/src/nsc/cmd_*.rs`, `secure/src/boot_ns.rs`, `secure/src/timeout.rs`
+**Gateway commands (6 total):**
+
+| CMD | Name | What it does |
+|-----|------|-------------|
+| 1 | GET_REMAINING | Return remaining PIN attempts |
+| 2 | REQUEST_UNLOCK | S-world prompts PIN via trusted UI, unlocks SEs |
+| 3 | GET_PUBKEY | Copy 32-byte verifying key to NS buffer |
+| 5 | CLEAR_SIGN | ZK-verify calldata interpretation, display, sign |
+| 6 | CLEAR_SIGN_MSG | EIP-712 message signing |
+| 7 | SIGN_USEROP | Parse AA UserOp, display inner tx, sign userOpHash |
+
+**Cross-cutting constraints:**
+- Every NS pointer validated before use (`validate_ns_read_ptr` / `validate_ns_write_ptr`)
+- NS buffers copied to secure stack before parsing (TOCTOU defense)
+- No panics across NSC boundary -- custom panic handler wipes secrets
+- Secure-only peripherals: both SE buses, OLED, buttons, TRNG, HASH, SAES, TAMP
+- On STM32U585: real CMSE `cmse-nonsecure-entry` veneers. On QEMU: shared-memory mailbox workaround
+**Status:** All 6 commands implemented. CMSE veneers tested on real STM32U585. QEMU uses mailbox shim.
+
+### SPHINCS+ / SLH-DSA Signing
+
+**What:** Post-quantum hash-based signatures for all transactions. Two-tier key architecture.
+**Key files:** `secure/src/crypto.rs`, `secure/src/nsc/sign_and_emit.rs`
+**Key derivation chain (FROZEN -- changing this changes the recovery contract):**
+```
+32-byte BIP-39 entropy
+  -> Mnemonic::from_entropy()
+  -> PBKDF2-HMAC-SHA512 (2048 iters) -> 64-byte BIP-39 seed
+  -> 3x SHA-256 KDF with domain separation -> 48-byte SLH-DSA seed
+  -> slh_keygen_internal (FIPS 205) -> SigningKey
+```
+**Domain separation:**
+- Bootstrap: `"pqwallet-bootstrap-sk-seed"` (global, never rotates)
+- Per-chain main: `"pqwallet-main-sk-seed"` + chain_id + key_index
+**Cross-cutting constraints:**
+- Parameter set is part of the recovery contract: same 24 words MUST produce the same key
+- Frozen domain tags: `"sphincs-slh-seed/v2"`, `"bip39-entropy/v2"`
+- Signing key lives only in S-SRAM during active window, zeroized on lock
+- Verify signature before releasing (fault-injection guard)
+- Sig size: 17,088 bytes (SHA2-128f) or 35,664 bytes (SHA2-192f target)
+**Status:** SLH-DSA-SHA2-128f fully working in QEMU. 192f migration planned for production.
+
+### ERC-4337 Smart Contracts
+
+**What:** On-chain account abstraction wallet with post-quantum-only signers. Fork of Coinbase Smart Wallet.
+**Key files:**
+- `contracts/smart-wallet/src/PQCoinbaseSmartWallet.sol` -- core wallet, `validateUserOp()`
+- `contracts/smart-wallet/src/PQCoinbaseSmartWalletFactory.sol` -- CREATE2 factory
+- `contracts/smart-wallet/src/PQOwnable.sol` -- two-tier signer state + OTS tracking
+- `contracts/smart-wallet/src/verifiers/SLHDSAVerifier.sol` -- FIPS-205 on-chain verifier
+- `contracts/smart-wallet/src/verifiers/SphincsC7Asm.sol` -- Yul-optimized verifier
+- `secure/src/aa/userop.rs` -- firmware-side UserOp hash construction
+**Two-tier signer model:**
+- **Bootstrap** (ML-DSA-44): global, never rotates, used for deployment + admin. `bootstrapPubKeyHash` immutable in contract.
+- **Main** (SLH-DSA): per-chain, per-epoch. Rotates every ~2^20 sigs. `currentKeyIndex` + `currentOTSIndex` tracked on-chain.
+**Cross-cutting constraints:**
+- Wallet address = CREATE2(factory, keccak256(bootstrap_pk), proxyInitCode) -- same on ALL chains
+- OTS index is authoritative on-chain, not on-device (device counter is optimization only)
+- No classical signer (secp256k1/P-256) anywhere in the contract
+- Signature wire format: `PQSignatureWrapper{signerType, keyIndex, otsIndex, pkSeed, pkRoot, signature}`
+- Safe/CowSwap integration via pre-signing pattern (UserOp calls `setPreSignature` or `Safe.signMessage`), not raw PQ signatures
+**Status:** Contracts implemented. Foundry tests pass. EntryPoint v0.6 integration.
+
+### ZK Clear Signing
+
+**What:** Groth16 proofs over BLS12-381 certify that human-readable strings faithfully interpret raw calldata. Wallet refuses to display a decoded action unless the ZK proof verifies.
+**Key files:** `secure/src/zk/groth16.rs`, `secure/src/zk/poseidon.rs`, `secure/src/zk/vk_bundle.rs`, `nonsecure/src/vk_db.rs`, `circuits/`, `dbgen/`
+**Cross-cutting constraints:**
+- VK pool in NS rodata, Merkle-rooted to 32-byte anchor in S-flash (`secure/src/db_roots.rs`)
+- S-world re-verifies every VK against Merkle root before running Groth16
+- Neither NS nor companion app can substitute a malicious VK
+- BLS12-381 is classical (not PQ) -- a CRQC break lets attacker forge display proofs but CANNOT leak the seed
+- Adding protocols: Circom circuit -> snarkjs -> 960-byte VK -> add to `secure/data/vks.json` -> `cargo run -p dbgen`
+**Status:** Aave V3 supply/withdraw/borrow/repay circuits shipped. CowSwap EIP-712 planned (M4).
+
+### BIP-39 Seed Management
+
+**What:** 24-word mnemonic encodes 256-bit entropy. Entropy XOR-split across two SEs. Reconstructed only in S-SRAM during unlock.
+**Key files:** `secure/src/crypto.rs`, `secure/src/ui/seed_wizard.rs`, `bip39/`
+**Cross-cutting constraints:**
+- Only 32-byte entropy stored on SEs, not the 48-byte SLH-DSA seed
+- PBKDF2 (2048 iters) re-runs on every unlock (~100ms on Cortex-M33)
+- Mnemonic shown to user ONCE during first-boot wizard, then never again
+- Spot-check: user confirms 3 random words they wrote down
+- Recovery: same 24 words on a new device must produce the same signing key (recovery contract)
+**Status:** Generation, verification, restoration all working in QEMU.
+
+## Build and Test
+
+```bash
+make play              # Interactive: drive wallet with arrow keys in QEMU
+make run               # Non-interactive smoke test (QEMU, mock SE)
+make run-tropic01      # Smoke test with real Tropic01 via /dev/ttyACM0
+make e2e               # Automated end-to-end: all sign-dispatch levels in QEMU
+make e2e-hw            # End-to-end on real STM32U585 via ST-LINK + probe-rs
+cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
+```
+
+**Feature flags** (in `secure/Cargo.toml`):
+| Flag | Description |
+|------|-------------|
+| `mock-se` | Mock secure element in SRAM (default, QEMU) |
+| `se050` | Real SE050 via I2C + SCP03 |
+| `tropic01-se` | Real Tropic01 via semihosting SPI bridge |
+| `debug-log` | Semihosting debug output (NEVER in production) |
+| `e2e-test` | Non-interactive scripted test mode (NEVER ship) |
+| `ui-semihosting` | Console UI (QEMU) |
+| `ui-oled` | SSD1306 I2C OLED (hardware) |
+| `stm32u585` | Real hardware target (vs QEMU mps2-an505) |
+| `pka-accel` | BLS12-381 Fp via STM32U585 PKA hardware |
+
+**Targets:** `thumbv8m.main-none-eabi` (both worlds). Release profile: `opt-level = "s"`, LTO, `codegen-units = 1`, `overflow-checks = true`. The `slh-dsa` crate is always `opt-level = 3`.
+
+## Code Conventions
+
+- `#![no_std]`, no heap, no allocator. Stack-only allocation.
+- `zeroize` crate with `ZeroizeOnDrop` on every secret type. Compiler fences around zeroization.
+- `subtle` crate for constant-time comparisons. No secret-dependent branches.
+- Every `unsafe` block has a `// SAFETY:` comment.
+- `#![deny(unsafe_op_in_unsafe_fn)]`, `#![warn(clippy::pedantic)]`
+- NS pointer validation on every gateway call before any dereference.
+- Shared types between worlds: `shared/src/lib.rs` with `#[repr(C)]`.
+- Secret types are `!Copy` and `!Clone` (prevent silent duplication).
+
+## Key File Map
+
+| Path | Purpose |
+|------|---------|
+| `secure/src/main.rs` | Secure world entry: SAU -> provision -> unlock -> boot NS |
+| `secure/src/crypto.rs` | All KDF, AES-GCM, PIN state, SLH-DSA key derivation |
+| `secure/src/nsc/mod.rs` | NSC gateway dispatcher (6 commands) |
+| `secure/src/nsc/state.rs` | Global secure state (pin_verified, master_secret) |
+| `secure/src/nsc/sign_and_emit.rs` | Decrypt entropy -> derive key -> sign -> emit |
+| `secure/src/sau.rs` | SAU + MPC/GTZC TrustZone configuration |
+| `secure/src/tropic01_se.rs` | Tropic01 Noise_KK1 sessions + MACD PIN |
+| `secure/src/se050/mod.rs` | SE050 driver: provisioning + unlock via UserID PIN |
+| `secure/src/se050/scp03.rs` | SCP03 authenticated+encrypted channel |
+| `secure/src/se050/apdu.rs` | SE050 APDU command construction |
+| `secure/src/secure_element.rs` | SecureElement trait + mock impl |
+| `secure/src/ui/pin_entry.rs` | Trusted PIN entry (runs in S-world) |
+| `secure/src/ui/seed_wizard.rs` | BIP-39 mnemonic generate/restore wizard |
+| `secure/src/zk/groth16.rs` | Groth16 pairing verifier (no alloc) |
+| `secure/src/erc20/dispatch.rs` | Tx trust-level dispatcher (ValueTransfer/Erc20Known/Blind) |
+| `secure/src/aa/userop.rs` | ERC-4337 UserOp hash construction |
+| `nonsecure/src/main.rs` | Non-secure world entry |
+| `nonsecure/src/nsc_api.rs` | NS-side gateway caller |
+| `nonsecure/src/e2e_test.rs` | Automated end-to-end test driver |
+| `shared/src/lib.rs` | Cross-world types: NscStatus, CMD constants |
+| `shared/src/db_format.rs` | ERC20 + VK database binary format |
+| `contracts/smart-wallet/src/PQCoinbaseSmartWallet.sol` | ERC-4337 wallet core |
+| `contracts/smart-wallet/src/PQOwnable.sol` | Two-tier PQ signer state |
+| `contracts/smart-wallet/src/verifiers/SLHDSAVerifier.sol` | FIPS-205 on-chain verifier |
+| `dbgen/` | Host-side Merkle DB builder |
+| `Makefile` | Build orchestration |
+| `docs/architecture.md` | Detailed technical architecture |
+| `docs/HARDENING.md` | Side-channel + fault hardening requirements |
+| `docs/pq-aa-wallet-design.md` | ERC-4337 wallet design spec |
+| `docs/se050-userid-pin-auth.md` | SE050 PIN auth design |
+
+## What NOT To Do
+
+- **Do not add a classical (secp256k1, P-256, Ed25519) transaction signer.** The wallet is PQ-only by design. The on-chain contract has no classical verifier path.
+- **Do not store secrets in non-secure world.** No PIN buffers, no entropy, no keys. Not even "temporarily".
+- **Do not compare PINs in firmware.** The SE hardware does the comparison. Firmware only passes the stretched PIN to the SE's auth mechanism.
+- **Do not transmit plaintext secrets over I2C/SPI.** Everything goes through the encrypted session (Noise_KK1 or SCP03). The planned ML-KEM inner wrap adds a PQ layer on top.
+- **Do not store full entropy on a single chip.** Each chip gets exactly one XOR half.
+- **Do not add heap allocation.** `#![no_std]`, no alloc, stack-only. No `Vec`, no `Box`, no `String`.
+- **Do not use software PRNG.** All randomness from hardware TRNG (STM32 TRNG in production, semihosting `/dev/urandom` on QEMU).
+- **Do not change the key derivation domain tags** (`"sphincs-slh-seed/v2"`, `"bip39-entropy/v2"`, `"pqwallet-bootstrap-*"`, `"pqwallet-main-*"`) without understanding that this changes the recovery contract: the same 24 words will produce a different key.
+- **Do not let NS world control the inactivity timer.** Timer runs on Secure-only TIM. NS pings do not reset it. Only real button presses on S-world confirm dialogs count as activity.
+- **Do not skip signature verification before releasing it.** The verify-before-release check is a fault-injection guard. Removing it opens a glitch attack.
+- **Do not add `debug-log` or `e2e-test` features to production builds.** CI must gate on this.
+
+## Deep-Dive Docs
+
+For full details beyond this summary, read:
+- `README.md` -- Complete architecture, threat model, quantum threat analysis, security model, implementation status, shipping checklist, STM32 lockdown procedure
+- `docs/architecture.md` -- Detailed technical architecture (1390 lines)
+- `docs/HARDENING.md` -- Side-channel and fault-injection hardening requirements
+- `docs/pq-aa-wallet-design.md` -- ERC-4337 wallet design with two-tier PQ signers
+- `docs/se050-userid-pin-auth.md` -- SE050 UserID PIN authentication design
+- `docs/dev-board-setup.md` -- B-U585I-IOT02A devkit setup
+- `docs/hardware_requirements.md` -- BOM and hardware requirements
+- `docs/m4-cowswap-eip712.md` -- CowSwap EIP-712 clear-signing design (future M4)
