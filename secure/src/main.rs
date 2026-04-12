@@ -52,12 +52,14 @@ mod sau;
 mod secure_element;
 #[cfg(all(feature = "se050", not(test)))]
 mod se050;
-#[cfg(all(feature = "tropic01-se", not(test)))]
+#[cfg(all(feature = "tropic01-se", not(feature = "stm32u585"), not(test)))]
 mod semihosting_spi;
 #[cfg(not(test))]
 mod timeout;
 #[cfg(all(feature = "tropic01-se", not(test)))]
 mod tropic01_se;
+#[cfg(all(feature = "dual-se", not(test)))]
+mod dual_se;
 #[cfg(not(test))]
 mod ui;
 #[cfg(not(test))]
@@ -86,13 +88,17 @@ const SYST_CVR: *mut u32 = 0xE000_E018 as *mut u32;
 #[cfg(all(feature = "mock-se", not(test)))]
 static mut SE: MockSecureElement = MockSecureElement::new();
 
-// Global TROPIC01 SE (used when tropic01-se feature is active)
-#[cfg(all(feature = "tropic01-se", not(test)))]
+// Global TROPIC01 SE (standalone, without dual-se)
+#[cfg(all(feature = "tropic01-se", not(feature = "dual-se"), not(test)))]
 static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureElement::new();
 
-// Global SE050 SE (used when se050 feature is active)
-#[cfg(all(feature = "se050", not(test)))]
+// Global SE050 SE (standalone, without dual-se)
+#[cfg(all(feature = "se050", not(feature = "dual-se"), not(test)))]
 static mut SE: se050::Se050 = se050::Se050::new();
+
+// Global dual-SE (Tropic01 + SE050 with XOR entropy split)
+#[cfg(all(feature = "dual-se", not(test)))]
+static mut SE: dual_se::DualSecureElement = dual_se::DualSecureElement::new();
 
 /// SysTick reload value for ~1 ms tick.
 /// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: set dynamically from rcc::init().
@@ -248,13 +254,29 @@ fn main() -> ! {
         secure_log!("[S] I2C1 initialized for SE050 (PB8/PB9, 400 kHz)");
     }
 
+    // Initialize SPI2 for TROPIC01 secure element.
+    // Must come after rcc::init() (clocks) and sau::init() (peripherals).
+    #[cfg(all(feature = "stm32u585", feature = "tropic01-se"))]
+    unsafe {
+        hw::spi_hw::init();
+        #[cfg(feature = "spi1-arduino")]
+        secure_log!("[S] SPI1 initialized for TROPIC01 (PE12-15 Arduino, 5 MHz)");
+        #[cfg(not(feature = "spi1-arduino"))]
+        secure_log!("[S] SPI2 initialized for TROPIC01 (PB12-15, 5 MHz)");
+    }
+
     ui::init();
     secure_log!("[S] UI initialized");
 
     // Try to load a previously saved per-device pairing key for the
     // Tropic01. If found, sessions use pairing slot 1 (per-device)
     // instead of slot 0 (shared devkit keys).
-    #[cfg(all(feature = "tropic01-se", not(test)))]
+    //
+    #[cfg(all(feature = "tropic01-se", not(feature = "dual-se"), not(test)))]
+    unsafe {
+        (&mut *core::ptr::addr_of_mut!(SE)).load_pairing_key();
+    }
+    #[cfg(all(feature = "dual-se", not(test)))]
     unsafe {
         (&mut *core::ptr::addr_of_mut!(SE)).load_pairing_key();
     }

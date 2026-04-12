@@ -10,7 +10,7 @@ Status: early hardware. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505.
 
 1. **Dual-chip seed split.** BIP-39 entropy is XOR-split: `half_T` on Tropic01, `half_E` on SE050. Neither chip alone reveals any bit of the seed. Code that stores the full entropy on a single chip, or transmits one half to the other chip, breaks the design.
 
-2. **Hardware-level PIN gating.** The PIN decision is made by the secure element silicon, never by MCU firmware. SE050 uses UserID auth (object `0x7B06_0000`, max 9 attempts, hardware constant-time comparison). Tropic01 uses a MAC-and-Destroy chain (13 slots). Firmware that compares PINs in software, or bypasses the SE's auth gate to read secrets, breaks the design.
+2. **Hardware-level PIN gating.** The PIN decision is made by the secure element silicon, never by MCU firmware. SE050 uses UserID auth (object `0x7B06_0000`, max 10 attempts, hardware constant-time comparison). Tropic01 uses a MAC-and-Destroy chain (13 slots). Firmware that compares PINs in software, or bypasses the SE's auth gate to read secrets, breaks the design.
 
 3. **E2E encrypted tunnel between TrustZone secure world and each SE.** Tropic01: Noise_KK1 (X25519 + AES-256-GCM) per session; pairing keys HUK-SAES-wrapped. SE050: SCP03 (AES-CMAC + AES-CBC) authenticated+encrypted channel. Planned: ML-KEM-1024 inner wrap so even a CRQC break of the classical channels reveals only opaque PQ ciphertext. No plaintext secret ever touches an I2C/SPI bus.
 
@@ -49,14 +49,14 @@ Status: early hardware. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505.
 - Per-device pairing key: generated from TRNG at first provisioning, stored in secure flash page 127 (`0x0C0FE000`, reserved in linker script). On QEMU: deterministic UID-derived fallback. Devkit keys (slot 0) never invalidated as fallback.
 - ML-KEM-1024 inner wrap planned: the blob stored on-chip will be `ct || aead`, not plaintext
 - RNG contribution: Tropic01 TRNG XORed with STM32 TRNG + SE050 TRNG (not yet implemented)
-**Status:** Noise_KK1 sessions work against TS1302 USB devkit via semihosting. MACD PIN chain implemented (10 attempts, AppNote XOR+tag scheme). Per-device pairing key provisioned to Tropic01 slot 1 at first boot. Never connected to a real STM32 SPI bus.
+**Status:** Noise_KK1 sessions work against TS1302 USB devkit via semihosting and against MicroE Clicker on real STM32U585 SPI bus. MACD PIN chain implemented (10 attempts, AppNote XOR+tag scheme). Per-device pairing key provisioned to Tropic01 slot 1 at first boot. **Real STM32U585 SPI driver implemented** (`hw/spi_hw.rs` + `hw/spi.rs`): two pin configurations selected by `spi1-arduino` feature. Default SPI2: PB12=CS, PB13=SCK, PB14=MISO, PB15=MOSI. Arduino headers (`spi1-arduino`): SPI1 on PE12=CS, PE13=SCK, PE14=MISO, PE15=MOSI — for Tropic01 MicroE Clicker stacked on SE050 Arduino shield. Both 5 MHz Mode 0. Automatically selected when `stm32u585` + `tropic01-se` features are active. Post-reboot ~10 ms delay before Noise_KK1 handshake (chip needs time after startup_req).
 
 ### SE050 Integration
 
-**What:** Stores `half_E` of the XOR-split entropy. Communicates over I2C via SCP03 authenticated+encrypted channel. UserID PIN auth with 9-attempt hardware limit.
+**What:** Stores `half_E` of the XOR-split entropy. Communicates over I2C via SCP03 authenticated+encrypted channel. UserID PIN auth with 10-attempt hardware limit.
 **Key files:** `secure/src/se050/mod.rs`, `secure/src/se050/scp03.rs`, `secure/src/se050/apdu.rs`, `secure/src/se050/t1oi2c.rs`, `secure/src/se050/i2c.rs`, `docs/se050-userid-pin-auth.md`
 **Object IDs:**
-- `0x7B06_0000` -- UserID (hardware PIN, max 9 attempts, non-deletable)
+- `0x7B06_0000` -- UserID (hardware PIN, max 10 attempts, non-deletable)
 - `0x7B06_0001` -- Raw entropy (32 B, policy: requires UserID auth)
 - `0x7B06_0002` -- Main verifying key (32 B, policy: requires UserID auth)
 - `0x7B06_0003` -- Bootstrap VK (32 B, policy: requires UserID auth)
@@ -176,7 +176,9 @@ cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
 |------|-------------|
 | `mock-se` | Mock secure element in SRAM (default, QEMU) |
 | `se050` | Real SE050 via I2C + SCP03 |
-| `tropic01-se` | Real Tropic01 via semihosting SPI bridge |
+| `tropic01-se` | Real Tropic01 via SPI (SPI1 or SPI2 on STM32U585, semihosting bridge on QEMU) |
+| `spi1-arduino` | Use SPI1/PE12-PE15 (Arduino R3 headers) instead of SPI2/PB12-PB15 for TROPIC01 |
+| `dual-se` | Both SEs active with XOR entropy split (implies `tropic01-se` + `se050`) |
 | `debug-log` | Semihosting debug output (NEVER in production) |
 | `e2e-test` | Non-interactive scripted test mode (NEVER ship) |
 | `ui-semihosting` | Console UI (QEMU) |
@@ -208,6 +210,9 @@ cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
 | `secure/src/nsc/sign_and_emit.rs` | Decrypt entropy -> derive key -> sign -> emit |
 | `secure/src/sau.rs` | SAU + MPC/GTZC TrustZone configuration |
 | `secure/src/tropic01_se.rs` | Tropic01 Noise_KK1 sessions + MACD PIN + pairing key setup |
+| `secure/src/dual_se.rs` | Dual-SE XOR entropy split: Tropic01 + SE050 combined WalletStore |
+| `secure/src/hw/spi_hw.rs` | SPI hardware init: SPI1/PE12-PE15 (`spi1-arduino`) or SPI2/PB12-PB15 (default) |
+| `secure/src/hw/spi.rs` | Bare-metal SPI `embedded_hal::SpiDevice` impl for TROPIC01 |
 | `secure/src/hw/flash.rs` | Secure flash driver: pairing key storage (page 127) |
 | `secure/src/se050/mod.rs` | SE050 driver: provisioning + unlock via UserID PIN |
 | `secure/src/se050/scp03.rs` | SCP03 authenticated+encrypted channel |

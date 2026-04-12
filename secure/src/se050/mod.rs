@@ -1,7 +1,7 @@
 //! NXP SE050 secure element driver.
 //!
 //! Stores BIP-39 entropy on the SE050, protected by a hardware-enforced
-//! UserID PIN (max 9 attempts before permanent lockout).
+//! UserID PIN (max 10 attempts before permanent lockout).
 //!
 //! Communication: I2C1 (PB8 SCL, PB9 SDA) -> T1oI2C -> SE05x APDUs,
 //! all wrapped in an SCP03 authenticated/encrypted channel.
@@ -265,7 +265,7 @@ impl WalletStore for Se050 {
         bootstrap_vk: &[u8; 32],
         pin: &[u8; 8],
     ) -> Result<(), SeError> {
-        self.store_objects(pin, 9, entropy, vk, bootstrap_vk)
+        self.store_objects(pin, sphincs_tz_shared::MAX_ATTEMPTS as u16, entropy, vk, bootstrap_vk)
             .map_err(|_| SeError::InternalError)?;
 
         // Cache VK + bootstrap VK so cmd_get_pubkey works before first unlock.

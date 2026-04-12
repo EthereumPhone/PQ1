@@ -413,7 +413,7 @@ firmware.
 | Slot | Name                     | Contents                                  | Size |
 |------|--------------------------|-------------------------------------------|------|
 | 0    | `RMEM_ENCRYPTED_ENTROPY` | AES-GCM blob of the 32-byte BIP-39 entropy | 60 B |
-| 1    | `RMEM_PIN_STATE`         | next-attempt counter + 9 × per-attempt encrypted master_secret blobs | 433 B |
+| 1    | `RMEM_PIN_STATE`         | next-attempt counter + 10 × per-attempt encrypted master_secret blobs | 481 B |
 | 2    | `RMEM_VERIFYING_KEY`     | 32-byte SLH-DSA public key (cached so the host can read it without unlocking) | 32 B |
 
 The mnemonic is **not** in any slot. The 48-byte SLH-DSA seed is **not** in
@@ -424,11 +424,11 @@ unlock — ~tens of milliseconds, dwarfed by SPHINCS+ signing's seconds.
 
 ### PIN Protection (MAC-and-Destroy)
 
-Each PIN attempt consumes one MACD slot (9 slots = 9 attempts max). On correct PIN,
-all slots are re-initialized. On 9 wrong PINs, the key is permanently erased ("bricked").
+Each PIN attempt consumes one MACD slot (10 slots = 10 attempts max). On correct PIN,
+all slots are re-initialized. On 10 wrong PINs, the key is permanently erased ("bricked").
 
 ```
-Enrollment (per slot j = 0..8):
+Enrollment (per slot j = 0..9):
   1. mac_and_destroy(j, init_input_j)     → initialize slot
   2. mac_and_destroy(j, pin_input_j)      → w_j (slot-specific wrap key)
   3. mac_and_destroy(j, init_input_j)     → re-initialize to known state
@@ -511,7 +511,7 @@ pub trait SecureElement {
 | Implementation | Feature | Backend |
 |---------------|---------|---------|
 | `MockSecureElement` | `mock-se` (default) | In-memory arrays, HMAC-SHA256 for MACD |
-| `Tropic01SecureElement` | `tropic01-se` | Real TROPIC01 chip via semihosting SPI, e2e encrypted |
+| `Tropic01SecureElement` | `tropic01-se` | Real TROPIC01 chip via SPI (bare-metal SPI1/SPI2 on STM32U585, semihosting bridge on QEMU), e2e encrypted |
 
 The mock stores up to 8 r-mem slots (512 bytes each) and 16 MACD slots (32 bytes each).
 The real implementation establishes a fresh Noise_KK1 encrypted session per operation batch.
@@ -1319,9 +1319,11 @@ When the STM32U585 board arrives:
    `make e2e-hw` runs the full sign-dispatch suite over this path on
    real silicon.
 
-3. **SPI transport:** Replace `SemihostingSpi` with a real `embedded_hal::spi::SpiDevice`
-   implementation using Embassy's SPI driver. The `Tropic01SecureElement` and its
-   `with_session!` macro work unchanged — only the SpiDevice impl swaps out.
+3. **SPI transport:** ~~Replace `SemihostingSpi` with a real `embedded_hal::spi::SpiDevice`
+   implementation.~~ **DONE.** Bare-metal `Stm32Spi` driver (`hw/spi_hw.rs` + `hw/spi.rs`)
+   implements `SpiDevice` for SPI1 (`spi1-arduino` feature, PE12-PE15 Arduino headers)
+   or SPI2 (default, PB12-PB15). The `with_session!` macro auto-selects `Stm32Spi`
+   on STM32U585, `SemihostingSpi` on QEMU.
 
 4. **RNG:** Replace semihosting `/dev/urandom` reads in `secure/src/host_rng.rs`
    with the STM32U585's hardware RNG (`embassy_stm32::rng`) or the TROPIC01's

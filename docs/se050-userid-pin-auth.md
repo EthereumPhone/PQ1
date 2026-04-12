@@ -21,7 +21,7 @@ right.
 With UserID authentication, the SE050 hardware:
 
 - Verifies the PIN internally (the MCU never sees the comparison)
-- Counts failed attempts and locks after 9 failures
+- Counts failed attempts and locks after 10 failures
 - Gates read access at the hardware level — no firmware exploit can bypass it
 
 The security boundary moves from the MCU (which runs arbitrary firmware)
@@ -35,7 +35,7 @@ into the SE050 (which runs fixed, certified logic).
 |                                              |
 |  Provisioning:                               |
 |    1. SCP03 channel (platform keys)          |
-|    2. WriteUserID(PIN, max_attempts=9)       |
+|    2. WriteUserID(PIN, max_attempts=10)      |
 |    3. WriteBinary(entropy, policy=UserID)    |
 |    4. WriteBinary(VK, policy=UserID)         |
 |                                              |
@@ -53,7 +53,7 @@ into the SE050 (which runs fixed, certified logic).
 +----------------+----------------------------+
 | SE050E (OM-SE050ARD, OEF 0xA921)            |
 |                                              |
-|  0x7B002000: UserID (PIN, 9 attempts)       |
+|  0x7B002000: UserID (PIN, 10 attempts)      |
 |  0x7B040000: entropy (32B, policy->UserID)  |
 |  0x7B040002: VK (32B, policy->UserID)       |
 |  0x7B040003: bootstrap VK (32B, policy->VK) |
@@ -105,7 +105,7 @@ protection to AES-GCM encryption.
 
 | Object ID    | Type    | Contents                    | Policy              |
 |--------------|---------|-----------------------------|----------------------|
-| `0x7B002000` | UserID  | PIN value, max 9 attempts   | No auth required     |
+| `0x7B002000` | UserID  | PIN value, max 10 attempts  | No auth required     |
 | `0x7B040000` | Binary  | Raw entropy (32 bytes)      | Require UserID auth  |
 | `0x7B040002` | Binary  | Verifying key (32 bytes)    | Require UserID auth  |
 | `0x7B040003` | Binary  | Bootstrap VK (32 bytes)     | Require UserID auth  |
@@ -214,7 +214,7 @@ INS = 0x41  (INS_WRITE | INS_AUTH_OBJECT)
 P1  = 0x07  (P1_UserID)
 P2  = 0x00
 Payload:
-  TAG_MAX_ATTEMPTS (0x12): 2-byte BE max attempts (e.g. 0x0009)
+  TAG_MAX_ATTEMPTS (0x12): 2-byte BE max attempts (e.g. 0x000A)
   TAG_1 (0x41): 4-byte object ID
   TAG_2 (0x42): PIN value (variable length)
 ```

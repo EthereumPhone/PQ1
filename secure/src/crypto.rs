@@ -415,7 +415,7 @@ pub fn derive_main_vk_from_entropy(
 // ---------------------------------------------------------------------------
 
 pub const PER_SLOT_CT_LEN: usize = 32 + 16; // master_secret (32) + AES-GCM tag (16)
-pub const PIN_STATE_MAX_LEN: usize = 1 + MAX_ATTEMPTS as usize * PER_SLOT_CT_LEN; // 433
+pub const PIN_STATE_MAX_LEN: usize = 1 + MAX_ATTEMPTS as usize * PER_SLOT_CT_LEN; // 481
 
 pub fn serialize_pin_state(
     next_index: u8,

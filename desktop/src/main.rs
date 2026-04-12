@@ -18,7 +18,7 @@ use usb_dongle::UsbDongle;
 // Constants
 // ---------------------------------------------------------------------------
 
-const MAX_ATTEMPTS: u8 = 9;
+const MAX_ATTEMPTS: u8 = 10;
 
 const RMEM_ENCRYPTED_SK: U16 = U16::new(0);
 const RMEM_PIN_STATE: U16 = U16::new(1);

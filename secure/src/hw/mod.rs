@@ -20,5 +20,11 @@ pub mod usb_hw;
 #[cfg(all(feature = "stm32u585", feature = "se050"))]
 pub mod i2c_hw;
 
+#[cfg(all(feature = "stm32u585", feature = "tropic01-se"))]
+pub mod spi_hw;
+
+#[cfg(all(feature = "stm32u585", feature = "tropic01-se"))]
+pub mod spi;
+
 #[cfg(feature = "stm32u585")]
 pub mod flash;

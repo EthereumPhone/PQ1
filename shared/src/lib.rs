@@ -11,7 +11,7 @@ pub const VERIFYING_KEY_LEN: usize = 32;
 pub const SIGNATURE_LEN: usize = 17_088;
 pub const PIN_LEN: usize = 8;
 pub const TX_HASH_LEN: usize = 32;
-pub const MAX_ATTEMPTS: u8 = 9;
+pub const MAX_ATTEMPTS: u8 = 10;
 
 /// Maximum size of an unsigned EIP-1559 transaction envelope passed across
 /// the gateway. The secure world copies the bytes into its own stack buffer

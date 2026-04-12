@@ -10,37 +10,40 @@ Last audited: 2026-04-12
 
 ### 1. Dual-SE Entropy Split
 
-**Status:** NOT STARTED
+**Status:** DONE (2026-04-12)
 
-The core security model. Currently, whichever SE is selected at compile time holds the **full 32-byte entropy** alone. The XOR-split design is not implemented.
+Implemented in `secure/src/dual_se.rs`. Feature flag `dual-se` (implies `tropic01-se` + `se050`).
 
-**What's needed:**
-- [ ] Provisioning path: generate entropy, split into `half_T` (Tropic01) and `half_E` (SE050), store each on its respective chip
-- [ ] Unlock path: unlock Tropic01 -> read `half_T`; unlock SE050 -> read `half_E`; XOR-reconstruct
-- [ ] HKDF reconstruction: add `hkdf` crate to `secure/Cargo.toml`, implement `E = HKDF(half_T XOR half_E)`
-- [ ] Two global SE instances: `static mut SE_TROPIC01` and `static mut SE_SE050`, both active simultaneously
-- [ ] New combined feature flag (e.g. `dual-se`) that enables both `se050` and `tropic01-se`
-- [ ] Remove mutual exclusion in `#[cfg]` gates in `secure/src/main.rs`
+- [x] Provisioning path: generate random `half_T`, compute `half_E = entropy XOR half_T`, store each on its respective chip
+- [x] Unlock path: unlock Tropic01 → `master_T`; unlock SE050 → `master_E`; constant-time cross-verify; read and decrypt both halves; XOR-reconstruct full entropy
+- [x] Reconstruction: `entropy = half_T XOR half_E`, verified via `kdf("sphincs-master", entropy, 0) == master_secret`
+- [x] Single `DualSecureElement` struct wraps both SEs, implements `WalletStore`
+- [x] New combined feature flag `dual-se` enables both `se050` and `tropic01-se`
+- [x] Conditional `#[cfg]` gates in `main.rs` support mock-se, standalone tropic01-se, standalone se050, and dual-se
 
-**Files to change:** `secure/src/main.rs`, `secure/src/crypto.rs`, `secure/Cargo.toml`
+**Files created:** `secure/src/dual_se.rs`
+**Files changed:** `secure/src/main.rs`, `secure/Cargo.toml`
 
 ---
 
 ### 2. Real SPI Driver for Tropic01
 
-**Status:** NOT STARTED
+**Status:** DONE (2026-04-12)
 
-`secure/src/semihosting_spi.rs` routes SPI through ARM semihosting to `/dev/ttyACM0`. Only works with a debugger attached. No real STM32U585 SPI driver exists. (For comparison, the SE050 I2C driver at `secure/src/se050/i2c.rs` is complete.)
+Bare-metal SPI driver at `secure/src/hw/spi_hw.rs` (init) + `secure/src/hw/spi.rs` (`SpiDevice` impl).
 
-**What's needed:**
-- [ ] Implement `embedded_hal::spi::SpiDevice` for STM32U585 SPI peripheral (likely SPI1 or SPI2)
-- [ ] GPIO pin config for MOSI/MISO/SCK/CS
-- [ ] Clock config matching Tropic01 requirements
-- [ ] Polling or DMA-based transfers
-- [ ] Replace `SemihostingSpi` usage in `tropic01_se.rs` when `stm32u585` feature is active
+- [x] `embedded_hal::spi::SpiDevice` impl for STM32U585 SPI peripheral (`Stm32Spi`)
+- [x] Default: SPI2 on PB12=CS, PB13=SCK (AF5), PB14=MISO (AF5), PB15=MOSI (AF5)
+- [x] `spi1-arduino` feature: SPI1 on PE12=CS, PE13=SCK (AF5), PE14=MISO (AF5), PE15=MOSI (AF5) — Arduino R3 headers for MicroE Clicker via SE050 shield
+- [x] 5 MHz clock (160 MHz PCLK / 32), SPI Mode 0 (CPOL=0, CPHA=0), MSB first
+- [x] Polling-based full-duplex transfers with timeout
+- [x] `tropic01_se.rs` `with_session!` macro auto-selects `Stm32Spi` on `stm32u585`, `SemihostingSpi` on QEMU
+- [x] SPI peripheral initialized in `main.rs` boot sequence (after `rcc::init()` + `sau::init()`)
+- [x] Post-reboot ~10 ms delay before Noise_KK1 handshake (required for back-to-back sessions)
+- [x] Tested: full provisioning + MACD PIN unlock on real STM32U585 + Tropic01 MicroE Clicker (SPI1 path)
 
-**Files to create:** `secure/src/hw/spi.rs`
-**Files to change:** `secure/src/tropic01_se.rs`, `secure/src/main.rs`
+**Files created:** `secure/src/hw/spi_hw.rs`, `secure/src/hw/spi.rs`
+**Files changed:** `secure/src/hw/mod.rs`, `secure/src/tropic01_se.rs`, `secure/src/main.rs`
 
 ---
 
@@ -66,7 +69,7 @@ The OLED UI backend (`secure/src/ui/oled.rs`) has button input explicitly marked
 
 **Status:** NOT STARTED
 
-Each SE has independent retry counters (Tropic01: 10 MACD-based attempts, SE050: 9 UserID attempts). The design requires atomic unlock of both chips or neither.
+Each SE has independent retry counters (Tropic01: 10 MACD-based attempts, SE050: 10 UserID attempts). The design requires atomic unlock of both chips or neither.
 
 **What's needed:**
 - [ ] Intent log in secure flash: write `PENDING{attempt=N}` before attempting either chip
@@ -247,4 +250,5 @@ When a task above is completed, update it here with the date and a one-line summ
 
 | Date | Item | Summary |
 |------|------|---------|
-| | | |
+| 2026-04-12 | #2 Real SPI Driver | Bare-metal SPI driver (SPI2/PB12-15 default, SPI1/PE12-15 `spi1-arduino`) with `embedded_hal::SpiDevice` impl. Tested on real STM32U585 + Tropic01 MicroE Clicker |
+| 2026-04-12 | #1 Dual-SE Entropy Split | XOR split via `DualSecureElement` in `dual_se.rs`, `dual-se` feature flag |

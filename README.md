@@ -98,7 +98,7 @@ Expected end-of-run output:
 ```
 [S] Wallet ready
 [NS] Non-secure world started!
-[NS] Remaining PIN attempts: 9
+[NS] Remaining PIN attempts: 10
 [NS] Get pubkey: Ok
 [NS] Pubkey[0..4]: [30, 77, d8, 24]
 [NS] Unlock: Ok
@@ -162,7 +162,11 @@ sphincs_rust/
 | Feature | Description |
 |---------|-------------|
 | `mock-se` | Mock secure element in SRAM (default, for QEMU testing) |
-| `tropic01-se` | Real TROPIC01 chip via semihosting SPI bridge |
+| `tropic01-se` | Real TROPIC01 chip via SPI (bare-metal SPI1/SPI2 on STM32U585, semihosting bridge on QEMU) |
+| `spi1-arduino` | Use SPI1/PE12-PE15 (Arduino R3 headers) instead of default SPI2/PB12-PB15 for TROPIC01 |
+| `se050` | Real SE050 via I2C1 + SCP03 |
+| `dual-se` | Both SEs active with XOR entropy split (implies `tropic01-se` + `se050`) |
+| `stm32u585` | Real STM32U585 hardware target (vs QEMU mps2-an505) |
 | `debug-log` | Enable semihosting debug output (remove for production) |
 | `pka-accel` (secure) | Route BLS12-381 Fp arithmetic through the STM32U585 PKA |
 | `e2e-test` | Non-interactive scripted test mode — **never ship in production** |
@@ -373,7 +377,7 @@ We use ML-DSA only for firmware signing (because the signature size matters more
 | **Key transport (Tropic01, outer)** | Noise_KK1 e2e encrypted SPI session (X25519 + ChaCha20-Poly1305), per-device pairing key generated from TRNG at first provisioning and stored in secure flash (page 127, `0x0C0FE000`). **Carries only ML-KEM ciphertext** — even a complete CRQC break of X25519 reveals only the inner PQ blob |
 | **Key transport (SE050, outer)** | SCP03 (or FastSCP / ECKey), static keys HUK-SAES-wrapped in U585 secure flash. **Carries only ML-KEM ciphertext.** A flash dump moved to a different U585 is useless |
 | **PIN handling** | Raw PIN is KDF-stretched to per-chip auth keys inside the secure world; PIN buffer wiped before the gateway returns. K is split via HKDF into per-chip auth keys K_T and K_E; raw PIN never crosses to either SE. Brute-force is rate-limited by SE hardware (MACD slot destruction / UserID attempt counter), not by CPU cost |
-| **Retry counters** | Both chips share a 9-attempt cap. Each PIN attempt is bracketed by a `PENDING{attempt=N+1}` record in S-flash so a power glitch between Tropic01 and SE050 increments cannot grant a free retry. If the two counters ever disagree on boot, the wallet wipes |
+| **Retry counters** | Both chips share a 10-attempt cap. Each PIN attempt is bracketed by a `PENDING{attempt=N+1}` record in S-flash so a power glitch between Tropic01 and SE050 increments cannot grant a free retry. If the two counters ever disagree on boot, the wallet wipes |
 | **Boot attestation** | Fresh U585-TRNG nonce signed independently by Tropic01 and SE050, both certificate chains verified against pinned vendor roots, both UIDs matched against pinned values. Any failure ⇒ no PIN entry |
 | **RNG** | Wallet entropy = `STM32_TRNG ⊕ Tropic01_TRNG ⊕ SE050_TRNG`. All session nonces from STM32 TRNG. No software PRNGs |
 | **Memory isolation** | TrustZone (SAU + IDAU + MPC + GTZC), DMA mastering into secure SRAM blocked, NS pointer validation on every gateway call, no panics across NSC |
@@ -565,8 +569,8 @@ See [docs/architecture.md](docs/architecture.md) for the technical design, [docs
 | TrustZone partitioning (SAU + IDAU + MPC/GTZC) | 🟢 QEMU-tested, 🟢 HW-tested | mps2-an505 MPC in QEMU; GTZC MPCBB1/MPCBB2 on real STM32U585 (SRAM1 secure, SRAM2 non-secure) |
 | NSC gateway (6 commands, NS pointer validation) | 🟢 QEMU-tested, 🟢 HW-tested | On STM32U585: real ARMv8-M CMSE `cmse-nonsecure-entry` veneers driven by `BLXNS`/SG/`BXNS`, exercised by `make e2e-hw`. On QEMU: shared-memory mailbox + SysTick poll as a workaround for the QEMU MPC S-alias bug. |
 | BIP-39 → SLH-DSA-SHA2-128f deterministic key derivation | 🟢 QEMU-tested | mps2-an505 (will migrate to 192f for production — recovery contract bump v1→v2) |
-| MAC-and-Destroy PIN with 9-attempt brick (Tropic01 path) | 🟡 QEMU + USB devkit | Logic in QEMU, MACD slot ops against a TS1302 dongle on `/dev/ttyACM0` |
-| Tropic01 e2e encrypted (Noise_KK1) sessions | 🟡 QEMU + USB devkit | Tropic01 chip is real, host is QEMU. **Has never spoken to a Tropic01 wired to a real STM32 SPI bus.** |
+| MAC-and-Destroy PIN with 10-attempt brick (Tropic01 path) | 🟡 QEMU + USB devkit | Logic in QEMU, MACD slot ops against a TS1302 dongle on `/dev/ttyACM0` |
+| Tropic01 e2e encrypted (Noise_KK1) sessions | 🟢 Real hardware | Tested on STM32U585 + Tropic01 MicroE Clicker (SPI1 via Arduino headers). Full provisioning + MACD PIN unlock verified. |
 | Trusted UI: OLED draw + 2-button input | 🟢 QEMU-tested | Mock backend prints to QEMU semihosting console; the SSD1306 driver path compiles but is unrun |
 | Seed wizard / PIN entry / EIP-1559 confirm dialogs | 🟢 QEMU-tested | mps2-an505, against the mock UI backend |
 | `slh-dsa`, `aes-gcm`, `sha2`, `hmac`, `bip39` crate integration | 🟢 QEMU-tested | mps2-an505 |
@@ -614,7 +618,7 @@ Goal: get the existing QEMU code running on a real ST eval board, with no SE050,
 3. Switch from the QEMU mps2-an505 runtime to **Embassy / `embassy-stm32`** for clocks, GPIO, SPI, I²C, USART
 4. ~~Replace the shared-memory gateway shim with **proper CMSE veneers**~~ **DONE** — the STM32U585 build compiles out the mailbox entirely and routes all six gateway commands through `extern "cmse-nonsecure-entry"` veneers. `make e2e-hw` drives all six sign-dispatch scenarios end-to-end through the real SG stubs on a B-U585I-IOT02A.
 5. Replace `host_rng` with the **STM32U585 TRNG** peripheral
-6. Replace `SemihostingSpi` with the Embassy SPI driver, wired to the Tropic01 dongle's SPI interface (or to a SPI-over-USB bridge while you wait for a custom PCB)
+6. ~~Replace `SemihostingSpi` with a real SPI driver~~ **DONE.** Bare-metal `Stm32Spi` driver (`hw/spi_hw.rs` + `hw/spi.rs`) supports SPI1 (Arduino headers, `spi1-arduino`) and SPI2 (direct wiring, default)
 7. Wire the SSD1306 OLED to the U585's I²C and confirm the existing `oled.rs` backend works on real glass
 8. Wire two physical buttons to GPIO pins, with a debouncer + long-press detector in the secure ISR
 9. Run the existing seed wizard / PIN entry / sign confirm flow end-to-end on real hardware
