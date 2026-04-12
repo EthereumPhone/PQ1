@@ -1774,6 +1774,7 @@ dependencies = [
  "sphincs-tz-bip39",
  "sphincs-tz-shared",
  "ssd1306",
+ "subtle",
  "tropic01 0.1.0 (git+https://github.com/tropicsquare/libtropic-rs?rev=0cacb5ed94e5df491bfbb39e8702cc47598f7d63)",
  "x25519-dalek",
  "zerocopy",

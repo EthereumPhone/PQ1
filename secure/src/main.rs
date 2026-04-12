@@ -251,6 +251,14 @@ fn main() -> ! {
     ui::init();
     secure_log!("[S] UI initialized");
 
+    // Try to load a previously saved per-device pairing key for the
+    // Tropic01. If found, sessions use pairing slot 1 (per-device)
+    // instead of slot 0 (shared devkit keys).
+    #[cfg(all(feature = "tropic01-se", not(test)))]
+    unsafe {
+        (&mut *core::ptr::addr_of_mut!(SE)).load_pairing_key();
+    }
+
     // ---- SE050 factory reset ----
     // Wipes all user objects (UserID, entropy, VKs) then halts.
     // Triggered by: make se050-reset

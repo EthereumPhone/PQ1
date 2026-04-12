@@ -12,7 +12,7 @@ The design target is a **STM32U585 + Tropic01 + NXP EdgeLock SE050**. No single 
                   │                                                   │
                   │  ┌───────────────── SECURE WORLD ───────────────┐ │   ┌──── NON-SECURE WORLD ────┐
                   │  │                                                │ │   │                          │
-                  │  │  Argon2id(PIN) → K → {K_T, K_E}                │ │   │  USB / display / buttons │
+                  │  │  PIN → KDF → {K_T, K_E}                        │ │   │  USB / display / buttons │
                   │  │                                                │ │   │  Tx parser, RLP, UI       │
    ┌──────────┐   │  │  Tropic01.unlock(K_T) → wrapped_T              │ │   │                          │
    │ Tropic01 │◄──┼──┤  ML-KEM-1024.Decaps(sk_pq, wrapped_T) → half_T │ │   │   ┌──────────────────┐   │
@@ -54,7 +54,7 @@ This is the *target architecture* for the production wallet. Every bullet here i
 - **Boot-time attestation of both chips** — fresh nonce signed by each SE's factory attestation key, verified against pinned vendor roots and pinned per-device UIDs. The classical SE attestation is treated as *proof of presence*; the cryptographic root of device identity is the ML-DSA-signed device certificate pinned in HDPL1 OEMiROT at provisioning. *(Not yet implemented — both attestation paths and the ML-DSA device cert are target.)*
 - **Mixed-RNG generation** — wallet entropy is `STM32_TRNG ⊕ Tropic01_TRNG ⊕ SE050_TRNG`. All three are post-quantum (Grover offers no meaningful speedup against true randomness). *(Currently uses host `/dev/urandom` via semihosting under QEMU.)*
 - **MAC-and-Destroy + AES-Auth retry limits** — 9 wrong PIN attempts on either chip permanently destroys its half. Counters are kept in lockstep via an intent log in S-flash so a power glitch grants neither free retries nor an accidental brick. *(MACD chain implemented for the Tropic01 path in QEMU; cross-chip lockstep / intent log not yet written.)*
-- **PQ-safe symmetric crypto throughout** — AES-256-GCM, SHA-256, SHA-512, HMAC-SHA256, HKDF-SHA256, PBKDF2-HMAC-SHA512, Argon2id. Every key, MAC tag, and hash is sized so that Grover's algorithm leaves ≥ 128-bit effective security. *(Implemented in QEMU.)*
+- **PQ-safe symmetric crypto throughout** — AES-256-GCM, SHA-256, SHA-512, HMAC-SHA256, HKDF-SHA256, PBKDF2-HMAC-SHA512. Every key, MAC tag, and hash is sized so that Grover's algorithm leaves ≥ 128-bit effective security. *(Implemented in QEMU.)*
 - **No heap** — `#![no_std]`, stack-only allocation, no allocator attack surface. *(Implemented.)*
 - **Hardened gateway** — NS pointer validation, TOCTOU defense, sensitive memory zeroization, custom panic handler that clears secrets before halting. *(The same `cmd_*::run` handlers are shared across both transports — only the entry point differs. Exercised on QEMU and on real STM32U585 under `make e2e-hw`.)*
 - **ZK clear signing** — for supported DeFi protocols (Aave V3 today), the wallet refuses to display a human-readable action string unless a Groth16 proof over BLS12-381 cryptographically certifies that the string is a faithful ABI interpretation of the raw calldata. The full VK pool lives in non-secure firmware rodata; the secure world only embeds a 32-byte Merkle root of the VK DB and re-verifies every supplied VK against that root before running Groth16, so neither the companion app nor a compromised non-secure world can substitute a malicious VK. *(Implemented in QEMU via `CMD_CLEAR_SIGN` (5); host-side `zk-test` crate verifies the Aave V3 supply proof in ~3.3 ms; automated `make e2e` suite exercises all four sign-dispatch levels end-to-end.)*
@@ -300,8 +300,7 @@ Every primitive that touches a secret is listed below with its post-quantum stat
 | **SE050 wire channel (outer)** | SCP03 (AES-CMAC + AES-CBC) or FastSCP (ECDH + AES) | k 16/32 B | ⚠️ mixed | SCP03 symmetric cipher is PQ-safe; FastSCP key establishment is ECDH and is *classical*. Both transport opaque PQ-wrapped ciphertext only |
 | **SE chip attestation (factory)** | ECDSA over a vendor curve | — | ❌ classical | Treated as proof of presence, not as the cryptographic root of identity |
 | **Cryptographic device identity** | ML-DSA-65 device certificate, signed at provisioning by your manufacturing-HSM root, pinned in HDPL1 OEMiROT | sig ~3 309 B | ✅ PQ | This is the actual root of trust for "is this physical device the one we provisioned" |
-| **PIN stretching** | Argon2id (m=64 MiB, t=3, p=1) | out 32 B | ✅ PQ | Memory-hard; Grover does not meaningfully accelerate memory-hard functions |
-| **Auth-key derivation (PIN → K_T, K_E)** | HKDF-SHA256 | out 32 B | ✅ PQ | SHA-256 retains 128-bit collision resistance under Grover |
+| **Auth-key derivation (PIN → K_T, K_E)** | HKDF-SHA256 | out 32 B | ✅ PQ | SHA-256 retains 128-bit collision resistance under Grover. PIN brute-force is rate-limited by the SE hardware (MACD slot destruction on Tropic01, UserID attempt counter on SE050), not by CPU cost |
 | **MAC-and-Destroy chain (Tropic01)** | HMAC-SHA256 | out 32 B | ✅ PQ | Same |
 | **BIP-39 → SPHINCS+ seed expansion** | PBKDF2-HMAC-SHA512 (2048 iters) + HKDF-SHA256 | out 72 B | ✅ PQ | SHA-512 retains 256-bit pre-image resistance under Grover |
 | **At-rest key wrapping (U585)** | AES-256 via SAES, key derived from per-die HUK | k 32 B | ✅ PQ | The HUK never leaves the SAES peripheral |
@@ -321,7 +320,6 @@ Every primitive that touches a secret is listed below with its post-quantum stat
 | BIP-39 → SLH-DSA expansion | HKDF-SHA256, info=`"sphincs-slh-seed/v2"` | v2 = the post-192f rev. v1 was the development 128f path |
 | KEM | ML-KEM-1024 | NIST level 5, 256-bit PQ security, biggest parameter that still fits the BOM |
 | KEM-AEAD binding | AES-256-GCM with key = `HKDF(K_shared, info="pq-wrap/v1")` | |
-| Argon2id parameters | `(m=64 MiB, t=3, p=1)` | tuned for ~500 ms unlock latency on U585; documented in spec |
 
 ## Quantum Threat Model
 
@@ -368,13 +366,13 @@ We use ML-DSA only for firmware signing (because the signature size matters more
 
 | Layer | Protection |
 |-------|------------|
-| **Seed at rest (Tropic01 half)** | `half_T` is **ML-KEM-1024-encapsulated + AES-256-GCM-sealed** before it ever crosses the SPI bus. The opaque PQ-wrapped blob is then AES-256-GCM-wrapped a second time under the MAC-and-Destroy chain, opened only by `K_T = HKDF(Argon2id(PIN), "tropic01-pairing/v1")` |
+| **Seed at rest (Tropic01 half)** | `half_T` is **ML-KEM-1024-encapsulated + AES-256-GCM-sealed** before it ever crosses the SPI bus. The opaque PQ-wrapped blob is then XOR-encrypted under the MAC-and-Destroy chain (10 attempts, AppNote scheme), opened only by `K_T = HKDF(PIN, "tropic01-pairing/v1")` |
 | **Seed at rest (SE050 half)**    | `half_E = E ⊕ half_T` is **ML-KEM-1024-encapsulated + AES-256-GCM-sealed** in U585 before being written to an SE050 binary object. The object's `ALLOW_READ` policy is bound to a single AES (or ECKey) auth object, opened only inside an SCP03 session. The SE050 only ever sees PQ ciphertext |
 | **PQ inner-wrap secret key** | ML-KEM-1024 secret key (3168 B) lives only in U585 secure flash, HUK-SAES-wrapped. Never decapsulates unless an unlock is in progress. Used for both halves with separate domain-separation tags |
 | **Seed reconstruction** | `E = HKDF(half_T ‖ half_E, info="bip39-entropy/v2")` happens *only* in U585 secure SRAM, for microseconds, then zeroized. Mnemonic and SLH-DSA seed are recomputed every unlock and never persisted in any form |
-| **Key transport (Tropic01, outer)** | Noise_KK1 e2e encrypted SPI session (X25519 + ChaCha20-Poly1305), pairing keys HUK-SAES-wrapped in U585 secure flash. **Carries only ML-KEM ciphertext** — even a complete CRQC break of X25519 reveals only the inner PQ blob |
+| **Key transport (Tropic01, outer)** | Noise_KK1 e2e encrypted SPI session (X25519 + ChaCha20-Poly1305), per-device pairing key generated from TRNG at first provisioning and stored in secure flash (page 127, `0x0C0FE000`). **Carries only ML-KEM ciphertext** — even a complete CRQC break of X25519 reveals only the inner PQ blob |
 | **Key transport (SE050, outer)** | SCP03 (or FastSCP / ECKey), static keys HUK-SAES-wrapped in U585 secure flash. **Carries only ML-KEM ciphertext.** A flash dump moved to a different U585 is useless |
-| **PIN handling** | Argon2id stretched to 256 bits inside the secure world, raw PIN buffer wiped before the gateway returns. Stretched K is split via HKDF into per-chip auth keys; raw PIN never crosses to either SE |
+| **PIN handling** | Raw PIN is KDF-stretched to per-chip auth keys inside the secure world; PIN buffer wiped before the gateway returns. K is split via HKDF into per-chip auth keys K_T and K_E; raw PIN never crosses to either SE. Brute-force is rate-limited by SE hardware (MACD slot destruction / UserID attempt counter), not by CPU cost |
 | **Retry counters** | Both chips share a 9-attempt cap. Each PIN attempt is bracketed by a `PENDING{attempt=N+1}` record in S-flash so a power glitch between Tropic01 and SE050 increments cannot grant a free retry. If the two counters ever disagree on boot, the wallet wipes |
 | **Boot attestation** | Fresh U585-TRNG nonce signed independently by Tropic01 and SE050, both certificate chains verified against pinned vendor roots, both UIDs matched against pinned values. Any failure ⇒ no PIN entry |
 | **RNG** | Wallet entropy = `STM32_TRNG ⊕ Tropic01_TRNG ⊕ SE050_TRNG`. All session nonces from STM32 TRNG. No software PRNGs |
@@ -434,11 +432,10 @@ Every step below runs in the **secure world**. The non-secure world drives nothi
       ▼
 ┌──────────────────────────────────────────────────────────────┐
 │ 4. UNLOCK BOTH SECURE ELEMENTS  (with PQ inner wrap)         │
-│    K   = Argon2id(PIN, salt_dev, m=64MiB, t=3)               │
-│    K_T = HKDF(K, "tropic01-pairing/v1")                      │
-│    K_E = HKDF(K, "se050-aeskey/v1")                          │
+│    K_T = HKDF(PIN, "tropic01-pairing/v1")                    │
+│    K_E = HKDF(PIN, "se050-aeskey/v1")                        │
 │    sk_pq = SAES_unwrap(HUK, sk_pq_wrapped)  // ML-KEM-1024   │
-│    zeroize(PIN_buffer) ; zeroize(K)                          │
+│    zeroize(PIN_buffer)                                       │
 │                                                              │
 │    ── Tropic01 ─────────────────────                         │
 │    macd_blob = Tropic01.macd_unlock(slot=N, K_T)             │
@@ -703,7 +700,7 @@ Nothing in this list is optional. Each item is something that has bricked, leake
 - [ ] Clean-room facility with **no network**, no removable media, no personal devices
 - [ ] Provisioning station OS image is reproducible, signed, and re-imaged before every batch
 - [ ] HSM-backed generation of every per-device secret (or NXP EdgeLock 2GO for SE050 at volume)
-- [ ] Per-device unique: SCP03 keys (or FastSCP/ECKey), Tropic01 pairing keys, salt_dev for Argon2id, Tropic01 UID pin, SE050 UID pin
+- [ ] Per-device unique: SCP03 keys (or FastSCP/ECKey), Tropic01 pairing keys, Tropic01 UID pin, SE050 UID pin
 - [ ] Provisioning logs **never contain secret material** (audit every log line; CI test that scans staging logs for high-entropy strings)
 - [ ] Two-person rule for any operation that touches the HSM root keys
 - [ ] Tamper-evident packaging between provisioning station and shipping
@@ -732,7 +729,7 @@ Nothing in this list is optional. Each item is something that has bricked, leake
 - [ ] **NIST PQC SLH-DSA (FIPS 205) test vectors** pass for every parameter set you ship
 - [ ] **Differential test** against a second SLH-DSA implementation (e.g. PQClean)
 - [ ] **BIP-39 spec test vectors** pass (Trezor 24-word vectors are already in `bip39/tests/vectors.rs` — extend with the official BIP-39 vectors)
-- [ ] **Argon2id test vectors** pass; chosen `(m, t, p)` benchmarked on real U585 silicon and tuned for ~500 ms unlock latency
+- [ ] **HKDF PIN-stretching test vectors** pass
 - [ ] **HKDF-SHA256 / SHA-512 test vectors** pass
 - [ ] **AES-256-GCM test vectors** pass on the SAES peripheral path, not just the software fallback
 - [ ] **SCP03 negative tests** against SE050: replayed APDUs, malformed APDUs, wrong static keys, expired session, wrong UID
@@ -914,7 +911,7 @@ Each HDPL transition **irrevocably hides** the option bytes and OBKEYs of the pr
 7. **Burn your secure and non-secure firmware images** into their respective flash regions, both with valid hybrid signatures in their headers.
 8. **Generate the device's PQ inner-wrap keypair on the device itself:** the secure firmware boots once in a special "factory mode", uses the mixed `STM32_TRNG ⊕ Tropic01_TRNG ⊕ SE050_TRNG` to run `(pk_pq, sk_pq) ← ML-KEM-1024.KeyGen()`, HUK-SAES-wraps `sk_pq`, and writes it to a dedicated secure-flash region. The wrapped blob never leaves the device. `pk_pq` is exported only for the post-provisioning self-test.
 9. **Generate and pin the device-identity certificate.** The HSM signs an ML-DSA-65 certificate over `{device_serial, U585_UID, Tropic01_UID, SE050_UID, pk_pq_hash}`. The certificate is pinned in HDPL1 OEMiROT alongside the manufacturing public-key hashes. This is the cryptographic root of "is this device the one we provisioned" — the SE classical attestations are downgraded to proof-of-presence only.
-10. **Burn per-device secrets** in the same provisioning session: HUK-SAES-wrapped Tropic01 pairing keys, HUK-SAES-wrapped SE050 SCP03 (or ECKey) static keys, pinned Tropic01 UID, pinned SE050 UID, pinned vendor attestation root certificates, salt_dev for Argon2id.
+10. **Burn per-device secrets** in the same provisioning session: Tropic01 pairing key (TRNG-generated, stored in secure flash page 127), HUK-SAES-wrapped SE050 SCP03 (or ECKey) static keys, pinned Tropic01 UID, pinned SE050 UID, pinned vendor attestation root certificates.
 11. **Run the post-provisioning self-test** over SWD: boot the device, walk through dual attestation + device-identity verification, provision a test wallet, sign a test transaction with SLH-DSA-192f, verify the signature, brick the test wallet (9 wrong PINs), confirm both SEs report destroyed state, confirm the PQ wrap blobs on both SEs are opaque ciphertext. The self-test record is signed (by the HSM) and archived.
 12. **Burn `RDP = 0xCC`** (Level 2). This is the **last** option-byte write and it is **irreversible**. SWD is dead the moment the regulator settles after this write. Once a device passes through this step, you cannot debug it, you cannot re-flash it, you cannot recover it. Make sure step 11 is bulletproof.
 13. **Final acceptance test** on the now-locked device: power-cycle, dual attest, verify ML-DSA device certificate, unlock with the test PIN (driving the full PQ inner-wrap path on both SEs), sign, verify, lock. If anything fails, the unit is scrap — you can't open it back up.

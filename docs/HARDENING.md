@@ -150,7 +150,7 @@ On every boot, before trusting the SE050:
 1. NS UI collects PIN digits, passes a byte buffer into a Secure NSC entry point.
 2. Secure world copies the PIN into a Secure-only buffer, zeroizes the NS-facing buffer immediately.
 3. Secure world computes `PIN_key = KDF(PIN, device_salt)` where:
-   - KDF is PBKDF2-HMAC-SHA256 with a high iteration count, or Argon2id if it fits.
+   - KDF is PBKDF2-HMAC-SHA256 with a high iteration count.
    - `device_salt` is a random per-device value stored on the SE050 as a non-secret binary object.
 4. `PIN_key` is used as the AESKey credential to open an SCP03 session against the SE050's PIN auth object.
 5. On success: read the seed binary object inside the SCP03 session.

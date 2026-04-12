@@ -22,7 +22,7 @@ Status: early hardware. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505.
 
 ```
   Tropic01 ----[Noise_KK1 E2E]----> STM32U585 SECURE WORLD <----[SCP03 E2E]---- SE050
-  (half_T, PIN-gated)                 |  Argon2id(PIN) -> K_T, K_E             (half_E, PIN-gated)
+  (half_T, PIN-gated)                 |  PIN -> KDF -> K_T, K_E                (half_E, PIN-gated)
                                       |  Reconstruct: E = HKDF(half_T XOR half_E)
                                       |  BIP-39(E) -> PBKDF2 -> SLH-DSA keygen -> sign
                                       |  Zeroize everything after sign
@@ -38,16 +38,18 @@ Status: early hardware. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505.
 
 ### Tropic01 Integration
 
-**What:** Stores `half_T` of the XOR-split entropy. Communicates over SPI via Noise_KK1 encrypted sessions. MAC-and-Destroy chain enforces PIN retry limits (13 slots).
-**Key files:** `secure/src/tropic01_se.rs`, `secure/src/pin.rs`, `secure/src/semihosting_spi.rs`
+**What:** Stores `half_T` of the XOR-split entropy. Communicates over SPI via Noise_KK1 encrypted sessions. MAC-and-Destroy chain enforces PIN retry limits (10 attempts, AppNote-aligned XOR+tag scheme).
+**Key files:** `secure/src/tropic01_se.rs`, `secure/src/semihosting_spi.rs`, `secure/src/hw/flash.rs`
 **Cross-cutting constraints:**
 - Must store ONLY its half, never the full entropy
-- PIN verification happens via MACD chain on-chip, not firmware comparison
+- PIN verification happens via MACD chain on-chip (10 attempts, 10 of 128 MACD slots), not firmware comparison
+- PIN state format: `counter(1B) ‖ tag(32B) ‖ XOR-encrypted-secrets(10×32B)` = 353 bytes (fits 475B r-mem limit)
+- Verification uses constant-time tag comparison (`subtle::ConstantTimeEq`)
 - Every read/write wrapped in a Noise_KK1 session (plaintext never on SPI)
-- Pairing keys must be HUK-SAES-wrapped at rest (not yet implemented)
+- Per-device pairing key: generated from TRNG at first provisioning, stored in secure flash page 127 (`0x0C0FE000`, reserved in linker script). On QEMU: deterministic UID-derived fallback. Devkit keys (slot 0) never invalidated as fallback.
 - ML-KEM-1024 inner wrap planned: the blob stored on-chip will be `ct || aead`, not plaintext
 - RNG contribution: Tropic01 TRNG XORed with STM32 TRNG + SE050 TRNG (not yet implemented)
-**Status:** Noise_KK1 sessions work against TS1302 USB devkit via semihosting. MACD PIN chain implemented. Never connected to a real STM32 SPI bus.
+**Status:** Noise_KK1 sessions work against TS1302 USB devkit via semihosting. MACD PIN chain implemented (10 attempts, AppNote XOR+tag scheme). Per-device pairing key provisioned to Tropic01 slot 1 at first boot. Never connected to a real STM32 SPI bus.
 
 ### SE050 Integration
 
@@ -205,7 +207,8 @@ cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
 | `secure/src/nsc/state.rs` | Global secure state (pin_verified, master_secret) |
 | `secure/src/nsc/sign_and_emit.rs` | Decrypt entropy -> derive key -> sign -> emit |
 | `secure/src/sau.rs` | SAU + MPC/GTZC TrustZone configuration |
-| `secure/src/tropic01_se.rs` | Tropic01 Noise_KK1 sessions + MACD PIN |
+| `secure/src/tropic01_se.rs` | Tropic01 Noise_KK1 sessions + MACD PIN + pairing key setup |
+| `secure/src/hw/flash.rs` | Secure flash driver: pairing key storage (page 127) |
 | `secure/src/se050/mod.rs` | SE050 driver: provisioning + unlock via UserID PIN |
 | `secure/src/se050/scp03.rs` | SCP03 authenticated+encrypted channel |
 | `secure/src/se050/apdu.rs` | SE050 APDU command construction |
