@@ -1,8 +1,8 @@
 # PQSigner OS -- Work TODO
 
-Tracks what remains to go from "working single-SE demo" to "end-to-end hardware wallet on STM32U585 + Tropic01 + SE050, PIN-gated, doing real transactions."
+Tracks what remains to go from "working dual-SE demo" to "end-to-end hardware wallet on STM32U585 + OPTIGA Trust M + SE050, PIN-gated, doing real transactions."
 
-Last audited: 2026-04-12
+Last audited: 2026-04-13
 
 ---
 

@@ -12,9 +12,14 @@
 
 Entropy of the seed phrase is split across two independent secure elements to eliminate single points of compromise.
 
-### Tropic01
+### Infineon OPTIGA Trust M V3
 
-- Holds one share of the seed entropy
+- Holds one share of the seed entropy (XOR-split half)
+- Common Criteria EAL6+ certified (SLS32AIA)
+- IFX I2C protocol (4-layer stack) at address 0x30
+- Shielded Connection (TLS-PRF + AES-128-CCM-8) for encrypted I2C
+- Authorization reference PIN protection (hardware-enforced access conditions)
+- Platform Binding Secret for per-device pairing (stored in secure flash page 126)
 
 ### NXP SE050
 
