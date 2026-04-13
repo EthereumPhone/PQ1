@@ -274,6 +274,7 @@ fn main() -> ! {
 
     ui::init();
     secure_log!("[S] UI initialized");
+    ui::splash();
 
     // Try to load a previously saved per-device pairing key for the
     // Tropic01. If found, sessions use pairing slot 1 (per-device)

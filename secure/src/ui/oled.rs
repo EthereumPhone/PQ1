@@ -14,9 +14,10 @@
 use super::{Button, Press, DISPLAY_COLS, DISPLAY_ROWS};
 use crate::hw;
 use embedded_graphics::{
-    mono_font::{ascii::FONT_5X8, MonoTextStyle},
+    mono_font::{ascii::{FONT_5X8, FONT_6X10}, MonoTextStyle},
     pixelcolor::BinaryColor,
     prelude::*,
+    primitives::{Line, PrimitiveStyle, Rectangle},
     text::{Baseline, Text},
 };
 
@@ -186,6 +187,92 @@ impl Display {
         self.flush_fb();
     }
 
+    /// Play the plug-in boot animation.
+    ///
+    /// Two stages over ~1 s total:
+    ///   1. Vertical scan line sweeps left→right, progressively uncovering
+    ///      the "PQ SIGNER" title rendered in FONT_6X10.
+    ///   2. A hollow progress bar under the title fills from left to right.
+    /// Ends with a cleared framebuffer so the next UI draw starts from blank.
+    pub fn splash(&mut self) {
+        const TITLE: &str = "PQ SIGNER";
+        // FONT_6X10 is 6 px wide; 9 chars = 54 px; centered x = (128-54)/2 = 37.
+        const TITLE_X: i32 = 37;
+        const TITLE_Y: i32 = 4;
+        let title_style = MonoTextStyle::new(&FONT_6X10, BinaryColor::On);
+
+        // Stage 1: scan-line reveal. Step of 4 gives 33 frames × ~12 ms ≈ 400 ms.
+        let mut sweep: usize = 0;
+        while sweep <= 128 {
+            self.fb.clear();
+            // Draw the full title, then black out everything at/past the sweep
+            // column so the title appears to be uncovered as the line moves.
+            let _ = Text::with_baseline(
+                TITLE,
+                Point::new(TITLE_X, TITLE_Y),
+                title_style,
+                Baseline::Top,
+            )
+            .draw(&mut self.fb);
+            for x in sweep..128 {
+                for page in 0..4 {
+                    self.fb.buf[page * 128 + x] = 0;
+                }
+            }
+            if sweep < 128 {
+                let _ = Line::new(
+                    Point::new(sweep as i32, 0),
+                    Point::new(sweep as i32, 31),
+                )
+                .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
+                .draw(&mut self.fb);
+            }
+            self.flush_fb();
+            delay_ms(12);
+            sweep += 4;
+        }
+
+        // Stage 2: progress bar. 20×22 origin, 88 wide, 6 tall, 2 px border.
+        const BAR_X: i32 = 20;
+        const BAR_Y: i32 = 22;
+        const BAR_W: u32 = 88;
+        const BAR_H: u32 = 6;
+        let outline = PrimitiveStyle::with_stroke(BinaryColor::On, 1);
+        let fill = PrimitiveStyle::with_fill(BinaryColor::On);
+        let fill_max: u32 = BAR_W - 4;
+
+        let mut f: u32 = 0;
+        while f <= fill_max {
+            self.fb.clear();
+            let _ = Text::with_baseline(
+                TITLE,
+                Point::new(TITLE_X, TITLE_Y),
+                title_style,
+                Baseline::Top,
+            )
+            .draw(&mut self.fb);
+            let _ = Rectangle::new(Point::new(BAR_X, BAR_Y), Size::new(BAR_W, BAR_H))
+                .into_styled(outline)
+                .draw(&mut self.fb);
+            if f > 0 {
+                let _ = Rectangle::new(
+                    Point::new(BAR_X + 2, BAR_Y + 2),
+                    Size::new(f, BAR_H - 4),
+                )
+                .into_styled(fill)
+                .draw(&mut self.fb);
+            }
+            self.flush_fb();
+            delay_ms(6);
+            f += 1;
+        }
+
+        // Hold the completed frame briefly, then blank the screen.
+        delay_ms(250);
+        self.fb.clear();
+        self.flush_fb();
+    }
+
     /// Send the pixel framebuffer to the SSD1306 over I2C.
     /// Sends 4 pages of 128 bytes each (129 bytes per I2C transaction
     /// including the 0x40 data control byte).
@@ -204,6 +291,17 @@ impl Display {
             chunk[0] = 0x40; // Co=0, D/C#=1 → data stream
             chunk[1..].copy_from_slice(&self.fb.buf[start..start + 128]);
             unsafe { hw::i2c::write(addr, &chunk) };
+        }
+    }
+}
+
+/// Blocking NOP delay (~ms at 160 MHz core clock). Same calibration as the
+/// OPTIGA IFX I2C driver. Good enough for animation frame pacing — the
+/// splash runs once at boot and precision is not required.
+fn delay_ms(ms: u32) {
+    for _ in 0..ms {
+        for _ in 0..40_000 {
+            cortex_m::asm::nop();
         }
     }
 }

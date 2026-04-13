@@ -60,6 +60,14 @@ impl Display {
         }
     }
 
+    /// Mock splash: print a single banner line so QEMU logs mirror the
+    /// real-hardware boot animation. No timing, no frames.
+    pub fn splash(&mut self) {
+        hprintln!("    +----------------+");
+        hprintln!("    |   PQ SIGNER    |");
+        hprintln!("    +----------------+");
+    }
+
     pub fn flush(&mut self) {
         // Render a framebox so the user sees a "screen" in the QEMU console.
         hprintln!("    +----------------+");
