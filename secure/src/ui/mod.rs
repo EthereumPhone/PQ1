@@ -92,6 +92,12 @@ pub fn input() -> &'static mut Input {
 // High-level helpers used by both backends
 // ---------------------------------------------------------------------------
 
+/// Play the boot/plug-in animation. Backend-specific; a no-op on backends
+/// without a pixel display. Safe to call once, after `init()`.
+pub fn splash() {
+    display().splash();
+}
+
 /// Show a single-line status message ("Locked", "Signing...", etc.).
 pub fn show_status(title: &str, sub: &str) {
     let d = display();

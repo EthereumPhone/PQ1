@@ -17,6 +17,7 @@ impl Display {
     }
 
     pub fn init(&mut self) {}
+    pub fn splash(&mut self) {}
     pub fn clear(&mut self) {}
 
     pub fn draw_line(&mut self, _row: usize, _text: &str) {}
