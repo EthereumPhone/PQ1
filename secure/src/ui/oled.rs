@@ -1,10 +1,10 @@
-//! Real OLED backend for STM32U585 + SSD1306 128×64 I2C display.
+//! Real OLED backend for STM32U585 + SSD1306 128×32 I2C display.
 //!
 //! Renders the same 4×16 character grid as the semihosting mock, but on a
 //! physical SSD1306 OLED driven over I2C1 (PB8=SCL, PB9=SDA).
 //!
-//! Text is drawn with `embedded-graphics` FONT_8X13 (8 px wide → 16 cols,
-//! 13 px tall at 16 px row pitch → 4 rows in 64 px).
+//! Text is drawn with `embedded-graphics` FONT_5X8 (5 px wide → ≥25 cols
+//! available for 16 used, 8 px tall at 8 px row pitch → 4 rows in 32 px).
 //!
 //! The `Input` struct is a stub: without physical GPIO buttons, only the
 //! `e2e-test` feature (which auto-confirms every dialog) is usable.
@@ -14,7 +14,7 @@
 use super::{Button, Press, DISPLAY_COLS, DISPLAY_ROWS};
 use crate::hw;
 use embedded_graphics::{
-    mono_font::{ascii::FONT_8X13, MonoTextStyle},
+    mono_font::{ascii::FONT_5X8, MonoTextStyle},
     pixelcolor::BinaryColor,
     prelude::*,
     text::{Baseline, Text},
@@ -29,21 +29,21 @@ const SSD1306_ADDR_ALT: u8 = 0x3D;
 static mut SSD1306_ADDR: u8 = SSD1306_ADDR_PRIMARY;
 
 // ---------------------------------------------------------------------------
-// Minimal 128×64 framebuffer in SSD1306 page format (8 pages × 128 bytes).
+// Minimal 128×32 framebuffer in SSD1306 page format (4 pages × 128 bytes).
 // Implements `DrawTarget` so embedded-graphics can render text directly.
 // ---------------------------------------------------------------------------
 
 struct Framebuf {
-    buf: [u8; 1024],
+    buf: [u8; 512],
 }
 
 impl Framebuf {
     const fn new() -> Self {
-        Self { buf: [0; 1024] }
+        Self { buf: [0; 512] }
     }
 
     fn clear(&mut self) {
-        self.buf = [0; 1024];
+        self.buf = [0; 512];
     }
 }
 
@@ -56,7 +56,7 @@ impl DrawTarget for Framebuf {
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
         for Pixel(coord, color) in pixels {
-            if coord.x >= 0 && coord.x < 128 && coord.y >= 0 && coord.y < 64 {
+            if coord.x >= 0 && coord.x < 128 && coord.y >= 0 && coord.y < 32 {
                 let x = coord.x as usize;
                 let y = coord.y as usize;
                 let page = y / 8;
@@ -75,7 +75,7 @@ impl DrawTarget for Framebuf {
 
 impl OriginDimensions for Framebuf {
     fn size(&self) -> Size {
-        Size::new(128, 64)
+        Size::new(128, 32)
     }
 }
 
@@ -113,19 +113,19 @@ impl Display {
         };
         unsafe { SSD1306_ADDR = addr };
 
-        // SSD1306 initialization sequence (128×64, charge-pump enabled).
+        // SSD1306 initialization sequence (128×32, charge-pump enabled).
         // 0xAE (display OFF) was already sent during the address probe.
         let init_cmds: &[u8] = &[
             0xD5, 0x80, // Clock divide / oscillator frequency
-            0xA8, 0x3F, // Multiplex ratio = 63 (64 lines)
+            0xA8, 0x1F, // Multiplex ratio = 31 (32 lines)
             0xD3, 0x00, // Display offset = 0
             0x40,       // Start line = 0
             0x8D, 0x14, // Charge pump ON
             0x20, 0x00, // Horizontal addressing mode
             0xA1,       // Segment remap (col 127 → SEG0)
             0xC8,       // COM scan direction remapped
-            0xDA, 0x12, // COM pins: alternative, no L/R remap
-            0x81, 0xCF, // Contrast
+            0xDA, 0x02, // COM pins: sequential, no L/R remap (128x32)
+            0x81, 0x8F, // Contrast (128x32 modules run cooler)
             0xD9, 0xF1, // Pre-charge period
             0xDB, 0x40, // VCOMH deselect level
             0xA4,       // Output follows RAM
@@ -139,14 +139,14 @@ impl Display {
         // Set full-screen column/page window for bulk writes.
         unsafe {
             hw::i2c::write(addr, &[0x00, 0x21, 0x00, 0x7F]); // col 0–127
-            hw::i2c::write(addr, &[0x00, 0x22, 0x00, 0x07]); // page 0–7
+            hw::i2c::write(addr, &[0x00, 0x22, 0x00, 0x03]); // page 0–3
         }
 
         // Clear display.
         self.fb.clear();
         self.flush_fb();
 
-        secure_log!("[S][OLED] display initialized (128x64)");
+        secure_log!("[S][OLED] display initialized (128x32)");
     }
 
     pub fn clear(&mut self) {
@@ -176,18 +176,18 @@ impl Display {
     pub fn flush(&mut self) {
         // Render the 4×16 character grid onto the pixel framebuffer.
         self.fb.clear();
-        let style = MonoTextStyle::new(&FONT_8X13, BinaryColor::On);
+        let style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
         for (i, row) in self.rows.iter().enumerate() {
             // SAFETY: draw_line restricts to printable ASCII → valid UTF-8.
             let s = unsafe { core::str::from_utf8_unchecked(row) };
-            let _ = Text::with_baseline(s, Point::new(0, i as i32 * 16), style, Baseline::Top)
+            let _ = Text::with_baseline(s, Point::new(0, i as i32 * 8), style, Baseline::Top)
                 .draw(&mut self.fb);
         }
         self.flush_fb();
     }
 
     /// Send the pixel framebuffer to the SSD1306 over I2C.
-    /// Sends 8 pages of 128 bytes each (129 bytes per I2C transaction
+    /// Sends 4 pages of 128 bytes each (129 bytes per I2C transaction
     /// including the 0x40 data control byte).
     fn flush_fb(&self) {
         let addr = unsafe { SSD1306_ADDR };
@@ -195,10 +195,10 @@ impl Display {
         // Reset address window to full screen.
         unsafe {
             hw::i2c::write(addr, &[0x00, 0x21, 0x00, 0x7F]);
-            hw::i2c::write(addr, &[0x00, 0x22, 0x00, 0x07]);
+            hw::i2c::write(addr, &[0x00, 0x22, 0x00, 0x03]);
         }
 
-        for page in 0..8 {
+        for page in 0..4 {
             let start = page * 128;
             let mut chunk = [0u8; 129];
             chunk[0] = 0x40; // Co=0, D/C#=1 → data stream

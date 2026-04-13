@@ -5,9 +5,9 @@
 //! * `ui-semihosting` — mock backend that prints a 4x16 framebox to the QEMU
 //!   console and reads "buttons" from semihosting `READC`. Used for QEMU
 //!   development today.
-//! * `ui-oled` — real backend that drives an SSD1306 128x64 I2C OLED via the
+//! * `ui-oled` — real backend that drives an SSD1306 128x32 I2C OLED via the
 //!   `ssd1306` crate and reads two GPIO buttons via `embedded-hal`. Used on
-//!   the STM32U585 + AZDelivery 0.96" OLED hardware.
+//!   the STM32U585 + SSD1306 0.91"/0.96" OLED hardware.
 //!
 //! Both backends export the same `Display` and `Input` types so the rest of
 //! the secure world is backend-agnostic.
@@ -32,7 +32,7 @@ pub mod pin_entry;
 pub mod seed_wizard;
 
 /// Logical display dimensions (cells, not pixels).
-/// 16 columns x 4 rows fits an 8x16 monospace font on a 128x64 OLED.
+/// 16 columns × 4 rows: fits 5×8 font on 128×32 OLED, 8×13 on 128×64.
 pub const DISPLAY_COLS: usize = 16;
 pub const DISPLAY_ROWS: usize = 4;
 
