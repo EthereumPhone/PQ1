@@ -249,6 +249,22 @@ fn main() -> ! {
 
     secure_log!("[S] Secure world starting...");
 
+    // ---- STSAFE-A110 I2C2 bus probe ----
+    // Scans I2C2 (PH4/PH5) for on-board peripherals, then halts.
+    // Triggered by: make stsafe-probe
+    #[cfg(feature = "stsafe-probe")]
+    unsafe {
+        hw::i2c2_probe::run_probe();
+    }
+
+    // ---- GPIO button test ----
+    // Scans Arduino header GPIOs, then tests debounced button events.
+    // Triggered by: make button-test
+    #[cfg(feature = "button-test")]
+    unsafe {
+        hw::buttons::run_test();
+    }
+
     sau::init();
     secure_log!("[S] SAU + MPC configured");
 

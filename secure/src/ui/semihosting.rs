@@ -87,23 +87,40 @@ impl Input {
         Self
     }
 
-    pub fn init(&mut self) {}
+    pub fn init(&mut self) {
+        #[cfg(feature = "gpio-buttons")]
+        unsafe {
+            crate::hw::buttons::init();
+            hprintln!("[S][SEMI] GPIO buttons ready (LEFT=PC1/D8, RIGHT=PA8/D9)");
+        }
+    }
 
-    /// Block on a single character from the host. The `_idle_check` argument
-    /// is ignored on the semihosting mock; see module-level note.
-    pub fn wait_button(&mut self, _idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
-        loop {
-            let c = unsafe { syscall!(READC) } as u8;
-            match c {
-                b'h' | b'a' => return Some((Button::Left, Press::Short)),
-                b'l' | b'd' => return Some((Button::Right, Press::Short)),
-                b'H' | b'A' => return Some((Button::Left, Press::Long)),
-                b'L' | b'D' => return Some((Button::Right, Press::Long)),
-                b'q' | b'Q' => {
-                    // Treat as long-cancel for ergonomics
-                    return Some((Button::Left, Press::Long));
+    /// Read a button press.
+    ///
+    /// With `gpio-buttons`: polls PC1 (LEFT) and PA8 (RIGHT) hardware pins.
+    /// Without: blocks on semihosting READC for keyboard input from host.
+    pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
+        #[cfg(feature = "gpio-buttons")]
+        {
+            return crate::hw::buttons::wait_event(idle_check);
+        }
+
+        #[cfg(not(feature = "gpio-buttons"))]
+        {
+            let _ = idle_check;
+            loop {
+                let c = unsafe { syscall!(READC) } as u8;
+                match c {
+                    b'h' | b'a' => return Some((Button::Left, Press::Short)),
+                    b'l' | b'd' => return Some((Button::Right, Press::Short)),
+                    b'H' | b'A' => return Some((Button::Left, Press::Long)),
+                    b'L' | b'D' => return Some((Button::Right, Press::Long)),
+                    b'q' | b'Q' => {
+                        // Treat as long-cancel for ergonomics
+                        return Some((Button::Left, Press::Long));
+                    }
+                    _ => continue,
                 }
-                _ => continue, // ignore whitespace, newlines, etc.
             }
         }
     }

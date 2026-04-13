@@ -335,6 +335,13 @@ impl Input {
     }
 
     pub fn init(&mut self) {
+        // Initialize GPIO buttons when available.
+        #[cfg(feature = "gpio-buttons")]
+        unsafe {
+            crate::hw::buttons::init();
+            secure_log!("[S][OLED] GPIO buttons ready (LEFT=PC1/D8, RIGHT=PA8/D9)");
+        }
+
         #[cfg(feature = "debug-log")]
         {
             use cortex_m_semihosting::syscall;
@@ -347,6 +354,7 @@ impl Input {
                 secure_log!("[S][OLED] button input ready (fd={})", fd);
             } else {
                 secure_log!("[S][OLED] no button input (semihosting OPEN failed)");
+                #[cfg(not(feature = "gpio-buttons"))]
                 secure_log!("[S][OLED]   use `make play-hw-display` for interactive mode");
             }
         }
@@ -354,15 +362,19 @@ impl Input {
 
     /// Read a button press.
     ///
-    /// When `debug-log` is enabled and the semihosting input file was
-    /// opened successfully, blocks on SYS_READ until the host sends a
-    /// button character (`h`/`l` = short, `H`/`L` = long — same protocol
-    /// as the semihosting UI backend).
-    ///
-    /// Without semihosting input, loops on WFE until the idle timer fires
-    /// (stub for future GPIO buttons).
-    pub fn wait_button(&mut self, _idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
-        #[cfg(feature = "debug-log")]
+    /// Priority:
+    /// 1. GPIO buttons (when `gpio-buttons` feature is active)
+    /// 2. Semihosting file I/O (when `debug-log` is active and fd is open)
+    /// 3. WFE idle loop (stub fallback)
+    pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
+        // GPIO hardware buttons — preferred when available.
+        #[cfg(feature = "gpio-buttons")]
+        {
+            return crate::hw::buttons::wait_event(idle_check);
+        }
+
+        // Semihosting file I/O — keyboard input via probe-rs TCP socket.
+        #[cfg(all(not(feature = "gpio-buttons"), feature = "debug-log"))]
         if self.fd != usize::MAX {
             use cortex_m_semihosting::syscall;
             loop {
@@ -371,7 +383,6 @@ impl Input {
                     syscall!(READ, self.fd, buf.as_mut_ptr(), 1usize)
                 };
                 if not_read == 0 {
-                    // 1 byte read successfully.
                     match buf[0] {
                         b'h' | b'a' => return Some((Button::Left, Press::Short)),
                         b'l' | b'd' => return Some((Button::Right, Press::Short)),
@@ -380,13 +391,13 @@ impl Input {
                         _ => continue,
                     }
                 }
-                // SYS_READ returned non-zero — EOF or error. Should not
-                // happen on a live TCP socket; retry.
             }
         }
-        // Fallback: no semihosting input — WFE until idle timer fires.
+
+        // Fallback: no input source — WFE until idle timer fires.
+        #[cfg(not(feature = "gpio-buttons"))]
         loop {
-            if _idle_check() {
+            if idle_check() {
                 return None;
             }
             cortex_m::asm::wfe();
