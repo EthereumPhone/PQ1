@@ -1,11 +1,11 @@
 //! Minimal secure flash driver for STM32U585.
 //!
-//! Provides read/write/erase for the last page of bank 1 (page 127,
-//! address 0x0C0F_E000), which is reserved for persistent secure-world
-//! data such as the Tropic01 pairing key and (future) intent log.
+//! Provides read/write/erase for the last two pages of bank 1:
+//! - Page 127 (0x0C0F_E000): Tropic01 pairing key / persistent secure data
+//! - Page 126 (0x0C0F_C000): OPTIGA Trust M Platform Binding Secret (PBS)
 //!
 //! The linker script (`memory-stm32u585.x`) must shrink FLASH LENGTH
-//! by 8 KB to prevent firmware code from being placed in this page.
+//! by 16 KB to prevent firmware code from being placed in these pages.
 
 use core::ptr::{read_volatile, write_volatile};
 
@@ -35,12 +35,20 @@ const BSY: u32 = 1 << 16; // Busy
 const ERR_MASK: u32 = 0xFA; // PROGERR | WRPERR | PGAERR | SIZERR | PGSERR
 
 // ---------------------------------------------------------------------------
-// Key storage page — last 8 KB of secure flash bank 1
+// Key storage page — last 8 KB of secure flash bank 1 (page 127)
 // ---------------------------------------------------------------------------
 
 /// Base address of the reserved key storage page (page 127).
 pub const KEY_PAGE_ADDR: u32 = 0x0C0F_E000;
 const KEY_PAGE_NUM: u32 = 127;
+
+// ---------------------------------------------------------------------------
+// PBS storage page — second-to-last 8 KB (page 126)
+// ---------------------------------------------------------------------------
+
+/// Base address of the OPTIGA Trust M PBS page (page 126).
+pub const PBS_PAGE_ADDR: u32 = 0x0C0F_C000;
+const PBS_PAGE_NUM: u32 = 126;
 
 // ---------------------------------------------------------------------------
 // Low-level helpers
@@ -181,6 +189,70 @@ pub unsafe fn write_key(key: &[u8; 32]) -> Result<(), ()> {
     let mut qw1 = [0u8; 16];
     qw1.copy_from_slice(&key[16..]);
     write_quadword(KEY_PAGE_ADDR + 16, &qw1)?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// OPTIGA Trust M PBS storage (page 126)
+// ---------------------------------------------------------------------------
+
+/// Erase the PBS storage page (page 126, 8 KB).
+pub unsafe fn erase_pbs_page() -> Result<(), ()> {
+    wait_bsy();
+    clear_errors();
+    unlock();
+
+    let cr = PER | (PBS_PAGE_NUM << PNB_SHIFT);
+    write_volatile(FLASH_SECCR, cr);
+    write_volatile(FLASH_SECCR, cr | STRT);
+
+    wait_bsy();
+
+    write_volatile(FLASH_SECCR, 0);
+    let sr = read_volatile(FLASH_SECSR);
+    lock();
+
+    if sr & ERR_MASK != 0 {
+        clear_errors();
+        Err(())
+    } else {
+        Ok(())
+    }
+}
+
+/// Read 32 bytes from the start of the PBS storage page.
+pub unsafe fn read_pbs(buf: &mut [u8; 32]) {
+    let src = PBS_PAGE_ADDR as *const u8;
+    for i in 0..32 {
+        buf[i] = read_volatile(src.add(i));
+    }
+}
+
+/// Check whether the PBS storage page is blank (first 32 bytes = 0xFF).
+pub unsafe fn is_pbs_blank() -> bool {
+    let src = PBS_PAGE_ADDR as *const u8;
+    for i in 0..32 {
+        if read_volatile(src.add(i)) != 0xFF {
+            return false;
+        }
+    }
+    true
+}
+
+/// Write a 32-byte PBS to the PBS storage page.
+///
+/// Erases the page first, then programs two quad-words (2 × 16 bytes).
+pub unsafe fn write_pbs(pbs: &[u8; 32]) -> Result<(), ()> {
+    erase_pbs_page()?;
+
+    let mut qw0 = [0u8; 16];
+    qw0.copy_from_slice(&pbs[..16]);
+    write_quadword(PBS_PAGE_ADDR, &qw0)?;
+
+    let mut qw1 = [0u8; 16];
+    qw1.copy_from_slice(&pbs[16..]);
+    write_quadword(PBS_PAGE_ADDR + 16, &qw1)?;
 
     Ok(())
 }

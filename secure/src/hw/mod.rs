@@ -17,7 +17,7 @@ pub mod i2c;
 #[cfg(all(feature = "stm32u585", feature = "usb"))]
 pub mod usb_hw;
 
-#[cfg(all(feature = "stm32u585", feature = "se050"))]
+#[cfg(all(feature = "stm32u585", any(feature = "se050", feature = "optiga-trust-m")))]
 pub mod i2c_hw;
 
 #[cfg(all(feature = "stm32u585", feature = "tropic01-se"))]
