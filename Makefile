@@ -344,6 +344,52 @@ flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
 	probe-rs reset --chip STM32U585AIIx
 	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
 
+# Real SE050 + GPIO hardware buttons + semihosting display.
+# The SE050 runs over I2C1 (PB8/PB9 on the Arduino shield), buttons on
+# CN13 D8/D9 jumper wires, and the UI renders via probe-rs semihosting.
+# Interactive: PIN entry, seed wizard, signing — all on real hardware.
+flash-hw-se050-buttons:
+	@echo "==> Building SE050 + GPIO buttons + semihosting UI"
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,debug-log,ui-semihosting,stm32u585,usb
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running SE050 + buttons wallet (Ctrl-C to quit)..."
+	@echo "    LEFT=CN13 pin1 (D8), RIGHT=CN13 pin2 (D9), GND=CN13 pin7"
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# GPIO button test: scan Arduino header pins, then test debounced events.
+# Requires: jumper wires on CN14 (D8=LEFT, D9=RIGHT, pin7=GND).
+button-test:
+	@echo "==> Building GPIO button test firmware..."
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features button-test,debug-log,ui-semihosting
+	@echo "==> Flashing button test firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Running button test (Ctrl-C to quit)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# STSAFE-A110 I2C2 bus probe: detect on-board secure element.
+# Scans I2C2 (PH4/PH5) for the STSAFE-A110 at 0x20 and any other devices.
+stsafe-probe:
+	@echo "==> Building STSAFE-A110 I2C2 probe firmware..."
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features stsafe-probe,debug-log,ui-semihosting
+	@echo "==> Flashing probe firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Running I2C2 bus scan (Ctrl-C to quit)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # SE050 factory reset: wipe all objects, then halt.
 # Run this once to clear stale SE050 state, then flash normal firmware.
 se050-reset:
@@ -362,7 +408,7 @@ se050-reset:
 build-hw-se050-oled:
 	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050,ui-oled,stm32u585,usb,debug-log
+		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-oled,stm32u585,usb,debug-log
 	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb

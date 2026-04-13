@@ -28,3 +28,9 @@ pub mod spi;
 
 #[cfg(feature = "stm32u585")]
 pub mod flash;
+
+#[cfg(feature = "stsafe-probe")]
+pub mod i2c2_probe;
+
+#[cfg(feature = "gpio-buttons")]
+pub mod buttons;

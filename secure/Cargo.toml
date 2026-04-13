@@ -64,6 +64,9 @@ se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 heade
 dual-se = ["tropic01-se", "se050"]  # Both SEs active: XOR-split entropy across Tropic01 + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 spi1-arduino = []  # Use SPI1/PE12-PE15 (Arduino R3 headers) instead of SPI2/PB12-PB15 for TROPIC01
+stsafe-probe = ["stm32u585", "mock-se"]  # I2C2 bus scan to detect on-board STSAFE-A110
+gpio-buttons = ["stm32u585"]  # GPIO button driver: PI2 (LEFT) + PA15 (RIGHT) on CN14
+button-test = ["stm32u585", "mock-se", "gpio-buttons"]  # Flash + run GPIO button test
 
 [dev-dependencies]
 hex = { workspace = true }
