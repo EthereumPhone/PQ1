@@ -176,7 +176,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     //    or sending it directly.
     let kind = dispatch_tx(&parsed, verified_meta);
 
-    #[cfg(feature = "e2e-test")]
+    #[cfg(all(feature = "e2e-test", feature = "debug-log"))]
     {
         let kind_name: &str = match &kind {
             TxKind::ValueTransfer => "ValueTransfer",
@@ -185,7 +185,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             TxKind::ContractCall => "ContractCall",
             TxKind::ContractCreation => "ContractCreation",
         };
-        cortex_m_semihosting::hprintln!("[S][e2e] cmd_sign_userop dispatch = {}", kind_name);
+        secure_log!("[S][e2e] cmd_sign_userop dispatch = {}", kind_name);
     }
 
     // ContractCreation cannot be wrapped as `execute(...)`. Reject early

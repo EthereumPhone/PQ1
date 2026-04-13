@@ -272,7 +272,7 @@ pub unsafe fn send_apdu(
     {
         if tx_len >= 5 {
             // Log the raw (post-SCP03) APDU header + first few bytes
-            cortex_m_semihosting::hprintln!(
+            secure_log!(
                 "[SE050] TX CLA={:02x} INS={:02x} P1={:02x} P2={:02x} Lc={:02x} len={}",
                 tx_buf[0], tx_buf[1], tx_buf[2], tx_buf[3], tx_buf[4], tx_len
             );
@@ -290,7 +290,7 @@ pub unsafe fn send_apdu(
     let sw = ((raw_resp[n - 2] as u16) << 8) | (raw_resp[n - 1] as u16);
 
     #[cfg(feature = "debug-log")]
-    cortex_m_semihosting::hprintln!("[SE050] RX SW=0x{:04x} len={}", sw, n);
+    secure_log!("[SE050] RX SW=0x{:04x} len={}", sw, n);
 
     if sw != SW_OK {
         return Err(Se050Error::Status(sw));
@@ -349,7 +349,7 @@ pub unsafe fn check_exists(
             #[cfg(feature = "debug-log")]
             {
                 if n >= 3 {
-                    cortex_m_semihosting::hprintln!(
+                    secure_log!(
                         "[SE050] check_exists resp: {:02x} {:02x} {:02x} (n={})",
                         resp[0], resp[1], resp[2], n
                     );
@@ -686,12 +686,12 @@ pub unsafe fn iterative_delete_all(
     pin: Option<&[u8]>,
 ) -> Result<(u16, u16), Se050Error> {
     #[cfg(feature = "debug-log")]
-    cortex_m_semihosting::hprintln!("[SE050][erase] Pass 1: unauthenticated");
+    secure_log!("[SE050][erase] Pass 1: unauthenticated");
 
     let (mut deleted, mut failed) = sweep(t1, scp03, None)?;
 
     #[cfg(feature = "debug-log")]
-    cortex_m_semihosting::hprintln!(
+    secure_log!(
         "[SE050][erase] Pass 1 done: {} deleted, {} left", deleted, failed
     );
 
@@ -719,7 +719,7 @@ pub unsafe fn iterative_delete_all(
     }
 
     #[cfg(feature = "debug-log")]
-    cortex_m_semihosting::hprintln!(
+    secure_log!(
         "[SE050][erase] Pass 2: authenticated (UserID=0x{:08x})", uid
     );
 
@@ -856,7 +856,7 @@ unsafe fn delete_id_list_page(
                 } else {
                     deleted += 1;
                     #[cfg(feature = "debug-log")]
-                    cortex_m_semihosting::hprintln!(
+                    secure_log!(
                         "[SE050][erase]   0x{:08x} deleted", id
                     );
                 }
@@ -864,7 +864,7 @@ unsafe fn delete_id_list_page(
             Err(_e) => {
                 failed += 1;
                 #[cfg(feature = "debug-log")]
-                cortex_m_semihosting::hprintln!(
+                secure_log!(
                     "[SE050][erase]   0x{:08x} FAILED: {:?}", id, _e
                 );
             }

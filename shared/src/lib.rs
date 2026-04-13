@@ -365,7 +365,13 @@ pub const CTX_GENERIC: u8 = 0x02;
 ///   chain_id(8) + nonce(32) + call_gas(32) + ver_gas(32) +
 ///   pre_gas(32) + max_fee(32) + max_prio(32) + init_code_hash(32) +
 ///   paymaster_hash(32) = 312
-pub const USEROP_V2_HEADER_LEN: usize = 4 + 4 + 20 + 20 + 8 + 32 * 7 + 32 * 2;
+pub const USEROP_V2_HEADER_LEN: usize = 4 + 4 + 20 + 20 + 8 + 32 * 8;
+
+// v2 AA payload (after key_index+ots_index) must equal v1 header minus has_bundle byte.
+const _: () = assert!(
+    USEROP_V2_HEADER_LEN - 8 == USEROP_HEADER_LEN - 1,
+    "v2 AA header size must match v1 (minus has_bundle)"
+);
 
 /// v2 protocol version reported in GET_DEVICE_INFO.
 pub const PROTOCOL_VERSION: u16 = 0x0200;
@@ -430,5 +436,122 @@ impl From<u32> for NscStatus {
             7 => Self::IdleWipe,
             _ => Self::InternalError,
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Wire-format layout tests (run with `cargo test -p sphincs-tz-shared`)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn userop_v2_header_is_312() {
+        // key_index(4) + ots_index(4) + sender(20) + entry_point(20) +
+        // chain_id(8) + 8 × u256(32) = 312
+        assert_eq!(USEROP_V2_HEADER_LEN, 312);
+    }
+
+    #[test]
+    fn userop_v1_header_is_305() {
+        // has_bundle(1) + sender(20) + entry_point(20) + chain_id(8) +
+        // 8 × u256(32) = 305
+        assert_eq!(USEROP_HEADER_LEN, 305);
+    }
+
+    #[test]
+    fn v2_aa_matches_v1_minus_has_bundle() {
+        // v2→v1 translation skips key_index(4)+ots_index(4), yielding
+        // the same 304-byte AA blob that v1 stores after has_bundle.
+        assert_eq!(USEROP_V2_HEADER_LEN - 8, USEROP_HEADER_LEN - 1);
+    }
+
+    #[test]
+    fn zk_header_len_matches_components() {
+        assert_eq!(
+            ZK_HEADER_LEN,
+            ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + USEROP_HEADER_LEN + 4
+        );
+    }
+
+    /// Simulate the v2 sign_userop payload layout and verify the
+    /// firmware would read tx_len from the correct offset.
+    #[test]
+    fn v2_sign_userop_offsets() {
+        const TX_LEN: usize = 50; // like the ETH transfer test vector
+        const TOTAL: usize = USEROP_V2_HEADER_LEN + 2 + TX_LEN + 2;
+
+        let mut buf = [0u8; TOTAL];
+        let mut p = 0usize;
+
+        p += 4; // key_index
+        p += 4; // ots_index
+        p += 20; // sender
+        p += 20; // entry_point
+        p += 8; // chain_id
+        p += 32 * 8; // 8 u256 fields
+        assert_eq!(p, USEROP_V2_HEADER_LEN, "header fields end at wrong offset");
+
+        // tx_len u16 BE
+        buf[p] = (TX_LEN >> 8) as u8;
+        buf[p + 1] = (TX_LEN & 0xFF) as u8;
+        p += 2;
+
+        // tx data
+        let mut i = 0;
+        while i < TX_LEN {
+            buf[p + i] = 0xAA;
+            i += 1;
+        }
+        p += TX_LEN;
+
+        // bundle_len = 0
+        p += 2;
+
+        assert_eq!(p, TOTAL);
+
+        // Verify: firmware reads tx_len at USEROP_V2_HEADER_LEN
+        let fw_tx_len = u16::from_be_bytes([
+            buf[USEROP_V2_HEADER_LEN],
+            buf[USEROP_V2_HEADER_LEN + 1],
+        ]) as usize;
+        assert_eq!(fw_tx_len, TX_LEN);
+    }
+
+    /// Simulate the v2 sign_clear_userop payload layout.
+    #[test]
+    fn v2_sign_clear_userop_offsets() {
+        let zk_header_start = 8usize; // after key_index + ots_index
+        let zk_len = ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN; // 612
+        let aa_len = USEROP_V2_HEADER_LEN - 8; // 304
+        let tx_len_off = zk_header_start + zk_len + aa_len;
+
+        assert_eq!(zk_len, 612);
+        assert_eq!(aa_len, 304);
+        assert_eq!(tx_len_off, 8 + 612 + 304); // = 924
+
+        const BUF_LEN: usize = 8 + 612 + 304 + 2 + 177 + 2 + 100;
+        let mut buf = [0u8; BUF_LEN];
+
+        let tx_len: usize = 177;
+        let vk_len: usize = 100;
+
+        // Write tx_len at expected offset
+        buf[tx_len_off] = (tx_len >> 8) as u8;
+        buf[tx_len_off + 1] = (tx_len & 0xFF) as u8;
+
+        // Verify firmware reads it correctly
+        let fw_tx_len = u16::from_be_bytes([buf[tx_len_off], buf[tx_len_off + 1]]) as usize;
+        assert_eq!(fw_tx_len, tx_len);
+
+        // Verify vk_bundle_len offset
+        let tx_end = tx_len_off + 2 + tx_len;
+        buf[tx_end] = (vk_len >> 8) as u8;
+        buf[tx_end + 1] = (vk_len & 0xFF) as u8;
+        let fw_vk_len =
+            u16::from_be_bytes([buf[tx_end], buf[tx_end + 1]]) as usize;
+        assert_eq!(fw_vk_len, vk_len);
     }
 }

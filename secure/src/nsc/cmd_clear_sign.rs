@@ -193,7 +193,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_status("Verifying", "ZK proof...");
 
     #[cfg(feature = "e2e-test")]
-    cortex_m_semihosting::hprintln!("[S][e2e] cmd_clear_sign dispatch = ZkClearSign");
+    secure_log!("[S][e2e] cmd_clear_sign dispatch = ZkClearSign");
 
     // 10. Verify the ZK clear signing proof against the local VK.
     if !verify_clear_signing_proof(calldata, readable, &proof, &vk) {

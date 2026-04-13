@@ -53,7 +53,7 @@ pub(super) unsafe fn sign_userop_hash(
     let user_op_hash = compute_user_op_hash(aa, &call_data_hash);
 
     #[cfg(feature = "e2e-test")]
-    cortex_m_semihosting::hprintln!(
+    secure_log!(
         "[S][e2e] userop_tail userOpHash[..4] = {:02x}{:02x}{:02x}{:02x}",
         user_op_hash[0],
         user_op_hash[1],

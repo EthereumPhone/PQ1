@@ -119,7 +119,7 @@ pub unsafe fn init(sysclk_mhz: u32) {
     cortex_m::asm::dsb();
 
     #[cfg(feature = "debug-log")]
-    cortex_m_semihosting::hprintln!(
+    secure_log!(
         "[S][I2C] I2C1 ready (CR1=0x{:08x} ISR=0x{:08x})",
         read_volatile(I2C1_CR1),
         read_volatile(I2C1_ISR),
@@ -189,7 +189,7 @@ pub unsafe fn write(addr: u8, data: &[u8]) -> bool {
                 t -= 1;
                 if t == 0 {
                     #[cfg(feature = "debug-log")]
-                    cortex_m_semihosting::hprintln!(
+                    secure_log!(
                         "[S][I2C] TXIS timeout! ISR=0x{:08x} CR2=0x{:08x}",
                         read_volatile(I2C1_ISR),
                         read_volatile(I2C1_CR2),
