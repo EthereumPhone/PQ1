@@ -1,5 +1,7 @@
 # OPTIGA Trust M -- Rust Ecosystem & Driver Implementation Plan
 
+> **Note:** The pure Rust driver described in this plan has been **implemented** at `secure/src/optiga/`. See `optiga/mod.rs` (WalletStore), `optiga/ifx_i2c.rs` (IFX I2C protocol), `optiga/apdu.rs` (APDU commands), `optiga/shield.rs` (Shielded Connection), `optiga/i2c.rs` (I2C driver). This document is retained as a design reference.
+
 ## Current Rust Ecosystem
 
 **No published crate exists on crates.io** for OPTIGA Trust M.

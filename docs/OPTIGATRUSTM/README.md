@@ -1,6 +1,8 @@
 # Infineon OPTIGA Trust M V3 -- Integration Reference
 
-Reference documentation for integrating the **OPTIGA Trust M V3** (SLS32AIA) secure element into the PQSigner OS wallet, targeting STM32U585 with a bare-metal Rust (`no_std`) driver.
+Reference documentation for the **OPTIGA Trust M V3** (SLS32AIA) secure element integration in PQSigner OS.
+
+**Status:** Driver implemented (`secure/src/optiga/`). Pure Rust IFX I2C protocol stack with AES-128-CCM shielded connection. Used as the primary SE in the dual-SE XOR entropy split (OPTIGA Trust M + SE050).
 
 **Hardware:** TRUSTMV3SHIELDTOBO1 Arduino shield + B-U585I-IOT02A dev board.
 

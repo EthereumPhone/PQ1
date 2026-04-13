@@ -16,9 +16,10 @@
 MEMORY
 {
     /* Secure flash: bank 1 via S alias.
-     * Last 8 KB (page 127, 0x0C0FE000) reserved for persistent
-     * secure data (pairing key, intent log). See hw/flash.rs. */
-    FLASH : ORIGIN = 0x0C000000, LENGTH = 1016K
+     * Last 16 KB (pages 126-127, 0x0C0FC000-0x0C0FFFFF) reserved for
+     * persistent secure data: page 127 = Tropic01 pairing key,
+     * page 126 = OPTIGA Trust M PBS. See hw/flash.rs. */
+    FLASH : ORIGIN = 0x0C000000, LENGTH = 1008K
 
     /* Secure SRAM: SRAM1 via S alias */
     RAM   : ORIGIN = 0x30000000, LENGTH = 192K

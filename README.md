@@ -2,9 +2,9 @@
 
 A **post-quantum hardware wallet** designed so that *every* cryptographic primitive that protects the seed — at rest, in transit between chips, in firmware updates, in transaction signing — is either a NIST PQC standard or a symmetric primitive at a key size that survives Grover's algorithm. The classical secure channels of the secure elements (which we cannot replace) are wrapped inside a PQ confidentiality layer so the SEs never see plaintext halves.
 
-The design target is a **STM32U585 + Tropic01 + NXP EdgeLock SE050**. No single die, no single vendor, and no future cryptographically-relevant quantum computer should be able to recover the seed from harvested traffic or extracted ciphertext.
+The design target is a **STM32U585 + Infineon OPTIGA Trust M V3 + NXP EdgeLock SE050**. No single die, no single vendor, and no future cryptographically-relevant quantum computer should be able to recover the seed from harvested traffic or extracted ciphertext.
 
-> **Status: early hardware.** The TrustZone firmware boots and runs on a real **B-U585I-IOT02A** dev board (STM32U585, Cortex-M33). The secure world, SAU/GTZC configuration, and first-boot wizard execute on silicon. See [`docs/dev-board-setup.md`](docs/dev-board-setup.md) for board setup instructions. Most development still happens on **QEMU mps2-an505** for faster iteration. Tropic01 is exercised against a **TS1302 USB devkit bridged into QEMU via semihosting**, not against a chip wired to a real STM32. SE050 is not yet integrated. The dual-SE split-entropy, ML-KEM inner-wrap, ML-DSA hybrid OEMiROT, custom PCB, and production STM32 bring-up are all the **target architecture**, not shipped code. Read the [Implementation Status](#implementation-status) table for what actually exists and where it actually runs today.
+> **Status: dual-SE implemented.** The TrustZone firmware boots and runs on a real **B-U585I-IOT02A** dev board (STM32U585, Cortex-M33). The secure world, SAU/GTZC configuration, and first-boot wizard execute on silicon. See [`docs/dev-board-setup.md`](docs/dev-board-setup.md) for board setup instructions. Both secure element drivers are written: **OPTIGA Trust M V3** (pure Rust IFX I2C stack + AES-128-CCM shielded connection) and **NXP SE050** (T1oI2C + SCP03). The dual-SE XOR entropy split is wired and tested — BIP-39 entropy is split across both chips. The ML-KEM inner-wrap, ML-DSA hybrid OEMiROT, custom PCB, and production STM32 bring-up are the remaining **target architecture** items. Read the [Implementation Status](#implementation-status) table for what actually exists and where it actually runs today.
 
 ```
                   ┌──────────────────────────────────────────────────┐
@@ -14,13 +14,13 @@ The design target is a **STM32U585 + Tropic01 + NXP EdgeLock SE050**. No single 
                   │  │                                                │ │   │                          │
                   │  │  PIN → KDF → {K_T, K_E}                        │ │   │  USB / display / buttons │
                   │  │                                                │ │   │  Tx parser, RLP, UI       │
-   ┌──────────┐   │  │  Tropic01.unlock(K_T) → wrapped_T              │ │   │                          │
-   │ Tropic01 │◄──┼──┤  ML-KEM-1024.Decaps(sk_pq, wrapped_T) → half_T │ │   │   ┌──────────────────┐   │
-   │(Noise_KK1)│   │  │                                                │◄┼───┼──►│ NSC gateway      │   │
-   │  outer)  │   │  │  SE050.unlock(K_E)   → wrapped_E               │ │   │   │ 4 commands only  │   │
-   └──────────┘   │  │  ML-KEM-1024.Decaps(sk_pq, wrapped_E) → half_E │ │   │   └──────────────────┘   │
-                  │  │                                                │ │   │                          │
-   ┌──────────┐   │  │  E       = HKDF(half_T ⊕ half_E)               │ │   │  no secrets, ever        │
+   ┌──────────┐   │  │  OPTIGA.unlock(K_O)  → wrapped_O               │ │   │                          │
+   │ OPTIGA   │◄──┼──┤  ML-KEM-1024.Decaps(sk_pq, wrapped_O) → half_O │ │   │   ┌──────────────────┐   │
+   │Trust M V3│   │  │                                                │◄┼───┼──►│ NSC gateway      │   │
+   │(Shielded │   │  │  SE050.unlock(K_E)   → wrapped_E               │ │   │   │ 4 commands only  │   │
+   │  Conn)   │   │  │  ML-KEM-1024.Decaps(sk_pq, wrapped_E) → half_E │ │   │   └──────────────────┘   │
+   └──────────┘   │  │                                                │ │   │                          │
+   ┌──────────┐   │  │  E       = HKDF(half_O ⊕ half_E)               │ │   │  no secrets, ever        │
    │  SE050   │◄──┼──┤  mnemonic ← BIP-39(E)                          │ │   │                          │
    │  (SCP03  │   │  │  slh_seed ← HKDF(PBKDF2-SHA512(mnemonic))      │ │   └──────────────────────────┘
    │  outer)  │   │  │  sk       ← SLH-DSA-SHA2-192f.keygen           │ │
@@ -29,7 +29,7 @@ The design target is a **STM32U585 + Tropic01 + NXP EdgeLock SE050**. No single 
                   │  │                                                │ │
                   │  │  HUK-SAES wraps:                               │ │
                   │  │    • ML-KEM-1024 secret key (PQ wrap layer)    │ │
-                  │  │    • Tropic01 pairing key                      │ │
+                  │  │    • OPTIGA Trust M Platform Binding Secret     │ │
                   │  │    • SE050 SCP03 / ECKey static key            │ │
                   │  │  TRNG / HASH / SAES / TAMP / BOR               │ │
                   │  │  Inactivity timer (Secure-only TIM)            │ │
@@ -48,12 +48,12 @@ This is the *target architecture* for the production wallet. Every bullet here i
 
 - **Post-quantum transaction signatures** — SLH-DSA-SHA2-192f (FIPS 205), ~192-bit PQ security. Hash-based, no number-theoretic assumptions, no known quantum speedup beyond Grover (factored into the parameter choice). *(Currently SHA2-128f in QEMU; 192f migration is part of the production bring-up.)*
 - **Post-quantum firmware signing** — A custom OEMiROT verifies every secure-world and non-secure-world image with **ML-DSA-65 (FIPS 204) + Ed25519 hybrid**. Both signatures must verify; the classical leg is a transitional safety net while ML-DSA matures. *(Not yet implemented — target for STM32 bring-up.)*
-- **Post-quantum confidentiality of all SE traffic** — both halves of the entropy are **ML-KEM-1024-encapsulated + AES-256-GCM-sealed** *before* they ever touch the I²C/SPI bus. The classical Noise_KK1 / SCP03 layers carry only opaque ciphertext. *(Inner-wrap layer not yet implemented — target for STM32 bring-up.)*
+- **Post-quantum confidentiality of all SE traffic** — both halves of the entropy are **ML-KEM-1024-encapsulated + AES-256-GCM-sealed** *before* they ever touch the I²C bus. The classical Shielded Connection / SCP03 layers carry only opaque ciphertext. *(Inner-wrap layer not yet implemented — target for STM32 bring-up.)*
 - **TrustZone isolation** — signing key, PIN state, ML-KEM secret key, and crypto ops confined to the secure world. *(On real STM32U585 silicon the six-command gateway runs through proper ARMv8-M CMSE `cmse-nonsecure-entry` veneers — exercised end-to-end under `make e2e-hw`. The QEMU mps2-an505 build uses a shared-memory mailbox + SysTick poll instead, as a workaround for a QEMU 8.2.2 MPC S-alias bug that breaks the SG instruction check.)*
-- **Dual secure elements (split entropy)** — BIP-39 entropy is XOR-split across a Tropic01 and an NXP SE050. Compromising either chip in isolation reveals **zero** bits of the seed. *(Currently single-SE on Tropic01 only — split logic and SE050 driver are unwritten.)*
+- **Dual secure elements (split entropy)** — BIP-39 entropy is XOR-split across an Infineon OPTIGA Trust M V3 and an NXP SE050. Compromising either chip in isolation reveals **zero** bits of the seed. *(Fully implemented with dual-SE XOR split across OPTIGA Trust M and SE050. Both chips share I2C1 at addresses 0x30 and 0x48.)*
 - **Boot-time attestation of both chips** — fresh nonce signed by each SE's factory attestation key, verified against pinned vendor roots and pinned per-device UIDs. The classical SE attestation is treated as *proof of presence*; the cryptographic root of device identity is the ML-DSA-signed device certificate pinned in HDPL1 OEMiROT at provisioning. *(Not yet implemented — both attestation paths and the ML-DSA device cert are target.)*
-- **Mixed-RNG generation** — wallet entropy is `STM32_TRNG ⊕ Tropic01_TRNG ⊕ SE050_TRNG`. All three are post-quantum (Grover offers no meaningful speedup against true randomness). *(Currently uses host `/dev/urandom` via semihosting under QEMU.)*
-- **MAC-and-Destroy + AES-Auth retry limits** — 9 wrong PIN attempts on either chip permanently destroys its half. Counters are kept in lockstep via an intent log in S-flash so a power glitch grants neither free retries nor an accidental brick. *(MACD chain implemented for the Tropic01 path in QEMU; cross-chip lockstep / intent log not yet written.)*
+- **Mixed-RNG generation** — wallet entropy is `STM32_TRNG ⊕ OPTIGA_TRNG ⊕ SE050_TRNG`. All three are post-quantum (Grover offers no meaningful speedup against true randomness). *(Currently uses host `/dev/urandom` via semihosting under QEMU.)*
+- **Hardware-enforced retry limits** — 10 wrong PIN attempts on either chip locks out its half. OPTIGA Trust M uses authorization references with firmware-managed attempt counter (protected by shielded connection). SE050 uses UserID auth with hardware-enforced max attempts. Cross-chip lockstep via intent log in S-flash planned. *(Attempt counters implemented on both chips; cross-chip lockstep / intent log not yet written.)*
 - **PQ-safe symmetric crypto throughout** — AES-256-GCM, SHA-256, SHA-512, HMAC-SHA256, HKDF-SHA256, PBKDF2-HMAC-SHA512. Every key, MAC tag, and hash is sized so that Grover's algorithm leaves ≥ 128-bit effective security. *(Implemented in QEMU.)*
 - **No heap** — `#![no_std]`, stack-only allocation, no allocator attack surface. *(Implemented.)*
 - **Hardened gateway** — NS pointer validation, TOCTOU defense, sensitive memory zeroization, custom panic handler that clears secrets before halting. *(The same `cmd_*::run` handlers are shared across both transports — only the entry point differs. Exercised on QEMU and on real STM32U585 under `make e2e-hw`.)*

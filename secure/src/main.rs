@@ -58,6 +58,8 @@ mod semihosting_spi;
 mod timeout;
 #[cfg(all(feature = "tropic01-se", not(test)))]
 mod tropic01_se;
+#[cfg(all(feature = "optiga-trust-m", not(test)))]
+mod optiga;
 #[cfg(all(feature = "dual-se", not(test)))]
 mod dual_se;
 #[cfg(not(test))]
@@ -84,8 +86,8 @@ const SYST_RVR: *mut u32 = 0xE000_E014 as *mut u32;
 #[cfg(not(test))]
 const SYST_CVR: *mut u32 = 0xE000_E018 as *mut u32;
 
-// Global mock SE (used when mock-se feature is active)
-#[cfg(all(feature = "mock-se", not(test)))]
+// Global mock SE (used when mock-se feature is active, no real SE)
+#[cfg(all(feature = "mock-se", not(feature = "se050"), not(feature = "tropic01-se"), not(feature = "optiga-trust-m"), not(test)))]
 static mut SE: MockSecureElement = MockSecureElement::new();
 
 // Global TROPIC01 SE (standalone, without dual-se)
@@ -96,7 +98,11 @@ static mut SE: tropic01_se::Tropic01SecureElement = tropic01_se::Tropic01SecureE
 #[cfg(all(feature = "se050", not(feature = "dual-se"), not(test)))]
 static mut SE: se050::Se050 = se050::Se050::new();
 
-// Global dual-SE (Tropic01 + SE050 with XOR entropy split)
+// Global OPTIGA Trust M SE (standalone, without dual-se)
+#[cfg(all(feature = "optiga-trust-m", not(feature = "dual-se"), not(test)))]
+static mut SE: optiga::OptigaTrustM = optiga::OptigaTrustM::new();
+
+// Global dual-SE (OPTIGA Trust M + SE050 with XOR entropy split)
 #[cfg(all(feature = "dual-se", not(test)))]
 static mut SE: dual_se::DualSecureElement = dual_se::DualSecureElement::new();
 
@@ -262,12 +268,13 @@ fn main() -> ! {
     sau::init();
     secure_log!("[S] SAU + MPC configured");
 
-    // Initialize I2C1 for SE050 secure element BEFORE any SE operations.
+    // Initialize I2C1 for SE050 and/or OPTIGA Trust M BEFORE any SE operations.
+    // Both chips share I2C1 (SE050 at 0x48, OPTIGA at 0x30). No address conflict.
     // Must come after rcc::init() (clocks) and sau::init() (peripherals).
-    #[cfg(all(feature = "stm32u585", feature = "se050"))]
+    #[cfg(all(feature = "stm32u585", any(feature = "se050", feature = "optiga-trust-m")))]
     unsafe {
         hw::i2c_hw::init();
-        secure_log!("[S] I2C1 initialized for SE050 (PB8/PB9, 400 kHz)");
+        secure_log!("[S] I2C1 initialized (PB8/PB9, 400 kHz)");
     }
 
     // Initialize SPI2 for TROPIC01 secure element.
@@ -292,9 +299,16 @@ fn main() -> ! {
     unsafe {
         (&mut *core::ptr::addr_of_mut!(SE)).load_pairing_key();
     }
+
+    // Load the Platform Binding Secret for OPTIGA Trust M from secure flash.
+    // If blank (first boot), PBS will be provisioned during the seed wizard.
+    #[cfg(all(feature = "optiga-trust-m", not(feature = "dual-se"), not(test)))]
+    unsafe {
+        (&mut *core::ptr::addr_of_mut!(SE)).load_pbs();
+    }
     #[cfg(all(feature = "dual-se", not(test)))]
     unsafe {
-        (&mut *core::ptr::addr_of_mut!(SE)).load_pairing_key();
+        (&mut *core::ptr::addr_of_mut!(SE)).load_pbs();
     }
 
     // ---- SE050 factory reset ----
@@ -312,6 +326,30 @@ fn main() -> ! {
             Err(_e) => {
                 secure_log!("[S] SE050 factory reset FAILED");
                 ui::show_status("SE050 reset", "FAILED");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
+
+    // ---- SE050 factory-reset roundtrip e2e test ----
+    // Provisions a fresh test UserID + 2 gated data objects under a
+    // known PIN, then exercises user_factory_reset and verifies all
+    // three objects are gone. Reports PASS/FAIL via semihosting.
+    // Uses test object IDs (0x7B07_xxxx) so it's repeatable on any chip.
+    // Triggered by: make se050-reset-e2e
+    #[cfg(feature = "se050-reset-e2e")]
+    unsafe {
+        ui::show_status("Reset e2e", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        const TEST_PIN: &[u8] = b"e2etest!";
+        match se.run_factory_reset_roundtrip(TEST_PIN) {
+            Ok(()) => {
+                secure_log!("[S] [E2E] FACTORY-RESET ROUNDTRIP: PASS");
+                ui::show_status("Reset e2e", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E] FACTORY-RESET ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("Reset e2e", "FAIL");
             }
         }
         loop { cortex_m::asm::wfi(); }

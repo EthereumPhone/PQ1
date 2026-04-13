@@ -366,13 +366,28 @@ pub unsafe fn check_exists(
     }
 }
 
-/// Create a UserID authentication object with a PIN.
+/// Create a UserID authentication object with a PIN and a self-deletable
+/// policy.
 ///
 /// The SE050 verifies PINs internally and enforces an attempt counter.
 /// After `max_attempts` failures the UserID locks permanently.
 ///
+/// Critical: the embedded TAG_POLICY is what makes the UserID deletable.
+/// Without it, the SE050 default policy applies — which has no
+/// `POLICY_OBJ_ALLOW_DELETE` bit, and the UserID is stuck until a
+/// FACTORY_RESET credential wipes the chip (a credential never
+/// provisioned on OM-SE050ARD dev samples).
+///
+/// Policy set here:
+///   `auth_obj_id = <this UserID's own object ID>`   (self-referential)
+///   `ar_header   = ALLOW_WRITE | ALLOW_DELETE | REQUIRE_SM`
+///
+/// A session that verifies the PIN against THIS UserID gains the right
+/// to rotate the PIN (WRITE) and to delete the whole UserID (DELETE).
+/// This is what enables a user-initiated factory reset: enter PIN →
+/// delete every gated data object → delete the UserID → chip blank.
+///
 /// HW lesson #1: INS must be 0x41 (WRITE | AUTH_OBJECT), not 0x01.
-/// HW lesson #4: UserID objects cannot be deleted after creation.
 pub unsafe fn write_userid(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
@@ -381,6 +396,22 @@ pub unsafe fn write_userid(
     max_attempts: u16,
 ) -> Result<(), Se050Error> {
     let mut apdu = ApduBuf::new(0x80, INS_WRITE | INS_AUTH_OBJECT, P1_USERID, P2_DEFAULT);
+
+    // Self-deletable policy. 9-byte TLV value:
+    //   [entry_len=0x08, auth_obj_id(4) = self, ar_header(4)]
+    // ar_header bits (per se05x_const.h):
+    //   0x00100000 ALLOW_WRITE   (rotate PIN)
+    //   0x00040000 ALLOW_DELETE  (user-initiated factory reset)
+    //   0x00020000 REQUIRE_SM    (always over SCP03)
+    let auth = obj_id.to_be_bytes();
+    let ar: u32 = 0x0016_0000;
+    let ar_bytes = ar.to_be_bytes();
+    let policy: [u8; 9] = [
+        0x08,
+        auth[0], auth[1], auth[2], auth[3],
+        ar_bytes[0], ar_bytes[1], ar_bytes[2], ar_bytes[3],
+    ];
+    apdu.tlv(TAG_POLICY, &policy);
 
     if max_attempts > 0 {
         apdu.tlv(TAG_MAX_ATTEMPTS, &max_attempts.to_be_bytes());
@@ -572,17 +603,288 @@ pub unsafe fn delete_object(
     }
 }
 
+/// Delete a UserID-gated secure object through an authenticated session.
+///
+/// Wraps the `DELETE_OBJECT` APDU inside an INS_PROCESS envelope with
+/// `TAG_SESSION_ID` at the outer level (matching `read_authed` /
+/// `verify_session`). Earlier ad-hoc implementations that sent
+/// `INS=0x04 P2=0x28` with a top-level TAG_SESSION_ID were silently
+/// ignoring the session and applying plain-SCP03 privileges → 0x6985/6986.
+pub unsafe fn delete_object_authed(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    session_id: &[u8; 8],
+    obj_id: u32,
+) -> Result<(), Se050Error> {
+    // Inner delete command: MGMT / DELETE_OBJECT / TAG_1(obj_id)
+    let mut inner = [0u8; 32];
+    inner[0] = 0x80;
+    inner[1] = INS_MGMT;
+    inner[2] = P1_DEFAULT;
+    inner[3] = 0x28; // P2 = DELETE_OBJECT
+    let mut io = 5;
+    io = tlv_put_u32(&mut inner, io, TAG_1, obj_id);
+    let inner_lc = io - 5;
+    inner[4] = inner_lc as u8;
+
+    let mut apdu = ApduBuf::new(0x80, INS_PROCESS, P1_DEFAULT, P2_DEFAULT);
+    apdu.tlv(TAG_SESSION_ID, session_id);
+    apdu.tlv(TAG_1, &inner[..io]);
+    let cmd = apdu.finish(false);
+
+    let mut resp = [0u8; 64];
+    send_apdu(t1, scp03, cmd, &mut resp).map(|_| ())
+}
+
+/// P2 for ReadIDList (kSE05x_P2_LIST).
+const P2_LIST: u8 = 0x25;
+
+/// P2 for ReadObjectAttributes (kSE05x_P2_ATTRIBUTES) — diagnostic.
+const P2_ATTRIBUTES: u8 = 0x3B;
+
+/// Read the on-chip policy attributes of a secure object. Useful for
+/// debugging "why is delete refused?" questions — the response contains
+/// the TAG_POLICY the object was created with.
+pub unsafe fn read_object_attributes(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    obj_id: u32,
+    buf: &mut [u8],
+) -> Result<usize, Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_ATTRIBUTES);
+    apdu.tlv_u32(TAG_1, obj_id);
+    let cmd = apdu.finish(true);
+
+    let mut resp = [0u8; 256];
+    let n = send_apdu(t1, scp03, cmd, &mut resp)?;
+    if let Some((_, val, _)) = tlv_parse(&resp[..n]) {
+        let take = val.len().min(buf.len());
+        buf[..take].copy_from_slice(&val[..take]);
+        return Ok(take);
+    }
+    let take = n.min(buf.len());
+    buf[..take].copy_from_slice(&resp[..take]);
+    Ok(take)
+}
+
+/// Iteratively delete every user-created object on the SE050, mirroring
+/// the NXP SDK's `Se05x_API_DeleteAll_Iterative`.
+///
+/// Two-pass: first tries plain SCP03 delete (handles default-policy
+/// objects), then if `auth_obj_id`/`pin` are provided, creates a UserID
+/// session and retries through `delete_object_authed`. Self-deletes
+/// the UserID object at the end.
+///
+/// Skips reserved ranges (0x7FFFxxxx applet-reserved, 0x7DA0xxxx demo
+/// auth, 0xF000_0000+ IoT Hub trust-provisioned).
+///
+/// Returns (deleted, remaining_failed).
+pub unsafe fn iterative_delete_all(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    auth_obj_id: Option<u32>,
+    pin: Option<&[u8]>,
+) -> Result<(u16, u16), Se050Error> {
+    #[cfg(feature = "debug-log")]
+    cortex_m_semihosting::hprintln!("[SE050][erase] Pass 1: unauthenticated");
+
+    let (mut deleted, mut failed) = sweep(t1, scp03, None)?;
+
+    #[cfg(feature = "debug-log")]
+    cortex_m_semihosting::hprintln!(
+        "[SE050][erase] Pass 1 done: {} deleted, {} left", deleted, failed
+    );
+
+    if failed == 0 {
+        return Ok((deleted, 0));
+    }
+
+    let (uid, pin_bytes) = match (auth_obj_id, pin) {
+        (Some(u), Some(p)) => (u, p),
+        _ => return Ok((deleted, failed)),
+    };
+
+    if !check_exists(t1, scp03, uid).unwrap_or(false) {
+        return Ok((deleted, failed));
+    }
+
+    let session_id = match create_session(t1, scp03, uid) {
+        Ok(s) => s,
+        Err(_) => return Ok((deleted, failed)),
+    };
+
+    if verify_session(t1, scp03, &session_id, pin_bytes).is_err() {
+        let _ = close_session(t1, scp03, &session_id);
+        return Ok((deleted, failed));
+    }
+
+    #[cfg(feature = "debug-log")]
+    cortex_m_semihosting::hprintln!(
+        "[SE050][erase] Pass 2: authenticated (UserID=0x{:08x})", uid
+    );
+
+    let (auth_del, auth_fail) = sweep(t1, scp03, Some(&session_id))?;
+    deleted += auth_del;
+    failed = auth_fail;
+
+    // Self-delete the UserID. Requires the UserID to have been created
+    // with the self-deletable policy (see `write_userid`). Older UserIDs
+    // without the policy stay put.
+    if delete_object_authed(t1, scp03, &session_id, uid).is_ok()
+        && !check_exists(t1, scp03, uid).unwrap_or(true)
+    {
+        deleted += 1;
+    }
+
+    let _ = close_session(t1, scp03, &session_id);
+    Ok((deleted, failed))
+}
+
+unsafe fn sweep(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    session_id: Option<&[u8; 8]>,
+) -> Result<(u16, u16), Se050Error> {
+    let mut total_deleted = 0u16;
+    let mut last_failed = 0u16;
+
+    for _ in 0..10 {
+        let mut cycle_deleted = 0u16;
+        let mut cycle_failed = 0u16;
+        let mut output_offset: u16 = 0;
+
+        loop {
+            let (more, list_byte_len, d, f) =
+                delete_id_list_page(t1, scp03, output_offset, session_id)?;
+            cycle_deleted += d;
+            cycle_failed += f;
+            output_offset = output_offset.saturating_add(list_byte_len as u16);
+            if more != 0x01 || list_byte_len == 0 {
+                break;
+            }
+        }
+
+        total_deleted += cycle_deleted;
+        last_failed = cycle_failed;
+        if cycle_deleted == 0 {
+            break;
+        }
+    }
+
+    Ok((total_deleted, last_failed))
+}
+
+unsafe fn delete_id_list_page(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    output_offset: u16,
+    session_id: Option<&[u8; 8]>,
+) -> Result<(u8, usize, u16, u16), Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_LIST);
+    apdu.tlv(TAG_1, &output_offset.to_be_bytes());
+    apdu.tlv(TAG_2, &[0xFF]);
+    let cmd = apdu.finish(true);
+
+    let mut resp = [0u8; 1024];
+    let resp_len = send_apdu(t1, scp03, cmd, &mut resp)?;
+    if resp_len < 3 {
+        return Ok((0x00, 0, 0, 0));
+    }
+
+    // BER-TLV: TAG_1(more_indicator, 1B) + TAG_2(id_list, N*4 bytes).
+    // ID list can exceed 127 bytes so 0x82-prefixed lengths are required.
+    let mut more = 0u8;
+    let mut list_start = 0usize;
+    let mut list_len = 0usize;
+
+    let mut idx = 0;
+    while idx + 1 < resp_len {
+        let tag = resp[idx];
+        idx += 1;
+        let len_byte = resp[idx];
+        idx += 1;
+        let len: usize = if len_byte < 0x80 {
+            len_byte as usize
+        } else if len_byte == 0x81 && idx < resp_len {
+            let l = resp[idx] as usize;
+            idx += 1;
+            l
+        } else if len_byte == 0x82 && idx + 1 < resp_len {
+            let l = ((resp[idx] as usize) << 8) | (resp[idx + 1] as usize);
+            idx += 2;
+            l
+        } else {
+            break;
+        };
+        if tag == TAG_1 && len == 1 && idx < resp_len {
+            more = resp[idx];
+        } else if tag == TAG_2 {
+            list_start = idx;
+            list_len = len;
+        }
+        idx = idx.saturating_add(len);
+    }
+
+    let mut deleted = 0u16;
+    let mut failed = 0u16;
+    let list_end = list_start.saturating_add(list_len).min(resp_len);
+    let mut i = list_start;
+    while i + 3 < list_end {
+        let id = ((resp[i] as u32) << 24)
+            | ((resp[i + 1] as u32) << 16)
+            | ((resp[i + 2] as u32) << 8)
+            | (resp[i + 3] as u32);
+        i += 4;
+
+        if id == 0
+            || (id & 0xFFFF_0000) == 0x7FFF_0000
+            || (id & 0xFFF0_0000) == 0x7DA0_0000
+            || id >= 0xF000_0000
+        {
+            continue;
+        }
+
+        let result = match session_id {
+            Some(sid) => delete_object_authed(t1, scp03, sid, id),
+            None => delete_object(t1, scp03, id),
+        };
+
+        match result {
+            Ok(()) => {
+                if check_exists(t1, scp03, id).unwrap_or(false) {
+                    failed += 1;
+                } else {
+                    deleted += 1;
+                    #[cfg(feature = "debug-log")]
+                    cortex_m_semihosting::hprintln!(
+                        "[SE050][erase]   0x{:08x} deleted", id
+                    );
+                }
+            }
+            Err(_e) => {
+                failed += 1;
+                #[cfg(feature = "debug-log")]
+                cortex_m_semihosting::hprintln!(
+                    "[SE050][erase]   0x{:08x} FAILED: {:?}", id, _e
+                );
+            }
+        }
+    }
+
+    Ok((more, list_len, deleted, failed))
+}
+
 /// Request a platform-level factory reset via SetPlatformSCPRequest.
 ///
-/// This resets the SE050 to factory defaults, wiping ALL objects including
-/// UserID auth objects that cannot be individually deleted.
-/// Uses the platform SCP resource ID 0x7FFF0207 (HW lesson #8).
+/// Note: `SetPlatformSCPRequest` only toggles whether SCP03 is mandatory
+/// — it does NOT wipe objects. Kept for compatibility; prefer
+/// `iterative_delete_all` for actual object cleanup.
 pub unsafe fn platform_factory_reset(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
 ) -> Result<(), Se050Error> {
     const PLATFORM_SCP_OBJ: u32 = 0x7FFF_0207;
-    const P2_SCP: u8 = 0x35;  // kSE05x_P2_SCP
+    const P2_SCP: u8 = 0x52; // kSE05x_P2_SCP (correct NXP SDK value)
     const FACTORY_RESET_REQ: u8 = 0x02;
 
     let mut apdu = ApduBuf::new(0x80, INS_MGMT, P1_DEFAULT, P2_SCP);

@@ -1,8 +1,8 @@
 # PQSigner OS -- Work TODO
 
-Tracks what remains to go from "working single-SE demo" to "end-to-end hardware wallet on STM32U585 + Tropic01 + SE050, PIN-gated, doing real transactions."
+Tracks what remains to go from "working dual-SE demo" to "end-to-end hardware wallet on STM32U585 + OPTIGA Trust M + SE050, PIN-gated, doing real transactions."
 
-Last audited: 2026-04-12
+Last audited: 2026-04-13
 
 ---
 
@@ -252,3 +252,4 @@ When a task above is completed, update it here with the date and a one-line summ
 |------|------|---------|
 | 2026-04-12 | #2 Real SPI Driver | Bare-metal SPI driver (SPI2/PB12-15 default, SPI1/PE12-15 `spi1-arduino`) with `embedded_hal::SpiDevice` impl. Tested on real STM32U585 + Tropic01 MicroE Clicker |
 | 2026-04-12 | #1 Dual-SE Entropy Split | XOR split via `DualSecureElement` in `dual_se.rs`, `dual-se` feature flag |
+| 2026-04-13 | OPTIGA Trust M driver | Full IFX I2C stack + shielded connection + WalletStore impl. Dual-SE updated to OPTIGA Trust M + SE050 |
