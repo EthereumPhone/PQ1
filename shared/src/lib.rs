@@ -91,6 +91,7 @@ pub const CMD_NONE: u32 = 0;
 pub const CMD_GET_REMAINING: u32 = 1;
 pub const CMD_REQUEST_UNLOCK: u32 = 2;
 pub const CMD_GET_PUBKEY: u32 = 3;
+// CMD 4 reserved (was CMD_SIGN in v1)
 pub const CMD_CLEAR_SIGN: u32 = 5;
 /// CMD_CLEAR_SIGN_MSG — EIP-712 typed-data clear signing (M4).
 ///
@@ -186,6 +187,40 @@ pub const CMD_GET_MAIN_PUBKEY: u32 = 9;
 /// into the NS output buffer.
 pub const CMD_SIGN_BOOTSTRAP: u32 = 10;
 
+/// CMD_IS_UNLOCKED — returns 1 if PIN-verified this session, 0 otherwise.
+pub const CMD_IS_UNLOCKED: u32 = 11;
+
+/// CMD_LOCK — zeroize all cached secrets and mark device as locked.
+pub const CMD_LOCK: u32 = 12;
+
+/// CMD_SIGN_MESSAGE — EIP-191 personal_sign. Computes
+/// `keccak256("\x19Ethereum Signed Message:\n" || len || msg)`, displays
+/// the message on the trusted UI, and signs the digest with SLH-DSA.
+///
+/// Payload wire format:
+///   [0..4)    key_index   u32 BE
+///   [4..8)    ots_index   u32 BE
+///   [8..16)   chain_id    u64 BE  (for display only)
+///   [16..18)  msg_len     u16 BE
+///   [18..18+msg_len)  message bytes
+///
+/// On success the secure world writes a PQSignatureWrapper
+/// (WRAPPER_TOTAL_LEN bytes) into the NS output buffer.
+pub const CMD_SIGN_MESSAGE: u32 = 13;
+
+/// CMD_GET_WALLET_ADDRESS — compute CREATE2 wallet address from stored
+/// bootstrap VK + caller-supplied factory parameters, display it on
+/// the trusted OLED for independent verification.
+///
+/// Payload wire format:
+///   [0..8)    chain_id         u64 BE  (displayed to user)
+///   [8..28)   factory_address  20 bytes
+///   [28..60)  init_code_hash   32 bytes
+///
+/// On success the secure world writes the 20-byte address to the NS
+/// output buffer and displays it on the OLED.
+pub const CMD_GET_WALLET_ADDRESS: u32 = 14;
+
 // ---------------------------------------------------------------------------
 // CMD_GET_MAIN_PUBKEY wire format
 // ---------------------------------------------------------------------------
@@ -263,6 +298,78 @@ pub const INS_UNLOCK: u8 = 0x12;
 pub const P1_FIRST: u8 = 0x00;
 pub const P1_MORE: u8 = 0x01;
 
+// ---------------------------------------------------------------------------
+// USB APDU protocol v2 — PQSigner native (replaces Keycard Shell compat)
+// ---------------------------------------------------------------------------
+
+/// v2 class byte. Companion tries 0xF0 first; SW_CLA_NOT_SUPPORTED means
+/// legacy firmware that only speaks CLA 0xE0.
+pub const APDU_CLA_V2: u8 = 0xF0;
+
+// -- Device info & status (0x01-0x0F) --
+pub const INS_V2_GET_DEVICE_INFO: u8 = 0x01;
+pub const INS_V2_GET_STATUS: u8 = 0x02;
+
+// -- Session management (0x10-0x1F) --
+pub const INS_V2_UNLOCK: u8 = 0x10;
+pub const INS_V2_LOCK: u8 = 0x11;
+
+// -- Key queries (0x20-0x2F) --
+pub const INS_V2_GET_BOOTSTRAP_VK: u8 = 0x20;
+pub const INS_V2_GET_MAIN_VK: u8 = 0x21;
+
+// -- UserOp signing (0x30-0x3F) --
+pub const INS_V2_SIGN_USEROP: u8 = 0x30;
+pub const INS_V2_SIGN_CLEAR_USEROP: u8 = 0x31;
+
+// -- Message / typed-data signing (0x40-0x4F) --
+pub const INS_V2_SIGN_MESSAGE: u8 = 0x40;
+pub const INS_V2_SIGN_EIP712: u8 = 0x41;
+
+// -- Bootstrap operations (0x50-0x5F) --
+pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
+
+// -- Address & account helpers (0x60-0x6F) --
+pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
+
+// -- Continuation (shared with v1) --
+pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
+
+/// v2 P1: bit 7 = chaining flag (ISO 7816-4 standard).
+/// 0x00 = last or only block, 0x80 = more blocks follow.
+pub const P1_V2_LAST: u8 = 0x00;
+pub const P1_V2_MORE: u8 = 0x80;
+
+// ---------------------------------------------------------------------------
+// PQSignatureWrapper — structured signing response (v2)
+// ---------------------------------------------------------------------------
+
+/// Signer type discriminator in the PQSignatureWrapper.
+pub const SIGNER_MAIN: u8 = 0x00;
+pub const SIGNER_BOOTSTRAP: u8 = 0x01;
+
+/// Fixed-size wrapper header written before the raw SLH-DSA signature:
+///   signer_type(1) + key_index(4) + ots_index(4) + pk_seed(32) + pk_root(32)
+pub const WRAPPER_HEADER_LEN: usize = 1 + 4 + 4 + 32 + 32; // 73
+
+/// Total PQSignatureWrapper size = header + raw signature.
+pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 17161
+
+/// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
+pub const CTX_DEPLOY: u8 = 0x00;
+pub const CTX_ROTATE: u8 = 0x01;
+pub const CTX_GENERIC: u8 = 0x02;
+
+/// v2 SIGN_USEROP fixed header length (before tx_len):
+///   key_index(4) + ots_index(4) + sender(20) + entry_point(20) +
+///   chain_id(8) + nonce(32) + call_gas(32) + ver_gas(32) +
+///   pre_gas(32) + max_fee(32) + max_prio(32) + init_code_hash(32) +
+///   paymaster_hash(32) = 312
+pub const USEROP_V2_HEADER_LEN: usize = 4 + 4 + 20 + 20 + 8 + 32 * 7 + 32 * 2;
+
+/// v2 protocol version reported in GET_DEVICE_INFO.
+pub const PROTOCOL_VERSION: u16 = 0x0200;
+
 /// ISO 7816-4 status words
 pub const SW_OK: u16 = 0x9000;
 pub const SW_MORE_DATA: u8 = 0x61; // SW1=0x61, SW2=remaining (0xFF if >255)
@@ -274,6 +381,8 @@ pub const SW_INS_NOT_SUPPORTED: u16 = 0x6D00;
 pub const SW_CLA_NOT_SUPPORTED: u16 = 0x6E00;
 pub const SW_FEATURE_NOT_SUPPORTED: u16 = 0x6501;
 pub const SW_INTERNAL_ERROR: u16 = 0x6F00;
+/// Referenced data invalidated — idle timeout wipe occurred mid-operation.
+pub const SW_REFERENCED_DATA_INVALIDATED: u16 = 0x6984;
 
 /// Maximum data bytes per APDU (short form Lc, 1 byte).
 pub const APDU_MAX_DATA: usize = 255;

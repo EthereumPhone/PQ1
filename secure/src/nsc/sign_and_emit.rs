@@ -16,7 +16,7 @@
 //! the SigningKey for the smallest possible window — the stack slot
 //! is wiped by SLH-DSA's own `Drop` impl when the function returns.
 
-use sphincs_tz_shared::{NscStatus, SIGNATURE_LEN};
+use sphincs_tz_shared::{NscStatus, SIGNATURE_LEN, WRAPPER_HEADER_LEN};
 use zeroize::Zeroize;
 
 use super::state::SecureState;
@@ -112,6 +112,146 @@ pub(super) unsafe fn decrypt_and_sign(
     crate::ui::show_status(success_banner, "");
 
     // Brief pause so the user sees "Signed", then restore idle screen.
+    for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
+    crate::ui::show_status("PQSigner OS", "Ready");
+
+    NscStatus::Ok as u32
+}
+
+/// v2 wrapper variant: writes a 73-byte PQSignatureWrapper header
+/// (signer_type + key_index + ots_index + pk_seed_padded + pk_root_padded)
+/// followed by the 17,088-byte raw SLH-DSA signature. Total output:
+/// `WRAPPER_TOTAL_LEN` (17,161) bytes.
+///
+/// The caller must have validated `sig_ptr` for `WRAPPER_TOTAL_LEN` bytes.
+///
+/// SAFETY: `sig_ptr` must point at a pre-validated `WRAPPER_TOTAL_LEN`-byte
+/// NS-writable region.
+pub(super) unsafe fn decrypt_and_sign_wrapped(
+    state: &SecureState,
+    msg_hash: &[u8; 32],
+    sig_ptr: *mut u8,
+    signer_type: u8,
+    key_index: u32,
+    ots_index: u32,
+    success_banner: &str,
+) -> u32 {
+    // 1. Read the encrypted entropy blob from the SE.
+    let mut entropy_blob = [0u8; 64];
+    let entropy_blob_len = {
+        use crate::secure_element::WalletStore;
+        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+        match se.read_entropy_blob(&mut entropy_blob) {
+            Ok(len) => len,
+            Err(_) => return NscStatus::InternalError as u32,
+        }
+    };
+
+    // 2. Decrypt the entropy.
+    let mut entropy = match crate::crypto::decrypt_entropy_blob(
+        &entropy_blob[..entropy_blob_len],
+        &state.master_secret,
+    ) {
+        Ok(e) => e,
+        Err(_) => {
+            entropy_blob.zeroize();
+            return NscStatus::CryptoError as u32;
+        }
+    };
+    entropy_blob.zeroize();
+
+    // 3. Derive the correct signing key based on signer_type.
+    //    For MAIN: uses the default derivation (legacy single-key path).
+    //    For BOOTSTRAP: uses the bootstrap derivation path.
+    //    Per-chain derivation for MAIN with key_index is handled by callers
+    //    that pass the appropriate msg_hash (the userOpHash already encodes
+    //    chain-specific data).
+    let signing_key = if signer_type == sphincs_tz_shared::SIGNER_BOOTSTRAP {
+        crate::crypto::derive_bootstrap_key_from_entropy(&entropy)
+    } else {
+        crate::crypto::derive_signing_key_from_entropy(&entropy)
+    };
+    entropy.zeroize();
+
+    // 4. Write the 73-byte wrapper header via volatile writes.
+    let mut hdr_pos: usize = 0;
+
+    // signer_type (1 byte)
+    core::ptr::write_volatile(sig_ptr.add(hdr_pos), signer_type);
+    hdr_pos += 1;
+
+    // key_index (4 bytes BE)
+    let ki = key_index.to_be_bytes();
+    for b in &ki {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos), *b);
+        hdr_pos += 1;
+    }
+
+    // ots_index (4 bytes BE)
+    let oi = ots_index.to_be_bytes();
+    for b in &oi {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos), *b);
+        hdr_pos += 1;
+    }
+
+    // pk_seed (32 bytes: raw 16 bytes right-padded to bytes32)
+    {
+        use signature::Keypair;
+        let vk_bytes = signing_key.verifying_key().to_bytes();
+        // VK = pk_seed[16] || pk_root[16]
+        // Pad pk_seed to 32 bytes
+        for i in 0..16 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), vk_bytes[i]);
+        }
+        for i in 16..32 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), 0u8);
+        }
+        hdr_pos += 32;
+
+        // pk_root (32 bytes: raw 16 bytes right-padded to bytes32)
+        for i in 0..16 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), vk_bytes[16 + i]);
+        }
+        for i in 16..32 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), 0u8);
+        }
+        hdr_pos += 32;
+    }
+
+    debug_assert_eq!(hdr_pos, WRAPPER_HEADER_LEN);
+
+    // 5. Hedged sign
+    let mut rand_buf = [0u8; 16];
+    derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
+
+    use slh_dsa::Sha2_128f;
+    use slh_dsa::SigningKey as Sk;
+    let sig = match <Sk<Sha2_128f>>::try_sign_with_context(
+        &signing_key,
+        msg_hash,
+        &[],
+        Some(&rand_buf),
+    ) {
+        Ok(s) => s,
+        Err(_) => {
+            rand_buf.zeroize();
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    // 6. Write the raw signature after the header.
+    let sig_bytes = sig.to_bytes();
+    let sig_offset = WRAPPER_HEADER_LEN;
+    for i in 0..SIGNATURE_LEN {
+        core::ptr::write_volatile(sig_ptr.add(sig_offset + i), sig_bytes[i]);
+    }
+
+    // 7. Cleanup
+    rand_buf.zeroize();
+
+    crate::timeout::reset_activity();
+    crate::ui::show_status(success_banner, "");
+
     for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
     crate::ui::show_status("PQSigner OS", "Ready");
 
