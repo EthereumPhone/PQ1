@@ -356,6 +356,22 @@ se050-reset:
 	@echo "==> Running factory reset (watch semihosting output)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# SE050 factory-reset roundtrip e2e test on real hardware.
+# Provisions a fresh test UserID + 2 gated data objects, exercises
+# user_factory_reset, then verifies all three objects are gone.
+# Uses test object IDs (0x7B07_xxxx) so it doesn't touch any real
+# wallet provisioning. Repeatable on the same chip.
+# Watch semihosting for "[E2E] FACTORY-RESET ROUNDTRIP: PASS"/"FAIL".
+se050-reset-e2e:
+	@echo "==> Building SE050 reset-roundtrip e2e firmware..."
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050-reset-e2e,ui-noop,stm32u585,debug-log
+	@echo "==> Flashing e2e firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Running e2e (watch semihosting output)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # SE050 + OLED interactive build (real SE050, real OLED display, real buttons).
 # Full first-boot wizard: user enters PIN and creates/restores mnemonic.
 # Both the SSD1306 OLED and SE050 share I2C1 (PB8/PB9) at 400 kHz.

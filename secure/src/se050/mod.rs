@@ -32,6 +32,17 @@ const VK_OBJ: u32 = 0x7B06_0002;
 /// Bootstrap verifying key (32 bytes), policy requires UserID auth.
 const BOOTSTRAP_VK_OBJ: u32 = 0x7B06_0003;
 
+// -- Factory-reset self-test object IDs --
+// Distinct from production IDs so the test never collides with a real
+// provisioning, and is repeatable on a chip that already has prod
+// objects at 0x7B06_xxxx.
+#[cfg(feature = "se050-reset-e2e")]
+const TEST_USERID_OBJ: u32 = 0x7B07_0000;
+#[cfg(feature = "se050-reset-e2e")]
+const TEST_DATA_OBJ_A: u32 = 0x7B07_0001;
+#[cfg(feature = "se050-reset-e2e")]
+const TEST_DATA_OBJ_B: u32 = 0x7B07_0002;
+
 // ---------------------------------------------------------------------------
 // Se050
 // ---------------------------------------------------------------------------
@@ -188,6 +199,157 @@ impl Se050 {
         }
         self.ready = false;
         self.scp03 = scp03::Scp03Session::new();
+        Ok(())
+    }
+
+    /// Self-contained factory-reset roundtrip test.
+    ///
+    /// 1. Cleanup: if a previous test left a UserID at `TEST_USERID_OBJ`,
+    ///    log in with `pin` and wipe it (best-effort).
+    /// 2. Provision: create a fresh UserID with the self-deletable
+    ///    policy (via `apdu::write_userid`) at `TEST_USERID_OBJ`, plus
+    ///    two gated binary data objects.
+    /// 3. Verify-presence: assert all three objects exist on chip.
+    /// 4. Reset: open a session against the test UserID, verify `pin`,
+    ///    delete both data objects, then self-delete the UserID.
+    /// 5. Verify-absence: assert none of the three objects remain.
+    ///
+    /// Returns `Ok(())` on full success, `Err` describing which step
+    /// failed otherwise. Never panics.
+    ///
+    /// Uses `0x7B07_xxxx` object IDs so it never collides with a real
+    /// dual-SE provisioning at `0x7B06_xxxx`. Repeatable on the same
+    /// chip — step 1 cleans up after itself.
+    #[cfg(feature = "se050-reset-e2e")]
+    pub fn run_factory_reset_roundtrip(&mut self, pin: &[u8]) -> Result<(), Se050Error> {
+        self.init()?;
+
+        // ---- 1. Cleanup any prior test residue ----
+        unsafe {
+            if apdu::check_exists(&mut self.t1, &mut self.scp03, TEST_USERID_OBJ)
+                .unwrap_or(false)
+            {
+                #[cfg(feature = "debug-log")]
+                cortex_m_semihosting::hprintln!(
+                    "[E2E] Prior test UserID present, wiping..."
+                );
+
+                if let Ok(sid) = apdu::create_session(
+                    &mut self.t1, &mut self.scp03, TEST_USERID_OBJ
+                ) {
+                    if apdu::verify_session(
+                        &mut self.t1, &mut self.scp03, &sid, pin
+                    ).is_ok() {
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_DATA_OBJ_A
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_DATA_OBJ_B
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_USERID_OBJ
+                        );
+                    }
+                    let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                }
+
+                // If still present, the prior policy wasn't self-deletable
+                // (was created before the fix). The test cannot proceed.
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, TEST_USERID_OBJ)
+                    .unwrap_or(true)
+                {
+                    return Err(Se050Error::Status(0x6986));
+                }
+            }
+        }
+
+        #[cfg(feature = "debug-log")]
+        cortex_m_semihosting::hprintln!("[E2E] step 1: cleanup OK");
+
+        // ---- 2. Provision fresh UserID + 2 gated data objects ----
+        unsafe {
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03, TEST_USERID_OBJ, pin, 9,
+            )?;
+
+            let payload_a = [0xA0u8; 32];
+            let payload_b = [0xB1u8; 32];
+            apdu::write_binary_gated(
+                &mut self.t1, &mut self.scp03,
+                TEST_DATA_OBJ_A, &payload_a, TEST_USERID_OBJ,
+            )?;
+            apdu::write_binary_gated(
+                &mut self.t1, &mut self.scp03,
+                TEST_DATA_OBJ_B, &payload_b, TEST_USERID_OBJ,
+            )?;
+        }
+
+        #[cfg(feature = "debug-log")]
+        cortex_m_semihosting::hprintln!("[E2E] step 2: provision OK");
+
+        // ---- 3. Verify presence ----
+        unsafe {
+            for obj in &[TEST_USERID_OBJ, TEST_DATA_OBJ_A, TEST_DATA_OBJ_B] {
+                if !apdu::check_exists(&mut self.t1, &mut self.scp03, *obj)
+                    .unwrap_or(false)
+                {
+                    #[cfg(feature = "debug-log")]
+                    cortex_m_semihosting::hprintln!(
+                        "[E2E] presence check FAILED for 0x{:08x}", obj
+                    );
+                    return Err(Se050Error::Status(0x6A82));
+                }
+            }
+        }
+
+        #[cfg(feature = "debug-log")]
+        cortex_m_semihosting::hprintln!("[E2E] step 3: presence OK (3/3)");
+
+        // ---- 4. Factory reset using the same PIN ----
+        unsafe {
+            let sid = apdu::create_session(
+                &mut self.t1, &mut self.scp03, TEST_USERID_OBJ,
+            )?;
+            apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, pin)
+                .map_err(|e| {
+                    let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                    e
+                })?;
+
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_DATA_OBJ_A,
+            )?;
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_DATA_OBJ_B,
+            )?;
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_USERID_OBJ,
+            )?;
+
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+        }
+
+        #[cfg(feature = "debug-log")]
+        cortex_m_semihosting::hprintln!("[E2E] step 4: factory reset OK");
+
+        // ---- 5. Verify absence ----
+        unsafe {
+            for obj in &[TEST_USERID_OBJ, TEST_DATA_OBJ_A, TEST_DATA_OBJ_B] {
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj)
+                    .unwrap_or(true)
+                {
+                    #[cfg(feature = "debug-log")]
+                    cortex_m_semihosting::hprintln!(
+                        "[E2E] absence check FAILED for 0x{:08x}", obj
+                    );
+                    return Err(Se050Error::Status(0x6A83));
+                }
+            }
+        }
+
+        #[cfg(feature = "debug-log")]
+        cortex_m_semihosting::hprintln!("[E2E] step 5: absence OK (3/3)");
+
         Ok(())
     }
 

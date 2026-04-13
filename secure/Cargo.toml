@@ -64,6 +64,7 @@ se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 heade
 optiga-trust-m = []  # Infineon OPTIGA Trust M V3 via I2C1 (TRUSTMV3SHIELDTOBO1 on Arduino R3 headers)
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
+se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
 spi1-arduino = []  # Use SPI1/PE12-PE15 (Arduino R3 headers) instead of SPI2/PB12-PB15 for TROPIC01
 
 [dev-dependencies]

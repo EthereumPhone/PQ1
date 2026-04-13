@@ -315,6 +315,30 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- SE050 factory-reset roundtrip e2e test ----
+    // Provisions a fresh test UserID + 2 gated data objects under a
+    // known PIN, then exercises user_factory_reset and verifies all
+    // three objects are gone. Reports PASS/FAIL via semihosting.
+    // Uses test object IDs (0x7B07_xxxx) so it's repeatable on any chip.
+    // Triggered by: make se050-reset-e2e
+    #[cfg(feature = "se050-reset-e2e")]
+    unsafe {
+        ui::show_status("Reset e2e", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        const TEST_PIN: &[u8] = b"e2etest!";
+        match se.run_factory_reset_roundtrip(TEST_PIN) {
+            Ok(()) => {
+                secure_log!("[S] [E2E] FACTORY-RESET ROUNDTRIP: PASS");
+                ui::show_status("Reset e2e", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E] FACTORY-RESET ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("Reset e2e", "FAIL");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- e2e-test fast-path ----
     //
     // Skip the entire interactive seed wizard + PIN entry. Provision
