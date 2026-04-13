@@ -31,7 +31,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen
 
 all: secure nonsecure
 
@@ -376,6 +376,20 @@ button-test:
 	@echo "==> Flashing button test firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
 	@echo "==> Running button test (Ctrl-C to quit)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# Companion-app QR-code screen in isolation: flash a firmware that
+# renders the QR + install URL on the OLED at boot and halts. Nothing
+# else runs — no SEs, no PIN flow, no NS world. Power-cycle or press
+# reset to re-run. Requires the SSD1306 OLED on I2C1 (PB8/PB9).
+qr-screen:
+	@echo "==> Building QR-screen test firmware..."
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features qr-screen-test,debug-log
+	@echo "==> Flashing QR-screen firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Running QR screen (Ctrl-C to quit; the OLED holds the image)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 # STSAFE-A110 I2C2 bus probe: detect on-board secure element.

@@ -69,6 +69,10 @@ spi1-arduino = []  # Use SPI1/PE12-PE15 (Arduino R3 headers) instead of SPI2/PB1
 stsafe-probe = ["stm32u585", "mock-se"]  # I2C2 bus scan to detect on-board STSAFE-A110
 gpio-buttons = ["stm32u585"]  # GPIO button driver: PI2 (LEFT) + PA15 (RIGHT) on CN14
 button-test = ["stm32u585", "mock-se", "gpio-buttons"]  # Flash + run GPIO button test
+qr-screen-test = ["ui-oled", "stm32u585", "mock-se"]  # Render QR + companion-app URL at boot, then halt. Use `make qr-screen`.
+
+[build-dependencies]
+qrcodegen = "1.8"
 
 [dev-dependencies]
 hex = { workspace = true }

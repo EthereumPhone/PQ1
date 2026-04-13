@@ -292,6 +292,19 @@ fn main() -> ! {
     secure_log!("[S] UI initialized");
     ui::splash();
 
+    // ---- QR-code screen test ----
+    // Renders the companion-app QR + URL, then halts. Used to iterate on
+    // the QR layout in isolation without going through the rest of boot.
+    // Triggered by: make qr-screen
+    #[cfg(feature = "qr-screen-test")]
+    {
+        ui::display().qr_splash();
+        secure_log!("[S] QR screen rendered — halting");
+        loop {
+            cortex_m::asm::wfi();
+        }
+    }
+
     // Try to load a previously saved per-device pairing key for the
     // Tropic01. If found, sessions use pairing slot 1 (per-device)
     // instead of slot 0 (shared devkit keys).
