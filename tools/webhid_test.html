@@ -143,7 +143,7 @@ async function receiveHidApdu() {
 
     while (true) {
         const report = await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Timeout (10s)')), 10000);
+            const timeout = setTimeout(() => reject(new Error('Timeout (120s)')), 120000);
             device.addEventListener('inputreport', (e) => {
                 clearTimeout(timeout);
                 resolve(new Uint8Array(e.data.buffer));

@@ -110,6 +110,11 @@ pub(super) unsafe fn decrypt_and_sign(
 
     crate::timeout::reset_activity();
     crate::ui::show_status(success_banner, "");
+
+    // Brief pause so the user sees "Signed", then restore idle screen.
+    for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
+    crate::ui::show_status("PQSigner OS", "Ready");
+
     NscStatus::Ok as u32
 }
 

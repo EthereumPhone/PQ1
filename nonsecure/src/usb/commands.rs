@@ -12,6 +12,7 @@
 //!   single key derived from the BIP-39 seed)
 
 use sphincs_tz_shared::*;
+use crate::aa;
 use crate::nsc_api;
 
 // ---------------------------------------------------------------------------
@@ -24,8 +25,8 @@ const CHAIN_BUF_LEN: usize = 8192;
 /// Signature buffer with room for SW.
 static mut SIG_BUF: [u8; SIGNATURE_LEN + 2] = [0u8; SIGNATURE_LEN + 2];
 
-/// Sign payload assembly buffer.
-const SIGN_PAYLOAD_BUF_LEN: usize = 1 + 4 + 4096 + 4 + 1120 + 64;
+/// Sign payload assembly buffer (must fit full UserOp wire format).
+const SIGN_PAYLOAD_BUF_LEN: usize = USEROP_PREFIX_LEN + 4096 + 4 + 1120 + 64;
 static mut SIGN_PAYLOAD_BUF: [u8; SIGN_PAYLOAD_BUF_LEN] = [0u8; SIGN_PAYLOAD_BUF_LEN];
 
 /// Clear-sign payload buffer.
@@ -321,14 +322,14 @@ impl CommandRouter {
             return self.sw_response(SW_WRONG_DATA);
         }
 
-        // Parse BIP32 path
+        // Parse BIP32 path (accepted but ignored — SLH-DSA uses single key)
         let path_elements = data[0] as usize;
         let path_bytes = 1 + path_elements * 4;
         if len < path_bytes {
             return self.sw_response(SW_WRONG_DATA);
         }
 
-        // Extract transaction data (everything after the BIP32 path)
+        // Extract raw EIP-1559 transaction (everything after the BIP32 path)
         let tx_data = &data[path_bytes..];
         let tx_len = len - path_bytes;
 
@@ -336,17 +337,57 @@ impl CommandRouter {
             return self.sw_response(SW_WRONG_LENGTH);
         }
 
-        // Build the sign payload in the format the NSC gateway expects:
-        // [has_bundle:u8=0][tx_len:u32 LE][tx_bytes]
-        let mut p = 0usize;
-        SIGN_PAYLOAD_BUF[p] = 0u8; // has_bundle = false
-        p += 1;
-        SIGN_PAYLOAD_BUF[p..p + 4].copy_from_slice(&(tx_len as u32).to_le_bytes());
-        p += 4;
-        SIGN_PAYLOAD_BUF[p..p + tx_len].copy_from_slice(tx_data);
-        p += tx_len;
+        // Extract chain_id from the EIP-1559 envelope for the UserOp wrapper.
+        let chain_id = match aa::extract_chain_id(tx_data) {
+            Some(id) => id,
+            None => return self.sw_response(SW_WRONG_DATA),
+        };
 
-        let status = nsc_api::sign_userop(&SIGN_PAYLOAD_BUF[..p], &mut SIG_BUF[..SIGNATURE_LEN]);
+        // Wrap the raw tx as an ERC-4337 UserOp. The secure world will
+        // independently re-parse the inner tx and recompute the userOpHash,
+        // so default AA parameters here cannot cause silent fund theft —
+        // they only affect whether the on-chain verification succeeds.
+        //
+        // For production, the host wallet should supply real AA params via
+        // an extended APDU format (P2=0x01). These defaults enable basic
+        // development and testing.
+        static ENTRYPOINT_V06: [u8; 20] = [
+            0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+            0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
+        ];
+        let zero20 = [0u8; 20];
+        let zero32 = [0u8; 32];
+        let mut nonce = [0u8; 32];
+        nonce[31] = 1;
+        let mut call_gas = [0u8; 32];
+        call_gas[29] = 0x01; call_gas[30] = 0x86; call_gas[31] = 0xa0; // 100_000
+        let mut ver_gas = [0u8; 32];
+        ver_gas[29] = 0x03; ver_gas[30] = 0x0d; ver_gas[31] = 0x40; // 200_000
+        let mut pre_gas = [0u8; 32];
+        pre_gas[30] = 0x52; pre_gas[31] = 0x08; // 21_000
+        let mut max_fee = [0u8; 32];
+        let fee_bytes = 50_000_000_000u64.to_be_bytes();
+        max_fee[24..32].copy_from_slice(&fee_bytes);
+        let mut max_prio = [0u8; 32];
+        let prio_bytes = 2_000_000_000u64.to_be_bytes();
+        max_prio[24..32].copy_from_slice(&prio_bytes);
+
+        let wrap = aa::UserOpWrapper {
+            sender: &zero20,
+            entry_point: &ENTRYPOINT_V06,
+            chain_id,
+            nonce: &nonce,
+            call_gas_limit: &call_gas,
+            verification_gas_limit: &ver_gas,
+            pre_verification_gas: &pre_gas,
+            max_fee_per_gas: &max_fee,
+            max_priority_fee_per_gas: &max_prio,
+            init_code_hash: &aa::KECCAK_EMPTY,
+            paymaster_and_data_hash: &aa::KECCAK_EMPTY,
+        };
+
+        let payload_len = aa::build_userop_payload(&wrap, tx_data, &mut SIGN_PAYLOAD_BUF);
+        let status = nsc_api::sign_userop(&SIGN_PAYLOAD_BUF[..payload_len], &mut SIG_BUF[..SIGNATURE_LEN]);
         self.sign_result(status)
     }
 

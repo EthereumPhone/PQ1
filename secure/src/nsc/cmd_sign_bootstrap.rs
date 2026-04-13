@@ -138,5 +138,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     rand_buf.zeroize();
     crate::timeout::reset_activity();
     crate::ui::show_status("Signed", "");
+
+    for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
+    crate::ui::show_status("PQSigner OS", "Ready");
+
     NscStatus::Ok as u32
 }
