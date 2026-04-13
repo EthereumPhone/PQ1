@@ -107,6 +107,25 @@ function hexCompact(arr) {
 function u16be(hi, lo) { return (hi << 8) | lo; }
 function u32be(a, b, c, d) { return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0; }
 
+function b64toU8(b64) {
+    const bin = atob(b64);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8;
+}
+
+// Pre-built Merkle-verified bundles extracted from the firmware's embedded DBs.
+// These match the test vectors used by `make e2e` and allow the secure world to
+// verify the bundle against its embedded Merkle root.
+
+// ERC20 metadata bundle for USDC mainnet (chain=1, contract=0xa0b86991...)
+// Wire: chain_id(8) + contract(20) + decimals(1) + name_len(1) + name + symbol_len(1) + symbol + leaf_index(4) + proof_depth(4) + proof(8*32)
+const ERC20_USDC_BUNDLE = b64toU8('AQAAAAAAAACguGmRxiGLNsHRnUounrDONgbrSAYHVVNEQ29pbgRVU0RDMgAAAAgAAACTsaxEtcIT8ARgYs6zIODdDOh4mKXVuBu6wafhIyw+iHlUJ3dZFZgK4Vf+zT7wKKVoqvmGZADcfufFiGc3eq8Ns3njgCj5U9E2HZeye40NzyNjQD6Wcm3ZognLMJKbmevCslZQKnCnM1WMMDwmp4aDBKl/Y7Xo0QjpRoeokSSbTdUCcmB7lWto65qbmIvZ/IMdXD5qVulgPfCdilQrISB35ZDkwGv1xtkbl3O8jzBo+iTTSTCsYaWFquns76/4v5sZrS7WmU6UZhDP7/IjhFbHQGOr5qgW6xTZRPvR3TgtJBaneDsBfdOVhONSrUUkG4c3N7b3RWrE4vMpC8QpY09h');
+
+// VK bundle for Aave V3 Pool mainnet (chain=1, contract=0x87870bca...)
+// Wire: chain_id(8) + contract(20) + vk(1056) + leaf_index(4) + proof_depth(4) + proof(4*32)
+const VK_AAVE_BUNDLE = b64toU8('AQAAAAAAAACHhwvKPz/WM1w/TOg5LWk1C0+k4hbwfDR7mK6n9LnBY0PrxqT6ETp3cnYJJgErLEzlRNdLHhdEq2gT9PSQXpq+fMSbpQrIUf5ObaV+wbHKW7MxcOJ9FW6Qye4aruhHy3y0jMksg33PiNgXnu8JayMjnKUGxwf9d1RET/91boF31RIbZwHi+139ZmpZJVIVbRhrQL8jLUZjTJPpAdvPQF65ln/dfAZTVj0B+8Btp6QZXR+j0NAjLmPVEWpvSqD6LaoyQULeJvbwREl/1AtSmYtbtbVotBa96cmSpe2DZeZBeCYhCvvYsoh+uAcXEgSUX060NlFQC1nxPpMoq4WdIfdyR89GKBHX2157g7JqSOUEkicvnEDiRpFzeuBo0K+R4VXtmV8hX0/YbOJEDLv6CmFLDIN8ARPgK2BScZ9gfazToIgnT2VZa9DQmSC2GrXaYbvcf1BJM0zxEhOUXVflrH0FXQQrfgJKorLwjwqRJggFJy3FEFHG5HrU+kA7ArRRC2R649F3C6wDJqgFu+/UgFbIwSG9uAYGxKAupzTMMqzSsCvCi5nLPih+hadjryZ0kqtXLpmrPzcNJ1zsHaGqqQdf8F95vgzl1SdyfW4RjMnNxtouNRqt/ZuqjL3Tp21CmmlRYNEskjrJzDusoonhk1SGCLgoAQw/PrlLMZFxyJSZm4jjh6roKoHYPVf3boGL8BFNYNod1e8CncmnVXtYhCwH8C7JYAy/mcekShyh3lRldCD/H4eJQH/4qT2QDJzIb5KpumrrKDkbE7gcZnCufwOEMyX5uxZK/zGtwFy3Tik4ZZ18lR0EVmL0rt5b0Xf5ho+ELlabBBmPA5oPjFhvIeGRlT4ciwxbwT9s2v/nPBJxCjYGj8olsm5leHeFPpGdxjYM2w8nsD63p1K0K2C/r8gOkiv/EhHmNF58AwFDyDRRVjQVfFivBrXJL1xmA0W27eAKxOoe2cX8DS64dPWk6ps4M3UP9QGxr3NLlg8snfd6aFc1IJCCCU0kfmOBFZeAFdnAm3xOvpStRXy4V3KNj7z50OaJLAKcqzQeUq1/seXexKK45PPA5rGpawbBGU3GZCzAgu8TQJ8WGnII0xUD8QQvDFCY2wxWvkVS3IC9ovvlYQtcjRSacpwu/uuoWHpe1xFlJOGdip/P0gTxvb7/wCoRBMYWGAycfk5r6H2l0B/a8I6ELyAClJehA4AvcwiYHV4f6dd6raMUcFNLPmBlsut0+u0QeAnGYRas+EuzllFjJL+NEKxuAqsT1XcXFzGReoQ/TsB4SH40ozpWCTbxHPAmfIl+oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAARvkMLN4MMrigwXkgbvzD3c1HbWrTSobTOaoS+ljBNoxMes+/GFf1WqQvV7OnpEn/4EkcXIRCLOJbWfpSmiu292CypVRpUEq7h9264XpMFAnjn1y2hixKk3UsgsvdpxFprWLbuVZvY8J+s1ivvmSQNQDAI57yuEEwd0SiVNIteYM=');
+
 // ---- HID Framing ----
 
 function buildApdu(ins, p1, p2, data = new Uint8Array(0)) {
@@ -584,13 +603,13 @@ document.getElementById('signUserOpErc20').onclick = async () => {
             0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89
         ]);
 
-        // Build v2 SIGN_USEROP payload with ERC-20 bundle
-        // NOTE: We send without a bundle here — the device will dispatch as
-        // Erc20Unknown (blind) if no bundle is attached, or Erc20Known if the
-        // companion app attaches the bundle. For this test we include no bundle
-        // to keep it simple; the firmware still signs it.
+        // Build v2 SIGN_USEROP payload with ERC-20 metadata bundle.
+        // The bundle is Merkle-verified by the secure world against its
+        // embedded root, enabling the Erc20Known dispatch path that shows
+        // the human-readable token name/symbol on the trusted UI.
+        const erc20Bundle = ERC20_USDC_BUNDLE;
         const txLen = testTx.length;
-        const totalLen = 4 + 4 + 20 + 20 + 8 + 32*8 + 2 + txLen + 2;
+        const totalLen = 4 + 4 + 20 + 20 + 8 + 32*8 + 2 + txLen + 2 + erc20Bundle.length;
         const payload = new Uint8Array(totalLen);
         let p = 0;
 
@@ -647,11 +666,14 @@ document.getElementById('signUserOpErc20').onclick = async () => {
         // tx data
         payload.set(testTx, p); p += txLen;
 
-        // bundle_len = 0 (no ERC-20 metadata bundle attached)
-        p += 2;
+        // ERC-20 metadata bundle (Merkle-verified by secure world)
+        payload[p++] = (erc20Bundle.length >> 8) & 0xFF;
+        payload[p++] = erc20Bundle.length & 0xFF;
+        payload.set(erc20Bundle, p); p += erc20Bundle.length;
 
         log(`  Sending SIGN_USEROP ERC-20 USDC transfer (${p} bytes payload)...`);
         log(`  Transfer 1000 USDC to 0x742d35cc...`);
+        log(`  ERC20 bundle: ${erc20Bundle.length} bytes (Merkle-verified)`);
         log(`  Confirm transaction on device display.`);
 
         const { sw, data } = await sendChainedApdu(INS_SIGN_USEROP, payload.slice(0, p));
@@ -795,13 +817,10 @@ document.getElementById('signClearUserOp').onclick = async () => {
         //     max_fee(32) + max_prio(32) + init_code_hash(32) + paymaster_hash(32) +
         //   tx_len(2) + tx + vk_bundle_len(2) + vk_bundle
         //
-        // NOTE: The VK bundle must be looked up from the device's NS-side VK DB
-        // by (chain_id, contract_address). Since we don't have access to the
-        // device's VK DB from WebHID, we send a zero-length VK bundle. This will
-        // cause the firmware to fail the Merkle verification — use this to test
-        // the ZK clear-sign flow up to the VK check, or provision a matching
-        // VK bundle for your device.
-        const vkBundle = new Uint8Array(0); // placeholder — real bundle from companion app
+        // The VK bundle is pre-extracted from the firmware's embedded VK DB
+        // (chain=1, contract=Aave V3 Pool). The secure world Merkle-verifies
+        // it against its embedded root before running the Groth16 verifier.
+        const vkBundle = VK_AAVE_BUNDLE;
 
         const txLen = aaveTx.length;
         const aaHeaderLen = 20 + 20 + 8 + 32*8; // 304 bytes
@@ -882,9 +901,9 @@ document.getElementById('signClearUserOp').onclick = async () => {
 
         log(`  Sending SIGN_CLEAR_USEROP Aave V3 supply (${p} bytes payload)...`);
         log(`  ZK proof: Groth16 over BLS12-381 (384 bytes)`);
+        log(`  VK bundle: ${vkBundle.length} bytes (Merkle-verified)`);
         log(`  Readable: "Supply 1000 USDC to Aave"`);
         log(`  Confirm on device display.`);
-        log(`  NOTE: Without a matching VK bundle, Merkle verification will fail.`);
 
         const { sw, data } = await sendChainedApdu(INS_SIGN_CLEAR_USEROP, payload.slice(0, p));
         if (sw === 0x9000) {

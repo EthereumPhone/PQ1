@@ -21,11 +21,11 @@ static VK_DB: &[u8] = include_bytes!("vk_db.bin");
 /// Wire layout (must match `secure/src/zk/vk_bundle.rs`):
 ///
 /// ```text
-///   chain_id      u64 LE       ( 8 B)
-///   contract      [u8; 20]     (20 B)
-///   vk            [u8; 960]    (960 B)
-///   leaf_index    u32 LE       ( 4 B)
-///   proof_depth   u32 LE       ( 4 B)
+///   chain_id      u64 LE            (   8 B)
+///   contract      [u8; 20]          (  20 B)
+///   vk            [u8; VK_BLOB_LEN] (1056 B)
+///   leaf_index    u32 LE            (   4 B)
+///   proof_depth   u32 LE            (   4 B)
 ///   proof         [u8; proof_depth * 32]
 /// ```
 pub fn build_bundle(chain_id: u64, contract: &[u8; 20], out: &mut [u8]) -> Option<usize> {
