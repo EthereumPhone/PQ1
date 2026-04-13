@@ -108,25 +108,84 @@ impl Se050 {
         Ok(())
     }
 
-    /// Factory reset: wipe the SE050 to factory defaults.
+    /// Iteratively delete every user-created object on the SE050 via
+    /// `Se05x_API_DeleteAll_Iterative` semantics.
     ///
-    /// Uses SetPlatformSCPRequest(FACTORY_RESET) which erases ALL objects
-    /// including UserID auth objects that can't be individually deleted.
-    /// After this the SE050 is blank — needs re-provisioning.
+    /// Two-pass: first unauthenticated SCP03 sweep, then (if `auth_obj_id`
+    /// + `pin` provided) an authenticated retry against that UserID. The
+    /// UserID itself is self-deleted at the end if it was created with
+    /// the self-deletable policy (see `apdu::write_userid`).
     ///
-    /// The SCP03 session is invalidated after reset, so `ready` is cleared.
+    /// Returns (deleted, remaining_failed).
+    pub fn iterative_wipe(
+        &mut self,
+        auth_obj_id: Option<u32>,
+        pin: Option<&[u8]>,
+    ) -> Result<(u16, u16), Se050Error> {
+        self.init()?;
+        unsafe {
+            apdu::iterative_delete_all(&mut self.t1, &mut self.scp03, auth_obj_id, pin)
+        }
+    }
+
+    /// User-initiated factory reset: verify PIN, delete every UserID-gated
+    /// data object, then self-delete the UserID itself. Leaves the SE050
+    /// side blank and ready for re-provisioning.
+    ///
+    /// The UserID deletion only succeeds if it was created with the
+    /// self-deletable policy (new UserIDs have it; legacy ones don't).
+    /// Zeroizes cached blobs in RAM on success.
+    pub fn user_factory_reset(&mut self, pin: &[u8]) -> Result<(), Se050Error> {
+        use zeroize::Zeroize;
+        self.init()?;
+
+        unsafe {
+            let session_id =
+                apdu::create_session(&mut self.t1, &mut self.scp03, USERID_OBJ)?;
+            if let Err(e) = apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &session_id, pin,
+            ) {
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
+                return Err(e);
+            }
+
+            for obj in &[ENTROPY_OBJ, VK_OBJ, BOOTSTRAP_VK_OBJ] {
+                let _ = apdu::delete_object_authed(
+                    &mut self.t1, &mut self.scp03, &session_id, *obj,
+                );
+            }
+
+            // Self-delete the UserID (needs self-deletable policy).
+            let _ = apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &session_id, USERID_OBJ,
+            );
+
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
+        }
+
+        self.entropy_blob_cache.zeroize();
+        self.blob_cached = false;
+        self.vk_cache.zeroize();
+        self.vk_cached = false;
+        self.bootstrap_vk_cache.zeroize();
+        self.bootstrap_vk_cached = false;
+        self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
+
+        #[cfg(feature = "debug-log")]
+        cortex_m_semihosting::hprintln!("[SE050] User factory reset complete");
+
+        Ok(())
+    }
+
+    /// Legacy platform factory reset — kept for completeness but does
+    /// NOT actually wipe objects. `SetPlatformSCPRequest` only toggles
+    /// SCP03-mandatory. Use `iterative_wipe` or `user_factory_reset`
+    /// for real cleanup.
     pub fn factory_reset(&mut self) -> Result<(), Se050Error> {
         self.init()?;
         unsafe {
-            #[cfg(feature = "debug-log")]
-            cortex_m_semihosting::hprintln!("[SE050] Platform factory reset...");
-
             apdu::platform_factory_reset(&mut self.t1, &mut self.scp03)?;
-
-            #[cfg(feature = "debug-log")]
-            cortex_m_semihosting::hprintln!("[SE050] Factory reset complete");
         }
-        // SCP03 session is dead after factory reset
         self.ready = false;
         self.scp03 = scp03::Scp03Session::new();
         Ok(())
