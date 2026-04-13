@@ -430,6 +430,27 @@ build-hw-se050-oled:
 		-p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> SE050 + OLED interactive build ready."
 
+# Standalone build: no debug-log, no semihosting. Safe to run with only
+# USB-C power and no debugger attached. BKPT-free.
+build-hw-se050-oled-standalone:
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-oled,stm32u585,usb
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> Standalone build ready (no semihosting, USB-C only)."
+
+flash-hw-se050-oled-standalone: build-hw-se050-oled-standalone
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Flashed. Disconnect ST-LINK, connect only USB-C."
+	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
+
 flash-hw-se050-oled: build-hw-se050-oled
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
 	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
