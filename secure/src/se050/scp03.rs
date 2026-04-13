@@ -218,7 +218,7 @@ pub unsafe fn establish(
 
     if card_crypto_computed[..8] != card_cryptogram[..] {
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[SCP03] Card cryptogram MISMATCH");
+        secure_log!("[SCP03] Card cryptogram MISMATCH");
         return Err(Se050Error::Scp03);
     }
 
@@ -252,7 +252,7 @@ pub unsafe fn establish(
     let ext_sw = ((ext_resp[ext_n - 2] as u16) << 8) | (ext_resp[ext_n - 1] as u16);
     if ext_sw != 0x9000 {
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[SCP03] EXT AUTH SW=0x{:04x}", ext_sw);
+        secure_log!("[SCP03] EXT AUTH SW=0x{:04x}", ext_sw);
         return Err(Se050Error::Status(ext_sw));
     }
 
@@ -261,7 +261,7 @@ pub unsafe fn establish(
     session.active = true;
 
     #[cfg(feature = "debug-log")]
-    cortex_m_semihosting::hprintln!("[SCP03] Session established");
+    secure_log!("[SCP03] Session established");
 
     Ok(())
 }

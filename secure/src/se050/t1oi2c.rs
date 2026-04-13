@@ -173,7 +173,7 @@ impl T1State {
         #[cfg(feature = "debug-log")]
         {
             let inf_len = ((rx_buf[2] as usize) << 8) | (rx_buf[3] as usize);
-            cortex_m_semihosting::hprintln!(
+            secure_log!(
                 "[SE050] RX NAD={:02x} PCB={:02x} LEN={} CRC_OK={}",
                 rx_buf[0], rx_buf[1], inf_len,
                 validate_frame(&rx_buf).is_ok()

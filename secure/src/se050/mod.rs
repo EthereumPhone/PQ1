@@ -97,22 +97,22 @@ impl Se050 {
             }
 
             #[cfg(feature = "debug-log")]
-            cortex_m_semihosting::hprintln!("[SE050] Init: interface reset...");
+            secure_log!("[SE050] Init: interface reset...");
 
             self.t1.interface_reset().map_err(|_| Se050Error::Transport)?;
 
             #[cfg(feature = "debug-log")]
-            cortex_m_semihosting::hprintln!("[SE050] Init: selecting applet...");
+            secure_log!("[SE050] Init: selecting applet...");
 
             apdu::select_applet(&mut self.t1)?;
 
             #[cfg(feature = "debug-log")]
-            cortex_m_semihosting::hprintln!("[SE050] Init: establishing SCP03...");
+            secure_log!("[SE050] Init: establishing SCP03...");
 
             scp03::establish(&mut self.scp03, &mut self.t1)?;
 
             #[cfg(feature = "debug-log")]
-            cortex_m_semihosting::hprintln!("[SE050] Init complete");
+            secure_log!("[SE050] Init complete");
         }
 
         self.ready = true;
@@ -183,7 +183,7 @@ impl Se050 {
         self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
 
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[SE050] User factory reset complete");
+        secure_log!("[SE050] User factory reset complete");
 
         Ok(())
     }
@@ -230,7 +230,7 @@ impl Se050 {
                 .unwrap_or(false)
             {
                 #[cfg(feature = "debug-log")]
-                cortex_m_semihosting::hprintln!(
+                secure_log!(
                     "[E2E] Prior test UserID present, wiping..."
                 );
 
@@ -264,7 +264,7 @@ impl Se050 {
         }
 
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[E2E] step 1: cleanup OK");
+        secure_log!("[E2E] step 1: cleanup OK");
 
         // ---- 2. Provision fresh UserID + 2 gated data objects ----
         unsafe {
@@ -285,7 +285,7 @@ impl Se050 {
         }
 
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[E2E] step 2: provision OK");
+        secure_log!("[E2E] step 2: provision OK");
 
         // ---- 3. Verify presence ----
         unsafe {
@@ -294,7 +294,7 @@ impl Se050 {
                     .unwrap_or(false)
                 {
                     #[cfg(feature = "debug-log")]
-                    cortex_m_semihosting::hprintln!(
+                    secure_log!(
                         "[E2E] presence check FAILED for 0x{:08x}", obj
                     );
                     return Err(Se050Error::Status(0x6A82));
@@ -303,7 +303,7 @@ impl Se050 {
         }
 
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[E2E] step 3: presence OK (3/3)");
+        secure_log!("[E2E] step 3: presence OK (3/3)");
 
         // ---- 4. Factory reset using the same PIN ----
         unsafe {
@@ -330,7 +330,7 @@ impl Se050 {
         }
 
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[E2E] step 4: factory reset OK");
+        secure_log!("[E2E] step 4: factory reset OK");
 
         // ---- 5. Verify absence ----
         unsafe {
@@ -339,7 +339,7 @@ impl Se050 {
                     .unwrap_or(true)
                 {
                     #[cfg(feature = "debug-log")]
-                    cortex_m_semihosting::hprintln!(
+                    secure_log!(
                         "[E2E] absence check FAILED for 0x{:08x}", obj
                     );
                     return Err(Se050Error::Status(0x6A83));
@@ -348,7 +348,7 @@ impl Se050 {
         }
 
         #[cfg(feature = "debug-log")]
-        cortex_m_semihosting::hprintln!("[E2E] step 5: absence OK (3/3)");
+        secure_log!("[E2E] step 5: absence OK (3/3)");
 
         Ok(())
     }
@@ -387,7 +387,7 @@ impl Se050 {
 
             if !userid_exists {
                 #[cfg(feature = "debug-log")]
-                cortex_m_semihosting::hprintln!("[SE050] Creating UserID...");
+                secure_log!("[SE050] Creating UserID...");
 
                 apdu::write_userid(
                     &mut self.t1, &mut self.scp03,
@@ -410,7 +410,7 @@ impl Se050 {
 
                 if !exists {
                     #[cfg(feature = "debug-log")]
-                    cortex_m_semihosting::hprintln!("[SE050] Writing obj 0x{:08x}...", obj_id);
+                    secure_log!("[SE050] Writing obj 0x{:08x}...", obj_id);
 
                     apdu::write_binary_gated(
                         &mut self.t1, &mut self.scp03,

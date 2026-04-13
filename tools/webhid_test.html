@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>PQSigner WebHID Test</title>
+<title>PQSigner WebHID Test — Protocol v2</title>
 <style>
   body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 2em; }
   h2 { color: #0fbcf9; }
@@ -11,10 +11,12 @@
   #log { background: #0d0d1a; color: #0f0; padding: 1em; min-height: 400px; font-size: 13px; overflow-y: auto; max-height: 600px; white-space: pre-wrap; }
   .section { margin-top: 1em; border-top: 1px solid #333; padding-top: 0.5em; }
   .section-title { color: #0fbcf9; font-weight: bold; }
+  input[type=text], input[type=number] { background: #0d0d1a; color: #0f0; border: 1px solid #333; padding: 4px 8px; font-family: monospace; width: 120px; }
+  label { color: #888; font-size: 12px; }
 </style>
 </head>
 <body>
-<h2>PQSigner WebHID Test (Keycard Shell Compatible)</h2>
+<h2>PQSigner WebHID Test &mdash; Protocol v2 (CLA 0xF0)</h2>
 
 <div>
   <button id="connect">Connect to PQSigner</button>
@@ -22,21 +24,38 @@
 </div>
 
 <div class="section">
-  <span class="section-title">Device Info</span><br>
-  <button id="getAppConf" disabled>GET_APP_CONF (0x06)</button>
-  <button id="getPinRemaining" disabled>GET_PIN_REMAINING (0x10)</button>
+  <span class="section-title">Device Info &amp; Status</span><br>
+  <button id="getDeviceInfo" disabled>GET_DEVICE_INFO (0x01)</button>
+  <button id="getStatus" disabled>GET_STATUS (0x02)</button>
 </div>
 
 <div class="section">
-  <span class="section-title">Key Management</span><br>
-  <button id="unlock" disabled>UNLOCK (0x12)</button>
-  <button id="getPubkey" disabled>GET_PUBLIC (0x02)</button>
-  <button id="getPubkeyExt" disabled>GET_PUBLIC extended (0x02, P2=1)</button>
+  <span class="section-title">Session</span><br>
+  <button id="unlock" disabled>UNLOCK (0x10)</button>
+  <button id="lock" disabled>LOCK (0x11)</button>
+</div>
+
+<div class="section">
+  <span class="section-title">Key Queries</span><br>
+  <button id="getBootstrapVk" disabled>GET_BOOTSTRAP_VK (0x20)</button>
+  <button id="getMainVk" disabled>GET_MAIN_VK (0x21)</button>
+  <label>Chain:</label> <input type="number" id="chainId" value="1">
+  <label>Key idx:</label> <input type="number" id="keyIndex" value="0">
 </div>
 
 <div class="section">
   <span class="section-title">Signing</span><br>
-  <button id="signTx" disabled>SIGN_ETH_TX (0x04) — test tx</button>
+  <button id="signUserOp" disabled>SIGN_USEROP (0x30) &mdash; ETH transfer</button>
+  <button id="signUserOpErc20" disabled>SIGN_USEROP (0x30) &mdash; ERC-20 USDC</button>
+  <button id="signClearUserOp" disabled>SIGN_CLEAR_USEROP (0x31) &mdash; Aave supply</button>
+  <button id="signMessage" disabled>SIGN_MESSAGE (0x40) &mdash; test msg</button>
+  <button id="signBootstrap" disabled>SIGN_BOOTSTRAP (0x50) &mdash; deploy</button>
+</div>
+
+<div class="section">
+  <span class="section-title">Address</span><br>
+  <button id="getWalletAddress" disabled>GET_WALLET_ADDRESS (0x60)</button>
+  <label>Factory:</label> <input type="text" id="factory" value="0x0000000000000000000000000000000000000000" style="width:360px">
 </div>
 
 <pre id="log"></pre>
@@ -46,18 +65,27 @@ const VID = 0x1209;
 const PID = 0x7051;
 const REPORT_SIZE = 64;
 const TAG_APDU = 0x05;
-const TAG_PING = 0x02;
-const CLA = 0xE0;
 
-// INS codes (Keycard Shell compatible)
-const INS_GET_PUBLIC     = 0x02;
-const INS_SIGN_ETH_TX   = 0x04;
-const INS_GET_APP_CONF   = 0x06;
-const INS_SIGN_ETH_MSG   = 0x08;
-const INS_SIGN_EIP712    = 0x0C;
-const INS_GET_RESPONSE   = 0xC0;
-const INS_GET_PIN_REMAINING = 0x10;
-const INS_UNLOCK         = 0x12;
+// v2 protocol
+const CLA = 0xF0;
+
+const INS_GET_DEVICE_INFO    = 0x01;
+const INS_GET_STATUS         = 0x02;
+const INS_UNLOCK             = 0x10;
+const INS_LOCK               = 0x11;
+const INS_GET_BOOTSTRAP_VK   = 0x20;
+const INS_GET_MAIN_VK        = 0x21;
+const INS_SIGN_USEROP        = 0x30;
+const INS_SIGN_CLEAR_USEROP  = 0x31;
+const INS_SIGN_MESSAGE       = 0x40;
+const INS_SIGN_EIP712        = 0x41;
+const INS_SIGN_BOOTSTRAP     = 0x50;
+const INS_GET_WALLET_ADDRESS = 0x60;
+const INS_GET_RESPONSE       = 0xC0;
+
+// v2 chaining: P1 bit 7
+const P1_LAST = 0x00;
+const P1_MORE = 0x80;
 
 let device = null;
 let channelId = 0x0101;
@@ -72,25 +100,14 @@ function hex(arr) {
     return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join(' ');
 }
 
-// BIP44 Ethereum path: m/44'/60'/0'/0/0
-const ETH_PATH = new Uint8Array([
-    0x05,                                     // 5 elements
-    0x80, 0x00, 0x00, 0x2C,                  // 44' (hardened)
-    0x80, 0x00, 0x00, 0x3C,                  // 60' (hardened)
-    0x80, 0x00, 0x00, 0x00,                  // 0'  (hardened)
-    0x00, 0x00, 0x00, 0x00,                  // 0
-    0x00, 0x00, 0x00, 0x00                   // 0
-]);
+function hexCompact(arr) {
+    return '0x' + Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
-// Simple unsigned EIP-1559 tx (send 0.001 ETH)
-const TEST_TX = new Uint8Array([
-    0x02, 0xf0, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00,
-    0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00, 0x82, 0x52, 0x08,
-    0x94, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a,
-    0xbc, 0xde, 0xf1, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
-    0xef, 0x12, 0x34, 0x88, 0x0d, 0xe0, 0xb6, 0xb3, 0xa7,
-    0x64, 0x00, 0x00, 0x80, 0xc0
-]);
+function u16be(hi, lo) { return (hi << 8) | lo; }
+function u32be(a, b, c, d) { return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0; }
+
+// ---- HID Framing ----
 
 function buildApdu(ins, p1, p2, data = new Uint8Array(0)) {
     const apdu = new Uint8Array(5 + data.length);
@@ -170,10 +187,11 @@ async function receiveHidApdu() {
     return new Uint8Array(buf.slice(0, expectedLen));
 }
 
-// Send APDU and receive response, handling GET_RESPONSE chaining
+// ---- APDU send with chaining + GET_RESPONSE ----
+
 async function sendApdu(ins, p1, p2, data) {
     const apdu = buildApdu(ins, p1, p2, data);
-    log(`>> APDU [${apdu.length}B]: ${hex(apdu.slice(0, 30))}${apdu.length > 30 ? '...' : ''}`);
+    log(`>> [${apdu.length}B] CLA=${CLA.toString(16)} INS=${ins.toString(16)} P1=${p1.toString(16)} Lc=${data ? data.length : 0}`);
 
     for (const frame of frameApdu(apdu)) {
         await device.sendReport(0, frame);
@@ -190,22 +208,104 @@ async function sendApdu(ins, p1, p2, data) {
         fullData.push(...payload);
 
         if (sw1 === 0x61) {
-            // More data — send GET_RESPONSE
-            log(`   ... SW=0x${sw.toString(16)}, ${fullData.length} bytes so far, fetching more...`);
+            if (fullData.length % 5000 < 253)
+                log(`   ... ${fullData.length} bytes received, fetching more...`);
             const getResp = buildApdu(INS_GET_RESPONSE, 0, 0);
             for (const frame of frameApdu(getResp)) {
                 await device.sendReport(0, frame);
             }
             response = await receiveHidApdu();
         } else {
-            const preview = fullData.length > 64 ? hex(fullData.slice(0, 64)) + '...' : hex(fullData);
-            log(`<< SW: 0x${sw.toString(16).padStart(4, '0')}  Data[${fullData.length}B]: ${preview}`);
+            log(`<< SW=0x${sw.toString(16).padStart(4, '0')} Data[${fullData.length}B]`);
             return { sw, data: new Uint8Array(fullData) };
         }
     }
 }
 
-// --- Button handlers ---
+// Send large payload with command chaining.
+// v2 firmware: P1=0x00 starts a new chain (first block), P1=0x80 continues.
+// The firmware executes when it receives a short block (lc < 255).
+async function sendChainedApdu(ins, payload) {
+    const MAX_CHUNK = 255;
+    let offset = 0;
+    let fullData = [];
+
+    while (offset < payload.length) {
+        const remaining = payload.length - offset;
+        const chunkLen = Math.min(MAX_CHUNK, remaining);
+        const isLast = (offset + chunkLen >= payload.length) || (chunkLen < MAX_CHUNK);
+        const p1 = (offset === 0) ? P1_LAST : P1_MORE;
+        const chunk = payload.slice(offset, offset + chunkLen);
+
+        const apdu = buildApdu(ins, p1, 0x00, chunk);
+        for (const frame of frameApdu(apdu)) {
+            await device.sendReport(0, frame);
+        }
+        const response = await receiveHidApdu();
+        const sw1 = response[response.length - 2];
+        const sw2 = response[response.length - 1];
+        const sw = (sw1 << 8) | sw2;
+
+        offset += chunkLen;
+
+        if (isLast) {
+            // This is the final response — may need GET_RESPONSE for large data
+            const respPayload = response.slice(0, response.length - 2);
+            fullData.push(...respPayload);
+
+            if (sw1 === 0x61) {
+                // Drain with GET_RESPONSE
+                let more = true;
+                while (more) {
+                    if (fullData.length % 5000 < 253)
+                        log(`   ... ${fullData.length} bytes received, fetching more...`);
+                    const getResp = buildApdu(INS_GET_RESPONSE, 0, 0);
+                    for (const frame of frameApdu(getResp)) {
+                        await device.sendReport(0, frame);
+                    }
+                    const gr = await receiveHidApdu();
+                    const gsw1 = gr[gr.length - 2];
+                    const gsw2 = gr[gr.length - 1];
+                    fullData.push(...gr.slice(0, gr.length - 2));
+                    more = (gsw1 === 0x61);
+                    if (!more) {
+                        const finalSw = (gsw1 << 8) | gsw2;
+                        log(`<< SW=0x${finalSw.toString(16).padStart(4, '0')} Data[${fullData.length}B]`);
+                        return { sw: finalSw, data: new Uint8Array(fullData) };
+                    }
+                }
+            }
+
+            log(`<< SW=0x${sw.toString(16).padStart(4, '0')} Data[${fullData.length}B]`);
+            return { sw, data: new Uint8Array(fullData) };
+        } else {
+            // Intermediate ACK — should be 0x9000
+            if (sw !== 0x9000) {
+                log(`   Chain error at offset ${offset}: SW=0x${sw.toString(16)}`);
+                return { sw, data: new Uint8Array(0) };
+            }
+        }
+    }
+    return { sw: 0x6F00, data: new Uint8Array(0) };
+}
+
+// ---- Helpers ----
+
+function parseWrapper(data) {
+    if (data.length < 73) return null;
+    return {
+        signerType: data[0] === 0 ? 'MAIN' : 'BOOTSTRAP',
+        keyIndex: u32be(data[1], data[2], data[3], data[4]),
+        otsIndex: u32be(data[5], data[6], data[7], data[8]),
+        pkSeed: data.slice(9, 41),
+        pkRoot: data.slice(41, 73),
+        sigLen: data.length - 73,
+    };
+}
+
+function capBit(caps, bit) { return (caps & (1 << bit)) !== 0; }
+
+// ---- Button Handlers ----
 
 document.getElementById('connect').onclick = async () => {
     try {
@@ -217,89 +317,702 @@ document.getElementById('connect').onclick = async () => {
         await device.open();
         document.getElementById('status').textContent = `Connected: ${device.productName}`;
         document.getElementById('status').style.color = '#0f0';
-        log(`Connected: ${device.productName} (VID ${device.vendorId.toString(16)}, PID ${device.productId.toString(16)})`);
+        log(`Connected: ${device.productName} (VID 0x${device.vendorId.toString(16)}, PID 0x${device.productId.toString(16)})`);
         document.querySelectorAll('button:not(#connect)').forEach(b => b.disabled = false);
     } catch (e) { log(`Error: ${e.message}`); }
 };
 
-document.getElementById('getAppConf').onclick = async () => {
+// GET_DEVICE_INFO
+document.getElementById('getDeviceInfo').onclick = async () => {
     try {
-        const { sw, data } = await sendApdu(INS_GET_APP_CONF, 0x80, 0x00);
-        if (sw === 0x9000 && data.length >= 23) {
-            log(`  FW version: ${data[0]}.${data[1]}.${data[2]}`);
-            const dbVer = (data[3] << 24) | (data[4] << 16) | (data[5] << 8) | data[6];
-            log(`  DB version: ${dbVer.toString(16)}`);
-            log(`  Device UID: ${hex(data.slice(7, 23))}`);
-            if (data.length >= 55) {
-                log(`  Public key: ${hex(data.slice(23, 55))}`);
-            }
+        const { sw, data } = await sendApdu(INS_GET_DEVICE_INFO, 0, 0);
+        if (sw === 0x9000 && data.length >= 40) {
+            const protoVer = u16be(data[0], data[1]);
+            log(`  Protocol:     v${(protoVer >> 8)}.${protoVer & 0xFF}`);
+            log(`  Firmware:     ${data[2]}.${data[3]}.${data[4]}`);
+            log(`  Device UID:   ${hex(data.slice(5, 21))}`);
+            const caps = u32be(data[21], data[22], data[23], data[24]);
+            log(`  Capabilities: 0x${caps.toString(16).padStart(8, '0')}`);
+            log(`    UserOp:     ${capBit(caps, 0)}  ZK-ClearSign: ${capBit(caps, 1)}  EIP-712: ${capBit(caps, 2)}`);
+            log(`    Message:    ${capBit(caps, 3)}  Bootstrap:    ${capBit(caps, 4)}  MultiChain: ${capBit(caps, 5)}`);
+            log(`    CowSwap:    ${capBit(caps, 6)}  AddrVerify:   ${capBit(caps, 7)}`);
+            log(`  Sig param:    ${data[25] === 0 ? 'SHA2-128f' : 'SHA2-192f'}`);
+            const sigSize = u16be(data[26], data[27]);
+            log(`  Sig size:     ${sigSize} bytes`);
+            log(`  ERC20 DB:     ${u32be(data[28], data[29], data[30], data[31]).toString(16)}`);
+            log(`  VK DB:        ${u32be(data[32], data[33], data[34], data[35]).toString(16)}`);
+            const epVer = u16be(data[36], data[37]);
+            log(`  EntryPoint:   v0.${epVer}`);
+            const overhead = u16be(data[38], data[39]);
+            log(`  Wrapper:      ${overhead} + ${sigSize} = ${overhead + sigSize} bytes total`);
+        } else {
+            log(`  Error: SW=0x${sw.toString(16)}`);
         }
     } catch (e) { log(`Error: ${e.message}`); }
 };
 
-document.getElementById('getPinRemaining').onclick = async () => {
+// GET_STATUS
+document.getElementById('getStatus').onclick = async () => {
     try {
-        const { sw, data } = await sendApdu(INS_GET_PIN_REMAINING, 0x80, 0x00);
-        if (sw === 0x9000) log(`  PIN attempts remaining: ${data[0]}`);
-        else log(`  Error: SW=0x${sw.toString(16)}`);
+        const { sw, data } = await sendApdu(INS_GET_STATUS, 0, 0);
+        if (sw === 0x9000 && data.length >= 3) {
+            log(`  Provisioned:  ${data[0] ? 'yes' : 'no'}`);
+            log(`  Locked:       ${data[1] ? 'yes' : 'no'}`);
+            log(`  PIN remaining: ${data[2]}`);
+        } else {
+            log(`  Error: SW=0x${sw.toString(16)}`);
+        }
     } catch (e) { log(`Error: ${e.message}`); }
 };
 
+// UNLOCK
 document.getElementById('unlock').onclick = async () => {
     try {
-        log('  Waiting for PIN entry on device display...');
-        const { sw } = await sendApdu(INS_UNLOCK, 0x80, 0x00);
-        log(`  Unlock result: SW=0x${sw.toString(16).padStart(4, '0')} ${sw === 0x9000 ? '(OK)' : '(FAILED)'}`);
+        log('  Waiting for PIN entry on device...');
+        const { sw } = await sendApdu(INS_UNLOCK, 0, 0);
+        log(`  Result: SW=0x${sw.toString(16).padStart(4, '0')} ${sw === 0x9000 ? '(unlocked)' : '(failed)'}`);
     } catch (e) { log(`Error: ${e.message}`); }
 };
 
-document.getElementById('getPubkey').onclick = async () => {
+// LOCK
+document.getElementById('lock').onclick = async () => {
     try {
-        const { sw, data } = await sendApdu(INS_GET_PUBLIC, 0x80, 0x00, ETH_PATH);
-        if (sw === 0x9000 && data.length >= 6) {
-            const fpLen = data[0];
-            const fp = hex(data.slice(1, 1 + fpLen));
-            const pkLen = data[1 + fpLen];
-            const pk = hex(data.slice(2 + fpLen, 2 + fpLen + pkLen));
-            log(`  Fingerprint: ${fp}`);
-            log(`  Public key [${pkLen}B]: ${pk}`);
+        const { sw } = await sendApdu(INS_LOCK, 0, 0);
+        log(`  Locked: SW=0x${sw.toString(16).padStart(4, '0')}`);
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+// GET_BOOTSTRAP_VK
+document.getElementById('getBootstrapVk').onclick = async () => {
+    try {
+        const { sw, data } = await sendApdu(INS_GET_BOOTSTRAP_VK, 0, 0);
+        if (sw === 0x9000 && data.length >= 32) {
+            log(`  pk_seed: ${hex(data.slice(0, 16))}`);
+            log(`  pk_root: ${hex(data.slice(16, 32))}`);
+        } else {
+            log(`  Error: SW=0x${sw.toString(16)}`);
         }
     } catch (e) { log(`Error: ${e.message}`); }
 };
 
-document.getElementById('getPubkeyExt').onclick = async () => {
+// GET_MAIN_VK
+document.getElementById('getMainVk').onclick = async () => {
     try {
-        const { sw, data } = await sendApdu(INS_GET_PUBLIC, 0x80, 0x01, ETH_PATH);
-        if (sw === 0x9000 && data.length >= 6) {
-            const fpLen = data[0];
-            const fp = hex(data.slice(1, 1 + fpLen));
-            const off = 1 + fpLen;
-            const pkLen = data[off];
-            const pk = hex(data.slice(off + 1, off + 1 + pkLen));
-            const ccOff = off + 1 + pkLen;
-            const ccLen = data[ccOff];
-            log(`  Fingerprint: ${fp}`);
-            log(`  Public key [${pkLen}B]: ${pk}`);
-            log(`  Chain code [${ccLen}B]: ${ccLen > 0 ? hex(data.slice(ccOff + 1, ccOff + 1 + ccLen)) : '(none)'}`);
+        const chainId = BigInt(document.getElementById('chainId').value);
+        const keyIdx = parseInt(document.getElementById('keyIndex').value);
+        const payload = new Uint8Array(12);
+        // chain_id u64 BE
+        for (let i = 0; i < 8; i++) payload[i] = Number((chainId >> BigInt((7 - i) * 8)) & 0xFFn);
+        // key_index u32 BE
+        payload[8] = (keyIdx >> 24) & 0xFF;
+        payload[9] = (keyIdx >> 16) & 0xFF;
+        payload[10] = (keyIdx >> 8) & 0xFF;
+        payload[11] = keyIdx & 0xFF;
+
+        log(`  Deriving VK for chain=${chainId}, key_index=${keyIdx}...`);
+        const { sw, data } = await sendApdu(INS_GET_MAIN_VK, 0, 0, payload);
+        if (sw === 0x9000 && data.length >= 32) {
+            log(`  pk_seed: ${hex(data.slice(0, 16))}`);
+            log(`  pk_root: ${hex(data.slice(16, 32))}`);
+        } else {
+            log(`  Error: SW=0x${sw.toString(16)}`);
         }
     } catch (e) { log(`Error: ${e.message}`); }
 };
 
-document.getElementById('signTx').onclick = async () => {
+// SIGN_USEROP — test transaction (send 0.001 ETH on chain 1)
+document.getElementById('signUserOp').onclick = async () => {
     try {
-        log('  Sending BIP32 path + test EIP-1559 tx for signing...');
-        const payload = new Uint8Array(ETH_PATH.length + TEST_TX.length);
-        payload.set(ETH_PATH);
-        payload.set(TEST_TX, ETH_PATH.length);
+        const chainId = BigInt(document.getElementById('chainId').value);
+        const keyIdx = parseInt(document.getElementById('keyIndex').value);
 
-        // Single chunk (fits in one APDU), P1=0x00 (first = last since Lc < 255)
-        const { sw, data } = await sendApdu(INS_SIGN_ETH_TX, 0x00, 0x00, payload);
+        // Unsigned EIP-1559 tx: send 0.001 ETH to 0xabcdef...
+        const testTx = new Uint8Array([
+            0x02, 0xf0, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00,
+            0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00, 0x82, 0x52, 0x08,
+            0x94, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a,
+            0xbc, 0xde, 0xf1, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
+            0xef, 0x12, 0x34, 0x88, 0x0d, 0xe0, 0xb6, 0xb3, 0xa7,
+            0x64, 0x00, 0x00, 0x80, 0xc0
+        ]);
+
+        // keccak256("")
+        const keccakEmpty = new Uint8Array([
+            0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e,
+            0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0, 0xe5, 0x00, 0xb6, 0x53,
+            0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85,
+            0xa4, 0x70
+        ]);
+
+        // EntryPoint v0.6
+        const entryPoint = new Uint8Array([
+            0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+            0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89
+        ]);
+
+        // Build v2 SIGN_USEROP payload
+        const txLen = testTx.length;
+        const totalLen = 4 + 4 + 20 + 20 + 8 + 32*8 + 2 + txLen + 2;
+        const payload = new Uint8Array(totalLen);
+        let p = 0;
+
+        // key_index u32 BE
+        payload[p++] = (keyIdx >> 24) & 0xFF;
+        payload[p++] = (keyIdx >> 16) & 0xFF;
+        payload[p++] = (keyIdx >> 8) & 0xFF;
+        payload[p++] = keyIdx & 0xFF;
+
+        // ots_index u32 BE = 0
+        p += 4;
+
+        // sender (20 bytes zero = not yet deployed)
+        p += 20;
+
+        // entry_point
+        payload.set(entryPoint, p); p += 20;
+
+        // chain_id u64 BE
+        for (let i = 0; i < 8; i++) payload[p++] = Number((chainId >> BigInt((7 - i) * 8)) & 0xFFn);
+
+        // nonce (32 bytes, = 1)
+        payload[p + 31] = 1; p += 32;
+
+        // call_gas_limit = 100000
+        payload[p + 29] = 0x01; payload[p + 30] = 0x86; payload[p + 31] = 0xa0; p += 32;
+
+        // verification_gas_limit = 200000
+        payload[p + 29] = 0x03; payload[p + 30] = 0x0d; payload[p + 31] = 0x40; p += 32;
+
+        // pre_verification_gas = 21000
+        payload[p + 30] = 0x52; payload[p + 31] = 0x08; p += 32;
+
+        // max_fee_per_gas = 50 gwei
+        const maxFee = BigInt(50_000_000_000);
+        for (let i = 0; i < 8; i++) payload[p + 24 + i] = Number((maxFee >> BigInt((7 - i) * 8)) & 0xFFn);
+        p += 32;
+
+        // max_priority_fee_per_gas = 2 gwei
+        const maxPrio = BigInt(2_000_000_000);
+        for (let i = 0; i < 8; i++) payload[p + 24 + i] = Number((maxPrio >> BigInt((7 - i) * 8)) & 0xFFn);
+        p += 32;
+
+        // init_code_hash = keccak256("")
+        payload.set(keccakEmpty, p); p += 32;
+
+        // paymaster_and_data_hash = keccak256("")
+        payload.set(keccakEmpty, p); p += 32;
+
+        // tx_len u16 BE
+        payload[p++] = (txLen >> 8) & 0xFF;
+        payload[p++] = txLen & 0xFF;
+
+        // tx data
+        payload.set(testTx, p); p += txLen;
+
+        // bundle_len = 0
+        p += 2;
+
+        log(`  Sending SIGN_USEROP (${p} bytes payload)...`);
+        log(`  Confirm transaction on device display.`);
+
+        const { sw, data } = await sendChainedApdu(INS_SIGN_USEROP, payload.slice(0, p));
         if (sw === 0x9000) {
-            log(`  Signature received: ${data.length} bytes`);
-            log(`  Sig[0..32]: ${hex(data.slice(0, 32))}`);
-            if (data.length > 32) log(`  Sig[32..64]: ${hex(data.slice(32, 64))}`);
+            const w = parseWrapper(data);
+            if (w) {
+                log(`  PQSignatureWrapper received!`);
+                log(`    signer:    ${w.signerType}`);
+                log(`    keyIndex:  ${w.keyIndex}`);
+                log(`    otsIndex:  ${w.otsIndex}`);
+                log(`    pkSeed:    ${hex(w.pkSeed.slice(0, 16))}...`);
+                log(`    pkRoot:    ${hex(w.pkRoot.slice(0, 16))}...`);
+                log(`    sig size:  ${w.sigLen} bytes`);
+                log(`    sig[0..32]: ${hex(data.slice(73, 105))}`);
+            } else {
+                log(`  Raw response: ${data.length} bytes`);
+                log(`  First 64: ${hex(data.slice(0, 64))}`);
+            }
         } else {
             log(`  Sign failed: SW=0x${sw.toString(16)}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+// SIGN_USEROP — ERC-20 USDC transfer (chain 1, to=USDC, transfer(recipient, 1000 USDC))
+document.getElementById('signUserOpErc20').onclick = async () => {
+    try {
+        const chainId = BigInt(document.getElementById('chainId').value);
+        const keyIdx = parseInt(document.getElementById('keyIndex').value);
+
+        // Unsigned EIP-1559 tx: USDC transfer(0x742d35cc..., 1000_000000)
+        // to = USDC mainnet 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+        // data = transfer(address,uint256) selector 0xa9059cbb + recipient + amount
+        const testTx = new Uint8Array([
+            0x02,
+            0xf8, 0x6e,                                                 // outer list, long form, 110 bytes
+            0x01,                                                       // chain_id = 1
+            0x80,                                                       // nonce = 0
+            0x84, 0x77, 0x35, 0x94, 0x00,                               // max_priority = 2 gwei
+            0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00,                         // max_fee = 50 gwei
+            0x83, 0x01, 0x86, 0xa0,                                     // gas_limit = 100000
+            0x94, 0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1,
+            0xd1, 0x9d, 0x4a, 0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb,
+            0x48,                                                       // to = USDC mainnet
+            0x80,                                                       // value = 0
+            0xb8, 0x44,                                                 // data: 68-byte string
+                0xa9, 0x05, 0x9c, 0xbb,                                 //   selector: transfer
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
+                0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,         //   recipient
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                0x3b, 0x9a, 0xca, 0x00,                                 //   amount = 1000_000000
+            0xc0,                                                       // access_list = empty
+        ]);
+
+        // keccak256("")
+        const keccakEmpty = new Uint8Array([
+            0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e,
+            0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0, 0xe5, 0x00, 0xb6, 0x53,
+            0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85,
+            0xa4, 0x70
+        ]);
+
+        // EntryPoint v0.6
+        const entryPoint = new Uint8Array([
+            0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+            0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89
+        ]);
+
+        // Build v2 SIGN_USEROP payload with ERC-20 bundle
+        // NOTE: We send without a bundle here — the device will dispatch as
+        // Erc20Unknown (blind) if no bundle is attached, or Erc20Known if the
+        // companion app attaches the bundle. For this test we include no bundle
+        // to keep it simple; the firmware still signs it.
+        const txLen = testTx.length;
+        const totalLen = 4 + 4 + 20 + 20 + 8 + 32*8 + 2 + txLen + 2;
+        const payload = new Uint8Array(totalLen);
+        let p = 0;
+
+        // key_index u32 BE
+        payload[p++] = (keyIdx >> 24) & 0xFF;
+        payload[p++] = (keyIdx >> 16) & 0xFF;
+        payload[p++] = (keyIdx >> 8) & 0xFF;
+        payload[p++] = keyIdx & 0xFF;
+
+        // ots_index u32 BE = 0
+        p += 4;
+
+        // sender (20 bytes zero = not yet deployed)
+        p += 20;
+
+        // entry_point
+        payload.set(entryPoint, p); p += 20;
+
+        // chain_id u64 BE
+        for (let i = 0; i < 8; i++) payload[p++] = Number((chainId >> BigInt((7 - i) * 8)) & 0xFFn);
+
+        // nonce (32 bytes, = 1)
+        payload[p + 31] = 1; p += 32;
+
+        // call_gas_limit = 100000
+        payload[p + 29] = 0x01; payload[p + 30] = 0x86; payload[p + 31] = 0xa0; p += 32;
+
+        // verification_gas_limit = 200000
+        payload[p + 29] = 0x03; payload[p + 30] = 0x0d; payload[p + 31] = 0x40; p += 32;
+
+        // pre_verification_gas = 21000
+        payload[p + 30] = 0x52; payload[p + 31] = 0x08; p += 32;
+
+        // max_fee_per_gas = 50 gwei
+        const maxFee = BigInt(50_000_000_000);
+        for (let i = 0; i < 8; i++) payload[p + 24 + i] = Number((maxFee >> BigInt((7 - i) * 8)) & 0xFFn);
+        p += 32;
+
+        // max_priority_fee_per_gas = 2 gwei
+        const maxPrio = BigInt(2_000_000_000);
+        for (let i = 0; i < 8; i++) payload[p + 24 + i] = Number((maxPrio >> BigInt((7 - i) * 8)) & 0xFFn);
+        p += 32;
+
+        // init_code_hash = keccak256("")
+        payload.set(keccakEmpty, p); p += 32;
+
+        // paymaster_and_data_hash = keccak256("")
+        payload.set(keccakEmpty, p); p += 32;
+
+        // tx_len u16 BE
+        payload[p++] = (txLen >> 8) & 0xFF;
+        payload[p++] = txLen & 0xFF;
+
+        // tx data
+        payload.set(testTx, p); p += txLen;
+
+        // bundle_len = 0 (no ERC-20 metadata bundle attached)
+        p += 2;
+
+        log(`  Sending SIGN_USEROP ERC-20 USDC transfer (${p} bytes payload)...`);
+        log(`  Transfer 1000 USDC to 0x742d35cc...`);
+        log(`  Confirm transaction on device display.`);
+
+        const { sw, data } = await sendChainedApdu(INS_SIGN_USEROP, payload.slice(0, p));
+        if (sw === 0x9000) {
+            const w = parseWrapper(data);
+            if (w) {
+                log(`  PQSignatureWrapper received!`);
+                log(`    signer:    ${w.signerType}`);
+                log(`    keyIndex:  ${w.keyIndex}`);
+                log(`    otsIndex:  ${w.otsIndex}`);
+                log(`    pkSeed:    ${hex(w.pkSeed.slice(0, 16))}...`);
+                log(`    pkRoot:    ${hex(w.pkRoot.slice(0, 16))}...`);
+                log(`    sig size:  ${w.sigLen} bytes`);
+            } else {
+                log(`  Raw response: ${data.length} bytes`);
+                log(`  First 64: ${hex(data.slice(0, 64))}`);
+            }
+        } else {
+            log(`  Sign failed: SW=0x${sw.toString(16)}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+// SIGN_CLEAR_USEROP — Aave V3 supply (ZK clear-sign with Groth16 proof)
+document.getElementById('signClearUserOp').onclick = async () => {
+    try {
+        const chainId = BigInt(document.getElementById('chainId').value);
+        const keyIdx = parseInt(document.getElementById('keyIndex').value);
+
+        // Groth16 proof (π.A || π.B || π.C) — 384 bytes
+        // From the e2e test vector: Aave V3 supply(1000 USDC)
+        const proof = new Uint8Array([
+            // π.A (96 bytes)
+            0x0d, 0x5f, 0xe2, 0xf5, 0x09, 0x8c, 0x66, 0x6c, 0x7f, 0xb4, 0x09, 0xba,
+            0xe4, 0x69, 0xa8, 0x85, 0xc9, 0x0b, 0x81, 0x7e, 0x0f, 0x3b, 0x54, 0x33,
+            0x24, 0x7d, 0x3d, 0xb2, 0x0d, 0x2f, 0xb7, 0xd5, 0x21, 0xc0, 0x29, 0xa0,
+            0x04, 0x8b, 0x2f, 0x21, 0xc8, 0xf0, 0x29, 0x5e, 0x21, 0x32, 0xd0, 0xe8,
+            0x10, 0x5b, 0x2b, 0xcc, 0x3b, 0x95, 0x6f, 0xa6, 0x9d, 0xf2, 0x66, 0x75,
+            0x6d, 0x27, 0x51, 0x0c, 0x19, 0xee, 0xcd, 0xd8, 0x36, 0x4d, 0xc1, 0x6c,
+            0x3b, 0xb1, 0x4d, 0x5d, 0x4b, 0x15, 0x6c, 0x9d, 0xa5, 0xff, 0x8a, 0x3e,
+            0x68, 0xf9, 0x76, 0x9c, 0xb8, 0x05, 0x6e, 0x2e, 0x01, 0x74, 0x81, 0xaa,
+            // π.B (192 bytes)
+            0x04, 0x99, 0xb1, 0x98, 0xae, 0x51, 0x4d, 0x30, 0x79, 0x11, 0x53, 0x79,
+            0x00, 0x36, 0xf9, 0xa0, 0x1d, 0xdc, 0x9d, 0x94, 0x70, 0x89, 0x89, 0xaa,
+            0x61, 0x84, 0xe0, 0xd9, 0xc5, 0x0e, 0x85, 0x83, 0x82, 0x56, 0x80, 0x12,
+            0xe8, 0xa0, 0xd4, 0xcb, 0x45, 0xa9, 0x0a, 0x63, 0x78, 0x64, 0x3b, 0x5f,
+            0x0d, 0xad, 0x10, 0xbc, 0x4a, 0xd4, 0x9e, 0x8a, 0xd6, 0x26, 0x36, 0x14,
+            0xa2, 0x8f, 0x62, 0xec, 0x74, 0x19, 0x02, 0x38, 0xc8, 0x05, 0xb0, 0x62,
+            0xb7, 0x2d, 0xbc, 0x1e, 0xb7, 0x25, 0xbb, 0x89, 0xe8, 0x23, 0xbf, 0x5b,
+            0xa5, 0x32, 0x3f, 0x6d, 0xc8, 0x9b, 0x33, 0xcd, 0xb3, 0x5a, 0x82, 0xc2,
+            0x11, 0x77, 0x7a, 0x18, 0xa9, 0x02, 0xcd, 0x1a, 0x96, 0xe1, 0x92, 0xdd,
+            0x0e, 0x75, 0x5b, 0x51, 0x96, 0xf2, 0xd9, 0x0e, 0xc3, 0xe3, 0x6f, 0xfa,
+            0x06, 0xf8, 0xcd, 0x1c, 0x0d, 0x89, 0xc5, 0x36, 0x2b, 0x0b, 0x2f, 0x73,
+            0xe6, 0xdc, 0x62, 0x49, 0xc0, 0x04, 0xb4, 0x10, 0x73, 0xef, 0xdd, 0x45,
+            0x10, 0x66, 0x7a, 0x37, 0xa0, 0xbb, 0x42, 0x19, 0x94, 0xd8, 0xe4, 0xbd,
+            0x50, 0xea, 0xf6, 0x11, 0xd7, 0x7d, 0x2f, 0x13, 0xa3, 0xc8, 0x09, 0x3c,
+            0x2b, 0x17, 0x21, 0x64, 0xdd, 0xef, 0x14, 0x7d, 0x06, 0x77, 0xa7, 0x7e,
+            0xb9, 0x0e, 0xd3, 0x4a, 0x17, 0x37, 0x1a, 0xb7, 0xc6, 0x69, 0xb9, 0xcd,
+            // π.C (96 bytes)
+            0x0f, 0x11, 0xcd, 0x45, 0x15, 0x10, 0xec, 0x5e, 0x92, 0x6a, 0x46, 0x9d,
+            0x1b, 0xab, 0x95, 0xc2, 0xe6, 0xf3, 0xe9, 0xe2, 0x85, 0xb8, 0x05, 0x80,
+            0x15, 0x06, 0x55, 0x72, 0x75, 0x52, 0x0e, 0x27, 0xfa, 0x7f, 0x37, 0x72,
+            0xd3, 0xc3, 0x73, 0x94, 0x12, 0xe0, 0x21, 0xb1, 0xb7, 0x41, 0x96, 0xc3,
+            0x15, 0xc8, 0xdb, 0xc2, 0x37, 0x7b, 0x98, 0x95, 0x81, 0x33, 0x2e, 0x6a,
+            0x95, 0xe0, 0xe1, 0x14, 0x82, 0x74, 0xb0, 0x2d, 0x84, 0x25, 0xa1, 0xc7,
+            0x97, 0xdb, 0x17, 0x79, 0x36, 0x27, 0x84, 0x3f, 0xb4, 0xf1, 0x67, 0x46,
+            0x37, 0xe2, 0x0b, 0x79, 0x96, 0x62, 0x7b, 0x01, 0x38, 0xb7, 0x6a, 0x2c,
+        ]);
+
+        // Calldata: supply(address,uint256,address,uint16) — 164 bytes (zero-padded)
+        const calldata = new Uint8Array([
+            0x61, 0x7b, 0xa0, 0x37, // selector: supply
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
+            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, // asset = USDC
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x3b, 0x9a, 0xca, 0x00, // amount = 1000 USDC
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
+            0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e, // onBehalfOf
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // referralCode = 0
+            // Padding to 164 bytes
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ]);
+
+        // Human-readable string — 64 bytes null-padded
+        // "Supply 00000010 00.000000000000000000 USDC"
+        const readable = new Uint8Array([
+            0x53, 0x75, 0x70, 0x70, 0x6c, 0x79, 0x20, 0x30, 0x30, 0x30, 0x30, 0x30,
+            0x30, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+            0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+            0x20, 0x55, 0x53, 0x44, 0x43, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ]);
+
+        // Unsigned EIP-1559 envelope: Aave V3 supply(1000 USDC) on chain 1
+        // to = Aave V3 Pool Mainnet 0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2
+        const aaveTx = new Uint8Array([
+            0x02, 0xf8, 0xae, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00, 0x85, 0x0b,
+            0xa4, 0x3b, 0x74, 0x00, 0x83, 0x03, 0x0d, 0x40, 0x94, 0x87, 0x87, 0x0b,
+            0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f, 0x4c, 0xe8, 0x39, 0x2d, 0x69,
+            0x35, 0x0b, 0x4f, 0xa4, 0xe2, 0x80, 0xb8, 0x84, 0x61, 0x7b, 0xa0, 0x37,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
+            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x3b, 0x9a, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53,
+            0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0,
+        ]);
+
+        // keccak256("")
+        const keccakEmpty = new Uint8Array([
+            0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e,
+            0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0, 0xe5, 0x00, 0xb6, 0x53,
+            0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85,
+            0xa4, 0x70
+        ]);
+
+        // EntryPoint v0.6
+        const entryPoint = new Uint8Array([
+            0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
+            0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89
+        ]);
+
+        // v2 wire format for SIGN_CLEAR_USEROP (0x31):
+        //   key_index(4) + ots_index(4) +
+        //   proof(384) + calldata(164) + readable(64) +
+        //   AA header: sender(20) + entry_point(20) + chain_id(8) +
+        //     nonce(32) + call_gas(32) + ver_gas(32) + pre_gas(32) +
+        //     max_fee(32) + max_prio(32) + init_code_hash(32) + paymaster_hash(32) +
+        //   tx_len(2) + tx + vk_bundle_len(2) + vk_bundle
+        //
+        // NOTE: The VK bundle must be looked up from the device's NS-side VK DB
+        // by (chain_id, contract_address). Since we don't have access to the
+        // device's VK DB from WebHID, we send a zero-length VK bundle. This will
+        // cause the firmware to fail the Merkle verification — use this to test
+        // the ZK clear-sign flow up to the VK check, or provision a matching
+        // VK bundle for your device.
+        const vkBundle = new Uint8Array(0); // placeholder — real bundle from companion app
+
+        const txLen = aaveTx.length;
+        const aaHeaderLen = 20 + 20 + 8 + 32*8; // 304 bytes
+        const totalPayload = 4 + 4 + 384 + 164 + 64 + aaHeaderLen + 2 + txLen + 2 + vkBundle.length;
+        const payload = new Uint8Array(totalPayload);
+        let p = 0;
+
+        // key_index u32 BE
+        payload[p++] = (keyIdx >> 24) & 0xFF;
+        payload[p++] = (keyIdx >> 16) & 0xFF;
+        payload[p++] = (keyIdx >> 8) & 0xFF;
+        payload[p++] = keyIdx & 0xFF;
+
+        // ots_index u32 BE = 0
+        p += 4;
+
+        // ZK header: proof (384 bytes)
+        payload.set(proof, p); p += 384;
+
+        // ZK header: calldata (164 bytes)
+        payload.set(calldata, p); p += 164;
+
+        // ZK header: readable (64 bytes)
+        payload.set(readable, p); p += 64;
+
+        // AA header: sender (20 bytes, zeros)
+        p += 20;
+
+        // AA header: entry_point
+        payload.set(entryPoint, p); p += 20;
+
+        // AA header: chain_id u64 BE
+        for (let i = 0; i < 8; i++) payload[p++] = Number((chainId >> BigInt((7 - i) * 8)) & 0xFFn);
+
+        // AA header: nonce (32 bytes, = 1)
+        payload[p + 31] = 1; p += 32;
+
+        // AA header: call_gas_limit = 200000
+        payload[p + 29] = 0x03; payload[p + 30] = 0x0d; payload[p + 31] = 0x40; p += 32;
+
+        // AA header: verification_gas_limit = 200000
+        payload[p + 29] = 0x03; payload[p + 30] = 0x0d; payload[p + 31] = 0x40; p += 32;
+
+        // AA header: pre_verification_gas = 21000
+        payload[p + 30] = 0x52; payload[p + 31] = 0x08; p += 32;
+
+        // AA header: max_fee_per_gas = 50 gwei
+        const maxFee = BigInt(50_000_000_000);
+        for (let i = 0; i < 8; i++) payload[p + 24 + i] = Number((maxFee >> BigInt((7 - i) * 8)) & 0xFFn);
+        p += 32;
+
+        // AA header: max_priority_fee_per_gas = 2 gwei
+        const maxPrio = BigInt(2_000_000_000);
+        for (let i = 0; i < 8; i++) payload[p + 24 + i] = Number((maxPrio >> BigInt((7 - i) * 8)) & 0xFFn);
+        p += 32;
+
+        // AA header: init_code_hash = keccak256("")
+        payload.set(keccakEmpty, p); p += 32;
+
+        // AA header: paymaster_and_data_hash = keccak256("")
+        payload.set(keccakEmpty, p); p += 32;
+
+        // tx_len u16 BE
+        payload[p++] = (txLen >> 8) & 0xFF;
+        payload[p++] = txLen & 0xFF;
+
+        // tx data
+        payload.set(aaveTx, p); p += txLen;
+
+        // vk_bundle_len u16 BE
+        payload[p++] = (vkBundle.length >> 8) & 0xFF;
+        payload[p++] = vkBundle.length & 0xFF;
+
+        // vk_bundle
+        if (vkBundle.length > 0) {
+            payload.set(vkBundle, p); p += vkBundle.length;
+        }
+
+        log(`  Sending SIGN_CLEAR_USEROP Aave V3 supply (${p} bytes payload)...`);
+        log(`  ZK proof: Groth16 over BLS12-381 (384 bytes)`);
+        log(`  Readable: "Supply 1000 USDC to Aave"`);
+        log(`  Confirm on device display.`);
+        log(`  NOTE: Without a matching VK bundle, Merkle verification will fail.`);
+
+        const { sw, data } = await sendChainedApdu(INS_SIGN_CLEAR_USEROP, payload.slice(0, p));
+        if (sw === 0x9000) {
+            const w = parseWrapper(data);
+            if (w) {
+                log(`  PQSignatureWrapper received!`);
+                log(`    signer:    ${w.signerType}`);
+                log(`    keyIndex:  ${w.keyIndex}`);
+                log(`    otsIndex:  ${w.otsIndex}`);
+                log(`    pkSeed:    ${hex(w.pkSeed.slice(0, 16))}...`);
+                log(`    pkRoot:    ${hex(w.pkRoot.slice(0, 16))}...`);
+                log(`    sig size:  ${w.sigLen} bytes`);
+            } else {
+                log(`  Raw response: ${data.length} bytes`);
+                log(`  First 64: ${hex(data.slice(0, 64))}`);
+            }
+        } else {
+            log(`  ZK clear-sign failed: SW=0x${sw.toString(16)}`);
+            if (sw === 0x6982) log(`  (Security not satisfied — likely VK bundle Merkle check failed)`);
+            if (sw === 0x6985) log(`  (Conditions not satisfied — device may be locked)`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+// SIGN_MESSAGE — test personal_sign
+document.getElementById('signMessage').onclick = async () => {
+    try {
+        const chainId = BigInt(document.getElementById('chainId').value);
+        const keyIdx = parseInt(document.getElementById('keyIndex').value);
+        const msg = new TextEncoder().encode('Hello from PQSigner!');
+
+        const payload = new Uint8Array(4 + 4 + 8 + 2 + msg.length);
+        let p = 0;
+
+        // key_index
+        payload[p++] = (keyIdx >> 24) & 0xFF;
+        payload[p++] = (keyIdx >> 16) & 0xFF;
+        payload[p++] = (keyIdx >> 8) & 0xFF;
+        payload[p++] = keyIdx & 0xFF;
+
+        // ots_index = 0
+        p += 4;
+
+        // chain_id u64 BE
+        for (let i = 0; i < 8; i++) payload[p++] = Number((chainId >> BigInt((7 - i) * 8)) & 0xFFn);
+
+        // msg_len u16 BE
+        payload[p++] = (msg.length >> 8) & 0xFF;
+        payload[p++] = msg.length & 0xFF;
+
+        // message
+        payload.set(msg, p); p += msg.length;
+
+        log(`  Sending SIGN_MESSAGE ("Hello from PQSigner!", ${p} bytes)...`);
+        log(`  Confirm message on device display.`);
+
+        const { sw, data } = await sendChainedApdu(INS_SIGN_MESSAGE, payload.slice(0, p));
+        if (sw === 0x9000) {
+            const w = parseWrapper(data);
+            if (w) {
+                log(`  PQSignatureWrapper received!`);
+                log(`    signer:   ${w.signerType}`);
+                log(`    sig size: ${w.sigLen} bytes`);
+            } else {
+                log(`  Response: ${data.length} bytes`);
+            }
+        } else {
+            log(`  Sign failed: SW=0x${sw.toString(16)}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+// SIGN_BOOTSTRAP — deployment authorization
+document.getElementById('signBootstrap').onclick = async () => {
+    try {
+        // Test: sign keccak256("PQWALLET_INIT_V1" + zeros) for deployment
+        const payload = new Uint8Array(37);
+        // ots_index = 0 (4 bytes)
+        // context_tag = 0x00 (DEPLOY)
+        payload[4] = 0x00;
+        // msg_hash = all zeros (test)
+        // bytes 5..37 already zero
+
+        log('  Sending SIGN_BOOTSTRAP (deploy context, test hash)...');
+        log('  Confirm "Deploy wallet?" on device display.');
+
+        const { sw, data } = await sendChainedApdu(INS_SIGN_BOOTSTRAP, payload);
+        if (sw === 0x9000) {
+            const w = parseWrapper(data);
+            if (w) {
+                log(`  PQSignatureWrapper received!`);
+                log(`    signer:   ${w.signerType} (expected BOOTSTRAP)`);
+                log(`    sig size: ${w.sigLen} bytes`);
+            }
+        } else {
+            log(`  Sign failed: SW=0x${sw.toString(16)}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+// GET_WALLET_ADDRESS
+document.getElementById('getWalletAddress').onclick = async () => {
+    try {
+        const chainId = BigInt(document.getElementById('chainId').value);
+        const factoryHex = document.getElementById('factory').value.replace('0x', '');
+
+        const payload = new Uint8Array(60);
+        let p = 0;
+
+        // chain_id u64 BE
+        for (let i = 0; i < 8; i++) payload[p++] = Number((chainId >> BigInt((7 - i) * 8)) & 0xFFn);
+
+        // factory_address (20 bytes)
+        for (let i = 0; i < 20; i++) {
+            payload[p++] = parseInt(factoryHex.substr(i * 2, 2), 16) || 0;
+        }
+
+        // init_code_hash (32 bytes) — placeholder zeros
+        p += 32;
+
+        log(`  Requesting wallet address for chain ${chainId}...`);
+        log(`  Verify address on device display.`);
+
+        const { sw, data } = await sendApdu(INS_GET_WALLET_ADDRESS, 0, 0, payload);
+        if (sw === 0x9000 && data.length >= 20) {
+            log(`  Address: ${hexCompact(data.slice(0, 20))}`);
+        } else {
+            log(`  Error: SW=0x${sw.toString(16)}`);
         }
     } catch (e) { log(`Error: ${e.message}`); }
 };

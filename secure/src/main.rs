@@ -13,9 +13,31 @@
 /// Conditional debug logging macro. Compiles to no-op without the `debug-log` feature
 /// and in host-side test builds (where cortex-m-semihosting is unavailable),
 /// ensuring no semihosting output in production builds.
+///
+/// When `debug-log` IS enabled, the macro checks the DHCSR.C_DEBUGEN bit at
+/// runtime before issuing the semihosting BKPT. This makes `debug-log` builds
+/// safe to run **without** a debugger attached — the output is silently skipped
+/// instead of HardFaulting.
 #[cfg(all(feature = "debug-log", not(test)))]
 macro_rules! secure_log {
-    ($($arg:tt)*) => { cortex_m_semihosting::hprintln!($($arg)*) };
+    ($($arg:tt)*) => {
+        // On real STM32U585: check DHCSR.C_DEBUGEN before semihosting BKPT.
+        // Without a debugger, BKPT would HardFault — this makes debug-log
+        // builds safe to run standalone (USB-only, no probe attached).
+        //
+        // On QEMU: semihosting works via BKPT interception regardless of
+        // DHCSR, so always emit.
+        #[cfg(feature = "stm32u585")]
+        {
+            if unsafe { core::ptr::read_volatile(0xE000_EDF0 as *const u32) } & 1 != 0 {
+                cortex_m_semihosting::hprintln!($($arg)*);
+            }
+        }
+        #[cfg(not(feature = "stm32u585"))]
+        {
+            cortex_m_semihosting::hprintln!($($arg)*);
+        }
+    };
 }
 #[cfg(any(not(feature = "debug-log"), test))]
 macro_rules! secure_log {
@@ -421,9 +443,9 @@ fn main() -> ! {
             // omit that feature) leak nothing on the semihosting channel.
             #[cfg(feature = "debug-log")]
             {
-                cortex_m_semihosting::hprintln!("[S] mnemonic (DEBUG):");
+                secure_log!("[S] mnemonic (DEBUG):");
                 for (i, w) in mnemonic.words().enumerate() {
-                    cortex_m_semihosting::hprintln!("  {} {}", i + 1, w);
+                    secure_log!("  {} {}", i + 1, w);
                 }
             }
 
@@ -438,9 +460,9 @@ fn main() -> ! {
                 if let Ok(_) =
                     (&mut *core::ptr::addr_of_mut!(SE)).read_vk(&mut vk_buf)
                 {
-                    cortex_m_semihosting::hprintln!("[S] vk (DEBUG):");
+                    secure_log!("[S] vk (DEBUG):");
                     for chunk in vk_buf[..32].chunks(8) {
-                        cortex_m_semihosting::hprintln!(
+                        secure_log!(
                             "  {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
                             chunk[0], chunk[1], chunk[2], chunk[3],
                             chunk[4], chunk[5], chunk[6], chunk[7]
@@ -643,11 +665,14 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
     #[cfg(feature = "debug-log")]
     {
-        // Best-effort debug output -- may fail if semihosting is unavailable
-        cortex_m_semihosting::hprintln!("[S] PANIC: {}", _info);
+        // Best-effort debug output — only if a debugger is actually attached.
+        if unsafe { core::ptr::read_volatile(0xE000_EDF0 as *const u32) } & 1 != 0 {
+            cortex_m_semihosting::hprintln!("[S] PANIC: {}", _info);
+        }
     }
 
     loop {
-        cortex_m::asm::bkpt();
+        // WFI instead of BKPT — BKPT without a debugger causes HardFault.
+        cortex_m::asm::wfi();
     }
 }

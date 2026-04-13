@@ -114,15 +114,15 @@ pub unsafe fn init() {
     #[cfg(feature = "debug-log")]
     {
         // Comprehensive register dump for USB bring-up debugging
-        cortex_m_semihosting::hprintln!(
+        secure_log!(
             "[S][USB] RCC_AHB2ENR1=0x{:08x}",
             read_volatile(RCC_AHB2ENR1)
         );
-        cortex_m_semihosting::hprintln!(
+        secure_log!(
             "[S][USB] GPIOA_MODER=0x{:08x} (expect PA11/12=AF=0b10)",
             read_volatile(GPIOA_MODER)
         );
-        cortex_m_semihosting::hprintln!(
+        secure_log!(
             "[S][USB] GPIOA_AFRH =0x{:08x} (expect PA11/12=AF10=0xA)",
             read_volatile(GPIOA_AFRH)
         );
@@ -130,7 +130,7 @@ pub unsafe fn init() {
         for off in [0x28u32, 0x2C, 0x30, 0x34] {
             let addr = GPIOA_S + off;
             let val = read_volatile(addr as *const u32);
-            cortex_m_semihosting::hprintln!(
+            secure_log!(
                 "[S][USB] GPIOA+0x{:02x}=0x{:08x}", off, val
             );
         }
@@ -151,7 +151,7 @@ pub unsafe fn init() {
 
     #[cfg(feature = "debug-log")]
     {
-        cortex_m_semihosting::hprintln!(
+        secure_log!(
             "[S][USB] After GPIO config: MODER=0x{:08x} AFRH=0x{:08x}",
             read_volatile(GPIOA_MODER), read_volatile(GPIOA_AFRH)
         );

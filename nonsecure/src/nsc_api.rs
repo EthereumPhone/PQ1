@@ -38,6 +38,10 @@ mod transport {
     const CMD_GET_BOOTSTRAP_PUBKEY: u32 = 8;
     const CMD_GET_MAIN_PUBKEY: u32 = 9;
     const CMD_SIGN_BOOTSTRAP: u32 = 10;
+    const CMD_IS_UNLOCKED: u32 = 11;
+    const CMD_LOCK: u32 = 12;
+    const CMD_SIGN_MESSAGE: u32 = 13;
+    const CMD_GET_WALLET_ADDRESS: u32 = 14;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -124,6 +128,38 @@ mod transport {
             gateway_call(CMD_SIGN_BOOTSTRAP, payload_ptr as u32, sig_ptr as u32, total_len)
         }
     }
+
+    #[inline]
+    pub(super) fn is_unlocked() -> u32 {
+        unsafe { gateway_call(CMD_IS_UNLOCKED, 0, 0, 0) }
+    }
+
+    #[inline]
+    pub(super) fn lock() -> u32 {
+        unsafe { gateway_call(CMD_LOCK, 0, 0, 0) }
+    }
+
+    #[inline]
+    pub(super) fn sign_message_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_SIGN_MESSAGE, payload_ptr as u32, sig_ptr as u32, total_len)
+        }
+    }
+
+    #[inline]
+    pub(super) fn get_wallet_address_call(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_GET_WALLET_ADDRESS, payload_ptr as u32, out_ptr as u32, total_len)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +183,10 @@ mod transport {
         fn nsc_get_bootstrap_pubkey(out_ptr: u32, out_len: u32) -> u32;
         fn nsc_get_main_pubkey(payload_ptr: u32, out_ptr: u32, out_len: u32) -> u32;
         fn nsc_sign_bootstrap(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_is_unlocked() -> u32;
+        fn nsc_lock() -> u32;
+        fn nsc_sign_message(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_get_wallet_address(payload_ptr: u32, out_ptr: u32, total_len: u32) -> u32;
     }
 
     #[inline]
@@ -212,6 +252,34 @@ mod transport {
         total_len: u32,
     ) -> u32 {
         unsafe { nsc_sign_bootstrap(payload_ptr as u32, sig_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn is_unlocked() -> u32 {
+        unsafe { nsc_is_unlocked() }
+    }
+
+    #[inline]
+    pub(super) fn lock() -> u32 {
+        unsafe { nsc_lock() }
+    }
+
+    #[inline]
+    pub(super) fn sign_message_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe { nsc_sign_message(payload_ptr as u32, sig_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn get_wallet_address_call(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe { nsc_get_wallet_address(payload_ptr as u32, out_ptr as u32, total_len) }
     }
 }
 
@@ -312,5 +380,37 @@ pub fn sign_bootstrap(msg_hash: &[u8; 32], sig_buf: &mut [u8]) -> u32 {
         msg_hash.as_ptr(),
         sig_buf.as_mut_ptr(),
         32,
+    )
+}
+
+/// Returns 1 if the device is PIN-unlocked this session, 0 otherwise.
+pub fn is_unlocked() -> bool {
+    transport::is_unlocked() == 1
+}
+
+/// Explicitly lock the device: zeroize cached secrets and mark as locked.
+pub fn lock() -> u32 {
+    transport::lock()
+}
+
+/// EIP-191 personal_sign. The payload carries key_index, ots_index,
+/// chain_id, and the message. The secure world computes the EIP-191
+/// hash, displays the message on the trusted UI, and signs with SLH-DSA.
+/// Returns a WRAPPER_TOTAL_LEN-byte PQSignatureWrapper.
+pub fn sign_message(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
+    transport::sign_message_call(
+        payload.as_ptr(),
+        sig_buf.as_mut_ptr(),
+        payload.len() as u32,
+    )
+}
+
+/// Compute CREATE2 wallet address from bootstrap VK + factory parameters,
+/// display on trusted OLED. Returns 20-byte address in `out`.
+pub fn get_wallet_address(payload: &[u8], out: &mut [u8; 20]) -> u32 {
+    transport::get_wallet_address_call(
+        payload.as_ptr(),
+        out.as_mut_ptr(),
+        payload.len() as u32,
     )
 }

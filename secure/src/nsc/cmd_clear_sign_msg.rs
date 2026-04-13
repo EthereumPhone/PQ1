@@ -141,7 +141,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_status("Verifying", "ZK proof...");
 
     #[cfg(feature = "e2e-test")]
-    cortex_m_semihosting::hprintln!("[S][e2e] cmd_clear_sign_msg dispatch = ZkClearSignMsg");
+    secure_log!("[S][e2e] cmd_clear_sign_msg dispatch = ZkClearSignMsg");
 
     // 7. Verify the Groth16 proof against (Poseidon(canonical),
     //    Poseidon(readable), ERC20_POSEIDON_ROOT). The proof attests
