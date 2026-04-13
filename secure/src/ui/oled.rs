@@ -360,6 +360,12 @@ impl Display {
     /// Sends 4 pages of 128 bytes each (129 bytes per I2C transaction
     /// including the 0x40 data control byte).
     fn flush_fb(&self) {
+        // Mirror the same buffer to the host via RTT when `ui-mirror` is on.
+        // Always identical bytes to what hits the I2C bus, so the host
+        // viewer matches the OLED 1:1.
+        #[cfg(feature = "ui-mirror")]
+        crate::ui::mirror::push(&self.fb.buf);
+
         let addr = unsafe { SSD1306_ADDR };
 
         // Reset address window to full screen.
@@ -446,18 +452,47 @@ impl Input {
     /// Read a button press.
     ///
     /// Priority:
-    /// 1. GPIO buttons (when `gpio-buttons` feature is active)
-    /// 2. Semihosting file I/O (when `debug-log` is active and fd is open)
-    /// 3. WFE idle loop (stub fallback)
+    /// 1. GPIO buttons (`gpio-buttons` feature)
+    /// 2. RTT down-channel from `tools/oled-mirror` (`ui-mirror` feature)
+    /// 3. Semihosting file I/O (`debug-log` feature, no mirror)
+    /// 4. WFE idle loop (stub fallback)
     pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
-        // GPIO hardware buttons — preferred when available.
+        // GPIO hardware buttons — preferred when physically present.
         #[cfg(feature = "gpio-buttons")]
         {
             return crate::hw::buttons::wait_event(idle_check);
         }
 
-        // Semihosting file I/O — keyboard input via probe-rs TCP socket.
-        #[cfg(all(not(feature = "gpio-buttons"), feature = "debug-log"))]
+        // RTT down-channel input from the host-side `oled-mirror` tool.
+        // Polls ~125 Hz; no interrupt source to WFE on.
+        #[cfg(all(not(feature = "gpio-buttons"), feature = "ui-mirror"))]
+        {
+            loop {
+                if idle_check() {
+                    return None;
+                }
+                if let Some(b) = crate::ui::mirror::try_read_button() {
+                    match b {
+                        b'h' | b'a' => return Some((Button::Left, Press::Short)),
+                        b'l' | b'd' => return Some((Button::Right, Press::Short)),
+                        b'H' | b'A' => return Some((Button::Left, Press::Long)),
+                        b'L' | b'D' => return Some((Button::Right, Press::Long)),
+                        _ => {}
+                    }
+                }
+                // ~8 ms per poll at 160 MHz; imperceptible button latency.
+                for _ in 0..320_000 {
+                    cortex_m::asm::nop();
+                }
+            }
+        }
+
+        // Semihosting file I/O — keyboard via probe-rs TCP socket bridge.
+        #[cfg(all(
+            not(feature = "gpio-buttons"),
+            not(feature = "ui-mirror"),
+            feature = "debug-log"
+        ))]
         if self.fd != usize::MAX {
             use cortex_m_semihosting::syscall;
             loop {

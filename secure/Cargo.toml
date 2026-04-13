@@ -35,6 +35,12 @@ embedded-hal = { version = "1", optional = true }
 ssd1306 = { version = "0.10", default-features = false, optional = true }
 embedded-graphics = { version = "0.8", default-features = false, optional = true }
 
+# RTT (Real-Time Transfer) for the `ui-mirror` debug feature only.
+# Streams the SSD1306 framebuffer to the host via the ST-LINK probe so the
+# OLED contents can be viewed in a terminal. Debug-only — gated out of
+# production builds by `make prod-check`.
+rtt-target = { version = "0.5", optional = true }
+
 # ARM-only: these crates don't compile on x86_64, so they're gated to the
 # ARM target. This lets `cargo test -p sphincs-tz-secure` run the
 # pure-logic unit tests (aa, tx) on the host without pulling in hardware deps.
@@ -70,6 +76,11 @@ stsafe-probe = ["stm32u585", "mock-se"]  # I2C2 bus scan to detect on-board STSA
 gpio-buttons = ["stm32u585"]  # GPIO button driver: PI2 (LEFT) + PA15 (RIGHT) on CN14
 button-test = ["stm32u585", "mock-se", "gpio-buttons"]  # Flash + run GPIO button test
 qr-screen-test = ["ui-oled", "stm32u585", "mock-se"]  # Render QR + companion-app URL at boot, then halt. Use `make qr-screen`.
+# Stream the SSD1306 framebuffer to the host over RTT so the OLED can be
+# viewed in a terminal during development. Implies `ui-oled` (nothing to
+# mirror without it). NEVER ship in production: `make prod-check` rejects
+# any build that has this feature enabled. See `tools/oled-mirror`.
+ui-mirror = ["dep:rtt-target", "ui-oled"]
 
 [build-dependencies]
 qrcodegen = "1.8"

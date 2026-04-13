@@ -1,0 +1,18 @@
+[package]
+name = "oled-mirror"
+version = "0.1.0"
+edition = "2021"
+description = "Host-side viewer for the SSD1306 framebuffer streamed via RTT by the `ui-mirror` firmware feature."
+
+[[bin]]
+name = "oled-mirror"
+path = "src/main.rs"
+
+# Kept out of the parent workspace — see the comment in ../../Cargo.toml.
+[workspace]
+
+[dependencies]
+probe-rs = "0.24"
+anyhow = "1"
+winit = "0.29"
+softbuffer = "0.4"

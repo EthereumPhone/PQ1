@@ -27,6 +27,9 @@ mod noop;
 #[cfg(feature = "ui-noop")]
 pub use noop::{Display, Input};
 
+#[cfg(feature = "ui-mirror")]
+pub mod mirror;
+
 pub mod confirm;
 pub mod pin_entry;
 pub mod seed_wizard;
@@ -64,6 +67,9 @@ static mut INPUT: Option<Input> = None;
 
 /// Initialize the global Display and Input. Must be called once at boot.
 pub fn init() {
+    #[cfg(feature = "ui-mirror")]
+    mirror::init();
+
     unsafe {
         let d = &raw mut DISPLAY;
         let i = &raw mut INPUT;

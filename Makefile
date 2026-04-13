@@ -23,6 +23,28 @@ NONSECURE_ELF = target/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure
 # Remove it for production builds to eliminate all debug strings.
 FEATURES ?= mock-se,debug-log,ui-semihosting
 
+# ---- Mirror mode --------------------------------------------------------
+# Stream the SSD1306 OLED contents to a scaled host window (via RTT)
+# instead of relying on the physical OLED. The firmware is built with the
+# `ui-mirror` feature and `debug-log` is dropped — semihosting BKPT
+# syscalls block forever without a host to service them, and the mirror
+# tool isn't one. Any target that wants to support mirror mode uses the
+# `RUN_OR_MIRROR` recipe below.
+#
+# Two equivalent ways to enable it:
+#    make qr-screen mirror       # extra goal — recommended ergonomics
+#    make qr-screen MIRROR=1     # explicit variable form
+MIRROR ?= 0
+ifneq (,$(filter mirror,$(MAKECMDGOALS)))
+  MIRROR := 1
+endif
+
+# No-op goal. Its presence on the command line flips MIRROR above; the
+# recipe itself does nothing so the "real" target next to it runs.
+.PHONY: mirror
+mirror:
+	@:
+
 # Extract features relevant to the nonsecure crate (it doesn't know about
 # mock-se, debug-log, ui-semihosting, etc. — only e2e-test and stm32u585).
 NS_FEATURES_LIST := $(strip $(foreach f,stm32u585 e2e-test usb,$(if $(findstring $(f),$(FEATURES)),$(f))))
@@ -31,7 +53,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen prod-check
 
 all: secure nonsecure
 
@@ -73,17 +95,30 @@ run: all
 play: all
 	@python3 tools/wallet_run.py
 
+# Feature set for `play-hw-display`. Mirror mode swaps `debug-log` (which
+# would block on semihosting BKPTs) for `ui-mirror`; buttons arrive over
+# the RTT down-channel from the host tool.
+ifeq ($(MIRROR),1)
+  PLAY_HW_FEATURES := mock-se,ui-oled,stm32u585,ui-mirror
+else
+  PLAY_HW_FEATURES := mock-se,debug-log,ui-oled,stm32u585
+endif
+
 # Interactive two-button wallet on real STM32U585 with SSD1306 OLED display.
 # Same arrow-key mapping as `play` (QEMU version), but runs on real hardware.
 # Display renders on the physical OLED; button input comes from your laptop
 # keyboard via probe-rs semihosting READC.
 # Requires: ST-LINK connected, SSD1306 OLED wired to PB8/PB9/3V3/GND.
+#
+# Append `mirror` to stream the OLED to a host window and drive buttons
+# via the window's keyboard focus (arrow keys, Shift+arrow for long press):
+#   make play-hw-display mirror
 play-hw-display:
-	@echo "==> Building secure + nonsecure for interactive OLED play"
+	@echo "==> Building secure + nonsecure for interactive OLED play (features: $(PLAY_HW_FEATURES))"
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-oled,stm32u585
+			--features $(PLAY_HW_FEATURES)
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features stm32u585
@@ -94,8 +129,12 @@ play-hw-display:
 	@STM32_Programmer_CLI --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+ifeq ($(MIRROR),1)
+	$(call RUN_OR_MIRROR,$(SECURE_ELF))
+else
 	@echo "==> Starting interactive wallet (Ctrl-C to quit)..."
 	@python3 tools/wallet_run_hw.py
+endif
 
 # Configure /dev/ttyACM0 for TROPIC01 communication
 setup-serial:
@@ -378,19 +417,66 @@ button-test:
 	@echo "==> Running button test (Ctrl-C to quit)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Feature-set selection for targets that support MIRROR=1. Dropping
+# `debug-log` here isn't optional: with `ui-mirror` enabled and no host
+# servicing semihosting BKPTs, any `secure_log!` call hangs the MCU.
+ifeq ($(MIRROR),1)
+  QR_SCREEN_FEATURES := qr-screen-test,ui-mirror
+else
+  QR_SCREEN_FEATURES := qr-screen-test,debug-log
+endif
+
+# Canned recipe used by any target that wants MIRROR=1 support. Called
+# AFTER `probe-rs download`. Argument: $(1) = path to the flashed ELF.
+# Resets the target (the mirror tool does this) and either launches the
+# host window or hands off to `probe-rs run`.
+define RUN_OR_MIRROR
+@if [ "$(MIRROR)" = "1" ]; then \
+    echo "==> Building oled-mirror host tool..."; \
+    cargo build --release --manifest-path tools/oled-mirror/Cargo.toml; \
+    RTT_ADDR=$$(arm-none-eabi-nm $(1) | awk '/ _SEGGER_RTT$$/ {print "0x"$$1}'); \
+    echo "==> Streaming OLED to window (rtt @ $$RTT_ADDR; close window or Esc to quit)..."; \
+    ./tools/oled-mirror/target/release/oled-mirror --chip STM32U585AIIx --rtt-addr $$RTT_ADDR; \
+ else \
+    echo "==> Running (Ctrl-C to quit)..."; \
+    probe-rs run --chip STM32U585AIIx $(1); \
+ fi
+endef
+
 # Companion-app QR-code screen in isolation: flash a firmware that
 # renders the QR + install URL on the OLED at boot and halts. Nothing
 # else runs — no SEs, no PIN flow, no NS world. Power-cycle or press
 # reset to re-run. Requires the SSD1306 OLED on I2C1 (PB8/PB9).
+#
+# Append `mirror` to stream the OLED contents to a host window instead:
+#   make qr-screen mirror
 qr-screen:
-	@echo "==> Building QR-screen test firmware..."
+	@echo "==> Building QR-screen test firmware (features: $(QR_SCREEN_FEATURES))..."
 	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features qr-screen-test,debug-log
+		-p sphincs-tz-secure --no-default-features --features $(QR_SCREEN_FEATURES)
 	@echo "==> Flashing QR-screen firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
-	@echo "==> Running QR screen (Ctrl-C to quit; the OLED holds the image)..."
-	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+	$(call RUN_OR_MIRROR,$(SECURE_ELF))
+
+# Production gate: refuse to build if any debug-only Cargo feature is in
+# the FEATURES list. Run this from CI before any release artifact is
+# produced. The forbidden set must stay in lockstep with the "NEVER ship"
+# features called out in CLAUDE.md and secure/Cargo.toml.
+FORBIDDEN_FEATURES := debug-log e2e-test ui-mirror mock-se se050-factory-reset se050-reset-e2e qr-screen-test stsafe-probe button-test
+prod-check:
+	@bad=""; \
+	for f in $(FORBIDDEN_FEATURES); do \
+		case ",$(FEATURES)," in \
+			*,$$f,*) bad="$$bad $$f" ;; \
+		esac; \
+	done; \
+	if [ -n "$$bad" ]; then \
+		echo "ERROR: production build contains forbidden feature(s):$$bad"; \
+		echo "       FEATURES=$(FEATURES)"; \
+		exit 1; \
+	fi; \
+	echo "==> prod-check OK (no forbidden features in: $(FEATURES))"
 
 # STSAFE-A110 I2C2 bus probe: detect on-board secure element.
 # Scans I2C2 (PH4/PH5) for the STSAFE-A110 at 0x20 and any other devices.

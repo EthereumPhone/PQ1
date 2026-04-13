@@ -25,6 +25,12 @@
 #     Build it out-of-tree with `cargo build --manifest-path
 #     tools/ob-configurator/Cargo.toml`.
 #
+#   * tools/oled-mirror — host-side viewer for the SSD1306 framebuffer
+#     streamed via RTT (see secure `ui-mirror` feature). Excluded because
+#     probe-rs's transitive deps (csv >= 1.2) conflict with the workspace
+#     resolution for criterion/bls12_381_pka. Build it out-of-tree with
+#     `cargo build --manifest-path tools/oled-mirror/Cargo.toml`.
+#
 #   * tools/*.py / *.js / *.sh — host scripts (dbgen helpers, circom
 #     compilation, token-list fetchers). Not Rust.
 #
