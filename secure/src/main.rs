@@ -347,22 +347,63 @@ fn main() -> ! {
         (&mut *core::ptr::addr_of_mut!(SE)).load_pbs();
     }
 
-    // ---- SE050 factory reset ----
-    // Wipes all user objects (UserID, entropy, VKs) then halts.
+    // ---- SE050 factory reset (iterative wipe) ----
+    // Actually wipes user objects via ReadIDList + DeleteSecureObject.
+    // Two authentication attempts to catch objects gated by either of
+    // the two UserIDs this firmware has ever provisioned:
+    //   - 0x7B06_0000 : current dual-SE / standalone SE050 UserID
+    //   - 0x7B00_2000 : legacy UserID from early f44fd92-era builds
+    // PIN is `b"00000000"` — the PIN baked into the e2e-test fast-path
+    // and entered by a user typing "0" eight times in the wizard.
+    //
     // Triggered by: make se050-reset
     #[cfg(feature = "se050-factory-reset")]
     unsafe {
-        ui::show_status("SE050 reset", "...");
+        ui::show_status("SE050 wipe", "...");
         let se = &mut *core::ptr::addr_of_mut!(SE);
-        match se.factory_reset() {
-            Ok(()) => {
-                secure_log!("[S] SE050 factory reset OK");
-                ui::show_status("SE050 reset", "OK - reflash");
-            }
+
+        const CURRENT_USERID: u32 = 0x7B06_0000;
+        const LEGACY_USERID: u32 = 0x7B00_2000;
+        const PIN: &[u8] = b"00000000";
+
+        let (d1, f1) = match se.iterative_wipe(Some(CURRENT_USERID), Some(PIN)) {
+            Ok(r) => r,
             Err(_e) => {
-                secure_log!("[S] SE050 factory reset FAILED");
-                ui::show_status("SE050 reset", "FAILED");
+                secure_log!("[S] iterative_wipe attempt 1 ERROR: {:?}", _e);
+                (0, u16::MAX)
             }
+        };
+        secure_log!(
+            "[S] Wipe attempt 1 (UserID 0x{:08x}): {} deleted, {} left",
+            CURRENT_USERID, d1, f1
+        );
+
+        // If the current-UserID pass left survivors, try the legacy UserID.
+        let (d2, f2) = if f1 > 0 {
+            match se.iterative_wipe(Some(LEGACY_USERID), Some(PIN)) {
+                Ok(r) => r,
+                Err(_e) => {
+                    secure_log!("[S] iterative_wipe attempt 2 ERROR: {:?}", _e);
+                    (0, f1)
+                }
+            }
+        } else {
+            (0, 0)
+        };
+        secure_log!(
+            "[S] Wipe attempt 2 (UserID 0x{:08x}): {} deleted, {} left",
+            LEGACY_USERID, d2, f2
+        );
+
+        let total = d1.saturating_add(d2);
+        secure_log!(
+            "[S] SE050 wipe: {} deleted total, {} permanently stuck",
+            total, f2
+        );
+        if f2 == 0 {
+            ui::show_status("SE050 wipe", "clean");
+        } else {
+            ui::show_status("SE050 wipe", "partial");
         }
         loop { cortex_m::asm::wfi(); }
     }
