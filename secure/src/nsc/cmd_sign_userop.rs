@@ -50,7 +50,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     use crate::ui::confirm::{confirm, ConfirmResult};
 
+    ui::show_status("Sign", "validating...");
+
     if !super::state::peek_state(|s| s.pin_verified) {
+        ui::show_status("Sign", "not unlocked");
         return NscStatus::NotInitialized as u32;
     }
 
@@ -63,9 +66,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if total_len < USEROP_PREFIX_LEN + 1
         || total_len > USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN
     {
+        ui::show_status("Sign", "bad length");
         return NscStatus::InvalidPointer as u32;
     }
     if !validate_ns_read_ptr(args.arg0, total_len) {
+        ui::show_status("Sign", "bad ptr");
         return NscStatus::InvalidPointer as u32;
     }
     if !validate_ns_write_ptr(args.arg1, SIGNATURE_LEN) {
@@ -73,14 +78,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // 2. TOCTOU snapshot — copy the entire NS payload into a secure
-    //    stack buffer before parsing anything.
-    let mut buf = [0u8; USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN];
+    //    static buffer before parsing anything. Uses a static instead of
+    //    a stack allocation to avoid overflowing the secure-world stack
+    //    (~5.5 KB would blow the CMSE gateway call frame).
+    const SNAP_LEN: usize = USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN;
+    static mut SNAP_BUF: [u8; SNAP_LEN] = [0u8; SNAP_LEN];
+    let buf = &mut SNAP_BUF[..];
     if total_len > buf.len() {
         return NscStatus::InvalidPointer as u32;
     }
     for i in 0..total_len {
         buf[i] = core::ptr::read_volatile(payload_ptr.add(i));
     }
+
+    ui::show_status("Sign", "parsing...");
 
     let has_bundle = buf[0] == 1;
 

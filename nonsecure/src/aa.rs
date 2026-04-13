@@ -166,6 +166,74 @@ pub fn build_clear_sign_userop_payload(
     p
 }
 
+/// Extract chain_id from a raw EIP-1559 unsigned envelope.
+///
+/// Format: `0x02 || RLP([chain_id, nonce, ...])`. We only decode the
+/// outer list header and the first RLP item (chain_id).
+///
+/// Returns `None` if the envelope is not a valid EIP-1559 type or too short.
+pub fn extract_chain_id(tx: &[u8]) -> Option<u64> {
+    if tx.is_empty() || tx[0] != 0x02 {
+        return None; // not EIP-1559
+    }
+    // Decode outer RLP list header at byte 1
+    let (body_start, _body_len) = rlp_list_header(&tx[1..])?;
+    let body = &tx[1 + body_start..];
+    // First item in the list body is chain_id
+    rlp_decode_u64(body)
+}
+
+/// Decode an RLP list header. Returns (header_size, body_length).
+fn rlp_list_header(data: &[u8]) -> Option<(usize, usize)> {
+    if data.is_empty() {
+        return None;
+    }
+    let b = data[0];
+    if (0xc0..=0xf7).contains(&b) {
+        // Short list: body length = b - 0xc0
+        Some((1, (b - 0xc0) as usize))
+    } else if (0xf8..=0xff).contains(&b) {
+        // Long list: next (b - 0xf7) bytes encode the body length
+        let len_bytes = (b - 0xf7) as usize;
+        if data.len() < 1 + len_bytes {
+            return None;
+        }
+        let mut body_len = 0usize;
+        for i in 0..len_bytes {
+            body_len = (body_len << 8) | data[1 + i] as usize;
+        }
+        Some((1 + len_bytes, body_len))
+    } else {
+        None // not a list
+    }
+}
+
+/// Decode the first RLP item as a u64.
+fn rlp_decode_u64(data: &[u8]) -> Option<u64> {
+    if data.is_empty() {
+        return None;
+    }
+    let b = data[0];
+    if b == 0x80 {
+        Some(0) // empty string = 0
+    } else if b < 0x80 {
+        Some(b as u64) // single byte
+    } else if (0x81..=0x88).contains(&b) {
+        // Short string (1-8 bytes) representing a big-endian integer
+        let len = (b - 0x80) as usize;
+        if data.len() < 1 + len {
+            return None;
+        }
+        let mut val = 0u64;
+        for i in 0..len {
+            val = (val << 8) | data[1 + i] as u64;
+        }
+        Some(val)
+    } else {
+        None // too long for u64
+    }
+}
+
 fn write_header(w: &UserOpWrapper<'_>, out: &mut [u8]) {
     debug_assert_eq!(out.len(), USEROP_HEADER_LEN);
     let mut p = 1usize; // skip has_bundle
