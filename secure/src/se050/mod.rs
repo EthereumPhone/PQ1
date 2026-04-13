@@ -127,12 +127,13 @@ impl Se050 {
     /// UserID itself is self-deleted at the end if it was created with
     /// the self-deletable policy (see `apdu::write_userid`).
     ///
-    /// Returns (deleted, remaining_failed).
+    /// Returns `(deleted, remaining_failed, auth_ok)`. See
+    /// `apdu::iterative_delete_all` for the meaning of `auth_ok`.
     pub fn iterative_wipe(
         &mut self,
         auth_obj_id: Option<u32>,
         pin: Option<&[u8]>,
-    ) -> Result<(u16, u16), Se050Error> {
+    ) -> Result<(u16, u16, bool), Se050Error> {
         self.init()?;
         unsafe {
             apdu::iterative_delete_all(&mut self.t1, &mut self.scp03, auth_obj_id, pin)

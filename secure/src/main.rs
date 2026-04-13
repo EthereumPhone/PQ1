@@ -362,49 +362,70 @@ fn main() -> ! {
         ui::show_status("SE050 wipe", "...");
         let se = &mut *core::ptr::addr_of_mut!(SE);
 
-        const CURRENT_USERID: u32 = 0x7B06_0000;
-        const LEGACY_USERID: u32 = 0x7B00_2000;
-        const PIN: &[u8] = b"00000000";
+        // Try the known dev UserIDs against the dev PIN candidates. Each
+        // wrong PIN consumes one SE050 attempt against that UserID
+        // (10-attempt budget); a correct PIN auto-resets the counter.
+        // PIN order is best-guess to minimise consumed attempts.
+        const USERIDS: &[u32] = &[0x7B06_0000, 0x7B00_2000];
+        const PIN_CANDIDATES: &[&[u8]] = &[
+            b"00000000", // e2e default + most common dev PIN
+            b"12345678",
+            b"11111111",
+        ];
 
-        let (d1, f1) = match se.iterative_wipe(Some(CURRENT_USERID), Some(PIN)) {
-            Ok(r) => r,
-            Err(_e) => {
-                secure_log!("[S] iterative_wipe attempt 1 ERROR: {:?}", _e);
-                (0, u16::MAX)
-            }
-        };
-        secure_log!(
-            "[S] Wipe attempt 1 (UserID 0x{:08x}): {} deleted, {} left",
-            CURRENT_USERID, d1, f1
-        );
+        let mut total_deleted: u32 = 0;
+        let mut last_failed: u16 = u16::MAX;
+        let mut any_auth_ok = false;
 
-        // If the current-UserID pass left survivors, try the legacy UserID.
-        let (d2, f2) = if f1 > 0 {
-            match se.iterative_wipe(Some(LEGACY_USERID), Some(PIN)) {
-                Ok(r) => r,
-                Err(_e) => {
-                    secure_log!("[S] iterative_wipe attempt 2 ERROR: {:?}", _e);
-                    (0, f1)
+        'outer: for &uid in USERIDS {
+            for &pin in PIN_CANDIDATES {
+                let (d, f, auth_ok) = match se.iterative_wipe(Some(uid), Some(pin)) {
+                    Ok(r) => r,
+                    Err(_e) => {
+                        secure_log!(
+                            "[S] iterative_wipe(UID=0x{:08x}) ERROR: {:?}",
+                            uid, _e
+                        );
+                        (0, u16::MAX, false)
+                    }
+                };
+                secure_log!(
+                    "[S] wipe UID=0x{:08x} pin={:?}: deleted={}, left={}, auth_ok={}",
+                    uid,
+                    core::str::from_utf8(pin).unwrap_or("?"),
+                    d, f, auth_ok
+                );
+                total_deleted = total_deleted.saturating_add(d as u32);
+                last_failed = f;
+                if auth_ok {
+                    any_auth_ok = true;
+                }
+                if f == 0 {
+                    break 'outer;
                 }
             }
+        }
+
+        // Tri-state outcome:
+        //   clean      — no survivors
+        //   wrong-PIN  — survivors AND no PIN ever authed (UserID likely
+        //                provisioned with a different PIN, or UserID OID
+        //                guess is wrong)
+        //   blocked    — survivors AND some PIN did auth, so the leftover
+        //                objects were created with a non-self-deletable
+        //                policy (older firmware) and are stuck on-chip
+        let status = if last_failed == 0 {
+            "clean"
+        } else if !any_auth_ok {
+            "wrong-PIN"
         } else {
-            (0, 0)
+            "blocked"
         };
         secure_log!(
-            "[S] Wipe attempt 2 (UserID 0x{:08x}): {} deleted, {} left",
-            LEGACY_USERID, d2, f2
+            "[S] SE050 wipe DONE: {} deleted total, {} survivors, status={}",
+            total_deleted, last_failed, status
         );
-
-        let total = d1.saturating_add(d2);
-        secure_log!(
-            "[S] SE050 wipe: {} deleted total, {} permanently stuck",
-            total, f2
-        );
-        if f2 == 0 {
-            ui::show_status("SE050 wipe", "clean");
-        } else {
-            ui::show_status("SE050 wipe", "partial");
-        }
+        ui::show_status("SE050 wipe", status);
         loop { cortex_m::asm::wfi(); }
     }
 

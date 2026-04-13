@@ -413,8 +413,15 @@ stsafe-probe:
 
 # SE050 factory reset: wipe all objects, then halt.
 # Run this once to clear stale SE050 state, then flash normal firmware.
+# Assumes the stale UserID is at 0x7B06_0000 or 0x7B00_2000 (legacy) and
+# the PIN is one of: 00000000, 12345678, 11111111. Each wrong attempt
+# consumes one of the SE050's 10 PIN tries against that UserID; a correct
+# PIN auto-resets the counter. Status reported on OLED + semihosting:
+# clean / wrong-PIN / blocked.
 se050-reset:
 	@echo "==> Building SE050 factory-reset firmware..."
+	@echo "    Assumes dev PIN in {00000000, 12345678, 11111111}"
+	@echo "    and stale UserID at 0x7B06_0000 or 0x7B00_2000."
 	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-factory-reset,ui-noop,stm32u585,debug-log

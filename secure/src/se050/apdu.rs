@@ -678,13 +678,17 @@ pub unsafe fn read_object_attributes(
 /// Skips reserved ranges (0x7FFFxxxx applet-reserved, 0x7DA0xxxx demo
 /// auth, 0xF000_0000+ IoT Hub trust-provisioned).
 ///
-/// Returns (deleted, remaining_failed).
+/// Returns `(deleted, remaining_failed, auth_ok)`. `auth_ok` is true when
+/// the unauthenticated pass cleaned everything OR the PIN authenticated
+/// against the UserID; false when auth was attempted (or required) and
+/// did not succeed. Lets the caller distinguish "wrong PIN" from
+/// "objects survived authenticated delete (policy-blocked)".
 pub unsafe fn iterative_delete_all(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     auth_obj_id: Option<u32>,
     pin: Option<&[u8]>,
-) -> Result<(u16, u16), Se050Error> {
+) -> Result<(u16, u16, bool), Se050Error> {
     #[cfg(feature = "debug-log")]
     secure_log!("[SE050][erase] Pass 1: unauthenticated");
 
@@ -696,26 +700,26 @@ pub unsafe fn iterative_delete_all(
     );
 
     if failed == 0 {
-        return Ok((deleted, 0));
+        return Ok((deleted, 0, true));
     }
 
     let (uid, pin_bytes) = match (auth_obj_id, pin) {
         (Some(u), Some(p)) => (u, p),
-        _ => return Ok((deleted, failed)),
+        _ => return Ok((deleted, failed, false)),
     };
 
     if !check_exists(t1, scp03, uid).unwrap_or(false) {
-        return Ok((deleted, failed));
+        return Ok((deleted, failed, false));
     }
 
     let session_id = match create_session(t1, scp03, uid) {
         Ok(s) => s,
-        Err(_) => return Ok((deleted, failed)),
+        Err(_) => return Ok((deleted, failed, false)),
     };
 
     if verify_session(t1, scp03, &session_id, pin_bytes).is_err() {
         let _ = close_session(t1, scp03, &session_id);
-        return Ok((deleted, failed));
+        return Ok((deleted, failed, false));
     }
 
     #[cfg(feature = "debug-log")]
@@ -737,7 +741,7 @@ pub unsafe fn iterative_delete_all(
     }
 
     let _ = close_session(t1, scp03, &session_id);
-    Ok((deleted, failed))
+    Ok((deleted, failed, true))
 }
 
 unsafe fn sweep(
