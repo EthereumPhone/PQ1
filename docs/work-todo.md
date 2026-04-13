@@ -84,6 +84,23 @@ Each SE has independent retry counters (Tropic01: 10 MACD-based attempts, SE050:
 
 ## HIGH -- Security-critical or blocks dual-SE
 
+### 6. PIN Entry Digit Scrambling
+
+**Status:** NOT STARTED
+
+PIN entry UI (`secure/src/ui/pin_entry.rs`) currently presents digits in fixed 0-9 order. An attacker observing button presses (shoulder-surfing, overhead camera, compromising EMI) can reconstruct the PIN from the press pattern alone. Scrambling the digit layout per-entry decouples button positions from digit values.
+
+**What's needed:**
+- [ ] Generate a fresh random permutation of 0-9 on every PIN entry session, using the hardware TRNG (never software PRNG)
+- [ ] Render the scrambled layout on the OLED; confirm/cancel buttons keep fixed positions
+- [ ] Ensure the permutation lives only in secure-world SRAM and is zeroized after PIN entry completes (success, cancel, or timeout)
+- [ ] Constant-time digit selection -- no secret-dependent branches or lookup-table timing leaks
+- [ ] Re-scramble after each digit (optional, defeats memorization of the layout between digits)
+
+**Files to change:** `secure/src/ui/pin_entry.rs`, `secure/src/ui/oled.rs`
+
+---
+
 ### 5. SE050 SecureElement Trait Unification
 
 **Status:** BY DESIGN, but blocks dual-SE
