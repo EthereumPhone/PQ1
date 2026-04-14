@@ -301,6 +301,130 @@ No sleep/idle power modes, watchdog, or graceful power-down sequences.
 
 ---
 
+### 18. SLH-DSA side-channel + fault-injection hardening
+
+**Status:** NOT STARTED (research complete — see `docs/production-security.md`)
+
+Research-derived mitigations from the deep-research round of 2026-04-14. Critical finding: **both verify-after-sign is inadequate** (RFC 9814 / Genêt TCHES 2023) and **OptRand = 0 (deterministic signing) enables PRF recovery**. These are not theoretical.
+
+**What's needed — P0 (must ship with these):**
+- [ ] **SLH-DSA double-compute**: sign twice on disjoint SRAM regions, constant-time compare, release only on match. Verify-after-sign alone is NOT sufficient — faulty sigs still verify per RFC 9814.
+- [ ] **Non-deterministic OptRand** on every signature: 16 B (128f) / 24 B (192f) freshly drawn from STM32 TRNG per sign call. Replace the current OptRand=0 deterministic path.
+- [ ] **Signing rate limiter**: global token-bucket caps at ~1 sig/sec, ~500/day, hard-rotate after 2^16 signatures per key. Extends attacker trace-collection window from minutes to months.
+- [ ] **WOTS chain + FORS tree shuffling** via Fisher-Yates, TRNG-seeded per sign. Desynchronises traces against profiled DPA.
+- [ ] **FihInt-style complement-storage** for all security-critical booleans (`blob_cached`, `pin_verified`, `match_ok`). Magic constants 0x1AAA_AAAA / 0x1555_5555, stored with XOR complement. Verify via `core::ptr::read_volatile` on every check (never `core::hint::black_box`).
+- [ ] **PIN-lockout fail-in pattern**: invert comparison to `if remaining != 0, continue` instead of `if remaining == 0, wipe`. A single-glitch branch-skip then misses wipe rather than triggering it.
+- [ ] **Compiler fence + DSB barrier after every zeroize** of master_secret, entropy, PIN buffers.
+
+**What's needed — P1 (strongly recommended):**
+- [ ] Architectural decision: **SHAKE vs SHA2 parameter set**. SHAKE enables Fluhrer PRF-tree (~1.7× overhead) with cleaner SCA story than SHA2 (masking ~3-5×, HASH peripheral has no DPA resistance per UM3370). Backward-compatible with on-chain verifier per the research.
+- [ ] Control-flow-integrity step counters: increment before critical call, decrement after, fail on mismatch. Detects function-skip glitches.
+- [ ] Random delays before security-critical ops (DWT or TRNG-seeded NOP sled).
+- [ ] Redundant volatile reads (2-3×) on critical state with OR-based fail-in.
+
+**Files to create:** `secure/src/fih.rs` (FihInt type + read_volatile helpers)
+**Files to change:** `secure/src/crypto.rs` (OptRand + double-compute), `secure/src/nsc/sign_and_emit.rs`, `secure/src/nsc/cmd_request_unlock.rs`, `secure/src/dual_se.rs` (seed XOR reconstruction hardening)
+
+---
+
+### 19. USB stack hardening (USB-C only attack surface)
+
+**Status:** NOT STARTED (research complete — see `docs/production-security.md`)
+
+Dev-research from Prompt D identified the USB path as our **largest remote attack surface** and surfaced concrete DWC2 errata workarounds and FI-resistant patterns.
+
+**What's needed — P0:**
+- [ ] **FI-resistant `min()`** in every USB control-transfer length-clamping site. Defeats Colin O'Flynn USENIX WOOT 2019 EMFI-on-min attack. Pattern: compute `min(a,b)` then verify `result <= a && result <= b`; if not, recompute via explicit conditional.
+- [ ] **DWC2 TxFIFO write atomicity**: ensure no CSR access to other endpoints between successive FIFO writes of one endpoint, per STM32U5 DWC2 errata. Single-packet transfers (DIEPTSIZ.XFRSIZ = DIEPCTL.MPSIZ).
+- [ ] **DWC2 ZLP race**: sequence SNAK/CNAK/EPENA per errata; flush all FIFOs on USB reset (GRSTCTL.RXFFLSH + GRSTCTL.TXFFLSH TXFNUM=0x10).
+- [ ] **Bounded APDU reassembly**: enforce `4 ≤ declared_len ≤ 4096` at seq=0; 5-second reassembly timeout with buffer scrub; abort-and-scrub if seq=0 arrives during active reassembly.
+- [ ] **HID OUT rate limiter**: token bucket ~200 reports/sec sustained, bucket size 64. NAK endpoint when empty.
+- [ ] **APDU CLA/INS allowlist** at non-secure before any NSC call.
+
+**What's needed — P1:**
+- [ ] Force OTG_GUSBCFG.FDMOD = 1 (device-only mode), disable SOF interrupt (timing side-channel).
+- [ ] FIFO sizing per RM0456 formula with ≥30% safety margin.
+- [ ] IWDG hang detection for USB path (2s timeout, kicked per transaction).
+- [ ] Response-buffer locking for 17,088-byte SLH-DSA signatures (ISO 7816 SW=0x61xx chunking; 30s timeout).
+
+**DO NOT TRUST** references to CVE-2026-4179 in the research doc — that CVE ID appears to be hallucinated (future-dated; does not appear in NVD). Cross-check any CVE citation against NVD before acting on it.
+
+**Files to create:** `secure/src/fih.rs` (shared with #18)
+**Files to change:** `secure/src/hw/usb_hw.rs`, `nonsecure/src/usb/transport.rs`, `nonsecure/src/usb/hid.rs`, `nonsecure/src/usb/commands.rs`
+
+---
+
+### 20. Production key management (SCP03 rotation + HUK-SAES + binding record)
+
+**Status:** NOT STARTED (research complete — see `docs/production-security.md`)
+
+Prompt B surfaced a concrete production-provisioning protocol. Supersedes the brief HUK-SAES note in item #7.
+
+**What's needed — P0:**
+- [ ] **Two-stage RDP provisioning**. Stage 1 at RDP0: read all 3 UIDs (STM32, SE050, OPTIGA), derive per-device SCP03 keys via CMAC-KDF(FMK, label, SE050_UID), rotate SE050 SCP03 from NXP default KVN=0x0B → KVN=0x11 via PUT KEY. Stage 2 at RDP1+: wrap all secrets with real DHUK via SAES (DHUK is a known constant at RDP0 — wrapping there is meaningless).
+- [ ] **Two-level SAES wrapping**: DHUK-ECB wraps 256-bit MasterKey → HKDF-SHA256(MasterKey, purpose) derives per-use keys → AES-GCM per-use wraps SCP03 / PBS / binding separately. Single-level DHUK-ECB has no integrity.
+- [ ] **Per-device SCP03 keys via CMAC-KDF** with SE050 UID as context. Mass-clone defence.
+- [ ] **OPTIGA PBS lifecycle lock**: OID 0xE140 to Operational state, Read=Never, Change=Conf(0xE140). Irreversible after provisioning.
+- [ ] **Binding record** signed by provisioner at factory: bind(STM32_UID, SE050_UID, OPTIGA_UID, fw_version, ts) signed ECDSA-P256. Store 3× (STM32 flash wrapped, SE050 object 0x10000001, OPTIGA OID 0xF1D1) plus SHA-256 anchor in OTP bytes 6-37.
+- [ ] **Boot-time anti-swap verify**: read all 3 UIDs, verify provisioner signature, verify OTP anchor hash. On ANY mismatch → erase Key Pages + wipe SE050 + permanent brick.
+
+**What's needed — P1:**
+- [ ] OPTIGA monotonic counter (OID 0xF1E0, Conf(0xE140) protected) for firmware anti-rollback.
+- [ ] Blob format versioning for smooth firmware upgrades (magic 0x504B4559, version byte, HKDF label).
+- [ ] SE050 attestation on every boot (ReadObject_W_Attst with key 0xF0000012) — optional, +100ms boot time.
+- [ ] OPTIGA cert chain verification against pinned Infineon Root CA — optional.
+
+**Verification items** (the research flagged these as needing cross-check):
+- [ ] Confirm NXP default SCP03 keys against current AN12436 revision (values cited: ENC=`852B…6287`, MAC=`DB0A…6B47`, DEK=`4C2F…A80C`). Research's claimed "Rev 2.4" is unverified.
+- [ ] Confirm SAES register bit-field positions against RM0456 + CMSIS `stm32u585xx.h` header (research author flagged as unknown).
+- [ ] Confirm STM32U585 DHUK actually returns a known constant at RDP0 (not merely "documented behaviour"); DHUK semantics may differ slightly per errata.
+
+**Files to create:** `provisioning/` (new host-side tooling crate), `secure/src/hw/saes.rs`, `secure/src/attestation.rs`, `secure/src/binding.rs`
+**Files to change:** `secure/src/main.rs` (boot-time anti-swap gate), `secure/src/se050/scp03.rs` (per-device keys), `secure/src/optiga/shield.rs` (PBS lifecycle lock)
+
+---
+
+### 21. TAMP + CSS + PVD configuration (hardware supervisor Stage 2)
+
+**Status:** NOT STARTED (already planned as Stage 2 of brownout roadmap — confirmed + expanded by research)
+
+Confirmed by Prompt A that factory defaults are "dangerously insecure." Masaryk U 76% PIN-glitch bypass on STM32U5A9 (same core family) traced directly to defaults.
+
+**What's needed — P0 (one-time at provisioning, burned in option bytes):**
+- [ ] `BOR_LEV` = 3 or 4 in FLASH_OPTR. Narrows voltage-glitch window hardware-wide.
+- [ ] `IWDG_SW` = 0 (hardware watchdog, cannot be disabled by firmware). 100-500 ms timeout.
+- [ ] `IWDG_STOP` = 0 + `IWDG_STDBY` = 0 (continue in low-power modes).
+- [ ] `SRAM2_ECC` = 1, `SRAM3_ECC` = 1 (ECC is OFF by default on U5 — earlier doc claim was wrong).
+- [ ] `SRAM2_RST` = 0 (auto-erase SRAM2 on every system reset).
+
+**What's needed — P0 (runtime config at boot):**
+- [ ] PVD enabled at highest threshold below 3.3V via `PWR_SVMCR.PVDE` + `PVDLS[2:0]`. EXTI16 handler zeroizes secrets + last-gasp write to backup register.
+- [ ] TAMP internal tampers: ITAMP1 (VBAT voltage), ITAMP2 (temperature), ITAMP3 (LSE CSS) all enabled with automatic backup-domain erasure on trigger.
+- [ ] CSS (Clock Security System) on HSE: `RCC_CR.CSSON` = 1.
+- [ ] ECCD double-bit NMI handler: read `RAMCFG_MxISR` + `RAMCFG_MxFEAR`, zeroize, soft-reset.
+
+**Hardware:**
+- [ ] **0.47-1 F supercap on VBAT** via Schottky from Vdd (1N5819 + 47Ω optional series R). See the decision rationale in `docs/brownout-hardening.md` "VBAT power source: supercap, not battery." Gives ~12-24 h bounded tamper retention — acceptable vs battery chemistry in enclosure.
+- [ ] For dev board: tack-solder to unpopulated CR1220 holder pads on back of board.
+
+**Files to create:** `secure/src/hw/power.rs` (PVD + PVM), `secure/src/hw/tamp.rs` (tamper config + backup regs)
+**Files to change:** `Makefile` (`stm32-harden-opts` target — add SRAM2/SRAM3 ECC + IWDG option bytes), `secure/src/main.rs` (boot-time PVD + TAMP init)
+
+---
+
+### 22. Supply-chain + provisioning attestation (research not yet run)
+
+**Status:** RESEARCH BUNDLE E NOT YET RUN
+
+Prompt E was prepared in `docs/research-bundles/E-supply-chain.md` but has not been sent through deep research. Open questions remain:
+- Counterfeit STM32U5 detection (clones of U5 family specifically, vs older L/F series).
+- Box-opening ceremony design for end customer (no independent tool required).
+- Cross-binding SE050-UID + OPTIGA-UID + STM32-UID signed manifest — partial answer in item #20 above (binding record), but not a full attestation-to-customer design.
+
+**Next step:** run E-supply-chain.md through Claude web deep research, then fold findings back into this todo and item #20 above.
+
+---
+
 ## Completion Log
 
 When a task above is completed, update it here with the date and a one-line summary.
@@ -313,3 +437,6 @@ When a task above is completed, update it here with the date and a one-line summ
 | 2026-04-14 | Firmware measurement | Boot-time SHA-256 of secure flash → 8 BIP-39 words on OLED. Host tool `fwmeasure` for reproducible-build comparison |
 | 2026-04-14 | SE050 PIN-lockout wipe | Two-entry TAG_POLICY with admin UserID at 0x7B06_00A0; admin PIN generated via STM32 TRNG + persisted to secure flash page 125; round-trip selftest at first-boot; crash-safe wipe flag. `make se050-admin-wipe-e2e` validated PASS on hardware. Full docs in docs/se050-factory-reset.md |
 | 2026-04-14 | Per-chain key derivation + OTS tracking | Fixed `sign_and_emit.rs` to use `derive_main_key_from_entropy(entropy, chain_id, key_index)` instead of legacy single-key path. Wired key_index/ots_index from v2 USB handler through to secure world via bit-31 flag on total_len. Added session-scoped OTS monotonicity enforcement in SecureState. |
+| 2026-04-14 | Brownout hardening Stage 1 | Reset-cause classification (RCC_CSR), verified flash quadword writes (post-write read-back), `make stm32-harden-opts` option-byte target (BOR3 + SRAM2_RST=0). Reset cause logged + dirty-reset triggers `zeroize_sensitive_state`. Bit layout for `RCC_CSR` empirically verified on hardware (0x14004400 = SFTRSTF + PINRSTF). Validated regression-free against `se050-admin-wipe-e2e`. Full design + Stages 2-5 in `docs/brownout-hardening.md`. |
+| 2026-04-14 | Crash-safety e2e test | New `make se050-crash-safety-e2e` 2-phase target: provision test objects + arm wipe flag + partial wipe + halt; user resets; phase 2 boots, detects flag, finishes wipe, erases flash page 125. Validated PASS on warm reset (`probe-rs reset`) AND true cold cycle (USB unplug — confirmed by SE050 PCB-byte change ef→82 indicating SE chip power-cycled). |
+| 2026-04-14 | AI deep-research round | 4 of 5 parallel research bundles run (A fault-injection, B key-mgmt, C SLH-DSA SCA, D USB hardening; E supply-chain pending). Findings synthesised into `docs/production-security.md` + new tasks #18-22 in this file. Hallucinations flagged: `CVE-2026-4179` fabricated; "SLasH-DSA 2025" Rowhammer paper future-dated/unverified; ES0499 §2.26.x section numbers + AN12436 Rev 2.4 SCP03 default keys cited but unverified — verify before code commit. |

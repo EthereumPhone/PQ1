@@ -169,21 +169,41 @@ Listed here so future research doesn't re-derive them from scratch.
 - §2.2.10: system reset during Stop 2 with SRAM power-down can permanently lock device (fixed in die rev cut 3.3).
 - §2.2.23: SRAM ECC status flags only update when matching interrupt is enabled. Pure polling silently misses errors.
 - IWDG Early-Wakeup Interrupt does not function in Stop modes (not fixed).
+- DWC2 USB controller bugs (section numbers cited as §2.26.x in the 2026-04-14 research; *unverified* — confirm against ES0499 PDF before citing in code): TxFIFO write atomicity (CSR access between consecutive FIFO writes corrupts XFRSIZ); ZLP race condition leaking stale TX FIFO data via SNAK/CNAK/EPENA timing.
+
+**Newly-learned (2026-04-14 research round) facts to fold into research:**
+| Claim | Source | Status |
+|---|---|---|
+| SLH-DSA verify-after-sign is INSUFFICIENT — faulty sigs often still verify | Genêt TCHES 2023 ("Grafting Trees"); RFC 9814 (cited but unverified) | High confidence on technical claim; verify RFC number |
+| OptRand = 0 (deterministic SLH-DSA) enables PRF(SK.seed) DPA recovery in ~1-10 traces | Saarinen SLotH CRYPTO 2024 (TVLA t=24.5 at 1k traces) | Plausible; verify exact numbers |
+| STM32U585 HASH peripheral provides ZERO DPA protection | ST UM3370 (SESIP guidance) | High confidence |
+| STM32U585 DHUK is a known constant at RDP0; "real" DHUK only activates at RDP ≥ 1 | NXP / ST documentation cited in research | Confirm before relying for production key wrap |
+| NXP SE050 default SCP03 keys are publicly published (ENC=852B…6287, MAC=DB0A…6B47, DEK=4C2F…A80C) | NXP AN12436 (research cites "Rev 2.4" — unverified) | Cross-check against current AN12436 |
+| Cortex-M33 verified vulnerable to USB-MIN() EMFI attack (Colin O'Flynn USENIX WOOT 2019) | Real published attack | Safe to cite |
+| Masaryk U thesis (Simonik) demonstrated 76% PIN-glitch bypass on STM32U5A9 | Plausible but unverified — search Masaryk thesis repo | Treat as "presumed vulnerable" until confirmed |
+
+**Hallucinations from the 2026-04-14 research round (do NOT cite):**
+- `CVE-2026-4179` (Zephyr STM32 USB infinite loop) — fabricated CVE ID; does not exist in NVD.
+- "SLasH-DSA 2025" Rowhammer paper by Boy et al. — future-dated, likely fabricated. Treat as unverified until found on IACR ePrint.
+- Specific ES0499 section numbers cited in research (§2.26.2, §2.26.3) — plausible but unconfirmed; verify before quoting in code.
 
 ## 6. Known threats already catalogued
 
-(So research can focus on *new* threats rather than re-listing these.)
+(So research can focus on *new* threats rather than re-listing these.
+Updated post-2026-04-14 research round — bundles A, B, C, D have run;
+bundle E has not.)
 
-- **Voltage glitching on RDP byte read during boot** — dominant historical STM32 attack; STM32U5 has no public bypass as of 2025. Our planned defenses: BOR4, PVD, tamper monitors, option-byte RDP Level 2 with OEM1LOCK for production.
+- **Voltage glitching on RDP byte read during boot** — dominant historical STM32 attack. Earlier "STM32U5 has no public bypass" was Ledger Donjon's 2024 statement; Masaryk U thesis (Simonik 2024/2025) reportedly demonstrated 76% PIN-glitch on STM32U5A9, same core. Defences planned: BOR4, PVD, tamper monitors, option-byte RDP Level 2 with OEM1LOCK for production. **Treat U5 as presumed-vulnerable** to glitching at the core level.
 - **EMFI** — possible against U5 core; no public attack. Defended via internal tamper (temp/voltage/clock), optional tamper mesh on production PCB.
 - **Power/EM side-channel on software crypto** — SLH-DSA on Cortex-M33 emits EM. Mitigation status unclear; needs dedicated research (see Prompt C below).
-- **Fault injection on signature verify / PIN compare** — partially mitigated (verify-before-release); need systematic double-glitch patterns everywhere (Prompt A).
-- **I2C bus interposer between MCU and SE** — defended by SCP03 with auth + encrypt on every APDU. Keys need rotation for production (Prompt B).
+- **Fault injection on signature verify / PIN compare** — partially mitigated (verify-before-release). Bundle A research found verify-after-sign is *not adequate* for SLH-DSA per Genêt TCHES 2023 + RFC 9814. **SLH-DSA double-compute on disjoint SRAM is mandatory** before production. PIN compare needs FihInt complement-storage + fail-in pattern + volatile reads. See `docs/production-security.md` §2.1 + work-todo.md #18.
+- **I2C bus interposer between MCU and SE** — defended by SCP03 with auth + encrypt on every APDU. Keys need rotation for production. Bundle B research provides the concrete two-stage RDP provisioning protocol with per-device SCP03 keys derived via CMAC-KDF(FMK, "SCP03-ENC", SE050_UID), PUT KEY (KVN 0x0B → 0x11), HUK-SAES two-level wrapping. See work-todo.md #20.
 - **Dark Skippy / anti-klepto nonce exfiltration** — ECDSA-specific, does not apply to SLH-DSA (stateless hash-based signatures have no nonce). **Irrelevant to us.** Stating this explicitly so future research doesn't chase it.
 - **Cold boot / Volt Boot / UnTrustZone SRAM residue** — minimize seed time in SRAM; Stage 2 moves secrets to SRAM2 with hardware auto-erase.
-- **USB stack CVEs** — CVE-2021-42553 (STM32Cube USB Host Library) and similar. Our USB stack is custom — needs audit (Prompt D).
+- **USB stack** — bundle D research found two unaddressed silicon errata (DWC2 TxFIFO write atomicity; ZLP race causing stale-data leak) and surfaced FI-resistant `min()` pattern (Colin O'Flynn USENIX WOOT 2019 EMFI attack on USB control-transfer length clamp). Bounded reassembly + HID rate limiter + APDU CLA/INS allowlist also pending. See work-todo.md #19. *Note*: research cited `CVE-2026-4179` for a Zephyr USB driver — that CVE is fabricated and should be ignored.
 - **Supply chain / counterfeit chips** — STM32 family heavily counterfeited; production plan is authorized-distributor sourcing + boot-time chip-ID verification (Prompt E).
 - **Seed entropy collection** — currently STM32 TRNG + HSI48. Multi-source mixing (STM32 TRNG XOR SE050 TRNG XOR OPTIGA TRNG) is designed but not yet implemented.
+- **SLH-DSA side-channel via PRF(SK.seed)** — bundle C research surfaced. Currently signing with `OptRand = 0` (deterministic) which makes horizontal DPA on the master secret feasible per Saarinen SLotH CRYPTO 2024 (~1-10 trace recovery on unprotected Cortex-M33). Mitigations: mandatory non-deterministic OptRand from STM32 TRNG every signature, signing rate limiter, 2^16 per-key rotation, WOTS+ chain + FORS tree shuffling, optional SHAKE migration for cleaner masking. See work-todo.md #18.
 
 ## 7. Open architectural questions we are actively researching
 
@@ -198,7 +218,17 @@ single ~50-120 KB markdown file. Upload the bundle as the only
 attachment, and the session has everything it needs. See
 `docs/research-bundles/README.md` for the mapping.
 
-The prompts below are the same questions, kept here for reference.
+**Status as of last update:**
+- Prompt A (fault injection): ✅ run, results in `docs/research-bundles/results/`, synthesised to `docs/production-security.md` §2.1 + work-todo.md #18.
+- Prompt B (key management): ✅ run, results in same dir, synthesised §2.2 + #20.
+- Prompt C (SLH-DSA SCA): ✅ run, synthesised §2.3 + #18.
+- Prompt D (USB hardening): ✅ run, synthesised §2.4 + #19.
+- **Prompt E (supply-chain attestation): ❌ NOT YET RUN** — bundle exists but has not been sent through deep research.
+
+The prompts below are the canonical question text. After a prompt has
+run, future research rounds on the same topic should reference the
+existing results doc + ask incremental follow-up questions rather than
+re-running the same query.
 
 ---
 

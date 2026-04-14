@@ -35,6 +35,26 @@ least catastrophic:
 Current design addresses **E partially** (wipe flag) and **F partially**
 (panic handler zeroize). Everything else is unmitigated.
 
+**Cross-references to the 2026-04-14 deep-research round** (see
+`docs/production-security.md` for the full synthesis):
+
+- Bundle A (fault injection) confirms: **BOR/IWDG/ECC/TAMP factory
+  defaults are directly attackable**. Masaryk U 2024/2025 thesis
+  (Simonik) demonstrated 76% PIN-glitch bypass on STM32U5A9 — same
+  core family as our U585. Our Stage 2 plan is now a must-ship, not
+  a nice-to-have.
+- Bundle A also surfaces: **SLH-DSA verify-after-sign is insufficient**
+  per RFC 9814 + Genêt TCHES 2023. A single fault during signing
+  produces a signature that often still verifies. Double-compute on
+  disjoint SRAM is mandatory. Tracked in work-todo.md #18, not in
+  this doc (out of brownout scope).
+- Bundle C surfaces: **we are currently signing with OptRand = 0**.
+  That enables PRF(SK.seed) horizontal-DPA recovery in few traces.
+  Fresh TRNG per signature required. Tracked in #18.
+- Bundle D surfaces: **DWC2 has silicon errata** (TxFIFO write
+  atomicity + ZLP race data-leak) that brownout-adjacent reset paths
+  can trip into. Tracked in #19.
+
 ## Target board: B-U585I-IOT02A
 
 This roadmap is written against the STMicro B-U585I-IOT02A Discovery
@@ -329,9 +349,10 @@ Smallest usable chunk that moves the needle.
 - **1c. Option-byte setup target.** `make stm32-harden-opts` runs
   `STM32_Programmer_CLI` to set `BOR_LEV=3` + `SRAM2_RST=0` on a given
   device. Run once per chip during provisioning. Documents consequences.
-  - *Note for Stage 2*: `SRAM2_ECC`, `SRAM3_ECC`, `BKPSRAM_ECC` will be
-    added to the same target — ECC is off by default and we need to
-    turn it on explicitly.
+  - *Stage 2 will extend this target* with `SRAM2_ECC=1`,
+    `SRAM3_ECC=1`, `BKPSRAM_ECC=1`, `IWDG_SW=0` (hardware watchdog),
+    `IWDG_STOP=0`, `IWDG_STDBY=0`. None of these are at the right
+    default — see production-security.md for the full set.
 - **1d. Dirty-reset boot hygiene.** When `reset_cause()` returns
   anything other than `Cold` or `Software`, main() calls
   `nsc::zeroize_sensitive_state()` before doing any unlock work. Belt-
