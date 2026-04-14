@@ -247,23 +247,24 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     let _ = payload_len; // payload parsing above used total_len before the trailer was stripped
 
-    // 10. OTS monotonicity: within a session, the same (chain_id, key_index)
-    //     must never reuse an ots_index. The on-chain contract is the
-    //     authoritative counter; this is a defense-in-depth guard against
-    //     the companion accidentally sending a stale value.
-    let ots_ok = super::state::peek_state(|s| {
-        if !s.has_signed {
-            return true;
+    // 10. OTS monotonicity: only enforced for v2 callers that supply
+    //     explicit key_index/ots_index via the trailer. Legacy v1 callers
+    //     default to (0, 0) and don't support OTS tracking.
+    if has_ots_trailer {
+        let ots_ok = super::state::peek_state(|s| {
+            if !s.has_signed {
+                return true;
+            }
+            if s.last_chain_id == aa.chain_id && s.last_key_index == key_index {
+                ots_index > s.last_ots_index
+            } else {
+                true // different chain or key epoch: companion is authoritative
+            }
+        });
+        if !ots_ok {
+            ui::show_status("OTS reuse", "rejected");
+            return NscStatus::CryptoError as u32;
         }
-        if s.last_chain_id == aa.chain_id && s.last_key_index == key_index {
-            ots_index > s.last_ots_index
-        } else {
-            true // different chain or key epoch: companion is authoritative
-        }
-    });
-    if !ots_ok {
-        ui::show_status("OTS reuse", "rejected");
-        return NscStatus::CryptoError as u32;
     }
 
     // 11. Hand off to the signing tail.
@@ -282,7 +283,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // Record OTS state on success so the next signing request for the
     // same (chain_id, key_index) must present a strictly greater index.
-    if status == NscStatus::Ok as u32 {
+    // Only tracked for v2 callers with explicit OTS indices.
+    if status == NscStatus::Ok as u32 && has_ots_trailer {
         super::state::with_state(|s| {
             s.last_chain_id = aa.chain_id;
             s.last_key_index = key_index;

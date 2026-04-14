@@ -480,9 +480,32 @@ pub fn provision_from_mnemonic(
 
     let mut master_secret: [u8; 32] = kdf(b"sphincs-master", &entropy, 0);
 
-    let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
-    drop(sk);
-    let bootstrap_vk = derive_bootstrap_vk_from_entropy(&entropy);
+    // e2e-test: skip SPHINCS+C7 keygen (minutes on QEMU/Pi per key).
+    // Write deterministic mock VK bytes — e2e tests never verify them.
+    #[cfg(feature = "e2e-test")]
+    let (vk_bytes, bootstrap_vk) = {
+        use sha3::{Digest, Keccak256};
+        let mut h = Keccak256::new();
+        h.update(b"e2e-mock-vk");
+        h.update(&entropy);
+        let hash = h.finalize();
+        let mut vk = [0u8; 32];
+        vk.copy_from_slice(&hash);
+        let mut h2 = Keccak256::new();
+        h2.update(b"e2e-mock-bootstrap-vk");
+        h2.update(&entropy);
+        let hash2 = h2.finalize();
+        let mut bvk = [0u8; 32];
+        bvk.copy_from_slice(&hash2);
+        (vk, bvk)
+    };
+    #[cfg(not(feature = "e2e-test"))]
+    let (vk_bytes, bootstrap_vk) = {
+        let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
+        drop(sk);
+        let bootstrap_vk = derive_bootstrap_vk_from_entropy(&entropy);
+        (vk_bytes, bootstrap_vk)
+    };
 
     store
         .provision(&entropy, &master_secret, &vk_bytes, &bootstrap_vk, pin)

@@ -28,8 +28,8 @@
 use crate::{aa, erc20_db, nsc_api, vk_db};
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
-    EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN, NscStatus,
-    SIGNATURE_LEN, USEROP_PREFIX_LEN,
+    EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN,
+    MAX_USEROP_RESPONSE_LEN, NscStatus, SIGNATURE_LEN, USEROP_PREFIX_LEN,
 };
 
 // === Scratch buffers ========================================================
@@ -44,6 +44,12 @@ const CLEAR_SIGN_BUF_LEN: usize = 921 + 4096 + 4 + 2048;
 static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
 
 static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
+
+// Output buffer for sign_userop_full responses. Must be at least
+// MAX_USEROP_RESPONSE_LEN bytes: init_code_len(4) + initCode(N)
+// + call_data_len(4) + callData(M) + PQSignatureWrapper.
+static mut USEROP_RESPONSE_BUF: [u8; MAX_USEROP_RESPONSE_LEN] =
+    [0u8; MAX_USEROP_RESPONSE_LEN];
 
 // Scratch buffer for an ERC-4337 UserOp wrapper payload. Sized to hold:
 //   USEROP_PREFIX_LEN (273+4) + max EIP-1559 tx + bundle_len (4) + max ERC20 bundle.
@@ -646,7 +652,7 @@ fn main() -> ! {
             )
         };
         let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
         };
         report("userop_value_transfer", status, &mut pass_count, &mut fail_count);
     }
@@ -670,7 +676,7 @@ fn main() -> ! {
                     bundle,
                     &mut USEROP_PAYLOAD_BUF,
                 );
-                nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+                nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
             },
             None => {
                 hprintln!("[E2E] userop_erc20: NS DB lookup MISS for USDC mainnet");
@@ -705,7 +711,7 @@ fn main() -> ! {
                 .copy_from_slice(&5u64.to_be_bytes());
         }
         let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
         };
         report_expect("neg_chain_id_mismatch", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
     }
@@ -728,7 +734,7 @@ fn main() -> ! {
             USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&0u32.to_le_bytes());
         }
         let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut SIG_BUF)
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut USEROP_RESPONSE_BUF)
         };
         report_expect("neg_tx_len_zero", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
     }
@@ -747,7 +753,7 @@ fn main() -> ! {
             USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&4097u32.to_le_bytes());
         }
         let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut SIG_BUF)
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut USEROP_RESPONSE_BUF)
         };
         report_expect("neg_tx_len_overflow", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
     }
@@ -767,7 +773,7 @@ fn main() -> ! {
         // Pass 10 fewer bytes than the full payload — tx_end > total_len.
         let truncated = payload_len - 10;
         let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..truncated], &mut SIG_BUF)
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..truncated], &mut USEROP_RESPONSE_BUF)
         };
         report_expect("neg_truncated_payload", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
     }
@@ -800,7 +806,7 @@ fn main() -> ! {
             )
         };
         let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
         };
         report_expect("neg_contract_creation", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
     }
@@ -820,7 +826,7 @@ fn main() -> ! {
             )
         };
         let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
+            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
         };
         report_expect("neg_bad_envelope", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
     }
