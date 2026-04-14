@@ -63,6 +63,8 @@ mod host_rng;
 #[cfg(all(any(feature = "pka-accel", feature = "stm32u585"), not(test)))]
 mod hw;
 #[cfg(not(test))]
+mod reset_cause;
+#[cfg(not(test))]
 mod nsc;
 #[cfg(not(test))]
 mod rng;
@@ -255,6 +257,14 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
 #[cfg(not(test))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
+    // Classify the reset cause FIRST — before any peripheral init,
+    // before any RCC_CSR modification. The sticky flags tell us why the
+    // chip just came up. Abnormal causes (watchdog / low-power /
+    // unknown) trigger defensive SRAM zeroization below, on the theory
+    // that whatever was in SRAM belongs to an aborted operation that
+    // never ran its normal cleanup path.
+    let (reset_cause, reset_csr_raw) = unsafe { reset_cause::classify_and_clear() };
+
     // STM32U585: configure clocks BEFORE any semihosting output.
     // Semihosting BKPT halts the CPU when no debugger is attached, so
     // clock/RNG init must happen first to allow standalone boot testing.
@@ -272,6 +282,25 @@ fn main() -> ! {
     }
 
     secure_log!("[S] Secure world starting...");
+    secure_log!(
+        "[S] Reset cause: {} (RCC_CSR=0x{:08x})",
+        reset_cause.tag(), reset_csr_raw
+    );
+
+    // Defensive SRAM zeroization on abnormal reset. Complements the
+    // panic handler's zeroize_sensitive_state() — if the chip reset
+    // before the panic handler could run (watchdog bite, brownout,
+    // glitch-induced fault), this is our last chance to wipe SRAM
+    // secrets before any subsequent unlock logic touches them.
+    //
+    // Skipped for Cold / Software / OptionByte causes: Cold boots have
+    // been off long enough for SRAM retention to decay; Software resets
+    // always originate from code that zeroized first; OptionByte
+    // reloads are triggered by the external provisioner, not the user.
+    if reset_cause.is_abnormal() {
+        secure_log!("[S] Abnormal reset — zeroizing sensitive SRAM");
+        unsafe { nsc::zeroize_sensitive_state(); }
+    }
 
     // ---- STSAFE-A110 I2C2 bus probe ----
     // Scans I2C2 (PH4/PH5) for on-board peripherals, then halts.
@@ -372,10 +401,15 @@ fn main() -> ! {
     //
     // Applies to both SE050-standalone and dual-SE builds — the flag and
     // admin PIN live on the STM32 side, independent of which SE backends
-    // are active.
+    // are active. Skipped under `se050-crash-safety-e2e` because that
+    // test owns the page 125 lifecycle itself (stores a test admin PIN
+    // and runs its own resume routine against test OIDs; letting
+    // factory_reset_admin fire here would erase the test state before
+    // the test's phase 2 runs).
     #[cfg(all(
         feature = "stm32u585",
         any(feature = "se050", feature = "dual-se"),
+        not(feature = "se050-crash-safety-e2e"),
         not(test),
     ))]
     unsafe {
@@ -470,6 +504,42 @@ fn main() -> ! {
             total_deleted, last_failed, status
         );
         ui::show_status("SE050 wipe", status);
+        loop { cortex_m::asm::wfi(); }
+    }
+
+    // ---- SE050 crash-safety (power-loss mid-wipe) e2e ----
+    // Two-phase test. Same firmware both runs; phase auto-detected from
+    // the wipe flag at page 125 QW 1.
+    //   Phase 1 (flag blank): provision test objects at 0x7B0A_xxxx,
+    //   persist a test admin PIN to flash, arm the flag, delete ONLY
+    //   the data object, halt → simulates power cut mid-wipe.
+    //   Phase 2 (flag armed, after manual board reset): verify pre-
+    //   resume state, read PIN from flash, finish the wipe, erase
+    //   page 125, report PASS.
+    // Triggered by: make se050-crash-safety-e2e
+    #[cfg(feature = "se050-crash-safety-e2e")]
+    unsafe {
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        let flag_armed_at_start = hw::flash::is_wipe_armed();
+        if flag_armed_at_start {
+            ui::show_status("Crash safety", "phase 2 (resume)");
+        } else {
+            ui::show_status("Crash safety", "phase 1 (partial)");
+        }
+        match se.run_crash_safety_roundtrip() {
+            Ok(msg) => {
+                secure_log!("[S] [E2E-CRASH] {}", msg);
+                if flag_armed_at_start {
+                    ui::show_status("Crash safety", "PASS");
+                } else {
+                    ui::show_status("RESET BOARD", "to run phase 2");
+                }
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E-CRASH] FAIL ({:?})", _e);
+                ui::show_status("Crash safety", "FAIL");
+            }
+        }
         loop { cortex_m::asm::wfi(); }
     }
 

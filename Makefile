@@ -98,6 +98,30 @@ play-hw-display:
 	@echo "==> Starting interactive wallet (Ctrl-C to quit)..."
 	@python3 tools/wallet_run_hw.py
 
+# One-time chip hardening: set brown-out supervision + SRAM2 auto-erase
+# option bytes. Run once per device during provisioning; no need to
+# repeat unless the chip has been fully option-byte-reset.
+#
+# Changes:
+#   BOR_LEV   = 3 (~2.7V)   — flash writes abort cleanly below this
+#   SRAM2_RST = 0            — silicon erases SRAM2 on every reset
+#                              (POR, BOR, SW, watchdog)
+#
+# Triggers an Option Byte Load (OBL_LAUNCH), which resets the chip.
+# Expected side effects: next boot classifies as ResetCause::OptionByte
+# in the semihosting log.
+#
+# After running this once, every subsequent reset hardware-zeroizes
+# SRAM2 — put sensitive active-window state there (Stage 2 of the
+# brownout hardening roadmap; see docs/brownout-hardening.md).
+stm32-harden-opts:
+	@echo "==> Configuring brown-out supervision + SRAM2 auto-erase"
+	@echo "    BOR_LEV=3 (~2.7V), SRAM2_RST=0 (auto-erase on reset)"
+	@echo "    This triggers an Option Byte Load — the chip will reset."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes BOR_LEV=3 SRAM2_RST=0
+	@echo "==> Option bytes written. Reset triggered. Chip state: hardened."
+
 # Configure /dev/ttyACM0 for TROPIC01 communication
 setup-serial:
 	@echo "Configuring /dev/ttyACM0 for TROPIC01..."
@@ -445,6 +469,34 @@ se050-reset-e2e:
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
 	@echo "==> Running e2e (watch semihosting output)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# SE050 crash-safety (power-loss mid-wipe) e2e test.
+# Two-phase: phase 1 provisions test objects at 0x7B0A_xxxx, writes a
+# test admin PIN to flash page 125, arms the wipe flag, deletes ONLY
+# the data object, halts. User/Makefile resets the board, simulating
+# power loss. Phase 2 boots, detects armed flag, verifies expected
+# mid-wipe state, finishes the wipe, erases page 125, reports PASS.
+# WARNING: overwrites flash page 125 admin PIN. Only run on a chip
+# that hasn't been through first-boot wizard on production firmware.
+# Watch semihosting for "PHASE 2 — CRASH-SAFETY RESUME: PASS"/"FAIL".
+se050-crash-safety-e2e:
+	@echo "==> Building SE050 crash-safety e2e firmware..."
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050-crash-safety-e2e,ui-noop,stm32u585,debug-log
+	@echo "==> Flashing crash-safety firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo ""
+	@echo "==> PHASE 1: provision + partial wipe + halt"
+	@echo "    (Watching for 'PHASE 1 COMPLETE' — 30s timeout)..."
+	-timeout 30 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) || true
+	@echo ""
+	@echo "==> Resetting board (simulated power cycle)..."
+	probe-rs reset --chip STM32U585AIIx
+	@echo ""
+	@echo "==> PHASE 2: boot-time resume"
+	@echo "    (Watching for 'CRASH-SAFETY RESUME: PASS' — 30s timeout)..."
+	-timeout 30 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) || true
 
 # SE050 admin-auth wipe e2e test.
 # Exercises the exact path PIN-lockout factory reset uses: admin UserID

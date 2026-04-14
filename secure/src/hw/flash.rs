@@ -119,6 +119,12 @@ pub unsafe fn erase_key_page() -> Result<(), ()> {
 /// The address must be quad-word aligned (16-byte boundary) and must
 /// point within the key storage page. The destination must be erased
 /// (all 0xFF) before writing.
+///
+/// Returns `Err(())` only if the flash controller set one of the error
+/// flags (PROGERR / WRPERR / PGAERR / SIZERR / PGSERR). **Does not
+/// verify that the bytes actually landed correctly** — a torn write
+/// under brown-out can produce a half-programmed quad-word with no
+/// error flag set. For persistent data, use `write_quadword_verified`.
 unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
     wait_bsy();
     clear_errors();
@@ -155,6 +161,29 @@ unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
     }
 }
 
+/// Program one quad-word **and read it back to confirm the bytes landed**.
+///
+/// Detects class-A torn writes (brown-out mid-program leaving some bits
+/// committed and others not): NOR flash can leave such a QW readable
+/// without flagging PROGERR, so a pure `write_quadword` returns `Ok`
+/// while the actual memory differs from `data`. The read-back compare
+/// here catches that deterministically.
+///
+/// Use this for anything that matters (admin PIN, PBS, pairing key,
+/// wipe flag). Internal helpers that don't care about durability can
+/// keep using `write_quadword`.
+pub unsafe fn write_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
+    write_quadword(addr, data)?;
+
+    let src = addr as *const u8;
+    for i in 0..16 {
+        if read_volatile(src.add(i)) != data[i] {
+            return Err(());
+        }
+    }
+    Ok(())
+}
+
 /// Read 32 bytes from the start of the key storage page.
 pub unsafe fn read_key(buf: &mut [u8; 32]) {
     let src = KEY_PAGE_ADDR as *const u8;
@@ -183,12 +212,12 @@ pub unsafe fn write_key(key: &[u8; 32]) -> Result<(), ()> {
     // First quad-word: bytes 0-15
     let mut qw0 = [0u8; 16];
     qw0.copy_from_slice(&key[..16]);
-    write_quadword(KEY_PAGE_ADDR, &qw0)?;
+    write_quadword_verified(KEY_PAGE_ADDR, &qw0)?;
 
     // Second quad-word: bytes 16-31
     let mut qw1 = [0u8; 16];
     qw1.copy_from_slice(&key[16..]);
-    write_quadword(KEY_PAGE_ADDR + 16, &qw1)?;
+    write_quadword_verified(KEY_PAGE_ADDR + 16, &qw1)?;
 
     Ok(())
 }
@@ -248,11 +277,11 @@ pub unsafe fn write_pbs(pbs: &[u8; 32]) -> Result<(), ()> {
 
     let mut qw0 = [0u8; 16];
     qw0.copy_from_slice(&pbs[..16]);
-    write_quadword(PBS_PAGE_ADDR, &qw0)?;
+    write_quadword_verified(PBS_PAGE_ADDR, &qw0)?;
 
     let mut qw1 = [0u8; 16];
     qw1.copy_from_slice(&pbs[16..]);
-    write_quadword(PBS_PAGE_ADDR + 16, &qw1)?;
+    write_quadword_verified(PBS_PAGE_ADDR + 16, &qw1)?;
 
     Ok(())
 }
@@ -345,7 +374,7 @@ pub unsafe fn write_admin_pin(pin: &[u8; 16]) -> Result<(), ()> {
 
     let mut qw = [0u8; 16];
     qw.copy_from_slice(pin);
-    write_quadword(ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET, &qw)
+    write_quadword_verified(ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET, &qw)
 }
 
 /// Arm the wipe-in-progress marker. Call immediately before initiating
@@ -358,7 +387,7 @@ pub unsafe fn write_admin_pin(pin: &[u8; 16]) -> Result<(), ()> {
 pub unsafe fn arm_wipe_flag() -> Result<(), ()> {
     let mut qw = [0xFFu8; 16];
     qw[0] = WIPE_FLAG_ARMED;
-    write_quadword(ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET, &qw)
+    write_quadword_verified(ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET, &qw)
 }
 
 /// Read the wipe-in-progress flag. Returns true iff armed.

@@ -516,6 +516,263 @@ impl Se050 {
         Ok(())
     }
 
+    /// Two-phase crash-safety test: simulates power loss mid-wipe on test
+    /// OID range `0x7B0A_xxxx`, then verifies the boot-time resume mechanism
+    /// correctly finishes the wipe after reset.
+    ///
+    /// Single firmware, phase is auto-detected via the wipe-in-progress
+    /// flag at flash page 125 QW1:
+    ///
+    /// PHASE 1 (flag blank on boot):
+    ///   a. Clean up any prior test residue.
+    ///   b. Provision admin UserID at `0x7B0A_00A0`, user UserID at
+    ///      `0x7B0A_0000`, data object at `0x7B0A_0001`. All with the
+    ///      real two-entry TAG_POLICY template.
+    ///   c. Persist the test admin PIN to flash page 125 QW0 so the
+    ///      resume phase can read it back (same mechanism the real
+    ///      wipe path uses).
+    ///   d. Arm the wipe flag at page 125 QW1.
+    ///   e. Partial wipe: open admin session, delete ONLY the data
+    ///      object, leaving user + admin UserIDs intact. This models
+    ///      power being cut halfway through the wipe sequence.
+    ///   f. Halt. Reports "PHASE 1 — RESET BOARD NOW".
+    ///
+    /// PHASE 2 (flag armed on boot):
+    ///   a. Verify pre-resume state: data gone, user present, admin
+    ///      present, flag armed. Any deviation = FAIL.
+    ///   b. Read test admin PIN from flash page 125 QW0 (same read
+    ///      path the real `factory_reset_admin` uses).
+    ///   c. Open admin session, delete remaining user + admin UserIDs.
+    ///   d. Verify all three test objects are gone.
+    ///   e. Erase flash page 125 — clears admin PIN and flag atomically,
+    ///      proving the normal wipe-completion path works.
+    ///   f. Reports "PHASE 2 — CRASH-SAFETY RESUME: PASS".
+    ///
+    /// Returns a status tag the caller can print. Destructive to any
+    /// real admin PIN on page 125 — only run on a chip that hasn't yet
+    /// been through first-boot wizard with production firmware.
+    #[cfg(feature = "se050-crash-safety-e2e")]
+    pub fn run_crash_safety_roundtrip(&mut self) -> Result<&'static str, Se050Error> {
+        self.init()?;
+
+        #[cfg(feature = "stm32u585")]
+        let flag_armed = unsafe { crate::hw::flash::is_wipe_armed() };
+        #[cfg(not(feature = "stm32u585"))]
+        let flag_armed = false;
+
+        if flag_armed {
+            self.crash_safety_phase2()
+                .map(|()| "PHASE 2 — CRASH-SAFETY RESUME: PASS")
+        } else {
+            self.crash_safety_phase1()
+                .map(|()| "PHASE 1 COMPLETE — RESET THE BOARD TO TRIGGER RESUME")
+        }
+    }
+
+    #[cfg(feature = "se050-crash-safety-e2e")]
+    fn crash_safety_phase1(&mut self) -> Result<(), Se050Error> {
+        const TEST_USER: u32 = 0x7B0A_0000;
+        const TEST_DATA: u32 = 0x7B0A_0001;
+        const TEST_ADMIN: u32 = 0x7B0A_00A0;
+        let admin_pin: [u8; 16] = *b"crashsafetypin00";
+        let user_pin: [u8; 8] = *b"crashsim";
+        let payload: [u8; 4] = [0xCA, 0xFE, 0xBA, 0xBE];
+
+        unsafe {
+            // ---- a. Cleanup prior residue via admin session ----
+            if apdu::check_exists(&mut self.t1, &mut self.scp03, TEST_ADMIN)
+                .unwrap_or(false)
+            {
+                if let Ok(sid) = apdu::create_session(
+                    &mut self.t1, &mut self.scp03, TEST_ADMIN,
+                ) {
+                    if apdu::verify_session(
+                        &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                    ).is_ok() {
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_USER,
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_ADMIN,
+                        );
+                    }
+                    let _ = apdu::close_session(
+                        &mut self.t1, &mut self.scp03, &sid,
+                    );
+                }
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-CRASH] 1a cleanup OK");
+
+            // ---- b. Provision admin + user + data with 2-entry policy ----
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN, &admin_pin, 0, None,
+            )?;
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03,
+                TEST_USER, &user_pin, 5, Some(TEST_ADMIN),
+            )?;
+            apdu::write_binary_gated(
+                &mut self.t1, &mut self.scp03,
+                TEST_DATA, &payload, TEST_USER, Some(TEST_ADMIN),
+            )?;
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-CRASH] 1b provision OK");
+
+            // ---- c. Persist admin PIN to flash (so phase 2 can read it) ----
+            #[cfg(feature = "stm32u585")]
+            {
+                crate::hw::flash::write_admin_pin(&admin_pin)
+                    .map_err(|_| Se050Error::Transport)?;
+
+                #[cfg(feature = "debug-log")]
+                secure_log!("[E2E-CRASH] 1c admin PIN persisted to flash page 125");
+
+                // ---- d. Arm the wipe flag ----
+                crate::hw::flash::arm_wipe_flag()
+                    .map_err(|_| Se050Error::Transport)?;
+
+                #[cfg(feature = "debug-log")]
+                secure_log!("[E2E-CRASH] 1d wipe flag armed");
+            }
+
+            // ---- e. Partial wipe: delete only the data object ----
+            let sid = apdu::create_session(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN,
+            )?;
+            apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+            ).map_err(|e| {
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                e
+            })?;
+
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
+            )?;
+
+            // Intentionally DO NOT delete TEST_USER or TEST_ADMIN — models
+            // power cut mid-wipe after step (e) but before step (f).
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-CRASH] 1e partial wipe done (data deleted, user+admin remain)");
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "se050-crash-safety-e2e")]
+    fn crash_safety_phase2(&mut self) -> Result<(), Se050Error> {
+        const TEST_USER: u32 = 0x7B0A_0000;
+        const TEST_DATA: u32 = 0x7B0A_0001;
+        const TEST_ADMIN: u32 = 0x7B0A_00A0;
+
+        unsafe {
+            // ---- a. Verify expected pre-resume state ----
+            let data_exists = apdu::check_exists(
+                &mut self.t1, &mut self.scp03, TEST_DATA,
+            ).unwrap_or(true);
+            let user_exists = apdu::check_exists(
+                &mut self.t1, &mut self.scp03, TEST_USER,
+            ).unwrap_or(false);
+            let admin_exists = apdu::check_exists(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN,
+            ).unwrap_or(false);
+
+            #[cfg(feature = "debug-log")]
+            secure_log!(
+                "[E2E-CRASH] 2a state: data={} user={} admin={}",
+                data_exists, user_exists, admin_exists
+            );
+
+            if data_exists || !user_exists || !admin_exists {
+                #[cfg(feature = "debug-log")]
+                secure_log!(
+                    "[E2E-CRASH] 2a FAIL: expected data=false user=true admin=true"
+                );
+                return Err(Se050Error::Status(0x6A90));
+            }
+
+            // ---- b. Read admin PIN from flash (same path real resume uses) ----
+            #[cfg(feature = "stm32u585")]
+            let mut admin_pin = {
+                let mut buf = [0u8; 16];
+                crate::hw::flash::read_admin_pin(&mut buf);
+                buf
+            };
+            #[cfg(not(feature = "stm32u585"))]
+            let mut admin_pin = [0u8; 16];
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-CRASH] 2b admin PIN read from flash");
+
+            // ---- c. Finish the wipe ----
+            let sid = apdu::create_session(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN,
+            )?;
+            apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+            ).map_err(|e| {
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                e
+            })?;
+
+            let _ = apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_USER,
+            );
+            let _ = apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_ADMIN,
+            );
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+
+            use zeroize::Zeroize;
+            admin_pin.zeroize();
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-CRASH] 2c resume wipe done");
+
+            // ---- d. Verify all three test objects gone ----
+            for obj in &[TEST_USER, TEST_DATA, TEST_ADMIN] {
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj)
+                    .unwrap_or(true)
+                {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!(
+                        "[E2E-CRASH] 2d FAIL: 0x{:08x} survived resume", obj
+                    );
+                    return Err(Se050Error::Status(0x6A91));
+                }
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-CRASH] 2d absence OK (3/3)");
+
+            // ---- e. Erase page 125 — clears admin PIN + wipe flag atomically ----
+            #[cfg(feature = "stm32u585")]
+            {
+                crate::hw::flash::erase_admin_page()
+                    .map_err(|_| Se050Error::Transport)?;
+
+                if crate::hw::flash::is_wipe_armed() {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!("[E2E-CRASH] 2e FAIL: flag still armed after erase");
+                    return Err(Se050Error::Status(0x6A92));
+                }
+
+                #[cfg(feature = "debug-log")]
+                secure_log!("[E2E-CRASH] 2e page 125 erased, flag cleared");
+            }
+        }
+
+        Ok(())
+    }
+
     /// Check if the device has been provisioned (UserID object exists).
     fn check_provisioned(&mut self) -> bool {
         if self.init().is_err() {
