@@ -316,6 +316,14 @@ fn main() -> ! {
     secure_log!("[S] UI initialized");
     ui::splash();
 
+    // Start SysTick early on real hardware so measured_boot can use
+    // timeout::now() for its 4-second auto-dismiss timer. On QEMU the
+    // mailbox gateway must be initialised before SysTick starts polling,
+    // so SysTick stays late there (and the semihosting UI blocks on
+    // READC anyway — no timer needed).
+    #[cfg(feature = "stm32u585")]
+    setup_systick();
+
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
     // Skipped in automated e2e tests which need non-interactive boot.
