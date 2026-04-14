@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use sphincs_tz_bip39::{hash_to_word_indices, WORDLIST};
 
 use crate::timeout;
-use crate::ui::{display, input, DISPLAY_COLS};
+use crate::ui::{display, input, show_status, DISPLAY_COLS};
 
 // ---------------------------------------------------------------------------
 // Flash region boundaries
@@ -78,8 +78,11 @@ fn firmware_hash() -> [u8; 32] {
 // Display
 // ---------------------------------------------------------------------------
 
-/// Auto-boot delay in SysTick ticks (~1 ms each).
-const AUTO_BOOT_MS: u32 = 4_000;
+/// Title screen duration in SysTick ticks (~1 ms each).
+const TITLE_MS: u32 = 1_500;
+
+/// Word screen auto-dismiss delay in SysTick ticks (~1 ms each).
+const WORDS_MS: u32 = 4_000;
 
 /// Render all 8 measurement words on a single screen.
 /// Layout: 2 words per row, 4 rows.
@@ -128,8 +131,9 @@ fn render_all_words(indices: &[u16; 8]) {
 /// Measure the firmware and display the resulting 8 BIP-39 words.
 /// Called during boot, after UI init and before SE provisioning.
 ///
-/// Shows all 8 words on a single screen and auto-boots after 4 seconds.
-/// Any button press dismisses immediately.
+/// 1. Shows "OS Fingerprint" title for 1.5 s so the user knows these
+///    are firmware identification words, not their seed phrase.
+/// 2. Shows all 8 words on a single screen for 4 s (any button skips).
 pub fn run() {
     let hash = firmware_hash();
     let indices = hash_to_word_indices(&hash);
@@ -142,10 +146,19 @@ pub fn run() {
         secure_log!("[S]   {} {}", i + 1, WORDLIST[idx as usize]);
     }
 
-    // Show all 8 words, then wait up to 4 seconds or until any button press.
+    // Phase 1: title screen — tells the user what's coming.
+    // Uses SysTick (running on STM32U585); on QEMU SysTick isn't
+    // started yet so now() stays 0 and the loop exits immediately.
+    show_status("OS Fingerprint", "");
+    let t0 = timeout::now();
+    while timeout::now().wrapping_sub(t0) < TITLE_MS {
+        cortex_m::asm::nop();
+    }
+
+    // Phase 2: show all 8 words, auto-dismiss after 4 s or any button.
     render_all_words(&indices);
 
     let start = timeout::now();
-    let mut auto_boot = || timeout::now().wrapping_sub(start) >= AUTO_BOOT_MS;
+    let mut auto_boot = || timeout::now().wrapping_sub(start) >= WORDS_MS;
     let _ = input().wait_button(&mut auto_boot);
 }
