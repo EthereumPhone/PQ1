@@ -56,7 +56,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Parse header
     let key_index = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]);
     let ots_index = u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]);
-    let _chain_id = u64::from_be_bytes([
+    let chain_id = u64::from_be_bytes([
         buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15],
     ]);
     let msg_len = u16::from_be_bytes([buf[16], buf[17]]) as usize;
@@ -83,22 +83,50 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
+    // OTS monotonicity guard (see cmd_sign_userop for details).
+    let ots_ok = super::state::peek_state(|s| {
+        if !s.has_signed {
+            return true;
+        }
+        if s.last_chain_id == chain_id && s.last_key_index == key_index {
+            ots_index > s.last_ots_index
+        } else {
+            true
+        }
+    });
+    if !ots_ok {
+        ui::show_status("OTS reuse", "rejected");
+        return NscStatus::CryptoError as u32;
+    }
+
     // Compute EIP-191 hash: keccak256("\x19Ethereum Signed Message:\n" || decimal_len || msg)
     let msg_hash = eip191_hash(msg);
 
     ui::show_status("Signing msg", "");
 
-    super::state::peek_state(|s| {
+    let status = super::state::peek_state(|s| {
         super::sign_and_emit::decrypt_and_sign_wrapped(
             s,
             &msg_hash,
             sig_ptr,
             SIGNER_MAIN,
+            chain_id,
             key_index,
             ots_index,
             "Signed",
         )
-    })
+    });
+
+    if status == NscStatus::Ok as u32 {
+        super::state::with_state(|s| {
+            s.last_chain_id = chain_id;
+            s.last_key_index = key_index;
+            s.last_ots_index = ots_index;
+            s.has_signed = true;
+        });
+    }
+
+    status
 }
 
 /// Compute `keccak256("\x19Ethereum Signed Message:\n" || ascii(msg.len()) || msg)`.

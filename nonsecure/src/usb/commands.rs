@@ -430,8 +430,8 @@ impl CommandRouter {
             return self.sw_response(SW_WRONG_DATA);
         }
 
-        let _key_index = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
-        let _ots_index = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+        let key_index = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+        let ots_index = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
 
         // P2 carries the deployment flag: 0x00 = deployed, 0x01 = not deployed.
         let needs_init_code = self.chain_p2 == P2_NOT_DEPLOYED;
@@ -489,9 +489,16 @@ impl CommandRouter {
             p += bundle_len;
         }
 
+        // Append key_index(4 BE) + ots_index(4 BE) as a trailer.
+        // The secure world detects these via bit 31 of the total_len arg.
+        SIGN_PAYLOAD_BUF[p..p + 4].copy_from_slice(&key_index.to_be_bytes());
+        p += 4;
+        SIGN_PAYLOAD_BUF[p..p + 4].copy_from_slice(&ots_index.to_be_bytes());
+        p += 4;
+
         // The secure world writes the structured UserOp response into SIG_BUF.
         // Response: init_code_len(4) + initCode(N) + call_data_len(4) + callData(M) + wrapper
-        let status = nsc_api::sign_userop(
+        let status = nsc_api::sign_userop_with_ots(
             &SIGN_PAYLOAD_BUF[..p],
             &mut SIG_BUF[..MAX_USEROP_RESPONSE_LEN],
         );

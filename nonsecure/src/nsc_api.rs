@@ -356,6 +356,18 @@ pub fn sign_userop(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
     )
 }
 
+/// Like [`sign_userop`] but signals the presence of a trailing
+/// `key_index(4 BE) + ots_index(4 BE)` trailer by setting bit 31 of
+/// the total_len argument. The secure world uses this flag to extract
+/// the OTS fields instead of defaulting to 0.
+pub fn sign_userop_with_ots(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
+    transport::sign_userop_call(
+        payload.as_ptr(),
+        sig_buf.as_mut_ptr(),
+        payload.len() as u32 | 0x8000_0000,
+    )
+}
+
 /// Read the 32-byte bootstrap signer's verifying key. No unlock required.
 pub fn get_bootstrap_pubkey(buf: &mut [u8; 32]) -> u32 {
     transport::get_bootstrap_pubkey(buf.as_mut_ptr(), 32)

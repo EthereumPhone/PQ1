@@ -65,19 +65,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     let payload_ptr = args.arg0 as *const u8;
     let out_ptr = args.arg1 as *mut u8;
+    let has_ots_trailer = args.arg2 & 0x8000_0000 != 0;
     let total_len = (args.arg2 & 0x7FFF_FFFF) as usize;
-    // key_index and ots_index are passed by the NS side via the upper
-    // 16 bits of two reserved fields. For the v1 NSC wire format they
-    // are zero; the v2 USB handler encodes them before calling the
-    // gateway. For now, extract from the last 8 bytes of the static
-    // scratch area (set by the NS USB command handler before the call).
     //
     // NOTE: These are used only for the PQSignatureWrapper header and
     // the initCode path. The v1 legacy path ignores them.
 
     // 1. Pointer + size validation.
+    // The v2 USB handler may append an 8-byte OTS trailer (key_index + ots_index).
+    const OTS_TRAILER_LEN: usize = 8;
     if total_len < USEROP_PREFIX_LEN + 1
-        || total_len > USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN
+        || total_len > USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN + OTS_TRAILER_LEN
     {
         ui::show_status("Sign", "bad length");
         return NscStatus::InvalidPointer as u32;
@@ -88,7 +86,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // 2. TOCTOU snapshot
-    const SNAP_LEN: usize = USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN;
+    const SNAP_LEN: usize = USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN + OTS_TRAILER_LEN;
     static mut SNAP_BUF: [u8; SNAP_LEN] = [0u8; SNAP_LEN];
     let buf = &mut SNAP_BUF[..];
     if total_len > buf.len() {
@@ -236,19 +234,39 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // 9. Extract key_index and ots_index from the TOCTOU-snapped buffer.
-    // The NS USB handler encodes them in a scratch area appended after
-    // the wire payload. For the v1 NSC wire format (gateway calls from
-    // the QEMU mailbox or old companions), they default to 0.
-    //
-    // For the new full-response path we need them for the wrapper header.
-    // The NS side writes key_index(4 BE) + ots_index(4 BE) into a
-    // well-known static location that cmd_sign_userop can read.
-    // TODO: For now, use 0. The v2 USB handler will be updated to pass
-    // these through via the payload or a side-channel.
-    let key_index: u32 = 0;
-    let ots_index: u32 = 0;
+    // The v2 USB handler appends key_index(4 BE) + ots_index(4 BE) after
+    // the wire payload and sets bit 31 of total_len to signal presence.
+    // Legacy v1 callers (QEMU mailbox) don't set the flag → default to 0.
+    let (key_index, ots_index, payload_len) = if has_ots_trailer && total_len >= 8 {
+        let pl = total_len - 8;
+        let ki = u32::from_be_bytes([buf[pl], buf[pl + 1], buf[pl + 2], buf[pl + 3]]);
+        let oi = u32::from_be_bytes([buf[pl + 4], buf[pl + 5], buf[pl + 6], buf[pl + 7]]);
+        (ki, oi, pl)
+    } else {
+        (0u32, 0u32, total_len)
+    };
+    let _ = payload_len; // payload parsing above used total_len before the trailer was stripped
 
-    // 10. Hand off to the signing tail.
+    // 10. OTS monotonicity: within a session, the same (chain_id, key_index)
+    //     must never reuse an ots_index. The on-chain contract is the
+    //     authoritative counter; this is a defense-in-depth guard against
+    //     the companion accidentally sending a stale value.
+    let ots_ok = super::state::peek_state(|s| {
+        if !s.has_signed {
+            return true;
+        }
+        if s.last_chain_id == aa.chain_id && s.last_key_index == key_index {
+            ots_index > s.last_ots_index
+        } else {
+            true // different chain or key epoch: companion is authoritative
+        }
+    });
+    if !ots_ok {
+        ui::show_status("OTS reuse", "rejected");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // 11. Hand off to the signing tail.
     let mut result_len: usize = 0;
     let status = super::userop_tail::sign_userop_full(
         &mut aa,
@@ -262,10 +280,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         "Signed",
     );
 
-    // Write the result length to a well-known location so the NS side
-    // knows how many bytes to return over USB. We encode it as the first
-    // 4 bytes of the gateway result by packing it into the upper bits.
-    // Actually, the gateway only returns a u32 status. The NS side can
-    // compute the length from the mode flag + constants.
+    // Record OTS state on success so the next signing request for the
+    // same (chain_id, key_index) must present a strictly greater index.
+    if status == NscStatus::Ok as u32 {
+        super::state::with_state(|s| {
+            s.last_chain_id = aa.chain_id;
+            s.last_key_index = key_index;
+            s.last_ots_index = ots_index;
+            s.has_signed = true;
+        });
+    }
+
     status
 }

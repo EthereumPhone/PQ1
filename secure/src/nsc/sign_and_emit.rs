@@ -118,6 +118,7 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     msg_hash: &[u8; 32],
     sig_ptr: *mut u8,
     signer_type: u8,
+    chain_id: u64,
     key_index: u32,
     ots_index: u32,
     success_banner: &str,
@@ -147,15 +148,12 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     entropy_blob.zeroize();
 
     // 3. Derive the correct signing key based on signer_type.
-    //    For MAIN: uses the default derivation (legacy single-key path).
-    //    For BOOTSTRAP: uses the bootstrap derivation path.
-    //    Per-chain derivation for MAIN with key_index is handled by callers
-    //    that pass the appropriate msg_hash (the userOpHash already encodes
-    //    chain-specific data).
+    //    BOOTSTRAP: global key (no chain_id / key_index differentiation).
+    //    MAIN: per-chain, per-epoch key derived from (chain_id, key_index).
     let signing_key = if signer_type == sphincs_tz_shared::SIGNER_BOOTSTRAP {
         crate::crypto::derive_bootstrap_key_from_entropy(&entropy)
     } else {
-        crate::crypto::derive_signing_key_from_entropy(&entropy)
+        crate::crypto::derive_main_key_from_entropy(&entropy, chain_id, key_index)
     };
     entropy.zeroize();
 

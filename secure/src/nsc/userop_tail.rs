@@ -258,6 +258,7 @@ pub(super) unsafe fn sign_userop_full(
             &user_op_hash,
             sig_out,
             sphincs_tz_shared::SIGNER_MAIN,
+            aa.chain_id,
             key_index,
             ots_index,
             success_banner,

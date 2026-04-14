@@ -34,6 +34,20 @@ pub(super) struct SecureState {
     /// Used both as the AES-GCM key for the encrypted-entropy blob and
     /// as the hedge input for SLH-DSA signing randomizers.
     pub(super) master_secret: [u8; 32],
+
+    // -- OTS tracking (session-scoped, lost on power cycle) -----------
+    // The on-chain contract is authoritative. These fields only enforce
+    // monotonicity within a single unlock session to prevent accidental
+    // OTS index reuse if the companion sends a stale value.
+
+    /// The chain_id of the last successful signature.
+    pub(super) last_chain_id: u64,
+    /// The key_index of the last successful signature.
+    pub(super) last_key_index: u32,
+    /// The ots_index used by the last successful signature.
+    pub(super) last_ots_index: u32,
+    /// Whether any signature has been produced this session.
+    pub(super) has_signed: bool,
 }
 
 impl SecureState {
@@ -42,6 +56,10 @@ impl SecureState {
             remaining_attempts: MAX_ATTEMPTS,
             pin_verified: false,
             master_secret: [0u8; 32],
+            last_chain_id: 0,
+            last_key_index: 0,
+            last_ots_index: 0,
+            has_signed: false,
         }
     }
 
@@ -52,6 +70,10 @@ impl SecureState {
     pub(super) fn zeroize_sensitive(&mut self) {
         self.master_secret.zeroize();
         self.pin_verified = false;
+        self.last_chain_id = 0;
+        self.last_key_index = 0;
+        self.last_ots_index = 0;
+        self.has_signed = false;
     }
 
     /// Stamp in a freshly-verified master secret and mark the device
