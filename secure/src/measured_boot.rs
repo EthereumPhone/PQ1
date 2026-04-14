@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use sphincs_tz_bip39::{hash_to_word_indices, WORDLIST};
 
 use crate::timeout;
-use crate::ui::{display, input, show_status, Button, Press, DISPLAY_COLS};
+use crate::ui::{display, input, DISPLAY_COLS};
 
 // ---------------------------------------------------------------------------
 // Flash region boundaries
@@ -78,42 +78,44 @@ fn firmware_hash() -> [u8; 32] {
 // Display
 // ---------------------------------------------------------------------------
 
-const WORDS_PER_PAGE: usize = 4;
-const TOTAL_WORDS: usize = 8;
-const TOTAL_PAGES: usize = TOTAL_WORDS / WORDS_PER_PAGE; // 2
+/// Auto-boot delay in SysTick ticks (~1 ms each).
+const AUTO_BOOT_MS: u32 = 4_000;
 
-/// Render one page of 4 measurement words.
-fn render_page(indices: &[u16; TOTAL_WORDS], page: usize) {
+/// Render all 8 measurement words on a single screen.
+/// Layout: 2 words per row, 4 rows.
+///
+/// ```text
+/// 1 close  5 grape
+/// 2 agent  6 though
+/// 3 own    7 sail
+/// 4 deputy 8 simple
+/// ```
+fn render_all_words(indices: &[u16; 8]) {
     let d = display();
     d.clear();
 
-    for slot in 0..WORDS_PER_PAGE {
-        let word_idx = page * WORDS_PER_PAGE + slot;
-        if word_idx >= TOTAL_WORDS {
-            break;
-        }
-        let word = WORDLIST[indices[word_idx] as usize];
-        let mut row = [b' '; DISPLAY_COLS];
+    for row in 0..4 {
+        let mut buf = [b' '; DISPLAY_COLS];
 
-        // Word number: "1 ocean"
-        let n = (word_idx + 1) as u8;
-        row[0] = b'0' + n;
-        row[1] = b' ';
-        let wb = word.as_bytes();
-        let max = core::cmp::min(wb.len(), DISPLAY_COLS - 2);
-        row[2..2 + max].copy_from_slice(&wb[..max]);
+        // Left column: words 1-4 (cols 0-7)
+        let li = row;
+        buf[0] = b'1' + row as u8;
+        buf[1] = b' ';
+        let lw = WORDLIST[indices[li] as usize].as_bytes();
+        let lmax = core::cmp::min(lw.len(), 6);
+        buf[2..2 + lmax].copy_from_slice(&lw[..lmax]);
 
-        // Page indicator on the last row, right-aligned: "1/2"
-        if slot == WORDS_PER_PAGE - 1 {
-            let col = DISPLAY_COLS - 3;
-            row[col] = b'0' + (page + 1) as u8;
-            row[col + 1] = b'/';
-            row[col + 2] = b'0' + TOTAL_PAGES as u8;
-        }
+        // Right column: words 5-8 (cols 8-15)
+        let ri = row + 4;
+        buf[8] = b'5' + row as u8;
+        buf[9] = b' ';
+        let rw = WORDLIST[indices[ri] as usize].as_bytes();
+        let rmax = core::cmp::min(rw.len(), 6);
+        buf[10..10 + rmax].copy_from_slice(&rw[..rmax]);
 
         // SAFETY: only ASCII written.
-        let s = unsafe { core::str::from_utf8_unchecked(&row) };
-        d.draw_line(slot, s);
+        let s = unsafe { core::str::from_utf8_unchecked(&buf) };
+        d.draw_line(row, s);
     }
 
     d.flush();
@@ -125,6 +127,9 @@ fn render_page(indices: &[u16; TOTAL_WORDS], page: usize) {
 
 /// Measure the firmware and display the resulting 8 BIP-39 words.
 /// Called during boot, after UI init and before SE provisioning.
+///
+/// Shows all 8 words on a single screen and auto-boots after 4 seconds.
+/// Any button press dismisses immediately.
 pub fn run() {
     let hash = firmware_hash();
     let indices = hash_to_word_indices(&hash);
@@ -137,41 +142,10 @@ pub fn run() {
         secure_log!("[S]   {} {}", i + 1, WORDLIST[idx as usize]);
     }
 
-    // Intro screen — user can skip with Left or view with Right.
-    show_status("FW Measurement", "R=view L=skip");
-    let mut idle = || timeout::is_idle();
-    match input().wait_button(&mut idle) {
-        Some((Button::Right, _)) => {}
-        _ => return, // Skip or idle timeout
-    }
+    // Show all 8 words, then wait up to 4 seconds or until any button press.
+    render_all_words(&indices);
 
-    // Paginate: 2 pages of 4 words.
-    let mut page: usize = 0;
-    timeout::reset_activity();
-
-    loop {
-        render_page(&indices, page);
-
-        let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
-            Some(ev) => ev,
-            None => return, // Idle timeout
-        };
-        timeout::reset_activity();
-
-        match event {
-            (Button::Right, Press::Short) => {
-                if page + 1 < TOTAL_PAGES {
-                    page += 1;
-                }
-            }
-            (Button::Left, Press::Short) => {
-                if page > 0 {
-                    page -= 1;
-                }
-            }
-            // Long press either button dismisses.
-            (_, Press::Long) => return,
-        }
-    }
+    let start = timeout::now();
+    let mut auto_boot = || timeout::now().wrapping_sub(start) >= AUTO_BOOT_MS;
+    let _ = input().wait_button(&mut auto_boot);
 }
