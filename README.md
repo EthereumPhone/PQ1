@@ -47,7 +47,7 @@ The design target is a **STM32U585 + Infineon OPTIGA Trust M V3 + NXP EdgeLock S
 This is the *target architecture* for the production wallet. Every bullet here is either implemented in QEMU today, partially implemented in QEMU today, or planned for the STM32 bring-up. See [Implementation Status](#implementation-status) for the per-item state.
 
 - **Post-quantum transaction signatures** — SLH-DSA-SHA2-192f (FIPS 205), ~192-bit PQ security. Hash-based, no number-theoretic assumptions, no known quantum speedup beyond Grover (factored into the parameter choice). *(Currently SHA2-128f in QEMU; 192f migration is part of the production bring-up.)*
-- **Post-quantum firmware signing** — A custom OEMiROT verifies every secure-world and non-secure-world image with **ML-DSA-65 (FIPS 204) + Ed25519 hybrid**. Both signatures must verify; the classical leg is a transitional safety net while ML-DSA matures. *(Not yet implemented — target for STM32 bring-up.)*
+- **Post-quantum firmware signing via hash-signature model** — instead of signing firmware binaries, the manufacturer signs the **firmware measurement hash** (the same SHA-256 displayed as 8 BIP-39 words at boot). Anyone can build the firmware from source (reproducible build), download the manufacturer's published signature, and flash the device. The device verifies: (1) the signature on the hash is valid (manufacturer's public key), and (2) the hash matches the installed firmware. This decouples build from approval — users build, the manufacturer approves. Neither can cheat: users can't forge the signature, and the manufacturer can't sign firmware that doesn't match the open-source code. Signature stored outside the measured flash region to avoid circular dependency. *(Not yet implemented — target for STM32 bring-up. See [Firmware Update Model](#firmware-update-model) for the full design.)*
 - **Post-quantum confidentiality of all SE traffic** — both halves of the entropy are **ML-KEM-1024-encapsulated + AES-256-GCM-sealed** *before* they ever touch the I²C bus. The classical Shielded Connection / SCP03 layers carry only opaque ciphertext. *(Inner-wrap layer not yet implemented — target for STM32 bring-up.)*
 - **TrustZone isolation** — signing key, PIN state, ML-KEM secret key, and crypto ops confined to the secure world. *(On real STM32U585 silicon the six-command gateway runs through proper ARMv8-M CMSE `cmse-nonsecure-entry` veneers — exercised end-to-end under `make e2e-hw`. The QEMU mps2-an505 build uses a shared-memory mailbox + SysTick poll instead, as a workaround for a QEMU 8.2.2 MPC S-alias bug that breaks the SG instruction check.)*
 - **Dual secure elements (split entropy)** — BIP-39 entropy is XOR-split across an Infineon OPTIGA Trust M V3 and an NXP SE050. Compromising either chip in isolation reveals **zero** bits of the seed. *(Fully implemented with dual-SE XOR split across OPTIGA Trust M and SE050. Both chips share I2C1 at addresses 0x30 and 0x48.)*
@@ -593,7 +593,7 @@ See [docs/architecture.md](docs/architecture.md) for the technical design, [docs
 | **Dual-chip retry counter sync (intent log in S-flash)** | ⏳ not started | — |
 | **Boot-time attestation of both chips** | ⏳ not started | — |
 | **Firmware measurement at boot (SHA-256 → 8 BIP-39 words)** | ✅ done | visual trustless verification via `fwmeasure` host tool |
-| **ML-DSA-65 + Ed25519 hybrid firmware signing OEMiROT** | ⏳ not started | requires custom OEMiROT (ST stock is RSA/ECDSA only) |
+| **Hash-signature firmware update model (ML-DSA-44)** | ⏳ not started | manufacturer signs measurement hash, users build from source |
 | **ML-DSA-65 device identity certificate pinned in HDPL1** | ⏳ not started | — |
 | **Mixed-RNG entropy generation (TRNG ⊕ TRNG ⊕ TRNG)** | ⏳ not started | currently semihosting `/dev/urandom` under QEMU |
 | **STM32 TRNG, HASH, SAES, TAMP, BOR, BKPSRAM peripheral drivers** | ⏳ not started | — |
@@ -602,6 +602,51 @@ See [docs/architecture.md](docs/architecture.md) for the technical design, [docs
 | **TAMP / BOR / inactivity wipe ISR on real silicon** | 🚫 blocked on hardware | — |
 | **RDP Level 2 burn** | 🚫 blocked on hardware | irreversible — final production step |
 | **Power-loss tests, fault-injection tests, side-channel tests** | 🚫 blocked on hardware | requires real silicon + lab access |
+
+## Firmware Update Model
+
+The wallet uses a **hash-signature** model for firmware updates that combines open-source reproducible builds with manufacturer approval. This is the planned design — not yet implemented.
+
+### How it works
+
+```
+Manufacturer (one-time per release):
+  1. Reviews and merges source code
+  2. CI builds firmware → SHA-256 hash → 8 BIP-39 words
+  3. Signs the hash with manufacturer private key (ML-DSA-44)
+  4. Publishes the signature (~2.4 KB) on GitHub Releases
+
+User (can be anyone):
+  1. Clones repo, builds firmware from source (reproducible build)
+  2. Runs `make measure` → gets the same 8 words (same source = same binary = same hash)
+  3. Downloads the manufacturer's published signature for those words
+  4. Packages firmware + signature → flashes device via companion app
+
+Device (on boot after update):
+  1. SHA-256 hashes the installed firmware → computes 8 words
+  2. Verifies the signature against the manufacturer's public key (stored in flash/OTP)
+  3. Signature valid + hash matches → accept, display words, continue boot
+  4. Signature invalid → reject update / refuse to boot / show warning
+```
+
+### Why this works
+
+- **Signing the hash IS signing the firmware.** SHA-256 collision resistance guarantees that a valid signature on hash H proves the firmware is the exact binary that was approved. No other binary can produce the same hash.
+- **Decoupled build from approval.** The manufacturer never distributes binaries — only a tiny signature. Users build from source. The manufacturer approves a hash, not a binary.
+- **Neither side can cheat.** Users can't forge the signature (need the private key). The manufacturer can't sign firmware that doesn't match the public source code (anyone can reproduce the build and compare the hash).
+- **Pre-installed malicious firmware is caught.** Even if a device ships with fake firmware that hardcodes the "correct" words, the first legitimate signed update invalidates it — the fake firmware can't predict the SHA-256 of a future binary that hasn't been written yet.
+- **No binary distribution needed.** The signature is ~2.4 KB and can be published anywhere: GitHub release, website, QR code, companion app API. Users always build from source.
+
+### Implementation notes
+
+- **Signature storage:** The signature must be stored *outside* the measured flash region (otherwise it changes the hash → circular dependency). A dedicated flash page or a separate USB transfer during the update handshake.
+- **Manufacturer public key:** Stored in OTP or WRP-protected flash. Supports key rotation via a signed key-update message.
+- **Signature scheme:** ML-DSA-44 (FIPS 204) — post-quantum, ~2.4 KB signatures. Consistent with the wallet's PQ-only philosophy.
+- **Companion app:** The companion app can embed the `fwmeasure` logic (SHA-256 + BIP-39 word encoding) to compute expected words instantly, and also support cloning + building from source for full reproducible verification.
+
+### Future: immutable bootloader (defense-in-depth)
+
+The current measurement code runs as part of the firmware it measures. A defense-in-depth upgrade would split the measurement into an **immutable bootloader** in WRP-locked flash pages that cannot be modified by any software update. This adds protection against a compromised update that replaces both the firmware and the measurement code simultaneously. See `docs/work-todo.md` for status.
 
 ## Bring-up Roadmap (QEMU → Real Silicon → Production)
 

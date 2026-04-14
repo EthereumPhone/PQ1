@@ -247,7 +247,47 @@ No flash programming, update protocol, or version management.
 
 ---
 
-### 15. Power Management
+### 15. Hash-Signature Firmware Update Model
+
+**Status:** NOT STARTED (design complete, see README.md "Firmware Update Model")
+
+Instead of signing firmware binaries, the manufacturer signs the measurement hash (the same SHA-256 displayed as 8 BIP-39 words at boot). Users build from source, download the published signature, and flash. The device verifies the signature and that the hash matches the installed firmware.
+
+**What's needed:**
+- [ ] ML-DSA-44 signature verification in secure world (`slh-dsa` or `ml-dsa` crate)
+- [ ] Manufacturer public key storage in OTP or WRP-protected flash
+- [ ] Signature storage: dedicated flash page outside the measured region, or USB transfer during update
+- [ ] Update handshake protocol: companion app sends firmware + signature over USB
+- [ ] Boot-time verification: hash firmware, verify signature, reject on mismatch
+- [ ] Key rotation mechanism: signed key-update message from current key to new key
+- [ ] CI/CD: build firmware, compute hash, sign with manufacturer key, publish signature to GitHub Releases
+- [ ] Companion app: embed `fwmeasure` logic + sparse-checkout repo build for full reproducible verification
+
+**Files to create:** `secure/src/update.rs` (update protocol), `secure/src/fw_verify.rs` (signature verification)
+**Files to change:** `secure/src/main.rs` (boot-time verification), `secure/src/hw/flash.rs` (signature page)
+
+---
+
+### 16. Immutable Bootloader (Defense-in-Depth)
+
+**Status:** NOT STARTED
+
+Split the firmware measurement code into a separate immutable bootloader in WRP-locked flash pages. Protects against a compromised update that replaces both the firmware and the measurement code simultaneously.
+
+**What's needed:**
+- [ ] Separate bootloader binary with its own linker script (ORIGIN = 0x0C000000, ~16-32 KB)
+- [ ] Minimal OLED driver, SHA-256, BIP-39 wordlist, I2C init, GPIO buttons in bootloader
+- [ ] Main firmware linker script updated: ORIGIN starts after bootloader region
+- [ ] WRP option bytes to permanently protect bootloader flash pages
+- [ ] Bootloader: hash firmware region, display 8 words, verify signature, jump to main firmware
+- [ ] HDP activation: bootloader becomes execute-only after measurement (optional, for attestation key protection)
+
+**Files to create:** `bootloader/` (new binary crate), `bootloader/memory.x`, `bootloader/src/main.rs`
+**Files to change:** `secure/memory-stm32u585.x` (adjust ORIGIN), `Makefile` (bootloader build target)
+
+---
+
+### 17. Power Management
 
 **Status:** NOT STARTED
 

@@ -178,6 +178,13 @@ Status: dual-SE implemented. Firmware boots on real B-U585I-IOT02A + QEMU mps2-a
 - The firmware hashing itself is safe: flash is read-only, the hash is a read-only operation
 - 88 bits = 2^88 second-preimage resistance — computationally infeasible to forge
 **Status:** Implemented. Works on both QEMU (semihosting) and STM32U585 (OLED).
+**Planned: hash-signature firmware update model:**
+- Manufacturer signs the SHA-256 measurement hash (not the binary) with ML-DSA-44
+- Users build from source (reproducible build), download the published signature (~2.4 KB), flash the device
+- Device verifies: signature valid (manufacturer's public key) AND hash matches installed firmware
+- Signature stored outside measured flash region (dedicated page or USB transfer) to avoid circular dependency
+- Pre-installed malicious firmware caught on first legitimate update: can't predict future binary hashes
+- See `README.md` "Firmware Update Model" section for full design
 
 ### BIP-39 Seed Management
 
