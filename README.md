@@ -158,6 +158,76 @@ sphincs_rust/
     +-- architecture.md      # Detailed technical architecture
 ```
 
+## Documentation Map
+
+The repo has accumulated several design + roadmap docs. They overlap less
+than they look — each has a specific purpose. **Read the right one for
+what you need:**
+
+### Start here
+
+| If you want to… | Read |
+|---|---|
+| Understand the architecture top-down | `README.md` (this file) + `docs/architecture.md` |
+| Navigate the code as a contributor | `CLAUDE.md` (project context, invariants, file map) |
+| Set up a B-U585I-IOT02A dev board | `docs/dev-board-setup.md`, `docs/hardware_requirements.md` |
+
+### Plan + roadmap
+
+| If you want to… | Read |
+|---|---|
+| See the full backlog (what's done, what's planned) | `docs/work-todo.md` |
+| Synthesise the 2026-04-14 deep-research findings into "what to do next" | `docs/production-security.md` |
+| Drive a future AI-research session with project context | `docs/ai-research-briefing.md` + `docs/research-bundles/` |
+| See what's already been researched (raw artefacts) | `docs/research-bundles/results/` |
+
+### Subsystem-specific design
+
+| If you want to… | Read |
+|---|---|
+| Understand the brownout / glitch / supervisor 5-stage rollout (BOR, PVD, ECC, IWDG, TAMP, supercap on VBAT) | `docs/brownout-hardening.md` |
+| Understand the SE050 PIN-lockout factory-reset design (admin UserID + 2-entry TAG_POLICY) | `docs/se050-factory-reset.md` |
+| Understand the SE050 native UserID PIN auth flow | `docs/se050-userid-pin-auth.md` |
+| Side-channel + fault-injection hardening requirements | `docs/HARDENING.md` (existing) + `docs/production-security.md` §2.1 (new) |
+| ERC-4337 wallet contract design | `docs/pq-aa-wallet-design.md` |
+| OPTIGA Trust M integration (IFX I2C, shielded connection) | `docs/OPTIGATRUSTM/*.md` |
+| Firmware measurement / signed updates | `docs/sphincs-c7-firmware-integration.md`, README §"Firmware Update Model" |
+| USB protocol on the wire | `docs/usb-protocol-v2.md`, `docs/usb-hid-setup.md` |
+| OLED mirror / dev tooling | `docs/oled-mirror.md` |
+
+### Per-domain quick map (which doc covers each concern)
+
+The four "live" planning docs split responsibilities like this — if it's
+not in the doc you opened, check the right one:
+
+| Concern | Lives in |
+|---|---|
+| BOR / PVD / IWDG / SRAM-ECC / TAMP / CSS / supercap on VBAT | `brownout-hardening.md` |
+| Wipe-in-progress flag + crash-safe factory-reset | `brownout-hardening.md` (mechanism) + `se050-factory-reset.md` (SE050-side) |
+| SLH-DSA double-compute + OptRand + FihInt + PIN fail-in | `production-security.md` §2.1 + `work-todo.md` #18 |
+| SCP03 key rotation + HUK-SAES wrapping + binding record | `production-security.md` §2.2 + `work-todo.md` #20 |
+| SLH-DSA side-channel mitigations (rate limit, shuffling, SHAKE-vs-SHA2 decision) | `production-security.md` §2.3 + `work-todo.md` #18 |
+| USB hardening (DWC2 errata, FI-resistant min, rate limiter) | `production-security.md` §2.4 + `work-todo.md` #19 |
+| Supply-chain attestation (research not yet run) | `research-bundles/E-supply-chain.md` (bundle ready) + `work-todo.md` #22 |
+| Hallucination/verification flags from research | `production-security.md` §3 + `ai-research-briefing.md` §5 |
+
+### Why three planning docs, not one
+
+- **`brownout-hardening.md`** is a focused multi-stage rollout (Stage 1
+  → Stage 5) for chip-level voltage/glitch supervisors. Mixing in
+  unrelated software-side findings would make the staged rollout
+  harder to follow.
+- **`production-security.md`** is the synthesis of the 2026-04-14 deep-
+  research round across all 4 areas (fault injection, SCA, USB, key
+  management) — a single place to read "what did we learn and what
+  must we do."
+- **`work-todo.md`** is the actionable index. When you sit down to
+  implement, this is what you read first.
+
+If you're new to the repo, the order is: this README → CLAUDE.md →
+`work-todo.md` → whichever subsystem doc matches the issue you're
+working on.
+
 ## Build Modes
 
 | Feature | Description |
