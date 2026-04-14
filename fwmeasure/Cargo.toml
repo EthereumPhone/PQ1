@@ -1,0 +1,16 @@
+[package]
+name = "fwmeasure"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "fwmeasure"
+path = "src/main.rs"
+
+[dependencies]
+sphincs-tz-bip39 = { workspace = true }
+# Pinned per-crate (not workspace) because `secure` uses
+# `default-features = false` for no_std. See workspace Cargo.toml comment.
+sha2 = "0.10"
+object = { version = "0.36", default-features = false, features = ["read", "elf"] }

@@ -31,7 +31,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen measure
 
 all: secure nonsecure
 
@@ -518,6 +518,11 @@ test-unit:
 test-solidity:
 	@echo "==> Running Foundry tests"
 	@cd contracts/smart-wallet && forge test
+
+# Compute firmware measurement words from the secure ELF.
+# Displays the same 8 BIP-39 words the device shows at boot.
+measure: secure
+	cargo run -p fwmeasure -- $(SECURE_ELF)
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

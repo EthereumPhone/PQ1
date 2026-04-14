@@ -46,6 +46,7 @@ members = [
     "zk-test",
     "bls12_381_pka",
     "dbgen",
+    "fwmeasure",
 ]
 resolver = "2"
 

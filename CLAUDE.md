@@ -162,6 +162,23 @@ Status: dual-SE implemented. Firmware boots on real B-U585I-IOT02A + QEMU mps2-a
 - Adding protocols: Circom circuit -> snarkjs -> 960-byte VK -> add to `secure/data/vks.json` -> `cargo run -p dbgen`
 **Status:** Aave V3 supply/withdraw/borrow/repay circuits shipped. CowSwap EIP-712 planned (M4).
 
+### Firmware Measurement (Measured Boot)
+
+**What:** At every boot, the secure world SHA-256 hashes its own flash image and displays the first 88 bits as 8 BIP-39 words on the OLED. A companion host tool (`fwmeasure`) independently computes the same hash from the firmware ELF. The user visually compares — no secrets, no attestation keys, fully trustless.
+**Key files:** `secure/src/measured_boot.rs`, `fwmeasure/src/main.rs`, `bip39/src/lib.rs` (`hash_to_word_indices`)
+**How it works:**
+- S-world reads its own flash from `FLASH_BASE` to the end of loaded content (linker symbols determine the boundary)
+- On STM32U585: hashes up to `__veneer_limit` (CMSE veneers are in FLASH)
+- On QEMU: hashes up to `__sidata + (__edata - __sdata)` (veneers are in the NSC region due to build.rs patching)
+- First 88 bits of SHA-256 → 8 × 11-bit BIP-39 word indices → displayed on OLED (2 pages of 4 words)
+- Host tool: `cargo run -p fwmeasure -- <firmware.elf>` or `make measure`
+**Cross-cutting constraints:**
+- Measurement runs before PIN entry — no secrets involved, pure flash read + hash
+- Skipped when `e2e-test` feature is active (non-interactive automated tests)
+- The firmware hashing itself is safe: flash is read-only, the hash is a read-only operation
+- 88 bits = 2^88 second-preimage resistance — computationally infeasible to forge
+**Status:** Implemented. Works on both QEMU (semihosting) and STM32U585 (OLED).
+
 ### BIP-39 Seed Management
 
 **What:** 24-word mnemonic encodes 256-bit entropy. Entropy XOR-split across two SEs. Reconstructed only in S-SRAM during unlock.
@@ -183,6 +200,7 @@ make run-tropic01      # Smoke test with real Tropic01 via /dev/ttyACM0
 make e2e               # Automated end-to-end: all sign-dispatch levels in QEMU
 make e2e-hw            # End-to-end on real STM32U585 via ST-LINK + probe-rs
 cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
+make measure           # Build firmware + print 8 BIP-39 measurement words
 ```
 
 **Feature flags** (in `secure/Cargo.toml`):
@@ -237,6 +255,7 @@ cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
 | `secure/src/se050/mod.rs` | SE050 driver: provisioning + unlock via UserID PIN |
 | `secure/src/se050/scp03.rs` | SCP03 authenticated+encrypted channel |
 | `secure/src/se050/apdu.rs` | SE050 APDU command construction |
+| `secure/src/measured_boot.rs` | Boot-time firmware SHA-256 hash → 8 BIP-39 words on OLED |
 | `secure/src/secure_element.rs` | SecureElement trait + mock impl |
 | `secure/src/ui/pin_entry.rs` | Trusted PIN entry (runs in S-world) |
 | `secure/src/ui/seed_wizard.rs` | BIP-39 mnemonic generate/restore wizard |
@@ -252,6 +271,7 @@ cargo run -p dbgen     # Regenerate ERC20 + VK databases from JSON sources
 | `contracts/smart-wallet/src/PQOwnable.sol` | Two-tier PQ signer state |
 | `contracts/smart-wallet/src/verifiers/SLHDSAVerifier.sol` | FIPS-205 on-chain verifier |
 | `dbgen/` | Host-side Merkle DB builder |
+| `fwmeasure/` | Host-side firmware measurement: ELF → SHA-256 → 8 BIP-39 words |
 | `Makefile` | Build orchestration |
 | `docs/architecture.md` | Detailed technical architecture |
 | `docs/HARDENING.md` | Side-channel + fault hardening requirements |

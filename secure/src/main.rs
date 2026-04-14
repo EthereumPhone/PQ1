@@ -85,6 +85,8 @@ mod optiga;
 #[cfg(all(feature = "dual-se", not(test)))]
 mod dual_se;
 #[cfg(not(test))]
+mod measured_boot;
+#[cfg(not(test))]
 mod ui;
 #[cfg(not(test))]
 mod zk;
@@ -313,6 +315,12 @@ fn main() -> ! {
     ui::init();
     secure_log!("[S] UI initialized");
     ui::splash();
+
+    // Firmware measurement: hash flash, display 8 BIP-39 words for
+    // visual comparison with the companion tool's reproducible build.
+    // Skipped in automated e2e tests which need non-interactive boot.
+    #[cfg(not(feature = "e2e-test"))]
+    measured_boot::run();
 
     // ---- QR-code screen test ----
     // Renders the companion-app QR + URL, then halts. Used to iterate on

@@ -252,6 +252,21 @@ fn write_11_bits(buf: &mut [u8], bit: usize, value: u16) {
 }
 
 // ---------------------------------------------------------------------------
+// Firmware measurement helpers
+// ---------------------------------------------------------------------------
+
+/// Extract 8 × 11-bit BIP-39 word indices from the first 88 bits of a
+/// SHA-256 hash. Used for firmware measurement display — NOT for mnemonic
+/// generation.
+pub fn hash_to_word_indices(hash: &[u8; 32]) -> [u16; 8] {
+    let mut indices = [0u16; 8];
+    for i in 0..8 {
+        indices[i] = read_11_bits(hash, i * BITS_PER_WORD);
+    }
+    indices
+}
+
+// ---------------------------------------------------------------------------
 // Wordlist lookup helpers
 // ---------------------------------------------------------------------------
 
