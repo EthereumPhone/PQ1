@@ -8,8 +8,7 @@ sphincs-tz-shared = { workspace = true }
 sphincs-tz-bip39  = { workspace = true }
 
 # Crypto (all no_std, no alloc)
-slh-dsa = { version = "0.2.0-rc.4", default-features = false }
-signature = { version = "3.0.0-rc.10", default-features = false }
+sphincs-c7 = { workspace = true }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
 aes = { version = "0.8", default-features = false }
 cmac = { version = "0.7", default-features = false }

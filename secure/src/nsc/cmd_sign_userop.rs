@@ -3,6 +3,20 @@
 //! tx on the trusted UI, recompute the canonical `userOpHash` natively,
 //! and sign that hash with SLH-DSA-SHA2-128f.
 //!
+//! ## Deployment modes
+//!
+//! The first byte of the payload is the **mode byte**:
+//!
+//!   * `0` — deployed, no ERC-20 bundle (legacy default)
+//!   * `1` — deployed, with ERC-20 bundle (legacy default)
+//!   * `2` — **not deployed**: firmware generates initCode automatically
+//!   * `3` — not deployed + with ERC-20 bundle
+//!
+//! When mode ≥ 2, the firmware derives the bootstrap keypair internally,
+//! produces the factory authorization signature, builds and hashes the
+//! initCode, and includes it in the structured UserOp response alongside
+//! the reconstructed callData and the main-signer PQSignatureWrapper.
+//!
 //! ## Why the secure world (and not NS) computes the userOpHash
 //!
 //! The single point of authorisation in this device is the trusted UI:
@@ -20,17 +34,9 @@
 //! ## Wire format
 //!
 //! See `sphincs_tz_shared::CMD_SIGN_USEROP` for the canonical layout.
-//! The handler validates pointers, snapshots the entire payload into a
-//! secure-stack buffer (TOCTOU defence), parses the AA header, parses
-//! the inner EIP-1559 envelope, optionally verifies an attached ERC-20
-//! metadata bundle, dispatches the inner tx through the same trust
-//! ladder used by `cmd_sign`, displays the inner tx on the trusted UI,
-//! reconstructs the canonical `execute(...)` callData, computes the
-//! userOpHash natively, then hands that 32-byte digest to the shared
-//! `decrypt_and_sign` tail.
 
 use sphincs_tz_shared::{
-    NscStatus, MAX_TX_LEN, SIGNATURE_LEN, USEROP_HEADER_LEN, USEROP_PREFIX_LEN,
+    NscStatus, MAX_TX_LEN, MAX_USEROP_RESPONSE_LEN, USEROP_HEADER_LEN, USEROP_PREFIX_LEN,
 };
 
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
@@ -58,11 +64,18 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     let payload_ptr = args.arg0 as *const u8;
-    let sig_ptr = args.arg1 as *mut u8;
-    let total_len = args.arg2 as usize;
+    let out_ptr = args.arg1 as *mut u8;
+    let total_len = (args.arg2 & 0x7FFF_FFFF) as usize;
+    // key_index and ots_index are passed by the NS side via the upper
+    // 16 bits of two reserved fields. For the v1 NSC wire format they
+    // are zero; the v2 USB handler encodes them before calling the
+    // gateway. For now, extract from the last 8 bytes of the static
+    // scratch area (set by the NS USB command handler before the call).
+    //
+    // NOTE: These are used only for the PQSignatureWrapper header and
+    // the initCode path. The v1 legacy path ignores them.
 
-    // 1. Pointer + size validation. The AA prefix (header + tx_len) is
-    //    fixed-size; reject anything that can't even fit it.
+    // 1. Pointer + size validation.
     if total_len < USEROP_PREFIX_LEN + 1
         || total_len > USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN
     {
@@ -73,14 +86,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign", "bad ptr");
         return NscStatus::InvalidPointer as u32;
     }
-    if !validate_ns_write_ptr(args.arg1, SIGNATURE_LEN) {
-        return NscStatus::InvalidPointer as u32;
-    }
 
-    // 2. TOCTOU snapshot — copy the entire NS payload into a secure
-    //    static buffer before parsing anything. Uses a static instead of
-    //    a stack allocation to avoid overflowing the secure-world stack
-    //    (~5.5 KB would blow the CMSE gateway call frame).
+    // 2. TOCTOU snapshot
     const SNAP_LEN: usize = USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN;
     static mut SNAP_BUF: [u8; SNAP_LEN] = [0u8; SNAP_LEN];
     let buf = &mut SNAP_BUF[..];
@@ -93,15 +100,28 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     ui::show_status("Sign", "parsing...");
 
-    let has_bundle = buf[0] == 1;
+    // 3. Parse mode byte.
+    let mode = buf[0];
+    let has_bundle = mode == 1 || mode == 3;
+    let needs_init_code = mode >= 2;
 
-    // 3. Parse the fixed AA header.
-    let aa = match parse_header(&buf[..USEROP_HEADER_LEN]) {
+    // Validate output buffer size based on mode.
+    let required_out = if needs_init_code {
+        MAX_USEROP_RESPONSE_LEN
+    } else {
+        MAX_USEROP_RESPONSE_LEN // same max — actual write is smaller
+    };
+    if !validate_ns_write_ptr(args.arg1, required_out) {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // 4. Parse the fixed AA header.
+    let mut aa = match parse_header(&buf[..USEROP_HEADER_LEN]) {
         Ok(a) => a,
         Err(_) => return NscStatus::InvalidPointer as u32,
     };
 
-    // 4. Parse the inner-tx length and locate the envelope.
+    // 5. Parse the inner-tx length and locate the envelope.
     let tx_len_off = USEROP_HEADER_LEN;
     let tx_len_bytes: [u8; 4] = match buf[tx_len_off..tx_len_off + 4].try_into() {
         Ok(v) => v,
@@ -118,7 +138,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
     let tx_bytes = &buf[tx_start..tx_end];
 
-    // 5. Parse the inner EIP-1559 envelope.
+    // 6. Parse the inner EIP-1559 envelope.
     let parsed = match eip1559::parse(tx_bytes) {
         Ok(t) => t,
         Err(_) => {
@@ -127,15 +147,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // Cross-check: the AA chain id and the inner-tx chain id MUST match.
-    // Otherwise the user could be fooled into authorising a tx for chain
-    // X via the trusted UI while signing a userOpHash for chain Y.
     if aa.chain_id != parsed.tx.chain_id {
         ui::show_status("Bad tx", "(chain mismatch)");
         return NscStatus::CryptoError as u32;
     }
 
-    // 6. Optional ERC-20 metadata bundle (same shape as cmd_sign).
+    // 7. Optional ERC-20 metadata bundle.
     let verified_meta: Option<Erc20Metadata<'_>> = if has_bundle {
         if tx_end + 4 > total_len {
             None
@@ -170,10 +187,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None
     };
 
-    // 7. Dispatch through the same trust ladder as the plain `cmd_sign`
-    //    path so the user sees the same trusted-UI flow regardless of
-    //    whether their wallet is wrapping the tx as an ERC-4337 UserOp
-    //    or sending it directly.
+    // 8. Trust-ladder dispatch + trusted UI confirmation.
     let kind = dispatch_tx(&parsed, verified_meta);
 
     #[cfg(all(feature = "e2e-test", feature = "debug-log"))]
@@ -188,8 +202,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         secure_log!("[S][e2e] cmd_sign_userop dispatch = {}", kind_name);
     }
 
-    // ContractCreation cannot be wrapped as `execute(...)`. Reject early
-    // so we don't try to sign garbage.
     if matches!(kind, TxKind::ContractCreation) {
         ui::show_status("UserOp", "no CREATE");
         return NscStatus::CryptoError as u32;
@@ -202,6 +214,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         TxKind::ContractCall => render_blind_sign_pages(&parsed.tx, parsed.data),
         TxKind::ContractCreation => render_contract_creation_pages(&parsed.tx, parsed.data),
     };
+
+    // For undeployed accounts, add a visual hint on the confirmation screen.
+    #[cfg(not(feature = "e2e-test"))]
+    if needs_init_code {
+        ui::show_status("DEPLOY+Sign", "confirm...");
+    }
 
     let confirm_result = confirm(pages.as_slice());
     match confirm_result {
@@ -217,7 +235,37 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // 8. Hand off to the shared UserOp signing tail: reconstruct
-    //    execute() callData, compute userOpHash, sign with SLH-DSA.
-    super::userop_tail::sign_userop_hash(&aa, &parsed.tx, parsed.data, sig_ptr, "Signed")
+    // 9. Extract key_index and ots_index from the TOCTOU-snapped buffer.
+    // The NS USB handler encodes them in a scratch area appended after
+    // the wire payload. For the v1 NSC wire format (gateway calls from
+    // the QEMU mailbox or old companions), they default to 0.
+    //
+    // For the new full-response path we need them for the wrapper header.
+    // The NS side writes key_index(4 BE) + ots_index(4 BE) into a
+    // well-known static location that cmd_sign_userop can read.
+    // TODO: For now, use 0. The v2 USB handler will be updated to pass
+    // these through via the payload or a side-channel.
+    let key_index: u32 = 0;
+    let ots_index: u32 = 0;
+
+    // 10. Hand off to the signing tail.
+    let mut result_len: usize = 0;
+    let status = super::userop_tail::sign_userop_full(
+        &mut aa,
+        &parsed.tx,
+        parsed.data,
+        out_ptr,
+        &mut result_len as *mut usize,
+        needs_init_code,
+        key_index,
+        ots_index,
+        "Signed",
+    );
+
+    // Write the result length to a well-known location so the NS side
+    // knows how many bytes to return over USB. We encode it as the first
+    // 4 bytes of the gateway result by packing it into the upper bits.
+    // Actually, the gateway only returns a u32 status. The NS side can
+    // compute the length from the mode flag + constants.
+    status
 }

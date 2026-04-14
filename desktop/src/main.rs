@@ -5,8 +5,7 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use anyhow::Result;
 use rand_core::{OsRng as OsRng06, RngCore};
 use sha2::{Digest, Sha256};
-use signature::{Keypair, Signer, Verifier};
-use slh_dsa::{Sha2_128f, SigningKey, VerifyingKey};
+use sphincs_c7::{SigningKey, VerifyingKey};
 use tropic01::keys::{SH0PRIV_PROD0, SH0PUB_PROD0};
 use tropic01::{Tropic01, X25519Dalek};
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -30,6 +29,15 @@ const RMEM_VERIFYING_KEY: U16 = U16::new(2);
 
 fn kdf(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
     let mut h = Sha256::new();
+    h.update(domain);
+    h.update(input);
+    h.update([index]);
+    h.finalize().into()
+}
+
+fn kdf_keccak(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
+    use sha3::{Digest as _, Keccak256};
+    let mut h = Keccak256::new();
     h.update(domain);
     h.update(input);
     h.update([index]);
@@ -221,12 +229,19 @@ fn cmd_enroll(device_path: &str) -> Result<()> {
     println!("=== Enroll: Generate key and store on TROPIC01 ===\n");
 
     // Generate keypair
-    println!("[1/4] Generating SLH-DSA-SHA2-128f keypair...");
-    let mut rng = rand::rng();
-    let signing_key = SigningKey::<Sha2_128f>::new(&mut rng);
+    println!("[1/4] Generating SPHINCS+C7 keypair...");
+    let mut sk_seed = [0u8; 32];
+    let mut pk_seed = [0u8; 16];
+    OsRng06.fill_bytes(&mut sk_seed);
+    OsRng06.fill_bytes(&mut pk_seed);
+    let signing_key = SigningKey::keygen(sk_seed, pk_seed);
     let verifying_key = signing_key.verifying_key();
-    let sk_bytes = signing_key.to_vec();
-    let vk_bytes = verifying_key.to_vec();
+    // Serialize as sk_seed(32) || pk_seed(16) || pk_root(16) = 64 bytes
+    let mut sk_bytes = Vec::with_capacity(64);
+    sk_bytes.extend_from_slice(signing_key.sk_seed());
+    sk_bytes.extend_from_slice(signing_key.pk_seed());
+    sk_bytes.extend_from_slice(signing_key.pk_root());
+    let vk_bytes = verifying_key.to_bytes().to_vec();
     println!("  Signing key:   {} bytes", sk_bytes.len());
     println!("  Verifying key: {} bytes", vk_bytes.len());
 
@@ -406,15 +421,31 @@ fn cmd_sign(device_path: &str) -> Result<()> {
 
             // Sign
             println!("\n[4/4] Signing test message...");
-            let retrieved_sk = SigningKey::<Sha2_128f>::try_from(decrypted_sk.as_slice())
-                .map_err(|e| anyhow::anyhow!("Reconstruct signing key: {e}"))?;
-            let verifying_key = VerifyingKey::<Sha2_128f>::try_from(vk_bytes.as_slice())
-                .map_err(|e| anyhow::anyhow!("Reconstruct verifying key: {e}"))?;
+            // Reconstruct from stored parts: sk_seed(32) || pk_seed(16) || pk_root(16)
+            if decrypted_sk.len() != 64 {
+                anyhow::bail!("Bad SK blob length: {} (expected 64)", decrypted_sk.len());
+            }
+            let mut sk_seed = [0u8; 32];
+            let mut pk_seed_arr = [0u8; 16];
+            let mut pk_root = [0u8; 16];
+            sk_seed.copy_from_slice(&decrypted_sk[0..32]);
+            pk_seed_arr.copy_from_slice(&decrypted_sk[32..48]);
+            pk_root.copy_from_slice(&decrypted_sk[48..64]);
+            let retrieved_sk = SigningKey::from_parts(sk_seed, pk_seed_arr, pk_root);
+
+            if vk_bytes.len() != 32 {
+                anyhow::bail!("Bad VK length: {} (expected 32)", vk_bytes.len());
+            }
+            let mut vk_arr = [0u8; 32];
+            vk_arr.copy_from_slice(&vk_bytes);
+            let verifying_key = VerifyingKey::from_bytes(&vk_arr);
 
             let message = b"Post-quantum hardware wallet test message";
-            let sig = retrieved_sk
-                .try_sign(message)
-                .map_err(|e| anyhow::anyhow!("Signing failed: {e}"))?;
+            let msg_hash: [u8; 32] = {
+                use sha3::{Digest as _, Keccak256};
+                Keccak256::digest(message).into()
+            };
+            let sig = retrieved_sk.sign(&msg_hash, None);
             let sig_bytes = sig.to_vec();
             println!(
                 "  Message:   \"{}\"",
@@ -426,9 +457,9 @@ fn cmd_sign(device_path: &str) -> Result<()> {
                 &sig_bytes[..16]
             );
 
-            verifying_key
-                .verify(message, &sig)
-                .map_err(|e| anyhow::anyhow!("Signature verification failed: {e}"))?;
+            if !verifying_key.verify(&msg_hash, &sig) {
+                anyhow::bail!("Signature verification failed");
+            }
             println!("  Verification: VALID");
 
             session.session_abort().ok();
@@ -469,23 +500,19 @@ fn cmd_sign(device_path: &str) -> Result<()> {
 
 fn slhdsa_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; 48] {
     let mut out = [0u8; 48];
-    let chunk0 = kdf(b"sphincs-slh-seed", bip39_seed, 0);
-    let chunk1 = kdf(b"sphincs-slh-seed", bip39_seed, 1);
-    let chunk2 = kdf(b"sphincs-slh-seed", bip39_seed, 2);
-    out[0..16].copy_from_slice(&chunk0[..16]);
-    out[16..32].copy_from_slice(&chunk1[..16]);
-    out[32..48].copy_from_slice(&chunk2[..16]);
+    let chunk0 = kdf_keccak(b"sphincsc7-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf_keccak(b"sphincsc7-pk-seed", bip39_seed, 0);
+    out[0..32].copy_from_slice(&chunk0);
+    out[32..48].copy_from_slice(&chunk1[..16]);
     out
 }
 
 fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; 48] {
     let mut out = [0u8; 48];
-    let chunk0 = kdf(b"pqwallet-bootstrap-sk-seed", bip39_seed, 0);
-    let chunk1 = kdf(b"pqwallet-bootstrap-sk-prf", bip39_seed, 0);
-    let chunk2 = kdf(b"pqwallet-bootstrap-pk-seed", bip39_seed, 0);
-    out[0..16].copy_from_slice(&chunk0[..16]);
-    out[16..32].copy_from_slice(&chunk1[..16]);
-    out[32..48].copy_from_slice(&chunk2[..16]);
+    let chunk0 = kdf_keccak(b"pqwallet-c7-bootstrap-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf_keccak(b"pqwallet-c7-bootstrap-pk-seed", bip39_seed, 0);
+    out[0..32].copy_from_slice(&chunk0);
+    out[32..48].copy_from_slice(&chunk1[..16]);
     out
 }
 
@@ -496,20 +523,19 @@ fn main_signer_seed_from_bip39(bip39_seed: &[u8; 64], chain_id: u64, key_index: 
     input[72..76].copy_from_slice(&key_index.to_be_bytes());
 
     let mut out = [0u8; 48];
-    let chunk0 = kdf(b"pqwallet-main-sk-seed", &input, 0);
-    let chunk1 = kdf(b"pqwallet-main-sk-prf", &input, 0);
-    let chunk2 = kdf(b"pqwallet-main-pk-seed", &input, 0);
-    out[0..16].copy_from_slice(&chunk0[..16]);
-    out[16..32].copy_from_slice(&chunk1[..16]);
-    out[32..48].copy_from_slice(&chunk2[..16]);
+    let chunk0 = kdf_keccak(b"pqwallet-c7-main-sk-seed", &input, 0);
+    let chunk1 = kdf_keccak(b"pqwallet-c7-main-pk-seed", &input, 0);
+    out[0..32].copy_from_slice(&chunk0);
+    out[32..48].copy_from_slice(&chunk1[..16]);
     out
 }
 
-fn derive_signing_key_from_seed(seed: &[u8; 48]) -> SigningKey<Sha2_128f> {
-    let sk_seed = &seed[0..16];
-    let sk_prf = &seed[16..32];
-    let pk_seed = &seed[32..48];
-    SigningKey::<Sha2_128f>::slh_keygen_internal(sk_seed, sk_prf, pk_seed)
+fn derive_signing_key_from_seed(seed: &[u8; 48]) -> SigningKey {
+    let mut sk_seed = [0u8; 32];
+    let mut pk_seed = [0u8; 16];
+    sk_seed.copy_from_slice(&seed[0..32]);
+    pk_seed.copy_from_slice(&seed[32..48]);
+    SigningKey::keygen(sk_seed, pk_seed)
 }
 
 // ---------------------------------------------------------------------------

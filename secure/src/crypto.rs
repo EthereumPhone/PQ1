@@ -1,7 +1,7 @@
 //! Crypto helpers: KDF, AES-GCM wrap/unwrap, PIN state ser/de, and on-unlock
-//! SLH-DSA key derivation from the stored BIP-39 entropy.
+//! SPHINCS+C7 key derivation from the stored BIP-39 entropy.
 //!
-//! ## Why entropy and not the SLH-DSA seed?
+//! ## Why entropy and not the SPHINCS+C7 seed?
 //!
 //! The on-device secret blob is the **32-byte BIP-39 entropy** — the raw
 //! 256 bits the user's 24-word phrase encodes. On every unlock the secure
@@ -16,14 +16,14 @@
 //!         ▼ PBKDF2-HMAC-SHA512, 2048 iters
 //!     bip39_seed (64 B)
 //!         │
-//!         ▼ slhdsa_seed_from_bip39  (3 × SHA-256 KDF)
-//!     SLH-DSA seed (48 B)
+//!         ▼ slhdsa_seed_from_bip39  (2 × Keccak-256 KDF)
+//!     SPHINCS+C7 seed (48 B)
 //!         │
-//!         ▼ slh_keygen_internal (FIPS-205)
-//!     SigningKey<Sha2_128f>
+//!         ▼ SigningKey::keygen
+//!     sphincs_c7::SigningKey
 //! ```
 //!
-//! Storing entropy rather than the post-PBKDF2 SLH-DSA seed has two benefits:
+//! Storing entropy rather than the post-PBKDF2 seed has two benefits:
 //! 1. Smaller secure-element footprint (32 B vs 48 B plaintext, 60 B vs 76 B
 //!    AES-GCM blob).
 //! 2. The on-device secret is bit-for-bit identical to the user's recovery
@@ -38,7 +38,7 @@ use aes_gcm::{Aes256Gcm, Nonce};
 use sha2::{Digest, Sha256};
 
 use crate::secure_element::SecureElement;
-use slh_dsa::{Sha2_128f, SigningKey};
+use sphincs_c7::SigningKey;
 use sphincs_tz_bip39::{Mnemonic, ENTROPY_BYTES};
 use sphincs_tz_shared::MAX_ATTEMPTS;
 use zeroize::Zeroize;
@@ -53,8 +53,8 @@ pub const RMEM_VERIFYING_KEY: u16 = 2;
 /// changes. Used by CMD_GET_BOOTSTRAP_PUBKEY.
 pub const RMEM_BOOTSTRAP_VK: u16 = 3;
 
-/// Length of the SLH-DSA-Sha2_128f seed material:
-/// `sk_seed (16) ‖ sk_prf (16) ‖ pk_seed (16)`. Computed from the BIP-39
+/// Length of the SPHINCS+C7 seed material:
+/// `sk_seed (32) ‖ pk_seed (16)`. Computed from the BIP-39
 /// entropy on every unlock; never persisted.
 pub const SEED_LEN: usize = 48;
 
@@ -71,6 +71,18 @@ pub const ENTROPY_BLOB_LEN: usize = 12 + ENTROPY_LEN + 16;
 
 pub fn kdf(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
     let mut h = Sha256::new();
+    h.update(domain);
+    h.update(input);
+    h.update([index]);
+    h.finalize().into()
+}
+
+/// Keccak-256 based KDF for SPHINCS+C7 seed derivation.
+/// Used by the signing key derivation paths; the SHA-256 `kdf()` above
+/// is kept for non-signing helpers (wrap-key, entropy-nonce, MACD).
+pub fn kdf_keccak(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
+    use sha3::{Digest as _, Keccak256};
+    let mut h = Keccak256::new();
     h.update(domain);
     h.update(input);
     h.update([index]);
@@ -200,53 +212,55 @@ pub fn decrypt_entropy_blob(
     Ok(entropy_buf)
 }
 
-/// Derive a fully-formed SLH-DSA-SHA2-128f signing key from a 48-byte
-/// SLH-DSA seed. Calls the FIPS-205 `slh_keygen_internal` primitive — the
-/// `pk_root` Merkle root is *computed* from `sk_seed`/`pk_seed`, not just
-/// deserialized.
-pub fn derive_signing_key(seed: &[u8; SEED_LEN]) -> SigningKey<Sha2_128f> {
-    let sk_seed = &seed[0..16];
-    let sk_prf = &seed[16..32];
-    let pk_seed = &seed[32..48];
-    SigningKey::<Sha2_128f>::slh_keygen_internal(sk_seed, sk_prf, pk_seed)
+/// Derive a fully-formed SPHINCS+C7 signing key from a 48-byte seed.
+/// Calls `SigningKey::keygen` which builds the full hypertree — the
+/// `pk_root` Merkle root is *computed* from `(sk_seed, pk_seed)`.
+///
+/// **Expensive** (~10s on Cortex-M33). At provisioning time, compute once
+/// and cache the VK. At signing time, use `SigningKey::from_parts` with
+/// the cached `pk_root` to skip the hypertree rebuild.
+pub fn derive_signing_key(seed: &[u8; SEED_LEN]) -> SigningKey {
+    let mut sk_seed = [0u8; 32];
+    let mut pk_seed = [0u8; 16];
+    sk_seed.copy_from_slice(&seed[0..32]);
+    pk_seed.copy_from_slice(&seed[32..48]);
+    SigningKey::keygen(sk_seed, pk_seed)
 }
 
-/// Derive the 48-byte SLH-DSA seed material deterministically from the 64-byte
-/// BIP-39 seed (PBKDF2-HMAC-SHA512 output of the user's mnemonic).
+/// Derive the 48-byte SPHINCS+C7 seed material deterministically from the
+/// 64-byte BIP-39 seed (PBKDF2-HMAC-SHA512 output of the user's mnemonic).
 ///
-/// Domain-separated with `"sphincs-slh-seed"` so the same mnemonic, used in a
-/// completely different wallet (e.g. BIP-44 Bitcoin), produces independent
-/// key material — losing one cannot pivot to compromise the other.
+/// Domain-separated with `"sphincsc7-sk-seed"` / `"sphincsc7-pk-seed"` so
+/// the same mnemonic, used in a completely different wallet (e.g. BIP-44
+/// Bitcoin), produces independent key material.
 ///
-/// Three SHA-256 chunks (one per 16-byte SLH-DSA seed component) keyed by an
-/// index byte, so a hypothetical SHA-256 collision in one chunk cannot be
-/// pivoted to control the others.
+/// Two Keccak-256 chunks: one full 32-byte `sk_seed` and the first 16 bytes
+/// of a second hash for `pk_seed`. The index byte is 0 for both (domain
+/// tag provides separation).
 ///
 /// This function is the **recovery contract**: as long as it remains stable,
-/// the same 24-word phrase always produces the same SPHINCS+ keypair, so a
+/// the same 24-word phrase always produces the same SPHINCS+C7 keypair, so a
 /// user who loses or bricks their device can restore from their written-down
 /// phrase on any device that runs this firmware.
 pub fn slhdsa_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
     let mut out = [0u8; SEED_LEN];
-    let chunk0 = kdf(b"sphincs-slh-seed", bip39_seed, 0);
-    let chunk1 = kdf(b"sphincs-slh-seed", bip39_seed, 1);
-    let chunk2 = kdf(b"sphincs-slh-seed", bip39_seed, 2);
-    out[0..16].copy_from_slice(&chunk0[..16]);
-    out[16..32].copy_from_slice(&chunk1[..16]);
-    out[32..48].copy_from_slice(&chunk2[..16]);
+    let chunk0 = kdf_keccak(b"sphincsc7-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf_keccak(b"sphincsc7-pk-seed", bip39_seed, 0);
+    out[0..32].copy_from_slice(&chunk0);       // sk_seed: full 32 bytes
+    out[32..48].copy_from_slice(&chunk1[..16]); // pk_seed: first 16 bytes
     out
 }
 
-/// Run the full BIP-39 → SLH-DSA derivation chain on a 32-byte entropy and
-/// return the SPHINCS+ signing key. Called on every unlock so the
-/// `SigningKey` only exists in secure SRAM for the duration of the actual
-/// signing operation, never persisted in any form.
+/// Run the full BIP-39 → SPHINCS+C7 derivation chain on a 32-byte entropy
+/// and return the signing key. Called on every unlock so the `SigningKey`
+/// only exists in secure SRAM for the duration of the actual signing
+/// operation, never persisted in any form.
 ///
 /// PBKDF2-HMAC-SHA512 (2048 iters) is the dominant cost (~tens of ms on a
 /// Cortex-M33; dwarfed by SPHINCS+ signing's seconds).
 pub fn derive_signing_key_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
-) -> SigningKey<Sha2_128f> {
+) -> SigningKey {
     // 1. Reconstruct the mnemonic from the stored entropy (recomputes
     //    checksum; never produces words out loud).
     let mnemonic = Mnemonic::from_entropy(entropy);
@@ -254,11 +268,11 @@ pub fn derive_signing_key_from_entropy(
     // 2. PBKDF2-HMAC-SHA512 with the empty passphrase.
     let mut bip39_seed = mnemonic.to_seed("");
 
-    // 3. Domain-separate to the 48-byte SLH-DSA seed.
+    // 3. Domain-separate to the 48-byte SPHINCS+C7 seed.
     let mut slh_seed = slhdsa_seed_from_bip39(&bip39_seed);
     bip39_seed.zeroize();
 
-    // 4. FIPS-205 KeyGen.
+    // 4. SPHINCS+C7 KeyGen (builds hypertree).
     let sk = derive_signing_key(&slh_seed);
     slh_seed.zeroize();
 
@@ -267,17 +281,13 @@ pub fn derive_signing_key_from_entropy(
 }
 
 /// Same as `derive_signing_key_from_entropy` but also returns the 32-byte
-/// SLH-DSA verifying key bytes. Used by provisioning to cache the VK in
-/// r-mem slot 2 without keeping the full SigningKey alive longer than
-/// necessary.
+/// verifying key bytes. Used by provisioning to cache the VK in r-mem
+/// slot 2 without keeping the full SigningKey alive longer than necessary.
 pub fn derive_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
-) -> (SigningKey<Sha2_128f>, [u8; 32]) {
-    use signature::Keypair;
+) -> (SigningKey, [u8; 32]) {
     let sk = derive_signing_key_from_entropy(entropy);
-    let vk_array = sk.verifying_key().to_bytes();
-    let mut vk_bytes = [0u8; 32];
-    vk_bytes.copy_from_slice(vk_array.as_slice());
+    let vk_bytes = sk.verifying_key().to_bytes();
     (sk, vk_bytes)
 }
 
@@ -288,28 +298,25 @@ pub fn derive_keypair_from_entropy(
 // Both key classes derive from the same BIP-39 entropy via domain-separated
 // KDFs that mirror the BIP-85 path structure:
 //
-//   bootstrap         = derive(seed, "pqwallet-bootstrap", 0)
-//   chain-main-key_i  = derive(seed, "pqwallet-main", chainId, keyIndex)
+//   bootstrap         = derive(seed, "pqwallet-c7-bootstrap", 0)
+//   chain-main-key_i  = derive(seed, "pqwallet-c7-main", chainId, keyIndex)
 //
-// Using SLH-DSA-SHA2-128f for both until ML-DSA-44 is available for the
-// bootstrap signer. The domain separation ensures the bootstrap key and
-// all per-chain main keys are cryptographically independent.
+// Using SPHINCS+C7 for both. The domain separation ensures the bootstrap
+// key and all per-chain main keys are cryptographically independent.
 
-/// Derive the bootstrap signer's SLH-DSA seed (48 bytes) from the BIP-39
-/// seed. The bootstrap signer is global (not per-chain), stateless, and
-/// never rotates.
+/// Derive the bootstrap signer's SPHINCS+C7 seed (48 bytes) from the
+/// BIP-39 seed. The bootstrap signer is global (not per-chain), stateless,
+/// and never rotates.
 pub fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
     let mut out = [0u8; SEED_LEN];
-    let chunk0 = kdf(b"pqwallet-bootstrap-sk-seed", bip39_seed, 0);
-    let chunk1 = kdf(b"pqwallet-bootstrap-sk-prf", bip39_seed, 0);
-    let chunk2 = kdf(b"pqwallet-bootstrap-pk-seed", bip39_seed, 0);
-    out[0..16].copy_from_slice(&chunk0[..16]);
-    out[16..32].copy_from_slice(&chunk1[..16]);
-    out[32..48].copy_from_slice(&chunk2[..16]);
+    let chunk0 = kdf_keccak(b"pqwallet-c7-bootstrap-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf_keccak(b"pqwallet-c7-bootstrap-pk-seed", bip39_seed, 0);
+    out[0..32].copy_from_slice(&chunk0);
+    out[32..48].copy_from_slice(&chunk1[..16]);
     out
 }
 
-/// Derive a per-chain main signer's SLH-DSA seed (48 bytes) from the
+/// Derive a per-chain main signer's SPHINCS+C7 seed (48 bytes) from the
 /// BIP-39 seed, chain ID, and key epoch index.
 ///
 /// Each (chain_id, key_index) pair produces a cryptographically
@@ -327,19 +334,17 @@ pub fn main_signer_seed_from_bip39(
     input[72..76].copy_from_slice(&key_index.to_be_bytes());
 
     let mut out = [0u8; SEED_LEN];
-    let chunk0 = kdf(b"pqwallet-main-sk-seed", &input, 0);
-    let chunk1 = kdf(b"pqwallet-main-sk-prf", &input, 0);
-    let chunk2 = kdf(b"pqwallet-main-pk-seed", &input, 0);
-    out[0..16].copy_from_slice(&chunk0[..16]);
-    out[16..32].copy_from_slice(&chunk1[..16]);
-    out[32..48].copy_from_slice(&chunk2[..16]);
+    let chunk0 = kdf_keccak(b"pqwallet-c7-main-sk-seed", &input, 0);
+    let chunk1 = kdf_keccak(b"pqwallet-c7-main-pk-seed", &input, 0);
+    out[0..32].copy_from_slice(&chunk0);
+    out[32..48].copy_from_slice(&chunk1[..16]);
     out
 }
 
 /// Derive the bootstrap signing key from BIP-39 entropy.
 pub fn derive_bootstrap_key_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
-) -> SigningKey<Sha2_128f> {
+) -> SigningKey {
     let mnemonic = Mnemonic::from_entropy(entropy);
     let mut bip39_seed = mnemonic.to_seed("");
     let mut seed = bootstrap_seed_from_bip39(&bip39_seed);
@@ -352,12 +357,9 @@ pub fn derive_bootstrap_key_from_entropy(
 /// Derive the bootstrap keypair (signing key + 32-byte verifying key).
 pub fn derive_bootstrap_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
-) -> (SigningKey<Sha2_128f>, [u8; 32]) {
-    use signature::Keypair;
+) -> (SigningKey, [u8; 32]) {
     let sk = derive_bootstrap_key_from_entropy(entropy);
-    let vk_array = sk.verifying_key().to_bytes();
-    let mut vk_bytes = [0u8; 32];
-    vk_bytes.copy_from_slice(vk_array.as_slice());
+    let vk_bytes = sk.verifying_key().to_bytes();
     (sk, vk_bytes)
 }
 
@@ -366,7 +368,7 @@ pub fn derive_main_key_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     chain_id: u64,
     key_index: u32,
-) -> SigningKey<Sha2_128f> {
+) -> SigningKey {
     let mnemonic = Mnemonic::from_entropy(entropy);
     let mut bip39_seed = mnemonic.to_seed("");
     let mut seed = main_signer_seed_from_bip39(&bip39_seed, chain_id, key_index);
@@ -381,12 +383,9 @@ pub fn derive_main_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     chain_id: u64,
     key_index: u32,
-) -> (SigningKey<Sha2_128f>, [u8; 32]) {
-    use signature::Keypair;
+) -> (SigningKey, [u8; 32]) {
     let sk = derive_main_key_from_entropy(entropy, chain_id, key_index);
-    let vk_array = sk.verifying_key().to_bytes();
-    let mut vk_bytes = [0u8; 32];
-    vk_bytes.copy_from_slice(vk_array.as_slice());
+    let vk_bytes = sk.verifying_key().to_bytes();
     (sk, vk_bytes)
 }
 

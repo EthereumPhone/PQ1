@@ -4,12 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# SPHINCS+ / SLH-DSA (post-quantum signatures)
-slh-dsa = "0.2.0-rc.4"
-signature = "3.0.0-rc.10"
-
-# RNG for slh-dsa (needs rand_core 0.10 compatible OsRng)
-rand = "0.10.0-rc.8"
+# SPHINCS+C7 (post-quantum keccak256-based signatures)
+sphincs-c7 = { path = "../sphincs-c7" }
+sha3 = "0.10"
 
 # TROPIC01 secure element driver (master has r_mem_data_write/read)
 tropic01 = { git = "https://github.com/tropicsquare/libtropic-rs", features = ["keys"] }

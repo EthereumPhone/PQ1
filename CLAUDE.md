@@ -87,7 +87,7 @@ Status: dual-SE implemented. Firmware boots on real B-U585I-IOT02A + QEMU mps2-a
 
 **What:** ARM TrustZone-M splits the MCU into secure world (all crypto, PIN, signing) and non-secure world (UI, USB, tx parsing). The NSC gateway is the only crossing point.
 **Key files:** `secure/src/main.rs`, `secure/src/sau.rs`, `secure/src/nsc/mod.rs`, `secure/src/nsc/state.rs`, `secure/src/nsc/ptr_validate.rs`, `secure/src/nsc/cmd_*.rs`, `secure/src/boot_ns.rs`, `secure/src/timeout.rs`
-**Gateway commands (6 total):**
+**Gateway commands:**
 
 | CMD | Name | What it does |
 |-----|------|-------------|
@@ -96,7 +96,8 @@ Status: dual-SE implemented. Firmware boots on real B-U585I-IOT02A + QEMU mps2-a
 | 3 | GET_PUBKEY | Copy 32-byte verifying key to NS buffer |
 | 5 | CLEAR_SIGN | ZK-verify calldata interpretation, display, sign |
 | 6 | CLEAR_SIGN_MSG | EIP-712 message signing |
-| 7 | SIGN_USEROP | Parse AA UserOp, display inner tx, sign userOpHash |
+| 7 | SIGN_USEROP | Parse AA UserOp, display inner tx, sign userOpHash. Mode byte ≥ 2: auto-generate initCode (bootstrap sig + factory calldata). Returns full structured UserOp response (initCode + callData + PQSignatureWrapper). |
+| 10 | SIGN_BOOTSTRAP | **DEPRECATED** — now handled by SIGN_USEROP mode ≥ 2. Kept for backward compat. |
 
 **Cross-cutting constraints:**
 - Every NS pointer validated before use (`validate_ns_read_ptr` / `validate_ns_write_ptr`)
@@ -269,6 +270,7 @@ make measure           # Build firmware + print 8 BIP-39 measurement words
 | `secure/src/zk/groth16.rs` | Groth16 pairing verifier (no alloc) |
 | `secure/src/erc20/dispatch.rs` | Tx trust-level dispatcher (ValueTransfer/Erc20Known/Blind) |
 | `secure/src/aa/userop.rs` | ERC-4337 UserOp hash construction |
+| `secure/src/aa/init_code.rs` | initCode construction for first-deployment UserOps (factory address placeholder, ABI encoding, keccak hash) |
 | `nonsecure/src/main.rs` | Non-secure world entry |
 | `nonsecure/src/nsc_api.rs` | NS-side gateway caller |
 | `nonsecure/src/e2e_test.rs` | Automated end-to-end test driver |

@@ -29,4 +29,5 @@
 //! [`crate::nsc::cmd_sign_userop`] handler and the helpers used by it
 //! and the e2e harness.
 
+pub mod init_code;
 pub mod userop;

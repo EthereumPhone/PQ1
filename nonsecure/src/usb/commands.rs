@@ -19,8 +19,9 @@ use crate::nsc_api;
 /// Maximum accumulated command data (across chained APDUs).
 const CHAIN_BUF_LEN: usize = 8192;
 
-/// Signature buffer — sized for the v2 PQSignatureWrapper + SW bytes.
-static mut SIG_BUF: [u8; WRAPPER_TOTAL_LEN + 2] = [0u8; WRAPPER_TOTAL_LEN + 2];
+/// Signature / UserOp response buffer — sized for the full structured
+/// UserOp response (initCode + callData + wrapper) + SW bytes.
+static mut SIG_BUF: [u8; MAX_USEROP_RESPONSE_LEN + 2] = [0u8; MAX_USEROP_RESPONSE_LEN + 2];
 
 /// Sign payload assembly buffer (must fit full UserOp wire format).
 const SIGN_PAYLOAD_BUF_LEN: usize = USEROP_PREFIX_LEN + 4096 + 4 + 1120 + 64;
@@ -69,6 +70,10 @@ pub struct CommandRouter {
     chain_pos: usize,
     /// CLA of current chaining session (0xE0 or 0xF0).
     chain_cla: u8,
+    /// P2 byte from the first chaining block (v2 only). Carries
+    /// per-command flags like the deployed/not-deployed mode for
+    /// SIGN_USEROP.
+    chain_p2: u8,
 }
 
 impl CommandRouter {
@@ -77,6 +82,7 @@ impl CommandRouter {
             chain_ins: 0,
             chain_pos: 0,
             chain_cla: 0,
+            chain_p2: 0,
         }
     }
 
@@ -88,7 +94,7 @@ impl CommandRouter {
         let cla = apdu[0];
         let ins = apdu[1];
         let p1 = apdu[2];
-        let _p2 = apdu[3];
+        let p2 = apdu[3];
 
         // GET_RESPONSE is CLA-agnostic (shared between v1 and v2)
         if ins == INS_V2_GET_RESPONSE {
@@ -97,7 +103,7 @@ impl CommandRouter {
 
         match cla {
             APDU_CLA => self.dispatch_v1(apdu, ins, p1),
-            APDU_CLA_V2 => self.dispatch_v2(apdu, ins, p1),
+            APDU_CLA_V2 => self.dispatch_v2(apdu, ins, p1, p2),
             _ => self.sw_response(SW_CLA_NOT_SUPPORTED),
         }
     }
@@ -184,7 +190,7 @@ impl CommandRouter {
     // v2 protocol (CLA 0xF0) — PQSigner native
     // ===================================================================
 
-    unsafe fn dispatch_v2(&mut self, apdu: &[u8], ins: u8, p1: u8) -> Response {
+    unsafe fn dispatch_v2(&mut self, apdu: &[u8], ins: u8, p1: u8, p2: u8) -> Response {
         let (lc, data) = if apdu.len() > 4 {
             let lc = apdu[4] as usize;
             if apdu.len() < 5 + lc {
@@ -210,9 +216,10 @@ impl CommandRouter {
         // Chained v2 commands (P1=0x00 last/only, P1=0x80 more)
         let is_more = (p1 & 0x80) != 0;
         if !is_more {
-            // First or only block
+            // First or only block — capture P2 for the whole chain
             self.chain_ins = ins;
             self.chain_cla = APDU_CLA_V2;
+            self.chain_p2 = p2;
             self.chain_pos = 0;
             if lc > CHAIN_BUF_LEN {
                 self.chain_ins = 0;
@@ -423,16 +430,11 @@ impl CommandRouter {
             return self.sw_response(SW_WRONG_DATA);
         }
 
-        // Extract key_index and ots_index (for the response wrapper — currently
-        // passed through but the NSC command doesn't use them yet).
-        // The NSC signing path will use the wrapper variant once fully wired.
-        // For now, translate to v1 wire format and use the legacy NSC path.
         let _key_index = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
         let _ots_index = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
 
-        // Translate v2 → v1 NSC wire format:
-        // v2: [key_index(4)][ots_index(4)][sender(20)][entry_point(20)][chain_id(8)][...u256 fields...][init_code_hash(32)][paymaster_hash(32)][tx_len u16 BE][tx][bundle_len u16 BE][bundle]
-        // v1: [has_bundle(1)][sender(20)][entry_point(20)][chain_id(8)][...u256 fields...][init_code_hash(32)][paymaster_hash(32)][tx_len u32 LE][tx][bundle_len u32 LE][bundle]
+        // P2 carries the deployment flag: 0x00 = deployed, 0x01 = not deployed.
+        let needs_init_code = self.chain_p2 == P2_NOT_DEPLOYED;
 
         let aa_start = 8; // skip key_index + ots_index
         let tx_len_off = USEROP_V2_HEADER_LEN;
@@ -458,9 +460,16 @@ impl CommandRouter {
             (false, 0, 0)
         };
 
-        // Build v1 NSC payload in SIGN_PAYLOAD_BUF
+        // Build v1 NSC payload in SIGN_PAYLOAD_BUF.
+        // Mode byte: 0=deployed, 1=deployed+bundle, 2=not-deployed, 3=not-deployed+bundle
         let mut p = 0usize;
-        SIGN_PAYLOAD_BUF[p] = if has_bundle { 1 } else { 0 };
+        let mode: u8 = match (needs_init_code, has_bundle) {
+            (false, false) => 0,
+            (false, true) => 1,
+            (true, false) => 2,
+            (true, true) => 3,
+        };
+        SIGN_PAYLOAD_BUF[p] = mode;
         p += 1;
         // Copy AA fields (sender through paymaster_hash) — starts at data[8]
         let aa_len = USEROP_V2_HEADER_LEN - 8; // 304 bytes
@@ -480,11 +489,32 @@ impl CommandRouter {
             p += bundle_len;
         }
 
+        // The secure world writes the structured UserOp response into SIG_BUF.
+        // Response: init_code_len(4) + initCode(N) + call_data_len(4) + callData(M) + wrapper
         let status = nsc_api::sign_userop(
             &SIGN_PAYLOAD_BUF[..p],
-            &mut SIG_BUF[..SIGNATURE_LEN],
+            &mut SIG_BUF[..MAX_USEROP_RESPONSE_LEN],
         );
-        self.sign_result_v1(status)
+        if status != NscStatus::Ok as u32 {
+            return self.nsc_status_to_response(status);
+        }
+
+        // Parse the structured response to find the total length:
+        // init_code_len(4) + initCode + call_data_len(4) + callData + WRAPPER_TOTAL_LEN
+        let ic_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]) as usize;
+        let cd_off = 4 + ic_len;
+        if cd_off + 4 > MAX_USEROP_RESPONSE_LEN {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+        let cd_len = u32::from_be_bytes([
+            SIG_BUF[cd_off], SIG_BUF[cd_off + 1], SIG_BUF[cd_off + 2], SIG_BUF[cd_off + 3],
+        ]) as usize;
+        let total = cd_off + 4 + cd_len + WRAPPER_TOTAL_LEN;
+        if total > MAX_USEROP_RESPONSE_LEN {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+
+        self.setup_chunked_response(total)
     }
 
     // -- 0x31 SIGN_CLEAR_USEROP --
@@ -600,7 +630,9 @@ impl CommandRouter {
         self.sign_result_v1(status)
     }
 
-    // -- 0x50 SIGN_BOOTSTRAP --
+    // -- 0x50 SIGN_BOOTSTRAP (DEPRECATED) --
+    // Bootstrap signing is now handled automatically by SIGN_USEROP when
+    // P2=0x01 (not-deployed). Kept for backward compatibility.
 
     unsafe fn cmd_v2_sign_bootstrap(&self, data: &[u8], len: usize) -> Response {
         // v2 wire: ots_index(4) + context_tag(1) + msg_hash(32) = 37 bytes

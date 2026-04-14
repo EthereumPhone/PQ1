@@ -68,7 +68,7 @@ pub const EXECUTE_SELECTOR: [u8; 4] = [0xb6, 0x1d, 0x27, 0xf6];
 /// `MAX_TX_LEN` (4096) bounds the inner data, plus rounding gives 4128
 /// for the data tail; the static prefix is 4+32+32+32+32 = 132. We
 /// round up to a 4 KiB-friendly buffer.
-pub const MAX_EXECUTE_CALLDATA_LEN: usize = 4 * 1024 + 256;
+pub use sphincs_tz_shared::MAX_EXECUTE_CALLDATA_LEN;
 
 /// Stack-friendly buffer for a reconstructed `execute(...)` calldata.
 ///

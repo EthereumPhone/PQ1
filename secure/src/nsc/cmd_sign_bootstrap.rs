@@ -12,7 +12,7 @@
 //! Payload at arg0:
 //!   [0..32)  message hash (bytes32 to sign)
 //!
-//! On success the 17,088-byte SLH-DSA signature is written to sig_ptr.
+//! On success the 3,704-byte SPHINCS+C7 signature is written to sig_ptr.
 
 use sphincs_tz_shared::{NscStatus, SIGNATURE_LEN, TX_HASH_LEN};
 use zeroize::Zeroize;
@@ -105,34 +105,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Hedged sign with bootstrap key
     let mut rand_buf = [0u8; 16];
     {
-        use sha2::{Digest, Sha256};
-        let mut h = Sha256::new();
-        h.update(b"bootstrap-sign-rand");
+        use sha3::{Digest, Keccak256};
+        let mut h = Keccak256::new();
+        h.update(b"sphincsc7-bootstrap-sign-rand");
         h.update(&master_secret);
         h.update(&msg_hash);
         let r = h.finalize();
         rand_buf.copy_from_slice(&r[..16]);
     }
 
-    use slh_dsa::Sha2_128f;
-    use slh_dsa::SigningKey as Sk;
-    let sig = match <Sk<Sha2_128f>>::try_sign_with_context(
-        &signing_key,
-        &msg_hash,
-        &[],
-        Some(&rand_buf),
-    ) {
-        Ok(s) => s,
-        Err(_) => {
-            rand_buf.zeroize();
-            return NscStatus::CryptoError as u32;
-        }
-    };
+    let sig = signing_key.sign(&msg_hash, Some(&rand_buf));
 
-    // Write signature to NS memory
-    let sig_bytes = sig.to_bytes();
+    // Write 3,704-byte signature to NS memory
     for i in 0..SIGNATURE_LEN {
-        core::ptr::write_volatile(sig_ptr.add(i), sig_bytes[i]);
+        core::ptr::write_volatile(sig_ptr.add(i), sig[i]);
     }
 
     rand_buf.zeroize();

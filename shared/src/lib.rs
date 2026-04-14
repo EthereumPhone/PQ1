@@ -3,12 +3,12 @@
 pub mod db_format;
 
 // ---------------------------------------------------------------------------
-// SLH-DSA-SHA2-128f sizes
+// SPHINCS+C7 (keccak256-based) sizes
 // ---------------------------------------------------------------------------
 
-pub const SIGNING_KEY_LEN: usize = 64;
-pub const VERIFYING_KEY_LEN: usize = 32;
-pub const SIGNATURE_LEN: usize = 17_088;
+pub const SIGNING_KEY_LEN: usize = 48; // sk_seed(32) + pk_seed(16)
+pub const VERIFYING_KEY_LEN: usize = 32; // pk_seed(16) + pk_root(16)
+pub const SIGNATURE_LEN: usize = 3_704;
 pub const PIN_LEN: usize = 8;
 pub const TX_HASH_LEN: usize = 32;
 pub const MAX_ATTEMPTS: u8 = 10;
@@ -129,10 +129,30 @@ pub const CMD_CLEAR_SIGN_MSG: u32 = 6;
 ///      (so the user sees the actual money flow, not the AA wrapper).
 ///   4. Signs `userOpHash` with SLH-DSA-SHA2-128f.
 ///
-/// Payload wire format (all integers big-endian unless noted):
+/// ## Mode byte (byte 0 of payload)
+///
+/// The first byte selects the deployment mode:
+///
+///   * `0` — deployed, no ERC-20 bundle
+///   * `1` — deployed, with ERC-20 bundle
+///   * `2` — **not deployed**: firmware generates initCode automatically
+///           (bootstrap sig + factory calldata), no ERC-20 bundle
+///   * `3` — **not deployed** + with ERC-20 bundle
+///
+/// When mode ≥ 2 (not-deployed), the firmware:
+///   - Derives the bootstrap keypair internally
+///   - Derives the main keypair for the AA chain_id + key_index
+///   - Signs `keccak256("PQWALLET_INIT_V1" || mainPkSeed || mainPkRoot)`
+///     with the bootstrap key to produce the factory authorization sig
+///   - Builds the full initCode: `factory_address(20) || abi.encodeCall(
+///     createAccount, (bPkSeed, bPkRoot, mPkSeed, mPkRoot, bootstrapSig))`
+///   - Computes `keccak256(initCode)` and uses it as init_code_hash
+///     (the host-supplied init_code_hash field is ignored)
+///
+/// ## Payload wire format (all integers big-endian unless noted)
 ///
 /// ```text
-///   [  0]                       has_bundle u8        (0 or 1)
+///   [  0]                       mode u8              (0/1/2/3)
 ///   [  1.. 21)  sender                              (20 bytes)
 ///   [ 21.. 41)  entry_point                         (20 bytes)
 ///   [ 41.. 49)  aa_chain_id     u64 BE              (chainid hashed by EntryPoint)
@@ -142,15 +162,24 @@ pub const CMD_CLEAR_SIGN_MSG: u32 = 6;
 ///   [145..177)  pre_verification_gas    u256 BE
 ///   [177..209)  max_fee_per_gas         u256 BE
 ///   [209..241)  max_priority_fee_per_gas u256 BE
-///   [241..273)  init_code_hash          32 bytes (keccak256)
+///   [241..273)  init_code_hash          32 bytes (keccak256; ignored when mode≥2)
 ///   [273..305)  paymaster_and_data_hash 32 bytes (keccak256)
 ///   [305..309)  tx_len u32 LE
 ///   [309..309+tx_len)  inner unsigned EIP-1559 envelope
 ///   [309+tx_len..]     optional [bundle_len u32 LE][ERC20 metadata bundle]
 /// ```
 ///
-/// On success the secure world writes a 17,088-byte SLH-DSA signature
-/// over `userOpHash` into the NS-supplied output buffer.
+/// ## Response format
+///
+/// On success the secure world writes a structured UserOp response:
+///
+/// ```text
+///   [0..4)           init_code_len   u32 BE  (0 when deployed)
+///   [4..4+N)         initCode        N bytes (absent when deployed)
+///   [4+N..8+N)       call_data_len   u32 BE
+///   [8+N..8+N+M)     callData        M bytes (reconstructed execute(...))
+///   [8+N+M..)        PQSignatureWrapper (WRAPPER_TOTAL_LEN bytes)
+/// ```
 pub const CMD_SIGN_USEROP: u32 = 7;
 
 /// CMD_GET_BOOTSTRAP_PUBKEY — return the 32-byte bootstrap signer's
@@ -176,11 +205,13 @@ pub const CMD_GET_BOOTSTRAP_PUBKEY: u32 = 8;
 /// NS output buffer.
 pub const CMD_GET_MAIN_PUBKEY: u32 = 9;
 
-/// CMD_SIGN_BOOTSTRAP — sign a 32-byte message hash with the bootstrap
-/// signer. Used for factory deployment authorization and emergency
-/// rotation authorization.
+/// CMD_SIGN_BOOTSTRAP — **DEPRECATED**: bootstrap signing is now handled
+/// automatically by CMD_SIGN_USEROP when mode byte ≥ 2 (not-deployed).
 ///
-/// Payload wire format:
+/// Kept for backward compatibility. New code should use CMD_SIGN_USEROP
+/// with mode byte = 2 or 3 instead.
+///
+/// Legacy payload wire format:
 ///   [0..32)  message hash (the bytes32 to sign)
 ///
 /// On success the secure world writes a 17,088-byte SLH-DSA signature
@@ -327,6 +358,8 @@ pub const INS_V2_SIGN_MESSAGE: u8 = 0x40;
 pub const INS_V2_SIGN_EIP712: u8 = 0x41;
 
 // -- Bootstrap operations (0x50-0x5F) --
+/// **DEPRECATED**: bootstrap signing is now handled automatically by
+/// INS_V2_SIGN_USEROP when P2=0x01 (not-deployed). Kept for backward compat.
 pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
 
 // -- Address & account helpers (0x60-0x6F) --
@@ -348,17 +381,76 @@ pub const P1_V2_MORE: u8 = 0x80;
 pub const SIGNER_MAIN: u8 = 0x00;
 pub const SIGNER_BOOTSTRAP: u8 = 0x01;
 
-/// Fixed-size wrapper header written before the raw SLH-DSA signature:
+/// Fixed-size wrapper header written before the raw SPHINCS+C7 signature:
 ///   signer_type(1) + key_index(4) + ots_index(4) + pk_seed(32) + pk_root(32)
 pub const WRAPPER_HEADER_LEN: usize = 1 + 4 + 4 + 32 + 32; // 73
 
 /// Total PQSignatureWrapper size = header + raw signature.
-pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 17161
+pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 3777
 
 /// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
+/// **DEPRECATED** along with CMD_SIGN_BOOTSTRAP.
 pub const CTX_DEPLOY: u8 = 0x00;
 pub const CTX_ROTATE: u8 = 0x01;
 pub const CTX_GENERIC: u8 = 0x02;
+
+// ---------------------------------------------------------------------------
+// initCode construction constants (first-deployment UserOps)
+// ---------------------------------------------------------------------------
+
+/// Placeholder factory address for initCode generation.
+///
+/// **MUST be replaced with the actual deployed PQCoinbaseSmartWalletFactory
+/// address before production use.** The null address will produce a valid
+/// initCode structure but the EntryPoint will revert because no factory
+/// exists at address(0).
+pub const FACTORY_ADDRESS: [u8; 20] = [0u8; 20];
+
+/// ABI selector for `createAccount(bytes32,bytes32,bytes32,bytes32,bytes)`.
+/// Equals `keccak256("createAccount(bytes32,bytes32,bytes32,bytes32,bytes)")[:4]`.
+/// Verified against `cast sig` from Foundry.
+pub const CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0x19, 0x64, 0xc4, 0xdd];
+
+/// Fixed initCode length for SPHINCS+C7:
+///   factory(20) + selector(4) + 4 static bytes32(128) + offset(32)
+///   + length(32) + padded_signature(3712) = 3,928
+///
+/// ABI layout of `createAccount(bytes32,bytes32,bytes32,bytes32,bytes)`:
+/// ```text
+///   [   0..  20)  factory address (NOT part of ABI, prepended per ERC-4337)
+///   [  20..  24)  selector 0x1964c4dd
+///   [  24..  56)  bootstrapPkSeed   (bytes32)
+///   [  56..  88)  bootstrapPkRoot   (bytes32)
+///   [  88.. 120)  mainPkSeed        (bytes32)
+///   [ 120.. 152)  mainPkRoot        (bytes32)
+///   [ 152.. 184)  offset to bytes   (= 0xA0 = 160)
+///   [ 184.. 216)  length of bytes   (= 3704)
+///   [ 216..3928)  bootstrapSig      (3704 bytes + 8 bytes zero-padding to 32-byte boundary)
+/// ```
+///
+/// The signature is 3,704 bytes (not 32-byte aligned: 3704 % 32 = 8),
+/// so 24 bytes of ABI zero-padding are appended to reach the next
+/// 32-byte boundary (3,712 bytes padded).
+pub const INIT_CODE_LEN: usize =
+    20 + 4 + 4 * 32 + 32 + 32 + ((SIGNATURE_LEN + 31) / 32) * 32; // 3_928
+
+/// Maximum reconstructed `execute(target, value, data)` callData size:
+/// selector(4) + target(32) + value(32) + offset(32) + length(32)
+/// + data padded to 32-byte boundary ≈ 132 + MAX_TX_LEN rounded up.
+pub const MAX_EXECUTE_CALLDATA_LEN: usize = 4 * 1024 + 256; // 4352
+
+/// Maximum full UserOp response size:
+///   init_code_len(4) + initCode(INIT_CODE_LEN) + call_data_len(4)
+///   + max callData(MAX_EXECUTE_CALLDATA_LEN) + signatureWrapper(WRAPPER_TOTAL_LEN)
+///
+/// For the not-deployed case. The deployed case is much smaller
+/// (init_code_len=0, no initCode body).
+pub const MAX_USEROP_RESPONSE_LEN: usize =
+    4 + INIT_CODE_LEN + 4 + MAX_EXECUTE_CALLDATA_LEN + WRAPPER_TOTAL_LEN;
+
+/// SIGN_USEROP v2 P2 values for deployment mode.
+pub const P2_DEPLOYED: u8 = 0x00;
+pub const P2_NOT_DEPLOYED: u8 = 0x01;
 
 /// v2 SIGN_USEROP fixed header length (before tx_len):
 ///   key_index(4) + ots_index(4) + sender(20) + entry_point(20) +
@@ -474,6 +566,20 @@ mod tests {
             ZK_HEADER_LEN,
             ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + USEROP_HEADER_LEN + 4
         );
+    }
+
+    #[test]
+    fn init_code_len_is_3928() {
+        // factory(20) + selector(4) + 4*bytes32(128) + offset(32) + length(32) + padded_sig(3712)
+        assert_eq!(INIT_CODE_LEN, 3_928);
+    }
+
+    #[test]
+    fn signature_abi_padding_correct() {
+        // 3704 % 32 = 8, so 24 bytes of zero-padding; padded = 3712
+        let padded = ((SIGNATURE_LEN + 31) / 32) * 32;
+        assert_eq!(padded, 3_712);
+        assert_eq!(padded % 32, 0);
     }
 
     /// Simulate the v2 sign_userop payload layout and verify the

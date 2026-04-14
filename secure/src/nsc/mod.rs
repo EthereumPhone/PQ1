@@ -299,6 +299,8 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_main_pubkey(
 }
 
 /// CMD_SIGN_BOOTSTRAP — sign with bootstrap key (admin ops).
+/// **DEPRECATED**: bootstrap signing is now handled automatically by
+/// CMD_SIGN_USEROP when mode byte ≥ 2 (not-deployed). Kept for backward compat.
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_sign_bootstrap(

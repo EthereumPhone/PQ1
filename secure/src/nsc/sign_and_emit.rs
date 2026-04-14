@@ -1,4 +1,4 @@
-//! Shared "decrypt entropy → derive signing key → hedged SLH-DSA sign
+//! Shared "decrypt entropy → derive signing key → hedged SPHINCS+C7 sign
 //! → write signature to NS" tail used by every signing command.
 //!
 //! Before this module existed every `cmd_*` signing path had its own
@@ -14,7 +14,7 @@
 //!
 //! The helper is only called once per command dispatch, so it owns
 //! the SigningKey for the smallest possible window — the stack slot
-//! is wiped by SLH-DSA's own `Drop` impl when the function returns.
+//! is wiped by sphincs_c7's `ZeroizeOnDrop` when the function returns.
 
 use sphincs_tz_shared::{NscStatus, SIGNATURE_LEN, WRAPPER_HEADER_LEN};
 use zeroize::Zeroize;
@@ -68,10 +68,10 @@ pub(super) unsafe fn decrypt_and_sign(
     };
     entropy_blob.zeroize();
 
-    // 3. Re-derive the SLH-DSA signing key from the entropy by running
+    // 3. Re-derive the SPHINCS+C7 signing key from the entropy by running
     //    the full BIP-39 chain. The SigningKey only exists on the
-    //    stack for the duration of this function, and slh-dsa zeroizes
-    //    it on drop.
+    //    stack for the duration of this function, and sphincs_c7
+    //    zeroizes it on drop.
     let signing_key = crate::crypto::derive_signing_key_from_entropy(&entropy);
     entropy.zeroize();
 
@@ -81,31 +81,17 @@ pub(super) unsafe fn decrypt_and_sign(
     let mut rand_buf = [0u8; 16];
     derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
 
-    use slh_dsa::Sha2_128f;
-    use slh_dsa::SigningKey as Sk;
-    let sig = match <Sk<Sha2_128f>>::try_sign_with_context(
-        &signing_key,
-        msg_hash,
-        &[],
-        Some(&rand_buf),
-    ) {
-        Ok(s) => s,
-        Err(_) => {
-            rand_buf.zeroize();
-            return NscStatus::CryptoError as u32;
-        }
-    };
+    let sig = signing_key.sign(msg_hash, Some(&rand_buf));
 
-    // 5. Write the 17,088-byte signature to NS memory, byte-at-a-time
+    // 5. Write the 3,704-byte signature to NS memory, byte-at-a-time
     //    via volatile writes (so the compiler can't fold the copy into
     //    a memcpy that skips unmapped pages or similar shenanigans).
-    let sig_bytes = sig.to_bytes();
     for i in 0..SIGNATURE_LEN {
-        core::ptr::write_volatile(sig_ptr.add(i), sig_bytes[i]);
+        core::ptr::write_volatile(sig_ptr.add(i), sig[i]);
     }
 
     // 6. Wipe the per-sig randomizer. The SigningKey goes out of scope
-    //    at the end of this function and slh-dsa zeroizes on drop.
+    //    at the end of this function and sphincs_c7 zeroizes on drop.
     rand_buf.zeroize();
 
     crate::timeout::reset_activity();
@@ -120,8 +106,8 @@ pub(super) unsafe fn decrypt_and_sign(
 
 /// v2 wrapper variant: writes a 73-byte PQSignatureWrapper header
 /// (signer_type + key_index + ots_index + pk_seed_padded + pk_root_padded)
-/// followed by the 17,088-byte raw SLH-DSA signature. Total output:
-/// `WRAPPER_TOTAL_LEN` (17,161) bytes.
+/// followed by the 3,704-byte raw SPHINCS+C7 signature. Total output:
+/// `WRAPPER_TOTAL_LEN` (3,777) bytes.
 ///
 /// The caller must have validated `sig_ptr` for `WRAPPER_TOTAL_LEN` bytes.
 ///
@@ -196,7 +182,6 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
 
     // pk_seed (32 bytes: raw 16 bytes right-padded to bytes32)
     {
-        use signature::Keypair;
         let vk_bytes = signing_key.verifying_key().to_bytes();
         // VK = pk_seed[16] || pk_root[16]
         // Pad pk_seed to 32 bytes
@@ -224,26 +209,12 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     let mut rand_buf = [0u8; 16];
     derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
 
-    use slh_dsa::Sha2_128f;
-    use slh_dsa::SigningKey as Sk;
-    let sig = match <Sk<Sha2_128f>>::try_sign_with_context(
-        &signing_key,
-        msg_hash,
-        &[],
-        Some(&rand_buf),
-    ) {
-        Ok(s) => s,
-        Err(_) => {
-            rand_buf.zeroize();
-            return NscStatus::CryptoError as u32;
-        }
-    };
+    let sig = signing_key.sign(msg_hash, Some(&rand_buf));
 
-    // 6. Write the raw signature after the header.
-    let sig_bytes = sig.to_bytes();
+    // 6. Write the raw 3,704-byte signature after the header.
     let sig_offset = WRAPPER_HEADER_LEN;
     for i in 0..SIGNATURE_LEN {
-        core::ptr::write_volatile(sig_ptr.add(sig_offset + i), sig_bytes[i]);
+        core::ptr::write_volatile(sig_ptr.add(sig_offset + i), sig[i]);
     }
 
     // 7. Cleanup
@@ -258,14 +229,14 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     NscStatus::Ok as u32
 }
 
-/// Derive a 16-byte randomizer for hedged SLH-DSA signing from the
+/// Derive a 16-byte randomizer for hedged SPHINCS+C7 signing from the
 /// master secret and the message hash. Keeping this private to the
 /// `sign_and_emit` module means callers can't accidentally use it
 /// with an unbounded pre-image.
 fn derive_sign_randomizer(master: &[u8; 32], msg_hash: &[u8; 32], out: &mut [u8; 16]) {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(b"sphincs-sign-rand");
+    use sha3::{Digest, Keccak256};
+    let mut h = Keccak256::new();
+    h.update(b"sphincsc7-sign-rand");
     h.update(master);
     h.update(msg_hash);
     let r = h.finalize();

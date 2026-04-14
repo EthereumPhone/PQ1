@@ -47,6 +47,7 @@ members = [
     "bls12_381_pka",
     "dbgen",
     "fwmeasure",
+    "sphincs-c7",
 ]
 resolver = "2"
 
@@ -64,6 +65,7 @@ edition = "2021"
 # Internal path deps
 sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
+sphincs-c7        = { path = "sphincs-c7" }
 bls12_381 = { package = "bls12_381_pka", path = "bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
 
 # no_std crypto shared by `secure` + `bip39`
@@ -81,7 +83,7 @@ hex = "0.4"
 [profile.dev]
 opt-level = 2
 
-[profile.dev.package.slh-dsa]
+[profile.dev.package.sphincs-c7]
 opt-level = 3
 
 [profile.release]
@@ -91,5 +93,5 @@ codegen-units = 1
 strip = "debuginfo"
 overflow-checks = true
 
-[profile.release.package.slh-dsa]
+[profile.release.package.sphincs-c7]
 opt-level = 3
