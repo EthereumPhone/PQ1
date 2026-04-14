@@ -51,7 +51,8 @@ it last as the source of truth.*
 | OLED | SSD1306, I2C (shared bus with SE050/OPTIGA at 400 kHz) | Trusted display in secure world |
 | Buttons | 2× GPIO (PI2 left, PA15 right) | Trusted input in secure world |
 | USB | OTG FS peripheral, USB-C connector | Only host interface. Ledger APDU + custom framing |
-| VBAT | **CR1220 holder, unpopulated by default** | Backup domain power (needed for Stage 4) |
+| VBAT (dev board) | CR1220 holder, unpopulated by default. Dev work uses a tack-soldered 0.47 F supercap across the holder pads. | Backup domain power for Stage 4 — bounded retention (~12 h), not unbounded battery. |
+| VBAT (production) | 0.47 F–1 F supercap via Schottky from Vdd. No battery in the enclosure. | Sealed-for-life BOM; bounded tamper window after unplug is acceptable given the dual-SE XOR split threat model. |
 
 **Voltage supervision state (as of this briefing):**
 - BOR, PVD, SRAM2/SRAM3/BackupSRAM ECC, IWDG, PVM all at **factory

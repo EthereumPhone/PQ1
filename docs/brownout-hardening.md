@@ -43,7 +43,7 @@ four blocks, full peripheral set). Details that affect the plan:
 
 | Feature | B-U585I-IOT02A state | Implication |
 |---|---|---|
-| **CR1220 battery holder (VBAT)** | **Present but unpopulated by default.** The board takes a CR1220 (12 mm) coin cell, not CR2032. Ships without the cell. | Stage 4 backup-register state machine will NOT work until a CR1220 is installed. Plan for this explicitly — don't silently assume VBAT is live. |
+| **CR1220 battery holder (VBAT)** | **Present but unpopulated by default** on the dev board. Production hardware will use a **0.47 F–1 F supercapacitor** instead — see "VBAT power source" below. | Dev board needs either a CR1220 installed OR a supercap tack-soldered to the holder pads with a Schottky from Vdd. Stage 4 works either way. |
 | NRST user button (B2) | Wired directly to MCU NRST pin | "One level more thorough than `probe-rs reset`" option for tests. Still does not cut SE050 Vcc. |
 | LSE 32.768 kHz crystal | Present | Enables `LSE` for RTC and IWDG timing. LSI-clocked IWDG works fine without it — LSE is a "nice to have" for accurate timekeeping. |
 | On-board ST-LINK V3 | Integrated | `probe-rs reset` uses SWD SYSRESETREQ. Does NOT interrupt USB Vbus → SE050 shield stays powered across reset. True cold cycle requires unplugging USB. |
@@ -192,6 +192,71 @@ defaults today:
   out in ST docs; safe to assume "fast enough relative to physical
   attack timescales" but do not rely on a specific µs figure.
 - **External tamper pins** with edge/level detection and filtering.
+
+### VBAT power source: supercap, not battery
+
+Production hardware-wallet design choice: the backup-domain power
+source is a **supercapacitor**, not a coin cell. Rationale:
+
+- **No battery chemistry in the enclosure.** No leakage, no swelling,
+  no age-out, no user-replacement lifecycle, no shipping-restrictions
+  associated with lithium cells.
+- **Sealed-for-life BOM.** 20+ year capacitor lifetime vs ~10 year
+  battery shelf life.
+- **Lower assembly cost** than holder + retention + cell.
+- **Trade-off**: tamper-monitoring retention after unplug is bounded
+  (hours to ~1 day), not indefinite. Acceptable given our dual-SE XOR
+  split + EAL6+ decap-out-of-scope threat model.
+
+Reference design:
+
+```
+Vdd (3V3) ─[Schottky BAT54]──┬── VBAT pin
+                             │
+                             ├── [C 0.47 F, 3.3 V supercap]
+                             │
+                            GND
+```
+
+- **Supercap**: 0.47 F / 3.3 V radial (Panasonic EECS-GW0H474H or
+  equivalent), ~6.8 mm × 2 mm. Self-leakage 5-10 µA.
+- **Schottky BAT54** (or similar): prevents supercap back-feeding Vdd
+  during unplug.
+- **Optional 10-47 Ω series R** between Vdd and the Schottky anode:
+  limits inrush current on first plug-in from empty. Skippable if the
+  main Vdd regulator handles the brief surge gracefully.
+
+Expected runtime math at U5 backup-domain load (~2-3 µA backup
+peripherals + ~5-10 µA supercap leakage = ~10 µA total, usable
+voltage swing 3 V → 1.65 V):
+
+| Supercap | Usable energy | Runtime |
+|---|---|---|
+| 0.47 F | ~700 mJ | ~12 hours |
+| 1 F | ~1.4 J | ~24 hours |
+| 5 F (Li-ion capacitor) | ~7 J | ~5 days |
+
+Firmware implications — minimal:
+
+- The Stage 1.5b VBAT canary pattern works unchanged. "Canary missing
+  AND device was off for longer than supercap retention" simply means
+  "supercap drained between sessions" rather than "battery dead." The
+  firmware response is identical: note it in diagnostics, fall back to
+  flash-based state, continue.
+- **Cold-boot charge-up**: first plug-in from a fully-drained supercap
+  charges with τ = R_series × C. With R_series = 47 Ω and C = 0.47 F,
+  τ ≈ 22 s; VBAT reaches ~2 V (usable) in ~3τ = ~1 minute. Stage 4
+  should gate backup-register writes on a PVM-monitored VBAT threshold,
+  or simply wait 60 s after cold boot before writing.
+
+Dev-board addition path (for validation work today, before a custom
+PCB exists): tack-solder a 0.47 F supercap across the CR1220 holder
+pads (+ and − terminals map to VBAT and GND). If the dev board ties
+VBAT to Vdd via a solder bridge (SB), open it and replace with a
+Schottky in the same footprint for proper isolation; otherwise the
+cap will also drain the Vdd rail on unplug and runtime falls well
+short of spec. See the B-U585I-IOT02A schematic for the specific SB
+designator.
 
 ### STM32U585 security-relevant errata (ES0499)
 
@@ -478,10 +543,18 @@ Validated at each stage; the test matrix grows monotonically.
 - **Do not extend the PVD handler** to do anything longer than ~94 µs
   of work (at our typical 35 mA draw + default 4.7 µF decoupling).
   Page erase is ~3-4 ms — unreachable as last-gasp action.
-- **Do not use backup-register state without VBAT present.** A
-  CR2032 is wired on B-U585I-IOT02A dev boards but MUST be populated
-  on production boards — otherwise backup regs become equivalent to
-  SRAM1 (lost on Vdd drop). Stage 1.5b adds a canary to detect this.
+- **Do not use backup-register state without VBAT power.** On the
+  B-U585I-IOT02A dev board the CR1220 holder is unpopulated by
+  default; production hardware uses a supercap instead of a battery
+  (see "VBAT power source" above). Either way, firmware must verify
+  via the Stage 1.5b canary that VBAT is live before trusting backup-
+  register state. If the canary is missing, Stage 4 falls back to
+  flash-based state.
+- **Do not assume VBAT is unbounded on production hardware.** With
+  the supercap design, backup-domain retention after unplug is ~12-24
+  hours, not years. Tamper-auto-erase during long cold-storage periods
+  is NOT in our threat model — the 24-word backup is the long-term
+  security anchor, not on-device state.
 - **Do not enable ECC reporting without pre-initialising the region.**
   ECC-protected SRAM has hidden parity bits that reset to an
   indeterminate state on power-up. Reading uninitialised ECC memory

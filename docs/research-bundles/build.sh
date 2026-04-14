@@ -95,9 +95,13 @@ rest is planned. `make stm32-harden-opts` is a one-time option-byte
 setup target (sets BOR3 + SRAM2_RST=0) but has not been run yet. See
 `docs/brownout-hardening.md` for the full plan.
 
-**VBAT.** B-U585I-IOT02A holder is CR1220 (not CR2032), **unpopulated
-by default**. Backup-register state machine for dual-SE wipe (Stage 4)
-is planned but depends on a populated cell.
+**VBAT.** Production hardware uses a **0.47 F supercap** (not a
+battery) on VBAT via Schottky from Vdd. Bounded retention (~12-24 h
+after unplug). The dev board has an unpopulated CR1220 holder whose
+pads can be reused for a tack-soldered supercap during validation.
+Indefinite-retention tamper monitoring during long cold storage is
+explicitly out of scope — the 24-word BIP-39 backup is the long-term
+security anchor.
 
 **Accepted trade-offs (research that contradicts these is not useful):**
 1. Seed transits STM32 SRAM during signing. Unavoidable until SE can

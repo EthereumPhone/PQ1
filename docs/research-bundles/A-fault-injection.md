@@ -67,9 +67,13 @@ rest is planned. `make stm32-harden-opts` is a one-time option-byte
 setup target (sets BOR3 + SRAM2_RST=0) but has not been run yet. See
 `docs/brownout-hardening.md` for the full plan.
 
-**VBAT.** B-U585I-IOT02A holder is CR1220 (not CR2032), **unpopulated
-by default**. Backup-register state machine for dual-SE wipe (Stage 4)
-is planned but depends on a populated cell.
+**VBAT.** Production hardware uses a **0.47 F supercap** (not a
+battery) on VBAT via Schottky from Vdd. Bounded retention (~12-24 h
+after unplug). The dev board has an unpopulated CR1220 holder whose
+pads can be reused for a tack-soldered supercap during validation.
+Indefinite-retention tamper monitoring during long cold storage is
+explicitly out of scope — the 24-word BIP-39 backup is the long-term
+security anchor.
 
 **Accepted trade-offs (research that contradicts these is not useful):**
 1. Seed transits STM32 SRAM during signing. Unavoidable until SE can
@@ -465,6 +469,7 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     msg_hash: &[u8; 32],
     sig_ptr: *mut u8,
     signer_type: u8,
+    chain_id: u64,
     key_index: u32,
     ots_index: u32,
     success_banner: &str,
@@ -494,15 +499,12 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     entropy_blob.zeroize();
 
     // 3. Derive the correct signing key based on signer_type.
-    //    For MAIN: uses the default derivation (legacy single-key path).
-    //    For BOOTSTRAP: uses the bootstrap derivation path.
-    //    Per-chain derivation for MAIN with key_index is handled by callers
-    //    that pass the appropriate msg_hash (the userOpHash already encodes
-    //    chain-specific data).
+    //    BOOTSTRAP: global key (no chain_id / key_index differentiation).
+    //    MAIN: per-chain, per-epoch key derived from (chain_id, key_index).
     let signing_key = if signer_type == sphincs_tz_shared::SIGNER_BOOTSTRAP {
         crate::crypto::derive_bootstrap_key_from_entropy(&entropy)
     } else {
-        crate::crypto::derive_signing_key_from_entropy(&entropy)
+        crate::crypto::derive_main_key_from_entropy(&entropy, chain_id, key_index)
     };
     entropy.zeroize();
 
@@ -740,6 +742,20 @@ pub(super) struct SecureState {
     /// Used both as the AES-GCM key for the encrypted-entropy blob and
     /// as the hedge input for SLH-DSA signing randomizers.
     pub(super) master_secret: [u8; 32],
+
+    // -- OTS tracking (session-scoped, lost on power cycle) -----------
+    // The on-chain contract is authoritative. These fields only enforce
+    // monotonicity within a single unlock session to prevent accidental
+    // OTS index reuse if the companion sends a stale value.
+
+    /// The chain_id of the last successful signature.
+    pub(super) last_chain_id: u64,
+    /// The key_index of the last successful signature.
+    pub(super) last_key_index: u32,
+    /// The ots_index used by the last successful signature.
+    pub(super) last_ots_index: u32,
+    /// Whether any signature has been produced this session.
+    pub(super) has_signed: bool,
 }
 
 impl SecureState {
@@ -748,6 +764,10 @@ impl SecureState {
             remaining_attempts: MAX_ATTEMPTS,
             pin_verified: false,
             master_secret: [0u8; 32],
+            last_chain_id: 0,
+            last_key_index: 0,
+            last_ots_index: 0,
+            has_signed: false,
         }
     }
 
@@ -758,6 +778,10 @@ impl SecureState {
     pub(super) fn zeroize_sensitive(&mut self) {
         self.master_secret.zeroize();
         self.pin_verified = false;
+        self.last_chain_id = 0;
+        self.last_key_index = 0;
+        self.last_ots_index = 0;
+        self.has_signed = false;
     }
 
     /// Stamp in a freshly-verified master secret and mark the device

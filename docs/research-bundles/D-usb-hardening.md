@@ -69,9 +69,13 @@ rest is planned. `make stm32-harden-opts` is a one-time option-byte
 setup target (sets BOR3 + SRAM2_RST=0) but has not been run yet. See
 `docs/brownout-hardening.md` for the full plan.
 
-**VBAT.** B-U585I-IOT02A holder is CR1220 (not CR2032), **unpopulated
-by default**. Backup-register state machine for dual-SE wipe (Stage 4)
-is planned but depends on a populated cell.
+**VBAT.** Production hardware uses a **0.47 F supercap** (not a
+battery) on VBAT via Schottky from Vdd. Bounded retention (~12-24 h
+after unplug). The dev board has an unpopulated CR1220 holder whose
+pads can be reused for a tack-soldered supercap during validation.
+Indefinite-retention tamper monitoring during long cold storage is
+explicitly out of scope — the 24-word BIP-39 backup is the long-term
+security anchor.
 
 **Accepted trade-offs (research that contradicts these is not useful):**
 1. Seed transits STM32 SRAM during signing. Unavoidable until SE can
@@ -1294,8 +1298,8 @@ impl CommandRouter {
             return self.sw_response(SW_WRONG_DATA);
         }
 
-        let _key_index = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
-        let _ots_index = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+        let key_index = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+        let ots_index = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
 
         // P2 carries the deployment flag: 0x00 = deployed, 0x01 = not deployed.
         let needs_init_code = self.chain_p2 == P2_NOT_DEPLOYED;
@@ -1353,9 +1357,16 @@ impl CommandRouter {
             p += bundle_len;
         }
 
+        // Append key_index(4 BE) + ots_index(4 BE) as a trailer.
+        // The secure world detects these via bit 31 of the total_len arg.
+        SIGN_PAYLOAD_BUF[p..p + 4].copy_from_slice(&key_index.to_be_bytes());
+        p += 4;
+        SIGN_PAYLOAD_BUF[p..p + 4].copy_from_slice(&ots_index.to_be_bytes());
+        p += 4;
+
         // The secure world writes the structured UserOp response into SIG_BUF.
         // Response: init_code_len(4) + initCode(N) + call_data_len(4) + callData(M) + wrapper
-        let status = nsc_api::sign_userop(
+        let status = nsc_api::sign_userop_with_ots(
             &SIGN_PAYLOAD_BUF[..p],
             &mut SIG_BUF[..MAX_USEROP_RESPONSE_LEN],
         );
