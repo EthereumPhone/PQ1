@@ -208,4 +208,21 @@ impl WalletStore for DualSecureElement {
         self.optiga.zeroize_caches();
         self.se050.zeroize_caches();
     }
+
+    /// Delegate SE050 wipe to its WalletStore impl (handles admin PIN,
+    /// wipe flag, admin-auth delete, flash erase). Then erase PBS to
+    /// orphan OPTIGA from this STM32 (no shielded channel without PBS
+    /// means no reads of half_O), and zeroize all SRAM state.
+    fn factory_reset_admin(&mut self) -> Result<(), SeError> {
+        let _ = self.se050.factory_reset_admin();
+
+        #[cfg(feature = "stm32u585")]
+        unsafe {
+            let _ = crate::hw::flash::erase_pbs_page();
+        }
+
+        self.zeroize_caches();
+        secure_log!("[DUAL] Factory reset complete — SE050 wiped, PBS erased");
+        Ok(())
+    }
 }

@@ -446,6 +446,22 @@ se050-reset-e2e:
 	@echo "==> Running e2e (watch semihosting output)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# SE050 admin-auth wipe e2e test.
+# Exercises the exact path PIN-lockout factory reset uses: admin UserID
+# auth deleting user-gated objects without knowing the user PIN. Uses
+# OID range 0x7B09_xxxx so it doesn't touch real provisioning or the
+# user-reset e2e range (0x7B07_xxxx). Repeatable on the same chip.
+# Watch semihosting for "[E2E-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS"/"FAIL".
+se050-admin-wipe-e2e:
+	@echo "==> Building SE050 admin-wipe e2e firmware..."
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features se050-admin-wipe-e2e,ui-noop,stm32u585,debug-log
+	@echo "==> Flashing admin-wipe e2e firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Running admin-wipe e2e (watch semihosting output)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # SE050 + OLED interactive build (real SE050, real OLED display, real buttons).
 # Full first-boot wizard: user enters PIN and creates/restores mnemonic.
 # Both the SSD1306 OLED and SE050 share I2C1 (PB8/PB9) at 400 kHz.

@@ -71,6 +71,7 @@ optiga-trust-m = []  # Infineon OPTIGA Trust M V3 via I2C1 (TRUSTMV3SHIELDTOBO1 
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
+se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated OID range. Use `make se050-admin-wipe-e2e`.
 spi1-arduino = []  # Use SPI1/PE12-PE15 (Arduino R3 headers) instead of SPI2/PB12-PB15 for TROPIC01
 stsafe-probe = ["stm32u585", "mock-se"]  # I2C2 bus scan to detect on-board STSAFE-A110
 gpio-buttons = ["stm32u585"]  # GPIO button driver: PI2 (LEFT) + PA15 (RIGHT) on CN14

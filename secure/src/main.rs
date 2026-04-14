@@ -363,6 +363,34 @@ fn main() -> ! {
         (&mut *core::ptr::addr_of_mut!(SE)).load_pbs();
     }
 
+    // ---- Boot-time wipe resume ----
+    // If a factory reset was armed but interrupted (power loss mid-wipe),
+    // the wipe flag in page 125 QW 1 survives the reboot. Finish the wipe
+    // now before any unlock attempt, so we never leave the chip in a
+    // half-wiped state that an attacker could leverage for partial secret
+    // extraction.
+    //
+    // Applies to both SE050-standalone and dual-SE builds — the flag and
+    // admin PIN live on the STM32 side, independent of which SE backends
+    // are active.
+    #[cfg(all(
+        feature = "stm32u585",
+        any(feature = "se050", feature = "dual-se"),
+        not(test),
+    ))]
+    unsafe {
+        use secure_element::WalletStore;
+        if hw::flash::is_wipe_armed() {
+            secure_log!("[S] Wipe-in-progress flag set — resuming factory reset");
+            ui::show_status("WIPING", "resuming from interrupt");
+            let _ = (&mut *core::ptr::addr_of_mut!(SE)).factory_reset_admin();
+            // factory_reset_admin ends with erase_admin_page() which clears
+            // both the PIN and the flag, so next boot sees an unprovisioned
+            // state and falls through to the first-boot wizard.
+            ui::show_status("WALLET WIPED", "restore from seed");
+        }
+    }
+
     // ---- SE050 factory reset (iterative wipe) ----
     // Actually wipes user objects via ReadIDList + DeleteSecureObject.
     // Two authentication attempts to catch objects gated by either of
@@ -442,6 +470,32 @@ fn main() -> ! {
             total_deleted, last_failed, status
         );
         ui::show_status("SE050 wipe", status);
+        loop { cortex_m::asm::wfi(); }
+    }
+
+    // ---- SE050 admin-auth wipe e2e ----
+    // Exercises the exact delete path used by the PIN-lockout factory
+    // reset: provision admin + user UserIDs + a data object with the
+    // two-entry TAG_POLICY, then delete everything under admin auth
+    // WITHOUT verifying the user PIN. Proves admin can wipe even when
+    // the user's credential is blocked.
+    // Uses test OID range 0x7B09_xxxx so it never touches production
+    // provisioning. Repeatable on the same chip.
+    // Triggered by: make se050-admin-wipe-e2e
+    #[cfg(feature = "se050-admin-wipe-e2e")]
+    unsafe {
+        ui::show_status("Admin wipe", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        match se.run_admin_wipe_roundtrip() {
+            Ok(()) => {
+                secure_log!("[S] [E2E-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS");
+                ui::show_status("Admin wipe", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E-ADMIN] ADMIN-WIPE ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("Admin wipe", "FAIL");
+            }
+        }
         loop { cortex_m::asm::wfi(); }
     }
 
@@ -530,6 +584,13 @@ fn main() -> ! {
             ui::show_status("Provisioning", "...");
 
             crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
+            // Admin-wipe credential + canary selftest are installed
+            // inside SE050's provision() for any stm32u585 build that
+            // includes SE050 (standalone or dual-SE). A selftest failure
+            // propagates as SeError::InternalError; crypto::
+            // provision_from_mnemonic panics on failure, which is the
+            // desired "don't ship a wallet that can't recover from PIN
+            // lockout" behaviour.
 
             // Debug-only: log the verifying key the SE just stored.
             #[cfg(feature = "debug-log")]

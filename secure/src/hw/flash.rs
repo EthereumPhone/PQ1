@@ -256,3 +256,113 @@ pub unsafe fn write_pbs(pbs: &[u8; 32]) -> Result<(), ()> {
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// SE050 admin-wipe state — page 125
+// ---------------------------------------------------------------------------
+//
+// Holds the per-device admin PIN (16 bytes from STM32 TRNG, used to
+// authenticate against ADMIN_WIPE_OBJ on SE050 during PIN-lockout wipe)
+// and a crash-safety flag for interrupted wipes. Independent of OPTIGA
+// PBS so SE050-standalone builds work without additional dependencies.
+//
+// Layout of page 125 (0x0C0F_A000, 8 KB):
+//   QW 0 (offset  0..15): admin PIN (16 bytes)
+//   QW 1 (offset 16..31): wipe flag — byte 0: 0x00 armed / 0xFF blank
+//                                     bytes 1..15: padding (0xFF)
+//   bytes 32..8192:       unused, 0xFF after erase
+//
+// Lifecycle:
+//   - First boot: page erased (all 0xFF) → generate random admin PIN
+//                 via rng::fill(), write QW 0. Wipe flag stays blank.
+//   - Wipe start: program QW 1 to [0x00, 0xFF × 15]. This is a 1→0
+//                 bit-clear on a blank QW, which NOR flash allows
+//                 without page erase — the admin PIN at QW 0 is preserved
+//                 so the wipe routine can still authenticate.
+//   - Wipe finish: erase_admin_page(). Clears PIN + flag both back to
+//                  0xFF, leaving the SE050 side of the device
+//                  "unprovisioned" from this page's perspective.
+
+/// Base address of the SE050 admin-state page (page 125).
+pub const ADMIN_PAGE_ADDR: u32 = 0x0C0F_A000;
+const ADMIN_PAGE_NUM: u32 = 125;
+
+const ADMIN_PIN_OFFSET: u32 = 0;
+const WIPE_FLAG_OFFSET: u32 = 16;
+const WIPE_FLAG_ARMED: u8 = 0x00;
+
+/// Erase page 125. Clears both the admin PIN and the wipe flag.
+pub unsafe fn erase_admin_page() -> Result<(), ()> {
+    wait_bsy();
+    clear_errors();
+    unlock();
+
+    let cr = PER | (ADMIN_PAGE_NUM << PNB_SHIFT);
+    write_volatile(FLASH_SECCR, cr);
+    write_volatile(FLASH_SECCR, cr | STRT);
+
+    wait_bsy();
+
+    write_volatile(FLASH_SECCR, 0);
+    let sr = read_volatile(FLASH_SECSR);
+    lock();
+
+    if sr & ERR_MASK != 0 {
+        clear_errors();
+        Err(())
+    } else {
+        Ok(())
+    }
+}
+
+/// Read the admin PIN from page 125 into `buf`. Caller checks
+/// `is_admin_pin_blank()` first to determine if the PIN is populated.
+pub unsafe fn read_admin_pin(buf: &mut [u8; 16]) {
+    let src = (ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET) as *const u8;
+    for i in 0..16 {
+        buf[i] = read_volatile(src.add(i));
+    }
+}
+
+/// Check whether the admin PIN slot is blank (first 16 bytes all 0xFF).
+pub unsafe fn is_admin_pin_blank() -> bool {
+    let src = (ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET) as *const u8;
+    for i in 0..16 {
+        if read_volatile(src.add(i)) != 0xFF {
+            return false;
+        }
+    }
+    true
+}
+
+/// Persist a 16-byte admin PIN into page 125.
+///
+/// Erases the whole page first (so any stale wipe flag is cleared too),
+/// then programs QW 0 with the PIN. After this call `is_admin_pin_blank()`
+/// is false and `is_wipe_armed()` is false.
+pub unsafe fn write_admin_pin(pin: &[u8; 16]) -> Result<(), ()> {
+    erase_admin_page()?;
+
+    let mut qw = [0u8; 16];
+    qw.copy_from_slice(pin);
+    write_quadword(ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET, &qw)
+}
+
+/// Arm the wipe-in-progress marker. Call immediately before initiating
+/// a factory reset so boot-time resume can pick up an interrupted wipe.
+///
+/// Does NOT erase page 125 — uses a 1→0 bit-clear on a single QW, which
+/// NOR flash supports without pre-erase. The admin PIN at QW 0 is
+/// preserved so the wipe routine can still authenticate against
+/// ADMIN_WIPE_OBJ during resume.
+pub unsafe fn arm_wipe_flag() -> Result<(), ()> {
+    let mut qw = [0xFFu8; 16];
+    qw[0] = WIPE_FLAG_ARMED;
+    write_quadword(ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET, &qw)
+}
+
+/// Read the wipe-in-progress flag. Returns true iff armed.
+pub unsafe fn is_wipe_armed() -> bool {
+    let src = (ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET) as *const u8;
+    read_volatile(src) == WIPE_FLAG_ARMED
+}

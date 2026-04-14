@@ -366,26 +366,63 @@ pub unsafe fn check_exists(
     }
 }
 
-/// Create a UserID authentication object with a PIN and a self-deletable
-/// policy.
+// Policy ar_header bit values (per se05x_const.h, POLICY_OBJ_ALLOW_*).
+const AR_ALLOW_READ: u32 = 0x0020_0000;
+const AR_ALLOW_WRITE: u32 = 0x0010_0000;
+const AR_ALLOW_DELETE: u32 = 0x0004_0000;
+const AR_REQUIRE_SM: u32 = 0x0002_0000;
+
+/// Build a TAG_POLICY value with one or two entries.
+///
+/// Layout per entry (9 bytes):
+///   `[entry_len=0x08] [auth_obj_id:4 BE] [ar_header:4 BE]`
+///
+/// SE05x policy semantics: entries are OR'd — if ANY entry's auth_obj_id
+/// is satisfied by the current session AND that entry's ar_header allows
+/// the requested operation, the operation succeeds. This lets us grant
+/// "normal use under UserID" + "admin delete under a secondary auth
+/// object" on the same secure object.
+fn build_policy(
+    primary_auth: u32,
+    primary_ar: u32,
+    admin_auth: Option<u32>,
+) -> ([u8; 18], usize) {
+    let mut out = [0u8; 18];
+    let mut len = 0;
+
+    let a = primary_auth.to_be_bytes();
+    let ar = primary_ar.to_be_bytes();
+    out[0] = 0x08;
+    out[1..5].copy_from_slice(&a);
+    out[5..9].copy_from_slice(&ar);
+    len += 9;
+
+    if let Some(admin) = admin_auth {
+        let a2 = admin.to_be_bytes();
+        // Admin entry: ALLOW_DELETE only (never ALLOW_READ) + REQUIRE_SM.
+        let ar2 = (AR_ALLOW_DELETE | AR_REQUIRE_SM).to_be_bytes();
+        out[9] = 0x08;
+        out[10..14].copy_from_slice(&a2);
+        out[14..18].copy_from_slice(&ar2);
+        len += 9;
+    }
+
+    (out, len)
+}
+
+/// Create a UserID authentication object with a PIN and a policy allowing
+/// self-delete plus optional admin-delete.
 ///
 /// The SE050 verifies PINs internally and enforces an attempt counter.
 /// After `max_attempts` failures the UserID locks permanently.
 ///
-/// Critical: the embedded TAG_POLICY is what makes the UserID deletable.
-/// Without it, the SE050 default policy applies — which has no
-/// `POLICY_OBJ_ALLOW_DELETE` bit, and the UserID is stuck until a
-/// FACTORY_RESET credential wipes the chip (a credential never
-/// provisioned on OM-SE050ARD dev samples).
-///
-/// Policy set here:
-///   `auth_obj_id = <this UserID's own object ID>`   (self-referential)
-///   `ar_header   = ALLOW_WRITE | ALLOW_DELETE | REQUIRE_SM`
-///
-/// A session that verifies the PIN against THIS UserID gains the right
-/// to rotate the PIN (WRITE) and to delete the whole UserID (DELETE).
-/// This is what enables a user-initiated factory reset: enter PIN →
-/// delete every gated data object → delete the UserID → chip blank.
+/// Policy entries:
+///   1. `auth_obj_id = <self>`, `ar = ALLOW_WRITE | ALLOW_DELETE | REQUIRE_SM`
+///      (session verified against this PIN can rotate PIN and self-delete)
+///   2. If `admin_auth_obj_id` is provided:
+///      `auth_obj_id = <admin>`, `ar = ALLOW_DELETE | REQUIRE_SM`
+///      (a session authenticated against the admin UserID can delete THIS
+///       UserID without knowing its PIN — essential for PIN-lockout wipe)
 ///
 /// HW lesson #1: INS must be 0x41 (WRITE | AUTH_OBJECT), not 0x01.
 pub unsafe fn write_userid(
@@ -394,24 +431,13 @@ pub unsafe fn write_userid(
     obj_id: u32,
     pin: &[u8],
     max_attempts: u16,
+    admin_auth_obj_id: Option<u32>,
 ) -> Result<(), Se050Error> {
     let mut apdu = ApduBuf::new(0x80, INS_WRITE | INS_AUTH_OBJECT, P1_USERID, P2_DEFAULT);
 
-    // Self-deletable policy. 9-byte TLV value:
-    //   [entry_len=0x08, auth_obj_id(4) = self, ar_header(4)]
-    // ar_header bits (per se05x_const.h):
-    //   0x00100000 ALLOW_WRITE   (rotate PIN)
-    //   0x00040000 ALLOW_DELETE  (user-initiated factory reset)
-    //   0x00020000 REQUIRE_SM    (always over SCP03)
-    let auth = obj_id.to_be_bytes();
-    let ar: u32 = 0x0016_0000;
-    let ar_bytes = ar.to_be_bytes();
-    let policy: [u8; 9] = [
-        0x08,
-        auth[0], auth[1], auth[2], auth[3],
-        ar_bytes[0], ar_bytes[1], ar_bytes[2], ar_bytes[3],
-    ];
-    apdu.tlv(TAG_POLICY, &policy);
+    let primary_ar = AR_ALLOW_WRITE | AR_ALLOW_DELETE | AR_REQUIRE_SM;
+    let (policy_buf, policy_len) = build_policy(obj_id, primary_ar, admin_auth_obj_id);
+    apdu.tlv(TAG_POLICY, &policy_buf[..policy_len]);
 
     if max_attempts > 0 {
         apdu.tlv(TAG_MAX_ATTEMPTS, &max_attempts.to_be_bytes());
@@ -425,31 +451,30 @@ pub unsafe fn write_userid(
     Ok(())
 }
 
-/// Write a binary object with a policy requiring UserID authentication.
+/// Write a binary object gated by UserID authentication, with optional
+/// admin-delete entry.
 ///
-/// Objects created with this function can only be read after verifying the
-/// PIN via an authenticated session.
+/// Policy entries:
+///   1. `auth_obj_id = <user>`, `ar = READ | WRITE | DELETE | REQUIRE_SM`
+///   2. If `admin_auth_obj_id` is provided:
+///      `auth_obj_id = <admin>`, `ar = DELETE | REQUIRE_SM`
+///      (admin can wipe but not read — preserves hardware-enforced PIN gating
+///       on entropy while giving the PIN-lockout path a way to clean up)
 ///
-/// HW lesson #2: In the policy TLV, auth_obj_id(4) comes BEFORE ar_header(4).
+/// HW lesson #2: In each policy entry, auth_obj_id(4) comes BEFORE ar_header(4).
 pub unsafe fn write_binary_gated(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     obj_id: u32,
     data: &[u8],
     auth_obj_id: u32,
+    admin_auth_obj_id: Option<u32>,
 ) -> Result<(), Se050Error> {
     let mut apdu = ApduBuf::new(0x80, INS_WRITE, P1_BINARY, P2_DEFAULT);
 
-    // Policy TLV: auth_obj_id(4, BE) THEN ar_header(4, BE).
-    // AR = READ(0x0020_0000) | WRITE(0x0010_0000) | DELETE(0x0004_0000) | REQUIRE_SM(0x0002_0000)
-    //    = 0x0036_0000
-    let auth_bytes = auth_obj_id.to_be_bytes();
-    let policy: [u8; 9] = [
-        0x08, // entry_len: 8 bytes follow
-        auth_bytes[0], auth_bytes[1], auth_bytes[2], auth_bytes[3],
-        0x00, 0x36, 0x00, 0x00,
-    ];
-    apdu.tlv(TAG_POLICY, &policy);
+    let primary_ar = AR_ALLOW_READ | AR_ALLOW_WRITE | AR_ALLOW_DELETE | AR_REQUIRE_SM;
+    let (policy_buf, policy_len) = build_policy(auth_obj_id, primary_ar, admin_auth_obj_id);
+    apdu.tlv(TAG_POLICY, &policy_buf[..policy_len]);
     apdu.tlv_u32(TAG_1, obj_id);
 
     // TAG_3: file length (max allocation size)

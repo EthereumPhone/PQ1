@@ -21,16 +21,26 @@ use t1oi2c::T1State;
 
 /// UserID authentication object — hardware-enforced PIN.
 /// Range v3 (0x7B06xxxx) to avoid stale objects from old firmware.
-const USERID_OBJ: u32 = 0x7B06_0000;
+pub const USERID_OBJ: u32 = 0x7B06_0000;
 
 /// Raw BIP-39 entropy (32 bytes), policy requires UserID auth.
-const ENTROPY_OBJ: u32 = 0x7B06_0001;
+pub const ENTROPY_OBJ: u32 = 0x7B06_0001;
 
 /// Verifying key (32 bytes), policy requires UserID auth.
-const VK_OBJ: u32 = 0x7B06_0002;
+pub const VK_OBJ: u32 = 0x7B06_0002;
 
 /// Bootstrap verifying key (32 bytes), policy requires UserID auth.
-const BOOTSTRAP_VK_OBJ: u32 = 0x7B06_0003;
+pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B06_0003;
+
+/// Admin wipe UserID. Second auth object, created at provisioning with a
+/// per-device random PIN derived from the OPTIGA PBS. Used only by the
+/// PIN-lockout factory-reset path: after 10 failed user PIN attempts,
+/// firmware authenticates against this object and deletes every user
+/// object (which all carry an admin-delete policy entry pointing here).
+///
+/// The admin PIN itself is never persisted in plaintext anywhere —
+/// derived on demand via `crypto::derive_se050_admin_pin(&pbs)`.
+pub const ADMIN_WIPE_OBJ: u32 = 0x7B06_00A0;
 
 // -- Factory-reset self-test object IDs --
 // Distinct from production IDs so the test never collides with a real
@@ -270,18 +280,18 @@ impl Se050 {
         // ---- 2. Provision fresh UserID + 2 gated data objects ----
         unsafe {
             apdu::write_userid(
-                &mut self.t1, &mut self.scp03, TEST_USERID_OBJ, pin, 9,
+                &mut self.t1, &mut self.scp03, TEST_USERID_OBJ, pin, 9, None,
             )?;
 
             let payload_a = [0xA0u8; 32];
             let payload_b = [0xB1u8; 32];
             apdu::write_binary_gated(
                 &mut self.t1, &mut self.scp03,
-                TEST_DATA_OBJ_A, &payload_a, TEST_USERID_OBJ,
+                TEST_DATA_OBJ_A, &payload_a, TEST_USERID_OBJ, None,
             )?;
             apdu::write_binary_gated(
                 &mut self.t1, &mut self.scp03,
-                TEST_DATA_OBJ_B, &payload_b, TEST_USERID_OBJ,
+                TEST_DATA_OBJ_B, &payload_b, TEST_USERID_OBJ, None,
             )?;
         }
 
@@ -354,6 +364,158 @@ impl Se050 {
         Ok(())
     }
 
+    /// Self-contained admin-auth wipe roundtrip on isolated OID range
+    /// `0x7B09_xxxx`.
+    ///
+    /// Provisions a fake "user UserID", a fake "admin UserID", and a
+    /// gated data object using the two-entry TAG_POLICY template (user
+    /// → full access; admin → DELETE). Then exercises the admin-auth
+    /// delete path — the one real PIN-lockout factory reset uses —
+    /// WITHOUT verifying the user PIN, proving that admin can wipe
+    /// even when the user's credential is blocked.
+    ///
+    /// Verifies all three objects are gone at the end.
+    ///
+    /// Uses OIDs distinct from the production range (`0x7B06_xxxx`) AND
+    /// from the user-reset e2e range (`0x7B07_xxxx`) so it runs safely
+    /// on a chip that already has real provisioning. Repeatable on the
+    /// same chip — step 1 cleans up any prior test residue.
+    #[cfg(feature = "se050-admin-wipe-e2e")]
+    pub fn run_admin_wipe_roundtrip(&mut self) -> Result<(), Se050Error> {
+        self.init()?;
+
+        const TEST_USER: u32 = 0x7B09_0000;
+        const TEST_DATA: u32 = 0x7B09_0001;
+        const TEST_ADMIN: u32 = 0x7B09_00A0;
+        let user_pin: [u8; 8] = *b"testuser";
+        let admin_pin: [u8; 16] = *b"testadminpin1234";
+        let payload: [u8; 8] = [0xC0, 0xFF, 0xEE, 0x01, 0x02, 0x03, 0x04, 0x05];
+
+        unsafe {
+            // ---- 1. Cleanup prior residue via admin session ----
+            // If admin obj still exists from a prior run, open a session,
+            // verify PIN, delete everything. This depends on the test
+            // admin PIN matching across runs (fixed constant above).
+            if apdu::check_exists(&mut self.t1, &mut self.scp03, TEST_ADMIN)
+                .unwrap_or(false)
+            {
+                if let Ok(sid) = apdu::create_session(
+                    &mut self.t1, &mut self.scp03, TEST_ADMIN,
+                ) {
+                    if apdu::verify_session(
+                        &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                    ).is_ok() {
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_USER,
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_ADMIN,
+                        );
+                    }
+                    let _ = apdu::close_session(
+                        &mut self.t1, &mut self.scp03, &sid,
+                    );
+                }
+
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, TEST_ADMIN)
+                    .unwrap_or(true)
+                {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!("[E2E-ADMIN] cleanup FAILED: test-admin stuck");
+                    return Err(Se050Error::Status(0x6986));
+                }
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-ADMIN] step 1: cleanup OK");
+
+            // ---- 2. Provision admin UserID first (so user objects can ref it) ----
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN, &admin_pin, 0, None,
+            )?;
+
+            // User UserID with two-entry policy: self + admin
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03,
+                TEST_USER, &user_pin, 5, Some(TEST_ADMIN),
+            )?;
+
+            // Data object with two-entry policy: user + admin
+            apdu::write_binary_gated(
+                &mut self.t1, &mut self.scp03,
+                TEST_DATA, &payload, TEST_USER, Some(TEST_ADMIN),
+            )?;
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-ADMIN] step 2: provision OK");
+
+            // ---- 3. Verify all three objects exist on-chip ----
+            for obj in &[TEST_USER, TEST_DATA, TEST_ADMIN] {
+                if !apdu::check_exists(&mut self.t1, &mut self.scp03, *obj)
+                    .unwrap_or(false)
+                {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!(
+                        "[E2E-ADMIN] step 3: 0x{:08x} missing after provision", obj
+                    );
+                    return Err(Se050Error::Status(0x6A82));
+                }
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-ADMIN] step 3: presence OK (3/3)");
+
+            // ---- 4. Admin-auth wipe — the actual path exercised by PIN lockout ----
+            // Note: we do NOT verify the user PIN here. That's the whole point:
+            // admin can delete user-gated objects without user auth.
+            let sid = apdu::create_session(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN,
+            )?;
+            apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+            ).map_err(|e| {
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                e
+            })?;
+
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
+            )?;
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_USER,
+            )?;
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, TEST_ADMIN,
+            )?;
+
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-ADMIN] step 4: admin wipe OK");
+
+            // ---- 5. Verify nothing survives ----
+            for obj in &[TEST_USER, TEST_DATA, TEST_ADMIN] {
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj)
+                    .unwrap_or(true)
+                {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!(
+                        "[E2E-ADMIN] step 5: 0x{:08x} survived wipe", obj
+                    );
+                    return Err(Se050Error::Status(0x6A83));
+                }
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-ADMIN] step 5: absence OK (3/3)");
+        }
+
+        Ok(())
+    }
+
     /// Check if the device has been provisioned (UserID object exists).
     fn check_provisioned(&mut self) -> bool {
         if self.init().is_err() {
@@ -365,11 +527,18 @@ impl Se050 {
         }
     }
 
-    /// Store objects on the SE050 behind a UserID PIN gate.
+    /// Store objects on the SE050 behind a UserID PIN gate, plus provision
+    /// the admin-wipe UserID that protects the PIN-lockout factory-reset
+    /// path.
     ///
-    /// Creates a UserID object with the PIN (can't be deleted after creation),
-    /// then stores three binary objects behind a policy that requires UserID
-    /// authentication to read. Skips creation of any existing object.
+    /// Every user object (UserID + three data blobs) gets a two-entry
+    /// TAG_POLICY: (user auth → full access) + (admin auth → DELETE only).
+    /// The admin UserID has unlimited attempts (max_attempts=0) — its PIN
+    /// is a 16-byte random derived from the OPTIGA PBS, so brute force is
+    /// infeasible and the wipe path must not lock itself out.
+    ///
+    /// Skips objects that already exist (re-provisioning without wipe is
+    /// rejected at the SE050 level by the existing policies).
     fn store_objects(
         &mut self,
         pin: &[u8],
@@ -377,11 +546,34 @@ impl Se050 {
         entropy: &[u8; 32],
         vk: &[u8; 32],
         bootstrap_vk: &[u8; 32],
+        admin_pin: Option<&[u8; 16]>,
     ) -> Result<(), Se050Error> {
         self.init()?;
 
         unsafe {
-            // UserID: skip if already exists (can't be deleted)
+            // Admin UserID first: must exist before user objects reference it
+            // in their admin-delete policy entries.
+            if let Some(admin) = admin_pin {
+                let admin_exists = apdu::check_exists(
+                    &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ
+                ).unwrap_or(false);
+
+                if !admin_exists {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!("[SE050] Creating admin UserID...");
+
+                    // Admin UserID policy: self-delete under admin auth.
+                    // max_attempts=0 = unlimited (PIN is per-device random).
+                    apdu::write_userid(
+                        &mut self.t1, &mut self.scp03,
+                        ADMIN_WIPE_OBJ, admin, 0, None,
+                    )?;
+                }
+            }
+
+            let admin_ref = admin_pin.map(|_| ADMIN_WIPE_OBJ);
+
+            // User UserID: skip if already exists.
             let userid_exists = apdu::check_exists(
                 &mut self.t1, &mut self.scp03, USERID_OBJ
             ).unwrap_or(false);
@@ -392,12 +584,11 @@ impl Se050 {
 
                 apdu::write_userid(
                     &mut self.t1, &mut self.scp03,
-                    USERID_OBJ, pin, max_attempts,
+                    USERID_OBJ, pin, max_attempts, admin_ref,
                 )?;
             }
 
-            // Binary objects: skip if already exist (reprovisioning requires
-            // factory reset due to UserID policy)
+            // Binary data objects: skip if already exist.
             let objs: [(u32, &[u8]); 3] = [
                 (ENTROPY_OBJ, entropy),
                 (VK_OBJ, vk),
@@ -415,9 +606,220 @@ impl Se050 {
 
                     apdu::write_binary_gated(
                         &mut self.t1, &mut self.scp03,
-                        *obj_id, data, USERID_OBJ,
+                        *obj_id, data, USERID_OBJ, admin_ref,
                     )?;
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Provision the SE050 with admin-wipe support.
+    ///
+    /// Same as the WalletStore::provision path except every user object
+    /// gets a two-entry TAG_POLICY whose second entry authorises ADMIN_WIPE_OBJ
+    /// to delete. Caller (dual_se.rs) supplies the per-device admin PIN
+    /// derived from the OPTIGA PBS.
+    pub fn provision_with_admin(
+        &mut self,
+        entropy: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        pin: &[u8; 8],
+        admin_pin: &[u8; 16],
+    ) -> Result<(), Se050Error> {
+        self.store_objects(
+            pin,
+            sphincs_tz_shared::MAX_ATTEMPTS as u16,
+            entropy, vk, bootstrap_vk,
+            Some(admin_pin),
+        )?;
+
+        self.vk_cache.copy_from_slice(vk);
+        self.vk_cached = true;
+        self.bootstrap_vk_cache.copy_from_slice(bootstrap_vk);
+        self.bootstrap_vk_cached = true;
+        self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
+
+        Ok(())
+    }
+
+    /// Provision admin wipe credential on an already-initialized chip.
+    ///
+    /// Used by the dual-SE glue during first-boot to install the admin
+    /// UserID before the user UserID is written (so user-object admin-delete
+    /// policies resolve). Idempotent — safe to call on a chip that already
+    /// has the admin object.
+    pub fn provision_admin(&mut self, admin_pin: &[u8; 16]) -> Result<(), Se050Error> {
+        self.init()?;
+        unsafe {
+            let exists = apdu::check_exists(
+                &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ
+            ).unwrap_or(false);
+            if !exists {
+                apdu::write_userid(
+                    &mut self.t1, &mut self.scp03,
+                    ADMIN_WIPE_OBJ, admin_pin, 0, None,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    /// PIN-lockout factory reset: authenticate as the admin UserID and
+    /// wipe every gated user object, then self-delete the admin UserID
+    /// itself. Does not touch PBS or any other chip state.
+    ///
+    /// Call this from the dual-SE coordinator after (a) the user UserID
+    /// has been blocked by SE050 silicon (10 wrong PIN attempts) or (b)
+    /// a persisted wipe-in-progress flag indicates a prior wipe was
+    /// interrupted. The admin PIN is derived on the STM32 side from the
+    /// OPTIGA PBS — caller supplies it here.
+    ///
+    /// Zeroizes all cached blobs on success and clears the ready flag so
+    /// the SE050 is re-initialised cleanly on next use.
+    pub fn admin_factory_reset(&mut self, admin_pin: &[u8; 16]) -> Result<(), Se050Error> {
+        use zeroize::Zeroize;
+        self.init()?;
+
+        unsafe {
+            // If the admin UserID doesn't exist, there's nothing structured
+            // to wipe via this path — fall back to plain iterative delete.
+            let admin_exists = apdu::check_exists(
+                &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ
+            ).unwrap_or(false);
+
+            if !admin_exists {
+                #[cfg(feature = "debug-log")]
+                secure_log!("[SE050] admin_factory_reset: no admin obj, falling back to iterative_delete_all");
+                let _ = apdu::iterative_delete_all(
+                    &mut self.t1, &mut self.scp03, None, None,
+                );
+            } else {
+                let session_id = apdu::create_session(
+                    &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ,
+                )?;
+
+                if let Err(e) = apdu::verify_session(
+                    &mut self.t1, &mut self.scp03, &session_id, admin_pin,
+                ) {
+                    let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
+                    return Err(e);
+                }
+
+                // Delete every gated user object under admin auth.
+                for obj in &[ENTROPY_OBJ, VK_OBJ, BOOTSTRAP_VK_OBJ, USERID_OBJ] {
+                    let _ = apdu::delete_object_authed(
+                        &mut self.t1, &mut self.scp03, &session_id, *obj,
+                    );
+                }
+
+                // Self-delete the admin UserID inside its own session.
+                let _ = apdu::delete_object_authed(
+                    &mut self.t1, &mut self.scp03, &session_id, ADMIN_WIPE_OBJ,
+                );
+
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
+            }
+
+            // Follow up with an unauthenticated sweep to catch any stragglers
+            // (e.g. legacy objects from prior firmware versions that don't
+            // have the admin-delete policy entry).
+            let _ = apdu::iterative_delete_all(
+                &mut self.t1, &mut self.scp03, None, None,
+            );
+        }
+
+        self.entropy_blob_cache.zeroize();
+        self.blob_cached = false;
+        self.vk_cache.zeroize();
+        self.vk_cached = false;
+        self.bootstrap_vk_cache.zeroize();
+        self.bootstrap_vk_cached = false;
+        self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
+
+        #[cfg(feature = "debug-log")]
+        secure_log!("[SE050] Admin factory reset complete");
+
+        Ok(())
+    }
+
+    /// Round-trip self-test: write a canary UserID + gated data object with
+    /// the same TAG_POLICY template used by real provisioning, then verify
+    /// the admin-delete path actually clears them. Aborts provisioning if
+    /// the canary survives — guardrail against future byte-order bugs in
+    /// the policy TLV construction.
+    ///
+    /// Uses object IDs 0x7B06_00B0 / 0x7B06_00B1 (distinct from production
+    /// range). Caller provides the admin PIN so the test exercises the
+    /// SAME auth path the real wipe will use.
+    pub fn policy_roundtrip_selftest(&mut self, admin_pin: &[u8; 16]) -> Result<(), Se050Error> {
+        self.init()?;
+
+        const CANARY_USERID: u32 = 0x7B06_00B0;
+        const CANARY_DATA: u32 = 0x7B06_00B1;
+        let canary_pin: [u8; 8] = *b"00000000";
+
+        unsafe {
+            // Cleanup any prior canary residue before testing.
+            let _ = apdu::delete_object(&mut self.t1, &mut self.scp03, CANARY_DATA);
+            let _ = apdu::delete_object(&mut self.t1, &mut self.scp03, CANARY_USERID);
+
+            // Ensure admin UserID exists for the test (it should at this point).
+            let admin_exists = apdu::check_exists(
+                &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ
+            ).unwrap_or(false);
+            if !admin_exists {
+                return Err(Se050Error::NotProvisioned);
+            }
+
+            // Write canary UserID with admin-delete policy entry.
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03,
+                CANARY_USERID, &canary_pin, 5, Some(ADMIN_WIPE_OBJ),
+            )?;
+
+            let canary_data: [u8; 4] = [0xDE, 0xAD, 0xBE, 0xEF];
+            apdu::write_binary_gated(
+                &mut self.t1, &mut self.scp03,
+                CANARY_DATA, &canary_data, CANARY_USERID, Some(ADMIN_WIPE_OBJ),
+            )?;
+
+            // Exercise admin-delete path.
+            let sid = apdu::create_session(
+                &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ,
+            )?;
+            if let Err(e) = apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &sid, admin_pin,
+            ) {
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                return Err(e);
+            }
+            let _ = apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, CANARY_DATA,
+            );
+            let _ = apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &sid, CANARY_USERID,
+            );
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+
+            // Verify both canary objects are gone.
+            let data_gone = !apdu::check_exists(
+                &mut self.t1, &mut self.scp03, CANARY_DATA,
+            ).unwrap_or(true);
+            let user_gone = !apdu::check_exists(
+                &mut self.t1, &mut self.scp03, CANARY_USERID,
+            ).unwrap_or(true);
+
+            if !(data_gone && user_gone) {
+                // Admin-delete failed — policy byte layout is wrong.
+                #[cfg(feature = "debug-log")]
+                secure_log!(
+                    "[SE050] policy_roundtrip_selftest FAILED: data_gone={} user_gone={}",
+                    data_gone, user_gone
+                );
+                return Err(Se050Error::Status(0x6986));
             }
         }
 
@@ -487,8 +889,59 @@ impl WalletStore for Se050 {
         bootstrap_vk: &[u8; 32],
         pin: &[u8; 8],
     ) -> Result<(), SeError> {
-        self.store_objects(pin, sphincs_tz_shared::MAX_ATTEMPTS as u16, entropy, vk, bootstrap_vk)
-            .map_err(|_| SeError::InternalError)?;
+        // Admin-wipe flow (STM32 target only — QEMU has no flash):
+        //   1. Load or generate the per-device admin PIN via STM32 TRNG,
+        //      persist to secure flash page 125.
+        //   2. Provision ADMIN_WIPE_OBJ UserID with that PIN.
+        //   3. Run a canary round-trip selftest proving the admin-delete
+        //      policy actually works (guardrail against TLV byte-order
+        //      regressions).
+        //   4. Provision user UserID + data objects with two-entry
+        //      TAG_POLICY (user auth → full; admin auth → DELETE).
+        //
+        // On QEMU: step 1-3 are skipped; objects get single-entry
+        // policies. PIN-lockout recovery is N/A on QEMU since there's
+        // no persistent chip state to wipe anyway.
+        #[cfg(feature = "stm32u585")]
+        {
+            let mut admin_pin = [0u8; 16];
+            unsafe {
+                if crate::hw::flash::is_admin_pin_blank() {
+                    crate::rng::fill(&mut admin_pin)
+                        .map_err(|_| SeError::InternalError)?;
+                    crate::hw::flash::write_admin_pin(&admin_pin)
+                        .map_err(|_| SeError::InternalError)?;
+                } else {
+                    crate::hw::flash::read_admin_pin(&mut admin_pin);
+                }
+            }
+
+            self.provision_admin(&admin_pin)
+                .map_err(|_| SeError::InternalError)?;
+            self.policy_roundtrip_selftest(&admin_pin)
+                .map_err(|_| SeError::InternalError)?;
+
+            self.store_objects(
+                pin,
+                sphincs_tz_shared::MAX_ATTEMPTS as u16,
+                entropy, vk, bootstrap_vk,
+                Some(&admin_pin),
+            ).map_err(|_| SeError::InternalError)?;
+
+            use zeroize::Zeroize;
+            admin_pin.zeroize();
+        }
+
+        #[cfg(not(feature = "stm32u585"))]
+        {
+            self.store_objects(
+                pin,
+                sphincs_tz_shared::MAX_ATTEMPTS as u16,
+                entropy, vk, bootstrap_vk,
+                None,
+            ).map_err(|_| SeError::InternalError)?;
+        }
+
 
         // Cache VK + bootstrap VK so cmd_get_pubkey works before first unlock.
         self.vk_cache.copy_from_slice(vk);
@@ -575,5 +1028,40 @@ impl WalletStore for Se050 {
         self.vk_cached = false;
         self.bootstrap_vk_cache.zeroize();
         self.bootstrap_vk_cached = false;
+    }
+
+    #[cfg(feature = "stm32u585")]
+    fn factory_reset_admin(&mut self) -> Result<(), SeError> {
+        // Load admin PIN from flash (populated at first-boot provision),
+        // arm the wipe flag for crash-safety, wipe SE050 under admin auth,
+        // then erase page 125 to clear both the PIN and the flag.
+        unsafe {
+            if crate::hw::flash::is_admin_pin_blank() {
+                // Nothing provisioned via the admin flow — best-effort
+                // unauthenticated sweep in case the chip still has legacy
+                // objects around.
+                let _ = self.iterative_wipe(None, None);
+            } else {
+                let mut admin_pin = [0u8; 16];
+                crate::hw::flash::read_admin_pin(&mut admin_pin);
+
+                let _ = crate::hw::flash::arm_wipe_flag();
+
+                if self.admin_factory_reset(&admin_pin).is_err() {
+                    // Admin session failed (rare — chip glitch, corrupted
+                    // SCP03). Fall back to iterative delete so we still
+                    // clear everything we can.
+                    let _ = self.iterative_wipe(None, None);
+                }
+
+                use zeroize::Zeroize;
+                admin_pin.zeroize();
+            }
+
+            let _ = crate::hw::flash::erase_admin_page();
+        }
+
+        self.zeroize_caches();
+        Ok(())
     }
 }

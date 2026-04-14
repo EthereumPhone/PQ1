@@ -74,6 +74,16 @@ pub trait WalletStore {
 
     /// Zeroize any cached secrets (called on idle wipe / lock / panic).
     fn zeroize_caches(&mut self);
+
+    /// PIN-lockout factory reset: wipe every persistent secret so the
+    /// device returns to a fresh unprovisioned state. Default no-op for
+    /// backends that don't persist anything (the mock); real backends
+    /// override. See `DualSecureElement::factory_reset_admin` for the
+    /// STM32 + dual-SE implementation.
+    fn factory_reset_admin(&mut self) -> Result<(), SeError> {
+        self.zeroize_caches();
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
