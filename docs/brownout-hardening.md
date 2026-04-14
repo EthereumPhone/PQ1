@@ -35,6 +35,66 @@ least catastrophic:
 Current design addresses **E partially** (wipe flag) and **F partially**
 (panic handler zeroize). Everything else is unmitigated.
 
+## Target board: B-U585I-IOT02A
+
+This roadmap is written against the STMicro B-U585I-IOT02A Discovery
+kit. Chip is **STM32U585AII6Q** (LQFP144, 2 MB flash, 786 KB SRAM in
+four blocks, full peripheral set). Details that affect the plan:
+
+| Feature | B-U585I-IOT02A state | Implication |
+|---|---|---|
+| CR2032 battery socket (VBAT) | Present; populated on our board | Stage 4 backup-register state machine will work. If production hardware omits VBAT, backup regs are lost on Vdd drop and Stage 4 falls back to flash-only. |
+| NRST user button (B2) | Wired directly to MCU NRST pin | "One level more thorough than `probe-rs reset`" option for tests. Still does not cut SE050 Vcc. |
+| LSE 32.768 kHz crystal | Present | Enables `LSE` for RTC and IWDG timing. LSI-clocked IWDG works fine without it — LSE is a "nice to have" for accurate timekeeping. |
+| On-board ST-LINK V3 | Integrated | `probe-rs reset` uses SWD SYSRESETREQ. Does NOT interrupt USB Vbus → SE050 shield stays powered across reset. True cold cycle requires unplugging USB. |
+| On-board STSAFE-A110 | Present, I2C2 bus | Currently unused by this firmware (only the `stsafe-probe` feature detects it). Not in scope for brownout work. |
+| OM-SE050ARD-E shield | Arduino-header mounted | SE050 powered from shield's 5V pin which is fed by USB. Any full-power-cycle test must disconnect USB; any warm reset keeps SE050 alive. |
+
+### STM32U585 SRAM layout & integrity
+
+The four SRAM blocks have different integrity features. Relevant to
+every stage of this plan:
+
+| Block | Size | Secure alias | ECC | Parity | Notes |
+|---|---|---|---|---|---|
+| SRAM1 | 192 KB | `0x3000_0000` | Yes (single-bit correct, double-bit detect) | — | Main SRAM, currently hosts nearly all our state. |
+| SRAM2 | 64 KB | `0x3003_0000` | Yes | Optional (mutually exclusive with ECC) | Target for Stage 2 secret relocation. Option byte `SRAM2_RST=0` makes silicon auto-erase this on every reset. |
+| SRAM3 | 512 KB | `0x3004_0000` | Yes | — | Unused today. Biggest block. |
+| SRAM4 | 16 KB | `0x3800_0000` | No | Yes | SmartRun domain; retained through Stop 2. |
+| Backup SRAM | 2 KB | `0x4002_4000` | No | No | VBAT-retained; auto-wiped on any TAMP event. |
+
+### How SRAM ECC actually works on U5 (correcting earlier guidance)
+
+On STM32U5, ECC **correction** is **always active in hardware** on the
+ECC-capable blocks — it's part of the SRAM cell structure, not a
+software-toggleable feature. Any single-bit flip (cosmic ray, voltage
+noise, brownout-induced transient) is silently corrected on every read
+today, regardless of whether we've configured anything.
+
+What **is** configurable via the RAMCFG peripheral is the
+**error reporting**:
+
+- `RAMCFG_MxCR` — block-level config (interrupt enable bits, latch mode).
+- `RAMCFG_MxIER.SEIE` — generate interrupt on single-bit corrections.
+  Usually left disabled (they're silently corrected; logging is noise).
+- `RAMCFG_MxIER.DEIE` — generate NMI on **double-bit detections** (the
+  uncorrectable case). **This is what we actually want for brownout
+  defense** — a double-bit hit on a secret region means bits have been
+  corrupted in a way ECC can't fix, and we should react rather than
+  return garbage.
+- `RAMCFG_MxISR` — status register (which errors fired since last clear).
+- `RAMCFG_MxFEAR` — failure address register, pinpoints the flipped
+  location.
+
+Neither our code nor cortex-m-rt touches RAMCFG. So today:
+- ✅ Single-bit correction is active (hardware feature).
+- ❌ Double-bit NMI is not routed. An uncorrectable ECC error today
+  returns corrupted data silently and may cause a hardfault if the hit
+  lands on instruction prefetch.
+
+Stage 2 will enable `DEIE` on SRAM1/2/3 and implement the NMI handler
+to zeroize + soft-reset on any double-bit event.
+
 ## What STM32U585 gives us for free
 
 STMicroelectronics anticipated brownout robustness. The U5 silicon has
@@ -66,8 +126,15 @@ defaults today:
   on every reset of any kind (POR, BOR, software, watchdog). Turn this
   on and put active-window secrets in SRAM2 — get hardware zeroization
   without firmware correctness dependency.
-- **ECC** on SRAM2/SRAM3: single-bit correct, double-bit NMI.
-- **RAMCFG_MxSR** exposes ECC errors for monitoring.
+- **ECC on SRAM1/2/3**: single-bit correction is always active in
+  hardware (silicon feature, not a toggle). Double-bit detection is
+  also always computed, but reporting requires enabling
+  `RAMCFG_MxIER.DEIE` + implementing an NMI handler. See the SRAM
+  section above for the full picture.
+- **`RAMCFG_MxISR`** — status register that accumulates ECC events
+  since last clear. Readable at any time for diagnostics.
+- **`RAMCFG_MxFEAR`** — failure address register, pinpoints the
+  flipped location of the most recent uncorrectable error.
 
 ### Backup domain (Vbat, already wired on B-U585I-IOT02A via CR2032)
 - **32 × 32-bit `TAMP_BKPxR`** backup registers: survive Vdd loss.
@@ -94,19 +161,23 @@ From a systematic audit of the codebase:
 
 | Feature | Status | Location |
 |---|---|---|
-| BOR level | chip default (unknown state) | option bytes unset |
-| PVD | disabled | no code |
-| `RCC_CSR` read | never | no code |
-| IWDG | disabled | no code |
-| `SRAM2_RST` | chip default (probably 1 — no auto-erase) | option bytes unset |
-| Post-flash-write verify | no — only `ERR_MASK` check | `hw/flash.rs:143-156` |
-| Multi-QW tearing guard | none | `hw/flash.rs:180-193, 247-257, 348-349` |
-| Flash structure headers (magic/ver/CRC) | none | raw bytes |
-| Panic handler zeroize | yes | `main.rs:842-858` |
-| Boot-time dirty-reset zeroize | no | N/A |
-| Backup regs / backup SRAM | unused | N/A |
-| SE050 post-APDU verify | fire-and-forget | `se050/mod.rs:174-177` |
-| Dual-SE ordering guard | single-state flag only | `dual_se.rs:216-226` |
+| BOR level | chip default until `make stm32-harden-opts` runs; target BOR3 (~2.7 V) | option bytes |
+| PVD | disabled | no code (Stage 2) |
+| `RCC_CSR` read | **Stage 1 done**: classified + logged every boot | `secure/src/reset_cause.rs` |
+| IWDG | disabled | no code (Stage 4) |
+| `SRAM2_RST` | chip default until `make stm32-harden-opts` runs; target 0 (auto-erase) | option bytes |
+| Post-flash-write verify | **Stage 1 done**: `write_quadword_verified` + read-back compare | `secure/src/hw/flash.rs` |
+| Multi-QW tearing guard | post-hoc detect only (from verified writes); Stage 5 adds A/B slots | `secure/src/hw/flash.rs` |
+| Flash structure headers (magic/ver/CRC) | none | raw bytes (Stage 3) |
+| Panic handler zeroize | yes | `main.rs` (pre-existing) |
+| Boot-time dirty-reset zeroize | **Stage 1 done**: abnormal `ResetCause` triggers `zeroize_sensitive_state` | `main.rs` |
+| ECC single-bit correction (SRAM1/2/3) | silicon feature; always active; no config needed | HW |
+| ECC double-bit NMI reporting | **off** (RAMCFG untouched); double-bit = silent corruption | no code (Stage 2) |
+| RAMCFG diagnostics | none — we don't know actual ECC event counts | no code (Stage 1.5) |
+| VBAT presence detection | none — Stage 4 depends on backup regs surviving | no code (Stage 1.5) |
+| Backup regs / backup SRAM | unused | N/A (Stage 4) |
+| SE050 post-APDU verify | fire-and-forget | `se050/mod.rs` |
+| Dual-SE ordering guard | single-state flag only | `dual_se.rs` |
 
 ## The 5-stage plan
 
@@ -139,7 +210,27 @@ Smallest usable chunk that moves the needle.
 Addresses: A (detect), C (detect), F (mitigate).
 Does NOT yet address: B, D, E (beyond existing), G, option-byte side of H.
 
-### Stage 2 — PVD last-gasp + SRAM2 relocation
+### Stage 1.5 — Diagnostic visibility (small, precedes Stage 2)
+
+Two tiny additions that don't change behaviour but give us ground truth
+before we start configuring things. Each is ~20-30 lines.
+
+- **1.5a. RAMCFG register dump at boot.** New `hw/ramcfg.rs`: reads
+  `RAMCFG_M1ISR..M4ISR` + `RAMCFG_M1CR..M4CR` + `RAMCFG_MxFEAR` once at
+  boot, logs via `secure_log!`. Tells us: (a) whether any ECC events
+  accumulated since last clear (single-bit corrections are silently
+  happening every few minutes at sea level from cosmic rays — we should
+  see them); (b) what the actual RAMCFG defaults are on this chip,
+  replacing my earlier guesses. No side effects, pure diagnostic.
+- **1.5b. VBAT presence canary.** Write a known magic value to
+  `TAMP_BKPR31` at first boot; check it on every subsequent boot. If
+  the magic survives, VBAT is live. If it's lost, VBAT is dead/absent
+  and we should not depend on backup-register persistence in Stage 4.
+  Log the result; don't gate on it yet (Stage 4 is where it matters).
+
+Addresses: prerequisite for making informed choices in Stages 2 and 4.
+
+### Stage 2 — PVD last-gasp + SRAM2 relocation + ECC reporting
 
 - **PVD interrupt.** Enable `PVDE` with `PLS` ~200 mV above `BOR_LEV`.
   EXTI16 handler (`PVD_IRQ`) fires when Vdd crosses threshold going
@@ -152,11 +243,26 @@ Does NOT yet address: B, D, E (beyond existing), G, option-byte side of H.
   `SRAM2_RST=0` option byte (set in Stage 1c) guarantees hardware
   zeroization of active secrets on every reset regardless of firmware
   correctness.
+  - **Initialisation gotcha**: ECC-protected SRAM must be fully written
+    before being read, or the uninitialised ECC bits produce spurious
+    double-bit errors on first access. During early boot, memset the
+    relocation region before any other code touches it.
+- **ECC double-bit NMI.** Enable `RAMCFG_MxIER.DEIE` on SRAM1, SRAM2,
+  SRAM3 (all ECC-capable blocks). Implement `#[exception] fn
+  NonMaskableInt()`: read `RAMCFG_MxISR` to identify which block
+  faulted, log `RAMCFG_MxFEAR`, zeroize the secret region, trigger a
+  soft reset via `SCB::AIRCR`. Stage 1d's dirty-reset path then cleans
+  up on the resulting boot (classified as `ResetCause::Software`).
+  - Optionally enable `SEIE` too, but route single-bit events to an
+    incrementing counter in a backup register rather than an NMI —
+    they're already corrected, and flooding an ISR with every
+    cosmic-ray hit is noise.
 - **Abort-on-PVD for flash writes.** If PVD is already asserted, reject
   flash writes immediately — never start a QW program under unstable
   Vcc.
 
-Addresses: A (prevent), C (prevent), F (hardware guarantee).
+Addresses: A (prevent), C (prevent), F (hardware guarantee),
+uncorrectable ECC (prevent silent corruption).
 
 ### Stage 3 — Flash structure integrity
 
@@ -296,7 +402,22 @@ Validated at each stage; the test matrix grows monotonically.
 - **Do not use backup-register state without VBAT present.** A
   CR2032 is wired on B-U585I-IOT02A dev boards but MUST be populated
   on production boards — otherwise backup regs become equivalent to
-  SRAM1 (lost on Vdd drop).
+  SRAM1 (lost on Vdd drop). Stage 1.5b adds a canary to detect this.
+- **Do not enable ECC reporting without pre-initialising the region.**
+  ECC-protected SRAM has hidden parity bits that reset to an
+  indeterminate state on power-up. Reading uninitialised ECC memory
+  after you've enabled `DEIE` will fire spurious NMIs from
+  double-bit-error *detection* even though no real corruption occurred.
+  Always memset the block before enabling reporting.
+- **Do not assume "ECC is not enabled" means "no protection today".**
+  On STM32U5 single-bit correction is a hardware property of the SRAM
+  cell itself — cosmic-ray hits are already being corrected right now
+  on SRAM1/2/3. What we're adding in Stage 2 is only the *reporting*
+  path for the uncorrectable (double-bit) case.
+- **Do not wire single-bit correction events to an NMI.** They
+  accumulate constantly at sea level. Route them to an incrementing
+  counter in a backup register for post-mortem diagnostics; the NMI
+  handler should only fire on uncorrectable (double-bit) events.
 
 ## Invariants (post-Stage 5)
 
@@ -315,23 +436,34 @@ At the end of the roadmap the following will hold:
    4-state machine in backup register 0 tells boot-time resume exactly
    where to pick up, whether the crash happened pre-SE050-wipe,
    during, post-SE050-wipe, or during OPTIGA erase.
-6. **Statistical confidence**: 1000-cycle cold-boot harness passes
+6. **Uncorrectable SRAM corruption never returns silent garbage.**
+   `RAMCFG_MxIER.DEIE` is enabled on all ECC-capable blocks; a
+   double-bit detection fires an NMI that zeroizes + soft-resets
+   rather than returning the corrupted bytes to the caller.
+7. **Statistical confidence**: 1000-cycle cold-boot harness passes
    100%.
 
 ## Status
 
-- Stage 1: **in progress** (see this PR / commit)
-- Stage 2: not started
-- Stage 3: not started
-- Stage 4: not started
-- Stage 5: not started
+- Stage 1: **complete** (commit `b00527e`). Verified on hardware: reset
+  classifier correctly reports `software` under `probe-rs run`
+  SYSRESETREQ (`RCC_CSR=0x14004400`); admin-wipe e2e test still passes;
+  all 7 feature combos build clean.
+- Stage 1.5 (RAMCFG + VBAT diagnostics): **not started**
+- Stage 2 (PVD + SRAM2 + ECC NMI): not started
+- Stage 3 (flash CRC/magic/version): not started
+- Stage 4 (backup-register state machine + IWDG): not started
+- Stage 5 (A/B slots): not started
 - Bench hardware (USB power switch, voltage sag tool): not acquired
+- **Option-byte application on the dev board**: `make
+  stm32-harden-opts` target exists but has NOT been run yet — chip is
+  still at factory defaults for BOR and SRAM2_RST.
 
 ## File map (post-Stage 1)
 
 | Concern | File |
 |---|---|
-| Reset-cause classification | `secure/src/hw/reset_cause.rs` (new) |
+| Reset-cause classification | `secure/src/reset_cause.rs` (new, top-level so QEMU can compile) |
 | Verified flash writes | `secure/src/hw/flash.rs` (`write_quadword_verified`) |
 | Boot-time dispatch | `secure/src/main.rs` |
 | Option-byte setup | `Makefile` target `stm32-harden-opts` |
