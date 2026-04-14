@@ -187,8 +187,17 @@ Listed here so future research doesn't re-derive them from scratch.
 ## 7. Open architectural questions we are actively researching
 
 These are where research effort should go. Each subsection is a
-**drop-in prompt** for an AI research session: attach *this whole
-document* as context, then paste the prompt text under the heading.
+**drop-in prompt** for an AI research session.
+
+**For tools that accept only one attachment per session** (Claude web,
+etc.), we've pre-built self-contained bundle files under
+`docs/research-bundles/`. Each bundle combines the question + a
+condensed version of this briefing + the relevant code excerpts into a
+single ~50-120 KB markdown file. Upload the bundle as the only
+attachment, and the session has everything it needs. See
+`docs/research-bundles/README.md` for the mapping.
+
+The prompts below are the same questions, kept here for reference.
 
 ---
 
