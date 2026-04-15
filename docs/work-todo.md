@@ -307,6 +307,12 @@ No sleep/idle power modes, watchdog, or graceful power-down sequences.
 
 Research-derived mitigations from the deep-research round of 2026-04-14. Critical finding: **both verify-after-sign is inadequate** (RFC 9814 / Genêt TCHES 2023) and **OptRand = 0 (deterministic signing) enables PRF recovery**. These are not theoretical.
 
+**STM32U5 is confirmed-vulnerable to voltage glitching**, not merely presumed. The Masaryk U Simonik thesis (verified real in the 2026-04-15 round) demonstrates ~76% PIN-glitch bypass on STM32U5 silicon (same family as our STM32U585). Ledger Donjon's March 2025 statement that no public attack existed was correct at publication but invalidated within months. Plan the FihInt / fail-in / double-compute items in this backlog as **must-ship**, not optional.
+
+**SHAKE-vs-SHA2 decision remains open** post-verification. The Fluhrer ePrint 2024/500 "1.7× overhead, backward-compatible PRF-tree" citation that argued for SHAKE migration is **not verifiable** per §3 of production-security.md — the claim is technically implausible on its face. The qualitative argument (SHAKE easier to mask than SHA-256) still holds, but don't commit to SHAKE on Fluhrer's alleged overhead number. Independent benchmark of SLH-DSA-SHAKE-128f performance + masking cost on Cortex-M33 needed before the decision is production-ready.
+
+- [ ] **SHAKE-vs-SHA2 architectural decision** (was P1 in original list, now a prerequisite). Benchmark SLH-DSA-SHAKE-128f masked implementation vs SLH-DSA-SHA2-128f with HASH peripheral + software countermeasures. Don't rely on Fluhrer's 1.7× figure — measure directly.
+
 **What's needed — P0 (must ship with these):**
 - [ ] **SLH-DSA double-compute**: sign twice on disjoint SRAM regions, constant-time compare, release only on match. Verify-after-sign alone is NOT sufficient — faulty sigs still verify per RFC 9814.
 - [ ] **Non-deterministic OptRand** on every signature: 16 B (128f) / 24 B (192f) freshly drawn from STM32 TRNG per sign call. Replace the current OptRand=0 deterministic path.
@@ -347,7 +353,10 @@ Dev-research from Prompt D identified the USB path as our **largest remote attac
 - [ ] IWDG hang detection for USB path (2s timeout, kicked per transaction).
 - [ ] Response-buffer locking for 17,088-byte SLH-DSA signatures (ISO 7816 SW=0x61xx chunking; 30s timeout).
 
-**Verified 2026-04-15**: `CVE-2026-4179` is real (published 2026-03-16; Zephyr advisory `GHSA-9xg7-g3q3-9prf`). We initially flagged it as hallucinated because it was future-dated relative to our training cutoff — that flag was wrong. Safe to cite. Note the advisory frames it as ISR-triggered infinite loop, not explicitly malicious USB host.
+**Verified 2026-04-15**: `CVE-2026-4179` is real (published 2026-03-16; Zephyr advisory `GHSA-9xg7-g3q3-9prf`). We initially flagged it as hallucinated because it was future-dated relative to our training cutoff — that flag was wrong. Safe to cite.
+
+**Additional action item from CVE-2026-4179 verification**:
+- [ ] Audit whether our USB stack shares patterns with the Zephyr bug. The advisory describes `usb_write()` called from ISR context then triggering `k_yield()` → infinite loop. Our stack is Rust on top of the `synopsys-usb-otg` crate rather than Zephyr C. Still worth grepping our ISR handlers for: (a) scheduler calls from ISR context, (b) blocking waits inside IRQ, (c) any `yield!()`-equivalent patterns. Likely not affected since we're a different stack, but worth the 30 minutes.
 
 **Files to create:** `secure/src/fih.rs` (shared with #18)
 **Files to change:** `secure/src/hw/usb_hw.rs`, `nonsecure/src/usb/transport.rs`, `nonsecure/src/usb/hid.rs`, `nonsecure/src/usb/commands.rs`
@@ -431,6 +440,9 @@ Bundle E extends item #20 with a **triple-UID cryptographically-signed manifest*
 - [ ] **Boot-time ceremony** (runs in secure world before entropy reconstruction): read STM32 UID → load manifest → verify SLH-DSA signature → compare all 3 UIDs to manifest + against each SE's own attested response → compare SHA3-256(firmware) against manifest.firmware_hash → check anti-rollback counter → ATTESTATION_PASSED. Any mismatch → permanent lockdown (no entropy release).
 - [ ] **Transparency log**: append-only public record of every `device_serial` + manifest hash emitted at the factory. Merkle-anchored (scheme TBD — see research prompt). Enables detection of rogue production runs even under HSM compromise.
 - [ ] **RDP Level 2** burned at end of provisioning (also in #20 — coordinate).
+
+**Reference point**: Trezor Safe 7 (verified real, announced Oct 21 2025, shipping late 2025 / early 2026) is the closest existing production-wallet architecture. Uses TROPIC01 as transparent SE + EAL6+ second SE for dual attestation. PQSigner adds the triple-UID SLH-DSA manifest on top. Worth studying Trezor's public documentation on Safe 7's attestation protocol before we finalise our own — we may learn from their transparent-SE approach, and we should be explicit where our design intentionally diverges.
+- [ ] Study Trezor Safe 7 attestation protocol (public docs + any security evaluations) and document how our triple-UID SLH-DSA design differs. May surface improvements or shared patterns.
 
 **What's needed — P1:**
 

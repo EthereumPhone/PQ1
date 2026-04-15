@@ -178,23 +178,35 @@ reports t-stat = 24.5 at 1000 traces — catastrophic leakage.
 |---|---|---|
 | HASH peripheral support | Yes (not DPA-resistant per UM3370) | No (software SHAKE required) |
 | Masking cost | 3-5× (inefficient on Cortex-M33) | 1.5-2× (cleaner) |
-| PRF-tree (Fluhrer 2024) | No | Yes (≤5 contexts per intermediate, 1.7× overhead) |
+| PRF-tree (Fluhrer 2024) | No | ⚠ **Citation unverified** — see §3 |
 | Backward compat with on-chain verifier | Tied to current contract | Requires contract change |
 
 Recommendation: evaluate SHAKE migration before Stage 2 implementation.
 If on-chain verifier can be parameterised, SHAKE is the materially-
 stronger SCA posture.
 
+**⚠ Caveat on SHAKE migration analysis**: the Fluhrer ePrint 2024/500
+"PRF-tree with 1.7× overhead, backward-compatible" citation that
+bundle C used to argue for SHAKE is **not verifiable** per the
+2026-04-15 verification round (see §3). Treat the SHAKE-vs-SHA2
+decision as open — do NOT commit to SHAKE on the basis of Fluhrer's
+claimed overhead figure. Independent analysis of SLH-DSA-SHAKE-128f
+performance + masking cost on Cortex-M33 is needed before this
+decision is production-ready. The qualitative argument (SHAKE is
+easier to mask than SHA-256) still holds; the specific 1.7× overhead
+number does not.
+
 **HASH peripheral**: **provides zero DPA protection** per UM3370.
 Useful for performance (~66 cycles/block) and timing-channel elimination
 only. Software countermeasures remain mandatory.
 
 **Caveats on numerical claims**: the research cites "SLotH" and
-"SLasH-DSA 2025" papers with specific trace-count numbers. SLotH
-(CRYPTO 2024) is a known title; exact TVLA numbers should be verified
-against the paper. SLasH-DSA (2025) is future-dated relative to the
-research AI's knowledge cutoff and **may be hallucinated** — do not
-cite in commit messages or user-facing docs without verifying.
+"SLasH-DSA 2025" papers with specific trace-count numbers. Author
+plausibility and paper existence confirmed for SLotH; exact TVLA
+numbers and the SLasH-DSA paper remain unverified per §3. The
+qualitative conclusion (unprotected Cortex-M33 leaks PRF(SK.seed)
+catastrophically) is defensible; the specific trace-count bounds
+should not be cited as pinpoint figures.
 
 ### 2.4 USB hardening (bundle D → todo #19)
 
