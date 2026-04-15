@@ -9,6 +9,7 @@ sphincs-tz-bip39  = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c7 = { workspace = true }
+jardin-fosc = { workspace = true }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
 aes = { version = "0.8", default-features = false }
 cmac = { version = "0.7", default-features = false }

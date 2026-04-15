@@ -9,6 +9,7 @@ import {UUPSUpgradeable} from "solady/utils/UUPSUpgradeable.sol";
 import {ERC1271} from "./ERC1271.sol";
 import {PQOwnable} from "./PQOwnable.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
+import {IJardinVerifier} from "./verifiers/IJardinVerifier.sol";
 
 /// @title PQCoinbaseSmartWallet
 ///
@@ -37,7 +38,8 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
     /// @notice Signer type discriminator for the dual-path validation.
     enum SignerType {
         MAIN,
-        BOOTSTRAP
+        BOOTSTRAP,
+        JARDIN
     }
 
     /// @notice ABI-encoded signature wrapper carried in
@@ -56,7 +58,10 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
         bytes32 pkSeed;
         /// @dev SPHINCS+C hypertree root commitment.
         bytes32 pkRoot;
-        /// @dev The SPHINCS+C7 signature bytes (3704 bytes).
+        /// @dev JARDIN only: H(r) slot key identifying the registered slot.
+        ///      Zero for MAIN/BOOTSTRAP signers.
+        bytes32 slotKey;
+        /// @dev The signature bytes. C11: 3976 bytes. JARDIN: 2468..3972 bytes.
         bytes signature;
     }
 
@@ -73,6 +78,10 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
     /// @notice The shared SPHINCS+C7 verifier contract (keccak256-based,
     ///         Yul-optimized). Used for both main and bootstrap signers.
     ISPHINCSVerifier public immutable verifier;
+
+    /// @notice The shared JARDIN FORS+C verifier contract for compact
+    ///         signatures. Used for the JARDIN signer path.
+    IJardinVerifier public immutable jardinVerifier;
 
     /// @notice Thrown when initialisation is attempted twice.
     error Initialized();
@@ -112,8 +121,11 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
 
     /// @param verifier_ The address of the {ISPHINCSVerifier} this
     ///                  implementation will use.
-    constructor(ISPHINCSVerifier verifier_) {
+    /// @param jardinVerifier_ The address of the {IJardinVerifier} for
+    ///                        compact FORS+C signatures.
+    constructor(ISPHINCSVerifier verifier_, IJardinVerifier jardinVerifier_) {
         verifier = verifier_;
+        jardinVerifier = jardinVerifier_;
         // The implementation contract must never be initialised — only
         // proxies pointing at it can be. We initialise the implementation
         // with a sentinel hash so the slot is non-zero, blocking
@@ -139,6 +151,18 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
             keccak256(abi.encodePacked(bootstrapPkSeed, bootstrapPkRoot)),
             keccak256(abi.encodePacked(mainPkSeed, mainPkRoot))
         );
+    }
+
+    /// @notice Register a JARDIN FORS+C slot. Can only be called via
+    ///         `execute(self, ...)` which requires EntryPoint validation.
+    ///
+    /// @param slotKey Keccak256 hash of the slot randomizer r.
+    /// @param subVkHash Keccak256 hash of (subPkSeed || subPkRoot).
+    function registerJardinSlot(
+        bytes32 slotKey,
+        bytes32 subVkHash
+    ) external virtual onlyOwner {
+        _registerJardinSlot(slotKey, subVkHash);
     }
 
     /// @notice Rotate the main signer to the next epoch. Can only be
@@ -264,7 +288,7 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
             if (w.otsIndex != currentOTSIndex()) return false;
             if (w.otsIndex > MAX_OTS_INDEX) return false;
             if (keccak256(abi.encodePacked(w.pkSeed, w.pkRoot)) != currentMainPubKeyHash()) return false;
-            if (w.signature.length != 3704) return false;
+            if (w.signature.length != 3976) return false;
 
             if (!verifier.verify(w.pkSeed, w.pkRoot, hash, w.signature)) return false;
 
@@ -277,12 +301,31 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
             if (w.otsIndex != bootstrapOTSIndex()) return false;
             if (w.otsIndex > MAX_OTS_INDEX) return false;
             if (keccak256(abi.encodePacked(w.pkSeed, w.pkRoot)) != bootstrapPubKeyHash()) return false;
-            if (w.signature.length != 3704) return false;
+            if (w.signature.length != 3976) return false;
 
             if (!verifier.verify(w.pkSeed, w.pkRoot, hash, w.signature)) return false;
 
             // Consume the bootstrap OTS index atomically with validation success
             _consumeBootstrapOTS(w.otsIndex);
+            return true;
+
+        } else if (w.signerType == SignerType.JARDIN) {
+            // Type 2: compact FORS+C verification via registered slot
+
+            // 1. Verify sub-key matches a registered slot
+            bytes32 storedHash = jardinSlot(w.slotKey);
+            if (storedHash == bytes32(0)) return false;
+            if (keccak256(abi.encodePacked(bytes16(w.pkSeed), bytes16(w.pkRoot))) != storedHash) return false;
+
+            // 2. Validate signature length: >= 2468 and (len - 2452) % 16 == 0
+            if (w.signature.length < 2468) return false;
+            if ((w.signature.length - 2452) % 16 != 0) return false;
+
+            // 3. Delegate FORS+C verification to shared verifier
+            if (!jardinVerifier.verifyForsCUnbalanced(w.pkSeed, w.pkRoot, hash, w.signature)) return false;
+
+            // No OTS index consumption — q is self-enforced by signature structure.
+            // Security: 128 bits per unique q (k*a = 26*5 = 130 bits).
             return true;
         }
 
@@ -309,11 +352,20 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
         if (w.signerType == SignerType.MAIN) {
             // Read-only check: verify the sig is valid but don't consume OTS
             if (keccak256(abi.encodePacked(w.pkSeed, w.pkRoot)) != currentMainPubKeyHash()) return false;
-            if (w.signature.length != 3704) return false;
+            if (w.signature.length != 3976) return false;
             return verifier.verify(w.pkSeed, w.pkRoot, hash, w.signature);
 
         } else if (w.signerType == SignerType.BOOTSTRAP) {
             return _verifyBootstrapSig(hash, w);
+
+        } else if (w.signerType == SignerType.JARDIN) {
+            // Read-only JARDIN verification (same as UserOp path — no state mutation)
+            bytes32 storedHash = jardinSlot(w.slotKey);
+            if (storedHash == bytes32(0)) return false;
+            if (keccak256(abi.encodePacked(bytes16(w.pkSeed), bytes16(w.pkRoot))) != storedHash) return false;
+            if (w.signature.length < 2468) return false;
+            if ((w.signature.length - 2452) % 16 != 0) return false;
+            return jardinVerifier.verifyForsCUnbalanced(w.pkSeed, w.pkRoot, hash, w.signature);
         }
 
         return false;
@@ -326,7 +378,7 @@ contract PQCoinbaseSmartWallet is ERC1271, IAccount, PQOwnable, UUPSUpgradeable,
         returns (bool)
     {
         if (keccak256(abi.encodePacked(w.pkSeed, w.pkRoot)) != bootstrapPubKeyHash()) return false;
-        if (w.signature.length != 3704) return false;
+        if (w.signature.length != 3976) return false;
         return verifier.verify(w.pkSeed, w.pkRoot, hash, w.signature);
     }
 

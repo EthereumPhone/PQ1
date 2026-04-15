@@ -31,6 +31,10 @@ struct PQSignerStorage {
 
     /// @dev `true` once the account has been initialised.
     bool initialized;
+
+    /// @dev JARDIN FORS+C slot registry: H(r) => H(subPkSeed || subPkRoot).
+    ///      Each slot supports up to 95 compact signatures before rotation.
+    mapping(bytes32 => bytes32) jardinSlots;
 }
 
 /// @title PQOwnable
@@ -86,6 +90,9 @@ abstract contract PQOwnable {
     /// @notice Emitted on every successful bootstrap-signer UserOp validation.
     event BootstrapOTSConsumed(uint32 indexed otsIndex);
 
+    /// @notice Emitted when a JARDIN FORS+C slot is registered.
+    event JardinSlotRegistered(bytes32 indexed slotKey, bytes32 indexed subVkHash);
+
     /// @notice Reverts unless `msg.sender` is the account itself.
     modifier onlyOwner() virtual {
         _checkOwner();
@@ -131,6 +138,13 @@ abstract contract PQOwnable {
     /// @notice Verify that (pkSeed, pkRoot) matches the current main signer commitment.
     function isMainKey(bytes32 pkSeed, bytes32 pkRoot) public view virtual returns (bool) {
         return keccak256(abi.encodePacked(pkSeed, pkRoot)) == _getStorage().currentMainPubKeyHash;
+    }
+
+    /// @notice Look up a JARDIN FORS+C slot commitment.
+    /// @param slotKey The slot key H(r).
+    /// @return The stored sub-VK hash, or bytes32(0) if unregistered.
+    function jardinSlot(bytes32 slotKey) public view virtual returns (bytes32) {
+        return _getStorage().jardinSlots[slotKey];
     }
 
     /// @notice One-shot initialiser. Called by the factory immediately
@@ -201,6 +215,22 @@ abstract contract PQOwnable {
 
         emit BootstrapOTSConsumed(consumed);
         return consumed;
+    }
+
+    /// @notice Register a JARDIN FORS+C slot. Called via
+    ///         `execute(self, registerJardinSlot(...))` — authorization
+    ///         happens in `validateUserOp` (main or bootstrap path).
+    ///
+    /// @param slotKey Keccak256 hash of the slot randomizer r.
+    /// @param subVkHash Keccak256 hash of (subPkSeed || subPkRoot).
+    function _registerJardinSlot(
+        bytes32 slotKey,
+        bytes32 subVkHash
+    ) internal virtual {
+        PQSignerStorage storage $ = _getStorage();
+        require($.jardinSlots[slotKey] == bytes32(0), "slot exists");
+        $.jardinSlots[slotKey] = subVkHash;
+        emit JardinSlotRegistered(slotKey, subVkHash);
     }
 
     /// @notice Reverts unless the caller is the account itself.

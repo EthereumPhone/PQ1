@@ -98,9 +98,9 @@ pub(super) unsafe fn decrypt_and_sign(
     let mut rand_buf = [0u8; 16];
     derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
 
-    let sig = signing_key.sign(msg_hash, Some(&rand_buf));
+    let sig = signing_key.sign_with_progress(msg_hash, Some(&rand_buf), signing_progress);
 
-    // 6. Write the 3,704-byte signature to NS memory, byte-at-a-time
+    // 6. Write signature to NS memory, byte-at-a-time
     //    via volatile writes (so the compiler can't fold the copy into
     //    a memcpy that skips unmapped pages or similar shenanigans).
     for i in 0..SIGNATURE_LEN {
@@ -236,9 +236,9 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     let mut rand_buf = [0u8; 16];
     derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
 
-    let sig = signing_key.sign(msg_hash, Some(&rand_buf));
+    let sig = signing_key.sign_with_progress(msg_hash, Some(&rand_buf), signing_progress);
 
-    // 6. Write the raw 3,704-byte signature after the header.
+    // 6. Write the raw signature after the header.
     let sig_offset = WRAPPER_HEADER_LEN;
     for i in 0..SIGNATURE_LEN {
         core::ptr::write_volatile(sig_ptr.add(sig_offset + i), sig[i]);
@@ -256,7 +256,7 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     NscStatus::Ok as u32
 }
 
-/// Derive a 16-byte randomizer for hedged SPHINCS+C7 signing from the
+/// Derive a 16-byte randomizer for hedged SPHINCS+C11 signing from the
 /// master secret and the message hash. Keeping this private to the
 /// `sign_and_emit` module means callers can't accidentally use it
 /// with an unbounded pre-image.
@@ -268,4 +268,154 @@ fn derive_sign_randomizer(master: &[u8; 32], msg_hash: &[u8; 32], out: &mut [u8;
     h.update(msg_hash);
     let r = h.finalize();
     out.copy_from_slice(&r[..16]);
+}
+
+/// Progress callback for the SPHINCS+C11 signing operation.
+/// Updates the OLED/console with a progress bar.
+fn signing_progress(percent: u8) {
+    crate::ui::show_progress("Signing", percent);
+}
+
+/// JARDIN FORS+C compact signing variant.
+///
+/// Ensures the JARDIN slot is initialized for the given (chain_id, slot_index),
+/// signs the message, and writes the JARDIN wrapper header + variable-length
+/// signature to NS memory.
+///
+/// SAFETY: `sig_ptr` must point at a pre-validated region of at least
+/// `JARDIN_WRAPPER_MAX_LEN` bytes.
+pub(super) unsafe fn decrypt_and_sign_jardin(
+    state: &mut super::state::SecureState,
+    msg_hash: &[u8; 32],
+    sig_ptr: *mut u8,
+    chain_id: u64,
+    slot_index: u32,
+    success_banner: &str,
+) -> (u32, usize) {
+    use sphincs_tz_shared::{
+        NscStatus, JARDIN_WRAPPER_HEADER_LEN, SIGNER_JARDIN,
+    };
+
+    // 1. Ensure JARDIN master entropy is derived for this session
+    if !state.jardin_master_derived {
+        // Read encrypted entropy, decrypt, derive JARDIN master
+        let mut entropy_blob = [0u8; 64];
+        let entropy_blob_len = {
+            use crate::secure_element::WalletStore;
+            let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+            match se.read_entropy_blob(&mut entropy_blob) {
+                Ok(len) => len,
+                Err(_) => return (NscStatus::InternalError as u32, 0),
+            }
+        };
+        let mut entropy = match crate::crypto::decrypt_entropy_blob(
+            &entropy_blob[..entropy_blob_len],
+            &state.master_secret,
+        ) {
+            Ok(e) => e,
+            Err(_) => {
+                entropy_blob.zeroize();
+                return (NscStatus::CryptoError as u32, 0);
+            }
+        };
+        entropy_blob.zeroize();
+
+        state.jardin_master_entropy =
+            crate::crypto::jardin_master_entropy_from_entropy(&entropy);
+        entropy.zeroize();
+        state.jardin_master_derived = true;
+    }
+
+    // 2. Initialize or switch JARDIN slot if needed
+    let need_init = !state.jardin_slot_active
+        || state.jardin_chain_id != chain_id
+        || state.jardin_slot_index != slot_index;
+
+    if need_init {
+        crate::ui::show_status("JARDIN keygen", "Please wait...");
+        let slot_entropy = jardin_fosc::hash::jardin_slot_entropy(
+            &state.jardin_master_entropy,
+            slot_index,
+        );
+        let slot = jardin_fosc::JardinSlot::keygen(slot_entropy);
+        // SAFETY: single-threaded access
+        unsafe {
+            *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(slot);
+        }
+        state.jardin_chain_id = chain_id;
+        state.jardin_slot_index = slot_index;
+        state.jardin_slot_active = true;
+    }
+
+    // 3. Get mutable reference to the slot
+    let slot = unsafe {
+        match &mut *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) {
+            Some(s) => s,
+            None => return (NscStatus::InternalError as u32, 0),
+        }
+    };
+
+    // 4. Check exhaustion
+    if slot.is_exhausted() {
+        return (NscStatus::SlotExhausted as u32, 0);
+    }
+
+    // 5. Sign
+    crate::ui::show_status("Signing", "JARDIN FORS+C");
+    let sig = match slot.sign(msg_hash) {
+        Ok(s) => s,
+        Err(_) => return (NscStatus::CryptoError as u32, 0),
+    };
+
+    // 6. Compute slot key: H(r)
+    let r = jardin_fosc::hash::jardin_slot_r(
+        &state.jardin_master_entropy,
+        slot_index,
+    );
+    let slot_key = jardin_fosc::hash::keccak256(&r);
+
+    // 7. Write JARDIN wrapper header (97 bytes) via volatile writes
+    let mut hdr_pos: usize = 0;
+
+    // signer_type (1 byte)
+    core::ptr::write_volatile(sig_ptr.add(hdr_pos), SIGNER_JARDIN);
+    hdr_pos += 1;
+
+    // slot_key (32 bytes)
+    for i in 0..32 {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), slot_key[i]);
+    }
+    hdr_pos += 32;
+
+    // subPkSeed (32 bytes: N real + 16 zero-padding)
+    for i in 0..32 {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), slot.pk_seed[i]);
+    }
+    hdr_pos += 32;
+
+    // subPkRoot (32 bytes: N real + 16 zero-padding)
+    for i in 0..32 {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), slot.pk_root[i]);
+    }
+    hdr_pos += 32;
+
+    debug_assert_eq!(hdr_pos, JARDIN_WRAPPER_HEADER_LEN);
+
+    // 8. Write the variable-length FORS+C signature
+    for i in 0..sig.len {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), sig.data[i]);
+    }
+
+    let total_len = JARDIN_WRAPPER_HEADER_LEN + sig.len;
+
+    // 9. Cleanup
+    crate::timeout::reset_activity();
+    crate::ui::show_status(success_banner, "");
+
+    for _ in 0..3_000_000u32 {
+        cortex_m::asm::nop();
+    }
+    crate::ui::show_status("PQSigner OS", "Ready");
+
+    (NscStatus::Ok as u32, total_len)
 }

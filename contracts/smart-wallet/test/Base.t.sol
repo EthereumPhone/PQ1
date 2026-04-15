@@ -6,11 +6,14 @@ import {UserOperation} from "account-abstraction/interfaces/UserOperation.sol";
 import {PQCoinbaseSmartWallet} from "../src/PQCoinbaseSmartWallet.sol";
 import {PQCoinbaseSmartWalletFactory} from "../src/PQCoinbaseSmartWalletFactory.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
+import {MockJardinVerifier} from "./mocks/MockJardinVerifier.sol";
+import {IJardinVerifier} from "../src/verifiers/IJardinVerifier.sol";
 
 /// @notice Shared test fixture. Deploys a mock verifier, implementation,
 ///         factory, and a single proxy wallet for use by all test files.
 abstract contract Base is Test {
     MockSPHINCSVerifier internal mockVerifier;
+    MockJardinVerifier internal mockJardinVerifier;
     PQCoinbaseSmartWallet internal implementation;
     PQCoinbaseSmartWalletFactory internal factory;
     PQCoinbaseSmartWallet internal wallet;
@@ -35,14 +38,17 @@ abstract contract Base is Test {
         mockVerifier = new MockSPHINCSVerifier(true);
         vm.label(address(mockVerifier), "MockVerifier");
 
-        implementation = new PQCoinbaseSmartWallet(mockVerifier);
+        mockJardinVerifier = new MockJardinVerifier(true);
+        vm.label(address(mockJardinVerifier), "MockJardinVerifier");
+
+        implementation = new PQCoinbaseSmartWallet(mockVerifier, IJardinVerifier(address(mockJardinVerifier)));
         vm.label(address(implementation), "Implementation");
 
         factory = new PQCoinbaseSmartWalletFactory(address(implementation), mockVerifier);
         vm.label(address(factory), "Factory");
 
         // Deploy wallet via factory with bootstrap-sig-gated createAccount
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
         wallet = factory.createAccount(
             TEST_BOOTSTRAP_PK_SEED, TEST_BOOTSTRAP_PK_ROOT,
             TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT,
@@ -56,29 +62,31 @@ abstract contract Base is Test {
     }
 
     /// @dev Build an ABI-encoded PQSignatureWrapper for MAIN signer with
-    ///      the given pk and a dummy 3704-byte signature. Uses keyIndex=current,
+    ///      the given pk and a dummy 3976-byte signature. Uses keyIndex=current,
     ///      otsIndex=current.
     function _wrapMainSignature(bytes32 pkSeed, bytes32 pkRoot) internal view returns (bytes memory) {
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
         return abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
             signerType: PQCoinbaseSmartWallet.SignerType.MAIN,
             keyIndex: wallet.currentKeyIndex(),
             otsIndex: wallet.currentOTSIndex(),
             pkSeed: pkSeed,
             pkRoot: pkRoot,
+            slotKey: bytes32(0),
             signature: dummySig
         }));
     }
 
     /// @dev Build an ABI-encoded PQSignatureWrapper for BOOTSTRAP signer.
     function _wrapBootstrapSignature(bytes32 pkSeed, bytes32 pkRoot) internal view returns (bytes memory) {
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
         return abi.encode(PQCoinbaseSmartWallet.PQSignatureWrapper({
             signerType: PQCoinbaseSmartWallet.SignerType.BOOTSTRAP,
             keyIndex: 0,
             otsIndex: wallet.bootstrapOTSIndex(),
             pkSeed: pkSeed,
             pkRoot: pkRoot,
+            slotKey: bytes32(0),
             signature: dummySig
         }));
     }

@@ -6,6 +6,7 @@ import {UserOperation} from "account-abstraction/interfaces/UserOperation.sol";
 import {PQCoinbaseSmartWallet} from "../src/PQCoinbaseSmartWallet.sol";
 import {UUPSUpgradeable} from "solady/utils/UUPSUpgradeable.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
+import {IJardinVerifier} from "../src/verifiers/IJardinVerifier.sol";
 
 /// @notice Helper target for execute tests.
 contract Counter {
@@ -79,7 +80,8 @@ contract PQCoinbaseSmartWalletTest is Base {
             otsIndex: 0, // already consumed
             pkSeed: TEST_MAIN_PK_SEED,
             pkRoot: TEST_MAIN_PK_ROOT,
-            signature: new bytes(3704)
+            slotKey: bytes32(0),
+            signature: new bytes(3976)
         }));
         UserOperation memory op2 = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
@@ -118,7 +120,8 @@ contract PQCoinbaseSmartWalletTest is Base {
             otsIndex: 0,
             pkSeed: TEST_MAIN_PK_SEED,
             pkRoot: TEST_MAIN_PK_ROOT,
-            signature: new bytes(3704)
+            slotKey: bytes32(0),
+            signature: new bytes(3976)
         }));
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
@@ -136,6 +139,7 @@ contract PQCoinbaseSmartWalletTest is Base {
             otsIndex: 0,
             pkSeed: TEST_MAIN_PK_SEED,
             pkRoot: TEST_MAIN_PK_ROOT,
+            slotKey: bytes32(0),
             signature: new bytes(100) // wrong length
         }));
         UserOperation memory op = _buildUserOp(
@@ -225,7 +229,8 @@ contract PQCoinbaseSmartWalletTest is Base {
             otsIndex: 0,
             pkSeed: newSeed,
             pkRoot: newRoot,
-            signature: new bytes(3704)
+            slotKey: bytes32(0),
+            signature: new bytes(3976)
         }));
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, abi.encodeCall(Counter.increment, ())))
@@ -251,7 +256,8 @@ contract PQCoinbaseSmartWalletTest is Base {
             otsIndex: 0,
             pkSeed: TEST_MAIN_PK_SEED,
             pkRoot: TEST_MAIN_PK_ROOT,
-            signature: new bytes(3704)
+            slotKey: bytes32(0),
+            signature: new bytes(3976)
         }));
         UserOperation memory op = _buildUserOp(
             abi.encodeCall(PQCoinbaseSmartWallet.execute, (address(counter), 0, ""))
@@ -313,7 +319,7 @@ contract PQCoinbaseSmartWalletTest is Base {
 
     function test_upgradeToAndCall() public {
         MockSPHINCSVerifier v2 = new MockSPHINCSVerifier(true);
-        PQCoinbaseSmartWallet impl2 = new PQCoinbaseSmartWallet(v2);
+        PQCoinbaseSmartWallet impl2 = new PQCoinbaseSmartWallet(v2, IJardinVerifier(address(0)));
 
         vm.prank(address(wallet));
         wallet.upgradeToAndCall(address(impl2), "");

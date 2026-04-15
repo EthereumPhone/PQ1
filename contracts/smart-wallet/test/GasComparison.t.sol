@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {SphincsC7Asm} from "../src/verifiers/SphincsC7Asm.sol";
 import {SLHDSAVerifier} from "../src/verifiers/SLHDSAVerifier.sol";
 import {ISPHINCSVerifier} from "../src/verifiers/ISPHINCSVerifier.sol";
+import {IJardinVerifier} from "../src/verifiers/IJardinVerifier.sol";
 import {PQCoinbaseSmartWallet} from "../src/PQCoinbaseSmartWallet.sol";
 import {PQCoinbaseSmartWalletFactory} from "../src/PQCoinbaseSmartWalletFactory.sol";
 import {UserOperation} from "account-abstraction/interfaces/UserOperation.sol";
@@ -33,7 +34,7 @@ contract GasComparisonTest is Test {
     bytes32 internal userOpHash;
 
     uint256 internal constant OLD_SIG_SIZE = 17088; // SLH-DSA-SHA2-128f
-    uint256 internal constant NEW_SIG_SIZE = 3704;  // SPHINCS+C7
+    uint256 internal constant NEW_SIG_SIZE = 3976;  // SPHINCS+C7
 
     function setUp() public {
         c7Verifier = new SphincsC7Asm();
@@ -50,7 +51,7 @@ contract GasComparisonTest is Test {
         bootstrapSig = vm.parseJsonBytes(json, ".bootstrapSig");
         userOpHash = vm.parseJsonBytes32(json, ".userOpHash");
 
-        implementation = new PQCoinbaseSmartWallet(ISPHINCSVerifier(address(c7Verifier)));
+        implementation = new PQCoinbaseSmartWallet(ISPHINCSVerifier(address(c7Verifier)), IJardinVerifier(address(0)));
         factory = new PQCoinbaseSmartWalletFactory(
             address(implementation), ISPHINCSVerifier(address(c7Verifier))
         );
@@ -66,7 +67,7 @@ contract GasComparisonTest is Test {
     function test_signature_size_reduction() public {
         uint256 reduction = ((OLD_SIG_SIZE - NEW_SIG_SIZE) * 100) / OLD_SIG_SIZE;
 
-        assertEq(NEW_SIG_SIZE, 3704);
+        assertEq(NEW_SIG_SIZE, 3976);
         assertEq(OLD_SIG_SIZE, 17088);
         assertGe(reduction, 78, "Signature must be at least 78% smaller");
 
@@ -121,6 +122,7 @@ contract GasComparisonTest is Test {
                 otsIndex: 0,
                 pkSeed: mainPkSeed,
                 pkRoot: mainPkRoot,
+                slotKey: bytes32(0),
                 signature: mainSig
             })
         );

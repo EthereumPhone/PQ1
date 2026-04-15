@@ -48,6 +48,25 @@ pub(super) struct SecureState {
     pub(super) last_ots_index: u32,
     /// Whether any signature has been produced this session.
     pub(super) has_signed: bool,
+
+    // -- JARDIN FORS+C state (session-scoped) ---------------------------
+    // Slot state is lost on power cycle / lock. The companion re-derives
+    // from the chain's latest registered slot on reconnect.
+
+    /// JARDIN master entropy (derived once per unlock from BIP-39 seed).
+    pub(super) jardin_master_entropy: [u8; 32],
+
+    /// Whether `jardin_master_entropy` has been derived this session.
+    pub(super) jardin_master_derived: bool,
+
+    /// Current JARDIN slot chain_id (0 = not initialized).
+    pub(super) jardin_chain_id: u64,
+
+    /// Current JARDIN slot index.
+    pub(super) jardin_slot_index: u32,
+
+    /// Whether a JARDIN slot is currently active in JARDIN_SLOT.
+    pub(super) jardin_slot_active: bool,
 }
 
 impl SecureState {
@@ -60,6 +79,11 @@ impl SecureState {
             last_key_index: 0,
             last_ots_index: 0,
             has_signed: false,
+            jardin_master_entropy: [0u8; 32],
+            jardin_master_derived: false,
+            jardin_chain_id: 0,
+            jardin_slot_index: 0,
+            jardin_slot_active: false,
         }
     }
 
@@ -74,6 +98,18 @@ impl SecureState {
         self.last_key_index = 0;
         self.last_ots_index = 0;
         self.has_signed = false;
+        self.jardin_master_entropy.zeroize();
+        self.jardin_master_derived = false;
+        self.jardin_chain_id = 0;
+        self.jardin_slot_index = 0;
+        self.jardin_slot_active = false;
+        // SAFETY: single-threaded, exclusive access via with_state
+        unsafe {
+            if let Some(ref mut slot) = *core::ptr::addr_of_mut!(JARDIN_SLOT) {
+                slot.zeroize();
+            }
+            *core::ptr::addr_of_mut!(JARDIN_SLOT) = None;
+        }
     }
 
     /// Stamp in a freshly-verified master secret and mark the device
@@ -90,6 +126,13 @@ impl SecureState {
 /// the program loader places it in the secure-world BSS and so it has
 /// a stable address for the no-`alloc` environment.
 static mut STATE: SecureState = SecureState::new();
+
+/// JARDIN slot storage. Separate from SecureState because JardinSlot
+/// (~3.1 KB) is too large for a const initializer and contains arrays
+/// that cannot be const-constructed. Placed in BSS via Option<None>.
+///
+/// SAFETY: same single-threaded invariant as STATE.
+pub(super) static mut JARDIN_SLOT: Option<jardin_fosc::JardinSlot> = None;
 
 /// Borrow the gateway state mutably for the duration of `f`.
 ///

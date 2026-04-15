@@ -462,6 +462,32 @@ pub fn derive_main_vk_from_entropy(
 }
 
 // ---------------------------------------------------------------------------
+// JARDIN FORS+C key derivation
+// ---------------------------------------------------------------------------
+//
+// JARDIN slots are derived deterministically from the BIP-39 seed via
+// domain-separated Keccak-256, preserving the recovery contract:
+// same 24 words + chain_id + slot_index → same JARDIN slot.
+
+/// Derive the master entropy for JARDIN FORS+C slots from the BIP-39 seed.
+/// Domain-separated so it is independent from C11 bootstrap/main keys.
+pub fn jardin_master_entropy_from_bip39(bip39_seed: &[u8; 64]) -> [u8; 32] {
+    kdf_keccak(b"pqwallet-jardin-master", bip39_seed, 0)
+}
+
+/// Derive JARDIN master entropy from raw BIP-39 entropy (runs the full
+/// BIP-39 chain: mnemonic → PBKDF2 → domain KDF).
+pub fn jardin_master_entropy_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+) -> [u8; 32] {
+    let mnemonic = Mnemonic::from_entropy(entropy);
+    let mut bip39_seed = mnemonic.to_seed("");
+    let master = jardin_master_entropy_from_bip39(&bip39_seed);
+    bip39_seed.zeroize();
+    master
+}
+
+// ---------------------------------------------------------------------------
 // PIN state serialization (unchanged — used by mock-SE MACD path)
 // ---------------------------------------------------------------------------
 

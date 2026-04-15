@@ -3,12 +3,12 @@
 pub mod db_format;
 
 // ---------------------------------------------------------------------------
-// SPHINCS+C7 (keccak256-based) sizes
+// SPHINCS+C11 (keccak256-based) sizes
 // ---------------------------------------------------------------------------
 
 pub const SIGNING_KEY_LEN: usize = 48; // sk_seed(32) + pk_seed(16)
 pub const VERIFYING_KEY_LEN: usize = 32; // pk_seed(16) + pk_root(16)
-pub const SIGNATURE_LEN: usize = 3_704;
+pub const SIGNATURE_LEN: usize = 3_976;
 pub const PIN_LEN: usize = 8;
 pub const TX_HASH_LEN: usize = 32;
 pub const MAX_ATTEMPTS: u8 = 10;
@@ -218,6 +218,42 @@ pub const CMD_GET_MAIN_PUBKEY: u32 = 9;
 /// into the NS output buffer.
 pub const CMD_SIGN_BOOTSTRAP: u32 = 10;
 
+/// CMD_SIGN_JARDIN — JARDIN FORS+C compact signing.
+///
+/// Signs a message hash using the JARDIN compact signature scheme.
+/// The slot is identified by (chain_id, slot_index). If the slot has
+/// not been initialised this session, firmware runs keygen (~3-4s).
+///
+/// Payload wire format:
+///   [0..8)   chain_id     u64 BE
+///   [8..12)  slot_index   u32 BE
+///   [12..44) msg_hash     32 bytes
+///
+/// Response: JARDIN wrapper header (97 bytes) + variable-length FORS+C
+/// signature (2452 + q*16 bytes).
+pub const CMD_SIGN_JARDIN: u32 = 15;
+
+/// CMD_REGISTER_JARDIN_SLOT — generate a Type 1 slot registration
+/// UserOp signed by the C11 main signer.
+///
+/// Payload wire format:
+///   [0..8)   chain_id     u64 BE
+///   [8..12)  slot_index   u32 BE
+///   [12..16) key_index    u32 BE  (main signer epoch)
+///   [16..20) ots_index    u32 BE  (main signer OTS)
+///
+/// Response: C11-signed UserOp containing registerJardinSlot callData.
+pub const CMD_REGISTER_JARDIN_SLOT: u32 = 16;
+
+/// CMD_GET_JARDIN_SLOT_INFO — query current JARDIN slot state.
+///
+/// Payload wire format:
+///   [0..8)   chain_id     u64 BE
+///   [8..12)  slot_index   u32 BE
+///
+/// Response: slot_index(4) || next_q(1) || remaining(1) || slot_active(1)
+pub const CMD_GET_JARDIN_SLOT_INFO: u32 = 17;
+
 /// CMD_IS_UNLOCKED — returns 1 if PIN-verified this session, 0 otherwise.
 pub const CMD_IS_UNLOCKED: u32 = 11;
 
@@ -380,6 +416,7 @@ pub const P1_V2_MORE: u8 = 0x80;
 /// Signer type discriminator in the PQSignatureWrapper.
 pub const SIGNER_MAIN: u8 = 0x00;
 pub const SIGNER_BOOTSTRAP: u8 = 0x01;
+pub const SIGNER_JARDIN: u8 = 0x02;
 
 /// Fixed-size wrapper header written before the raw SPHINCS+C7 signature:
 ///   signer_type(1) + key_index(4) + ots_index(4) + pk_seed(32) + pk_root(32)
@@ -387,6 +424,28 @@ pub const WRAPPER_HEADER_LEN: usize = 1 + 4 + 4 + 32 + 32; // 73
 
 /// Total PQSignatureWrapper size = header + raw signature.
 pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 3777
+
+// ---------------------------------------------------------------------------
+// JARDIN FORS+C compact signature constants
+// ---------------------------------------------------------------------------
+
+/// JARDIN fixed body: R(32) + counter(4) + 25*(secret(16)+auth(80)) + lastRoot(16).
+pub const JARDIN_FORSC_BODY: usize = 2452;
+
+/// Minimum JARDIN signature size (q=1).
+pub const JARDIN_SIG_MIN: usize = 2468;
+
+/// Maximum JARDIN signature size (q=95).
+pub const JARDIN_SIG_MAX: usize = 3972;
+
+/// Maximum signatures per JARDIN slot.
+pub const JARDIN_Q_MAX: u8 = 95;
+
+/// JARDIN wrapper header: signer_type(1) + slot_key(32) + subPkSeed(32) + subPkRoot(32).
+pub const JARDIN_WRAPPER_HEADER_LEN: usize = 1 + 32 + 32 + 32; // 97
+
+/// Maximum JARDIN wrapper total: header + max signature.
+pub const JARDIN_WRAPPER_MAX_LEN: usize = JARDIN_WRAPPER_HEADER_LEN + JARDIN_SIG_MAX; // 4069
 
 /// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
 /// **DEPRECATED** along with CMD_SIGN_BOOTSTRAP.
@@ -424,15 +483,15 @@ pub const CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0x19, 0x64, 0xc4, 0xdd];
 ///   [  88.. 120)  mainPkSeed        (bytes32)
 ///   [ 120.. 152)  mainPkRoot        (bytes32)
 ///   [ 152.. 184)  offset to bytes   (= 0xA0 = 160)
-///   [ 184.. 216)  length of bytes   (= 3704)
-///   [ 216..3928)  bootstrapSig      (3704 bytes + 8 bytes zero-padding to 32-byte boundary)
+///   [ 184.. 216)  length of bytes   (= 3976)
+///   [ 216..4216)  bootstrapSig      (3976 bytes + 24 bytes zero-padding to 32-byte boundary)
 /// ```
 ///
-/// The signature is 3,704 bytes (not 32-byte aligned: 3704 % 32 = 8),
+/// The signature is 3,976 bytes (not 32-byte aligned: 3976 % 32 = 8),
 /// so 24 bytes of ABI zero-padding are appended to reach the next
-/// 32-byte boundary (3,712 bytes padded).
+/// 32-byte boundary (4,000 bytes padded).
 pub const INIT_CODE_LEN: usize =
-    20 + 4 + 4 * 32 + 32 + 32 + ((SIGNATURE_LEN + 31) / 32) * 32; // 3_928
+    20 + 4 + 4 * 32 + 32 + 32 + ((SIGNATURE_LEN + 31) / 32) * 32; // 4_216
 
 /// Maximum reconstructed `execute(target, value, data)` callData size:
 /// selector(4) + target(32) + value(32) + offset(32) + length(32)
@@ -512,6 +571,7 @@ pub enum NscStatus {
     NotInitialized = 5,
     UserRejected = 6,
     IdleWipe = 7,
+    SlotExhausted = 8,
     InternalError = 0xFFFF_FFFF,
 }
 
@@ -526,6 +586,7 @@ impl From<u32> for NscStatus {
             5 => Self::NotInitialized,
             6 => Self::UserRejected,
             7 => Self::IdleWipe,
+            8 => Self::SlotExhausted,
             _ => Self::InternalError,
         }
     }
@@ -569,16 +630,16 @@ mod tests {
     }
 
     #[test]
-    fn init_code_len_is_3928() {
-        // factory(20) + selector(4) + 4*bytes32(128) + offset(32) + length(32) + padded_sig(3712)
-        assert_eq!(INIT_CODE_LEN, 3_928);
+    fn init_code_len_is_4216() {
+        // factory(20) + selector(4) + 4*bytes32(128) + offset(32) + length(32) + padded_sig(4000)
+        assert_eq!(INIT_CODE_LEN, 4_216);
     }
 
     #[test]
     fn signature_abi_padding_correct() {
-        // 3704 % 32 = 8, so 24 bytes of zero-padding; padded = 3712
+        // 3976 % 32 = 8, so 24 bytes of zero-padding; padded = 4000
         let padded = ((SIGNATURE_LEN + 31) / 32) * 32;
-        assert_eq!(padded, 3_712);
+        assert_eq!(padded, 4_000);
         assert_eq!(padded % 32, 0);
     }
 
