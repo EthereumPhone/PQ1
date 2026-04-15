@@ -149,8 +149,18 @@ pub(super) unsafe fn sign_userop_full(
         };
         entropy_blob.zeroize();
 
-        // 1b. Derive bootstrap VK + main VK for this chain
-        let bootstrap_vk = crate::crypto::derive_bootstrap_vk_from_entropy(&entropy);
+        // 1b. Read cached bootstrap VK from r-mem (avoids keygen)
+        //     + derive main VK for this chain (no cache, full keygen).
+        let bootstrap_vk = {
+            let mut bvk = [0u8; 32];
+            use crate::secure_element::WalletStore;
+            let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+            if se.read_bootstrap_vk(&mut bvk).is_err() {
+                entropy.zeroize();
+                return NscStatus::InternalError as u32;
+            }
+            bvk
+        };
         let main_vk = crate::crypto::derive_main_vk_from_entropy(
             &entropy, aa.chain_id, key_index,
         );
@@ -161,7 +171,12 @@ pub(super) unsafe fn sign_userop_full(
         // 1c. Compute the authorization message and sign with bootstrap key
         let auth_msg = init_code::compute_auth_message(&m_pk_seed, &m_pk_root);
 
-        let bootstrap_sk = crate::crypto::derive_bootstrap_key_from_entropy(&entropy);
+        // Use fast path: cached pk_root from the bootstrap VK we just read.
+        let mut cached_b_pk_root = [0u8; 16];
+        cached_b_pk_root.copy_from_slice(&bootstrap_vk[16..32]);
+        let bootstrap_sk = crate::crypto::derive_bootstrap_key_from_entropy_fast(
+            &entropy, &cached_b_pk_root,
+        );
 
         // Hedged randomizer for bootstrap signature
         let mut rand_buf = [0u8; 16];

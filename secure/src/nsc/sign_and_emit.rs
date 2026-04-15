@@ -68,52 +68,57 @@ pub(super) unsafe fn decrypt_and_sign(
     };
     entropy_blob.zeroize();
 
-    // e2e-test: skip SPHINCS+C7 keygen+signing (minutes on QEMU/Pi).
-    // Tests verify gateway dispatch and status codes, not signature validity.
-    #[cfg(feature = "e2e-test")]
+    // 3. Read the cached default VK from r-mem to extract pk_root.
+    //    This avoids the expensive hypertree rebuild (~10-15s) by
+    //    using SigningKey::from_parts with the cached pk_root.
+    let mut vk_buf = [0u8; 32];
     {
-        entropy.zeroize();
-        mock_sign_to_ns(msg_hash, sig_ptr, SIGNATURE_LEN, success_banner);
-        return NscStatus::Ok as u32;
-    }
-
-    #[cfg(not(feature = "e2e-test"))]
-    {
-        // 3. Re-derive the SPHINCS+C7 signing key from the entropy by running
-        //    the full BIP-39 chain. The SigningKey only exists on the
-        //    stack for the duration of this function, and sphincs_c7
-        //    zeroizes it on drop.
-        let signing_key = crate::crypto::derive_signing_key_from_entropy(&entropy);
-        entropy.zeroize();
-
-        // 4. Hedged sign: mix the chip-bound master secret into the per-sig
-        //    randomizer so the same message produces different signatures
-        //    across different unlocks.
-        let mut rand_buf = [0u8; 16];
-        derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
-
-        let sig = signing_key.sign(msg_hash, Some(&rand_buf));
-
-        // 5. Write the 3,704-byte signature to NS memory, byte-at-a-time
-        //    via volatile writes (so the compiler can't fold the copy into
-        //    a memcpy that skips unmapped pages or similar shenanigans).
-        for i in 0..SIGNATURE_LEN {
-            core::ptr::write_volatile(sig_ptr.add(i), sig[i]);
+        use crate::secure_element::WalletStore;
+        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+        if se.read_vk(&mut vk_buf).is_err() {
+            entropy.zeroize();
+            return NscStatus::InternalError as u32;
         }
-
-        // 6. Wipe the per-sig randomizer. The SigningKey goes out of scope
-        //    at the end of this function and sphincs_c7 zeroizes on drop.
-        rand_buf.zeroize();
-
-        crate::timeout::reset_activity();
-        crate::ui::show_status(success_banner, "");
-
-        // Brief pause so the user sees "Signed", then restore idle screen.
-        for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
-        crate::ui::show_status("PQSigner OS", "Ready");
-
-        NscStatus::Ok as u32
     }
+    let mut cached_pk_root = [0u8; 16];
+    cached_pk_root.copy_from_slice(&vk_buf[16..32]);
+
+    // 4. Re-derive the SPHINCS+C7 signing key from the entropy +
+    //    cached pk_root. BIP-39 chain (PBKDF2 + 2x Keccak) is fast;
+    //    from_parts skips the hypertree rebuild.
+    let signing_key = crate::crypto::derive_signing_key_from_entropy_fast(
+        &entropy,
+        &cached_pk_root,
+    );
+    entropy.zeroize();
+
+    // 5. Hedged sign: mix the chip-bound master secret into the per-sig
+    //    randomizer so the same message produces different signatures
+    //    across different unlocks.
+    let mut rand_buf = [0u8; 16];
+    derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
+
+    let sig = signing_key.sign(msg_hash, Some(&rand_buf));
+
+    // 6. Write the 3,704-byte signature to NS memory, byte-at-a-time
+    //    via volatile writes (so the compiler can't fold the copy into
+    //    a memcpy that skips unmapped pages or similar shenanigans).
+    for i in 0..SIGNATURE_LEN {
+        core::ptr::write_volatile(sig_ptr.add(i), sig[i]);
+    }
+
+    // 7. Wipe the per-sig randomizer. The SigningKey goes out of scope
+    //    at the end of this function and sphincs_c7 zeroizes on drop.
+    rand_buf.zeroize();
+
+    crate::timeout::reset_activity();
+    crate::ui::show_status(success_banner, "");
+
+    // Brief pause so the user sees "Signed", then restore idle screen.
+    for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
+    crate::ui::show_status("PQSigner OS", "Ready");
+
+    NscStatus::Ok as u32
 }
 
 /// v2 wrapper variant: writes a 73-byte PQSignatureWrapper header
@@ -125,7 +130,6 @@ pub(super) unsafe fn decrypt_and_sign(
 ///
 /// SAFETY: `sig_ptr` must point at a pre-validated `WRAPPER_TOTAL_LEN`-byte
 /// NS-writable region.
-#[cfg_attr(feature = "e2e-test", allow(unused_variables))]
 pub(super) unsafe fn decrypt_and_sign_wrapped(
     state: &SecureState,
     msg_hash: &[u8; 32],
@@ -160,115 +164,96 @@ pub(super) unsafe fn decrypt_and_sign_wrapped(
     };
     entropy_blob.zeroize();
 
-    // e2e-test: skip SPHINCS+C7 keygen+signing (minutes on QEMU/Pi).
-    #[cfg(feature = "e2e-test")]
-    {
-        entropy.zeroize();
-        mock_sign_to_ns(msg_hash, sig_ptr, WRAPPER_HEADER_LEN + SIGNATURE_LEN, success_banner);
-        return NscStatus::Ok as u32;
-    }
-
-    #[cfg(not(feature = "e2e-test"))]
-    {
-        // 3. Derive the correct signing key based on signer_type.
-        //    BOOTSTRAP: global key (no chain_id / key_index differentiation).
-        //    MAIN: per-chain, per-epoch key derived from (chain_id, key_index).
-        let signing_key = if signer_type == sphincs_tz_shared::SIGNER_BOOTSTRAP {
-            crate::crypto::derive_bootstrap_key_from_entropy(&entropy)
-        } else {
-            crate::crypto::derive_main_key_from_entropy(&entropy, chain_id, key_index)
-        };
-        entropy.zeroize();
-
-        // 4. Write the 73-byte wrapper header via volatile writes.
-        let mut hdr_pos: usize = 0;
-
-        // signer_type (1 byte)
-        core::ptr::write_volatile(sig_ptr.add(hdr_pos), signer_type);
-        hdr_pos += 1;
-
-        // key_index (4 bytes BE)
-        let ki = key_index.to_be_bytes();
-        for b in &ki {
-            core::ptr::write_volatile(sig_ptr.add(hdr_pos), *b);
-            hdr_pos += 1;
-        }
-
-        // ots_index (4 bytes BE)
-        let oi = ots_index.to_be_bytes();
-        for b in &oi {
-            core::ptr::write_volatile(sig_ptr.add(hdr_pos), *b);
-            hdr_pos += 1;
-        }
-
-        // pk_seed (32 bytes: raw 16 bytes right-padded to bytes32)
+    // 3. Derive the correct signing key based on signer_type.
+    //    BOOTSTRAP: use cached VK from r-mem for fast path (from_parts).
+    //    MAIN: per-chain, per-epoch key — no cached VK, full keygen required.
+    let signing_key = if signer_type == sphincs_tz_shared::SIGNER_BOOTSTRAP {
+        // Bootstrap VK is cached in r-mem — use fast path.
+        let mut bvk_buf = [0u8; 32];
         {
-            let vk_bytes = signing_key.verifying_key().to_bytes();
-            // VK = pk_seed[16] || pk_root[16]
-            // Pad pk_seed to 32 bytes
-            for i in 0..16 {
-                core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), vk_bytes[i]);
+            use crate::secure_element::WalletStore;
+            let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+            if se.read_bootstrap_vk(&mut bvk_buf).is_err() {
+                entropy.zeroize();
+                return NscStatus::InternalError as u32;
             }
-            for i in 16..32 {
-                core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), 0u8);
-            }
-            hdr_pos += 32;
-
-            // pk_root (32 bytes: raw 16 bytes right-padded to bytes32)
-            for i in 0..16 {
-                core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), vk_bytes[16 + i]);
-            }
-            for i in 16..32 {
-                core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), 0u8);
-            }
-            hdr_pos += 32;
         }
+        let mut cached_pk_root = [0u8; 16];
+        cached_pk_root.copy_from_slice(&bvk_buf[16..32]);
+        crate::crypto::derive_bootstrap_key_from_entropy_fast(&entropy, &cached_pk_root)
+    } else {
+        crate::crypto::derive_main_key_from_entropy(&entropy, chain_id, key_index)
+    };
+    entropy.zeroize();
 
-        debug_assert_eq!(hdr_pos, WRAPPER_HEADER_LEN);
+    // 4. Write the 73-byte wrapper header via volatile writes.
+    let mut hdr_pos: usize = 0;
 
-        // 5. Hedged sign
-        let mut rand_buf = [0u8; 16];
-        derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
+    // signer_type (1 byte)
+    core::ptr::write_volatile(sig_ptr.add(hdr_pos), signer_type);
+    hdr_pos += 1;
 
-        let sig = signing_key.sign(msg_hash, Some(&rand_buf));
+    // key_index (4 bytes BE)
+    let ki = key_index.to_be_bytes();
+    for b in &ki {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos), *b);
+        hdr_pos += 1;
+    }
 
-        // 6. Write the raw 3,704-byte signature after the header.
-        let sig_offset = WRAPPER_HEADER_LEN;
-        for i in 0..SIGNATURE_LEN {
-            core::ptr::write_volatile(sig_ptr.add(sig_offset + i), sig[i]);
+    // ots_index (4 bytes BE)
+    let oi = ots_index.to_be_bytes();
+    for b in &oi {
+        core::ptr::write_volatile(sig_ptr.add(hdr_pos), *b);
+        hdr_pos += 1;
+    }
+
+    // pk_seed (32 bytes: raw 16 bytes right-padded to bytes32)
+    {
+        let vk_bytes = signing_key.verifying_key().to_bytes();
+        // VK = pk_seed[16] || pk_root[16]
+        // Pad pk_seed to 32 bytes
+        for i in 0..16 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), vk_bytes[i]);
         }
+        for i in 16..32 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), 0u8);
+        }
+        hdr_pos += 32;
 
-        // 7. Cleanup
-        rand_buf.zeroize();
-
-        crate::timeout::reset_activity();
-        crate::ui::show_status(success_banner, "");
-
-        for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
-        crate::ui::show_status("PQSigner OS", "Ready");
-
-        NscStatus::Ok as u32
+        // pk_root (32 bytes: raw 16 bytes right-padded to bytes32)
+        for i in 0..16 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), vk_bytes[16 + i]);
+        }
+        for i in 16..32 {
+            core::ptr::write_volatile(sig_ptr.add(hdr_pos + i), 0u8);
+        }
+        hdr_pos += 32;
     }
-}
 
-/// e2e-test mock: write deterministic bytes to the output buffer and
-/// show the success UI without performing any SPHINCS+C7 crypto.
-///
-/// SAFETY: `out_ptr` must point at a pre-validated NS-writable region
-/// of at least `len` bytes.
-#[cfg(feature = "e2e-test")]
-unsafe fn mock_sign_to_ns(
-    msg_hash: &[u8; 32],
-    out_ptr: *mut u8,
-    len: usize,
-    success_banner: &str,
-) {
-    for i in 0..len {
-        core::ptr::write_volatile(out_ptr.add(i), msg_hash[i % 32] ^ (i as u8));
+    debug_assert_eq!(hdr_pos, WRAPPER_HEADER_LEN);
+
+    // 5. Hedged sign
+    let mut rand_buf = [0u8; 16];
+    derive_sign_randomizer(&state.master_secret, msg_hash, &mut rand_buf);
+
+    let sig = signing_key.sign(msg_hash, Some(&rand_buf));
+
+    // 6. Write the raw 3,704-byte signature after the header.
+    let sig_offset = WRAPPER_HEADER_LEN;
+    for i in 0..SIGNATURE_LEN {
+        core::ptr::write_volatile(sig_ptr.add(sig_offset + i), sig[i]);
     }
+
+    // 7. Cleanup
+    rand_buf.zeroize();
+
     crate::timeout::reset_activity();
     crate::ui::show_status(success_banner, "");
+
+    for _ in 0..3_000_000u32 { cortex_m::asm::nop(); }
     crate::ui::show_status("PQSigner OS", "Ready");
+
+    NscStatus::Ok as u32
 }
 
 /// Derive a 16-byte randomizer for hedged SPHINCS+C7 signing from the
