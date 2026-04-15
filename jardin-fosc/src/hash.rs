@@ -7,7 +7,7 @@
 //!
 //! These match the Solidity `JardinForsCVerifier` exactly.
 
-use sha3::{Digest, Keccak256};
+use keccak_asm::{Digest, Keccak256};
 
 use crate::params::{A, K, N};
 

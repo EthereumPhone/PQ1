@@ -9,7 +9,7 @@
 //! matches the EVM uint256 big-endian representation where a 128-bit value
 //! occupies bytes [0..16) and bytes [16..32) are zero.
 
-use sha3::{Digest, Keccak256};
+use keccak_asm::{Digest, Keccak256};
 
 use crate::params::N;
 

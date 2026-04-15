@@ -276,6 +276,11 @@ fn signing_progress(percent: u8) {
     crate::ui::show_progress("Signing", percent);
 }
 
+/// Progress callback for JARDIN slot keygen (~20 s).
+fn keygen_progress(percent: u8) {
+    crate::ui::show_progress("New slot keygen", percent);
+}
+
 /// Ensure the JARDIN master entropy is derived and the requested slot is
 /// initialized. Shared by [`decrypt_and_sign_jardin`] and
 /// [`super::cmd_register_jardin_slot`].
@@ -327,12 +332,15 @@ pub(super) unsafe fn ensure_jardin_ready(
         || state.jardin_slot_index != slot_index;
 
     if need_init {
-        crate::ui::show_status("JARDIN keygen", "Please wait...");
+        crate::ui::show_progress("New slot keygen", 0);
         let slot_entropy = jardin_fosc::hash::jardin_slot_entropy(
             &state.jardin_master_entropy,
             slot_index,
         );
-        let slot = jardin_fosc::JardinSlot::keygen(slot_entropy);
+        let slot = jardin_fosc::JardinSlot::keygen_with_progress(
+            slot_entropy,
+            keygen_progress,
+        );
         // SAFETY: single-threaded access
         unsafe {
             *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(slot);

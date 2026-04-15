@@ -58,6 +58,14 @@
   <label>Factory:</label> <input type="text" id="factory" value="0x0000000000000000000000000000000000000000" style="width:360px">
 </div>
 
+<div class="section">
+  <span class="section-title">JARDIN Compact Signing</span><br>
+  <button id="jardinRegister" disabled>REGISTER_SLOT (0x71)</button>
+  <button id="jardinSign" disabled>SIGN_JARDIN (0x70)</button>
+  <button id="jardinInfo" disabled>GET_SLOT_INFO (0x72)</button>
+  <label>Slot:</label> <input type="number" id="jardinSlotIndex" value="0" style="width:40px" min="0">
+</div>
+
 <pre id="log"></pre>
 
 <script>
@@ -81,6 +89,9 @@ const INS_SIGN_MESSAGE       = 0x40;
 const INS_SIGN_EIP712        = 0x41;
 const INS_SIGN_BOOTSTRAP     = 0x50;
 const INS_GET_WALLET_ADDRESS = 0x60;
+const INS_SIGN_JARDIN        = 0x70;
+const INS_REGISTER_JARDIN    = 0x71;
+const INS_GET_JARDIN_INFO    = 0x72;
 const INS_GET_RESPONSE       = 0xC0;
 
 // v2 chaining: P1 bit 7
@@ -1032,6 +1043,124 @@ document.getElementById('getWalletAddress').onclick = async () => {
             log(`  Address: ${hexCompact(data.slice(0, 20))}`);
         } else {
             log(`  Error: SW=0x${sw.toString(16)}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+// ===================================================================
+// JARDIN FORS+C compact signing
+// ===================================================================
+
+document.getElementById('jardinInfo').onclick = async () => {
+    try {
+        const chainId = parseInt(document.getElementById('chainId').value) || 1;
+        const slotIndex = parseInt(document.getElementById('jardinSlotIndex').value) || 0;
+        log(`>> GET_JARDIN_SLOT_INFO  chain=${chainId} slot=${slotIndex}`);
+
+        const payload = new Uint8Array(12);
+        const dv = new DataView(payload.buffer);
+        dv.setBigUint64(0, BigInt(chainId));
+        dv.setUint32(8, slotIndex);
+
+        const { sw, data } = await sendApdu(INS_GET_JARDIN_INFO, 0, 0, payload);
+        if (sw === 0x9000 && data.length >= 7) {
+            const si = new DataView(data.buffer).getUint32(0);
+            const nextQ = data[4];
+            const remaining = data[5];
+            const active = data[6];
+            log(`  Slot ${si}: next_q=${nextQ}  remaining=${remaining}  active=${active ? 'YES' : 'no'}`);
+            if (remaining > 0 && remaining <= 15) {
+                log(`  !! Rotation recommended: only ${remaining} signatures left`);
+            }
+        } else {
+            log(`  Error: SW=0x${sw.toString(16).padStart(4, '0')}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('jardinRegister').onclick = async () => {
+    try {
+        const chainId = parseInt(document.getElementById('chainId').value) || 1;
+        const slotIndex = parseInt(document.getElementById('jardinSlotIndex').value) || 0;
+        log(`>> REGISTER_JARDIN_SLOT  chain=${chainId} slot=${slotIndex}`);
+        log(`   This may trigger keygen (~20s on first use). Watch device display.`);
+
+        const payload = new Uint8Array(12);
+        const dv = new DataView(payload.buffer);
+        dv.setBigUint64(0, BigInt(chainId));
+        dv.setUint32(8, slotIndex);
+
+        const { sw, data } = await sendApdu(INS_REGISTER_JARDIN, 0, 0, payload);
+        if (sw === 0x9000 && data.length >= 128) {
+            const slotKey    = data.slice(0, 32);
+            const subVkHash  = data.slice(32, 64);
+            const subPkSeed  = data.slice(64, 80);
+            const subPkRoot  = data.slice(80, 96);
+            const r          = data.slice(96, 128);
+            log(`  Slot registered successfully:`);
+            log(`    slotKey:    ${hex(slotKey)}`);
+            log(`    subVkHash:  ${hex(subVkHash)}`);
+            log(`    subPkSeed:  ${hex(subPkSeed)}`);
+            log(`    subPkRoot:  ${hex(subPkRoot)}`);
+            log(`    r:          ${hex(r)}`);
+            log(`  Use these values for on-chain registerJardinSlot(slotKey, subVkHash)`);
+        } else if (sw === 0x6985) {
+            log(`  Device locked. Unlock first.`);
+        } else {
+            log(`  Error: SW=0x${sw.toString(16).padStart(4, '0')}`);
+        }
+    } catch (e) { log(`Error: ${e.message}`); }
+};
+
+document.getElementById('jardinSign').onclick = async () => {
+    try {
+        const chainId = parseInt(document.getElementById('chainId').value) || 1;
+        const slotIndex = parseInt(document.getElementById('jardinSlotIndex').value) || 0;
+        log(`>> SIGN_JARDIN  chain=${chainId} slot=${slotIndex}`);
+        log(`   First sign on a new slot triggers keygen (~20s). Watch device display.`);
+
+        // Build a test message hash (keccak256 of "JARDIN test")
+        const msgHash = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) msgHash[i] = (0xAA + i) & 0xFF;
+
+        const payload = new Uint8Array(44);
+        const dv = new DataView(payload.buffer);
+        dv.setBigUint64(0, BigInt(chainId));
+        dv.setUint32(8, slotIndex);
+        payload.set(msgHash, 12);
+
+        const { sw, data } = await sendApdu(INS_SIGN_JARDIN, 0, 0, payload);
+        if (sw === 0x9000 && data.length >= 4) {
+            const rawLen = new DataView(data.buffer).getUint32(0);
+            const rotationSoon = (rawLen & 0x80000000) !== 0;
+            const responseLen = rawLen & 0x7FFFFFFF;
+
+            const signerType = data[4];
+            const slotKey = data.slice(5, 37);
+            const subPkSeed = data.slice(37, 69);
+            const subPkRoot = data.slice(69, 101);
+            const sigBytes = data.slice(101, 4 + responseLen - 4);
+            const q = (sigBytes.length - 2452) / 16;
+
+            log(`  JARDIN signature (q=${q}):`);
+            log(`    signerType: 0x${signerType.toString(16).padStart(2, '0')} (JARDIN)`);
+            log(`    slotKey:    ${hex(slotKey)}`);
+            log(`    subPkSeed:  ${hexCompact(subPkSeed)}`);
+            log(`    subPkRoot:  ${hexCompact(subPkRoot)}`);
+            log(`    sig length: ${sigBytes.length} bytes`);
+            log(`    total resp: ${responseLen} bytes`);
+
+            if (rotationSoon) {
+                log(`  !! ROTATION SOON: fewer than 15 signatures remaining on this slot.`);
+                log(`     Register the next slot now to avoid interruption.`);
+            }
+        } else if (sw === 0x6501) {
+            log(`  Slot exhausted (all 95 signatures used).`);
+            log(`  Register a new slot with slot_index=${slotIndex + 1} and retry.`);
+        } else if (sw === 0x6985) {
+            log(`  Device locked. Unlock first.`);
+        } else {
+            log(`  Error: SW=0x${sw.toString(16).padStart(4, '0')} data[${data.length}B]`);
         }
     } catch (e) { log(`Error: ${e.message}`); }
 };

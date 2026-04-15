@@ -86,21 +86,36 @@ impl JardinSlot {
     ///
     /// This is the expensive operation (~235K keccak256 hashes). It builds
     /// all Q_MAX FORS trees and the unbalanced Merkle tree.
-    ///
-    /// On a Cortex-M33 at ~70K hashes/sec, this takes ~3-4 seconds.
     pub fn keygen(entropy: [u8; 32]) -> Self {
+        Self::keygen_with_progress(entropy, |_| {})
+    }
+
+    /// Like [`keygen`] but calls `progress(percent)` periodically (0-100).
+    ///
+    /// Use this on firmware to drive a progress bar during the ~20 s keygen.
+    pub fn keygen_with_progress(entropy: [u8; 32], progress: impl Fn(u8)) -> Self {
         let (pk_seed, sk_seed) = hash::jardin_derive_keys(&entropy);
         let sentinel = hash::jardin_sentinel(&pk_seed, &sk_seed);
 
-        // Compute all Q_MAX FORS public keys (q is 1-indexed)
+        progress(0);
+
+        // Compute all Q_MAX FORS public keys (q is 1-indexed).
+        // This is ~95% of the keygen cost, so map i=0..95 to 0..95%.
         let mut fors_pks = [[0u8; 32]; Q_MAX];
         for i in 0..Q_MAX {
             fors_pks[i] = fors::compute_forsc_pk(&pk_seed, &sk_seed, (i + 1) as u32);
+            // Report every 5th tree to avoid flooding I2C OLED writes
+            if (i + 1) % 5 == 0 || i == Q_MAX - 1 {
+                let pct = ((i + 1) * 95 / Q_MAX) as u8;
+                progress(pct);
+            }
         }
 
-        // Build unbalanced tree
+        // Build unbalanced tree (~5% of cost)
         let (pk_root, spine) =
             unbalanced::build_unbalanced_tree(&pk_seed, &sentinel, &fors_pks);
+
+        progress(100);
 
         JardinSlot {
             pk_seed,

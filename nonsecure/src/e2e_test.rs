@@ -658,9 +658,13 @@ fn main() -> ! {
                 &mut USEROP_PAYLOAD_BUF,
             )
         };
+        let t0 = dwt_cycles();
         let status = unsafe {
             nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
         };
+        let t1 = dwt_cycles();
+        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
+        hprintln!("[E2E] C7 userop_value_transfer (SPHINCS+C7 sign): {}ms", elapsed_ms);
         report("userop_value_transfer", status, &mut pass_count, &mut fail_count);
     }
 
@@ -839,68 +843,83 @@ fn main() -> ! {
     }
 
     // ===================================================================
-    // JARDIN FORS+C compact signature scenarios
+    // JARDIN FORS+C compact signature scenarios (with timing)
     // ===================================================================
     //
     // These must run in sequence: scenario 15 initialises the slot,
     // subsequent scenarios depend on the slot state from prior signs.
-
-    // ----- Scenario 15: JARDIN FORS+C basic sign -----
     //
-    // First sign on slot 0: triggers keygen (~3-4 s), then signs at q=1.
-    // Verify the response has the SIGNER_JARDIN header byte and a valid
-    // response length (4 + 97 + JARDIN_SIG_MIN for q=1).
+    // Timing uses ARM semihosting SYS_CLOCK (centiseconds).
+
+    hprintln!("");
+    hprintln!("[E2E] ===== JARDIN FORS+C timing benchmarks =====");
+
+    // ----- Scenario 15: FIRST SIGN (includes keygen) -----
+    //
+    // First sign on slot 0: triggers keygen (~235K hashes), then signs
+    // at q=1.  This is the SLOW path -- measured to show keygen cost.
     {
         let msg_hash = [0xAAu8; 32];
+        let t0 = dwt_cycles();
         let status = unsafe {
             nsc_api::sign_jardin(1, 0, &msg_hash, &mut JARDIN_SIG_BUF)
         };
+        let t1 = dwt_cycles();
+        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
+        hprintln!("[E2E] jardin_first_sign (KEYGEN + sign q=1): {}ms", elapsed_ms);
         if status == NscStatus::Ok as u32 {
             unsafe {
-                let resp_len = u32::from_be_bytes([
+                let raw = u32::from_be_bytes([
                     JARDIN_SIG_BUF[0], JARDIN_SIG_BUF[1],
                     JARDIN_SIG_BUF[2], JARDIN_SIG_BUF[3],
-                ]) as usize;
+                ]);
+                let resp_len = (raw & 0x7FFF_FFFF) as usize;
                 let signer_type = JARDIN_SIG_BUF[4];
                 let expected_min = 4 + JARDIN_WRAPPER_HEADER_LEN + JARDIN_SIG_MIN;
                 if signer_type != SIGNER_JARDIN {
-                    hprintln!("[E2E] jardin_basic_sign: bad signer_type 0x{:02x}", signer_type);
+                    hprintln!("[E2E] jardin_first_sign: bad signer_type 0x{:02x}", signer_type);
                 } else if resp_len < expected_min {
-                    hprintln!("[E2E] jardin_basic_sign: resp_len {} < expected_min {}", resp_len, expected_min);
+                    hprintln!("[E2E] jardin_first_sign: resp_len {} < expected_min {}", resp_len, expected_min);
+                } else {
+                    hprintln!("[E2E] jardin_first_sign: sig_len={} bytes (q=1)", resp_len - 4);
                 }
             }
         }
-        report("jardin_basic_sign", status, &mut pass_count, &mut fail_count);
+        report("jardin_first_sign", status, &mut pass_count, &mut fail_count);
     }
 
-    // ----- Scenario 16: JARDIN sequential sign (q=2) -----
+    // ----- Scenario 16: FAST SIGN (slot already active, q=2) -----
     //
-    // Second sign on same slot. The response should be 16 bytes longer
-    // than the first (q=2 adds one more auth node at 16 bytes).
+    // Second sign on same slot — no keygen.  This is the FAST path that
+    // every transaction after the first one uses.
     {
         let msg_hash2 = [0xBBu8; 32];
+        let t0 = dwt_cycles();
         let status = unsafe {
             nsc_api::sign_jardin(1, 0, &msg_hash2, &mut JARDIN_SIG_BUF)
         };
+        let t1 = dwt_cycles();
+        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
+        hprintln!("[E2E] jardin_fast_sign  (sign q=2, NO keygen): {}ms", elapsed_ms);
         if status == NscStatus::Ok as u32 {
             unsafe {
-                let resp_len = u32::from_be_bytes([
+                let raw = u32::from_be_bytes([
                     JARDIN_SIG_BUF[0], JARDIN_SIG_BUF[1],
                     JARDIN_SIG_BUF[2], JARDIN_SIG_BUF[3],
-                ]) as usize;
-                // q=2: body(2452) + 2*16 = 2484, + header(97) + prefix(4) = 2585
+                ]);
+                let resp_len = (raw & 0x7FFF_FFFF) as usize;
                 let expected_q2 = 4 + JARDIN_WRAPPER_HEADER_LEN + 2452 + 2 * 16;
                 if resp_len != expected_q2 {
-                    hprintln!("[E2E] jardin_seq_sign_q2: resp_len {} != expected {}", resp_len, expected_q2);
+                    hprintln!("[E2E] jardin_fast_sign: resp_len {} != expected {}", resp_len, expected_q2);
+                } else {
+                    hprintln!("[E2E] jardin_fast_sign: sig_len={} bytes (q=2)", resp_len - 4);
                 }
             }
         }
-        report("jardin_seq_sign_q2", status, &mut pass_count, &mut fail_count);
+        report("jardin_fast_sign", status, &mut pass_count, &mut fail_count);
     }
 
     // ----- Scenario 17: JARDIN slot info -----
-    //
-    // After 2 signs, next_q should be 3, remaining should be 93, active=1.
     {
         let status = unsafe {
             nsc_api::get_jardin_slot_info(1, 0, &mut JARDIN_INFO_BUF)
@@ -910,6 +929,7 @@ fn main() -> ! {
                 let next_q = JARDIN_INFO_BUF[4];
                 let remaining = JARDIN_INFO_BUF[5];
                 let active = JARDIN_INFO_BUF[6];
+                hprintln!("[E2E] jardin_slot_info: next_q={} remaining={} active={}", next_q, remaining, active);
                 if active != 1 {
                     hprintln!("[E2E] jardin_slot_info: expected active=1, got {}", active);
                 }
@@ -925,21 +945,20 @@ fn main() -> ! {
     }
 
     // ----- Scenario 18: JARDIN register slot -----
-    //
-    // Register slot 0 (already active). Returns slot_key, sub_vk_hash,
-    // sub_pk_seed, sub_pk_root, and r. Verify non-zero values.
     {
+        let t0 = dwt_cycles();
         let status = unsafe {
             nsc_api::register_jardin_slot(1, 0, &mut JARDIN_REGISTER_BUF)
         };
+        let t1 = dwt_cycles();
+        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
+        hprintln!("[E2E] jardin_register (slot already active):  {}ms", elapsed_ms);
         if status == NscStatus::Ok as u32 {
             unsafe {
-                // slot_key (bytes 0..32) should be non-zero
                 let slot_key_zero = JARDIN_REGISTER_BUF[0..32].iter().all(|&b| b == 0);
                 if slot_key_zero {
                     hprintln!("[E2E] jardin_register: slot_key is all-zero");
                 }
-                // sub_vk_hash (bytes 32..64) should be non-zero
                 let vk_hash_zero = JARDIN_REGISTER_BUF[32..64].iter().all(|&b| b == 0);
                 if vk_hash_zero {
                     hprintln!("[E2E] jardin_register: sub_vk_hash is all-zero");
@@ -949,22 +968,35 @@ fn main() -> ! {
         report("jardin_register_slot", status, &mut pass_count, &mut fail_count);
     }
 
-    // ----- Scenario 19: JARDIN slot switch (slot 1) -----
+    // ----- Scenario 19: SLOT SWITCH (includes keygen for new slot) -----
     //
-    // Sign with slot_index=1 on the same chain. This triggers keygen for
-    // the new slot. Verify the sign succeeds.
+    // Sign with slot_index=1: triggers keygen for the new slot.
     {
         let msg_hash = [0xCCu8; 32];
+        let t0 = dwt_cycles();
         let status = unsafe {
             nsc_api::sign_jardin(1, 1, &msg_hash, &mut JARDIN_SIG_BUF)
         };
+        let t1 = dwt_cycles();
+        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
+        hprintln!("[E2E] jardin_slot_switch (KEYGEN slot 1 + sign): {}ms", elapsed_ms);
         report("jardin_slot_switch", status, &mut pass_count, &mut fail_count);
     }
 
-    // ----- Scenario 20: JARDIN query non-active slot -----
-    //
-    // After switching to slot 1, query slot 0 — it should be inactive
-    // (chain matches but slot_index does not).
+    // ----- Scenario 20: FAST SIGN on new slot (q=2, no keygen) -----
+    {
+        let msg_hash = [0xDDu8; 32];
+        let t0 = dwt_cycles();
+        let status = unsafe {
+            nsc_api::sign_jardin(1, 1, &msg_hash, &mut JARDIN_SIG_BUF)
+        };
+        let t1 = dwt_cycles();
+        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
+        hprintln!("[E2E] jardin_fast_sign2 (slot 1, q=2, NO keygen): {}ms", elapsed_ms);
+        report("jardin_fast_sign_slot1", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 21: query non-active slot -----
     {
         let status = unsafe {
             nsc_api::get_jardin_slot_info(1, 0, &mut JARDIN_INFO_BUF)
@@ -980,6 +1012,9 @@ fn main() -> ! {
         report("jardin_neg_inactive_slot", status, &mut pass_count, &mut fail_count);
     }
 
+    hprintln!("[E2E] ===== end JARDIN benchmarks =====");
+    hprintln!("");
+
     // ----- Summary -----
     hprintln!("[E2E] summary: {} passed, {} failed", pass_count, fail_count);
     if fail_count == 0 {
@@ -990,6 +1025,31 @@ fn main() -> ! {
         debug::exit(debug::EXIT_FAILURE);
     }
     loop {}
+}
+
+/// Read the DWT cycle counter (free-running 32-bit, started by secure
+/// world at boot).  Returns raw cycles; use [`cycles_to_ms`] to convert.
+///
+/// On STM32U585 the counter runs at 160 MHz (wraps every ~26.8 s).
+/// On QEMU the rate is simulated and may differ.
+fn dwt_cycles() -> u32 {
+    // DWT_CYCCNT is at 0xE0001004.  On TrustZone parts NS can read it
+    // if the secure world enabled DWT + DEMCR.TRCENA (done in main.rs).
+    unsafe { core::ptr::read_volatile(0xE000_1004 as *const u32) }
+}
+
+/// Convert a cycle delta to milliseconds.  On STM32U585 the DWT runs at
+/// the core clock (160 MHz).  On QEMU the rate is emulated — values are
+/// approximate but the ratio between fast/slow paths is accurate.
+#[cfg(feature = "stm32u585")]
+fn cycles_to_ms(cycles: u32) -> u32 {
+    cycles / 160_000 // 160 MHz
+}
+
+#[cfg(not(feature = "stm32u585"))]
+fn cycles_to_ms(cycles: u32) -> u32 {
+    // QEMU mps2-an505 runs at 25 MHz simulated core clock
+    cycles / 25_000
 }
 
 fn report(name: &str, status: u32, pass: &mut u32, fail: &mut u32) {

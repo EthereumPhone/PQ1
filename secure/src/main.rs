@@ -772,6 +772,27 @@ fn main() -> ! {
 
     ui::show_status("PQSigner OS", "Ready");
 
+    // Enable the DWT cycle counter so the non-secure world can measure
+    // timing (e2e benchmarks, companion latency logging).  The counter
+    // runs at the CPU core clock (160 MHz on STM32U585, simulated on QEMU).
+    //
+    // DEMCR.TRCENA enables the DWT unit; DWT_CTRL.CYCCNTENA starts the
+    // free-running 32-bit cycle counter; DWT_LAR unlocks write access.
+    // DSCSR.CDS=1 is needed for NS to read DWT on TrustZone parts.
+    unsafe {
+        const DEMCR: *mut u32 = 0xE000_EDFC as *mut u32;
+        const DWT_LAR: *mut u32 = 0xE000_1FB0 as *mut u32;
+        const DWT_CTRL: *mut u32 = 0xE000_1000 as *mut u32;
+        const DWT_CYCCNT: *mut u32 = 0xE000_1004 as *mut u32;
+        // Enable trace unit
+        core::ptr::write_volatile(DEMCR, core::ptr::read_volatile(DEMCR) | (1 << 24));
+        // Unlock DWT for writes
+        core::ptr::write_volatile(DWT_LAR, 0xC5AC_CE55);
+        // Reset and start cycle counter
+        core::ptr::write_volatile(DWT_CYCCNT, 0);
+        core::ptr::write_volatile(DWT_CTRL, core::ptr::read_volatile(DWT_CTRL) | 1);
+    }
+
     secure_log!("[S] Booting non-secure world...");
     unsafe { boot_ns::boot(NS_FLASH_BASE) }
 }

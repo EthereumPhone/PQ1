@@ -5,7 +5,7 @@ edition.workspace = true
 description = "JARDIN FORS+C compact post-quantum signatures (no_std, no alloc)"
 
 [dependencies]
-sha3 = { version = "0.10", default-features = false }
+keccak-asm = { workspace = true }
 zeroize = { workspace = true, features = ["zeroize_derive"] }
 
 [dev-dependencies]

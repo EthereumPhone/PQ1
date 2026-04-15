@@ -900,6 +900,7 @@ impl CommandRouter {
             NscStatus::InvalidPointer => SW_INTERNAL_ERROR,
             NscStatus::CryptoError => SW_INTERNAL_ERROR,
             NscStatus::IdleWipe => SW_REFERENCED_DATA_INVALIDATED,
+            NscStatus::SlotExhausted => SW_FEATURE_NOT_SUPPORTED,
             NscStatus::InternalError => SW_INTERNAL_ERROR,
         };
         self.sw_response(sw)

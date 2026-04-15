@@ -5,7 +5,7 @@ edition.workspace = true
 description = "SPHINCS+C7 keccak256-based post-quantum signatures (no_std, no alloc)"
 
 [dependencies]
-sha3 = { version = "0.10", default-features = false }
+keccak-asm = { workspace = true }
 zeroize = { workspace = true, features = ["zeroize_derive"] }
 
 [dev-dependencies]

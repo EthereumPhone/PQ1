@@ -49,6 +49,7 @@ members = [
     "fwmeasure",
     "sphincs-c7",
     "jardin-fosc",
+    "keccak-asm",
 ]
 resolver = "2"
 
@@ -68,6 +69,7 @@ sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
 sphincs-c7        = { path = "sphincs-c7" }
 jardin-fosc       = { path = "jardin-fosc" }
+keccak-asm        = { path = "keccak-asm" }
 bls12_381 = { package = "bls12_381_pka", path = "bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
 
 # no_std crypto shared by `secure` + `bip39`
@@ -91,6 +93,21 @@ opt-level = 3
 [profile.dev.package.jardin-fosc]
 opt-level = 3
 
+[profile.dev.package.sha3]
+opt-level = 3
+
+[profile.dev.package.keccak]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.hmac]
+opt-level = 3
+
+[profile.dev.package.keccak-asm]
+opt-level = 3
+
 [profile.release]
 opt-level = "s"
 lto = true
@@ -102,4 +119,24 @@ overflow-checks = true
 opt-level = 3
 
 [profile.release.package.jardin-fosc]
+opt-level = 3
+
+# The keccak-f1600 permutation is the innermost loop of every SPHINCS+C7
+# and JARDÍN hash call (tens of thousands per sign, 235K per JARDÍN keygen).
+# These MUST be compiled for speed, not size.
+[profile.release.package.sha3]
+opt-level = 3
+
+[profile.release.package.keccak]
+opt-level = 3
+
+# PBKDF2-HMAC-SHA512 runs 2048 iterations on every unlock and JARDÍN
+# master entropy derivation. sha2/hmac at opt-level "s" adds seconds.
+[profile.release.package.sha2]
+opt-level = 3
+
+[profile.release.package.hmac]
+opt-level = 3
+
+[profile.release.package.keccak-asm]
 opt-level = 3
