@@ -415,29 +415,61 @@ change to work-todo #20 scope.
 ## 3. Hallucination + verification log
 
 The research-round prompts told the AI to cite primary sources and
-say "I don't know" rather than guess. Across the 4 responses, here's
-what we flagged as needing verification *before* committing to code:
+say "I don't know" rather than guess. Across the 5 responses, here's
+the status of every flagged citation — after a 2026-04-15 verification
+round of web searches.
 
-| Claim | Source | Status | Action |
+**Lesson learned from this verification round**: most of our initial
+hallucination-flagging was wrong. We called items hallucinated because
+they were future-dated relative to our own model's training cutoff;
+they were actually real publications from after the cutoff. Be less
+aggressive flagging things as fabricated in future rounds — verify
+first, flag second.
+
+| Claim | Source | **Verification status (2026-04-15)** | Action |
 |---|---|---|---|
-| `CVE-2026-4179` (Zephyr STM32 USB) | bundle D | **Hallucinated** (future-dated CVE) | Do not cite |
-| ES0499 §2.26.2 / §2.26.3 exact section numbers | bundle D | Plausible, unverified | Verify against ES0499 PDF before referencing in code |
-| NXP AN12436 "Rev 2.4" SCP03 default keys | bundle B | Plausible, unverified | Confirm against current NXP AN12436 revision |
-| STM32U585 SAES bit fields (KEYSEL/KMOD positions) | bundle B | Explicitly flagged as unknown by research | Cross-check CMSIS `stm32u585xx.h` |
-| RFC 9814 on SLH-DSA verify-after-sign | bundle A | Future-dated (July 2025) relative to AI knowledge cutoff | Verify on IETF datatracker; treat claim as "likely true per Genêt TCHES 2023 even if RFC number is wrong" |
-| Masaryk U 76% PIN-glitch on STM32U5A9 (Simonik thesis) | bundle A | Plausible, unverified | Search Masaryk thesis repo before citing |
-| Saarinen SLotH CRYPTO 2024 TVLA numbers | bundle C | Paper is real; specific numbers unverified | Read paper before committing architecture on t=24.5 figure |
-| Fluhrer PRF-tree ePrint 2024/500 (1.7× overhead) | bundle C | Plausible, unverified | Cost-benefit decision depends; verify paper |
-| Boy et al. "SLasH-DSA" 2025 Rowhammer universal forgery | bundle A + C | Future-dated, likely hallucinated | Treat as unverified until verified |
-| Genêt "Grafting Trees" TCHES 2023 | bundle A | Real, well-known | Safe to cite |
-| Colin O'Flynn "MIN()imum Failure" USENIX WOOT 2019 | bundle D | Real | Safe to cite |
-| Thomas Roth TrustZone-M on SAM L11 at 36C3 | bundle D | Real | Safe to cite |
+| `CVE-2026-4179` (Zephyr STM32 USB infinite loop) | bundle D | ✅ **REAL**. Published 2026-03-16. Zephyr advisory `GHSA-9xg7-g3q3-9prf`, CWE-835, CVSS 6.1. Affects Zephyr ≤ 4.3.0 drivers/usb/device/usb_dc_stm32.c. | Safe to cite. Note advisory is about `usb_write()` from ISR + `k_yield()`, not explicitly malicious USB host — read the GHSA before re-describing. |
+| `CVE-2021-42553` (STM32Cube USB Host buffer overflow) | bundle D | ✅ **REAL**. NVD, CVSS 9.8 CRITICAL. | Safe to cite. |
+| **RFC 9814** (SLH-DSA verify-after-sign inadequate) | bundle A | ✅ **REAL**. Proposed Standard, July 2025. §5 quote: *"Verifying a signature before releasing the signature value is a typical fault-attack countermeasure; however, this countermeasure is not effective for SLH-DSA."* | Safe to cite — directly supports the double-compute mandate. |
+| NXP **AN12436** SCP03 default keys (ENC/MAC/DEK) | bundle B | ✅ **REAL**. Latest revision is Rev 2.4 (8 July 2024). All three hex values match byte-for-byte against earlier retrievable rev 1.6. | Safe to cite. |
+| STM32U5 **errata ES0499** existence | bundle D | ✅ **REAL**, Rev 11 (December 2025) current. §2.2.15 confirmed verbatim ("OTG_FS is reset by OTGRST and DCMI_PSSIRST bits"). | Cite ES0499 safely. |
+| ES0499 specific sub-section numbers (§2.26.2, §2.26.3, §2.26.4, §2.26.5) | bundle D | 🟡 **Partially verified.** USB OTG errata is indeed in ES0499; exact sub-section numbering could not be confirmed from public search snippets. May have shifted between revisions. | Download Rev 11 and pin citations to it before quoting section numbers in code. |
+| **AN5342** (Flash ECC / SRAM ECC option bytes) | bundle A | ✅ **REAL**. Title: "How to use ECC management for internal memories protection on STM32 MCUs." Originally STM32H7-focused, broadened to multi-series. | Cite safely. Some STM32U5-specific ECC detail lives in RM0456 rather than AN5342; open current AN5342 to confirm U585-specific option-byte wording. |
+| **RM0456** covers SAES peripheral | bundle B | ✅ **REAL**. Confirmed. | Safe to cite. Pin latest revision number when writing code against specific bit fields. |
+| STM32U585 SAES bit fields (KEYSEL / KMOD positions) | bundle B | 🟡 Research author explicitly flagged as unknown; confirmation not attempted in this verification round. | Cross-check CMSIS `stm32u585xx.h` before writing SAES code. |
+| **Ledger Donjon March 2025 Trezor Safe 3** glitch | bundle E | ✅ **REAL**. Blog post dated March 12, 2025 at `ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security`. TRZ32F429 voltage-glitched, pre-shared secret extracted from flash, firmware attestation bypassed. Trezor's own confirmation at `trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation`. | Safe to cite. |
+| **Trezor Safe 7** with TROPIC01 | bundle E | ✅ **REAL**. Announced October 21, 2025 (`trezor.io/trezor-safe-7`; `tropicsquare.com/news-and-events/...trezor-safe-7`). Shipping late 2025 / early 2026. Transparent secure element + EAL6+ secondary SE (dual attestation). | Safe to cite. This is the closest existing product to our PQSigner OS architecture. |
+| **Trezor Safe 5** uses STM32U5 | bundle E | ✅ **REAL**. Confirmed via Trezor product page + Ledger blog. | Safe to cite. |
+| Ledger Donjon 2025 statement that "no public fault injection attack on STM32U5" | bundle E | ✅ **REAL**. Exact quote in the Ledger blog post (`ledger.com/why-secure-elements-make-a-crucial-difference...` March 12, 2025). Note: **already superseded by the Simonik thesis** below. | Safe to cite, but qualify that it was true as of publication and has since been invalidated. |
+| **Masaryk U Simonik thesis** 76% PIN-glitch on STM32U5A9 | bundle A / C / E | ✅ **REAL**. Bachelor's thesis by Oliver Simonik at Masaryk U on fault injection against STM32U5 (Trezor Safe 5). Referenced at `it4sec.substack.com/p/fault-injection-attack-on-the-stm32u5`. Thesis PDF on `is.muni.cz` (not directly retrieved this round — verify the URL before quoting page numbers). | Safe to cite. This is the empirical demonstration that STM32U5 is **not** glitch-immune. |
+| **BlaatSchaap** STM32F103 clone research | bundle E | ✅ **REAL**. `blaatschaap.be/identifying-32f103-clones/` + multi-part Cortex-M series. Uses CPUID/ROMTABLE differences. Specific r2p1 vs r1p1 exact revision strings not confirmed this round. | Safe to cite for the approach; verify exact revision strings against primary source. |
+| **TheCharlatan May 2020 ColdCard firmware-reset** | bundle E | ✅ **REAL**. `thecharlatan.ch/COLDCARD-Supply-Chain/`. | Safe to cite. |
+| **Saleem Rashid 2018 Ledger Nano Snake demo** | bundle E | ✅ **REAL**. `saleemrashid.com/2018/03/20/breaking-ledger-security-model/`; Krebs on Security coverage. | Safe to cite. |
+| **wallet.fail at 35C3** | bundle D | ✅ **REAL**. `media.ccc.de/v/35c3-9563-wallet_fail`. December 2018 CCC. | Safe to cite. |
+| **SiliconToaster** (Ledger Donjon EMFI tool) | bundle D / E | ✅ **REAL**. `github.com/Ledger-Donjon/silicon-toaster`, LGPLv3, Hardwear.io 2020 paper (`eprint.iacr.org/2020/1115`). | Safe to cite. |
+| **"Extraktor" Ledger Donjon ~$100 glitch board** | bundle D | ❌ **Cannot confirm** this specific tool name. Not found in Donjon's public repos / blog. Likely misremembering of SiliconToaster (which *is* real) or a non-public internal tool. | Do **not** cite "Extraktor" by name; say "published Ledger Donjon glitching tooling" if referring to the general capability. |
+| **CanSecWest 2024 / VoidStar STM32F4 RDP bypass** | bundle D / E | ✅ **REAL**. Matthew Alt (VoidStar Security LLC), talk title "Glitching in 3D: Low-Cost EMFI Attacks." `secwest.net/presentations-2024/glitching-in-3d-low-cost-emfi-attacks`, `voidstarsec.com`. | Safe to cite. |
+| "Riscure LFI on ColdCard" | bundle D / E | 🔴 **Attribution WRONG.** The ColdCard Mk2 ATECC508A single-laser-shot + Mk3 ATECC608A multi-shot attacks were done by **Ledger Donjon (Olivier Hériveaux)**, NOT Riscure. See `blog.coinkite.com/laser-fault-injection/`, SSTIC 2020/2021 papers, `ledger.com/blog/coldcard-pin-code`. | Correct attribution when citing. Research content is correct; credit is wrong. |
+| **Colin O'Flynn "MIN()imum Failure" USENIX WOOT 2019** | bundle D | ✅ **REAL**. Safe to cite. |
+| **Thomas Roth TrustZone-M on SAM L11 at 36C3** | bundle D | ✅ **REAL**. `media.ccc.de/v/36c3-10859-trustzone-m_eh...`. |
+| **Saß et al. μ-Glitch USENIX Security 2023** | bundle A | ✅ **REAL**, 4-fault TrustZone-M bypass demonstrated. Safe to cite. |
+| **Spensky et al. GlitchResistor DSN 2021** | bundle A | ✅ **REAL**. Specific "100% success at 8-cycle window" figure not reverified, but paper exists and characterises success rates in this ballpark. |
+| **Genêt "Grafting Trees" TCHES 2023** | bundle A | ✅ **REAL**. Paper by Aymeric Genêt, TCHES 2023, single-fault universal-forgery via grafting subtree into SPHINCS+ hypertree. Safe to cite; this is the canonical reason verify-after-sign doesn't save SLH-DSA. |
+| **Kannwischer et al. COSADE 2018** (DPA on SPHINCS-256 BLAKE) | bundle C | ✅ **REAL**. Springer LNCS 10815. ~10k traces for 32-bit chunk is consistent with paper. |
+| **Saarinen "SLotH" CRYPTO 2024** + specific TVLA numbers (t=24.5 at 1k traces) | bundle C | 🟡 Saarinen's work on PQC side-channels is real. The specific SLotH paper title + exact numerical claims could not be independently confirmed in this verification round. | Verify against the actual paper before committing architectural decisions that depend on the trace-count figure. |
+| **Fluhrer ePrint 2024/500** — PRF-tree 1.7× overhead, backward-compat | bundle C | ❌ **Does not exist as described** per verification agent. The claim "backward-compatible PRF-tree" is technically implausible — changing PRF tree structure changes verification output. | **Do not base architectural decisions on this citation** until verified. Treat SHAKE migration discussion as open question pending an independent reference. |
+| **Belenky et al. TCHES 2023 / COSADE 2021** specific trace counts (275K / 30K) | bundle C | 🟡 Author works on side-channels; specific trace counts unverified. | Treat as indicative rather than pinpoint benchmarks. |
+| **Boy et al. "SLasH-DSA 2025" Rowhammer universal forgery** | bundle A / C | 🟡 **Uncertain.** Post-May-2025 cutoff. OpenSSL SLH-DSA support shipped in OpenSSL 3.5 early 2025, so an attack paper in 2025 is plausible, but neither we nor our verification agents could confirm its existence. | Do not cite until independently found. The underlying Rowhammer-vs-PQ-signing threat class is real regardless. |
+| **Fox-IT AES-256 EM attack** (5 min at 1 m) | bundle C | ✅ **REAL**. Fox-IT whitepaper by Ramsay & Van Woudenberg, 2017. Safe to cite. |
+| **Kraken Security Labs Trezor glitching** ($75, 15 min) | bundle D | ✅ **REAL**. January 2020 disclosure. Safe to cite. |
+| **NCC Group "CM-1-C" pattern label** | bundle A | 🟡 NCC Group's multi-part fault-injection-countermeasures series is real (`research.nccgroup.com/2021/07/08/software-based-fault-injection-countermeasures-part-2-3/`) and covers complement-storage + redundant-check patterns. The specific "CM-1-C" identifier could not be located. | Cite the NCC Group series by URL; do not cite "CM-1-C" by name. |
+| **MCUboot magic constants 0x1AAA_AAAA / 0x1555_5555** | bundle A | ✅ **REAL**. Documented in MCUboot design docs; values chosen specifically for fault-injection hardening. Safe to cite. |
+| **Ringzer0 PicoEMP STM32F4 RDP bypass** | bundle D | 🟡 PicoEMP (by Colin O'Flynn / NewAE) is real; STM32F4 RDP EMFI bypasses exist; specific claim of "Ringzer0 + PicoEMP + 3D printer automated scanning" could not be tied to a specific publication. | Cite PicoEMP generically; don't invent specific research attributions. |
 
-General rule for future commits: if we're going to cite a paper /
-CVE / errata section in source code comments or external docs,
-**independently verify first**. The deep-research round correctly
-surfaced the threats + mitigations; it occasionally fabricates the
-exact citation for those threats.
+**Bottom line**: of the 30+ technical references in the 5 research
+bundles, fewer than a handful are actual hallucinations. The round
+was more accurate than my initial skepticism suggested. Going
+forward: verify-then-flag, not flag-then-verify.
 
 ## 4. Implementation sequencing
 

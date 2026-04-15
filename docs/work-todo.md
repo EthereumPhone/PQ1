@@ -347,7 +347,7 @@ Dev-research from Prompt D identified the USB path as our **largest remote attac
 - [ ] IWDG hang detection for USB path (2s timeout, kicked per transaction).
 - [ ] Response-buffer locking for 17,088-byte SLH-DSA signatures (ISO 7816 SW=0x61xx chunking; 30s timeout).
 
-**DO NOT TRUST** references to CVE-2026-4179 in the research doc — that CVE ID appears to be hallucinated (future-dated; does not appear in NVD). Cross-check any CVE citation against NVD before acting on it.
+**Verified 2026-04-15**: `CVE-2026-4179` is real (published 2026-03-16; Zephyr advisory `GHSA-9xg7-g3q3-9prf`). We initially flagged it as hallucinated because it was future-dated relative to our training cutoff — that flag was wrong. Safe to cite. Note the advisory frames it as ISR-triggered infinite loop, not explicitly malicious USB host.
 
 **Files to create:** `secure/src/fih.rs` (shared with #18)
 **Files to change:** `secure/src/hw/usb_hw.rs`, `nonsecure/src/usb/transport.rs`, `nonsecure/src/usb/hid.rs`, `nonsecure/src/usb/commands.rs`
@@ -374,10 +374,10 @@ Prompt B surfaced a concrete production-provisioning protocol. Supersedes the br
 - [ ] SE050 attestation on every boot (ReadObject_W_Attst with key 0xF0000012) — optional, +100ms boot time.
 - [ ] OPTIGA cert chain verification against pinned Infineon Root CA — optional.
 
-**Verification items** (the research flagged these as needing cross-check):
-- [ ] Confirm NXP default SCP03 keys against current AN12436 revision (values cited: ENC=`852B…6287`, MAC=`DB0A…6B47`, DEK=`4C2F…A80C`). Research's claimed "Rev 2.4" is unverified.
-- [ ] Confirm SAES register bit-field positions against RM0456 + CMSIS `stm32u585xx.h` header (research author flagged as unknown).
-- [ ] Confirm STM32U585 DHUK actually returns a known constant at RDP0 (not merely "documented behaviour"); DHUK semantics may differ slightly per errata.
+**Verification items** (remaining after 2026-04-15 web verification round):
+- [x] ~~Confirm NXP default SCP03 keys against current AN12436 revision~~ — **VERIFIED**. AN12436 Rev 2.4 (July 2024), all three hex values match byte-for-byte. Safe to use.
+- [ ] Confirm SAES register bit-field positions against RM0456 + CMSIS `stm32u585xx.h` header (research author flagged as unknown — not verified in web-search round).
+- [ ] Confirm STM32U585 DHUK actually returns a known constant at RDP0 (not merely "documented behaviour") — DHUK semantics may differ per errata.
 
 **Files to create:** `provisioning/` (new host-side tooling crate), `secure/src/hw/saes.rs`, `secure/src/attestation.rs`, `secure/src/binding.rs`
 **Files to change:** `secure/src/main.rs` (boot-time anti-swap gate), `secure/src/se050/scp03.rs` (per-device keys), `secure/src/optiga/shield.rs` (PBS lifecycle lock)
@@ -444,14 +444,16 @@ Bundle E extends item #20 with a **triple-UID cryptographically-signed manifest*
 - [ ] Recovery / warranty procedure for devices that brick due to genuine hardware failure vs. attestation failure. UX for distinguishing "we got a bad SE" from "someone tried to swap chips."
 - [ ] Carrier / distributor notifications when transparency-log audit detects anomalies.
 
-**Verification items (hallucinations flagged from Bundle E — confirm before relying)**:
-- [ ] "Ledger Donjon March 2025 Trezor Safe 3 attack" — cited as Tier B threat-model proof; future-dated relative to AI knowledge cutoff; likely hallucinated. **Do not cite in commit messages or user-facing docs** without independent verification.
-- [ ] "Trezor Safe 7 with TROPIC01" — does not exist as a shipping product as of knowledge cutoff. Omit from comparison tables until confirmed.
-- [ ] "Masaryk U Simonik 2024/2025 thesis" 76% PIN-glitch figure — plausible but no link. Search Masaryk thesis repo before citing.
-- [ ] "BlaatSchaap research" on STM32F103 CPUID cloning — plausible pseudonym; verify.
-- [ ] "TheCharlatan May 2020 ColdCard firmware-reset" attack — plausible but no link.
-- [ ] ES0499 specific bit positions in chip-ID probe list — cross-check against current ES0499 PDF.
-- [ ] Bundle E claim that **STM32U5 clones do not exist as of early 2025** — properly hedged as "absence of evidence"; treat as current best guess, not guarantee.
+**Verification items after 2026-04-15 web verification round**:
+- [x] ~~Ledger Donjon March 2025 Trezor Safe 3 attack~~ — **VERIFIED REAL**. Blog post at `ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security` (March 12, 2025). Trezor confirmation at `trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation`.
+- [x] ~~Trezor Safe 7 with TROPIC01~~ — **VERIFIED REAL**. Announced October 21, 2025; shipping late 2025 / early 2026. Dual attestation (TROPIC01 + EAL6+ SE).
+- [x] ~~Masaryk U Simonik thesis 76% PIN-glitch~~ — **VERIFIED REAL**. Bachelor's thesis on fault injection vs STM32U5 (Trezor Safe 5). Reference: `it4sec.substack.com/p/fault-injection-attack-on-the-stm32u5`.
+- [x] ~~BlaatSchaap research on STM32F103 clones~~ — **VERIFIED REAL**. `blaatschaap.be/identifying-32f103-clones/` and multi-part Cortex-M series. Safe to cite.
+- [x] ~~TheCharlatan May 2020 ColdCard firmware-reset~~ — **VERIFIED REAL**. `thecharlatan.ch/COLDCARD-Supply-Chain/`.
+- [ ] ES0499 specific sub-section numbers (§2.26.2, §2.26.3, etc.) — ES0499 Rev 11 exists and covers USB OTG errata but exact sub-section numbering not confirmed in web search. Pin citations to Rev 11 PDF before writing code against specific section numbers.
+- Bundle E claim "STM32U5 clones do not exist as of early 2025" — appropriately hedged in the original; Simonik thesis + Donjon March 2025 attack now invalidate the "glitch-immune" subtext. U5 is presumed-vulnerable.
+
+**Attribution correction (2026-04-15)**: One item in Bundle E / D had wrong attribution. "Riscure LFI on ColdCard" (Mk2 ATECC508A single-shot; Mk3 ATECC608A multi-shot) was actually done by **Ledger Donjon (Olivier Hériveaux)**, not Riscure. See `blog.coinkite.com/laser-fault-injection/` + SSTIC 2020/2021 papers. Fix wherever we cite this.
 
 **Files to create:** `provisioning/` host-side tooling (extend #20), `secure/src/attestation.rs` (extend #20), `secure/src/hw/chip_id_probe.rs` (anti-counterfeit), `verify-webusb/` (browser verification page + server component)
 **Files to change:** `secure/src/main.rs` (full boot-time ceremony), `secure/src/se050/apdu.rs` (add ReadObject_W_Attst wrapper), `secure/src/optiga/apdu.rs` (add attested-sign + cert-chain verify)
@@ -473,4 +475,5 @@ When a task above is completed, update it here with the date and a one-line summ
 | 2026-04-14 | Brownout hardening Stage 1 | Reset-cause classification (RCC_CSR), verified flash quadword writes (post-write read-back), `make stm32-harden-opts` option-byte target (BOR3 + SRAM2_RST=0). Reset cause logged + dirty-reset triggers `zeroize_sensitive_state`. Bit layout for `RCC_CSR` empirically verified on hardware (0x14004400 = SFTRSTF + PINRSTF). Validated regression-free against `se050-admin-wipe-e2e`. Full design + Stages 2-5 in `docs/brownout-hardening.md`. |
 | 2026-04-14 | Crash-safety e2e test | New `make se050-crash-safety-e2e` 2-phase target: provision test objects + arm wipe flag + partial wipe + halt; user resets; phase 2 boots, detects flag, finishes wipe, erases flash page 125. Validated PASS on warm reset (`probe-rs reset`) AND true cold cycle (USB unplug — confirmed by SE050 PCB-byte change ef→82 indicating SE chip power-cycled). |
 | 2026-04-14 | AI deep-research round | 4 of 5 parallel research bundles run (A fault-injection, B key-mgmt, C SLH-DSA SCA, D USB hardening; E supply-chain pending). Findings synthesised into `docs/production-security.md` + new tasks #18-22 in this file. Hallucinations flagged: `CVE-2026-4179` fabricated; "SLasH-DSA 2025" Rowhammer paper future-dated/unverified; ES0499 §2.26.x section numbers + AN12436 Rev 2.4 SCP03 default keys cited but unverified — verify before code commit. |
-| 2026-04-15 | Bundle E supply-chain research | 5th deep-research bundle completed. Synthesised into production-security.md §2.5 + work-todo.md #22. Key finding: triple-UID SLH-DSA-128s factory manifest supersedes Bundle B's ECDSA-P256 binding record (adds firmware_hash + PQ-resistant signing + transparency-log + WebUSB verify ceremony). Hallucinations flagged: "Ledger Donjon March 2025 Trezor Safe 3 attack" (future-dated, no link); "Trezor Safe 7" (doesn't exist); Masaryk thesis / BlaatSchaap / TheCharlatan citations all plausible-but-unverified. SE050 variant gate identified — attestation requires SE050 C/E/F, not A/B/D. |
+| 2026-04-15 | Bundle E supply-chain research | 5th deep-research bundle completed. Synthesised into production-security.md §2.5 + work-todo.md #22. Key finding: triple-UID SLH-DSA-128s factory manifest supersedes Bundle B's ECDSA-P256 binding record (adds firmware_hash + PQ-resistant signing + transparency-log + WebUSB verify ceremony). SE050 variant gate identified — attestation requires SE050 C/E/F, not A/B/D. |
+| 2026-04-15 | Hallucination verification round | Web-verified every citation previously flagged as fabricated across all 5 bundles. **Most flags were wrong** — CVE-2026-4179, Ledger Donjon March 2025 Trezor Safe 3 attack, Trezor Safe 7, Masaryk Simonik thesis, BlaatSchaap + TheCharlatan research, RFC 9814, NXP AN12436 Rev 2.4, ES0499 all verified REAL. Our training cutoff dismissed post-cutoff publications as hallucinations. Corrected verification log in production-security.md §3. Genuinely fabricated / unverifiable items narrowed down to: Fluhrer ePrint 2024/500 (likely doesn't exist as described), "Extraktor" glitch board (not found — probably SiliconToaster misremembered), NCC "CM-1-C" specific label (series real, label not locatable), some precise trace-count figures. One attribution error fixed: ColdCard LFI attack was Ledger Donjon, not Riscure. |

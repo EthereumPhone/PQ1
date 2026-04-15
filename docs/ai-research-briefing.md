@@ -182,17 +182,28 @@ Listed here so future research doesn't re-derive them from scratch.
 | Cortex-M33 verified vulnerable to USB-MIN() EMFI attack (Colin O'Flynn USENIX WOOT 2019) | Real published attack | Safe to cite |
 | Masaryk U thesis (Simonik) demonstrated 76% PIN-glitch bypass on STM32U5A9 | Plausible but unverified — search Masaryk thesis repo | Treat as "presumed vulnerable" until confirmed |
 
-**Hallucinations from the 2026-04-14 research round (do NOT cite):**
-- `CVE-2026-4179` (Zephyr STM32 USB infinite loop) — fabricated CVE ID; does not exist in NVD.
-- "SLasH-DSA 2025" Rowhammer paper by Boy et al. — future-dated, likely fabricated. Treat as unverified until found on IACR ePrint.
-- Specific ES0499 section numbers cited in research (§2.26.2, §2.26.3) — plausible but unconfirmed; verify before quoting in code.
+**2026-04-15 verification round**: most of what was initially flagged as hallucinated turned out to be REAL. Our model's training cutoff was pre-2025 so it dismissed post-cutoff publications as fabrications. **Lesson for future research rounds: verify before flagging.** Full corrected verification table in `production-security.md` §3.
 
-**Hallucinations from the 2026-04-15 Bundle E round (do NOT cite):**
-- "Ledger Donjon March 2025 attack on Trezor Safe 3" — cited as Tier-B threat justification but no ticket / blog URL; future-dated relative to the AI's training cutoff. Technical threat model holds regardless; do not cite this specific attack without verification.
-- "Trezor Safe 7" with TROPIC01 — does not exist as a shipping product as of knowledge cutoff. Safe 5 is current Trezor flagship.
-- "Masaryk U Simonik 2024/2025 thesis" 76% PIN-glitch STM32U5A9 figure — plausible (Masaryk is a real university, U5A9 is real silicon) but no link / author verification. Treat as "presumed-vulnerable defensive posture" rather than "proven attack."
-- "BlaatSchaap research" on STM32F103 CPUID cloning — plausible pseudonym, unverified.
-- "TheCharlatan May 2020 ColdCard firmware-reset" — plausible but no link.
+**Confirmed real (previously flagged as hallucinated — DO cite them)**:
+- `CVE-2026-4179` (Zephyr USB infinite loop, 2026-03-16, advisory `GHSA-9xg7-g3q3-9prf`). Safe to cite; note advisory frames it as ISR-triggered `k_yield()`, not explicitly a malicious-host issue.
+- `RFC 9814` (SLH-DSA in CMS, July 2025). Quote confirmed: "this countermeasure is not effective for SLH-DSA."
+- NXP AN12436 Rev 2.4 (SE050 default SCP03 keys). All three hex values match byte-for-byte.
+- Ledger Donjon March 2025 Trezor Safe 3 glitch (TRZ32F429, `ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security`).
+- Trezor Safe 7 (announced October 21, 2025, TROPIC01 + EAL6+ dual attestation).
+- Masaryk U Simonik thesis on STM32U5 fault injection (~76% PIN-glitch on Trezor Safe 5).
+- BlaatSchaap STM32F103 clone research (`blaatschaap.be`).
+- TheCharlatan ColdCard firmware-reset attack (May 2020, `thecharlatan.ch/COLDCARD-Supply-Chain/`).
+
+**Remaining genuinely uncertain / likely fabricated (do NOT cite without independent verification)**:
+- Fluhrer ePrint 2024/500 "PRF-tree 1.7× overhead, backward-compatible" — does not appear to exist as described; technically implausible (changing PRF tree structure changes verification output). **Do not base architectural decisions on this.**
+- "Extraktor" Ledger Donjon ~$100 glitch board — cannot confirm this specific tool name. Likely misremembering of SiliconToaster (which IS real). Say "published Ledger Donjon tooling" instead.
+- NCC Group "CM-1-C" pattern label — NCC's multi-part FI-countermeasure series is real, but the specific "CM-1-C" identifier not locatable. Cite series by URL.
+- "SLasH-DSA 2025" Boy et al. Rowhammer — post-cutoff, plausible but unconfirmed. Don't cite yet.
+- Saarinen "SLotH" CRYPTO 2024 specific TVLA numerical claims (t=24.5 at 1k traces) — paper+author plausible, exact numbers unverified.
+- Belenky et al. specific trace counts (275K / 30K) — unverified.
+- ES0499 specific sub-section numbers (§2.26.2, §2.26.3, etc.) — ES0499 Rev 11 confirmed, but exact sub-section numbering may have shifted. Pin to Rev 11 PDF before quoting.
+
+**Attribution correction**: "Riscure LFI on ColdCard" (Mk2 ATECC508A / Mk3 ATECC608A) was actually **Ledger Donjon (Olivier Hériveaux)**, not Riscure. Research content is correct; attribution was wrong.
 
 ## 6. Known threats already catalogued
 
@@ -200,7 +211,7 @@ Listed here so future research doesn't re-derive them from scratch.
 Updated post-2026-04-14 research round — bundles A, B, C, D have run;
 bundle E has not.)
 
-- **Voltage glitching on RDP byte read during boot** — dominant historical STM32 attack. Earlier "STM32U5 has no public bypass" was Ledger Donjon's 2024 statement; Masaryk U thesis (Simonik 2024/2025) reportedly demonstrated 76% PIN-glitch on STM32U5A9, same core. Defences planned: BOR4, PVD, tamper monitors, option-byte RDP Level 2 with OEM1LOCK for production. **Treat U5 as presumed-vulnerable** to glitching at the core level.
+- **Voltage glitching on RDP byte read during boot** — dominant historical STM32 attack. Ledger Donjon's March 2025 statement that no public U5 glitch bypass existed (verified real, `ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security`) was invalidated within months by the Simonik thesis at Masaryk University (verified real) demonstrating ~76% PIN-glitch bypass on STM32U5 silicon. Defences planned: BOR4, PVD, tamper monitors, option-byte RDP Level 2 with OEM1LOCK for production. **U5 is confirmed glitch-vulnerable** at the core level — not presumed, proven.
 - **EMFI** — possible against U5 core; no public attack. Defended via internal tamper (temp/voltage/clock), optional tamper mesh on production PCB.
 - **Power/EM side-channel on software crypto** — SLH-DSA on Cortex-M33 emits EM. Mitigation status unclear; needs dedicated research (see Prompt C below).
 - **Fault injection on signature verify / PIN compare** — partially mitigated (verify-before-release). Bundle A research found verify-after-sign is *not adequate* for SLH-DSA per Genêt TCHES 2023 + RFC 9814. **SLH-DSA double-compute on disjoint SRAM is mandatory** before production. PIN compare needs FihInt complement-storage + fail-in pattern + volatile reads. See `docs/production-security.md` §2.1 + work-todo.md #18.
