@@ -275,12 +275,142 @@ format is right but the ID is fabricated. Do **not** reference this
 CVE in code comments or public docs. The structural advice (IWDG
 timeout, bounded reassembly, rate limiter) stands regardless.
 
-### 2.5 Supply-chain attestation (bundle E → not yet run)
+### 2.5 Supply-chain attestation (bundle E → todo #22)
 
-Prompt E exists as `docs/research-bundles/E-supply-chain.md` but has
-not been run through deep research yet. When run, findings fold into
-todo #22 and potentially update item #20 (binding record + boot-time
-anti-swap design may need revision).
+Bundle E surfaces a **triple-UID binding manifest** as the load-bearing
+defence — no shipping wallet currently does this, and it closes the
+single-chip-replacement attack surface that has bitten every existing
+wallet (Trezor Safe 3 via Ledger Donjon glitch on the STM32-OPTIGA
+pre-shared secret; Ledger Snake demo via arbitrary MCU code while SE
+attestation passed; ColdCard via firmware factory-reset without
+changing the tamper bag). Bundle B (§2.2) already specified per-device
+SCP03 rotation + OPTIGA PBS lock + ECDSA-P256 binding record; bundle E
+**extends** that with SLH-DSA manifest replacement, firmware-hash
+inclusion, transparency log, and a WebUSB user-verification ceremony.
+
+**What Bundle E adds on top of Bundle B:**
+
+1. **SLH-DSA-128s factory manifest** replaces Bundle B's ECDSA-P256
+   binding record. Post-quantum resistant; signature is ~7.8 KB
+   (fine — it's stored once, read on every boot). The factory HSM
+   signing key runs through an M-of-N ceremony with geographically
+   distributed shares.
+2. **CBOR manifest schema** with explicit fields:
+   ```
+   {
+     manifest_type:        "PQS-BIND-v1",
+     se050_uid:            <18 B from SE050 IDENTIFY>,
+     optiga_uid:           <27 B from OID 0xE0C2>,
+     stm32_uid:            <12 B from 0x0BFA_0590>,
+     firmware_hash:        SHA3-256(firmware_image),   // NEW vs Bundle B
+     firmware_version:     <monotonic counter>,
+     device_serial:        SHA3-256(se050_uid || optiga_uid || stm32_uid),
+     production_ts:        <ISO 8601>,
+     manifest_version:     1,
+     factory_pubkey_fp:    SHA3-256(factory_pubkey)[:16]
+   }
+   ```
+   Firmware-hash inclusion means the manifest also acts as a measured-
+   boot anchor — ties chip identity to a specific firmware build.
+3. **SE050 boot-time attestation** via `Se05x_API_ReadObject_W_Attst`
+   with caller-supplied 16-byte freshness nonce. Returns 18-byte
+   chipId + ECDSA-SHA256 signature over response. Verify signature
+   chains to NXP root CA. ⚠ **Variant constraint**: only SE050 C/E/F
+   have pre-provisioned attestation certs at OID `0xF0000013`; variants
+   A/B/D have keys but no cert. Confirm we're on C/E/F before relying
+   on attestation.
+4. **OPTIGA boot-time attestation** via `optiga_crypt_ecdsa_sign` with
+   key at OID `0xE0F0`, cert read from OID `0xE0E0`, chains to
+   Infineon OPTIGA ECC Root CA 2. Same freshness nonce across both SEs.
+5. **STM32U585 anti-counterfeit probes** at boot (detect remarked
+   chips / clones):
+   - CPUID / DBGMCU_IDCODE — expect Cortex-M33 r0p4, DEV_ID `0x482`.
+     Read at `0xE0044000`.
+   - UID register at `0x0BFA_0590`: validate lot bytes are printable
+     ASCII (`0x20`..`0x7E`), wafer number < 25, UID not all-0 or
+     all-0xFF.
+   - DHUK probe via SAES: run a DHUK-gated op, verify output against
+     factory-recorded expected value.
+   - Errata fingerprinting: `DBGMCU_DBG_AUTH_DEVICE.AUTH_ID` reads
+     zero at RDP0 (documented silicon quirk); a clone "fixing" this
+     outs itself. MSI-frequency low-drift (up to 25%) and ICACHE/
+     DCACHE behavior on Stop mode exit are mask-specific.
+   - Flash ECC: AN5342 documents SEC-DED; test last-64KB-block of
+     SRAM3 behavior.
+6. **Transparency log**: append-only record of every device serial +
+   manifest hash. Published (Merkle-anchored per the research's
+   suggestion; exact scheme TBD). Enables detection of rogue
+   production runs — any device with valid manifest but missing from
+   log fails the ceremony, even if factory HSM is compromised.
+7. **WebUSB box-opening ceremony** at `verify.pqsigner.io`:
+   - Browser sends fresh random challenge via WebUSB.
+   - Both SEs sign it (SE050 with NXP-attested key; OPTIGA with
+     Infineon-attested key).
+   - Website verifies both signatures independently chain to their
+     respective pinned root CAs, and that the UIDs match the binding
+     manifest, and the manifest's SLH-DSA signature verifies against
+     the published factory pubkey.
+   - Customer sees green-checkmark + device serial without installing
+     any tool.
+
+**Boot-time verification ceremony** (runs in secure world before
+entropy reconstruction):
+1. Read STM32 UID from `0x0BFA_0590`.
+2. Load binding manifest from secure flash.
+3. Verify SLH-DSA-128s signature with factory pubkey (stored in
+   write-protected OTP).
+4. Compare manifest.stm32_uid against hardware. Halt on mismatch.
+5. Probe SE050 (I2C addr `0x48`, IoT applet AID), attested read with
+   fresh nonce, extract chipId. Compare against manifest.se050_uid
+   AND against SE050's own signed chipId. Halt on mismatch.
+6. Probe OPTIGA (I2C addr `0x30`), read UID from `0xE0C2`, ECDSA-sign
+   same nonce with `0xE0F0`. Compare to manifest.optiga_uid. Halt.
+7. Compute SHA3-256 of firmware image; compare to
+   manifest.firmware_hash. Halt on mismatch.
+8. Check monotonic anti-rollback counter (from Bundle B).
+9. Set ATTESTATION_PASSED; proceed to normal boot.
+
+Failure at any step → permanent lockdown: neither SE releases entropy
+half; USB reports specific failure reason (manifest invalid / UID
+mismatch / firmware hash mismatch / etc.).
+
+**Hallucination flags from Bundle E** (fold these into the verification
+log in §3 below):
+
+- **"Ledger Donjon March 2025 attack on Trezor Safe 3"** — cited as
+  justification for the Tier B threat tier but no link / ticket /
+  blog post reference. Future-dated relative to the AI's training
+  cutoff (Feb 2025). **Treat as unverified**; the technical threat
+  model holds regardless but this specific attack should not be cited
+  as proof without verification.
+- **"Trezor Safe 7"** — claimed to add TROPIC01 for dual attestation.
+  Does not exist as a shipping product as of knowledge cutoff. Safe 5
+  is the current Trezor flagship. **Omit from comparison tables**
+  until it actually ships.
+- **"Masaryk University 2024/2025 thesis by Oliver Simonik"** — 76%
+  PIN-glitch on STM32U5A9. Plausible but unverified (no link /
+  repository citation).
+- **"BlaatSchaap research"** on STM32F103 clone detection — plausible
+  but unverified pseudonymous researcher.
+- **"TheCharlatan May 2020 ColdCard firmware-reset attack"** —
+  plausible but unverified (no link).
+- **ES0499 specific bit positions** cited in the chip-ID probe list
+  (`AUTH_ID` bitfield behavior at RDP0, MSI frequency anomaly) —
+  plausible but unverified; cross-check against current ES0499 PDF
+  before implementing.
+- **STM32U5 clone "do not exist as of early 2025"** — properly
+  hedged as absence-of-evidence rather than evidence-of-absence.
+  Treat as current best-available assessment, not a guarantee.
+
+**ECDSA vs SLH-DSA binding signature decision**:
+Bundle B used ECDSA-P256 for the binding record because it's small and
+SE050/OPTIGA can do it natively. Bundle E argues SLH-DSA-128s is more
+defensible long-term (PQ-resistant, no key-extraction from factory HSM
+via Shor). Since we're already computing SLH-DSA on the MCU for
+transaction signing, adding SLH-DSA verification of the manifest at
+boot is free. Recommendation: **go with Bundle E's SLH-DSA manifest**;
+retire Bundle B's ECDSA binding record design. This is a material
+change to work-todo #20 scope.
 
 ## 3. Hallucination + verification log
 

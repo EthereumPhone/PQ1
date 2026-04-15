@@ -187,6 +187,13 @@ Listed here so future research doesn't re-derive them from scratch.
 - "SLasH-DSA 2025" Rowhammer paper by Boy et al. — future-dated, likely fabricated. Treat as unverified until found on IACR ePrint.
 - Specific ES0499 section numbers cited in research (§2.26.2, §2.26.3) — plausible but unconfirmed; verify before quoting in code.
 
+**Hallucinations from the 2026-04-15 Bundle E round (do NOT cite):**
+- "Ledger Donjon March 2025 attack on Trezor Safe 3" — cited as Tier-B threat justification but no ticket / blog URL; future-dated relative to the AI's training cutoff. Technical threat model holds regardless; do not cite this specific attack without verification.
+- "Trezor Safe 7" with TROPIC01 — does not exist as a shipping product as of knowledge cutoff. Safe 5 is current Trezor flagship.
+- "Masaryk U Simonik 2024/2025 thesis" 76% PIN-glitch STM32U5A9 figure — plausible (Masaryk is a real university, U5A9 is real silicon) but no link / author verification. Treat as "presumed-vulnerable defensive posture" rather than "proven attack."
+- "BlaatSchaap research" on STM32F103 CPUID cloning — plausible pseudonym, unverified.
+- "TheCharlatan May 2020 ColdCard firmware-reset" — plausible but no link.
+
 ## 6. Known threats already catalogued
 
 (So research can focus on *new* threats rather than re-listing these.
@@ -201,7 +208,7 @@ bundle E has not.)
 - **Dark Skippy / anti-klepto nonce exfiltration** — ECDSA-specific, does not apply to SLH-DSA (stateless hash-based signatures have no nonce). **Irrelevant to us.** Stating this explicitly so future research doesn't chase it.
 - **Cold boot / Volt Boot / UnTrustZone SRAM residue** — minimize seed time in SRAM; Stage 2 moves secrets to SRAM2 with hardware auto-erase.
 - **USB stack** — bundle D research found two unaddressed silicon errata (DWC2 TxFIFO write atomicity; ZLP race causing stale-data leak) and surfaced FI-resistant `min()` pattern (Colin O'Flynn USENIX WOOT 2019 EMFI attack on USB control-transfer length clamp). Bounded reassembly + HID rate limiter + APDU CLA/INS allowlist also pending. See work-todo.md #19. *Note*: research cited `CVE-2026-4179` for a Zephyr USB driver — that CVE is fabricated and should be ignored.
-- **Supply chain / counterfeit chips** — STM32 family heavily counterfeited; production plan is authorized-distributor sourcing + boot-time chip-ID verification (Prompt E).
+- **Supply chain / counterfeit chips** — STM32 family heavily counterfeited. Bundle E research: U5-family clones not confirmed as of early 2025 (absence of evidence, appropriately hedged). Defences: STM32U585 CPUID + UID + DHUK + errata-fingerprint probes at boot; triple-UID SLH-DSA-128s manifest signed at factory (closes single-chip-swap attacks that have broken every existing wallet); SE050 + OPTIGA attestation against pinned NXP + Infineon root CAs; transparency log of shipped device serials; WebUSB box-opening ceremony for customers. See work-todo.md #22 + production-security.md §2.5.
 - **Seed entropy collection** — currently STM32 TRNG + HSI48. Multi-source mixing (STM32 TRNG XOR SE050 TRNG XOR OPTIGA TRNG) is designed but not yet implemented.
 - **SLH-DSA side-channel via PRF(SK.seed)** — bundle C research surfaced. Currently signing with `OptRand = 0` (deterministic) which makes horizontal DPA on the master secret feasible per Saarinen SLotH CRYPTO 2024 (~1-10 trace recovery on unprotected Cortex-M33). Mitigations: mandatory non-deterministic OptRand from STM32 TRNG every signature, signing rate limiter, 2^16 per-key rotation, WOTS+ chain + FORS tree shuffling, optional SHAKE migration for cleaner masking. See work-todo.md #18.
 
@@ -220,10 +227,10 @@ attachment, and the session has everything it needs. See
 
 **Status as of last update:**
 - Prompt A (fault injection): ✅ run, results in `docs/research-bundles/results/`, synthesised to `docs/production-security.md` §2.1 + work-todo.md #18.
-- Prompt B (key management): ✅ run, results in same dir, synthesised §2.2 + #20.
+- Prompt B (key management): ✅ run, results in same dir, synthesised §2.2 + #20 (partially superseded by E).
 - Prompt C (SLH-DSA SCA): ✅ run, synthesised §2.3 + #18.
 - Prompt D (USB hardening): ✅ run, synthesised §2.4 + #19.
-- **Prompt E (supply-chain attestation): ❌ NOT YET RUN** — bundle exists but has not been sent through deep research.
+- Prompt E (supply-chain attestation): ✅ run, synthesised §2.5 + #22. Triple-UID SLH-DSA manifest **supersedes** Bundle B's ECDSA-P256 binding record.
 
 The prompts below are the canonical question text. After a prompt has
 run, future research rounds on the same topic should reference the
