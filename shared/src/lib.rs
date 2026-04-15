@@ -229,8 +229,17 @@ pub const CMD_SIGN_BOOTSTRAP: u32 = 10;
 ///   [8..12)  slot_index   u32 BE
 ///   [12..44) msg_hash     32 bytes
 ///
-/// Response: JARDIN wrapper header (97 bytes) + variable-length FORS+C
-/// signature (2452 + q*16 bytes).
+/// Response:
+///   [0..4)   response_len   u32 BE (see below)
+///   [4..101) JARDIN wrapper header (97 bytes)
+///   [101..)  raw FORS+C signature (2452 + q*16 bytes)
+///
+/// **Rotation-soon flag:** bit 31 of `response_len` is set when the slot
+/// has fewer than [`JARDIN_ROTATION_THRESHOLD`] (15) signatures remaining.
+/// The companion should mask the flag before reading the length:
+///
+///   rotation_soon = (response_len >> 31) & 1
+///   actual_len    = response_len & 0x7FFF_FFFF
 pub const CMD_SIGN_JARDIN: u32 = 15;
 
 /// CMD_REGISTER_JARDIN_SLOT — generate a Type 1 slot registration
@@ -401,6 +410,11 @@ pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
 // -- Address & account helpers (0x60-0x6F) --
 pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
 
+// -- JARDIN FORS+C compact signing (0x70-0x7F) --
+pub const INS_V2_SIGN_JARDIN: u8 = 0x70;
+pub const INS_V2_REGISTER_JARDIN_SLOT: u8 = 0x71;
+pub const INS_V2_GET_JARDIN_SLOT_INFO: u8 = 0x72;
+
 // -- Continuation (shared with v1) --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
 
@@ -446,6 +460,16 @@ pub const JARDIN_WRAPPER_HEADER_LEN: usize = 1 + 32 + 32 + 32; // 97
 
 /// Maximum JARDIN wrapper total: header + max signature.
 pub const JARDIN_WRAPPER_MAX_LEN: usize = JARDIN_WRAPPER_HEADER_LEN + JARDIN_SIG_MAX; // 4069
+
+/// When fewer than this many signatures remain on the active JARDIN slot,
+/// CMD_SIGN_JARDIN sets bit 31 of the response length field to signal
+/// the companion to proactively register the next slot.
+pub const JARDIN_ROTATION_THRESHOLD: u8 = 15;
+
+/// Bit mask for the rotation-soon flag in the CMD_SIGN_JARDIN response
+/// length field.  Same bit-31 signalling convention used by
+/// `sign_userop_with_ots` for the OTS trailer flag.
+pub const JARDIN_ROTATION_FLAG: u32 = 0x8000_0000;
 
 /// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
 /// **DEPRECATED** along with CMD_SIGN_BOOTSTRAP.

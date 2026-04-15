@@ -276,25 +276,20 @@ fn signing_progress(percent: u8) {
     crate::ui::show_progress("Signing", percent);
 }
 
-/// JARDIN FORS+C compact signing variant.
+/// Ensure the JARDIN master entropy is derived and the requested slot is
+/// initialized. Shared by [`decrypt_and_sign_jardin`] and
+/// [`super::cmd_register_jardin_slot`].
 ///
-/// Ensures the JARDIN slot is initialized for the given (chain_id, slot_index),
-/// signs the message, and writes the JARDIN wrapper header + variable-length
-/// signature to NS memory.
+/// On success the caller can safely access `state.jardin_master_entropy`
+/// and `super::state::JARDIN_SLOT`.
 ///
-/// SAFETY: `sig_ptr` must point at a pre-validated region of at least
-/// `JARDIN_WRAPPER_MAX_LEN` bytes.
-pub(super) unsafe fn decrypt_and_sign_jardin(
+/// SAFETY: single-threaded dispatcher invariant must hold.
+pub(super) unsafe fn ensure_jardin_ready(
     state: &mut super::state::SecureState,
-    msg_hash: &[u8; 32],
-    sig_ptr: *mut u8,
     chain_id: u64,
     slot_index: u32,
-    success_banner: &str,
-) -> (u32, usize) {
-    use sphincs_tz_shared::{
-        NscStatus, JARDIN_WRAPPER_HEADER_LEN, SIGNER_JARDIN,
-    };
+) -> u32 {
+    use sphincs_tz_shared::NscStatus;
 
     // 1. Ensure JARDIN master entropy is derived for this session
     if !state.jardin_master_derived {
@@ -305,7 +300,7 @@ pub(super) unsafe fn decrypt_and_sign_jardin(
             let se = &mut *core::ptr::addr_of_mut!(crate::SE);
             match se.read_entropy_blob(&mut entropy_blob) {
                 Ok(len) => len,
-                Err(_) => return (NscStatus::InternalError as u32, 0),
+                Err(_) => return NscStatus::InternalError as u32,
             }
         };
         let mut entropy = match crate::crypto::decrypt_entropy_blob(
@@ -315,7 +310,7 @@ pub(super) unsafe fn decrypt_and_sign_jardin(
             Ok(e) => e,
             Err(_) => {
                 entropy_blob.zeroize();
-                return (NscStatus::CryptoError as u32, 0);
+                return NscStatus::CryptoError as u32;
             }
         };
         entropy_blob.zeroize();
@@ -345,6 +340,35 @@ pub(super) unsafe fn decrypt_and_sign_jardin(
         state.jardin_chain_id = chain_id;
         state.jardin_slot_index = slot_index;
         state.jardin_slot_active = true;
+    }
+
+    NscStatus::Ok as u32
+}
+
+/// JARDIN FORS+C compact signing variant.
+///
+/// Ensures the JARDIN slot is initialized for the given (chain_id, slot_index),
+/// signs the message, and writes the JARDIN wrapper header + variable-length
+/// signature to NS memory.
+///
+/// SAFETY: `sig_ptr` must point at a pre-validated region of at least
+/// `JARDIN_WRAPPER_MAX_LEN` bytes.
+pub(super) unsafe fn decrypt_and_sign_jardin(
+    state: &mut super::state::SecureState,
+    msg_hash: &[u8; 32],
+    sig_ptr: *mut u8,
+    chain_id: u64,
+    slot_index: u32,
+    success_banner: &str,
+) -> (u32, usize) {
+    use sphincs_tz_shared::{
+        NscStatus, JARDIN_WRAPPER_HEADER_LEN, SIGNER_JARDIN,
+    };
+
+    // 1-2. Ensure master entropy derived and slot initialized
+    let init_status = ensure_jardin_ready(state, chain_id, slot_index);
+    if init_status != NscStatus::Ok as u32 {
+        return (init_status, 0);
     }
 
     // 3. Get mutable reference to the slot

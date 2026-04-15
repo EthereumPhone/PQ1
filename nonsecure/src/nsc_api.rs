@@ -42,6 +42,9 @@ mod transport {
     const CMD_LOCK: u32 = 12;
     const CMD_SIGN_MESSAGE: u32 = 13;
     const CMD_GET_WALLET_ADDRESS: u32 = 14;
+    const CMD_SIGN_JARDIN: u32 = 15;
+    const CMD_REGISTER_JARDIN_SLOT: u32 = 16;
+    const CMD_GET_JARDIN_SLOT_INFO: u32 = 17;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -160,6 +163,39 @@ mod transport {
             gateway_call(CMD_GET_WALLET_ADDRESS, payload_ptr as u32, out_ptr as u32, total_len)
         }
     }
+
+    #[inline]
+    pub(super) fn sign_jardin_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_SIGN_JARDIN, payload_ptr as u32, sig_ptr as u32, total_len)
+        }
+    }
+
+    #[inline]
+    pub(super) fn register_jardin_slot_call(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_REGISTER_JARDIN_SLOT, payload_ptr as u32, out_ptr as u32, total_len)
+        }
+    }
+
+    #[inline]
+    pub(super) fn get_jardin_slot_info_call(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        out_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(CMD_GET_JARDIN_SLOT_INFO, payload_ptr as u32, out_ptr as u32, out_len)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -187,6 +223,9 @@ mod transport {
         fn nsc_lock() -> u32;
         fn nsc_sign_message(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_get_wallet_address(payload_ptr: u32, out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_sign_jardin(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_register_jardin_slot(payload_ptr: u32, out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_get_jardin_slot_info(payload_ptr: u32, out_ptr: u32, out_len: u32) -> u32;
     }
 
     #[inline]
@@ -280,6 +319,33 @@ mod transport {
         total_len: u32,
     ) -> u32 {
         unsafe { nsc_get_wallet_address(payload_ptr as u32, out_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn sign_jardin_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe { nsc_sign_jardin(payload_ptr as u32, sig_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn register_jardin_slot_call(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe { nsc_register_jardin_slot(payload_ptr as u32, out_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn get_jardin_slot_info_call(
+        payload_ptr: *const u8,
+        out_ptr: *mut u8,
+        out_len: u32,
+    ) -> u32 {
+        unsafe { nsc_get_jardin_slot_info(payload_ptr as u32, out_ptr as u32, out_len) }
     }
 }
 
@@ -424,5 +490,50 @@ pub fn get_wallet_address(payload: &[u8], out: &mut [u8; 20]) -> u32 {
         payload.as_ptr(),
         out.as_mut_ptr(),
         payload.len() as u32,
+    )
+}
+
+/// Sign a 32-byte message hash using JARDIN FORS+C compact signing.
+///
+/// The response is written to `sig_buf` with a 4-byte BE length prefix
+/// followed by the JARDIN wrapper (97-byte header + variable-length
+/// FORS+C signature of 2452 + q*16 bytes).
+pub fn sign_jardin(chain_id: u64, slot_index: u32, msg_hash: &[u8; 32], sig_buf: &mut [u8]) -> u32 {
+    let mut payload = [0u8; 44];
+    payload[0..8].copy_from_slice(&chain_id.to_be_bytes());
+    payload[8..12].copy_from_slice(&slot_index.to_be_bytes());
+    payload[12..44].copy_from_slice(msg_hash);
+    transport::sign_jardin_call(
+        payload.as_ptr(),
+        sig_buf.as_mut_ptr(),
+        payload.len() as u32,
+    )
+}
+
+/// Register a JARDIN slot (simplified V1).  Returns raw slot parameters
+/// in `out_buf`: slot_key(32) + sub_vk_hash(32) + sub_pk_seed(16) +
+/// sub_pk_root(16) + r(32) = 128 bytes.  The companion builds the
+/// on-chain `registerJardinSlot(slotKey, subVkHash)` UserOp.
+pub fn register_jardin_slot(chain_id: u64, slot_index: u32, out_buf: &mut [u8]) -> u32 {
+    let mut payload = [0u8; 12];
+    payload[0..8].copy_from_slice(&chain_id.to_be_bytes());
+    payload[8..12].copy_from_slice(&slot_index.to_be_bytes());
+    transport::register_jardin_slot_call(
+        payload.as_ptr(),
+        out_buf.as_mut_ptr(),
+        payload.len() as u32,
+    )
+}
+
+/// Query JARDIN slot info.  Returns 7 bytes in `out_buf`:
+/// slot_index(4 BE) + next_q(1) + remaining(1) + slot_active(1).
+pub fn get_jardin_slot_info(chain_id: u64, slot_index: u32, out_buf: &mut [u8]) -> u32 {
+    let mut payload = [0u8; 12];
+    payload[0..8].copy_from_slice(&chain_id.to_be_bytes());
+    payload[8..12].copy_from_slice(&slot_index.to_be_bytes());
+    transport::get_jardin_slot_info_call(
+        payload.as_ptr(),
+        out_buf.as_mut_ptr(),
+        7,
     )
 }

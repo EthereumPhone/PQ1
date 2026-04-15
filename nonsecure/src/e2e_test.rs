@@ -29,12 +29,19 @@ use crate::{aa, erc20_db, nsc_api, vk_db};
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
     EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN,
-    MAX_USEROP_RESPONSE_LEN, NscStatus, SIGNATURE_LEN, USEROP_PREFIX_LEN,
+    JARDIN_SIG_MIN, JARDIN_WRAPPER_HEADER_LEN, JARDIN_WRAPPER_MAX_LEN,
+    MAX_USEROP_RESPONSE_LEN, NscStatus, SIGNATURE_LEN, SIGNER_JARDIN, USEROP_PREFIX_LEN,
 };
 
 // === Scratch buffers ========================================================
 
 static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
+
+// JARDIN FORS+C scratch buffers
+static mut JARDIN_SIG_BUF: [u8; 4 + JARDIN_WRAPPER_MAX_LEN] =
+    [0u8; 4 + JARDIN_WRAPPER_MAX_LEN];
+static mut JARDIN_REGISTER_BUF: [u8; 128] = [0u8; 128];
+static mut JARDIN_INFO_BUF: [u8; 7] = [0u8; 7];
 
 static mut ERC20_BUNDLE_BUF: [u8; 1120] = [0u8; 1120];
 
@@ -829,6 +836,148 @@ fn main() -> ! {
             nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
         };
         report_expect("neg_bad_envelope", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    }
+
+    // ===================================================================
+    // JARDIN FORS+C compact signature scenarios
+    // ===================================================================
+    //
+    // These must run in sequence: scenario 15 initialises the slot,
+    // subsequent scenarios depend on the slot state from prior signs.
+
+    // ----- Scenario 15: JARDIN FORS+C basic sign -----
+    //
+    // First sign on slot 0: triggers keygen (~3-4 s), then signs at q=1.
+    // Verify the response has the SIGNER_JARDIN header byte and a valid
+    // response length (4 + 97 + JARDIN_SIG_MIN for q=1).
+    {
+        let msg_hash = [0xAAu8; 32];
+        let status = unsafe {
+            nsc_api::sign_jardin(1, 0, &msg_hash, &mut JARDIN_SIG_BUF)
+        };
+        if status == NscStatus::Ok as u32 {
+            unsafe {
+                let resp_len = u32::from_be_bytes([
+                    JARDIN_SIG_BUF[0], JARDIN_SIG_BUF[1],
+                    JARDIN_SIG_BUF[2], JARDIN_SIG_BUF[3],
+                ]) as usize;
+                let signer_type = JARDIN_SIG_BUF[4];
+                let expected_min = 4 + JARDIN_WRAPPER_HEADER_LEN + JARDIN_SIG_MIN;
+                if signer_type != SIGNER_JARDIN {
+                    hprintln!("[E2E] jardin_basic_sign: bad signer_type 0x{:02x}", signer_type);
+                } else if resp_len < expected_min {
+                    hprintln!("[E2E] jardin_basic_sign: resp_len {} < expected_min {}", resp_len, expected_min);
+                }
+            }
+        }
+        report("jardin_basic_sign", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 16: JARDIN sequential sign (q=2) -----
+    //
+    // Second sign on same slot. The response should be 16 bytes longer
+    // than the first (q=2 adds one more auth node at 16 bytes).
+    {
+        let msg_hash2 = [0xBBu8; 32];
+        let status = unsafe {
+            nsc_api::sign_jardin(1, 0, &msg_hash2, &mut JARDIN_SIG_BUF)
+        };
+        if status == NscStatus::Ok as u32 {
+            unsafe {
+                let resp_len = u32::from_be_bytes([
+                    JARDIN_SIG_BUF[0], JARDIN_SIG_BUF[1],
+                    JARDIN_SIG_BUF[2], JARDIN_SIG_BUF[3],
+                ]) as usize;
+                // q=2: body(2452) + 2*16 = 2484, + header(97) + prefix(4) = 2585
+                let expected_q2 = 4 + JARDIN_WRAPPER_HEADER_LEN + 2452 + 2 * 16;
+                if resp_len != expected_q2 {
+                    hprintln!("[E2E] jardin_seq_sign_q2: resp_len {} != expected {}", resp_len, expected_q2);
+                }
+            }
+        }
+        report("jardin_seq_sign_q2", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 17: JARDIN slot info -----
+    //
+    // After 2 signs, next_q should be 3, remaining should be 93, active=1.
+    {
+        let status = unsafe {
+            nsc_api::get_jardin_slot_info(1, 0, &mut JARDIN_INFO_BUF)
+        };
+        if status == NscStatus::Ok as u32 {
+            unsafe {
+                let next_q = JARDIN_INFO_BUF[4];
+                let remaining = JARDIN_INFO_BUF[5];
+                let active = JARDIN_INFO_BUF[6];
+                if active != 1 {
+                    hprintln!("[E2E] jardin_slot_info: expected active=1, got {}", active);
+                }
+                if next_q != 3 {
+                    hprintln!("[E2E] jardin_slot_info: expected next_q=3, got {}", next_q);
+                }
+                if remaining != 93 {
+                    hprintln!("[E2E] jardin_slot_info: expected remaining=93, got {}", remaining);
+                }
+            }
+        }
+        report("jardin_slot_info", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 18: JARDIN register slot -----
+    //
+    // Register slot 0 (already active). Returns slot_key, sub_vk_hash,
+    // sub_pk_seed, sub_pk_root, and r. Verify non-zero values.
+    {
+        let status = unsafe {
+            nsc_api::register_jardin_slot(1, 0, &mut JARDIN_REGISTER_BUF)
+        };
+        if status == NscStatus::Ok as u32 {
+            unsafe {
+                // slot_key (bytes 0..32) should be non-zero
+                let slot_key_zero = JARDIN_REGISTER_BUF[0..32].iter().all(|&b| b == 0);
+                if slot_key_zero {
+                    hprintln!("[E2E] jardin_register: slot_key is all-zero");
+                }
+                // sub_vk_hash (bytes 32..64) should be non-zero
+                let vk_hash_zero = JARDIN_REGISTER_BUF[32..64].iter().all(|&b| b == 0);
+                if vk_hash_zero {
+                    hprintln!("[E2E] jardin_register: sub_vk_hash is all-zero");
+                }
+            }
+        }
+        report("jardin_register_slot", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 19: JARDIN slot switch (slot 1) -----
+    //
+    // Sign with slot_index=1 on the same chain. This triggers keygen for
+    // the new slot. Verify the sign succeeds.
+    {
+        let msg_hash = [0xCCu8; 32];
+        let status = unsafe {
+            nsc_api::sign_jardin(1, 1, &msg_hash, &mut JARDIN_SIG_BUF)
+        };
+        report("jardin_slot_switch", status, &mut pass_count, &mut fail_count);
+    }
+
+    // ----- Scenario 20: JARDIN query non-active slot -----
+    //
+    // After switching to slot 1, query slot 0 — it should be inactive
+    // (chain matches but slot_index does not).
+    {
+        let status = unsafe {
+            nsc_api::get_jardin_slot_info(1, 0, &mut JARDIN_INFO_BUF)
+        };
+        if status == NscStatus::Ok as u32 {
+            unsafe {
+                let active = JARDIN_INFO_BUF[6];
+                if active != 0 {
+                    hprintln!("[E2E] jardin_neg_inactive: expected active=0, got {}", active);
+                }
+            }
+        }
+        report("jardin_neg_inactive_slot", status, &mut pass_count, &mut fail_count);
     }
 
     // ----- Summary -----

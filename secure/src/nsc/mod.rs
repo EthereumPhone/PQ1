@@ -51,14 +51,17 @@
 mod cmd_clear_sign;
 mod cmd_clear_sign_msg;
 mod cmd_get_bootstrap_pubkey;
+mod cmd_get_jardin_slot_info;
 mod cmd_get_main_pubkey;
 mod cmd_get_pubkey;
 mod cmd_get_remaining;
 mod cmd_get_wallet_address;
 mod cmd_is_unlocked;
 mod cmd_lock;
+mod cmd_register_jardin_slot;
 mod cmd_request_unlock;
 mod cmd_sign_bootstrap;
+mod cmd_sign_jardin;
 mod cmd_sign_message;
 mod cmd_sign_userop;
 mod ptr_validate;
@@ -69,9 +72,10 @@ mod userop_tail;
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
     NscStatus, CMD_CLEAR_SIGN, CMD_CLEAR_SIGN_MSG, CMD_GET_BOOTSTRAP_PUBKEY,
-    CMD_GET_MAIN_PUBKEY, CMD_GET_PUBKEY, CMD_GET_REMAINING, CMD_GET_WALLET_ADDRESS,
-    CMD_IS_UNLOCKED, CMD_LOCK, CMD_NONE, CMD_REQUEST_UNLOCK, CMD_SIGN_BOOTSTRAP,
-    CMD_SIGN_MESSAGE, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
+    CMD_GET_JARDIN_SLOT_INFO, CMD_GET_MAIN_PUBKEY, CMD_GET_PUBKEY, CMD_GET_REMAINING,
+    CMD_GET_WALLET_ADDRESS, CMD_IS_UNLOCKED, CMD_LOCK, CMD_NONE,
+    CMD_REGISTER_JARDIN_SLOT, CMD_REQUEST_UNLOCK, CMD_SIGN_BOOTSTRAP,
+    CMD_SIGN_JARDIN, CMD_SIGN_MESSAGE, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -199,6 +203,9 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_LOCK => cmd_lock::run(),
         CMD_SIGN_MESSAGE => cmd_sign_message::run(args),
         CMD_GET_WALLET_ADDRESS => cmd_get_wallet_address::run(args),
+        CMD_SIGN_JARDIN => cmd_sign_jardin::run(args),
+        CMD_REGISTER_JARDIN_SLOT => cmd_register_jardin_slot::run(args),
+        CMD_GET_JARDIN_SLOT_INFO => cmd_get_jardin_slot_info::run(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -348,4 +355,40 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_wallet_address(
 ) -> u32 {
     let args = GatewayArgs { arg0: payload_ptr, arg1: out_ptr, arg2: total_len };
     unsafe { cmd_get_wallet_address::run(&args) }
+}
+
+/// CMD_SIGN_JARDIN — JARDIN FORS+C compact signing.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_sign_jardin(
+    payload_ptr: u32,
+    sig_out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
+    unsafe { cmd_sign_jardin::run(&args) }
+}
+
+/// CMD_REGISTER_JARDIN_SLOT — return JARDIN slot registration parameters.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_register_jardin_slot(
+    payload_ptr: u32,
+    out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: out_ptr, arg2: total_len };
+    unsafe { cmd_register_jardin_slot::run(&args) }
+}
+
+/// CMD_GET_JARDIN_SLOT_INFO — query JARDIN slot state.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_jardin_slot_info(
+    payload_ptr: u32,
+    out_ptr: u32,
+    out_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: payload_ptr, arg1: out_ptr, arg2: out_len };
+    unsafe { cmd_get_jardin_slot_info::run(&args) }
 }
