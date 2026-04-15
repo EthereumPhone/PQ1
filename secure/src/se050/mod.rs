@@ -1083,11 +1083,18 @@ impl Se050 {
         Ok(())
     }
 
-    /// Authenticate with PIN and read the stored entropy from hardware.
+    /// Authenticate with PIN and read entropy + cached VKs from hardware.
     ///
-    /// On success returns the 32-byte entropy. On PIN failure the SE050
-    /// hardware decrements its attempt counter internally.
-    fn authenticate_and_read(&mut self, pin: &[u8]) -> Result<[u8; 32], Se050Error> {
+    /// Reads all three PIN-gated objects (entropy, VK, bootstrap VK) in a
+    /// single authenticated session so the unlock path never needs to run
+    /// the expensive SPHINCS+C7 hypertree keygen (~25s per key on Cortex-M33).
+    ///
+    /// On success returns `(entropy, vk, bootstrap_vk)`. On PIN failure the
+    /// SE050 hardware decrements its attempt counter internally.
+    fn authenticate_and_read(
+        &mut self,
+        pin: &[u8],
+    ) -> Result<([u8; 32], [u8; 32], [u8; 32]), Se050Error> {
         self.init()?;
 
         unsafe {
@@ -1106,11 +1113,25 @@ impl Se050 {
                 return Err(e);
             }
 
-            // Read entropy through the authenticated session
+            // Read all three objects through the authenticated session.
+            // All share the same UserID auth policy.
             let mut entropy = [0u8; 32];
-            let n = apdu::read_authed(
+            let mut vk = [0u8; 32];
+            let mut bootstrap_vk = [0u8; 32];
+
+            let n_entropy = apdu::read_authed(
                 &mut self.t1, &mut self.scp03,
                 &session_id, ENTROPY_OBJ, &mut entropy,
+            );
+
+            let n_vk = apdu::read_authed(
+                &mut self.t1, &mut self.scp03,
+                &session_id, VK_OBJ, &mut vk,
+            );
+
+            let n_bvk = apdu::read_authed(
+                &mut self.t1, &mut self.scp03,
+                &session_id, BOOTSTRAP_VK_OBJ, &mut bootstrap_vk,
             );
 
             // Always close the session
@@ -1118,11 +1139,24 @@ impl Se050 {
                 &mut self.t1, &mut self.scp03, &session_id,
             );
 
-            match n {
-                Ok(32) => Ok(entropy),
-                Ok(_) => Err(Se050Error::Transport), // unexpected length
-                Err(e) => Err(e),
+            // Entropy is mandatory; VK reads are best-effort (fall back
+            // to full keygen in unlock if they fail).
+            match n_entropy {
+                Ok(32) => {}
+                Ok(_) => return Err(Se050Error::Transport),
+                Err(e) => return Err(e),
             }
+
+            // Zero out VK buffers on read failure so unlock can detect
+            // the miss and fall back to keygen.
+            if !matches!(n_vk, Ok(32)) {
+                vk = [0u8; 32];
+            }
+            if !matches!(n_bvk, Ok(32)) {
+                bootstrap_vk = [0u8; 32];
+            }
+
+            Ok((entropy, vk, bootstrap_vk))
         }
     }
 }
@@ -1213,15 +1247,16 @@ impl WalletStore for Se050 {
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
         use zeroize::Zeroize;
 
-        let mut entropy = self.authenticate_and_read(pin).map_err(|e| match e {
-            Se050Error::PinIncorrect => {
-                if self.remaining > 0 {
-                    self.remaining -= 1;
+        let (mut entropy, vk_from_se, bvk_from_se) =
+            self.authenticate_and_read(pin).map_err(|e| match e {
+                Se050Error::PinIncorrect => {
+                    if self.remaining > 0 {
+                        self.remaining -= 1;
+                    }
+                    UnlockError::PinIncorrect
                 }
-                UnlockError::PinIncorrect
-            }
-            _ => UnlockError::InternalError,
-        })?;
+                _ => UnlockError::InternalError,
+            })?;
 
         // Successful unlock — reset attempt counter.
         self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
@@ -1233,15 +1268,31 @@ impl WalletStore for Se050 {
         self.entropy_blob_cache.copy_from_slice(&blob);
         self.blob_cached = true;
 
-        // Cache VK + bootstrap VK.
-        let (sk, vk_bytes) = crate::crypto::derive_keypair_from_entropy(&entropy);
-        drop(sk);
-        self.vk_cache.copy_from_slice(&vk_bytes);
-        self.vk_cached = true;
+        // Cache VK + bootstrap VK directly from SE050 — no hypertree
+        // keygen needed. These were written at provisioning time and are
+        // read in the same authenticated session as the entropy.
+        //
+        // A zero VK means the SE050 read failed (legacy provisioning or
+        // transport glitch). Fall back to the expensive full keygen only
+        // in that case.
+        if vk_from_se != [0u8; 32] {
+            self.vk_cache.copy_from_slice(&vk_from_se);
+            self.vk_cached = true;
+        } else {
+            let (sk, vk_bytes) = crate::crypto::derive_keypair_from_entropy(&entropy);
+            drop(sk);
+            self.vk_cache.copy_from_slice(&vk_bytes);
+            self.vk_cached = true;
+        }
 
-        let bvk = crate::crypto::derive_bootstrap_vk_from_entropy(&entropy);
-        self.bootstrap_vk_cache.copy_from_slice(&bvk);
-        self.bootstrap_vk_cached = true;
+        if bvk_from_se != [0u8; 32] {
+            self.bootstrap_vk_cache.copy_from_slice(&bvk_from_se);
+            self.bootstrap_vk_cached = true;
+        } else {
+            let bvk = crate::crypto::derive_bootstrap_vk_from_entropy(&entropy);
+            self.bootstrap_vk_cache.copy_from_slice(&bvk);
+            self.bootstrap_vk_cached = true;
+        }
 
         entropy.zeroize();
 

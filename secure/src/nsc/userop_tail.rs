@@ -190,7 +190,9 @@ pub(super) unsafe fn sign_userop_full(
             rand_buf.copy_from_slice(&r[..16]);
         }
 
-        let bootstrap_sig = bootstrap_sk.sign(&auth_msg, Some(&rand_buf));
+        let bootstrap_sig = bootstrap_sk.sign_with_progress(
+            &auth_msg, Some(&rand_buf), bootstrap_sign_progress,
+        );
         rand_buf.zeroize();
         drop(bootstrap_sk); // zeroize on drop
 
@@ -286,4 +288,8 @@ pub(super) unsafe fn sign_userop_full(
     }
 
     status
+}
+
+fn bootstrap_sign_progress(percent: u8) {
+    crate::ui::show_progress("Bootstrap sig", percent);
 }

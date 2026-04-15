@@ -28,7 +28,7 @@ contract PQCoinbaseSmartWalletFactoryTest is Base {
     }
 
     function test_createAccount_returnExisting() public {
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
         PQCoinbaseSmartWallet dup = factory.createAccount(
             TEST_BOOTSTRAP_PK_SEED, TEST_BOOTSTRAP_PK_ROOT,
             TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT,
@@ -42,7 +42,7 @@ contract PQCoinbaseSmartWalletFactoryTest is Base {
         mockVerifier.setShouldVerify(false);
         bytes32 newSeed = bytes32(uint256(0xeeee));
         bytes32 newRoot = bytes32(uint256(0xdddd));
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
         vm.expectRevert(abi.encodeWithSignature("InvalidBootstrapSignature()"));
         factory.createAccount(newSeed, newRoot, TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT, dummySig);
     }

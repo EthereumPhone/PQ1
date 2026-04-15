@@ -61,7 +61,7 @@ pub fn compute_auth_message(
 /// ```text
 ///   factory(20) + selector(4) + bootstrapPkSeed(32) + bootstrapPkRoot(32)
 ///   + mainPkSeed(32) + mainPkRoot(32) + offset(32) + sigLen(32)
-///   + sig(3704) + padding(24) = 3928
+///   + sig(3976) + padding(24) = 4216
 /// ```
 pub fn compute_init_code_hash(
     bootstrap_pk_seed: &[u8; 32],
@@ -96,10 +96,10 @@ pub fn compute_init_code_hash(
     len_word[24..32].copy_from_slice(&(SIGNATURE_LEN as u64).to_be_bytes());
     h.update(&len_word);
 
-    // Bootstrap signature data (3,704 bytes)
+    // Bootstrap signature data
     h.update(bootstrap_sig);
 
-    // ABI zero-padding to 32-byte boundary (3704 % 32 = 8, need 24 zeros)
+    // ABI zero-padding to 32-byte boundary
     let padding = ((SIGNATURE_LEN + 31) / 32) * 32 - SIGNATURE_LEN;
     let zeros = [0u8; 32];
     h.update(&zeros[..padding]);
@@ -163,13 +163,13 @@ pub unsafe fn write_init_code_to_ns(
     len_word[24..32].copy_from_slice(&(SIGNATURE_LEN as u64).to_be_bytes());
     write_word_volatile(out_ptr, &mut pos, &len_word);
 
-    // Bootstrap signature data (3,704 bytes)
+    // Bootstrap signature data
     for i in 0..SIGNATURE_LEN {
         core::ptr::write_volatile(out_ptr.add(pos), bootstrap_sig[i]);
         pos += 1;
     }
 
-    // ABI zero-padding to 32-byte boundary (3704 % 32 = 8, need 24 zeros)
+    // ABI zero-padding to 32-byte boundary
     let padding = ((SIGNATURE_LEN + 31) / 32) * 32 - SIGNATURE_LEN;
     for _ in 0..padding {
         core::ptr::write_volatile(out_ptr.add(pos), 0u8);

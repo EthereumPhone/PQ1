@@ -41,7 +41,7 @@ VARIANTS = {
     "c6": {"h": 24, "d": 2, "k": 8, "a": 16, "m_max": 0, "scheme": "fors",
             "subtree_h": 12, "sig_size": 3352},
     "c7": {"h": 24, "d": 2, "k": 8, "a": 16, "m_max": 0, "scheme": "fors",
-            "subtree_h": 12, "sig_size": 3704,
+            "subtree_h": 12, "sig_size": 3976,
             "w": 8, "log_w": 3, "l": 43, "den1": 43, "target_sum": 151, "w_mask": 0x7},
     "c8": {"h": 20, "d": 2, "k": 12, "a": 13, "m_max": 0, "scheme": "fors",
             "subtree_h": 10, "sig_size": 3848,

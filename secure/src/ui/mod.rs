@@ -112,3 +112,29 @@ pub fn show_status(title: &str, sub: &str) {
     d.draw_line(2, sub);
     d.flush();
 }
+
+/// Show a status title with a text progress bar (0-100%).
+///
+/// Display layout (4 rows × 16 cols):
+///   row 0: (empty)
+///   row 1: title
+///   row 2: (empty)
+///   row 3: [######          ]   <- 14 usable cells
+pub fn show_progress(title: &str, percent: u8) {
+    let pct = if percent > 100 { 100 } else { percent };
+    let filled = (pct as usize * 14 + 50) / 100; // 0..14, rounded
+
+    let mut bar = [b' '; DISPLAY_COLS]; // 16 chars
+    bar[0] = b'[';
+    bar[15] = b']';
+    for i in 0..14 {
+        bar[i + 1] = if i < filled { b'#' } else { b'-' };
+    }
+
+    let d = display();
+    d.clear();
+    d.draw_line(1, title);
+    let bar_str = unsafe { core::str::from_utf8_unchecked(&bar) };
+    d.draw_line(3, bar_str);
+    d.flush();
+}

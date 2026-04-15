@@ -1,12 +1,12 @@
-//! SPHINCS+C7 — keccak256-based post-quantum hash-based signatures.
+//! SPHINCS+C11 — keccak256-based post-quantum hash-based signatures.
 //!
-//! Parameter set C7: `W+C_F+C  h=24  d=2  a=16  k=8  w=8  l=43  sig=3704`
+//! Parameter set C11: `W+C_F+C  h=16  d=2  a=11  k=13  w=8  l=43  sig=3976`
 //!
 //! This is a `#![no_std]`, zero-allocation implementation targeting
 //! Cortex-M33 (STM32U585). All buffers are stack-allocated.
 //!
-//! The algorithm matches the Solidity verifier `SphincsC7Asm.sol` and
-//! the Python reference signer `signer_c7.py` (adapted from
+//! The algorithm matches the Solidity verifier `SPHINCs-C11Asm.sol` and
+//! the Python reference signer `signer.py` (adapted from
 //! <https://github.com/nconsigny/SPHINCs->).
 
 #![no_std]
@@ -53,9 +53,9 @@ impl SigningKey {
 
     /// Derive the signing key by building the full hypertree.
     ///
-    /// **Expensive**: computes 4096 WOTS public keys + Merkle tree at the
-    /// top layer. On Cortex-M33 this takes ~10-15 seconds. Call once at
-    /// provisioning time, not on every sign.
+    /// Computes 256 WOTS public keys + Merkle tree at the top layer.
+    /// On Cortex-M33 this takes ~1-2 seconds. Call once at provisioning
+    /// time, not on every sign.
     pub fn keygen(sk_seed: [u8; 32], pk_seed: [u8; N]) -> Self {
         let pk_root = hypertree::compute_pk_root(&sk_seed, &pk_seed);
         Self {
@@ -79,10 +79,23 @@ impl SigningKey {
     /// derivation for hedged signing. If `None`, the R is derived purely
     /// from `(sk_seed, message)`.
     ///
-    /// Returns a 3,704-byte signature that verifies under [`SphincsC7Asm.sol`]
+    /// Returns a 3,976-byte signature that verifies under [`SPHINCs-C11Asm.sol`]
     /// and the Rust [`verify`] function.
     pub fn sign(&self, msg_hash: &[u8; 32], opt_rand: Option<&[u8; N]>) -> [u8; SIGNATURE_LEN] {
         hypertree::sign(&self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand)
+    }
+
+    /// Like [`sign`] but reports progress (0-100%) via a callback so the
+    /// caller can update a UI indicator during the multi-second operation.
+    pub fn sign_with_progress(
+        &self,
+        msg_hash: &[u8; 32],
+        opt_rand: Option<&[u8; N]>,
+        progress: fn(u8),
+    ) -> [u8; SIGNATURE_LEN] {
+        hypertree::sign_with_progress(
+            &self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand, progress,
+        )
     }
 
     /// Read-only access to the secret seed (for KDF purposes within

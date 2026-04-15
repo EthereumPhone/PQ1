@@ -19,8 +19,8 @@ use crate::wots;
 
 /// Compute `pk_root` by building the top-layer subtree.
 ///
-/// This is the expensive keygen operation: builds all 4096 WOTS keys at
-/// layer 1, tree 0. Called once at provisioning.
+/// Builds all 256 WOTS keys at layer 1, tree 0. Called once at
+/// provisioning.
 ///
 /// Matches Python: `_build_hypertree_d2(seed, sk_seed, subtree_h, cfg)`.
 pub fn compute_pk_root(sk_seed: &[u8; 32], pk_seed: &[u8; N]) -> [u8; N] {
@@ -29,21 +29,48 @@ pub fn compute_pk_root(sk_seed: &[u8; 32], pk_seed: &[u8; N]) -> [u8; N] {
     merkle::compute_subtree_root(&seed, sk_seed, 1, 0)
 }
 
-/// Full SPHINCS+C7 signing.
+/// Full SPHINCS+C11 signing.
 ///
-/// Produces a 3,704-byte signature: R || FORS || HT_layer0 || HT_layer1.
+/// Produces a 3,976-byte signature: R || FORS || HT_layer0 || HT_layer1.
 pub fn sign(
     sk_seed: &[u8; 32],
     pk_seed: &[u8; N],
     pk_root: &[u8; N],
     msg_hash: &[u8; 32],
-    _opt_rand: Option<&[u8; N]>,
+    opt_rand: Option<&[u8; N]>,
 ) -> [u8; SIGNATURE_LEN] {
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, None)
+}
+
+/// Like [`sign`] but calls `progress(percent)` at each major phase
+/// so the caller can update a UI indicator (0-100).
+pub fn sign_with_progress(
+    sk_seed: &[u8; 32],
+    pk_seed: &[u8; N],
+    pk_root: &[u8; N],
+    msg_hash: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    progress: fn(u8),
+) -> [u8; SIGNATURE_LEN] {
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, Some(progress))
+}
+
+fn sign_inner(
+    sk_seed: &[u8; 32],
+    pk_seed: &[u8; N],
+    pk_root: &[u8; N],
+    msg_hash: &[u8; 32],
+    _opt_rand: Option<&[u8; N]>,
+    progress: Option<fn(u8)>,
+) -> [u8; SIGNATURE_LEN] {
+    let report = |pct: u8| { if let Some(f) = progress { f(pct); } };
+
     let seed = pad16(pk_seed);
     let mut sig = [0u8; SIGNATURE_LEN];
     let mut offset = 0;
 
     // 1. R-grind: find R such that the last FORS index is 0
+    report(0);
     let (r, digest) = fors::grind_r(pk_seed, pk_root, msg_hash);
 
     // Write R (16 bytes)
@@ -56,6 +83,8 @@ pub fn sign(
 
     // Verify forced-zero constraint
     debug_assert_eq!(fors_indices[K - 1], 0, "Last FORS index must be 0 after R-grinding");
+
+    report(5);
 
     // 3. Sign FORS+C: K trees
     //
@@ -79,6 +108,8 @@ pub fn sign(
             &secret,
             &auth_path,
         );
+        // FORS trees span 5%-30%, each tree ~2%
+        report((5 + ((t as u32 + 1) * 25) / (K as u32 - 1)) as u8);
     }
 
     // Last tree (forced-zero): the "secret" is the tree root
@@ -87,6 +118,8 @@ pub fn sign(
     let last_leaf_adrs =
         crate::address::make_adrs(0, 0, ADRS_FORS_TREE, (K - 1) as u32, 0, 0, 0);
     fors_roots[K - 1] = crate::hash::th(&seed, &last_leaf_adrs, &pad16(&last_root));
+
+    report(32);
 
     // Write ALL secrets (K * N bytes)
     for t in 0..K {
@@ -118,6 +151,9 @@ pub fn sign(
         // Build the subtree and get the auth path
         let (auth_path, _subtree_root) =
             merkle::build_subtree_with_auth(&seed, sk_seed, layer, idx_tree as u64, idx_leaf);
+
+        // HT layers: layer 0 = 32%-65%, layer 1 = 65%-98%
+        report((32 + (layer + 1) * 33) as u8);
 
         // WOTS+C sign the current node
         let (wots_sigma, count) =
@@ -158,6 +194,7 @@ pub fn sign(
             &auth_path,
         );
     }
+    report(100);
 
     debug_assert_eq!(offset, SIGNATURE_LEN);
 

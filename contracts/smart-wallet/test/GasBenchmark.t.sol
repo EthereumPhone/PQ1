@@ -29,7 +29,7 @@ contract GasBenchmarkTest is Base {
     function test_gas_createAccount_newWallet() public {
         bytes32 freshSeed = bytes32(uint256(0xff01));
         bytes32 freshRoot = bytes32(uint256(0xff02));
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
 
         uint256 gasBefore = gasleft();
         factory.createAccount(freshSeed, freshRoot, TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT, dummySig);
@@ -39,7 +39,7 @@ contract GasBenchmarkTest is Base {
     }
 
     function test_gas_createAccount_existingWallet() public {
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
 
         uint256 gasBefore = gasleft();
         factory.createAccount(

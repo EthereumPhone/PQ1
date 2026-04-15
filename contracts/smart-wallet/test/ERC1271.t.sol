@@ -14,7 +14,7 @@ contract ERC1271Test is Base {
         // Deploy a second wallet with a different bootstrap key
         bytes32 otherSeed = bytes32(uint256(0xeeeeeeee));
         bytes32 otherRoot = bytes32(uint256(0xdddddddd));
-        bytes memory dummySig = new bytes(3704);
+        bytes memory dummySig = new bytes(3976);
         PQCoinbaseSmartWallet w2 = factory.createAccount(
             otherSeed, otherRoot,
             TEST_MAIN_PK_SEED, TEST_MAIN_PK_ROOT,

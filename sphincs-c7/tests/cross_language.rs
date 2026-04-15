@@ -106,7 +106,7 @@ fn test_verify_python_bootstrap_sig2() {
 
 #[test]
 fn test_signature_size() {
-    assert_eq!(SIGNATURE_LEN, 3704, "C7 signature must be exactly 3704 bytes");
+    assert_eq!(SIGNATURE_LEN, 3976, "C11 signature must be exactly 3976 bytes");
 }
 
 #[test]
