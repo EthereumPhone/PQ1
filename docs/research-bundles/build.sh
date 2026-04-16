@@ -387,6 +387,170 @@ EOF
 }
 
 # ===============================================================
+# BUNDLE F — Trezor Safe 7 comparison
+# ===============================================================
+
+make_bundle_f() {
+  local bundle="$OUT_DIR/F-trezor-safe-7-comparison.md"
+  cat > "$bundle" <<'EOF'
+# Research Prompt F — PQSigner OS vs Trezor Safe 7: Architecture Comparison
+
+## Research question
+
+Using the PQSigner OS architecture described below and inlined in full,
+produce a detailed, evidence-based comparison with the **Trezor Safe 7**
+(SatoshiLabs, announced Oct 2025). Do not treat this as marketing
+copy — treat it as a security engineering review. Where Trezor Safe 7
+is better, say so explicitly. Where PQSigner is better, say so
+explicitly. Where both have open problems, name them.
+
+Compare across these dimensions, in this order:
+
+1. **Secure-element strategy**
+   - Trezor Safe 7 reportedly uses a Tropic Square **TROPIC01** secure
+     element alongside an MCU; document the exact role it plays
+     (storage only? PIN gate? signing? entropy source?). Cite Trezor /
+     Tropic documentation.
+   - Compare to PQSigner's **dual-SE** architecture (NXP SE050 +
+     Infineon OPTIGA Trust M V3), XOR-split entropy, hardware PIN
+     gates on both chips.
+   - Is dual-SE net-better than single-SE-with-open-design? Name
+     concrete attack classes where each wins.
+
+2. **Cryptographic algorithms (signing + key derivation)**
+   - Trezor Safe 7: what curves / signature schemes does it support on-
+     device? Any post-quantum scheme today, announced, or on roadmap?
+   - PQSigner: SLH-DSA-SHA2-128f (migrating 192f) transaction signer,
+     ML-DSA-44 bootstrap signer, no classical signer anywhere. ERC-4337
+     smart-account model (no EOA, keys rotate on-chain).
+   - Evaluate the classical-vs-PQ trade-off honestly: Trezor's curve
+     choices are battle-tested and ubiquitous; PQSigner's PQ choices
+     are NIST-finalized but rare in production wallets and much larger
+     signatures (17-35 KB vs 64 bytes).
+
+3. **Seed storage, recovery, and derivation**
+   - Trezor Safe 7 seed storage location + PIN-lockout policy + Shamir
+     / SLIP-39 support + passphrase support.
+   - PQSigner: 24-word BIP-39 entropy XOR-split across two SEs, re-
+     derived into SRAM each unlock, zeroized on lock/timeout. No
+     SLIP-39, no passphrase (yet).
+   - Recovery semantics: what does "restore from backup" look like on
+     each? How is the PQ recovery contract preserved (same 24 words →
+     same PQ keys)?
+
+4. **PIN security and lockout**
+   - Trezor Safe 7 PIN gate: software counter, SE counter, or MCU-
+     enforced? Max-attempts behaviour?
+   - PQSigner: hardware-enforced counters on both SEs (SE050 UserID
+     max 10; OPTIGA Trust M auth reference + firmware-managed decr-
+     before-auth counter at OID 0xF1D5). Admin-wipe secondary UserID
+     for post-lockout recovery.
+
+5. **Firmware update model and verifiability**
+   - Trezor Safe 7 firmware update: signed by whom, with what keys,
+     verified by which chip? Rollback protection?
+   - PQSigner: measured-boot + 8-BIP-39-word SHA-256 displayed on OLED,
+     user visually compares with host tool output. Planned: ML-DSA-44-
+     signed measurement hash (not binary) for reproducible-build
+     verification. Firmware flashed over ST-LINK (no USB DFU).
+   - Pros/cons of each model for a paranoid user.
+
+6. **Supply chain + attestation ("is my new box genuine?")**
+   - Trezor Safe 7 out-of-box attestation: what does the device prove
+     to Trezor Suite on first connection? Historical Trezor
+     attestation failures (incl. anti-clone bypasses). Any FIDO-like
+     signed-UID chain?
+   - PQSigner: dual-SE UID cert chains (NXP root + Infineon root) +
+     STM32-UID cross-binding planned (work-todo #22). Current state
+     is: no attestation implemented yet.
+   - Which design better defeats an interdiction attacker (repackaging
+     Mallory)?
+
+7. **Physical / side-channel security posture**
+   - Trezor Safe 7 tamper detection, glitch protection, ECC on SRAM,
+     BOR/PVD, anti-SCA claims.
+   - PQSigner: Stage 1 brownout hardening landed (reset-cause class,
+     verified flash writes); stages 2-5 planned (BOR/PVD/IWDG/TAMP/ECC
+     config, fault-injection countermeasures, SLH-DSA SCA hardening).
+     Explicitly not yet: hardware-level tamper switches, active mesh,
+     decap defence.
+   - Which design gets to production first on this axis?
+
+8. **Open-source / reproducibility / external review**
+   - Trezor's long-standing open-source firmware and third-party audit
+     record — cite actual audit reports.
+   - PQSigner: fully open-source (no NDA components in the firmware
+     code path), BUT depends on closed-source SE firmware on SE050 +
+     OPTIGA Trust M. Reproducible builds planned not shipped.
+   - What does "verifiable hardware wallet" actually mean in each
+     case?
+
+9. **Smart-contract / AA / MPC integration posture**
+   - Trezor Safe 7's support for smart-contract wallets today (Safe,
+     Argent, ERC-4337 passkey/4337 signers). Does it clear-sign any
+     AA structures or just EIP-712?
+   - PQSigner: native ERC-4337 smart account with PQ-only signers, on-
+     device Groth16 ZK clear-signing for Aave v3 (+ CowSwap planned),
+     deterministic CREATE2 address on all chains from bootstrap PK.
+   - Which is the better on-ramp for the smart-wallet / AA world?
+
+10. **UX / ergonomics honestly**
+    - Signature size (PQSigner 17-35 KB per tx vs 64 bytes) — ergonomic
+      fallout on USB latency, mempool propagation, L2 inclusion cost.
+    - User prompts per transaction, number of button presses, display
+      constraints (PQSigner: SSD1306 128x64 OLED; Trezor Safe 7: 1.54"
+      color touchscreen).
+    - Recovery ceremony complexity. Backup verification flow.
+
+11. **What Trezor does that PQSigner should steal (concrete list)**
+    - Specific design patterns, audit artefacts, or UX flows from
+      Trezor that PQSigner should copy, with citations.
+
+12. **What PQSigner does that Trezor can't easily adopt**
+    - Things structurally locked out by Trezor's architecture (dual-SE
+      retrofit, PQ-only signing, on-device AA / ZK clear-signing,
+      etc.).
+
+Deliverables:
+- A table summarising each dimension ("Trezor Safe 7 | PQSigner OS |
+  winner | confidence").
+- For every claim about Trezor Safe 7, cite a Trezor blog post, wiki
+  page, GitHub repo, audit report, CVE, or trusted-third-party
+  teardown. Do not invent specs.
+- If Trezor Safe 7 details are not public enough to answer a question,
+  say so explicitly and downgrade confidence.
+
+**Style / ground rules.**
+- No marketing voice. "Safer in X sense, weaker in Y sense" is the
+  target tone.
+- PQSigner's accepted trade-offs (see preamble) are not up for
+  re-litigation. "Just use secp256k1" is not a valid critique.
+- "Trezor Safe 7 has not disclosed this publicly" is a perfectly
+  acceptable answer — please use it where true.
+- Cite specific documents, not general web searches.
+- Note that Trezor Safe 7 launched on 2025-10-13; materials older
+  than that describe earlier Trezor models (One, Model T, Safe 3,
+  Safe 5) and may not apply.
+
+EOF
+  write_preamble "$bundle"
+  {
+    printf '\n## Relevant docs and code\n'
+  } >> "$bundle"
+  append_markdown "$bundle" "README.md"
+  append_markdown "$bundle" "CLAUDE.md"
+  append_markdown "$bundle" "docs/architecture.md"
+  append_markdown "$bundle" "docs/pq-aa-wallet-design.md"
+  append_markdown "$bundle" "docs/HARDENING.md"
+  append_markdown "$bundle" "docs/brownout-hardening.md"
+  append_markdown "$bundle" "docs/production-security.md"
+  append_markdown "$bundle" "docs/ai-research-briefing.md"
+  append_code "$bundle" "secure/src/dual_se.rs" rust
+  append_code "$bundle" "secure/src/nsc/mod.rs" rust
+  echo "  built $bundle ($(wc -c < "$bundle") bytes)"
+}
+
+# ===============================================================
 # run
 # ===============================================================
 
@@ -398,6 +562,7 @@ make_bundle_b
 make_bundle_c
 make_bundle_d
 make_bundle_e
+make_bundle_f
 
 echo
 echo "Done. Upload any single bundle file to Claude web and paste nothing"

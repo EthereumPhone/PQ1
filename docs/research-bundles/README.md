@@ -28,7 +28,7 @@ Each bundle is 50-120 KB of markdown. Well under typical file-upload
 limits (Claude web supports ~30 MB per attachment / 200k tokens of
 conversation context).
 
-## The five research tracks
+## The research tracks
 
 | Letter | Topic | Primary code bundled |
 |---|---|---|
@@ -37,9 +37,10 @@ conversation context).
 | **C** | SLH-DSA side-channel landscape on Cortex-M33 | `crypto.rs`, `sign_and_emit.rs`, `cmd_sign_userop.rs`, `secure/Cargo.toml` |
 | **D** | USB stack hardening for USB-C-only design | `hw/usb_hw.rs`, `nonsecure/src/usb/*`, `docs/usb-protocol-v2.md` |
 | **E** | Supply-chain + provisioning attestation | `docs/architecture.md`, `docs/pq-aa-wallet-design.md`, `docs/HARDENING.md` |
+| **F** | Comparison against Trezor Safe 7 (Oct 2025) | `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/pq-aa-wallet-design.md`, `docs/HARDENING.md`, `docs/brownout-hardening.md`, `docs/production-security.md`, `docs/ai-research-briefing.md`, `dual_se.rs`, `nsc/mod.rs` |
 
-All five are orthogonal and can be run in parallel (five separate
-conversations, one per bundle). Results feed back into
+All tracks are orthogonal and can be run in parallel (one
+conversation per bundle). Results feed back into
 `docs/brownout-hardening.md`, `docs/work-todo.md`, and the
 architecture docs.
 
