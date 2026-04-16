@@ -160,21 +160,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InvalidPointer as u32;
     }
 
-    // ── 4a. CRIT-3: refuse paymasters ─────────────────────────────
-    //
-    // The wire format carries only `keccak256(paymasterAndData)`. There
-    // is no trusted-UI path that can show the user a paymaster address
-    // or the post-op gas charge, and a non-displayable security
-    // parameter has no business inside the signed `userOpHash`. A
-    // hostile paymaster can drain the wallet via `postOp`. Until the
-    // wire format carries raw paymaster bytes AND the trusted UI shows
-    // them, refuse any UserOp that references a paymaster.
-    if paymaster_and_data_hash != KECCAK_EMPTY {
-        ui::show_status("Paymaster", "unsupported");
-        return NscStatus::UserRejected as u32;
-    }
-
-    // ── 4b. CRIT-17: refuse nonce-key overflow ────────────────────
+    // ── 4. CRIT-17: refuse nonce-key overflow ─────────────────────
     //
     // EntryPoint v0.9 nonces are 192-bit key | 64-bit seq. Our Type 2
     // nonce = base + 1 when Type 1 is present. If the bottom 64 bits

@@ -9,7 +9,7 @@
 
 ## Remediation status (updated 2026-04-16 after audit response)
 
-- ✅ **All 9 CRITICAL findings resolved.** CRIT-7 was classified won't-fix by design after a threat-model review: with CRIT-9 (SAES-wrapped PBS) and CRIT-6 (read-back-verified counter bump) closing offline and online brute force respectively, PIN KDF hardening buys nothing on Cortex-M33.
+- ✅ **7 of 9 CRITICAL findings resolved.** CRIT-7 was classified won't-fix by design after a threat-model review: with CRIT-9 (SAES-wrapped PBS) and CRIT-6 (read-back-verified counter bump) closing offline and online brute force respectively, PIN KDF hardening buys nothing on Cortex-M33. CRIT-3 was retracted — the purported paymaster-drain attack does not exist in ERC-4337 (paymaster pays EntryPoint from its own stake; no wallet charge without a pre-existing relationship).
 - ✅ **All 18 HIGH findings resolved or mitigated.**
 - ✅ **5 of 20 MEDIUM findings addressed** (M1, M4, M10, M14, M20); the remaining 15 are defense-in-depth items that do not block shipping.
 - ⏳ **LOW findings** are documentation / cosmetic and were deferred.
@@ -28,7 +28,7 @@ However, the perimeter around that cryptography has serious problems. There are 
 
 The bugs cluster in three areas:
 
-1. **Trusted-UI display lies about what's signed.** The user sees `nonce=0`, `gas=0`, `max fee = 0 gwei`, and the paymaster is invisible — but the signed `userOpHash` binds the real values from the wire payload. A hostile non-secure (NS) world signs gas-bombs and paymaster-drains while the trusted UI shows a clean transaction.
+1. **Trusted-UI display lies about what's signed.** The user sees `nonce=0`, `gas=0`, `max fee = 0 gwei` — but the signed `userOpHash` binds the real values from the wire payload. A hostile non-secure (NS) world signs gas-bombs while the trusted UI shows a clean transaction.
 2. **The OPTIGA Trust M driver trusts the firmware where it should trust the chip silicon.** The PIN attempt counter is firmware-managed (not chip-enforced), the PIN KDF is a single SHA-256 (offline-brute-forceable), the Platform Binding Secret is in plaintext flash, and the PIN-auth challenge is sent in plaintext so a bus-snooper can pre-compute HMAC tables.
 3. **The Cortex-M33 / TrustZone perimeter has a hole.** With the `usb` feature enabled (every shipping configuration), `TZSC_SECCFGR{1,2,3} = 0` makes every TZSC-controlled peripheral non-secure — including the TRNG, AES, PKA, HASH accelerators, and the I2C buses to both secure elements. This single line of code defeats CLAUDE.md invariant #4.
 
@@ -45,7 +45,7 @@ This document lists every finding by severity, with file:line citations, code ex
 - [CRITICAL findings](#critical-findings)
   - [CRIT-1 · Multi-chain `next_q` overwrite causes FORS+C key compromise](#crit-1--multi-chain-next_q-overwrite-causes-forsc-key-compromise)
   - [CRIT-2 · Trusted UI displays fake gas/nonce/fee values](#crit-2--trusted-ui-displays-fake-gasnoncefee-values)
-  - [CRIT-3 · `paymaster_and_data_hash` is opaque NS input](#crit-3--paymaster_and_data_hash-is-opaque-ns-input)
+  - [CRIT-3 · retracted (paymaster is not an attack vector)](#crit-3--retracted--paymaster-is-not-an-attack-vector)
   - [CRIT-4 · TZSC `SECCFGR1/2/3 = 0` exposes ALL peripherals to NS](#crit-4--tzsc-seccfgr123--0-exposes-all-peripherals-to-ns)
   - [CRIT-5 · `init_code_hash` hardcoded to `KECCAK_EMPTY`](#crit-5--init_code_hash-hardcoded-to-keccak_empty)
   - [CRIT-6 · OPTIGA PIN counter is firmware-managed, not chip-enforced](#crit-6--optiga-pin-counter-is-firmware-managed-not-chip-enforced)
@@ -244,7 +244,7 @@ Nonce: 0
 
 The user confirms because everything looks fine. The wallet signs the userOpHash with the real values. The bundler submits to EntryPoint v0.9. EntryPoint pulls `verificationGasLimit * maxFeePerGas + callGasLimit * maxFeePerGas + preVerificationGas * maxFeePerGas` from the wallet's prefund — potentially the entire balance — and the bundler keeps the difference.
 
-Same vector via paymaster (see CRIT-3): NS injects a hostile paymaster, user sees nothing about it, paymaster contract drains the wallet via post-op gas charge.
+(An earlier draft also flagged a paymaster-drain variant of this exploit; see the retracted CRIT-3 — that attack doesn't exist in ERC-4337.)
 
 #### Why "show 0" is worse than "show nothing"
 
@@ -271,39 +271,11 @@ Or refuse the sign if any wrapper field exceeds a sane limit and display "Fees: 
 
 ---
 
-### ✅ CRIT-3 · `paymaster_and_data_hash` is opaque NS input
+### ~~CRIT-3~~ · **RETRACTED** — paymaster is not an attack vector
 
-**Files:** `secure/src/nsc/cmd_sign_userop.rs:134-135, 496, 574`
-**Invariant violated:** trusted-display contract; CLAUDE.md invariant #4 (TZ trust boundary)
-**🛠️ Status: FIXED (option 2 from the audit).** Immediately after parsing, the sign handler refuses any UserOp with `paymaster_and_data_hash != KECCAK_EMPTY` and returns `NscStatus::UserRejected`. A future revision can accept raw paymaster bytes + display the address; until then the attack surface is closed.
+The original finding assumed a hostile paymaster could drain the wallet via `postOp`. That premise was wrong. In ERC-4337 the paymaster pays the EntryPoint for gas from *its own* stake; it can only charge the wallet back if the wallet has a pre-existing relationship with it (ETH deposit, ERC-20 allowance, etc.). Referencing an arbitrary paymaster in a signed UserOp does not create such a relationship. If the paymaster's `validatePaymasterUserOp` reverts, the UserOp is dropped by the bundler at no cost to the wallet; if it succeeds, the paymaster is the one out of pocket.
 
-The wire format passes `paymaster_and_data_hash` as 32 bytes from NS (offset 180-212 of the unified sign input). The firmware copies it directly into the userOpHash params:
-
-```rust
-// secure/src/nsc/cmd_sign_userop.rs:134-135
-let mut paymaster_and_data_hash = [0u8; 32];
-paymaster_and_data_hash.copy_from_slice(&snap[180..212]);
-```
-
-```rust
-// secure/src/nsc/cmd_sign_userop.rs:496, 574
-let t1_params = AaUserOpParamsV09 { ..., paymaster_and_data_hash, ... };
-let t2_params = AaUserOpParamsV09 { ..., paymaster_and_data_hash, ... };
-```
-
-The trusted UI never sees the paymaster address — only the hash. There is no display path that can render "Paymaster: 0xABC...DEF" or even "Paymaster: yes / no".
-
-#### Exploit
-
-ERC-4337 paymasters can charge the wallet for gas via the EntryPoint's `postOp` callback. A malicious paymaster contract can charge arbitrary amounts (limited only by `paymasterPostOpGasLimit`, which is also NS-controlled). NS supplies a hostile `paymaster_and_data_hash`; user signs; paymaster drains the wallet on the next bundler submit.
-
-#### Fix
-
-Either:
-1. Accept the raw `paymasterAndData` bytes (bounded, e.g. 256 bytes max), display the paymaster contract address on the trusted UI, and compute the hash inside the secure world.
-2. Refuse to sign when `paymaster_and_data_hash != KECCAK_EMPTY`.
-
-A non-displayable security parameter has no business being inside the signed bytes. This is a textbook "what the user sees ≠ what the user signs" violation.
+The `paymaster_and_data_hash != KECCAK_EMPTY` refusal has been removed; the sign handler is once again paymaster-agnostic.
 
 ---
 
@@ -1112,7 +1084,7 @@ In strict priority order. Items in **CANNOT SHIP** must be fixed before any wall
 
 1. ✅ **CRIT-1 multi-chain q-reuse** — `jardin_flash` is now a per-chain log-structured store with compaction. `read_latest_for(chain_id)` is the new read API.
 2. ✅ **CRIT-2 trusted-UI display** — real `nonce`, `maxFeePerGas`, `maxPriorityFeePerGas`, and summed `gas_limit` rendered from the packed v0.9 fields. Threshold-based extra-confirm page is future work (MEDIUM-grade enhancement).
-3. ✅ **CRIT-3 paymaster opacity** — option (b) applied: sign refused when `paymaster_and_data_hash != KECCAK_EMPTY`. Option (a) remains the next step once a raw-paymaster wire format exists.
+3. ~~CRIT-3~~ — retracted; paymaster references are not an attack vector against the wallet.
 4. ✅ **CRIT-4 TZSC peripheral exposure** — default-secure baseline + USB-only allowlist + runtime assert that RNG/HASH/PKA/SAES/AES/I2C1/I2C2 stay secure.
 5. ✅ **CRIT-5 init_code_hash** — option (1) applied: `aa/init_code.rs` deleted. `aa/mod.rs` documents the external-deploy requirement.
 6. ✅ **CRIT-6 OPTIGA counter** — verify-after-write (option 3) added; chip-native counter migration tracked as a follow-up.
