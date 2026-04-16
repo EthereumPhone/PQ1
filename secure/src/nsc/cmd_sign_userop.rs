@@ -624,10 +624,51 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         sub_pk_seed: sub_pk_seed_16,
         sub_pk_root: sub_pk_root_16,
     };
-    if jardin_flash::write(&new_state).is_err() {
+    if let Err(e) = jardin_flash::write(&new_state) {
         entropy.zeroize();
         new_state.zeroize();
-        ui::show_status("Flash write", "FAIL");
+        // Emit a SECSR diagnostic onto the OLED so we can tell WRPERR
+        // (0x10) from PGSERR (0x80) from VerifyFailed without hooking
+        // up a debugger. `hex_line` lives in the ui module.
+        let (kind, detail) = match e {
+            jardin_flash::FlashError::EraseHardware { sr, page } => {
+                let mut buf = [0u8; 14];
+                let _ = u32_hex(&mut buf, sr);
+                buf[8] = b' ';
+                buf[9] = b'P';
+                buf[10] = b':';
+                let p = (page & 0xFF) as u8;
+                buf[11] = hex_nib(p >> 4);
+                buf[12] = hex_nib(p & 0x0F);
+                buf[13] = 0;
+                ("Erase SR:", copy_to_static(&buf))
+            }
+            jardin_flash::FlashError::ProgramHardware { sr, addr } => {
+                let mut buf = [0u8; 14];
+                let _ = u32_hex(&mut buf, sr);
+                buf[8] = b' ';
+                buf[9] = b'@';
+                buf[10] = hex_nib(((addr >> 12) & 0xF) as u8);
+                buf[11] = hex_nib(((addr >> 8) & 0xF) as u8);
+                buf[12] = hex_nib(((addr >> 4) & 0xF) as u8);
+                buf[13] = hex_nib((addr & 0xF) as u8);
+                ("Prog SR:", copy_to_static(&buf))
+            }
+            jardin_flash::FlashError::VerifyFailed { addr, byte_idx, .. } => {
+                let mut buf = [0u8; 14];
+                buf[0] = b'@';
+                buf[1] = hex_nib(((addr >> 12) & 0xF) as u8);
+                buf[2] = hex_nib(((addr >> 8) & 0xF) as u8);
+                buf[3] = hex_nib(((addr >> 4) & 0xF) as u8);
+                buf[4] = hex_nib((addr & 0xF) as u8);
+                buf[5] = b'+';
+                buf[6] = hex_nib(((byte_idx >> 4) & 0xF) as u8);
+                buf[7] = hex_nib((byte_idx & 0xF) as u8);
+                buf[8] = 0;
+                ("VerifyFail:", copy_to_static(&buf))
+            }
+        };
+        ui::show_status(kind, detail);
         return NscStatus::InternalError as u32;
     }
     new_state.zeroize();
@@ -711,4 +752,34 @@ fn add_one_to_be_u256(v: &mut [u8; 32]) {
 
 fn c11_sign_progress(percent: u8) {
     crate::ui::show_progress("C11 sign", percent);
+}
+
+/// Hex-format a u32 as 8 ASCII chars into `out[..8]`.
+fn u32_hex(out: &mut [u8; 14], v: u32) -> usize {
+    for i in 0..8 {
+        let nib = ((v >> ((7 - i) * 4)) & 0xF) as u8;
+        out[i] = hex_nib(nib);
+    }
+    8
+}
+
+fn hex_nib(n: u8) -> u8 {
+    match n & 0x0F {
+        0..=9 => b'0' + n,
+        _ => b'a' + (n - 10),
+    }
+}
+
+/// Copy a nul-terminated ASCII buffer into a static and return it as a
+/// `&'static str`. The underlying buffer is shared across calls but the
+/// OLED renders immediately, so the stale-data window is a few
+/// microseconds — acceptable for a diagnostic-only path.
+fn copy_to_static(buf: &[u8; 14]) -> &'static str {
+    static mut STATIC_MSG: [u8; 14] = [0u8; 14];
+    unsafe {
+        let dst = &mut *core::ptr::addr_of_mut!(STATIC_MSG);
+        *dst = *buf;
+        let end = dst.iter().position(|&b| b == 0).unwrap_or(dst.len());
+        core::str::from_utf8_unchecked(&dst[..end])
+    }
 }

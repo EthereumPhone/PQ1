@@ -228,13 +228,16 @@ fn integrity_tag(prefix: &[u8]) -> [u8; 4] {
     out
 }
 
-/// Persistence error.
+/// Persistence error. `sr` captures the raw FLASH_SECSR bits so a
+/// caller can log which bit fired (WRPERR / PGSERR / SIZERR / etc.).
 #[derive(Clone, Copy, Debug)]
 pub enum FlashError {
-    /// Flash controller reported an error (PROGERR / WRPERR / …).
-    Hardware,
+    /// Flash controller reported an error during page erase.
+    EraseHardware { sr: u32, page: u32 },
+    /// Flash controller reported an error during quadword program.
+    ProgramHardware { sr: u32, addr: u32 },
     /// Read-back after program did not match the intended bytes.
-    VerifyFailed,
+    VerifyFailed { addr: u32, byte_idx: usize, expected: u8, actual: u8 },
 }
 
 // ---------------------------------------------------------------------------
@@ -343,12 +346,12 @@ mod backend {
         core::ptr::write_volatile(FLASH_SECCR, cr);
         core::ptr::write_volatile(FLASH_SECCR, cr | STRT);
         wait_bsy();
-        core::ptr::write_volatile(FLASH_SECCR, 0);
         let sr = core::ptr::read_volatile(FLASH_SECSR);
+        core::ptr::write_volatile(FLASH_SECCR, 0);
         lock();
         if sr & ERR_MASK != 0 {
             clear_errors();
-            Err(FlashError::Hardware)
+            Err(FlashError::EraseHardware { sr, page: page_num })
         } else {
             Ok(())
         }
@@ -370,18 +373,24 @@ mod backend {
             core::ptr::write_volatile(dst.add(i), word);
         }
         wait_bsy();
-        core::ptr::write_volatile(FLASH_SECCR, 0);
         let sr = core::ptr::read_volatile(FLASH_SECSR);
+        core::ptr::write_volatile(FLASH_SECCR, 0);
         lock();
         if sr & ERR_MASK != 0 {
             clear_errors();
-            return Err(FlashError::Hardware);
+            return Err(FlashError::ProgramHardware { sr, addr });
         }
         // Read-back compare.
         let src = addr as *const u8;
         for i in 0..16 {
-            if core::ptr::read_volatile(src.add(i)) != qw[i] {
-                return Err(FlashError::VerifyFailed);
+            let actual = core::ptr::read_volatile(src.add(i));
+            if actual != qw[i] {
+                return Err(FlashError::VerifyFailed {
+                    addr,
+                    byte_idx: i,
+                    expected: qw[i],
+                    actual,
+                });
             }
         }
         Ok(())
