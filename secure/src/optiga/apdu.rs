@@ -101,18 +101,19 @@ pub const OID_SESSION: u16 = 0xE100;
 
 /// Platform Binding Secret (shielded-connection root of trust).
 pub const OID_PBS:           u16 = 0xE140;
-/// Authorization reference object (holds the PIN-derived HMAC secret).
-pub const OID_AUTH_REF:      u16 = 0xF1D0;
-/// Entropy half (32 B) — one leg of the XOR-split BIP-39 seed.
-pub const OID_ENTROPY:       u16 = 0xF1D1;
-/// Default verifying key (32 B).
-pub const OID_VK:            u16 = 0xF1D2;
-/// Bootstrap verifying key (32 B).
-pub const OID_BOOTSTRAP_VK:  u16 = 0xF1D3;
-/// Master secret (32 B) — used for dual-SE cross-verification.
-pub const OID_MASTER_SECRET: u16 = 0xF1D4;
-/// PIN attempt counter (1 B, firmware-managed, shielded-only writes).
-pub const OID_COUNTER:       u16 = 0xF1D5;
+// Bring-up note: F1D0–F1D5 were locked during an earlier test run, so the
+// auth-ref NEV metadata cannot be rewritten on this specific chip. Rotated
+// to F1D6–F1DB for the current debugging pass. TODO: once `lock_oid` is
+// understood (see store_objects), revert to the canonical range so the
+// chip's 16-arbitrary-data-object budget isn't consumed by dev iterations.
+// Second rotation: F1DC–F1E1 are completely untouched. Once the state
+// machine is stable we can commit to the canonical F1D0–F1D5 range.
+pub const OID_AUTH_REF:      u16 = 0xF1DC;
+pub const OID_ENTROPY:       u16 = 0xF1DD;
+pub const OID_MASTER_SECRET: u16 = 0xF1DE;
+pub const OID_VK:            u16 = 0xF1DF;
+pub const OID_BOOTSTRAP_VK:  u16 = 0xF1E0;
+pub const OID_COUNTER:       u16 = 0xF1E1;
 
 // ---------------------------------------------------------------------------
 // Metadata tags and access-condition identifiers
@@ -580,17 +581,21 @@ pub fn build_metadata_protected(
 
 /// Metadata for the authorization-reference OID (0xF1D0).
 ///
-/// - **Change**: `Conf(0xE140)` — only the shielded connection (i.e. the
-///   admin path from MCU) can rewrite the secret. This enables
-///   factory-reset-with-new-PIN without bricking the chip.
+/// Bring-up variant: Change=ALW (always allow). This is INSECURE for
+/// production — it lets anyone with I²C access overwrite the PIN-derived
+/// HMAC secret. Used only while the chip's factory-reset / OID recovery
+/// story is still being worked out; once we have a reliable way to
+/// unpair-and-repair an OPTIGA we can switch Change back to Conf(E140).
+///
+/// - **Change**: Always (dev-only; MUST be narrowed before shipping).
 /// - **Read**: Never.
-/// - **Execute**: Always — required for the HMAC challenge-response protocol.
+/// - **Execute**: Always — required for HMAC challenge-response.
 /// - **Data type**: AUTHREF (0x31).
 pub fn build_metadata_auth_ref() -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
-    push_ac_conf(&mut inner, &mut c, META_CHANGE);
+    push_ac_simple(&mut inner, &mut c, META_CHANGE, AC_ALW);
     push_ac_simple(&mut inner, &mut c, META_READ, AC_NEV);
     push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_ALW);
     push_data_type(&mut inner, &mut c, DTYPE_AUTHREF);

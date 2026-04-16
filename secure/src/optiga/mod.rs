@@ -264,6 +264,7 @@ impl OptigaTrustM {
 
     /// Ensure the shielded connection is active, establishing it on demand
     /// from the cached PBS.
+    #[allow(dead_code)] // kept for when the PRL handshake is fixed
     fn ensure_shield(&mut self) -> Result<(), OptigaError> {
         if !self.shield.active {
             if !self.shield.pbs_loaded {
@@ -274,6 +275,43 @@ impl OptigaTrustM {
                     .map_err(|_| OptigaError::Shield)?;
             }
         }
+        Ok(())
+    }
+
+    /// PBS provisioning without attempting the shielded-connection
+    /// handshake. Writes PBS to OID 0xE140 + sets its metadata (LcsO,
+    /// type=0x22), saves PBS to MCU flash, but does NOT call
+    /// `shield.establish`. Used while the PRL handshake is being
+    /// debugged against real silicon.
+    fn setup_pbs_no_handshake(&mut self) -> Result<(), OptigaError> {
+        let mut pbs = [0u8; 32];
+        crate::rng::fill(&mut pbs).map_err(|_| OptigaError::Transport)?;
+
+        unsafe {
+            apdu::set_data_object(
+                &mut self.ifx, &mut self.shield,
+                apdu::OID_PBS, &pbs,
+            )?;
+
+            let (meta, meta_len) = apdu::build_metadata_pbs_final();
+            apdu::set_metadata(
+                &mut self.ifx, &mut self.shield,
+                apdu::OID_PBS, &meta[..meta_len],
+            )?;
+        }
+
+        self.shield.load_pbs(&pbs);
+
+        #[cfg(feature = "stm32u585")]
+        unsafe {
+            crate::hw::flash::write_pbs(&pbs)
+                .map_err(|_| OptigaError::Transport)?;
+            secure_log!("[OPTIGA] PBS written to flash page 126");
+        }
+
+        pbs.zeroize();
+
+        secure_log!("[OPTIGA] PBS provisioned (handshake deferred)");
         Ok(())
     }
 
@@ -319,45 +357,92 @@ impl OptigaTrustM {
 
     /// Lock an OID's lifecycle to Operational (irreversible).
     ///
-    /// Must be called after the AC metadata is in place so the chip knows
-    /// which rules to apply post-lock.
-    unsafe fn lock_oid(&mut self, oid: u16) -> Result<(), OptigaError> {
-        let (lock_meta, lock_len) = apdu::build_metadata_lock();
-        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &lock_meta[..lock_len])
+    /// Under `optiga-bringup-fresh` we skip this call so the OIDs stay in
+    /// Creation state and can be rewritten on the next test run. Without
+    /// this escape hatch each provisioning attempt permanently consumes
+    /// one entry from the chip's arbitrary-data-object budget.
+    unsafe fn lock_oid(&mut self, _oid: u16) -> Result<(), OptigaError> {
+        #[cfg(feature = "optiga-bringup-fresh")]
+        {
+            secure_log!("[OPTIGA/prov] OID 0x{:04x}: lock_oid SKIPPED (bring-up)", _oid);
+            return Ok(());
+        }
+        #[cfg(not(feature = "optiga-bringup-fresh"))]
+        {
+            let (lock_meta, lock_len) = apdu::build_metadata_lock();
+            apdu::set_metadata(&mut self.ifx, &mut self.shield, _oid, &lock_meta[..lock_len])
+        }
     }
 
     /// Provision the auth-reference OID: install AC + data-type, write the
     /// PIN-derived secret, lock LcsO.
     unsafe fn provision_auth_ref(&mut self, pin_secret: &[u8; 32]) -> Result<(), OptigaError> {
-        // Install AC + data type FIRST so the write lands typed as AUTHREF.
+        secure_log!("[OPTIGA/prov] auth_ref: set_metadata");
         let (meta, meta_len) = apdu::build_metadata_auth_ref();
-        apdu::set_metadata(
+        if let Err(e) = apdu::set_metadata(
             &mut self.ifx, &mut self.shield,
             apdu::OID_AUTH_REF, &meta[..meta_len],
-        )?;
+        ) {
+            secure_log!("[OPTIGA/prov] auth_ref set_metadata FAILED: {:?}", e);
+            return Err(e);
+        }
 
-        apdu::set_data_object(
+        secure_log!("[OPTIGA/prov] auth_ref: set_data_object");
+        if let Err(e) = apdu::set_data_object(
             &mut self.ifx, &mut self.shield,
             apdu::OID_AUTH_REF, pin_secret,
-        )?;
+        ) {
+            secure_log!("[OPTIGA/prov] auth_ref set_data FAILED: {:?}", e);
+            return Err(e);
+        }
 
-        self.lock_oid(apdu::OID_AUTH_REF)
+        secure_log!("[OPTIGA/prov] auth_ref: lock_oid");
+        if let Err(e) = self.lock_oid(apdu::OID_AUTH_REF) {
+            secure_log!("[OPTIGA/prov] auth_ref lock FAILED: {:?}", e);
+            return Err(e);
+        }
+        Ok(())
     }
 
-    /// Provision one user data OID: write payload, install AC, lock.
+    /// Provision one user data OID: write payload (while LcsO=Creation
+    /// allows it), then install AC, then lock LcsO.
+    ///
+    /// Order matters: if we install `Change = Auto(F1DC) OR Conf(E140)`
+    /// BEFORE writing the data, the chip immediately enforces that AC on
+    /// the subsequent write (even in Creation state, in practice) and we
+    /// get Status=0xff. Writing the data first, while default "allow-all"
+    /// Creation-state ACs apply, succeeds.
     unsafe fn provision_user_oid(
         &mut self,
         oid: u16,
         data: &[u8],
-        require_shielded_read: bool,
+        _require_shielded_read: bool,
     ) -> Result<(), OptigaError> {
-        apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data)?;
+        secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_data ({} bytes)", oid, data.len());
+        if let Err(e) = apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data) {
+            secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_data FAILED: {:?}", oid, e);
+            return Err(e);
+        }
 
-        let (meta, meta_len) =
-            apdu::build_metadata_protected(apdu::OID_AUTH_REF, require_shielded_read);
-        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len])?;
-
-        self.lock_oid(oid)
+        // Bring-up: skip AC install + LcsO lock entirely. Leaves OID in
+        // Creation state with default "allow all" access — fine for
+        // validating the provisioning / unlock round trip on real silicon
+        // but MUST be re-enabled (via build_metadata_protected) before
+        // shipping. See project memory for the chip-reset story.
+        #[cfg(not(feature = "optiga-bringup-fresh"))]
+        {
+            let (meta, meta_len) =
+                apdu::build_metadata_protected(apdu::OID_AUTH_REF, _require_shielded_read);
+            if let Err(e) = apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len]) {
+                secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_metadata FAILED: {:?}", oid, e);
+                return Err(e);
+            }
+            if let Err(e) = self.lock_oid(oid) {
+                secure_log!("[OPTIGA/prov] OID 0x{:04x}: lock FAILED: {:?}", oid, e);
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 
     /// Provision the attempt counter: write 0, install AC, lock.
@@ -393,11 +478,12 @@ impl OptigaTrustM {
     ) -> Result<(), OptigaError> {
         self.init()?;
 
-        // 1. PBS + shielded connection
-        if self.shield.pbs_loaded {
-            self.ensure_shield()?;
-        } else {
-            self.setup_pbs()?;
+        // 1. PBS (plain write; shielded connection disabled until the PRL
+        // handshake bring-up issue is resolved — see project memory).
+        // Still writes the PBS and metadata so the chip is ready to
+        // handshake later. Subsequent APDUs go plaintext via ifx layer.
+        if !self.shield.pbs_loaded {
+            self.setup_pbs_no_handshake()?;
         }
 
         // 2. Auth reference
@@ -406,10 +492,12 @@ impl OptigaTrustM {
         pin_secret.zeroize();
         result?;
 
-        // 3. User data (entropy + master_secret need Conf on read; VKs don't)
+        // 3. User data. While shielded is disabled we drop the Conf(E140)
+        // arm from Read AC — entropy/master_secret become Auto(F1D0) only,
+        // same protection level as VK. I²C traffic is plaintext for now.
         unsafe {
-            self.provision_user_oid(apdu::OID_ENTROPY, entropy, true)?;
-            self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret, true)?;
+            self.provision_user_oid(apdu::OID_ENTROPY, entropy, false)?;
+            self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret, false)?;
             self.provision_user_oid(apdu::OID_VK, vk, false)?;
             self.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk, false)?;
             self.provision_counter()?;
@@ -445,38 +533,55 @@ impl OptigaTrustM {
     /// 8. Reset counter to 0
     /// 9. Cache everything, return master_secret
     fn authenticate_and_read(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], OptigaError> {
+        secure_log!("[OPTIGA/auth] authenticate_and_read: start");
         self.init()?;
-        self.ensure_shield()?;
+        // Shielded connection intentionally skipped while the PRL
+        // handshake is being brought up — all APDUs plaintext for now.
 
         unsafe {
-            // 2. Check counter — missing counter means the device wasn't
-            // provisioned, so bail with NotProvisioned rather than looping
-            // on PinIncorrect.
             let attempts = match self.read_counter_raw() {
-                Some(v) if v == RESET_SENTINEL => return Err(OptigaError::NotProvisioned),
-                Some(v) => v,
-                None => return Err(OptigaError::NotProvisioned),
+                Some(v) if v == RESET_SENTINEL => {
+                    secure_log!("[OPTIGA/auth] counter = RESET_SENTINEL → NotProvisioned");
+                    return Err(OptigaError::NotProvisioned);
+                }
+                Some(v) => {
+                    secure_log!("[OPTIGA/auth] counter = {}", v);
+                    v
+                }
+                None => {
+                    secure_log!("[OPTIGA/auth] counter read returned None → NotProvisioned");
+                    return Err(OptigaError::NotProvisioned);
+                }
             };
             if attempts >= MAX_ATTEMPTS {
                 return Err(OptigaError::PinLocked);
             }
 
-            // 3. Bump counter BEFORE verify (so a power cut can't refund the attempt)
-            apdu::set_data_object(
+            secure_log!("[OPTIGA/auth] bumping counter to {}", attempts + 1);
+            if let Err(e) = apdu::set_data_object(
                 &mut self.ifx, &mut self.shield,
                 apdu::OID_COUNTER, &[attempts + 1],
-            )?;
+            ) {
+                secure_log!("[OPTIGA/auth] counter bump FAILED: {:?}", e);
+                return Err(e);
+            }
 
-            // 4. Get challenge
+            secure_log!("[OPTIGA/auth] GetRandom for challenge");
             let mut challenge = [0u8; AUTH_CHALLENGE_LEN];
-            apdu::get_random(&mut self.ifx, &mut challenge)?;
+            if let Err(e) = apdu::get_random(&mut self.ifx, &mut challenge) {
+                secure_log!("[OPTIGA/auth] GetRandom FAILED: {:?}", e);
+                return Err(e);
+            }
+            secure_log!(
+                "[OPTIGA/auth] challenge[0..4]={:02x}{:02x}{:02x}{:02x}",
+                challenge[0], challenge[1], challenge[2], challenge[3]
+            );
 
-            // 5. Host-side HMAC
             let mut pin_secret = Self::derive_pin_secret(pin);
             let mut hmac = Self::hmac_sha256(&pin_secret, &challenge);
             pin_secret.zeroize();
 
-            // 6. Ask chip to verify
+            secure_log!("[OPTIGA/auth] hmac_verify via DecryptSym");
             let verify_result = apdu::hmac_verify(
                 &mut self.ifx, &mut self.shield,
                 apdu::OID_AUTH_REF,
@@ -488,15 +593,18 @@ impl OptigaTrustM {
             challenge.zeroize();
 
             match verify_result {
-                Ok(()) => {}
-                Err(OptigaError::PinIncorrect)
-                | Err(OptigaError::Status(_))
-                | Err(OptigaError::PinLocked) => {
-                    // HMAC mismatch — chip rejects. Don't decrement counter
-                    // here; we already bumped it in step 3.
-                    return Err(OptigaError::PinIncorrect);
+                Ok(()) => {
+                    secure_log!("[OPTIGA/auth] hmac_verify OK");
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    secure_log!("[OPTIGA/auth] hmac_verify FAILED: {:?}", e);
+                    return Err(match e {
+                        OptigaError::PinIncorrect
+                        | OptigaError::Status(_)
+                        | OptigaError::PinLocked => OptigaError::PinIncorrect,
+                        other => other,
+                    });
+                }
             }
 
             // 7. Read protected data now that Auto(F1D0) is authorized
@@ -569,7 +677,10 @@ impl OptigaTrustM {
     /// irreversible, and that would prevent future rotation.
     pub fn factory_reset(&mut self) -> Result<(), OptigaError> {
         self.init()?;
-        self.ensure_shield()?;
+        // Shielded path is disabled while PRL is being debugged; Change AC
+        // for user OIDs is currently Auto(F1D0) only, so factory reset
+        // needs a valid PIN session. TODO: re-enable Conf(E140) path once
+        // the handshake is green.
 
         let blank = [0u8; 32];
         unsafe {
