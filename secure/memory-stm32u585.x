@@ -16,14 +16,16 @@
 MEMORY
 {
     /* Secure flash: bank 1 via S alias.
-     * Last 24 KB (pages 125-127, 0x0C0FA000-0x0C0FFFFF) reserved for
+     * Last 40 KB (pages 123-127, 0x0C0F6000-0x0C0FFFFF) reserved for
      * persistent secure data:
      *   page 127 (0x0C0FE000) = reserved (legacy Tropic01 pairing key;
      *                            free for reuse after full Tropic01 removal)
      *   page 126 (0x0C0FC000) = OPTIGA Trust M PBS (dual-SE only)
      *   page 125 (0x0C0FA000) = SE050 admin-wipe state (PIN at QW0, flag at QW1)
-     * See hw/flash.rs. */
-    FLASH : ORIGIN = 0x0C000000, LENGTH = 1000K
+     *   page 124 (0x0C0F8000) = JARDÍN slot-state buffer A (primary)
+     *   page 123 (0x0C0F6000) = JARDÍN slot-state buffer B (shadow/wear-level)
+     * See hw/flash.rs and nsc/jardin_flash.rs. */
+    FLASH : ORIGIN = 0x0C000000, LENGTH = 984K
 
     /* Secure SRAM: SRAM1 via S alias */
     RAM   : ORIGIN = 0x30000000, LENGTH = 192K

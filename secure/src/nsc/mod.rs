@@ -64,6 +64,7 @@ mod cmd_sign_bootstrap;
 mod cmd_sign_jardin;
 mod cmd_sign_message;
 mod cmd_sign_userop;
+pub(crate) mod jardin_flash;
 mod ptr_validate;
 mod sign_and_emit;
 mod state;
