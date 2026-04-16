@@ -1191,8 +1191,8 @@ function u16buf(value) {
 
 function buildSignUserOpPayload(chainId, txBytes, bundle = null) {
     const parts = [];
-    parts.push(u32buf(0));           // key_index = 0
-    parts.push(u32buf(0));           // ots_index = 0
+    parts.push(u32buf(0));                // key_index = 0
+    parts.push(u32buf(nextOtsIndex));     // ots_index (monotonic per session)
     parts.push(new Uint8Array(20));  // sender = zeros (not deployed)
     parts.push(ENTRY_POINT);        // entry_point
     parts.push(u64buf(chainId));     // chain_id
@@ -1329,8 +1329,8 @@ const TransactionBuilder = {
         ]);
 
         const parts = [];
-        parts.push(u32buf(0));           // key_index
-        parts.push(u32buf(0));           // ots_index
+        parts.push(u32buf(0));                // key_index
+        parts.push(u32buf(nextOtsIndex));     // ots_index (monotonic per session)
         parts.push(proof);               // proof (384 bytes)
         parts.push(calldata);            // calldata (164 bytes)
         parts.push(readable);            // readable (64 bytes)
@@ -1624,6 +1624,17 @@ let deviceInfo = null;
 let walletAddress = null;
 let lastSignResult = null;
 
+// OTS index counter. The secure world enforces strict monotonicity on
+// CMD_SIGN_USEROP per (chain_id, key_index) within an unlock session —
+// the first sign passes unconditionally, each later one must present a
+// strictly greater ots_index. Persisted in localStorage so that page
+// reloads don't clash with device state that survived the reload.
+let nextOtsIndex = Number(localStorage.getItem('pqsigner.nextOtsIndex') || '0') >>> 0;
+function setNextOtsIndex(v) {
+    nextOtsIndex = v >>> 0;
+    localStorage.setItem('pqsigner.nextOtsIndex', String(nextOtsIndex));
+}
+
 function swToMessage(sw, context = '') {
     switch (sw) {
         case SW_CONDITIONS: return 'Device is locked. Please unlock first.';
@@ -1716,6 +1727,7 @@ async function handleLock() {
         await DeviceAPI.lock();
         appState = 'locked';
         UI.setState('locked');
+        setNextOtsIndex(0); // device wiped its OTS state on lock
         UI.toast('Device locked', 'info');
         walletAddress = null;
 
@@ -1791,6 +1803,7 @@ async function handleSign() {
         UI.hideProgress();
         lastSignResult = result;
         UI.showSuccess(result);
+        setNextOtsIndex(nextOtsIndex + 1);
 
         if (result.wrapper) {
             devLog(`  Signed: ${result.wrapper.signerType}, ${result.wrapper.sigLen}B signature`);
@@ -1801,6 +1814,7 @@ async function handleSign() {
             if (e.sw === SW_SESSION_EXPIRED) {
                 appState = 'locked';
                 UI.setState('locked');
+                setNextOtsIndex(0); // device wiped its OTS state on idle wipe
                 UI.toast('Session expired. Please unlock again.', 'warn');
                 try {
                     const status = await DeviceAPI.getStatus();
@@ -1811,6 +1825,7 @@ async function handleSign() {
             if (e.sw === SW_CONDITIONS) {
                 appState = 'locked';
                 UI.setState('locked');
+                setNextOtsIndex(0); // device reports locked → state wiped
                 UI.toast('Device is locked. Please unlock first.', 'warn');
                 return;
             }
