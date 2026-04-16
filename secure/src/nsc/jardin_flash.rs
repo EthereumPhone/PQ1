@@ -315,6 +315,30 @@ mod backend {
     const BSY: u32 = 1 << 16;
     const ERR_MASK: u32 = 0xFA;
 
+    // ICACHE registers (secure alias). On STM32U5 the ICACHE serves
+    // BOTH code fetches and data loads from flash, so after every
+    // erase/program we must invalidate it or read-backs will return
+    // the pre-write cached bytes. The non-secure alias lives at
+    // 0x4003_0400 but the flash writes happen through SECCR so the
+    // secure ICACHE at 0x5003_0400 is the one to invalidate.
+    const ICACHE: u32 = 0x5003_0400;
+    const ICACHE_CR: *mut u32 = ICACHE as *mut u32;
+    const ICACHE_SR: *const u32 = (ICACHE + 0x04) as *const u32;
+    const ICACHE_FCR: *mut u32 = (ICACHE + 0x0C) as *mut u32;
+    const CACHEINV: u32 = 1 << 1;
+    const BUSYF: u32 = 1 << 0;
+    const BSYENDF: u32 = 1 << 1;
+
+    unsafe fn invalidate_icache() {
+        let cr = core::ptr::read_volatile(ICACHE_CR);
+        core::ptr::write_volatile(ICACHE_CR, cr | CACHEINV);
+        while core::ptr::read_volatile(ICACHE_SR) & BUSYF != 0 {
+            cortex_m::asm::nop();
+        }
+        // Clear BSYENDF by writing 1 to it.
+        core::ptr::write_volatile(ICACHE_FCR, BSYENDF);
+    }
+
     unsafe fn wait_bsy() {
         while core::ptr::read_volatile(FLASH_SECSR) & BSY != 0 {
             cortex_m::asm::nop();
@@ -349,6 +373,9 @@ mod backend {
         let sr = core::ptr::read_volatile(FLASH_SECSR);
         core::ptr::write_volatile(FLASH_SECCR, 0);
         lock();
+        // ICACHE must be invalidated after any flash erase/program or
+        // subsequent reads will return stale cached bytes.
+        invalidate_icache();
         if sr & ERR_MASK != 0 {
             clear_errors();
             Err(FlashError::EraseHardware { sr, page: page_num })
@@ -376,6 +403,9 @@ mod backend {
         let sr = core::ptr::read_volatile(FLASH_SECSR);
         core::ptr::write_volatile(FLASH_SECCR, 0);
         lock();
+        // Invalidate ICACHE so the read-back below sees the freshly
+        // programmed bytes, not the pre-write cached value.
+        invalidate_icache();
         if sr & ERR_MASK != 0 {
             clear_errors();
             return Err(FlashError::ProgramHardware { sr, addr });
