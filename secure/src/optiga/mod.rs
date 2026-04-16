@@ -368,6 +368,46 @@ impl OptigaTrustM {
         }
     }
 
+    /// Check if the auth-ref OID already has data_type = 0x31 (AUTHREF).
+    /// Used by bringup-fresh to skip re-provisioning across runs when
+    /// the secret on-chip is already the one we'd write.
+    #[cfg(feature = "optiga-bringup-fresh")]
+    unsafe fn auth_ref_is_authref_typed(&mut self) -> bool {
+        let mut meta = [0u8; 64];
+        match apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, &mut meta,
+        ) {
+            Ok(n) => {
+                // Walk the TLV tree looking for tag 0xE8 (data type) = 0x31.
+                if n < 2 || meta[0] != 0x20 { return false; }
+                let root_len = meta[1] as usize;
+                if 2 + root_len > n { return false; }
+                let mut pos = 2;
+                while pos + 2 <= 2 + root_len {
+                    let tag = meta[pos];
+                    let tlen = meta[pos + 1] as usize;
+                    if pos + 2 + tlen > 2 + root_len { break; }
+                    if tag == 0xE8 && tlen == 1 && meta[pos + 2] == 0x31 {
+                        return true;
+                    }
+                    pos += 2 + tlen;
+                }
+                false
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Close + reopen the OPTIGA application context. Frees the chip's
+    /// per-session work buffer between long chains of writes where the
+    /// chip otherwise starts returning Status=0xff after a few operations.
+    unsafe fn reopen_application(&mut self) -> Result<(), OptigaError> {
+        secure_log!("[OPTIGA/prov] reopen_application");
+        apdu::close_application(&mut self.ifx)?;
+        apdu::open_application(&mut self.ifx)
+    }
+
     /// Lock an OID's lifecycle to Operational (irreversible).
     ///
     /// Under `optiga-bringup-fresh` we skip this call so the OIDs stay in
@@ -500,19 +540,47 @@ impl OptigaTrustM {
         }
 
         // 2. Auth reference
-        let mut pin_secret = Self::derive_pin_secret(pin);
-        let result = unsafe { self.provision_auth_ref(&pin_secret) };
-        pin_secret.zeroize();
-        result?;
+        //
+        // Under bringup-fresh, skip if the OID already holds our secret
+        // (the PIN-derived secret is deterministic across runs since PIN
+        // + KDF domain are fixed, so re-provisioning would just rewrite
+        // the same bytes — and the chip refuses the second write because
+        // AUTHREF-typed OIDs are effectively write-once). Check by
+        // reading the OID's metadata and looking for data_type = 0x31.
+        let already_provisioned = {
+            #[cfg(feature = "optiga-bringup-fresh")]
+            {
+                unsafe { self.auth_ref_is_authref_typed() }
+            }
+            #[cfg(not(feature = "optiga-bringup-fresh"))]
+            { false }
+        };
+        if already_provisioned {
+            secure_log!("[OPTIGA/prov] auth_ref already provisioned (bringup, skipping)");
+        } else {
+            let mut pin_secret = Self::derive_pin_secret(pin);
+            let result = unsafe { self.provision_auth_ref(&pin_secret) };
+            pin_secret.zeroize();
+            result?;
+        }
 
         // 3. User data. While shielded is disabled we drop the Conf(E140)
         // arm from Read AC — entropy/master_secret become Auto(F1D0) only,
         // same protection level as VK. I²C traffic is plaintext for now.
+        // Cycle Close/Open between OIDs: on this chip, after ~3 consecutive
+        // SetData operations the chip starts returning Status=0xff. The
+        // pattern goes away if we release + reacquire the application
+        // context, suggesting a per-session work buffer or transient-OID
+        // slot gets exhausted otherwise.
         unsafe {
             self.provision_user_oid(apdu::OID_ENTROPY, entropy, false)?;
+            self.reopen_application()?;
             self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret, false)?;
+            self.reopen_application()?;
             self.provision_user_oid(apdu::OID_VK, vk, false)?;
+            self.reopen_application()?;
             self.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk, false)?;
+            self.reopen_application()?;
             self.provision_counter()?;
         }
 

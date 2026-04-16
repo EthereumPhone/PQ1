@@ -306,6 +306,20 @@ pub unsafe fn open_application(ifx: &mut IfxState) -> Result<(), OptigaError> {
     Ok(())
 }
 
+/// `CloseApplication` — frees the chip-side session state / work buffer.
+/// Used between provisioning steps when the chip starts returning
+/// Status=0xff after N consecutive data writes (suspected buffer exhaustion).
+/// Pair with a subsequent `open_application` to reopen the session.
+pub unsafe fn close_application(ifx: &mut IfxState) -> Result<(), OptigaError> {
+    let mut ab = ApduBuf::new(CMD_CLOSE_APPLICATION, 0x00);
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 64];
+    let n = ifx.transceive(apdu, &mut resp)?;
+    let _ = parse_response(&resp, n)?;
+    Ok(())
+}
+
 /// `GetRandom` — generate `length` random bytes from the chip's TRNG.
 ///
 /// CRIT-8 fix: when the shielded connection is active, the request AND
