@@ -209,20 +209,29 @@ impl WalletStore for DualSecureElement {
         self.se050.zeroize_caches();
     }
 
-    /// Delegate SE050 wipe to its WalletStore impl (handles admin PIN,
-    /// wipe flag, admin-auth delete, flash erase). Then erase PBS to
-    /// orphan OPTIGA from this STM32 (no shielded channel without PBS
-    /// means no reads of half_O), and zeroize all SRAM state.
+    /// Wipe both SEs via their admin recovery paths and clear SRAM caches.
+    ///
+    /// OPTIGA: `optiga.factory_reset()` overwrites every user OID through
+    /// the shielded-connection path (`Change = Auto(F1D0) OR Conf(0xE140)`).
+    /// Works even if the user PIN is forgotten. The PBS in flash is
+    /// preserved so the chip remains usable for re-provisioning; the user
+    /// OIDs are now blank.
+    ///
+    /// SE050: delegates to its own `factory_reset_admin` which uses the
+    /// admin UserID at 0x7B06_00A0 to delete user objects.
+    ///
+    /// A best-effort attempt is made on each backend — if one fails we
+    /// still try the other and wipe SRAM state.
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
-        let _ = self.se050.factory_reset_admin();
-
-        #[cfg(feature = "stm32u585")]
-        unsafe {
-            let _ = crate::hw::flash::erase_pbs_page();
-        }
+        let optiga_result = self.optiga.factory_reset_admin();
+        let se050_result = self.se050.factory_reset_admin();
 
         self.zeroize_caches();
-        secure_log!("[DUAL] Factory reset complete — SE050 wiped, PBS erased");
+
+        // Surface the first error we saw, but SRAM is zeroized regardless.
+        optiga_result.and(se050_result)?;
+
+        secure_log!("[DUAL] Factory reset complete — OPTIGA user data wiped, SE050 wiped");
         Ok(())
     }
 }

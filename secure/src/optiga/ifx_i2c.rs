@@ -144,11 +144,15 @@ impl IfxState {
     // Physical layer: register read/write
     // -----------------------------------------------------------------------
 
-    /// Write `data` to an IFX I2C register.
+    /// Write `data` to an IFX I2C register, retrying on NACK.
     ///
-    /// On the wire this is a single I2C write: `[reg_addr, data...]`.
+    /// The chip enters sleep mode between transactions and NACKs the first
+    /// address byte until it wakes — but the address detection itself is
+    /// what wakes it. So NACK on the first transaction is expected; retry
+    /// up to 20 times at 500 µs intervals before giving up.
+    ///
+    /// On the wire each transaction is: `[reg_addr, data...]`.
     unsafe fn write_register(&self, reg: u8, data: &[u8]) -> Result<(), IfxError> {
-        // Build [reg, data...] on stack. Max frame is 277 bytes + 1 reg byte.
         let mut buf = [0u8; MAX_FRAME_SIZE + 1];
         let len = 1 + data.len();
         if len > buf.len() {
@@ -156,16 +160,31 @@ impl IfxState {
         }
         buf[0] = reg;
         buf[1..len].copy_from_slice(data);
-        i2c::write(&buf[..len])?;
-        Ok(())
+
+        for _ in 0..20 {
+            if i2c::write(&buf[..len]).is_ok() {
+                return Ok(());
+            }
+            for _ in 0..80_000u32 {
+                cortex_m::asm::nop();
+            }
+        }
+        Err(IfxError::I2c)
     }
 
-    /// Read `buf.len()` bytes from an IFX I2C register.
+    /// Read `buf.len()` bytes from an IFX I2C register, retrying on NACK.
     ///
-    /// On the wire: I2C write `[reg_addr]`, then I2C read `buf`.
+    /// On the wire: I2C write `[reg_addr]`, then I2C read `buf` (repeated START).
     unsafe fn read_register(&self, reg: u8, buf: &mut [u8]) -> Result<(), IfxError> {
-        i2c::write_read(&[reg], buf)?;
-        Ok(())
+        for _ in 0..20 {
+            if i2c::write_read(&[reg], buf).is_ok() {
+                return Ok(());
+            }
+            for _ in 0..80_000u32 {
+                cortex_m::asm::nop();
+            }
+        }
+        Err(IfxError::I2c)
     }
 
     // -----------------------------------------------------------------------
@@ -270,16 +289,32 @@ impl IfxState {
     }
 
     /// Poll I2C_STATE register until response-ready bit is set.
-    /// Returns the 4-byte state on success.
+    ///
+    /// Transient read failures are expected — the chip may NACK while it
+    /// is busy processing a previous command. Keep polling until either
+    /// the ready bit flips or we exhaust MAX_POLL_RETRIES.
     unsafe fn poll_response_ready(&self) -> Result<[u8; 4], IfxError> {
         let mut state = [0u8; 4];
-        for _ in 0..MAX_POLL_RETRIES {
-            self.read_register(REG_I2C_STATE, &mut state)?;
-            if state[0] & STATE_RESP_READY != 0 {
-                return Ok(state);
+        let mut ok_reads: u32 = 0;
+        let mut last_state0: u8 = 0;
+        for i in 0..MAX_POLL_RETRIES {
+            if self.read_register(REG_I2C_STATE, &mut state).is_ok() {
+                ok_reads += 1;
+                last_state0 = state[0];
+                if state[0] & STATE_RESP_READY != 0 {
+                    secure_log!(
+                        "[OPTIGA/ifx] poll: ready after {} iters ({} ok reads), state[0]=0x{:02x}",
+                        i, ok_reads, state[0]
+                    );
+                    return Ok(state);
+                }
             }
             Self::delay_1ms();
         }
+        secure_log!(
+            "[OPTIGA/ifx] poll: TIMEOUT after {} iters, {} ok reads, last state[0]=0x{:02x}",
+            MAX_POLL_RETRIES, ok_reads, last_state0
+        );
         Err(IfxError::Timeout)
     }
 
@@ -292,26 +327,36 @@ impl IfxState {
     /// Writes `0x0000` to register 0x88, then polls I2C_STATE until the
     /// chip is ready (~15 ms for warm reset).
     pub unsafe fn soft_reset(&mut self) -> Result<(), IfxError> {
-        self.write_register(REG_SOFT_RESET, &[0x00, 0x00])?;
+        secure_log!("[OPTIGA/ifx] soft_reset: writing REG_SOFT_RESET(0x88)");
+        if let Err(e) = self.write_register(REG_SOFT_RESET, &[0x00, 0x00]) {
+            secure_log!("[OPTIGA/ifx] soft_reset: REG_SOFT_RESET write FAILED: {:?}", e);
+            return Err(e);
+        }
+        secure_log!("[OPTIGA/ifx] soft_reset: REG_SOFT_RESET write ACKed");
 
-        // Wait ~20 ms for soft reset to complete
         for _ in 0..20 {
             Self::delay_1ms();
         }
 
-        // Reset sequence counters
         self.tx_seq = 0;
         self.rx_seq = 0;
 
-        // Send ReSynch to synchronize data link layer
         let mut resynch = [0u8; 5];
         let len = self.build_resynch_frame(&mut resynch);
-        self.write_register(REG_DATA, &resynch[..len])?;
+        secure_log!("[OPTIGA/ifx] soft_reset: sending ReSynch frame");
+        if let Err(e) = self.write_register(REG_DATA, &resynch[..len]) {
+            secure_log!("[OPTIGA/ifx] soft_reset: ReSynch write FAILED: {:?}", e);
+            return Err(e);
+        }
+        secure_log!("[OPTIGA/ifx] soft_reset: ReSynch write ACKed");
 
-        // Wait for ReSynch ACK
-        self.poll_response_ready()?;
-        let mut resp = [0u8; 5];
-        self.read_register(REG_DATA, &mut resp)?;
+        // ReSynch is fire-and-forget: the chip resets its sequence counters
+        // but does NOT generate a response frame. Wait for the chip to
+        // finish processing, then exit — the next APDU will find a chip in
+        // a known state.
+        for _ in 0..20 {
+            Self::delay_1ms();
+        }
 
         Ok(())
     }

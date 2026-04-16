@@ -120,6 +120,8 @@ The SE050 has its own provisioning/unlock path (`provision_with_mnemonic_se050()
 
 **Status:** PARTIALLY DONE
 
+> See also #23 for Trezor comparison context — Trezor Safe 7 uses HUK for a different purpose (seed-decryption key derivation from MCU flash); our wrapping scope (SCP03 keys only) is narrower by design because our seed never lands on MCU flash in the first place.
+
 Tropic01 pairing key: **DONE** — TRNG-generated per-device key stored in secure flash page 127 (`0x0C0FE000`) via `hw/flash.rs`. Written at first provisioning, read on every boot. Devkit keys (slot 0) kept as fallback.
 
 SE050 SCP03 keys (`PLATFORM_ENC`, `PLATFORM_MAC`) are still hardcoded constants. On a real device, these should be wrapped by the STM32U585 Hardware Unique Key via the SAES peripheral.
@@ -305,6 +307,8 @@ No sleep/idle power modes, watchdog, or graceful power-down sequences.
 
 **Status:** NOT STARTED (research complete — see `docs/production-security.md`)
 
+> See also #23 for PIN counter hardening gap surfaced by Bundle F: OPTIGA OID 0xF1D5 is firmware-managed decrement-before-auth (glitch during decrement can revert the counter); TROPIC01 uses physically irreversible fused slots. Either migrate to OPTIGA monotonic counter objects or add a secure-flash-anchored shadow counter as an anti-rollback check.
+
 Research-derived mitigations from the deep-research round of 2026-04-14. Critical finding: **both verify-after-sign is inadequate** (RFC 9814 / Genêt TCHES 2023) and **OptRand = 0 (deterministic signing) enables PRF recovery**. These are not theoretical.
 
 **STM32U5 is confirmed-vulnerable to voltage glitching**, not merely presumed. The Masaryk U Simonik thesis (verified real in the 2026-04-15 round) demonstrates ~76% PIN-glitch bypass on STM32U5 silicon (same family as our STM32U585). Ledger Donjon's March 2025 statement that no public attack existed was correct at publication but invalidated within months. Plan the FihInt / fail-in / double-compute items in this backlog as **must-ship**, not optional.
@@ -425,6 +429,8 @@ Confirmed by Prompt A that factory defaults are "dangerously insecure." Masaryk 
 
 **Status:** NOT STARTED (bundle E research complete — see `docs/production-security.md` §2.5; raw result at `docs/research-bundles/results/compass_artifact_wf-b5bd18ff-...md`)
 
+> See also #23 for a complementary anti-interdiction layer: "ship without firmware" (Trezor Safe 7 pattern) eliminates firmware-tampering during shipping without needing the attestation ceremony to execute on a potentially hostile binary. Defence in depth, not a replacement.
+
 Bundle E extends item #20 with a **triple-UID cryptographically-signed manifest** + transparency log + user-facing WebUSB box-opening ceremony. This closes the single-chip-replacement attack surface that has affected every shipping hardware wallet (Trezor Safe 3, Ledger Snake demo, ColdCard firmware-reset). No shipping wallet implements what's described here today.
 
 **Relationship to #20**: #20's ECDSA-P256 binding record is **superseded** by the SLH-DSA-128s manifest design in this item. Implement #22 and retire the ECDSA-P256 path from #20 rather than shipping both.
@@ -472,6 +478,56 @@ Bundle E extends item #20 with a **triple-UID cryptographically-signed manifest*
 
 ---
 
+### 23. Trezor Safe 7 gap closure (feature parity + ship-ready infrastructure)
+
+**Status:** NOT STARTED (bundle F research complete — see `docs/research-bundles/results/compass_artifact_wf-bb70bc61-...md`)
+
+Comparative review against **Trezor Safe 7** (announced 2025-10-21, shipping Nov 2025) surfaced a set of gaps that are *not* covered by the existing PQ / attestation / SCA tracks in this document. These are standalone features + infrastructure deliverables shipping today in Trezor's product. The research is honest: Trezor wins 6 of 10 comparison dimensions; this section is the concrete list of items needed to close that gap where structurally possible.
+
+**What's needed — P0 (prerequisites for any v1 security claim):**
+
+- [ ] **Reproducible builds.** Nix + Docker pipeline producing byte-identical firmware except for the signature block. Precondition for the measured-boot 8-word display (item #5) being a meaningful verification mechanism — without repro builds, a user comparing the 8 words against `fwmeasure` output can't distinguish "I built the right source" from "I built something that hashes the same." Trezor ships this today; gold standard to copy.
+- [ ] **Hybrid boot signature.** Current plan signs measurement with ML-DSA-44 only. Bundle F recommends hybrid Ed25519 + ML-DSA-44 (or EdDSA + SLH-DSA-128, per Trezor's boardloader) so firmware remains verifiable even if one scheme breaks. *Cross-ref: extend #5 / #18.*
+- [ ] **Published security-disclosure page.** Establish the Trezor-style "past security issues" page from day one: every CVE, researcher, severity, resolution. Reputation is built by publishing incidents, not hiding them.
+
+**What's needed — P1 (feature parity):**
+
+- [ ] **SLIP-39 Shamir backup.** SatoshiLabs-invented, MIT-licensed (github.com/satoshilabs/slips/blob/master/slip-0039.md). Single-24-word backup is a resilience SPOF. Support ≥2-of-3 and ≥3-of-5 share configurations for geographic distribution.
+- [ ] **BIP-39 passphrase ("hidden wallet").** Up to 50 ASCII chars, $5-wrench defence + plausible deniability. Maps straight into existing KDF as an extra input alongside the 24 words.
+- [ ] **On-device backup verification flow.** Equivalent of Trezor "Check backup": user re-enters the 24 words on OLED, device confirms they match the stored seed, no host involved. SSD1306 128×64 is constrained but doable.
+
+**What's needed — P3 (low priority / unlikely to ship):**
+
+- [ ] **Ship-without-firmware anti-interdiction.** Factory flashes only boardloader + bootloader; firmware installed by user on first boot via companion app over USB with bootloader signature check. Defeats firmware-swap interdiction. *Decision 2026-04-15: deprioritised — significant build-pipeline + provisioning-flow rework, and #22 triple-UID attestation + hybrid-signed firmware already cover the bulk of the threat. Reconsider only if we hit a concrete interdiction threat model we can't close otherwise.* Cross-ref: complementary to #22.
+
+**What's needed — P2 (doc clarifications surfaced by Bundle F critique):**
+
+- [ ] **Document the Groth16 split architecture explicitly.** Bundle F correctly notes on-device proof *generation* is infeasible on Cortex-M33 for non-trivial circuits. Our design is host-side proof generation + on-device verify — but the current docs make this easy to misread. Add a subsection to `docs/architecture.md` ZK section clarifying: prover = companion app, verifier = secure world + trusted display. Document the constraint-count ceiling we tested at.
+- [ ] **Clarify "no seed on MCU flash" differentiation.** Trezor Safe 7 stores seed **encrypted** on MCU flash (SE-contributed KDF). Our XOR-split means MCU flash extraction reveals **zero entropy bits** — a genuine differentiator worth naming explicitly in `README.md` and `docs/architecture.md` threat-model sections. Currently implicit.
+
+**Cross-references to existing items:**
+
+- **#5** (Measured boot) — extend to hybrid PQ+classical signature per Bundle F.
+- **#7** (HUK-SAES) — unchanged; note that our wrapping scope is narrower by design (we don't need to derive a seed-decryption key because no seed lives on MCU flash).
+- **#18** (SLH-DSA SCA + FI) — PIN counter hardening note added to its header.
+- **#22** (Supply-chain attestation) — ship-without-firmware is a complementary layer.
+
+**What this section does NOT try to close (structural, not feature-gap):**
+
+- Physical enclosure / active-mesh / IP67 case. That's a product manufacturing step, not firmware work. Tracked out-of-band.
+- Bluetooth / Qi2 / battery. Explicit PQSigner design choice: USB-C only.
+- Color touchscreen. OLED was picked deliberately for simplicity of the trusted display.
+- Universal blockchain support. We're PQ-only AA by design; chasing ECDSA parity is a category error.
+
+**Relationship to Trezor's publicly-unknown details:**
+
+Bundle F flags several Safe 7 specifics as not publicly disclosed yet (exact SE secret-sharing scheme, SLH-DSA-192f migration, anti-rollback counter granularity). Don't over-engineer against assumed Trezor designs. Re-audit Bundle F once SatoshiLabs publishes the Safe 7 firmware (their OSS track record suggests within ~6 months of shipping).
+
+**Files to create:** `scripts/repro-build.sh` + Nix/Docker config, `secure/src/ui/slip39_wizard.rs`, `secure/src/ui/passphrase.rs`, `secure/src/ui/backup_verify.rs`
+**Files to change:** `README.md` (explicit threat-model diff vs Trezor), `docs/architecture.md` (ZK split-architecture subsection, "no seed on MCU flash" framing), `secure/src/measured_boot.rs` (hybrid sig slot)
+
+---
+
 ## Completion Log
 
 When a task above is completed, update it here with the date and a one-line summary.
@@ -488,5 +544,7 @@ When a task above is completed, update it here with the date and a one-line summ
 | 2026-04-14 | Crash-safety e2e test | New `make se050-crash-safety-e2e` 2-phase target: provision test objects + arm wipe flag + partial wipe + halt; user resets; phase 2 boots, detects flag, finishes wipe, erases flash page 125. Validated PASS on warm reset (`probe-rs reset`) AND true cold cycle (USB unplug — confirmed by SE050 PCB-byte change ef→82 indicating SE chip power-cycled). |
 | 2026-04-14 | AI deep-research round | 4 of 5 parallel research bundles run (A fault-injection, B key-mgmt, C SLH-DSA SCA, D USB hardening; E supply-chain pending). Findings synthesised into `docs/production-security.md` + new tasks #18-22 in this file. Hallucinations flagged: `CVE-2026-4179` fabricated; "SLasH-DSA 2025" Rowhammer paper future-dated/unverified; ES0499 §2.26.x section numbers + AN12436 Rev 2.4 SCP03 default keys cited but unverified — verify before code commit. |
 | 2026-04-15 | Bundle E supply-chain research | 5th deep-research bundle completed. Synthesised into production-security.md §2.5 + work-todo.md #22. Key finding: triple-UID SLH-DSA-128s factory manifest supersedes Bundle B's ECDSA-P256 binding record (adds firmware_hash + PQ-resistant signing + transparency-log + WebUSB verify ceremony). SE050 variant gate identified — attestation requires SE050 C/E/F, not A/B/D. |
+| 2026-04-15 | Bundle F Trezor Safe 7 comparison | 6th deep-research bundle. Trezor wins 6 of 10 comparison dimensions (attestation, FW update model, UX, physical security, open-source maturity, recovery options); PQSigner wins AA/smart-contract posture and PQ signing; ties on SE strategy. New work-todo #23 with P0 (repro builds, hybrid boot sig, security-disclosures page), P1 (SLIP-39, passphrase, on-device backup check), P2 (Groth16 split-architecture docs, "no seed on MCU flash" framing), P3 (ship-without-firmware, deprioritised). Cross-refs into #7/#18/#22. |
 | 2026-04-15 | Hallucination verification round | Web-verified every citation previously flagged as fabricated across all 5 bundles. **Most flags were wrong** — CVE-2026-4179, Ledger Donjon March 2025 Trezor Safe 3 attack, Trezor Safe 7, Masaryk Simonik thesis, BlaatSchaap + TheCharlatan research, RFC 9814, NXP AN12436 Rev 2.4, ES0499 all verified REAL. Our training cutoff dismissed post-cutoff publications as hallucinations. Corrected verification log in production-security.md §3. Genuinely fabricated / unverifiable items narrowed down to: Fluhrer ePrint 2024/500 (likely doesn't exist as described), "Extraktor" glitch board (not found — probably SiliconToaster misremembered), NCC "CM-1-C" specific label (series real, label not locatable), some precise trace-count figures. One attribution error fixed: ColdCard LFI attack was Ledger Donjon, not Riscure. |
 | 2026-04-16 | JARDÍN cutover (phases 1-7) | Collapsed the multi-signer architecture to a single JARDÍN FORS+C signing path behind one `CMD_SIGN_USEROP`. Flash-backed `SlotState` persists `next_q` across power cycles (phase 1). Added SPHINCS+C11 master key derivation matching the SPHINCs- reference byte-for-byte (phase 2, 7 unit tests + BIP-39 vector). Unified Type 1 / Type 2 state machine emits a `[type1_len \| t1 \| type2_len \| t2]` bundle the companion submits as up to two EntryPoint v0.9 UserOps (phase 3). USB layer cut from 14 INS codes + v1 Keycard Shell compat to 7 native v2 instructions; webhid tool rewritten for the unified bundle (phase 4). `PQJardinWallet` + `PQJardinWalletFactory` contracts replace the multi-signer wallet; 14 new Foundry tests pass; EntryPoint v0.9 via `account-abstraction` submodule update to `releases/v0.9`; CREATE2 salt = `keccak256(masterPkSeed \|\| masterPkRoot)` (phase 5). ERC-20 metadata bundle + Groth16 ZK clear-sign preserved as optional trailer sections on the unified sign payload, verifying against the firmware-embedded Merkle-rooted DBs just like before. Fixed a latent sphincs-c7 bug where `extract_ht_index` used C7 parameters (24-bit mask at bit 128) instead of C11 (16-bit mask at bit 143); self-verification now passes keygen → sign → verify roundtrip. |
+| 2026-04-16 | OPTIGA Trust M silicon bring-up | TRUST-M-SHIELD on B-U585I-IOT02A via breadboard wired to I2C1. Rewrote `secure/src/optiga/apdu.rs` for correct wire format (positional InData not TLV, CMD bytes with 0x80 CLEAR_LAST_ERROR flag, access-condition tags AutoRef=0x23/Conf=0x20, data-type tag 0xE8, AUTHREF type 0x31), added `get_random` + `hmac_verify` primitives. Switched `authenticate_and_read` to proper HMAC challenge-response protocol (chip-side verify via DecryptSym CMD 0x95 + tag 0x43). Added admin factory-reset via shielded-connection Conf(E140) path — avoids SE050-style permanent lockout by making every user OID's Change AC `Auto(F1D0) OR Conf(E140)`. Physical fixes validated on real hardware: CTL→3V3 jumper required, 50µs guard time between register-write/read transactions required, ReSynch is fire-and-forget. OpenApplication now returns valid response. Saved bring-up quirks to memory (`project_optiga_bringup.md`). |

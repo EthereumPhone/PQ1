@@ -79,6 +79,69 @@ unsafe fn configure_transfer(addr: u8, nbytes: u8, direction: u32, flags: u32) {
     write_volatile(I2C1_CR2, cr2);
 }
 
+/// Probe a single 7-bit I2C address with a 0-byte write. Returns `Ok(())`
+/// iff the slave ACKs.
+pub unsafe fn probe_addr(addr: u8) -> Result<(), I2cError> {
+    use crate::hw::i2c_hw::*;
+
+    write_volatile(I2C1_ICR, ICR_NACKCF | ICR_STOPCF | ICR_BERRCF | ICR_ARLOCF);
+
+    let cr2: u32 = ((addr as u32) << 1)
+        | (0u32 << 16)
+        | CR2_START
+        | CR2_AUTOEND;
+    write_volatile(I2C1_CR2, cr2);
+
+    let mut t = TIMEOUT_LOOPS;
+    loop {
+        let isr = read_volatile(I2C1_ISR);
+        if isr & ISR_NACKF != 0 {
+            write_volatile(I2C1_ICR, ICR_NACKCF);
+            let mut s = TIMEOUT_LOOPS;
+            while read_volatile(I2C1_ISR) & ISR_STOPF == 0 {
+                s -= 1;
+                if s == 0 { break; }
+            }
+            write_volatile(I2C1_ICR, ICR_STOPCF);
+            return Err(I2cError::Nack);
+        }
+        if isr & ISR_STOPF != 0 {
+            write_volatile(I2C1_ICR, ICR_STOPCF);
+            return Ok(());
+        }
+        t -= 1;
+        if t == 0 {
+            return Err(I2cError::Timeout);
+        }
+    }
+}
+
+/// One-shot 0-byte write probe — returns Ok(()) iff the OPTIGA at
+/// `OPTIGA_ADDR` ACKs the address byte.
+pub unsafe fn probe() -> Result<(), I2cError> {
+    probe_addr(OPTIGA_ADDR)
+}
+
+/// Probe that writes a single register-address byte (IFX I2C REG_I2C_STATE
+/// = 0x82). Some chip firmware revisions NACK bare address-only writes but
+/// ACK when any data byte follows. This is the minimal transaction the
+/// OPTIGA's register-access layer guarantees to accept.
+pub unsafe fn probe_with_reg() -> Result<(), I2cError> {
+    write(&[0x82])
+}
+
+/// Scan every 7-bit address on I2C1 and log each responder. Used during
+/// bring-up when we don't know what address the OPTIGA ended up at.
+pub unsafe fn scan() {
+    secure_log!("[OPTIGA/i2c] Scanning I2C1 0x08..0x77 for responders");
+    for addr in 0x08u8..=0x77u8 {
+        if probe_addr(addr).is_ok() {
+            secure_log!("[OPTIGA/i2c]   found responder at 0x{:02x}", addr);
+        }
+    }
+    secure_log!("[OPTIGA/i2c] Scan complete");
+}
+
 /// Write `data` to the OPTIGA Trust M (blocking).
 pub unsafe fn write(data: &[u8]) -> Result<(), I2cError> {
     let total = data.len();
@@ -160,7 +223,17 @@ pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
     Ok(())
 }
 
-/// Write `tx` then read `rx` in a single I2C transaction (repeated START).
+/// Write `tx` then read `rx`.
+///
+/// IFX I2C register-read pattern per Infineon's reference driver:
+///   1. Write: `[addr+W | reg_addr | STOP]`
+///   2. Wait `PL_GUARD_TIME_INTERVAL_US` (50 µs) for the chip to latch the
+///      register selector.
+///   3. Read: `[addr+R | data... | STOP]` (no register address — the chip
+///      remembers the selector across transactions).
+///
+/// Repeated-START is not used: the Trust M silicon NACKs the restart
+/// address byte when it transitions directly from write to read phase.
 pub unsafe fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
     if tx.is_empty() {
         return read(rx);
@@ -168,26 +241,12 @@ pub unsafe fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
     if rx.is_empty() {
         return write(tx);
     }
+    write(tx)?;
 
-    // Write phase: no AUTOEND (repeated START instead of STOP)
-    configure_transfer(OPTIGA_ADDR, tx.len().min(255) as u8, 0, 0);
-
-    for &byte in tx {
-        wait_flag(ISR_TXIS)?;
-        write_volatile(I2C1_TXDR, byte as u32);
+    // 50 µs guard time at 160 MHz ≈ 8000 NOPs.
+    for _ in 0..8_000u32 {
+        core::arch::asm!("nop");
     }
 
-    wait_flag(ISR_TC)?;
-
-    // Read phase: repeated START, AUTOEND
-    configure_transfer(OPTIGA_ADDR, rx.len().min(255) as u8, CR2_RD_WRN, CR2_AUTOEND);
-
-    for byte in rx.iter_mut() {
-        wait_flag(ISR_RXNE)?;
-        *byte = read_volatile(I2C1_RXDR) as u8;
-    }
-
-    wait_flag(ISR_STOPF)?;
-    write_volatile(I2C1_ICR, ICR_STOPCF);
-    Ok(())
+    read(rx)
 }
