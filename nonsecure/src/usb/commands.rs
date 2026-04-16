@@ -132,41 +132,44 @@ impl CommandRouter {
             _ => {}
         }
 
-        // Chained commands (P1 bit 7 = 0x80 → more follows).
+        // Chained commands per ISO 7816-4:
+        //   P1 bit 7 = 0 → this is the LAST (or only) block
+        //   P1 bit 7 = 1 → MORE blocks follow
+        //
+        // The chain state machine:
+        //   - `chain_ins == 0` means no chain is active.
+        //   - On "more follows", append to the active chain (starting one
+        //     if none exists) and return SW_OK.
+        //   - On "last or only", append and execute.
         let is_more = (p1 & 0x80) != 0;
-        if !is_more {
+
+        // Append (or start) into the chain buffer.
+        if self.chain_ins == 0 {
             self.chain_ins = ins;
             self.chain_pos = 0;
-            if lc > CHAIN_BUF_LEN {
-                self.chain_ins = 0;
-                return self.sw_response(SW_WRONG_LENGTH);
-            }
-            if lc > 0 {
-                CHAIN_BUF[..lc].copy_from_slice(data);
-                self.chain_pos = lc;
-            }
-            if lc < APDU_MAX_DATA {
-                return self.execute_chain(ins);
-            }
-            self.sw_response(SW_OK)
-        } else {
-            if ins != self.chain_ins {
-                self.chain_ins = 0;
-                self.chain_pos = 0;
-                return self.sw_response(SW_CONDITIONS_NOT_SATISFIED);
-            }
-            if self.chain_pos + lc > CHAIN_BUF_LEN {
-                self.chain_ins = 0;
-                self.chain_pos = 0;
-                return self.sw_response(SW_WRONG_LENGTH);
-            }
+        } else if ins != self.chain_ins {
+            // New INS mid-chain is a protocol error.
+            self.chain_ins = 0;
+            self.chain_pos = 0;
+            return self.sw_response(SW_CONDITIONS_NOT_SATISFIED);
+        }
+        if self.chain_pos + lc > CHAIN_BUF_LEN {
+            self.chain_ins = 0;
+            self.chain_pos = 0;
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        if lc > 0 {
             CHAIN_BUF[self.chain_pos..self.chain_pos + lc].copy_from_slice(data);
             self.chain_pos += lc;
-            if lc < APDU_MAX_DATA {
-                return self.execute_chain(ins);
-            }
-            self.sw_response(SW_OK)
         }
+
+        if is_more {
+            // More chunks to come.
+            return self.sw_response(SW_OK);
+        }
+
+        // Last (or only) chunk — execute.
+        self.execute_chain(ins)
     }
 
     unsafe fn execute_chain(&mut self, ins: u8) -> Response {
