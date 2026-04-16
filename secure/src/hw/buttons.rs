@@ -19,6 +19,12 @@
 //! Active low: shorting a GPIO jumper to the GND jumper = "press".
 //! Internal pull-ups keep the pins HIGH when not shorted.
 //!
+//! Gestures:
+//!   * short left / right        → prev / next page
+//!   * long left  (>= 500 ms)    → cancel
+//!   * long right (>= 500 ms)    → confirm
+//!   * both pressed together     → confirm (chord, 80 ms skew window)
+//!
 //! The on-board blue USER button (PC13) is also monitored in test mode
 //! as a reference to confirm the firmware is running.
 
@@ -60,6 +66,11 @@ const RIGHT_BIT: u32 = 1 << 8;  // PA8  (CN13 pin 2, Arduino D9)
 const DEBOUNCE_MS: u32 = 30;
 const LONG_PRESS_MS: u32 = 500;
 const POLL_MS: u32 = 5;
+/// After one button debounces as pressed, wait up to this long for the other
+/// to also go down. If both are held within the window it's treated as a
+/// "confirm" chord (synthesized as `(Right, Long)` so every existing UI path
+/// sees it as a confirm event without changing the `Button` enum).
+const COMBO_WINDOW_MS: u32 = 80;
 
 /// Loops-per-ms for the busy-wait delay, calibrated at init time.
 static mut LOOPS_PER_MS: u32 = 32_000; // default assumes 160 MHz
@@ -148,28 +159,78 @@ use crate::ui::{Button, Press};
 /// Block until a debounced button event occurs, or `idle_check` returns true.
 ///
 /// Returns `None` if the idle timer fired (caller should wipe secrets).
+///
+/// Pressing both buttons within `COMBO_WINDOW_MS` synthesizes a
+/// `(Button::Right, Press::Long)` event so every existing UI path treats it
+/// as a confirm.
 pub fn wait_event(idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
     loop {
         if idle_check() {
             return None;
         }
 
-        // Check LEFT (PI2)
+        if !(left_pressed() || right_pressed()) {
+            delay_ms(POLL_MS);
+            continue;
+        }
+
+        // Debounce the initial press.
+        delay_ms(DEBOUNCE_MS);
+        if !(left_pressed() || right_pressed()) {
+            continue; // bounce
+        }
+
+        // Watch for up to COMBO_WINDOW_MS to see if the second button also
+        // goes down. If the user is chording confirm, this catches the
+        // natural skew between their two thumbs.
+        let mut elapsed: u32 = 0;
+        let mut combo = left_pressed() && right_pressed();
+        while !combo && elapsed < COMBO_WINDOW_MS {
+            delay_ms(POLL_MS);
+            elapsed += POLL_MS;
+            if idle_check() {
+                return None;
+            }
+            if left_pressed() && right_pressed() {
+                combo = true;
+                break;
+            }
+            if !left_pressed() && !right_pressed() {
+                break; // first button already released — treat as noise
+            }
+        }
+
+        if combo {
+            // Wait for both buttons to release (debounced) so we don't emit a
+            // stray single-press event from whichever one is released last.
+            return wait_combo_release(idle_check);
+        }
+
+        // No combo — fall back to single-button hold tracking.
+        let already_held = DEBOUNCE_MS + elapsed;
         if left_pressed() {
-            delay_ms(DEBOUNCE_MS);
-            if left_pressed() {
-                return track_hold(left_pressed, Button::Left, idle_check);
-            }
+            return track_hold(left_pressed, Button::Left, idle_check, already_held);
         }
-
-        // Check RIGHT (PA15)
         if right_pressed() {
+            return track_hold(right_pressed, Button::Right, idle_check, already_held);
+        }
+        // Neither still pressed — released during the combo window, ignore.
+    }
+}
+
+/// Wait for both buttons to be released (debounced), then emit the confirm
+/// event. Returns `None` if the idle timer fires.
+fn wait_combo_release(idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
+    loop {
+        if idle_check() {
+            return None;
+        }
+        if !left_pressed() && !right_pressed() {
             delay_ms(DEBOUNCE_MS);
-            if right_pressed() {
-                return track_hold(right_pressed, Button::Right, idle_check);
+            if !left_pressed() && !right_pressed() {
+                return Some((Button::Right, Press::Long));
             }
         }
-
         delay_ms(POLL_MS);
     }
 }
@@ -181,8 +242,9 @@ fn track_hold(
     is_pressed: fn() -> bool,
     button: Button,
     idle_check: &mut dyn FnMut() -> bool,
+    initial_held_ms: u32,
 ) -> Option<(Button, Press)> {
-    let mut held_ms: u32 = DEBOUNCE_MS; // already waited the debounce
+    let mut held_ms: u32 = initial_held_ms;
 
     loop {
         if idle_check() {
@@ -289,6 +351,8 @@ pub unsafe fn run_test() -> ! {
     hprintln!("[BTN] Phase 2: Button event detection");
     hprintln!("[BTN]   LEFT  = PC1/D8  (short <500ms, long >=500ms)");
     hprintln!("[BTN]   RIGHT = PA8/D9  (short <500ms, long >=500ms)");
+    hprintln!("[BTN]   BOTH pressed together = confirm chord");
+    hprintln!("[BTN]                           (reports as RIGHT LONG)");
     hprintln!("[BTN] Waiting for events...");
     hprintln!("========================================");
 

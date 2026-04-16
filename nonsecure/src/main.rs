@@ -1,8 +1,11 @@
 #![no_std]
 #![no_main]
 // The `e2e-test` build swaps out the interactive main() for a scripted
-// runner in e2e_test.rs.
+// runner in e2e_test.rs; `bench-key-speed` swaps it for a timing bench.
+// Both repurpose the crate entry point, so the interactive imports and
+// helpers end up unused — silence the resulting warnings.
 #![cfg_attr(feature = "e2e-test", allow(dead_code))]
+#![cfg_attr(feature = "bench-key-speed", allow(dead_code, unused_imports))]
 
 #[cfg(not(feature = "usb"))]
 use cortex_m_semihosting::{debug, hprintln};
@@ -22,6 +25,8 @@ use sphincs_tz_shared::{
 
 #[cfg(feature = "e2e-test")]
 mod e2e_test;
+#[cfg(feature = "bench-key-speed")]
+mod bench_key_speed;
 mod erc20_db;
 mod nsc_api;
 #[cfg(feature = "usb")]
@@ -30,20 +35,20 @@ mod usb;
 mod vk_db;
 
 /// Scratch buffer for the unified sign command response (Type 1 + Type 2).
-#[cfg(not(feature = "e2e-test"))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
 static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN] = [0u8; MAX_JARDIN_RESPONSE_LEN];
 
 /// Scratch buffer for a sign payload (header + up to 256B inner calldata).
-#[cfg(not(feature = "e2e-test"))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
 const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 256;
-#[cfg(not(feature = "e2e-test"))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
 static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
 
 // ---------------------------------------------------------------------------
 // USB main loop: polls USB HID, dispatches APDUs to the NSC gateway.
 // Active when the `usb` feature is enabled (hardware builds with host comms).
 // ---------------------------------------------------------------------------
-#[cfg(all(feature = "usb", not(feature = "e2e-test")))]
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let mut stack = unsafe { usb::init() };
@@ -65,7 +70,7 @@ fn main() -> ! {
 // Interactive QEMU demo (no USB). Exercises the unified JARDÍN sign
 // command end-to-end: unlock → sign a value-transfer → print result.
 // ---------------------------------------------------------------------------
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS] Non-secure world started!");
@@ -84,15 +89,25 @@ fn main() -> ! {
         let status = nsc_api::sign_userop(&PAYLOAD_BUF[..payload_len], &mut SIG_BUF);
         hprintln!("[NS] sign_userop: {:?}", NscStatus::from(status));
         if status == NscStatus::Ok as u32 {
-            let t1_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]);
-            let t2_off = 4 + t1_len as usize;
+            let ic_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]);
+            let t1_off = 4 + ic_len as usize;
+            let t1_len = u32::from_be_bytes([
+                SIG_BUF[t1_off],
+                SIG_BUF[t1_off + 1],
+                SIG_BUF[t1_off + 2],
+                SIG_BUF[t1_off + 3],
+            ]);
+            let t2_off = t1_off + 4 + t1_len as usize;
             let t2_len = u32::from_be_bytes([
                 SIG_BUF[t2_off],
                 SIG_BUF[t2_off + 1],
                 SIG_BUF[t2_off + 2],
                 SIG_BUF[t2_off + 3],
             ]);
-            hprintln!("[NS] type1_len: {}, type2_len: {}", t1_len, t2_len);
+            hprintln!(
+                "[NS] init_code_len: {}, type1_len: {}, type2_len: {}",
+                ic_len, t1_len, t2_len
+            );
         }
     }
 
@@ -103,7 +118,7 @@ fn main() -> ! {
 
 /// Build a unified-sign payload for a value-transfer tx.
 /// Output layout matches `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN`.
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed")))]
 fn build_value_transfer_payload(buf: &mut [u8]) -> usize {
     // Sepolia chain_id, slot_index hint = 0, empty inner data.
     let chain_id: u64 = 11_155_111;

@@ -6,10 +6,8 @@
 //! means we only emit the tree root (no authentication path needed),
 //! saving (A * N) = 256 bytes per signature.
 
-use keccak_asm::{Digest, Keccak256};
-
 use crate::address::make_adrs;
-use crate::hash::{fors_secret, h_msg, pad16, th, th_multi, th_pair, truncate};
+use crate::hash::{fors_secret, h_msg, pad16, th, th_multi, th_pair, truncate, Digest, Keccak256};
 use crate::params::*;
 
 /// Extract K FORS indices from the H_msg digest.

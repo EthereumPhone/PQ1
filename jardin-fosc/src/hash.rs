@@ -6,16 +6,41 @@
 //! EVM uint256 representation.
 //!
 //! These match the Solidity `JardinForsCVerifier` exactly.
-
-use keccak_asm::{Digest, Keccak256};
+//!
+//! Under the optional `sha256-hash` feature the primary hash is SHA-256
+//! instead of Keccak-256. The linked binary must supply the three
+//! `pqsigner_sha256_*` extern fns below.
 
 use crate::params::{A, K, N};
 
-/// Compute keccak256 of arbitrary data, returning full 32 bytes.
+#[cfg(not(feature = "sha256-hash"))]
+use keccak_asm::{Digest, Keccak256};
+
+#[cfg(feature = "sha256-hash")]
+extern "C" {
+    fn pqsigner_sha256_init();
+    fn pqsigner_sha256_update(ptr: *const u8, len: usize);
+    fn pqsigner_sha256_final(out: *mut u8);
+}
+
+/// Compute the primary hash (Keccak-256 or SHA-256) of arbitrary data.
 pub fn keccak256(data: &[u8]) -> [u8; 32] {
-    let mut h = Keccak256::new();
-    h.update(data);
-    h.finalize().into()
+    #[cfg(not(feature = "sha256-hash"))]
+    {
+        let mut h = Keccak256::new();
+        h.update(data);
+        h.finalize().into()
+    }
+    #[cfg(feature = "sha256-hash")]
+    {
+        let mut out = [0u8; 32];
+        unsafe {
+            pqsigner_sha256_init();
+            pqsigner_sha256_update(data.as_ptr(), data.len());
+            pqsigner_sha256_final(out.as_mut_ptr());
+        }
+        out
+    }
 }
 
 /// Mask a 32-byte value to the top N=16 bytes (zero out bytes [16..32]).

@@ -42,10 +42,11 @@
 //! wire format.
 
 use sphincs_tz_shared::{
-    NscStatus, C11_SIG_LEN, JARDIN_FORSC_BODY, JARDIN_TYPE1_LEN, JARDIN_TYPE1_MARKER,
+    NscStatus, C11_SIG_LEN, FLAG_INCLUDE_INIT_CODE, JARDIN_CREATE_ACCOUNT_SELECTOR,
+    JARDIN_FORSC_BODY, JARDIN_INIT_CODE_LEN, JARDIN_TYPE1_LEN, JARDIN_TYPE1_MARKER,
     JARDIN_TYPE2_HEADER_LEN, JARDIN_TYPE2_MARKER, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN,
-    SIGN_USEROP_HEADER_LEN, ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN,
-    ZK_STRING_LEN, ZK_VK_BUNDLE_MAX_LEN,
+    PQ_JARDIN_WALLET_FACTORY, SIGN_USEROP_HEADER_LEN, ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA,
+    ZK_PROOF_LEN, ZK_STRING_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -134,7 +135,15 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let chain_id = u64::from_be_bytes([
         snap[0], snap[1], snap[2], snap[3], snap[4], snap[5], snap[6], snap[7],
     ]);
-    let slot_index_hint = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
+    // The legacy `slot_index_hint` field is now a flags field. Bit 31
+    // (`FLAG_INCLUDE_INIT_CODE`) tells the firmware that the wallet has
+    // not yet been deployed on `chain_id` and it must synthesise
+    // `initCode` from its master pubkey pair so the companion can build
+    // the first-deploy `PackedUserOperation` without ever seeing the
+    // master pubkey on its own.
+    let flags = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
+    let include_init_code = (flags & FLAG_INCLUDE_INIT_CODE) != 0;
+    let slot_index_hint = flags & !FLAG_INCLUDE_INIT_CODE;
     let mut sender = [0u8; 20];
     sender.copy_from_slice(&snap[12..32]);
     let mut entry_point = [0u8; 20];
@@ -559,6 +568,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Zeroizing::new([0u8; JARDIN_TYPE1_LEN]);
     let mut h_r = [0u8; 32];
 
+    // initCode is only ever attached to a Type 1 UserOp (the first-deploy
+    // UserOp of a fresh chain). A Normal-mode sign has no Type 1 frame to
+    // carry it, so the request is internally inconsistent — refuse it
+    // rather than silently drop the flag.
+    if include_init_code && !needs_type1 {
+        entropy.zeroize();
+        ui::show_status("Sign", "init_code w/o type1");
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    let mut init_code_out: Zeroizing<[u8; JARDIN_INIT_CODE_LEN]> =
+        Zeroizing::new([0u8; JARDIN_INIT_CODE_LEN]);
+    let mut emit_init_code = false;
+
     if needs_type1 {
         ui::show_status("Slot register", "building type 1");
 
@@ -587,13 +610,40 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
         };
 
+        // C11 keygen first — we need the master pubkey pair to build
+        // initCode before we can bind its hash into the userOpHash.
+        ui::show_progress("C11 keygen", 0);
+        let (c11_sk, c11_pk_seed_32, c11_pk_root_32) =
+            crate::crypto::derive_c11_master_keypair_from_entropy_with_progress(
+                &*entropy,
+                |p| ui::show_progress("C11 keygen", p),
+            );
+
+        // Build the optional initCode:
+        //   factory(20) || selector(4) || masterPkSeed(32) || masterPkRoot(32)
+        // and precompute `keccak256(initCode)` for the Type 1 userOpHash.
+        // `c11_pk_seed_32` and `c11_pk_root_32` are already N-masked
+        // (top 16 bytes populated, bottom 16 zero) — exactly the
+        // `bytes32` shape the factory expects.
+        let t1_init_code_hash = if include_init_code {
+            let ic = &mut *init_code_out;
+            ic[..20].copy_from_slice(&PQ_JARDIN_WALLET_FACTORY);
+            ic[20..24].copy_from_slice(&JARDIN_CREATE_ACCOUNT_SELECTOR);
+            ic[24..56].copy_from_slice(&c11_pk_seed_32);
+            ic[56..88].copy_from_slice(&c11_pk_root_32);
+            emit_init_code = true;
+            keccak256(ic.as_slice())
+        } else {
+            KECCAK_EMPTY
+        };
+
         // Type 1 userOpHash (EntryPoint v0.9).
         let t1_params = AaUserOpParamsV09 {
             sender,
             entry_point,
             chain_id,
             nonce: U256(nonce),
-            init_code_hash: KECCAK_EMPTY,
+            init_code_hash: t1_init_code_hash,
             account_gas_limits,
             pre_verification_gas: U256(pre_verification_gas),
             gas_fees,
@@ -602,13 +652,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let t1_call_hash = keccak256(t1_exec.as_slice());
         let t1_user_op_hash = compute_user_op_hash_v09(&t1_params, &t1_call_hash);
 
-        // C11 keygen + sign.
-        ui::show_progress("C11 keygen", 0);
-        let (c11_sk, _c11_pk_seed_32, _c11_pk_root_32) =
-            crate::crypto::derive_c11_master_keypair_from_entropy_with_progress(
-                &*entropy,
-                |p| ui::show_progress("C11 keygen", p),
-            );
         let c11_sig = match crate::crypto::c11_sign_verified_with_progress(
             &c11_sk,
             &t1_user_op_hash,
@@ -791,7 +834,29 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     new_state.zeroize();
 
     // ── 15. Assemble output bundle ─────────────────────────────────
+    //
+    // Output layout:
+    //   [init_code_len(4 BE)][init_code(0 or 88)]
+    //   [type1_len(4 BE)][type1_bytes(0 or 4041)]
+    //   [type2_len(4 BE)][type2_bytes]
+    //
+    // When the companion did not set `FLAG_INCLUDE_INIT_CODE`, the first
+    // four bytes are zero and the bundle continues with the type1 frame
+    // immediately after — same semantics as the Type-1 "not needed" case.
     let mut write_pos: usize = 0;
+    let init_code_len = if emit_init_code { JARDIN_INIT_CODE_LEN } else { 0 };
+    let ic_len_be = (init_code_len as u32).to_be_bytes();
+    for i in 0..4 {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), ic_len_be[i]);
+    }
+    write_pos += 4;
+    if emit_init_code {
+        for i in 0..JARDIN_INIT_CODE_LEN {
+            core::ptr::write_volatile(out_ptr.add(write_pos + i), init_code_out[i]);
+        }
+        write_pos += JARDIN_INIT_CODE_LEN;
+    }
+
     let type1_len = if needs_type1 { JARDIN_TYPE1_LEN } else { 0 };
     let t1_len_be = (type1_len as u32).to_be_bytes();
     for i in 0..4 {
@@ -841,6 +906,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // ── 16. Zeroise transients ─────────────────────────────────────
     entropy.zeroize();
     type1_out.zeroize();
+    init_code_out.zeroize();
 
     crate::timeout::reset_activity();
     ui::show_status("Signed", "");

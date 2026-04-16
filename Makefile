@@ -31,7 +31,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen measure factory-reset
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed qr-screen measure factory-reset
 
 all: secure nonsecure
 
@@ -250,6 +250,67 @@ e2e:
 		exit 0; \
 	else \
 		echo "==> e2e: ASSERTIONS FAILED"; \
+		exit 1; \
+	fi
+
+# Fully-automated JARDÍN signing benchmark on real STM32U585.
+#
+# Clocks the MCU to 160 MHz (hw::rcc::init, the default for the stm32u585
+# build path) and uses the DWT cycle counter (armed in secure main.rs
+# before booting NS) to measure wall-clock time for:
+#
+#   A) first-sign on a fresh chain  — Type 1 (C11) + slot keygen + Type 2
+#   B) 5 x subsequent signs on same chain — Type 2 only (slot cached)
+#   C) first-sign on a second chain — another Type 1 data point
+#
+# The secure crate builds with `e2e-test` so the wallet auto-provisions
+# a fixed mnemonic and pre-unlocks the gateway (no PIN UI).  The NS crate
+# builds with `bench-key-speed`, which swaps main() for the bench runner
+# in `nonsecure/src/bench_key_speed.rs`.
+#
+# Why this exists: motivates evaluating the SHA-256 hash variant (see
+# `docs/SHA256_VARIANT.md`), where the STM32U585 HASH peripheral would
+# accelerate signing ~10x vs software Keccak.  This target establishes
+# the baseline number.
+#
+# Requires: ST-LINK connected, STM32_Programmer_CLI on PATH.
+# Pass: exits 0 with "[NS][bench] === PASS ===" on stdout.
+# Fail: exits 1 if any sign returns non-Ok or the PASS line is missing.
+test-key-speed:
+	@echo "==> Building secure (e2e-test auto-provision) + NS (bench-key-speed) + SHA-256 HW accel"
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+		cargo build --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,sha256-hash
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features bench-key-speed,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running key-speed bench on hardware (160 MHz)..."
+	@echo "    (streaming semihosting output; each [NS][bench] line = one measurement)"
+	@log=$$(mktemp -t test-key-speed.XXXXXX.log); \
+	trap 'rm -f "$$log"' EXIT; \
+	rc_file=$$(mktemp -t test-key-speed-rc.XXXXXX); \
+	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
+	{ probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
+	rc=$$(cat "$$rc_file"); \
+	echo "===================================="; \
+	if [ "$$rc" != "0" ] && [ "$$rc" != "130" ]; then \
+		echo "==> test-key-speed: FAIL (probe-rs exited $$rc)"; \
+		exit 1; \
+	fi; \
+	if grep -q "\[NS\]\[bench\] === PASS ===" "$$log"; then \
+		echo "==> test-key-speed: PASS"; \
+		exit 0; \
+	else \
+		echo "==> test-key-speed: FAIL (missing PASS marker)"; \
 		exit 1; \
 	fi
 

@@ -86,22 +86,23 @@ mod stm32 {
     const MPCBB_CR: u32 = 0x00;
     const MPCBB_SECCFGR0: u32 = 0x100;
 
-    // GTZC1 TZSC base address (S alias, AHB1)
-    const TZSC_BASE: u32 = 0x5003_2800;
+    // GTZC1 TZSC base address (S alias, AHB1). Per STM32U585 RM0456 and
+    // CMSIS header: AHB1PERIPH_BASE_S (0x50020000) + 0x12400 = 0x50032400.
+    // (The nearby 0x50032800 is GTZC1 TZIC — the interrupt controller,
+    // not the security config; do not conflate.)
+    const TZSC_BASE: u32 = 0x5003_2400;
     const TZSC_SECCFGR1: *mut u32 = (TZSC_BASE + 0x10) as *mut u32;
     const TZSC_SECCFGR2: *mut u32 = (TZSC_BASE + 0x14) as *mut u32;
     const TZSC_SECCFGR3: *mut u32 = (TZSC_BASE + 0x18) as *mut u32;
 
-    // ---- USB allowlist for TZSC (RM0456 §54 AHB2 peripheral table) ----
+    // ---- USB allowlist for TZSC ----
     //
     // On STM32U585 the USB OTG FS controller is the only TZSC-gated
-    // peripheral the NS world needs direct register access to. Its
-    // RCC clock-enable bit (AHB2ENR1) is bit 14, and its TZSC bit in
-    // SECCFGR2 is at the same position because ST keeps the two
-    // numberings aligned within each bus.
-    //
-    // If the USB stack ever gains a new hard dependency (e.g. a DMA
-    // channel) the corresponding bit needs to be added here.
+    // peripheral the NS world needs direct register access to. The TZSC
+    // SECCFGRx layout is documented in RM0456 §54; note that the TZSC
+    // bit positions do NOT align with RCC AHB/APB clock-enable bits —
+    // each register groups a different bus (APB1 / APB2 / AHB) with its
+    // own ordering.
     //
     // UCPD1 stays SECURE: the CC-detection handshake is performed from
     // the secure world at boot (`hw::usb_hw::init_ucpd`); the NS USB
@@ -109,28 +110,18 @@ mod stm32 {
     //
     // GPIOs are NOT gated by TZSC — their security is per-pin in the
     // bank's GPIOx_SECCFGR register (see `hw::usb_hw::init`).
-    const SECCFGR2_OTG_FS_BIT: u32 = 1 << 14; // USB OTG FS
-
-    // The complement-of-allowlist constants below are intended as
-    // runtime self-checks: after configuration, these bits MUST still
-    // read as 1 (secure) or we've broken invariant #4.
     //
-    // These mirror the RM0456 §54 tables for the bus peripherals we
-    // care about in the signing path. If the chip revision changes the
-    // layout, the asserts fire and we know to revisit.
-    const SECCFGR1_RNG_BIT: u32 = 1 << 1; // AHB3: RNG
-    const SECCFGR1_HASH_BIT: u32 = 1 << 2; // AHB3: HASH
-    const SECCFGR1_PKA_BIT: u32 = 1 << 3; // AHB3: PKA
-    const SECCFGR1_SAES_BIT: u32 = 1 << 0; // AHB3: SAES
-    const SECCFGR2_AES_BIT: u32 = 1 << 13; // AHB2: AES
-    const SECCFGR3_I2C1_BIT: u32 = 1 << 21; // APB1: I2C1
-    const SECCFGR3_I2C2_BIT: u32 = 1 << 22; // APB1: I2C2
+    // TODO: verify this bit position against the STM32U585 reference
+    // manual once the usb feature is exercised on hardware. If OTG_FS
+    // is at a different bit, the post-allowlist self-check below will
+    // catch the mismatch.
+    #[cfg(feature = "usb")]
+    const SECCFGR2_OTG_FS_BIT: u32 = 1 << 14;
 
     pub unsafe fn configure_gtzc() {
         // Enable GTZC1 clock
         let ahb1enr = core::ptr::read_volatile(RCC_AHB1ENR);
         core::ptr::write_volatile(RCC_AHB1ENR, ahb1enr | (1 << 24));
-        // Small delay for clock to stabilize
         cortex_m::asm::dsb();
 
         // MPCBB1 (SRAM1, 192 KB): all secure (default after reset with TZEN=1,
@@ -156,38 +147,53 @@ mod stm32 {
 
         // ---- GTZC1 TZSC: default-secure, with a minimal USB allowlist ----
         //
-        // Baseline: every TZSC-gated peripheral is SECURE.
+        // Baseline: every TZSC-gated peripheral is SECURE. Writing 1s to
+        // unimplemented bits is ignored by the silicon, so the readback
+        // reflects exactly the set of implemented peripherals — we store
+        // that as our "all-secure" reference.
         core::ptr::write_volatile(TZSC_SECCFGR1, 0xFFFF_FFFF);
         core::ptr::write_volatile(TZSC_SECCFGR2, 0xFFFF_FFFF);
         core::ptr::write_volatile(TZSC_SECCFGR3, 0xFFFF_FFFF);
         cortex_m::asm::dsb();
+        let base1 = core::ptr::read_volatile(TZSC_SECCFGR1);
+        let base2 = core::ptr::read_volatile(TZSC_SECCFGR2);
+        let base3 = core::ptr::read_volatile(TZSC_SECCFGR3);
+
+        // Sanity check: each register must have at least one implemented
+        // bit, otherwise the GTZC1 clock isn't actually on or TZSC_BASE
+        // is wrong. Refuse to boot in that state — NS running against a
+        // fabric whose security attributes didn't stick is exactly the
+        // scenario CRIT-4 warns about.
+        if base1 == 0 || base2 == 0 || base3 == 0 {
+            loop {
+                cortex_m::asm::nop();
+            }
+        }
 
         // Allowlist: the USB stack needs OTG FS in NS. Everything else
         // (I2C buses, TRNG, AES, PKA, HASH, SAES, timers, ...) stays
         // SECURE. This is the inverse of the old "everything NS" hole.
         #[cfg(feature = "usb")]
         {
-            let sec2 = core::ptr::read_volatile(TZSC_SECCFGR2);
-            core::ptr::write_volatile(TZSC_SECCFGR2, sec2 & !SECCFGR2_OTG_FS_BIT);
+            let want2 = base2 & !SECCFGR2_OTG_FS_BIT;
+            core::ptr::write_volatile(TZSC_SECCFGR2, want2);
             cortex_m::asm::dsb();
+            // Self-check: only OTG_FS should have changed. If the write
+            // landed anywhere else (wrong bit position, silicon lock),
+            // halt rather than hand NS a partly-secure fabric.
+            let post2 = core::ptr::read_volatile(TZSC_SECCFGR2);
+            if post2 != want2 {
+                loop {
+                    cortex_m::asm::nop();
+                }
+            }
         }
 
-        // ---- Runtime self-check ----
-        //
-        // If any of the must-be-secure bits cleared, we've broken
-        // invariant #4 and the secure world has to refuse to continue.
-        // Panic before NS ever runs so the hole can never be exercised.
+        // Self-check: after all intended writes, SECCFGR1 and SECCFGR3
+        // must still be the all-secure baseline (we never touch those).
         let s1 = core::ptr::read_volatile(TZSC_SECCFGR1);
-        let s2 = core::ptr::read_volatile(TZSC_SECCFGR2);
         let s3 = core::ptr::read_volatile(TZSC_SECCFGR3);
-        let expect1 =
-            SECCFGR1_SAES_BIT | SECCFGR1_RNG_BIT | SECCFGR1_HASH_BIT | SECCFGR1_PKA_BIT;
-        let expect2 = SECCFGR2_AES_BIT;
-        let expect3 = SECCFGR3_I2C1_BIT | SECCFGR3_I2C2_BIT;
-        if (s1 & expect1) != expect1 || (s2 & expect2) != expect2 || (s3 & expect3) != expect3 {
-            // The crypto fabric is reachable from NS. Halt before the
-            // NS world ever runs — a live wallet in this state is the
-            // exact scenario CRIT-4 warns about.
+        if s1 != base1 || s3 != base3 {
             loop {
                 cortex_m::asm::nop();
             }

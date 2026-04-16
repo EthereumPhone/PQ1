@@ -8,6 +8,11 @@ description = "SPHINCS+C7 keccak256-based post-quantum signatures (no_std, no al
 keccak-asm = { workspace = true }
 zeroize = { workspace = true, features = ["zeroize_derive"] }
 
+[features]
+# See jardin-fosc: swap Keccak-256 for SHA-256. Linked binary must supply
+# `pqsigner_sha256_init/update/final`.
+sha256-hash = []
+
 [dev-dependencies]
 hex = { workspace = true }
 serde = { version = "1", features = ["derive"] }

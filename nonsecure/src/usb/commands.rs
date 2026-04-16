@@ -274,11 +274,15 @@ impl CommandRouter {
     /// response into `SIG_BUF`:
     ///
     /// ```text
-    ///   [type1_len u32 BE] [type1_bytes...] [type2_len u32 BE] [type2_bytes...]
+    ///   [init_code_len u32 BE] [init_code_bytes...]
+    ///   [type1_len     u32 BE] [type1_bytes...]
+    ///   [type2_len     u32 BE] [type2_bytes...]
     /// ```
     ///
-    /// When `type1_len == 0` no slot registration is needed; the
-    /// companion submits only the Type 2 UserOp.
+    /// `init_code_len` is non-zero only when the companion set
+    /// `FLAG_INCLUDE_INIT_CODE` on the request (fresh wallet, first deploy
+    /// on this chain). Similarly `type1_len == 0` means slot registration
+    /// was not needed and the companion should submit only Type 2.
     unsafe fn cmd_sign_userop(&self, data_len: usize) -> Response {
         if data_len < SIGN_USEROP_HEADER_LEN {
             return self.sw_response(SW_WRONG_LENGTH);
@@ -303,19 +307,29 @@ impl CommandRouter {
             return self.nsc_status_to_response(status);
         }
 
-        // Parse the two-chunk bundle to compute the total length.
-        let t1_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]) as usize;
-        if 4 + t1_len + 4 > MAX_JARDIN_RESPONSE_LEN {
+        // Parse the three-chunk bundle to compute the total length.
+        let ic_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]) as usize;
+        if 4 + ic_len + 4 > MAX_JARDIN_RESPONSE_LEN {
             return self.sw_response(SW_INTERNAL_ERROR);
         }
-        let t2_len_off = 4 + t1_len;
+        let t1_len_off = 4 + ic_len;
+        let t1_len = u32::from_be_bytes([
+            SIG_BUF[t1_len_off],
+            SIG_BUF[t1_len_off + 1],
+            SIG_BUF[t1_len_off + 2],
+            SIG_BUF[t1_len_off + 3],
+        ]) as usize;
+        if t1_len_off + 4 + t1_len + 4 > MAX_JARDIN_RESPONSE_LEN {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+        let t2_len_off = t1_len_off + 4 + t1_len;
         let t2_len = u32::from_be_bytes([
             SIG_BUF[t2_len_off],
             SIG_BUF[t2_len_off + 1],
             SIG_BUF[t2_len_off + 2],
             SIG_BUF[t2_len_off + 3],
         ]) as usize;
-        let total = 4 + t1_len + 4 + t2_len;
+        let total = t2_len_off + 4 + t2_len;
         if total > MAX_JARDIN_RESPONSE_LEN {
             return self.sw_response(SW_INTERNAL_ERROR);
         }

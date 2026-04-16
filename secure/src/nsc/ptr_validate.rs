@@ -17,6 +17,12 @@
 //!      `shared/src/lib.rs`. The TT instruction asks the hardware
 //!      directly.
 //!
+//! TT result bit layout (ARMv8-M, used by Zephyr/TF-M):
+//!   bit 22 S     — 1 if Secure, 0 if Non-Secure
+//!   bit 21 NSRW  — 1 if NS read-write
+//!   bit 20 NSR   — 1 if NS readable
+//!   bit 17 SRVLD — 1 if SAU region matched
+//!
 //! These helpers are called on every `cmd_*` entry; keeping them in a
 //! single tiny file makes the memory-boundary invariants easy to audit.
 
@@ -27,12 +33,6 @@ use sphincs_tz_shared::{
 /// ARMv8-M `TT` (Test Target) — ask the SAU/IDAU for the security
 /// attributes of `addr` in the *current* security state. Returns the
 /// 32-bit TT response word as described in ARMv8-M Reference Manual.
-///
-/// Bits of interest:
-///   bit 23 S     — 1 if address is Secure, 0 if Non-Secure
-///   bit 21 NSR   — 1 if Non-Secure readable from NS
-///   bit 22 NSRW  — 1 if Non-Secure read-write from NS
-///   bit 20 SRVLD — 1 if SAU region valid
 ///
 /// Only present on real STM32U585 hardware — QEMU mps2-an505 has no
 /// real SAU (the workaround there is the shared-mailbox dispatch).
@@ -70,11 +70,16 @@ fn tt_range_is_ns(ptr: u32, len: usize) -> bool {
         None => return false,
     };
 
-    let s_bit = |r: u32| ((r >> 23) & 1) == 0;
-    let nsr_bit = |r: u32| ((r >> 21) & 1) == 1;
-    let ok = |r: u32| s_bit(r) && nsr_bit(r);
+    // TT response: bit 22 = S, bit 20 = NSR. Accept if NS (S=0) and
+    // NS-readable (NSR=1).
+    let is_ns = |r: u32| ((r >> 22) & 1) == 0;
+    let nsr = |r: u32| ((r >> 20) & 1) == 1;
+    let ok = |r: u32| is_ns(r) && nsr(r);
 
-    if !ok(tt(ptr)) || !ok(tt(end_incl)) {
+    let r0 = tt(ptr);
+    let r1 = tt(end_incl);
+
+    if !ok(r0) || !ok(r1) {
         return false;
     }
     // Stride through the middle 32-byte blocks.

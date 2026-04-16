@@ -57,6 +57,10 @@ ui-oled = ["dep:ssd1306", "dep:embedded-graphics", "dep:embedded-hal"]
 ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger/OLED)
 pka-accel = ["bls12_381/pka"]  # STM32U585 PKA hardware acceleration for BLS12-381 Fp arithmetic
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
+# Replace Keccak-256 with STM32U585 HASH-peripheral-accelerated SHA-256 in
+# both signing crates. Bench-only / off-contract — signatures are not
+# cross-compatible with the Keccak variant.
+sha256-hash = ["jardin-fosc/sha256-hash", "sphincs-c7/sha256-hash"]
 # Non-interactive automated end-to-end test mode. Provisions a fixed
 # test mnemonic + PIN at boot, marks PIN as verified, and short-circuits
 # every confirm() / enter_pin() dialog so no stdin input is needed.

@@ -94,16 +94,24 @@ fn build_sign_payload(
     off
 }
 
-/// Parse a `[type1_len|t1][type2_len|t2]` bundle and assert basic shape.
+/// Parse a `[ic_len|ic][type1_len|t1][type2_len|t2]` bundle and assert
+/// basic shape.
 ///
 /// Returns `(type1_present, type2_len)`.
 fn parse_response(resp: &[u8]) -> (bool, usize) {
-    let t1_len = u32::from_be_bytes([resp[0], resp[1], resp[2], resp[3]]) as usize;
+    let ic_len = u32::from_be_bytes([resp[0], resp[1], resp[2], resp[3]]) as usize;
+    let t1_len_off = 4 + ic_len;
+    let t1_len = u32::from_be_bytes([
+        resp[t1_len_off],
+        resp[t1_len_off + 1],
+        resp[t1_len_off + 2],
+        resp[t1_len_off + 3],
+    ]) as usize;
     assert!(t1_len == 0 || t1_len == JARDIN_TYPE1_LEN);
     if t1_len != 0 {
-        assert_eq!(resp[4], 0x01, "Type 1 marker must be 0x01");
+        assert_eq!(resp[t1_len_off + 4], 0x01, "Type 1 marker must be 0x01");
     }
-    let t2_off = 4 + t1_len;
+    let t2_off = t1_len_off + 4 + t1_len;
     let t2_len = u32::from_be_bytes([
         resp[t2_off],
         resp[t2_off + 1],

@@ -500,16 +500,63 @@ pub const JARDIN_TYPE2_MIN_LEN: usize = JARDIN_TYPE2_HEADER_LEN + JARDIN_FORSC_B
 /// Type 2 wire payload at q=95: header + 2452 + 95*16.
 pub const JARDIN_TYPE2_MAX_LEN: usize = JARDIN_TYPE2_HEADER_LEN + JARDIN_SIG_MAX; // 4037
 
-/// Maximum unified response = 4-byte type1 len + max type1 body + 4-byte type2 len + max type2 body.
+// ---------------------------------------------------------------------------
+// PQJardinWalletFactory initCode (first-deploy UserOps)
+// ---------------------------------------------------------------------------
+
+/// Deployed address of the `PQJardinWalletFactory` contract.
+///
+/// The factory is deployed via a deterministic singleton deployer so the
+/// address is identical on every chain (this is load-bearing for the
+/// recovery contract — see `CLAUDE.md`'s CREATE2 salt note). Until the
+/// production singleton deploy lands, this stays at `0x00…00` and any
+/// first-deploy UserOp will be rejected by `EntryPoint.getSenderAddress`
+/// because there is no factory at address(0).
+pub const PQ_JARDIN_WALLET_FACTORY: [u8; 20] = [0u8; 20];
+
+/// ABI selector for `PQJardinWalletFactory.createAccount(bytes32,bytes32)`.
+/// Equals `keccak256("createAccount(bytes32,bytes32)")[..4]`.
+pub const JARDIN_CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0x18, 0x38, 0x15, 0xc8];
+
+/// Length of the initCode produced by the firmware when the companion
+/// sets `FLAG_INCLUDE_INIT_CODE` on a SIGN_USEROP request:
+///
+/// ```text
+///   factory(20) || selector(4) || masterPkSeed(32) || masterPkRoot(32)
+/// ```
+///
+/// The two `bytes32` args are already 32-byte aligned, so no ABI padding
+/// is needed.
+pub const JARDIN_INIT_CODE_LEN: usize = 20 + 4 + 32 + 32; // 88
+
+/// Maximum unified response:
+///
+/// ```text
+///   [init_code_len(4 BE)][init_code(0 or 88)]
+///   [type1_len(4 BE)][type1_bytes(0 or 4041)]
+///   [type2_len(4 BE)][type2_bytes(2533..=4037)]
+/// ```
 pub const MAX_JARDIN_RESPONSE_LEN: usize =
-    4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_MAX_LEN; // 8086
+    4 + JARDIN_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_MAX_LEN; // 8178
+
+/// Bit 31 of `slot_index_hint` is repurposed as a flag: set by the
+/// companion when the wallet has not yet been deployed on this chain.
+/// Firmware then synthesises `initCode` from its master pubkey pair and
+/// folds the hash into the Type 1 `userOpHash`, and emits the initCode
+/// bytes alongside the signature bundle so the companion can populate
+/// `PackedUserOperation.initCode` without ever seeing the master pubkey
+/// on its own.
+///
+/// When this flag is clear the low 31 bits of `slot_index_hint` carry no
+/// meaning (M4: they are ignored on every mode).
+pub const FLAG_INCLUDE_INIT_CODE: u32 = 0x8000_0000;
 
 /// Unified CMD_SIGN_USEROP v3 payload layout.
 ///
 /// | off | size | field |
 /// |-----|------|-------|
 /// |  0  |  8  | chain_id (u64 BE) |
-/// |  8  |  4  | slot_index_hint (u32 BE; 0 on fresh wallet) |
+/// |  8  |  4  | flags (u32 BE, bit 31 = include initCode; lower bits reserved) |
 /// | 12  | 20  | sender (PQJardinWallet address — firmware does not recompute) |
 /// | 32  | 20  | entry_point (EntryPoint v0.9 address) |
 /// | 52  | 32  | nonce (u256 BE; base nonce for Type 1 if registration needed, else Type 2) |

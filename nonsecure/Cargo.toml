@@ -11,6 +11,11 @@ default = []
 # ZK clear sign) in sequence and prints PASS/FAIL lines a host
 # harness can grep.
 e2e-test = []
+# Replaces the interactive main() with a DWT-timed JARDÍN signing bench.
+# Pairs with the secure crate's `e2e-test` feature (for auto-provision +
+# pre-unlock) and `stm32u585` (for the 160 MHz PLL path). Hardware only —
+# the QEMU transport has no DWT.  Use `make test-key-speed`.
+bench-key-speed = []
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
 

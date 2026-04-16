@@ -8,10 +8,53 @@
 //! 128 bits of a 32-byte buffer (left-aligned, right-zero-padded). This
 //! matches the EVM uint256 big-endian representation where a 128-bit value
 //! occupies bytes [0..16) and bytes [16..32) are zero.
+//!
+//! Under the optional `sha256-hash` feature, `Keccak256` is aliased to a
+//! wrapper that forwards to `pqsigner_sha256_*` extern fns. The linked
+//! binary (e.g. the secure firmware) provides the implementation —
+//! typically via the STM32U585 HASH peripheral.
 
-use keccak_asm::{Digest, Keccak256};
+pub(crate) use inner::{Digest, Keccak256};
 
 use crate::params::N;
+
+#[cfg(not(feature = "sha256-hash"))]
+mod inner {
+    pub use keccak_asm::{Digest, Keccak256};
+}
+
+#[cfg(feature = "sha256-hash")]
+mod inner {
+    extern "C" {
+        fn pqsigner_sha256_init();
+        fn pqsigner_sha256_update(ptr: *const u8, len: usize);
+        fn pqsigner_sha256_final(out: *mut u8);
+    }
+
+    pub trait Digest: Sized {
+        fn new() -> Self;
+        fn update(&mut self, data: impl AsRef<[u8]>);
+        fn finalize(self) -> [u8; 32];
+    }
+
+    pub struct Keccak256;
+
+    impl Digest for Keccak256 {
+        fn new() -> Self {
+            unsafe { pqsigner_sha256_init() };
+            Self
+        }
+        fn update(&mut self, data: impl AsRef<[u8]>) {
+            let b = data.as_ref();
+            unsafe { pqsigner_sha256_update(b.as_ptr(), b.len()) };
+        }
+        fn finalize(self) -> [u8; 32] {
+            let mut out = [0u8; 32];
+            unsafe { pqsigner_sha256_final(out.as_mut_ptr()) };
+            out
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers

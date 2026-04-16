@@ -59,16 +59,22 @@ mod ptr_validate;
 mod state;
 
 // HIGH-2 fix: refuse to build hardware images that also enable any of
-// the dev-only features. `e2e-test` exposes `set_e2e_unlocked` with no
-// PIN check; `debug-log` and `ui-semihosting` leak secure-world state
-// via the semihosting channel; `ui-mirror` streams the OLED over RTT;
-// `mock-se` substitutes an in-SRAM fake SE. Any of these enabled on a
+// the dev-only features. `debug-log` and `ui-semihosting` leak secure-
+// world state via the semihosting channel; `ui-mirror` streams the OLED
+// over RTT; `mock-se` substitutes an in-SRAM fake SE. Any of these on a
 // `stm32u585` release build is a ship-blocker.
+//
+// Hardware test images opt in by also enabling `e2e-test` (which exposes
+// `set_e2e_unlocked` so the automated harness never needs to drive the
+// PIN UI). `e2e-test` is the unambiguous "not-shippable" marker, so when
+// it's on we permit the other dev features needed to drive the tests
+// (`make e2e-hw`, `make test-key-speed`). CI must still gate shipped
+// firmware on `e2e-test` being OFF.
 #[cfg(all(
     feature = "stm32u585",
     not(debug_assertions),
+    not(feature = "e2e-test"),
     any(
-        feature = "e2e-test",
         feature = "debug-log",
         feature = "ui-semihosting",
         feature = "ui-mirror",
@@ -77,8 +83,9 @@ mod state;
 ))]
 compile_error!(
     "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
-     e2e-test / debug-log / ui-semihosting / ui-mirror / mock-se. These \
-     features either bypass PIN checks or leak secure-world state."
+     debug-log / ui-semihosting / ui-mirror / mock-se. These features leak \
+     secure-world state or replace the SE with a mock. Hardware test images \
+     may opt in by also enabling `e2e-test`."
 );
 
 #[cfg(not(feature = "stm32u585"))]
