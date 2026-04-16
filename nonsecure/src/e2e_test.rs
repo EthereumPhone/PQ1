@@ -1,1075 +1,172 @@
-// This file uses raw `static mut` scratch buffers throughout — they
-// hold multi-kilobyte signing payloads the embedded-target stack can't
-// accommodate, and the e2e runner is single-threaded and non-reentrant
-// so aliasing is impossible by construction. Silencing the
-// static_mut_refs lint ONLY for this test file keeps production NS
-// code still honest about raw static refs.
+// Post-cutover e2e test runner: exercises the unified JARDÍN Type 1 /
+// Type 2 sign command end-to-end.
+//
+// Compiled only with `--features e2e-test`. The matching feature on
+// the secure crate auto-provisions the wallet, marks PIN_VERIFIED
+// true, and short-circuits every confirm() dialog so this runner can
+// drive back-to-back signs (first → Type 1 + Type 2, second → Type 2
+// only) without any human input.
 #![allow(static_mut_refs)]
 
-//! Non-interactive end-to-end test runner for the secure-world sign
-//! dispatch logic.
-//!
-//! Compiled only with `--features e2e-test`. The matching feature on
-//! the secure crate auto-provisions the wallet, marks PIN_VERIFIED
-//! true, and short-circuits every confirm() dialog so this runner can
-//! drive the gateway through all four trust levels back-to-back
-//! without any human input.
-//!
-//! Each scenario:
-//!   1. Builds (or borrows) an unsigned EIP-1559 envelope
-//!   2. Optionally attaches a metadata bundle from the NS-side DB
-//!   3. Calls the appropriate gateway entrypoint
-//!   4. Asserts the secure world returned `NscStatus::Ok`
-//!
-//! The host-side `make e2e` target greps the secure-world log lines
-//! `[S][e2e] cmd_sign dispatch = <variant>` to verify the dispatcher
-//! picked the right TxKind for each request.
-
-use crate::{aa, erc20_db, nsc_api, vk_db};
+use crate::nsc_api;
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
-    EIP712_CANONICAL_LEN, EIP712_HEADER_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN,
-    JARDIN_SIG_MIN, JARDIN_WRAPPER_HEADER_LEN, JARDIN_WRAPPER_MAX_LEN,
-    MAX_USEROP_RESPONSE_LEN, NscStatus, SIGNATURE_LEN, SIGNER_JARDIN, USEROP_PREFIX_LEN,
+    JARDIN_TYPE1_LEN, JARDIN_TYPE2_MARKER, MAX_JARDIN_RESPONSE_LEN, NscStatus,
+    SIGN_USEROP_HEADER_LEN,
 };
 
-// === Scratch buffers ========================================================
+// === Scratch buffers =======================================================
 
-static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
+static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN] = [0u8; MAX_JARDIN_RESPONSE_LEN];
+static mut PAYLOAD_BUF: [u8; SIGN_USEROP_HEADER_LEN + 256] =
+    [0u8; SIGN_USEROP_HEADER_LEN + 256];
 
-// JARDIN FORS+C scratch buffers
-static mut JARDIN_SIG_BUF: [u8; 4 + JARDIN_WRAPPER_MAX_LEN] =
-    [0u8; 4 + JARDIN_WRAPPER_MAX_LEN];
-static mut JARDIN_REGISTER_BUF: [u8; 128] = [0u8; 128];
-static mut JARDIN_INFO_BUF: [u8; 7] = [0u8; 7];
+// === Helpers ===============================================================
 
-static mut ERC20_BUNDLE_BUF: [u8; 1120] = [0u8; 1120];
-
-// Sized for the largest clear-sign payload: ZK header (921) + max tx
-// (4096) + bundle_len (4) + max VK bundle (2048).
-const CLEAR_SIGN_BUF_LEN: usize = 921 + 4096 + 4 + 2048;
-static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
-
-static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
-
-// Output buffer for sign_userop_full responses. Must be at least
-// MAX_USEROP_RESPONSE_LEN bytes: init_code_len(4) + initCode(N)
-// + call_data_len(4) + callData(M) + PQSignatureWrapper.
-static mut USEROP_RESPONSE_BUF: [u8; MAX_USEROP_RESPONSE_LEN] =
-    [0u8; MAX_USEROP_RESPONSE_LEN];
-
-// Scratch buffer for an ERC-4337 UserOp wrapper payload. Sized to hold:
-//   USEROP_PREFIX_LEN (273+4) + max EIP-1559 tx + bundle_len (4) + max ERC20 bundle.
-const USEROP_PAYLOAD_BUF_LEN: usize = USEROP_PREFIX_LEN + 4096 + 4 + 1120 + 64;
-static mut USEROP_PAYLOAD_BUF: [u8; USEROP_PAYLOAD_BUF_LEN] = [0u8; USEROP_PAYLOAD_BUF_LEN];
-
-// Deterministic test fixtures for the AA wrapper. None of these need to
-// match a real chain — the secure world only verifies internal
-// consistency between the wrapper chain id and the inner tx chain id.
-
-/// Sender = arbitrary deterministic PQ wallet address (this is what the
-/// PQCoinbaseSmartWalletFactory would CREATE2 to for our test owner).
-static AA_SENDER: [u8; 20] = [
-    0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
-    0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42,
+/// EntryPoint v0.9 canonical Sepolia address.
+const ENTRY_POINT_V09: [u8; 20] = [
+    0x43, 0x37, 0x09, 0x00, 0x9B, 0x83, 0x30, 0xFD, 0xa3, 0x23, 0x11, 0xDF, 0x1C, 0x2A, 0xFA, 0x40,
+    0x2e, 0xD8, 0xD0, 0x09,
 ];
-/// EntryPoint v0.6 mainnet address (same as upstream Coinbase Smart Wallet).
-static AA_ENTRY_POINT: [u8; 20] = [
-    0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
-    0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
-];
-/// Nonce = 1 (key=0 || seq=1).
-static AA_NONCE: [u8; 32] = {
-    let mut n = [0u8; 32];
-    n[31] = 1;
-    n
-};
-/// Gas params: 100_000 / 200_000 / 21_000 / 50 gwei / 2 gwei.
-static AA_CALL_GAS: [u8; 32] = {
-    let mut v = [0u8; 32];
-    let g: u64 = 100_000;
-    let b = g.to_be_bytes();
-    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
-    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
-    v
-};
-static AA_VERIFICATION_GAS: [u8; 32] = {
-    let mut v = [0u8; 32];
-    let g: u64 = 200_000;
-    let b = g.to_be_bytes();
-    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
-    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
-    v
-};
-static AA_PRE_VERIFICATION_GAS: [u8; 32] = {
-    let mut v = [0u8; 32];
-    let g: u64 = 21_000;
-    let b = g.to_be_bytes();
-    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
-    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
-    v
-};
-static AA_MAX_FEE: [u8; 32] = {
-    let mut v = [0u8; 32];
-    let g: u64 = 50_000_000_000;
-    let b = g.to_be_bytes();
-    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
-    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
-    v
-};
-static AA_MAX_PRIO: [u8; 32] = {
-    let mut v = [0u8; 32];
-    let g: u64 = 2_000_000_000;
-    let b = g.to_be_bytes();
-    v[24] = b[0]; v[25] = b[1]; v[26] = b[2]; v[27] = b[3];
-    v[28] = b[4]; v[29] = b[5]; v[30] = b[6]; v[31] = b[7];
-    v
-};
 
-fn aa_wrapper() -> aa::UserOpWrapper<'static> {
-    aa::UserOpWrapper {
-        sender: &AA_SENDER,
-        entry_point: &AA_ENTRY_POINT,
-        chain_id: 1,
-        nonce: &AA_NONCE,
-        call_gas_limit: &AA_CALL_GAS,
-        verification_gas_limit: &AA_VERIFICATION_GAS,
-        pre_verification_gas: &AA_PRE_VERIFICATION_GAS,
-        max_fee_per_gas: &AA_MAX_FEE,
-        max_priority_fee_per_gas: &AA_MAX_PRIO,
-        init_code_hash: &aa::KECCAK_EMPTY,
-        paymaster_and_data_hash: &aa::KECCAK_EMPTY,
-    }
+/// `keccak256("")` — used for empty paymasterAndData.
+const KECCAK_EMPTY: [u8; 32] = [
+    0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
+    0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70,
+];
+
+fn build_sign_payload(
+    buf: &mut [u8],
+    chain_id: u64,
+    slot_index_hint: u32,
+    nonce_seq: u64,
+    to: &[u8; 20],
+    value_wei: u128,
+    inner_data: &[u8],
+) -> usize {
+    let sender: [u8; 20] = [0x42; 20];
+    let mut nonce = [0u8; 32];
+    nonce[24..32].copy_from_slice(&nonce_seq.to_be_bytes());
+
+    // accountGasLimits = (300_000 << 128) | 50_000
+    let mut agl = [0u8; 32];
+    agl[0..16].copy_from_slice(&300_000u128.to_be_bytes());
+    agl[16..32].copy_from_slice(&50_000u128.to_be_bytes());
+
+    let mut pre_gas = [0u8; 32];
+    pre_gas[28..32].copy_from_slice(&100_000u32.to_be_bytes());
+
+    // gasFees = (2 gwei << 128) | 10 gwei
+    let mut gf = [0u8; 32];
+    gf[0..16].copy_from_slice(&2_000_000_000u128.to_be_bytes());
+    gf[16..32].copy_from_slice(&10_000_000_000u128.to_be_bytes());
+
+    let mut value = [0u8; 32];
+    value[16..32].copy_from_slice(&value_wei.to_be_bytes());
+
+    let mut off = 0usize;
+    buf[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
+    off += 8;
+    buf[off..off + 4].copy_from_slice(&slot_index_hint.to_be_bytes());
+    off += 4;
+    buf[off..off + 20].copy_from_slice(&sender);
+    off += 20;
+    buf[off..off + 20].copy_from_slice(&ENTRY_POINT_V09);
+    off += 20;
+    buf[off..off + 32].copy_from_slice(&nonce);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&agl);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&pre_gas);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&gf);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&KECCAK_EMPTY);
+    off += 32;
+    buf[off..off + 20].copy_from_slice(to);
+    off += 20;
+    buf[off..off + 32].copy_from_slice(&value);
+    off += 32;
+    buf[off..off + 2].copy_from_slice(&(inner_data.len() as u16).to_be_bytes());
+    off += 2;
+    buf[off..off + inner_data.len()].copy_from_slice(inner_data);
+    off += inner_data.len();
+    off
 }
 
-// === Scenario 1: simple ETH value transfer (empty calldata) =================
-//
-// chain_id = 1, value = 1 ETH, to = arbitrary EOA, data = empty.
-// Expected dispatch: `ValueTransfer`.
-static SCENARIO_VALUE_TRANSFER: [u8; 50] = [
-    0x02,
-    0xf0,
-    0x01,                                                       // chain_id = 1
-    0x80,                                                       // nonce = 0
-    0x84, 0x77, 0x35, 0x94, 0x00,                               // max_priority = 2 gwei
-    0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00,                         // max_fee = 50 gwei
-    0x82, 0x52, 0x08,                                           // gas_limit = 21000
-    0x94,
-    0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde,
-    0xf1, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x12, 0x34,
-    0x88, 0x0d, 0xe0, 0xb6, 0xb3, 0xa7, 0x64, 0x00, 0x00,       // value = 10^18 wei
-    0x80,                                                       // data = empty
-    0xc0,                                                       // access_list = empty
-];
-
-// === Scenario 2: ERC20 transfer to a contract pinned in the NS DB ===========
-//
-// chain_id = 1, to = USDC mainnet (0xa0b8...), value = 0,
-// data = transfer(0x742d35..., 1000_000000) = 4 + 32 + 32 = 68 bytes.
-// The harness attaches the matching ERC20 bundle from the NS-side DB.
-// Expected dispatch: `Erc20Known`.
-static SCENARIO_USDC_TRANSFER: [u8; 113] = [
-    0x02,
-    0xf8, 0x6e,                                                 // outer list, long form, 110 bytes
-    0x01,                                                       // chain_id = 1
-    0x80,                                                       // nonce = 0
-    0x84, 0x77, 0x35, 0x94, 0x00,                               // max_priority = 2 gwei
-    0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00,                         // max_fee = 50 gwei
-    0x83, 0x01, 0x86, 0xa0,                                     // gas_limit = 100000
-    0x94, 0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1,
-    0xd1, 0x9d, 0x4a, 0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb,
-    0x48,                                                       // to = USDC mainnet
-    0x80,                                                       // value = 0
-    0xb8, 0x44,                                                 // data: 68-byte string
-        0xa9, 0x05, 0x9c, 0xbb,                                 //   selector: transfer
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
-        0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,         //   recipient
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-        0x3b, 0x9a, 0xca, 0x00,                                 //   amount = 1000_000000
-    0xc0,                                                       // access_list = empty
-];
-
-const USDC_MAINNET_ADDR: [u8; 20] = [
-    0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1,
-    0x9d, 0x4a, 0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
-];
-
-// === Scenario 4: ZK clear-sign (Aave V3 supply) =============================
-//
-// Uses the existing ZKlarity Aave V3 supply test vector. The Aave V3
-// Pool address is in the NS-side VK DB, so the harness fetches the VK
-// bundle and the secure world Merkle-verifies it before running
-// Groth16 verification.
-
-#[rustfmt::skip]
-static AAVE_PROOF: [u8; 384] = [
-    // π.A
-    0x0d, 0x5f, 0xe2, 0xf5, 0x09, 0x8c, 0x66, 0x6c, 0x7f, 0xb4, 0x09, 0xba,
-    0xe4, 0x69, 0xa8, 0x85, 0xc9, 0x0b, 0x81, 0x7e, 0x0f, 0x3b, 0x54, 0x33,
-    0x24, 0x7d, 0x3d, 0xb2, 0x0d, 0x2f, 0xb7, 0xd5, 0x21, 0xc0, 0x29, 0xa0,
-    0x04, 0x8b, 0x2f, 0x21, 0xc8, 0xf0, 0x29, 0x5e, 0x21, 0x32, 0xd0, 0xe8,
-    0x10, 0x5b, 0x2b, 0xcc, 0x3b, 0x95, 0x6f, 0xa6, 0x9d, 0xf2, 0x66, 0x75,
-    0x6d, 0x27, 0x51, 0x0c, 0x19, 0xee, 0xcd, 0xd8, 0x36, 0x4d, 0xc1, 0x6c,
-    0x3b, 0xb1, 0x4d, 0x5d, 0x4b, 0x15, 0x6c, 0x9d, 0xa5, 0xff, 0x8a, 0x3e,
-    0x68, 0xf9, 0x76, 0x9c, 0xb8, 0x05, 0x6e, 0x2e, 0x01, 0x74, 0x81, 0xaa,
-    // π.B
-    0x04, 0x99, 0xb1, 0x98, 0xae, 0x51, 0x4d, 0x30, 0x79, 0x11, 0x53, 0x79,
-    0x00, 0x36, 0xf9, 0xa0, 0x1d, 0xdc, 0x9d, 0x94, 0x70, 0x89, 0x89, 0xaa,
-    0x61, 0x84, 0xe0, 0xd9, 0xc5, 0x0e, 0x85, 0x83, 0x82, 0x56, 0x80, 0x12,
-    0xe8, 0xa0, 0xd4, 0xcb, 0x45, 0xa9, 0x0a, 0x63, 0x78, 0x64, 0x3b, 0x5f,
-    0x0d, 0xad, 0x10, 0xbc, 0x4a, 0xd4, 0x9e, 0x8a, 0xd6, 0x26, 0x36, 0x14,
-    0xa2, 0x8f, 0x62, 0xec, 0x74, 0x19, 0x02, 0x38, 0xc8, 0x05, 0xb0, 0x62,
-    0xb7, 0x2d, 0xbc, 0x1e, 0xb7, 0x25, 0xbb, 0x89, 0xe8, 0x23, 0xbf, 0x5b,
-    0xa5, 0x32, 0x3f, 0x6d, 0xc8, 0x9b, 0x33, 0xcd, 0xb3, 0x5a, 0x82, 0xc2,
-    0x11, 0x77, 0x7a, 0x18, 0xa9, 0x02, 0xcd, 0x1a, 0x96, 0xe1, 0x92, 0xdd,
-    0x0e, 0x75, 0x5b, 0x51, 0x96, 0xf2, 0xd9, 0x0e, 0xc3, 0xe3, 0x6f, 0xfa,
-    0x06, 0xf8, 0xcd, 0x1c, 0x0d, 0x89, 0xc5, 0x36, 0x2b, 0x0b, 0x2f, 0x73,
-    0xe6, 0xdc, 0x62, 0x49, 0xc0, 0x04, 0xb4, 0x10, 0x73, 0xef, 0xdd, 0x45,
-    0x10, 0x66, 0x7a, 0x37, 0xa0, 0xbb, 0x42, 0x19, 0x94, 0xd8, 0xe4, 0xbd,
-    0x50, 0xea, 0xf6, 0x11, 0xd7, 0x7d, 0x2f, 0x13, 0xa3, 0xc8, 0x09, 0x3c,
-    0x2b, 0x17, 0x21, 0x64, 0xdd, 0xef, 0x14, 0x7d, 0x06, 0x77, 0xa7, 0x7e,
-    0xb9, 0x0e, 0xd3, 0x4a, 0x17, 0x37, 0x1a, 0xb7, 0xc6, 0x69, 0xb9, 0xcd,
-    // π.C
-    0x0f, 0x11, 0xcd, 0x45, 0x15, 0x10, 0xec, 0x5e, 0x92, 0x6a, 0x46, 0x9d,
-    0x1b, 0xab, 0x95, 0xc2, 0xe6, 0xf3, 0xe9, 0xe2, 0x85, 0xb8, 0x05, 0x80,
-    0x15, 0x06, 0x55, 0x72, 0x75, 0x52, 0x0e, 0x27, 0xfa, 0x7f, 0x37, 0x72,
-    0xd3, 0xc3, 0x73, 0x94, 0x12, 0xe0, 0x21, 0xb1, 0xb7, 0x41, 0x96, 0xc3,
-    0x15, 0xc8, 0xdb, 0xc2, 0x37, 0x7b, 0x98, 0x95, 0x81, 0x33, 0x2e, 0x6a,
-    0x95, 0xe0, 0xe1, 0x14, 0x82, 0x74, 0xb0, 0x2d, 0x84, 0x25, 0xa1, 0xc7,
-    0x97, 0xdb, 0x17, 0x79, 0x36, 0x27, 0x84, 0x3f, 0xb4, 0xf1, 0x67, 0x46,
-    0x37, 0xe2, 0x0b, 0x79, 0x96, 0x62, 0x7b, 0x01, 0x38, 0xb7, 0x6a, 0x2c,
-];
-
-#[rustfmt::skip]
-static AAVE_CALLDATA: [u8; 164] = [
-    0x61, 0x7b, 0xa0, 0x37, // selector: supply(address,uint256,address,uint16)
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-    0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, // asset = USDC
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x3b, 0x9a, 0xca, 0x00, // amount = 1000 USDC
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
-    0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e, // onBehalfOf
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // referralCode = 0
-    // Padding to 164 bytes (MAX_CALLDATA)
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-];
-
-#[rustfmt::skip]
-static AAVE_READABLE: [u8; 64] = [
-    0x53, 0x75, 0x70, 0x70, 0x6c, 0x79, 0x20, 0x30, 0x30, 0x30, 0x30, 0x30,
-    0x30, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-    0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-    0x20, 0x55, 0x53, 0x44, 0x43, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00,
-];
-
-// EIP-1559 envelope wrapping the Aave V3 supply(1000 USDC) calldata.
-// chain_id=1, to=Aave V3 Pool Mainnet, value=0, data=132 bytes of
-// supply() calldata, access_list=[]. The final byte is 0xc0 (empty
-// LIST per EIP-1559) — NOT 0x80 (empty string), which the strict
-// parser rejects with UnexpectedType.
-#[rustfmt::skip]
-static AAVE_TX: [u8; 177] = [
-    0x02, 0xf8, 0xae, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00, 0x85, 0x0b,
-    0xa4, 0x3b, 0x74, 0x00, 0x83, 0x03, 0x0d, 0x40, 0x94, 0x87, 0x87, 0x0b,
-    0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f, 0x4c, 0xe8, 0x39, 0x2d, 0x69,
-    0x35, 0x0b, 0x4f, 0xa4, 0xe2, 0x80, 0xb8, 0x84, 0x61, 0x7b, 0xa0, 0x37,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-    0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x3b, 0x9a, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53,
-    0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0,
-];
-
-const AAVE_V3_POOL_MAINNET: [u8; 20] = [
-    0x87, 0x87, 0x0b, 0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f,
-    0x4c, 0xe8, 0x39, 0x2d, 0x69, 0x35, 0x0b, 0x4f, 0xa4, 0xe2,
-];
-
-// === Scenario 5: ZK clear-sign (CowSwap GPv2Settlement.setPreSignature) =====
-//
-// Exercises the in-tree `circuits/cowswap/set_pre_signature/` circuit
-// end-to-end: the NS side looks up the CowSwap VK in the VK DB by
-// (chain_id=1, GPv2Settlement mainnet), builds the clear-sign payload
-// with the committed Groth16 proof, and the secure world Merkle-
-// verifies the VK bundle + runs Groth16 against a static "Pre-sign
-// CowSwap order" readable string. First non-Aave protocol exercised
-// by the e2e suite, proving the in-tree Circom toolchain produces
-// VKs that work in the live firmware flow.
-//
-// The vectors below are AUTO-GENERATED by
-// `circuits/scripts/gen_cowswap_e2e_vector.js`. To regenerate:
-//
-//   circom circuits/cowswap/set_pre_signature/circuit.circom \
-//     --r1cs --wasm --sym --prime bls12381 \
-//     --output build/circuits/cowswap_set_pre_signature/ \
-//     -l circuits/node_modules
-//   node circuits/scripts/gen_cowswap_e2e_vector.js
-//
-// then paste the new byte arrays below. Groth16 prove is randomised,
-// so the proof bytes (but not the calldata/readable/tx/address) will
-// change on every run.
-
-// ── AUTO-GENERATED BEGIN (gen_cowswap_e2e_vector.js) ──
-//   orderUid = 0xaabbccddeeff0011223344556677889900112233445566778899aabbccddeeff742d35cc6634c0532925a3b844bc454e4438f44e68000000
-//   readable = "Pre-sign CowSwap order"
-//   to       = 0x9008D19f58AAbD9eD0D60971565AA8510560ab41 (GPv2Settlement, chain_id=1)
-
-#[rustfmt::skip]
-static COWSWAP_PROOF: [u8; 384] = [
-    0x0a, 0x4a, 0x25, 0xe3, 0xea, 0x20, 0xe4, 0xf4, 0x67, 0xd6, 0x0c, 0x48,
-    0xcf, 0xfa, 0xeb, 0xd4, 0xba, 0x7d, 0x4b, 0x44, 0x3f, 0xdc, 0x7f, 0x43,
-    0xdf, 0x2a, 0x36, 0x32, 0x47, 0x1a, 0x46, 0x51, 0xd1, 0x11, 0x6e, 0x63,
-    0x8a, 0x74, 0x52, 0xd9, 0x8b, 0xcb, 0x5d, 0xc1, 0xa3, 0xf3, 0xa7, 0x20,
-    0x04, 0x95, 0x3c, 0xc8, 0x10, 0xa2, 0x05, 0x53, 0x80, 0x04, 0x9e, 0xc2,
-    0x95, 0x2b, 0xdd, 0x33, 0x94, 0x8e, 0x12, 0xfd, 0xe3, 0xa9, 0xcd, 0xcb,
-    0x6b, 0x56, 0xd7, 0xfa, 0x8e, 0xea, 0x75, 0xa6, 0xd4, 0xa9, 0x0b, 0x07,
-    0x8e, 0x9c, 0x8d, 0xf7, 0x82, 0xe1, 0x5a, 0xf5, 0x09, 0x9f, 0xe7, 0x33,
-    0x11, 0xa4, 0x3a, 0x95, 0x8a, 0xf4, 0xf7, 0x81, 0xe6, 0xa3, 0xcb, 0x18,
-    0x8f, 0x2b, 0x24, 0x73, 0xe9, 0xb8, 0x92, 0xee, 0xf9, 0xaf, 0x35, 0x48,
-    0xf5, 0xc6, 0xae, 0x40, 0xc2, 0x71, 0xdd, 0x4b, 0xc6, 0x88, 0xa6, 0x0a,
-    0x18, 0xac, 0x65, 0xee, 0x54, 0x3c, 0x50, 0x24, 0xa6, 0x37, 0xf0, 0x79,
-    0x15, 0xe9, 0x5f, 0xcc, 0xb4, 0xfd, 0xaf, 0xb4, 0x32, 0xeb, 0xaf, 0xe0,
-    0x90, 0x8b, 0xd7, 0x24, 0x4b, 0x0f, 0xd5, 0x45, 0x8b, 0x76, 0x8b, 0x51,
-    0xc7, 0x2c, 0x72, 0xfd, 0x14, 0x9f, 0xbb, 0x97, 0xd2, 0x90, 0x73, 0x58,
-    0x7c, 0x4f, 0xfd, 0x52, 0xdc, 0xa2, 0x81, 0x66, 0xeb, 0x5d, 0x01, 0x81,
-    0x01, 0x93, 0x5c, 0x06, 0x6f, 0x6d, 0xba, 0xe2, 0x29, 0xd8, 0x0c, 0x7a,
-    0xba, 0x3f, 0x08, 0x1e, 0xf5, 0xbe, 0x83, 0x05, 0x48, 0xd2, 0xf0, 0x81,
-    0x73, 0x05, 0xb3, 0x70, 0xde, 0xf9, 0x20, 0x2a, 0x77, 0xba, 0x04, 0x3e,
-    0x28, 0xb8, 0x73, 0x4f, 0x28, 0x23, 0xc2, 0x71, 0x59, 0xbb, 0xbe, 0x7f,
-    0x14, 0xf6, 0x8f, 0x5e, 0x43, 0x0b, 0xd8, 0x86, 0x64, 0x5f, 0x70, 0x56,
-    0x00, 0x63, 0x76, 0x54, 0x78, 0xfd, 0xc5, 0xe3, 0xc5, 0xff, 0x1a, 0x1d,
-    0x2c, 0xd5, 0x71, 0xa2, 0x42, 0xd4, 0xf0, 0x31, 0x99, 0xb4, 0x4b, 0x15,
-    0x41, 0xfe, 0x2a, 0x7d, 0x5f, 0xcf, 0x0a, 0x8d, 0x95, 0xa1, 0x20, 0x11,
-    0x16, 0xb6, 0xa8, 0xec, 0x18, 0xa7, 0x44, 0xb2, 0x6f, 0x34, 0x60, 0x79,
-    0x76, 0xb7, 0x2c, 0x43, 0xcf, 0x16, 0x75, 0x1e, 0xe5, 0x7b, 0x0d, 0x4e,
-    0x5a, 0x6e, 0x31, 0x86, 0x42, 0xb6, 0x1a, 0xc2, 0x81, 0x95, 0x7e, 0xd6,
-    0x53, 0xfa, 0x08, 0xa1, 0x7c, 0x65, 0xff, 0xbb, 0x77, 0xfc, 0xb4, 0xbb,
-    0x0e, 0x0e, 0x24, 0x0a, 0x93, 0x23, 0x70, 0xf0, 0xd4, 0x28, 0xbe, 0x7c,
-    0x06, 0x64, 0xcb, 0x3e, 0x0a, 0x91, 0x5f, 0xaa, 0xff, 0xe6, 0xd7, 0x35,
-    0xf8, 0x70, 0xe9, 0xc9, 0x5f, 0xd0, 0x5f, 0xfe, 0x4c, 0x81, 0xb0, 0x07,
-    0x53, 0x94, 0x83, 0x45, 0x02, 0x7b, 0x14, 0xb2, 0x1d, 0x2e, 0xaa, 0x63,
-];
-
-#[rustfmt::skip]
-static COWSWAP_CALLDATA: [u8; 164] = [
-    0xec, 0x6c, 0xb1, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x38, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11,
-    0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00, 0x11, 0x22, 0x33,
-    0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-    0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
-    0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e, 0x68, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-];
-
-#[rustfmt::skip]
-static COWSWAP_READABLE: [u8; 64] = [
-    0x50, 0x72, 0x65, 0x2d, 0x73, 0x69, 0x67, 0x6e, 0x20, 0x43, 0x6f, 0x77,
-    0x53, 0x77, 0x61, 0x70, 0x20, 0x6f, 0x72, 0x64, 0x65, 0x72, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00,
-];
-
-#[rustfmt::skip]
-static COWSWAP_TX: [u8; 209] = [
-    0x02, 0xf8, 0xce, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00, 0x85, 0x0b,
-    0xa4, 0x3b, 0x74, 0x00, 0x83, 0x03, 0x0d, 0x40, 0x94, 0x90, 0x08, 0xd1,
-    0x9f, 0x58, 0xaa, 0xbd, 0x9e, 0xd0, 0xd6, 0x09, 0x71, 0x56, 0x5a, 0xa8,
-    0x51, 0x05, 0x60, 0xab, 0x41, 0x80, 0xb8, 0xa4, 0xec, 0x6c, 0xb1, 0x3f,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x38,
-    0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
-    0x66, 0x77, 0x88, 0x99, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x74, 0x2d, 0x35, 0xcc,
-    0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc, 0x45, 0x4e,
-    0x44, 0x38, 0xf4, 0x4e, 0x68, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0xc0,
-];
-
-const COWSWAP_GPV2_SETTLEMENT_MAINNET: [u8; 20] = [
-    0x90, 0x08, 0xd1, 0x9f, 0x58, 0xaa, 0xbd, 0x9e, 0xd0, 0xd6, 0x09, 0x71,
-    0x56, 0x5a, 0xa8, 0x51, 0x05, 0x60, 0xab, 0x41,
-];
-// ── AUTO-GENERATED END ──
-
-// === Scenario 6: ZK clear-sign EIP-712 GPv2Order (M4) =======================
-//
-// Exercises the in-tree `circuits/cowswap/eip712_order/` circuit
-// end-to-end. There is no on-chain transaction here — the wallet
-// signs an EIP-712 typed-data digest derived natively in the secure
-// world from the same 164-byte canonical buffer the Groth16 proof
-// binds via Poseidon. The trusted UI displays a 32-character readable
-// string of the form "CowSwap SELL    exp 0xXXXXXXXX  " bound to the
-// canonical bytes via the circuit. The secure world verifies the VK
-// bundle (looked up by the EIP-712 sentinel address — see
-// secure/src/tx/eip712/cowswap.rs::SENTINEL), runs Groth16,
-// then keccak-hashes the re-expanded abi.encode(GPv2Order) struct to
-// produce the digest it actually signs with SLH-DSA.
-//
-// The vectors below are AUTO-GENERATED by
-// `circuits/scripts/gen_cowswap_eip712_e2e_vector.js`. To regenerate:
-//
-//   circom circuits/cowswap/eip712_order/circuit.circom \
-//     --r1cs --wasm --sym --prime bls12381 \
-//     --output build/circuits/cowswap_eip712_order/ \
-//     -l circuits/node_modules
-//   node circuits/scripts/gen_cowswap_eip712_e2e_vector.js
-//
-// then paste the new byte arrays below. Groth16 prove is randomised,
-// so the proof bytes will change on every run.
-
-// ── AUTO-GENERATED EIP712 BEGIN (gen_cowswap_eip712_e2e_vector.js) ──
-// Inputs:
-//   chain_id   = 1
-//   sellToken  = 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 (USDC)
-//   buyToken   = 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2  (WETH)
-//   receiver   = 0x742d35cc6634c0532925a3b844bc454e4438f44e
-//   sellAmount = 1000000000  (1000.0000 USDC)
-//   buyAmount  = 500000000000000000  (0.5000 WETH)
-//   feeAmount  = 0
-//   validTo    = 0x68000000
-//   kind       = SELL
-//   appData    = 0x83b9dcb2316e54fc04c10f74c9a3d5dd66a9e4c43c04ccefb9c0c03e61e5fb28
-//   readable   = "CowSwap SELL    SELL:                  1000.0000          USDC  for at least:             0.5000          WETH                  "
-//   sentinel addr (DB lookup key) = 0x9008D19f58AAbD9eD0D60971565AA8510560ab42
-
-#[rustfmt::skip]
-static EIP712_PROOF: [u8; 384] = [
-    0x13, 0x2d, 0xb4, 0x01, 0xfa, 0xb4, 0x78, 0xea, 0x6a, 0xd4, 0x8f, 0xd6,
-    0xe9, 0x44, 0xfd, 0xfc, 0xeb, 0x4f, 0x01, 0x2d, 0x86, 0x7a, 0x86, 0x34,
-    0x58, 0x8e, 0x60, 0xd0, 0x43, 0x15, 0x51, 0x0e, 0x18, 0x3b, 0x19, 0x54,
-    0xb0, 0x14, 0x55, 0x5d, 0x92, 0x8f, 0x84, 0xd9, 0x6e, 0x27, 0xf1, 0xae,
-    0x13, 0x8b, 0xb9, 0x7b, 0x70, 0x8f, 0xd7, 0x7b, 0x7b, 0xca, 0x82, 0x30,
-    0x97, 0x18, 0xdc, 0x0b, 0xc1, 0x68, 0x0c, 0x16, 0xd6, 0x71, 0x57, 0xa0,
-    0xac, 0xdb, 0x2a, 0xe4, 0x92, 0xca, 0x54, 0xb4, 0x9e, 0x8e, 0x93, 0x65,
-    0xe7, 0x72, 0x23, 0xf9, 0xa2, 0x1e, 0xc6, 0x96, 0x9c, 0x10, 0x48, 0x1c,
-    0x11, 0x2a, 0x97, 0x8b, 0x30, 0x7a, 0xec, 0xfe, 0xf9, 0x53, 0x7f, 0x41,
-    0x99, 0x3f, 0x72, 0xa3, 0xf4, 0x13, 0x38, 0x8e, 0xdc, 0xa8, 0xd7, 0xd4,
-    0xa4, 0xce, 0x52, 0x66, 0x48, 0xa0, 0xf5, 0x09, 0xf0, 0x69, 0x03, 0x07,
-    0xa5, 0xfb, 0x47, 0xc4, 0xc2, 0x60, 0xef, 0x72, 0x11, 0x48, 0x23, 0xaf,
-    0x0b, 0xe6, 0x75, 0x12, 0x5c, 0x62, 0x00, 0x76, 0x0c, 0xa4, 0x41, 0xec,
-    0x93, 0xad, 0x95, 0xac, 0x8c, 0xa1, 0xd1, 0x9a, 0xc9, 0x98, 0xf6, 0x62,
-    0xb8, 0xea, 0x10, 0xa7, 0x74, 0x08, 0x9b, 0xbb, 0xad, 0x1d, 0xd6, 0xa7,
-    0x00, 0x61, 0xb7, 0x8e, 0x19, 0x7a, 0x29, 0x04, 0x5b, 0x92, 0xd2, 0x58,
-    0x04, 0x62, 0xb7, 0x3b, 0xa2, 0x87, 0xf8, 0xb8, 0xfa, 0x70, 0xe8, 0xe2,
-    0x15, 0xfd, 0xd3, 0x2b, 0xaa, 0x92, 0x23, 0x5a, 0x42, 0xb2, 0x9a, 0xaa,
-    0x04, 0xb3, 0x9a, 0x4f, 0xdf, 0x93, 0xb9, 0x75, 0x49, 0xd9, 0x20, 0x59,
-    0x77, 0x96, 0xc9, 0x9c, 0xa7, 0x57, 0x36, 0x9c, 0x04, 0xf1, 0xf8, 0xe5,
-    0x10, 0x8c, 0xe0, 0x37, 0x2a, 0x82, 0xbd, 0x8c, 0x98, 0xe8, 0x1a, 0x31,
-    0x48, 0x78, 0x46, 0x40, 0xb3, 0x51, 0x8a, 0x20, 0xc0, 0x8d, 0x6f, 0x97,
-    0x81, 0x95, 0xf2, 0x92, 0x9c, 0x94, 0xd7, 0xd3, 0xa9, 0x80, 0xcc, 0x9a,
-    0xaf, 0x20, 0x38, 0x18, 0x7a, 0x9c, 0x3d, 0x89, 0x33, 0x68, 0x08, 0x8b,
-    0x07, 0xd5, 0xfc, 0x85, 0x1d, 0x59, 0x8b, 0x3d, 0x66, 0x88, 0x9d, 0x2e,
-    0x78, 0x72, 0xb4, 0x8f, 0x2f, 0x10, 0x46, 0x1c, 0xd3, 0xd5, 0x79, 0xe2,
-    0x83, 0xa0, 0xfa, 0xc8, 0x20, 0x1c, 0x67, 0x4a, 0xaa, 0x3c, 0x11, 0x53,
-    0xee, 0x34, 0x38, 0x36, 0x76, 0x9b, 0xec, 0xf7, 0xca, 0x71, 0xda, 0x24,
-    0x06, 0x5e, 0x8b, 0xe0, 0x1c, 0x47, 0x23, 0x98, 0x3c, 0xd6, 0xb0, 0xbf,
-    0x74, 0x44, 0x00, 0xc6, 0xf0, 0x2f, 0x76, 0xdb, 0x8a, 0x92, 0x4f, 0xe6,
-    0x59, 0x18, 0xd2, 0x27, 0x95, 0x9d, 0xe2, 0xaf, 0xf4, 0xe1, 0x9d, 0x63,
-    0xe4, 0x07, 0x73, 0x92, 0x51, 0xf2, 0xec, 0x8a, 0xfb, 0x6d, 0xc0, 0x74,
-];
-
-#[rustfmt::skip]
-static EIP712_CANONICAL: [u8; 204] = [
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xa0, 0xb8, 0x69, 0x91,
-    0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a, 0x2e, 0x9e, 0xb0, 0xce,
-    0x36, 0x06, 0xeb, 0x48, 0xc0, 0x2a, 0xaa, 0x39, 0xb2, 0x23, 0xfe, 0x8d,
-    0x0a, 0x0e, 0x5c, 0x4f, 0x27, 0xea, 0xd9, 0x08, 0x3c, 0x75, 0x6c, 0xc2,
-    0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
-    0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x3b, 0x9a, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x06, 0xf0, 0x5b, 0x59, 0xd3, 0xb2, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x68, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x83, 0xb9, 0xdc, 0xb2, 0x31, 0x6e, 0x54, 0xfc,
-    0x04, 0xc1, 0x0f, 0x74, 0xc9, 0xa3, 0xd5, 0xdd, 0x66, 0xa9, 0xe4, 0xc4,
-    0x3c, 0x04, 0xcc, 0xef, 0xb9, 0xc0, 0xc0, 0x3e, 0x61, 0xe5, 0xfb, 0x28,
-];
-
-#[rustfmt::skip]
-static EIP712_READABLE: [u8; 128] = [
-    0x43, 0x6f, 0x77, 0x53, 0x77, 0x61, 0x70, 0x20, 0x53, 0x45, 0x4c, 0x4c,
-    0x20, 0x20, 0x20, 0x20, 0x53, 0x45, 0x4c, 0x4c, 0x3a, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30, 0x30, 0x30, 0x30,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x55, 0x53,
-    0x44, 0x43, 0x20, 0x20, 0x66, 0x6f, 0x72, 0x20, 0x61, 0x74, 0x20, 0x6c,
-    0x65, 0x61, 0x73, 0x74, 0x3a, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2e, 0x35, 0x30, 0x30, 0x30,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x57, 0x45,
-    0x54, 0x48, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-    0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-];
-
-const COWSWAP_EIP712_SENTINEL_MAINNET: [u8; 20] = [
-    0x90, 0x08, 0xd1, 0x9f, 0x58, 0xaa, 0xbd, 0x9e, 0xd0, 0xd6, 0x09, 0x71,
-    0x56, 0x5a, 0xa8, 0x51, 0x05, 0x60, 0xab, 0x42,
-];
-// ── AUTO-GENERATED EIP712 END ──
-
-// === Test runner ============================================================
+/// Parse a `[type1_len|t1][type2_len|t2]` bundle and assert basic shape.
+///
+/// Returns `(type1_present, type2_len)`.
+fn parse_response(resp: &[u8]) -> (bool, usize) {
+    let t1_len = u32::from_be_bytes([resp[0], resp[1], resp[2], resp[3]]) as usize;
+    assert!(t1_len == 0 || t1_len == JARDIN_TYPE1_LEN);
+    if t1_len != 0 {
+        assert_eq!(resp[4], 0x01, "Type 1 marker must be 0x01");
+    }
+    let t2_off = 4 + t1_len;
+    let t2_len = u32::from_be_bytes([
+        resp[t2_off],
+        resp[t2_off + 1],
+        resp[t2_off + 2],
+        resp[t2_off + 3],
+    ]) as usize;
+    let t2_body = t2_off + 4;
+    assert_eq!(resp[t2_body], JARDIN_TYPE2_MARKER, "Type 2 marker must be 0x02");
+    (t1_len != 0, t2_len)
+}
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    hprintln!("[E2E] non-secure runner started");
+    hprintln!("[NS][e2e] === JARDÍN unified sign runner ===");
 
-    let mut pass_count = 0u32;
-    let mut fail_count = 0u32;
+    // Unlock (auto-short-circuited by e2e-test feature on the secure side).
+    let status = nsc_api::request_unlock();
+    assert_eq!(status, NscStatus::Ok as u32);
+    hprintln!("[NS][e2e] unlock: OK");
 
-    // ----- Scenario 1: ZK clear-sign (Aave V3 supply) -----
-    {
-        let bundle_len = unsafe {
-            vk_db::build_bundle(1, &AAVE_V3_POOL_MAINNET, &mut VK_BUNDLE_BUF)
-        };
-        let status = match bundle_len {
-            Some(n) => unsafe {
-                let vk_bundle = &VK_BUNDLE_BUF[..n];
-                let p = aa::build_clear_sign_userop_payload(
-                    &aa_wrapper(),
-                    &AAVE_PROOF,
-                    &AAVE_CALLDATA,
-                    &AAVE_READABLE,
-                    &AAVE_TX,
-                    vk_bundle,
-                    &mut CLEAR_SIGN_BUF,
-                );
-                nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF)
-            },
-            None => {
-                hprintln!("[E2E] zk_clear_sign: NS VK DB lookup MISS for Aave V3 mainnet");
-                NscStatus::CryptoError as u32
-            }
-        };
-        report("zk_clear_sign", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 2: ZK clear-sign (CowSwap setPreSignature) -----
-    {
-        let bundle_len = unsafe {
-            vk_db::build_bundle(1, &COWSWAP_GPV2_SETTLEMENT_MAINNET, &mut VK_BUNDLE_BUF)
-        };
-        let status = match bundle_len {
-            Some(n) => unsafe {
-                let vk_bundle = &VK_BUNDLE_BUF[..n];
-                let p = aa::build_clear_sign_userop_payload(
-                    &aa_wrapper(),
-                    &COWSWAP_PROOF,
-                    &COWSWAP_CALLDATA,
-                    &COWSWAP_READABLE,
-                    &COWSWAP_TX,
-                    vk_bundle,
-                    &mut CLEAR_SIGN_BUF,
-                );
-                nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF)
-            },
-            None => {
-                hprintln!(
-                    "[E2E] cowswap_pre_sign: NS VK DB lookup MISS for GPv2Settlement mainnet"
-                );
-                NscStatus::CryptoError as u32
-            }
-        };
-        report("cowswap_pre_sign", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 6: ZK clear-sign EIP-712 (CowSwap GPv2Order) -----
-    {
-        let bundle_len = unsafe {
-            vk_db::build_bundle(1, &COWSWAP_EIP712_SENTINEL_MAINNET, &mut VK_BUNDLE_BUF)
-        };
-        let status = match bundle_len {
-            Some(n) => unsafe {
-                let vk_bundle = &VK_BUNDLE_BUF[..n];
-                let mut p = 0usize;
-                CLEAR_SIGN_BUF[p..p + EIP712_PROOF_LEN].copy_from_slice(&EIP712_PROOF);
-                p += EIP712_PROOF_LEN;
-                CLEAR_SIGN_BUF[p..p + EIP712_CANONICAL_LEN].copy_from_slice(&EIP712_CANONICAL);
-                p += EIP712_CANONICAL_LEN;
-                CLEAR_SIGN_BUF[p..p + EIP712_STRING_LEN].copy_from_slice(&EIP712_READABLE);
-                p += EIP712_STRING_LEN;
-                debug_assert_eq!(p, EIP712_HEADER_LEN);
-                CLEAR_SIGN_BUF[p..p + 4].copy_from_slice(&(vk_bundle.len() as u32).to_le_bytes());
-                p += 4;
-                CLEAR_SIGN_BUF[p..p + vk_bundle.len()].copy_from_slice(vk_bundle);
-                p += vk_bundle.len();
-                nsc_api::clear_sign_msg(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF)
-            },
-            None => {
-                hprintln!(
-                    "[E2E] cowswap_eip712_order: NS VK DB lookup MISS for sentinel mainnet"
-                );
-                NscStatus::CryptoError as u32
-            }
-        };
-        report("cowswap_eip712_order", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 7: ERC-4337 UserOp wrapping plain value transfer -----
-    //
-    // The non-secure side wraps the existing SCENARIO_VALUE_TRANSFER
-    // envelope as a UserOperation: same inner tx, with AA wrapper
-    // params built from the deterministic test fixtures above. The
-    // secure world parses the AA header, parses the inner tx,
-    // dispatches it through the same trust ladder as cmd_sign
-    // (expected: ValueTransfer), reconstructs the canonical
-    // execute(target,value,data) callData, computes the EntryPoint
-    // v0.6 userOpHash natively, and signs that hash with SLH-DSA.
-    {
-        let payload_len = unsafe {
-            aa::build_userop_payload(
-                &aa_wrapper(),
-                &SCENARIO_VALUE_TRANSFER,
-                &mut USEROP_PAYLOAD_BUF,
-            )
-        };
-        let t0 = dwt_cycles();
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
-        };
-        let t1 = dwt_cycles();
-        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
-        hprintln!("[E2E] C7 userop_value_transfer (SPHINCS+C7 sign): {}ms", elapsed_ms);
-        report("userop_value_transfer", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 8: ERC-4337 UserOp wrapping ERC20 (USDC) transfer -----
-    //
-    // Same as scenario 2 (Erc20Known dispatch via the NS DB lookup),
-    // but routed through cmd_sign_userop with an attached ERC-20
-    // metadata bundle so the trusted UI still decodes the inner
-    // ERC-20 call before the secure world hashes the wrapper.
-    {
-        let bundle_len = unsafe {
-            erc20_db::build_bundle(1, &USDC_MAINNET_ADDR, &mut ERC20_BUNDLE_BUF)
-        };
-        let status = match bundle_len {
-            Some(n) => unsafe {
-                let bundle = &ERC20_BUNDLE_BUF[..n];
-                let payload_len = aa::build_userop_payload_with_bundle(
-                    &aa_wrapper(),
-                    &SCENARIO_USDC_TRANSFER,
-                    bundle,
-                    &mut USEROP_PAYLOAD_BUF,
-                );
-                nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
-            },
-            None => {
-                hprintln!("[E2E] userop_erc20: NS DB lookup MISS for USDC mainnet");
-                NscStatus::CryptoError as u32
-            }
-        };
-        report("userop_erc20", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ===================================================================
-    // Negative scenarios — exercise error paths in cmd_sign_userop.
-    // Each expects a specific non-zero NscStatus.
-    // ===================================================================
-
-    // ----- Scenario 9: chain_id mismatch between AA header and inner tx ---
-    //
-    // Build a normal UserOp for SCENARIO_VALUE_TRANSFER (inner chain_id=1),
-    // then patch the AA header's chain_id to 5. The secure world cross-checks
-    // these at cmd_sign_userop.rs:126 and rejects with CryptoError.
-    {
-        let payload_len = unsafe {
-            aa::build_userop_payload(
-                &aa_wrapper(),
-                &SCENARIO_VALUE_TRANSFER,
-                &mut USEROP_PAYLOAD_BUF,
-            )
-        };
-        // Patch the AA chain_id field (offset 1+20+20 = 41, 8 bytes BE) to 5.
-        unsafe {
-            let chain_id_off = 1 + 20 + 20;
-            USEROP_PAYLOAD_BUF[chain_id_off..chain_id_off + 8]
-                .copy_from_slice(&5u64.to_be_bytes());
-        }
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
-        };
-        report_expect("neg_chain_id_mismatch", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 10: tx_len = 0 ----------------------------------------
-    //
-    // Valid AA header but the tx_len field is zero. The secure world rejects
-    // at cmd_sign_userop.rs:104 with InvalidPointer.
-    {
-        let wrap = aa_wrapper();
-        // Build a minimal payload: header + tx_len(0) + 1 dummy byte
-        let min_len = USEROP_PREFIX_LEN + 1;
-        unsafe {
-            USEROP_PAYLOAD_BUF[..min_len].fill(0);
-            USEROP_PAYLOAD_BUF[0] = 0; // has_bundle = false
-            // Write a valid header
-            aa::build_userop_payload(&wrap, &[0x02], &mut USEROP_PAYLOAD_BUF);
-            // Overwrite tx_len to 0
-            let tl_off = sphincs_tz_shared::USEROP_HEADER_LEN;
-            USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&0u32.to_le_bytes());
-        }
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut USEROP_RESPONSE_BUF)
-        };
-        report_expect("neg_tx_len_zero", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 11: tx_len > MAX_TX_LEN --------------------------------
-    //
-    // tx_len claims 4097 bytes but total_len is small. The secure world
-    // rejects at cmd_sign_userop.rs:104 with InvalidPointer.
-    {
-        let wrap = aa_wrapper();
-        let min_len = USEROP_PREFIX_LEN + 1;
-        unsafe {
-            aa::build_userop_payload(&wrap, &[0x02], &mut USEROP_PAYLOAD_BUF);
-            // Overwrite tx_len to MAX_TX_LEN + 1 = 4097
-            let tl_off = sphincs_tz_shared::USEROP_HEADER_LEN;
-            USEROP_PAYLOAD_BUF[tl_off..tl_off + 4].copy_from_slice(&4097u32.to_le_bytes());
-        }
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..min_len], &mut USEROP_RESPONSE_BUF)
-        };
-        report_expect("neg_tx_len_overflow", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 12: truncated payload ----------------------------------
-    //
-    // Build a valid UserOp but pass fewer bytes than tx_len claims. The
-    // secure world rejects at cmd_sign_userop.rs:109 with InvalidPointer.
-    {
-        let payload_len = unsafe {
-            aa::build_userop_payload(
-                &aa_wrapper(),
-                &SCENARIO_VALUE_TRANSFER,
-                &mut USEROP_PAYLOAD_BUF,
-            )
-        };
-        // Pass 10 fewer bytes than the full payload — tx_end > total_len.
-        let truncated = payload_len - 10;
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..truncated], &mut USEROP_RESPONSE_BUF)
-        };
-        report_expect("neg_truncated_payload", status, NscStatus::InvalidPointer, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 13: contract creation (to = absent) --------------------
-    //
-    // An EIP-1559 envelope with no `to` field (contract creation). The
-    // secure world parses it, dispatches as ContractCreation, and rejects
-    // at cmd_sign_userop.rs:186 with CryptoError.
-    #[rustfmt::skip]
-    static SCENARIO_CONTRACT_CREATION: [u8; 13] = [
-        0x02,                           // EIP-1559 type byte
-        0xcb,                           // RLP list, 11-byte body
-        0x01,                           // chain_id = 1
-        0x80,                           // nonce = 0
-        0x80,                           // max_priority_fee = 0
-        0x80,                           // max_fee = 0
-        0x82, 0x52, 0x08,               // gas_limit = 21000
-        0x80,                           // to = ABSENT (contract creation)
-        0x80,                           // value = 0
-        0x80,                           // data = empty
-        0xc0,                           // access_list = empty
+    // Scenario 1: first-sign — expect Type 1 + Type 2.
+    hprintln!("[NS][e2e] Scenario 1: first sign (Type 1 + Type 2)");
+    let to_alice: [u8; 20] = [
+        0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78,
+        0x90, 0xab, 0xcd, 0xef, 0x12,
     ];
-    {
-        let payload_len = unsafe {
-            aa::build_userop_payload(
-                &aa_wrapper(),
-                &SCENARIO_CONTRACT_CREATION,
-                &mut USEROP_PAYLOAD_BUF,
-            )
-        };
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
-        };
-        report_expect("neg_contract_creation", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    unsafe {
+        let len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111, // Sepolia
+            0,          // slot_index hint
+            1,          // base nonce
+            &to_alice,
+            1_000_000_000_000_000_000u128, // 1 ETH
+            &[],
+        );
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "first-sign must succeed");
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(t1_present, "first-sign must emit a Type 1");
+        hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
 
-    // ----- Scenario 14: garbage envelope -----------------------------------
-    //
-    // Random bytes in the inner tx position — not valid RLP, not starting
-    // with 0x02. The secure world rejects at cmd_sign_userop.rs:117 with
-    // CryptoError.
-    {
-        static GARBAGE: [u8; 10] = [0xFF; 10];
-        let payload_len = unsafe {
-            aa::build_userop_payload(
-                &aa_wrapper(),
-                &GARBAGE,
-                &mut USEROP_PAYLOAD_BUF,
-            )
-        };
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut USEROP_RESPONSE_BUF)
-        };
-        report_expect("neg_bad_envelope", status, NscStatus::CryptoError, &mut pass_count, &mut fail_count);
+    // Scenario 2: second-sign on same chain — expect Type 2 only.
+    hprintln!("[NS][e2e] Scenario 2: second sign (Type 2 only)");
+    unsafe {
+        let len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111,
+            0,
+            2,
+            &to_alice,
+            500_000_000_000_000_000u128, // 0.5 ETH
+            &[],
+        );
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "second-sign must succeed");
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "second-sign must NOT emit a Type 1");
+        hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
 
-    // ===================================================================
-    // JARDIN FORS+C compact signature scenarios (with timing)
-    // ===================================================================
-    //
-    // These must run in sequence: scenario 15 initialises the slot,
-    // subsequent scenarios depend on the slot state from prior signs.
-    //
-    // Timing uses ARM semihosting SYS_CLOCK (centiseconds).
-
-    hprintln!("");
-    hprintln!("[E2E] ===== JARDIN FORS+C timing benchmarks =====");
-
-    // ----- Scenario 15: FIRST SIGN (includes keygen) -----
-    //
-    // First sign on slot 0: triggers keygen (~235K hashes), then signs
-    // at q=1.  This is the SLOW path -- measured to show keygen cost.
-    {
-        let msg_hash = [0xAAu8; 32];
-        let t0 = dwt_cycles();
-        let status = unsafe {
-            nsc_api::sign_jardin(1, 0, &msg_hash, &mut JARDIN_SIG_BUF)
-        };
-        let t1 = dwt_cycles();
-        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
-        hprintln!("[E2E] jardin_first_sign (KEYGEN + sign q=1): {}ms", elapsed_ms);
-        if status == NscStatus::Ok as u32 {
-            unsafe {
-                let raw = u32::from_be_bytes([
-                    JARDIN_SIG_BUF[0], JARDIN_SIG_BUF[1],
-                    JARDIN_SIG_BUF[2], JARDIN_SIG_BUF[3],
-                ]);
-                let resp_len = (raw & 0x7FFF_FFFF) as usize;
-                let signer_type = JARDIN_SIG_BUF[4];
-                let expected_min = 4 + JARDIN_WRAPPER_HEADER_LEN + JARDIN_SIG_MIN;
-                if signer_type != SIGNER_JARDIN {
-                    hprintln!("[E2E] jardin_first_sign: bad signer_type 0x{:02x}", signer_type);
-                } else if resp_len < expected_min {
-                    hprintln!("[E2E] jardin_first_sign: resp_len {} < expected_min {}", resp_len, expected_min);
-                } else {
-                    hprintln!("[E2E] jardin_first_sign: sig_len={} bytes (q=1)", resp_len - 4);
-                }
-            }
-        }
-        report("jardin_first_sign", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 16: FAST SIGN (slot already active, q=2) -----
-    //
-    // Second sign on same slot — no keygen.  This is the FAST path that
-    // every transaction after the first one uses.
-    {
-        let msg_hash2 = [0xBBu8; 32];
-        let t0 = dwt_cycles();
-        let status = unsafe {
-            nsc_api::sign_jardin(1, 0, &msg_hash2, &mut JARDIN_SIG_BUF)
-        };
-        let t1 = dwt_cycles();
-        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
-        hprintln!("[E2E] jardin_fast_sign  (sign q=2, NO keygen): {}ms", elapsed_ms);
-        if status == NscStatus::Ok as u32 {
-            unsafe {
-                let raw = u32::from_be_bytes([
-                    JARDIN_SIG_BUF[0], JARDIN_SIG_BUF[1],
-                    JARDIN_SIG_BUF[2], JARDIN_SIG_BUF[3],
-                ]);
-                let resp_len = (raw & 0x7FFF_FFFF) as usize;
-                let expected_q2 = 4 + JARDIN_WRAPPER_HEADER_LEN + 2452 + 2 * 16;
-                if resp_len != expected_q2 {
-                    hprintln!("[E2E] jardin_fast_sign: resp_len {} != expected {}", resp_len, expected_q2);
-                } else {
-                    hprintln!("[E2E] jardin_fast_sign: sig_len={} bytes (q=2)", resp_len - 4);
-                }
-            }
-        }
-        report("jardin_fast_sign", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 17: JARDIN slot info -----
-    {
-        let status = unsafe {
-            nsc_api::get_jardin_slot_info(1, 0, &mut JARDIN_INFO_BUF)
-        };
-        if status == NscStatus::Ok as u32 {
-            unsafe {
-                let next_q = JARDIN_INFO_BUF[4];
-                let remaining = JARDIN_INFO_BUF[5];
-                let active = JARDIN_INFO_BUF[6];
-                hprintln!("[E2E] jardin_slot_info: next_q={} remaining={} active={}", next_q, remaining, active);
-                if active != 1 {
-                    hprintln!("[E2E] jardin_slot_info: expected active=1, got {}", active);
-                }
-                if next_q != 3 {
-                    hprintln!("[E2E] jardin_slot_info: expected next_q=3, got {}", next_q);
-                }
-                if remaining != 93 {
-                    hprintln!("[E2E] jardin_slot_info: expected remaining=93, got {}", remaining);
-                }
-            }
-        }
-        report("jardin_slot_info", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 18: JARDIN register slot -----
-    {
-        let t0 = dwt_cycles();
-        let status = unsafe {
-            nsc_api::register_jardin_slot(1, 0, &mut JARDIN_REGISTER_BUF)
-        };
-        let t1 = dwt_cycles();
-        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
-        hprintln!("[E2E] jardin_register (slot already active):  {}ms", elapsed_ms);
-        if status == NscStatus::Ok as u32 {
-            unsafe {
-                let slot_key_zero = JARDIN_REGISTER_BUF[0..32].iter().all(|&b| b == 0);
-                if slot_key_zero {
-                    hprintln!("[E2E] jardin_register: slot_key is all-zero");
-                }
-                let vk_hash_zero = JARDIN_REGISTER_BUF[32..64].iter().all(|&b| b == 0);
-                if vk_hash_zero {
-                    hprintln!("[E2E] jardin_register: sub_vk_hash is all-zero");
-                }
-            }
-        }
-        report("jardin_register_slot", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 19: SLOT SWITCH (includes keygen for new slot) -----
-    //
-    // Sign with slot_index=1: triggers keygen for the new slot.
-    {
-        let msg_hash = [0xCCu8; 32];
-        let t0 = dwt_cycles();
-        let status = unsafe {
-            nsc_api::sign_jardin(1, 1, &msg_hash, &mut JARDIN_SIG_BUF)
-        };
-        let t1 = dwt_cycles();
-        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
-        hprintln!("[E2E] jardin_slot_switch (KEYGEN slot 1 + sign): {}ms", elapsed_ms);
-        report("jardin_slot_switch", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 20: FAST SIGN on new slot (q=2, no keygen) -----
-    {
-        let msg_hash = [0xDDu8; 32];
-        let t0 = dwt_cycles();
-        let status = unsafe {
-            nsc_api::sign_jardin(1, 1, &msg_hash, &mut JARDIN_SIG_BUF)
-        };
-        let t1 = dwt_cycles();
-        let elapsed_ms = cycles_to_ms(t1.wrapping_sub(t0));
-        hprintln!("[E2E] jardin_fast_sign2 (slot 1, q=2, NO keygen): {}ms", elapsed_ms);
-        report("jardin_fast_sign_slot1", status, &mut pass_count, &mut fail_count);
-    }
-
-    // ----- Scenario 21: query non-active slot -----
-    {
-        let status = unsafe {
-            nsc_api::get_jardin_slot_info(1, 0, &mut JARDIN_INFO_BUF)
-        };
-        if status == NscStatus::Ok as u32 {
-            unsafe {
-                let active = JARDIN_INFO_BUF[6];
-                if active != 0 {
-                    hprintln!("[E2E] jardin_neg_inactive: expected active=0, got {}", active);
-                }
-            }
-        }
-        report("jardin_neg_inactive_slot", status, &mut pass_count, &mut fail_count);
-    }
-
-    hprintln!("[E2E] ===== end JARDIN benchmarks =====");
-    hprintln!("");
-
-    // ----- Summary -----
-    hprintln!("[E2E] summary: {} passed, {} failed", pass_count, fail_count);
-    if fail_count == 0 {
-        hprintln!("[E2E] ALL TESTS PASSED");
-        debug::exit(debug::EXIT_SUCCESS);
-    } else {
-        hprintln!("[E2E] SOME TESTS FAILED");
-        debug::exit(debug::EXIT_FAILURE);
-    }
+    hprintln!("[NS][e2e] === All scenarios passed! ===");
+    debug::exit(debug::EXIT_SUCCESS);
     loop {}
-}
-
-/// Read the DWT cycle counter (free-running 32-bit, started by secure
-/// world at boot).  Returns raw cycles; use [`cycles_to_ms`] to convert.
-///
-/// On STM32U585 the counter runs at 160 MHz (wraps every ~26.8 s).
-/// On QEMU the rate is simulated and may differ.
-fn dwt_cycles() -> u32 {
-    // DWT_CYCCNT is at 0xE0001004.  On TrustZone parts NS can read it
-    // if the secure world enabled DWT + DEMCR.TRCENA (done in main.rs).
-    unsafe { core::ptr::read_volatile(0xE000_1004 as *const u32) }
-}
-
-/// Convert a cycle delta to milliseconds.  On STM32U585 the DWT runs at
-/// the core clock (160 MHz).  On QEMU the rate is emulated — values are
-/// approximate but the ratio between fast/slow paths is accurate.
-#[cfg(feature = "stm32u585")]
-fn cycles_to_ms(cycles: u32) -> u32 {
-    cycles / 160_000 // 160 MHz
-}
-
-#[cfg(not(feature = "stm32u585"))]
-fn cycles_to_ms(cycles: u32) -> u32 {
-    // QEMU mps2-an505 runs at 25 MHz simulated core clock
-    cycles / 25_000
-}
-
-fn report(name: &str, status: u32, pass: &mut u32, fail: &mut u32) {
-    if status == NscStatus::Ok as u32 {
-        hprintln!("[E2E] {} = PASS", name);
-        *pass += 1;
-    } else {
-        hprintln!("[E2E] {} = FAIL (status {})", name, status);
-        *fail += 1;
-    }
-}
-
-/// Like `report` but expects a specific *non-Ok* status. Used for negative
-/// test scenarios that exercise error paths in the secure-world gateway.
-fn report_expect(name: &str, status: u32, expected: NscStatus, pass: &mut u32, fail: &mut u32) {
-    if status == expected as u32 {
-        hprintln!("[E2E] {} = PASS (expected status {})", name, status);
-        *pass += 1;
-    } else {
-        hprintln!("[E2E] {} = FAIL (got {}, expected {})", name, status, expected as u32);
-        *fail += 1;
-    }
 }

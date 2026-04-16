@@ -1,82 +1,100 @@
-//! `CMD_SIGN_USEROP` — wrap a user-authorised inner EIP-1559
-//! transaction as an ERC-4337 v0.6 `UserOperation`, display the inner
-//! tx on the trusted UI, recompute the canonical `userOpHash` natively,
-//! and sign that hash with SLH-DSA-SHA2-128f.
+//! CMD_SIGN_USEROP — unified JARDÍN Type 1 / Type 2 sign state machine.
 //!
-//! ## Deployment modes
+//! The one and only signing command in the post-cutover wallet. Given an
+//! inner transaction (to, value, data) plus the AA wrapper parameters,
+//! the firmware transparently handles slot registration (Type 1) when
+//! needed and always produces a Type 2 FORS+C signature for the user's
+//! actual tx.
 //!
-//! The first byte of the payload is the **mode byte**:
+//! The companion submits up to two EntryPoint v0.9 PackedUserOperations:
 //!
-//!   * `0` — deployed, no ERC-20 bundle (legacy default)
-//!   * `1` — deployed, with ERC-20 bundle (legacy default)
-//!   * `2` — **not deployed**: firmware generates initCode automatically
-//!   * `3` — not deployed + with ERC-20 bundle
+//!   1. Type 1 — slot registration UserOp. `callData = execute(sender, 0, "")`
+//!      (a no-op call to self). Signature wraps a full SPHINCS+C11 sig
+//!      against the C11 master key, plus the raw randomiser `r` and the
+//!      N-truncated sub-key `(subPkSeed, subPkRoot)`. The wallet
+//!      contract validates the C11 sig and, as a side effect, records
+//!      `slots[keccak256(r)] = keccak256(subPkSeed || subPkRoot)`.
 //!
-//! When mode ≥ 2, the firmware derives the bootstrap keypair internally,
-//! produces the factory authorization signature, builds and hashes the
-//! initCode, and includes it in the structured UserOp response alongside
-//! the reconstructed callData and the main-signer PQSignatureWrapper.
+//!   2. Type 2 — user tx UserOp. `callData = execute(to, value, data)`.
+//!      Signature wraps a FORS+C sig against the registered sub-key.
 //!
-//! ## Why the secure world (and not NS) computes the userOpHash
+//! The state machine:
 //!
-//! The single point of authorisation in this device is the trusted UI:
-//! whatever bytes the user confirms are exactly the bytes that get
-//! authorised on chain. For a normal EIP-1559 sign that's the keccak256
-//! of the displayed envelope. For an ERC-4337 UserOp the EntryPoint
-//! actually executes `userOp.callData`, which the user never sees as
-//! such — they see "send 1 ETH to 0xabc". So the secure world has to
-//! reconstruct the callData byte-for-byte from the displayed inner tx
-//! and feed only that reconstruction into the userOpHash. A hostile
-//! NS that swapped the AA wrapper would have the secure world produce a
-//! signature over a hash that doesn't match what NS gave the bundler,
-//! so verification on chain would fail loud — never silent fund theft.
+//! ```text
+//!   read SlotState from flash
+//!   ├── none / not-registered / chain-mismatch    → FirstSign (slot_index = hint)
+//!   │                                                emit Type 1 + Type 2
+//!   ├── registered & next_q <= Q_MAX               → Normal
+//!   │                                                emit Type 2 only
+//!   └── registered & next_q > Q_MAX                → Rotate (slot_index + 1)
+//!                                                    emit Type 1 + Type 2
+//! ```
 //!
-//! ## Wire format
+//! `next_q` is persisted to flash **before** the Type 2 bytes are
+//! released to NS. A power-cycle after sign-but-before-flash would
+//! otherwise allow q reuse and FORS+C security collapses under reuse
+//! (128 → 105 bits at q=2, lower with more).
 //!
-//! See `sphincs_tz_shared::CMD_SIGN_USEROP` for the canonical layout.
+//! Every signature is verified locally before being written to NS
+//! (fault-injection guard).
+//!
+//! See `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN` for the input
+//! wire format.
 
 use sphincs_tz_shared::{
-    NscStatus, MAX_TX_LEN, MAX_USEROP_RESPONSE_LEN, USEROP_HEADER_LEN, USEROP_PREFIX_LEN,
+    NscStatus, C11_SIG_LEN, JARDIN_FORSC_BODY, JARDIN_TYPE1_LEN, JARDIN_TYPE1_MARKER,
+    JARDIN_TYPE2_HEADER_LEN, JARDIN_TYPE2_MARKER, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN,
+    SIGN_USEROP_HEADER_LEN, ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN,
+    ZK_STRING_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
+use zeroize::Zeroize;
 
+use super::jardin_flash::{self, SlotState, FLAG_SLOT_REGISTERED};
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::GatewayArgs;
+use crate::aa::userop::{
+    compute_user_op_hash_v09, reconstruct_execute_calldata, AaUserOpParamsV09, KECCAK_EMPTY,
+};
+use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
+use crate::erc20::calldata::{parse_erc20_calldata, Erc20Call};
+use crate::tx::display::{
+    render_blind_sign_pages, render_erc20_known_pages, render_erc20_unknown_pages, render_pages,
+};
+use crate::tx::eip1559::{Eip1559Tx, U256};
+use crate::tx::hash::keccak256;
 use crate::ui;
 
+/// Reserve enough room to TOCTOU-snapshot the largest valid input the
+/// gateway will accept.
+const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
+    + MAX_TX_LEN
+    + 2 + MAX_ERC20_BUNDLE_LEN
+    + 2 + ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN;
+
+/// Mode the state machine dispatches on.
+enum Mode {
+    FirstSign,
+    Normal(SlotState),
+    Rotate { from: SlotState },
+}
+
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
-    use crate::aa::userop::parse_header;
-    use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
-    use crate::erc20::{dispatch_tx, TxKind};
-    use crate::tx::{
-        display::{
-            render_blind_sign_pages, render_contract_creation_pages, render_erc20_known_pages,
-            render_erc20_unknown_pages, render_pages,
-        },
-        eip1559,
-    };
     use crate::ui::confirm::{confirm, ConfirmResult};
 
     ui::show_status("Sign", "validating...");
 
+    // ── 1. Unlock check ─────────────────────────────────────────────
     if !super::state::peek_state(|s| s.pin_verified) {
         ui::show_status("Sign", "not unlocked");
         return NscStatus::NotInitialized as u32;
     }
 
+    // ── 2. Pointer + length validation ───────────────────────────────
     let payload_ptr = args.arg0 as *const u8;
     let out_ptr = args.arg1 as *mut u8;
-    let has_ots_trailer = args.arg2 & 0x8000_0000 != 0;
-    let total_len = (args.arg2 & 0x7FFF_FFFF) as usize;
-    //
-    // NOTE: These are used only for the PQSignatureWrapper header and
-    // the initCode path. The v1 legacy path ignores them.
+    let total_len = args.arg2 as usize;
 
-    // 1. Pointer + size validation.
-    // The v2 USB handler may append an 8-byte OTS trailer (key_index + ots_index).
-    const OTS_TRAILER_LEN: usize = 8;
-    if total_len < USEROP_PREFIX_LEN + 1
-        || total_len > USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN + OTS_TRAILER_LEN
-    {
+    if total_len < SIGN_USEROP_HEADER_LEN || total_len > SNAP_LEN {
         ui::show_status("Sign", "bad length");
         return NscStatus::InvalidPointer as u32;
     }
@@ -84,143 +102,236 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign", "bad ptr");
         return NscStatus::InvalidPointer as u32;
     }
+    if !validate_ns_write_ptr(args.arg1, MAX_JARDIN_RESPONSE_LEN) {
+        ui::show_status("Sign", "bad out");
+        return NscStatus::InvalidPointer as u32;
+    }
 
-    // 2. TOCTOU snapshot
-    const SNAP_LEN: usize = USEROP_PREFIX_LEN + MAX_TX_LEN + 4 + MAX_ERC20_BUNDLE_LEN + OTS_TRAILER_LEN;
+    // ── 3. TOCTOU snapshot ──────────────────────────────────────────
     static mut SNAP_BUF: [u8; SNAP_LEN] = [0u8; SNAP_LEN];
-    let buf = &mut SNAP_BUF[..];
-    if total_len > buf.len() {
-        return NscStatus::InvalidPointer as u32;
-    }
+    let snap = &mut SNAP_BUF[..total_len];
     for i in 0..total_len {
-        buf[i] = core::ptr::read_volatile(payload_ptr.add(i));
+        snap[i] = core::ptr::read_volatile(payload_ptr.add(i));
     }
 
-    ui::show_status("Sign", "parsing...");
+    // ── 4. Parse header (big-endian, fixed offsets) ────────────────
+    let chain_id = u64::from_be_bytes([
+        snap[0], snap[1], snap[2], snap[3], snap[4], snap[5], snap[6], snap[7],
+    ]);
+    let slot_index_hint = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
+    let mut sender = [0u8; 20];
+    sender.copy_from_slice(&snap[12..32]);
+    let mut entry_point = [0u8; 20];
+    entry_point.copy_from_slice(&snap[32..52]);
+    let mut nonce = [0u8; 32];
+    nonce.copy_from_slice(&snap[52..84]);
+    let mut account_gas_limits = [0u8; 32];
+    account_gas_limits.copy_from_slice(&snap[84..116]);
+    let mut pre_verification_gas = [0u8; 32];
+    pre_verification_gas.copy_from_slice(&snap[116..148]);
+    let mut gas_fees = [0u8; 32];
+    gas_fees.copy_from_slice(&snap[148..180]);
+    let mut paymaster_and_data_hash = [0u8; 32];
+    paymaster_and_data_hash.copy_from_slice(&snap[180..212]);
+    let mut to_address = [0u8; 20];
+    to_address.copy_from_slice(&snap[212..232]);
+    let mut value = [0u8; 32];
+    value.copy_from_slice(&snap[232..264]);
+    let data_len = u16::from_be_bytes([snap[264], snap[265]]) as usize;
 
-    // 3. Parse mode byte.
-    let mode = buf[0];
-    let has_bundle = mode == 1 || mode == 3;
-    let needs_init_code = mode >= 2;
+    if data_len > MAX_TX_LEN || SIGN_USEROP_HEADER_LEN + data_len > total_len {
+        ui::show_status("Sign", "bad data_len");
+        return NscStatus::InvalidPointer as u32;
+    }
 
-    // Validate output buffer size based on mode.
-    let required_out = if needs_init_code {
-        MAX_USEROP_RESPONSE_LEN
+    // Copy the variable-length sections into owned buffers so we can
+    // release the SNAP_BUF lifetime after parsing. `inner_data` stays a
+    // borrow into the snapshot because the sign path copies it into the
+    // execute() calldata anyway.
+    let inner_data: &[u8] =
+        &snap[SIGN_USEROP_HEADER_LEN..SIGN_USEROP_HEADER_LEN + data_len];
+
+    // ── 4b. Optional trailer: ERC-20 bundle + ZK clear-sign bundle ──
+    //
+    // Layout (appended after inner_data):
+    //   erc20_bundle_len u16 BE
+    //   erc20_bundle     [u8; erc20_bundle_len]
+    //   zk_bundle_len    u16 BE
+    //   zk_bundle        [u8; zk_bundle_len]
+    //
+    // Both length fields default to zero when absent. Older companions
+    // that don't know about the trailer simply set total_len to
+    // SIGN_USEROP_HEADER_LEN + data_len and the firmware treats the
+    // missing fields as zero.
+    let mut cursor = SIGN_USEROP_HEADER_LEN + data_len;
+
+    let erc20_bundle_len = if cursor + 2 <= total_len {
+        let l = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
+        cursor += 2;
+        l
     } else {
-        MAX_USEROP_RESPONSE_LEN // same max — actual write is smaller
+        0
     };
-    if !validate_ns_write_ptr(args.arg1, required_out) {
+    if erc20_bundle_len > MAX_ERC20_BUNDLE_LEN || cursor + erc20_bundle_len > total_len {
+        ui::show_status("Sign", "bad erc20 bundle");
+        return NscStatus::InvalidPointer as u32;
+    }
+    let erc20_bundle_start = cursor;
+    cursor += erc20_bundle_len;
+
+    let zk_bundle_len = if cursor + 2 <= total_len {
+        let l = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
+        cursor += 2;
+        l
+    } else {
+        0
+    };
+    if zk_bundle_len > ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
+        || cursor + zk_bundle_len > total_len
+    {
+        ui::show_status("Sign", "bad zk bundle");
+        return NscStatus::InvalidPointer as u32;
+    }
+    let zk_bundle_start = cursor;
+    cursor += zk_bundle_len;
+
+    if cursor != total_len {
+        ui::show_status("Sign", "trailing bytes");
         return NscStatus::InvalidPointer as u32;
     }
 
-    // 4. Parse the fixed AA header.
-    let mut aa = match parse_header(&buf[..USEROP_HEADER_LEN]) {
-        Ok(a) => a,
-        Err(_) => return NscStatus::InvalidPointer as u32,
+    // ── 5. Build a display-time Eip1559Tx shim ──────────────────────
+    //
+    // The real EIP-1559 parser owns (chain_id, nonce, gas fields, to,
+    // value, data_len). For the v3 wire format we don't receive a full
+    // EIP-1559 envelope, just the fields that matter to the user's
+    // trusted-UI display. Fill in what the renderer needs and zero out
+    // the rest — the gas fields live on the AA wrapper side now.
+    let tx_for_display = Eip1559Tx {
+        chain_id,
+        nonce: 0,
+        max_priority_fee_per_gas: U256::zero(),
+        max_fee_per_gas: U256::zero(),
+        gas_limit: 0,
+        to: Some(to_address),
+        value: U256(value),
+        data_len,
+        access_list_count: 0,
+        signing_hash: [0u8; 32],
     };
 
-    // 5. Parse the inner-tx length and locate the envelope.
-    let tx_len_off = USEROP_HEADER_LEN;
-    let tx_len_bytes: [u8; 4] = match buf[tx_len_off..tx_len_off + 4].try_into() {
-        Ok(v) => v,
-        Err(_) => return NscStatus::InvalidPointer as u32,
-    };
-    let tx_len = u32::from_le_bytes(tx_len_bytes) as usize;
-    if tx_len == 0 || tx_len > MAX_TX_LEN {
-        return NscStatus::InvalidPointer as u32;
-    }
-    let tx_start = USEROP_PREFIX_LEN;
-    let tx_end = tx_start + tx_len;
-    if tx_end > total_len {
-        return NscStatus::InvalidPointer as u32;
-    }
-    let tx_bytes = &buf[tx_start..tx_end];
-
-    // 6. Parse the inner EIP-1559 envelope.
-    let parsed = match eip1559::parse(tx_bytes) {
-        Ok(t) => t,
-        Err(_) => {
-            ui::show_status("Bad tx", "(parse fail)");
-            return NscStatus::CryptoError as u32;
-        }
-    };
-
-    if aa.chain_id != parsed.tx.chain_id {
-        ui::show_status("Bad tx", "(chain mismatch)");
-        return NscStatus::CryptoError as u32;
-    }
-
-    // 7. Optional ERC-20 metadata bundle.
-    let verified_meta: Option<Erc20Metadata<'_>> = if has_bundle {
-        if tx_end + 4 > total_len {
-            None
-        } else {
-            let blen_bytes: [u8; 4] = match buf[tx_end..tx_end + 4].try_into() {
-                Ok(v) => v,
-                Err(_) => return NscStatus::InvalidPointer as u32,
-            };
-            let bundle_len = u32::from_le_bytes(blen_bytes) as usize;
-            let bundle_start = tx_end + 4;
-            let bundle_end = bundle_start + bundle_len;
-            if bundle_len == 0 || bundle_len > MAX_ERC20_BUNDLE_LEN || bundle_end > total_len {
-                None
-            } else {
-                match verify_erc20_bundle(&buf[bundle_start..bundle_end]) {
-                    Some(meta) => {
-                        let to_match = match parsed.tx.to {
-                            Some(addr) => addr == meta.contract,
-                            None => false,
-                        };
-                        if meta.chain_id == parsed.tx.chain_id && to_match {
-                            Some(meta)
-                        } else {
-                            None
-                        }
-                    }
-                    None => None,
+    // ── 6a. Verify the optional ERC-20 metadata bundle ──────────────
+    //
+    // A verified bundle upgrades an ERC-20 transfer from the
+    // `Erc20Unknown` trust level ("structurally decoded, amount shown
+    // as raw uint256") to `Erc20Known` ("trusted symbol + decimals
+    // from the firmware-embedded Merkle-rooted DB"). The cross-checks
+    // against `tx.chain_id` and `tx.to` live here, NOT inside
+    // `verify_erc20_bundle`.
+    let verified_meta: Option<Erc20Metadata<'_>> = if erc20_bundle_len > 0 {
+        let bundle_slice =
+            &snap[erc20_bundle_start..erc20_bundle_start + erc20_bundle_len];
+        match verify_erc20_bundle(bundle_slice) {
+            Some(meta) => {
+                let contract_match = match tx_for_display.to {
+                    Some(addr) => addr == meta.contract,
+                    None => false,
+                };
+                if meta.chain_id == chain_id && contract_match {
+                    Some(meta)
+                } else {
+                    // Bundle is structurally valid but doesn't match the
+                    // tx being signed. Fall back to Erc20Unknown rather
+                    // than reject the sign — the bundle is just a
+                    // display hint.
+                    None
                 }
             }
+            None => None,
         }
     } else {
         None
     };
 
-    // 8. Trust-ladder dispatch + trusted UI confirmation.
-    let kind = dispatch_tx(&parsed, verified_meta);
-
-    #[cfg(all(feature = "e2e-test", feature = "debug-log"))]
+    // ── 6b. Verify the optional ZK clear-sign bundle ────────────────
+    //
+    // When present, the NS world is attesting that `readable` is a
+    // human-sensible interpretation of `calldata`, and the secure
+    // world must display `readable` instead of dumping the raw
+    // calldata hex. The Groth16 proof binds Poseidon(calldata) and
+    // Poseidon(readable) to a circuit-specific VK that was committed
+    // to in the firmware's Merkle-rooted VK DB.
+    let zk_verified: Option<([u8; ZK_MAX_CALLDATA], [u8; ZK_STRING_LEN])> = if zk_bundle_len > 0
+        && zk_bundle_len >= ZK_CLEAR_SIGN_FIXED_LEN
     {
-        let kind_name: &str = match &kind {
-            TxKind::ValueTransfer => "ValueTransfer",
-            TxKind::Erc20Known(_, _) => "Erc20Known",
-            TxKind::Erc20Unknown(_) => "Erc20Unknown",
-            TxKind::ContractCall => "ContractCall",
-            TxKind::ContractCreation => "ContractCreation",
-        };
-        secure_log!("[S][e2e] cmd_sign_userop dispatch = {}", kind_name);
-    }
+        let zk_slice = &snap[zk_bundle_start..zk_bundle_start + zk_bundle_len];
+        let proof_bytes: &[u8; ZK_PROOF_LEN] = zk_slice[..ZK_PROOF_LEN].try_into().unwrap();
+        let calldata_bytes: &[u8; ZK_MAX_CALLDATA] = zk_slice
+            [ZK_PROOF_LEN..ZK_PROOF_LEN + ZK_MAX_CALLDATA]
+            .try_into()
+            .unwrap();
+        let readable_bytes: &[u8; ZK_STRING_LEN] = zk_slice
+            [ZK_PROOF_LEN + ZK_MAX_CALLDATA..ZK_CLEAR_SIGN_FIXED_LEN]
+            .try_into()
+            .unwrap();
+        let vk_bundle = &zk_slice[ZK_CLEAR_SIGN_FIXED_LEN..];
 
-    if matches!(kind, TxKind::ContractCreation) {
-        ui::show_status("UserOp", "no CREATE");
-        return NscStatus::CryptoError as u32;
-    }
-
-    let pages = match kind {
-        TxKind::ValueTransfer => render_pages(&parsed.tx),
-        TxKind::Erc20Known(call, meta) => render_erc20_known_pages(&parsed.tx, &call, &meta),
-        TxKind::Erc20Unknown(call) => render_erc20_unknown_pages(&parsed.tx, &call),
-        TxKind::ContractCall => render_blind_sign_pages(&parsed.tx, parsed.data),
-        TxKind::ContractCreation => render_contract_creation_pages(&parsed.tx, parsed.data),
+        // Verify the VK bundle against the firmware-embedded Merkle
+        // root, compute Poseidon public signals, and run Groth16.
+        match crate::zk::verify_clear_sign_proof(
+            proof_bytes,
+            calldata_bytes,
+            readable_bytes,
+            vk_bundle,
+        ) {
+            Ok(()) => {
+                // Cross-check: the bound calldata MUST match what the
+                // user actually wants to sign, otherwise a malicious
+                // NS could attest to a different readable string and
+                // have the secure world sign an unrelated tx.
+                let calldata_prefix = &inner_data[..inner_data.len().min(ZK_MAX_CALLDATA)];
+                let attested_prefix = &calldata_bytes[..calldata_prefix.len()];
+                if calldata_prefix == attested_prefix
+                    && calldata_bytes[calldata_prefix.len()..]
+                        .iter()
+                        .all(|&b| b == 0)
+                {
+                    let mut cd = [0u8; ZK_MAX_CALLDATA];
+                    cd.copy_from_slice(calldata_bytes);
+                    let mut rd = [0u8; ZK_STRING_LEN];
+                    rd.copy_from_slice(readable_bytes);
+                    Some((cd, rd))
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
     };
 
-    // For undeployed accounts, add a visual hint on the confirmation screen.
-    #[cfg(not(feature = "e2e-test"))]
-    if needs_init_code {
-        ui::show_status("DEPLOY+Sign", "confirm...");
-    }
-
-    let confirm_result = confirm(pages.as_slice());
-    match confirm_result {
+    // ── 6c. Pick the render flavour ────────────────────────────────
+    let pages = if let Some((_, readable)) = zk_verified.as_ref() {
+        // ZK clear-sign: the NS-attested readable string is on screen
+        // instead of the raw calldata.
+        crate::zk::render_clear_sign_pages(&tx_for_display, readable)
+    } else if inner_data.is_empty() {
+        render_pages(&tx_for_display)
+    } else {
+        match parse_erc20_calldata(inner_data) {
+            Some(call) => {
+                if let Some(meta) = verified_meta.as_ref() {
+                    render_erc20_known_pages(&tx_for_display, &call, meta)
+                } else {
+                    render_erc20_unknown_pages(&tx_for_display, &call)
+                }
+            }
+            None => render_blind_sign_pages(&tx_for_display, inner_data),
+        }
+    };
+    let _erc20_type_marker: Option<Erc20Call> = None; // suppress unused import when cfg trims
+    match confirm(pages.as_slice()) {
         ConfirmResult::Confirmed => {}
         ConfirmResult::Cancelled => {
             ui::show_status("Cancelled", "");
@@ -233,65 +344,371 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // 9. Extract key_index and ots_index from the TOCTOU-snapped buffer.
-    // The v2 USB handler appends key_index(4 BE) + ots_index(4 BE) after
-    // the wire payload and sets bit 31 of total_len to signal presence.
-    // Legacy v1 callers (QEMU mailbox) don't set the flag → default to 0.
-    let (key_index, ots_index, payload_len) = if has_ots_trailer && total_len >= 8 {
-        let pl = total_len - 8;
-        let ki = u32::from_be_bytes([buf[pl], buf[pl + 1], buf[pl + 2], buf[pl + 3]]);
-        let oi = u32::from_be_bytes([buf[pl + 4], buf[pl + 5], buf[pl + 6], buf[pl + 7]]);
-        (ki, oi, pl)
-    } else {
-        (0u32, 0u32, total_len)
+    // ── 7. Read slot state from flash, decide mode ──────────────────
+    let existing = jardin_flash::read_latest();
+    let mode = match &existing {
+        Some(s)
+            if s.chain_id == chain_id
+                && s.is_registered()
+                && (s.next_q as usize) <= jardin_fosc::params::Q_MAX =>
+        {
+            Mode::Normal(s.clone())
+        }
+        Some(s)
+            if s.chain_id == chain_id
+                && s.is_registered()
+                && (s.next_q as usize) > jardin_fosc::params::Q_MAX =>
+        {
+            Mode::Rotate { from: s.clone() }
+        }
+        _ => Mode::FirstSign,
     };
-    let _ = payload_len; // payload parsing above used total_len before the trailer was stripped
 
-    // 10. OTS monotonicity: only enforced for v2 callers that supply
-    //     explicit key_index/ots_index via the trailer. Legacy v1 callers
-    //     default to (0, 0) and don't support OTS tracking.
-    if has_ots_trailer {
-        let ots_ok = super::state::peek_state(|s| {
-            if !s.has_signed {
-                return true;
-            }
-            if s.last_chain_id == aa.chain_id && s.last_key_index == key_index {
-                ots_index > s.last_ots_index
-            } else {
-                true // different chain or key epoch: companion is authoritative
-            }
-        });
-        if !ots_ok {
-            ui::show_status("OTS reuse", "rejected");
+    // ── 8. Reconstruct entropy + derive JARDIN master ──────────────
+    let master_secret = super::state::peek_state(|s| s.master_secret);
+    let mut entropy_blob = [0u8; 64];
+    let entropy_blob_len = {
+        use crate::secure_element::WalletStore;
+        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+        match se.read_entropy_blob(&mut entropy_blob) {
+            Ok(l) => l,
+            Err(_) => return NscStatus::InternalError as u32,
+        }
+    };
+    let mut entropy = match crate::crypto::decrypt_entropy_blob(
+        &entropy_blob[..entropy_blob_len],
+        &master_secret,
+    ) {
+        Ok(e) => e,
+        Err(_) => {
+            entropy_blob.zeroize();
             return NscStatus::CryptoError as u32;
         }
+    };
+    entropy_blob.zeroize();
+    let jardin_master_entropy = crate::crypto::jardin_master_entropy_from_entropy(&entropy);
+
+    // ── 9. Build Type 2 callData: execute(to, value, data) ──────────
+    let t2_exec = match reconstruct_execute_calldata(&tx_for_display, inner_data) {
+        Ok(c) => c,
+        Err(_) => {
+            entropy.zeroize();
+            return NscStatus::CryptoError as u32;
+        }
+    };
+
+    // ── 10. Nonces per UserOp ──────────────────────────────────────
+    //
+    // Companion supplies the base nonce. When Type 1 is present it
+    // runs FIRST at the supplied nonce; Type 2 then goes at nonce+1.
+    // In Normal mode Type 2 goes at the supplied nonce directly.
+    let needs_type1 = !matches!(mode, Mode::Normal(_));
+    let mut type2_nonce = nonce;
+    if needs_type1 {
+        add_one_to_be_u256(&mut type2_nonce);
     }
 
-    // 11. Hand off to the signing tail.
-    let mut result_len: usize = 0;
-    let status = super::userop_tail::sign_userop_full(
-        &mut aa,
-        &parsed.tx,
-        parsed.data,
-        out_ptr,
-        &mut result_len as *mut usize,
-        needs_init_code,
-        key_index,
-        ots_index,
-        "Signed",
-    );
+    // ── 11. Determine the slot_index and initialise the slot ────────
+    let new_slot_index = match &mode {
+        Mode::FirstSign => slot_index_hint,
+        Mode::Rotate { from } => from.slot_index + 1,
+        Mode::Normal(s) => s.slot_index,
+    };
 
-    // Record OTS state on success so the next signing request for the
-    // same (chain_id, key_index) must present a strictly greater index.
-    // Only tracked for v2 callers with explicit OTS indices.
-    if status == NscStatus::Ok as u32 && has_ots_trailer {
+    let need_keygen = match &mode {
+        Mode::FirstSign | Mode::Rotate { .. } => true,
+        Mode::Normal(stored) => unsafe {
+            match &*core::ptr::addr_of!(super::state::JARDIN_SLOT) {
+                Some(cur) => {
+                    cur.pk_seed[..16] != stored.sub_pk_seed
+                        || cur.pk_root[..16] != stored.sub_pk_root
+                        || cur.next_q != stored.next_q
+                }
+                None => true,
+            }
+        },
+    };
+
+    if need_keygen {
+        ui::show_progress("Slot keygen", 0);
+        let slot_entropy =
+            jardin_fosc::hash::jardin_slot_entropy(&jardin_master_entropy, new_slot_index);
+        let mut slot = jardin_fosc::JardinSlot::keygen_with_progress(slot_entropy, |p| {
+            ui::show_progress("Slot keygen", p);
+        });
+        if let Mode::Normal(stored) = &mode {
+            slot.next_q = stored.next_q;
+        }
+        unsafe {
+            *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(slot);
+        }
         super::state::with_state(|s| {
-            s.last_chain_id = aa.chain_id;
-            s.last_key_index = key_index;
-            s.last_ots_index = ots_index;
-            s.has_signed = true;
+            s.jardin_master_entropy = jardin_master_entropy;
+            s.jardin_master_derived = true;
+            s.jardin_chain_id = chain_id;
+            s.jardin_slot_index = new_slot_index;
+            s.jardin_slot_active = true;
         });
     }
 
-    status
+    // ── 12. Type 1 (if needed) ─────────────────────────────────────
+    let mut type1_out = [0u8; JARDIN_TYPE1_LEN];
+    let mut h_r = [0u8; 32];
+
+    if needs_type1 {
+        ui::show_status("Slot register", "building type 1");
+
+        // Deterministic r per (master, slot_index). H(r) is the on-chain slotKey.
+        let r = jardin_fosc::hash::jardin_slot_r(&jardin_master_entropy, new_slot_index);
+        h_r = jardin_fosc::hash::keccak256(&r);
+
+        // Type 1 callData: execute(sender, 0, "")
+        let t1_tx = Eip1559Tx {
+            chain_id,
+            nonce: 0,
+            max_priority_fee_per_gas: U256::zero(),
+            max_fee_per_gas: U256::zero(),
+            gas_limit: 0,
+            to: Some(sender),
+            value: U256::zero(),
+            data_len: 0,
+            access_list_count: 0,
+            signing_hash: [0u8; 32],
+        };
+        let t1_exec = match reconstruct_execute_calldata(&t1_tx, &[]) {
+            Ok(c) => c,
+            Err(_) => {
+                entropy.zeroize();
+                return NscStatus::CryptoError as u32;
+            }
+        };
+
+        // Type 1 userOpHash (EntryPoint v0.9).
+        let t1_params = AaUserOpParamsV09 {
+            sender,
+            entry_point,
+            chain_id,
+            nonce: U256(nonce),
+            init_code_hash: KECCAK_EMPTY,
+            account_gas_limits,
+            pre_verification_gas: U256(pre_verification_gas),
+            gas_fees,
+            paymaster_and_data_hash,
+        };
+        let t1_call_hash = keccak256(t1_exec.as_slice());
+        let t1_user_op_hash = compute_user_op_hash_v09(&t1_params, &t1_call_hash);
+
+        // C11 keygen + sign.
+        ui::show_progress("C11 keygen", 0);
+        let (c11_sk, _c11_pk_seed_32, _c11_pk_root_32) =
+            crate::crypto::derive_c11_master_keypair_from_entropy_with_progress(
+                &entropy,
+                |p| ui::show_progress("C11 keygen", p),
+            );
+        let c11_sig = match crate::crypto::c11_sign_verified_with_progress(
+            &c11_sk,
+            &t1_user_op_hash,
+            c11_sign_progress,
+        ) {
+            Ok(s) => s,
+            Err(_) => {
+                entropy.zeroize();
+                return NscStatus::CryptoError as u32;
+            }
+        };
+        drop(c11_sk); // Zeroise on drop.
+
+        // Extract the newly-built sub-key commitments from the slot.
+        let (sub_pk_seed, sub_pk_root) = unsafe {
+            match &*core::ptr::addr_of!(super::state::JARDIN_SLOT) {
+                Some(s) => {
+                    let mut seed = [0u8; 16];
+                    let mut root = [0u8; 16];
+                    seed.copy_from_slice(&s.pk_seed[..16]);
+                    root.copy_from_slice(&s.pk_root[..16]);
+                    (seed, root)
+                }
+                None => {
+                    entropy.zeroize();
+                    return NscStatus::InternalError as u32;
+                }
+            }
+        };
+
+        // Assemble Type 1 payload.
+        type1_out[0] = JARDIN_TYPE1_MARKER;
+        type1_out[1..33].copy_from_slice(&r);
+        type1_out[33..49].copy_from_slice(&sub_pk_seed);
+        type1_out[49..65].copy_from_slice(&sub_pk_root);
+        type1_out[65..65 + C11_SIG_LEN].copy_from_slice(&c11_sig);
+    } else if let Mode::Normal(stored) = &mode {
+        h_r = stored.h_r;
+    }
+
+    // ── 13. Type 2 sign the user's userOpHash ──────────────────────
+    let (sub_pk_seed_16, sub_pk_root_16) = unsafe {
+        match &*core::ptr::addr_of!(super::state::JARDIN_SLOT) {
+            Some(s) => {
+                let mut seed = [0u8; 16];
+                let mut root = [0u8; 16];
+                seed.copy_from_slice(&s.pk_seed[..16]);
+                root.copy_from_slice(&s.pk_root[..16]);
+                (seed, root)
+            }
+            None => {
+                entropy.zeroize();
+                return NscStatus::InternalError as u32;
+            }
+        }
+    };
+
+    let t2_params = AaUserOpParamsV09 {
+        sender,
+        entry_point,
+        chain_id,
+        nonce: U256(type2_nonce),
+        init_code_hash: KECCAK_EMPTY,
+        account_gas_limits,
+        pre_verification_gas: U256(pre_verification_gas),
+        gas_fees,
+        paymaster_and_data_hash,
+    };
+    let t2_call_hash = keccak256(t2_exec.as_slice());
+    let t2_user_op_hash = compute_user_op_hash_v09(&t2_params, &t2_call_hash);
+
+    ui::show_progress("FORS+C sign", 0);
+    let slot_ref = unsafe {
+        match &mut *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) {
+            Some(s) => s,
+            None => {
+                entropy.zeroize();
+                return NscStatus::InternalError as u32;
+            }
+        }
+    };
+
+    if slot_ref.is_exhausted() {
+        entropy.zeroize();
+        ui::show_status("Slot exhausted", "rotate");
+        return NscStatus::SlotExhausted as u32;
+    }
+
+    let q_used = slot_ref.next_q;
+    let sig = match slot_ref.sign(&t2_user_op_hash) {
+        Ok(s) => s,
+        Err(_) => {
+            entropy.zeroize();
+            return NscStatus::CryptoError as u32;
+        }
+    };
+    // Verify-before-release.
+    if !jardin_fosc::verify(
+        &slot_ref.pk_seed,
+        &slot_ref.pk_root,
+        &t2_user_op_hash,
+        &sig.data[..sig.len],
+    ) {
+        entropy.zeroize();
+        ui::show_status("Sig verify", "FAIL");
+        return NscStatus::CryptoError as u32;
+    }
+
+    // ── 14. Persist next_q BEFORE releasing bytes ──────────────────
+    let mut new_state = SlotState {
+        seq: 0,
+        chain_id,
+        slot_index: new_slot_index,
+        next_q: q_used + 1,
+        flags: FLAG_SLOT_REGISTERED,
+        h_r,
+        sub_pk_seed: sub_pk_seed_16,
+        sub_pk_root: sub_pk_root_16,
+    };
+    if jardin_flash::write(&new_state).is_err() {
+        entropy.zeroize();
+        new_state.zeroize();
+        ui::show_status("Flash write", "FAIL");
+        return NscStatus::InternalError as u32;
+    }
+    new_state.zeroize();
+
+    // ── 15. Assemble output bundle ─────────────────────────────────
+    let mut write_pos: usize = 0;
+    let type1_len = if needs_type1 { JARDIN_TYPE1_LEN } else { 0 };
+    let t1_len_be = (type1_len as u32).to_be_bytes();
+    for i in 0..4 {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), t1_len_be[i]);
+    }
+    write_pos += 4;
+    if needs_type1 {
+        for i in 0..JARDIN_TYPE1_LEN {
+            core::ptr::write_volatile(out_ptr.add(write_pos + i), type1_out[i]);
+        }
+        write_pos += JARDIN_TYPE1_LEN;
+    }
+
+    let type2_total = JARDIN_TYPE2_HEADER_LEN + sig.len;
+    debug_assert_eq!(
+        type2_total,
+        JARDIN_TYPE2_HEADER_LEN + JARDIN_FORSC_BODY + q_used as usize * 16
+    );
+    let t2_len_be = (type2_total as u32).to_be_bytes();
+    for i in 0..4 {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), t2_len_be[i]);
+    }
+    write_pos += 4;
+
+    core::ptr::write_volatile(out_ptr.add(write_pos), JARDIN_TYPE2_MARKER);
+    write_pos += 1;
+    for i in 0..32 {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), h_r[i]);
+    }
+    write_pos += 32;
+    for i in 0..16 {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), sub_pk_seed_16[i]);
+    }
+    write_pos += 16;
+    for i in 0..16 {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), sub_pk_root_16[i]);
+    }
+    write_pos += 16;
+    for i in 0..sig.len {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), sig.data[i]);
+    }
+    write_pos += sig.len;
+
+    debug_assert!(write_pos <= MAX_JARDIN_RESPONSE_LEN);
+    let _ = write_pos;
+
+    // ── 16. Zeroise transients ─────────────────────────────────────
+    entropy.zeroize();
+    type1_out.zeroize();
+
+    crate::timeout::reset_activity();
+    ui::show_status("Signed", "");
+    for _ in 0..3_000_000u32 {
+        cortex_m::asm::nop();
+    }
+    ui::show_status("PQSigner OS", "Ready");
+
+    NscStatus::Ok as u32
+}
+
+/// Increment a big-endian u256 in-place by 1. Used to bump the
+/// EntryPoint nonce by 1 between Type 1 and Type 2 UserOps.
+fn add_one_to_be_u256(v: &mut [u8; 32]) {
+    for i in (0..32).rev() {
+        let (sum, carry) = v[i].overflowing_add(1);
+        v[i] = sum;
+        if !carry {
+            return;
+        }
+    }
+    // 256-bit wrap is impossible in practice (sign count would need to
+    // exceed 2^256); if somehow reached, the zeroed buffer will be
+    // rejected on-chain.
+}
+
+fn c11_sign_progress(percent: u8) {
+    crate::ui::show_progress("C11 sign", percent);
 }

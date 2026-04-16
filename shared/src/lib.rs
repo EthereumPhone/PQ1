@@ -471,6 +471,83 @@ pub const JARDIN_ROTATION_THRESHOLD: u8 = 15;
 /// `sign_userop_with_ots` for the OTS trailer flag.
 pub const JARDIN_ROTATION_FLAG: u32 = 0x8000_0000;
 
+// ---------------------------------------------------------------------------
+// Unified JARDÍN Type 1 / Type 2 wire format (CMD_SIGN_USEROP)
+// ---------------------------------------------------------------------------
+//
+// The unified sign command emits a bundle that the companion submits as
+// up to two EntryPoint v0.9 UserOps. Byte layout MUST match the on-chain
+// PQJardinWallet verifier (phase 5) exactly.
+
+/// SPHINCS+C11 signature length (== `SIGNATURE_LEN` as of the C11 cutover).
+pub const C11_SIG_LEN: usize = SIGNATURE_LEN;
+
+/// Type 1 wire payload: `[marker(1) | r(32) | subPkSeed(16) | subPkRoot(16) | c11Sig(3976)]`.
+pub const JARDIN_TYPE1_LEN: usize = 1 + 32 + 16 + 16 + C11_SIG_LEN; // 4041
+
+/// Type 1 marker byte.
+pub const JARDIN_TYPE1_MARKER: u8 = 0x01;
+
+/// Type 2 fixed preamble: `[marker(1) | H(r)(32) | subPkSeed(16) | subPkRoot(16)]`.
+pub const JARDIN_TYPE2_HEADER_LEN: usize = 1 + 32 + 16 + 16; // 65
+
+/// Type 2 marker byte.
+pub const JARDIN_TYPE2_MARKER: u8 = 0x02;
+
+/// Type 2 wire payload at q=1: header + 2452 + 1*16.
+pub const JARDIN_TYPE2_MIN_LEN: usize = JARDIN_TYPE2_HEADER_LEN + JARDIN_FORSC_BODY + 16; // 2533
+
+/// Type 2 wire payload at q=95: header + 2452 + 95*16.
+pub const JARDIN_TYPE2_MAX_LEN: usize = JARDIN_TYPE2_HEADER_LEN + JARDIN_SIG_MAX; // 4037
+
+/// Maximum unified response = 4-byte type1 len + max type1 body + 4-byte type2 len + max type2 body.
+pub const MAX_JARDIN_RESPONSE_LEN: usize =
+    4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_MAX_LEN; // 8086
+
+/// Unified CMD_SIGN_USEROP v3 payload layout.
+///
+/// | off | size | field |
+/// |-----|------|-------|
+/// |  0  |  8  | chain_id (u64 BE) |
+/// |  8  |  4  | slot_index_hint (u32 BE; 0 on fresh wallet) |
+/// | 12  | 20  | sender (PQJardinWallet address — firmware does not recompute) |
+/// | 32  | 20  | entry_point (EntryPoint v0.9 address) |
+/// | 52  | 32  | nonce (u256 BE; base nonce for Type 1 if registration needed, else Type 2) |
+/// | 84  | 32  | account_gas_limits (bytes32, `verGas<<128 \| callGas`) |
+/// | 116 | 32  | pre_verification_gas (u256 BE) |
+/// | 148 | 32  | gas_fees (bytes32, `maxPriorityFee<<128 \| maxFee`) |
+/// | 180 | 32  | paymaster_and_data_hash (keccak256; `KECCAK_EMPTY` when empty) |
+/// | 212 | 20  | to_address (inner tx recipient) |
+/// | 232 | 32  | value (u256 BE) |
+/// | 264 |  2  | data_len (u16 BE; 0..=MAX_TX_LEN) |
+/// | 266 |  N  | data |
+/// | 266+N | 2 | erc20_bundle_len (u16 BE; 0 = no bundle) |
+/// | 268+N | B | erc20_bundle (Merkle-verified ERC-20 metadata, see `erc20::bundle`) |
+/// | 268+N+B | 2 | zk_bundle_len (u16 BE; 0 = no ZK clear-sign) |
+/// | 270+N+B | Z | zk_bundle (Groth16 proof + calldata + readable string + VK bundle) |
+///
+/// All three trailing sections are optional. When a section's length is
+/// zero the next section immediately follows.
+pub const SIGN_USEROP_HEADER_LEN: usize =
+    8 + 4 + 20 + 20 + 32 + 32 + 32 + 32 + 32 + 20 + 32 + 2; // 266
+
+/// Compile-time sanity check: header ends exactly at `data_len`.
+const _: () = assert!(SIGN_USEROP_HEADER_LEN == 266);
+
+/// ZK clear-sign bundle header layout (prepended to the variable-length
+/// VK bundle bytes):
+///
+/// | off | size | field |
+/// |-----|------|-------|
+/// |  0  | 384  | Groth16 proof (π.A || π.B || π.C) |
+/// | 384 | 164  | circuit-attested calldata (right-zero-padded) |
+/// | 548 |  64  | readable UTF-8 string (null-padded) |
+pub const ZK_CLEAR_SIGN_FIXED_LEN: usize = ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN;
+
+/// Maximum size of the VK bundle tail supplied after the fixed
+/// ZK_CLEAR_SIGN_FIXED_LEN prefix.
+pub const ZK_VK_BUNDLE_MAX_LEN: usize = 2048;
+
 /// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
 /// **DEPRECATED** along with CMD_SIGN_BOOTSTRAP.
 pub const CTX_DEPLOY: u8 = 0x00;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.28;
 
 /// @title IJardinVerifier
 /// @notice Interface for JARDIN FORS+C compact signature verification.

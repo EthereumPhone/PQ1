@@ -52,7 +52,6 @@ mod tx;
 // compiles only the pure logic on x86_64.
 #[cfg(not(test))]
 mod boot_ns;
-#[cfg(not(test))]
 mod crypto;
 #[cfg(not(test))]
 mod db_roots;
@@ -68,11 +67,9 @@ mod reset_cause;
 mod nsc;
 #[cfg(not(test))]
 mod rng;
-#[cfg(not(test))]
 mod pin;
 #[cfg(not(test))]
 mod sau;
-#[cfg(not(test))]
 mod secure_element;
 #[cfg(all(feature = "se050", not(test)))]
 mod se050;

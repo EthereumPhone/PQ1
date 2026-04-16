@@ -1,9 +1,7 @@
 #![no_std]
 #![no_main]
 // The `e2e-test` build swaps out the interactive main() for a scripted
-// runner in e2e_test.rs that only exercises a subset of the nsc_api
-// surface. Silence the resulting dead-code noise ONLY in that build so
-// production builds still surface genuinely unused symbols.
+// runner in e2e_test.rs.
 #![cfg_attr(feature = "e2e-test", allow(dead_code))]
 
 #[cfg(not(feature = "usb"))]
@@ -13,81 +11,30 @@ use panic_semihosting as _;
 #[cfg(feature = "usb")]
 use panic_halt as _;
 
-// NOTE: the interactive demo (`main.rs::main`) and the automated runner
-// (`e2e_test.rs::main`) each own their own imports and scratch statics.
-// Everything below this line is the interactive-only side, gated off so
-// the `e2e-test` build doesn't spew "never used" warnings.
+// Interactive demo (mainly for `make play`): uses the unified JARDÍN
+// Type 1 / Type 2 sign command to sign a single value-transfer tx.
 #[cfg(all(not(feature = "e2e-test"), feature = "usb"))]
 use cortex_m_semihosting::{debug, hprintln};
 #[cfg(not(feature = "e2e-test"))]
 use sphincs_tz_shared::{
-    NscStatus, SIGNATURE_LEN, USEROP_PREFIX_LEN, VERIFYING_KEY_LEN, ZK_HEADER_LEN,
-    ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN,
+    NscStatus, MAX_JARDIN_RESPONSE_LEN, SIGN_USEROP_HEADER_LEN,
 };
 
-mod aa;
-mod erc20_db;
 #[cfg(feature = "e2e-test")]
 mod e2e_test;
 mod nsc_api;
 #[cfg(feature = "usb")]
 mod usb;
-mod vk_db;
 
-// Static signature buffer (17KB is too large for stack)
+/// Scratch buffer for the unified sign command response (Type 1 + Type 2).
 #[cfg(not(feature = "e2e-test"))]
-static mut SIG_BUF: [u8; SIGNATURE_LEN] = [0u8; SIGNATURE_LEN];
+static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN] = [0u8; MAX_JARDIN_RESPONSE_LEN];
 
-/// Scratch buffer for ERC-4337 UserOp signing payloads.
+/// Scratch buffer for a sign payload (header + up to 256B inner calldata).
 #[cfg(not(feature = "e2e-test"))]
-const USEROP_PAYLOAD_BUF_LEN: usize = USEROP_PREFIX_LEN + 4096 + 4 + 1120 + 64;
+const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 256;
 #[cfg(not(feature = "e2e-test"))]
-static mut USEROP_PAYLOAD_BUF: [u8; USEROP_PAYLOAD_BUF_LEN] = [0u8; USEROP_PAYLOAD_BUF_LEN];
-
-/// Scratch buffer for a clear-sign payload (ZK header + AA header + tx + VK bundle).
-#[cfg(not(feature = "e2e-test"))]
-const CLEAR_SIGN_BUF_LEN: usize = 921 + 4096 + 4 + 2048;
-#[cfg(not(feature = "e2e-test"))]
-static mut CLEAR_SIGN_BUF: [u8; CLEAR_SIGN_BUF_LEN] = [0u8; CLEAR_SIGN_BUF_LEN];
-
-/// Scratch buffer for the VK bundle the NS DB returns.
-#[cfg(not(feature = "e2e-test"))]
-static mut VK_BUNDLE_BUF: [u8; 2048] = [0u8; 2048];
-
-/// A complete unsigned EIP-1559 transaction envelope (50 bytes), built by hand:
-///
-/// ```text
-/// 0x02 ‖ rlp([
-///   chain_id          = 1,
-///   nonce             = 0,
-///   max_priority_fee  = 2 gwei,
-///   max_fee           = 50 gwei,
-///   gas_limit         = 21000,
-///   to                = 0xabcdef123456789abcdef123456789abcdef1234,
-///   value             = 1 ETH (= 10^18 wei),
-///   data              = (empty),
-///   access_list       = []
-/// ])
-/// ```
-///
-/// The secure world parses this, displays the fields on the trusted UI,
-/// waits for the user to confirm via the buttons, then signs.
-#[cfg(not(feature = "e2e-test"))]
-static UNSIGNED_TX: [u8; 50] = [
-    0x02,                                                       // EIP-2718 type 2
-    0xf0,                                                       // RLP list header (0xc0 + 48)
-    0x01,                                                       // chain_id = 1
-    0x80,                                                       // nonce = 0
-    0x84, 0x77, 0x35, 0x94, 0x00,                               // max_priority = 2 gwei
-    0x85, 0x0b, 0xa4, 0x3b, 0x74, 0x00,                         // max_fee = 50 gwei
-    0x82, 0x52, 0x08,                                           // gas_limit = 21000
-    0x94,                                                       // to: 20-byte string header
-    0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde,
-    0xf1, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x12, 0x34,
-    0x88, 0x0d, 0xe0, 0xb6, 0xb3, 0xa7, 0x64, 0x00, 0x00,       // value = 10^18 wei
-    0x80,                                                       // data = empty
-    0xc0,                                                       // access_list = empty
-];
+static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
 
 // ---------------------------------------------------------------------------
 // USB main loop: polls USB HID, dispatches APDUs to the NSC gateway.
@@ -112,215 +59,112 @@ fn main() -> ! {
 }
 
 // ---------------------------------------------------------------------------
-// Interactive test harness (default, non-USB mode for QEMU testing).
+// Interactive QEMU demo (no USB). Exercises the unified JARDÍN sign
+// command end-to-end: unlock → sign a value-transfer → print result.
 // ---------------------------------------------------------------------------
 #[cfg(all(not(feature = "e2e-test"), not(feature = "usb")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS] Non-secure world started!");
 
-    // Test 1: Get remaining attempts
     let attempts = nsc_api::get_remaining_attempts();
     hprintln!("[NS] Remaining PIN attempts: {}", attempts);
-    assert_eq!(attempts, 9);
 
-    // Test 2: Get public key (no unlock required)
-    let mut pubkey = [0u8; VERIFYING_KEY_LEN];
-    let status = nsc_api::get_pubkey(&mut pubkey);
-    hprintln!("[NS] Get pubkey: {:?}", NscStatus::from(status));
-    assert_eq!(status, NscStatus::Ok as u32);
-    hprintln!("[NS] Pubkey[0..4]: {:02x?}", &pubkey[..4]);
-
-    // Test 3: Request unlock — secure world prompts user via display+buttons
     hprintln!("[NS] Requesting unlock (PIN entry on trusted UI)...");
-    hprintln!("[NS]   Press 'l' to increment digit, 'L' to advance/submit");
-    hprintln!("[NS]   Press 'h' to decrement digit, 'H' to back/cancel");
     let status = nsc_api::request_unlock();
     hprintln!("[NS] Unlock: {:?}", NscStatus::from(status));
     assert_eq!(status, NscStatus::Ok as u32);
 
-    // Test 4: Sign an EIP-1559 transaction as an ERC-4337 UserOp.
-    // The secure world parses the inner tx, displays it, reconstructs
-    // execute() callData, computes userOpHash, and signs with SLH-DSA.
-    hprintln!("[NS] Wrapping EIP-1559 envelope as UserOp for signing...");
-    hprintln!("[NS]   On the trusted UI, scroll with 'l' / 'h', long-press 'L' to confirm");
-    {
-        let wrap = aa::UserOpWrapper {
-            sender: &[0x42; 20],
-            entry_point: &[
-                0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
-                0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
-            ],
-            chain_id: 1,
-            nonce: &{ let mut n = [0u8; 32]; n[31] = 1; n },
-            call_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x01; v[30] = 0x86; v[31] = 0xa0; v },
-            verification_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x03; v[30] = 0x0d; v[31] = 0x40; v },
-            pre_verification_gas: &{ let mut v = [0u8; 32]; v[30] = 0x52; v[31] = 0x08; v },
-            max_fee_per_gas: &{
-                let mut v = [0u8; 32];
-                let b = 50_000_000_000u64.to_be_bytes();
-                v[24..32].copy_from_slice(&b); v
-            },
-            max_priority_fee_per_gas: &{
-                let mut v = [0u8; 32];
-                let b = 2_000_000_000u64.to_be_bytes();
-                v[24..32].copy_from_slice(&b); v
-            },
-            init_code_hash: &aa::KECCAK_EMPTY,
-            paymaster_and_data_hash: &aa::KECCAK_EMPTY,
-        };
-        let payload_len = unsafe {
-            aa::build_userop_payload(&wrap, &UNSIGNED_TX, &mut USEROP_PAYLOAD_BUF)
-        };
-        let status = unsafe {
-            nsc_api::sign_userop(&USEROP_PAYLOAD_BUF[..payload_len], &mut SIG_BUF)
-        };
-        hprintln!("[NS] UserOp sign: {:?}", NscStatus::from(status));
-        assert_eq!(status, NscStatus::Ok as u32);
-        hprintln!("[NS] Sig[0..8]: {:02x?}", unsafe { &SIG_BUF[..8] });
-        hprintln!("[NS] Sig len: {} bytes", SIGNATURE_LEN);
-    }
-
-    // Test 5: ZK Clear Sign — verify Groth16 proof, display ZK-verified
-    // string, then sign as UserOp (reconstruct execute() callData,
-    // compute userOpHash, sign with SLH-DSA).
-    hprintln!("[NS] Testing ZK clear signing (Aave V3 supply 1000 USDC)...");
-    hprintln!("[NS]   This verifies a Groth16 proof that the displayed string");
-    hprintln!("[NS]   faithfully represents the Aave calldata being signed.");
-    {
-        // Groth16 proof (π.A || π.B || π.C) from ZKlarity proof_supply.json
-        #[rustfmt::skip]
-        static PROOF: [u8; 384] = [
-            0x0d, 0x5f, 0xe2, 0xf5, 0x09, 0x8c, 0x66, 0x6c, 0x7f, 0xb4, 0x09, 0xba,
-            0xe4, 0x69, 0xa8, 0x85, 0xc9, 0x0b, 0x81, 0x7e, 0x0f, 0x3b, 0x54, 0x33,
-            0x24, 0x7d, 0x3d, 0xb2, 0x0d, 0x2f, 0xb7, 0xd5, 0x21, 0xc0, 0x29, 0xa0,
-            0x04, 0x8b, 0x2f, 0x21, 0xc8, 0xf0, 0x29, 0x5e, 0x21, 0x32, 0xd0, 0xe8,
-            0x10, 0x5b, 0x2b, 0xcc, 0x3b, 0x95, 0x6f, 0xa6, 0x9d, 0xf2, 0x66, 0x75,
-            0x6d, 0x27, 0x51, 0x0c, 0x19, 0xee, 0xcd, 0xd8, 0x36, 0x4d, 0xc1, 0x6c,
-            0x3b, 0xb1, 0x4d, 0x5d, 0x4b, 0x15, 0x6c, 0x9d, 0xa5, 0xff, 0x8a, 0x3e,
-            0x68, 0xf9, 0x76, 0x9c, 0xb8, 0x05, 0x6e, 0x2e, 0x01, 0x74, 0x81, 0xaa,
-            0x04, 0x99, 0xb1, 0x98, 0xae, 0x51, 0x4d, 0x30, 0x79, 0x11, 0x53, 0x79,
-            0x00, 0x36, 0xf9, 0xa0, 0x1d, 0xdc, 0x9d, 0x94, 0x70, 0x89, 0x89, 0xaa,
-            0x61, 0x84, 0xe0, 0xd9, 0xc5, 0x0e, 0x85, 0x83, 0x82, 0x56, 0x80, 0x12,
-            0xe8, 0xa0, 0xd4, 0xcb, 0x45, 0xa9, 0x0a, 0x63, 0x78, 0x64, 0x3b, 0x5f,
-            0x0d, 0xad, 0x10, 0xbc, 0x4a, 0xd4, 0x9e, 0x8a, 0xd6, 0x26, 0x36, 0x14,
-            0xa2, 0x8f, 0x62, 0xec, 0x74, 0x19, 0x02, 0x38, 0xc8, 0x05, 0xb0, 0x62,
-            0xb7, 0x2d, 0xbc, 0x1e, 0xb7, 0x25, 0xbb, 0x89, 0xe8, 0x23, 0xbf, 0x5b,
-            0xa5, 0x32, 0x3f, 0x6d, 0xc8, 0x9b, 0x33, 0xcd, 0xb3, 0x5a, 0x82, 0xc2,
-            0x11, 0x77, 0x7a, 0x18, 0xa9, 0x02, 0xcd, 0x1a, 0x96, 0xe1, 0x92, 0xdd,
-            0x0e, 0x75, 0x5b, 0x51, 0x96, 0xf2, 0xd9, 0x0e, 0xc3, 0xe3, 0x6f, 0xfa,
-            0x06, 0xf8, 0xcd, 0x1c, 0x0d, 0x89, 0xc5, 0x36, 0x2b, 0x0b, 0x2f, 0x73,
-            0xe6, 0xdc, 0x62, 0x49, 0xc0, 0x04, 0xb4, 0x10, 0x73, 0xef, 0xdd, 0x45,
-            0x10, 0x66, 0x7a, 0x37, 0xa0, 0xbb, 0x42, 0x19, 0x94, 0xd8, 0xe4, 0xbd,
-            0x50, 0xea, 0xf6, 0x11, 0xd7, 0x7d, 0x2f, 0x13, 0xa3, 0xc8, 0x09, 0x3c,
-            0x2b, 0x17, 0x21, 0x64, 0xdd, 0xef, 0x14, 0x7d, 0x06, 0x77, 0xa7, 0x7e,
-            0xb9, 0x0e, 0xd3, 0x4a, 0x17, 0x37, 0x1a, 0xb7, 0xc6, 0x69, 0xb9, 0xcd,
-            0x0f, 0x11, 0xcd, 0x45, 0x15, 0x10, 0xec, 0x5e, 0x92, 0x6a, 0x46, 0x9d,
-            0x1b, 0xab, 0x95, 0xc2, 0xe6, 0xf3, 0xe9, 0xe2, 0x85, 0xb8, 0x05, 0x80,
-            0x15, 0x06, 0x55, 0x72, 0x75, 0x52, 0x0e, 0x27, 0xfa, 0x7f, 0x37, 0x72,
-            0xd3, 0xc3, 0x73, 0x94, 0x12, 0xe0, 0x21, 0xb1, 0xb7, 0x41, 0x96, 0xc3,
-            0x15, 0xc8, 0xdb, 0xc2, 0x37, 0x7b, 0x98, 0x95, 0x81, 0x33, 0x2e, 0x6a,
-            0x95, 0xe0, 0xe1, 0x14, 0x82, 0x74, 0xb0, 0x2d, 0x84, 0x25, 0xa1, 0xc7,
-            0x97, 0xdb, 0x17, 0x79, 0x36, 0x27, 0x84, 0x3f, 0xb4, 0xf1, 0x67, 0x46,
-            0x37, 0xe2, 0x0b, 0x79, 0x96, 0x62, 0x7b, 0x01, 0x38, 0xb7, 0x6a, 0x2c,
-        ];
-
-        #[rustfmt::skip]
-        static CALLDATA: [u8; 164] = [
-            0x61, 0x7b, 0xa0, 0x37,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x3b, 0x9a, 0xca, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
-            0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ];
-
-        #[rustfmt::skip]
-        static READABLE: [u8; 64] = [
-            0x53, 0x75, 0x70, 0x70, 0x6c, 0x79, 0x20, 0x30, 0x30, 0x30, 0x30, 0x30,
-            0x30, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-            0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-            0x20, 0x55, 0x53, 0x44, 0x43, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-        ];
-
-        #[rustfmt::skip]
-        static TX: [u8; 177] = [
-            0x02, 0xf8, 0xae, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00, 0x85, 0x0b,
-            0xa4, 0x3b, 0x74, 0x00, 0x83, 0x03, 0x0d, 0x40, 0x94, 0x87, 0x87, 0x0b,
-            0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f, 0x4c, 0xe8, 0x39, 0x2d, 0x69,
-            0x35, 0x0b, 0x4f, 0xa4, 0xe2, 0x80, 0xb8, 0x84, 0x61, 0x7b, 0xa0, 0x37,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x3b, 0x9a, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53,
-            0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
-        ];
-
-        const AAVE_V3_POOL: [u8; 20] = [
-            0x87, 0x87, 0x0b, 0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f,
-            0x4c, 0xe8, 0x39, 0x2d, 0x69, 0x35, 0x0b, 0x4f, 0xa4, 0xe2,
-        ];
-
-        let wrap = aa::UserOpWrapper {
-            sender: &[0x42; 20],
-            entry_point: &[
-                0x5f, 0xf1, 0x37, 0xd4, 0xb0, 0xfd, 0xcd, 0x49, 0xdc, 0xa3,
-                0x0c, 0x7c, 0xf5, 0x7e, 0x57, 0x8a, 0x02, 0x6d, 0x27, 0x89,
-            ],
-            chain_id: 1,
-            nonce: &{ let mut n = [0u8; 32]; n[31] = 1; n },
-            call_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x01; v[30] = 0x86; v[31] = 0xa0; v },
-            verification_gas_limit: &{ let mut v = [0u8; 32]; v[28] = 0x00; v[29] = 0x03; v[30] = 0x0d; v[31] = 0x40; v },
-            pre_verification_gas: &{ let mut v = [0u8; 32]; v[30] = 0x52; v[31] = 0x08; v },
-            max_fee_per_gas: &{
-                let mut v = [0u8; 32];
-                let b = 50_000_000_000u64.to_be_bytes();
-                v[24..32].copy_from_slice(&b); v
-            },
-            max_priority_fee_per_gas: &{
-                let mut v = [0u8; 32];
-                let b = 2_000_000_000u64.to_be_bytes();
-                v[24..32].copy_from_slice(&b); v
-            },
-            init_code_hash: &aa::KECCAK_EMPTY,
-            paymaster_and_data_hash: &aa::KECCAK_EMPTY,
-        };
-
-        unsafe {
-            let vk_bundle_len = vk_db::build_bundle(1, &AAVE_V3_POOL, &mut VK_BUNDLE_BUF)
-                .expect("vk_db: aave v3 mainnet not found in DB");
-            let vk_bundle = &VK_BUNDLE_BUF[..vk_bundle_len];
-            hprintln!("[NS] VK bundle: {} bytes (Merkle-verified by S)", vk_bundle.len());
-
-            let p = aa::build_clear_sign_userop_payload(
-                &wrap, &PROOF, &CALLDATA, &READABLE, &TX, vk_bundle, &mut CLEAR_SIGN_BUF,
-            );
-            hprintln!("[NS] Clear sign payload: {} bytes", p);
-            hprintln!("[NS]   On the trusted UI: ZK proof verification, then confirm");
-            let status = nsc_api::clear_sign(&CLEAR_SIGN_BUF[..p], &mut SIG_BUF);
-            hprintln!("[NS] Clear sign: {:?}", NscStatus::from(status));
+    hprintln!("[NS] Signing a value-transfer (1 ETH → 0xAB..12)...");
+    unsafe {
+        let payload_len = build_value_transfer_payload(&mut PAYLOAD_BUF);
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..payload_len], &mut SIG_BUF);
+        hprintln!("[NS] sign_userop: {:?}", NscStatus::from(status));
+        if status == NscStatus::Ok as u32 {
+            let t1_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]);
+            let t2_off = 4 + t1_len as usize;
+            let t2_len = u32::from_be_bytes([
+                SIG_BUF[t2_off],
+                SIG_BUF[t2_off + 1],
+                SIG_BUF[t2_off + 2],
+                SIG_BUF[t2_off + 3],
+            ]);
+            hprintln!("[NS] type1_len: {}, type2_len: {}", t1_len, t2_len);
         }
     }
 
-    hprintln!("\n[NS] === All tests passed! ===");
+    hprintln!("\n[NS] === Interactive demo complete ===");
     debug::exit(debug::EXIT_SUCCESS);
     loop {}
+}
+
+/// Build a unified-sign payload for a value-transfer tx.
+/// Output layout matches `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN`.
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb")))]
+fn build_value_transfer_payload(buf: &mut [u8]) -> usize {
+    // Sepolia chain_id, slot_index hint = 0, empty inner data.
+    let chain_id: u64 = 11_155_111;
+    let sender: [u8; 20] = [0x42; 20];
+    let entry_point: [u8; 20] = [
+        0x43, 0x37, 0x09, 0x00, 0x9B, 0x83, 0x30, 0xFD, 0xa3, 0x23, 0x11, 0xDF, 0x1C, 0x2A, 0xFA,
+        0x40, 0x2e, 0xD8, 0xD0, 0x09,
+    ];
+    let mut nonce = [0u8; 32];
+    nonce[31] = 1;
+
+    // accountGasLimits = (300_000 << 128) | 50_000
+    let mut agl = [0u8; 32];
+    agl[0..16].copy_from_slice(&300_000u128.to_be_bytes());
+    agl[16..32].copy_from_slice(&50_000u128.to_be_bytes());
+
+    let mut pre_gas = [0u8; 32];
+    pre_gas[28..32].copy_from_slice(&100_000u32.to_be_bytes());
+
+    // gasFees = (2 gwei << 128) | 10 gwei
+    let mut gf = [0u8; 32];
+    gf[0..16].copy_from_slice(&2_000_000_000u128.to_be_bytes());
+    gf[16..32].copy_from_slice(&10_000_000_000u128.to_be_bytes());
+
+    const KECCAK_EMPTY: [u8; 32] = [
+        0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03,
+        0xc0, 0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85,
+        0xa4, 0x70,
+    ];
+
+    let to_address: [u8; 20] = [
+        0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78,
+        0x90, 0xab, 0xcd, 0xef, 0x12,
+    ];
+    let mut value = [0u8; 32];
+    // 1 ETH = 10^18 wei.
+    let wei = 1_000_000_000_000_000_000u128.to_be_bytes();
+    value[16..32].copy_from_slice(&wei);
+
+    let mut off = 0usize;
+    buf[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
+    off += 8;
+    buf[off..off + 4].copy_from_slice(&0u32.to_be_bytes()); // slot_index_hint
+    off += 4;
+    buf[off..off + 20].copy_from_slice(&sender);
+    off += 20;
+    buf[off..off + 20].copy_from_slice(&entry_point);
+    off += 20;
+    buf[off..off + 32].copy_from_slice(&nonce);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&agl);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&pre_gas);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&gf);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&KECCAK_EMPTY);
+    off += 32;
+    buf[off..off + 20].copy_from_slice(&to_address);
+    off += 20;
+    buf[off..off + 32].copy_from_slice(&value);
+    off += 32;
+    buf[off..off + 2].copy_from_slice(&0u16.to_be_bytes());
+    off += 2;
+    debug_assert_eq!(off, SIGN_USEROP_HEADER_LEN);
+    off
 }

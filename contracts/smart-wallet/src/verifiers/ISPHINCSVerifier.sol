@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.28;
 
 /// @title ISPHINCSVerifier
 /// @notice Interface for SPHINCS+C keccak256-based signature verification.

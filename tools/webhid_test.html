@@ -2,1919 +2,604 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PQSigner Wallet</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>PQSigner — JARDÍN Test Tool</title>
 <style>
-:root {
-  --bg: #0f1117;
-  --surface: #1a1d27;
-  --surface-alt: #151820;
-  --surface-hover: #252830;
-  --border: #2d3039;
-  --text: #f0f0f0;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-soft: rgba(59,130,246,0.12);
-  --success: #10b981;
-  --success-soft: rgba(16,185,129,0.12);
-  --warning: #f59e0b;
-  --warning-soft: rgba(245,158,11,0.12);
-  --danger: #ef4444;
-  --danger-soft: rgba(239,68,68,0.12);
-  --radius: 14px;
-  --radius-sm: 8px;
-  --radius-xs: 6px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.25);
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-  --transition: 0.2s ease;
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f0f2f5;
-    --surface: #ffffff;
-    --surface-alt: #f8f9fa;
-    --surface-hover: #f0f1f3;
-    --border: #e2e4e9;
-    --text: #111827;
-    --text-secondary: #6b7280;
-    --text-muted: #9ca3af;
-    --accent-soft: rgba(59,130,246,0.08);
-    --success-soft: rgba(16,185,129,0.08);
-    --warning-soft: rgba(245,158,11,0.08);
-    --danger-soft: rgba(239,68,68,0.08);
-    --shadow: 0 4px 24px rgba(0,0,0,0.06);
-  }
-}
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { height: 100%; }
-body {
-  font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* ── Header ── */
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.logo {
-  font-weight: 700;
-  font-size: 1.125rem;
-  letter-spacing: -0.02em;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.logo svg { flex-shrink: 0; }
-.status-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  transition: background var(--transition);
-}
-.status-dot.connected { background: var(--warning); }
-.status-dot.unlocked { background: var(--success); }
-.btn-header {
-  font-family: var(--font);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  padding: 6px 14px;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition);
-}
-.btn-header:hover { color: var(--text); border-color: var(--text-muted); }
-[data-state="disconnected"] .btn-header,
-[data-state="locked"] .btn-header { display: none; }
-
-/* ── Container ── */
-.container {
-  max-width: 560px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 24px 16px 64px;
-  flex: 1;
-}
-
-/* ── State-driven visibility ── */
-.view { display: none; }
-[data-state="disconnected"] .view-disconnected,
-[data-state="locked"] .view-locked,
-[data-state="unlocked"] .view-unlocked { display: block; }
-
-/* ── Hero (disconnected) ── */
-.hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 80px 24px 40px;
-}
-.hero-icon {
-  margin-bottom: 32px;
-  opacity: 0.9;
-}
-.hero h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  margin-bottom: 8px;
-}
-.hero p {
-  color: var(--text-secondary);
-  font-size: 1.0625rem;
-  margin-bottom: 40px;
-}
-.browser-warning {
-  display: none;
-  margin-top: 16px;
-  padding: 12px 16px;
-  background: var(--danger-soft);
-  color: var(--danger);
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-  text-align: center;
-}
-.browser-warning.visible { display: block; }
-
-/* ── Cards ── */
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 24px;
-  margin-bottom: 16px;
-  box-shadow: var(--shadow);
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-.card-header h3 {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--text);
-  letter-spacing: -0.01em;
-}
-.card-label {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
-}
-
-/* ── Locked view ── */
-.locked-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 48px 24px;
-  margin-top: 60px;
-}
-.locked-card svg { margin-bottom: 24px; opacity: 0.7; }
-.locked-card h2 {
-  font-size: 1.375rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 8px;
-}
-.locked-card .subtitle {
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
-  margin-bottom: 8px;
-}
-.pin-remaining {
-  font-size: 0.8125rem;
-  color: var(--text-muted);
-  margin-bottom: 28px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.pin-remaining .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-}
-.pin-remaining.low .dot { background: var(--warning); }
-.pin-remaining.critical .dot { background: var(--danger); }
-
-/* ── Address card ── */
-.address-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.address-text {
-  flex: 1;
-  font-family: var(--mono);
-  font-size: 0.8125rem;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.address-loading {
-  color: var(--text-muted);
-  font-family: var(--font);
-  font-style: italic;
-}
-.btn-icon {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-muted);
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  transition: all var(--transition);
-}
-.btn-icon:hover { color: var(--accent); background: var(--accent-soft); }
-.btn-icon.copied { color: var(--success); }
-
-/* ── Buttons ── */
-.btn-primary {
-  font-family: var(--font);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  padding: 12px 24px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  transition: all var(--transition);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  width: 100%;
-}
-.btn-primary:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); }
-.btn-primary:active:not(:disabled) { transform: translateY(0); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.btn-primary .spinner-sm {
-  width: 18px;
-  height: 18px;
-  border: 2px solid rgba(255,255,255,0.3);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-.btn-secondary {
-  font-family: var(--font);
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  transition: all var(--transition);
-}
-.btn-secondary:hover { background: var(--surface-hover); }
-.btn-sign { margin-top: 20px; }
-
-/* ── Tabs ── */
-.tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 20px;
-  gap: 0;
-}
-.tab {
-  font-family: var(--font);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  padding: 10px 16px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition);
-  white-space: nowrap;
-}
-.tab:hover { color: var(--text-secondary); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-
-/* ── Form fields ── */
-.form-field {
-  margin-bottom: 16px;
-}
-.form-field label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-.form-field input,
-.form-field select {
-  width: 100%;
-  padding: 10px 14px;
-  font-family: var(--font);
-  font-size: 0.875rem;
-  color: var(--text);
-  background: var(--surface-alt);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  outline: none;
-  transition: border-color var(--transition);
-}
-.form-field input:focus,
-.form-field select:focus { border-color: var(--accent); }
-.form-field input::placeholder { color: var(--text-muted); }
-.form-field input.error { border-color: var(--danger); }
-.form-field .field-error {
-  font-size: 0.75rem;
-  color: var(--danger);
-  margin-top: 4px;
-  display: none;
-}
-.form-field .field-error.visible { display: block; }
-.form-field input[type="text"].addr-input { font-family: var(--mono); font-size: 0.8125rem; }
-.demo-note {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  padding: 16px;
-  background: var(--accent-soft);
-  border-radius: var(--radius-sm);
-  margin-bottom: 16px;
-}
-.demo-note strong { color: var(--text); }
-
-/* ── Details / Collapsible ── */
-details.card { padding: 0; }
-details.card summary {
-  padding: 16px 24px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: color var(--transition);
-}
-details.card summary:hover { color: var(--text-secondary); }
-details.card summary::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transition: transform var(--transition);
-}
-details[open].card summary::before { transform: rotate(45deg); }
-details.card .details-body {
-  padding: 0 24px 20px;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-details.card .details-body .info-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-}
-details.card .details-body .info-row:last-child { border-bottom: none; }
-details.card .details-body .info-label { color: var(--text-muted); }
-details.card .details-body .info-value { font-family: var(--mono); font-size: 0.75rem; }
-.dev-log {
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 16px 24px 20px;
-  font-family: var(--mono);
-  font-size: 0.6875rem;
-  line-height: 1.6;
-  color: var(--text-muted);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* ── Overlay ── */
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(4px);
-  padding: 24px;
-}
-.overlay.visible { display: flex; }
-.overlay-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 40px 32px;
-  max-width: 400px;
-  width: 100%;
-  text-align: center;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.3);
-  animation: overlay-in 0.25s ease;
-}
-@keyframes overlay-in {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-.overlay-card .spinner {
-  width: 48px;
-  height: 48px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 24px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.overlay-title {
-  font-size: 1.0625rem;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.overlay-subtitle {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-.progress-track {
-  width: 100%;
-  height: 4px;
-  background: var(--border);
-  border-radius: 2px;
-  margin-top: 20px;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-  width: 0%;
-}
-
-/* ── Success overlay ── */
-.success-icon {
-  margin: 0 auto 20px;
-  width: 64px;
-  height: 64px;
-}
-.success-icon circle {
-  stroke-dasharray: 166;
-  stroke-dashoffset: 166;
-  animation: circle-draw 0.5s ease forwards;
-}
-.success-icon path {
-  stroke-dasharray: 30;
-  stroke-dashoffset: 30;
-  animation: check-draw 0.3s ease forwards 0.35s;
-}
-@keyframes circle-draw { to { stroke-dashoffset: 0; } }
-@keyframes check-draw { to { stroke-dashoffset: 0; } }
-.success-card h3 {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 20px;
-}
-.sig-summary {
-  text-align: left;
-  margin-bottom: 24px;
-}
-.sig-field { margin-bottom: 12px; }
-.sig-field label {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 4px;
-}
-.sig-value {
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  word-break: break-all;
-  padding: 8px 12px;
-  background: var(--surface-alt);
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border);
-}
-.overlay-buttons {
-  display: flex;
-  gap: 8px;
-}
-.overlay-buttons .btn-primary,
-.overlay-buttons .btn-secondary { flex: 1; }
-
-/* ── Toast ── */
-.toast-container {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 200;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.toast {
-  padding: 12px 16px;
-  border-radius: var(--radius-sm);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  max-width: 360px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  animation: toast-in 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.toast.removing { animation: toast-out 0.25s ease forwards; }
-.toast-error { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger); }
-.toast-success { background: var(--success-soft); color: var(--success); border: 1px solid var(--success); }
-.toast-info { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
-.toast-warn { background: var(--warning-soft); color: var(--warning); border: 1px solid var(--warning); }
-@keyframes toast-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes toast-out { from { opacity: 1; } to { opacity: 0; transform: translateX(40px); } }
-
-/* ── Responsive ── */
-@media (max-width: 480px) {
-  .container { padding: 16px 12px 48px; }
-  .card { padding: 20px 16px; }
-  header { padding: 12px 16px; }
-  .hero { padding: 48px 16px 32px; }
-  .hero h1 { font-size: 1.5rem; }
-  .tabs { overflow-x: auto; }
-  .tab { font-size: 0.75rem; padding: 8px 12px; }
-  .overlay-card { padding: 32px 20px; }
-}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, Inter, system-ui, sans-serif; background: #0a0a0a; color: #e5e7eb; min-height: 100vh; padding: 32px 16px; font-size: 14px; }
+  .container { max-width: 720px; margin: 0 auto; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  header .tag { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.12em; margin-left: 12px; }
+  .card { background: #141417; border: 1px solid #24242a; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; color: #9ca3af; font-weight: 500; margin-bottom: 12px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .row:last-child { margin-bottom: 0; }
+  .row label { width: 120px; font-size: 12px; color: #9ca3af; }
+  .row input { flex: 1; background: #0a0a0a; border: 1px solid #2a2a30; color: #e5e7eb; padding: 10px 12px; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 13px; min-width: 240px; }
+  button { background: #3b82f6; border: none; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; transition: background 0.1s; }
+  button:hover:not(:disabled) { background: #2563eb; }
+  button:disabled { background: #1f2937; color: #6b7280; cursor: not-allowed; }
+  button.secondary { background: #1f2937; color: #e5e7eb; }
+  button.secondary:hover:not(:disabled) { background: #374151; }
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #1f2937; border-radius: 20px; font-size: 12px; }
+  .status-pill .dot { width: 6px; height: 6px; background: #6b7280; border-radius: 50%; }
+  .status-pill.ok .dot { background: #10b981; }
+  .status-pill.err .dot { background: #ef4444; }
+  .status-pill.warn .dot { background: #f59e0b; }
+  .log { background: #070708; border: 1px solid #1e1e24; border-radius: 8px; padding: 12px; font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.5; color: #9ca3af; height: 240px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .log .err { color: #f87171; }
+  .log .ok { color: #34d399; }
+  .log .info { color: #60a5fa; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .stat { padding: 12px; background: #0a0a0a; border: 1px solid #2a2a30; border-radius: 8px; }
+  .stat .label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat .value { font-size: 16px; font-family: ui-monospace, monospace; color: #e5e7eb; margin-top: 4px; word-break: break-all; }
+  .badge { display: inline-block; padding: 2px 8px; background: #1e3a5f; color: #93c5fd; border-radius: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .bundler-url { font-family: ui-monospace, monospace; font-size: 11px; color: #9ca3af; }
 </style>
 </head>
-<body data-state="disconnected">
-
-<!-- ── Header ── -->
-<header>
-  <div class="logo">
-    <svg width="22" height="26" viewBox="0 0 22 26" fill="none">
-      <path d="M11 1L1 5.5v8c0 6.8 4.2 13.2 10 14.5 5.8-1.3 10-7.7 10-14.5v-8L11 1z"
-            fill="var(--accent)" fill-opacity="0.15" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M7.5 13.5l2.5 2.5 4.5-5" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    </svg>
-    PQSigner
-  </div>
-  <div class="status-bar">
-    <span class="status-dot" id="statusDot"></span>
-    <span id="statusText">Not connected</span>
-  </div>
-  <button class="btn-header" id="lockBtn">Lock</button>
-</header>
-
-<!-- ── Main Container ── -->
+<body>
 <div class="container">
+  <header>
+    <h1>PQSigner JARDÍN Test Tool<span class="tag">v3 unified-sign</span></h1>
+    <span class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Disconnected</span></span>
+  </header>
 
-  <!-- Disconnected View -->
-  <section class="view view-disconnected">
-    <div class="hero">
-      <div class="hero-icon">
-        <svg width="80" height="96" viewBox="0 0 80 96" fill="none">
-          <path d="M40 4L8 20v28c0 24 13.3 46.4 32 52 18.7-5.6 32-28 32-52V20L40 4z"
-                fill="var(--accent)" fill-opacity="0.1" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
-          <path d="M28 50l8 8 16-18" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-        </svg>
-      </div>
-      <h1>PQSigner</h1>
-      <p>Post-quantum hardware wallet</p>
-      <button class="btn-primary" id="connectBtn" style="max-width:280px">Connect Wallet</button>
-      <div class="browser-warning" id="browserWarning">
-        WebHID is not supported in this browser. Please use Chrome or Edge.
-      </div>
+  <div class="card">
+    <h2>Device</h2>
+    <div class="actions">
+      <button id="connectBtn">Connect WebHID</button>
+      <button id="unlockBtn" class="secondary" disabled>Unlock</button>
+      <button id="lockBtn" class="secondary" disabled>Lock</button>
+      <button id="slotInfoBtn" class="secondary" disabled>Slot Info</button>
     </div>
-  </section>
+  </div>
 
-  <!-- Locked View -->
-  <section class="view view-locked">
-    <div class="card locked-card">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="11" width="18" height="11" rx="2.5"/>
-        <path d="M7 11V7a5 5 0 0110 0v4"/>
-        <circle cx="12" cy="16.5" r="1" fill="var(--accent)"/>
-      </svg>
-      <h2>Device Locked</h2>
-      <p class="subtitle">Enter your PIN on the device to continue</p>
-      <div class="pin-remaining" id="pinInfo">
-        <span class="dot"></span>
-        <span id="pinText">Checking...</span>
-      </div>
-      <button class="btn-primary" id="unlockBtn" style="max-width:240px">Unlock</button>
+  <div class="card">
+    <h2>Sign Transaction</h2>
+    <div class="row">
+      <label>Chain ID</label>
+      <input id="chainId" value="11155111" />
     </div>
-  </section>
-
-  <!-- Unlocked View -->
-  <section class="view view-unlocked">
-
-    <!-- Wallet Address -->
-    <div class="card">
-      <div class="card-label">Wallet Address</div>
-      <div class="address-display">
-        <span class="address-text address-loading" id="walletAddress">Fetching address...</span>
-        <button class="btn-icon" id="copyAddressBtn" title="Copy address">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2"/>
-            <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
-          </svg>
-        </button>
-      </div>
+    <div class="row">
+      <label>Nonce</label>
+      <input id="nonce" value="0" />
     </div>
-
-    <!-- Sign Transaction -->
-    <div class="card">
-      <div class="card-header"><h3>Sign Transaction</h3></div>
-
-      <div class="tabs">
-        <button class="tab active" data-tab="eth">ETH Transfer</button>
-        <button class="tab" data-tab="erc20">USDC Transfer</button>
-        <button class="tab" data-tab="defi">Aave V3</button>
-      </div>
-
-      <!-- ETH Transfer -->
-      <div class="tab-content active" data-content="eth">
-        <div class="form-field">
-          <label for="ethTo">Recipient</label>
-          <input type="text" id="ethTo" class="addr-input" placeholder="0x..." autocomplete="off" spellcheck="false">
-          <div class="field-error" id="ethToError"></div>
-        </div>
-        <div class="form-field">
-          <label for="ethAmount">Amount (ETH)</label>
-          <input type="text" id="ethAmount" placeholder="0.001" autocomplete="off">
-          <div class="field-error" id="ethAmountError"></div>
-        </div>
-      </div>
-
-      <!-- USDC Transfer -->
-      <div class="tab-content" data-content="erc20">
-        <div class="form-field">
-          <label for="erc20To">Recipient</label>
-          <input type="text" id="erc20To" class="addr-input" placeholder="0x..." autocomplete="off" spellcheck="false">
-          <div class="field-error" id="erc20ToError"></div>
-        </div>
-        <div class="form-field">
-          <label for="erc20Amount">Amount (USDC)</label>
-          <input type="text" id="erc20Amount" placeholder="1000" autocomplete="off">
-          <div class="field-error" id="erc20AmountError"></div>
-        </div>
-      </div>
-
-      <!-- Aave V3 Supply -->
-      <div class="tab-content" data-content="defi">
-        <div class="demo-note">
-          <strong>Aave V3 Supply Demo</strong><br>
-          Supply 1000 USDC to Aave V3 Pool (Ethereum mainnet).<br>
-          This transaction includes a pre-computed ZK proof verified on-device.
-        </div>
-      </div>
-
-      <button class="btn-primary btn-sign" id="signBtn">Sign Transaction</button>
+    <div class="row">
+      <label>To</label>
+      <input id="to" placeholder="0x..." value="0x000000000000000000000000000000000000dead" />
     </div>
-
-    <!-- Device Details -->
-    <details class="card">
-      <summary>Device Details</summary>
-      <div class="details-body" id="deviceDetails">
-        <div class="info-row"><span class="info-label">Status</span><span class="info-value">Querying...</span></div>
-      </div>
-    </details>
-
-    <!-- Developer Log -->
-    <details class="card">
-      <summary>Developer Log</summary>
-      <pre class="dev-log" id="log"></pre>
-    </details>
-  </section>
-</div>
-
-<!-- ── Progress Overlay ── -->
-<div class="overlay" id="progressOverlay">
-  <div class="overlay-card">
-    <div class="spinner"></div>
-    <p class="overlay-title" id="progressTitle">Processing...</p>
-    <p class="overlay-subtitle" id="progressSubtitle"></p>
-    <div class="progress-track" id="progressTrack" style="display:none">
-      <div class="progress-fill" id="progressFill"></div>
+    <div class="row">
+      <label>Value (wei)</label>
+      <input id="value" value="0" />
     </div>
+    <div class="row">
+      <label>Calldata (hex)</label>
+      <input id="data" placeholder="0x" value="" />
+    </div>
+    <div class="actions">
+      <button id="signBtn" disabled>Sign (unified JARDÍN)</button>
+      <button id="submitBtn" class="secondary" disabled>Submit to bundler</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Last Result</h2>
+    <div class="grid" id="resultGrid">
+      <div class="stat"><div class="label">Type 1</div><div class="value" id="t1Len">—</div></div>
+      <div class="stat"><div class="label">Type 2</div><div class="value" id="t2Len">—</div></div>
+      <div class="stat"><div class="label">Slot Index</div><div class="value" id="slotIdx">—</div></div>
+      <div class="stat"><div class="label">Next q</div><div class="value" id="nextQ">—</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Bundler</h2>
+    <div class="row">
+      <label>RPC URL</label>
+      <input id="bundlerUrl" class="bundler-url" value="" placeholder="https://api.pimlico.io/v2/11155111/rpc?apikey=..." />
+    </div>
+    <div style="font-size: 12px; color: #6b7280; line-height: 1.5;">
+      Submit happens in two steps when a Type 1 is present: first the slot-registration UserOp, then the user's tx. For testing locally without a real bundler, leave the URL blank and the sign step will still work — results are logged only.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Log</h2>
+    <div class="log" id="log"></div>
   </div>
 </div>
 
-<!-- ── Success Overlay ── -->
-<div class="overlay" id="successOverlay">
-  <div class="overlay-card success-card">
-    <div class="success-icon">
-      <svg viewBox="0 0 64 64" fill="none">
-        <circle cx="32" cy="32" r="28" stroke="var(--success)" stroke-width="2.5"/>
-        <path d="M20 33l8 8 16-18" stroke="var(--success)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-    <h3>Transaction Signed</h3>
-    <div class="sig-summary" id="sigSummary"></div>
-    <div class="overlay-buttons">
-      <button class="btn-secondary" id="copySigBtn">Copy Signature</button>
-      <button class="btn-primary" id="dismissBtn">Done</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── Toast Container ── -->
-<div class="toast-container" id="toastContainer"></div>
-
-<!-- ═══════════════════════════════════════════════════════ -->
 <script>
 'use strict';
 
-// ═══════════════════════════════════════════════════════
-// PROTOCOL LAYER — preserved transport infrastructure
-// ═══════════════════════════════════════════════════════
-
+// ── Protocol constants ──────────────────────────────────────────────
 const VID = 0x1209;
 const PID = 0x7051;
 const REPORT_SIZE = 64;
 const TAG_APDU = 0x05;
 
 const CLA = 0xF0;
-
-const INS_GET_DEVICE_INFO    = 0x01;
-const INS_GET_STATUS         = 0x02;
-const INS_UNLOCK             = 0x10;
-const INS_LOCK               = 0x11;
-const INS_GET_BOOTSTRAP_VK   = 0x20;
-const INS_GET_MAIN_VK        = 0x21;
-const INS_SIGN_USEROP        = 0x30;
-const INS_SIGN_CLEAR_USEROP  = 0x31;
-const INS_SIGN_MESSAGE       = 0x40;
-const INS_SIGN_EIP712        = 0x41;
-const INS_SIGN_BOOTSTRAP     = 0x50;
-const INS_GET_WALLET_ADDRESS = 0x60;
-const INS_SIGN_JARDIN        = 0x70;
-const INS_REGISTER_JARDIN    = 0x71;
-const INS_GET_JARDIN_INFO    = 0x72;
-const INS_GET_RESPONSE       = 0xC0;
+const INS_GET_DEVICE_INFO = 0x01;
+const INS_GET_STATUS = 0x02;
+const INS_UNLOCK = 0x10;
+const INS_LOCK = 0x11;
+const INS_SIGN_USEROP = 0x30;
+const INS_GET_JARDIN_INFO = 0x72;
+const INS_GET_RESPONSE = 0xC0;
 
 const P1_LAST = 0x00;
 const P1_MORE = 0x80;
 
-// Status words
 const SW_OK = 0x9000;
 const SW_SECURITY = 0x6982;
 const SW_CONDITIONS = 0x6985;
 const SW_SLOT_EXHAUSTED = 0x6501;
 const SW_SESSION_EXPIRED = 0x6984;
 
+// EntryPoint v0.9 canonical Sepolia/mainnet address.
+const ENTRY_POINT_V09 = '0x433709009B8330FDa32311DF1C2AFA402eD8D009';
+// keccak256("")
+const KECCAK_EMPTY = new Uint8Array([
+  0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
+  0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70,
+]);
+
+// Gas defaults for Sepolia.
+const DEFAULT_GAS = {
+  verGas: 300_000n,
+  callGas: 50_000n,
+  preVerificationGas: 100_000n,
+  maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
+  maxFeePerGas: 10_000_000_000n,        // 10 gwei
+};
+
 let device = null;
 let channelId = 0x0101;
+let lastResult = null;
 
-const logEl = document.getElementById('log');
+// ── DOM helpers ────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const logEl = $('log');
 
-function devLog(msg) {
-    if (logEl) {
-        logEl.textContent += msg + '\n';
-        logEl.scrollTop = logEl.scrollHeight;
-    }
+function log(msg, cls = '') {
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  const now = new Date().toLocaleTimeString();
+  div.textContent = `[${now}] ${msg}`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
-function hex(arr) {
-    return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join(' ');
+function setStatus(text, cls) {
+  $('statusText').textContent = text;
+  $('statusPill').className = 'status-pill ' + (cls || '');
 }
 
-function hexCompact(arr) {
-    return '0x' + Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+function setButtonState(connected, unlocked) {
+  $('connectBtn').disabled = connected;
+  $('unlockBtn').disabled = !connected;
+  $('lockBtn').disabled = !connected;
+  $('slotInfoBtn').disabled = !connected;
+  $('signBtn').disabled = !unlocked;
 }
 
-function u16be(hi, lo) { return (hi << 8) | lo; }
-function u32be(a, b, c, d) { return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0; }
-
-function b64toU8(b64) {
-    const bin = atob(b64);
-    const u8 = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    return u8;
+// ── Byte utilities ────────────────────────────────────────────────
+function hexToBytes(h) {
+  const clean = h.replace(/^0x/i, '').replace(/\s/g, '');
+  if (clean.length % 2) throw new Error('odd-length hex');
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  return out;
+}
+function bytesToHex(b) {
+  return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function u16be(n) { return new Uint8Array([(n >> 8) & 0xFF, n & 0xFF]); }
+function u32be(n) { n = n >>> 0; return new Uint8Array([(n >> 24) & 0xFF, (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF]); }
+function u64be(n) {
+  const bi = BigInt(n);
+  const buf = new Uint8Array(8);
+  for (let i = 0; i < 8; i++) buf[i] = Number((bi >> BigInt((7 - i) * 8)) & 0xFFn);
+  return buf;
+}
+function u256be(n) {
+  const bi = BigInt(n);
+  const buf = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) buf[31 - i] = Number((bi >> BigInt(i * 8)) & 0xFFn);
+  return buf;
+}
+function u128be(n) {
+  const bi = BigInt(n);
+  const buf = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) buf[15 - i] = Number((bi >> BigInt(i * 8)) & 0xFFn);
+  return buf;
 }
 
-const ERC20_USDC_BUNDLE = b64toU8('AQAAAAAAAACguGmRxiGLNsHRnUounrDONgbrSAYHVVNEQ29pbgRVU0RDMgAAAAgAAACTsaxEtcIT8ARgYs6zIODdDOh4mKXVuBu6wafhIyw+iHlUJ3dZFZgK4Vf+zT7wKKVoqvmGZADcfufFiGc3eq8Ns3njgCj5U9E2HZeye40NzyNjQD6Wcm3ZognLMJKbmevCslZQKnCnM1WMMDwmp4aDBKl/Y7Xo0QjpRoeokSSbTdUCcmB7lWto65qbmIvZ/IMdXD5qVulgPfCdilQrISB35ZDkwGv1xtkbl3O8jzBo+iTTSTCsYaWFquns76/4v5sZrS7WmU6UZhDP7/IjhFbHQGOr5qgW6xTZRPvR3TgtJBaneDsBfdOVhONSrUUkG4c3N7b3RWrE4vMpC8QpY09h');
-const VK_AAVE_BUNDLE = b64toU8('AQAAAAAAAACHhwvKPz/WM1w/TOg5LWk1C0+k4hbwfDR7mK6n9LnBY0PrxqT6ETp3cnYJJgErLEzlRNdLHhdEq2gT9PSQXpq+fMSbpQrIUf5ObaV+wbHKW7MxcOJ9FW6Qye4aruhHy3y0jMksg33PiNgXnu8JayMjnKUGxwf9d1RET/91boF31RIbZwHi+139ZmpZJVIVbRhrQL8jLUZjTJPpAdvPQF65ln/dfAZTVj0B+8Btp6QZXR+j0NAjLmPVEWpvSqD6LaoyQULeJvbwREl/1AtSmYtbtbVotBa96cmSpe2DZeZBeCYhCvvYsoh+uAcXEgSUX060NlFQC1nxPpMoq4WdIfdyR89GKBHX2157g7JqSOUEkicvnEDiRpFzeuBo0K+R4VXtmV8hX0/YbOJEDLv6CmFLDIN8ARPgK2BScZ9gfazToIgnT2VZa9DQmSC2GrXaYbvcf1BJM0zxEhOUXVflrH0FXQQrfgJKorLwjwqRJggFJy3FEFHG5HrU+kA7ArRRC2R649F3C6wDJqgFu+/UgFbIwSG9uAYGxKAupzTMMqzSsCvCi5nLPih+hadjryZ0kqtXLpmrPzcNJ1zsHaGqqQdf8F95vgzl1SdyfW4RjMnNxtouNRqt/ZuqjL3Tp21CmmlRYNEskjrJzDusoonhk1SGCLgoAQw/PrlLMZFxyJSZm4jjh6roKoHYPVf3boGL8BFNYNod1e8CncmnVXtYhCwH8C7JYAy/mcekShyh3lRldCD/H4eJQH/4qT2QDJzIb5KpumrrKDkbE7gcZnCufwOEMyX5uxZK/zGtwFy3Tik4ZZ18lR0EVmL0rt5b0Xf5ho+ELlabBBmPA5oPjFhvIeGRlT4ciwxbwT9s2v/nPBJxCjYGj8olsm5leHeFPpGdxjYM2w8nsD63p1K0K2C/r8gOkiv/EhHmNF58AwFDyDRRVjQVfFivBrXJL1xmA0W27eAKxOoe2cX8DS64dPWk6ps4M3UP9QGxr3NLlg8snfd6aFc1IJCCCU0kfmOBFZeAFdnAm3xOvpStRXy4V3KNj7z50OaJLAKcqzQeUq1/seXexKK45PPA5rGpawbBGU3GZCzAgu8TQJ8WGnII0xUD8QQvDFCY2wxWvkVS3IC9ovvlYQtcjRSacpwu/uuoWHpe1xFlJOGdip/P0gTxvb7/wCoRBMYWGAycfk5r6H2l0B/a8I6ELyAClJehA4AvcwiYHV4f6dd6raMUcFNLPmBlsut0+u0QeAnGYRas+EuzllFjJL+NEKxuAqsT1XcXFzGReoQ/TsB4SH40ozpWCTbxHPAmfIl+oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAARvkMLN4MMrigwXkgbvzD3c1HbWrTSobTOaoS+ljBNoxMes+/GFf1WqQvV7OnpEn/4EkcXIRCLOJbWfpSmiu292CypVRpUEq7h9264XpMFAnjn1y2hixKk3UsgsvdpxFprWLbuVZvY8J+s1ivvmSQNQDAI57yuEEwd0SiVNIteYM=');
+function concatBytes(chunks) {
+  const total = chunks.reduce((s, c) => s + c.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
 
-// ---- HID Framing ----
-
-function buildApdu(ins, p1, p2, data = new Uint8Array(0)) {
-    const apdu = new Uint8Array(5 + data.length);
-    apdu[0] = CLA;
-    apdu[1] = ins;
-    apdu[2] = p1;
-    apdu[3] = p2;
-    apdu[4] = data.length;
-    apdu.set(data, 5);
-    return apdu;
+// ── HID framing ───────────────────────────────────────────────────
+function buildApdu(ins, p1, p2, data) {
+  const lc = data ? data.length : 0;
+  const apdu = new Uint8Array(5 + lc);
+  apdu[0] = CLA;
+  apdu[1] = ins;
+  apdu[2] = p1;
+  apdu[3] = p2;
+  apdu[4] = lc;
+  if (lc) apdu.set(data, 5);
+  return apdu;
 }
 
 function frameApdu(apdu) {
-    const frames = [];
-    let offset = 0, seq = 0;
+  const frames = [];
+  let off = 0, seq = 0;
 
-    const first = new Uint8Array(REPORT_SIZE);
-    first[0] = (channelId >> 8) & 0xFF;
-    first[1] = channelId & 0xFF;
-    first[2] = TAG_APDU;
-    first[3] = 0; first[4] = 0;
-    first[5] = (apdu.length >> 8) & 0xFF;
-    first[6] = apdu.length & 0xFF;
-    const firstChunk = Math.min(57, apdu.length);
-    first.set(apdu.subarray(0, firstChunk), 7);
-    frames.push(first);
-    offset = firstChunk;
-    seq = 1;
+  const first = new Uint8Array(REPORT_SIZE);
+  first[0] = (channelId >> 8) & 0xFF;
+  first[1] = channelId & 0xFF;
+  first[2] = TAG_APDU;
+  first[3] = 0; first[4] = 0;
+  first[5] = (apdu.length >> 8) & 0xFF;
+  first[6] = apdu.length & 0xFF;
+  const firstChunk = Math.min(57, apdu.length);
+  first.set(apdu.subarray(0, firstChunk), 7);
+  frames.push(first);
+  off = firstChunk;
+  seq = 1;
 
-    while (offset < apdu.length) {
-        const frame = new Uint8Array(REPORT_SIZE);
-        frame[0] = (channelId >> 8) & 0xFF;
-        frame[1] = channelId & 0xFF;
-        frame[2] = TAG_APDU;
-        frame[3] = (seq >> 8) & 0xFF;
-        frame[4] = seq & 0xFF;
-        const chunk = Math.min(59, apdu.length - offset);
-        frame.set(apdu.subarray(offset, offset + chunk), 5);
-        frames.push(frame);
-        offset += chunk;
-        seq++;
-    }
-    return frames;
+  while (off < apdu.length) {
+    const f = new Uint8Array(REPORT_SIZE);
+    f[0] = (channelId >> 8) & 0xFF;
+    f[1] = channelId & 0xFF;
+    f[2] = TAG_APDU;
+    f[3] = (seq >> 8) & 0xFF;
+    f[4] = seq & 0xFF;
+    const c = Math.min(59, apdu.length - off);
+    f.set(apdu.subarray(off, off + c), 5);
+    frames.push(f);
+    off += c;
+    seq++;
+  }
+  return frames;
 }
 
 async function receiveHidApdu() {
-    let buf = [];
-    let expectedLen = 0;
-    let seq = 0;
-
-    while (true) {
-        const report = await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Timeout (120s)')), 120000);
-            device.addEventListener('inputreport', (e) => {
-                clearTimeout(timeout);
-                resolve(new Uint8Array(e.data.buffer));
-            }, { once: true });
-        });
-
-        const rTag = report[2];
-        const rSeq = (report[3] << 8) | report[4];
-        if (rTag !== TAG_APDU) continue;
-        if (rSeq !== seq) { devLog(`ERROR: expected seq ${seq}, got ${rSeq}`); break; }
-
-        if (seq === 0) {
-            expectedLen = (report[5] << 8) | report[6];
-            const chunk = Math.min(57, expectedLen);
-            buf.push(...report.slice(7, 7 + chunk));
-        } else {
-            const remaining = expectedLen - buf.length;
-            const chunk = Math.min(59, remaining);
-            buf.push(...report.slice(5, 5 + chunk));
-        }
-        seq++;
-        if (buf.length >= expectedLen) break;
+  const buf = [];
+  let expected = 0, seq = 0;
+  while (true) {
+    const r = await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('Timeout (120s)')), 120_000);
+      device.addEventListener('inputreport', (e) => {
+        clearTimeout(t);
+        resolve(new Uint8Array(e.data.buffer));
+      }, { once: true });
+    });
+    if (r[2] !== TAG_APDU) continue;
+    const rSeq = (r[3] << 8) | r[4];
+    if (rSeq !== seq) { log(`HID seq mismatch: expected ${seq}, got ${rSeq}`, 'err'); break; }
+    if (seq === 0) {
+      expected = (r[5] << 8) | r[6];
+      const c = Math.min(57, expected);
+      buf.push(...r.slice(7, 7 + c));
+    } else {
+      const remaining = expected - buf.length;
+      const c = Math.min(59, remaining);
+      buf.push(...r.slice(5, 5 + c));
     }
-    return new Uint8Array(buf.slice(0, expectedLen));
+    seq++;
+    if (buf.length >= expected) break;
+  }
+  return new Uint8Array(buf.slice(0, expected));
 }
 
 async function sendApdu(ins, p1, p2, data) {
-    const apdu = buildApdu(ins, p1, p2, data);
-    devLog(`>> [${apdu.length}B] INS=0x${ins.toString(16)} P1=0x${p1.toString(16)} Lc=${data ? data.length : 0}`);
+  const apdu = buildApdu(ins, p1, p2, data);
+  for (const f of frameApdu(apdu)) await device.sendReport(0, f);
 
-    for (const frame of frameApdu(apdu)) {
-        await device.sendReport(0, frame);
+  const collected = [];
+  let resp = await receiveHidApdu();
+  while (true) {
+    const sw1 = resp[resp.length - 2];
+    const sw2 = resp[resp.length - 1];
+    const sw = (sw1 << 8) | sw2;
+    collected.push(...resp.slice(0, resp.length - 2));
+    if (sw1 === 0x61) {
+      const more = buildApdu(INS_GET_RESPONSE, 0, 0);
+      for (const f of frameApdu(more)) await device.sendReport(0, f);
+      resp = await receiveHidApdu();
+    } else {
+      return { sw, data: new Uint8Array(collected) };
     }
-
-    let fullData = [];
-    let response = await receiveHidApdu();
-
-    while (true) {
-        const sw1 = response[response.length - 2];
-        const sw2 = response[response.length - 1];
-        const sw = (sw1 << 8) | sw2;
-        const payload = response.slice(0, response.length - 2);
-        fullData.push(...payload);
-
-        if (sw1 === 0x61) {
-            if (fullData.length % 5000 < 253)
-                devLog(`   ... ${fullData.length} bytes received, fetching more...`);
-            const getResp = buildApdu(INS_GET_RESPONSE, 0, 0);
-            for (const frame of frameApdu(getResp)) {
-                await device.sendReport(0, frame);
-            }
-            response = await receiveHidApdu();
-        } else {
-            devLog(`<< SW=0x${sw.toString(16).padStart(4, '0')} Data[${fullData.length}B]`);
-            return { sw, data: new Uint8Array(fullData) };
-        }
-    }
+  }
 }
 
 async function sendChainedApdu(ins, payload) {
-    const MAX_CHUNK = 255;
-    let offset = 0;
-    let fullData = [];
+  const MAX = 255;
+  let off = 0;
+  let lastResp = null;
+  while (off < payload.length) {
+    const remaining = payload.length - off;
+    const chunk = Math.min(MAX, remaining);
+    const isLast = (off + chunk) >= payload.length;
+    const p1 = isLast ? P1_LAST : P1_MORE;
+    const slice = payload.slice(off, off + chunk);
+    const apdu = buildApdu(ins, p1, 0x00, slice);
+    for (const f of frameApdu(apdu)) await device.sendReport(0, f);
 
-    while (offset < payload.length) {
-        const remaining = payload.length - offset;
-        const chunkLen = Math.min(MAX_CHUNK, remaining);
-        const isLast = (offset + chunkLen >= payload.length) || (chunkLen < MAX_CHUNK);
-        const p1 = (offset === 0) ? P1_LAST : P1_MORE;
-        const chunk = payload.slice(offset, offset + chunkLen);
-
-        const apdu = buildApdu(ins, p1, 0x00, chunk);
-        for (const frame of frameApdu(apdu)) {
-            await device.sendReport(0, frame);
-        }
-        const response = await receiveHidApdu();
-        const sw1 = response[response.length - 2];
-        const sw2 = response[response.length - 1];
-        const sw = (sw1 << 8) | sw2;
-
-        offset += chunkLen;
-
-        if (isLast) {
-            const respPayload = response.slice(0, response.length - 2);
-            fullData.push(...respPayload);
-
-            if (sw1 === 0x61) {
-                let more = true;
-                while (more) {
-                    if (fullData.length % 5000 < 253)
-                        devLog(`   ... ${fullData.length} bytes received, fetching more...`);
-                    const getResp = buildApdu(INS_GET_RESPONSE, 0, 0);
-                    for (const frame of frameApdu(getResp)) {
-                        await device.sendReport(0, frame);
-                    }
-                    const gr = await receiveHidApdu();
-                    const gsw1 = gr[gr.length - 2];
-                    const gsw2 = gr[gr.length - 1];
-                    fullData.push(...gr.slice(0, gr.length - 2));
-                    more = (gsw1 === 0x61);
-                    if (!more) {
-                        const finalSw = (gsw1 << 8) | gsw2;
-                        devLog(`<< SW=0x${finalSw.toString(16).padStart(4, '0')} Data[${fullData.length}B]`);
-                        return { sw: finalSw, data: new Uint8Array(fullData) };
-                    }
-                }
-            }
-
-            devLog(`<< SW=0x${sw.toString(16).padStart(4, '0')} Data[${fullData.length}B]`);
-            return { sw, data: new Uint8Array(fullData) };
-        } else {
-            if (sw !== 0x9000) {
-                devLog(`   Chain error at offset ${offset}: SW=0x${sw.toString(16)}`);
-                return { sw, data: new Uint8Array(0) };
-            }
-        }
+    let resp = await receiveHidApdu();
+    const collected = [];
+    while (true) {
+      const sw1 = resp[resp.length - 2];
+      const sw2 = resp[resp.length - 1];
+      const sw = (sw1 << 8) | sw2;
+      collected.push(...resp.slice(0, resp.length - 2));
+      if (sw1 === 0x61) {
+        const more = buildApdu(INS_GET_RESPONSE, 0, 0);
+        for (const f of frameApdu(more)) await device.sendReport(0, f);
+        resp = await receiveHidApdu();
+      } else {
+        lastResp = { sw, data: new Uint8Array(collected) };
+        break;
+      }
     }
-    return { sw: 0x6F00, data: new Uint8Array(0) };
+    off += chunk;
+    if (isLast) return lastResp;
+    if ((lastResp.sw >>> 0) !== SW_OK) return lastResp;
+  }
+  return lastResp;
 }
 
-function parseWrapper(data) {
-    if (data.length < 73) return null;
-    const st = data[0];
-    if (st === 0x02) {
-        // JARDÍN wrapper: signer_type(1) + slot_key(32) + subPkSeed(32) + subPkRoot(32) = 97 bytes
-        if (data.length < 97) return null;
-        return {
-            signerType: 'COMPACT',
-            slotKey: data.slice(1, 33),
-            pkSeed: data.slice(33, 65),
-            pkRoot: data.slice(65, 97),
-            sigLen: data.length - 97,
-            headerLen: 97,
-        };
-    }
-    return {
-        signerType: st === 0 ? 'MAIN' : 'BOOTSTRAP',
-        keyIndex: u32be(data[1], data[2], data[3], data[4]),
-        otsIndex: u32be(data[5], data[6], data[7], data[8]),
-        pkSeed: data.slice(9, 41),
-        pkRoot: data.slice(41, 73),
-        sigLen: data.length - 73,
-        headerLen: 73,
-    };
-}
-
-function capBit(caps, bit) { return (caps & (1 << bit)) !== 0; }
-
-
-// ═══════════════════════════════════════════════════════
-// RLP ENCODER — minimal EIP-1559 transaction builder
-// ═══════════════════════════════════════════════════════
-
-function bigIntToMinBytes(n) {
-    if (n === 0n) return new Uint8Array(0);
-    const h = n.toString(16);
-    const padded = h.length % 2 ? '0' + h : h;
-    const bytes = new Uint8Array(padded.length / 2);
-    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(padded.substr(i * 2, 2), 16);
-    return bytes;
-}
-
-function rlpEncode(input) {
-    if (input instanceof Uint8Array) {
-        if (input.length === 1 && input[0] < 0x80) return input;
-        if (input.length === 0) return new Uint8Array([0x80]);
-        if (input.length <= 55) {
-            const r = new Uint8Array(1 + input.length);
-            r[0] = 0x80 + input.length;
-            r.set(input, 1);
-            return r;
-        }
-        const lenB = bigIntToMinBytes(BigInt(input.length));
-        const r = new Uint8Array(1 + lenB.length + input.length);
-        r[0] = 0xb7 + lenB.length;
-        r.set(lenB, 1);
-        r.set(input, 1 + lenB.length);
-        return r;
-    }
-    // Array → list
-    const parts = input.map(item => {
-        if (item instanceof Uint8Array) return rlpEncode(item);
-        if (Array.isArray(item)) return rlpEncode(item);
-        // BigInt or number
-        return rlpEncode(bigIntToMinBytes(BigInt(item)));
-    });
-    const totalLen = parts.reduce((s, p) => s + p.length, 0);
-    let result;
-    if (totalLen <= 55) {
-        result = new Uint8Array(1 + totalLen);
-        result[0] = 0xc0 + totalLen;
-    } else {
-        const lenB = bigIntToMinBytes(BigInt(totalLen));
-        result = new Uint8Array(1 + lenB.length + totalLen);
-        result[0] = 0xf7 + lenB.length;
-        result.set(lenB, 1);
-    }
-    let offset = result.length - totalLen;
-    for (const p of parts) { result.set(p, offset); offset += p.length; }
-    return result;
-}
-
-function hexToBytes(h) {
-    const clean = h.replace(/^0x/i, '');
-    if (clean.length % 2) throw new Error('Invalid hex');
-    const bytes = new Uint8Array(clean.length / 2);
-    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
-    return bytes;
-}
-
-function parseUnits(str, decimals) {
-    const s = str.trim();
-    if (!s || isNaN(Number(s))) throw new Error('Invalid amount');
-    const [whole = '0', frac = ''] = s.split('.');
-    if (frac.length > decimals) throw new Error(`Too many decimal places (max ${decimals})`);
-    const padded = frac.padEnd(decimals, '0');
-    const val = BigInt(whole) * (10n ** BigInt(decimals)) + BigInt(padded);
-    if (val <= 0n) throw new Error('Amount must be greater than zero');
-    return val;
-}
-
-function isValidAddress(addr) {
-    return /^0x[0-9a-fA-F]{40}$/.test(addr);
-}
-
-
-// ═══════════════════════════════════════════════════════
-// TRANSACTION BUILDER
-// ═══════════════════════════════════════════════════════
-
-const ENTRY_POINT = hexToBytes('5FF137D4b0FDCD49DCA30c7CF57E578a026d2789');
-const KECCAK_EMPTY = hexToBytes('c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470');
-
-const GAS = {
-    maxPriorityFee: 2_000_000_000n,
-    maxFee: 50_000_000_000n,
-    ethGasLimit: 21000n,
-    tokenGasLimit: 100000n,
-    defiGasLimit: 200000n,
-    callGasLimit: 100000n,
-    verificationGasLimit: 200000n,
-    preVerificationGas: 21000n,
-};
-
-function buildEip1559Tx(chainId, to, value, data, gasLimit) {
-    const body = rlpEncode([
-        BigInt(chainId),      // chain_id
-        0n,                   // nonce
-        GAS.maxPriorityFee,   // max_priority_fee_per_gas
-        GAS.maxFee,           // max_fee_per_gas
-        gasLimit,             // gas_limit
-        hexToBytes(to.replace('0x', '')), // to
-        value,                // value
-        data || new Uint8Array(0), // data
-        [],                   // access_list
-    ]);
-    const tx = new Uint8Array(1 + body.length);
-    tx[0] = 0x02; // EIP-1559 type
-    tx.set(body, 1);
-    return tx;
-}
-
-function u256buf(value) {
-    const buf = new Uint8Array(32);
-    const bytes = bigIntToMinBytes(BigInt(value));
-    buf.set(bytes, 32 - bytes.length);
-    return buf;
-}
-
-function u64buf(value) {
-    const buf = new Uint8Array(8);
-    const v = BigInt(value);
-    for (let i = 0; i < 8; i++) buf[i] = Number((v >> BigInt((7 - i) * 8)) & 0xFFn);
-    return buf;
-}
-
-function u32buf(value) {
-    const v = value >>> 0;
-    return new Uint8Array([(v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF]);
-}
-
-function u16buf(value) {
-    return new Uint8Array([(value >> 8) & 0xFF, value & 0xFF]);
-}
-
-function buildSignUserOpPayload(chainId, txBytes, bundle = null) {
-    const parts = [];
-    parts.push(u32buf(0));                // key_index = 0
-    parts.push(u32buf(nextOtsIndex));     // ots_index (monotonic per session)
-    parts.push(new Uint8Array(20));  // sender = zeros (not deployed)
-    parts.push(ENTRY_POINT);        // entry_point
-    parts.push(u64buf(chainId));     // chain_id
-    parts.push(u256buf(1n));         // nonce = 1
-    parts.push(u256buf(GAS.callGasLimit));
-    parts.push(u256buf(GAS.verificationGasLimit));
-    parts.push(u256buf(GAS.preVerificationGas));
-    parts.push(u256buf(GAS.maxFee));
-    parts.push(u256buf(GAS.maxPriorityFee));
-    parts.push(KECCAK_EMPTY);       // init_code_hash
-    parts.push(KECCAK_EMPTY);       // paymaster_and_data_hash
-    parts.push(u16buf(txBytes.length)); // tx_len
-    parts.push(txBytes);            // tx
-    parts.push(u16buf(bundle ? bundle.length : 0)); // bundle_len
-    if (bundle) parts.push(bundle);
-
-    const totalLen = parts.reduce((s, p) => s + p.length, 0);
-    const payload = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const p of parts) { payload.set(p, offset); offset += p.length; }
-    return payload;
-}
-
-function buildTransferCalldata(recipient, amount) {
-    const data = new Uint8Array(68);
-    data[0] = 0xa9; data[1] = 0x05; data[2] = 0x9c; data[3] = 0xbb; // transfer selector
-    const addrBytes = hexToBytes(recipient.replace('0x', ''));
-    data.set(addrBytes, 4 + 12);
-    const amountBytes = bigIntToMinBytes(amount);
-    data.set(amountBytes, 4 + 32 + (32 - amountBytes.length));
-    return data;
-}
-
-const TransactionBuilder = {
-    ethTransfer(to, amountWei, chainId = 1n) {
-        const tx = buildEip1559Tx(chainId, to, amountWei, null, GAS.ethGasLimit);
-        return buildSignUserOpPayload(chainId, tx);
-    },
-
-    usdcTransfer(to, amountUsdc, chainId = 1n) {
-        const calldata = buildTransferCalldata(to, amountUsdc);
-        const usdcContract = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
-        const tx = buildEip1559Tx(chainId, usdcContract, 0n, calldata, GAS.tokenGasLimit);
-        return buildSignUserOpPayload(chainId, tx, ERC20_USDC_BUNDLE);
-    },
-
-    aaveSupplyDemo(chainId = 1n) {
-        // Pre-computed ZK proof for Aave V3 supply(1000 USDC) — exact test vectors
-        const proof = new Uint8Array([
-            // π.A (96 bytes)
-            0x0d, 0x5f, 0xe2, 0xf5, 0x09, 0x8c, 0x66, 0x6c, 0x7f, 0xb4, 0x09, 0xba,
-            0xe4, 0x69, 0xa8, 0x85, 0xc9, 0x0b, 0x81, 0x7e, 0x0f, 0x3b, 0x54, 0x33,
-            0x24, 0x7d, 0x3d, 0xb2, 0x0d, 0x2f, 0xb7, 0xd5, 0x21, 0xc0, 0x29, 0xa0,
-            0x04, 0x8b, 0x2f, 0x21, 0xc8, 0xf0, 0x29, 0x5e, 0x21, 0x32, 0xd0, 0xe8,
-            0x10, 0x5b, 0x2b, 0xcc, 0x3b, 0x95, 0x6f, 0xa6, 0x9d, 0xf2, 0x66, 0x75,
-            0x6d, 0x27, 0x51, 0x0c, 0x19, 0xee, 0xcd, 0xd8, 0x36, 0x4d, 0xc1, 0x6c,
-            0x3b, 0xb1, 0x4d, 0x5d, 0x4b, 0x15, 0x6c, 0x9d, 0xa5, 0xff, 0x8a, 0x3e,
-            0x68, 0xf9, 0x76, 0x9c, 0xb8, 0x05, 0x6e, 0x2e, 0x01, 0x74, 0x81, 0xaa,
-            // π.B (192 bytes)
-            0x04, 0x99, 0xb1, 0x98, 0xae, 0x51, 0x4d, 0x30, 0x79, 0x11, 0x53, 0x79,
-            0x00, 0x36, 0xf9, 0xa0, 0x1d, 0xdc, 0x9d, 0x94, 0x70, 0x89, 0x89, 0xaa,
-            0x61, 0x84, 0xe0, 0xd9, 0xc5, 0x0e, 0x85, 0x83, 0x82, 0x56, 0x80, 0x12,
-            0xe8, 0xa0, 0xd4, 0xcb, 0x45, 0xa9, 0x0a, 0x63, 0x78, 0x64, 0x3b, 0x5f,
-            0x0d, 0xad, 0x10, 0xbc, 0x4a, 0xd4, 0x9e, 0x8a, 0xd6, 0x26, 0x36, 0x14,
-            0xa2, 0x8f, 0x62, 0xec, 0x74, 0x19, 0x02, 0x38, 0xc8, 0x05, 0xb0, 0x62,
-            0xb7, 0x2d, 0xbc, 0x1e, 0xb7, 0x25, 0xbb, 0x89, 0xe8, 0x23, 0xbf, 0x5b,
-            0xa5, 0x32, 0x3f, 0x6d, 0xc8, 0x9b, 0x33, 0xcd, 0xb3, 0x5a, 0x82, 0xc2,
-            0x11, 0x77, 0x7a, 0x18, 0xa9, 0x02, 0xcd, 0x1a, 0x96, 0xe1, 0x92, 0xdd,
-            0x0e, 0x75, 0x5b, 0x51, 0x96, 0xf2, 0xd9, 0x0e, 0xc3, 0xe3, 0x6f, 0xfa,
-            0x06, 0xf8, 0xcd, 0x1c, 0x0d, 0x89, 0xc5, 0x36, 0x2b, 0x0b, 0x2f, 0x73,
-            0xe6, 0xdc, 0x62, 0x49, 0xc0, 0x04, 0xb4, 0x10, 0x73, 0xef, 0xdd, 0x45,
-            0x10, 0x66, 0x7a, 0x37, 0xa0, 0xbb, 0x42, 0x19, 0x94, 0xd8, 0xe4, 0xbd,
-            0x50, 0xea, 0xf6, 0x11, 0xd7, 0x7d, 0x2f, 0x13, 0xa3, 0xc8, 0x09, 0x3c,
-            0x2b, 0x17, 0x21, 0x64, 0xdd, 0xef, 0x14, 0x7d, 0x06, 0x77, 0xa7, 0x7e,
-            0xb9, 0x0e, 0xd3, 0x4a, 0x17, 0x37, 0x1a, 0xb7, 0xc6, 0x69, 0xb9, 0xcd,
-            // π.C (96 bytes)
-            0x0f, 0x11, 0xcd, 0x45, 0x15, 0x10, 0xec, 0x5e, 0x92, 0x6a, 0x46, 0x9d,
-            0x1b, 0xab, 0x95, 0xc2, 0xe6, 0xf3, 0xe9, 0xe2, 0x85, 0xb8, 0x05, 0x80,
-            0x15, 0x06, 0x55, 0x72, 0x75, 0x52, 0x0e, 0x27, 0xfa, 0x7f, 0x37, 0x72,
-            0xd3, 0xc3, 0x73, 0x94, 0x12, 0xe0, 0x21, 0xb1, 0xb7, 0x41, 0x96, 0xc3,
-            0x15, 0xc8, 0xdb, 0xc2, 0x37, 0x7b, 0x98, 0x95, 0x81, 0x33, 0x2e, 0x6a,
-            0x95, 0xe0, 0xe1, 0x14, 0x82, 0x74, 0xb0, 0x2d, 0x84, 0x25, 0xa1, 0xc7,
-            0x97, 0xdb, 0x17, 0x79, 0x36, 0x27, 0x84, 0x3f, 0xb4, 0xf1, 0x67, 0x46,
-            0x37, 0xe2, 0x0b, 0x79, 0x96, 0x62, 0x7b, 0x01, 0x38, 0xb7, 0x6a, 0x2c,
-        ]);
-
-        // Calldata: supply(address,uint256,address,uint16) — 164 bytes
-        const calldata = new Uint8Array([
-            0x61, 0x7b, 0xa0, 0x37,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x3b, 0x9a, 0xca, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8,
-            0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        ]);
-
-        // Human-readable string — 64 bytes null-padded
-        const readable = new Uint8Array([
-            0x53, 0x75, 0x70, 0x70, 0x6c, 0x79, 0x20, 0x30, 0x30, 0x30, 0x30, 0x30,
-            0x30, 0x31, 0x30, 0x30, 0x30, 0x2e, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-            0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
-            0x20, 0x55, 0x53, 0x44, 0x43, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-        ]);
-
-        // Unsigned EIP-1559 envelope: Aave V3 supply(1000 USDC)
-        const aaveTx = new Uint8Array([
-            0x02, 0xf8, 0xae, 0x01, 0x80, 0x84, 0x77, 0x35, 0x94, 0x00, 0x85, 0x0b,
-            0xa4, 0x3b, 0x74, 0x00, 0x83, 0x03, 0x0d, 0x40, 0x94, 0x87, 0x87, 0x0b,
-            0xca, 0x3f, 0x3f, 0xd6, 0x33, 0x5c, 0x3f, 0x4c, 0xe8, 0x39, 0x2d, 0x69,
-            0x35, 0x0b, 0x4f, 0xa4, 0xe2, 0x80, 0xb8, 0x84, 0x61, 0x7b, 0xa0, 0x37,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a,
-            0x2e, 0x9e, 0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x3b, 0x9a, 0xca, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53,
-            0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc, 0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0,
-        ]);
-
-        const parts = [];
-        parts.push(u32buf(0));                // key_index
-        parts.push(u32buf(nextOtsIndex));     // ots_index (monotonic per session)
-        parts.push(proof);               // proof (384 bytes)
-        parts.push(calldata);            // calldata (164 bytes)
-        parts.push(readable);            // readable (64 bytes)
-        parts.push(new Uint8Array(20));  // sender
-        parts.push(ENTRY_POINT);         // entry_point
-        parts.push(u64buf(chainId));     // chain_id
-        parts.push(u256buf(1n));         // nonce
-        parts.push(u256buf(GAS.defiGasLimit)); // call_gas_limit
-        parts.push(u256buf(GAS.verificationGasLimit));
-        parts.push(u256buf(GAS.preVerificationGas));
-        parts.push(u256buf(GAS.maxFee));
-        parts.push(u256buf(GAS.maxPriorityFee));
-        parts.push(KECCAK_EMPTY);        // init_code_hash
-        parts.push(KECCAK_EMPTY);        // paymaster_hash
-        parts.push(u16buf(aaveTx.length));
-        parts.push(aaveTx);
-        parts.push(u16buf(VK_AAVE_BUNDLE.length));
-        parts.push(VK_AAVE_BUNDLE);
-
-        const totalLen = parts.reduce((s, p) => s + p.length, 0);
-        const payload = new Uint8Array(totalLen);
-        let offset = 0;
-        for (const p of parts) { payload.set(p, offset); offset += p.length; }
-        return payload;
-    },
-};
-
-
-// ═══════════════════════════════════════════════════════
-// DEVICE API
-// ═══════════════════════════════════════════════════════
-
+// ── DeviceAPI ────────────────────────────────────────────────────
 const DeviceAPI = {
-    async connect() {
-        const devices = await navigator.hid.requestDevice({
-            filters: [{ vendorId: VID, productId: PID }]
-        });
-        if (devices.length === 0) throw new Error('No device selected');
-        device = devices[0];
-        await device.open();
-        devLog(`Connected: ${device.productName}`);
-        return { name: device.productName };
-    },
+  async connect() {
+    const filters = [{ vendorId: VID, productId: PID }];
+    const devices = await navigator.hid.requestDevice({ filters });
+    if (devices.length === 0) throw new Error('No device selected');
+    device = devices[0];
+    if (!device.opened) await device.open();
+    log(`Connected: ${device.productName}`, 'ok');
+  },
 
-    async getDeviceInfo() {
-        const { sw, data } = await sendApdu(INS_GET_DEVICE_INFO, 0, 0);
-        if (sw !== SW_OK || data.length < 40) throw new DeviceError(sw, 'Failed to get device info');
-        return {
-            protocolVersion: `${data[0]}.${data[1]}`,
-            firmware: `${data[2]}.${data[3]}.${data[4]}`,
-            uid: hexCompact(data.slice(5, 21)),
-            capabilities: u32be(data[21], data[22], data[23], data[24]),
-            sigParam: data[25] === 0 ? 'SHA2-128f' : 'SHA2-192f',
-            sigSize: u16be(data[26], data[27]),
-            erc20Db: u32be(data[28], data[29], data[30], data[31]).toString(16),
-            vkDb: u32be(data[32], data[33], data[34], data[35]).toString(16),
-            entryPoint: `v0.${u16be(data[36], data[37])}`,
-            wrapperOverhead: u16be(data[38], data[39]),
-            capUserOp: capBit(u32be(data[21], data[22], data[23], data[24]), 0),
-            capZkClear: capBit(u32be(data[21], data[22], data[23], data[24]), 1),
-            capMessage: capBit(u32be(data[21], data[22], data[23], data[24]), 3),
-        };
-    },
+  async getDeviceInfo() {
+    const r = await sendApdu(INS_GET_DEVICE_INFO, 0, 0);
+    if (r.sw !== SW_OK) throw new Error(`SW=0x${r.sw.toString(16)}`);
+    return r.data;
+  },
 
-    async getStatus() {
-        const { sw, data } = await sendApdu(INS_GET_STATUS, 0, 0);
-        if (sw !== SW_OK || data.length < 3) throw new DeviceError(sw, 'Failed to get status');
-        return {
-            provisioned: !!data[0],
-            locked: !!data[1],
-            pinRemaining: data[2],
-        };
-    },
+  async getStatus() {
+    const r = await sendApdu(INS_GET_STATUS, 0, 0);
+    if (r.sw !== SW_OK) throw new Error(`SW=0x${r.sw.toString(16)}`);
+    return { provisioned: r.data[0], locked: r.data[1], pinRemaining: r.data[2] };
+  },
 
-    async unlock() {
-        const { sw } = await sendApdu(INS_UNLOCK, 0, 0);
-        return { success: sw === SW_OK, sw };
-    },
+  async unlock() {
+    const r = await sendApdu(INS_UNLOCK, 0, 0);
+    return r.sw;
+  },
 
-    async lock() {
-        const { sw } = await sendApdu(INS_LOCK, 0, 0);
-        return { success: sw === SW_OK };
-    },
+  async lock() {
+    const r = await sendApdu(INS_LOCK, 0, 0);
+    return r.sw;
+  },
 
-    async getWalletAddress(chainId = 1) {
-        const payload = new Uint8Array(60);
-        payload.set(u64buf(chainId), 0);
-        // factory (20 bytes, zeros) + init_code_hash (32 bytes, zeros)
+  async getSlotInfo(chainId) {
+    const r = await sendApdu(INS_GET_JARDIN_INFO, 0, 0, u64be(chainId));
+    if (r.sw !== SW_OK) throw new Error(`SW=0x${r.sw.toString(16)}`);
+    const d = r.data;
+    const slotIndex = (d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3];
+    const nextQ = (d[4] << 24) | (d[5] << 16) | (d[6] << 8) | d[7];
+    const flags = (d[8] << 24) | (d[9] << 16) | (d[10] << 8) | d[11];
+    const active = d[12];
+    const hR = d.slice(13, 45);
+    return { slotIndex: slotIndex >>> 0, nextQ: nextQ >>> 0, flags, active, hR };
+  },
 
-        const { sw, data } = await sendApdu(INS_GET_WALLET_ADDRESS, 0, 0, payload);
-        if (sw !== SW_OK || data.length < 20) throw new DeviceError(sw, 'Failed to get address');
-        return hexCompact(data.slice(0, 20));
-    },
-
-    async signUserOp(payload) {
-        devLog(`  Sending SIGN_USEROP (${payload.length} bytes)...`);
-        const { sw, data } = await sendChainedApdu(INS_SIGN_USEROP, payload);
-        if (sw !== SW_OK) throw new DeviceError(sw, 'Sign failed');
-        return { sw, data, wrapper: parseWrapper(data) };
-    },
-
-    async signClearUserOp(payload) {
-        devLog(`  Sending SIGN_CLEAR_USEROP (${payload.length} bytes)...`);
-        const { sw, data } = await sendChainedApdu(INS_SIGN_CLEAR_USEROP, payload);
-        if (sw !== SW_OK) throw new DeviceError(sw, 'ZK clear-sign failed');
-        return { sw, data, wrapper: parseWrapper(data) };
-    },
+  /// Unified sign: returns { type1, type2 } Uint8Arrays (type1 can be null).
+  async signUserOp(params) {
+    const payload = buildSignPayload(params);
+    log(`Sign request: ${payload.length}B payload`, 'info');
+    const r = await sendChainedApdu(INS_SIGN_USEROP, payload);
+    if (r.sw !== SW_OK) throw new Error(`Sign failed: SW=0x${r.sw.toString(16)}`);
+    return parseSignResponse(r.data);
+  },
 };
 
-class DeviceError extends Error {
-    constructor(sw, message) {
-        super(message);
-        this.sw = sw;
-    }
+// ── Payload + response helpers ─────────────────────────────────────
+//
+// Optional trailer sections (after inner-tx calldata):
+//   * `erc20Bundle`: Merkle-verified ERC-20 metadata. When present the
+//     device displays token symbol + decimals ("1 USDC" instead of
+//     "1,000,000 raw units").
+//   * `zkBundle`: Groth16 clear-sign attestation. When present the
+//     device displays the attested readable string instead of the raw
+//     calldata hex.
+function buildSignPayload(p) {
+  const sender = hexToBytes(p.sender || '0x0000000000000000000000000000000000000000');
+  if (sender.length !== 20) throw new Error('sender must be 20 bytes');
+  const entryPoint = hexToBytes(p.entryPoint || ENTRY_POINT_V09);
+  if (entryPoint.length !== 20) throw new Error('entryPoint must be 20 bytes');
+  const to = hexToBytes(p.to);
+  if (to.length !== 20) throw new Error('to must be 20 bytes');
+  const data = p.data ? hexToBytes(p.data) : new Uint8Array(0);
+  if (data.length > 0xFFFF) throw new Error('inner data too long');
+
+  const erc20Bundle = p.erc20Bundle || new Uint8Array(0);
+  const zkBundle = p.zkBundle || new Uint8Array(0);
+
+  // accountGasLimits = (verGas << 128) | callGas
+  const agl = concatBytes([u128be(p.verGas), u128be(p.callGas)]);
+  // gasFees = (maxPriorityFee << 128) | maxFee
+  const gf = concatBytes([u128be(p.maxPriorityFeePerGas), u128be(p.maxFeePerGas)]);
+
+  const head = concatBytes([
+    u64be(p.chainId),
+    u32be(p.slotIndexHint || 0),
+    sender,
+    entryPoint,
+    u256be(p.nonce),
+    agl,
+    u256be(p.preVerificationGas),
+    gf,
+    p.paymasterAndDataHash || KECCAK_EMPTY,
+    to,
+    u256be(p.value),
+    u16be(data.length),
+    data,
+  ]);
+
+  // Omit both trailer sections entirely when neither is present. Older
+  // firmware that doesn't know about them silently accepts this shape.
+  if (erc20Bundle.length === 0 && zkBundle.length === 0) {
+    return head;
+  }
+
+  return concatBytes([
+    head,
+    u16be(erc20Bundle.length),
+    erc20Bundle,
+    u16be(zkBundle.length),
+    zkBundle,
+  ]);
 }
 
-
-// ═══════════════════════════════════════════════════════
-// UI MANAGER
-// ═══════════════════════════════════════════════════════
-
-const UI = {
-    els: {},
-
-    init() {
-        this.els = {
-            body: document.body,
-            statusDot: document.getElementById('statusDot'),
-            statusText: document.getElementById('statusText'),
-            lockBtn: document.getElementById('lockBtn'),
-            connectBtn: document.getElementById('connectBtn'),
-            unlockBtn: document.getElementById('unlockBtn'),
-            signBtn: document.getElementById('signBtn'),
-            pinInfo: document.getElementById('pinInfo'),
-            pinText: document.getElementById('pinText'),
-            walletAddress: document.getElementById('walletAddress'),
-            copyAddressBtn: document.getElementById('copyAddressBtn'),
-            deviceDetails: document.getElementById('deviceDetails'),
-            browserWarning: document.getElementById('browserWarning'),
-            progressOverlay: document.getElementById('progressOverlay'),
-            progressTitle: document.getElementById('progressTitle'),
-            progressSubtitle: document.getElementById('progressSubtitle'),
-            progressTrack: document.getElementById('progressTrack'),
-            progressFill: document.getElementById('progressFill'),
-            successOverlay: document.getElementById('successOverlay'),
-            sigSummary: document.getElementById('sigSummary'),
-            copySigBtn: document.getElementById('copySigBtn'),
-            dismissBtn: document.getElementById('dismissBtn'),
-            toastContainer: document.getElementById('toastContainer'),
-        };
-    },
-
-    setState(state) {
-        this.els.body.dataset.state = state;
-        const dot = this.els.statusDot;
-        dot.className = 'status-dot';
-        if (state === 'locked') dot.classList.add('connected');
-        if (state === 'unlocked') dot.classList.add('unlocked');
-    },
-
-    setStatus(text) {
-        this.els.statusText.textContent = text;
-    },
-
-    setPinInfo(remaining) {
-        const el = this.els.pinInfo;
-        el.className = 'pin-remaining';
-        if (remaining <= 3) el.classList.add('critical');
-        else if (remaining <= 6) el.classList.add('low');
-        this.els.pinText.textContent = `${remaining} attempts remaining`;
-    },
-
-    setAddress(addr) {
-        const el = this.els.walletAddress;
-        el.textContent = addr;
-        el.classList.remove('address-loading');
-    },
-
-    setAddressLoading() {
-        const el = this.els.walletAddress;
-        el.textContent = 'Fetching address...';
-        el.classList.add('address-loading');
-    },
-
-    setDeviceInfo(info) {
-        this.els.deviceDetails.innerHTML = [
-            ['Firmware', info.firmware],
-            ['Protocol', `v${info.protocolVersion}`],
-            ['Device UID', info.uid],
-            ['Signature', `${info.sigParam} (${info.sigSize}B)`],
-            ['EntryPoint', info.entryPoint],
-            ['Capabilities', [
-                info.capUserOp && 'UserOp',
-                info.capZkClear && 'ZK-ClearSign',
-                info.capMessage && 'Message',
-            ].filter(Boolean).join(', ') || 'None'],
-        ].map(([label, value]) =>
-            `<div class="info-row"><span class="info-label">${label}</span><span class="info-value">${value}</span></div>`
-        ).join('');
-    },
-
-    showProgress(title, subtitle = '') {
-        this.els.progressTitle.textContent = title;
-        this.els.progressSubtitle.textContent = subtitle;
-        this.els.progressTrack.style.display = 'none';
-        this.els.progressOverlay.classList.add('visible');
-    },
-
-    hideProgress() {
-        this.els.progressOverlay.classList.remove('visible');
-    },
-
-    showSuccess(result) {
-        const w = result.wrapper;
-        const sigType = w ? w.signerType : 'Unknown';
-        const sigLen = w ? w.sigLen : result.data.length;
-        const sigStart = w ? hexCompact(result.data.slice(w.headerLen, w.headerLen + 32)) : '...';
-
-        this.els.sigSummary.innerHTML = `
-            <div class="sig-field">
-                <label>Type</label>
-                <div class="sig-value">${sigType === 'MAIN' ? 'Standard' : sigType === 'COMPACT' ? 'Compact' : sigType}</div>
-            </div>
-            <div class="sig-field">
-                <label>Size</label>
-                <div class="sig-value">${sigLen.toLocaleString()} bytes</div>
-            </div>
-            <div class="sig-field">
-                <label>Signature Preview</label>
-                <div class="sig-value">${sigStart}...</div>
-            </div>
-        `;
-        // Reset SVG animation
-        const icon = document.querySelector('.success-icon');
-        icon.innerHTML = icon.innerHTML;
-
-        this.els.successOverlay.classList.add('visible');
-    },
-
-    hideSuccess() {
-        this.els.successOverlay.classList.remove('visible');
-    },
-
-    toast(message, type = 'info') {
-        const t = document.createElement('div');
-        t.className = `toast toast-${type}`;
-        t.textContent = message;
-        this.els.toastContainer.appendChild(t);
-        setTimeout(() => {
-            t.classList.add('removing');
-            setTimeout(() => t.remove(), 300);
-        }, 5000);
-    },
-
-    getActiveTab() {
-        const active = document.querySelector('.tab.active');
-        return active ? active.dataset.tab : 'eth';
-    },
-
-    setButtonLoading(btn, loading) {
-        if (loading) {
-            btn.dataset.originalText = btn.textContent;
-            btn.innerHTML = '<span class="spinner-sm"></span>' + (btn.dataset.loadingText || 'Processing...');
-            btn.disabled = true;
-        } else {
-            btn.textContent = btn.dataset.originalText || btn.textContent;
-            btn.disabled = false;
-        }
-    },
-
-    clearFormErrors() {
-        document.querySelectorAll('.field-error').forEach(el => el.classList.remove('visible'));
-        document.querySelectorAll('.form-field input').forEach(el => el.classList.remove('error'));
-    },
-
-    showFieldError(inputId, message) {
-        const input = document.getElementById(inputId);
-        const error = document.getElementById(inputId + 'Error');
-        if (input) input.classList.add('error');
-        if (error) { error.textContent = message; error.classList.add('visible'); }
-    },
-};
-
-
-// ═══════════════════════════════════════════════════════
-// APP CONTROLLER — state machine & orchestration
-// ═══════════════════════════════════════════════════════
-
-let appState = 'disconnected';
-let deviceInfo = null;
-let walletAddress = null;
-let lastSignResult = null;
-
-// OTS index counter. The secure world enforces strict monotonicity on
-// CMD_SIGN_USEROP per (chain_id, key_index) within an unlock session —
-// the first sign passes unconditionally, each later one must present a
-// strictly greater ots_index. Persisted in localStorage so that page
-// reloads don't clash with device state that survived the reload.
-let nextOtsIndex = Number(localStorage.getItem('pqsigner.nextOtsIndex') || '0') >>> 0;
-function setNextOtsIndex(v) {
-    nextOtsIndex = v >>> 0;
-    localStorage.setItem('pqsigner.nextOtsIndex', String(nextOtsIndex));
+function parseSignResponse(resp) {
+  if (resp.length < 8) throw new Error('response too short');
+  const t1Len = (resp[0] << 24) | (resp[1] << 16) | (resp[2] << 8) | resp[3];
+  let off = 4;
+  let type1 = null;
+  if (t1Len > 0) {
+    type1 = resp.slice(off, off + t1Len);
+    off += t1Len;
+  }
+  const t2Len = (resp[off] << 24) | (resp[off + 1] << 16) | (resp[off + 2] << 8) | resp[off + 3];
+  off += 4;
+  const type2 = resp.slice(off, off + t2Len);
+  return { type1, type2 };
 }
 
-function swToMessage(sw, context = '') {
-    switch (sw) {
-        case SW_CONDITIONS: return 'Device is locked. Please unlock first.';
-        case SW_SECURITY:
-            if (context === 'unlock') return 'Incorrect PIN.';
-            return 'Transaction rejected on device.';
-        case SW_SESSION_EXPIRED: return 'Session expired. Please unlock again.';
-        case SW_SLOT_EXHAUSTED: return 'Signing key exhausted.';
-        default: return `Device error (0x${sw.toString(16).padStart(4, '0')}).`;
-    }
-}
-
-async function handleConnect() {
-    try {
-        const { name } = await DeviceAPI.connect();
-        UI.setStatus(name);
-        UI.toast('Device connected', 'success');
-
-        // Fetch initial status
-        const status = await DeviceAPI.getStatus();
-        if (!status.locked) {
-            await transitionToUnlocked();
-        } else {
-            UI.setPinInfo(status.pinRemaining);
-            UI.setState('locked');
-            appState = 'locked';
-        }
-    } catch (e) {
-        if (e.message !== 'No device selected') {
-            UI.toast(e.message, 'error');
-        }
-    }
-}
-
-async function handleUnlock() {
-    UI.els.unlockBtn.dataset.loadingText = 'Waiting for PIN...';
-    UI.setButtonLoading(UI.els.unlockBtn, true);
-
-    try {
-        const { success, sw } = await DeviceAPI.unlock();
-        if (success) {
-            UI.toast('Device unlocked', 'success');
-            await transitionToUnlocked();
-        } else {
-            UI.toast(swToMessage(sw, 'unlock'), 'error');
-            // Refresh PIN attempts
-            try {
-                const status = await DeviceAPI.getStatus();
-                UI.setPinInfo(status.pinRemaining);
-            } catch (_) {}
-        }
-    } catch (e) {
-        UI.toast(e.message || 'Unlock failed', 'error');
-    } finally {
-        UI.setButtonLoading(UI.els.unlockBtn, false);
-        UI.els.unlockBtn.textContent = 'Unlock';
-    }
-}
-
-async function transitionToUnlocked() {
-    appState = 'unlocked';
-    UI.setState('unlocked');
-
-    // Fetch device info and address in parallel
-    UI.setAddressLoading();
-    try {
-        const [info, addr] = await Promise.all([
-            DeviceAPI.getDeviceInfo().catch(e => { devLog('DeviceInfo error: ' + e.message); return null; }),
-            DeviceAPI.getWalletAddress(1).catch(e => { devLog('Address error: ' + e.message); return null; }),
-        ]);
-
-        if (info) {
-            deviceInfo = info;
-            UI.setDeviceInfo(info);
-            UI.setStatus(device.productName);
-        }
-        if (addr) {
-            walletAddress = addr;
-            UI.setAddress(addr);
-        } else {
-            UI.setAddress('Address unavailable');
-        }
-    } catch (e) {
-        devLog('Unlock transition error: ' + e.message);
-    }
-}
-
-async function handleLock() {
-    try {
-        await DeviceAPI.lock();
-        appState = 'locked';
-        UI.setState('locked');
-        setNextOtsIndex(0); // device wiped its OTS state on lock
-        UI.toast('Device locked', 'info');
-        walletAddress = null;
-
-        const status = await DeviceAPI.getStatus();
-        UI.setPinInfo(status.pinRemaining);
-    } catch (e) {
-        UI.toast('Lock failed: ' + e.message, 'error');
-    }
-}
-
-async function handleSign() {
-    UI.clearFormErrors();
-    const tab = UI.getActiveTab();
-
-    let payload, commandType;
-    try {
-        if (tab === 'eth') {
-            const to = document.getElementById('ethTo').value.trim();
-            const amountStr = document.getElementById('ethAmount').value.trim();
-
-            if (!to) { UI.showFieldError('ethTo', 'Please enter a recipient address'); return; }
-            if (!isValidAddress(to)) { UI.showFieldError('ethTo', 'Invalid Ethereum address (must be 0x + 40 hex chars)'); return; }
-            if (!amountStr) { UI.showFieldError('ethAmount', 'Please enter an amount'); return; }
-
-            let amountWei;
-            try { amountWei = parseUnits(amountStr, 18); }
-            catch (e) { UI.showFieldError('ethAmount', e.message); return; }
-
-            payload = TransactionBuilder.ethTransfer(to, amountWei, 1n);
-            commandType = 'userop';
-            devLog(`ETH transfer: ${amountStr} ETH to ${to}`);
-
-        } else if (tab === 'erc20') {
-            const to = document.getElementById('erc20To').value.trim();
-            const amountStr = document.getElementById('erc20Amount').value.trim();
-
-            if (!to) { UI.showFieldError('erc20To', 'Please enter a recipient address'); return; }
-            if (!isValidAddress(to)) { UI.showFieldError('erc20To', 'Invalid Ethereum address (must be 0x + 40 hex chars)'); return; }
-            if (!amountStr) { UI.showFieldError('erc20Amount', 'Please enter an amount'); return; }
-
-            let amountUnits;
-            try { amountUnits = parseUnits(amountStr, 6); }
-            catch (e) { UI.showFieldError('erc20Amount', e.message); return; }
-
-            payload = TransactionBuilder.usdcTransfer(to, amountUnits, 1n);
-            commandType = 'userop';
-            devLog(`USDC transfer: ${amountStr} USDC to ${to}`);
-
-        } else if (tab === 'defi') {
-            payload = TransactionBuilder.aaveSupplyDemo(1n);
-            commandType = 'clear';
-            devLog('Aave V3 supply demo: 1000 USDC');
-        }
-    } catch (e) {
-        UI.toast('Failed to build transaction: ' + e.message, 'error');
-        return;
-    }
-
-    // Disable sign button
-    UI.els.signBtn.disabled = true;
-
-    // Show progress
-    UI.showProgress('Signing Transaction', 'Confirm on your device');
-
-    try {
-        let result;
-        if (commandType === 'userop') {
-            result = await DeviceAPI.signUserOp(payload);
-        } else {
-            result = await DeviceAPI.signClearUserOp(payload);
-        }
-
-        UI.hideProgress();
-        lastSignResult = result;
-        UI.showSuccess(result);
-        setNextOtsIndex(nextOtsIndex + 1);
-
-        if (result.wrapper) {
-            devLog(`  Signed: ${result.wrapper.signerType}, ${result.wrapper.sigLen}B signature`);
-        }
-    } catch (e) {
-        UI.hideProgress();
-        if (e instanceof DeviceError) {
-            if (e.sw === SW_SESSION_EXPIRED) {
-                appState = 'locked';
-                UI.setState('locked');
-                setNextOtsIndex(0); // device wiped its OTS state on idle wipe
-                UI.toast('Session expired. Please unlock again.', 'warn');
-                try {
-                    const status = await DeviceAPI.getStatus();
-                    UI.setPinInfo(status.pinRemaining);
-                } catch (_) {}
-                return;
-            }
-            if (e.sw === SW_CONDITIONS) {
-                appState = 'locked';
-                UI.setState('locked');
-                setNextOtsIndex(0); // device reports locked → state wiped
-                UI.toast('Device is locked. Please unlock first.', 'warn');
-                return;
-            }
-            UI.toast(swToMessage(e.sw), 'error');
-        } else {
-            UI.toast(e.message || 'Signing failed', 'error');
-        }
-    } finally {
-        UI.els.signBtn.disabled = false;
-    }
-}
-
-
-// ═══════════════════════════════════════════════════════
-// INITIALIZATION
-// ═══════════════════════════════════════════════════════
-
-document.addEventListener('DOMContentLoaded', () => {
-    UI.init();
-
-    // Check WebHID support
-    if (!navigator.hid) {
-        UI.els.browserWarning.classList.add('visible');
-        UI.els.connectBtn.disabled = true;
-    }
-
-    // Device disconnect handler
-    navigator.hid?.addEventListener('disconnect', (e) => {
-        if (device && e.device === device) {
-            device = null;
-            appState = 'disconnected';
-            UI.setState('disconnected');
-            UI.setStatus('Not connected');
-            UI.toast('Device disconnected', 'warn');
-            walletAddress = null;
-        }
-    });
-
-    // Main button handlers
-    UI.els.connectBtn.addEventListener('click', handleConnect);
-    UI.els.unlockBtn.addEventListener('click', handleUnlock);
-    UI.els.lockBtn.addEventListener('click', handleLock);
-    UI.els.signBtn.addEventListener('click', handleSign);
-
-    // Tab switching
-    document.querySelectorAll('.tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            tab.classList.add('active');
-            const content = document.querySelector(`[data-content="${tab.dataset.tab}"]`);
-            if (content) content.classList.add('active');
-            UI.clearFormErrors();
-        });
-    });
-
-    // Copy address
-    UI.els.copyAddressBtn.addEventListener('click', async () => {
-        if (!walletAddress) return;
-        try {
-            await navigator.clipboard.writeText(walletAddress);
-            UI.els.copyAddressBtn.classList.add('copied');
-            UI.toast('Address copied', 'success');
-            setTimeout(() => UI.els.copyAddressBtn.classList.remove('copied'), 2000);
-        } catch (_) {
-            UI.toast('Failed to copy', 'error');
-        }
-    });
-
-    // Copy signature
-    UI.els.copySigBtn.addEventListener('click', async () => {
-        if (!lastSignResult) return;
-        try {
-            await navigator.clipboard.writeText(hexCompact(lastSignResult.data));
-            UI.toast('Signature copied', 'success');
-        } catch (_) {
-            UI.toast('Failed to copy', 'error');
-        }
-    });
-
-    // Dismiss success
-    UI.els.dismissBtn.addEventListener('click', () => UI.hideSuccess());
-
-    // Close overlays on backdrop click
-    UI.els.successOverlay.addEventListener('click', (e) => {
-        if (e.target === UI.els.successOverlay) UI.hideSuccess();
-    });
+// ── UI wiring ────────────────────────────────────────────────────
+$('connectBtn').addEventListener('click', async () => {
+  try {
+    await DeviceAPI.connect();
+    setStatus('Connected, locked', 'warn');
+    setButtonState(true, false);
+    await refreshStatus();
+  } catch (e) {
+    log(`Connect failed: ${e.message}`, 'err');
+  }
 });
 
+$('unlockBtn').addEventListener('click', async () => {
+  try {
+    log('Requesting unlock — enter PIN on device...', 'info');
+    const sw = await DeviceAPI.unlock();
+    if (sw === SW_OK) {
+      log('Unlocked', 'ok');
+      setStatus('Unlocked', 'ok');
+      setButtonState(true, true);
+    } else {
+      log(`Unlock failed: SW=0x${sw.toString(16)}`, 'err');
+    }
+  } catch (e) { log(`Unlock error: ${e.message}`, 'err'); }
+});
+
+$('lockBtn').addEventListener('click', async () => {
+  try {
+    await DeviceAPI.lock();
+    log('Locked', 'ok');
+    setStatus('Locked', 'warn');
+    setButtonState(true, false);
+  } catch (e) { log(`Lock error: ${e.message}`, 'err'); }
+});
+
+$('slotInfoBtn').addEventListener('click', async () => {
+  try {
+    const chainId = BigInt($('chainId').value);
+    const info = await DeviceAPI.getSlotInfo(chainId);
+    $('slotIdx').textContent = info.active ? info.slotIndex : '—';
+    $('nextQ').textContent = info.active ? info.nextQ : '—';
+    log(`Slot info: slot=${info.slotIndex}, next_q=${info.nextQ}, flags=${info.flags}, active=${info.active}`, 'info');
+  } catch (e) { log(`Slot info failed: ${e.message}`, 'err'); }
+});
+
+$('signBtn').addEventListener('click', async () => {
+  $('signBtn').disabled = true;
+  try {
+    const params = {
+      chainId: BigInt($('chainId').value),
+      slotIndexHint: 0,
+      sender: '0x' + '42'.repeat(20), // TODO: compute from master pk via factory
+      entryPoint: ENTRY_POINT_V09,
+      nonce: BigInt($('nonce').value),
+      verGas: DEFAULT_GAS.verGas,
+      callGas: DEFAULT_GAS.callGas,
+      preVerificationGas: DEFAULT_GAS.preVerificationGas,
+      maxPriorityFeePerGas: DEFAULT_GAS.maxPriorityFeePerGas,
+      maxFeePerGas: DEFAULT_GAS.maxFeePerGas,
+      paymasterAndDataHash: KECCAK_EMPTY,
+      to: $('to').value,
+      value: BigInt($('value').value || '0'),
+      data: $('data').value.trim() || undefined,
+    };
+    log('Confirm the transaction on the device...', 'info');
+    const { type1, type2 } = await DeviceAPI.signUserOp(params);
+    lastResult = { type1, type2 };
+    $('t1Len').textContent = type1 ? `${type1.length} B` : '0 (no registration)';
+    $('t2Len').textContent = `${type2.length} B`;
+    if (type1) {
+      log(`Type 1 (slot register): ${type1.length}B — 0x${bytesToHex(type1.slice(0, 32))}...`, 'ok');
+    } else {
+      log('No Type 1 needed (slot already registered on this chain)', 'info');
+    }
+    log(`Type 2 (user tx sig): ${type2.length}B — 0x${bytesToHex(type2.slice(0, 32))}...`, 'ok');
+    $('submitBtn').disabled = false;
+    // Refresh slot info so the next_q display is current.
+    try {
+      const info = await DeviceAPI.getSlotInfo(params.chainId);
+      $('slotIdx').textContent = info.slotIndex;
+      $('nextQ').textContent = info.nextQ;
+    } catch (_) {}
+  } catch (e) {
+    log(`Sign failed: ${e.message}`, 'err');
+  } finally {
+    $('signBtn').disabled = false;
+  }
+});
+
+$('submitBtn').addEventListener('click', async () => {
+  if (!lastResult) return;
+  const url = $('bundlerUrl').value.trim();
+  if (!url) {
+    log('No bundler URL set — cannot submit. Paste an RPC URL in the Bundler card.', 'warn');
+    return;
+  }
+  log('Bundler submission not yet wired up in this tool. Use script/submit_userop.py.', 'warn');
+  // A full implementation would construct two PackedUserOperation objects
+  // (Type 1 at supplied nonce, Type 2 at nonce+1) and POST them to the
+  // bundler via eth_sendUserOperation.
+});
+
+async function refreshStatus() {
+  try {
+    const s = await DeviceAPI.getStatus();
+    if (s.provisioned === 0) setStatus('Not provisioned', 'err');
+    else if (s.locked) setStatus('Locked', 'warn');
+    else { setStatus('Unlocked', 'ok'); setButtonState(true, true); }
+    log(`Status: provisioned=${s.provisioned}, locked=${s.locked}, pinRemaining=${s.pinRemaining}`);
+  } catch (e) {
+    log(`Status error: ${e.message}`, 'err');
+  }
+}
+
+log('Ready. Click Connect to select your device.', 'info');
 </script>
 </body>
 </html>

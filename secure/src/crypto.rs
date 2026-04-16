@@ -488,6 +488,168 @@ pub fn jardin_master_entropy_from_entropy(
 }
 
 // ---------------------------------------------------------------------------
+// SPHINCS+C11 master keypair derivation (SPHINCs--compatible)
+// ---------------------------------------------------------------------------
+//
+// The master C11 keypair is the long-term identity of a JARDÍN wallet:
+// the CREATE2 salt is `keccak256(masterPkSeed || masterPkRoot)`, so the
+// same 24 words produce the same on-chain wallet address across every
+// chain forever.
+//
+// Derivation matches `/home/markus/SPHINCs-/signer-wasm/src/keygen.rs`
+// byte-for-byte. The "sphincs-c6-v1" domain tag is a historical quirk
+// inherited from when the reference repo used SPHINCS+C6; it must NOT be
+// "modernised" to "sphincs-c11-v1" because that would invalidate every
+// already-written backup. This is part of the frozen recovery contract.
+//
+// This derivation is separate from the JARDÍN master entropy above: the
+// C11 keys sign only Type 1 slot-registration payloads, never user txs.
+
+/// SPHINCS+C11 master-key derivation from the 64-byte BIP-39 seed.
+///
+/// Returns `(pk_seed_32, sk_seed_32)`.
+///
+/// - `pk_seed_32`: the top 16 bytes are `keccak256("pk_seed" || master[0..32])[0..16]`
+///   and the bottom 16 bytes are zero. This is the N-mask layout used by
+///   every SPHINCS+C11 internal hash and the on-chain `masterPkSeed`
+///   immutable.
+/// - `sk_seed_32`: the full 32 bytes of `keccak256("sk_seed" || master[0..32])`.
+///
+/// `master = HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (only the first 32
+/// bytes are consumed; the remainder is discarded and wiped).
+///
+/// This is part of the **recovery contract** — same 24 words must produce
+/// the same keys forever. Domain tags are byte-identical to the reference.
+pub fn derive_c11_master_from_bip39_seed(bip39_seed: &[u8; 64]) -> ([u8; 32], [u8; 32]) {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    use sha3::{Digest as _, Keccak256};
+
+    // Step 1: HMAC-SHA512("sphincs-c6-v1", bip39_seed) → 64-byte master.
+    // Length note: the tag is exactly 13 ASCII bytes; NO length-prefix, NO
+    // NUL terminator. Matches `keygen.rs:38` in the reference.
+    //
+    // Use the `Mac::new_from_slice` path explicitly because both `Mac`
+    // and `KeyInit` traits define an identically-named constructor.
+    let mut mac = <Hmac<Sha512> as Mac>::new_from_slice(b"sphincs-c6-v1")
+        .expect("HMAC-SHA512 accepts any key length");
+    mac.update(bip39_seed);
+    let master_ga = mac.finalize().into_bytes();
+    let mut master = [0u8; 64];
+    master.copy_from_slice(&master_ga);
+
+    // Step 2: pk_seed = mask_n(keccak256("pk_seed" || master[0..32]))
+    //   mask_n keeps bytes [0..16] and zeros bytes [16..32].
+    let mut pk_hasher = Keccak256::new();
+    pk_hasher.update(b"pk_seed");
+    pk_hasher.update(&master[..32]);
+    let pk_digest: [u8; 32] = pk_hasher.finalize().into();
+    let mut pk_seed = [0u8; 32];
+    pk_seed[..16].copy_from_slice(&pk_digest[..16]);
+
+    // Step 3: sk_seed = keccak256("sk_seed" || master[0..32])  (full 32 bytes, no mask).
+    let mut sk_hasher = Keccak256::new();
+    sk_hasher.update(b"sk_seed");
+    sk_hasher.update(&master[..32]);
+    let sk_digest: [u8; 32] = sk_hasher.finalize().into();
+    let mut sk_seed = [0u8; 32];
+    sk_seed.copy_from_slice(&sk_digest);
+
+    master.zeroize();
+
+    (pk_seed, sk_seed)
+}
+
+/// Convenience wrapper: run the BIP-39 chain from 32-byte entropy, then
+/// derive the C11 master keys. Wipes the intermediate `bip39_seed`.
+pub fn derive_c11_master_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+) -> ([u8; 32], [u8; 32]) {
+    let mnemonic = Mnemonic::from_entropy(entropy);
+    let mut bip39_seed = mnemonic.to_seed("");
+    let result = derive_c11_master_from_bip39_seed(&bip39_seed);
+    bip39_seed.zeroize();
+    result
+}
+
+/// Full C11 master-keypair derivation including hypertree-root keygen.
+///
+/// Returns `(signing_key, master_pk_seed_32, master_pk_root_32)`.
+///
+/// - `signing_key` is a ready-to-use `sphincs_c7::SigningKey` (the crate
+///   name is a historical holdover — it actually implements C11).
+/// - `master_pk_seed_32` is the N-masked public seed suitable for storing
+///   as an on-chain `bytes32` (top 16 bytes populated, bottom 16 zero).
+/// - `master_pk_root_32` is the N-masked hypertree root in the same layout.
+///
+/// **Expensive**: runs the full C11 hypertree keygen (256 WOTS keys +
+/// Merkle root at top layer). Only call when actually producing a Type 1
+/// signature. On Cortex-M33 this takes ~3 s; on QEMU it takes much less.
+pub fn derive_c11_master_keypair_from_entropy(
+    entropy: &[u8; ENTROPY_LEN],
+) -> (sphincs_c7::SigningKey, [u8; 32], [u8; 32]) {
+    derive_c11_master_keypair_from_entropy_with_progress(entropy, |_| {})
+}
+
+/// Like [`derive_c11_master_keypair_from_entropy`] but reports 0..100 keygen
+/// progress via the supplied callback so a trusted-UI progress bar can be
+/// kept responsive during the multi-second operation.
+pub fn derive_c11_master_keypair_from_entropy_with_progress(
+    entropy: &[u8; ENTROPY_LEN],
+    progress: impl Fn(u8),
+) -> (sphincs_c7::SigningKey, [u8; 32], [u8; 32]) {
+    progress(0);
+    let (pk_seed_32, sk_seed_32) = derive_c11_master_from_entropy(entropy);
+
+    // Pack pk_seed into the 16-byte N-slot shape the sphincs-c7 crate expects.
+    let mut pk_seed_16 = [0u8; 16];
+    pk_seed_16.copy_from_slice(&pk_seed_32[..16]);
+    let mut sk_seed_arr = [0u8; 32];
+    sk_seed_arr.copy_from_slice(&sk_seed_32);
+
+    // SigningKey::keygen builds the full hypertree. The report() closure
+    // inside progress() remains the caller's responsibility — the keygen
+    // itself is a single expensive call with no sub-progress hook.
+    progress(10);
+    let sk = sphincs_c7::SigningKey::keygen(sk_seed_arr, pk_seed_16);
+    progress(100);
+
+    // Build the N-masked 32-byte pk_root for on-chain storage.
+    let mut pk_root_32 = [0u8; 32];
+    pk_root_32[..16].copy_from_slice(sk.pk_root());
+
+    (sk, pk_seed_32, pk_root_32)
+}
+
+/// Sign a 32-byte message hash with the master C11 signing key and the
+/// (optional) randomiser. Wraps `sphincs_c7::SigningKey::sign` with a
+/// verify-before-release fault-injection guard.
+///
+/// The crate is called `sphincs-c7` for historical reasons but produces
+/// C11 signatures (3976 bytes) — see `sphincs-c7/src/params.rs`.
+pub fn c11_sign_verified(
+    sk: &sphincs_c7::SigningKey,
+    msg_hash: &[u8; 32],
+) -> Result<[u8; sphincs_c7::params::SIGNATURE_LEN], ()> {
+    c11_sign_verified_with_progress(sk, msg_hash, |_| {})
+}
+
+/// Like [`c11_sign_verified`] but reports 0..100 signing progress via the
+/// supplied callback.
+pub fn c11_sign_verified_with_progress(
+    sk: &sphincs_c7::SigningKey,
+    msg_hash: &[u8; 32],
+    progress: fn(u8),
+) -> Result<[u8; sphincs_c7::params::SIGNATURE_LEN], ()> {
+    let sig = sk.sign_with_progress(msg_hash, None, progress);
+    // Verify before release (fault-injection guard).
+    if !sphincs_c7::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig) {
+        return Err(());
+    }
+    Ok(sig)
+}
+
+// ---------------------------------------------------------------------------
 // PIN state serialization (unchanged — used by mock-SE MACD path)
 // ---------------------------------------------------------------------------
 
@@ -621,4 +783,140 @@ pub fn store_macd_encrypted(
 
     se.r_mem_erase(RMEM_BOOTSTRAP_VK).ok();
     se.r_mem_write(RMEM_BOOTSTRAP_VK, bootstrap_vk).unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// Host-only tests for the SPHINCS+C11 derivation recovery contract.
+// ---------------------------------------------------------------------------
+//
+// These assert byte-for-byte equality against values computed independently
+// by a host Python script using hashlib + pycryptodome. The fixed mnemonic
+// is BIP-39 24-word test vector 1 (entropy = 32 zero bytes, checksum 0x66,
+// last word derived at index 102 → "art").
+//
+// If this test ever fails, someone has silently changed the recovery
+// contract — the same 24 words will now produce a different on-chain wallet
+// address. Treat this as a breaking-change red flag and revert the change.
+
+#[cfg(test)]
+mod c11_derivation_tests {
+    use super::*;
+    use sphincs_tz_bip39::Mnemonic;
+    use std::string::String;
+
+    fn hex(bytes: &[u8]) -> String {
+        let mut out = String::with_capacity(bytes.len() * 2);
+        for b in bytes {
+            out.push_str(&std::format!("{:02x}", b));
+        }
+        out
+    }
+
+    /// Reference values produced by `tools/scripts/derive_c11_vectors.py`
+    /// with mnemonic `abandon abandon ... abandon art`, empty passphrase.
+    const REF_BIP39_SEED: &str = "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf705489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840";
+    const REF_MASTER: &str = "667261ca90c0989a022a50e6df59ae712c335076a19c252dfb81f81b06537a9a5c0dd6a84a695fdcf15c5e7279abcf9895be2905cde3fc93de929394f8feed38";
+    const REF_PK_SEED: &str = "00aa9ff74affea790b794caeb405696f00000000000000000000000000000000";
+    const REF_SK_SEED: &str = "6a0815eeea3aa64a040594f22fb1d2a525d2379526f82275ecf9458c3774750f";
+
+    #[test]
+    fn bip39_seed_matches_reference() {
+        // Verify our BIP-39 impl produces the same PBKDF2 seed for the
+        // fixed test mnemonic that Python's hashlib.pbkdf2_hmac produces.
+        let mnemonic = Mnemonic::from_entropy(&[0u8; 32]);
+        let seed = mnemonic.to_seed("");
+        assert_eq!(hex(&seed), REF_BIP39_SEED, "BIP-39 seed drifted");
+    }
+
+    #[test]
+    fn derive_c11_master_from_bip39_seed_matches_reference() {
+        // Decode the reference bip39_seed from hex directly so this test
+        // isolates the derive_c11_master_from_bip39_seed function from
+        // our BIP-39 implementation.
+        let mut seed = [0u8; 64];
+        decode_hex_into(REF_BIP39_SEED, &mut seed);
+
+        let (pk_seed, sk_seed) = derive_c11_master_from_bip39_seed(&seed);
+        assert_eq!(hex(&pk_seed), REF_PK_SEED, "pk_seed drifted");
+        assert_eq!(hex(&sk_seed), REF_SK_SEED, "sk_seed drifted");
+    }
+
+    #[test]
+    fn derive_c11_master_from_entropy_matches_reference() {
+        // End-to-end from raw 32-byte entropy (which is what we actually
+        // have on-device) through mnemonic → PBKDF2 → HMAC-SHA512 → Keccak.
+        let (pk_seed, sk_seed) = derive_c11_master_from_entropy(&[0u8; 32]);
+        assert_eq!(hex(&pk_seed), REF_PK_SEED, "end-to-end pk_seed drifted");
+        assert_eq!(hex(&sk_seed), REF_SK_SEED, "end-to-end sk_seed drifted");
+    }
+
+    #[test]
+    fn c11_master_top_16_bytes_kept_bottom_zeroed() {
+        // pk_seed must have its bottom 16 bytes zero (the N-mask).
+        let (pk_seed, _) = derive_c11_master_from_bip39_seed(&[0u8; 64]);
+        assert!(pk_seed[16..].iter().all(|&b| b == 0), "pk_seed bottom 16 must be zero");
+    }
+
+    #[test]
+    fn c11_master_is_deterministic() {
+        let (pk1, sk1) = derive_c11_master_from_entropy(&[0xAAu8; 32]);
+        let (pk2, sk2) = derive_c11_master_from_entropy(&[0xAAu8; 32]);
+        assert_eq!(pk1, pk2);
+        assert_eq!(sk1, sk2);
+    }
+
+    #[test]
+    fn c11_master_distinct_entropy_distinct_keys() {
+        let (pk_a, sk_a) = derive_c11_master_from_entropy(&[0u8; 32]);
+        let (pk_b, sk_b) = derive_c11_master_from_entropy(&[1u8; 32]);
+        assert_ne!(pk_a, pk_b);
+        assert_ne!(sk_a, sk_b);
+    }
+
+    #[test]
+    fn c11_master_keypair_produces_valid_signature() {
+        // Full Type 1 flow: derive master → sign a 32-byte hash → verify.
+        let (sk, master_pk_seed_32, master_pk_root_32) =
+            derive_c11_master_keypair_from_entropy(&[0x17u8; 32]);
+
+        // master_pk_seed_32 and master_pk_root_32 must be N-masked.
+        assert!(master_pk_seed_32[16..].iter().all(|&b| b == 0));
+        assert!(master_pk_root_32[16..].iter().all(|&b| b == 0));
+
+        let msg = [0xBDu8; 32];
+        let sig = c11_sign_verified(&sk, &msg).expect("c11 sign must succeed");
+        assert_eq!(sig.len(), sphincs_c7::params::SIGNATURE_LEN);
+
+        // Independent verify against the 16-byte pk_seed / pk_root.
+        let mut pk_seed_16 = [0u8; 16];
+        pk_seed_16.copy_from_slice(&master_pk_seed_32[..16]);
+        let mut pk_root_16 = [0u8; 16];
+        pk_root_16.copy_from_slice(&master_pk_root_32[..16]);
+        assert!(sphincs_c7::verify(&pk_seed_16, &pk_root_16, &msg, &sig));
+
+        // A different message must fail verification.
+        let other_msg = [0xBEu8; 32];
+        assert!(!sphincs_c7::verify(&pk_seed_16, &pk_root_16, &other_msg, &sig));
+    }
+
+    /// Decode an even-length lowercase hex string into a byte slice.
+    fn decode_hex_into(hex_str: &str, out: &mut [u8]) {
+        assert_eq!(hex_str.len(), out.len() * 2);
+        let b = hex_str.as_bytes();
+        for i in 0..out.len() {
+            let hi = decode_nibble(b[2 * i]);
+            let lo = decode_nibble(b[2 * i + 1]);
+            out[i] = (hi << 4) | lo;
+        }
+    }
+
+    fn decode_nibble(c: u8) -> u8 {
+        match c {
+            b'0'..=b'9' => c - b'0',
+            b'a'..=b'f' => c - b'a' + 10,
+            b'A'..=b'F' => c - b'A' + 10,
+            _ => panic!("bad hex nibble"),
+        }
+    }
+
 }

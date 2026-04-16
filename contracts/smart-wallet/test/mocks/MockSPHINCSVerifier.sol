@@ -1,22 +1,25 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.28;
 
 import {ISPHINCSVerifier} from "../../src/verifiers/ISPHINCSVerifier.sol";
 
-/// @notice Controllable mock for wallet tests. The real SphincsC7Asm verifier
-///         is tested separately with genuine test vectors.
+/// @notice Controllable mock for wallet tests. The real `SPHINCsC11Asm`
+///         verifier is tested separately with genuine signature vectors;
+///         this mock exists so the wallet dispatcher tests can focus on
+///         control flow.
 contract MockSPHINCSVerifier is ISPHINCSVerifier {
-    bool public shouldVerify;
+    bool public valid;
 
-    constructor(bool shouldVerify_) {
-        shouldVerify = shouldVerify_;
+    function setValid(bool v) external {
+        valid = v;
     }
 
-    function setShouldVerify(bool v) external {
-        shouldVerify = v;
-    }
-
-    function verify(bytes32, bytes32, bytes32, bytes calldata) external view override returns (bool) {
-        return shouldVerify;
+    function verify(bytes32, bytes32, bytes32, bytes calldata)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return valid;
     }
 }

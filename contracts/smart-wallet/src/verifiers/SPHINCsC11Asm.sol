@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.28;
 
-/// @title SphincsC11Asm — Stateless SPHINCS+ C11 verifier (shared, Yul-optimized)
+/// @title SPHINCsC11Asm — Stateless SPHINCS+ C11 verifier (Yul-optimised)
 /// @notice C11: W+C_F+C h=16 d=2 a=11 k=13 w=8 l=43 target_sum=203 sig=3976
-///         Optimized for hardware-wallet signing speed (256 WOTS keys per subtree
-///         vs 4096 for C7). Same WOTS (w=8, l=43) and verify gas (~116K).
-/// @dev Domain-separated H_msg (160 bytes). Branchless Merkle swap, hoisted chain address.
-///      Source: https://github.com/nconsigny/SPHINCs-/blob/main/src/SPHINCs-C11Asm.sol
-contract SphincsC7Asm {
+/// @dev Domain-separated H_msg (160 bytes). Branchless Merkle swap, hoisted
+///      chain address. Source:
+///      https://github.com/nconsigny/SPHINCs-/blob/main/src/SPHINCs-C11Asm.sol
+contract SPHINCsC11Asm {
 
     function verify(bytes32 pkSeed, bytes32 pkRoot, bytes32 message, bytes calldata sig)
         external pure returns (bool valid)

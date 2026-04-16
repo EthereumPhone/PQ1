@@ -3,7 +3,7 @@ src = "src"
 out = "out"
 libs = ["lib"]
 test = "test"
-solc_version = "0.8.23"
+solc_version = "0.8.28"
 evm_version = "prague"
 via_ir = true
 optimizer = true
@@ -16,7 +16,7 @@ optimizer = true
 optimizer_runs = 999999
 via_ir = true
 evm_version = "prague"
-solc_version = "0.8.23"
+solc_version = "0.8.28"
 
 [fmt]
 sort_imports = true

@@ -46,26 +46,29 @@ pub fn extract_fors_indices(digest: &[u8; 32]) -> [u32; K] {
 ///
 /// `htIdx = (digest >> (K * A)) & ((1 << H) - 1)`
 ///
-/// With K=8, A=16: starts at bit 128 (byte 16 from the end).
-/// With H=24: extracts 24 bits.
+/// With C11 (K=13, A=11, H=16): starts at bit 143, extracts 16 bits.
 ///
-/// Matches Solidity: `let htIdx := and(shr(128, digest), 0xFFFFFF)`
+/// Matches Solidity `SPHINCs-C11Asm.sol`:
+///   `let htIdx := and(shr(143, digest), 0xFFFF)`
 pub fn extract_ht_index(digest: &[u8; 32]) -> u32 {
-    // Bit 128 from LSB = bit 128 from right = byte index 31 - 16 = 15
-    // In big-endian: bits [128..152) are at bytes [13..16)
-    // shr(128, digest) in Solidity means shifting the uint256 right by 128 bits,
-    // which in big-endian bytes means taking bytes [0..16) and interpreting as
-    // the lower bits. After shifting, we mask with 0xFFFFFF (24 bits).
+    // In a 32-byte big-endian value the least-significant bit is in the
+    // last byte. Bit index N counts from the LSB, so:
+    //   byte_from_back = N / 8
+    //   bit_in_byte    = N % 8
+    //   be_byte_index  = 31 - byte_from_back
     //
-    // In big-endian bytes, bit 128 from LSB is at byte index (256-128-1)/8 = 15.
-    // The 24 bits starting at bit 128 are:
-    //   byte[15] bits [0..8)  -> bits 128..136
-    //   byte[14] bits [0..8)  -> bits 136..144
-    //   byte[13] bits [0..8)  -> bits 144..152
-    let b0 = digest[15] as u32; // bits 128..136
-    let b1 = digest[14] as u32; // bits 136..144
-    let b2 = digest[13] as u32; // bits 144..152
-    (b0 | (b1 << 8) | (b2 << 16)) & 0xFF_FFFF
+    // For bit 143:
+    //   byte_from_back = 17  →  be_byte_index = 14, bit_in_byte = 7
+    // bits [143..159) span the top bit of digest[14] through all of
+    // digest[13] and the low 7 bits of digest[12].
+    //
+    // Compute `(digest >> 143) & 0xFFFF` by loading digest[12..15) as a
+    // 24-bit big-endian value and shifting right by 7 bits.
+    let b2 = digest[12] as u32; // bits 152..159 (BE top byte)
+    let b1 = digest[13] as u32; // bits 144..151
+    let b0 = digest[14] as u32; // bits 136..143 (bit 7 = bit 143)
+    let combined: u32 = (b2 << 16) | (b1 << 8) | b0;
+    (combined >> 7) & ((1u32 << H) - 1)
 }
 
 /// R-grinding: find a randomizer R such that the last FORS index is zero.

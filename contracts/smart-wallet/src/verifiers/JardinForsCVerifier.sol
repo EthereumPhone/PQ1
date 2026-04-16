@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.23;
+pragma solidity 0.8.28;
 
 /// @title JardinForsCVerifier — Stateless JARDIN FORS+C verifier (shared, Yul-optimized)
 /// @notice Variant 2: k=26 a=5 n=16 Q_MAX=95 sig=2452+q*16

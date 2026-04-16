@@ -1,55 +1,30 @@
 # Workspace manifest.
 #
-# The eight member crates below fall into three groups:
-#
-#   * Firmware (cross-compiled to thumbv8m.main-none-eabi):
-#       secure      — SPHINCS+ secure world / TCB
-#       nonsecure   — non-secure world / NS demo runner
-#       shared      — zero-dep #![no_std] wire-format / size constants
-#       bip39       — no_std BIP-39 mnemonic library
-#       bls12_381_pka — vendored zkcrypto/bls12_381 0.8.0 + `pka` feature
-#                       (see bls12_381_pka/UPSTREAM.md)
-#
-#   * Host-side Rust (runs on the dev machine):
-#       desktop     — host-side SPHINCS+ wallet (reference + USB dongle host)
-#       dbgen       — builds the on-disk ERC20 + VK merkle DBs
-#       zk-test     — standalone Groth16 verifier smoke-test harness
+# Post-JARDÍN-cutover layout. Every crate listed here is needed to
+# build the firmware (secure + nonsecure + shared + bip39 + jardin-fosc
+# + sphincs-c7 + keccak-asm) or the host-side firmware measurement tool
+# (fwmeasure).
 #
 # Intentionally NOT in the workspace:
-#
-#   * tools/ob-configurator — a tiny thumbv8m.main-none-eabi "program" used
-#     to unlock STM32U585 option bytes. It has its own build.rs, linker
-#     script, and memory.x and MUST be built with a completely different
-#     RUSTFLAGS / link configuration than `secure`/`nonsecure`, so keeping
-#     it as a workspace member would pollute workspace-level build flags.
-#     Build it out-of-tree with `cargo build --manifest-path
-#     tools/ob-configurator/Cargo.toml`.
-#
-#   * tools/oled-mirror — host-side viewer for the SSD1306 framebuffer
-#     streamed via RTT (see secure `ui-mirror` feature). Excluded because
-#     probe-rs's transitive deps (csv >= 1.2) conflict with the workspace
-#     resolution for criterion/bls12_381_pka. Build it out-of-tree with
-#     `cargo build --manifest-path tools/oled-mirror/Cargo.toml`.
-#
-#   * tools/*.py / *.js / *.sh — host scripts (dbgen helpers, circom
-#     compilation, token-list fetchers). Not Rust.
-#
-#   * circuits/ — Circom sources + the node_modules/ hairball that
-#     supports them. Built via `tools/build_vks.sh`, not cargo.
+#   * tools/ob-configurator — STM32U585 option-byte unlocker, needs a
+#     different RUSTFLAGS / linker config than secure/nonsecure.
+#   * tools/oled-mirror — host-side RTT framebuffer viewer.
+#   * tools/*.py / *.js / *.sh — host scripts; not Rust.
 [workspace]
 members = [
-    "desktop",
     "shared",
     "secure",
     "nonsecure",
     "bip39",
-    "zk-test",
-    "bls12_381_pka",
-    "dbgen",
     "fwmeasure",
     "sphincs-c7",
     "jardin-fosc",
     "keccak-asm",
+    # ZK clear-sign support: BLS12-381 pairing, Merkle DB builder, standalone
+    # Groth16 verifier test harness.
+    "bls12_381_pka",
+    "dbgen",
+    "zk-test",
 ]
 resolver = "2"
 
@@ -58,11 +33,7 @@ edition = "2021"
 
 # Shared dependency versions. Member crates opt in with
 # `dep = { workspace = true }` and may add features on top, but they
-# cannot override the version or default-features. Keep this list
-# trimmed to deps where ALL consumers agree on the base configuration
-# (same version + same default-features); deps with genuine config
-# divergence (e.g. sha2 needs default-features = false for secure but
-# defaults-on for dbgen on the host) stay pinned per-crate.
+# cannot override the version or default-features.
 [workspace.dependencies]
 # Internal path deps
 sphincs-tz-shared = { path = "shared" }
@@ -81,7 +52,6 @@ cortex-m             = "0.7"
 cortex-m-rt          = "0.7"
 cortex-m-semihosting = "0.5"
 
-# Host-side utility shared by `dbgen` + `bip39` dev-deps
 hex = "0.4"
 
 [profile.dev]
@@ -121,7 +91,7 @@ opt-level = 3
 [profile.release.package.jardin-fosc]
 opt-level = 3
 
-# The keccak-f1600 permutation is the innermost loop of every SPHINCS+C7
+# The keccak-f1600 permutation is the innermost loop of every SPHINCS+C11
 # and JARDÍN hash call (tens of thousands per sign, 235K per JARDÍN keygen).
 # These MUST be compiled for speed, not size.
 [profile.release.package.sha3]
@@ -130,8 +100,7 @@ opt-level = 3
 [profile.release.package.keccak]
 opt-level = 3
 
-# PBKDF2-HMAC-SHA512 runs 2048 iterations on every unlock and JARDÍN
-# master entropy derivation. sha2/hmac at opt-level "s" adds seconds.
+# PBKDF2-HMAC-SHA512 runs 2048 iterations on every unlock.
 [profile.release.package.sha2]
 opt-level = 3
 

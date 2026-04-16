@@ -1,0 +1,232 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.28;
+
+import {IAccount} from "account-abstraction/interfaces/IAccount.sol";
+import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
+import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+
+import {PQOwnable} from "./PQOwnable.sol";
+import {IJardinVerifier} from "./verifiers/IJardinVerifier.sol";
+import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
+
+/// @title PQJardinWallet
+///
+/// @notice Pure post-quantum ERC-4337 v0.9 account with a single master
+///         SPHINCS+C11 identity and on-chain-tracked JARDÍN FORS+C
+///         sub-keys. Every UserOp carries one of two signature types:
+///
+///           * **Type 1** (`0x01`): master-key C11 signature + the raw
+///             randomiser `r` and sub-key commitments `(subPkSeed,
+///             subPkRoot)`. Validation side-effect: the wallet records
+///             `slots[keccak256(r)] = keccak256(subPkSeed || subPkRoot)`.
+///
+///           * **Type 2** (`0x02`): FORS+C signature against a previously
+///             registered sub-key. `sig[1:33]` is `keccak256(r)` — the
+///             slotKey — and the wallet checks that the supplied
+///             `(subPkSeed, subPkRoot)` matches what was registered.
+///
+///         The master C11 keypair is **immutable**: it is passed to the
+///         constructor via the factory and cannot be changed. Seed
+///         recovery produces the same master keys, so redeploying on a
+///         lost device yields the same CREATE2 address.
+///
+///         No ECDSA. No classical signer. No bootstrap signer. No
+///         OTS counter. The whole multi-signer + bootstrap + ZK clear-
+///         signing machinery from the pre-cutover wallet is gone.
+///
+/// @author PQSigner OS (post-JARDÍN cutover)
+contract PQJardinWallet is IAccount, PQOwnable {
+    // ── Config (immutable) ──────────────────────────────────────────
+
+    IEntryPoint private immutable _entryPoint;
+    ISPHINCSVerifier public immutable c11Verifier;
+    IJardinVerifier public immutable forscVerifier;
+
+    /// @notice Master C11 public seed (N-masked: top 16 bytes populated,
+    ///         bottom 16 zero). Immutable — rotating it would break the
+    ///         recovery contract.
+    bytes32 public immutable masterPkSeed;
+
+    /// @notice Master C11 hypertree root commitment. Same N-mask layout.
+    bytes32 public immutable masterPkRoot;
+
+    // ── Signature types ────────────────────────────────────────────
+
+    uint8 public constant TYPE_1_REGISTER = 0x01;
+    uint8 public constant TYPE_2_COMPACT = 0x02;
+
+    /// @dev 1 byte marker + 32 r + 16 subPkSeed + 16 subPkRoot + 3976 C11 sig.
+    uint256 public constant TYPE_1_SIG_LEN = 1 + 32 + 16 + 16 + 3976;
+
+    /// @dev 1 byte marker + 32 slotKey + 16 subPkSeed + 16 subPkRoot + 2452+q*16 FORS+C.
+    uint256 public constant TYPE_2_HEADER_LEN = 1 + 32 + 16 + 16;
+    uint256 public constant TYPE_2_MIN_SIG_LEN = 2452 + 16; // q=1
+    uint256 public constant TYPE_2_MAX_SIG_LEN = 2452 + 95 * 16; // q=95
+
+    // ── Errors ────────────────────────────────────────────────────
+
+    error NotFromEntryPoint();
+    error InvalidSignatureType();
+    error InvalidSignatureLength();
+    error UnregisteredSlot();
+
+    /// @dev ERC-4337 v0.9 sentinel for failed validation.
+    uint256 private constant SIG_VALIDATION_FAILED = 1;
+    /// @dev ERC-4337 sentinel for successful validation.
+    uint256 private constant SIG_VALIDATION_SUCCESS = 0;
+
+    constructor(
+        IEntryPoint ep,
+        ISPHINCSVerifier c11,
+        IJardinVerifier forsc,
+        bytes32 masterPkSeed_,
+        bytes32 masterPkRoot_
+    ) {
+        _entryPoint = ep;
+        c11Verifier = c11;
+        forscVerifier = forsc;
+        masterPkSeed = masterPkSeed_;
+        masterPkRoot = masterPkRoot_;
+    }
+
+    // ── IAccount ────────────────────────────────────────────────
+
+    function entryPoint() public view returns (IEntryPoint) {
+        return _entryPoint;
+    }
+
+    /// @inheritdoc IAccount
+    function validateUserOp(
+        PackedUserOperation calldata userOp,
+        bytes32 userOpHash,
+        uint256 missingAccountFunds
+    ) external override returns (uint256 validationData) {
+        if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+
+        validationData = _validateSignature(userOp, userOpHash);
+
+        if (missingAccountFunds != 0) {
+            (bool ok, ) = payable(msg.sender).call{value: missingAccountFunds}("");
+            (ok); // EntryPoint handles failure.
+        }
+    }
+
+    /// @notice Execute an inner call, restricted to the EntryPoint.
+    ///         Matches the canonical `execute(address,uint256,bytes)`
+    ///         entrypoint used by the firmware's callData reconstruction.
+    function execute(address target, uint256 value, bytes calldata data)
+        external
+        returns (bytes memory)
+    {
+        if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+        (bool ok, bytes memory ret) = target.call{value: value}(data);
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(ret, 0x20), mload(ret))
+            }
+        }
+        return ret;
+    }
+
+    /// @notice Batched execute for when a single UserOp must fan out
+    ///         to multiple calls. Same EntryPoint-only gate.
+    function executeBatch(
+        address[] calldata targets,
+        uint256[] calldata values,
+        bytes[] calldata datas
+    ) external {
+        if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+        uint256 n = targets.length;
+        require(values.length == n && datas.length == n, "length mismatch");
+        for (uint256 i = 0; i < n; ++i) {
+            (bool ok, bytes memory ret) = targets[i].call{value: values[i]}(datas[i]);
+            if (!ok) {
+                assembly ("memory-safe") {
+                    revert(add(ret, 0x20), mload(ret))
+                }
+            }
+        }
+    }
+
+    // ── Signature validation ────────────────────────────────────
+
+    /// @dev Dispatch on the first byte of `userOp.signature`:
+    ///      0x01 → Type 1 (register sub-key via C11)
+    ///      0x02 → Type 2 (FORS+C sign against registered sub-key)
+    function _validateSignature(
+        PackedUserOperation calldata userOp,
+        bytes32 userOpHash
+    ) internal returns (uint256) {
+        bytes calldata sig = userOp.signature;
+        if (sig.length == 0) return SIG_VALIDATION_FAILED;
+
+        uint8 sigType = uint8(sig[0]);
+
+        if (sigType == TYPE_1_REGISTER) {
+            if (sig.length != TYPE_1_SIG_LEN) return SIG_VALIDATION_FAILED;
+
+            bytes32 r = bytes32(sig[1:33]);
+            bytes16 subSeed16 = bytes16(sig[33:49]);
+            bytes16 subRoot16 = bytes16(sig[49:65]);
+            bytes calldata c11Sig = sig[65:TYPE_1_SIG_LEN];
+
+            // Verify the master C11 signature over userOpHash.
+            try c11Verifier.verify(masterPkSeed, masterPkRoot, userOpHash, c11Sig)
+                returns (bool ok)
+            {
+                if (!ok) return SIG_VALIDATION_FAILED;
+            } catch {
+                return SIG_VALIDATION_FAILED;
+            }
+
+            // Register (or idempotently re-confirm) the slot.
+            if (r != bytes32(0)) {
+                bytes32 slotKey = keccak256(abi.encodePacked(r));
+                bytes32 subVkHash = keccak256(abi.encodePacked(subSeed16, subRoot16));
+                _registerJardinSlot(slotKey, subVkHash);
+            }
+            return SIG_VALIDATION_SUCCESS;
+        }
+
+        if (sigType == TYPE_2_COMPACT) {
+            if (sig.length < TYPE_2_HEADER_LEN + TYPE_2_MIN_SIG_LEN) {
+                return SIG_VALIDATION_FAILED;
+            }
+            if (sig.length > TYPE_2_HEADER_LEN + TYPE_2_MAX_SIG_LEN) {
+                return SIG_VALIDATION_FAILED;
+            }
+
+            bytes32 slotKey = bytes32(sig[1:33]);
+            bytes16 subSeed16 = bytes16(sig[33:49]);
+            bytes16 subRoot16 = bytes16(sig[49:65]);
+
+            // Slot must be registered and match the supplied sub-key.
+            bytes32 subVkHash = keccak256(abi.encodePacked(subSeed16, subRoot16));
+            if (_getStorage().jardinSlots[slotKey] != subVkHash) {
+                return SIG_VALIDATION_FAILED;
+            }
+
+            // The FORS+C verifier expects bytes32 arguments. Pad the
+            // 16-byte N values into the high halves.
+            bytes32 subPkSeed32;
+            bytes32 subPkRoot32;
+            assembly ("memory-safe") {
+                subPkSeed32 := shl(128, shr(128, subSeed16))
+                subPkRoot32 := shl(128, shr(128, subRoot16))
+            }
+            bytes calldata forscSig = sig[65:];
+            try forscVerifier.verifyForsCUnbalanced(subPkSeed32, subPkRoot32, userOpHash, forscSig)
+                returns (bool ok)
+            {
+                if (!ok) return SIG_VALIDATION_FAILED;
+            } catch {
+                return SIG_VALIDATION_FAILED;
+            }
+            return SIG_VALIDATION_SUCCESS;
+        }
+
+        revert InvalidSignatureType();
+    }
+
+    receive() external payable {}
+}
