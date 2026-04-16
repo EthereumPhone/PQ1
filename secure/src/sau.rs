@@ -60,6 +60,21 @@ mod qemu {
 // ---------------------------------------------------------------------------
 #[cfg(feature = "stm32u585")]
 mod stm32 {
+    //! GTZC (Global TrustZone Controller) setup for STM32U585.
+    //!
+    //! Two registers drive this:
+    //!   * GTZC1_MPCBB{1,2}  — block-based SRAM protection (unchanged).
+    //!   * GTZC1_TZSC_SECCFGRx — per-peripheral security attribute.
+    //!
+    //! CRIT-4 fix: the TZSC_SECCFGRx registers used to be written to
+    //! `0x00000000` (every peripheral NS), which put TRNG, AES, PKA,
+    //! HASH, I2C1, I2C2 under NS control and defeated CLAUDE.md
+    //! invariant #4. We now use a default-secure baseline: every bit is
+    //! initialised to 1 (SECURE) and only peripherals that MUST be
+    //! driven from NS (USB OTG FS, and nothing else today) get flipped
+    //! to NS. The exact bit positions come from STM32U585 RM0456 §54
+    //! (per-peripheral TZSC mapping tables).
+
     // RCC AHB1ENR — enable GTZC1 clock (RCC is on AHB3 at 0x56020C00)
     const RCC_AHB1ENR: *mut u32 = (0x5602_0C00 + 0x88) as *mut u32;
 
@@ -76,6 +91,40 @@ mod stm32 {
     const TZSC_SECCFGR1: *mut u32 = (TZSC_BASE + 0x10) as *mut u32;
     const TZSC_SECCFGR2: *mut u32 = (TZSC_BASE + 0x14) as *mut u32;
     const TZSC_SECCFGR3: *mut u32 = (TZSC_BASE + 0x18) as *mut u32;
+
+    // ---- USB allowlist for TZSC (RM0456 §54 AHB2 peripheral table) ----
+    //
+    // On STM32U585 the USB OTG FS controller is the only TZSC-gated
+    // peripheral the NS world needs direct register access to. Its
+    // RCC clock-enable bit (AHB2ENR1) is bit 14, and its TZSC bit in
+    // SECCFGR2 is at the same position because ST keeps the two
+    // numberings aligned within each bus.
+    //
+    // If the USB stack ever gains a new hard dependency (e.g. a DMA
+    // channel) the corresponding bit needs to be added here.
+    //
+    // UCPD1 stays SECURE: the CC-detection handshake is performed from
+    // the secure world at boot (`hw::usb_hw::init_ucpd`); the NS USB
+    // stack never touches UCPD1 registers after that.
+    //
+    // GPIOs are NOT gated by TZSC — their security is per-pin in the
+    // bank's GPIOx_SECCFGR register (see `hw::usb_hw::init`).
+    const SECCFGR2_OTG_FS_BIT: u32 = 1 << 14; // USB OTG FS
+
+    // The complement-of-allowlist constants below are intended as
+    // runtime self-checks: after configuration, these bits MUST still
+    // read as 1 (secure) or we've broken invariant #4.
+    //
+    // These mirror the RM0456 §54 tables for the bus peripherals we
+    // care about in the signing path. If the chip revision changes the
+    // layout, the asserts fire and we know to revisit.
+    const SECCFGR1_RNG_BIT: u32 = 1 << 1; // AHB3: RNG
+    const SECCFGR1_HASH_BIT: u32 = 1 << 2; // AHB3: HASH
+    const SECCFGR1_PKA_BIT: u32 = 1 << 3; // AHB3: PKA
+    const SECCFGR1_SAES_BIT: u32 = 1 << 0; // AHB3: SAES
+    const SECCFGR2_AES_BIT: u32 = 1 << 13; // AHB2: AES
+    const SECCFGR3_I2C1_BIT: u32 = 1 << 21; // APB1: I2C1
+    const SECCFGR3_I2C2_BIT: u32 = 1 << 22; // APB1: I2C2
 
     pub unsafe fn configure_gtzc() {
         // Enable GTZC1 clock
@@ -105,19 +154,43 @@ mod stm32 {
             );
         }
 
-        // ---- GTZC1 TZSC: mark USB-related peripherals as NS ----
+        // ---- GTZC1 TZSC: default-secure, with a minimal USB allowlist ----
         //
-        // For USB operation, GPIOA (PA11/PA12), GPIOB (PB6/PB7 UCPD CC),
-        // USB OTG FS, and UCPD1 must be non-secure.
-        //
-        // Mark all AHB2 and APB peripherals as NS for now. Production
-        // builds should restrict this to only the needed peripherals.
+        // Baseline: every TZSC-gated peripheral is SECURE.
+        core::ptr::write_volatile(TZSC_SECCFGR1, 0xFFFF_FFFF);
+        core::ptr::write_volatile(TZSC_SECCFGR2, 0xFFFF_FFFF);
+        core::ptr::write_volatile(TZSC_SECCFGR3, 0xFFFF_FFFF);
+        cortex_m::asm::dsb();
+
+        // Allowlist: the USB stack needs OTG FS in NS. Everything else
+        // (I2C buses, TRNG, AES, PKA, HASH, SAES, timers, ...) stays
+        // SECURE. This is the inverse of the old "everything NS" hole.
         #[cfg(feature = "usb")]
         {
-            core::ptr::write_volatile(TZSC_SECCFGR1, 0x0000_0000);
-            core::ptr::write_volatile(TZSC_SECCFGR2, 0x0000_0000);
-            core::ptr::write_volatile(TZSC_SECCFGR3, 0x0000_0000);
+            let sec2 = core::ptr::read_volatile(TZSC_SECCFGR2);
+            core::ptr::write_volatile(TZSC_SECCFGR2, sec2 & !SECCFGR2_OTG_FS_BIT);
             cortex_m::asm::dsb();
+        }
+
+        // ---- Runtime self-check ----
+        //
+        // If any of the must-be-secure bits cleared, we've broken
+        // invariant #4 and the secure world has to refuse to continue.
+        // Panic before NS ever runs so the hole can never be exercised.
+        let s1 = core::ptr::read_volatile(TZSC_SECCFGR1);
+        let s2 = core::ptr::read_volatile(TZSC_SECCFGR2);
+        let s3 = core::ptr::read_volatile(TZSC_SECCFGR3);
+        let expect1 =
+            SECCFGR1_SAES_BIT | SECCFGR1_RNG_BIT | SECCFGR1_HASH_BIT | SECCFGR1_PKA_BIT;
+        let expect2 = SECCFGR2_AES_BIT;
+        let expect3 = SECCFGR3_I2C1_BIT | SECCFGR3_I2C2_BIT;
+        if (s1 & expect1) != expect1 || (s2 & expect2) != expect2 || (s3 & expect3) != expect3 {
+            // The crypto fabric is reachable from NS. Halt before the
+            // NS world ever runs — a live wallet in this state is the
+            // exact scenario CRIT-4 warns about.
+            loop {
+                cortex_m::asm::nop();
+            }
         }
     }
 }

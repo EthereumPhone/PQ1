@@ -49,7 +49,14 @@ pub fn confirm(pages: &[Page]) -> ConfirmResult {
     #[cfg(not(feature = "e2e-test"))]
     {
         let mut idx: usize = 0;
-        timeout::reset_activity();
+        // HIGH-13 fix: do NOT reset the inactivity timer on entry.
+        // NS can spam SIGN_USEROP / request-unlock calls; each call
+        // lands us here and the old code reset the timer before the
+        // user had touched a button. That kept the unlocked window
+        // open indefinitely as long as NS kept asking — the exact
+        // thing CLAUDE.md forbids ("NS pings do not reset [the
+        // inactivity timer]. Only real button presses on S-world
+        // confirm dialogs count as activity.").
 
         loop {
             render_page(&pages[idx], idx, pages.len());
@@ -60,6 +67,8 @@ pub fn confirm(pages: &[Page]) -> ConfirmResult {
                 None => return ConfirmResult::IdleWipe,
             };
 
+            // A button event IS real user activity — reset the timer
+            // here and only here. This is the trusted-display contract.
             timeout::reset_activity();
 
             match event {

@@ -202,14 +202,27 @@ impl OptigaTrustM {
         }
 
         unsafe {
-            if !crate::hw::flash::is_pbs_blank() {
-                let mut pbs = [0u8; 32];
-                crate::hw::flash::read_pbs(&mut pbs);
-                self.shield.load_pbs(&pbs);
-                pbs.zeroize();
-                secure_log!("[OPTIGA] PBS loaded from flash page 126");
-            } else {
+            if crate::hw::flash::is_pbs_blank() {
                 secure_log!("[OPTIGA] PBS page blank (first boot)");
+                return;
+            }
+            let mut pbs = [0u8; 32];
+            match crate::hw::flash::read_pbs(&mut pbs) {
+                Ok(()) => {
+                    self.shield.load_pbs(&pbs);
+                    pbs.zeroize();
+                    secure_log!("[OPTIGA] PBS unsealed from flash page 126");
+                }
+                Err(e) => {
+                    // CRIT-9: either the flash was tampered with, the
+                    // chip was swapped under this firmware, or this
+                    // firmware revision changed the wrap-key domain.
+                    // All three collapse to "treat as unprovisioned
+                    // and re-run first-boot provisioning" — the admin
+                    // factory-reset path handles the clean-up.
+                    pbs.zeroize();
+                    secure_log!("[OPTIGA] PBS unseal FAILED: {:?}; treating as blank", e);
+                }
             }
         }
     }
@@ -535,8 +548,10 @@ impl OptigaTrustM {
     fn authenticate_and_read(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], OptigaError> {
         secure_log!("[OPTIGA/auth] authenticate_and_read: start");
         self.init()?;
-        // Shielded connection intentionally skipped while the PRL
-        // handshake is being brought up — all APDUs plaintext for now.
+        // CRIT-8 requires every PIN-auth APDU to traverse the shielded
+        // connection, including the TRNG challenge fetch. Re-establish
+        // (or reuse the existing) session before any further APDU.
+        self.ensure_shield()?;
 
         unsafe {
             let attempts = match self.read_counter_raw() {
@@ -557,18 +572,41 @@ impl OptigaTrustM {
                 return Err(OptigaError::PinLocked);
             }
 
-            secure_log!("[OPTIGA/auth] bumping counter to {}", attempts + 1);
+            // 3. Bump counter BEFORE verify (so a power cut can't refund
+            //    the attempt). CRIT-6 fix: add a read-back assertion
+            //    that the written value actually landed — a glitch or
+            //    bus-MITM that produces a nominal-success response for
+            //    a failed write would otherwise leave the counter at
+            //    `attempts` and allow a re-try. On mismatch we refuse
+            //    the whole unlock and zeroize; the counter is advisory
+            //    but the firmware-level assertion is not.
+            let new_attempts = attempts + 1;
+            secure_log!("[OPTIGA/auth] bumping counter to {}", new_attempts);
             if let Err(e) = apdu::set_data_object(
                 &mut self.ifx, &mut self.shield,
-                apdu::OID_COUNTER, &[attempts + 1],
+                apdu::OID_COUNTER, &[new_attempts],
             ) {
                 secure_log!("[OPTIGA/auth] counter bump FAILED: {:?}", e);
                 return Err(e);
             }
+            let readback = self.read_counter_raw().ok_or(OptigaError::PinLocked)?;
+            if readback != new_attempts {
+                secure_log!(
+                    "[OPTIGA/auth] counter readback mismatch: wrote {} read {} — PinLocked",
+                    new_attempts, readback
+                );
+                return Err(OptigaError::PinLocked);
+            }
 
-            secure_log!("[OPTIGA/auth] GetRandom for challenge");
+            // 4. Get challenge. CRIT-8 fix: route through the shielded
+            //    channel AND XOR with host TRNG, so a bus MITM can't
+            //    force a fixed challenge and a compromised chip RNG
+            //    can't feed us a predictable one.
+            secure_log!("[OPTIGA/auth] GetRandom (shielded + host-mixed)");
             let mut challenge = [0u8; AUTH_CHALLENGE_LEN];
-            if let Err(e) = apdu::get_random(&mut self.ifx, &mut challenge) {
+            if let Err(e) =
+                apdu::get_random_mixed(&mut self.ifx, &mut self.shield, &mut challenge)
+            {
                 secure_log!("[OPTIGA/auth] GetRandom FAILED: {:?}", e);
                 return Err(e);
             }
@@ -681,6 +719,20 @@ impl OptigaTrustM {
         // for user OIDs is currently Auto(F1D0) only, so factory reset
         // needs a valid PIN session. TODO: re-enable Conf(E140) path once
         // the handshake is green.
+
+        // HIGH-18 fix: arm the shared wipe flag BEFORE starting any
+        // destructive OID write. A power loss between two OID wipes
+        // would otherwise leave OPTIGA in a half-wiped state where
+        // (say) OID_ENTROPY is zeroed but OID_AUTH_REF is intact —
+        // the next boot would successfully verify the stale PIN and
+        // read zeros for entropy. Recovery on the next boot is
+        // gated on `is_wipe_armed()` in main.rs so we just re-run
+        // the same reset sequence (the Conf(E140) AC path still
+        // works because PBS is intact).
+        #[cfg(feature = "stm32u585")]
+        unsafe {
+            let _ = crate::hw::flash::arm_wipe_flag();
+        }
 
         let blank = [0u8; 32];
         unsafe {

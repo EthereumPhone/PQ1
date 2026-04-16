@@ -128,6 +128,25 @@ contract PQJardinWallet is IAccount, PQOwnable {
         return ret;
     }
 
+    /// @notice Revoke a registered JARDIN slot. Must be invoked by
+    ///         `_entryPoint` — the UserOp carrying this calldata had
+    ///         to pass Type 1 (master-C11) or Type 2 (registered
+    ///         sub-key) validation, which is sufficient proof of
+    ///         authority from the owner of the seed.
+    ///
+    ///         Typical recovery flow for a leaked sub-key:
+    ///           1. User notices exfiltration.
+    ///           2. Sign a Type 1 UserOp that registers a fresh sub-key
+    ///              at a new slotKey.
+    ///           3. Sign a Type 2 UserOp from the new slot whose
+    ///              callData is `revokeJardinSlot(oldSlotKey)`.
+    ///         After step 3, the leaked sub-key can no longer be used.
+    /// @param slotKey Slot identifier to revoke.
+    function revokeJardinSlot(bytes32 slotKey) external {
+        if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+        _revokeJardinSlot(slotKey);
+    }
+
     /// @notice Batched execute for when a single UserOp must fan out
     ///         to multiple calls. Same EntryPoint-only gate.
     function executeBatch(
@@ -179,12 +198,17 @@ contract PQJardinWallet is IAccount, PQOwnable {
                 return SIG_VALIDATION_FAILED;
             }
 
+            // HIGH-16 fix: `r == 0` must never be silently accepted.
+            // A valid firmware-produced Type 1 always has r derived
+            // from keccak256(master || "jardin_r" || slot_index) which
+            // has negligible probability of hitting zero, so this
+            // branch is an attack path, not a legitimate flow. Reject.
+            if (r == bytes32(0)) return SIG_VALIDATION_FAILED;
+
             // Register (or idempotently re-confirm) the slot.
-            if (r != bytes32(0)) {
-                bytes32 slotKey = keccak256(abi.encodePacked(r));
-                bytes32 subVkHash = keccak256(abi.encodePacked(subSeed16, subRoot16));
-                _registerJardinSlot(slotKey, subVkHash);
-            }
+            bytes32 slotKey = keccak256(abi.encodePacked(r));
+            bytes32 subVkHash = keccak256(abi.encodePacked(subSeed16, subRoot16));
+            _registerJardinSlot(slotKey, subVkHash);
             return SIG_VALIDATION_SUCCESS;
         }
 
@@ -225,7 +249,13 @@ contract PQJardinWallet is IAccount, PQOwnable {
             return SIG_VALIDATION_SUCCESS;
         }
 
-        revert InvalidSignatureType();
+        // HIGH-15 fix: the IAccount spec says validateUserOp must
+        // return `SIG_VALIDATION_FAILED` (1) on any signature problem
+        // so bundlers can simulate with a placeholder signature
+        // without reverting. The previous code was inconsistent —
+        // empty sig returned FAILED, unknown sigType reverted. Align
+        // both paths to a non-reverting failure return.
+        return SIG_VALIDATION_FAILED;
     }
 
     receive() external payable {}

@@ -29,6 +29,13 @@ pub mod spi;
 #[cfg(feature = "stm32u585")]
 pub mod flash;
 
+/// Device-bound wrap-key derivation (UID + firmware measurement). Only
+/// pulled in on real hardware because the QEMU flash backend is a RAM
+/// buffer — there's no persistent flash to seal and the QEMU UID is
+/// a constant anyway.
+#[cfg(feature = "stm32u585")]
+pub mod huk;
+
 #[cfg(feature = "stsafe-probe")]
 pub mod i2c2_probe;
 

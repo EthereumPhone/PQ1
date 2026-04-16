@@ -13,6 +13,10 @@ use crate::ui;
 pub(super) unsafe fn run() -> u32 {
     use crate::ui::pin_entry::{enter_pin, PinEntryResult};
 
+    // HIGH-7 fix: prevent SysTick idle-wipe from racing us while the
+    // user is typing the PIN or while we are deriving master_secret.
+    let _busy = super::HandlerGuard::enter();
+
     let pin = match enter_pin() {
         PinEntryResult::Pin(p) => p,
         PinEntryResult::Cancelled | PinEntryResult::Mismatch => {

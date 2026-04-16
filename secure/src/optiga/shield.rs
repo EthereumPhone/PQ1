@@ -188,6 +188,16 @@ impl ShieldedConnection {
             return Err(ShieldError::NotActive);
         }
 
+        // HIGH-9 fix: Infineon specifies a renegotiation threshold
+        // at `enc_seq >= 0xFFFFFFF0`. Beyond that the AEAD nonce
+        // (nonce_base || seq) would wrap and repeat — CCM keystream
+        // would be recovered. Force the connection closed so the
+        // caller triggers a fresh handshake.
+        if self.enc_seq >= 0xFFFF_FFF0 {
+            self.active = false;
+            return Err(ShieldError::NotActive);
+        }
+
         let out_len = SC_HEADER_LEN + plaintext.len() + CCM_TAG_LEN;
         if out_len > out.len() {
             return Err(ShieldError::BufferOverflow);
@@ -237,11 +247,32 @@ impl ShieldedConnection {
             return Err(ShieldError::DecryptFailed);
         }
 
-        let _sctr = input[0];
+        let sctr = input[0];
+        if sctr != SCTR_RECORD_FULL {
+            // HIGH-M16: the record type byte is part of the AAD, and
+            // we also want to refuse alert / handshake frames coming
+            // back at this stage — only full-protection record frames
+            // are valid responses to a wrapped command.
+            return Err(ShieldError::DecryptFailed);
+        }
         let seq = ((input[1] as u32) << 24)
             | ((input[2] as u32) << 16)
             | ((input[3] as u32) << 8)
             | input[4] as u32;
+
+        // HIGH-10 fix: refuse replays. A MITM that captures a valid
+        // response frame could otherwise inject it again at a later
+        // point and short-circuit a fresh command. We expect each
+        // response to bump dec_seq by exactly 1; anything with a
+        // lower-or-equal seq is either a replay or a bug.
+        if seq < self.dec_seq {
+            return Err(ShieldError::DecryptFailed);
+        }
+        // Threshold enforcement (symmetric with enc_seq).
+        if seq >= 0xFFFF_FFF0 {
+            self.active = false;
+            return Err(ShieldError::NotActive);
+        }
 
         let ct_and_tag = &input[SC_HEADER_LEN..];
         let plaintext_len = ct_and_tag.len() - CCM_TAG_LEN;
@@ -265,7 +296,7 @@ impl ShieldedConnection {
             return Err(ShieldError::DecryptFailed);
         }
 
-        self.dec_seq = seq + 1;
+        self.dec_seq = seq.saturating_add(1);
         Ok(plaintext_len)
     }
 

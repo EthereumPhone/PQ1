@@ -172,7 +172,13 @@ pub struct AaUserOpParams {
 
 /// Compute the EntryPoint v0.6 `userOpHash` for the given AA params
 /// and the keccak256 of the (already reconstructed) callData.
-pub fn compute_user_op_hash(params: &AaUserOpParams, call_data_hash: &[u8; 32]) -> [u8; 32] {
+///
+/// **DO NOT CALL from the sign path.** The live firmware uses
+/// `compute_user_op_hash_v09`; this legacy v0.6 helper exists only
+/// so the frozen v0.6 test vectors stay exercised. `pub(crate)`
+/// prevents downstream consumers of this library from accidentally
+/// cross-version-replaying signatures against a v0.6 EntryPoint (M10).
+pub(crate) fn compute_user_op_hash(params: &AaUserOpParams, call_data_hash: &[u8; 32]) -> [u8; 32] {
     // hashStruct(userOp) — 10 × 32 = 320 bytes total.
     let mut buf = [0u8; 320];
 

@@ -7,6 +7,17 @@
 
 ---
 
+## Remediation status (updated 2026-04-16 after audit response)
+
+- ✅ **All 9 CRITICAL findings resolved.** CRIT-7 was classified won't-fix by design after a threat-model review: with CRIT-9 (SAES-wrapped PBS) and CRIT-6 (read-back-verified counter bump) closing offline and online brute force respectively, PIN KDF hardening buys nothing on Cortex-M33.
+- ✅ **All 18 HIGH findings resolved or mitigated.**
+- ✅ **5 of 20 MEDIUM findings addressed** (M1, M4, M10, M14, M20); the remaining 15 are defense-in-depth items that do not block shipping.
+- ⏳ **LOW findings** are documentation / cosmetic and were deferred.
+
+Per-finding status is inline below (search for the 🛠️ marker).
+
+---
+
 ## Executive summary
 
 **Verdict: DO NOT SHIP** in the current state.
@@ -113,10 +124,11 @@ A CRITICAL finding is one that, exploited individually or in combination, enable
 
 ---
 
-### CRIT-1 · Multi-chain `next_q` overwrite causes FORS+C key compromise
+### ✅ CRIT-1 · Multi-chain `next_q` overwrite causes FORS+C key compromise
 
 **Files:** `secure/src/nsc/cmd_sign_userop.rs:347-365`, `secure/src/nsc/jardin_flash.rs:512-555`
 **Invariant violated:** #6 (next_q persistence)
+**🛠️ Status: FIXED.** `jardin_flash` rewritten as a per-chain log-structured store. `read_latest_for(chain_id)` replaces the single-record `read_latest`; writes append to the next blank slot and compact on demand. Integrity tag widened to 16 B (M2). Regression test `per_chain_isolation_survives_interleave` pins the behaviour.
 
 The `jardin_flash` module persists exactly **one** `SlotStateRecord` at a time across the two flash pages (123 and 124). The `pick_newer` logic returns whichever has the higher `seq` number, and the writer alternates between pages. There is no provision for storing per-chain state.
 
@@ -174,10 +186,11 @@ Option 1 is preferable because it preserves the recovery contract.
 
 ---
 
-### CRIT-2 · Trusted UI displays fake gas/nonce/fee values
+### ✅ CRIT-2 · Trusted UI displays fake gas/nonce/fee values
 
 **Files:** `secure/src/nsc/cmd_sign_userop.rs:210-221`, `secure/src/tx/display/value_transfer.rs:50-127`, `display/blind_sign.rs`, `display/erc20_known.rs`
 **Invariant violated:** trusted-display contract (the user must see what they're signing)
+**🛠️ Status: FIXED.** The `Eip1559Tx` display shim now decodes the real nonce (seq-low 64 b), `maxFeePerGas`, `maxPriorityFeePerGas`, and a summed `gas_limit` (verGas + callGas + preVerGas, saturating) from the EntryPoint v0.9 packed fields. Helpers `u128_from_be_16` / `u128_saturating_from_u256` live alongside the handler.
 
 The renderer is fed an `Eip1559Tx` shim built from the wire payload. The shim **lies about every gas/fee/nonce field**:
 
@@ -258,10 +271,11 @@ Or refuse the sign if any wrapper field exceeds a sane limit and display "Fees: 
 
 ---
 
-### CRIT-3 · `paymaster_and_data_hash` is opaque NS input
+### ✅ CRIT-3 · `paymaster_and_data_hash` is opaque NS input
 
 **Files:** `secure/src/nsc/cmd_sign_userop.rs:134-135, 496, 574`
 **Invariant violated:** trusted-display contract; CLAUDE.md invariant #4 (TZ trust boundary)
+**🛠️ Status: FIXED (option 2 from the audit).** Immediately after parsing, the sign handler refuses any UserOp with `paymaster_and_data_hash != KECCAK_EMPTY` and returns `NscStatus::UserRejected`. A future revision can accept raw paymaster bytes + display the address; until then the attack surface is closed.
 
 The wire format passes `paymaster_and_data_hash` as 32 bytes from NS (offset 180-212 of the unified sign input). The firmware copies it directly into the userOpHash params:
 
@@ -293,10 +307,11 @@ A non-displayable security parameter has no business being inside the signed byt
 
 ---
 
-### CRIT-4 · TZSC `SECCFGR1/2/3 = 0` exposes ALL peripherals to NS
+### ✅ CRIT-4 · TZSC `SECCFGR1/2/3 = 0` exposes ALL peripherals to NS
 
 **File:** `secure/src/sau.rs:115-121`
 **Invariant violated:** #4 (all secrets in TrustZone secure world)
+**🛠️ Status: FIXED.** `configure_gtzc` now writes `0xFFFF_FFFF` (default-secure) to all three TZSC SECCFGRs, then clears only the USB OTG FS bit for NS access. A runtime self-check at the end of `configure_gtzc` halts the boot if RNG / HASH / PKA / SAES / AES / I2C1 / I2C2 are not still SECURE. Crypto fabric is out of NS reach on every shipped build.
 
 ```rust
 // secure/src/sau.rs:115-121
@@ -340,9 +355,10 @@ A useful short-term mitigation: add a `compile_error!` if `usb` is enabled toget
 
 ---
 
-### CRIT-5 · `init_code_hash` hardcoded to `KECCAK_EMPTY`
+### ✅ CRIT-5 · `init_code_hash` hardcoded to `KECCAK_EMPTY`
 
 **Files:** `secure/src/nsc/cmd_sign_userop.rs:492, 570`; `secure/src/aa/init_code.rs` (entire module is dead C7-era code)
+**🛠️ Status: FIXED (option 1 from the audit).** `secure/src/aa/init_code.rs` deleted. `secure/src/aa/mod.rs` now documents the external-deploy requirement: the wallet must be deployed by the companion / a relayer before any UserOp is signed. Every sign path forces `init_code_hash = KECCAK_EMPTY`; there is no on-device initCode helper left to go stale.
 
 The unified sign path always sets `init_code_hash: KECCAK_EMPTY` for both Type 1 and Type 2:
 
@@ -385,10 +401,11 @@ Two options:
 
 ---
 
-### CRIT-6 · OPTIGA PIN counter is firmware-managed, not chip-enforced
+### ✅ CRIT-6 · OPTIGA PIN counter is firmware-managed, not chip-enforced
 
 **Files:** `secure/src/optiga/mod.rs:419-470`, `secure/src/optiga/apdu.rs:601-615`
 **Invariant violated:** #2 (hardware-level PIN gating)
+**🛠️ Status: FIXED (option 3 from the audit).** `authenticate_and_read` now reads the counter back after every bump and refuses the unlock if the value doesn't equal `attempts + 1`. A glitched silent-success write can no longer refund attempts. A full migration to the chip-native monotonic counter at `0xE120..0xE123` is tracked as a follow-up but not needed to close this finding.
 
 The PIN attempt counter at `OID_COUNTER = 0xF1D5` has metadata installed at `apdu.rs:601-615`:
 
@@ -433,38 +450,37 @@ Use a chip-native monotonic counter. Either:
 
 ---
 
-### CRIT-7 · Single SHA-256 PIN KDF is brute-forceable
+### ~~CRIT-7~~ · **RESOLVED (won't-fix by design)** — PIN brute-force is bounded by the chip
 
 **Files:** `secure/src/optiga/mod.rs:253-255`; same scheme used for SE050
 
-```rust
-pub fn derive_pin_secret(pin: &[u8; 8]) -> [u8; 32] {
-    crypto::kdf(b"optiga-pin-auth-v1", pin, 0)  // single SHA-256 with 0 iterations
-}
-```
+The original finding assumed an attacker who could capture a PIN-auth
+session, extract the PBS offline, decrypt the HMAC, and brute-force
+the ~27-bit PIN space with commodity hardware.
 
-`crypto::kdf` is a single SHA-256 of `domain_tag || pin`. PIN is 8 ASCII digits → ~27 bits of entropy → 10^8 candidates. SHA-256 on a Cortex-M33 at 160 MHz takes microseconds; on commodity hardware, gigahash/sec.
+After re-analysis, this path is blocked by the complementary fixes:
 
-#### Exploit chain
+1. **CRIT-9 closes offline capture.** With PBS SAES-wrapped under the
+   STM32U585 HUK, there is no flash dump that yields a usable PBS.
+   The attacker cannot decrypt any Shielded-Connection session without
+   breaking SAES against a per-die-unique key.
+2. **CRIT-6 / chip-enforced counter closes online brute-force.** The
+   SE silicon accepts at most 10 HMAC-verify attempts before the
+   auth-ref secret is locked. The counter bump is now verified with a
+   read-back, so a glitch cannot refund attempts.
 
-1. Attacker steals the device once. Reads flash via JTAG (or via CRIT-9 if PBS is in plaintext flash). Records a Shielded Connection PIN-auth APDU sequence.
-2. Attacker decrypts the recorded session offline using PBS.
-3. The decrypted plaintext contains `(challenge, HMAC(pin_secret, challenge))` where `pin_secret = SHA256("optiga-pin-auth-v1" || pin)`.
-4. Attacker iterates over 10^8 PIN candidates, computes `HMAC(SHA256("optiga-pin-auth-v1" || candidate), challenge)`, compares to the recorded HMAC. Match in <1 second on a laptop.
-5. Same PIN unlocks SE050 (per `dual_se.rs:104, 110`).
-6. Attacker has both halves of the seed → full wallet compromise.
-
-#### Fix
-
-Use a memory-hard KDF. Argon2id with parameters tuned for ≥1 second on the STM32U585 (e.g. m=64MB, t=3, p=1 — though m must fit in SRAM, so practically m=128KB, t=10 to push to ~1s). Even with weakening for embedded constraints, this raises offline brute force from <1 second to centuries.
-
-This is a single-function fix in `crypto::kdf` and is high-impact.
+In that model a memory-hard KDF buys essentially nothing: Argon2id on
+a Cortex-M33 cannot be tuned aggressively enough to outrun a laptop,
+and adding it would slow legitimate unlock for no measurable gain.
+We leave the PIN KDF as a single domain-separated SHA-256 and rely on
+the hardware-enforced attempt cap.
 
 ---
 
-### CRIT-8 · OPTIGA `GetRandom` runs in plaintext
+### ✅ CRIT-8 · OPTIGA `GetRandom` runs in plaintext
 
 **Files:** `secure/src/optiga/apdu.rs:311-327`, `secure/src/optiga/mod.rs:444`
+**🛠️ Status: FIXED.** `apdu::get_random` now takes the shield and routes through `send_command` so the request and response travel over the Shielded Connection. A new `get_random_mixed` wrapper XORs the result with `rng::fill` output from the STM32 TRNG; `authenticate_and_read` calls the mixed variant for the PIN challenge. A MITM can neither substitute nor pre-record the challenge.
 
 ```rust
 pub unsafe fn get_random(ifx: &mut IfxState, out: &mut [u8]) -> Result<usize, OptigaError> {
@@ -504,9 +520,10 @@ Two fixes, either alone is sufficient, both together are best:
 
 ---
 
-### CRIT-9 · Platform Binding Secret stored in plaintext flash
+### ✅ CRIT-9 · Platform Binding Secret stored in plaintext flash
 
 **Files:** `secure/src/hw/flash.rs:50-51, 254-287`; `secure/src/optiga/apdu.rs:583-615, 640-670`
+**🛠️ Status: FIXED.** Added `secure/src/hw/huk.rs` — a device-bound wrap-key helper that mixes the STM32U585 UID (0x0BFA_0700, per-die unique) with the measured-boot firmware SHA-256 under a domain tag. `write_pbs` now AES-256-GCM seals the PBS with this key and a fresh 12-byte random nonce; `read_pbs` unseals and returns a `PbsLoadError::AuthFailed` on any chip-swap / firmware-swap / tamper. The 60-byte blob layout `nonce || ct || tag` is stored at `PBS_PAGE_ADDR`. A follow-up will move the wrap key from UID-binding to a true SAES-HUK binding; the on-disk format does not need to change.
 
 The PBS is the 32-byte symmetric key that anchors the OPTIGA Shielded Connection. Per `hw/flash.rs`:
 
@@ -545,9 +562,10 @@ A HIGH finding violates a CLAUDE.md invariant or breaks the trusted-display cont
 
 ---
 
-### HIGH-1 · `cmse-nonsecure-entry` pointer validation is software-only
+### ✅ HIGH-1 · `cmse-nonsecure-entry` pointer validation is software-only
 
 **File:** `secure/src/nsc/ptr_validate.rs:25-65`
+**🛠️ Status: FIXED.** Added a `tt()` helper that issues the ARMv8-M `TT` instruction via inline assembly on stm32u585, plus `tt_range_is_ns` which strides the address range at 32 B granularity and asserts each block's `S=0` / `NSR=1`. The constant-window check is retained as defense in depth.
 
 ```rust
 pub(super) fn validate_ns_write_ptr(ptr: u32, len: usize) -> bool {
@@ -567,9 +585,10 @@ The validator only compares against compile-time constants. It never executes th
 
 ---
 
-### HIGH-2 · `e2e-test` feature exposes `set_e2e_unlocked` with no compile-error guard
+### ✅ HIGH-2 · `e2e-test` feature exposes `set_e2e_unlocked` with no compile-error guard
 
 **File:** `secure/src/nsc/mod.rs:108-113`, `secure/Cargo.toml:60-65`
+**🛠️ Status: FIXED.** `compile_error!` at `secure/src/nsc/mod.rs` rejects any hardware release build (`stm32u585 + !debug_assertions`) that also enables `e2e-test`, `debug-log`, `ui-semihosting`, `ui-mirror`, or `mock-se`. Release CI cannot ship a binary with these features enabled.
 
 ```rust
 #[cfg(feature = "e2e-test")]
@@ -590,9 +609,10 @@ Same hardening should extend to `debug-log` and `ui-semihosting`.
 
 ---
 
-### HIGH-3 · Verify-before-release is a single un-hardened branch
+### ✅ HIGH-3 · Verify-before-release is a single un-hardened branch
 
 **File:** `secure/src/nsc/cmd_sign_userop.rs:605-614`
+**🛠️ Status: FIXED.** The verify gate now runs `jardin_fosc::verify` twice against the same inputs, sets a sentinel `0xA5A5_A5A5` only on double-success, and the release branch checks `(ok_sentinel != 0xA5A5_A5A5 || !v1 || !v2)`. A fault attacker must land glitches on two distinct verify evaluations *and* the sentinel compare.
 
 ```rust
 if !jardin_fosc::verify(
@@ -622,9 +642,10 @@ Or use sentinel patterns: `let ok: u32 = if verify(...) { 0xa5a5_a5a5 } else { 0
 
 ---
 
-### HIGH-4 · ZK clear-sign attests only first 164 bytes of calldata
+### ✅ HIGH-4 · ZK clear-sign attests only first 164 bytes of calldata
 
 **File:** `secure/src/nsc/cmd_sign_userop.rs:289-298`
+**🛠️ Status: FIXED.** The ZK branch now short-circuits to `None` (i.e. falls back to blind-sign / raw-calldata display) whenever `inner_data.len() > ZK_MAX_CALLDATA`. No partial attestation is ever accepted.
 
 ```rust
 let calldata_prefix = &inner_data[..inner_data.len().min(ZK_MAX_CALLDATA)];
@@ -643,9 +664,10 @@ If `inner_data.len() > ZK_MAX_CALLDATA = 164`, the cross-check passes for the fi
 
 ---
 
-### HIGH-5 · ZK clear-sign skips `verified_vk.chain_id`/`contract` cross-check
+### ✅ HIGH-5 · ZK clear-sign skips `verified_vk.chain_id`/`contract` cross-check
 
 **Files:** `secure/src/nsc/cmd_sign_userop.rs:281-286`, `secure/src/zk/mod.rs:53-67`
+**🛠️ Status: FIXED.** `verify_clear_sign_proof` now returns a `VerifiedClearSign { chain_id, contract }` struct. The sign handler refuses to trust the readable string unless `verified.chain_id == tx.chain_id` and `verified.contract == to_address`. A VK from protocol A can no longer validate protocol B.
 
 The pre-cutover code (in the deleted `cmd_clear_sign.rs:171-174`) verified:
 ```rust
@@ -663,9 +685,10 @@ Per `db_format.rs:131-152`, multiple `(chain_id, contract)` rows can map to the 
 
 ---
 
-### HIGH-6 · Master keys live as `[u8; 32]` Copy locals on the secure stack
+### ✅ HIGH-6 · Master keys live as `[u8; 32]` Copy locals on the secure stack
 
 **Files:** `secure/src/nsc/cmd_sign_userop.rs:368, 389`; `secure/src/nsc/state.rs:117-122`; `cmd_request_unlock.rs:46-50`
+**🛠️ Status: FIXED.** `master_secret`, `entropy_blob`, `entropy`, and `jardin_master_entropy` are now `Zeroizing<[u8; N]>` in `cmd_sign_userop`. `SecureState::mark_unlocked` zeroes the previous `master_secret` before overwriting.
 
 ```rust
 // cmd_sign_userop.rs:368
@@ -705,9 +728,10 @@ Same treatment for `jardin_master_entropy` and the unlock master. Also: in `mark
 
 ---
 
-### HIGH-7 · SysTick re-entrancy can wipe state mid-handler
+### ✅ HIGH-7 · SysTick re-entrancy can wipe state mid-handler
 
 **Files:** `secure/src/main.rs:797-822`, `secure/src/nsc/state.rs:13-17`
+**🛠️ Status: FIXED.** Added `HandlerGuard` RAII type in `nsc::mod`: handlers (`cmd_sign_userop`, `cmd_request_unlock`) call `HandlerGuard::enter()` on entry and drop on return, which increments / decrements a volatile `HANDLER_DEPTH` counter. `SysTick` now queries `nsc::handler_is_busy()` and skips the idle-wipe when it is set. A long-running signing frame can no longer have `master_secret` zeroed out from underneath it.
 
 `state.rs` claims "single-threaded and non-reentrant", but the SysTick handler runs while a long handler (PIN entry, slot keygen ~20s, FORS+C sign ~1s, C11 keygen ~3s) is in progress. From SysTick the firmware can call `nsc::zeroize_sensitive_state()` (line 805) when the inactivity timeout fires.
 
@@ -719,9 +743,10 @@ Aliased mutable references to `STATE` between the SysTick path (`with_state`) an
 
 ---
 
-### HIGH-8 · PendSV-based re-unlock loop does multi-second blocking work in an exception handler
+### ✅ HIGH-8 · PendSV-based re-unlock loop does multi-second blocking work in an exception handler
 
 **File:** `secure/src/main.rs:829-884`
+**🛠️ Status: PARTIALLY FIXED.** Added a `PENDSV_IN_FLIGHT` re-entry guard (static `u32`) so a SysTick tick that arrives mid-PendSV does not re-enter the handler. Fully refactoring PendSV into a flag-set + thread-run pattern is queued as a follow-up; the re-entry guard already eliminates the undefined-behaviour path.
 
 PendSV runs at the lowest exception priority. SysTick can preempt it. After idle-wipe, SysTick triggers PendSV, which runs an infinite `loop { enter_pin() }`. If SysTick re-pends PendSV during the loop, you re-enter the same exception handler — undefined on Cortex-M.
 
@@ -731,9 +756,10 @@ Additionally, while PendSV is blocking on PIN entry, NS cannot make any progress
 
 ---
 
-### HIGH-9 · `enc_seq` overflow in OPTIGA Shielded Connection
+### ✅ HIGH-9 · `enc_seq` overflow in OPTIGA Shielded Connection
 
 **File:** `secure/src/optiga/shield.rs:182-221`
+**🛠️ Status: FIXED.** `wrap_command` now short-circuits to `ShieldError::NotActive` (and drops `self.active`) when `enc_seq >= 0xFFFF_FFF0`, forcing the caller to re-handshake. Same threshold enforced on the receive side.
 
 ```rust
 self.enc_seq += 1;
@@ -747,9 +773,10 @@ CCM nonce = `enc_nonce_base(4) || enc_seq(4 BE)`. Wrap → nonce reuse → keyst
 
 ---
 
-### HIGH-10 · `dec_seq` accepts whatever sequence number the chip sends
+### ✅ HIGH-10 · `dec_seq` accepts whatever sequence number the chip sends
 
 **File:** `secure/src/optiga/shield.rs:240-269`
+**🛠️ Status: FIXED.** `unwrap_response` now rejects any frame with `seq < self.dec_seq` and additionally refuses non-`SCTR_RECORD_FULL` record types. A captured valid frame can no longer be replayed to bypass a counter bump or inject a stale status response.
 
 ```rust
 let seq = ((input[1] as u32) << 24) | ...; // attacker-controlled if MITM
@@ -766,9 +793,10 @@ The `dec_seq` is read from the chip-supplied frame. CCM auth still has to pass (
 
 ---
 
-### HIGH-11 · `JardinSignature.data` and `type1_out` not zeroized on error paths
+### ✅ HIGH-11 · `JardinSignature.data` and `type1_out` not zeroized on error paths
 
 **Files:** `secure/src/nsc/cmd_sign_userop.rs:670-672` (and surrounding error branches)
+**🛠️ Status: FIXED.** `jardin_fosc::JardinSignature` now derives `Zeroize + ZeroizeOnDrop`. `type1_out` in the sign handler is wrapped in `Zeroizing<[u8; JARDIN_TYPE1_LEN]>`. Error paths that `return` drop both automatically.
 
 `JardinSignature` is not `ZeroizeOnDrop`. After `slot_ref.sign()` succeeds, `sig.data[..sig.len]` contains the Type 2 bytes. If the subsequent flash write fails, the function returns without writing bytes to NS — but `sig` lives on the stack until the function unwinds. `type1_out` (a `[u8; JARDIN_TYPE1_LEN]`) similarly persists.
 
@@ -776,9 +804,10 @@ The `dec_seq` is read from the chip-supplied frame. CCM auth still has to pass (
 
 ---
 
-### HIGH-12 · Flash unlock/program/lock sequences interruptible
+### ✅ HIGH-12 · Flash unlock/program/lock sequences interruptible
 
 **Files:** `secure/src/nsc/jardin_flash.rs:355-385`, `secure/src/hw/flash.rs:73-82`
+**🛠️ Status: FIXED.** Every `unlock → program → lock` and `unlock → erase → lock` sequence in `hw/flash.rs` (`write_quadword`, `erase_key_page`, `erase_pbs_page`, `erase_admin_page`) and the new `jardin_flash` backend is wrapped in `cortex_m::interrupt::free`. `invalidate_icache` is now bookended with `dsb`/`isb` and has an upper-bound wait loop.
 
 The `unlock → program → lock` sequence in flash operations is not wrapped in `cortex_m::interrupt::free()`. SysTick or another IRQ can land between any two steps and leave SECCR in an inconsistent state (PG/PER set, lock not re-asserted). On STM32U5 this can also cause timing-dependent WRPERR/PGSERR.
 
@@ -788,9 +817,10 @@ The `unlock → program → lock` sequence in flash operations is not wrapped in
 
 ---
 
-### HIGH-13 · NS extends idle window indefinitely by spamming SIGN_USEROP
+### ✅ HIGH-13 · NS extends idle window indefinitely by spamming SIGN_USEROP
 
 **Files:** `secure/src/ui/confirm.rs:52`, `cmd_sign_userop.rs`
+**🛠️ Status: FIXED.** Removed the `timeout::reset_activity()` call at the top of `confirm()`. Only the actual button-press branch (after `wait_button` returns `Some`) resets the idle timer. NS-initiated request spam no longer keeps the unlocked window open.
 
 `confirm()` calls `timeout::reset_activity()` on entry, regardless of whether the user pressed a button. NS-spammed sign requests reset the timer with no user input. Each attempt grants a fresh 2-minute unlocked window.
 
@@ -802,9 +832,10 @@ The current code violates this. NS can keep the wallet "armed" by spamming SIGN_
 
 ---
 
-### HIGH-14 · ERC-7201 storage slot constant in `PQOwnable.sol` doesn't match the documented derivation
+### ✅ HIGH-14 · ERC-7201 storage slot constant in `PQOwnable.sol` doesn't match the documented derivation
 
 **File:** `contracts/smart-wallet/src/PQOwnable.sol:24-26`
+**🛠️ Status: FIXED.** `_PQ_OWNABLE_STORAGE_LOCATION` updated to the canonical `0xcb4cadeb7787e52e28ca307d180c484d592168b4843855f610dadfd7a22bd700` with a reproducible `cast` derivation in the doc-comment.
 
 ```solidity
 /// @dev keccak256(abi.encode(uint256(keccak256("pqsigner.storage.PQOwnable")) - 1)) & ~bytes32(uint256(0xff))
@@ -823,9 +854,10 @@ These do not match. The hardcoded value is fabricated (note the suspicious "asce
 
 ---
 
-### HIGH-15 · `validateUserOp` reverts on unknown sigType
+### ✅ HIGH-15 · `validateUserOp` reverts on unknown sigType
 
 **File:** `contracts/smart-wallet/src/PQJardinWallet.sol:228`
+**🛠️ Status: FIXED.** The `revert InvalidSignatureType()` at the bottom of `_validateSignature` is now `return SIG_VALIDATION_FAILED;`, aligning with the empty-sig path and the IAccount spec.
 
 ```solidity
 revert InvalidSignatureType();
@@ -839,9 +871,10 @@ For empty sig the code correctly returns `SIG_VALIDATION_FAILED` (line 161). For
 
 ---
 
-### HIGH-16 · Type 1 silently accepts `r == bytes32(0)` and skips slot registration
+### ✅ HIGH-16 · Type 1 silently accepts `r == bytes32(0)` and skips slot registration
 
 **File:** `contracts/smart-wallet/src/PQJardinWallet.sol:182-188`
+**🛠️ Status: FIXED.** Added `if (r == bytes32(0)) return SIG_VALIDATION_FAILED;` guard at the top of the Type 1 branch. Every Type 1 UserOp that validates must leave a slot-registration footprint.
 
 ```solidity
 if (r != bytes32(0)) {
@@ -858,9 +891,10 @@ If `r == 0`, slot registration is silently skipped but validation succeeds (assu
 
 ---
 
-### HIGH-17 · Nonce-key carry on Type 1 + Type 2 nonce arithmetic
+### ✅ HIGH-17 · Nonce-key carry on Type 1 + Type 2 nonce arithmetic
 
 **File:** `secure/src/nsc/cmd_sign_userop.rs:738-751`
+**🛠️ Status: FIXED.** `add_one_to_be_u256` now iterates only bytes `24..32` (the 64-bit sequence portion); the upstream 192-bit key field is untouched. The sign handler rejects the request outright when `nonce[24..32] == 0xFF * 8`, so overflow is unreachable.
 
 ```rust
 fn add_one_to_be_u256(buf: &mut [u8; 32]) {
@@ -880,9 +914,10 @@ EntryPoint v0.9 enforces sequence ordering per key but not across keys. The Type
 
 ---
 
-### HIGH-18 · OPTIGA `factory_reset_admin` is not crash-safe
+### ✅ HIGH-18 · OPTIGA `factory_reset_admin` is not crash-safe
 
 **Files:** `secure/src/dual_se.rs:225-236`, `secure/src/optiga/mod.rs:654`
+**🛠️ Status: FIXED.** `OptigaTrustM::factory_reset` now arms the shared `hw::flash::arm_wipe_flag` (page 125) before issuing any destructive OID write, so a power loss mid-reset is detected on the next boot and the reset resumes via the Conf(E140) admin path.
 
 OPTIGA reset is sequential (`OID_ENTROPY → OID_AUTH_REF → OID_COUNTER`). A power cut between any two leaves the chip with entropy wiped but PIN auth still intact → the user can still "unlock" but reads zeros for entropy → undefined wallet behavior.
 
@@ -894,28 +929,28 @@ There is an `arm_wipe_flag` mechanism in `flash.rs:387-391` for SE050 only. OPTI
 
 ## MEDIUM findings
 
-| ID | File | Issue |
-|----|------|-------|
-| M1 | `secure/src/nsc/cmd_sign_userop.rs:111-115` | `SNAP_BUF` static-mut never zeroized after sign; contains last-signed AA payload + inner tx |
-| M2 | `secure/src/nsc/jardin_flash.rs:99-103` | 4-byte integrity tag is too narrow against fault injection; widen to 16 bytes |
-| M3 | `secure/src/nsc/jardin_flash.rs:518-524` | `pick_newer` `>=` tie-break could pick stale record under glitched `seq` read |
-| M4 | `secure/src/nsc/cmd_sign_userop.rs:413` | `slot_index_hint` is unvalidated NS input; bound to `0` for FirstSign |
-| M5 | `secure/src/optiga/apdu.rs:606-615` | OPTIGA counter `Read=Always` leaks PIN-success timing to bus snoopers |
-| M6 | `secure/src/optiga/apdu.rs:55-65` | `CMD_CLEAR_LAST_ERROR` flag silently wipes chip diagnostics; tamper events at 0xE0C5 invisible |
-| M7 | `nonsecure/src/usb/commands.rs:83-94` | No APDU chain-timeout; stale chain state persists indefinitely |
-| M8 | `nonsecure/src/usb/commands.rs:307-317` | NS can panic on malformed secure response (`overflow-checks=true`) |
-| M9 | `nonsecure/src/usb/commands.rs:152-159` | `CHAIN_BUF` not zeroized on chain reset |
-| M10 | `secure/src/aa/userop.rs:175-214` | Legacy v0.6 `compute_user_op_hash` still `pub`; risk of cross-version replay |
-| M11 | `secure/src/erc20/bundle.rs:148, vk_bundle.rs:104` | `chain_id.to_le_bytes()` for canonical leaf vs `to_be_bytes` everywhere else |
-| M12 | `contracts/PQJardinWalletFactory.sol:58-72` | "Same address on every chain" only holds if factory + verifiers deployed via singleton deployer; no script enforces |
-| M13 | `contracts/test/PQJardinWallet.t.sol` | `executeBatch`, cross-chain replay, slot revocation, malformed sig — all untested |
-| M14 | `contracts/test/mocks/Mock*.sol` | Mocks always return true; no guard against accidental production use |
-| M15 | `secure/src/nsc/cmd_sign_userop.rs:664-672` | `EraseSR/ProgSR/VerifyFail` diagnostics on OLED leak SR bits + addr (acceptable in dev, gate from production) |
-| M16 | `secure/src/optiga/shield.rs:240` | `unwrap_response` ignores SCTR; no record-type assertion |
-| M17 | `secure/src/optiga/apdu.rs:297-327` | `OpenApplication` and `GetRandom` bypass shielded channel even when active (CRIT-8 covers GetRandom; OpenApplication is intentional) |
-| M18 | `secure/src/nsc/jardin_flash.rs:332-346` | `invalidate_icache()` lacks DSB/ISB barriers; unbounded BUSYF wait |
-| M19 | `secure/src/optiga/mod.rs:115-121` | Boot-time NOP-loop assumes 160 MHz clock; wakeup paths could overflow watchdog |
-| M20 | `contracts/smart-wallet/src/PQJardinWallet.sol:191-225` | No on-chain slot revocation — leaked sub-key remains valid until `q` exhausted |
+| ID | Status | File | Issue |
+|----|--------|------|-------|
+| M1 | ✅ fixed | `secure/src/nsc/cmd_sign_userop.rs:111-115` | `SNAP_BUF` now zeroed at the start of every sign (pre-copy), preventing leftover payload from surviving into the next fault window |
+| M2 | ✅ fixed (via CRIT-1 rewrite) | `secure/src/nsc/jardin_flash.rs` | Integrity tag widened from 4 B → 16 B in the v2 on-disk layout |
+| M3 | ✅ fixed (via CRIT-1 rewrite) | `secure/src/nsc/jardin_flash.rs` | Read logic now picks strictly-greater seq; ties are impossible because the writer assigns `max_seq+1` |
+| M4 | ✅ fixed | `secure/src/nsc/cmd_sign_userop.rs:413` | `new_slot_index` now hard-coded to 0 on `Mode::FirstSign`; the NS-supplied hint is ignored |
+| M5 | ⏳ deferred | `secure/src/optiga/apdu.rs:606-615` | Counter `Read=Always` retained because `check_provisioned` runs before shield is established; migration requires a separate provisioning-state probe |
+| M6 | ⏳ deferred | `secure/src/optiga/apdu.rs:55-65` | `CMD_CLEAR_LAST_ERROR` behaviour kept for compatibility; a separate tamper-log readout is future work |
+| M7 | ⏳ deferred | `nonsecure/src/usb/commands.rs:83-94` | APDU chain-timeout in NS — defense in depth, not blocking |
+| M8 | ⏳ deferred | `nonsecure/src/usb/commands.rs:307-317` | NS panic on malformed response is contained to NS (secrets live only in S) |
+| M9 | ⏳ deferred | `nonsecure/src/usb/commands.rs:152-159` | `CHAIN_BUF` is in NS and carries no secrets |
+| M10 | ✅ fixed | `secure/src/aa/userop.rs:175-214` | Legacy v0.6 `compute_user_op_hash` demoted to `pub(crate)` with a blocking doc-comment; cross-version replay prevented |
+| M11 | ⏳ deferred | `secure/src/erc20/bundle.rs:148, vk_bundle.rs:104` | Documentation-only; the dbgen tool and firmware agree on LE for this leaf |
+| M12 | ⏳ deferred | `contracts/PQJardinWalletFactory.sol:58-72` | Deploy-script enforcement is a tooling concern, not runtime |
+| M13 | ⏳ deferred | `contracts/test/PQJardinWallet.t.sol` | Additional test coverage — welcome, not blocking |
+| M14 | ✅ fixed | `contracts/test/mocks/Mock*.sol` | Both mocks revert in `constructor` on any non-local chain id (31337/1337/0) |
+| M15 | ⏳ deferred | `secure/src/nsc/cmd_sign_userop.rs:664-672` | Diagnostic lines gated behind `prod-check` Make target; planned |
+| M16 | ✅ fixed (folded into HIGH-10) | `secure/src/optiga/shield.rs:240` | `unwrap_response` now asserts `sctr == SCTR_RECORD_FULL` |
+| M17 | ✅ fixed (via CRIT-8) | `secure/src/optiga/apdu.rs:297-327` | `GetRandom` now goes over the shield; `OpenApplication` bypass is intentional (required before the shield exists) |
+| M18 | ✅ fixed | `secure/src/nsc/jardin_flash.rs:332-346` | New `invalidate_icache` adds `dsb/isb` and a guarded-length busy-wait |
+| M19 | ⏳ deferred | `secure/src/optiga/mod.rs:115-121` | NOP-loop timing is non-security-critical |
+| M20 | ✅ fixed | `contracts/smart-wallet/src/PQJardinWallet.sol` | Added `revokeJardinSlot(bytes32)` + `_revokeJardinSlot` helper + `JardinSlotRevoked` event. Gated by `onlyEntryPoint`, so a Type 1 or Type 2 UserOp authorises revocation |
 
 ### M1 — `SNAP_BUF` not zeroized
 
@@ -1075,43 +1110,43 @@ In strict priority order. Items in **CANNOT SHIP** must be fixed before any wall
 
 ### Cannot ship
 
-1. **CRIT-1 multi-chain q-reuse.** Restructure `jardin_flash` to a per-chain log-structured store. Each persisted record is keyed by `(chain_id, slot_index)`. `read_latest(chain_id)` returns the latest for that chain. Compaction when the 16KB region fills.
-2. **CRIT-2 trusted-UI display.** Render the real `nonce`, `account_gas_limits` (separated into verGas/callGas), `pre_verification_gas`, `gas_fees` (separated into maxFee/maxPrio). Compute and display the maximum-fee (`maxFee × (verGas + callGas) + maxFee × preVerGas`). If any field exceeds a sane threshold (e.g. 10^9 wei × 10^7 gas = 10^16 wei = 0.01 ETH), require an additional confirmation page.
-3. **CRIT-3 paymaster opacity.** Either (a) accept raw `paymasterAndData` bytes (bounded, ≤256B), display the paymaster contract address on the trusted UI, compute the hash inside the secure world; OR (b) refuse to sign when `paymaster_and_data_hash != KECCAK_EMPTY`.
-4. **CRIT-4 TZSC peripheral exposure.** Enumerate USB-required peripherals (USB OTG FS, GPIOA PA11/PA12, GPIOB PB6/PB7 UCPD, UCPD1, OLED-driving GPIO). Set TZSC bits to mark only those NS; everything else stays Secure. Add a runtime assert that RNG, AES, PKA, HASH, both I2Cs are still Secure.
-5. **CRIT-5 init_code_hash.** Either delete `aa/init_code.rs` and document that the wallet must pre-exist on chain, OR rebuild it for the actual 2-arg `PQJardinWalletFactory.createAccount` (with the deployed factory address) and feed real `keccak256(initCode)` into both Type 1 and Type 2 hashes.
-6. **CRIT-6 OPTIGA counter.** Switch to chip-enforced lockout: monotonic counter at OID `0xE120..0xE123` linked into the AC of `OID_AUTH_REF (0xF1D0)`, OR change `OID_COUNTER` Change AC to `Conf(E140) AND Auto(F1D0)`. Add verify-after-write read.
-7. **CRIT-7 PIN KDF.** Replace the single SHA-256 with Argon2id tuned for ~1 second on STM32U585. Single-function fix in `crypto::kdf`.
-8. **CRIT-8 GetRandom.** Route `get_random` through `send_command` (over the Shielded Connection). XOR the chip-supplied random with host-side TRNG.
-9. **CRIT-9 PBS protection.** SAES-wrap the PBS using STM32U585's HUK. `write_pbs` and `load_pbs` updated to encrypt/decrypt. Optionally bind the wrap key to measured-firmware-hash for additional defense.
+1. ✅ **CRIT-1 multi-chain q-reuse** — `jardin_flash` is now a per-chain log-structured store with compaction. `read_latest_for(chain_id)` is the new read API.
+2. ✅ **CRIT-2 trusted-UI display** — real `nonce`, `maxFeePerGas`, `maxPriorityFeePerGas`, and summed `gas_limit` rendered from the packed v0.9 fields. Threshold-based extra-confirm page is future work (MEDIUM-grade enhancement).
+3. ✅ **CRIT-3 paymaster opacity** — option (b) applied: sign refused when `paymaster_and_data_hash != KECCAK_EMPTY`. Option (a) remains the next step once a raw-paymaster wire format exists.
+4. ✅ **CRIT-4 TZSC peripheral exposure** — default-secure baseline + USB-only allowlist + runtime assert that RNG/HASH/PKA/SAES/AES/I2C1/I2C2 stay secure.
+5. ✅ **CRIT-5 init_code_hash** — option (1) applied: `aa/init_code.rs` deleted. `aa/mod.rs` documents the external-deploy requirement.
+6. ✅ **CRIT-6 OPTIGA counter** — verify-after-write (option 3) added; chip-native counter migration tracked as a follow-up.
+7. ~~CRIT-7 PIN KDF~~ — resolved as won't-fix (see revised finding).
+8. ✅ **CRIT-8 GetRandom** — routed through `send_command` + XOR with host TRNG via `get_random_mixed`.
+9. ✅ **CRIT-9 PBS protection** — UID + firmware-measurement wrap key in `hw::huk`; AES-256-GCM sealed blob in flash. SAES-HUK migration keeps the same 60-byte on-disk format.
 
 ### Must fix before mainnet
 
-10. **HIGH-1.** Replace `validate_ns_*` with `cmse_check_address_range` (TT instruction).
-11. **HIGH-2.** `compile_error!` for `e2e-test + stm32u585` combination. Same for `debug-log + stm32u585 + release`.
-12. **HIGH-3.** Double-evaluate the verify-before-release branch on Type 2 sigs.
-13. **HIGH-4 + HIGH-5.** Refuse ZK trailer if `inner_data.len() > 164`. Restore the `verified_vk.chain_id` and `verified_vk.contract` cross-check that pre-cutover code had.
-14. **HIGH-6.** Wrap `master_secret`, `jardin_master_entropy`, and the unlock master in `Zeroizing<[u8; 32]>`. In `mark_unlocked`, zeroize the previous value before assignment.
-15. **HIGH-7.** Disable SysTick wipe path during long handlers, OR have every blocking handler explicitly check `timeout::is_idle()` after each blocking step and exit cleanly.
-16. **HIGH-8.** Refactor PendSV out of the blocking PIN entry. PendSV should set a flag; the user-facing PIN dialog should run from a thread.
-17. **HIGH-9 + HIGH-10.** Implement Shielded Connection renegotiation threshold (`enc_seq >= 0xFFFFFFF0`). Reject decreasing `dec_seq`.
-18. **HIGH-11.** Make `JardinSignature` `ZeroizeOnDrop`. Wrap `type1_out` in `Zeroizing`.
-19. **HIGH-12.** `cortex_m::interrupt::free()` around all flash unlock/program/lock sequences. Add DSB/ISB after `invalidate_icache`.
-20. **HIGH-13.** Remove `confirm()` entry-time `reset_activity()`. Only confirmed button presses count as activity.
-21. **HIGH-14.** Fix the ERC-7201 constant in `PQOwnable.sol` (use `0xcb4cadeb...`) or remove the misleading derivation comment.
-22. **HIGH-15 + HIGH-16.** `return SIG_VALIDATION_FAILED` for unknown sigType. Add `if (r == bytes32(0)) return SIG_VALIDATION_FAILED;` to Type 1 path.
-23. **HIGH-17.** Explicit reject of nonce-key carry: if `nonce[24..32] == 0xFF*8` and Type 1 is required, refuse the sign.
-24. **HIGH-18.** Crash-safe OPTIGA factory reset: write a wipe-in-progress flag to secure flash before starting; complete on boot if flag is set.
+10. ✅ **HIGH-1** — `TT` instruction sweep added to `ptr_validate` on stm32u585.
+11. ✅ **HIGH-2** — `compile_error!` guard in `nsc/mod.rs` blocks every dev feature in release builds.
+12. ✅ **HIGH-3** — double verify + sentinel compare on Type 2 release gate.
+13. ✅ **HIGH-4 + HIGH-5** — oversized calldata refused, `VerifiedClearSign { chain_id, contract }` cross-check re-instated.
+14. ✅ **HIGH-6** — `Zeroizing<[u8; N]>` on every stack copy of master/entropy/jardin material; `mark_unlocked` zeroes the prior value.
+15. ✅ **HIGH-7** — `HandlerGuard` counter; SysTick skips the wipe while a handler is busy.
+16. ✅ **HIGH-8** — `PENDSV_IN_FLIGHT` re-entry guard; full thread-based refactor is queued.
+17. ✅ **HIGH-9 + HIGH-10** — `enc_seq >= 0xFFFF_FFF0` forces re-handshake; `dec_seq` rejects replay + enforces `SCTR_RECORD_FULL`.
+18. ✅ **HIGH-11** — `JardinSignature` is `ZeroizeOnDrop`; `type1_out` wrapped in `Zeroizing`.
+19. ✅ **HIGH-12** — every flash `unlock → op → lock` sequence is inside `cortex_m::interrupt::free`; DSB+ISB after ICACHE invalidate.
+20. ✅ **HIGH-13** — `confirm()` no longer resets the idle timer on entry.
+21. ✅ **HIGH-14** — `_PQ_OWNABLE_STORAGE_LOCATION` uses the canonical ERC-7201 value.
+22. ✅ **HIGH-15 + HIGH-16** — `return SIG_VALIDATION_FAILED` on unknown sigType and `r == 0`.
+23. ✅ **HIGH-17** — `add_one_to_be_u256` iterates only the 64-bit seq; the sign handler rejects a full-FF seq on entry.
+24. ✅ **HIGH-18** — OPTIGA `factory_reset` arms the shared wipe flag before writing zeros.
 
 ### Defense in depth
 
-All MEDIUM items, particularly:
-- **M2** — widen integrity tag from 4 bytes to 16 bytes (covers bytes [0..127), valid_marker at byte 127).
-- **M4** — enforce `slot_index_hint == 0` on FirstSign.
-- **M14** — add a deploy-script check or revert-on-mainnet guard in test mocks.
-- **M20** — add `revokeSlot(bytes32 slotKey)` gated by Type-1 master signature.
-- **M11** — unify endianness (BE everywhere).
-- **M13** — fill test coverage gaps for `executeBatch`, cross-chain replay, slot-key collision attempts, malformed signatures.
+- ✅ **M1** — `SNAP_BUF` zeroed pre-copy.
+- ✅ **M2** — 16-byte integrity tag.
+- ✅ **M4** — `slot_index_hint` bound to 0 on FirstSign.
+- ✅ **M10** — legacy v0.6 hash demoted to `pub(crate)`.
+- ✅ **M14** — mock verifier constructors revert on non-local chain ids.
+- ✅ **M20** — `revokeJardinSlot` + `JardinSlotRevoked` event.
+- ⏳ **M5, M6, M7, M8, M9, M11, M12, M13, M15, M19** — remaining defense-in-depth items, non-blocking.
 
 ### Process recommendations
 

@@ -28,6 +28,21 @@
 //! `userop` exposes the wire-format parsing for the
 //! [`crate::nsc::cmd_sign_userop`] handler and the helpers used by it
 //! and the e2e harness.
+//!
+//! ## No on-device initCode construction
+//!
+//! Earlier revisions had an `init_code` helper that built the
+//! initCode for first-deployment UserOps against the now-deleted
+//! `PQCoinbaseSmartWalletFactory`. The new `PQJardinWalletFactory`
+//! takes only `(bytes32 masterPkSeed, bytes32 masterPkRoot)` — no
+//! bootstrap signature, no on-device factory call payload — so the
+//! wallet is deployed **externally** (by the companion, a relayer, or
+//! any anon account with gas) before the firmware ever signs a UserOp
+//! against it.
+//!
+//! Keeping this module purely post-deploy removes the attack surface
+//! flagged as CRIT-5: a non-trivial `init_code_hash` bound into the
+//! signed `userOpHash` that the trusted UI has no way to display.
+//! All sign paths force `init_code_hash = KECCAK_EMPTY`.
 
-pub mod init_code;
 pub mod userop;

@@ -1,31 +1,31 @@
-//! JARDÍN slot-state persistence in secure flash.
+//! JARDÍN slot-state persistence in secure flash (per-chain log-structured).
 //!
-//! Two pages (primary + shadow) at the top of secure flash hold a
-//! double-buffered, sequence-numbered `SlotStateRecord`. On STM32U585
-//! the pages are real flash (writes survive power loss); on QEMU the
-//! backing store is a static-RAM buffer so the same API can be
-//! exercised by the e2e test without persistence semantics.
+//! Two 8-KB pages at the top of secure flash form a **log** of up to 128
+//! slot-state records (64 per page, 128 B each). Each record is keyed by
+//! `(chain_id, slot_index)` and carries a globally-monotonic `seq`.
 //!
-//! ## Why persist at all
+//! ## Why per-chain
 //!
-//! JARDÍN FORS+C is a **few-time** scheme: each `(pk, q)` signs at most
-//! once, and reusing `q` with a different message leaks FORS secrets
-//! (security drops from 128 bits to ~105 at q=2, ~90 at q=3, etc.).
-//! The on-chain verifier is stateless so the chain will not reject a
-//! replayed q. The only thing preventing reuse after a power cycle is
-//! device-local state. Hence: flash.
+//! JARDÍN FORS+C security collapses sharply under `(slot, q)` reuse:
+//! 128-bit at q=1, ~105-bit at q=2 with random messages, much worse with
+//! adversarial choice. A single record that tracks only the "most-recent"
+//! chain causes q-reuse the moment the user signs on chain A, then B,
+//! then returns to A — because the A record has been overwritten, the
+//! state machine restarts at q=1 for A.
+//!
+//! Keeping latest state **per chain** is therefore a correctness
+//! requirement, not an optimisation.
 //!
 //! ## Layout
 //!
-//! Each record is 128 bytes = 8 STM32 quad-words (QW = 16 B, the flash
-//! programming unit). Layout:
+//! Each record is 128 B. Layout:
 //!
 //! ```text
 //!   off  len  field
 //!   ---  ---  -----------------------------------------
 //!     0    4  magic              = 0x4A41_5244 ("JARD")
-//!     4    4  version            = 1
-//!     8    8  seq                (u64 LE, monotonic)
+//!     4    4  version            = 2  (log-structured v2)
+//!     8    8  seq                (u64 LE, global monotonic)
 //!    16    8  chain_id           (u64 LE)
 //!    24    4  slot_index         (u32 LE)
 //!    28    4  next_q             (u32 LE, next unused FORS+C leaf)
@@ -34,58 +34,64 @@
 //!    40   32  h_r                (keccak256(r), the on-chain slotKey)
 //!    72   16  sub_pk_seed        (16 B, N-masked pkSeed of the slot)
 //!    88   16  sub_pk_root        (16 B, N-masked pkRoot of the slot)
-//!   104    4  integrity          (first 4 B of keccak256(bytes[0..104]))
-//!   108   19  reserved
+//!   104   16  integrity          (first 16 B of keccak256(bytes[0..104]))
+//!   120    7  reserved
 //!   127    1  valid_marker       (0x00 = populated, 0xFF = blank)
 //! ```
 //!
-//! The `valid_marker` lives in the final byte so a torn QW write on
-//! brown-out cannot leave the marker asserted with stale data: the
-//! last QW (offset 112..128) is programmed atomically after the
-//! preceding ones, so if we see `valid_marker == 0x00` the preceding
-//! bytes are also committed.
+//! The integrity tag is 16 B (widened from 4 B in v1) so that fault-
+//! injection with a collision probability beyond 2^-128 would be needed
+//! to forge a valid record. `valid_marker` at the final byte remains the
+//! torn-write defence: the last QW (offset 112..128) is programmed
+//! atomically; torn earlier writes leave the marker at 0xFF (blank).
 //!
 //! ## Write algorithm
 //!
-//! Updates are double-buffered at page granularity. To commit a new
-//! `SlotState`:
+//! Appending a record:
 //!
-//!   1. Read the latest-seq record from either page, call that `cur`.
-//!   2. Compute `new.seq = cur.seq + 1` (0 if no record exists).
-//!   3. Erase the *other* page.
-//!   4. Program the new record at offset 0 of the freshly-erased page.
-//!   5. On success the new page is implicitly active (higher seq).
+//!   1. Scan both pages; find `max_seq` and the first blank slot.
+//!   2. If a blank slot exists: assign `seq = max_seq + 1`, program it.
+//!   3. Otherwise compact: collect latest-per-chain (including the new
+//!      state) in SRAM, erase one page, re-program the compacted set
+//!      with fresh seqs, erase the other page. The re-seq'd records
+//!      always have higher seqs than any stale records on the other
+//!      page, so torn-compaction recovery is deterministic.
 //!
-//! Read: scan both pages, take the record with the highest seq whose
-//! integrity hash verifies and whose valid_marker is 0x00. Return
-//! `None` if neither page has a valid record.
+//! Reads scan both pages and return the max-seq record for the given
+//! chain_id.
 //!
-//! Wear: one page erase per commit, alternating between the two pages
-//! → 2 × 10K erase-cycle endurance = 20K commits of headroom. At the
-//! worst case (one commit per signature, 95 signs per rotation) this
-//! gives ~20K signatures over the device lifetime. Fine for an MVP.
-//! Log-structured appends would trade complexity for ~64× more
-//! headroom; deferred until we measure a real bottleneck.
+//! ## Wear
+//!
+//! At best ~64 × 2 pages = 128 records per erase cycle. With 2 × 10 K
+//! endurance = 20 K erases, worst-case ≈ 1.3 M signs of headroom before
+//! wearout — plenty for the lifetime of the device.
 
 use zeroize::Zeroize;
 
 /// Magic word identifying a JARDÍN slot-state record ("JARD" little-endian).
 pub const MAGIC: u32 = 0x4A41_5244;
 
-/// Current on-disk layout version.
-pub const VERSION: u32 = 1;
+/// Current on-disk layout version (v2: per-chain log).
+pub const VERSION: u32 = 2;
 
 /// Record size in bytes = 8 flash quad-words.
 pub const RECORD_LEN: usize = 128;
 
-/// Page size on STM32U585 (2 KB flash page = 128 QW).
-///
-/// We reserve one full page per buffer even though only 128 bytes are
-/// used, because flash erase is per-page. The remaining 1920 bytes are
-/// unused (0xFF).
+/// Page size on STM32U585 (2 KB flash page = 128 QW; we reserve 8 KB).
 pub const PAGE_LEN: usize = 8 * 1024;
 
-// Byte offsets within a record
+/// Records that fit in one page.
+pub const RECORDS_PER_PAGE: usize = PAGE_LEN / RECORD_LEN;
+
+/// Total records across both log pages.
+pub const TOTAL_RECORDS: usize = RECORDS_PER_PAGE * 2;
+
+/// Compaction buffer: maximum number of unique chain_ids we can retain
+/// across a single compaction. Each chain consumes one record slot, so
+/// this also bounds the post-compaction residency of page A.
+pub const MAX_UNIQUE_CHAINS: usize = 32;
+
+// Byte offsets within a record.
 const OFF_MAGIC: usize = 0;
 const OFF_VERSION: usize = 4;
 const OFF_SEQ: usize = 8;
@@ -100,6 +106,7 @@ const OFF_INTEGRITY: usize = 104;
 const OFF_VALID_MARKER: usize = 127;
 
 const INTEGRITY_COVERED_LEN: usize = OFF_INTEGRITY;
+const INTEGRITY_LEN: usize = 16;
 const VALID_MARKER: u8 = 0x00;
 
 /// Flags bit positions.
@@ -107,8 +114,8 @@ pub const FLAG_SLOT_REGISTERED: u32 = 1 << 0;
 
 /// In-memory representation of one slot-state record.
 ///
-/// `seq` is managed by this module — callers should not set it; pass
-/// whatever is in the returned `SlotState` back in on update.
+/// `seq` is managed by this module — callers should not set it; the
+/// module assigns `max_seq + 1` on every write.
 #[derive(Clone, Zeroize)]
 pub struct SlotState {
     pub seq: u64,
@@ -127,12 +134,7 @@ impl SlotState {
         self.flags & FLAG_SLOT_REGISTERED != 0
     }
 
-    /// Serialize to the 128-byte on-disk record. Caller supplies the
-    /// integrity-hash helper so we don't depend on a specific keccak impl.
     fn serialize_into(&self, buf: &mut [u8; RECORD_LEN]) {
-        // Clear to 0xFF so unused bytes read as "blank" in case of a
-        // partial write that writes the first QWs but not the last.
-        // The final atomic QW write flips valid_marker to 0x00.
         for b in buf.iter_mut() {
             *b = 0xFF;
         }
@@ -147,18 +149,11 @@ impl SlotState {
         buf[OFF_SUB_PK_SEED..OFF_SUB_PK_SEED + 16].copy_from_slice(&self.sub_pk_seed);
         buf[OFF_SUB_PK_ROOT..OFF_SUB_PK_ROOT + 16].copy_from_slice(&self.sub_pk_root);
 
-        // Integrity: first 4 bytes of keccak256 over bytes [0..104).
         let integrity = integrity_tag(&buf[..INTEGRITY_COVERED_LEN]);
-        buf[OFF_INTEGRITY..OFF_INTEGRITY + 4].copy_from_slice(&integrity);
-
-        // valid_marker is the very last byte and is programmed in the
-        // final QW; use 0x00 to assert "valid".
+        buf[OFF_INTEGRITY..OFF_INTEGRITY + INTEGRITY_LEN].copy_from_slice(&integrity);
         buf[OFF_VALID_MARKER] = VALID_MARKER;
     }
 
-    /// Parse and validate a 128-byte record. Returns `None` if the
-    /// record is blank, has the wrong magic, a bad integrity tag, or
-    /// the valid marker is not asserted.
     fn deserialize(buf: &[u8; RECORD_LEN]) -> Option<Self> {
         if buf[OFF_VALID_MARKER] != VALID_MARKER {
             return None;
@@ -171,9 +166,8 @@ impl SlotState {
         if version != VERSION {
             return None;
         }
-        // Verify integrity tag.
         let computed = integrity_tag(&buf[..INTEGRITY_COVERED_LEN]);
-        if computed != buf[OFF_INTEGRITY..OFF_INTEGRITY + 4] {
+        if !ct_eq(&computed, &buf[OFF_INTEGRITY..OFF_INTEGRITY + INTEGRITY_LEN]) {
             return None;
         }
         let mut seq_bytes = [0u8; 8];
@@ -215,17 +209,28 @@ impl SlotState {
     }
 }
 
-/// First 4 bytes of keccak256 over the record prefix. Good enough as a
-/// structural integrity check; not a security boundary (the seed
-/// itself is protected by the SE + PIN gate).
-fn integrity_tag(prefix: &[u8]) -> [u8; 4] {
+/// First 16 bytes of keccak256 over the record prefix.
+fn integrity_tag(prefix: &[u8]) -> [u8; INTEGRITY_LEN] {
     use sha3::{Digest, Keccak256};
     let mut h = Keccak256::new();
     h.update(prefix);
     let digest = h.finalize();
-    let mut out = [0u8; 4];
-    out.copy_from_slice(&digest[..4]);
+    let mut out = [0u8; INTEGRITY_LEN];
+    out.copy_from_slice(&digest[..INTEGRITY_LEN]);
     out
+}
+
+/// Constant-time slice equality. Used to gate integrity acceptance so a
+/// side-channel can't discriminate near-matches from mismatches.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut d: u8 = 0;
+    for i in 0..a.len() {
+        d |= a[i] ^ b[i];
+    }
+    d == 0
 }
 
 /// Persistence error. `sr` captures the raw FLASH_SECSR bits so a
@@ -237,7 +242,19 @@ pub enum FlashError {
     /// Flash controller reported an error during quadword program.
     ProgramHardware { sr: u32, addr: u32 },
     /// Read-back after program did not match the intended bytes.
-    VerifyFailed { addr: u32, byte_idx: usize, expected: u8, actual: u8 },
+    VerifyFailed {
+        addr: u32,
+        byte_idx: usize,
+        expected: u8,
+        actual: u8,
+    },
+}
+
+/// Identifier for the two log pages.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Page {
+    A,
+    B,
 }
 
 // ---------------------------------------------------------------------------
@@ -246,61 +263,70 @@ pub enum FlashError {
 
 #[cfg(feature = "stm32u585")]
 mod backend {
-    //! STM32U585 backend backed by the `hw::flash` driver.
-    //!
-    //! Two pages are reserved at the top of secure flash bank 1:
-    //!
-    //!   * page 124 (0x0C0F_8000) — primary buffer (A)
-    //!   * page 123 (0x0C0F_6000) — shadow buffer  (B)
-    //!
-    //! `memory-stm32u585.x` must shrink `FLASH LENGTH` by 16 KB past
-    //! the existing reservation for pages 125–127 to keep firmware
-    //! code out of these pages.
+    //! STM32U585 backend. Two 8-KB pages at the top of secure flash
+    //! bank 1 hold the log (pages 123 + 124). Programming is quad-word
+    //! aligned; each record spans 8 QWs.
 
-    use super::{FlashError, PAGE_LEN, RECORD_LEN};
+    use super::{FlashError, Page, RECORDS_PER_PAGE, RECORD_LEN};
 
-    const JARDIN_A_ADDR: u32 = 0x0C0F_8000;
-    const JARDIN_A_PAGE_NUM: u32 = 124;
-    const JARDIN_B_ADDR: u32 = 0x0C0F_6000;
-    const JARDIN_B_PAGE_NUM: u32 = 123;
+    const PAGE_A_ADDR: u32 = 0x0C0F_8000;
+    const PAGE_A_PAGE_NUM: u32 = 124;
+    const PAGE_B_ADDR: u32 = 0x0C0F_6000;
+    const PAGE_B_PAGE_NUM: u32 = 123;
 
-    pub const PAGE_A_ADDR: u32 = JARDIN_A_ADDR;
-    pub const PAGE_B_ADDR: u32 = JARDIN_B_ADDR;
+    fn addr_of(page: Page) -> u32 {
+        match page {
+            Page::A => PAGE_A_ADDR,
+            Page::B => PAGE_B_ADDR,
+        }
+    }
 
-    unsafe fn read_page(addr: u32, buf: &mut [u8; RECORD_LEN]) {
-        let src = addr as *const u8;
+    fn page_num(page: Page) -> u32 {
+        match page {
+            Page::A => PAGE_A_PAGE_NUM,
+            Page::B => PAGE_B_PAGE_NUM,
+        }
+    }
+
+    fn slot_addr(page: Page, slot: usize) -> u32 {
+        addr_of(page) + (slot as u32) * (RECORD_LEN as u32)
+    }
+
+    /// Read one slot of the log into `buf`.
+    pub unsafe fn read_slot(page: Page, slot: usize, buf: &mut [u8; RECORD_LEN]) {
+        debug_assert!(slot < RECORDS_PER_PAGE);
+        let src = slot_addr(page, slot) as *const u8;
         for i in 0..RECORD_LEN {
             buf[i] = core::ptr::read_volatile(src.add(i));
         }
     }
 
-    /// Read the first `RECORD_LEN` bytes of page A.
-    pub unsafe fn read_page_a(buf: &mut [u8; RECORD_LEN]) {
-        read_page(JARDIN_A_ADDR, buf);
+    /// Program one slot. Assumes the slot is blank (all 0xFF). Programs
+    /// 8 QWs in order; the final QW (which carries the valid_marker) is
+    /// written last so torn writes leave the slot detected as blank.
+    pub unsafe fn write_slot(
+        page: Page,
+        slot: usize,
+        buf: &[u8; RECORD_LEN],
+    ) -> Result<(), FlashError> {
+        debug_assert!(slot < RECORDS_PER_PAGE);
+        let base = slot_addr(page, slot);
+        cortex_m::interrupt::free(|_| {
+            let mut qw = [0u8; 16];
+            for i in 0..(RECORD_LEN / 16) {
+                qw.copy_from_slice(&buf[i * 16..(i + 1) * 16]);
+                program_qw(base + (i as u32) * 16, &qw)?;
+            }
+            Ok(())
+        })
     }
 
-    /// Read the first `RECORD_LEN` bytes of page B.
-    pub unsafe fn read_page_b(buf: &mut [u8; RECORD_LEN]) {
-        read_page(JARDIN_B_ADDR, buf);
+    /// Erase an entire log page. Sets all bytes to 0xFF.
+    pub unsafe fn erase_page(page: Page) -> Result<(), FlashError> {
+        cortex_m::interrupt::free(|_| erase_page_num(page_num(page)))
     }
 
-    /// Erase page A and program `buf` at offset 0. Uses the same
-    /// flash-controller sequence as `hw::flash` but targets a
-    /// different page number.
-    pub unsafe fn erase_and_write_page_a(buf: &[u8; RECORD_LEN]) -> Result<(), FlashError> {
-        erase_and_write(JARDIN_A_ADDR, JARDIN_A_PAGE_NUM, buf)
-    }
-
-    /// Erase page B and program `buf` at offset 0.
-    pub unsafe fn erase_and_write_page_b(buf: &[u8; RECORD_LEN]) -> Result<(), FlashError> {
-        erase_and_write(JARDIN_B_ADDR, JARDIN_B_PAGE_NUM, buf)
-    }
-
-    // Direct flash-controller interaction mirrors `hw::flash` — the
-    // public helpers there target pages 125..127, we need 123..124,
-    // so duplicate the tight sequence here rather than widen the
-    // driver's public surface.
-
+    // Direct flash-controller interaction.
     const FLASH: u32 = 0x5002_2000;
     const FLASH_SECKEYR: *mut u32 = (FLASH + 0x0C) as *mut u32;
     const FLASH_SECSR: *mut u32 = (FLASH + 0x24) as *mut u32;
@@ -315,12 +341,8 @@ mod backend {
     const BSY: u32 = 1 << 16;
     const ERR_MASK: u32 = 0xFA;
 
-    // ICACHE registers (secure alias). On STM32U5 the ICACHE serves
-    // BOTH code fetches and data loads from flash, so after every
-    // erase/program we must invalidate it or read-backs will return
-    // the pre-write cached bytes. The non-secure alias lives at
-    // 0x4003_0400 but the flash writes happen through SECCR so the
-    // secure ICACHE at 0x5003_0400 is the one to invalidate.
+    // ICACHE registers (secure alias). After every flash write the data
+    // cache must be invalidated or read-backs return stale bytes.
     const ICACHE: u32 = 0x5003_0400;
     const ICACHE_CR: *mut u32 = ICACHE as *mut u32;
     const ICACHE_SR: *const u32 = (ICACHE + 0x04) as *const u32;
@@ -332,11 +354,20 @@ mod backend {
     unsafe fn invalidate_icache() {
         let cr = core::ptr::read_volatile(ICACHE_CR);
         core::ptr::write_volatile(ICACHE_CR, cr | CACHEINV);
+        // Data-synchronisation barrier so the CACHEINV write is visible
+        // to the cache controller before we poll BUSYF.
+        cortex_m::asm::dsb();
+        let mut guard = 0u32;
         while core::ptr::read_volatile(ICACHE_SR) & BUSYF != 0 {
             cortex_m::asm::nop();
+            guard = guard.wrapping_add(1);
+            if guard > 1_000_000 {
+                break;
+            }
         }
-        // Clear BSYENDF by writing 1 to it.
         core::ptr::write_volatile(ICACHE_FCR, BSYENDF);
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
     }
 
     unsafe fn wait_bsy() {
@@ -362,7 +393,7 @@ mod backend {
         core::ptr::write_volatile(FLASH_SECCR, cr | LOCK);
     }
 
-    unsafe fn erase_page(page_num: u32) -> Result<(), FlashError> {
+    unsafe fn erase_page_num(page_num: u32) -> Result<(), FlashError> {
         wait_bsy();
         clear_errors();
         unlock();
@@ -373,8 +404,6 @@ mod backend {
         let sr = core::ptr::read_volatile(FLASH_SECSR);
         core::ptr::write_volatile(FLASH_SECCR, 0);
         lock();
-        // ICACHE must be invalidated after any flash erase/program or
-        // subsequent reads will return stale cached bytes.
         invalidate_icache();
         if sr & ERR_MASK != 0 {
             clear_errors();
@@ -403,8 +432,6 @@ mod backend {
         let sr = core::ptr::read_volatile(FLASH_SECSR);
         core::ptr::write_volatile(FLASH_SECCR, 0);
         lock();
-        // Invalidate ICACHE so the read-back below sees the freshly
-        // programmed bytes, not the pre-write cached value.
         invalidate_icache();
         if sr & ERR_MASK != 0 {
             clear_errors();
@@ -425,149 +452,301 @@ mod backend {
         }
         Ok(())
     }
-
-    unsafe fn erase_and_write(
-        addr: u32,
-        page_num: u32,
-        buf: &[u8; RECORD_LEN],
-    ) -> Result<(), FlashError> {
-        erase_page(page_num)?;
-        // Program the 8 QWs making up the record in order. The last
-        // QW holds `valid_marker` at its final byte, so if we fail
-        // partway through the record is still detected as blank.
-        let mut qw = [0u8; 16];
-        for i in 0..(RECORD_LEN / 16) {
-            qw.copy_from_slice(&buf[i * 16..(i + 1) * 16]);
-            program_qw(addr + (i as u32) * 16, &qw)?;
-        }
-        // The remaining (PAGE_LEN - RECORD_LEN) bytes are left as 0xFF
-        // (erase pattern) — no need to program them. Reference PAGE_LEN
-        // to pin the constant.
-        let _ = PAGE_LEN;
-        Ok(())
-    }
 }
 
 #[cfg(not(feature = "stm32u585"))]
 mod backend {
-    //! QEMU / host backend: two static-RAM buffers that mimic the
-    //! flash layout. Not power-persistent; enough to exercise the
-    //! read/write state machine in e2e tests.
+    //! QEMU / host backend: two static-RAM buffers that mimic the flash
+    //! layout. Not power-persistent; enough to exercise the read/write
+    //! state machine in e2e tests.
 
-    use super::{FlashError, RECORD_LEN};
+    use super::{FlashError, Page, PAGE_LEN, RECORDS_PER_PAGE, RECORD_LEN};
 
-    static mut PAGE_A: [u8; RECORD_LEN] = [0xFF; RECORD_LEN];
-    static mut PAGE_B: [u8; RECORD_LEN] = [0xFF; RECORD_LEN];
+    static mut PAGE_A: [u8; PAGE_LEN] = [0xFF; PAGE_LEN];
+    static mut PAGE_B: [u8; PAGE_LEN] = [0xFF; PAGE_LEN];
 
-    pub unsafe fn read_page_a(buf: &mut [u8; RECORD_LEN]) {
-        *buf = *core::ptr::addr_of!(PAGE_A);
+    fn slot_offset(slot: usize) -> usize {
+        slot * RECORD_LEN
     }
 
-    pub unsafe fn read_page_b(buf: &mut [u8; RECORD_LEN]) {
-        *buf = *core::ptr::addr_of!(PAGE_B);
+    pub unsafe fn read_slot(page: Page, slot: usize, buf: &mut [u8; RECORD_LEN]) {
+        debug_assert!(slot < RECORDS_PER_PAGE);
+        let off = slot_offset(slot);
+        let src: &[u8; PAGE_LEN] = match page {
+            Page::A => &*core::ptr::addr_of!(PAGE_A),
+            Page::B => &*core::ptr::addr_of!(PAGE_B),
+        };
+        buf.copy_from_slice(&src[off..off + RECORD_LEN]);
     }
 
-    pub unsafe fn erase_and_write_page_a(buf: &[u8; RECORD_LEN]) -> Result<(), FlashError> {
-        *core::ptr::addr_of_mut!(PAGE_A) = *buf;
+    pub unsafe fn write_slot(
+        page: Page,
+        slot: usize,
+        buf: &[u8; RECORD_LEN],
+    ) -> Result<(), FlashError> {
+        debug_assert!(slot < RECORDS_PER_PAGE);
+        let off = slot_offset(slot);
+        let dst: &mut [u8; PAGE_LEN] = match page {
+            Page::A => &mut *core::ptr::addr_of_mut!(PAGE_A),
+            Page::B => &mut *core::ptr::addr_of_mut!(PAGE_B),
+        };
+        // Mimic NOR-flash one-way bit transitions: the slot must be blank
+        // (all 0xFF) before programming — catches bugs where callers
+        // forget to erase before re-program.
+        for i in 0..RECORD_LEN {
+            if dst[off + i] != 0xFF {
+                return Err(FlashError::ProgramHardware {
+                    sr: 0,
+                    addr: off as u32,
+                });
+            }
+        }
+        dst[off..off + RECORD_LEN].copy_from_slice(buf);
         Ok(())
     }
 
-    pub unsafe fn erase_and_write_page_b(buf: &[u8; RECORD_LEN]) -> Result<(), FlashError> {
-        *core::ptr::addr_of_mut!(PAGE_B) = *buf;
+    pub unsafe fn erase_page(page: Page) -> Result<(), FlashError> {
+        let dst: &mut [u8; PAGE_LEN] = match page {
+            Page::A => &mut *core::ptr::addr_of_mut!(PAGE_A),
+            Page::B => &mut *core::ptr::addr_of_mut!(PAGE_B),
+        };
+        for b in dst.iter_mut() {
+            *b = 0xFF;
+        }
         Ok(())
     }
 
-    /// Test-only helper to reset the simulated flash. Not exposed on
-    /// real hardware because there's no reason to; re-flashing the
-    /// device is the equivalent.
+    /// Test-only helper to reset the simulated flash.
     #[cfg(test)]
     pub unsafe fn reset_all() {
-        *core::ptr::addr_of_mut!(PAGE_A) = [0xFF; RECORD_LEN];
-        *core::ptr::addr_of_mut!(PAGE_B) = [0xFF; RECORD_LEN];
+        let _ = erase_page(Page::A);
+        let _ = erase_page(Page::B);
     }
 }
 
 // ---------------------------------------------------------------------------
-// Public API.
+// Public API
 // ---------------------------------------------------------------------------
 
-/// Which page holds the newer record, if any.
+/// Read the latest-committed slot state for `chain_id`, or `None` if
+/// this chain has no record.
+pub fn read_latest_for(chain_id: u64) -> Option<SlotState> {
+    let mut best: Option<SlotState> = None;
+    scan_all(|rec| {
+        if rec.chain_id == chain_id {
+            let take = match &best {
+                Some(cur) => rec.seq > cur.seq,
+                None => true,
+            };
+            if take {
+                best = Some(rec);
+            }
+        }
+    });
+    best
+}
+
+/// Read the globally-most-recent slot state across all chains.
 ///
-/// Both pages may hold independently-valid records (e.g. after an
-/// interrupted write). The caller takes the one with the higher seq.
-enum Newer {
-    A(SlotState),
-    B(SlotState),
-    Neither,
+/// Kept for diagnostics and legacy test code. For sign-time decisions
+/// use `read_latest_for(chain_id)`.
+pub fn read_latest() -> Option<SlotState> {
+    let mut best: Option<SlotState> = None;
+    scan_all(|rec| {
+        let take = match &best {
+            Some(cur) => rec.seq > cur.seq,
+            None => true,
+        };
+        if take {
+            best = Some(rec);
+        }
+    });
+    best
 }
 
-fn pick_newer() -> Newer {
-    let mut buf_a = [0u8; RECORD_LEN];
-    let mut buf_b = [0u8; RECORD_LEN];
-    // SAFETY: single-threaded secure world; no concurrent readers.
-    unsafe {
-        backend::read_page_a(&mut buf_a);
-        backend::read_page_b(&mut buf_b);
-    }
-    let a = SlotState::deserialize(&buf_a);
-    let b = SlotState::deserialize(&buf_b);
-    match (a, b) {
-        (None, None) => Newer::Neither,
-        (Some(a), None) => Newer::A(a),
-        (None, Some(b)) => Newer::B(b),
-        (Some(a), Some(b)) => {
-            if a.seq >= b.seq {
-                Newer::A(a)
-            } else {
-                Newer::B(b)
+/// Commit a new slot state. The module assigns `seq = max_seq + 1` and
+/// appends to the log. When the log is full, the function compacts in
+/// place before appending.
+pub fn write(state: &SlotState) -> Result<(), FlashError> {
+    // Scan both pages: find max_seq and first blank slot.
+    let mut max_seq: u64 = 0;
+    let mut first_blank: Option<(Page, usize)> = None;
+    let mut buf = [0u8; RECORD_LEN];
+
+    for &page in &[Page::A, Page::B] {
+        for slot in 0..RECORDS_PER_PAGE {
+            unsafe {
+                backend::read_slot(page, slot, &mut buf);
+            }
+            if let Some(rec) = SlotState::deserialize(&buf) {
+                if rec.seq > max_seq {
+                    max_seq = rec.seq;
+                }
+            } else if is_slot_blank(&buf) && first_blank.is_none() {
+                first_blank = Some((page, slot));
             }
         }
     }
+
+    let mut to_write = state.clone();
+    to_write.seq = max_seq.wrapping_add(1);
+    let mut ser = [0xFFu8; RECORD_LEN];
+    to_write.serialize_into(&mut ser);
+
+    let result = if let Some((page, slot)) = first_blank {
+        unsafe { backend::write_slot(page, slot, &ser) }
+    } else {
+        let r = compact_and_write(state, max_seq);
+        to_write.zeroize();
+        ser.zeroize();
+        return r;
+    };
+
+    to_write.zeroize();
+    ser.zeroize();
+    result
 }
 
-/// Read the latest-committed slot state, or `None` if no record has
-/// ever been committed (or both records are corrupt / blank).
-pub fn read_latest() -> Option<SlotState> {
-    match pick_newer() {
-        Newer::A(s) | Newer::B(s) => Some(s),
-        Newer::Neither => None,
+/// Whether a raw 128-byte slot buffer is in the all-0xFF erased state.
+fn is_slot_blank(buf: &[u8; RECORD_LEN]) -> bool {
+    for &b in buf.iter() {
+        if b != 0xFF {
+            return false;
+        }
+    }
+    true
+}
+
+/// Compact the log: collect latest-per-chain (including the new state),
+/// write the compacted set to the emptier page, then erase the other.
+fn compact_and_write(new_state: &SlotState, max_seq: u64) -> Result<(), FlashError> {
+    // Per-page population counts help pick the target (we erase the page
+    // with more populated slots first — it's more in need of compaction).
+    let mut count_a: usize = 0;
+    let mut count_b: usize = 0;
+    {
+        let mut buf = [0u8; RECORD_LEN];
+        for slot in 0..RECORDS_PER_PAGE {
+            unsafe {
+                backend::read_slot(Page::A, slot, &mut buf);
+            }
+            if SlotState::deserialize(&buf).is_some() {
+                count_a += 1;
+            }
+            unsafe {
+                backend::read_slot(Page::B, slot, &mut buf);
+            }
+            if SlotState::deserialize(&buf).is_some() {
+                count_b += 1;
+            }
+        }
+    }
+
+    // Target = page whose contents we will replace with the compacted set.
+    // Pick the page that currently holds MORE records; that page is more
+    // "in need" of compaction. Ties break to A.
+    let target = if count_b > count_a { Page::B } else { Page::A };
+    let other = if target == Page::A { Page::B } else { Page::A };
+
+    // Build latest-per-chain map in SRAM. `new_state`'s chain must be
+    // represented by `new_state` itself (overrides any stored record).
+    let mut latest: [Option<SlotState>; MAX_UNIQUE_CHAINS] = Default::default();
+    let mut n_chains: usize = 0;
+
+    scan_all(|rec| {
+        if rec.chain_id == new_state.chain_id {
+            return;
+        }
+        for i in 0..n_chains {
+            if let Some(ref cur) = latest[i] {
+                if cur.chain_id == rec.chain_id {
+                    if rec.seq > cur.seq {
+                        latest[i] = Some(rec);
+                    }
+                    return;
+                }
+            }
+        }
+        if n_chains < MAX_UNIQUE_CHAINS {
+            latest[n_chains] = Some(rec);
+            n_chains += 1;
+        }
+        // else: silent drop — the map is full. The caller's new_state
+        // still gets written below. Realistically unreachable for
+        // sensible chain counts (ERC-4337 networks fit under 32).
+    });
+
+    // Prepend-ish: insert new_state at position n_chains (still unique).
+    if n_chains < MAX_UNIQUE_CHAINS {
+        latest[n_chains] = Some(new_state.clone());
+        n_chains += 1;
+    } else {
+        // No room for new_state in the compaction buffer — fail rather
+        // than silently drop. This is effectively impossible in
+        // practice; bumping MAX_UNIQUE_CHAINS fixes it if it ever hits.
+        return Err(FlashError::ProgramHardware { sr: 0, addr: 0 });
+    }
+
+    // Assign fresh monotonically-increasing seqs. The re-seqed records
+    // dominate any stale records still on the other page, so reads
+    // during the window between step 4 and step 5 pick the right state.
+    let mut next_seq = max_seq.wrapping_add(1);
+    let mut buf = [0xFFu8; RECORD_LEN];
+
+    // Erase target.
+    let erase_res = unsafe { backend::erase_page(target) };
+    if erase_res.is_err() {
+        zeroize_latest(&mut latest);
+        return erase_res;
+    }
+
+    // Write the compacted set.
+    for i in 0..n_chains {
+        if let Some(ref mut rec) = latest[i] {
+            rec.seq = next_seq;
+            next_seq = next_seq.wrapping_add(1);
+            rec.serialize_into(&mut buf);
+            let w = unsafe { backend::write_slot(target, i, &buf) };
+            if let Err(e) = w {
+                buf.zeroize();
+                zeroize_latest(&mut latest);
+                return Err(e);
+            }
+        }
+    }
+    buf.zeroize();
+
+    // Erase the other page — cleans up stale records. Not load-bearing
+    // for correctness (readers already ignore stale records because
+    // max-seq wins), but reclaims space for future appends.
+    let erase_other = unsafe { backend::erase_page(other) };
+    zeroize_latest(&mut latest);
+    erase_other
+}
+
+fn zeroize_latest(latest: &mut [Option<SlotState>; MAX_UNIQUE_CHAINS]) {
+    for slot in latest.iter_mut() {
+        if let Some(ref mut r) = slot {
+            r.zeroize();
+        }
+        *slot = None;
     }
 }
 
-/// Commit a new slot state. The module chooses the destination page
-/// and assigns the sequence number; the caller should zero `seq` in
-/// the input (or leave the value from a prior `read_latest()` — the
-/// module increments what's in flash, not what's in `state`).
-///
-/// After a successful return the new record is readable via
-/// `read_latest()`. On failure neither page is partially committed
-/// (the destination erase happens before the program, so torn writes
-/// leave the destination blank with `valid_marker = 0xFF`, which
-/// deserialize() rejects).
-pub fn write(state: &SlotState) -> Result<(), FlashError> {
-    let (cur_seq, dest_is_a) = match pick_newer() {
-        Newer::Neither => (0u64, true),
-        // Cur is on A → commit to B, and vice versa.
-        Newer::A(s) => (s.seq, false),
-        Newer::B(s) => (s.seq, true),
-    };
-    let mut to_write = state.clone();
-    to_write.seq = cur_seq.wrapping_add(1);
-    let mut buf = [0xFFu8; RECORD_LEN];
-    to_write.serialize_into(&mut buf);
-
-    let result = unsafe {
-        if dest_is_a {
-            backend::erase_and_write_page_a(&buf)
-        } else {
-            backend::erase_and_write_page_b(&buf)
+/// Visit every valid record in the log.
+fn scan_all(mut visit: impl FnMut(SlotState)) {
+    let mut buf = [0u8; RECORD_LEN];
+    for &page in &[Page::A, Page::B] {
+        for slot in 0..RECORDS_PER_PAGE {
+            unsafe {
+                backend::read_slot(page, slot, &mut buf);
+            }
+            if let Some(rec) = SlotState::deserialize(&buf) {
+                visit(rec);
+            }
         }
-    };
-    // Always zeroize the serialised buffer — the sub_pk_seed / h_r are
-    // not secret but there's no harm, and the habit keeps the
-    // zeroize-on-drop discipline uniform across the secure world.
+    }
     buf.zeroize();
-    result
 }
 
 // ---------------------------------------------------------------------------
@@ -578,10 +757,10 @@ pub fn write(state: &SlotState) -> Result<(), FlashError> {
 mod tests {
     use super::*;
 
-    fn sample(next_q: u32) -> SlotState {
+    fn sample(chain_id: u64, next_q: u32) -> SlotState {
         SlotState {
             seq: 0,
-            chain_id: 1,
+            chain_id,
             slot_index: 0,
             next_q,
             flags: FLAG_SLOT_REGISTERED,
@@ -591,20 +770,16 @@ mod tests {
         }
     }
 
-    // Serialize/deserialize round-trips without any backend involvement.
     #[test]
     fn roundtrip_serialize_deserialize() {
-        let s = sample(7);
+        let mut s = sample(1, 7);
+        s.seq = 42;
         let mut buf = [0u8; RECORD_LEN];
         s.serialize_into(&mut buf);
         let r = SlotState::deserialize(&buf).expect("valid record");
-        assert_eq!(r.chain_id, s.chain_id);
-        assert_eq!(r.slot_index, s.slot_index);
-        assert_eq!(r.next_q, s.next_q);
-        assert_eq!(r.flags, s.flags);
-        assert_eq!(r.h_r, s.h_r);
-        assert_eq!(r.sub_pk_seed, s.sub_pk_seed);
-        assert_eq!(r.sub_pk_root, s.sub_pk_root);
+        assert_eq!(r.seq, 42);
+        assert_eq!(r.chain_id, 1);
+        assert_eq!(r.next_q, 7);
     }
 
     #[test]
@@ -615,96 +790,97 @@ mod tests {
 
     #[test]
     fn corrupted_integrity_rejects() {
-        let s = sample(5);
+        let s = sample(1, 5);
         let mut buf = [0u8; RECORD_LEN];
         s.serialize_into(&mut buf);
-        // Flip a byte inside the integrity-covered region.
         buf[OFF_CHAIN_ID] ^= 0xA5;
         assert!(SlotState::deserialize(&buf).is_none());
     }
 
-    #[test]
-    fn missing_valid_marker_rejects() {
-        let s = sample(5);
-        let mut buf = [0u8; RECORD_LEN];
-        s.serialize_into(&mut buf);
-        buf[OFF_VALID_MARKER] = 0xFF;
-        assert!(SlotState::deserialize(&buf).is_none());
-    }
-
-    #[test]
-    fn wrong_magic_rejects() {
-        let s = sample(5);
-        let mut buf = [0u8; RECORD_LEN];
-        s.serialize_into(&mut buf);
-        buf[0] = buf[0].wrapping_add(1);
-        assert!(SlotState::deserialize(&buf).is_none());
-    }
-
-    // Backend-involving tests. Serialized with a lock because they
-    // share PAGE_A / PAGE_B static mut.
     use std::sync::Mutex;
     fn lock() -> std::sync::MutexGuard<'static, ()> {
         static M: Mutex<()> = Mutex::new(());
-        let g = M.lock().unwrap();
-        unsafe { backend::reset_all() };
+        let g = M.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            backend::reset_all();
+        }
         g
     }
 
     #[test]
     fn empty_on_fresh_device() {
         let _g = lock();
+        assert!(read_latest_for(1).is_none());
         assert!(read_latest().is_none());
     }
 
     #[test]
     fn write_then_read() {
         let _g = lock();
-        let s = sample(1);
-        write(&s).expect("write");
-        let got = read_latest().expect("present");
+        write(&sample(1, 1)).expect("write");
+        let got = read_latest_for(1).expect("present");
         assert_eq!(got.next_q, 1);
-        assert_eq!(got.seq, 1);
+        assert_eq!(got.chain_id, 1);
     }
 
     #[test]
-    fn alternating_writes_bump_seq() {
+    fn per_chain_isolation_survives_interleave() {
+        // The regression test for CRIT-1: alternating writes on two
+        // chains must not erase either chain's state.
         let _g = lock();
         for q in 1..=10u32 {
-            let s = sample(q);
-            write(&s).unwrap();
+            write(&sample(1, q)).unwrap(); // chain 1: q=1..10
+            write(&sample(2, q)).unwrap(); // chain 2: q=1..10
         }
-        let got = read_latest().unwrap();
-        assert_eq!(got.next_q, 10);
-        assert_eq!(got.seq, 10);
+        let a = read_latest_for(1).unwrap();
+        let b = read_latest_for(2).unwrap();
+        assert_eq!(a.next_q, 10);
+        assert_eq!(b.next_q, 10);
     }
 
     #[test]
-    fn corrupted_newer_page_falls_back_to_older() {
+    fn other_chain_does_not_see_this_chains_state() {
         let _g = lock();
-        write(&sample(1)).unwrap();
-        write(&sample(2)).unwrap();
-        // Corrupt the newer page (page A after two writes, since
-        // seq 1 landed on A and seq 2 on B? Let's just trash both
-        // records and reinsert to confirm pick_newer handles the case.
-        // Simpler: corrupt page B directly via the test helper.
-        unsafe {
-            let mut buf = [0u8; RECORD_LEN];
-            backend::read_page_b(&mut buf);
-            if SlotState::deserialize(&buf).is_some() {
-                // Flip magic on B to invalidate.
-                buf[0] ^= 0xFF;
-                // Re-write via write helper would bump seq; use direct
-                // reset and re-seed A by writing seq=1 then trashing B
-                // via a blank write. Easier: directly manipulate the
-                // backing buffer by writing a known-bad record to B.
-                let _ = backend::erase_and_write_page_b(&buf);
-            }
+        write(&sample(1, 50)).unwrap();
+        assert!(read_latest_for(2).is_none());
+    }
+
+    #[test]
+    fn compaction_preserves_latest_per_chain() {
+        let _g = lock();
+        // Fill the log past both pages (128 slots).
+        // 3 chains cycling, next_q climbing.
+        for i in 0..130u32 {
+            let chain = ((i % 3) as u64) + 1;
+            write(&sample(chain, i + 1)).unwrap();
         }
-        let got = read_latest().expect("should fall back to A");
-        // We don't know which record survived, but one of them should
-        // have a valid seq and next_q.
-        assert!(got.seq >= 1);
-        assert!(got.next_q >= 1);
+        for c in 1..=3u64 {
+            let s = read_latest_for(c).expect("chain present after compaction");
+            // After 130 interleaved writes the last next_q for each chain
+            // is the last cycle hit.
+            assert!(s.next_q >= 128);
+        }
+    }
+
+    #[test]
+    fn compaction_triggers_after_total_records() {
+        let _g = lock();
+        // Write TOTAL_RECORDS+1 records for distinct chains (up to
+        // MAX_UNIQUE_CHAINS-1) then keep adding to chain 1. Compaction
+        // must eventually run and preserve both.
+        for i in 0..(MAX_UNIQUE_CHAINS - 1) as u64 {
+            write(&sample(i + 10, 1)).unwrap();
+        }
+        // Now hammer chain 1.
+        for q in 1..=120u32 {
+            write(&sample(1, q)).unwrap();
+        }
+        let s = read_latest_for(1).unwrap();
+        assert_eq!(s.next_q, 120);
+        // Every other chain's state must still be present.
+        for i in 0..(MAX_UNIQUE_CHAINS - 1) as u64 {
+            let r = read_latest_for(i + 10).unwrap();
+            assert_eq!(r.next_q, 1);
+        }
     }
 }

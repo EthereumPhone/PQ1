@@ -58,6 +58,29 @@ pub(crate) mod jardin_flash;
 mod ptr_validate;
 mod state;
 
+// HIGH-2 fix: refuse to build hardware images that also enable any of
+// the dev-only features. `e2e-test` exposes `set_e2e_unlocked` with no
+// PIN check; `debug-log` and `ui-semihosting` leak secure-world state
+// via the semihosting channel; `ui-mirror` streams the OLED over RTT;
+// `mock-se` substitutes an in-SRAM fake SE. Any of these enabled on a
+// `stm32u585` release build is a ship-blocker.
+#[cfg(all(
+    feature = "stm32u585",
+    not(debug_assertions),
+    any(
+        feature = "e2e-test",
+        feature = "debug-log",
+        feature = "ui-semihosting",
+        feature = "ui-mirror",
+        feature = "mock-se",
+    )
+))]
+compile_error!(
+    "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
+     e2e-test / debug-log / ui-semihosting / ui-mirror / mock-se. These \
+     features either bypass PIN checks or leak secure-world state."
+);
+
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
     NscStatus, CMD_GET_JARDIN_SLOT_INFO, CMD_GET_REMAINING, CMD_IS_UNLOCKED, CMD_LOCK, CMD_NONE,
@@ -102,6 +125,53 @@ pub(super) struct GatewayArgs {
 /// Whether the device is currently unlocked (PIN verified this session).
 pub fn is_unlocked() -> bool {
     state::peek_state(|s| s.pin_verified)
+}
+
+/// HIGH-7 guard: depth counter incremented on handler entry,
+/// decremented on exit. SysTick refuses to wipe when depth > 0 so
+/// a long-running signing handler that holds stack-local copies of
+/// secrets can't have the BSS copy zeroed out from underneath it
+/// (which would leave the stack copies disagreeing with the state
+/// the user just had wiped — a classic aliasing-under-ISR bug).
+///
+/// Stored as a plain `static mut u32` with volatile access. We do
+/// not need atomicity because Cortex-M33 single-core execution is
+/// strictly linear outside ISRs, and SysTick reads the value with a
+/// `read_volatile` + comparison that is itself atomic on 32-bit
+/// aligned loads.
+static mut HANDLER_DEPTH: u32 = 0;
+
+/// Guard type: increment on construction, decrement on drop.
+pub(crate) struct HandlerGuard;
+
+impl HandlerGuard {
+    /// RAII guard — call at the top of every long-running gateway
+    /// handler (sign, request_unlock). Drop at function exit.
+    pub(crate) fn enter() -> Self {
+        // SAFETY: single-threaded outside ISRs; we only need the
+        // write to be visible before SysTick can fire again.
+        unsafe {
+            let d = core::ptr::read_volatile(core::ptr::addr_of!(HANDLER_DEPTH));
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(HANDLER_DEPTH), d + 1);
+        }
+        HandlerGuard
+    }
+}
+
+impl Drop for HandlerGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let d = core::ptr::read_volatile(core::ptr::addr_of!(HANDLER_DEPTH));
+            let nd = d.saturating_sub(1);
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(HANDLER_DEPTH), nd);
+        }
+    }
+}
+
+/// Read the current handler-busy depth from a SysTick handler.
+pub fn handler_is_busy() -> bool {
+    // SAFETY: 32-bit aligned volatile load is atomic on Cortex-M33.
+    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(HANDLER_DEPTH)) > 0 }
 }
 
 /// Test-only helper: stamp the secure-side master secret and mark the

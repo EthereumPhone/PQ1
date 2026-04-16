@@ -47,7 +47,7 @@ use sphincs_tz_shared::{
     SIGN_USEROP_HEADER_LEN, ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN,
     ZK_STRING_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use super::jardin_flash::{self, SlotState, FLAG_SLOT_REGISTERED};
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
@@ -81,6 +81,11 @@ enum Mode {
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     use crate::ui::confirm::{confirm, ConfirmResult};
 
+    // HIGH-7 fix: mark the handler as busy so SysTick's background
+    // idle-wipe path cannot zero out `master_secret` while we still
+    // hold a stack-local copy of it. Dropped on scope exit.
+    let _busy = super::HandlerGuard::enter();
+
     ui::show_status("Sign", "validating...");
 
     // ── 1. Unlock check ─────────────────────────────────────────────
@@ -108,7 +113,18 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 3. TOCTOU snapshot ──────────────────────────────────────────
+    //
+    // M1 fix: wipe any leftover payload from the PREVIOUS sign before
+    // we fill it with this request. Otherwise a fault that dumps
+    // secure SRAM between signs could expose the user's last-signed
+    // transaction to an attacker.
     static mut SNAP_BUF: [u8; SNAP_LEN] = [0u8; SNAP_LEN];
+    {
+        let buf = &mut *core::ptr::addr_of_mut!(SNAP_BUF);
+        for b in buf.iter_mut() {
+            *b = 0;
+        }
+    }
     let snap = &mut SNAP_BUF[..total_len];
     for i in 0..total_len {
         snap[i] = core::ptr::read_volatile(payload_ptr.add(i));
@@ -141,6 +157,32 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     if data_len > MAX_TX_LEN || SIGN_USEROP_HEADER_LEN + data_len > total_len {
         ui::show_status("Sign", "bad data_len");
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // ── 4a. CRIT-3: refuse paymasters ─────────────────────────────
+    //
+    // The wire format carries only `keccak256(paymasterAndData)`. There
+    // is no trusted-UI path that can show the user a paymaster address
+    // or the post-op gas charge, and a non-displayable security
+    // parameter has no business inside the signed `userOpHash`. A
+    // hostile paymaster can drain the wallet via `postOp`. Until the
+    // wire format carries raw paymaster bytes AND the trusted UI shows
+    // them, refuse any UserOp that references a paymaster.
+    if paymaster_and_data_hash != KECCAK_EMPTY {
+        ui::show_status("Paymaster", "unsupported");
+        return NscStatus::UserRejected as u32;
+    }
+
+    // ── 4b. CRIT-17: refuse nonce-key overflow ────────────────────
+    //
+    // EntryPoint v0.9 nonces are 192-bit key | 64-bit seq. Our Type 2
+    // nonce = base + 1 when Type 1 is present. If the bottom 64 bits
+    // are all 0xFF, the +1 carries into the key field and silently
+    // changes the nonce key — a user intent violation. Refuse outright;
+    // the companion can submit a fresh base nonce.
+    if nonce[24..32] == [0xFFu8; 8] {
+        ui::show_status("Nonce seq", "overflow");
         return NscStatus::InvalidPointer as u32;
     }
 
@@ -202,17 +244,50 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // ── 5. Build a display-time Eip1559Tx shim ──────────────────────
     //
-    // The real EIP-1559 parser owns (chain_id, nonce, gas fields, to,
-    // value, data_len). For the v3 wire format we don't receive a full
-    // EIP-1559 envelope, just the fields that matter to the user's
-    // trusted-UI display. Fill in what the renderer needs and zero out
-    // the rest — the gas fields live on the AA wrapper side now.
+    // CRIT-2 fix: the shim previously fed zeros for nonce / gas / fees
+    // to the renderer while the signed userOpHash bound the real
+    // numbers, so a hostile NS could present "Max fee: 0 gwei" to the
+    // user while actually signing a gas-bomb. We now decode the real
+    // values from the EntryPoint v0.9 packed fields and feed them to
+    // the display.
+    //
+    // EntryPoint v0.9 packing:
+    //   nonce              = u256 BE (top 192 bits = key, bottom 64 = seq)
+    //   accountGasLimits   = bytes32, (verificationGasLimit << 128) | callGasLimit
+    //   gasFees            = bytes32, (maxPriorityFeePerGas << 128) | maxFeePerGas
+    //   preVerificationGas = u256 BE
+    let display_nonce = u64::from_be_bytes([
+        nonce[24], nonce[25], nonce[26], nonce[27],
+        nonce[28], nonce[29], nonce[30], nonce[31],
+    ]);
+    let display_max_fee = {
+        // maxFeePerGas lives in the low 128 bits of gas_fees; zero-
+        // extend to U256 for the renderer.
+        let mut v = [0u8; 32];
+        v[16..32].copy_from_slice(&gas_fees[16..32]);
+        U256(v)
+    };
+    let display_max_prio = {
+        let mut v = [0u8; 32];
+        v[16..32].copy_from_slice(&gas_fees[0..16]);
+        U256(v)
+    };
+    // gas_limit displayed = verGas + callGas + preVerificationGas,
+    // saturating at u64::MAX so the format helper can't overflow.
+    let ver_gas_u128 = u128_from_be_16(&account_gas_limits[0..16]);
+    let call_gas_u128 = u128_from_be_16(&account_gas_limits[16..32]);
+    let pre_ver_u128 = u128_saturating_from_u256(&pre_verification_gas);
+    let display_gas_limit: u64 = ver_gas_u128
+        .saturating_add(call_gas_u128)
+        .saturating_add(pre_ver_u128)
+        .min(u64::MAX as u128) as u64;
+
     let tx_for_display = Eip1559Tx {
         chain_id,
-        nonce: 0,
-        max_priority_fee_per_gas: U256::zero(),
-        max_fee_per_gas: U256::zero(),
-        gas_limit: 0,
+        nonce: display_nonce,
+        max_priority_fee_per_gas: display_max_prio,
+        max_fee_per_gas: display_max_fee,
+        gas_limit: display_gas_limit,
         to: Some(to_address),
         value: U256(value),
         data_len,
@@ -276,36 +351,54 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             .unwrap();
         let vk_bundle = &zk_slice[ZK_CLEAR_SIGN_FIXED_LEN..];
 
-        // Verify the VK bundle against the firmware-embedded Merkle
-        // root, compute Poseidon public signals, and run Groth16.
-        match crate::zk::verify_clear_sign_proof(
-            proof_bytes,
-            calldata_bytes,
-            readable_bytes,
-            vk_bundle,
-        ) {
-            Ok(()) => {
-                // Cross-check: the bound calldata MUST match what the
-                // user actually wants to sign, otherwise a malicious
-                // NS could attest to a different readable string and
-                // have the secure world sign an unrelated tx.
-                let calldata_prefix = &inner_data[..inner_data.len().min(ZK_MAX_CALLDATA)];
-                let attested_prefix = &calldata_bytes[..calldata_prefix.len()];
-                if calldata_prefix == attested_prefix
-                    && calldata_bytes[calldata_prefix.len()..]
-                        .iter()
-                        .all(|&b| b == 0)
-                {
-                    let mut cd = [0u8; ZK_MAX_CALLDATA];
-                    cd.copy_from_slice(calldata_bytes);
-                    let mut rd = [0u8; ZK_STRING_LEN];
-                    rd.copy_from_slice(readable_bytes);
-                    Some((cd, rd))
-                } else {
-                    None
+        // HIGH-4 fix: reject outright if the inner calldata exceeds
+        // the ZK circuit's attestation window. A longer calldata is
+        // partially bound (first 164 bytes) and the trailing bytes
+        // slip through into the signed tx unattested.
+        if inner_data.len() > ZK_MAX_CALLDATA {
+            None
+        } else {
+            // Verify the VK bundle against the firmware-embedded Merkle
+            // root, compute Poseidon public signals, and run Groth16.
+            match crate::zk::verify_clear_sign_proof(
+                proof_bytes,
+                calldata_bytes,
+                readable_bytes,
+                vk_bundle,
+            ) {
+                Ok(verified) => {
+                    // HIGH-5 fix: cross-check that the VK's claimed
+                    // (chain_id, contract) matches the tx being signed.
+                    // Without this a VK for protocol A on chain A could
+                    // validate calldata routed at protocol B on chain B.
+                    if verified.chain_id != chain_id || verified.contract != to_address {
+                        None
+                    } else {
+                        // The bound calldata MUST match what the user
+                        // actually wants to sign, otherwise a malicious
+                        // NS could attest to a different readable
+                        // string and have the secure world sign an
+                        // unrelated tx.
+                        let calldata_prefix =
+                            &inner_data[..inner_data.len().min(ZK_MAX_CALLDATA)];
+                        let attested_prefix = &calldata_bytes[..calldata_prefix.len()];
+                        if calldata_prefix == attested_prefix
+                            && calldata_bytes[calldata_prefix.len()..]
+                                .iter()
+                                .all(|&b| b == 0)
+                        {
+                            let mut cd = [0u8; ZK_MAX_CALLDATA];
+                            cd.copy_from_slice(calldata_bytes);
+                            let mut rd = [0u8; ZK_STRING_LEN];
+                            rd.copy_from_slice(readable_bytes);
+                            Some((cd, rd))
+                        } else {
+                            None
+                        }
+                    }
                 }
+                Err(_) => None,
             }
-            Err(_) => None,
         }
     } else {
         None
@@ -344,19 +437,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // ── 7. Read slot state from flash, decide mode ──────────────────
-    let existing = jardin_flash::read_latest();
+    // ── 7. Read slot state from flash for this chain, decide mode ──
+    //
+    // CRIT-1 fix: read per-chain. The log-structured store keeps one
+    // latest record per chain_id, so signing on chain B cannot overwrite
+    // chain A's next_q the way the v1 single-record store did.
+    let existing = jardin_flash::read_latest_for(chain_id);
     let mode = match &existing {
         Some(s)
-            if s.chain_id == chain_id
-                && s.is_registered()
+            if s.is_registered()
                 && (s.next_q as usize) <= jardin_fosc::params::Q_MAX =>
         {
             Mode::Normal(s.clone())
         }
         Some(s)
-            if s.chain_id == chain_id
-                && s.is_registered()
+            if s.is_registered()
                 && (s.next_q as usize) > jardin_fosc::params::Q_MAX =>
         {
             Mode::Rotate { from: s.clone() }
@@ -365,28 +460,36 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
 
     // ── 8. Reconstruct entropy + derive JARDIN master ──────────────
-    let master_secret = super::state::peek_state(|s| s.master_secret);
-    let mut entropy_blob = [0u8; 64];
+    //
+    // HIGH-6 fix: every stack-local copy of a secret is wrapped in
+    // Zeroizing so a panic or early return can't leave bytes on the
+    // stack for a subsequent shorter-frame to expose.
+    let master_secret: Zeroizing<[u8; 32]> =
+        Zeroizing::new(super::state::peek_state(|s| s.master_secret));
+    let mut entropy_blob = Zeroizing::new([0u8; 64]);
     let entropy_blob_len = {
         use crate::secure_element::WalletStore;
         let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-        match se.read_entropy_blob(&mut entropy_blob) {
+        match se.read_entropy_blob(&mut *entropy_blob) {
             Ok(l) => l,
             Err(_) => return NscStatus::InternalError as u32,
         }
     };
-    let mut entropy = match crate::crypto::decrypt_entropy_blob(
-        &entropy_blob[..entropy_blob_len],
-        &master_secret,
-    ) {
-        Ok(e) => e,
-        Err(_) => {
-            entropy_blob.zeroize();
-            return NscStatus::CryptoError as u32;
-        }
-    };
-    entropy_blob.zeroize();
-    let jardin_master_entropy = crate::crypto::jardin_master_entropy_from_entropy(&entropy);
+    let mut entropy = Zeroizing::new(
+        match crate::crypto::decrypt_entropy_blob(
+            &entropy_blob[..entropy_blob_len],
+            &*master_secret,
+        ) {
+            Ok(e) => e,
+            Err(_) => {
+                return NscStatus::CryptoError as u32;
+            }
+        },
+    );
+    // `entropy_blob` and `master_secret` drop on scope exit; no manual
+    // zeroize needed.
+    let jardin_master_entropy: Zeroizing<[u8; 32]> =
+        Zeroizing::new(crate::crypto::jardin_master_entropy_from_entropy(&*entropy));
 
     // ── 9. Build Type 2 callData: execute(to, value, data) ──────────
     let t2_exec = match reconstruct_execute_calldata(&tx_for_display, inner_data) {
@@ -409,8 +512,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 11. Determine the slot_index and initialise the slot ────────
+    //
+    // M4 fix: the NS-supplied `slot_index_hint` is unvalidated
+    // attacker input. On FirstSign we bind it to 0 — there is no
+    // legitimate reason for a fresh chain to skip straight to a
+    // non-zero slot, and an attacker could otherwise pick a slot
+    // index that collides with one they later want to rotate into.
     let new_slot_index = match &mode {
-        Mode::FirstSign => slot_index_hint,
+        Mode::FirstSign => {
+            let _ = slot_index_hint;
+            0
+        }
         Mode::Rotate { from } => from.slot_index + 1,
         Mode::Normal(s) => s.slot_index,
     };
@@ -432,7 +544,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if need_keygen {
         ui::show_progress("Slot keygen", 0);
         let slot_entropy =
-            jardin_fosc::hash::jardin_slot_entropy(&jardin_master_entropy, new_slot_index);
+            jardin_fosc::hash::jardin_slot_entropy(&*jardin_master_entropy, new_slot_index);
         let mut slot = jardin_fosc::JardinSlot::keygen_with_progress(slot_entropy, |p| {
             ui::show_progress("Slot keygen", p);
         });
@@ -443,7 +555,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(slot);
         }
         super::state::with_state(|s| {
-            s.jardin_master_entropy = jardin_master_entropy;
+            s.jardin_master_entropy.zeroize();
+            s.jardin_master_entropy = *jardin_master_entropy;
             s.jardin_master_derived = true;
             s.jardin_chain_id = chain_id;
             s.jardin_slot_index = new_slot_index;
@@ -452,14 +565,19 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 12. Type 1 (if needed) ─────────────────────────────────────
-    let mut type1_out = [0u8; JARDIN_TYPE1_LEN];
+    //
+    // HIGH-11 fix: wrap in Zeroizing so any error-path early return
+    // (or panic before we hand the bytes to NS) wipes the in-flight
+    // signature rather than leaving it on the stack.
+    let mut type1_out: Zeroizing<[u8; JARDIN_TYPE1_LEN]> =
+        Zeroizing::new([0u8; JARDIN_TYPE1_LEN]);
     let mut h_r = [0u8; 32];
 
     if needs_type1 {
         ui::show_status("Slot register", "building type 1");
 
         // Deterministic r per (master, slot_index). H(r) is the on-chain slotKey.
-        let r = jardin_fosc::hash::jardin_slot_r(&jardin_master_entropy, new_slot_index);
+        let r = jardin_fosc::hash::jardin_slot_r(&*jardin_master_entropy, new_slot_index);
         h_r = jardin_fosc::hash::keccak256(&r);
 
         // Type 1 callData: execute(sender, 0, "")
@@ -502,7 +620,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_progress("C11 keygen", 0);
         let (c11_sk, _c11_pk_seed_32, _c11_pk_root_32) =
             crate::crypto::derive_c11_master_keypair_from_entropy_with_progress(
-                &entropy,
+                &*entropy,
                 |p| ui::show_progress("C11 keygen", p),
             );
         let c11_sig = match crate::crypto::c11_sign_verified_with_progress(
@@ -601,13 +719,26 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             return NscStatus::CryptoError as u32;
         }
     };
-    // Verify-before-release.
-    if !jardin_fosc::verify(
+    // Verify-before-release. HIGH-3 fix: double-evaluate so a single
+    // fault-injected bit-flip on the `if !` instruction or its
+    // predicate register can't skip the gate and release an unverified
+    // sig. Two independent evaluations plus a sentinel check raise the
+    // cost of the attack from "one glitch" to "two perfectly-placed
+    // glitches on the same instruction boundary".
+    let v1 = jardin_fosc::verify(
         &slot_ref.pk_seed,
         &slot_ref.pk_root,
         &t2_user_op_hash,
         &sig.data[..sig.len],
-    ) {
+    );
+    let v2 = jardin_fosc::verify(
+        &slot_ref.pk_seed,
+        &slot_ref.pk_root,
+        &t2_user_op_hash,
+        &sig.data[..sig.len],
+    );
+    let ok_sentinel: u32 = if v1 && v2 { 0xA5A5_A5A5 } else { 0x5A5A_5A5A };
+    if ok_sentinel != 0xA5A5_A5A5 || !v1 || !v2 {
         entropy.zeroize();
         ui::show_status("Sig verify", "FAIL");
         return NscStatus::CryptoError as u32;
@@ -735,19 +866,22 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     NscStatus::Ok as u32
 }
 
-/// Increment a big-endian u256 in-place by 1. Used to bump the
-/// EntryPoint nonce by 1 between Type 1 and Type 2 UserOps.
+/// Increment the 64-bit sequence portion of an EntryPoint v0.9 nonce.
+///
+/// v0.9 nonces are `(key: 192) | (seq: 64)`. Incrementing across the
+/// full 256-bit word would carry into the key field on overflow, which
+/// silently changes the nonce key — a user-intent violation. We add 1
+/// to the bottom 8 bytes ONLY, and the caller rejects the input when
+/// `seq == 0xFF..FF` so overflow is impossible here (HIGH-17 fix).
 fn add_one_to_be_u256(v: &mut [u8; 32]) {
-    for i in (0..32).rev() {
+    for i in (24..32).rev() {
         let (sum, carry) = v[i].overflowing_add(1);
         v[i] = sum;
         if !carry {
             return;
         }
     }
-    // 256-bit wrap is impossible in practice (sign count would need to
-    // exceed 2^256); if somehow reached, the zeroed buffer will be
-    // rejected on-chain.
+    debug_assert!(false, "nonce seq overflow slipped past the step-4b guard");
 }
 
 fn c11_sign_progress(percent: u8) {
@@ -782,4 +916,24 @@ fn copy_to_static(buf: &[u8; 14]) -> &'static str {
         let end = dst.iter().position(|&b| b == 0).unwrap_or(dst.len());
         core::str::from_utf8_unchecked(&dst[..end])
     }
+}
+
+/// Decode a 16-byte big-endian slice as `u128`.
+fn u128_from_be_16(bytes: &[u8]) -> u128 {
+    debug_assert_eq!(bytes.len(), 16);
+    let mut buf = [0u8; 16];
+    buf.copy_from_slice(&bytes[..16]);
+    u128::from_be_bytes(buf)
+}
+
+/// Decode a 32-byte big-endian u256 as `u128`, saturating at `u128::MAX`.
+/// Used for display only — the signed digest still carries the full
+/// u256 value.
+fn u128_saturating_from_u256(bytes: &[u8; 32]) -> u128 {
+    for &b in &bytes[0..16] {
+        if b != 0 {
+            return u128::MAX;
+        }
+    }
+    u128_from_be_16(&bytes[16..32])
 }

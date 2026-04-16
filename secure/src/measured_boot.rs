@@ -61,7 +61,7 @@ fn flash_end() -> usize {
 // ---------------------------------------------------------------------------
 
 /// SHA-256 hash of the firmware flash region.
-fn firmware_hash() -> [u8; 32] {
+pub fn firmware_hash() -> [u8; 32] {
     let end = flash_end();
     let size = end - FLASH_BASE;
 

@@ -308,9 +308,17 @@ pub unsafe fn open_application(ifx: &mut IfxState) -> Result<(), OptigaError> {
 
 /// `GetRandom` — generate `length` random bytes from the chip's TRNG.
 ///
+/// CRIT-8 fix: when the shielded connection is active, the request AND
+/// the response travel over the encrypted channel, so an I2C MITM
+/// cannot substitute a fixed challenge. The caller is additionally
+/// expected to XOR the returned bytes with host-side TRNG (see
+/// `get_random_mixed`) so that even a compromised chip-side TRNG
+/// cannot feed the firmware predictable randomness.
+///
 /// InData: `Length(2 BE)` (positional, no tag).
 pub unsafe fn get_random(
     ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
     out: &mut [u8],
 ) -> Result<usize, OptigaError> {
     let length = out.len() as u16;
@@ -319,12 +327,44 @@ pub unsafe fn get_random(
     let apdu = ab.finish();
 
     let mut resp = [0u8; 512];
-    let n = ifx.transceive(apdu, &mut resp)?;
+    let n = send_command(ifx, shield, apdu, &mut resp)?;
     let payload = parse_response(&resp, n)?;
 
     let copy_len = payload.len().min(out.len());
     out[..copy_len].copy_from_slice(&payload[..copy_len]);
     Ok(copy_len)
+}
+
+/// `GetRandom` with host-side XOR mixing.
+///
+/// Even when the shielded connection encrypts the chip's reply, a
+/// compromised-at-manufacture chip could return deterministic
+/// "random" bytes. XOR-mixing with host TRNG output guarantees that
+/// at least one independent entropy source contributes to every byte.
+///
+/// Requires an active shielded connection — the caller must ensure
+/// `shield.active == true`.
+pub unsafe fn get_random_mixed(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    out: &mut [u8],
+) -> Result<usize, OptigaError> {
+    let n = get_random(ifx, shield, out)?;
+    if n == 0 {
+        return Ok(0);
+    }
+    let mut host = [0u8; 64];
+    let want = n.min(host.len());
+    crate::rng::fill(&mut host[..want]).map_err(|_| OptigaError::Transport)?;
+    for i in 0..want {
+        out[i] ^= host[i];
+    }
+    // Zeroise the host TRNG buffer — the XOR output already carries its
+    // contribution, no need to leave it on the stack.
+    for b in host.iter_mut() {
+        *b = 0;
+    }
+    Ok(n)
 }
 
 /// `GetDataObject` — read `length` bytes from `oid` starting at `offset`.
@@ -606,8 +646,17 @@ pub fn build_metadata_auth_ref() -> (MetaBuf, usize) {
 /// Metadata for the PIN attempt counter (0xF1D5).
 ///
 /// - **Change**: `Conf(0xE140)` — only the shielded connection can update.
+///   Any write is additionally guarded in firmware by a verify-after-
+///   write read-back (see `authenticate_and_read`) so a glitched
+///   silent-success write cannot bypass the lockout.
 /// - **Read**: Always (the value is non-secret).
 /// - **Execute**: Never.
+///
+/// CRIT-6 mitigation is applied in firmware (verify-after-write + PBS
+/// protection via SAES-wrap, see CRIT-9) rather than in the metadata
+/// itself: a chip-native monotonic counter (OID E120..E123 linked
+/// into AUTH_REF's AC) would be stronger but requires a wire-level
+/// extension we defer to the next driver revision.
 pub fn build_metadata_counter() -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;

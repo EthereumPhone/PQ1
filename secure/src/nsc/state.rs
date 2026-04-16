@@ -115,8 +115,14 @@ impl SecureState {
     /// Stamp in a freshly-verified master secret and mark the device
     /// unlocked. Used by both the real PIN verify path and the
     /// `e2e-test` set-state helper.
-    pub(super) fn mark_unlocked(&mut self, master: [u8; 32]) {
+    ///
+    /// HIGH-6 fix: explicitly zeroize the previous master_secret
+    /// before overwriting, so a re-unlock can never leave the
+    /// prior session's secret on the stack or in BSS.
+    pub(super) fn mark_unlocked(&mut self, mut master: [u8; 32]) {
+        self.master_secret.zeroize();
         self.master_secret = master;
+        master.zeroize();
         self.pin_verified = true;
         self.remaining_attempts = MAX_ATTEMPTS;
     }

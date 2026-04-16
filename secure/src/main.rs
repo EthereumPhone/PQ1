@@ -801,7 +801,16 @@ fn SysTick() {
 
     // Background idle wipe: if PIN state is unlocked and the inactivity
     // timer has fired with no command in flight, wipe.
-    if timeout::is_idle() && nsc::is_unlocked() {
+    //
+    // HIGH-7 fix: don't wipe when a long-running gateway handler is
+    // busy — it's holding stack-local copies of master_secret /
+    // entropy / jardin_master_entropy and they would disagree with
+    // the freshly-zeroed BSS copy, leaving the handler to sign a
+    // transaction for a session the user no longer is unlocked for.
+    // Let the handler observe `timeout::is_idle()` at its own
+    // blocking-dialog check points (which `confirm` and `enter_pin`
+    // already do via the idle callback to `wait_button`).
+    if timeout::is_idle() && nsc::is_unlocked() && !nsc::handler_is_busy() {
         nsc::zeroize_sensitive_state();
         ui::show_status("Locked", "(idle wipe)");
 
@@ -821,16 +830,39 @@ fn SysTick() {
     nsc::poll_gateway();
 }
 
+/// PendSV re-entry guard. Lives at module scope so `addr_of_mut!`
+/// returns the raw pointer LLVM expects; declaring it inside
+/// PendSV() gives a function-local binding whose address syntax is
+/// different.
+#[cfg(all(not(test), feature = "stm32u585"))]
+static mut PENDSV_IN_FLIGHT: u32 = 0;
+
 /// PendSV handler — runs the PIN re-unlock flow after an idle wipe.
 ///
 /// Triggered by SysTick when it detects idle timeout. Runs at the lowest
 /// exception priority so it doesn't block SysTick ticks or CMSE veneers.
 /// The blocking PIN entry UI is safe here.
+///
+/// HIGH-8 partial fix: add a re-entry guard — SysTick can re-pend
+/// PendSV while PendSV is already running the PIN loop (e.g. when
+/// the user is between button presses and SysTick fires another
+/// idle tick). Re-entering this handler is undefined on Cortex-M33,
+/// so the guard returns immediately on nested entry.
 #[cfg(all(not(test), feature = "stm32u585"))]
 #[cortex_m_rt::exception]
 fn PendSV() {
+    unsafe {
+        if core::ptr::read_volatile(core::ptr::addr_of!(PENDSV_IN_FLIGHT)) != 0 {
+            return;
+        }
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 1);
+    }
+
     // Only run if we're actually locked (avoids spurious re-entry)
     if nsc::is_unlocked() {
+        unsafe {
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 0);
+        }
         return;
     }
 
@@ -880,6 +912,9 @@ fn PendSV() {
                 }
             }
         }
+
+        // Clear the re-entry guard on normal loop exit.
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 0);
     }
 }
 

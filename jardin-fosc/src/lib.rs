@@ -74,6 +74,15 @@ pub struct JardinSlot {
 ///
 /// Variable-length: 2452 + q*16 bytes. The `data` buffer is sized for
 /// the maximum possible signature (q=Q_MAX=95).
+///
+/// `ZeroizeOnDrop` so any early-return or error path that drops the
+/// signature before the caller writes it to NS does not leave the
+/// bytes on the stack. The fields themselves are public bytes (no
+/// secret is derivable from `(data, len)` alone) but leaving the
+/// value of a previous signature in stack SRAM violates the secure-
+/// world discipline that every secret-adjacent type carries its own
+/// wipe on drop.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct JardinSignature {
     /// Raw signature bytes.
     pub data: [u8; SIG_MAX],

@@ -42,28 +42,42 @@ pub const PROOF_LEN: usize = 384;
 #[derive(Debug, Clone, Copy)]
 pub struct ClearSignError;
 
+/// Metadata returned on a successful `verify_clear_sign_proof` — the
+/// caller uses these fields to cross-check the proof against the
+/// transaction it claims to describe (HIGH-5).
+#[derive(Clone, Copy)]
+pub struct VerifiedClearSign {
+    pub chain_id: u64,
+    pub contract: [u8; 20],
+}
+
 /// End-to-end verification of a ZK clear-sign bundle supplied as three
 /// byte buffers: the 384-byte Groth16 proof, the 164-byte calldata, the
 /// 64-byte readable string, and the variable-length VK bundle that
 /// proves the verification key is Merkle-committed to the firmware-
 /// embedded `VK_DB_ROOT`.
 ///
-/// On success the proof was valid: the readable string is a
-/// circuit-attested faithful representation of the calldata.
+/// On success the proof was valid *and* returns the VK's claimed
+/// `(chain_id, contract)` pair so the caller can confirm it matches
+/// the tx being signed. Without that cross-check, a VK for protocol A
+/// on chain A could validate a readable string for protocol B on
+/// chain B.
 pub fn verify_clear_sign_proof(
     proof_bytes: &[u8; PROOF_LEN],
     calldata: &[u8; MAX_CALLDATA],
     readable: &[u8; STRING_LEN],
     vk_bundle: &[u8],
-) -> Result<(), ClearSignError> {
+) -> Result<VerifiedClearSign, ClearSignError> {
     let proof = Groth16Proof::from_bytes(proof_bytes).ok_or(ClearSignError)?;
     let verified_vk = vk_bundle::verify_vk_bundle(vk_bundle).ok_or(ClearSignError)?;
     let vk = VerificationKey::from_bytes(verified_vk.vk_as_2pub()).ok_or(ClearSignError)?;
-    if verify_clear_signing_proof(calldata, readable, &proof, &vk) {
-        Ok(())
-    } else {
-        Err(ClearSignError)
+    if !verify_clear_signing_proof(calldata, readable, &proof, &vk) {
+        return Err(ClearSignError);
     }
+    Ok(VerifiedClearSign {
+        chain_id: verified_vk.chain_id,
+        contract: verified_vk.contract,
+    })
 }
 
 /// Render a trusted-UI confirmation screen for a ZK-verified clear-sign

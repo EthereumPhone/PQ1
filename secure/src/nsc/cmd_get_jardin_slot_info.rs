@@ -51,11 +51,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ]);
 
     let (slot_index, next_q, flags, active, h_r): (u32, u32, u32, u8, [u8; 32]) =
-        match jardin_flash::read_latest() {
-            Some(s) if s.chain_id == chain_id => {
-                (s.slot_index, s.next_q, s.flags, 1u8, s.h_r)
-            }
-            _ => (0u32, 0u32, 0u32, 0u8, [0u8; 32]),
+        match jardin_flash::read_latest_for(chain_id) {
+            Some(s) => (s.slot_index, s.next_q, s.flags, 1u8, s.h_r),
+            None => (0u32, 0u32, 0u32, 0u8, [0u8; 32]),
         };
 
     let si = slot_index.to_be_bytes();

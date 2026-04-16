@@ -90,28 +90,31 @@ unsafe fn lock() {
 ///
 /// After erase, all bytes in the page read as 0xFF.
 pub unsafe fn erase_key_page() -> Result<(), ()> {
-    wait_bsy();
-    clear_errors();
-    unlock();
-
-    // Set PER + page number, then STRT
-    let cr = PER | (KEY_PAGE_NUM << PNB_SHIFT);
-    write_volatile(FLASH_SECCR, cr);
-    write_volatile(FLASH_SECCR, cr | STRT);
-
-    wait_bsy();
-
-    // Clear PER
-    write_volatile(FLASH_SECCR, 0);
-    let sr = read_volatile(FLASH_SECSR);
-    lock();
-
-    if sr & ERR_MASK != 0 {
+    // HIGH-12 fix: interrupt-free around the erase sequence.
+    cortex_m::interrupt::free(|_| {
+        wait_bsy();
         clear_errors();
-        Err(())
-    } else {
-        Ok(())
-    }
+        unlock();
+
+        let cr = PER | (KEY_PAGE_NUM << PNB_SHIFT);
+        write_volatile(FLASH_SECCR, cr);
+        write_volatile(FLASH_SECCR, cr | STRT);
+
+        wait_bsy();
+
+        write_volatile(FLASH_SECCR, 0);
+        let sr = read_volatile(FLASH_SECSR);
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
 }
 
 /// Program one quad-word (16 bytes / 128 bits) at the given flash address.
@@ -125,40 +128,50 @@ pub unsafe fn erase_key_page() -> Result<(), ()> {
 /// verify that the bytes actually landed correctly** — a torn write
 /// under brown-out can produce a half-programmed quad-word with no
 /// error flag set. For persistent data, use `write_quadword_verified`.
+///
+/// HIGH-12 fix: the whole unlock → program → lock sequence runs
+/// inside `cortex_m::interrupt::free` so an IRQ (especially SysTick
+/// or the OLED I2C callback) landing mid-sequence can't leave SECCR
+/// in an inconsistent state. On STM32U5 an interrupted program
+/// sequence can latch PGSERR; the `free` block keeps the sequence
+/// atomic.
 unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
-    wait_bsy();
-    clear_errors();
-    unlock();
-
-    // Set PG bit
-    write_volatile(FLASH_SECCR, PG);
-
-    // Write 4 × 32-bit words to the target address.
-    // The flash controller latches all four and programs them atomically.
-    let dst = addr as *mut u32;
-    for i in 0..4 {
-        let word = u32::from_le_bytes([
-            data[i * 4],
-            data[i * 4 + 1],
-            data[i * 4 + 2],
-            data[i * 4 + 3],
-        ]);
-        write_volatile(dst.add(i), word);
-    }
-
-    wait_bsy();
-
-    // Clear PG
-    write_volatile(FLASH_SECCR, 0);
-    let sr = read_volatile(FLASH_SECSR);
-    lock();
-
-    if sr & ERR_MASK != 0 {
+    cortex_m::interrupt::free(|_| {
+        wait_bsy();
         clear_errors();
-        Err(())
-    } else {
-        Ok(())
-    }
+        unlock();
+
+        // Set PG bit
+        write_volatile(FLASH_SECCR, PG);
+
+        // Write 4 × 32-bit words to the target address.
+        let dst = addr as *mut u32;
+        for i in 0..4 {
+            let word = u32::from_le_bytes([
+                data[i * 4],
+                data[i * 4 + 1],
+                data[i * 4 + 2],
+                data[i * 4 + 3],
+            ]);
+            write_volatile(dst.add(i), word);
+        }
+
+        wait_bsy();
+
+        // Clear PG
+        write_volatile(FLASH_SECCR, 0);
+        let sr = read_volatile(FLASH_SECSR);
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
 }
 
 /// Program one quad-word **and read it back to confirm the bytes landed**.
@@ -223,45 +236,129 @@ pub unsafe fn write_key(key: &[u8; 32]) -> Result<(), ()> {
 }
 
 // ---------------------------------------------------------------------------
-// OPTIGA Trust M PBS storage (page 126)
+// OPTIGA Trust M PBS storage (page 126) — device-bound sealed
 // ---------------------------------------------------------------------------
+//
+// CRIT-9 fix: the Platform Binding Secret is no longer stored in
+// plaintext. On every write we AES-256-GCM-encrypt the 32-byte PBS
+// under a wrap key derived from the STM32U585 chip UID and the
+// measured-boot firmware hash (see `hw::huk`). A flash dump carried
+// to a different chip — or read back under different firmware — no
+// longer yields a usable PBS.
+//
+// On-disk layout (60 bytes at PBS_PAGE_ADDR):
+//
+//   offset  size  field
+//     0     12    AES-GCM nonce (random, regenerated on every write)
+//    12     32    AES-GCM ciphertext of the 32-byte PBS
+//    44     16    AES-GCM authentication tag
+//    60    ...    filler (0xFF) to the end of the page
+//
+// A legitimate `load_pbs` reads the 60-byte blob, re-derives the
+// wrap key from UID + firmware hash, and runs AES-GCM decrypt. A
+// tampered blob (wrong tag, wrong chip, wrong firmware) fails the
+// GCM tag check and is rejected.
+
+use aes_gcm::aead::{AeadInPlace, KeyInit};
+use aes_gcm::{Aes256Gcm, Nonce};
+use zeroize::Zeroize;
+
+/// Domain tag for the PBS wrap key.
+const PBS_WRAP_DOMAIN: &[u8] = b"pqsigner-pbs-wrap-v1";
+/// Length of the sealed PBS blob: nonce(12) || ct(32) || tag(16).
+const PBS_BLOB_LEN: usize = 12 + 32 + 16;
+
+/// Result of an unseal attempt.
+#[derive(Debug)]
+pub enum PbsLoadError {
+    /// Flash page is blank — no PBS has been sealed yet.
+    Blank,
+    /// Flash bytes didn't decrypt: either corrupted, from a different
+    /// chip, or produced by a different firmware revision. Treat
+    /// identically to "blank" from the caller's perspective (re-
+    /// provision), but surface the distinction in logs.
+    AuthFailed,
+}
 
 /// Erase the PBS storage page (page 126, 8 KB).
 pub unsafe fn erase_pbs_page() -> Result<(), ()> {
-    wait_bsy();
-    clear_errors();
-    unlock();
-
-    let cr = PER | (PBS_PAGE_NUM << PNB_SHIFT);
-    write_volatile(FLASH_SECCR, cr);
-    write_volatile(FLASH_SECCR, cr | STRT);
-
-    wait_bsy();
-
-    write_volatile(FLASH_SECCR, 0);
-    let sr = read_volatile(FLASH_SECSR);
-    lock();
-
-    if sr & ERR_MASK != 0 {
+    cortex_m::interrupt::free(|_| {
+        wait_bsy();
         clear_errors();
-        Err(())
-    } else {
-        Ok(())
-    }
+        unlock();
+
+        let cr = PER | (PBS_PAGE_NUM << PNB_SHIFT);
+        write_volatile(FLASH_SECCR, cr);
+        write_volatile(FLASH_SECCR, cr | STRT);
+
+        wait_bsy();
+
+        write_volatile(FLASH_SECCR, 0);
+        let sr = read_volatile(FLASH_SECSR);
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
 }
 
-/// Read 32 bytes from the start of the PBS storage page.
-pub unsafe fn read_pbs(buf: &mut [u8; 32]) {
+/// Read the sealed PBS blob from flash and unseal it, returning the
+/// 32-byte Platform Binding Secret in `buf`.
+pub unsafe fn read_pbs(buf: &mut [u8; 32]) -> Result<(), PbsLoadError> {
+    // Slurp the blob.
     let src = PBS_PAGE_ADDR as *const u8;
-    for i in 0..32 {
-        buf[i] = read_volatile(src.add(i));
+    let mut blob = [0u8; PBS_BLOB_LEN];
+    for i in 0..PBS_BLOB_LEN {
+        blob[i] = read_volatile(src.add(i));
+    }
+    // Blank-page guard: an erased page reads as all-0xFF; nothing to
+    // unseal.
+    if blob.iter().all(|&b| b == 0xFF) {
+        return Err(PbsLoadError::Blank);
+    }
+
+    // Derive the wrap key fresh. It stays in SRAM only for the
+    // duration of the decrypt; no caching.
+    let mut wrap_key = super::huk::derive_device_key(PBS_WRAP_DOMAIN);
+    let cipher = Aes256Gcm::new_from_slice(&wrap_key).unwrap();
+
+    let nonce: [u8; 12] = blob[..12].try_into().unwrap();
+    let mut pt = [0u8; 32];
+    pt.copy_from_slice(&blob[12..44]);
+    let tag = aes_gcm::Tag::from_slice(&blob[44..60]);
+
+    let r = cipher.decrypt_in_place_detached(Nonce::from_slice(&nonce), &[], &mut pt, tag);
+    wrap_key.zeroize();
+    blob.zeroize();
+
+    match r {
+        Ok(()) => {
+            buf.copy_from_slice(&pt);
+            pt.zeroize();
+            Ok(())
+        }
+        Err(_) => {
+            pt.zeroize();
+            Err(PbsLoadError::AuthFailed)
+        }
     }
 }
 
-/// Check whether the PBS storage page is blank (first 32 bytes = 0xFF).
+/// Check whether the PBS storage page has been sealed.
+///
+/// Returns true when the page reads as all-blank (0xFF). Does NOT try
+/// to decrypt — a tampered-but-non-blank page reports `is_pbs_blank()
+/// == false`; the caller gets an `AuthFailed` on `read_pbs` in that
+/// case and can treat it as "re-provision required".
 pub unsafe fn is_pbs_blank() -> bool {
     let src = PBS_PAGE_ADDR as *const u8;
-    for i in 0..32 {
+    for i in 0..PBS_BLOB_LEN {
         if read_volatile(src.add(i)) != 0xFF {
             return false;
         }
@@ -269,21 +366,71 @@ pub unsafe fn is_pbs_blank() -> bool {
     true
 }
 
-/// Write a 32-byte PBS to the PBS storage page.
-///
-/// Erases the page first, then programs two quad-words (2 × 16 bytes).
+/// Seal a 32-byte PBS to flash. Erases the page, derives the
+/// device-bound wrap key, AES-GCM encrypts the PBS with a freshly
+/// generated random nonce, and programs the resulting blob.
 pub unsafe fn write_pbs(pbs: &[u8; 32]) -> Result<(), ()> {
     erase_pbs_page()?;
 
-    let mut qw0 = [0u8; 16];
-    qw0.copy_from_slice(&pbs[..16]);
-    write_quadword_verified(PBS_PAGE_ADDR, &qw0)?;
+    // Fresh random nonce per write. Same PBS produced twice must not
+    // yield the same ciphertext (defence against traffic-analysis
+    // watermarking; also required by GCM unique-nonce invariant).
+    let mut nonce = [0u8; 12];
+    crate::rng::fill(&mut nonce).map_err(|_| ())?;
+
+    let mut wrap_key = super::huk::derive_device_key(PBS_WRAP_DOMAIN);
+    let cipher = Aes256Gcm::new_from_slice(&wrap_key).unwrap();
+
+    // Encrypt in-place into a working buffer so we can zeroize on
+    // error without leaving the plaintext on the stack.
+    let mut ct = [0u8; 32];
+    ct.copy_from_slice(pbs);
+    let tag = cipher
+        .encrypt_in_place_detached(Nonce::from_slice(&nonce), &[], &mut ct)
+        .map_err(|_| ())?;
+    wrap_key.zeroize();
+
+    // Assemble the 60-byte blob: [nonce | ct | tag]. Program as 4 QWs.
+    //   QW 0 = nonce(12) || ct[0..4]
+    //   QW 1 = ct[4..20]
+    //   QW 2 = ct[20..32] || tag[0..4]
+    //   QW 3 = tag[4..16] || 0xFF × 4  (unused bits stay in erased state)
+    let mut qw = [0xFFu8; 16];
+
+    qw[..12].copy_from_slice(&nonce);
+    qw[12..16].copy_from_slice(&ct[0..4]);
+    let r0 = write_quadword_verified(PBS_PAGE_ADDR, &qw);
+    qw.zeroize();
+    if let Err(e) = r0 {
+        ct.zeroize();
+        return Err(e);
+    }
 
     let mut qw1 = [0u8; 16];
-    qw1.copy_from_slice(&pbs[16..]);
-    write_quadword_verified(PBS_PAGE_ADDR + 16, &qw1)?;
+    qw1.copy_from_slice(&ct[4..20]);
+    let r1 = write_quadword_verified(PBS_PAGE_ADDR + 16, &qw1);
+    qw1.zeroize();
+    if let Err(e) = r1 {
+        ct.zeroize();
+        return Err(e);
+    }
 
-    Ok(())
+    let mut qw2 = [0u8; 16];
+    qw2[..12].copy_from_slice(&ct[20..32]);
+    qw2[12..16].copy_from_slice(&tag[..4]);
+    let r2 = write_quadword_verified(PBS_PAGE_ADDR + 32, &qw2);
+    qw2.zeroize();
+    if let Err(e) = r2 {
+        ct.zeroize();
+        return Err(e);
+    }
+
+    let mut qw3 = [0xFFu8; 16];
+    qw3[..12].copy_from_slice(&tag[4..16]);
+    let r3 = write_quadword_verified(PBS_PAGE_ADDR + 48, &qw3);
+    qw3.zeroize();
+    ct.zeroize();
+    r3
 }
 
 // ---------------------------------------------------------------------------
@@ -322,26 +469,30 @@ const WIPE_FLAG_ARMED: u8 = 0x00;
 
 /// Erase page 125. Clears both the admin PIN and the wipe flag.
 pub unsafe fn erase_admin_page() -> Result<(), ()> {
-    wait_bsy();
-    clear_errors();
-    unlock();
-
-    let cr = PER | (ADMIN_PAGE_NUM << PNB_SHIFT);
-    write_volatile(FLASH_SECCR, cr);
-    write_volatile(FLASH_SECCR, cr | STRT);
-
-    wait_bsy();
-
-    write_volatile(FLASH_SECCR, 0);
-    let sr = read_volatile(FLASH_SECSR);
-    lock();
-
-    if sr & ERR_MASK != 0 {
+    cortex_m::interrupt::free(|_| {
+        wait_bsy();
         clear_errors();
-        Err(())
-    } else {
-        Ok(())
-    }
+        unlock();
+
+        let cr = PER | (ADMIN_PAGE_NUM << PNB_SHIFT);
+        write_volatile(FLASH_SECCR, cr);
+        write_volatile(FLASH_SECCR, cr | STRT);
+
+        wait_bsy();
+
+        write_volatile(FLASH_SECCR, 0);
+        let sr = read_volatile(FLASH_SECSR);
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
 }
 
 /// Read the admin PIN from page 125 into `buf`. Caller checks
