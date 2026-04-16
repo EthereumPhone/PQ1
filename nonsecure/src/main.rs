@@ -22,9 +22,12 @@ use sphincs_tz_shared::{
 
 #[cfg(feature = "e2e-test")]
 mod e2e_test;
+mod erc20_db;
 mod nsc_api;
 #[cfg(feature = "usb")]
 mod usb;
+#[cfg(feature = "usb")]
+mod vk_db;
 
 /// Scratch buffer for the unified sign command response (Type 1 + Type 2).
 #[cfg(not(feature = "e2e-test"))]

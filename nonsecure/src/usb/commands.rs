@@ -178,7 +178,7 @@ impl CommandRouter {
         self.chain_pos = 0;
 
         match ins {
-            INS_V2_SIGN_USEROP => self.cmd_sign_userop(&CHAIN_BUF[..len]),
+            INS_V2_SIGN_USEROP => self.cmd_sign_userop(len),
             _ => self.sw_response(SW_INS_NOT_SUPPORTED),
         }
     }
@@ -279,12 +279,26 @@ impl CommandRouter {
     ///
     /// When `type1_len == 0` no slot registration is needed; the
     /// companion submits only the Type 2 UserOp.
-    unsafe fn cmd_sign_userop(&self, data: &[u8]) -> Response {
-        if data.len() < SIGN_USEROP_HEADER_LEN {
+    unsafe fn cmd_sign_userop(&self, data_len: usize) -> Response {
+        if data_len < SIGN_USEROP_HEADER_LEN {
             return self.sw_response(SW_WRONG_LENGTH);
         }
 
-        let status = nsc_api::sign_userop(data, &mut SIG_BUF[..MAX_JARDIN_RESPONSE_LEN]);
+        // Opportunistically attach an ERC-20 metadata bundle if the
+        // companion didn't already include a trailer and the (chain_id,
+        // tx.to) pair matches a known token. The secure world still
+        // Merkle-verifies every byte before trusting it for display.
+        let effective_len = Self::maybe_inject_erc20_bundle(data_len);
+        // If the companion attached a ZK clear-sign trailer with just
+        // proof + calldata + readable (no VK bundle), look up the VK by
+        // (chain_id, tx.to) and append it so the secure world's
+        // Groth16 verifier has a Merkle-proven key to work with.
+        let effective_len = Self::maybe_inject_vk_bundle(effective_len);
+
+        let status = nsc_api::sign_userop(
+            &CHAIN_BUF[..effective_len],
+            &mut SIG_BUF[..MAX_JARDIN_RESPONSE_LEN],
+        );
         if status != NscStatus::Ok as u32 {
             return self.nsc_status_to_response(status);
         }
@@ -335,6 +349,139 @@ impl CommandRouter {
             ptr: RESP_BUF.as_ptr(),
             len: 47,
         }
+    }
+
+    /// If the companion sent a bare `[header | data]` payload (no
+    /// trailer sections) and `(chain_id, tx.to)` hits the NS-side ERC-20
+    /// database, append an `[u16 BE len | bundle]` trailer inside
+    /// `CHAIN_BUF` so the secure world can render a token-aware
+    /// confirmation page instead of falling back to "Unknown token".
+    ///
+    /// Returns the (possibly extended) payload length. On any failure
+    /// (lookup miss, payload already has trailers, no room) returns
+    /// `received_len` unchanged — the secure world degrades gracefully
+    /// to `Erc20Unknown`.
+    unsafe fn maybe_inject_erc20_bundle(received_len: usize) -> usize {
+        if received_len < SIGN_USEROP_HEADER_LEN {
+            return received_len;
+        }
+
+        let data_len = u16::from_be_bytes([CHAIN_BUF[264], CHAIN_BUF[265]]) as usize;
+        let payload_end = SIGN_USEROP_HEADER_LEN + data_len;
+        if payload_end > received_len {
+            return received_len;
+        }
+        // Only augment bare payloads. If the companion already provided
+        // trailer sections, trust its layout.
+        if received_len != payload_end {
+            return received_len;
+        }
+        // Plain value transfer — no ERC-20 metadata needed.
+        if data_len == 0 {
+            return received_len;
+        }
+
+        let chain_id = u64::from_be_bytes([
+            CHAIN_BUF[0],
+            CHAIN_BUF[1],
+            CHAIN_BUF[2],
+            CHAIN_BUF[3],
+            CHAIN_BUF[4],
+            CHAIN_BUF[5],
+            CHAIN_BUF[6],
+            CHAIN_BUF[7],
+        ]);
+        let mut to = [0u8; 20];
+        to.copy_from_slice(&CHAIN_BUF[212..232]);
+
+        // Matches `MAX_ERC20_BUNDLE_LEN` in `secure/src/erc20/bundle.rs`.
+        let mut bundle_buf = [0u8; 1120];
+        let Some(bundle_len) = crate::erc20_db::build_bundle(chain_id, &to, &mut bundle_buf) else {
+            return received_len;
+        };
+
+        let new_len = payload_end + 2 + bundle_len;
+        if new_len > CHAIN_BUF_LEN {
+            return received_len;
+        }
+
+        CHAIN_BUF[payload_end..payload_end + 2]
+            .copy_from_slice(&(bundle_len as u16).to_be_bytes());
+        CHAIN_BUF[payload_end + 2..new_len].copy_from_slice(&bundle_buf[..bundle_len]);
+        new_len
+    }
+
+    /// If the companion attached a ZK clear-sign trailer containing just
+    /// the fixed `proof + calldata + readable` block (exactly
+    /// `ZK_CLEAR_SIGN_FIXED_LEN` bytes) and `(chain_id, tx.to)` hits the
+    /// NS-side VK database, append the looked-up VK bundle so the secure
+    /// world's Groth16 verifier has a Merkle-proven key to work with.
+    ///
+    /// Returns the (possibly extended) payload length. On any failure
+    /// returns `received_len` unchanged; the secure world will then
+    /// reject the ZK trailer and the signer will fall back to the plain
+    /// contract-call display path.
+    unsafe fn maybe_inject_vk_bundle(received_len: usize) -> usize {
+        if received_len < SIGN_USEROP_HEADER_LEN {
+            return received_len;
+        }
+
+        let data_len = u16::from_be_bytes([CHAIN_BUF[264], CHAIN_BUF[265]]) as usize;
+        let after_data = SIGN_USEROP_HEADER_LEN + data_len;
+        if after_data + 2 > received_len {
+            return received_len;
+        }
+
+        let erc20_len =
+            u16::from_be_bytes([CHAIN_BUF[after_data], CHAIN_BUF[after_data + 1]]) as usize;
+        let after_erc20 = after_data + 2 + erc20_len;
+        if after_erc20 + 2 > received_len {
+            return received_len;
+        }
+
+        let zk_len_off = after_erc20;
+        let zk_len =
+            u16::from_be_bytes([CHAIN_BUF[zk_len_off], CHAIN_BUF[zk_len_off + 1]]) as usize;
+        // Only act when the companion sent exactly the fixed block with
+        // no VK bundle attached. Any other shape is either an invalid
+        // trailer (which the secure world will reject) or already
+        // includes a VK bundle the companion built itself.
+        if zk_len != ZK_CLEAR_SIGN_FIXED_LEN {
+            return received_len;
+        }
+        let zk_end = zk_len_off + 2 + zk_len;
+        if zk_end != received_len {
+            return received_len;
+        }
+
+        let chain_id = u64::from_be_bytes([
+            CHAIN_BUF[0],
+            CHAIN_BUF[1],
+            CHAIN_BUF[2],
+            CHAIN_BUF[3],
+            CHAIN_BUF[4],
+            CHAIN_BUF[5],
+            CHAIN_BUF[6],
+            CHAIN_BUF[7],
+        ]);
+        let mut to = [0u8; 20];
+        to.copy_from_slice(&CHAIN_BUF[212..232]);
+
+        let mut vk_bundle_buf = [0u8; ZK_VK_BUNDLE_MAX_LEN];
+        let Some(vk_bundle_len) = crate::vk_db::build_bundle(chain_id, &to, &mut vk_bundle_buf)
+        else {
+            return received_len;
+        };
+
+        let new_zk_len = zk_len + vk_bundle_len;
+        let new_len = zk_end + vk_bundle_len;
+        if new_len > CHAIN_BUF_LEN || new_zk_len > u16::MAX as usize {
+            return received_len;
+        }
+
+        CHAIN_BUF[zk_end..new_len].copy_from_slice(&vk_bundle_buf[..vk_bundle_len]);
+        CHAIN_BUF[zk_len_off..zk_len_off + 2].copy_from_slice(&(new_zk_len as u16).to_be_bytes());
+        new_len
     }
 
     // ===================================================================
