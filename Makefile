@@ -31,7 +31,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen measure
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity qr-screen measure factory-reset
 
 all: secure nonsecure
 
@@ -453,6 +453,63 @@ se050-reset:
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
 	@echo "==> Running factory reset (watch semihosting output)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# Full device factory reset: wipe every piece of persistent state that
+# accumulates during provisioning + signing, so the device returns to a
+# fresh unprovisioned state (as if it had just come off the programming
+# line).
+#
+# What gets wiped:
+#   * SE050 data objects — entropy half_E, UserID/PIN, gated objects.
+#     Reuses the se050-factory-reset firmware (assumes dev PIN in
+#     {00000000, 12345678, 11111111}; a wrong guess consumes one of the
+#     SE050's 10 PIN attempts).
+#   * All STM32 secure flash — mass-erased via STM32_Programmer_CLI,
+#     which clears:
+#       - page 123 — JARDÍN slot-state shadow buffer
+#       - page 124 — JARDÍN slot-state primary (next_q, sub-key commits,
+#                    h_r) — the invariant that makes every Type 2
+#                    signature advance q persistently
+#       - page 125 — SE050 admin PIN + crash-safety wipe flag
+#       - page 126 — OPTIGA Trust M Platform Binding Secret
+#       - page 127 — Tropic01 pairing key slot
+#     plus all firmware code — so you WILL need to re-flash afterwards.
+#
+# What does NOT get wiped:
+#   * OPTIGA Trust M internal objects (half_O, auth refs). The firmware
+#     currently has no OPTIGA reset path. Losing the PBS on STM32 page
+#     126 means the MCU can no longer open a Shielded Connection against
+#     those objects, so in practice the OPTIGA side is inert after this
+#     target runs, but its silicon still holds the entropy half.
+#   * Option bytes (TZEN / SECWM / SECBOOTADD0). Those survive mass
+#     erase and the normal flash-hw-* targets re-assert them anyway.
+#
+# Prompts for confirmation. Requires ST-LINK connected and
+# STM32_Programmer_CLI on PATH.
+factory-reset:
+	@echo "==> FACTORY RESET"
+	@echo "    Wipes: SE050 data objects + all STM32 flash (pages 123-127 + firmware)"
+	@echo "    You MUST re-flash firmware afterwards — the chip will be blank."
+	@printf "    Proceed? [y/N] "; \
+		read ans; \
+		[ "$$ans" = "y" ] || [ "$$ans" = "Y" ] || { echo "    Aborted."; exit 1; }
+	@echo ""
+	@echo "==> Step 1/2: building + running SE050 factory-reset firmware"
+	@echo "    (20s timeout — proceeds even if SE050 isn't attached)"
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+		cargo build --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features se050-factory-reset,ui-noop,stm32u585,debug-log
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	-@timeout 20 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) || true
+	@echo ""
+	@echo "==> Step 2/2: STM32 mass-erase (wipes all flash pages + firmware)"
+	@STM32_Programmer_CLI --connect port=SWD mode=UR -e all
+	@echo ""
+	@echo "==> Factory reset complete. Chip is blank."
+	@echo "    Re-flash firmware to use the device again, e.g.:"
+	@echo "      make flash-hw-se050-oled-standalone   # SE050 + OLED, production"
+	@echo "      make flash-hw-se050-usb-test          # SE050 + USB, auto-provisioned test"
 
 # SE050 factory-reset roundtrip e2e test on real hardware.
 # Provisions a fresh test UserID + 2 gated data objects, exercises
