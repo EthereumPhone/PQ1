@@ -641,13 +641,21 @@ pub fn build_metadata_pbs_final() -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
-    push_lcso_op(&mut inner, &mut c, LCS_OPERATIONAL);
+    // LcsO = Creation (0x01) during bring-up. Infineon's reference sample
+    // keeps LcsO at Creation while testing — "At the real time/customer
+    // side this needs to be LCSO_STATE_OPERATIONAL (0x07)". Community
+    // reports on the Infineon forum suggest that bumping to Operational
+    // in the same metadata write that installs the AC can leave the PRL
+    // state machine wedged on some firmware revisions. Once the
+    // shielded-connection handshake is green end-to-end, follow up with
+    // a separate metadata write that raises LcsO to 0x07 irreversibly.
+    push_lcso_op(&mut inner, &mut c, 0x01);
 
     // Change: LcsO < Operational OR Conf(0xE140) — 7-byte expression.
     inner[c] = META_CHANGE;
     inner[c + 1] = 0x07;
-    inner[c + 2] = 0xE1; // LcsO compare tag
-    inner[c + 3] = 0xFC; // "<" comparator
+    inner[c + 2] = 0xE1;
+    inner[c + 3] = 0xFC;
     inner[c + 4] = LCS_OPERATIONAL;
     inner[c + 5] = AC_OR;
     inner[c + 6] = AC_OP_CONF;

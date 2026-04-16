@@ -66,6 +66,7 @@ e2e-test = []
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
 se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
 optiga-trust-m = []  # Infineon OPTIGA Trust M V3 via I2C1 (TRUSTMV3SHIELDTOBO1 on Arduino R3 headers)
+optiga-bringup-fresh = []  # Erase MCU-side PBS flash at boot to force a fresh chip pairing. Dev-only; bricks already-provisioned chips from this MCU.
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.

@@ -288,26 +288,52 @@ impl ShieldedConnection {
             return Err(ShieldError::NoPbs);
         }
 
+        secure_log!("[OPTIGA/shield] establish: start");
+
         // Generate master random from TRNG
         let mut random_m = [0u8; RANDOM_LEN];
         crate::rng::fill(&mut random_m).map_err(|_| ShieldError::HandshakeFailed)?;
+        secure_log!("[OPTIGA/shield] random_m generated");
 
-        // Step 1: Send MasterHello
-        // Format: SCTR(0x00) | ProtocolVersion(0x01)
+        // Step 1: Send MasterHello via the presentation-layer path
+        // (PRESENCE_BIT set in PCTR). Format: SCTR(0x00) | ProtoVer(0x01).
         let hello = [SCTR_HANDSHAKE_HELLO, PROTOCOL_VERSION];
         let mut resp = [0u8; 64];
-        let n = ifx.transceive(&hello, &mut resp)
-            .map_err(|_| ShieldError::HandshakeFailed)?;
+        secure_log!("[OPTIGA/shield] sending MasterHello");
+        let n = match ifx.transceive_prl(&hello, &mut resp) {
+            Ok(n) => n,
+            Err(e) => {
+                secure_log!("[OPTIGA/shield] MasterHello transceive FAILED: {:?}", e);
+                return Err(ShieldError::HandshakeFailed);
+            }
+        };
 
-        // Step 2: Parse SlaveHello
-        // Format: SCTR(0x00) | Random_S(32) | SeqNum_S(4)
-        if n < 1 + RANDOM_LEN + 4 {
+        // Step 2: Parse SlaveHello — 38 bytes total per Infineon
+        // `ifx_i2c_presentation_layer.c::PRL_SLAVE_HELLO_LENGTH = 0x26`:
+        //   byte 0      : SCTR
+        //   byte 1      : ProtocolVersion
+        //   bytes 2..34 : Random_S (32 bytes)
+        //   bytes 34..38: SeqNum_S (4 bytes)
+        const SLAVE_HELLO_RANDOM_OFFSET: usize = 2;
+        const SLAVE_HELLO_SEQ_OFFSET: usize = 34;
+        const SLAVE_HELLO_LEN: usize = 38;
+
+        secure_log!("[OPTIGA/shield] MasterHello response n={}", n);
+        if n < SLAVE_HELLO_LEN {
+            secure_log!(
+                "[OPTIGA/shield] SlaveHello too short ({} < {}), bytes=[{:02x}{:02x}{:02x}{:02x}...]",
+                n, SLAVE_HELLO_LEN, resp[0], resp[1], resp[2], resp[3]
+            );
             return Err(ShieldError::HandshakeFailed);
         }
         let mut random_s = [0u8; RANDOM_LEN];
-        random_s.copy_from_slice(&resp[1..1 + RANDOM_LEN]);
+        random_s.copy_from_slice(
+            &resp[SLAVE_HELLO_RANDOM_OFFSET..SLAVE_HELLO_RANDOM_OFFSET + RANDOM_LEN]
+        );
         let mut seq_s = [0u8; 4];
-        seq_s.copy_from_slice(&resp[1 + RANDOM_LEN..1 + RANDOM_LEN + 4]);
+        seq_s.copy_from_slice(
+            &resp[SLAVE_HELLO_SEQ_OFFSET..SLAVE_HELLO_SEQ_OFFSET + 4]
+        );
 
         // Step 3: Derive session keys
         self.derive_session_keys(&random_m, &random_s);
@@ -338,7 +364,7 @@ impl ShieldedConnection {
         let msg_len = 5 + ct_len;
 
         let mut resp2 = [0u8; 128];
-        let n2 = ifx.transceive(&finished_msg[..msg_len], &mut resp2)
+        let n2 = ifx.transceive_prl(&finished_msg[..msg_len], &mut resp2)
             .map_err(|_| ShieldError::HandshakeFailed)?;
 
         // Step 5: Verify SlaveFinished

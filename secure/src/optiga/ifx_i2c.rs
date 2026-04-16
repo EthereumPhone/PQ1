@@ -58,10 +58,12 @@ const SEQCTR_ACK: u8 = 0x00;
 const SEQCTR_NACK: u8 = 0x20;
 const SEQCTR_RESYNCH: u8 = 0x40;
 
-/// Data frame: FRNR in bits 1-0 (our transmit sequence number).
-const FRNR_SHIFT: u8 = 0;
-/// Data frame: ACKNR in bits 3-2 (expected next rx sequence number).
-const ACKNR_SHIFT: u8 = 2;
+/// Data frame: FRNR in bits 3-2 (our transmit sequence number).
+/// Matches Infineon `DL_FCTR_FRNR_OFFSET = 2`, mask 0x0C.
+const FRNR_SHIFT: u8 = 2;
+/// Data frame: ACKNR in bits 1-0 (expected next rx sequence number).
+/// Matches Infineon `DL_FCTR_ACKNR_OFFSET = 0`, mask 0x03.
+const ACKNR_SHIFT: u8 = 0;
 
 // ---------------------------------------------------------------------------
 // Transport layer PCTR encoding
@@ -77,6 +79,14 @@ const PCTR_CHAIN_MID: u8 = 0x02;
 const PCTR_CHAIN_LAST: u8 = 0x04;
 /// Chaining indicator mask (bits 2-0).
 const PCTR_CHAIN_MASK: u8 = 0x07;
+
+/// Presence bit — OR'd into the PCTR of every outgoing data frame when the
+/// chip's shielded-connection (presentation layer) is available. Matches
+/// Infineon `IFX_I2C_PRESENCE_BIT = 0x08`. Without it, the chip does not
+/// route the payload through the PRL state machine and treats every frame
+/// as a raw APDU (which then produces nonsense responses to handshake
+/// messages).
+const PCTR_PRESENCE_BIT: u8 = 0x08;
 
 // ---------------------------------------------------------------------------
 // Sizes and limits
@@ -368,7 +378,8 @@ impl IfxState {
     /// Send an APDU and receive the response.
     ///
     /// Handles transport-layer chaining (fragmentation for large APDUs)
-    /// and data-link ACK/NACK/retransmission.
+    /// and data-link ACK/NACK/retransmission. PRESENCE_BIT is cleared —
+    /// use [`transceive_prl`] for presentation-layer handshake messages.
     ///
     /// Returns the number of response bytes written to `resp`.
     pub unsafe fn transceive(
@@ -376,24 +387,42 @@ impl IfxState {
         apdu: &[u8],
         resp: &mut [u8],
     ) -> Result<usize, IfxError> {
-        // --- Transmit phase: fragment APDU if needed ---
-        self.send_apdu(apdu)?;
+        self.send_apdu_inner(apdu, false)?;
+        self.receive_response(resp)
+    }
 
-        // --- Receive phase: read and reassemble response ---
+    /// Same as [`transceive`] but with PRESENCE_BIT set in the outgoing
+    /// PCTR. Routes the payload to the chip's presentation layer — use
+    /// for handshake messages (MasterHello, MasterFinished) and for
+    /// shielded-connection records once a session is active.
+    pub unsafe fn transceive_prl(
+        &mut self,
+        msg: &[u8],
+        resp: &mut [u8],
+    ) -> Result<usize, IfxError> {
+        self.send_apdu_inner(msg, true)?;
         self.receive_response(resp)
     }
 
     /// Fragment and send an APDU, handling data-link ACK/NACK.
-    unsafe fn send_apdu(&mut self, apdu: &[u8]) -> Result<(), IfxError> {
+    ///
+    /// `presence` selects which chip-side layer processes the payload:
+    /// - `false` → bare APDU (OpenApplication, GetDataObject, …)
+    /// - `true`  → presentation layer (MasterHello / MasterFinished / Record)
+    ///
+    /// The chip treats PCTR's PRESENCE_BIT as a layer selector. Setting it
+    /// on a bare APDU causes the chip's PRL state machine to interpret
+    /// the CMD byte as an SCTR and return an alert.
+    unsafe fn send_apdu_inner(&mut self, apdu: &[u8], presence: bool) -> Result<(), IfxError> {
+        let presence_bits = if presence { PCTR_PRESENCE_BIT } else { 0 };
+
         if apdu.len() <= MAX_PAYLOAD_PER_FRAME {
-            // Single frame: PCTR = no chaining
             let mut payload = [0u8; MAX_FRAME_SIZE];
-            payload[0] = PCTR_NO_CHAIN;
+            payload[0] = PCTR_NO_CHAIN | presence_bits;
             payload[1..1 + apdu.len()].copy_from_slice(apdu);
             let payload_len = 1 + apdu.len();
             self.send_frame_with_retry(&payload[..payload_len])?;
         } else {
-            // Multi-frame chaining
             let mut offset = 0;
             let total = apdu.len();
             let mut first = true;
@@ -413,7 +442,7 @@ impl IfxState {
                 };
 
                 let mut payload = [0u8; MAX_FRAME_SIZE];
-                payload[0] = pctr;
+                payload[0] = pctr | presence_bits;
                 payload[1..1 + chunk].copy_from_slice(&apdu[offset..offset + chunk]);
                 let payload_len = 1 + chunk;
                 self.send_frame_with_retry(&payload[..payload_len])?;
@@ -424,50 +453,23 @@ impl IfxState {
         Ok(())
     }
 
-    /// Send a single data frame and wait for ACK, with retry on NACK.
+    unsafe fn send_apdu(&mut self, apdu: &[u8]) -> Result<(), IfxError> {
+        self.send_apdu_inner(apdu, false)
+    }
+
+    /// Send a single data frame. Fire-and-forget at this layer — the
+    /// OPTIGA Trust M doesn't always send a separate control-frame ACK;
+    /// when the chip has a response ready immediately, it piggybacks the
+    /// acknowledgment by setting ACKNR in the response data frame itself.
+    /// The transmit-sequence increment happens unconditionally, and the
+    /// subsequent `receive_response` both drains the response data frame
+    /// and (via the chip's internal DL layer) validates the piggybacked ACK.
     unsafe fn send_frame_with_retry(&mut self, payload: &[u8]) -> Result<(), IfxError> {
         let mut frame_buf = [0u8; MAX_FRAME_SIZE];
-
-        for retry in 0..MAX_TX_RETRIES {
-            let frame_len = self.build_data_frame(payload, &mut frame_buf);
-            self.write_register(REG_DATA, &frame_buf[..frame_len])?;
-
-            // Wait for response (ACK or NACK)
-            self.poll_response_ready()?;
-
-            let mut ack_buf = [0u8; MAX_FRAME_SIZE];
-            // Read at least 5 bytes for a control frame
-            self.read_register(REG_DATA, &mut ack_buf[..5])?;
-
-            let (fctr, _) = self.validate_frame(&ack_buf[..5])?;
-
-            if Self::is_control_frame(fctr) {
-                match Self::ctrl_seqctr(fctr) {
-                    SEQCTR_ACK => {
-                        // Success — advance transmit sequence
-                        self.tx_seq = (self.tx_seq + 1) & 0x03;
-                        return Ok(());
-                    }
-                    SEQCTR_NACK => {
-                        // Retry
-                        if retry == MAX_TX_RETRIES - 1 {
-                            return Err(IfxError::Nack);
-                        }
-                        continue;
-                    }
-                    SEQCTR_RESYNCH => {
-                        self.tx_seq = 0;
-                        self.rx_seq = 0;
-                        return Err(IfxError::ReSynch);
-                    }
-                    _ => return Err(IfxError::BadResponse),
-                }
-            } else {
-                // Unexpected data frame instead of control frame
-                return Err(IfxError::BadResponse);
-            }
-        }
-        Err(IfxError::Nack)
+        let frame_len = self.build_data_frame(payload, &mut frame_buf);
+        self.write_register(REG_DATA, &frame_buf[..frame_len])?;
+        self.tx_seq = (self.tx_seq + 1) & 0x03;
+        Ok(())
     }
 
     /// Receive a response, handling chained fragments.
@@ -488,23 +490,60 @@ impl IfxState {
             } else {
                 MAX_FRAME_SIZE
             };
+            secure_log!(
+                "[OPTIGA/ifx] rx: state=[{:02x} {:02x} {:02x} {:02x}] resp_len={} read_len={}",
+                state[0], state[1], state[2], state[3], resp_len, read_len
+            );
 
             // Read the response frame
             let mut frame_buf = [0u8; MAX_FRAME_SIZE];
             self.read_register(REG_DATA, &mut frame_buf[..read_len])?;
+            secure_log!(
+                "[OPTIGA/ifx] rx frame[0..8]=[{:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}]",
+                frame_buf[0], frame_buf[1], frame_buf[2], frame_buf[3],
+                frame_buf[4], frame_buf[5], frame_buf[6], frame_buf[7]
+            );
 
-            let (fctr, payload) = self.validate_frame(&frame_buf[..read_len])?;
+            let (fctr, payload) = match self.validate_frame(&frame_buf[..read_len]) {
+                Ok(x) => x,
+                Err(e) => {
+                    secure_log!("[OPTIGA/ifx] rx validate_frame FAILED: {:?}", e);
+                    return Err(e);
+                }
+            };
 
-            // Send ACK for this data frame
+            // A control frame ahead of the data response is either the
+            // ACK for our last write (fine — the chip will follow up with
+            // the data frame) or a NACK (bail, caller should retry the
+            // tx). We drain the ACK/NACK here and keep polling for the
+            // real data response.
+            if Self::is_control_frame(fctr) {
+                match Self::ctrl_seqctr(fctr) {
+                    SEQCTR_ACK => {
+                        secure_log!("[OPTIGA/ifx] rx: ACK received, continuing poll for data");
+                        continue;
+                    }
+                    SEQCTR_NACK => {
+                        secure_log!("[OPTIGA/ifx] rx: NACK received");
+                        return Err(IfxError::Nack);
+                    }
+                    SEQCTR_RESYNCH => {
+                        secure_log!("[OPTIGA/ifx] rx: ReSynch received");
+                        self.tx_seq = 0;
+                        self.rx_seq = 0;
+                        return Err(IfxError::ReSynch);
+                    }
+                    _ => return Err(IfxError::BadResponse),
+                }
+            }
+
+            // Data frame: increment our rx sequence (this was frame N,
+            // next expected is N+1) and send a separate ACK frame so the
+            // chip knows it can drop its retransmission buffer.
             self.rx_seq = (self.rx_seq + 1) & 0x03;
             let mut ack_buf = [0u8; 5];
             let ack_len = self.build_ack_frame(&mut ack_buf);
             self.write_register(REG_DATA, &ack_buf[..ack_len])?;
-
-            // Control frame as response = error
-            if Self::is_control_frame(fctr) {
-                return Err(IfxError::BadResponse);
-            }
 
             // Extract transport layer: first byte is PCTR
             if payload.is_empty() {

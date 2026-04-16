@@ -171,8 +171,36 @@ impl OptigaTrustM {
     /// Called at boot. If the PBS page is blank (first boot), this is a
     /// no-op — PBS will be generated during `setup_pbs` on first
     /// provisioning.
+    ///
+    /// Under `optiga-bringup-fresh` the PBS page is erased at boot. This
+    /// forces `setup_pbs` to generate a fresh secret, which is what we
+    /// want when the chip's OID 0xE140 is still in LcsO=Creation state
+    /// (fresh silicon) or when we've re-flashed the MCU but the chip was
+    /// never successfully provisioned. Should NEVER be enabled in
+    /// production — it orphans any already-provisioned chip from the MCU.
     #[cfg(feature = "stm32u585")]
     pub fn load_pbs(&mut self) {
+        #[cfg(feature = "optiga-bringup-fresh")]
+        unsafe {
+            if !crate::hw::flash::is_pbs_blank() {
+                secure_log!("[OPTIGA] optiga-bringup-fresh: erasing stale PBS flash page");
+                match crate::hw::flash::erase_pbs_page() {
+                    Ok(()) => {
+                        let still_dirty = !crate::hw::flash::is_pbs_blank();
+                        secure_log!(
+                            "[OPTIGA] erase returned Ok, is_pbs_blank post-erase: {}",
+                            !still_dirty
+                        );
+                    }
+                    Err(_) => {
+                        secure_log!("[OPTIGA] erase_pbs_page returned Err");
+                    }
+                }
+            } else {
+                secure_log!("[OPTIGA] optiga-bringup-fresh: PBS page already blank");
+            }
+        }
+
         unsafe {
             if !crate::hw::flash::is_pbs_blank() {
                 let mut pbs = [0u8; 32];
@@ -545,16 +573,21 @@ impl OptigaTrustM {
 
         let blank = [0u8; 32];
         unsafe {
-            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_ENTROPY, &blank)?;
-            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_MASTER_SECRET, &blank)?;
-            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_VK, &blank)?;
-            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_BOOTSTRAP_VK, &blank)?;
-            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_AUTH_REF, &blank)?;
-            // RESET_SENTINEL tells is_provisioned() this is a wiped chip.
+            // Write the sentinel FIRST so a crash mid-wipe still produces a
+            // chip that boots as unprovisioned — the wizard on the next
+            // boot will overwrite every OID cleanly. If we wrote the
+            // sentinel last, a crash would leave stale user data behind a
+            // "provisioned"-looking counter, reproducing the SE050 trap.
             apdu::set_data_object(
                 &mut self.ifx, &mut self.shield,
                 apdu::OID_COUNTER, &[RESET_SENTINEL],
             )?;
+
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_AUTH_REF, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_ENTROPY, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_MASTER_SECRET, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_VK, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_BOOTSTRAP_VK, &blank)?;
         }
 
         self.zeroize_caches_internal();
