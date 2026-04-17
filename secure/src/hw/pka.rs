@@ -21,8 +21,10 @@
 
 // ── PKA peripheral registers ────────────────────────────────────────────
 
-/// PKA peripheral base address (STM32U585, AHB2 bus)
-const PKA_BASE: u32 = 0x420C_2000;
+/// PKA peripheral base address (STM32U585, AHB2 bus — secure alias).
+/// NS alias is 0x420C_2000; TZSC_SECCFGRx config marks PKA secure, so
+/// secure code must use 0x520C_2000.
+const PKA_BASE: u32 = 0x520C_2000;
 
 /// PKA control register
 const PKA_CR: *mut u32 = PKA_BASE as *mut u32;

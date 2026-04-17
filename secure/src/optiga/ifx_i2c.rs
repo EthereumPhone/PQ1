@@ -101,8 +101,11 @@ const TL_HEADER_SIZE: usize = 1;
 /// Maximum APDU payload per frame (single, unchained).
 const MAX_PAYLOAD_PER_FRAME: usize = MAX_FRAME_SIZE - DL_HEADER_SIZE - TL_HEADER_SIZE;
 
-/// Maximum retries for ACK polling.
-const MAX_POLL_RETRIES: u32 = 500;
+/// Maximum retries for ACK polling (one poll per ~1 ms).
+/// SetObjectProtected triggers ECDSA-P256 signature verification on the
+/// chip, which takes up to ~1 s wall clock on V3 silicon — bump to 3000
+/// so we don't time out mid-verify.
+const MAX_POLL_RETRIES: u32 = 3000;
 /// Maximum retransmission attempts on NACK.
 const MAX_TX_RETRIES: u32 = 3;
 
@@ -175,9 +178,10 @@ impl IfxState {
             if i2c::write(&buf[..len]).is_ok() {
                 return Ok(());
             }
-            for _ in 0..80_000u32 {
-                cortex_m::asm::nop();
-            }
+            // LTO elides `for _ in 0..N { cortex_m::asm::nop() }` on
+            // recent toolchains — use `delay` which has a volatile
+            // counter and always runs the full cycle count.
+            cortex_m::asm::delay(80_000);
         }
         Err(IfxError::I2c)
     }
@@ -190,9 +194,10 @@ impl IfxState {
             if i2c::write_read(&[reg], buf).is_ok() {
                 return Ok(());
             }
-            for _ in 0..80_000u32 {
-                cortex_m::asm::nop();
-            }
+            // LTO elides `for _ in 0..N { cortex_m::asm::nop() }` on
+            // recent toolchains — use `delay` which has a volatile
+            // counter and always runs the full cycle count.
+            cortex_m::asm::delay(80_000);
         }
         Err(IfxError::I2c)
     }
@@ -291,11 +296,10 @@ impl IfxState {
     // Polling helpers
     // -----------------------------------------------------------------------
 
-    /// NOP delay loop (~1 ms at 160 MHz).
+    /// NOP delay loop (~1 ms at 160 MHz). Uses `cortex_m::asm::delay` —
+    /// a `for _ in 0..N { nop() }` version gets elided by LTO.
     fn delay_1ms() {
-        for _ in 0..40_000 {
-            cortex_m::asm::nop();
-        }
+        cortex_m::asm::delay(40_000);
     }
 
     /// Poll I2C_STATE register until response-ready bit is set.

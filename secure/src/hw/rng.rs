@@ -5,8 +5,11 @@
 
 use core::ptr::{read_volatile, write_volatile};
 
-// RNG register base (NS alias — AHB2 bus)
-const RNG: u32 = 0x420C_0800;
+// RNG register base (S alias — AHB2 bus). Must use the secure alias
+// from secure code: after CRIT-4 TZSC config, the RNG peripheral is
+// marked SECURE in GTZC1_TZSC_SECCFGRx, so NS-alias accesses (0x420C_0800)
+// are rejected by the bus fabric.
+const RNG: u32 = 0x520C_0800;
 
 const RNG_CR: *mut u32 = (RNG + 0x00) as *mut u32;
 const RNG_SR: *const u32 = (RNG + 0x04) as *const u32;

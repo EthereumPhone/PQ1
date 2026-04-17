@@ -89,7 +89,8 @@ mod stm32 {
     // GTZC1 TZSC base address (S alias, AHB1). Per STM32U585 RM0456 and
     // CMSIS header: AHB1PERIPH_BASE_S (0x50020000) + 0x12400 = 0x50032400.
     // (The nearby 0x50032800 is GTZC1 TZIC — the interrupt controller,
-    // not the security config; do not conflate.)
+    // not the security config; do not conflate. This was the source of
+    // the silently-no-op TZSC writes that motivated the audit.)
     const TZSC_BASE: u32 = 0x5003_2400;
     const TZSC_SECCFGR1: *mut u32 = (TZSC_BASE + 0x10) as *mut u32;
     const TZSC_SECCFGR2: *mut u32 = (TZSC_BASE + 0x14) as *mut u32;
