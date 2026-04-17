@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>PQSigner — JARDÍN Test Tool</title>
+<title>PQSigner — SPHINCS+C10 (JARDÍN) Test Tool</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, Inter, system-ui, sans-serif; background: #0a0a0a; color: #e5e7eb; min-height: 100vh; padding: 32px 16px; font-size: 14px; }
@@ -42,7 +42,7 @@
 <body>
 <div class="container">
   <header>
-    <h1>PQSigner JARDÍN Test Tool<span class="tag">v3 unified-sign</span></h1>
+    <h1>PQSigner SPHINCS+C10 Test Tool<span class="tag">v3 unified-sign (JARDÍN Type 1 / Type 2)</span></h1>
     <span class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Disconnected</span></span>
   </header>
 
@@ -85,7 +85,7 @@
       <label><input type="checkbox" id="registerSlot" /> Register slot (emit Type 1)</label>
     </div>
     <div class="actions">
-      <button id="signBtn" disabled>Sign (unified JARDÍN)</button>
+      <button id="signBtn" disabled>Sign (SPHINCS+C10)</button>
       <button id="submitBtn" class="secondary" disabled>Submit to bundler</button>
     </div>
   </div>
@@ -485,18 +485,34 @@ function buildSignPayload(p) {
 }
 
 function parseSignResponse(resp) {
-  if (resp.length < 8) throw new Error('response too short');
-  const t1Len = (resp[0] << 24) | (resp[1] << 16) | (resp[2] << 8) | resp[3];
+  // Wire format (secure/src/nsc/cmd_sign_userop.rs):
+  //   [init_code_len(4 BE)][init_code(0 or 88)]
+  //   [type1_len(4 BE)][type1(0 or 4073)]
+  //   [type2_len(4 BE)][type2(4073)]
+  if (resp.length < 12) throw new Error('response too short');
+  const readU32Be = (o) => (resp[o] * 0x1000000) + (resp[o+1] << 16) + (resp[o+2] << 8) + resp[o+3];
+
+  const icLen = readU32Be(0);
   let off = 4;
+  let initCode = null;
+  if (icLen > 0) {
+    initCode = resp.slice(off, off + icLen);
+    off += icLen;
+  }
+
+  const t1Len = readU32Be(off);
+  off += 4;
   let type1 = null;
   if (t1Len > 0) {
     type1 = resp.slice(off, off + t1Len);
     off += t1Len;
   }
-  const t2Len = (resp[off] << 24) | (resp[off + 1] << 16) | (resp[off + 2] << 8) | resp[off + 3];
+
+  const t2Len = readU32Be(off);
   off += 4;
   const type2 = resp.slice(off, off + t2Len);
-  return { type1, type2 };
+
+  return { initCode, type1, type2 };
 }
 
 // ── UI wiring ────────────────────────────────────────────────────
