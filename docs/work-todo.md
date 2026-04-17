@@ -528,6 +528,64 @@ Bundle F flags several Safe 7 specifics as not publicly disclosed yet (exact SE 
 
 ---
 
+### 24. OPTIGA pairing restructure: OTP-derived PBS + HUK re-root
+
+**Status:** IN PROGRESS (2026-04-17). Full rationale and mechanism in `docs/optiga-brick-postmortem.md`.
+
+We bricked the Shielded Connection on our TRUSTMV3SHIELDTOBO1 bring-up chip during rx_seq debugging. Root cause analysis shows the current pairing code **would brick any customer device on any firmware update** — this is a ship blocker, not a bench anomaly. Three compounding issues:
+
+- PBS is generated as random per-provisioning (non-deterministic).
+- PBS is sealed to MCU flash page 126 with an AES-256-GCM key that mixes `firmware_hash()` — so any firmware rebuild produces a different key and the seal becomes undecryptable.
+- `setup_pbs_no_handshake` bumps `E140 LcsO=Operational` (irreversible) immediately after the write, committing to a pairing that only survives while that one firmware binary is running.
+
+Fix is structural, modelled on Trezor's production design (`~/repos/trezor-firmware/core/embed/sec/optiga/` + `sec/secret_keys/stm32u5/`). See the postmortem doc for the full trace, the `firmware_hash()` attestation-vs-HUK separation of concerns, and the decision record on which Trezor patterns we port vs. skip.
+
+**What's needed — P0 (this week, unblocks continued dev):**
+
+- [ ] **`optiga-no-shield` dev feature**: skip `setup_pbs_no_handshake` entirely + make `ensure_shield` a no-op. Lets the current bricked chip exercise all non-PRL paths (provisioning F1Dx OIDs, PIN HMAC via `DecryptSym`, entropy reads, factory-reset) while new shields are in transit.
+- [ ] **Gate `setup_pbs_no_handshake`'s LcsO=op bump** behind a `optiga-lock-operational` Cargo feature. Default OFF — future dev chips stay at LcsO=Creation (rewriteable) and cannot be bricked by rebuild. Production builds opt in once OTP is burned.
+- [ ] **Remove the `optiga-bringup-fresh` feature.** Its flash-page-126 erase was what finished off our test chip; once PBS is OTP-derived (below) the feature is meaningless.
+
+**What's needed — P0 (step 2, next week, the actual fix):**
+
+- [ ] **`secure/src/hw/otp.rs`**: read/write the STM32U585 OTP block (`0x0BFA_0000`, 512 bytes). `read_device_master`, `burn_device_master` (one-shot), `is_device_master_burned`.
+- [ ] **`secure/src/hw/secret_keys.rs`** (Trezor parallel): domain-labelled HKDF expansions of the OTP master key. `optiga_pairing_secret`, `se050_scp03_enc_key`, `se050_scp03_mac_key`, `tropic01_pairing_key`. Closes work-todo #7 HUK-SAES with the same infrastructure.
+- [ ] **`make stm32-burn-device-key`** Makefile target: runs once per physical board, writes 32 TRNG bytes to OTP via probe-rs.
+- [ ] Rewrite `setup_pbs_no_handshake` to derive PBS from `secret_keys::optiga_pairing_secret()` instead of `rng::fill`. Delete the flash-seal/unseal paths.
+- [ ] Delete `hw/flash.rs::read_pbs / write_pbs / erase_pbs_page / PBS_PAGE_ADDR / PbsLoadError` + the `aes-gcm` dep if nothing else uses it.
+- [ ] Delete `optiga/mod.rs::load_pbs`'s flash path — replace with `self.shield.load_pbs(&secret_keys::optiga_pairing_secret()?)` at boot.
+
+**What's needed — P0 (step 3, decouples firmware_hash from HUK):**
+
+- [ ] **Re-root `secure/src/hw/huk.rs::derive_device_key`** off `firmware_hash()` and onto `hw::otp::read_device_master()`. **Keep `measured_boot::firmware_hash()` intact** — the 8-BIP-39-word OLED attestation + #22 manifest binding still depends on it. This change affects every caller of `derive_device_key` (SE050 SCP03 wrap, TROPIC01 pairing wrap); those get firmware-update-stable wrap keys as a side effect.
+
+**What's needed — P1 (Trezor ports beyond PBS, finish the OPTIGA layer):**
+
+- [ ] **Hardware monotonic counter for PIN attempts**: migrate `OID_COUNTER` from `0xF1E1` (software, glitch-fragile, `Conf(E140)`-gated) → `0xE120` (OPTIGA built-in monotonic counter with `Auto(LUC)` access conditions). Drop the firmware-side decrement-before-verify gymnastics in `authenticate_and_read`. Closes the concern noted in `project_optiga_bringup.md` memory.
+- [ ] **Typed `OptigaMetadata` struct** replacing the tag-by-tag `push_ac_simple`/`push_lcso_op` builders in `apdu.rs`. Pure refactor; makes merge-vs-overwrite semantics explicit. Mirror of Trezor's `optiga_metadata`.
+
+**What's needed — P2 (validation):**
+
+- [ ] End-to-end test on a fresh SLS32AIA shield: `stm32-burn-device-key` → provision → PRL handshake green → PIN unlock green → reflash any build → still works. Prove the brick-on-update scenario is gone.
+
+**What we're NOT porting from Trezor** (decision record; full rationale in §6.4 of the postmortem):
+
+- Multi-OID PIN stretching chain (`OID_PIN_CMAC` E200 + `OID_PIN_HMAC` F1D8 + `OID_PIN_ECDH` E0F3). Trezor uses it to defeat offline brute force after flash extraction; our design never stores PIN material in MCU flash so the threat is closed elsewhere.
+- ECDSA signing-key masking with an OTP-derived mask. We don't sign with OPTIGA ECC keys. The general pattern may be worth revisiting for work-todo #18 (SLH-DSA SCA/FI), not for the OPTIGA layer.
+- `optiga_suspend`/`optiga_resume` with RTC wakeup. Irrelevant for a USB-bus-powered device.
+
+**Cross-references:**
+
+- `docs/optiga-brick-postmortem.md` — full rationale (primary reference for this item)
+- #7 HUK-SAES — the OTP + `secret_keys` infrastructure introduced here is what #7 needs; they merge
+- #22 Supply-chain attestation — `firmware_hash()` stays intact and is still this manifest's firmware-identity input
+- `project_optiga_bringup.md` memory — has the earlier bring-up quirks + a note about PIN counter hardening that this item closes
+
+**Files to create:** `secure/src/hw/otp.rs`, `secure/src/hw/secret_keys.rs`, `scripts/burn_device_key.py` (helper for `stm32-burn-device-key`)
+**Files to change:** `secure/Cargo.toml` (new features), `secure/src/optiga/mod.rs` (setup_pbs rewrite, load_pbs simplification, LcsO gate), `secure/src/optiga/apdu.rs` (OptigaMetadata refactor, OID_COUNTER change), `secure/src/hw/huk.rs` (OTP-backed), `secure/src/hw/flash.rs` (delete PBS seal), `secure/src/main.rs` (load_pbs call simplification), `Makefile` (new target)
+
+---
+
 ## Completion Log
 
 When a task above is completed, update it here with the date and a one-line summary.

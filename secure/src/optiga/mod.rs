@@ -282,8 +282,22 @@ impl OptigaTrustM {
     /// (fresh silicon) or when we've re-flashed the MCU but the chip was
     /// never successfully provisioned. Should NEVER be enabled in
     /// production — it orphans any already-provisioned chip from the MCU.
+    ///
+    /// Under `optiga-no-shield`: flash-page-126 unseal is skipped
+    /// entirely. We don't need a PBS because PRL never runs.
+    ///
+    /// NOTE (work-todo #24 step 2): the whole flash-page-126 seal/unseal
+    /// path goes away once PBS is derived deterministically from the
+    /// OTP master key. This function becomes a single line: load the
+    /// HKDF-derived PBS into `self.shield`. See
+    /// `docs/optiga-brick-postmortem.md` §5.
     #[cfg(feature = "stm32u585")]
     pub fn load_pbs(&mut self) {
+        #[cfg(feature = "optiga-no-shield")]
+        {
+            secure_log!("[OPTIGA] load_pbs skipped (feature optiga-no-shield)");
+            return;
+        }
         #[cfg(feature = "optiga-bringup-fresh")]
         unsafe {
             if !crate::hw::flash::is_pbs_blank() {
@@ -381,18 +395,39 @@ impl OptigaTrustM {
 
     /// Ensure the shielded connection is active, establishing it on demand
     /// from the cached PBS.
-    #[allow(dead_code)] // kept for when the PRL handshake is fixed
+    ///
+    /// Under `optiga-no-shield` this is a no-op — we never attempt the PRL
+    /// handshake, every APDU stays plaintext on I2C. Use this mode when
+    /// `E140` is unreachable on a specific chip (e.g. the current bricked
+    /// test chip), so that non-PRL paths (PIN HMAC verify, entropy
+    /// read/write, factory reset of F1Dx) can still be exercised. See
+    /// `docs/optiga-brick-postmortem.md` §7.
     fn ensure_shield(&mut self) -> Result<(), OptigaError> {
-        if !self.shield.active {
-            if !self.shield.pbs_loaded {
-                return Err(OptigaError::Shield);
-            }
-            unsafe {
-                self.shield.establish(&mut self.ifx)
-                    .map_err(|_| OptigaError::Shield)?;
-            }
+        #[cfg(feature = "optiga-no-shield")]
+        {
+            // Mode-of-operation: bus-level I2C encryption is intentionally
+            // off. AC'd reads/writes rely on the authenticated-on-chip
+            // path instead (PIN HMAC verify → Auto(F1DC) session state).
+            return Ok(());
         }
-        Ok(())
+        #[cfg(not(feature = "optiga-no-shield"))]
+        {
+            if !self.shield.active {
+                if !self.shield.pbs_loaded {
+                    return Err(OptigaError::Shield);
+                }
+                // Chip-side pre-condition for PRL handshake: E140 LcsO=op.
+                // For chips that were provisioned under an older firmware
+                // revision that kept LcsO at Creation, bump it here — no-op
+                // if already Operational.
+                unsafe {
+                    self.ensure_pbs_lcso_operational()?;
+                    self.shield.establish(&mut self.ifx)
+                        .map_err(|_| OptigaError::Shield)?;
+                }
+            }
+            Ok(())
+        }
     }
 
     /// PBS provisioning without attempting the shielded-connection
@@ -400,6 +435,24 @@ impl OptigaTrustM {
     /// type=0x22), saves PBS to MCU flash, but does NOT call
     /// `shield.establish`. Used while the PRL handshake is being
     /// debugged against real silicon.
+    ///
+    /// The final LcsO=Operational bump is gated behind the
+    /// `optiga-lock-operational` Cargo feature. Per SRM §"Platform Binding
+    /// Secret" the chip requires `E140.LcsO=op` for the presentation-layer
+    /// state machine to emit SlaveHello — so production builds must enable
+    /// the feature, but dev builds leave it off so a firmware rebuild does
+    /// not produce an unrecoverable chip. Full rationale in
+    /// `docs/optiga-brick-postmortem.md` §3 and §7.
+    ///
+    /// TODO (work-todo #24 step 2): replace `rng::fill(&mut pbs)` with an
+    /// HKDF expansion of the STM32U585 OTP master key
+    /// (`secret_keys::optiga_pairing_secret()`). Until that lands, the PBS
+    /// is random-per-provisioning and the flash-seal still depends on
+    /// `firmware_hash()`, so enabling `optiga-lock-operational` on top of
+    /// this code *will* re-produce the brick scenario on firmware update.
+    /// The Cargo feature therefore serves as a deliberate check: it is
+    /// trivially easy to not flip it, and flipping it acknowledges the
+    /// commitment.
     fn setup_pbs_no_handshake(&mut self) -> Result<(), OptigaError> {
         let mut pbs = [0u8; 32];
         crate::rng::fill(&mut pbs).map_err(|_| OptigaError::Transport)?;
@@ -415,6 +468,28 @@ impl OptigaTrustM {
                 &mut self.ifx, &mut self.shield,
                 apdu::OID_PBS, &meta[..meta_len],
             )?;
+
+            // LcsO = Operational. Irreversible per SRM §"Life Cycle Status".
+            // Gated behind `optiga-lock-operational` so dev builds cannot
+            // commit to an irreversible pairing on a chip whose PBS
+            // derivation isn't yet deterministic (work-todo #24 step 2).
+            #[cfg(feature = "optiga-lock-operational")]
+            {
+                let (lock_meta, lock_len) = apdu::build_metadata_lock();
+                if let Err(e) = apdu::set_metadata(
+                    &mut self.ifx, &mut self.shield,
+                    apdu::OID_PBS, &lock_meta[..lock_len],
+                ) {
+                    secure_log!("[OPTIGA/prov] E140 LcsO→op bump FAILED: {:?}", e);
+                    pbs.zeroize();
+                    return Err(e);
+                }
+                secure_log!("[OPTIGA/prov] E140 LcsO bumped to Operational (feature optiga-lock-operational)");
+            }
+            #[cfg(not(feature = "optiga-lock-operational"))]
+            {
+                secure_log!("[OPTIGA/prov] E140 LcsO bump SKIPPED (optiga-lock-operational OFF; E140 stays at Creation, rewriteable)");
+            }
         }
 
         self.shield.load_pbs(&pbs);
@@ -429,6 +504,35 @@ impl OptigaTrustM {
         pbs.zeroize();
 
         secure_log!("[OPTIGA] PBS provisioned (handshake deferred)");
+        Ok(())
+    }
+
+    /// Make sure E140 is at LcsO=Operational. Required before any PRL
+    /// handshake attempt: on a chip where previous provisioning left E140
+    /// at LcsO=Creation (e.g. earlier firmware revisions of this driver),
+    /// the chip refuses to emit SlaveHello.
+    ///
+    /// Reads metadata first and only writes when needed so we don't burn
+    /// an NVM cycle on every boot once the chip is already Operational.
+    /// Metadata reads are Change=ALW on the LcsO tag (SRM §"Metadata
+    /// associated with data and key objects"), no shielded connection
+    /// required.
+    unsafe fn ensure_pbs_lcso_operational(&mut self) -> Result<(), OptigaError> {
+        let mut meta = [0u8; 64];
+        let n = apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PBS, &mut meta,
+        )?;
+        if apdu::is_metadata_operational(&meta, n) {
+            secure_log!("[OPTIGA/shield] E140 already at LcsO=op");
+            return Ok(());
+        }
+        secure_log!("[OPTIGA/shield] E140 LcsO<op; bumping to Operational");
+        let (lock_meta, lock_len) = apdu::build_metadata_lock();
+        apdu::set_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PBS, &lock_meta[..lock_len],
+        )?;
         Ok(())
     }
 
@@ -640,19 +744,31 @@ impl OptigaTrustM {
         // handshake bring-up issue is resolved — see project memory).
         // Still writes the PBS and metadata so the chip is ready to
         // handshake later. Subsequent APDUs go plaintext via ifx layer.
-        if !self.shield.pbs_loaded {
-            secure_log!("[OPTIGA/prov] step 1: setup_pbs_no_handshake");
-            if let Err(e) = self.setup_pbs_no_handshake() {
-                secure_log!("[OPTIGA/prov] setup_pbs FAILED: {:?}", e);
-                return Err(e);
+        //
+        // Under `optiga-no-shield` the entire PBS setup is skipped — we
+        // never use shielded connection, so we never write E140. This
+        // keeps a chip with a bricked E140 (LcsO=op with lost PBS) usable
+        // for all non-PRL paths. See docs/optiga-brick-postmortem.md §7.
+        #[cfg(feature = "optiga-no-shield")]
+        {
+            secure_log!("[OPTIGA/prov] step 1 skipped (feature optiga-no-shield; PRL is disabled)");
+        }
+        #[cfg(not(feature = "optiga-no-shield"))]
+        {
+            if !self.shield.pbs_loaded {
+                secure_log!("[OPTIGA/prov] step 1: setup_pbs_no_handshake");
+                if let Err(e) = self.setup_pbs_no_handshake() {
+                    secure_log!("[OPTIGA/prov] setup_pbs FAILED: {:?}", e);
+                    return Err(e);
+                }
+                // After PBS write (2 SetData ops) the chip refuses further
+                // writes until it is hard-reset. Pulse RST (PE0) to clear
+                // the wedge; NV OIDs (including the PBS we just wrote) survive.
+                #[cfg(feature = "stm32u585")]
+                self.hard_reset_and_reinit()?;
+            } else {
+                secure_log!("[OPTIGA/prov] step 1 skipped (PBS already loaded)");
             }
-            // After PBS write (2 SetData ops) the chip refuses further
-            // writes until it is hard-reset. Pulse RST (PE0) to clear
-            // the wedge; NV OIDs (including the PBS we just wrote) survive.
-            #[cfg(feature = "stm32u585")]
-            self.hard_reset_and_reinit()?;
-        } else {
-            secure_log!("[OPTIGA/prov] step 1 skipped (PBS already loaded)");
         }
 
         // 2. Auth reference

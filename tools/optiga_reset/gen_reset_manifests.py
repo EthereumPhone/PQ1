@@ -28,12 +28,27 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOL_DIR = REPO_ROOT.parent / "optiga-trust-m/examples/tools/protected_update_data_set"
 TOOL = TOOL_DIR / "bin/protected_update_data_set"
 PRIV_KEY = TOOL_DIR / "samples/integrity/sample_ec_256_priv.pem"
-META_FILE = Path(__file__).resolve().parent / "reset_metadata.txt"
+META_FILE_DEFAULT = Path(__file__).resolve().parent / "reset_metadata.txt"
+META_FILE_E140 = Path(__file__).resolve().parent / "reset_metadata_e140.txt"
 OUT_DIR = Path(__file__).resolve().parent / "out"
 BLOB = OUT_DIR / "reset_manifests.bin"
 
 TRUST_ANCHOR_OID = 0xE0E3
-TARGET_OIDS = list(range(0xF1D0, 0xF1E0))  # F1D0..F1DF (16 OIDs)
+
+# 0xF1D0..0xF1DF: AUTHREF / arbitrary-data slots that end up burned during
+# bring-up iterations; generic metadata (LcsO=Init, Read=ALW, Change=LcsO<op).
+#
+# 0xE140: Platform Binding Secret. Needs a different reset metadata because
+# after provisioning its LcsO is Operational and Change becomes Conf(E140),
+# making normal rewrites impossible once the host-side PBS is lost (e.g.
+# after `optiga-bringup-fresh` erases MCU flash page 126). The custom
+# metadata restores it to Creation with data_type=PBS so
+# `setup_pbs_no_handshake` can re-run end-to-end on the next boot.
+TARGET_OIDS: list[tuple[int, Path]] = [
+    (oid, META_FILE_DEFAULT) for oid in range(0xF1D0, 0xF1E0)
+] + [
+    (0xE140, META_FILE_E140),
+]
 
 
 HEX_RE = re.compile(r"0x([0-9A-Fa-f]{2})")
@@ -41,7 +56,7 @@ MANIFEST_HEAD = re.compile(r"Manifest Data , size : \[(\d+)\]")
 FRAGMENT_HEAD = re.compile(r"Fragment number:\[(\d+)\], size:\[(\d+)\]")
 
 
-def run_tool(target_oid: int) -> tuple[bytes, bytes]:
+def run_tool(target_oid: int, meta_file: Path) -> tuple[bytes, bytes]:
     """Return (manifest_bytes, fragment_bytes) for a single target OID."""
     cmd = [
         str(TOOL),
@@ -51,7 +66,7 @@ def run_tool(target_oid: int) -> tuple[bytes, bytes]:
         "sign_algo=ES_256",
         f"priv_key={PRIV_KEY}",
         "payload_type=metadata",
-        f"metadata={META_FILE}",
+        f"metadata={meta_file}",
         "content_reset=1",
     ]
     result = subprocess.run(
@@ -94,9 +109,9 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     entries = []
 
-    for oid in TARGET_OIDS:
-        manifest, fragment = run_tool(oid)
-        print(f"  OID 0x{oid:04X}: manifest={len(manifest)}B, fragment={len(fragment)}B")
+    for oid, meta_file in TARGET_OIDS:
+        manifest, fragment = run_tool(oid, meta_file)
+        print(f"  OID 0x{oid:04X}: manifest={len(manifest)}B, fragment={len(fragment)}B, meta={meta_file.name}")
         entries.append((oid, manifest, fragment))
 
         (OUT_DIR / f"{oid:04x}.manifest.bin").write_bytes(manifest)

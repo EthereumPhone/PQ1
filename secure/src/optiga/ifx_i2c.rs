@@ -148,9 +148,24 @@ pub struct IfxState {
     rx_seq: u8,
 }
 
+/// Initial DL frame-number value for `rx_seq`. Per Infineon
+/// `ifx_i2c_data_link_layer.c` (`DL_MAX_FRAME_NUM = 0x03`) `rx_seq_nr`
+/// is initialised to 3 so the first received data frame's FRNR=0
+/// passes the `fr_nr == (rx_seq_nr + 1) & 3` check and the ACK we
+/// emit carries ACKNR=0 (matching the chip's just-sent FRNR). Our
+/// previous init of 0 produced ACKs with ACKNR=1 → chip's DL layer
+/// rejected them as ACKNR mismatch against its own tx_seq_nr=0,
+/// dropped into DISCARD state, and silently returned 4-byte empty-OK
+/// frames to every subsequent APDU.
+///
+/// `tx_seq` stays at 0 because `build_data_frame` does "use-then-bump"
+/// rather than "bump-then-use" — our first send produces FRNR=0
+/// directly.
+const DL_RX_SEQ_INIT: u8 = 0x03;
+
 impl IfxState {
     pub const fn new() -> Self {
-        Self { tx_seq: 0, rx_seq: 0 }
+        Self { tx_seq: 0, rx_seq: DL_RX_SEQ_INIT }
     }
 
     // -----------------------------------------------------------------------
@@ -353,7 +368,7 @@ impl IfxState {
         }
 
         self.tx_seq = 0;
-        self.rx_seq = 0;
+        self.rx_seq = DL_RX_SEQ_INIT;
 
         let mut resynch = [0u8; 5];
         let len = self.build_resynch_frame(&mut resynch);
@@ -534,7 +549,7 @@ impl IfxState {
                     SEQCTR_RESYNCH => {
                         secure_log!("[OPTIGA/ifx] rx: ReSynch received");
                         self.tx_seq = 0;
-                        self.rx_seq = 0;
+                        self.rx_seq = DL_RX_SEQ_INIT;
                         return Err(IfxError::ReSynch);
                     }
                     _ => return Err(IfxError::BadResponse),

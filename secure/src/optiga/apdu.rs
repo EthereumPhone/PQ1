@@ -3,7 +3,12 @@
 //! Wire format (per Infineon Solution Reference Manual and reference C driver):
 //!
 //!   Command:  `CMD(1) | Param(1) | InLen(2 BE) | InData(...)`
-//!   Response: `Status(1) | OutLen(2 BE) | OutData(...)`
+//!   Response: `Sta(1) | UnDef(1) | OutLen(2 BE) | OutData(...)`
+//!
+//! The SRM (§"APDU Fields") defines the response header as 4 bytes: Sta, a
+//! single undefined byte that can hold any value 0x00-0xFF, then the 2-byte
+//! big-endian OutLen, then OutData. Empty responses (OpenApp, SetData) still
+//! return 4 header bytes (typically all zero).
 //!
 //! CMD bytes always carry the `CLEAR_LAST_ERROR` flag (0x80) — the chip uses
 //! the low 7 bits to select the operation. E.g. GetDataObject is sent as
@@ -260,13 +265,17 @@ impl ApduBuf {
 
 /// Parse an OPTIGA response. Returns the payload slice (status byte verified).
 ///
-/// Response format: `Status(1) | OutLen(2 BE) | OutData(...)`
+/// Response format: `Sta(1) | UnDef(1) | OutLen(2 BE) | OutData(...)` — 4-byte
+/// header. `UnDef` is documented as "any value 0x00-0xFF" and is deliberately
+/// skipped here; treating it as part of OutLen would corrupt every response
+/// whose chip happened to put a non-zero byte there.
 fn parse_response(resp: &[u8], len: usize) -> Result<&[u8], OptigaError> {
-    if len < 3 {
+    if len < 4 {
         return Err(OptigaError::Transport);
     }
     let status = resp[0];
-    let data_len = ((resp[1] as usize) << 8) | resp[2] as usize;
+    // resp[1] = UnDef — ignored.
+    let data_len = ((resp[2] as usize) << 8) | resp[3] as usize;
 
     if status != OPTIGA_STATUS_SUCCESS {
         return Err(match status {
@@ -278,10 +287,10 @@ fn parse_response(resp: &[u8], len: usize) -> Result<&[u8], OptigaError> {
         });
     }
 
-    if 3 + data_len > len {
+    if 4 + data_len > len {
         return Err(OptigaError::Transport);
     }
-    Ok(&resp[3..3 + data_len])
+    Ok(&resp[4..4 + data_len])
 }
 
 // ---------------------------------------------------------------------------
@@ -822,15 +831,18 @@ pub fn build_metadata_pbs_final() -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
-    // LcsO = Creation (0x01) during bring-up. Infineon's reference sample
-    // keeps LcsO at Creation while testing — "At the real time/customer
-    // side this needs to be LCSO_STATE_OPERATIONAL (0x07)". Community
-    // reports on the Infineon forum suggest that bumping to Operational
-    // in the same metadata write that installs the AC can leave the PRL
-    // state machine wedged on some firmware revisions. Once the
-    // shielded-connection handshake is green end-to-end, follow up with
-    // a separate metadata write that raises LcsO to 0x07 irreversibly.
-    push_lcso_op(&mut inner, &mut c, 0x01);
+    // Intentionally NO LcsO tag in this write. LcsO progresses forward-only
+    // (Creation → Initialization → Operational); writing a value below the
+    // chip's current LcsO can be rejected. On a virgin chip LcsO=Creation,
+    // and on a chip reset via SetObjectProtected manifest LcsO=Initialization
+    // (see `tools/optiga_reset/reset_metadata_e140.txt`) — both are <op, so
+    // the Change AC installed below will hold until the explicit bump from
+    // `setup_pbs_no_handshake` raises LcsO to Operational. Merge semantics:
+    // the existing stored LcsO survives this write untouched.
+    //
+    // The bump to Operational is required before PRL handshake will work
+    // (SRM §"Platform Binding Secret": "LcsO set to operational", confirmed
+    // against Infineon's matter_provisioning final-metadata config).
 
     // Change: LcsO < Operational OR Conf(0xE140) — 7-byte expression.
     inner[c] = META_CHANGE;

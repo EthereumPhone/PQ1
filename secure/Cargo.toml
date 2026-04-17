@@ -73,8 +73,10 @@ e2e-test = []
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
 se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
 optiga-trust-m = []  # Infineon OPTIGA Trust M V3 via I2C1 (TRUSTMV3SHIELDTOBO1 on Arduino R3 headers)
-optiga-bringup-fresh = []  # Erase MCU-side PBS flash at boot to force a fresh chip pairing. Dev-only; bricks already-provisioned chips from this MCU.
+optiga-bringup-fresh = []  # Erase MCU-side PBS flash at boot to force a fresh chip pairing. Dev-only; bricks already-provisioned chips from this MCU. Slated for removal — see docs/optiga-brick-postmortem.md §7.
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
+optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
+optiga-lock-operational = []  # Production: bump E140 LcsO to Operational at end of PBS provisioning. Irreversible. Default OFF — dev chips stay at LcsO=Creation (rewriteable) so firmware rebuilds cannot brick them. ONLY enable when (a) OTP master key is burned, (b) PBS is OTP-derived (work-todo #24 step 2), (c) chip is intended for production ship. See docs/optiga-brick-postmortem.md §5 + §7.
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
