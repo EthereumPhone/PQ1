@@ -227,10 +227,53 @@ make play              # Interactive: drive wallet with arrow keys in QEMU
 make run               # Non-interactive smoke test (QEMU, mock SE)
 make e2e               # Automated end-to-end: unified JARDÍN sign (QEMU)
 make e2e-hw            # End-to-end on real STM32U585 via ST-LINK + probe-rs
+make play-hw-display   # Interactive OLED + arrow-key forwarding on hardware
+make test-key-speed    # Fully-automated DWT-timed signing bench on hardware
 make measure           # Build firmware + print 8 BIP-39 measurement words
 cd contracts/smart-wallet && forge test -vv
 cargo test -p sphincs-tz-secure --tests --release
 ```
+
+### Hardware testing under probe-rs — what actually works
+
+`probe-rs` does **not** implement semihosting op `0x07` (`SYS_READC`). Any
+firmware build that reaches a `ui-semihosting` keyboard prompt on real
+hardware will hang in the polling loop, with probe-rs emitting a storm of
+`Target wanted to run semihosting operation 0x7 ... but probe-rs does not
+support this operation yet` warnings. This hits `make e2e-hw` because the
+NS-side test driver still calls `CMD_REQUEST_UNLOCK` even when the secure
+world has already been pre-unlocked by the `e2e-test` feature — and the
+PIN entry dialog uses `SYS_READC`. QEMU doesn't trip this because
+`qemu-system-arm`'s semihosting chardev is wired to stdin.
+
+Three ways around it, in order of usefulness:
+
+1. **`make test-key-speed`** — the automated signing benchmark. Does no
+   semihosting reads, prints `=== PASS ===` on completion. With
+   `hw-sha256` active (implied by `stm32u585`), expect roughly:
+   first-sign ≈ 2.77 s, Type-1-only ≈ 1.11 s, Type-2-only ≈ 1.66 s.
+   Any number substantially higher than these means the HASH peripheral
+   isn't being used.
+2. **`make play-hw-display`** — interactive wallet on real OLED. Uses
+   `tools/wallet_run_hw.py` to forward arrow keys through a probe-rs
+   `print`-based handshake, not `SYS_READC`. Works end-to-end.
+3. **QEMU**: `make e2e` or `make play`. Fully exercised by CI and the
+   default dev loop; only real hardware has the probe-rs gap.
+
+### HW SHA-256 self-test (boot-time)
+
+`hw::hash::init_clock()` runs `SHA-256("abc")` as a known-answer test
+and halts the CPU in `loop { wfe() }` on mismatch. You'll always see
+one of two lines early in boot:
+
+```
+[S] hash: HW SHA-256 self-test PASS   ← accelerator healthy, signing proceeds
+[S] hash: HW SHA-256 self-test FAIL — HALT   ← CPU parks; no signing will happen
+```
+
+Silent failure is impossible — if the `PASS` line is there, the HASH
+peripheral is producing correct digests, so any downstream hang is
+unrelated to the cutover.
 
 **Feature flags** (in `secure/Cargo.toml`):
 | Flag | Description |
@@ -241,12 +284,13 @@ cargo test -p sphincs-tz-secure --tests --release
 | `tropic01-se` | Real Tropic01 via SPI (standalone only, not used in dual-SE) |
 | `dual-se` | Both SEs active with XOR entropy split (implies `optiga-trust-m` + `se050`) |
 | `debug-log` | Semihosting debug output (NEVER in production) |
-| `e2e-test` | Non-interactive scripted test mode (NEVER ship) |
-| `ui-semihosting` | Console UI (QEMU) |
+| `e2e-test` | Non-interactive scripted test mode (NEVER ship). Pre-provisions a fixed mnemonic + PIN, short-circuits every secure-side `confirm()` / `enter_pin()`. NS-side runners may still call `CMD_REQUEST_UNLOCK` — harmless in QEMU, stalls under probe-rs. |
+| `ui-semihosting` | Console UI (QEMU or probe-rs `print`-forwarded; `SYS_READC` only works under QEMU) |
 | `ui-oled` | SSD1306 I2C OLED (hardware) |
-| `stm32u585` | Real hardware target (vs QEMU mps2-an505) |
+| `stm32u585` | Real STM32U585 hardware (vs QEMU mps2-an505). **Implies `hw-sha256`** — every hardware build routes SHA-256 through the HASH peripheral automatically. |
+| `hw-sha256` | Route `sphincs-c7` + `jardin-fosc` SHA-256 calls through the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`. Pulled in transitively by `stm32u585`; never needed by itself on host/QEMU. |
 
-**Targets:** `thumbv8m.main-none-eabi` (both worlds). Release profile: `opt-level = "s"`, LTO, `codegen-units = 1`, `overflow-checks = true`. The `sphincs-c7`, `jardin-fosc`, `sha2`, and `hmac` crates are always `opt-level = 3` (SHA-256 is the hot inner loop).
+**Targets:** `thumbv8m.main-none-eabi` (both worlds). Release profile: `opt-level = "s"`, LTO, `codegen-units = 1`, `overflow-checks = true`. The `sphincs-c7`, `jardin-fosc`, `sha2`, and `hmac` crates are always `opt-level = 3` (SHA-256 is the hot inner loop on host / fallback builds; on device the HASH peripheral handles it in one cycle/byte).
 
 ## Code Conventions
 

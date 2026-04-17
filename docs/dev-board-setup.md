@@ -221,12 +221,21 @@ What it switches:
 
 ## 9. Known Limitations
 
-- **No interactive input via probe-rs.** The semihosting UI mock uses `SYS_READC` (operation 0x7) for button input. probe-rs does not support this operation. The firmware boots and displays the UI but cannot receive button presses. Workarounds:
-  - Run the **e2e test** (`make e2e` with `stm32u585` feature) which is non-interactive
-  - Wire up real **GPIO buttons + OLED display** (`ui-oled` feature)
-  - Use **GDB with OpenOCD** which has full semihosting support
+- **No interactive input via probe-rs.** The semihosting UI mock uses `SYS_READC` (operation `0x07`) for button input. probe-rs does not support this operation. `make e2e-hw` builds with `ui-semihosting,e2e-test` and boots fine — you'll see `[S] hash: HW SHA-256 self-test PASS`, provisioning complete, the NS-side test runner kick off — and then hang on the `Enter PIN` dialog because the NS driver calls `CMD_REQUEST_UNLOCK` even though the secure world pre-unlocked itself. You'll see a stream of `Target wanted to run semihosting operation 0x7 ... probe-rs does not support this operation yet. Continuing...` warnings.
+  Workarounds (pick by what you're testing):
+  - **Signing speed / correctness, fully automated:** `make test-key-speed` — DWT-timed bench, no semihosting reads, prints `=== PASS ===` on success. With `hw-sha256` active (implied by `stm32u585`) expect first-sign ≈ 2.77 s on 160 MHz. Any number much higher means the HASH peripheral isn't on.
+  - **Driving the wallet by hand on real hardware:** `make play-hw-display` — uses `tools/wallet_run_hw.py` to forward arrow keys through a probe-rs `print`-based handshake (not `SYS_READC`), drives the physical SSD1306 OLED.
+  - **Full semihosting console:** **GDB with OpenOCD** instead of probe-rs — `arm-none-eabi-gdb` + `openocd` handle `SYS_READC` correctly, so `make e2e-hw` will actually run to completion.
+  - **On-board buttons:** wire real GPIO buttons + OLED (`ui-oled,gpio-buttons`) and drive the device standalone with no debugger at all.
 
-- **Running at 16 MHz (HSI16).** The firmware switches from the default 4 MHz MSI to HSI16 (16 MHz) at boot. PLL configuration for 160 MHz is not yet working due to a PWR VOS register write issue (likely GTZC/TZSC privilege configuration). The 16 MHz clock is a 4x speedup over the default and within VOS Range 4 limits.
+- **HW SHA-256 self-test gates signing.** On `stm32u585` builds, `hw::hash::init_clock()` runs a `SHA-256("abc")` known-answer test at boot and halts the CPU in `loop { wfe() }` on mismatch. You'll always see exactly one of:
+  ```
+  [S] hash: HW SHA-256 self-test PASS
+  [S] hash: HW SHA-256 self-test FAIL — HALT
+  ```
+  The `stm32u585` feature implies `hw-sha256`, so every real-hardware build routes every SPHINCS+C11 and JARDIN FORS+C hash through the STM32U585 HASH peripheral. Software `sha2::Sha256` is only used on host tests / QEMU.
+
+- **Running at 160 MHz** (post `85673a8`). The firmware configures PLL1 to drive the CPU at 160 MHz via `hw::rcc::init()`. Matches the VOS Range 1 / flash latency combo the datasheet specifies. On 16 MHz HSI fallback builds (ancient commits) signing is ~10× slower.
 
 - **Hardware TRNG.** The `hw::rng` module uses the STM32U585's True Random Number Generator peripheral, clocked by HSI48. This replaces the semihosting `/dev/urandom` backend used on QEMU.
 
