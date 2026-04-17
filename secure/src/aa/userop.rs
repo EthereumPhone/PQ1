@@ -50,7 +50,16 @@
 use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::tx::hash::keccak256;
 
+use sha2::{Digest as Sha256Digest, Sha256};
 use sha3::{Digest, Keccak256};
+
+/// SHA-256("") — the empty-bytes hash used for empty `initCode` and
+/// `paymasterAndData` inside the SHA-256 sphincs digest.
+pub const SHA256_EMPTY: [u8; 32] = [
+    0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9,
+    0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52,
+    0xb8, 0x55,
+];
 
 /// Selector for `execute(address,uint256,bytes)` on
 /// {PQCoinbaseSmartWallet}. This matches the upstream Coinbase Smart
@@ -413,6 +422,95 @@ pub fn compute_user_op_hash_v09(
     h.update([0x19, 0x01]);
     h.update(domain_sep);
     h.update(struct_hash);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&h.finalize());
+    out
+}
+
+// ---------------------------------------------------------------------------
+// SPHINCS+C10 signing digest (SHA-256, hardware-accelerated on STM32U585)
+// ---------------------------------------------------------------------------
+//
+// The keccak-based userOpHash that EntryPoint v0.9 supplies to
+// `validateUserOp` is fine for replay protection but expensive to
+// compute on our target — STM32U585 has hardware SHA-256 (and SAES) but
+// no keccak accelerator, so every keccak call falls back to a portable
+// software implementation. To keep the hot path fast we instead sign
+// over a custom SHA-256 digest. `PQSmartWallet.sphincsDigest(userOp)`
+// computes the exact same digest on-chain via the SHA-256 precompile
+// (address 0x02). Neither side ever calls keccak on the sign path.
+//
+// Layout (all SHA-256, all big-endian uints):
+//
+//   sphincsDigest = sha256(
+//         sender                          (20 bytes)
+//      || nonce                           (32 bytes)
+//      || sha256(initCode)                (32 bytes, SHA256_EMPTY when empty)
+//      || sha256(callData)                (32 bytes, SHA256_EMPTY when empty)
+//      || accountGasLimits                (32 bytes)
+//      || preVerificationGas              (32 bytes)
+//      || gasFees                         (32 bytes)
+//      || sha256(paymasterAndData)        (32 bytes, SHA256_EMPTY when empty)
+//      || entryPoint                      (20 bytes)
+//      || chainId                         (32 bytes, u256 BE)
+//   )
+//
+// The digest covers every UserOp field that affects transaction
+// semantics, plus the entryPoint + chainId domain separators, so replay
+// attacks across chains / wallets / UserOps remain impossible.
+
+/// Compute the firmware-friendly SHA-256 sphincs digest for an
+/// EntryPoint v0.9 PackedUserOperation.
+///
+/// * `init_code_digest` / `paymaster_and_data_digest` are the SHA-256 of
+///   the respective bytes fields — use `SHA256_EMPTY` when a field is
+///   absent.
+/// * `call_data_digest` is the SHA-256 of the reconstructed
+///   `execute(...)` / `addOwnerBytes(...)` calldata.
+pub fn compute_sphincs_digest_v09(
+    params: &AaUserOpParamsV09Sha256,
+    call_data_digest: &[u8; 32],
+) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(params.sender);
+    h.update(params.nonce.0);
+    h.update(params.init_code_digest);
+    h.update(call_data_digest);
+    h.update(params.account_gas_limits);
+    h.update(params.pre_verification_gas.0);
+    h.update(params.gas_fees);
+    h.update(params.paymaster_and_data_digest);
+    h.update(params.entry_point);
+    // chainId is a Solidity uint256 → 32-byte BE.
+    let mut chain_be = [0u8; 32];
+    chain_be[24..32].copy_from_slice(&params.chain_id.to_be_bytes());
+    h.update(chain_be);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&h.finalize());
+    out
+}
+
+/// Same shape as `AaUserOpParamsV09` but carrying SHA-256 pre-digests of
+/// the variable-length fields instead of keccak ones. Kept as a separate
+/// type to prevent accidental mixing with the keccak v0.9 hash path.
+#[derive(Debug, Clone)]
+pub struct AaUserOpParamsV09Sha256 {
+    pub sender: [u8; 20],
+    pub entry_point: [u8; 20],
+    pub chain_id: u64,
+    pub nonce: U256,
+    pub init_code_digest: [u8; 32],
+    pub account_gas_limits: [u8; 32],
+    pub pre_verification_gas: U256,
+    pub gas_fees: [u8; 32],
+    pub paymaster_and_data_digest: [u8; 32],
+}
+
+/// SHA-256 of a byte slice as a convenience wrapper.
+#[inline]
+pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(data);
     let mut out = [0u8; 32];
     out.copy_from_slice(&h.finalize());
     out

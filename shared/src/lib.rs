@@ -408,30 +408,53 @@ pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 3777
 /// SPHINCS+C10 signature length (== `SIGNATURE_LEN` as of the C10 cutover).
 pub const C10_SIG_LEN: usize = SIGNATURE_LEN;
 
-/// Type 1 wire payload: `[marker(1) | r(32) | subPkSeed(16) | subPkRoot(16) | c10Sig(4008)]`.
-pub const JARDIN_TYPE1_LEN: usize = 1 + 32 + 16 + 16 + C10_SIG_LEN; // 4073
+/// `abi.encode(uint256 ownerIndex, bytes innerSig)` wrapper around a
+/// SPHINCS+C10 signature, matching the on-chain `PQSmartWallet`
+/// `SignatureWrapper` struct.
+///
+/// Solidity encodes this as:
+///   * head: `uint256 ownerIndex` (32) + `bytes offset = 0x40` (32) = 64B
+///   * tail: `uint256 len = 4008` (32) + `data` padded up to next 32-byte
+///     boundary → `ceil(4008/32)*32 = 4032` bytes
+///
+/// So the wrapper is exactly 32 + 32 + 32 + 4032 = 4128 bytes.
+pub const SIG_WRAPPER_LEN: usize = {
+    let padded = ((C10_SIG_LEN + 31) / 32) * 32;
+    32 + 32 + 32 + padded
+}; // 4128
 
-/// Type 1 marker byte.
+/// Type 1 = bootstrap-signed `addOwnerBytes` UserOp signature wrapper.
+///
+/// Emitted when the companion asks for slot rotation (`FLAG_REGISTER_SLOT`).
+/// The firmware builds a synthetic addOwner UserOp internally, hashes it
+/// with SHA-256, signs the hash with the bootstrap C10 key, and wraps the
+/// sig as `(ownerIndex = 0, inner_sig = c10_sig)`.
+pub const JARDIN_TYPE1_LEN: usize = SIG_WRAPPER_LEN;
+
+/// Type 2 = slot-signed user-tx UserOp signature wrapper.
+///
+/// Emitted on every sign request. `ownerIndex = slot_index + 1` (slot 0 is
+/// at on-chain ownerIndex 1 since ownerIndex 0 is the bootstrap key).
+pub const JARDIN_TYPE2_LEN: usize = SIG_WRAPPER_LEN;
+
+/// Type 1 / 2 markers are deprecated — dispatch now happens on-chain via
+/// `SignatureWrapper.ownerIndex`, not a leading byte. Kept only as a
+/// historic `0x01 = bootstrap` / `0x02 = slot` mnemonic for the companion
+/// UI.
 pub const JARDIN_TYPE1_MARKER: u8 = 0x01;
-
-/// Type 2 fixed preamble: `[marker(1) | H(r)(32) | subPkSeed(16) | subPkRoot(16)]`.
-pub const JARDIN_TYPE2_HEADER_LEN: usize = 1 + 32 + 16 + 16; // 65
-
-/// Type 2 marker byte.
 pub const JARDIN_TYPE2_MARKER: u8 = 0x02;
 
-/// Type 2 wire payload (fixed) = preamble + SPHINCS+C10 signature.
-///
-/// Post-cutover, the per-slot sub-key is a SPHINCS+C10 key (not FORS+C), so
-/// Type 2 signatures are a fixed 4008-byte C10 signature. This replaces the
-/// old 2533..=4037 variable length driven by the FORS+C `q` counter.
-pub const JARDIN_TYPE2_LEN: usize = JARDIN_TYPE2_HEADER_LEN + C10_SIG_LEN; // 4073
+/// Back-compat constant: the abi.encode header that precedes the raw 4008-
+/// byte C10 sig inside a SignatureWrapper (32 ownerIndex + 32 offset +
+/// 32 length = 96 bytes). Surfaced over USB in GET_DEVICE_INFO so the
+/// host companion can slice the wrapper without embedding the constant.
+pub const JARDIN_TYPE2_HEADER_LEN: usize = 32 + 32 + 32;
 
 // ---------------------------------------------------------------------------
 // PQJardinWalletFactory initCode (first-deploy UserOps)
 // ---------------------------------------------------------------------------
 
-/// Deployed address of the `PQJardinWalletFactory` contract.
+/// Deployed address of the `PQSmartWalletFactory` contract.
 ///
 /// The factory is deployed via a deterministic singleton deployer so the
 /// address is identical on every chain (this is load-bearing for the
@@ -439,32 +462,56 @@ pub const JARDIN_TYPE2_LEN: usize = JARDIN_TYPE2_HEADER_LEN + C10_SIG_LEN; // 40
 /// production singleton deploy lands, this stays at `0x00…00` and any
 /// first-deploy UserOp will be rejected by `EntryPoint.getSenderAddress`
 /// because there is no factory at address(0).
-pub const PQ_JARDIN_WALLET_FACTORY: [u8; 20] = [0u8; 20];
+pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [0u8; 20];
 
-/// ABI selector for `PQJardinWalletFactory.createAccount(bytes32,bytes32)`.
-/// Equals `keccak256("createAccount(bytes32,bytes32)")[..4]`.
-pub const JARDIN_CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0x18, 0x38, 0x15, 0xc8];
+/// Back-compat alias for the old factory name (kept temporarily so the
+/// build doesn't break in places that haven't been renamed yet).
+pub const PQ_JARDIN_WALLET_FACTORY: [u8; 20] = PQ_SMART_WALLET_FACTORY;
 
-/// Length of the initCode produced by the firmware when the companion
-/// sets `FLAG_INCLUDE_INIT_CODE` on a SIGN_USEROP request:
+/// ABI selector for
+/// `PQSmartWalletFactory.createAccount(bytes32,bytes32,bytes32,bytes32,uint64,bytes)`.
+/// Equals `keccak256("createAccount(bytes32,bytes32,bytes32,bytes32,uint64,bytes)")[..4]`.
+pub const PQ_CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0xf6, 0x18, 0x2a, 0x73];
+
+/// Back-compat alias.
+pub const JARDIN_CREATE_ACCOUNT_SELECTOR: [u8; 4] = PQ_CREATE_ACCOUNT_SELECTOR;
+
+/// ABI selector for `PQSmartWallet.addOwnerBytes(bytes)`.
+/// Equals `keccak256("addOwnerBytes(bytes)")[..4]`.
+pub const PQ_ADD_OWNER_BYTES_SELECTOR: [u8; 4] = [0x10, 0x14, 0x90, 0xcb];
+
+/// Length (bytes) of the `createAccount(...)` initCode produced by the
+/// firmware when `FLAG_INCLUDE_INIT_CODE` is set.
 ///
+/// Layout:
 /// ```text
-///   factory(20) || selector(4) || masterPkSeed(32) || masterPkRoot(32)
+///   factory(20)
+///     || selector(4)
+///     || masterPkSeed(32)
+///     || masterPkRoot(32)
+///     || slot0PkSeed(32)
+///     || slot0PkRoot(32)
+///     || chainId (padded to uint256) (32)
+///     || abi-encoded bytes offset = 0xE0 (32)
+///     || bytes length = 4008 (32)
+///     || bytes data padded to 32-byte boundary = 4032
 /// ```
 ///
-/// The two `bytes32` args are already 32-byte aligned, so no ABI padding
-/// is needed.
-pub const JARDIN_INIT_CODE_LEN: usize = 20 + 4 + 32 + 32; // 88
+/// = 20 + 4 + (5 × 32) + 32 + 32 + 4032 = 4280 bytes.
+pub const PQ_INIT_CODE_LEN: usize = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 
-/// Maximum unified response:
+/// Back-compat alias for the old initCode-length name.
+pub const JARDIN_INIT_CODE_LEN: usize = PQ_INIT_CODE_LEN;
+
+/// Maximum unified response from `CMD_SIGN_USEROP`:
 ///
 /// ```text
-///   [init_code_len(4 BE)][init_code(0 or 88)]
-///   [type1_len(4 BE)][type1_bytes(0 or 4073)]
-///   [type2_len(4 BE)][type2_bytes(4073)]
+///   [init_code_len(4 BE)][init_code(0 or PQ_INIT_CODE_LEN)]
+///   [type1_len(4 BE)][type1_wrapper(0 or SIG_WRAPPER_LEN)]
+///   [type2_len(4 BE)][type2_wrapper(SIG_WRAPPER_LEN)]
 /// ```
 pub const MAX_JARDIN_RESPONSE_LEN: usize =
-    4 + JARDIN_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_LEN; // 8246
+    4 + PQ_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_LEN;
 
 /// Flags bit 31 — set by the companion when the wallet has not yet been
 /// deployed on this chain. Firmware synthesises `initCode` from its master

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>PQSigner — SPHINCS+C10 (JARDÍN) Test Tool</title>
+<title>PQSigner — SPHINCS+C10 (Coinbase-style multi-owner) Test Tool</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, Inter, system-ui, sans-serif; background: #0a0a0a; color: #e5e7eb; min-height: 100vh; padding: 32px 16px; font-size: 14px; }
@@ -42,7 +42,7 @@
 <body>
 <div class="container">
   <header>
-    <h1>PQSigner SPHINCS+C10 Test Tool<span class="tag">v3 unified-sign (JARDÍN Type 1 / Type 2)</span></h1>
+    <h1>PQSigner SPHINCS+C10 Test Tool<span class="tag">v4 Coinbase-style multi-owner (SHA-256 digest)</span></h1>
     <span class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Disconnected</span></span>
   </header>
 
@@ -82,7 +82,10 @@
       <input id="data" placeholder="0x" value="" />
     </div>
     <div class="row">
-      <label><input type="checkbox" id="registerSlot" /> Register slot (emit Type 1)</label>
+      <label><input type="checkbox" id="registerSlot" /> Rotate slot (emit Type 1 addOwner by bootstrap, slot_index &gt;= 1)</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="includeInitCode" /> First deploy (emit factory initCode, requires slot_index = 0)</label>
     </div>
     <div class="actions">
       <button id="signBtn" disabled>Sign (SPHINCS+C10)</button>
@@ -104,8 +107,10 @@
   <div class="card">
     <h2>Last Result</h2>
     <div class="grid" id="resultGrid">
-      <div class="stat"><div class="label">Type 1</div><div class="value" id="t1Len">—</div></div>
-      <div class="stat"><div class="label">Type 2</div><div class="value" id="t2Len">—</div></div>
+      <div class="stat"><div class="label">initCode</div><div class="value" id="icLen">—</div></div>
+      <div class="stat"><div class="label">Type 1 wrapper (bootstrap)</div><div class="value" id="t1Len">—</div></div>
+      <div class="stat"><div class="label">Type 2 wrapper (slot)</div><div class="value" id="t2Len">—</div></div>
+      <div class="stat"><div class="label">Owner index (T2)</div><div class="value" id="t2OwnerIdx">—</div></div>
     </div>
   </div>
 
@@ -158,11 +163,18 @@ const SW_SESSION_EXPIRED = 0x6984;
 
 // EntryPoint v0.9 canonical Sepolia/mainnet address.
 const ENTRY_POINT_V09 = '0x433709009B8330FDa32311DF1C2AFA402eD8D009';
-// keccak256("")
-const KECCAK_EMPTY = new Uint8Array([
-  0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
-  0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70,
+// sha256("") — the empty-bytes hash. The on-wire `paymaster_and_data_hash`
+// is now a SHA-256 digest (not keccak) to match PQSmartWallet.sphincsDigest.
+const SHA256_EMPTY = new Uint8Array([
+  0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+  0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
 ]);
+
+// Wrapper / initCode / Type 1 / Type 2 sizes — kept in sync with
+// shared/src/lib.rs constants.
+const C10_SIG_LEN = 4008;
+const SIG_WRAPPER_LEN = 32 + 32 + 32 + (Math.ceil(C10_SIG_LEN / 32) * 32); // 4128
+const PQ_INIT_CODE_LEN = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 
 // Gas defaults for Sepolia.
 const DEFAULT_GAS = {
@@ -446,12 +458,21 @@ function buildSignPayload(p) {
   // gasFees = (maxPriorityFee << 128) | maxFee
   const gf = concatBytes([u128be(p.maxPriorityFeePerGas), u128be(p.maxFeePerGas)]);
 
-  // Flags u32: bit 31 = FLAG_INCLUDE_INIT_CODE, bit 30 = FLAG_REGISTER_SLOT,
-  // bits 29..0 = slot_index. The firmware uses this to decide whether to
-  // synthesise initCode and/or emit a Type 1 slot-registration frame.
+  // Flags u32: bit 31 = FLAG_INCLUDE_INIT_CODE (first deploy),
+  // bit 30 = FLAG_REGISTER_SLOT (rotation), bits 29..0 = slot_index.
+  // The two high bits are mutually exclusive; firmware rejects both set.
   let flags = (p.slotIndex || 0) & SLOT_INDEX_MASK;
   if (p.registerSlot) flags |= FLAG_REGISTER_SLOT;
   if (p.includeInitCode) flags |= FLAG_INCLUDE_INIT_CODE;
+  if (p.registerSlot && p.includeInitCode) {
+    throw new Error('registerSlot and includeInitCode are mutually exclusive');
+  }
+  if (p.includeInitCode && (p.slotIndex || 0) !== 0) {
+    throw new Error('includeInitCode requires slotIndex = 0');
+  }
+  if (p.registerSlot && (p.slotIndex || 0) === 0) {
+    throw new Error('registerSlot requires slotIndex >= 1');
+  }
 
   const head = concatBytes([
     u64be(p.chainId),
@@ -462,7 +483,7 @@ function buildSignPayload(p) {
     agl,
     u256be(p.preVerificationGas),
     gf,
-    p.paymasterAndDataHash || KECCAK_EMPTY,
+    p.paymasterAndDataHash || SHA256_EMPTY,
     to,
     u256be(p.value),
     u16be(data.length),
@@ -486,9 +507,9 @@ function buildSignPayload(p) {
 
 function parseSignResponse(resp) {
   // Wire format (secure/src/nsc/cmd_sign_userop.rs):
-  //   [init_code_len(4 BE)][init_code(0 or 88)]
-  //   [type1_len(4 BE)][type1(0 or 4073)]
-  //   [type2_len(4 BE)][type2(4073)]
+  //   [init_code_len(4 BE)][init_code(0 or 4280)]
+  //   [type1_len(4 BE)][type1_wrapper(0 or 4128)]   — abi.encode(uint256, bytes)
+  //   [type2_len(4 BE)][type2_wrapper(4128)]        — abi.encode(uint256, bytes)
   if (resp.length < 12) throw new Error('response too short');
   const readU32Be = (o) => (resp[o] * 0x1000000) + (resp[o+1] << 16) + (resp[o+2] << 8) + resp[o+3];
 
@@ -515,14 +536,26 @@ function parseSignResponse(resp) {
   return { initCode, type1, type2 };
 }
 
+// Decode the owner index (first 32 bytes) of an abi.encode-wrapped sig.
+function wrapperOwnerIndex(wrapper) {
+  if (!wrapper || wrapper.length < 32) return null;
+  // The index fits in a JS Number as long as it's < 2^53; slots beyond
+  // that will be impractical anyway.
+  let n = 0n;
+  for (let i = 0; i < 32; i++) n = (n << 8n) | BigInt(wrapper[i]);
+  return n;
+}
+
 // ── UI wiring ────────────────────────────────────────────────────
 $('connectBtn').addEventListener('click', async () => {
   try {
     await DeviceAPI.connect();
-    setStatus('Connected, locked', 'warn');
+    setStatus('Querying status…', 'warn');
     setButtonState(true, false);
+    log('Sending GET_STATUS APDU…', 'info');
     await refreshStatus();
   } catch (e) {
+    setStatus(`Connect err: ${e.message}`, 'err');
     log(`Connect failed: ${e.message}`, 'err');
   }
 });
@@ -557,6 +590,7 @@ $('signBtn').addEventListener('click', async () => {
       chainId: BigInt($('chainId').value),
       slotIndex: Number($('slotIndex').value) >>> 0,
       registerSlot: $('registerSlot').checked,
+      includeInitCode: $('includeInitCode').checked,
       sender: '0x' + '42'.repeat(20), // TODO: compute from master pk via factory
       entryPoint: ENTRY_POINT_V09,
       nonce: BigInt($('nonce').value),
@@ -565,22 +599,29 @@ $('signBtn').addEventListener('click', async () => {
       preVerificationGas: DEFAULT_GAS.preVerificationGas,
       maxPriorityFeePerGas: DEFAULT_GAS.maxPriorityFeePerGas,
       maxFeePerGas: DEFAULT_GAS.maxFeePerGas,
-      paymasterAndDataHash: KECCAK_EMPTY,
+      paymasterAndDataHash: SHA256_EMPTY,
       to: $('to').value,
       value: BigInt($('value').value || '0'),
       data: $('data').value.trim() || undefined,
     };
     log('Confirm the transaction on the device...', 'info');
-    const { type1, type2 } = await DeviceAPI.signUserOp(params);
-    lastResult = { type1, type2 };
-    $('t1Len').textContent = type1 ? `${type1.length} B` : '0 (no registration)';
+    const { initCode, type1, type2 } = await DeviceAPI.signUserOp(params);
+    lastResult = { initCode, type1, type2 };
+    $('icLen').textContent = initCode ? `${initCode.length} B` : '0 (no deploy)';
+    $('t1Len').textContent = type1 ? `${type1.length} B (bootstrap)` : '0 (no rotation)';
     $('t2Len').textContent = `${type2.length} B`;
-    if (type1) {
-      log(`Type 1 (slot register): ${type1.length}B — 0x${bytesToHex(type1.slice(0, 32))}...`, 'ok');
-    } else {
-      log('No Type 1 emitted (companion did not request slot registration)', 'info');
+    const t2Owner = wrapperOwnerIndex(type2);
+    $('t2OwnerIdx').textContent = t2Owner !== null ? t2Owner.toString() : '—';
+    if (initCode) {
+      log(`initCode (deploy): ${initCode.length}B — 0x${bytesToHex(initCode.slice(0, 24))}...`, 'ok');
     }
-    log(`Type 2 (user tx sig): ${type2.length}B — 0x${bytesToHex(type2.slice(0, 32))}...`, 'ok');
+    if (type1) {
+      const t1Owner = wrapperOwnerIndex(type1);
+      log(`Type 1 wrapper (ownerIdx=${t1Owner}): ${type1.length}B`, 'ok');
+    } else if (!initCode) {
+      log('No Type 1 / no initCode — normal single-UserOp sign', 'info');
+    }
+    log(`Type 2 wrapper (ownerIdx=${t2Owner}): ${type2.length}B`, 'ok');
     $('submitBtn').disabled = false;
   } catch (e) {
     log(`Sign failed: ${e.message}`, 'err');
@@ -630,16 +671,19 @@ async function runSignWithParams(params, description) {
   $('testZkAaveBtn').disabled = true;
   try {
     log(`Running ${description} — confirm on device...`, 'info');
-    const { type1, type2 } = await DeviceAPI.signUserOp(params);
-    lastResult = { type1, type2 };
-    $('t1Len').textContent = type1 ? `${type1.length} B` : '0 (no registration)';
+    const { initCode, type1, type2 } = await DeviceAPI.signUserOp(params);
+    lastResult = { initCode, type1, type2 };
+    $('icLen').textContent = initCode ? `${initCode.length} B` : '0 (no deploy)';
+    $('t1Len').textContent = type1 ? `${type1.length} B (bootstrap)` : '0 (no rotation)';
     $('t2Len').textContent = `${type2.length} B`;
+    const t2Owner = wrapperOwnerIndex(type2);
+    $('t2OwnerIdx').textContent = t2Owner !== null ? t2Owner.toString() : '—';
+    if (initCode) log(`initCode: ${initCode.length}B`, 'ok');
     if (type1) {
-      log(`Type 1 (slot register): ${type1.length}B — 0x${bytesToHex(type1.slice(0, 32))}...`, 'ok');
-    } else {
-      log('No Type 1 needed (slot already registered on this chain)', 'info');
+      const t1Owner = wrapperOwnerIndex(type1);
+      log(`Type 1 wrapper (ownerIdx=${t1Owner}): ${type1.length}B`, 'ok');
     }
-    log(`Type 2 (user tx sig): ${type2.length}B — 0x${bytesToHex(type2.slice(0, 32))}...`, 'ok');
+    log(`Type 2 wrapper (ownerIdx=${t2Owner}): ${type2.length}B`, 'ok');
     $('submitBtn').disabled = false;
   } catch (e) {
     log(`${description} failed: ${e.message}`, 'err');
@@ -661,6 +705,7 @@ $('testUsdcBtn').addEventListener('click', async () => {
     chainId: USDC_BASE.chainId,
     slotIndex: Number($('slotIndex').value) >>> 0,
     registerSlot: $('registerSlot').checked,
+    includeInitCode: $('includeInitCode').checked,
     sender: '0x' + '42'.repeat(20),
     entryPoint: ENTRY_POINT_V09,
     nonce: BigInt($('nonce').value || '0'),
@@ -669,7 +714,7 @@ $('testUsdcBtn').addEventListener('click', async () => {
     preVerificationGas: DEFAULT_GAS.preVerificationGas,
     maxPriorityFeePerGas: DEFAULT_GAS.maxPriorityFeePerGas,
     maxFeePerGas: DEFAULT_GAS.maxFeePerGas,
-    paymasterAndDataHash: KECCAK_EMPTY,
+    paymasterAndDataHash: SHA256_EMPTY,
     to: USDC_BASE.token,
     value: 0n,
     data: '0x' + bytesToHex(calldata),
@@ -696,6 +741,7 @@ $('testZkAaveBtn').addEventListener('click', async () => {
     chainId: 1n,
     slotIndex: Number($('slotIndex').value) >>> 0,
     registerSlot: $('registerSlot').checked,
+    includeInitCode: $('includeInitCode').checked,
     sender: '0x' + '42'.repeat(20),
     entryPoint: ENTRY_POINT_V09,
     nonce: BigInt($('nonce').value || '0'),
@@ -704,7 +750,7 @@ $('testZkAaveBtn').addEventListener('click', async () => {
     preVerificationGas: DEFAULT_GAS.preVerificationGas,
     maxPriorityFeePerGas: DEFAULT_GAS.maxPriorityFeePerGas,
     maxFeePerGas: DEFAULT_GAS.maxFeePerGas,
-    paymasterAndDataHash: KECCAK_EMPTY,
+    paymasterAndDataHash: SHA256_EMPTY,
     to: AAVE_V3_POOL_MAINNET,
     value: 0n,
     data: '0x' + bytesToHex(innerData),
@@ -729,11 +775,13 @@ $('submitBtn').addEventListener('click', async () => {
 async function refreshStatus() {
   try {
     const s = await DeviceAPI.getStatus();
+    log(`Status: provisioned=${s.provisioned}, locked=${s.locked}, pinRemaining=${s.pinRemaining}`);
     if (s.provisioned === 0) setStatus('Not provisioned', 'err');
     else if (s.locked) setStatus('Locked', 'warn');
     else { setStatus('Unlocked', 'ok'); setButtonState(true, true); }
-    log(`Status: provisioned=${s.provisioned}, locked=${s.locked}, pinRemaining=${s.pinRemaining}`);
   } catch (e) {
+    // Surface the error in the pill so the user doesn't have to hunt the log.
+    setStatus(`Status error: ${e.message}`, 'err');
     log(`Status error: ${e.message}`, 'err');
   }
 }

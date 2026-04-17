@@ -1,30 +1,48 @@
-//! CMD_SIGN_USEROP — unified JARDÍN Type 1 / Type 2 sign command.
+//! CMD_SIGN_USEROP — Coinbase-Smart-Wallet-style sign command (all SHA-256).
 //!
-//! Post-cutover every signing primitive in the wallet is SPHINCS+C10:
+//! After the Coinbase Smart Wallet port, every signature on the wallet is a
+//! SPHINCS+C10 sig over a purely-SHA-256 digest (no keccak on the sign path —
+//! STM32U585 has HW SHA-256 but no keccak accelerator). The on-chain wallet
+//! owns an array of 64-byte C10 owners: owner index 0 is the immutable
+//! bootstrap key; owner index 1 is the per-chain slot-0 key (added by the
+//! factory on deploy); higher indices are slot keys added by the bootstrap
+//! when the previous slot hits its 65,536-sig cap.
 //!
-//!   * **Type 1** (slot registration) — bootstrap C10 key signs a UserOp
-//!     whose callData is a no-op `execute(sender, 0, "")`. The signature
-//!     bundle carries the newly-derived slot C10 `(pk_seed, pk_root)` so
-//!     `PQJardinWallet` can record `slots[sha256(r)] = sha256(pk_seed ||
-//!     pk_root)` and bump `bootstrapUses`.
-//!   * **Type 2** (user tx) — the slot C10 key signs the user's
-//!     `execute(to, value, data)` UserOp. The on-chain wallet looks up
-//!     the slot, verifies the C10 sig, and bumps `slotUses` against
-//!     `MAX_SLOT_USES`.
+//! Three flows, selected by the companion-supplied flags field:
 //!
-//! **Firmware is stateless** for slot selection. The non-secure companion
-//! drives `(chain_id, slot_index, flags)` via the flags field:
+//!   * **Deploy** (`FLAG_INCLUDE_INIT_CODE` only, slot_index = 0)
+//!     The wallet doesn't yet exist on this chain. Firmware:
+//!       1. Derives slot-0 for `(chain_id, 0)`.
+//!       2. Signs `sha256("pqwallet-factory-add-slot" || chain_id ||
+//!          slot0PkSeed || slot0PkRoot)` with the bootstrap key — this
+//!          is the `factorySig` that unlocks `createAccount` on-chain.
+//!       3. Assembles the factory-call `initCode` carrying `factorySig`.
+//!       4. Signs the user's single UserOp (with `initCode` attached)
+//!          using slot-0.
+//!     Output: initCode + Type 2 sig wrapper (`ownerIndex = 1`).
 //!
-//!   * bit 31 (`FLAG_INCLUDE_INIT_CODE`) — first deploy, emit factory
-//!     initCode so the first UserOp can bootstrap the wallet contract.
-//!   * bit 30 (`FLAG_REGISTER_SLOT`) — emit a Type 1 ahead of Type 2,
-//!     registering this `(chain_id, slot_index)` on-chain.
-//!   * bits 29..0 (`SLOT_INDEX_MASK`) — authoritative slot index.
+//!   * **Rotation** (`FLAG_REGISTER_SLOT` only, slot_index ≥ 1)
+//!     slot N-1 is exhausted / compromised. Firmware:
+//!       1. Derives slot-N for `(chain_id, slot_index)`.
+//!       2. Builds an internal `addOwnerBytes(slot_N_owner_bytes)` UserOp,
+//!          signs its SHA-256 sphincs digest with the bootstrap key.
+//!       3. Builds the user's UserOp (nonce = base+1), signs with slot-N.
+//!     Output: Type 1 sig wrapper (`ownerIndex = 0`) + Type 2 sig wrapper
+//!     (`ownerIndex = slot_index + 1`).
 //!
-//! There is no flash store, no `next_q`, no mode state machine. Slot keys
-//! are derived deterministically from `(master_entropy, slot_index)` and
-//! cached in SRAM across the unlock session; a cache miss on a different
-//! `slot_index` triggers a fresh C10 keygen (~5-6 s on hardware).
+//!   * **Normal** (neither flag)
+//!     Slot-N is already registered on-chain. Firmware:
+//!       1. Derives (or reuses cached) slot-N.
+//!       2. Signs the user's UserOp with slot-N.
+//!     Output: Type 2 sig wrapper only.
+//!
+//! `FLAG_INCLUDE_INIT_CODE` and `FLAG_REGISTER_SLOT` are mutually exclusive
+//! — first deploy cannot simultaneously be a rotation (slot-0 is set by the
+//! factory atomically, no separate addOwner needed).
+//!
+//! Firmware is still stateless: slot keys are derived on demand from
+//! `(master_entropy, chain_id, slot_index)` and cached in SRAM across the
+//! unlock session. Bootstrap key regen happens only on rotation/deploy paths.
 //!
 //! Every signature is verified locally before being written to NS
 //! (fault-injection guard, double-evaluated).
@@ -32,11 +50,10 @@
 use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
     NscStatus, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT,
-    JARDIN_CREATE_ACCOUNT_SELECTOR, JARDIN_INIT_CODE_LEN, JARDIN_TYPE1_LEN,
-    JARDIN_TYPE1_MARKER, JARDIN_TYPE2_LEN, JARDIN_TYPE2_MARKER, MAX_JARDIN_RESPONSE_LEN,
-    MAX_TX_LEN, PQ_JARDIN_WALLET_FACTORY, SIGN_USEROP_HEADER_LEN, SLOT_INDEX_MASK,
-    ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN,
-    ZK_VK_BUNDLE_MAX_LEN,
+    MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN, PQ_ADD_OWNER_BYTES_SELECTOR,
+    PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN, PQ_SMART_WALLET_FACTORY,
+    SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN, SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN,
+    ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -47,11 +64,16 @@ fn sha256(bytes: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
+/// Domain tag the firmware signs when authorising slot-0 on a new chain.
+/// MUST match `PQSmartWalletFactory.FACTORY_ADD_SLOT_DOMAIN`.
+const FACTORY_ADD_SLOT_DOMAIN: &[u8] = b"pqwallet-factory-add-slot";
+
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
 use crate::aa::userop::{
-    compute_user_op_hash_v09, reconstruct_execute_calldata, AaUserOpParamsV09, KECCAK_EMPTY,
+    compute_sphincs_digest_v09, reconstruct_execute_calldata, sha256_bytes,
+    AaUserOpParamsV09Sha256, SHA256_EMPTY,
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
 use crate::erc20::calldata::{parse_erc20_calldata, Erc20Call};
@@ -59,7 +81,6 @@ use crate::tx::display::{
     render_blind_sign_pages, render_erc20_known_pages, render_erc20_unknown_pages, render_pages,
 };
 use crate::tx::eip1559::{Eip1559Tx, U256};
-use crate::tx::hash::keccak256;
 use crate::ui;
 
 /// Reserve enough room to TOCTOU-snapshot the largest valid input the
@@ -152,15 +173,30 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InvalidPointer as u32;
     }
 
-    // initCode only rides a Type 1 frame; reject the inconsistent combo.
-    if include_init_code && !register_slot {
-        ui::show_status("Sign", "init_code w/o type1");
+    // Flag-combination invariants (post-Coinbase-port):
+    //   * INCLUDE_INIT_CODE and REGISTER_SLOT are mutually exclusive —
+    //     first-deploy bundles its slot-0 registration into the factory
+    //     call, so there is never a separate addOwner UserOp on deploy.
+    //   * INCLUDE_INIT_CODE requires slot_index == 0 (the factory can
+    //     only pre-register the canonical slot 0).
+    //   * REGISTER_SLOT requires slot_index >= 1 (rotation only; slot-0
+    //     is already added by the factory on deploy).
+    if include_init_code && register_slot {
+        ui::show_status("Sign", "incompatible flags");
+        return NscStatus::InvalidPointer as u32;
+    }
+    if include_init_code && slot_index != 0 {
+        ui::show_status("Sign", "init_code needs slot0");
+        return NscStatus::InvalidPointer as u32;
+    }
+    if register_slot && slot_index == 0 {
+        ui::show_status("Sign", "register needs slot>=1");
         return NscStatus::InvalidPointer as u32;
     }
 
     // CRIT-17: refuse nonce-seq overflow. v0.9 nonces are 192-bit key | 64-bit seq.
-    // When Type 1 is present, Type 2 nonce = base + 1 — overflowing the seq
-    // would carry into the key field and silently change the nonce key.
+    // When REGISTER_SLOT is set, Type 2 nonce = base + 1 — overflowing the
+    // seq would carry into the key field and silently change the nonce key.
     if register_slot && nonce[24..32] == [0xFFu8; 8] {
         ui::show_status("Nonce seq", "overflow");
         return NscStatus::InvalidPointer as u32;
@@ -386,21 +422,24 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
 
     // ── 9. Type 2 nonce ────────────────────────────────────────────
-    // Type 1 (if present) consumes the supplied base nonce; Type 2 uses
-    // base+1. In Type-2-only mode Type 2 uses base directly.
+    // When REGISTER_SLOT is set, the Type 1 UserOp consumes the supplied
+    // base nonce and Type 2 uses base+1. In the other two modes Type 2
+    // uses the supplied base directly.
     let mut type2_nonce = nonce;
     if register_slot {
         add_one_to_be_u256(&mut type2_nonce);
     }
 
-    // ── 10. Slot C10 keygen (cached by slot_index) ─────────────────
+    // ── 10. Slot C10 keygen (cached by (chain_id, slot_index)) ─────
     //
-    // Re-keygen iff the SRAM cache holds a different slot_index.
+    // Post-Coinbase-port slot keys are chain-specific so the cache key
+    // must cover both fields. A cache miss on either triggers a fresh
+    // ~5-6 s keygen.
     let need_keygen = super::state::peek_state(|_| {
         // SAFETY: single-threaded gateway.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::JARDIN_SLOT) };
         match cached {
-            Some(c) => c.slot_index != slot_index,
+            Some(c) => c.chain_id != chain_id || c.slot_index != slot_index,
             None => true,
         }
     });
@@ -410,12 +449,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(
                 &*jardin_master_entropy,
+                chain_id,
                 slot_index,
                 |p| ui::show_progress("Slot keygen", p),
             );
         // SAFETY: single-threaded.
         unsafe {
             *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(CachedSlot {
+                chain_id,
                 slot_index,
                 key: slot_sk,
             });
@@ -427,15 +468,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         });
     }
 
-    // Extract the 16-byte slot pubkey halves for the bundle header and the
-    // slot SigningKey reference for signing.
-    let (slot_pk_seed_16, slot_pk_root_16) = unsafe {
+    // Extract the 32-byte slot pubkey halves. Post-port the on-chain
+    // verifier takes `bytes32` pkSeed + pkRoot directly from the 64-byte
+    // owner bytes, so the old N-mask truncation to 16 bytes is gone.
+    let (slot_pk_seed_32, slot_pk_root_32) = unsafe {
         match &*core::ptr::addr_of!(super::state::JARDIN_SLOT) {
             Some(c) => {
-                let mut seed = [0u8; 16];
-                let mut root = [0u8; 16];
-                seed.copy_from_slice(&c.key.pk_seed()[..16]);
-                root.copy_from_slice(&c.key.pk_root()[..16]);
+                let mut seed = [0u8; 32];
+                let mut root = [0u8; 32];
+                seed[..16].copy_from_slice(&c.key.pk_seed()[..16]);
+                root[..16].copy_from_slice(&c.key.pk_root()[..16]);
                 (seed, root)
             }
             None => {
@@ -445,120 +487,178 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // ── 11. Type 1 (optional) ──────────────────────────────────────
-    let mut type1_out: Zeroizing<[u8; JARDIN_TYPE1_LEN]> =
-        Zeroizing::new([0u8; JARDIN_TYPE1_LEN]);
-    let mut init_code_out: Zeroizing<[u8; JARDIN_INIT_CODE_LEN]> =
-        Zeroizing::new([0u8; JARDIN_INIT_CODE_LEN]);
+    // Slot-N's 64-byte owner bytes (pkSeed || pkRoot) — injected into the
+    // Type 1 addOwnerBytes calldata.
+    let mut slot_owner_bytes = [0u8; 64];
+    slot_owner_bytes[..32].copy_from_slice(&slot_pk_seed_32);
+    slot_owner_bytes[32..].copy_from_slice(&slot_pk_root_32);
+
+    // ── 11. Build Type 1 (optional) + initCode (optional) ──────────
+    //
+    // We need the bootstrap C10 key in three cases:
+    //   * FLAG_INCLUDE_INIT_CODE — to sign the factorySig for slot-0.
+    //   * FLAG_REGISTER_SLOT — to sign the addOwnerBytes UserOp.
+    // So regen the bootstrap key (~5-6 s) once and use as needed.
+    //
+    // Non-secret outputs:
+    //   * `init_code_out` / `emit_init_code` — 4280-byte factory call.
+    //   * `type1_wrapper_out` / `emit_type1` — 4128-byte SignatureWrapper.
+    let mut init_code_out: Zeroizing<[u8; PQ_INIT_CODE_LEN]> =
+        Zeroizing::new([0u8; PQ_INIT_CODE_LEN]);
+    let mut type1_wrapper_out: Zeroizing<[u8; SIG_WRAPPER_LEN]> =
+        Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
     let mut emit_init_code = false;
-    let h_r: [u8; 32];
+    let mut emit_type1 = false;
+    let mut t1_init_code_digest = SHA256_EMPTY;
 
-    if register_slot {
-        ui::show_status("Slot register", "building type 1");
-
-        // Deterministic r per (master, slot_index). H(r) is the on-chain slotKey.
-        let r = crate::crypto::jardin_slot_r(&*jardin_master_entropy, slot_index);
-        h_r = sha256(&r);
-
-        // Type 1 callData: execute(sender, 0, "")
-        let t1_tx = Eip1559Tx {
-            chain_id,
-            nonce: 0,
-            max_priority_fee_per_gas: U256::zero(),
-            max_fee_per_gas: U256::zero(),
-            gas_limit: 0,
-            to: Some(sender),
-            value: U256::zero(),
-            data_len: 0,
-            access_list_count: 0,
-            signing_hash: [0u8; 32],
-        };
-        let t1_exec = match reconstruct_execute_calldata(&t1_tx, &[]) {
-            Ok(c) => c,
-            Err(_) => {
-                entropy.zeroize();
-                return NscStatus::CryptoError as u32;
-            }
-        };
-
-        // C10 bootstrap keygen. Unavoidably expensive (~5-6 s on hardware)
-        // but only needed on register-slot requests.
+    if include_init_code || register_slot {
         ui::show_progress("C10 keygen", 0);
-        let (c10_sk, c10_pk_seed_32, c10_pk_root_32) =
+        let (c10_sk, master_pk_seed_32, master_pk_root_32) =
             crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
                 &*entropy,
                 |p| ui::show_progress("C10 keygen", p),
             );
 
-        // Optional initCode:
-        //   factory(20) || selector(4) || masterPkSeed(32) || masterPkRoot(32)
-        let t1_init_code_hash = if include_init_code {
+        // ── 11a. Deploy path: build initCode + factorySig ──────────
+        if include_init_code {
+            ui::show_status("Factory", "signing slot-0");
+
+            // factorySig message: sha256(DOMAIN || chainId(8) ||
+            //                             slot0PkSeed(32) || slot0PkRoot(32))
+            let mut factory_msg = [0u8; 25 + 8 + 32 + 32];
+            factory_msg[..25].copy_from_slice(FACTORY_ADD_SLOT_DOMAIN);
+            factory_msg[25..33].copy_from_slice(&chain_id.to_be_bytes());
+            factory_msg[33..65].copy_from_slice(&slot_pk_seed_32);
+            factory_msg[65..97].copy_from_slice(&slot_pk_root_32);
+            let factory_digest = sha256(&factory_msg);
+
+            let factory_sig = match crate::crypto::c10_sign_verified_with_progress(
+                &c10_sk,
+                &factory_digest,
+                c10_sign_progress_bootstrap,
+            ) {
+                Ok(s) => s,
+                Err(_) => {
+                    entropy.zeroize();
+                    return NscStatus::CryptoError as u32;
+                }
+            };
+
+            // Build the initCode blob. Layout:
+            //
+            //   factory(20)
+            //   || selector(4)
+            //   || masterPkSeed(32) || masterPkRoot(32)
+            //   || slot0PkSeed(32) || slot0PkRoot(32)
+            //   || chainId (left-padded to uint256, 32)
+            //   || bytes-offset (0xE0 = 224, 32)
+            //   || bytes-length (4008, 32)
+            //   || factory_sig (4008 bytes, then padded to 4032)
             let ic = &mut *init_code_out;
-            ic[..20].copy_from_slice(&PQ_JARDIN_WALLET_FACTORY);
-            ic[20..24].copy_from_slice(&JARDIN_CREATE_ACCOUNT_SELECTOR);
-            ic[24..56].copy_from_slice(&c10_pk_seed_32);
-            ic[56..88].copy_from_slice(&c10_pk_root_32);
+            ic[..20].copy_from_slice(&PQ_SMART_WALLET_FACTORY);
+            ic[20..24].copy_from_slice(&PQ_CREATE_ACCOUNT_SELECTOR);
+            ic[24..56].copy_from_slice(&master_pk_seed_32);
+            ic[56..88].copy_from_slice(&master_pk_root_32);
+            ic[88..120].copy_from_slice(&slot_pk_seed_32);
+            ic[120..152].copy_from_slice(&slot_pk_root_32);
+            // chainId left-padded
+            ic[152 + 24..184].copy_from_slice(&chain_id.to_be_bytes());
+            // bytes-offset = 0xE0 (= head-args-len: 5 × 32 = 160; plus 32
+            // for own offset slot gives 192 — wait, but offset is measured
+            // from the start of the abi-encoded args, AFTER the selector.
+            // Args start at ic+24. The 5 fixed slots take 5*32 = 160 bytes.
+            // The bytes-offset slot itself is at 160..192. So offset value
+            // = 192 (= 0xC0). Actually Solidity measures offset from the
+            // *first byte of the abi-encoded args*, not from the offset
+            // slot; and the offset points to the start of the length field.
+            // For (bytes32,bytes32,bytes32,bytes32,uint64,bytes) the head
+            // occupies 6×32 = 192 bytes (each head slot is 32), and the
+            // length field starts at byte 192. So offset = 0xc0 = 192.
+            let offset_field_start = 24 + 5 * 32;
+            ic[offset_field_start + 24..offset_field_start + 32]
+                .copy_from_slice(&(6 * 32u64).to_be_bytes());
+            let length_field_start = offset_field_start + 32;
+            ic[length_field_start + 24..length_field_start + 32]
+                .copy_from_slice(&(C10_SIG_LEN as u64).to_be_bytes());
+            let data_start = length_field_start + 32;
+            ic[data_start..data_start + C10_SIG_LEN].copy_from_slice(&factory_sig);
+            // Trailing 4032 - 4008 = 24 bytes of zero padding are already zero.
+
+            debug_assert_eq!(data_start + 4032, PQ_INIT_CODE_LEN);
             emit_init_code = true;
-            keccak256(ic.as_slice())
-        } else {
-            KECCAK_EMPTY
-        };
+            // initCode digest for the Type 2 sphincs sign.
+            t1_init_code_digest = sha256_bytes(ic.as_slice());
+        }
 
-        // Type 1 userOpHash (EntryPoint v0.9).
-        let t1_params = AaUserOpParamsV09 {
-            sender,
-            entry_point,
-            chain_id,
-            nonce: U256(nonce),
-            init_code_hash: t1_init_code_hash,
-            account_gas_limits,
-            pre_verification_gas: U256(pre_verification_gas),
-            gas_fees,
-            paymaster_and_data_hash,
-        };
-        let t1_call_hash = keccak256(t1_exec.as_slice());
-        let t1_user_op_hash = compute_user_op_hash_v09(&t1_params, &t1_call_hash);
+        // ── 11b. Rotation path: build addOwnerBytes UserOp + Type 1 sig ──
+        if register_slot {
+            ui::show_status("Slot register", "signing addOwner");
 
-        let c10_sig = match crate::crypto::c10_sign_verified_with_progress(
-            &c10_sk,
-            &t1_user_op_hash,
-            c10_sign_progress_bootstrap,
-        ) {
-            Ok(s) => s,
-            Err(_) => {
-                entropy.zeroize();
-                return NscStatus::CryptoError as u32;
-            }
-        };
+            // addOwnerBytes(bytes) calldata:
+            //   selector(4) || offset(32 = 0x20) || length(32 = 0x40)
+            //     || data(64 = slot_N_owner_bytes) — already 32-aligned
+            let mut t1_call = [0u8; 4 + 32 + 32 + 64];
+            t1_call[..4].copy_from_slice(&PQ_ADD_OWNER_BYTES_SELECTOR);
+            t1_call[4 + 28..4 + 32].copy_from_slice(&0x20u32.to_be_bytes());
+            t1_call[4 + 32 + 28..4 + 32 + 32].copy_from_slice(&64u32.to_be_bytes());
+            t1_call[4 + 64..4 + 64 + 64].copy_from_slice(&slot_owner_bytes);
+            let t1_call_digest = sha256_bytes(&t1_call);
+
+            // Sphincs digest for the Type 1 UserOp.
+            let t1_params = AaUserOpParamsV09Sha256 {
+                sender,
+                entry_point,
+                chain_id,
+                nonce: U256(nonce),
+                init_code_digest: SHA256_EMPTY, // rotation never rides initCode
+                account_gas_limits,
+                pre_verification_gas: U256(pre_verification_gas),
+                gas_fees,
+                paymaster_and_data_digest: SHA256_EMPTY,
+            };
+            let t1_digest = compute_sphincs_digest_v09(&t1_params, &t1_call_digest);
+
+            let bootstrap_sig = match crate::crypto::c10_sign_verified_with_progress(
+                &c10_sk,
+                &t1_digest,
+                c10_sign_progress_bootstrap,
+            ) {
+                Ok(s) => s,
+                Err(_) => {
+                    entropy.zeroize();
+                    return NscStatus::CryptoError as u32;
+                }
+            };
+
+            encode_signature_wrapper(&mut *type1_wrapper_out, 0, &bootstrap_sig);
+            emit_type1 = true;
+        }
+
         drop(c10_sk); // ZeroizeOnDrop.
-
-        // Assemble Type 1 payload.
-        type1_out[0] = JARDIN_TYPE1_MARKER;
-        type1_out[1..33].copy_from_slice(&r);
-        type1_out[33..49].copy_from_slice(&slot_pk_seed_16);
-        type1_out[49..65].copy_from_slice(&slot_pk_root_16);
-        type1_out[65..65 + C10_SIG_LEN].copy_from_slice(&c10_sig);
-    } else {
-        // Type-2-only mode: the companion already registered the slot, but
-        // it still needs H(r) so the on-chain wallet can look up the slotKey.
-        let r = crate::crypto::jardin_slot_r(&*jardin_master_entropy, slot_index);
-        h_r = sha256(&r);
     }
 
-    // ── 12. Type 2: slot C10 sign the user's userOpHash ────────────
-    let t2_params = AaUserOpParamsV09 {
+    // ── 12. Type 2: slot C10 signs the user's UserOp sphincs digest ──
+    let t2_call_digest = sha256_bytes(t2_exec.as_slice());
+    let t2_init_code_digest = if include_init_code {
+        t1_init_code_digest
+    } else {
+        SHA256_EMPTY
+    };
+    // The on-wire `paymaster_and_data_hash` is now the SHA-256 of the
+    // paymasterAndData bytes (companion sends SHA256_EMPTY when absent).
+    // Staying all-sha256 means zero keccak on the sign path.
+    let t2_params = AaUserOpParamsV09Sha256 {
         sender,
         entry_point,
         chain_id,
         nonce: U256(type2_nonce),
-        init_code_hash: KECCAK_EMPTY,
+        init_code_digest: t2_init_code_digest,
         account_gas_limits,
         pre_verification_gas: U256(pre_verification_gas),
         gas_fees,
-        paymaster_and_data_hash,
+        paymaster_and_data_digest: paymaster_and_data_hash,
     };
-    let t2_call_hash = keccak256(t2_exec.as_slice());
-    let t2_user_op_hash = compute_user_op_hash_v09(&t2_params, &t2_call_hash);
+    let t2_digest = compute_sphincs_digest_v09(&t2_params, &t2_call_digest);
 
     ui::show_progress("Slot C10 sign", 0);
     let t2_sig = {
@@ -573,7 +673,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         };
         match crate::crypto::c10_sign_verified_with_progress(
             slot_ref,
-            &t2_user_op_hash,
+            &t2_digest,
             c10_sign_progress_slot,
         ) {
             Ok(s) => s,
@@ -594,8 +694,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InternalError as u32;
             }
         };
-        let v1 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_user_op_hash, &t2_sig);
-        let v2 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_user_op_hash, &t2_sig);
+        let v1 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_digest, &t2_sig);
+        let v2 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_digest, &t2_sig);
         (v1, v2)
     };
     let ok_sentinel: u32 = if v1 && v2 { 0xA5A5_A5A5 } else { 0x5A5A_5A5A };
@@ -605,71 +705,51 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::CryptoError as u32;
     }
 
+    // Wrap the Type 2 sig: ownerIndex = slot_index + 1 (bootstrap is at 0).
+    let t2_owner_index = (slot_index as u64) + 1;
+    let mut type2_wrapper_out: Zeroizing<[u8; SIG_WRAPPER_LEN]> =
+        Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
+    encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
+
     // ── 13. Assemble output bundle ─────────────────────────────────
     //
     // Layout:
-    //   [init_code_len(4 BE)][init_code(0 or 88)]
-    //   [type1_len(4 BE)][type1(0 or 4073)]
-    //   [type2_len(4 BE)][type2(4073)]
+    //   [init_code_len(4 BE)][init_code(0 or 4280)]
+    //   [type1_len(4 BE)][type1_wrapper(0 or 4128)]
+    //   [type2_len(4 BE)][type2_wrapper(4128)]
     let mut write_pos: usize = 0;
-    let init_code_len = if emit_init_code { JARDIN_INIT_CODE_LEN } else { 0 };
-    let ic_len_be = (init_code_len as u32).to_be_bytes();
-    for i in 0..4 {
-        core::ptr::write_volatile(out_ptr.add(write_pos + i), ic_len_be[i]);
-    }
-    write_pos += 4;
+    let init_code_len = if emit_init_code { PQ_INIT_CODE_LEN } else { 0 };
+    write_be_u32(out_ptr, &mut write_pos, init_code_len as u32);
     if emit_init_code {
-        for i in 0..JARDIN_INIT_CODE_LEN {
+        for i in 0..PQ_INIT_CODE_LEN {
             core::ptr::write_volatile(out_ptr.add(write_pos + i), init_code_out[i]);
         }
-        write_pos += JARDIN_INIT_CODE_LEN;
+        write_pos += PQ_INIT_CODE_LEN;
     }
 
-    let type1_len = if register_slot { JARDIN_TYPE1_LEN } else { 0 };
-    let t1_len_be = (type1_len as u32).to_be_bytes();
-    for i in 0..4 {
-        core::ptr::write_volatile(out_ptr.add(write_pos + i), t1_len_be[i]);
-    }
-    write_pos += 4;
-    if register_slot {
-        for i in 0..JARDIN_TYPE1_LEN {
-            core::ptr::write_volatile(out_ptr.add(write_pos + i), type1_out[i]);
+    let type1_len = if emit_type1 { SIG_WRAPPER_LEN } else { 0 };
+    write_be_u32(out_ptr, &mut write_pos, type1_len as u32);
+    if emit_type1 {
+        for i in 0..SIG_WRAPPER_LEN {
+            core::ptr::write_volatile(out_ptr.add(write_pos + i), type1_wrapper_out[i]);
         }
-        write_pos += JARDIN_TYPE1_LEN;
+        write_pos += SIG_WRAPPER_LEN;
     }
 
-    let t2_len_be = (JARDIN_TYPE2_LEN as u32).to_be_bytes();
-    for i in 0..4 {
-        core::ptr::write_volatile(out_ptr.add(write_pos + i), t2_len_be[i]);
+    write_be_u32(out_ptr, &mut write_pos, SIG_WRAPPER_LEN as u32);
+    for i in 0..SIG_WRAPPER_LEN {
+        core::ptr::write_volatile(out_ptr.add(write_pos + i), type2_wrapper_out[i]);
     }
-    write_pos += 4;
-
-    core::ptr::write_volatile(out_ptr.add(write_pos), JARDIN_TYPE2_MARKER);
-    write_pos += 1;
-    for i in 0..32 {
-        core::ptr::write_volatile(out_ptr.add(write_pos + i), h_r[i]);
-    }
-    write_pos += 32;
-    for i in 0..16 {
-        core::ptr::write_volatile(out_ptr.add(write_pos + i), slot_pk_seed_16[i]);
-    }
-    write_pos += 16;
-    for i in 0..16 {
-        core::ptr::write_volatile(out_ptr.add(write_pos + i), slot_pk_root_16[i]);
-    }
-    write_pos += 16;
-    for i in 0..C10_SIG_LEN {
-        core::ptr::write_volatile(out_ptr.add(write_pos + i), t2_sig[i]);
-    }
-    write_pos += C10_SIG_LEN;
+    write_pos += SIG_WRAPPER_LEN;
 
     debug_assert!(write_pos <= MAX_JARDIN_RESPONSE_LEN);
-    debug_assert_eq!(write_pos - (4 + init_code_len + 4 + type1_len + 4), JARDIN_TYPE2_LEN);
+    debug_assert_eq!(write_pos - (4 + init_code_len + 4 + type1_len + 4), SIG_WRAPPER_LEN);
     let _ = write_pos;
 
     // ── 14. Zeroise transients ─────────────────────────────────────
     entropy.zeroize();
-    type1_out.zeroize();
+    type1_wrapper_out.zeroize();
+    type2_wrapper_out.zeroize();
     init_code_out.zeroize();
 
     crate::timeout::reset_activity();
@@ -680,6 +760,35 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_status("PQSigner OS", "Ready");
 
     NscStatus::Ok as u32
+}
+
+/// Encode a SignatureWrapper `(uint256 ownerIndex, bytes innerSig)` into
+/// `out` in place. Layout:
+///
+///   [0..32)      ownerIndex (uint256 BE)
+///   [32..64)     offset to bytes = 0x40 (uint256 BE)
+///   [64..96)     length = C10_SIG_LEN (uint256 BE)
+///   [96..4128)   inner C10 sig, right-padded with zeros to a 32-byte boundary
+fn encode_signature_wrapper(out: &mut [u8; SIG_WRAPPER_LEN], owner_index: u64, inner_sig: &[u8]) {
+    debug_assert_eq!(inner_sig.len(), C10_SIG_LEN);
+    // ownerIndex left-padded to 32 bytes
+    out[24..32].copy_from_slice(&owner_index.to_be_bytes());
+    // offset = 0x40
+    out[32 + 31] = 0x40;
+    // length = 4008 = 0x0fa8
+    out[64 + 24..64 + 32].copy_from_slice(&(C10_SIG_LEN as u64).to_be_bytes());
+    // inner sig
+    out[96..96 + C10_SIG_LEN].copy_from_slice(inner_sig);
+    // trailing padding is already zero from the Zeroizing init.
+}
+
+/// Volatile write of a big-endian u32 to `out_ptr + *write_pos`, advancing the cursor.
+unsafe fn write_be_u32(out_ptr: *mut u8, write_pos: &mut usize, v: u32) {
+    let be = v.to_be_bytes();
+    for i in 0..4 {
+        core::ptr::write_volatile(out_ptr.add(*write_pos + i), be[i]);
+    }
+    *write_pos += 4;
 }
 
 /// Increment the 64-bit sequence portion of an EntryPoint v0.9 nonce.

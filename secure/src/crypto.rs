@@ -674,20 +674,35 @@ pub fn c10_sign_verified_with_progress(
 // FORS+C keygen to C10 keygen). The last two are new tags for the C10 slot
 // seed/pk derivation.
 
-/// Compute the deterministic slot entropy for a given `slot_index`.
-pub fn jardin_slot_entropy(master_entropy: &[u8; 32], slot_index: u32) -> [u8; 32] {
+/// Compute the deterministic slot entropy for a given `(chain_id, slot_index)`.
+///
+/// Post-Coinbase-port, slot keys are chain-specific so the same seed
+/// produces different slot identities on different chains. This is the
+/// cryptographic underpinning of the role-split design: an attacker
+/// who learned a slot key on chain A still cannot impersonate the user
+/// on chain B. The domain tag stays `"jardin_slot"` so the first byte
+/// of entropy is compatible with the pre-port layout for slot 0 on a
+/// single-chain setup; higher chains produce distinct entropy.
+pub fn jardin_slot_entropy(
+    master_entropy: &[u8; 32],
+    chain_id: u64,
+    slot_index: u32,
+) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(master_entropy);
     h.update(b"jardin_slot");
+    h.update(chain_id.to_be_bytes());
     h.update(slot_index.to_be_bytes());
     h.finalize().into()
 }
 
-/// Compute the per-slot randomiser `r` used to index the on-chain slotKey.
-pub fn jardin_slot_r(master_entropy: &[u8; 32], slot_index: u32) -> [u8; 32] {
+/// Compute the per-slot randomiser `r`. Same chain-binding rule as
+/// `jardin_slot_entropy`.
+pub fn jardin_slot_r(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(master_entropy);
     h.update(b"jardin_r");
+    h.update(chain_id.to_be_bytes());
     h.update(slot_index.to_be_bytes());
     h.finalize().into()
 }
@@ -721,19 +736,21 @@ fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
 /// should cache the resulting `SigningKey` across signs of the same slot.
 pub fn derive_c10_slot_keypair(
     master_entropy: &[u8; 32],
+    chain_id: u64,
     slot_index: u32,
 ) -> (SigningKey, [u8; 32], [u8; 32]) {
-    derive_c10_slot_keypair_with_progress(master_entropy, slot_index, |_| {})
+    derive_c10_slot_keypair_with_progress(master_entropy, chain_id, slot_index, |_| {})
 }
 
 /// Progress-reporting variant of [`derive_c10_slot_keypair`].
 pub fn derive_c10_slot_keypair_with_progress(
     master_entropy: &[u8; 32],
+    chain_id: u64,
     slot_index: u32,
     progress: impl Fn(u8),
 ) -> (SigningKey, [u8; 32], [u8; 32]) {
     progress(0);
-    let mut slot_entropy = jardin_slot_entropy(master_entropy, slot_index);
+    let mut slot_entropy = jardin_slot_entropy(master_entropy, chain_id, slot_index);
     let (sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&slot_entropy);
     slot_entropy.zeroize();
 

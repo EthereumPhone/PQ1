@@ -54,27 +54,32 @@ fn main() -> ! {
     ns_debug_log("[NS] main() entered");
 
     // Dump USB-relevant register state before usb::init() hits the DWC2
-    // core soft-reset. If ICLK (48 MHz PHY clock) isn't running the reset
-    // polling loop inside synopsys-usb-otg hangs forever.
+    // core soft-reset. Gated on DHCSR.C_DEBUGEN so the standalone build
+    // (no debugger attached) doesn't BKPT → HardFault before USB even
+    // comes up — without the gate, `hprintln!` executes BKPT 0xAB and
+    // the CPU halts silently because NS uses `panic_halt`.
     unsafe {
-        // Read via the NS alias (secure aliases HardFault from NS).
-        const RCC_NS: u32 = 0x4602_0C00;
-        let ccipr1 = core::ptr::read_volatile((RCC_NS + 0xE0) as *const u32);
-        let cr = core::ptr::read_volatile((RCC_NS + 0x00) as *const u32);
-        let ahb2enr1 = core::ptr::read_volatile((RCC_NS + 0x8C) as *const u32);
-        let _ = cortex_m_semihosting::hprintln!(
-            "[NS] pre-usb regs: RCC_CR=0x{:08x} CCIPR1=0x{:08x} AHB2ENR1=0x{:08x}",
-            cr, ccipr1, ahb2enr1
-        );
-        // USB OTG FS GOTGCTL / GRSTCTL
-        const USB_NS: u32 = 0x4204_0000;
-        let gotgctl = core::ptr::read_volatile(USB_NS as *const u32);
-        let grstctl = core::ptr::read_volatile((USB_NS + 0x10) as *const u32);
-        let gccfg = core::ptr::read_volatile((USB_NS + 0x38) as *const u32);
-        let _ = cortex_m_semihosting::hprintln!(
-            "[NS] pre-usb OTG: GOTGCTL=0x{:08x} GRSTCTL=0x{:08x} GCCFG=0x{:08x}",
-            gotgctl, grstctl, gccfg
-        );
+        const DHCSR: *const u32 = 0xE000_EDF0 as *const u32;
+        if (core::ptr::read_volatile(DHCSR) & 1) != 0 {
+            // Read via the NS alias (secure aliases HardFault from NS).
+            const RCC_NS: u32 = 0x4602_0C00;
+            let ccipr1 = core::ptr::read_volatile((RCC_NS + 0xE0) as *const u32);
+            let cr = core::ptr::read_volatile((RCC_NS + 0x00) as *const u32);
+            let ahb2enr1 = core::ptr::read_volatile((RCC_NS + 0x8C) as *const u32);
+            let _ = cortex_m_semihosting::hprintln!(
+                "[NS] pre-usb regs: RCC_CR=0x{:08x} CCIPR1=0x{:08x} AHB2ENR1=0x{:08x}",
+                cr, ccipr1, ahb2enr1
+            );
+            // USB OTG FS GOTGCTL / GRSTCTL
+            const USB_NS: u32 = 0x4204_0000;
+            let gotgctl = core::ptr::read_volatile(USB_NS as *const u32);
+            let grstctl = core::ptr::read_volatile((USB_NS + 0x10) as *const u32);
+            let gccfg = core::ptr::read_volatile((USB_NS + 0x38) as *const u32);
+            let _ = cortex_m_semihosting::hprintln!(
+                "[NS] pre-usb OTG: GOTGCTL=0x{:08x} GRSTCTL=0x{:08x} GCCFG=0x{:08x}",
+                gotgctl, grstctl, gccfg
+            );
+        }
     }
 
     ns_debug_log("[NS] calling usb::init()");

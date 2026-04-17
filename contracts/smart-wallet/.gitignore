@@ -20,3 +20,6 @@ docs/
 .VSCodeCounter/
 
 .certora_internal/
+
+# Coinbase smart-wallet reference clone (read-only, for derivation)
+reference/

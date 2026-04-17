@@ -132,11 +132,14 @@ static mut STATE: SecureState = SecureState::new();
 /// SAFETY: same single-threaded invariant as `STATE`.
 pub(super) static mut JARDIN_SLOT: Option<CachedSlot> = None;
 
-/// In-SRAM slot cache: a SigningKey tagged with the `slot_index` it was
-/// derived for. Chain id is not part of the cache key because slot
-/// derivation is chain-agnostic — on-chain separation is enforced by the
-/// per-wallet `slots[slotKey]` mapping instead.
+/// In-SRAM slot cache: a SigningKey tagged with the `(chain_id,
+/// slot_index)` tuple it was derived for. After the Coinbase-Smart-
+/// Wallet port, slot keys are chain-specific — signing on chain A with
+/// slot index N derives a different key than chain B with the same
+/// index, so the cache must key on both. A mismatch on either field
+/// triggers a fresh keygen (~5-6 s on hardware).
 pub(super) struct CachedSlot {
+    pub(super) chain_id: u64,
     pub(super) slot_index: u32,
     pub(super) key: sphincs_c10::SigningKey,
 }
