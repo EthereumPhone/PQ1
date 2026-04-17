@@ -52,7 +52,6 @@
       <button id="connectBtn">Connect WebHID</button>
       <button id="unlockBtn" class="secondary" disabled>Unlock</button>
       <button id="lockBtn" class="secondary" disabled>Lock</button>
-      <button id="slotInfoBtn" class="secondary" disabled>Slot Info</button>
     </div>
   </div>
 
@@ -61,6 +60,10 @@
     <div class="row">
       <label>Chain ID</label>
       <input id="chainId" value="11155111" />
+    </div>
+    <div class="row">
+      <label>Slot index</label>
+      <input id="slotIndex" value="0" />
     </div>
     <div class="row">
       <label>Nonce</label>
@@ -77,6 +80,9 @@
     <div class="row">
       <label>Calldata (hex)</label>
       <input id="data" placeholder="0x" value="" />
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="registerSlot" /> Register slot (emit Type 1)</label>
     </div>
     <div class="actions">
       <button id="signBtn" disabled>Sign (unified JARDÍN)</button>
@@ -100,8 +106,6 @@
     <div class="grid" id="resultGrid">
       <div class="stat"><div class="label">Type 1</div><div class="value" id="t1Len">—</div></div>
       <div class="stat"><div class="label">Type 2</div><div class="value" id="t2Len">—</div></div>
-      <div class="stat"><div class="label">Slot Index</div><div class="value" id="slotIdx">—</div></div>
-      <div class="stat"><div class="label">Next q</div><div class="value" id="nextQ">—</div></div>
     </div>
   </div>
 
@@ -137,8 +141,12 @@ const INS_GET_STATUS = 0x02;
 const INS_UNLOCK = 0x10;
 const INS_LOCK = 0x11;
 const INS_SIGN_USEROP = 0x30;
-const INS_GET_JARDIN_INFO = 0x72;
 const INS_GET_RESPONSE = 0xC0;
+
+// Flags field (bits 31..0, big-endian in the wire payload).
+const FLAG_INCLUDE_INIT_CODE = 0x80000000 >>> 0;
+const FLAG_REGISTER_SLOT     = 0x40000000;
+const SLOT_INDEX_MASK        = ~(FLAG_INCLUDE_INIT_CODE | FLAG_REGISTER_SLOT) >>> 0;
 
 const P1_LAST = 0x00;
 const P1_MORE = 0x80;
@@ -146,7 +154,6 @@ const P1_MORE = 0x80;
 const SW_OK = 0x9000;
 const SW_SECURITY = 0x6982;
 const SW_CONDITIONS = 0x6985;
-const SW_SLOT_EXHAUSTED = 0x6501;
 const SW_SESSION_EXPIRED = 0x6984;
 
 // EntryPoint v0.9 canonical Sepolia/mainnet address.
@@ -192,7 +199,6 @@ function setButtonState(connected, unlocked) {
   $('connectBtn').disabled = connected;
   $('unlockBtn').disabled = !connected;
   $('lockBtn').disabled = !connected;
-  $('slotInfoBtn').disabled = !connected;
   $('signBtn').disabled = !unlocked;
   $('testUsdcBtn').disabled = !unlocked;
   $('testZkAaveBtn').disabled = !unlocked;
@@ -403,18 +409,6 @@ const DeviceAPI = {
     return r.sw;
   },
 
-  async getSlotInfo(chainId) {
-    const r = await sendApdu(INS_GET_JARDIN_INFO, 0, 0, u64be(chainId));
-    if (r.sw !== SW_OK) throw new Error(`SW=0x${r.sw.toString(16)}`);
-    const d = r.data;
-    const slotIndex = (d[0] << 24) | (d[1] << 16) | (d[2] << 8) | d[3];
-    const nextQ = (d[4] << 24) | (d[5] << 16) | (d[6] << 8) | d[7];
-    const flags = (d[8] << 24) | (d[9] << 16) | (d[10] << 8) | d[11];
-    const active = d[12];
-    const hR = d.slice(13, 45);
-    return { slotIndex: slotIndex >>> 0, nextQ: nextQ >>> 0, flags, active, hR };
-  },
-
   /// Unified sign: returns { type1, type2 } Uint8Arrays (type1 can be null).
   async signUserOp(params) {
     const payload = buildSignPayload(params);
@@ -452,9 +446,16 @@ function buildSignPayload(p) {
   // gasFees = (maxPriorityFee << 128) | maxFee
   const gf = concatBytes([u128be(p.maxPriorityFeePerGas), u128be(p.maxFeePerGas)]);
 
+  // Flags u32: bit 31 = FLAG_INCLUDE_INIT_CODE, bit 30 = FLAG_REGISTER_SLOT,
+  // bits 29..0 = slot_index. The firmware uses this to decide whether to
+  // synthesise initCode and/or emit a Type 1 slot-registration frame.
+  let flags = (p.slotIndex || 0) & SLOT_INDEX_MASK;
+  if (p.registerSlot) flags |= FLAG_REGISTER_SLOT;
+  if (p.includeInitCode) flags |= FLAG_INCLUDE_INIT_CODE;
+
   const head = concatBytes([
     u64be(p.chainId),
-    u32be(p.slotIndexHint || 0),
+    u32be(flags >>> 0),
     sender,
     entryPoint,
     u256be(p.nonce),
@@ -533,22 +534,13 @@ $('lockBtn').addEventListener('click', async () => {
   } catch (e) { log(`Lock error: ${e.message}`, 'err'); }
 });
 
-$('slotInfoBtn').addEventListener('click', async () => {
-  try {
-    const chainId = BigInt($('chainId').value);
-    const info = await DeviceAPI.getSlotInfo(chainId);
-    $('slotIdx').textContent = info.active ? info.slotIndex : '—';
-    $('nextQ').textContent = info.active ? info.nextQ : '—';
-    log(`Slot info: slot=${info.slotIndex}, next_q=${info.nextQ}, flags=${info.flags}, active=${info.active}`, 'info');
-  } catch (e) { log(`Slot info failed: ${e.message}`, 'err'); }
-});
-
 $('signBtn').addEventListener('click', async () => {
   $('signBtn').disabled = true;
   try {
     const params = {
       chainId: BigInt($('chainId').value),
-      slotIndexHint: 0,
+      slotIndex: Number($('slotIndex').value) >>> 0,
+      registerSlot: $('registerSlot').checked,
       sender: '0x' + '42'.repeat(20), // TODO: compute from master pk via factory
       entryPoint: ENTRY_POINT_V09,
       nonce: BigInt($('nonce').value),
@@ -570,16 +562,10 @@ $('signBtn').addEventListener('click', async () => {
     if (type1) {
       log(`Type 1 (slot register): ${type1.length}B — 0x${bytesToHex(type1.slice(0, 32))}...`, 'ok');
     } else {
-      log('No Type 1 needed (slot already registered on this chain)', 'info');
+      log('No Type 1 emitted (companion did not request slot registration)', 'info');
     }
     log(`Type 2 (user tx sig): ${type2.length}B — 0x${bytesToHex(type2.slice(0, 32))}...`, 'ok');
     $('submitBtn').disabled = false;
-    // Refresh slot info so the next_q display is current.
-    try {
-      const info = await DeviceAPI.getSlotInfo(params.chainId);
-      $('slotIdx').textContent = info.slotIndex;
-      $('nextQ').textContent = info.nextQ;
-    } catch (_) {}
   } catch (e) {
     log(`Sign failed: ${e.message}`, 'err');
   } finally {
@@ -639,11 +625,6 @@ async function runSignWithParams(params, description) {
     }
     log(`Type 2 (user tx sig): ${type2.length}B — 0x${bytesToHex(type2.slice(0, 32))}...`, 'ok');
     $('submitBtn').disabled = false;
-    try {
-      const info = await DeviceAPI.getSlotInfo(params.chainId);
-      $('slotIdx').textContent = info.slotIndex;
-      $('nextQ').textContent = info.nextQ;
-    } catch (_) {}
   } catch (e) {
     log(`${description} failed: ${e.message}`, 'err');
   } finally {
@@ -662,7 +643,8 @@ $('testUsdcBtn').addEventListener('click', async () => {
   $('data').value = '0x' + bytesToHex(calldata);
   const params = {
     chainId: USDC_BASE.chainId,
-    slotIndexHint: 0,
+    slotIndex: Number($('slotIndex').value) >>> 0,
+    registerSlot: $('registerSlot').checked,
     sender: '0x' + '42'.repeat(20),
     entryPoint: ENTRY_POINT_V09,
     nonce: BigInt($('nonce').value || '0'),
@@ -696,7 +678,8 @@ $('testZkAaveBtn').addEventListener('click', async () => {
   $('data').value = '0x' + bytesToHex(innerData);
   const params = {
     chainId: 1n,
-    slotIndexHint: 0,
+    slotIndex: Number($('slotIndex').value) >>> 0,
+    registerSlot: $('registerSlot').checked,
     sender: '0x' + '42'.repeat(20),
     entryPoint: ENTRY_POINT_V09,
     nonce: BigInt($('nonce').value || '0'),

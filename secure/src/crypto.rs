@@ -652,6 +652,107 @@ pub fn c10_sign_verified_with_progress(
 }
 
 // ---------------------------------------------------------------------------
+// JARDÍN slot C10 keypair derivation
+// ---------------------------------------------------------------------------
+//
+// Post-cutover the per-slot signing key is itself a SPHINCS+C10 keypair. The
+// firmware is stateless with respect to slot selection — it re-derives the
+// keypair deterministically from `(jardin_master_entropy, slot_index)` on
+// every sign (and caches the result in SRAM for the remainder of the unlock
+// session).
+//
+// Derivation chain:
+//
+//   jardin_master_entropy = sha256("pqwallet-jardin-master" || bip39_seed)
+//   slot_entropy          = sha256(master || "jardin_slot" || slot_index_be)
+//   r                     = sha256(master || "jardin_r"    || slot_index_be)
+//   slot_sk_seed          = sha256("jardin_slot_c10_sk_seed" || slot_entropy)
+//   slot_pk_seed_16       = sha256("jardin_slot_c10_pk_seed" || slot_entropy)[0..16]
+//
+// The first three rules preserve the domain tags that were already part of
+// the recovery contract (only the consumer of `slot_entropy` changed from
+// FORS+C keygen to C10 keygen). The last two are new tags for the C10 slot
+// seed/pk derivation.
+
+/// Compute the deterministic slot entropy for a given `slot_index`.
+pub fn jardin_slot_entropy(master_entropy: &[u8; 32], slot_index: u32) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(master_entropy);
+    h.update(b"jardin_slot");
+    h.update(slot_index.to_be_bytes());
+    h.finalize().into()
+}
+
+/// Compute the per-slot randomiser `r` used to index the on-chain slotKey.
+pub fn jardin_slot_r(master_entropy: &[u8; 32], slot_index: u32) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(master_entropy);
+    h.update(b"jardin_r");
+    h.update(slot_index.to_be_bytes());
+    h.finalize().into()
+}
+
+/// Derive the slot C10 `(sk_seed_32, pk_seed_32)` pair from slot entropy.
+/// `pk_seed_32` uses the N-mask layout (top 16 bytes populated, bottom 16
+/// zero) to match the on-chain `bytes32` shape expected by the C10 verifier.
+fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    let mut sk_h = Sha256::new();
+    sk_h.update(b"jardin_slot_c10_sk_seed");
+    sk_h.update(slot_entropy);
+    let sk_seed: [u8; 32] = sk_h.finalize().into();
+
+    let mut pk_h = Sha256::new();
+    pk_h.update(b"jardin_slot_c10_pk_seed");
+    pk_h.update(slot_entropy);
+    let pk_digest: [u8; 32] = pk_h.finalize().into();
+    let mut pk_seed = [0u8; 32];
+    pk_seed[..16].copy_from_slice(&pk_digest[..16]);
+
+    (sk_seed, pk_seed)
+}
+
+/// Full slot-C10-keypair derivation including hypertree keygen.
+///
+/// Returns `(signing_key, pk_seed_32, pk_root_32)`, both pubkey halves in
+/// the N-masked 32-byte layout the on-chain `slots[slotKey]` commitment
+/// hashes over (`sha256(pk_seed[..16] || pk_root[..16])`).
+///
+/// **Expensive**: ~5-6 s on Cortex-M33 with the HASH peripheral. Callers
+/// should cache the resulting `SigningKey` across signs of the same slot.
+pub fn derive_c10_slot_keypair(
+    master_entropy: &[u8; 32],
+    slot_index: u32,
+) -> (SigningKey, [u8; 32], [u8; 32]) {
+    derive_c10_slot_keypair_with_progress(master_entropy, slot_index, |_| {})
+}
+
+/// Progress-reporting variant of [`derive_c10_slot_keypair`].
+pub fn derive_c10_slot_keypair_with_progress(
+    master_entropy: &[u8; 32],
+    slot_index: u32,
+    progress: impl Fn(u8),
+) -> (SigningKey, [u8; 32], [u8; 32]) {
+    progress(0);
+    let mut slot_entropy = jardin_slot_entropy(master_entropy, slot_index);
+    let (sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&slot_entropy);
+    slot_entropy.zeroize();
+
+    let mut pk_seed_16 = [0u8; 16];
+    pk_seed_16.copy_from_slice(&pk_seed_32[..16]);
+    let mut sk_seed_arr = [0u8; 32];
+    sk_seed_arr.copy_from_slice(&sk_seed_32);
+
+    progress(10);
+    let sk = SigningKey::keygen(sk_seed_arr, pk_seed_16);
+    progress(100);
+
+    let mut pk_root_32 = [0u8; 32];
+    pk_root_32[..16].copy_from_slice(sk.pk_root());
+
+    (sk, pk_seed_32, pk_root_32)
+}
+
+// ---------------------------------------------------------------------------
 // PIN state serialization (unchanged — used by mock-SE MACD path)
 // ---------------------------------------------------------------------------
 

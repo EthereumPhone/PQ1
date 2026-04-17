@@ -7,17 +7,16 @@ import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOper
 
 import {PQJardinWallet} from "../src/PQJardinWallet.sol";
 import {PQJardinWalletFactory} from "../src/PQJardinWalletFactory.sol";
-import {MockJardinVerifier} from "./mocks/MockJardinVerifier.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 
-/// @notice End-to-end test for the JARDÍN-only wallet using mock verifiers.
-///         Validates the Type 1 / Type 2 dispatch state machine, CREATE2
-///         determinism, and the on-chain slot registry.
+/// @notice End-to-end test for the all-C10 wallet using a single mock
+///         SPHINCS+C10 verifier for both the bootstrap path and per-slot
+///         paths. Validates Type 1 / Type 2 dispatch, CREATE2 determinism,
+///         the on-chain slot registry, and the two use-count caps.
 contract PQJardinWalletTest is Test {
     address constant ENTRY_POINT_ADDR = address(0x4337);
 
     MockSPHINCSVerifier internal c10;
-    MockJardinVerifier internal forsc;
     PQJardinWalletFactory internal factory;
 
     bytes32 internal constant MASTER_PK_SEED =
@@ -29,10 +28,14 @@ contract PQJardinWalletTest is Test {
     bytes16 internal constant SUB_PK_SEED_16 = bytes16(uint128(0xdeadbeefdeadbeefdeadbeefdeadbeef));
     bytes16 internal constant SUB_PK_ROOT_16 = bytes16(uint128(0xcafebabecafebabecafebabecafebabe));
 
+    /// @dev ERC-7201 base slot for PQOwnable — must mirror the constant in
+    ///      `PQOwnable._PQ_OWNABLE_STORAGE_LOCATION`.
+    bytes32 internal constant BASE_SLOT =
+        0xcb4cadeb7787e52e28ca307d180c484d592168b4843855f610dadfd7a22bd700;
+
     function setUp() public {
         c10 = new MockSPHINCSVerifier();
-        forsc = new MockJardinVerifier();
-        factory = new PQJardinWalletFactory(IEntryPoint(ENTRY_POINT_ADDR), c10, forsc);
+        factory = new PQJardinWalletFactory(IEntryPoint(ENTRY_POINT_ADDR), c10);
     }
 
     // ── CREATE2 determinism ─────────────────────────────────────────
@@ -94,7 +97,6 @@ contract PQJardinWalletTest is Test {
 
         vm.startPrank(ENTRY_POINT_ADDR);
         assertEq(w.validateUserOp(_packedOp(address(w), sig), keccak256("a"), 0), 0);
-        // Same (r, subKey) re-registration is a no-op, not a revert.
         assertEq(w.validateUserOp(_packedOp(address(w), sig), keccak256("b"), 0), 0);
         vm.stopPrank();
     }
@@ -141,10 +143,8 @@ contract PQJardinWalletTest is Test {
         w.validateUserOp(_packedOp(address(w), t1), keccak256("reg"), 0);
 
         // Step 2: Type 2 against the now-registered slot.
-        forsc.setValid(true);
         bytes32 slotKey = sha256(abi.encodePacked(R));
-        bytes memory forscSig = new bytes(2468); // q=1 length
-        bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16, forscSig);
+        bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), t2), keccak256("user-tx"), 0);
         assertEq(vd, 0, "Type 2 against registered slot must validate");
@@ -152,11 +152,10 @@ contract PQJardinWalletTest is Test {
 
     function test_type2UnregisteredSlotRejects() public {
         PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
-        forsc.setValid(true);
+        c10.setValid(true);
 
         bytes32 slotKey = sha256(abi.encodePacked(R));
-        bytes memory forscSig = new bytes(2468);
-        bytes memory sig = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16, forscSig);
+        bytes memory sig = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
 
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), sig), keccak256("x"), 0);
@@ -174,18 +173,37 @@ contract PQJardinWalletTest is Test {
             0
         );
 
-        forsc.setValid(true);
         bytes32 slotKey = sha256(abi.encodePacked(R));
         bytes16 wrongSeed = bytes16(uint128(0x1234));
-        bytes memory forscSig = new bytes(2468);
-        bytes memory sig = _buildType2Sig(slotKey, wrongSeed, SUB_PK_ROOT_16, forscSig);
+        bytes memory sig = _buildType2Sig(slotKey, wrongSeed, SUB_PK_ROOT_16);
 
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), sig), keccak256("x"), 0);
         assertEq(vd, 1, "wrong sub-key must fail validation");
     }
 
-    function test_type2FORSCFailRejects() public {
+    function test_type2C10FailRejects() public {
+        PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
+
+        // Register via a passing C10 verifier.
+        c10.setValid(true);
+        vm.prank(ENTRY_POINT_ADDR);
+        w.validateUserOp(
+            _packedOp(address(w), _buildType1Sig(R, SUB_PK_SEED_16, SUB_PK_ROOT_16)),
+            keccak256("reg"),
+            0
+        );
+
+        // Then flip it: the SAME verifier now returns false → Type 2 fails.
+        c10.setValid(false);
+        bytes32 slotKey = sha256(abi.encodePacked(R));
+        bytes memory sig = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        vm.prank(ENTRY_POINT_ADDR);
+        uint256 vd = w.validateUserOp(_packedOp(address(w), sig), keccak256("x"), 0);
+        assertEq(vd, 1, "C10 fail must fail validation");
+    }
+
+    function test_type2BadLengthRejects() public {
         PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
 
         c10.setValid(true);
@@ -196,13 +214,14 @@ contract PQJardinWalletTest is Test {
             0
         );
 
-        forsc.setValid(false);
         bytes32 slotKey = sha256(abi.encodePacked(R));
-        bytes memory forscSig = new bytes(2468);
-        bytes memory sig = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16, forscSig);
+        bytes memory sig = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        bytes memory shortSig = new bytes(sig.length - 1);
+        for (uint i = 0; i < shortSig.length; i++) shortSig[i] = sig[i];
+
         vm.prank(ENTRY_POINT_ADDR);
-        uint256 vd = w.validateUserOp(_packedOp(address(w), sig), keccak256("x"), 0);
-        assertEq(vd, 1, "FORS+C fail must fail validation");
+        uint256 vd = w.validateUserOp(_packedOp(address(w), shortSig), keccak256("x"), 0);
+        assertEq(vd, 1, "wrong-length Type 2 must fail validation");
     }
 
     // ── Bootstrap counter ──────────────────────────────────────────
@@ -220,8 +239,8 @@ contract PQJardinWalletTest is Test {
         assertEq(w.validateUserOp(_packedOp(address(w), sig), keccak256("a"), 0), 0);
         assertEq(w.bootstrapUses(), 1, "counter bumps on success");
 
-        // Same (r, subKey) is idempotent for the slot registry, but it is
-        // still a new Type 1 acceptance and must bump the counter.
+        // Idempotent re-reg still bumps the counter (policy: we're accepting
+        // a new signature even if the slot entry is unchanged).
         vm.prank(ENTRY_POINT_ADDR);
         assertEq(w.validateUserOp(_packedOp(address(w), sig), keccak256("b"), 0), 0);
         assertEq(w.bootstrapUses(), 2, "idempotent re-reg still bumps counter");
@@ -252,14 +271,9 @@ contract PQJardinWalletTest is Test {
         assertEq(w.bootstrapUses(), 0, "zero r must not bump counter");
     }
 
-    /// @notice Push the counter to exactly `MAX_BOOTSTRAP_USES - 1` via a
-    ///         storage write, confirm the next Type 1 is still accepted and
-    ///         fills the cap, then confirm the following Type 1 is rejected
-    ///         with SIG_VALIDATION_FAILED (not a revert).
-    ///
-    ///         Rather than running 65,536 full validations (would burn gas
-    ///         and forge test time), we write the counter directly to the
-    ///         canonical ERC-7201 slot + the `bootstrapUses` offset.
+    /// @notice Push the counter to `MAX_BOOTSTRAP_USES - 1` via a storage
+    ///         write, confirm the final Type 1 is still accepted and fills
+    ///         the cap, then confirm the next Type 1 is rejected cleanly.
     function test_bootstrapCounterCapRejectsOverflow() public {
         PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
         c10.setValid(true);
@@ -267,20 +281,17 @@ contract PQJardinWalletTest is Test {
         uint256 cap = w.MAX_BOOTSTRAP_USES();
         assertEq(cap, 65_536, "cap must be 65536");
 
-        // bootstrapUses lives at slot + 1 (mapping is slot + 0).
-        bytes32 baseSlot =
-            0xcb4cadeb7787e52e28ca307d180c484d592168b4843855f610dadfd7a22bd700;
-        bytes32 counterSlot = bytes32(uint256(baseSlot) + 1);
+        // bootstrapUses lives at BASE_SLOT + 1 (the `jardinSlots` mapping
+        // is at offset 0; `slotUses` at offset 2 was added after it).
+        bytes32 counterSlot = bytes32(uint256(BASE_SLOT) + 1);
         vm.store(address(w), counterSlot, bytes32(cap - 1));
         assertEq(w.bootstrapUses(), cap - 1, "counter primed to cap-1");
 
-        // Last allowed Type 1 — accepted, counter fills the cap.
         bytes memory sig = _buildType1Sig(R, SUB_PK_SEED_16, SUB_PK_ROOT_16);
         vm.prank(ENTRY_POINT_ADDR);
         assertEq(w.validateUserOp(_packedOp(address(w), sig), keccak256("last"), 0), 0);
         assertEq(w.bootstrapUses(), cap, "final Type 1 fills the cap");
 
-        // Next Type 1 — rejected with SIG_VALIDATION_FAILED, no revert.
         bytes32 otherR = bytes32(uint256(0xd00d));
         bytes memory sig2 = _buildType1Sig(otherR, SUB_PK_SEED_16, SUB_PK_ROOT_16);
         vm.prank(ENTRY_POINT_ADDR);
@@ -288,35 +299,158 @@ contract PQJardinWalletTest is Test {
         assertEq(w.bootstrapUses(), cap, "counter stays at cap after rejection");
     }
 
-    /// @notice Once the cap is full, Type 2 against the already-registered
-    ///         slot must still work (the current JARDÍN slot keeps signing
-    ///         until its own q-exhaustion).
+    /// @notice Once the bootstrap cap is full, Type 2 against already-
+    ///         registered slots must still work (up to each slot's own
+    ///         `MAX_SLOT_USES`).
     function test_bootstrapExhaustedAllowsType2() public {
         PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
         c10.setValid(true);
 
-        // Register one slot (counter 1).
+        // Register one slot (bootstrapUses = 1).
         bytes memory t1 = _buildType1Sig(R, SUB_PK_SEED_16, SUB_PK_ROOT_16);
         vm.prank(ENTRY_POINT_ADDR);
         w.validateUserOp(_packedOp(address(w), t1), keccak256("reg"), 0);
         assertEq(w.bootstrapUses(), 1);
 
         // Push counter to cap.
-        bytes32 baseSlot =
-            0xcb4cadeb7787e52e28ca307d180c484d592168b4843855f610dadfd7a22bd700;
-        vm.store(address(w), bytes32(uint256(baseSlot) + 1), bytes32(w.MAX_BOOTSTRAP_USES()));
+        vm.store(address(w), bytes32(uint256(BASE_SLOT) + 1), bytes32(w.MAX_BOOTSTRAP_USES()));
 
-        // Type 2 against the already-registered slot should still work.
-        forsc.setValid(true);
+        // Type 2 against the already-registered slot must still work.
         bytes32 slotKey = sha256(abi.encodePacked(R));
-        bytes memory forscSig = new bytes(2468);
-        bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16, forscSig);
+        bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
         vm.prank(ENTRY_POINT_ADDR);
         assertEq(
             w.validateUserOp(_packedOp(address(w), t2), keccak256("tx"), 0),
             0,
-            "Type 2 must still work when C10 bootstrap is exhausted"
+            "Type 2 must still work when bootstrap cap is hit"
         );
+    }
+
+    // ── Slot counter ───────────────────────────────────────────────
+
+    /// @notice Every accepted Type 2 bumps `slotUses[slotKey]` by exactly 1.
+    function test_slotCounterIncrementsOnSuccess() public {
+        PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
+        c10.setValid(true);
+
+        // Register the slot.
+        bytes memory t1 = _buildType1Sig(R, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        vm.prank(ENTRY_POINT_ADDR);
+        w.validateUserOp(_packedOp(address(w), t1), keccak256("reg"), 0);
+
+        bytes32 slotKey = sha256(abi.encodePacked(R));
+        assertEq(w.slotUses(slotKey), 0, "slot counter starts at 0");
+
+        bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        vm.startPrank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), t2), keccak256("tx1"), 0), 0);
+        assertEq(w.slotUses(slotKey), 1, "slot counter bumps on success");
+        assertEq(w.validateUserOp(_packedOp(address(w), t2), keccak256("tx2"), 0), 0);
+        assertEq(w.slotUses(slotKey), 2, "slot counter keeps bumping");
+        vm.stopPrank();
+    }
+
+    /// @notice Rejected Type 2s (wrong sub-key, C10 fail, bad length)
+    ///         must not bump the slot counter.
+    function test_slotCounterDoesNotIncrementOnFailure() public {
+        PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
+        c10.setValid(true);
+
+        bytes memory t1 = _buildType1Sig(R, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        vm.prank(ENTRY_POINT_ADDR);
+        w.validateUserOp(_packedOp(address(w), t1), keccak256("reg"), 0);
+
+        bytes32 slotKey = sha256(abi.encodePacked(R));
+        assertEq(w.slotUses(slotKey), 0);
+
+        // Wrong sub-key.
+        bytes memory wrong = _buildType2Sig(slotKey, bytes16(uint128(0x1234)), SUB_PK_ROOT_16);
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), wrong), keccak256("a"), 0), 1);
+        assertEq(w.slotUses(slotKey), 0, "wrong sub-key must not bump");
+
+        // Failing C10 verifier.
+        c10.setValid(false);
+        bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), t2), keccak256("b"), 0), 1);
+        assertEq(w.slotUses(slotKey), 0, "failed C10 must not bump");
+
+        // Wrong length.
+        c10.setValid(true);
+        bytes memory shortSig = new bytes(t2.length - 1);
+        for (uint i = 0; i < shortSig.length; i++) shortSig[i] = t2[i];
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), shortSig), keccak256("c"), 0), 1);
+        assertEq(w.slotUses(slotKey), 0, "bad length must not bump");
+    }
+
+    /// @notice Prime slotUses to `MAX_SLOT_USES - 1`, confirm the final
+    ///         Type 2 is accepted and fills the cap, then confirm the
+    ///         next Type 2 is rejected cleanly with SIG_VALIDATION_FAILED
+    ///         (no revert — bundler-friendly).
+    function test_slotCounterCapRejectsOverflow() public {
+        PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
+        c10.setValid(true);
+
+        bytes memory t1 = _buildType1Sig(R, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        vm.prank(ENTRY_POINT_ADDR);
+        w.validateUserOp(_packedOp(address(w), t1), keccak256("reg"), 0);
+
+        bytes32 slotKey = sha256(abi.encodePacked(R));
+        uint256 cap = w.MAX_SLOT_USES();
+        assertEq(cap, 65_536, "slot cap must be 65536");
+
+        // slotUses mapping lives at BASE_SLOT + 2.
+        // Mapping-slot derivation: keccak256(abi.encode(key, mappingSlot)).
+        bytes32 mappingSlot = bytes32(uint256(BASE_SLOT) + 2);
+        bytes32 entrySlot = keccak256(abi.encode(slotKey, mappingSlot));
+        vm.store(address(w), entrySlot, bytes32(cap - 1));
+        assertEq(w.slotUses(slotKey), cap - 1, "slot counter primed to cap-1");
+
+        bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), t2), keccak256("last"), 0), 0);
+        assertEq(w.slotUses(slotKey), cap, "final Type 2 fills the cap");
+
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), t2), keccak256("over"), 0), 1);
+        assertEq(w.slotUses(slotKey), cap, "slot counter stays at cap after rejection");
+    }
+
+    /// @notice The slot cap must be independent per slotKey — burning one
+    ///         slot to exhaustion must not affect another slot.
+    function test_slotCounterIsPerSlot() public {
+        PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
+        c10.setValid(true);
+
+        bytes32 r1 = bytes32(uint256(0x1001));
+        bytes32 r2 = bytes32(uint256(0x1002));
+        bytes16 seed2 = bytes16(uint128(0xeeee));
+        bytes16 root2 = bytes16(uint128(0xffff));
+
+        // Register two distinct slots.
+        vm.prank(ENTRY_POINT_ADDR);
+        w.validateUserOp(_packedOp(address(w), _buildType1Sig(r1, SUB_PK_SEED_16, SUB_PK_ROOT_16)), keccak256("r1"), 0);
+        vm.prank(ENTRY_POINT_ADDR);
+        w.validateUserOp(_packedOp(address(w), _buildType1Sig(r2, seed2, root2)), keccak256("r2"), 0);
+
+        bytes32 slot1 = sha256(abi.encodePacked(r1));
+        bytes32 slot2 = sha256(abi.encodePacked(r2));
+
+        // Exhaust slot1 via direct storage write.
+        bytes32 mappingSlot = bytes32(uint256(BASE_SLOT) + 2);
+        bytes32 entry1 = keccak256(abi.encode(slot1, mappingSlot));
+        vm.store(address(w), entry1, bytes32(w.MAX_SLOT_USES()));
+
+        // slot1 is dead; slot2 must still work.
+        bytes memory sig1 = _buildType2Sig(slot1, SUB_PK_SEED_16, SUB_PK_ROOT_16);
+        bytes memory sig2 = _buildType2Sig(slot2, seed2, root2);
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), sig1), keccak256("x"), 0), 1, "slot1 exhausted");
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(w.validateUserOp(_packedOp(address(w), sig2), keccak256("y"), 0), 0, "slot2 still fine");
+        assertEq(w.slotUses(slot2), 1, "slot2 counter bumps independently");
     }
 
     // ── Access control ─────────────────────────────────────────────
@@ -347,21 +481,22 @@ contract PQJardinWalletTest is Test {
         for (uint i = 0; i < 32; i++) out[1 + i] = r[i];
         for (uint i = 0; i < 16; i++) out[33 + i] = subSeed[i];
         for (uint i = 0; i < 16; i++) out[49 + i] = subRoot[i];
-        // The remaining 4008 bytes of C10 sig are zero — the mock verifier
-        // ignores them and returns its pre-set validity flag.
+        // The remaining 4008 bytes are zero — the mock verifier ignores
+        // them and returns its pre-set validity flag.
     }
 
-    function _buildType2Sig(bytes32 slotKey, bytes16 subSeed, bytes16 subRoot, bytes memory forscSig)
+    /// @notice Build a Type 2 (all-C10) signature frame. Fixed 4073 bytes.
+    function _buildType2Sig(bytes32 slotKey, bytes16 subSeed, bytes16 subRoot)
         internal
         pure
         returns (bytes memory out)
     {
-        out = new bytes(1 + 32 + 16 + 16 + forscSig.length);
+        out = new bytes(1 + 32 + 16 + 16 + 4008);
         out[0] = 0x02;
         for (uint i = 0; i < 32; i++) out[1 + i] = slotKey[i];
         for (uint i = 0; i < 16; i++) out[33 + i] = subSeed[i];
         for (uint i = 0; i < 16; i++) out[49 + i] = subRoot[i];
-        for (uint i = 0; i < forscSig.length; i++) out[65 + i] = forscSig[i];
+        // Trailing 4008 bytes ignored by the mock.
     }
 
     function _packedOp(address sender, bytes memory signature)

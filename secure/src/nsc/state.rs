@@ -49,24 +49,19 @@ pub(super) struct SecureState {
     /// Whether any signature has been produced this session.
     pub(super) has_signed: bool,
 
-    // -- JARDIN FORS+C state (session-scoped) ---------------------------
-    // Slot state is lost on power cycle / lock. The companion re-derives
-    // from the chain's latest registered slot on reconnect.
+    // -- JARDÍN slot cache (session-scoped) -----------------------------
+    // Post-C10-cutover the firmware is stateless with respect to slot
+    // selection: the companion sends `(chain_id, slot_index, flags)` on
+    // every sign. We cache the derived JARDÍN master entropy across the
+    // unlock session (one BIP-39 → SHA-256 pass) and the derived slot
+    // SigningKey (one multi-second hypertree keygen) to amortise repeat
+    // signs. Both are dropped on lock / idle-wipe / panic.
 
-    /// JARDIN master entropy (derived once per unlock from BIP-39 seed).
+    /// JARDÍN master entropy (derived once per unlock from BIP-39 seed).
     pub(super) jardin_master_entropy: [u8; 32],
 
     /// Whether `jardin_master_entropy` has been derived this session.
     pub(super) jardin_master_derived: bool,
-
-    /// Current JARDIN slot chain_id (0 = not initialized).
-    pub(super) jardin_chain_id: u64,
-
-    /// Current JARDIN slot index.
-    pub(super) jardin_slot_index: u32,
-
-    /// Whether a JARDIN slot is currently active in JARDIN_SLOT.
-    pub(super) jardin_slot_active: bool,
 }
 
 impl SecureState {
@@ -81,9 +76,6 @@ impl SecureState {
             has_signed: false,
             jardin_master_entropy: [0u8; 32],
             jardin_master_derived: false,
-            jardin_chain_id: 0,
-            jardin_slot_index: 0,
-            jardin_slot_active: false,
         }
     }
 
@@ -100,14 +92,11 @@ impl SecureState {
         self.has_signed = false;
         self.jardin_master_entropy.zeroize();
         self.jardin_master_derived = false;
-        self.jardin_chain_id = 0;
-        self.jardin_slot_index = 0;
-        self.jardin_slot_active = false;
-        // SAFETY: single-threaded, exclusive access via with_state
+        // SAFETY: single-threaded, exclusive access via with_state.
+        // JARDIN_SLOT holds a SigningKey (ZeroizeOnDrop). Replacing the
+        // Option with None drops the inner key, which wipes its secret
+        // material automatically.
         unsafe {
-            if let Some(ref mut slot) = *core::ptr::addr_of_mut!(JARDIN_SLOT) {
-                slot.zeroize();
-            }
             *core::ptr::addr_of_mut!(JARDIN_SLOT) = None;
         }
     }
@@ -133,12 +122,24 @@ impl SecureState {
 /// a stable address for the no-`alloc` environment.
 static mut STATE: SecureState = SecureState::new();
 
-/// JARDIN slot storage. Separate from SecureState because JardinSlot
-/// (~3.1 KB) is too large for a const initializer and contains arrays
-/// that cannot be const-constructed. Placed in BSS via Option<None>.
+/// Cached slot SigningKey for the `(slot_index)` most recently signed with
+/// during this unlock session. Re-keygen happens when the companion asks
+/// for a different `slot_index`; the cache is dropped on lock/idle-wipe.
 ///
-/// SAFETY: same single-threaded invariant as STATE.
-pub(super) static mut JARDIN_SLOT: Option<jardin_fosc::JardinSlot> = None;
+/// Kept separate from `SecureState` because `SigningKey` holds arrays that
+/// cannot be const-constructed; `Option<None>` lives in BSS.
+///
+/// SAFETY: same single-threaded invariant as `STATE`.
+pub(super) static mut JARDIN_SLOT: Option<CachedSlot> = None;
+
+/// In-SRAM slot cache: a SigningKey tagged with the `slot_index` it was
+/// derived for. Chain id is not part of the cache key because slot
+/// derivation is chain-agnostic — on-chain separation is enforced by the
+/// per-wallet `slots[slotKey]` mapping instead.
+pub(super) struct CachedSlot {
+    pub(super) slot_index: u32,
+    pub(super) key: sphincs_c10::SigningKey,
+}
 
 /// Borrow the gateway state mutably for the duration of `f`.
 ///

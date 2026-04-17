@@ -9,7 +9,6 @@ sphincs-tz-bip39  = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }
-jardin-fosc = { workspace = true }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
 aes = { version = "0.8", default-features = false }
 cmac = { version = "0.7", default-features = false }
@@ -64,7 +63,7 @@ stm32u585 = ["sphincs-tz-shared/stm32u585", "hw-sha256"]
 # peripheral (the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`).
 # Without this feature the signing crates use software `sha2::Sha256` — what
 # host tests need. Every `stm32u585` build opts in automatically.
-hw-sha256 = ["jardin-fosc/hw-sha256", "sphincs-c10/hw-sha256"]
+hw-sha256 = ["sphincs-c10/hw-sha256"]
 # Non-interactive automated end-to-end test mode. Provisions a fixed
 # test mnemonic + PIN at boot, marks PIN as verified, and short-circuits
 # every confirm() / enter_pin() dialog so no stdin input is needed.

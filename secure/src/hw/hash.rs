@@ -1,17 +1,17 @@
 //! STM32U585 HASH peripheral driver — SHA-256 only.
 //!
 //! Used under the `hw-sha256` feature on `sphincs-tz-secure` to route
-//! every SHA-256 call from `sphincs-c10` and `jardin-fosc` through the
-//! hardware accelerator. The HASH peripheral runs at roughly 1 cycle/byte
-//! (single-block) — significantly faster than the software `sha2::Sha256`
-//! fallback that non-firmware builds use, and which dominates FORS+C
-//! signing wall time when software is used.
+//! every SHA-256 call from `sphincs-c10` through the hardware accelerator.
+//! The HASH peripheral runs at roughly 1 cycle/byte (single-block) —
+//! significantly faster than the software `sha2::Sha256` fallback that
+//! non-firmware builds use, and which dominates C10 signing wall time
+//! when software is used.
 //!
 //! Register layout is the STM32U5 HASH v4 (same IP as STM32H5 / WBA55).
 //! Confirmed against Linux `drivers/crypto/stm32/stm32-hash.c`.
 //!
-//! This module provides three extern "C" symbols that `sphincs-c10` and
-//! `jardin-fosc` call when compiled with `hw-sha256`:
+//! This module provides three extern "C" symbols that `sphincs-c10` calls
+//! when compiled with `hw-sha256`:
 //!
 //!   pqsigner_sha256_init()
 //!   pqsigner_sha256_update(ptr, len)
@@ -108,10 +108,25 @@ unsafe fn self_test() {
         0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
     ];
     if out == expected {
-        cortex_m_semihosting::hprintln!("[S] hash: HW SHA-256 self-test PASS");
+        debug_log_safe(|| {
+            cortex_m_semihosting::hprintln!("[S] hash: HW SHA-256 self-test PASS");
+        });
     } else {
-        cortex_m_semihosting::hprintln!("[S] hash: HW SHA-256 self-test FAIL — HALT");
+        debug_log_safe(|| {
+            cortex_m_semihosting::hprintln!("[S] hash: HW SHA-256 self-test FAIL — HALT");
+        });
         loop { cortex_m::asm::wfe(); }
+    }
+}
+
+/// Run `f` only if a debugger is actually attached (DHCSR.C_DEBUGEN=1).
+/// Calling `hprintln!` without a debugger issues a BKPT which HardFaults
+/// on real hardware — the standalone firmware must never trip that.
+#[inline(always)]
+fn debug_log_safe(f: impl FnOnce()) {
+    let debugen = unsafe { read_volatile(0xE000_EDF0 as *const u32) } & 1;
+    if debugen != 0 {
+        f();
     }
 }
 
@@ -121,10 +136,12 @@ unsafe fn wait_ready() {
     while read_volatile(HASH_SR) & SR_BUSY != 0 {
         t += 1;
         if t > 10_000_000 {
-            cortex_m_semihosting::hprintln!(
-                "[S] hash: wait_ready TIMEOUT, SR={:#x}",
-                read_volatile(HASH_SR)
-            );
+            let sr = read_volatile(HASH_SR);
+            debug_log_safe(|| {
+                cortex_m_semihosting::hprintln!(
+                    "[S] hash: wait_ready TIMEOUT, SR={:#x}", sr
+                );
+            });
             return;
         }
     }
@@ -140,7 +157,7 @@ unsafe fn write_word(w: u32) {
 }
 
 // ---------------------------------------------------------------------------
-// Extern symbols — called from `sphincs-c10` and `jardin-fosc`.
+// Extern symbols — called from `sphincs-c10`.
 // ---------------------------------------------------------------------------
 
 /// Start a new SHA-256 computation.
@@ -220,13 +237,15 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     while read_volatile(HASH_SR) & SR_DCIS == 0 {
         t += 1;
         if t > 10_000_000 {
-            cortex_m_semihosting::hprintln!(
-                "[S] hash: DCIS TIMEOUT, SR={:#x} CR={:#x} STR={:#x} remaining_bits={}",
-                read_volatile(HASH_SR),
-                read_volatile(HASH_CR),
-                read_volatile(HASH_STR),
-                remaining_bits
-            );
+            let sr = read_volatile(HASH_SR);
+            let cr = read_volatile(HASH_CR);
+            let str_v = read_volatile(HASH_STR);
+            debug_log_safe(|| {
+                cortex_m_semihosting::hprintln!(
+                    "[S] hash: DCIS TIMEOUT, SR={:#x} CR={:#x} STR={:#x} remaining_bits={}",
+                    sr, cr, str_v, remaining_bits
+                );
+            });
             return;
         }
     }

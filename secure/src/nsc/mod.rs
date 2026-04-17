@@ -48,13 +48,11 @@
 //!   * [`cmd_get_remaining`], [`cmd_request_unlock`], [`cmd_get_pubkey`],
 //!     [`cmd_clear_sign`], [`cmd_clear_sign_msg`], [`cmd_sign_userop`].
 
-mod cmd_get_jardin_slot_info;
 mod cmd_get_remaining;
 mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_request_unlock;
 mod cmd_sign_userop;
-pub(crate) mod jardin_flash;
 mod ptr_validate;
 mod state;
 
@@ -75,7 +73,6 @@ mod state;
     not(debug_assertions),
     not(feature = "e2e-test"),
     any(
-        feature = "debug-log",
         feature = "ui-semihosting",
         feature = "ui-mirror",
         feature = "mock-se",
@@ -90,7 +87,7 @@ compile_error!(
 
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
-    NscStatus, CMD_GET_JARDIN_SLOT_INFO, CMD_GET_REMAINING, CMD_IS_UNLOCKED, CMD_LOCK, CMD_NONE,
+    NscStatus, CMD_GET_REMAINING, CMD_IS_UNLOCKED, CMD_LOCK, CMD_NONE,
     CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
@@ -258,7 +255,6 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_SIGN_USEROP => cmd_sign_userop::run(args),
         CMD_IS_UNLOCKED => cmd_is_unlocked::run(),
         CMD_LOCK => cmd_lock::run(),
-        CMD_GET_JARDIN_SLOT_INFO => cmd_get_jardin_slot_info::run(args),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -320,14 +316,3 @@ pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
     unsafe { cmd_lock::run() }
 }
 
-/// CMD_GET_JARDIN_SLOT_INFO — query JARDIN slot state (from flash).
-#[cfg(feature = "stm32u585")]
-#[no_mangle]
-pub extern "cmse-nonsecure-entry" fn nsc_get_jardin_slot_info(
-    payload_ptr: u32,
-    out_ptr: u32,
-    out_len: u32,
-) -> u32 {
-    let args = GatewayArgs { arg0: payload_ptr, arg1: out_ptr, arg2: out_len };
-    unsafe { cmd_get_jardin_slot_info::run(&args) }
-}

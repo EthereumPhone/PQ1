@@ -29,7 +29,6 @@ mod transport {
     const CMD_SIGN_USEROP: u32 = 7;
     const CMD_IS_UNLOCKED: u32 = 11;
     const CMD_LOCK: u32 = 12;
-    const CMD_GET_JARDIN_SLOT_INFO: u32 = 17;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -72,17 +71,6 @@ mod transport {
     pub(super) fn lock() -> u32 {
         unsafe { gateway_call(CMD_LOCK, 0, 0, 0) }
     }
-
-    #[inline]
-    pub(super) fn get_jardin_slot_info_call(
-        payload_ptr: *const u8,
-        out_ptr: *mut u8,
-        out_len: u32,
-    ) -> u32 {
-        unsafe {
-            gateway_call(CMD_GET_JARDIN_SLOT_INFO, payload_ptr as u32, out_ptr as u32, out_len)
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +85,6 @@ mod transport {
         fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_is_unlocked() -> u32;
         fn nsc_lock() -> u32;
-        fn nsc_get_jardin_slot_info(payload_ptr: u32, out_ptr: u32, out_len: u32) -> u32;
     }
 
     #[inline]
@@ -127,15 +114,6 @@ mod transport {
     #[inline]
     pub(super) fn lock() -> u32 {
         unsafe { nsc_lock() }
-    }
-
-    #[inline]
-    pub(super) fn get_jardin_slot_info_call(
-        payload_ptr: *const u8,
-        out_ptr: *mut u8,
-        out_len: u32,
-    ) -> u32 {
-        unsafe { nsc_get_jardin_slot_info(payload_ptr as u32, out_ptr as u32, out_len) }
     }
 }
 
@@ -170,19 +148,4 @@ pub fn is_unlocked() -> bool {
 /// Explicitly lock the device: zeroize cached secrets and mark as locked.
 pub fn lock() -> u32 {
     transport::lock()
-}
-
-/// Query the persisted JARDÍN slot state for a given chain_id.
-///
-/// `out_buf` is filled with the 45-byte response: slot_index(4) +
-/// next_q(4) + flags(4) + active(1) + h_r(32). The `slot_index`
-/// parameter is reserved for backward compatibility and ignored.
-pub fn get_jardin_slot_info(chain_id: u64, _slot_index: u32, out_buf: &mut [u8]) -> u32 {
-    let mut payload = [0u8; 8];
-    payload[0..8].copy_from_slice(&chain_id.to_be_bytes());
-    transport::get_jardin_slot_info_call(
-        payload.as_ptr(),
-        out_buf.as_mut_ptr(),
-        out_buf.len() as u32,
-    )
 }

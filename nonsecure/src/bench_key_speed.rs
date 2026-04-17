@@ -19,7 +19,7 @@
 use crate::nsc_api;
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
-    MAX_JARDIN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
+    FLAG_REGISTER_SLOT, MAX_JARDIN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
 };
 
 // === Scratch buffers =======================================================
@@ -63,7 +63,7 @@ const KECCAK_EMPTY: [u8; 32] = [
     0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70,
 ];
 
-fn build_payload(buf: &mut [u8], chain_id: u64, nonce_seq: u64) -> usize {
+fn build_payload(buf: &mut [u8], chain_id: u64, slot_index: u32, register_slot: bool, nonce_seq: u64) -> usize {
     let sender: [u8; 20] = [0x42; 20];
     let to: [u8; 20] = [0xab; 20];
     let mut nonce = [0u8; 32];
@@ -88,7 +88,8 @@ fn build_payload(buf: &mut [u8], chain_id: u64, nonce_seq: u64) -> usize {
     let mut off = 0usize;
     buf[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
     off += 8;
-    buf[off..off + 4].copy_from_slice(&0u32.to_be_bytes()); // slot_index_hint / flags
+    let flags = slot_index | if register_slot { FLAG_REGISTER_SLOT } else { 0 };
+    buf[off..off + 4].copy_from_slice(&flags.to_be_bytes());
     off += 4;
     buf[off..off + 20].copy_from_slice(&sender);
     off += 20;
@@ -122,9 +123,9 @@ struct SignTiming {
     status: u32,
 }
 
-fn time_one_sign(chain_id: u64, nonce_seq: u64) -> SignTiming {
+fn time_one_sign(chain_id: u64, slot_index: u32, register_slot: bool, nonce_seq: u64) -> SignTiming {
     unsafe {
-        let len = build_payload(&mut PAYLOAD_BUF, chain_id, nonce_seq);
+        let len = build_payload(&mut PAYLOAD_BUF, chain_id, slot_index, register_slot, nonce_seq);
         let t0 = cycles_now();
         let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
         let t1 = cycles_now();
@@ -153,7 +154,10 @@ fn main() -> ! {
     hprintln!("[NS][bench] gateway pre-unlocked: OK");
 
     // ---- A. first-sign on chain 1: Type 1 + slot keygen + Type 2 ----
-    let a = time_one_sign(1, 1);
+    //
+    // Companion-driven slot registration. Cold slot cache + master C10
+    // keygen path — the slowest possible sign.
+    let a = time_one_sign(1, 0, true, 1);
     if a.status != NscStatus::Ok as u32 {
         hprintln!("[NS][bench] FAIL: first-sign on chain 1 = status {}", a.status);
         debug::exit(debug::EXIT_FAILURE);
@@ -168,7 +172,7 @@ fn main() -> ! {
     const N: u32 = 5;
     let mut total_b: u64 = 0;
     for i in 0..N {
-        let b = time_one_sign(1, 2 + i as u64);
+        let b = time_one_sign(1, 0, false, 2 + i as u64);
         if b.status != NscStatus::Ok as u32 {
             hprintln!(
                 "[NS][bench] FAIL: type2 #{} on chain 1 = status {}",
@@ -193,8 +197,11 @@ fn main() -> ! {
         N, avg_b_cycles, avg_b_ms
     );
 
-    // ---- C. first-sign on chain 2: second Type 1 + keygen + Type 2 ----
-    let c = time_one_sign(2, 1);
+    // ---- C. first-sign on chain 2, same slot_index: Type 1 + master
+    // keygen + Type 2. The slot SigningKey is cached from A (slot
+    // derivation is chain-agnostic) so only the bootstrap C10 keygen
+    // runs — this is the "new chain, same slot" steady state.
+    let c = time_one_sign(2, 0, true, 1);
     if c.status != NscStatus::Ok as u32 {
         hprintln!("[NS][bench] FAIL: first-sign on chain 2 = status {}", c.status);
         debug::exit(debug::EXIT_FAILURE);

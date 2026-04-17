@@ -6,49 +6,50 @@ import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
 
 import {PQOwnable} from "./PQOwnable.sol";
-import {IJardinVerifier} from "./verifiers/IJardinVerifier.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 
 /// @title PQJardinWallet
 ///
-/// @notice Pure post-quantum ERC-4337 v0.9 account with a single bootstrap
-///         SPHINCS+C10 identity and on-chain-tracked JARDÍN FORS+C
-///         sub-keys. Every UserOp carries one of two signature types:
+/// @notice Pure post-quantum ERC-4337 v0.9 account. Every signature —
+///         bootstrap Type 1 and per-slot Type 2 — is SPHINCS+C10; there
+///         is only one signature primitive in the whole contract.
 ///
 ///           * **Type 1** (`0x01`): bootstrap-key C10 signature + the raw
-///             randomiser `r` and sub-key commitments `(subPkSeed,
-///             subPkRoot)`. Validation side-effects: the wallet
-///             increments `bootstrapUses` (capped at `MAX_BOOTSTRAP_USES
-///             = 65,536` per chain) and records
-///             `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
+///             randomiser `r` and slot-key commitments `(subPkSeed,
+///             subPkRoot)`. Validation side-effects: bump `bootstrapUses`
+///             (capped at `MAX_BOOTSTRAP_USES = 65_536` per chain) and
+///             record `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
 ///
-///           * **Type 2** (`0x02`): FORS+C signature against a previously
+///           * **Type 2** (`0x02`): slot-C10 signature against a previously
 ///             registered sub-key. `sig[1:33]` is `sha256(r)` — the
 ///             slotKey — and the wallet checks that the supplied
-///             `(subPkSeed, subPkRoot)` matches what was registered.
+///             `(subPkSeed, subPkRoot)` matches the registered commitment,
+///             then bumps `slotUses[slotKey]` against `MAX_SLOT_USES =
+///             65_536`. The 4008-byte C10 signature in `sig[65:4073]` is
+///             routed through the same `c10Verifier` that Type 1 uses.
 ///
-///         The bootstrap C10 keypair is **immutable**: it is passed to the
-///         constructor via the factory and cannot be changed. Seed
-///         recovery produces the same bootstrap keys, so redeploying on a
-///         lost device yields the same CREATE2 address.
+///         The bootstrap C10 keypair is **immutable** (passed to the
+///         constructor via the factory); seed recovery produces the same
+///         bootstrap keys, so redeploying on a lost device yields the
+///         same CREATE2 address.
 ///
-///         Bootstrap-use accounting: the on-chain `bootstrapUses` counter
-///         increments on every accepted Type 1. Once it reaches
-///         `MAX_BOOTSTRAP_USES`, further Type 1s revert with
-///         `"bootstrap exhausted"`; the currently-registered JARDÍN slot
-///         can still sign Type 2 transactions until its own `Q_MAX`, but
-///         no new slot rotations are possible on that chain.
+///         Use accounting: `bootstrapUses` caps the total number of slots
+///         a chain will ever accept at 65,536. `slotUses[slotKey]` caps
+///         each slot at 65,536 signatures. Together the chain can service
+///         up to 65,536 × 65,536 ≈ 2^32 user transactions before it
+///         becomes permanently frozen — well inside the SPHINCS+C10
+///         hypertree's 2^18 signing-position capacity with a deliberate
+///         birthday-style safety margin.
 ///
-///         No ECDSA. No classical signer. The whole multi-signer +
-///         ZK clear-signing machinery from the pre-cutover wallet is gone.
+///         No ECDSA. No classical signer. No FORS+C. No multi-signer
+///         machinery from the pre-cutover wallet.
 ///
-/// @author PQSigner OS (post-C10 cutover)
+/// @author PQSigner OS (post-all-C10 cutover)
 contract PQJardinWallet is IAccount, PQOwnable {
     // ── Config (immutable) ──────────────────────────────────────────
 
     IEntryPoint private immutable _entryPoint;
     ISPHINCSVerifier public immutable c10Verifier;
-    IJardinVerifier public immutable forscVerifier;
 
     /// @notice Bootstrap C10 public seed (N-masked: top 16 bytes populated,
     ///         bottom 16 zero). Immutable — rotating it would break the
@@ -66,21 +67,29 @@ contract PQJardinWallet is IAccount, PQOwnable {
     /// @dev 1 byte marker + 32 r + 16 subPkSeed + 16 subPkRoot + 4008 C10 sig.
     uint256 public constant TYPE_1_SIG_LEN = 1 + 32 + 16 + 16 + 4008;
 
-    /// @dev 1 byte marker + 32 slotKey + 16 subPkSeed + 16 subPkRoot + 2452+q*16 FORS+C.
-    uint256 public constant TYPE_2_HEADER_LEN = 1 + 32 + 16 + 16;
-    uint256 public constant TYPE_2_MIN_SIG_LEN = 2452 + 16; // q=1
-    uint256 public constant TYPE_2_MAX_SIG_LEN = 2452 + 95 * 16; // q=95
+    /// @dev 1 byte marker + 32 slotKey + 16 subPkSeed + 16 subPkRoot + 4008 C10 sig.
+    ///      Type 2 is now a fixed-length C10 signature (same primitive as
+    ///      Type 1, different pk); no variable FORS+C tail.
+    uint256 public constant TYPE_2_SIG_LEN = 1 + 32 + 16 + 16 + 4008;
 
-    // ── Bootstrap-use cap ───────────────────────────────────────────
+    // ── Use caps ───────────────────────────────────────────────────
 
     /// @notice Maximum number of Type 1 (bootstrap C10) signatures this
     ///         wallet will accept on this chain. Set deliberately below
     ///         the C10 hypertree's 2^18 = 262,144-signature capacity so
     ///         on-chain wear stays well inside the SPHINCS+ birthday-style
     ///         safety margin. Exceeding this cap bricks Type 1 on this
-    ///         chain (the registered JARDÍN slot can still emit Type 2
-    ///         until its own `Q_MAX`).
+    ///         chain (already-registered slots can still emit Type 2
+    ///         until their own `MAX_SLOT_USES`).
     uint256 public constant MAX_BOOTSTRAP_USES = 65_536;
+
+    /// @notice Maximum number of Type 2 (per-slot C10) signatures a
+    ///         single slot will accept. Mirrors the bootstrap cap against
+    ///         the same 2^18 C10 capacity, so a chain servicing
+    ///         `MAX_BOOTSTRAP_USES` slots × `MAX_SLOT_USES` signatures
+    ///         per slot ≈ 2^32 total tx before becoming permanently
+    ///         frozen. Enforced by `_bumpSlotUses` after each Type 2.
+    uint256 public constant MAX_SLOT_USES = 65_536;
 
     // ── Errors ────────────────────────────────────────────────────
 
@@ -98,13 +107,11 @@ contract PQJardinWallet is IAccount, PQOwnable {
     constructor(
         IEntryPoint ep,
         ISPHINCSVerifier c10,
-        IJardinVerifier forsc,
         bytes32 masterPkSeed_,
         bytes32 masterPkRoot_
     ) {
         _entryPoint = ep;
         c10Verifier = c10;
-        forscVerifier = forsc;
         masterPkSeed = masterPkSeed_;
         masterPkRoot = masterPkRoot_;
     }
@@ -150,8 +157,8 @@ contract PQJardinWallet is IAccount, PQOwnable {
 
     /// @notice Revoke a registered JARDIN slot. Must be invoked by
     ///         `_entryPoint` — the UserOp carrying this calldata had
-    ///         to pass Type 1 (master-C11) or Type 2 (registered
-    ///         sub-key) validation, which is sufficient proof of
+    ///         to pass Type 1 (bootstrap C10) or Type 2 (registered
+    ///         slot C10) validation, which is sufficient proof of
     ///         authority from the owner of the seed.
     ///
     ///         Typical recovery flow for a leaked sub-key:
@@ -190,8 +197,8 @@ contract PQJardinWallet is IAccount, PQOwnable {
     // ── Signature validation ────────────────────────────────────
 
     /// @dev Dispatch on the first byte of `userOp.signature`:
-    ///      0x01 → Type 1 (register sub-key via C11)
-    ///      0x02 → Type 2 (FORS+C sign against registered sub-key)
+    ///      0x01 → Type 1 (bootstrap C10 registers a new slot sub-key)
+    ///      0x02 → Type 2 (slot C10 signs against a registered sub-key)
     function _validateSignature(
         PackedUserOperation calldata userOp,
         bytes32 userOpHash
@@ -254,12 +261,7 @@ contract PQJardinWallet is IAccount, PQOwnable {
         }
 
         if (sigType == TYPE_2_COMPACT) {
-            if (sig.length < TYPE_2_HEADER_LEN + TYPE_2_MIN_SIG_LEN) {
-                return SIG_VALIDATION_FAILED;
-            }
-            if (sig.length > TYPE_2_HEADER_LEN + TYPE_2_MAX_SIG_LEN) {
-                return SIG_VALIDATION_FAILED;
-            }
+            if (sig.length != TYPE_2_SIG_LEN) return SIG_VALIDATION_FAILED;
 
             bytes32 slotKey = bytes32(sig[1:33]);
             bytes16 subSeed16 = bytes16(sig[33:49]);
@@ -271,22 +273,36 @@ contract PQJardinWallet is IAccount, PQOwnable {
                 return SIG_VALIDATION_FAILED;
             }
 
-            // The FORS+C verifier expects bytes32 arguments. Pad the
-            // 16-byte N values into the high halves.
+            // Pre-check per-slot cap before running the expensive C10
+            // verifier (same gas-guarding rationale as the bootstrap
+            // pre-check above).
+            if (_getStorage().slotUses[slotKey] >= MAX_SLOT_USES) {
+                return SIG_VALIDATION_FAILED;
+            }
+
+            // The C10 verifier expects bytes32 arguments — pad the 16-byte
+            // N values into the high halves and zero the low half.
             bytes32 subPkSeed32;
             bytes32 subPkRoot32;
             assembly ("memory-safe") {
                 subPkSeed32 := shl(128, shr(128, subSeed16))
                 subPkRoot32 := shl(128, shr(128, subRoot16))
             }
-            bytes calldata forscSig = sig[65:];
-            try forscVerifier.verifyForsCUnbalanced(subPkSeed32, subPkRoot32, userOpHash, forscSig)
+            bytes calldata c10Sig = sig[65:TYPE_2_SIG_LEN];
+            try c10Verifier.verify(subPkSeed32, subPkRoot32, userOpHash, c10Sig)
                 returns (bool ok)
             {
                 if (!ok) return SIG_VALIDATION_FAILED;
             } catch {
                 return SIG_VALIDATION_FAILED;
             }
+
+            // Bump slotUses AFTER the verifier succeeds so a failed sig
+            // never costs the user an on-chain use. The helper re-checks
+            // the cap and reverts if the counter would exceed it, so a
+            // simultaneous in-flight UserOp cannot push a slot over the
+            // limit either.
+            _bumpSlotUses(slotKey, MAX_SLOT_USES);
             return SIG_VALIDATION_SUCCESS;
         }
 

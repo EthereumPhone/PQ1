@@ -4,7 +4,6 @@ pragma solidity 0.8.28;
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 
 import {PQJardinWallet} from "./PQJardinWallet.sol";
-import {IJardinVerifier} from "./verifiers/IJardinVerifier.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 
 /// @title PQJardinWalletFactory
@@ -17,7 +16,6 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 contract PQJardinWalletFactory {
     IEntryPoint public immutable entryPoint;
     ISPHINCSVerifier public immutable c10Verifier;
-    IJardinVerifier public immutable forscVerifier;
 
     event AccountCreated(
         address indexed account,
@@ -25,10 +23,9 @@ contract PQJardinWalletFactory {
         bytes32 indexed masterPkRoot
     );
 
-    constructor(IEntryPoint ep, ISPHINCSVerifier c10, IJardinVerifier forsc) {
+    constructor(IEntryPoint ep, ISPHINCSVerifier c10) {
         entryPoint = ep;
         c10Verifier = c10;
-        forscVerifier = forsc;
     }
 
     /// @notice Deploy the wallet at its deterministic CREATE2 address, or
@@ -48,7 +45,7 @@ contract PQJardinWalletFactory {
         }
         bytes32 salt = _salt(masterPkSeed, masterPkRoot);
         PQJardinWallet acc = new PQJardinWallet{salt: salt}(
-            entryPoint, c10Verifier, forscVerifier, masterPkSeed, masterPkRoot
+            entryPoint, c10Verifier, masterPkSeed, masterPkRoot
         );
         emit AccountCreated(address(acc), masterPkSeed, masterPkRoot);
         return acc;
@@ -64,7 +61,7 @@ contract PQJardinWalletFactory {
         bytes32 initCodeHash = keccak256(
             abi.encodePacked(
                 type(PQJardinWallet).creationCode,
-                abi.encode(entryPoint, c10Verifier, forscVerifier, masterPkSeed, masterPkRoot)
+                abi.encode(entryPoint, c10Verifier, masterPkSeed, masterPkRoot)
             )
         );
         bytes32 h = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, initCodeHash));

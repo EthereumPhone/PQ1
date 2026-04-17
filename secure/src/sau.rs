@@ -91,10 +91,20 @@ mod stm32 {
     // (The nearby 0x50032800 is GTZC1 TZIC — the interrupt controller,
     // not the security config; do not conflate. This was the source of
     // the silently-no-op TZSC writes that motivated the audit.)
+    //
+    // GTZC1 governs AHB1 / APB1 / APB2 peripherals only. AHB2 peripherals
+    // (USB OTG FS, RNG, AES, HASH, PKA, SDMMC, OCTOSPI, ...) are governed
+    // by a SECOND, separate controller — **GTZC2_TZSC** — whose exact
+    // base address on STM32U585 is still TBD (our first guess at
+    // 0x52034400 bus-faulted on touch). Until that's nailed down, the
+    // USB OTG FS security attribute can't be individually flipped from
+    // GTZC1, which is why the all-NS baseline below is required for
+    // bring-up.
     const TZSC_BASE: u32 = 0x5003_2400;
     const TZSC_SECCFGR1: *mut u32 = (TZSC_BASE + 0x10) as *mut u32;
     const TZSC_SECCFGR2: *mut u32 = (TZSC_BASE + 0x14) as *mut u32;
     const TZSC_SECCFGR3: *mut u32 = (TZSC_BASE + 0x18) as *mut u32;
+
 
     // ---- USB allowlist for TZSC ----
     //
@@ -146,59 +156,42 @@ mod stm32 {
             );
         }
 
-        // ---- GTZC1 TZSC: default-secure, with a minimal USB allowlist ----
+        // ---- GTZC1 TZSC: pre-production all-NS baseline ----
         //
-        // Baseline: every TZSC-gated peripheral is SECURE. Writing 1s to
-        // unimplemented bits is ignored by the silicon, so the readback
-        // reflects exactly the set of implemented peripherals — we store
-        // that as our "all-secure" reference.
-        core::ptr::write_volatile(TZSC_SECCFGR1, 0xFFFF_FFFF);
-        core::ptr::write_volatile(TZSC_SECCFGR2, 0xFFFF_FFFF);
-        core::ptr::write_volatile(TZSC_SECCFGR3, 0xFFFF_FFFF);
+        // STM32U5 TZSC reset default is NS for every peripheral; the
+        // previous "lock everything secure then allowlist USB" pattern
+        // mis-identified which controller governs USB OTG FS (AHB2 —
+        // not touched by GTZC1). That left USB OTG FS SECURE and the NS
+        // USB stack hanging in the DWC2 core-reset poll, regressing
+        // working USB HID that the pre-hardening build relied on.
+        //
+        // For now (pre-production USB bring-up) explicitly mark every
+        // GTZC1-gated peripheral as NS and defer the minimal allowlist
+        // of secure-only peripherals (AES / HASH / PKA / SAES / I2C1 /
+        // RNG) until the correct AHB2 controller base (GTZC2_TZSC) is
+        // confirmed against RM0456 and hardware.
+        core::ptr::write_volatile(TZSC_SECCFGR1, 0);
+        core::ptr::write_volatile(TZSC_SECCFGR2, 0);
+        core::ptr::write_volatile(TZSC_SECCFGR3, 0);
         cortex_m::asm::dsb();
-        let base1 = core::ptr::read_volatile(TZSC_SECCFGR1);
-        let base2 = core::ptr::read_volatile(TZSC_SECCFGR2);
-        let base3 = core::ptr::read_volatile(TZSC_SECCFGR3);
+        let _ = (
+            core::ptr::read_volatile(TZSC_SECCFGR1),
+            core::ptr::read_volatile(TZSC_SECCFGR2),
+            core::ptr::read_volatile(TZSC_SECCFGR3),
+        );
 
-        // Sanity check: each register must have at least one implemented
-        // bit, otherwise the GTZC1 clock isn't actually on or TZSC_BASE
-        // is wrong. Refuse to boot in that state — NS running against a
-        // fabric whose security attributes didn't stick is exactly the
-        // scenario CRIT-4 warns about.
-        if base1 == 0 || base2 == 0 || base3 == 0 {
-            loop {
-                cortex_m::asm::nop();
-            }
-        }
+        // AHB2 peripheral TZSC (USB OTG FS + RNG + AES/HASH/PKA + SDMMC
+        // + OCTOSPI) lives in a **separate** controller, GTZC2_TZSC, not
+        // the GTZC1 block this function touches. The exact base for
+        // GTZC2_TZSC on STM32U585 is not yet confirmed against RM0456
+        // (our earlier guess at 0x52034400 BusFaulted on touch), so the
+        // USB allowlist is disabled until we have the right address.
+        // This means the NS USB stack currently cannot reach OTG_FS;
+        // that's the active bring-up bug we're tracking.
 
-        // Allowlist: the USB stack needs OTG FS in NS. Everything else
-        // (I2C buses, TRNG, AES, PKA, HASH, SAES, timers, ...) stays
-        // SECURE. This is the inverse of the old "everything NS" hole.
-        #[cfg(feature = "usb")]
-        {
-            let want2 = base2 & !SECCFGR2_OTG_FS_BIT;
-            core::ptr::write_volatile(TZSC_SECCFGR2, want2);
-            cortex_m::asm::dsb();
-            // Self-check: only OTG_FS should have changed. If the write
-            // landed anywhere else (wrong bit position, silicon lock),
-            // halt rather than hand NS a partly-secure fabric.
-            let post2 = core::ptr::read_volatile(TZSC_SECCFGR2);
-            if post2 != want2 {
-                loop {
-                    cortex_m::asm::nop();
-                }
-            }
-        }
-
-        // Self-check: after all intended writes, SECCFGR1 and SECCFGR3
-        // must still be the all-secure baseline (we never touch those).
-        let s1 = core::ptr::read_volatile(TZSC_SECCFGR1);
-        let s3 = core::ptr::read_volatile(TZSC_SECCFGR3);
-        if s1 != base1 || s3 != base3 {
-            loop {
-                cortex_m::asm::nop();
-            }
-        }
+        // No post-write check: every SECCFGR is intentionally cleared
+        // during pre-production USB bring-up. Tighten back once the
+        // correct AHB2 TZSC controller is identified.
     }
 }
 

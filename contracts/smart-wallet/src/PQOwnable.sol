@@ -5,32 +5,38 @@ pragma solidity 0.8.28;
 ///
 /// @custom:storage-location erc7201:pqsigner.storage.PQOwnable
 struct PQSignerStorage {
-    /// @dev JARDIN FORS+C slot registry: `H(r) => sha256(subPkSeed || subPkRoot)`.
+    /// @dev JARDIN slot registry: `H(r) => sha256(subPkSeed || subPkRoot)`.
     ///      Populated by Type 1 signature validation as a side effect; read
     ///      by Type 2 signature validation to look up the registered sub-key.
     mapping(bytes32 => bytes32) jardinSlots;
 
     /// @dev Monotonic count of successful Type 1 (bootstrap C10) signatures
-    ///      the wallet has accepted on this chain. The wallet contract
-    ///      rejects any Type 1 once this counter hits
-    ///      `PQJardinWallet.MAX_BOOTSTRAP_USES` (= 65,536), so each chain
-    ///      burns at most one quarter of the C10 hypertree's
-    ///      2^18 = 262,144 signing positions — a conservative margin on
-    ///      top of the SPHINCS+ birthday-style security bounds. Once
-    ///      exhausted, the chain can still run Type 2 transactions
-    ///      against the currently-registered JARDÍN slot (up to
-    ///      `Q_MAX = 95` per slot), but no further slot rotations are
-    ///      possible on that chain.
+    ///      the wallet has accepted on this chain. Capped at
+    ///      `PQJardinWallet.MAX_BOOTSTRAP_USES = 65_536`, well inside the
+    ///      C10 hypertree's 2^18 = 262,144 signing positions. Once the cap
+    ///      is hit the chain can still run Type 2 transactions against
+    ///      already-registered slots (up to `MAX_SLOT_USES` each), but no
+    ///      further slot rotations are possible on that chain.
     uint256 bootstrapUses;
+
+    /// @dev Per-slot monotonic count of successful Type 2 (slot C10)
+    ///      signatures, keyed by `slotKey = sha256(r)`. Bumped inside
+    ///      `_bumpSlotUses` after a successful Type 2 verification.
+    ///      Capped at `PQJardinWallet.MAX_SLOT_USES = 65_536`. Exhausting
+    ///      a slot makes all future Type 2 sigs for that slotKey return
+    ///      `SIG_VALIDATION_FAILED`; the companion rotates to `slot_index
+    ///      + 1` via a Type 1 registration to resume signing.
+    mapping(bytes32 => uint256) slotUses;
 }
 
 /// @title PQOwnable
 ///
-/// @notice Minimal on-chain slot registry for the JARDÍN-only post-cutover
-///         wallet. The entire multi-signer ownership model is gone — every
+/// @notice Minimal on-chain slot registry for the all-SPHINCS+C10 wallet.
+///         The entire multi-signer ownership model is gone — every
 ///         signature on the wallet is validated against the immutable
-///         master C11 keypair set at construction time, with JARDIN
-///         FORS+C sub-keys registered as pure storage side effects.
+///         bootstrap C10 keypair set at construction time (Type 1) or
+///         against a slot-C10 sub-key registered on-chain as a pure
+///         storage side effect of a prior Type 1 (Type 2).
 ///
 /// @author PQSigner OS
 abstract contract PQOwnable {
@@ -53,7 +59,7 @@ abstract contract PQOwnable {
     bytes32 private constant _PQ_OWNABLE_STORAGE_LOCATION =
         0xcb4cadeb7787e52e28ca307d180c484d592168b4843855f610dadfd7a22bd700;
 
-    /// @notice Emitted when a JARDIN FORS+C slot is registered.
+    /// @notice Emitted when a JARDIN slot is registered.
     event JardinSlotRegistered(bytes32 indexed slotKey, bytes32 indexed subVkHash);
 
     /// @notice Emitted on every successful Type 1 bootstrap C10 signature,
@@ -61,7 +67,13 @@ abstract contract PQOwnable {
     ///         can track exhaustion without re-scanning storage.
     event BootstrapKeyUsed(uint256 indexed newCount);
 
-    /// @notice Emitted when a JARDIN FORS+C slot is revoked via
+    /// @notice Emitted on every successful Type 2 slot-C10 signature,
+    ///         carrying the post-increment per-slot counter so off-chain
+    ///         tools can see how close each slot is to its cap without
+    ///         re-scanning storage.
+    event SlotKeyUsed(bytes32 indexed slotKey, uint256 indexed newCount);
+
+    /// @notice Emitted when a JARDIN slot is revoked via
     ///         `PQJardinWallet.revokeJardinSlot`. The storage entry
     ///         is cleared to bytes32(0); any future Type 2 signature
     ///         against the revoked slotKey fails with
@@ -79,6 +91,15 @@ abstract contract PQOwnable {
     ///         wallet has accepted on this chain. Read-only view.
     function bootstrapUses() public view virtual returns (uint256) {
         return _getStorage().bootstrapUses;
+    }
+
+    /// @notice Number of successful Type 2 signatures this slot has
+    ///         produced. Read-only view — the companion uses it to decide
+    ///         when to rotate to `slot_index + 1` before the per-slot cap
+    ///         is hit.
+    /// @param slotKey The on-chain slot key H(r).
+    function slotUses(bytes32 slotKey) public view virtual returns (uint256) {
+        return _getStorage().slotUses[slotKey];
     }
 
     /// @notice Register or idempotently re-confirm a JARDIN slot's sub-key.
@@ -112,7 +133,7 @@ abstract contract PQOwnable {
     ///
     ///         Callable only from the wallet itself — the UserOp that
     ///         carries the `revokeJardinSlot(slotKey)` calldata must be
-    ///         authorised by the master C11 identity (Type 1) OR by a
+    ///         authorised by the bootstrap C10 identity (Type 1) OR by a
     ///         live registered slot (Type 2). The public authorisation
     ///         gate is on `PQJardinWallet.revokeJardinSlot`, which
     ///         forwards here.
@@ -139,6 +160,23 @@ abstract contract PQOwnable {
         require(next <= cap, "bootstrap exhausted");
         $.bootstrapUses = next;
         emit BootstrapKeyUsed(next);
+        return next;
+    }
+
+    /// @notice Bump the per-slot use counter after a successful Type 2
+    ///         slot-C10 signature. Reverts via `require` if the counter
+    ///         would exceed `cap`; the caller (`PQJardinWallet`) passes
+    ///         `MAX_SLOT_USES` so the cap lives as a wallet-level
+    ///         invariant and the storage layer remains policy-free.
+    /// @param  slotKey  Slot identifier being bumped.
+    /// @param  cap      Maximum number of Type 2 signatures allowed per slot.
+    /// @return newCount Post-increment counter value.
+    function _bumpSlotUses(bytes32 slotKey, uint256 cap) internal returns (uint256 newCount) {
+        PQSignerStorage storage $ = _getStorage();
+        uint256 next = $.slotUses[slotKey] + 1;
+        require(next <= cap, "slot exhausted");
+        $.slotUses[slotKey] = next;
+        emit SlotKeyUsed(slotKey, next);
         return next;
     }
 

@@ -14,7 +14,6 @@
 //! | 0x10 | UNLOCK                   |
 //! | 0x11 | LOCK                     |
 //! | 0x30 | SIGN_USEROP (unified)    |
-//! | 0x72 | GET_JARDIN_SLOT_INFO     |
 //! | 0xC0 | GET_RESPONSE             |
 
 use sphincs_tz_shared::*;
@@ -65,7 +64,8 @@ const FW_VERSION: [u8; 3] = [0x03, 0x00, 0x00];
 // ---------------------------------------------------------------------------
 
 const CAP_JARDIN_SIGN: u32 = 1 << 0; // the one sign command
-const CAP_FLASH_NEXT_Q: u32 = 1 << 1; // firmware owns `next_q` in flash
+// Bit 1 (CAP_FLASH_NEXT_Q) is retired — post-C10-cutover the firmware
+// is stateless for slot selection; the companion drives rotation.
 
 // ---------------------------------------------------------------------------
 // Response wrapper
@@ -128,7 +128,6 @@ impl CommandRouter {
             INS_V2_GET_STATUS => return self.cmd_get_status(),
             INS_V2_UNLOCK => return self.cmd_unlock(),
             INS_V2_LOCK => return self.cmd_lock(),
-            INS_V2_GET_JARDIN_SLOT_INFO => return self.cmd_get_jardin_slot_info(data, lc),
             _ => {}
         }
 
@@ -200,15 +199,15 @@ impl CommandRouter {
         RESP_BUF[p..p + 16].fill(0); // device_uid placeholder
         p += 16;
 
-        let caps = CAP_JARDIN_SIGN | CAP_FLASH_NEXT_Q;
+        let caps = CAP_JARDIN_SIGN;
         RESP_BUF[p..p + 4].copy_from_slice(&caps.to_be_bytes());
         p += 4;
 
-        RESP_BUF[p] = 1; // sig_param_set: 1 = JARDÍN FORS+C (128-bit)
+        RESP_BUF[p] = 2; // sig_param_set: 2 = SPHINCS+C10 (128-bit) everywhere
         p += 1;
 
-        // Maximum sig size (Type 2 at q=95) for companion buffer sizing.
-        RESP_BUF[p..p + 2].copy_from_slice(&(JARDIN_TYPE2_MAX_LEN as u16).to_be_bytes());
+        // Type 2 sig size — now fixed at `JARDIN_TYPE2_LEN` bytes.
+        RESP_BUF[p..p + 2].copy_from_slice(&(JARDIN_TYPE2_LEN as u16).to_be_bytes());
         p += 2;
 
         // Unused legacy version fields, zeroed.
@@ -335,34 +334,6 @@ impl CommandRouter {
         }
 
         self.setup_chunked_response(total)
-    }
-
-    /// 0x72 GET_JARDIN_SLOT_INFO — query persisted slot state.
-    unsafe fn cmd_get_jardin_slot_info(&self, data: &[u8], lc: usize) -> Response {
-        if lc < 8 {
-            return self.sw_response(SW_WRONG_LENGTH);
-        }
-        // The NS-side API takes (chain_id, slot_index) for historical
-        // reasons; the secure handler only uses chain_id.
-        let chain_id = u64::from_be_bytes([
-            data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7],
-        ]);
-
-        // Pack chain_id into an 8-byte payload.
-        let mut out = [0u8; 45];
-        let status = nsc_api::get_jardin_slot_info(chain_id, 0, &mut out);
-        if status != NscStatus::Ok as u32 {
-            return self.nsc_status_to_response(status);
-        }
-
-        // 45-byte response + 2 SW bytes.
-        RESP_BUF[..45].copy_from_slice(&out);
-        RESP_BUF[45] = (SW_OK >> 8) as u8;
-        RESP_BUF[46] = (SW_OK & 0xFF) as u8;
-        Response {
-            ptr: RESP_BUF.as_ptr(),
-            len: 47,
-        }
     }
 
     /// If the companion sent a bare `[header | data]` payload (no
@@ -584,7 +555,6 @@ impl CommandRouter {
             NscStatus::InvalidPointer => SW_INTERNAL_ERROR,
             NscStatus::CryptoError => SW_INTERNAL_ERROR,
             NscStatus::IdleWipe => SW_REFERENCED_DATA_INVALIDATED,
-            NscStatus::SlotExhausted => SW_FEATURE_NOT_SUPPORTED,
             NscStatus::InternalError => SW_INTERNAL_ERROR,
         };
         self.sw_response(sw)

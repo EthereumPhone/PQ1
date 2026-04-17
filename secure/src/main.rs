@@ -175,48 +175,63 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
 
     loop {
         // ---- 1. Choose PIN (twice) ----
+        secure_log!("[S] wizard: enter_pin_with_confirm");
         let pin = match enter_pin_with_confirm() {
-            PinEntryResult::Pin(p) => p,
+            PinEntryResult::Pin(p) => {
+                secure_log!("[S] wizard: PIN confirmed");
+                p
+            }
             PinEntryResult::Mismatch => {
+                secure_log!("[S] wizard: PIN mismatch — retry");
                 ui::show_status("PINs differ", "retry...");
                 continue;
             }
             PinEntryResult::Cancelled => {
+                secure_log!("[S] wizard: PIN entry cancelled — retry");
                 ui::show_status("Cancelled", "retry...");
                 continue;
             }
             PinEntryResult::IdleWipe => {
+                secure_log!("[S] wizard: PIN entry idle wipe — retry");
                 ui::show_status("Idle", "retry...");
                 continue;
             }
         };
 
         // ---- 2. New or restore? ----
+        secure_log!("[S] wizard: choose_setup_mode");
         let mnemonic = match choose_setup_mode() {
             WizardChoice::NewWallet => {
+                secure_log!("[S] wizard: NewWallet — generating entropy");
                 // Pull 32 bytes of entropy from the host CSPRNG (semihosting
                 // /dev/urandom on QEMU; will be the on-board hardware RNG on
                 // STM32U585 — see docs/architecture.md "Porting to STM32U585").
                 let mut entropy = [0u8; 32];
                 if rng::fill(&mut entropy).is_err() {
+                    secure_log!("[S] wizard: rng::fill FAILED");
                     let mut p = pin;
                     p.zeroize();
                     ui::show_status("RNG failed", "retry...");
                     continue;
                 }
+                secure_log!("[S] wizard: entropy ok, showing mnemonic");
                 let m = sphincs_tz_bip39::Mnemonic::from_entropy(&entropy);
                 entropy.zeroize();
 
                 // Show the 24 words paginated; require the user to walk to
                 // the last page before they can confirm.
-                if show_mnemonic(&m) != WizardResult::Confirmed {
+                let sm = show_mnemonic(&m);
+                if sm != WizardResult::Confirmed {
+                    secure_log!("[S] wizard: show_mnemonic returned {:?} — retry", sm);
                     let mut p = pin;
                     p.zeroize();
                     ui::show_status("Cancelled", "retry...");
                     continue;
                 }
                 // Spot-check 3 random words against what they wrote down.
-                if verify_mnemonic(&m) != WizardResult::Confirmed {
+                let vm = verify_mnemonic(&m);
+                if vm != WizardResult::Confirmed {
+                    secure_log!("[S] wizard: verify_mnemonic returned {:?} — retry", vm);
                     let mut p = pin;
                     p.zeroize();
                     ui::show_status("Verify fail", "retry...");
@@ -224,22 +239,28 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
                 }
                 m
             }
-            WizardChoice::Restore => match enter_mnemonic() {
-                Ok(m) => m,
-                Err(WizardError::Cancelled) => {
-                    let mut p = pin;
-                    p.zeroize();
-                    ui::show_status("Cancelled", "retry...");
-                    continue;
+            WizardChoice::Restore => {
+                secure_log!("[S] wizard: Restore — entering mnemonic");
+                match enter_mnemonic() {
+                    Ok(m) => m,
+                    Err(WizardError::Cancelled) => {
+                        secure_log!("[S] wizard: enter_mnemonic cancelled — retry");
+                        let mut p = pin;
+                        p.zeroize();
+                        ui::show_status("Cancelled", "retry...");
+                        continue;
+                    }
+                    Err(WizardError::IdleWipe) => {
+                        secure_log!("[S] wizard: enter_mnemonic idle wipe — retry");
+                        let mut p = pin;
+                        p.zeroize();
+                        ui::show_status("Idle", "retry...");
+                        continue;
+                    }
                 }
-                Err(WizardError::IdleWipe) => {
-                    let mut p = pin;
-                    p.zeroize();
-                    ui::show_status("Idle", "retry...");
-                    continue;
-                }
-            },
+            }
             WizardChoice::Cancelled | WizardChoice::IdleWipe => {
+                secure_log!("[S] wizard: choose_setup_mode cancelled/idle — retry");
                 let mut p = pin;
                 p.zeroize();
                 ui::show_status("Cancelled", "retry...");
@@ -269,7 +290,10 @@ fn main() -> ! {
     unsafe {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
-        hw::rng::init();
+        // RNG init is deferred until AFTER sau::init() / GTZC config —
+        // accessing RNG_S (0x520C_0800) before the TZSC has assigned the
+        // peripheral's security attribute can stall the AHB2 fabric on
+        // STM32U5.
         #[cfg(feature = "hw-sha256")]
         hw::hash::init_clock();
         // When SE050 is also active, its i2c_hw::init() configures I2C1 at
@@ -319,6 +343,14 @@ fn main() -> ! {
 
     sau::init();
     secure_log!("[S] SAU + MPC configured");
+
+    // RNG init now that GTZC/TZSC has assigned RNG as a secure peripheral
+    // and the SAU is live. Safe to touch 0x520C_0800 from the secure world.
+    #[cfg(feature = "stm32u585")]
+    unsafe {
+        hw::rng::init();
+        secure_log!("[S] TRNG initialised");
+    }
 
     // Initialize I2C1 for SE050 and/or OPTIGA Trust M BEFORE any SE operations.
     // Both chips share I2C1 (SE050 at 0x48, OPTIGA at 0x30). No address conflict.

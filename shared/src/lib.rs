@@ -218,50 +218,11 @@ pub const CMD_GET_MAIN_PUBKEY: u32 = 9;
 /// into the NS output buffer.
 pub const CMD_SIGN_BOOTSTRAP: u32 = 10;
 
-/// CMD_SIGN_JARDIN — JARDIN FORS+C compact signing.
-///
-/// Signs a message hash using the JARDIN compact signature scheme.
-/// The slot is identified by (chain_id, slot_index). If the slot has
-/// not been initialised this session, firmware runs keygen (~3-4s).
-///
-/// Payload wire format:
-///   [0..8)   chain_id     u64 BE
-///   [8..12)  slot_index   u32 BE
-///   [12..44) msg_hash     32 bytes
-///
-/// Response:
-///   [0..4)   response_len   u32 BE (see below)
-///   [4..101) JARDIN wrapper header (97 bytes)
-///   [101..)  raw FORS+C signature (2452 + q*16 bytes)
-///
-/// **Rotation-soon flag:** bit 31 of `response_len` is set when the slot
-/// has fewer than [`JARDIN_ROTATION_THRESHOLD`] (15) signatures remaining.
-/// The companion should mask the flag before reading the length:
-///
-///   rotation_soon = (response_len >> 31) & 1
-///   actual_len    = response_len & 0x7FFF_FFFF
-pub const CMD_SIGN_JARDIN: u32 = 15;
-
-/// CMD_REGISTER_JARDIN_SLOT — generate a Type 1 slot registration
-/// UserOp signed by the C11 main signer.
-///
-/// Payload wire format:
-///   [0..8)   chain_id     u64 BE
-///   [8..12)  slot_index   u32 BE
-///   [12..16) key_index    u32 BE  (main signer epoch)
-///   [16..20) ots_index    u32 BE  (main signer OTS)
-///
-/// Response: C11-signed UserOp containing registerJardinSlot callData.
-pub const CMD_REGISTER_JARDIN_SLOT: u32 = 16;
-
-/// CMD_GET_JARDIN_SLOT_INFO — query current JARDIN slot state.
-///
-/// Payload wire format:
-///   [0..8)   chain_id     u64 BE
-///   [8..12)  slot_index   u32 BE
-///
-/// Response: slot_index(4) || next_q(1) || remaining(1) || slot_active(1)
-pub const CMD_GET_JARDIN_SLOT_INFO: u32 = 17;
+// CMDs 15/16/17 — pre-unified-sign JARDIN commands (CMD_SIGN_JARDIN,
+// CMD_REGISTER_JARDIN_SLOT, CMD_GET_JARDIN_SLOT_INFO) are retired. With the
+// all-C10 cutover, the firmware is stateless for slot selection: the
+// companion drives `(chain_id, slot_index, flags)` per call via
+// `CMD_SIGN_USEROP`, so no separate slot-info / registration commands exist.
 
 /// CMD_IS_UNLOCKED — returns 1 if PIN-verified this session, 0 otherwise.
 pub const CMD_IS_UNLOCKED: u32 = 11;
@@ -410,10 +371,8 @@ pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
 // -- Address & account helpers (0x60-0x6F) --
 pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
 
-// -- JARDIN FORS+C compact signing (0x70-0x7F) --
-pub const INS_V2_SIGN_JARDIN: u8 = 0x70;
-pub const INS_V2_REGISTER_JARDIN_SLOT: u8 = 0x71;
-pub const INS_V2_GET_JARDIN_SLOT_INFO: u8 = 0x72;
+// INS range 0x70-0x7F (formerly JARDIN FORS+C compact signing — retired
+// with the C10 slot cutover).
 
 // -- Continuation (shared with v1) --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
@@ -427,10 +386,9 @@ pub const P1_V2_MORE: u8 = 0x80;
 // PQSignatureWrapper — structured signing response (v2)
 // ---------------------------------------------------------------------------
 
-/// Signer type discriminator in the PQSignatureWrapper.
+/// Signer type discriminator in the (legacy v2) PQSignatureWrapper.
 pub const SIGNER_MAIN: u8 = 0x00;
 pub const SIGNER_BOOTSTRAP: u8 = 0x01;
-pub const SIGNER_JARDIN: u8 = 0x02;
 
 /// Fixed-size wrapper header written before the raw SPHINCS+C7 signature:
 ///   signer_type(1) + key_index(4) + ots_index(4) + pk_seed(32) + pk_root(32)
@@ -438,38 +396,6 @@ pub const WRAPPER_HEADER_LEN: usize = 1 + 4 + 4 + 32 + 32; // 73
 
 /// Total PQSignatureWrapper size = header + raw signature.
 pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 3777
-
-// ---------------------------------------------------------------------------
-// JARDIN FORS+C compact signature constants
-// ---------------------------------------------------------------------------
-
-/// JARDIN fixed body: R(32) + counter(4) + 25*(secret(16)+auth(80)) + lastRoot(16).
-pub const JARDIN_FORSC_BODY: usize = 2452;
-
-/// Minimum JARDIN signature size (q=1).
-pub const JARDIN_SIG_MIN: usize = 2468;
-
-/// Maximum JARDIN signature size (q=95).
-pub const JARDIN_SIG_MAX: usize = 3972;
-
-/// Maximum signatures per JARDIN slot.
-pub const JARDIN_Q_MAX: u8 = 95;
-
-/// JARDIN wrapper header: signer_type(1) + slot_key(32) + subPkSeed(32) + subPkRoot(32).
-pub const JARDIN_WRAPPER_HEADER_LEN: usize = 1 + 32 + 32 + 32; // 97
-
-/// Maximum JARDIN wrapper total: header + max signature.
-pub const JARDIN_WRAPPER_MAX_LEN: usize = JARDIN_WRAPPER_HEADER_LEN + JARDIN_SIG_MAX; // 4069
-
-/// When fewer than this many signatures remain on the active JARDIN slot,
-/// CMD_SIGN_JARDIN sets bit 31 of the response length field to signal
-/// the companion to proactively register the next slot.
-pub const JARDIN_ROTATION_THRESHOLD: u8 = 15;
-
-/// Bit mask for the rotation-soon flag in the CMD_SIGN_JARDIN response
-/// length field.  Same bit-31 signalling convention used by
-/// `sign_userop_with_ots` for the OTS trailer flag.
-pub const JARDIN_ROTATION_FLAG: u32 = 0x8000_0000;
 
 // ---------------------------------------------------------------------------
 // Unified JARDÍN Type 1 / Type 2 wire format (CMD_SIGN_USEROP)
@@ -494,11 +420,12 @@ pub const JARDIN_TYPE2_HEADER_LEN: usize = 1 + 32 + 16 + 16; // 65
 /// Type 2 marker byte.
 pub const JARDIN_TYPE2_MARKER: u8 = 0x02;
 
-/// Type 2 wire payload at q=1: header + 2452 + 1*16.
-pub const JARDIN_TYPE2_MIN_LEN: usize = JARDIN_TYPE2_HEADER_LEN + JARDIN_FORSC_BODY + 16; // 2533
-
-/// Type 2 wire payload at q=95: header + 2452 + 95*16.
-pub const JARDIN_TYPE2_MAX_LEN: usize = JARDIN_TYPE2_HEADER_LEN + JARDIN_SIG_MAX; // 4037
+/// Type 2 wire payload (fixed) = preamble + SPHINCS+C10 signature.
+///
+/// Post-cutover, the per-slot sub-key is a SPHINCS+C10 key (not FORS+C), so
+/// Type 2 signatures are a fixed 4008-byte C10 signature. This replaces the
+/// old 2533..=4037 variable length driven by the FORS+C `q` counter.
+pub const JARDIN_TYPE2_LEN: usize = JARDIN_TYPE2_HEADER_LEN + C10_SIG_LEN; // 4073
 
 // ---------------------------------------------------------------------------
 // PQJardinWalletFactory initCode (first-deploy UserOps)
@@ -534,29 +461,42 @@ pub const JARDIN_INIT_CODE_LEN: usize = 20 + 4 + 32 + 32; // 88
 /// ```text
 ///   [init_code_len(4 BE)][init_code(0 or 88)]
 ///   [type1_len(4 BE)][type1_bytes(0 or 4073)]
-///   [type2_len(4 BE)][type2_bytes(2533..=4037)]
+///   [type2_len(4 BE)][type2_bytes(4073)]
 /// ```
 pub const MAX_JARDIN_RESPONSE_LEN: usize =
-    4 + JARDIN_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_MAX_LEN; // 8210
+    4 + JARDIN_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_LEN; // 8246
 
-/// Bit 31 of `slot_index_hint` is repurposed as a flag: set by the
-/// companion when the wallet has not yet been deployed on this chain.
-/// Firmware then synthesises `initCode` from its master pubkey pair and
-/// folds the hash into the Type 1 `userOpHash`, and emits the initCode
-/// bytes alongside the signature bundle so the companion can populate
-/// `PackedUserOperation.initCode` without ever seeing the master pubkey
-/// on its own.
-///
-/// When this flag is clear the low 31 bits of `slot_index_hint` carry no
-/// meaning (M4: they are ignored on every mode).
+/// Flags bit 31 — set by the companion when the wallet has not yet been
+/// deployed on this chain. Firmware synthesises `initCode` from its master
+/// pubkey pair, folds the hash into the Type 1 `userOpHash`, and emits the
+/// initCode bytes alongside the signature bundle so the companion can
+/// populate `PackedUserOperation.initCode` without ever seeing the master
+/// pubkey on its own. Requires `FLAG_REGISTER_SLOT` (init_code only rides
+/// on a Type 1 frame).
 pub const FLAG_INCLUDE_INIT_CODE: u32 = 0x8000_0000;
+
+/// Flags bit 30 — set by the companion to ask the firmware to emit a Type 1
+/// slot-registration frame before the Type 2 user-tx frame.
+///
+/// The firmware is stateless with respect to slot selection: it does not
+/// track whether `(chain_id, slot_index)` has been registered on-chain. The
+/// companion app keeps that bookkeeping and sets this flag on the first sign
+/// for a new `(chain_id, slot_index)` pair, or when rotating to the next
+/// slot after exhausting the on-chain `MAX_SLOT_USES` cap.
+///
+/// When clear, the firmware emits Type 2 only and the companion submits a
+/// single UserOp.
+pub const FLAG_REGISTER_SLOT: u32 = 0x4000_0000;
+
+/// Bit mask of the flags field reserved for the slot index.
+pub const SLOT_INDEX_MASK: u32 = !(FLAG_INCLUDE_INIT_CODE | FLAG_REGISTER_SLOT);
 
 /// Unified CMD_SIGN_USEROP v3 payload layout.
 ///
 /// | off | size | field |
 /// |-----|------|-------|
 /// |  0  |  8  | chain_id (u64 BE) |
-/// |  8  |  4  | flags (u32 BE, bit 31 = include initCode; lower bits reserved) |
+/// |  8  |  4  | flags (u32 BE: bit 31 = include initCode, bit 30 = register slot, bits 29..0 = slot_index) |
 /// | 12  | 20  | sender (PQJardinWallet address — firmware does not recompute) |
 /// | 32  | 20  | entry_point (EntryPoint v0.9 address) |
 /// | 52  | 32  | nonce (u256 BE; base nonce for Type 1 if registration needed, else Type 2) |
@@ -719,7 +659,8 @@ pub enum NscStatus {
     NotInitialized = 5,
     UserRejected = 6,
     IdleWipe = 7,
-    SlotExhausted = 8,
+    // 8 (was SlotExhausted) is retired — post-C10 slot cutover, per-slot
+    // exhaustion is enforced on-chain by MAX_SLOT_USES, not by firmware.
     InternalError = 0xFFFF_FFFF,
 }
 
@@ -734,7 +675,6 @@ impl From<u32> for NscStatus {
             5 => Self::NotInitialized,
             6 => Self::UserRejected,
             7 => Self::IdleWipe,
-            8 => Self::SlotExhausted,
             _ => Self::InternalError,
         }
     }

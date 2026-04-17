@@ -51,10 +51,43 @@ static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
 #[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    let mut stack = unsafe { usb::init() };
+    ns_debug_log("[NS] main() entered");
 
+    // Dump USB-relevant register state before usb::init() hits the DWC2
+    // core soft-reset. If ICLK (48 MHz PHY clock) isn't running the reset
+    // polling loop inside synopsys-usb-otg hangs forever.
+    unsafe {
+        // Read via the NS alias (secure aliases HardFault from NS).
+        const RCC_NS: u32 = 0x4602_0C00;
+        let ccipr1 = core::ptr::read_volatile((RCC_NS + 0xE0) as *const u32);
+        let cr = core::ptr::read_volatile((RCC_NS + 0x00) as *const u32);
+        let ahb2enr1 = core::ptr::read_volatile((RCC_NS + 0x8C) as *const u32);
+        let _ = cortex_m_semihosting::hprintln!(
+            "[NS] pre-usb regs: RCC_CR=0x{:08x} CCIPR1=0x{:08x} AHB2ENR1=0x{:08x}",
+            cr, ccipr1, ahb2enr1
+        );
+        // USB OTG FS GOTGCTL / GRSTCTL
+        const USB_NS: u32 = 0x4204_0000;
+        let gotgctl = core::ptr::read_volatile(USB_NS as *const u32);
+        let grstctl = core::ptr::read_volatile((USB_NS + 0x10) as *const u32);
+        let gccfg = core::ptr::read_volatile((USB_NS + 0x38) as *const u32);
+        let _ = cortex_m_semihosting::hprintln!(
+            "[NS] pre-usb OTG: GOTGCTL=0x{:08x} GRSTCTL=0x{:08x} GCCFG=0x{:08x}",
+            gotgctl, grstctl, gccfg
+        );
+    }
+
+    ns_debug_log("[NS] calling usb::init()");
+    let mut stack = unsafe { usb::init() };
+    ns_debug_log("[NS] usb::init() returned — entering poll loop");
+
+    let mut poll_counter: u32 = 0;
     loop {
         if stack.device.poll(&mut [&mut stack.transport.hid]) {
+            if poll_counter == 0 {
+                ns_debug_log("[NS] first poll() returned true");
+            }
+            poll_counter = poll_counter.saturating_add(1);
             if !stack.transport.is_tx_active() {
                 if let Some(apdu) = stack.transport.try_receive() {
                     let resp = unsafe { stack.commands.dispatch(apdu) };
@@ -63,6 +96,18 @@ fn main() -> ! {
             }
         }
         stack.transport.poll_tx();
+    }
+}
+
+/// Emit a semihosting log line only if a debugger is attached (DHCSR.C_DEBUGEN=1).
+/// Required because NS uses `panic_halt` and `hprintln!` without a debugger
+/// BKPTs → HardFault → silent halt.
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
+fn ns_debug_log(msg: &str) {
+    const DHCSR: *const u32 = 0xE000_EDF0 as *const u32;
+    let c_debugen = unsafe { core::ptr::read_volatile(DHCSR) } & 1;
+    if c_debugen != 0 {
+        let _ = cortex_m_semihosting::hprintln!("{}", msg);
     }
 }
 
@@ -120,7 +165,11 @@ fn main() -> ! {
 /// Output layout matches `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN`.
 #[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed")))]
 fn build_value_transfer_payload(buf: &mut [u8]) -> usize {
-    // Sepolia chain_id, slot_index hint = 0, empty inner data.
+    // Sepolia chain_id, slot 0 with FLAG_REGISTER_SLOT so the demo first-
+    // sign emits the expected Type 1 + Type 2 bundle. (The stateless
+    // firmware has no way to know on its own whether this slot has been
+    // registered on-chain yet.)
+    use sphincs_tz_shared::FLAG_REGISTER_SLOT;
     let chain_id: u64 = 11_155_111;
     let sender: [u8; 20] = [0x42; 20];
     let entry_point: [u8; 20] = [
@@ -161,7 +210,8 @@ fn build_value_transfer_payload(buf: &mut [u8]) -> usize {
     let mut off = 0usize;
     buf[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
     off += 8;
-    buf[off..off + 4].copy_from_slice(&0u32.to_be_bytes()); // slot_index_hint
+    // flags: slot_index=0 | FLAG_REGISTER_SLOT
+    buf[off..off + 4].copy_from_slice(&FLAG_REGISTER_SLOT.to_be_bytes());
     off += 4;
     buf[off..off + 20].copy_from_slice(&sender);
     off += 20;

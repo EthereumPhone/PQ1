@@ -664,7 +664,9 @@ flash-hw-se050-oled-standalone: build-hw-se050-oled-standalone
 	@STM32_Programmer_CLI --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
-	@echo "==> Flashed. Disconnect ST-LINK, connect only USB-C."
+	@echo "==> Resetting target..."
+	@probe-rs reset --chip STM32U585AIIx
+	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
 	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
 
 flash-hw-se050-oled: build-hw-se050-oled

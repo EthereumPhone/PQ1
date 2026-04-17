@@ -1,18 +1,23 @@
-// Post-cutover e2e test runner: exercises the unified JARDÍN Type 1 /
-// Type 2 sign command end-to-end.
+// Post-cutover e2e test runner: exercises the stateless, companion-driven
+// JARDÍN sign command end-to-end (all-SPHINCS+C10).
+//
+// The companion decides whether to ask for a Type 1 slot registration
+// by setting `FLAG_REGISTER_SLOT` in the flags u32, and picks the slot
+// directly via the low 30 bits. The firmware keeps zero slot state on
+// disk — each scenario is a pure function of `(chain_id, slot_index,
+// flags)` and the master seed.
 //
 // Compiled only with `--features e2e-test`. The matching feature on
 // the secure crate auto-provisions the wallet, marks PIN_VERIFIED
 // true, and short-circuits every confirm() dialog so this runner can
-// drive back-to-back signs (first → Type 1 + Type 2, second → Type 2
-// only) without any human input.
+// drive signs without any human input.
 #![allow(static_mut_refs)]
 
 use crate::nsc_api;
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
-    JARDIN_TYPE1_LEN, JARDIN_TYPE2_MARKER, MAX_JARDIN_RESPONSE_LEN, NscStatus,
-    SIGN_USEROP_HEADER_LEN,
+    FLAG_REGISTER_SLOT, JARDIN_TYPE1_LEN, JARDIN_TYPE2_LEN, JARDIN_TYPE2_MARKER,
+    MAX_JARDIN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
 };
 
 // === Scratch buffers =======================================================
@@ -38,7 +43,8 @@ const KECCAK_EMPTY: [u8; 32] = [
 fn build_sign_payload(
     buf: &mut [u8],
     chain_id: u64,
-    slot_index_hint: u32,
+    slot_index: u32,
+    register_slot: bool,
     nonce_seq: u64,
     to: &[u8; 20],
     value_wei: u128,
@@ -67,7 +73,8 @@ fn build_sign_payload(
     let mut off = 0usize;
     buf[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
     off += 8;
-    buf[off..off + 4].copy_from_slice(&slot_index_hint.to_be_bytes());
+    let flags: u32 = slot_index | if register_slot { FLAG_REGISTER_SLOT } else { 0 };
+    buf[off..off + 4].copy_from_slice(&flags.to_be_bytes());
     off += 4;
     buf[off..off + 20].copy_from_slice(&sender);
     off += 20;
@@ -118,6 +125,7 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
         resp[t2_off + 2],
         resp[t2_off + 3],
     ]) as usize;
+    assert_eq!(t2_len, JARDIN_TYPE2_LEN, "Type 2 is a fixed-length C10 sig");
     let t2_body = t2_off + 4;
     assert_eq!(resp[t2_body], JARDIN_TYPE2_MARKER, "Type 2 marker must be 0x02");
     (t1_len != 0, t2_len)
@@ -127,50 +135,103 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
 fn main() -> ! {
     hprintln!("[NS][e2e] === JARDÍN unified sign runner ===");
 
-    // Unlock (auto-short-circuited by e2e-test feature on the secure side).
-    let status = nsc_api::request_unlock();
-    assert_eq!(status, NscStatus::Ok as u32);
-    hprintln!("[NS][e2e] unlock: OK");
+    // The secure `e2e-test` feature auto-provisions and pre-unlocks the
+    // gateway at boot. Under probe-rs the PIN-entry dialog would spin on
+    // semihosting op 0x07 (SYS_READC) because probe-rs doesn't implement
+    // it, so we intentionally skip `CMD_REQUEST_UNLOCK` here and just
+    // verify the pre-unlock worked — same pattern `bench_key_speed` uses.
+    if !nsc_api::is_unlocked() {
+        hprintln!("[NS][e2e] FAIL: gateway not pre-unlocked (needs e2e-test on secure)");
+        debug::exit(debug::EXIT_FAILURE);
+        loop {}
+    }
+    hprintln!("[NS][e2e] gateway pre-unlocked: OK");
 
-    // Scenario 1: first-sign — expect Type 1 + Type 2.
-    hprintln!("[NS][e2e] Scenario 1: first sign (Type 1 + Type 2)");
     let to_alice: [u8; 20] = [
         0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78,
         0x90, 0xab, 0xcd, 0xef, 0x12,
     ];
+
+    // Scenario 1: first-sign with FLAG_REGISTER_SLOT — expect Type 1 + Type 2.
+    hprintln!("[NS][e2e] Scenario 1: register slot 0 on chain A (Type 1 + Type 2)");
     unsafe {
         let len = build_sign_payload(
             &mut PAYLOAD_BUF,
             11_155_111, // Sepolia
-            0,          // slot_index hint
+            0,          // slot_index
+            true,       // register_slot
             1,          // base nonce
             &to_alice,
             1_000_000_000_000_000_000u128, // 1 ETH
             &[],
         );
         let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
-        assert_eq!(status, NscStatus::Ok as u32, "first-sign must succeed");
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 1 must succeed");
         let (t1_present, t2_len) = parse_response(&SIG_BUF);
-        assert!(t1_present, "first-sign must emit a Type 1");
+        assert!(t1_present, "scenario 1 must emit a Type 1");
         hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
 
-    // Scenario 2: second-sign on same chain — expect Type 2 only.
-    hprintln!("[NS][e2e] Scenario 2: second sign (Type 2 only)");
+    // Scenario 2: repeat sign on same chain/slot, no flag — expect Type 2 only.
+    hprintln!("[NS][e2e] Scenario 2: repeat sign on chain A slot 0 (Type 2 only)");
     unsafe {
         let len = build_sign_payload(
             &mut PAYLOAD_BUF,
             11_155_111,
             0,
+            false, // slot already registered
             2,
             &to_alice,
             500_000_000_000_000_000u128, // 0.5 ETH
             &[],
         );
         let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
-        assert_eq!(status, NscStatus::Ok as u32, "second-sign must succeed");
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 2 must succeed");
         let (t1_present, t2_len) = parse_response(&SIG_BUF);
-        assert!(!t1_present, "second-sign must NOT emit a Type 1");
+        assert!(!t1_present, "scenario 2 must NOT emit a Type 1");
+        hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
+    }
+
+    // Scenario 3: companion rotates to slot 1 on the same chain — expect
+    // Type 1 (new slot registration) + Type 2.
+    hprintln!("[NS][e2e] Scenario 3: rotate to slot 1 on chain A (Type 1 + Type 2)");
+    unsafe {
+        let len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111,
+            1, // new slot
+            true,
+            3,
+            &to_alice,
+            250_000_000_000_000_000u128, // 0.25 ETH
+            &[],
+        );
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 3 must succeed");
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(t1_present, "scenario 3 must emit a Type 1");
+        hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
+    }
+
+    // Scenario 4: FirstSign on a different chain_id with slot 0 — expect
+    // Type 1 + Type 2 (per-chain slot registration, firmware doesn't know
+    // or care that chain A already registered slot 0).
+    hprintln!("[NS][e2e] Scenario 4: register slot 0 on chain B (Type 1 + Type 2)");
+    unsafe {
+        let len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            84_532, // Base Sepolia
+            0,
+            true,
+            1,
+            &to_alice,
+            100_000_000_000_000_000u128, // 0.1 ETH
+            &[],
+        );
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 4 must succeed");
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(t1_present, "scenario 4 must emit a Type 1");
         hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
 

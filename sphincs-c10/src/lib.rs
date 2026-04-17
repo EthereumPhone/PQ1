@@ -2,9 +2,10 @@
 //!
 //! Parameter set C10: `W+C_F+C  h=18  d=2  a=11  k=13  w=8  l=43  sig=4008`
 //!
-//! C10 is the **bootstrap** (master) identity of the PQSigner OS wallet.
-//! It signs slot-registration Type 1 messages only; Type 2 transaction
-//! signing is handled by the FORS+C JARDÍN slot keys in `jardin-fosc`.
+//! C10 is the **only** signature primitive in the PQSigner OS wallet.
+//! The bootstrap (master) identity signs Type 1 slot registrations, and
+//! every per-slot sub-key signs Type 2 user transactions — both through
+//! the same stateless 4008-byte signature.
 //!
 //! This is a `#![no_std]`, zero-allocation implementation targeting
 //! Cortex-M33 (STM32U585). All buffers are stack-allocated.
