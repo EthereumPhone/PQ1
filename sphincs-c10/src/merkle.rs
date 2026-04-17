@@ -20,7 +20,7 @@ pub fn compute_subtree_root(
     layer: u32,
     tree: u64,
 ) -> [u8; N] {
-    let n_leaves = SUBTREE_LEAVES; // 4096
+    let n_leaves = SUBTREE_LEAVES; // 512
     let mut stack = [[0u8; N]; SUBTREE_H + 1]; // 13 entries = 208 bytes
     let mut stack_heights = [0u32; SUBTREE_H + 1];
     let mut sp: usize = 0;

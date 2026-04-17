@@ -1,12 +1,16 @@
-//! SPHINCS+C11 — SHA-256-based post-quantum hash-based signatures.
+//! SPHINCS+C10 — SHA-256-based post-quantum hash-based signatures.
 //!
-//! Parameter set C11: `W+C_F+C  h=16  d=2  a=11  k=13  w=8  l=43  sig=3976`
+//! Parameter set C10: `W+C_F+C  h=18  d=2  a=11  k=13  w=8  l=43  sig=4008`
+//!
+//! C10 is the **bootstrap** (master) identity of the PQSigner OS wallet.
+//! It signs slot-registration Type 1 messages only; Type 2 transaction
+//! signing is handled by the FORS+C JARDÍN slot keys in `jardin-fosc`.
 //!
 //! This is a `#![no_std]`, zero-allocation implementation targeting
 //! Cortex-M33 (STM32U585). All buffers are stack-allocated.
 //!
-//! The algorithm matches the Solidity verifier `SPHINCs-C11Asm.sol` and
-//! the Python reference signer `signer.py` (adapted from
+//! The algorithm matches the Solidity verifier `SPHINCsC10Asm.sol` and
+//! the Python reference signer (adapted from
 //! <https://github.com/nconsigny/SPHINCs->).
 
 #![no_std]
@@ -24,7 +28,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use params::{N, SIGNATURE_LEN, VERIFYING_KEY_LEN};
 
-/// SPHINCS+C7 signing key.
+/// SPHINCS+C10 signing key.
 ///
 /// Contains the secret seed and public key material needed for signing.
 /// Zeroized on drop. NOT `Copy` or `Clone` to prevent silent duplication.
@@ -53,9 +57,9 @@ impl SigningKey {
 
     /// Derive the signing key by building the full hypertree.
     ///
-    /// Computes 256 WOTS public keys + Merkle tree at the top layer.
-    /// On Cortex-M33 this takes ~1-2 seconds. Call once at provisioning
-    /// time, not on every sign.
+    /// Computes 2^SUBTREE_H = 512 WOTS public keys + Merkle tree at the
+    /// top layer. On Cortex-M33 this takes ~2-3 seconds. Call once at
+    /// provisioning time, not on every sign.
     pub fn keygen(sk_seed: [u8; 32], pk_seed: [u8; N]) -> Self {
         let pk_root = hypertree::compute_pk_root(&sk_seed, &pk_seed);
         Self {
@@ -79,7 +83,7 @@ impl SigningKey {
     /// derivation for hedged signing. If `None`, the R is derived purely
     /// from `(sk_seed, message)`.
     ///
-    /// Returns a 3,976-byte signature that verifies under [`SPHINCs-C11Asm.sol`]
+    /// Returns a 4,008-byte signature that verifies under [`SPHINCsC10Asm.sol`]
     /// and the Rust [`verify`] function.
     pub fn sign(&self, msg_hash: &[u8; 32], opt_rand: Option<&[u8; N]>) -> [u8; SIGNATURE_LEN] {
         hypertree::sign(&self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand)
@@ -113,7 +117,7 @@ impl SigningKey {
     }
 }
 
-/// SPHINCS+C7 verifying key (public key).
+/// SPHINCS+C10 verifying key (public key).
 ///
 /// 32 bytes: `pk_seed(16) || pk_root(16)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -146,7 +150,7 @@ impl VerifyingKey {
     }
 }
 
-/// Standalone verify function.
+/// Standalone verify function for SPHINCS+C10.
 pub fn verify(
     pk_seed: &[u8; N],
     pk_root: &[u8; N],

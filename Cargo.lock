@@ -1249,7 +1249,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sphincs-c7"
+name = "sphincs-c10"
 version = "0.1.0"
 dependencies = [
  "hex",
@@ -1303,7 +1303,7 @@ dependencies = [
  "rtt-target",
  "sha2 0.10.9",
  "sha3 0.10.8",
- "sphincs-c7",
+ "sphincs-c10",
  "sphincs-tz-bip39",
  "sphincs-tz-shared",
  "ssd1306",

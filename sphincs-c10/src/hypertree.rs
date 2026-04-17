@@ -19,8 +19,8 @@ use crate::wots;
 
 /// Compute `pk_root` by building the top-layer subtree.
 ///
-/// Builds all 256 WOTS keys at layer 1, tree 0. Called once at
-/// provisioning.
+/// Builds all 2^SUBTREE_H = 512 WOTS keys at layer 1, tree 0. Called
+/// once at provisioning.
 ///
 /// Matches Python: `_build_hypertree_d2(seed, sk_seed, subtree_h, cfg)`.
 pub fn compute_pk_root(sk_seed: &[u8; 32], pk_seed: &[u8; N]) -> [u8; N] {
@@ -29,9 +29,9 @@ pub fn compute_pk_root(sk_seed: &[u8; 32], pk_seed: &[u8; N]) -> [u8; N] {
     merkle::compute_subtree_root(&seed, sk_seed, 1, 0)
 }
 
-/// Full SPHINCS+C11 signing.
+/// Full SPHINCS+C10 signing.
 ///
-/// Produces a 3,976-byte signature: R || FORS || HT_layer0 || HT_layer1.
+/// Produces a 4,008-byte signature: R || FORS || HT_layer0 || HT_layer1.
 pub fn sign(
     sk_seed: &[u8; 32],
     pk_seed: &[u8; N],
@@ -207,7 +207,7 @@ fn sign_inner(
     sig
 }
 
-/// Verify a SPHINCS+C7 signature.
+/// Verify a SPHINCS+C10 signature.
 pub fn verify(
     pk_seed: &[u8; N],
     pk_root: &[u8; N],

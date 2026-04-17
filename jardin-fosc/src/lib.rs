@@ -7,7 +7,7 @@
 //!
 //! JARDIN uses a two-tier on-chain model:
 //!
-//! - **Type 1 (register):** A full SPHINCS+C11 proof registers a new slot
+//! - **Type 1 (register):** A full SPHINCS+C10 proof registers a new slot
 //!   on-chain: `slots[H(r)] = H(subPkSeed || subPkRoot)`.
 //!
 //! - **Type 2 (compact):** A FORS+C proof signs transactions cheaply using

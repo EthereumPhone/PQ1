@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// @title SPHINCsC11Asm — Stateless SPHINCS+ C11 verifier (Yul-optimised, SHA-256)
-/// @notice C11: W+C_F+C h=16 d=2 a=11 k=13 w=8 l=43 target_sum=203 sig=3976
-/// @dev Domain-separated H_msg (160 bytes). Branchless Merkle swap, hoisted
+/// @title SPHINCsC10Asm — Stateless SPHINCS+ C10 verifier (Yul-optimised, SHA-256)
+/// @notice C10: W+C_F+C h=18 d=2 a=11 k=13 w=8 l=43 target_sum=205 sig=4008
+/// @dev C10 is the **bootstrap** (master) identity of the PQSigner OS wallet.
+///      It signs slot-registration Type 1 messages only; per-transaction
+///      signing uses the stateful FORS+C JARDÍN slot keys. The hypertree
+///      holds 2^18 signing positions, and `PQJardinWallet.bootstrapUses`
+///      caps actual on-chain Type 1 usage at 65,536 per chain.
+///
+///      Domain-separated H_msg (160 bytes). Branchless Merkle swap, hoisted
 ///      chain address. SHA-256 variant: every tweakable hash is computed by
 ///      the precompile at address 0x02 so firmware running on STM32U585's
 ///      HASH peripheral produces byte-identical outputs.
@@ -12,7 +18,7 @@ pragma solidity 0.8.28;
 ///        [0x00..len]   input buffer (seed, adrs, data, ...)
 ///        [0x600..0x620] scratch for precompile output, then AND-masked
 ///                      to N=16 bytes when the caller wants a truncated value.
-contract SPHINCsC11Asm {
+contract SPHINCsC10Asm {
 
     function verify(bytes32 pkSeed, bytes32 pkRoot, bytes32 message, bytes calldata sig)
         external view returns (bool valid)
@@ -24,7 +30,7 @@ contract SPHINCsC11Asm {
             // 0x80 + 42*32 = 0x5C0 is the highest legitimate write).
             let OUT := 0x600
 
-            if iszero(eq(sig.length, 3976)) {
+            if iszero(eq(sig.length, 4008)) {
                 mstore(0x00, 0x08c379a000000000000000000000000000000000000000000000000000000000)
                 mstore(0x04, 0x20)
                 mstore(0x24, 18)
@@ -45,8 +51,8 @@ contract SPHINCsC11Asm {
             pop(staticcall(gas(), 0x02, 0x00, 0xA0, OUT, 32))
             let digest := mload(OUT)
 
-            // htIdx = (digest >> 143) & (2^16-1)
-            let htIdx := and(shr(143, digest), 0xFFFF)
+            // htIdx = (digest >> 143) & (2^18-1)
+            let htIdx := and(shr(143, digest), 0x3FFFF)
 
             // FORS+C (K=13, A=11)
             let dVal := digest
@@ -104,14 +110,14 @@ contract SPHINCsC11Asm {
             pop(staticcall(gas(), 0x02, 0x00, 0x1E0, OUT, 32))
             let forsPk := and(mload(OUT), N_MASK)
 
-            // Hypertree (D=2, subtree_h=8, w=8, l=43, target_sum=203)
+            // Hypertree (D=2, subtree_h=9, w=8, l=43, target_sum=205)
             let currentNode := forsPk
             let idxTree := htIdx
             let sigOff := 2336 // HT_START
 
             for { let layer := 0 } lt(layer, 2) { layer := add(layer, 1) } {
-                let idxLeaf := and(idxTree, 0xFF) // 2^8 - 1
-                idxTree := shr(8, idxTree)
+                let idxLeaf := and(idxTree, 0x1FF) // 2^9 - 1
+                idxTree := shr(9, idxTree)
 
                 let wotsAdrs := or(shl(224, layer), or(shl(160, idxTree), shl(96, idxLeaf)))
                 // countOff = sigOff + l*N = sigOff + 688
@@ -125,12 +131,12 @@ contract SPHINCsC11Asm {
                 pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
                 let d := mload(OUT)
 
-                // Validate digit sum = 203 (43 base-8 digits, 3 bits each)
+                // Validate digit sum = 205 (43 base-8 digits, 3 bits each)
                 let digitSum := 0
                 for { let ii := 0 } lt(ii, 43) { ii := add(ii, 1) } {
                     digitSum := add(digitSum, and(shr(mul(ii, 3), d), 0x7))
                 }
-                if iszero(eq(digitSum, 203)) { revert(0, 0) }
+                if iszero(eq(digitSum, 205)) { revert(0, 0) }
 
                 // 43 WOTS chains (w=8: max 7 steps per chain)
                 let wotsPtr := add(sigBase, sigOff)
@@ -162,14 +168,14 @@ contract SPHINCsC11Asm {
                 pop(staticcall(gas(), 0x02, 0x00, 0x5A0, OUT, 32))
                 let wotsPk := and(mload(OUT), N_MASK)
 
-                // Merkle auth path (8 levels)
+                // Merkle auth path (9 levels)
                 let authOff := add(countOff, 4)
                 let treeAdrs := or(shl(224, layer), or(shl(160, idxTree), shl(128, 2)))
                 let merkleNode := wotsPk
                 let mIdx := idxLeaf
                 let merklePtr := add(sigBase, authOff)
 
-                for { let h := 0 } lt(h, 8) { h := add(h, 1) } {
+                for { let h := 0 } lt(h, 9) { h := add(h, 1) } {
                     let sibling := and(calldataload(add(merklePtr, shl(4, h))), N_MASK)
                     let parentIdx := shr(1, mIdx)
                     mstore(0x20, or(
@@ -185,7 +191,7 @@ contract SPHINCsC11Asm {
                 }
 
                 currentNode := merkleNode
-                sigOff := add(authOff, 128) // 8*16
+                sigOff := add(authOff, 144) // 9*16
             }
 
             valid := eq(currentNode, root)

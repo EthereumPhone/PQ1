@@ -9,6 +9,19 @@ struct PQSignerStorage {
     ///      Populated by Type 1 signature validation as a side effect; read
     ///      by Type 2 signature validation to look up the registered sub-key.
     mapping(bytes32 => bytes32) jardinSlots;
+
+    /// @dev Monotonic count of successful Type 1 (bootstrap C10) signatures
+    ///      the wallet has accepted on this chain. The wallet contract
+    ///      rejects any Type 1 once this counter hits
+    ///      `PQJardinWallet.MAX_BOOTSTRAP_USES` (= 65,536), so each chain
+    ///      burns at most one quarter of the C10 hypertree's
+    ///      2^18 = 262,144 signing positions — a conservative margin on
+    ///      top of the SPHINCS+ birthday-style security bounds. Once
+    ///      exhausted, the chain can still run Type 2 transactions
+    ///      against the currently-registered JARDÍN slot (up to
+    ///      `Q_MAX = 95` per slot), but no further slot rotations are
+    ///      possible on that chain.
+    uint256 bootstrapUses;
 }
 
 /// @title PQOwnable
@@ -43,6 +56,11 @@ abstract contract PQOwnable {
     /// @notice Emitted when a JARDIN FORS+C slot is registered.
     event JardinSlotRegistered(bytes32 indexed slotKey, bytes32 indexed subVkHash);
 
+    /// @notice Emitted on every successful Type 1 bootstrap C10 signature,
+    ///         carrying the post-increment counter value so off-chain tools
+    ///         can track exhaustion without re-scanning storage.
+    event BootstrapKeyUsed(uint256 indexed newCount);
+
     /// @notice Emitted when a JARDIN FORS+C slot is revoked via
     ///         `PQJardinWallet.revokeJardinSlot`. The storage entry
     ///         is cleared to bytes32(0); any future Type 2 signature
@@ -55,6 +73,12 @@ abstract contract PQOwnable {
     /// @return The stored sub-VK hash, or bytes32(0) if unregistered.
     function jardinSlot(bytes32 slotKey) public view virtual returns (bytes32) {
         return _getStorage().jardinSlots[slotKey];
+    }
+
+    /// @notice Number of successful Type 1 bootstrap C10 signatures the
+    ///         wallet has accepted on this chain. Read-only view.
+    function bootstrapUses() public view virtual returns (uint256) {
+        return _getStorage().bootstrapUses;
     }
 
     /// @notice Register or idempotently re-confirm a JARDIN slot's sub-key.
@@ -100,6 +124,22 @@ abstract contract PQOwnable {
             delete $.jardinSlots[slotKey];
             emit JardinSlotRevoked(slotKey, prev);
         }
+    }
+
+    /// @notice Bump the bootstrap-use counter after a successful Type 1
+    ///         signature. Reverts via `require` if the counter would exceed
+    ///         `cap`; the caller (`PQJardinWallet`) passes
+    ///         `MAX_BOOTSTRAP_USES` so the cap lives as a wallet-level
+    ///         invariant and the storage layer remains policy-free.
+    /// @param cap Maximum number of Type 1 signatures allowed on this chain.
+    /// @return newCount Post-increment counter value.
+    function _bumpBootstrapUses(uint256 cap) internal returns (uint256 newCount) {
+        PQSignerStorage storage $ = _getStorage();
+        uint256 next = $.bootstrapUses + 1;
+        require(next <= cap, "bootstrap exhausted");
+        $.bootstrapUses = next;
+        emit BootstrapKeyUsed(next);
+        return next;
     }
 
     /// @dev ERC-7201 storage accessor.

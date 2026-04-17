@@ -1,10 +1,10 @@
 //! FORS+C: Forest of Random Subsets with forced-zero Constraint.
 //!
-//! FORS consists of K=8 independent Merkle trees, each of height A=16.
+//! FORS consists of K=13 independent Merkle trees, each of height A=11.
 //! The message digest selects one leaf per tree (via A-bit indices).
 //! The last tree's index is **forced to zero** by R-grinding, which
 //! means we only emit the tree root (no authentication path needed),
-//! saving (A * N) = 256 bytes per signature.
+//! saving (A * N) = 176 bytes per signature.
 
 use crate::address::make_adrs;
 use crate::hash::{fors_secret, h_msg, pad16, th, th_multi, th_pair, truncate, Digest, Sha256};
@@ -44,29 +44,28 @@ pub fn extract_fors_indices(digest: &[u8; 32]) -> [u32; K] {
 ///
 /// `htIdx = (digest >> (K * A)) & ((1 << H) - 1)`
 ///
-/// With C11 (K=13, A=11, H=16): starts at bit 143, extracts 16 bits.
+/// With C10 (K=13, A=11, H=18): starts at bit 143, extracts 18 bits.
 ///
-/// Matches Solidity `SPHINCs-C11Asm.sol`:
-///   `let htIdx := and(shr(143, digest), 0xFFFF)`
+/// Matches Solidity `SPHINCsC10Asm.sol`:
+///   `let htIdx := and(shr(143, digest), 0x3FFFF)`
 pub fn extract_ht_index(digest: &[u8; 32]) -> u32 {
-    // In a 32-byte big-endian value the least-significant bit is in the
-    // last byte. Bit index N counts from the LSB, so:
-    //   byte_from_back = N / 8
-    //   bit_in_byte    = N % 8
-    //   be_byte_index  = 31 - byte_from_back
-    //
-    // For bit 143:
-    //   byte_from_back = 17  →  be_byte_index = 14, bit_in_byte = 7
-    // bits [143..159) span the top bit of digest[14] through all of
-    // digest[13] and the low 7 bits of digest[12].
-    //
-    // Compute `(digest >> 143) & 0xFFFF` by loading digest[12..15) as a
-    // 24-bit big-endian value and shifting right by 7 bits.
-    let b2 = digest[12] as u32; // bits 152..159 (BE top byte)
-    let b1 = digest[13] as u32; // bits 144..151
-    let b0 = digest[14] as u32; // bits 136..143 (bit 7 = bit 143)
-    let combined: u32 = (b2 << 16) | (b1 << 8) | b0;
-    (combined >> 7) & ((1u32 << H) - 1)
+    // H bits starting at bit (K*A) of the 256-bit BE digest. Loaded
+    // into a u64 so the mask is safe up to H=56, which comfortably
+    // covers every defined C-family parameter set.
+    let bit_offset = K * A; // 143
+    let byte_start = 31usize - bit_offset / 8; // 14 (holds the low byte)
+    let bit_in_byte = bit_offset % 8; // 7
+    let bytes_needed = (H + bit_in_byte + 7) / 8; // 4 for C10 (18+7+7)/8
+
+    let mut val: u64 = 0;
+    for b in 0..bytes_needed {
+        let idx = byte_start.wrapping_sub(b);
+        if idx < 32 {
+            val |= (digest[idx] as u64) << (b * 8);
+        }
+    }
+    let mask: u64 = (1u64 << H) - 1;
+    ((val >> bit_in_byte) & mask) as u32
 }
 
 /// R-grinding: find a randomizer R such that the last FORS index is zero.
@@ -126,7 +125,7 @@ pub fn compute_fors_root(
     tree_idx: u32,
 ) -> [u8; N] {
     // Treehash: process 2^A leaves left-to-right with a stack.
-    let n_leaves = FORS_LEAVES; // 65536
+    let n_leaves = FORS_LEAVES; // 2048
     let mut stack = [[0u8; N]; A + 1]; // 17 entries, 272 bytes
     let mut stack_heights = [0u32; A + 1];
     let mut sp: usize = 0;
@@ -170,7 +169,7 @@ pub fn compute_fors_root(
 /// Sign one FORS tree: return (secret, auth_path).
 ///
 /// Uses iterative Treehash with O(A) stack to compute the authentication
-/// path without materializing the full 65536-leaf tree.
+/// path without materializing the full 2^A-leaf tree.
 pub fn sign_fors_tree(
     seed: &[u8; 32],
     sk_seed: &[u8; 32],

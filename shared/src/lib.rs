@@ -3,12 +3,12 @@
 pub mod db_format;
 
 // ---------------------------------------------------------------------------
-// SPHINCS+C11 (SHA-256-based) sizes
+// SPHINCS+C10 (SHA-256-based) sizes — bootstrap (master) identity
 // ---------------------------------------------------------------------------
 
 pub const SIGNING_KEY_LEN: usize = 48; // sk_seed(32) + pk_seed(16)
 pub const VERIFYING_KEY_LEN: usize = 32; // pk_seed(16) + pk_root(16)
-pub const SIGNATURE_LEN: usize = 3_976;
+pub const SIGNATURE_LEN: usize = 4_008;
 pub const PIN_LEN: usize = 8;
 pub const TX_HASH_LEN: usize = 32;
 pub const MAX_ATTEMPTS: u8 = 10;
@@ -479,11 +479,11 @@ pub const JARDIN_ROTATION_FLAG: u32 = 0x8000_0000;
 // up to two EntryPoint v0.9 UserOps. Byte layout MUST match the on-chain
 // PQJardinWallet verifier (phase 5) exactly.
 
-/// SPHINCS+C11 signature length (== `SIGNATURE_LEN` as of the C11 cutover).
-pub const C11_SIG_LEN: usize = SIGNATURE_LEN;
+/// SPHINCS+C10 signature length (== `SIGNATURE_LEN` as of the C10 cutover).
+pub const C10_SIG_LEN: usize = SIGNATURE_LEN;
 
-/// Type 1 wire payload: `[marker(1) | r(32) | subPkSeed(16) | subPkRoot(16) | c11Sig(3976)]`.
-pub const JARDIN_TYPE1_LEN: usize = 1 + 32 + 16 + 16 + C11_SIG_LEN; // 4041
+/// Type 1 wire payload: `[marker(1) | r(32) | subPkSeed(16) | subPkRoot(16) | c10Sig(4008)]`.
+pub const JARDIN_TYPE1_LEN: usize = 1 + 32 + 16 + 16 + C10_SIG_LEN; // 4073
 
 /// Type 1 marker byte.
 pub const JARDIN_TYPE1_MARKER: u8 = 0x01;
@@ -533,11 +533,11 @@ pub const JARDIN_INIT_CODE_LEN: usize = 20 + 4 + 32 + 32; // 88
 ///
 /// ```text
 ///   [init_code_len(4 BE)][init_code(0 or 88)]
-///   [type1_len(4 BE)][type1_bytes(0 or 4041)]
+///   [type1_len(4 BE)][type1_bytes(0 or 4073)]
 ///   [type2_len(4 BE)][type2_bytes(2533..=4037)]
 /// ```
 pub const MAX_JARDIN_RESPONSE_LEN: usize =
-    4 + JARDIN_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_MAX_LEN; // 8178
+    4 + JARDIN_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_MAX_LEN; // 8210
 
 /// Bit 31 of `slot_index_hint` is repurposed as a flag: set by the
 /// companion when the wallet has not yet been deployed on this chain.
@@ -631,15 +631,15 @@ pub const CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0x19, 0x64, 0xc4, 0xdd];
 ///   [  88.. 120)  mainPkSeed        (bytes32)
 ///   [ 120.. 152)  mainPkRoot        (bytes32)
 ///   [ 152.. 184)  offset to bytes   (= 0xA0 = 160)
-///   [ 184.. 216)  length of bytes   (= 3976)
-///   [ 216..4216)  bootstrapSig      (3976 bytes + 24 bytes zero-padding to 32-byte boundary)
+///   [ 184.. 216)  length of bytes   (= 4008)
+///   [ 216..4248)  bootstrapSig      (4008 bytes + 24 bytes zero-padding to 32-byte boundary)
 /// ```
 ///
-/// The signature is 3,976 bytes (not 32-byte aligned: 3976 % 32 = 8),
+/// The signature is 4,008 bytes (not 32-byte aligned: 4008 % 32 = 8),
 /// so 24 bytes of ABI zero-padding are appended to reach the next
-/// 32-byte boundary (4,000 bytes padded).
+/// 32-byte boundary (4,032 bytes padded).
 pub const INIT_CODE_LEN: usize =
-    20 + 4 + 4 * 32 + 32 + 32 + ((SIGNATURE_LEN + 31) / 32) * 32; // 4_216
+    20 + 4 + 4 * 32 + 32 + 32 + ((SIGNATURE_LEN + 31) / 32) * 32; // 4_248
 
 /// Maximum reconstructed `execute(target, value, data)` callData size:
 /// selector(4) + target(32) + value(32) + offset(32) + length(32)
@@ -778,16 +778,16 @@ mod tests {
     }
 
     #[test]
-    fn init_code_len_is_4216() {
-        // factory(20) + selector(4) + 4*bytes32(128) + offset(32) + length(32) + padded_sig(4000)
-        assert_eq!(INIT_CODE_LEN, 4_216);
+    fn init_code_len_is_4248() {
+        // factory(20) + selector(4) + 4*bytes32(128) + offset(32) + length(32) + padded_sig(4032)
+        assert_eq!(INIT_CODE_LEN, 4_248);
     }
 
     #[test]
     fn signature_abi_padding_correct() {
-        // 3976 % 32 = 8, so 24 bytes of zero-padding; padded = 4000
+        // 4008 % 32 = 8, so 24 bytes of zero-padding; padded = 4032
         let padded = ((SIGNATURE_LEN + 31) / 32) * 32;
-        assert_eq!(padded, 4_000);
+        assert_eq!(padded, 4_032);
         assert_eq!(padded % 32, 0);
     }
 

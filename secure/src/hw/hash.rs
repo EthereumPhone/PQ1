@@ -1,7 +1,7 @@
 //! STM32U585 HASH peripheral driver — SHA-256 only.
 //!
 //! Used under the `hw-sha256` feature on `sphincs-tz-secure` to route
-//! every SHA-256 call from `sphincs-c7` and `jardin-fosc` through the
+//! every SHA-256 call from `sphincs-c10` and `jardin-fosc` through the
 //! hardware accelerator. The HASH peripheral runs at roughly 1 cycle/byte
 //! (single-block) — significantly faster than the software `sha2::Sha256`
 //! fallback that non-firmware builds use, and which dominates FORS+C
@@ -10,7 +10,7 @@
 //! Register layout is the STM32U5 HASH v4 (same IP as STM32H5 / WBA55).
 //! Confirmed against Linux `drivers/crypto/stm32/stm32-hash.c`.
 //!
-//! This module provides three extern "C" symbols that `sphincs-c7` and
+//! This module provides three extern "C" symbols that `sphincs-c10` and
 //! `jardin-fosc` call when compiled with `hw-sha256`:
 //!
 //!   pqsigner_sha256_init()
@@ -140,7 +140,7 @@ unsafe fn write_word(w: u32) {
 }
 
 // ---------------------------------------------------------------------------
-// Extern symbols — called from `sphincs-c7` and `jardin-fosc`.
+// Extern symbols — called from `sphincs-c10` and `jardin-fosc`.
 // ---------------------------------------------------------------------------
 
 /// Start a new SHA-256 computation.

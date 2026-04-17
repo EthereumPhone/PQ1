@@ -11,13 +11,15 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 
 /// @title PQJardinWallet
 ///
-/// @notice Pure post-quantum ERC-4337 v0.9 account with a single master
-///         SPHINCS+C11 identity and on-chain-tracked JARDÍN FORS+C
+/// @notice Pure post-quantum ERC-4337 v0.9 account with a single bootstrap
+///         SPHINCS+C10 identity and on-chain-tracked JARDÍN FORS+C
 ///         sub-keys. Every UserOp carries one of two signature types:
 ///
-///           * **Type 1** (`0x01`): master-key C11 signature + the raw
+///           * **Type 1** (`0x01`): bootstrap-key C10 signature + the raw
 ///             randomiser `r` and sub-key commitments `(subPkSeed,
-///             subPkRoot)`. Validation side-effect: the wallet records
+///             subPkRoot)`. Validation side-effects: the wallet
+///             increments `bootstrapUses` (capped at `MAX_BOOTSTRAP_USES
+///             = 65,536` per chain) and records
 ///             `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
 ///
 ///           * **Type 2** (`0x02`): FORS+C signature against a previously
@@ -25,29 +27,35 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 ///             slotKey — and the wallet checks that the supplied
 ///             `(subPkSeed, subPkRoot)` matches what was registered.
 ///
-///         The master C11 keypair is **immutable**: it is passed to the
+///         The bootstrap C10 keypair is **immutable**: it is passed to the
 ///         constructor via the factory and cannot be changed. Seed
-///         recovery produces the same master keys, so redeploying on a
+///         recovery produces the same bootstrap keys, so redeploying on a
 ///         lost device yields the same CREATE2 address.
 ///
-///         No ECDSA. No classical signer. No bootstrap signer. No
-///         OTS counter. The whole multi-signer + bootstrap + ZK clear-
-///         signing machinery from the pre-cutover wallet is gone.
+///         Bootstrap-use accounting: the on-chain `bootstrapUses` counter
+///         increments on every accepted Type 1. Once it reaches
+///         `MAX_BOOTSTRAP_USES`, further Type 1s revert with
+///         `"bootstrap exhausted"`; the currently-registered JARDÍN slot
+///         can still sign Type 2 transactions until its own `Q_MAX`, but
+///         no new slot rotations are possible on that chain.
 ///
-/// @author PQSigner OS (post-JARDÍN cutover)
+///         No ECDSA. No classical signer. The whole multi-signer +
+///         ZK clear-signing machinery from the pre-cutover wallet is gone.
+///
+/// @author PQSigner OS (post-C10 cutover)
 contract PQJardinWallet is IAccount, PQOwnable {
     // ── Config (immutable) ──────────────────────────────────────────
 
     IEntryPoint private immutable _entryPoint;
-    ISPHINCSVerifier public immutable c11Verifier;
+    ISPHINCSVerifier public immutable c10Verifier;
     IJardinVerifier public immutable forscVerifier;
 
-    /// @notice Master C11 public seed (N-masked: top 16 bytes populated,
+    /// @notice Bootstrap C10 public seed (N-masked: top 16 bytes populated,
     ///         bottom 16 zero). Immutable — rotating it would break the
     ///         recovery contract.
     bytes32 public immutable masterPkSeed;
 
-    /// @notice Master C11 hypertree root commitment. Same N-mask layout.
+    /// @notice Bootstrap C10 hypertree root commitment. Same N-mask layout.
     bytes32 public immutable masterPkRoot;
 
     // ── Signature types ────────────────────────────────────────────
@@ -55,13 +63,24 @@ contract PQJardinWallet is IAccount, PQOwnable {
     uint8 public constant TYPE_1_REGISTER = 0x01;
     uint8 public constant TYPE_2_COMPACT = 0x02;
 
-    /// @dev 1 byte marker + 32 r + 16 subPkSeed + 16 subPkRoot + 3976 C11 sig.
-    uint256 public constant TYPE_1_SIG_LEN = 1 + 32 + 16 + 16 + 3976;
+    /// @dev 1 byte marker + 32 r + 16 subPkSeed + 16 subPkRoot + 4008 C10 sig.
+    uint256 public constant TYPE_1_SIG_LEN = 1 + 32 + 16 + 16 + 4008;
 
     /// @dev 1 byte marker + 32 slotKey + 16 subPkSeed + 16 subPkRoot + 2452+q*16 FORS+C.
     uint256 public constant TYPE_2_HEADER_LEN = 1 + 32 + 16 + 16;
     uint256 public constant TYPE_2_MIN_SIG_LEN = 2452 + 16; // q=1
     uint256 public constant TYPE_2_MAX_SIG_LEN = 2452 + 95 * 16; // q=95
+
+    // ── Bootstrap-use cap ───────────────────────────────────────────
+
+    /// @notice Maximum number of Type 1 (bootstrap C10) signatures this
+    ///         wallet will accept on this chain. Set deliberately below
+    ///         the C10 hypertree's 2^18 = 262,144-signature capacity so
+    ///         on-chain wear stays well inside the SPHINCS+ birthday-style
+    ///         safety margin. Exceeding this cap bricks Type 1 on this
+    ///         chain (the registered JARDÍN slot can still emit Type 2
+    ///         until its own `Q_MAX`).
+    uint256 public constant MAX_BOOTSTRAP_USES = 65_536;
 
     // ── Errors ────────────────────────────────────────────────────
 
@@ -69,6 +88,7 @@ contract PQJardinWallet is IAccount, PQOwnable {
     error InvalidSignatureType();
     error InvalidSignatureLength();
     error UnregisteredSlot();
+    error BootstrapExhausted();
 
     /// @dev ERC-4337 v0.9 sentinel for failed validation.
     uint256 private constant SIG_VALIDATION_FAILED = 1;
@@ -77,13 +97,13 @@ contract PQJardinWallet is IAccount, PQOwnable {
 
     constructor(
         IEntryPoint ep,
-        ISPHINCSVerifier c11,
+        ISPHINCSVerifier c10,
         IJardinVerifier forsc,
         bytes32 masterPkSeed_,
         bytes32 masterPkRoot_
     ) {
         _entryPoint = ep;
-        c11Verifier = c11;
+        c10Verifier = c10;
         forscVerifier = forsc;
         masterPkSeed = masterPkSeed_;
         masterPkRoot = masterPkRoot_;
@@ -184,13 +204,26 @@ contract PQJardinWallet is IAccount, PQOwnable {
         if (sigType == TYPE_1_REGISTER) {
             if (sig.length != TYPE_1_SIG_LEN) return SIG_VALIDATION_FAILED;
 
+            // Hard-cap on the number of Type 1 signatures this chain
+            // will accept. Checked BEFORE calling the C10 verifier so a
+            // griefing NS can't burn the wallet's gas attempting to
+            // validate a sig that would be rejected anyway.
+            //
+            // Returning SIG_VALIDATION_FAILED (rather than reverting)
+            // keeps the IAccount contract with bundler simulation: the
+            // UserOp fails gracefully instead of tripping the EntryPoint's
+            // banning heuristics.
+            if (_getStorage().bootstrapUses >= MAX_BOOTSTRAP_USES) {
+                return SIG_VALIDATION_FAILED;
+            }
+
             bytes32 r = bytes32(sig[1:33]);
             bytes16 subSeed16 = bytes16(sig[33:49]);
             bytes16 subRoot16 = bytes16(sig[49:65]);
-            bytes calldata c11Sig = sig[65:TYPE_1_SIG_LEN];
+            bytes calldata c10Sig = sig[65:TYPE_1_SIG_LEN];
 
-            // Verify the master C11 signature over userOpHash.
-            try c11Verifier.verify(masterPkSeed, masterPkRoot, userOpHash, c11Sig)
+            // Verify the bootstrap C10 signature over userOpHash.
+            try c10Verifier.verify(masterPkSeed, masterPkRoot, userOpHash, c10Sig)
                 returns (bool ok)
             {
                 if (!ok) return SIG_VALIDATION_FAILED;
@@ -209,6 +242,14 @@ contract PQJardinWallet is IAccount, PQOwnable {
             bytes32 slotKey = sha256(abi.encodePacked(r));
             bytes32 subVkHash = sha256(abi.encodePacked(subSeed16, subRoot16));
             _registerJardinSlot(slotKey, subVkHash);
+
+            // Bump the bootstrap counter AFTER the slot registration so
+            // an attacker who finds a way to make `_registerJardinSlot`
+            // revert can't also burn the counter. The cap re-check here
+            // is redundant with the pre-check above, but cheap — and the
+            // pair forms a full pre/post invariant against any re-entry
+            // into storage between the two points.
+            _bumpBootstrapUses(MAX_BOOTSTRAP_USES);
             return SIG_VALIDATION_SUCCESS;
         }
 

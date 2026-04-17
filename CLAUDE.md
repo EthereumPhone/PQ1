@@ -2,7 +2,7 @@
 
 Post-quantum ERC-4337 hardware wallet. Target: **STM32U585 (Cortex-M33, TrustZone) + Infineon OPTIGA Trust M V3 + NXP SE050**. Every primitive protecting the seed is PQ or symmetric with >=256-bit keys. Signing is **JARDÍN FORS+C only** — pure post-quantum, no ECDSA, no classical fallback. The wallet is an account-abstraction smart account that talks to EntryPoint v0.9.
 
-Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. Both SE drivers (OPTIGA Trust M, SE050) working. Dual-SE XOR entropy split wired and tested. The `PQJardinWallet` smart-wallet is deployed via a deterministic CREATE2 factory whose salt is `sha256(masterPkSeed || masterPkRoot)`, so the same 24 words produce the same address on every chain. **SHA-256 cutover:** every hash inside the PQ signing stack (SPHINCS+C11, JARDÍN FORS+C, slot-key derivation, KDF, CREATE2 salt) is now SHA-256, routed through the STM32U585 HASH peripheral on hardware. `sha3::Keccak256` is retained only for the external-standard hashes the EVM demands (EIP-4337 userOpHash, EIP-712, EIP-1559 envelope, ERC-7201 namespace, the CREATE2 address formula itself).
+Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. Both SE drivers (OPTIGA Trust M, SE050) working. Dual-SE XOR entropy split wired and tested. The `PQJardinWallet` smart-wallet is deployed via a deterministic CREATE2 factory whose salt is `sha256(masterPkSeed || masterPkRoot)`, so the same 24 words produce the same address on every chain. **SHA-256 cutover:** every hash inside the PQ signing stack (SPHINCS+C10, JARDÍN FORS+C, slot-key derivation, KDF, CREATE2 salt) is now SHA-256, routed through the STM32U585 HASH peripheral on hardware. `sha3::Keccak256` is retained only for the external-standard hashes the EVM demands (EIP-4337 userOpHash, EIP-712, EIP-1559 envelope, ERC-7201 namespace, the CREATE2 address formula itself). **C10 cutover:** the bootstrap (master) identity is now SPHINCS+C10 (`h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008`), replacing C11. The on-chain `PQJardinWallet.bootstrapUses` counter caps Type 1 usage at **65,536 per chain** (`MAX_BOOTSTRAP_USES`). Once the cap is hit, further slot rotations on that chain are rejected with `SIG_VALIDATION_FAILED`; the currently-registered JARDÍN slot keeps signing Type 2 tx until its own `Q_MAX`.
 
 ## Non-Negotiable Invariants
 
@@ -16,11 +16,13 @@ Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 
 4. **All secrets live ONLY in TrustZone secure world.** Non-secure world never sees a PIN digit, entropy byte, signing key, or derived secret. The NSC gateway exposes only opaque commands (unlock, sign, status) that return non-secret data. Pointer validation on every call. TOCTOU defense: NS buffers copied to secure stack before parsing.
 
-5. **Post-quantum only for transaction signing.** JARDÍN FORS+C. No classical signer (secp256k1, P-256, Ed25519) anywhere. The master identity that gates slot registration is SPHINCS+C11 — still hash-based, no lattice assumptions. The on-chain wallet contract has NO classical verifier path.
+5. **Post-quantum only for transaction signing.** JARDÍN FORS+C. No classical signer (secp256k1, P-256, Ed25519) anywhere. The bootstrap identity that gates slot registration is SPHINCS+C10 — still hash-based, no lattice assumptions. The on-chain wallet contract has NO classical verifier path.
 
 6. **`next_q` persistence before release.** Every FORS+C signature increments `next_q` in secure flash BEFORE the Type 2 bytes are released to NS. A rollback after sign-but-before-flash would otherwise allow q reuse and FORS+C security collapses under reuse (128 → 105 bits at q=2, lower with more).
 
-7. **Master C11 keys are immutable.** The on-chain CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`. Rotating master keys would change the wallet address — seed recovery would land users at a different account. The factory has no `rotateMasterKeys` function, and there is no on-chain ownership model that could introduce one.
+7. **Bootstrap C10 keys are immutable.** The on-chain CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`. Rotating the bootstrap key would change the wallet address — seed recovery would land users at a different account. The factory has no `rotateMasterKeys` function, and there is no on-chain ownership model that could introduce one.
+
+8. **Bootstrap C10 uses capped at 65,536 per chain.** `PQJardinWallet.bootstrapUses` increments on every accepted Type 1 and is checked against `MAX_BOOTSTRAP_USES = 65_536` before dispatch. This keeps wallet usage well inside the SPHINCS+C10 `h=18` tree's 2^18 = 262,144 signing positions, leaving a conservative birthday-style safety margin. Once a chain hits the cap, firmware still services Type 2 signing against the last-registered slot but can no longer rotate — the companion surfaces this as an irrecoverable per-chain freeze.
 
 ## Architecture at a Glance
 
@@ -34,8 +36,8 @@ Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
                                            |       +--- HMAC-SHA512("sphincs-c6-v1") -> master
                                            |       |       |  +-- sha256("pk_seed"||master[..32]) & N_MASK    -> masterPkSeed
                                            |       |       |  +-- sha256("sk_seed"||master[..32])              -> masterSkSeed
-                                           |       |       +-- sphincs_c7::SigningKey::keygen(...)              -> masterPkRoot
-                                           |       |              (C11 hypertree, built on-demand for Type 1)
+                                           |       |       +-- sphincs_c10::SigningKey::keygen(...)             -> masterPkRoot
+                                           |       |              (C10 hypertree, built on-demand for Type 1)
                                            |       |
                                            |       +--- sha256("pqwallet-jardin-master" || bip39_seed)  -> jardin_master_entropy
                                            |                                                                        |
@@ -44,7 +46,7 @@ Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
                                            |                                                                        |
                                            |       jardin_fosc::JardinSlot::keygen(entropy) -> sub_pk_seed, sub_pk_root, 94-node spine
                                            |                                                                        |
-                                           |       Type 1: C11-sign(master_sk, userOpHash_t1) -> 3976-byte C11 sig
+                                           |       Type 1: C10-sign(master_sk, userOpHash_t1) -> 4008-byte C10 sig
                                            |       Type 2: FORS+C-sign(slot, userOpHash_t2)    -> 2452+q*16-byte sig
                                            |
                                            +--[NSC gateway, 6 cmds]---> NON-SECURE WORLD
@@ -82,7 +84,7 @@ Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
   slot_index = hint         slot_index stays        slot_index += 1
   keygen new slot           rebuild slot if         keygen new slot
   Type 1 + Type 2           state not cached        Type 1 + Type 2
-  type1_len = 4041          Type 2 only             type1_len = 4041
+  type1_len = 4073          Type 2 only             type1_len = 4073
                             type1_len = 0           (Type 1 registers
                                                      the NEW sub-key)
 ```
@@ -115,8 +117,8 @@ offset  size  field
 [type1_len(4 BE)][type1_bytes...][type2_len(4 BE)][type2_bytes...]
 ```
 
-- `type1_bytes` (exactly 4041 bytes when present):
-  `[0x01][r(32)][subPkSeed(16)][subPkRoot(16)][C11_sig(3976)]`
+- `type1_bytes` (exactly 4073 bytes when present):
+  `[0x01][r(32)][subPkSeed(16)][subPkRoot(16)][C10_sig(4008)]`
 
 - `type2_bytes` (2533..4037 bytes):
   `[0x02][H(r)(32)][subPkSeed(16)][subPkRoot(16)][FORS+C_sig(2452 + q·16)]`
@@ -124,8 +126,8 @@ offset  size  field
 ### On-chain validation
 
 `PQJardinWallet.validateUserOp` dispatches on `sig[0]`:
-- `0x01` → verify master C11 sig over `userOpHash`, record `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
-- `0x02` → look up `slots[slotKey]`, check sub-key commitment matches, verify FORS+C sig.
+- `0x01` → check `bootstrapUses < MAX_BOOTSTRAP_USES` (= 65,536), verify bootstrap C10 sig over `userOpHash`, record `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`, then bump the counter and emit `BootstrapKeyUsed(newCount)`.
+- `0x02` → look up `slots[slotKey]`, check sub-key commitment matches, verify FORS+C sig. (Does NOT touch `bootstrapUses` — Type 2 keeps working after the C10 cap is hit.)
 
 ## Subsystem Guides
 
@@ -143,17 +145,18 @@ offset  size  field
 - `slot.next_q` advances monotonically; flash persistence happens BEFORE the signature is released to NS.
 - The H_msg is 192 bytes: `pkSeed(32) || pkRoot(32) || R(32) || msg(32) || counter_u256(32) || 0xFF..FF(32)`.
 
-### SPHINCS+C11 master signing (`sphincs-c7/`)
+### SPHINCS+C10 bootstrap signing (`sphincs-c10/`)
 
-The crate name is historical — it implements **C11** (W+C_F+C, h=16, d=2, a=11, k=13, w=8, l=43, sig=3976). Used only for Type 1 slot registration; FORS+C handles every user tx.
+Implements **C10** (W+C_F+C, h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008). Used only for Type 1 slot registration; FORS+C handles every user tx. The 2^18-leaf hypertree holds ~262K positions; the on-chain counter caps real-world usage at 65,536 per chain so the wallet stays deep inside the SPHINCS+ birthday-style safety margin.
 
 **Key files:**
-- `sphincs-c7/src/lib.rs` — `SigningKey::keygen`, `SigningKey::sign`, `verify`.
-- `sphincs-c7/src/hypertree.rs`, `wots.rs`, `fors.rs`, `merkle.rs`, `address.rs`, `hash.rs`, `params.rs`.
+- `sphincs-c10/src/lib.rs` — `SigningKey::keygen`, `SigningKey::sign`, `verify`.
+- `sphincs-c10/src/hypertree.rs`, `wots.rs`, `fors.rs`, `merkle.rs`, `address.rs`, `hash.rs`, `params.rs`.
+- `sphincs-c10/tests/gen_test_vectors.rs` — emits `contracts/smart-wallet/test/c10_test_vectors.json` for the Foundry smoketest.
 
 **Cross-cutting invariants:**
-- Output matches `SPHINCsC11Asm.sol` (Yul-optimised Solidity verifier) byte-for-byte.
-- 3,976-byte signature. Verify time on-chain ≈ 116K gas.
+- Output matches `SPHINCsC10Asm.sol` (Yul-optimised Solidity verifier) byte-for-byte.
+- 4,008-byte signature.
 - `SigningKey` is `ZeroizeOnDrop`; never leaves secure SRAM.
 
 ### OPTIGA Trust M Integration
@@ -209,15 +212,16 @@ At every boot, the secure world SHA-256 hashes its own flash image and displays 
 Pure-PQ account-abstraction wallet on EntryPoint v0.9.
 
 **Key files:**
-- `src/PQJardinWallet.sol` — validates Type 1 + Type 2 signatures, stores `jardinSlots` mapping.
+- `src/PQJardinWallet.sol` — validates Type 1 + Type 2 signatures, stores `jardinSlots` mapping, enforces `MAX_BOOTSTRAP_USES = 65_536`.
 - `src/PQJardinWalletFactory.sol` — CREATE2 factory. Salt = `sha256(masterPkSeed || masterPkRoot)` (the CREATE2 opcode itself still keccak256-hashes `0xff || addr || salt || keccak256(initCode)`; we only control the salt preimage).
-- `src/PQOwnable.sol` — minimal storage helper (`jardinSlots` mapping only).
-- `src/verifiers/SPHINCsC11Asm.sol` — stateless Yul C11 verifier.
+- `src/PQOwnable.sol` — minimal storage helper (`jardinSlots` mapping + `bootstrapUses` counter) plus `_bumpBootstrapUses(cap)`.
+- `src/verifiers/SPHINCsC10Asm.sol` — stateless Yul C10 verifier (SHA-256 precompile).
 - `src/verifiers/JardinForsCVerifier.sol` — stateless Yul FORS+C verifier.
 
 **Cross-cutting invariants:**
 - No classical signer path anywhere in the contract.
-- Master C11 keys immutable after construction.
+- Bootstrap C10 keys immutable after construction.
+- `bootstrapUses` monotonically increases; no reset path anywhere in the contract or factory.
 - Wire formats consumed here MUST match the firmware's output byte-for-byte.
 
 ## Build and Test
@@ -288,9 +292,9 @@ unrelated to the cutover.
 | `ui-semihosting` | Console UI (QEMU or probe-rs `print`-forwarded; `SYS_READC` only works under QEMU) |
 | `ui-oled` | SSD1306 I2C OLED (hardware) |
 | `stm32u585` | Real STM32U585 hardware (vs QEMU mps2-an505). **Implies `hw-sha256`** — every hardware build routes SHA-256 through the HASH peripheral automatically. |
-| `hw-sha256` | Route `sphincs-c7` + `jardin-fosc` SHA-256 calls through the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`. Pulled in transitively by `stm32u585`; never needed by itself on host/QEMU. |
+| `hw-sha256` | Route `sphincs-c10` + `jardin-fosc` SHA-256 calls through the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`. Pulled in transitively by `stm32u585`; never needed by itself on host/QEMU. |
 
-**Targets:** `thumbv8m.main-none-eabi` (both worlds). Release profile: `opt-level = "s"`, LTO, `codegen-units = 1`, `overflow-checks = true`. The `sphincs-c7`, `jardin-fosc`, `sha2`, and `hmac` crates are always `opt-level = 3` (SHA-256 is the hot inner loop on host / fallback builds; on device the HASH peripheral handles it in one cycle/byte).
+**Targets:** `thumbv8m.main-none-eabi` (both worlds). Release profile: `opt-level = "s"`, LTO, `codegen-units = 1`, `overflow-checks = true`. The `sphincs-c10`, `jardin-fosc`, `sha2`, and `hmac` crates are always `opt-level = 3` (SHA-256 is the hot inner loop on host / fallback builds; on device the HASH peripheral handles it in one cycle/byte).
 
 ## Code Conventions
 
@@ -306,10 +310,10 @@ unrelated to the cutover.
 ## Recovery contract (post-SHA-256 cutover)
 
 - **BIP-39 → seed**: PBKDF2-HMAC-SHA512, 2048 iters, empty passphrase (standard).
-- **Seed → C11 master**: `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (note the C6 tag — historical, do NOT modernise), then:
+- **Seed → C10 bootstrap master**: `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (note the C6 tag — historical, do NOT modernise even after the C11→C10 cutover), then:
   - `masterPkSeed = sha256("pk_seed" || master[0..32]) & N_MASK` (top 16 bytes kept, bottom 16 zero)
   - `masterSkSeed = sha256("sk_seed" || master[0..32])`
-  - `masterPkRoot = sphincs_c7::SigningKey::keygen(masterSkSeed, masterPkSeed[..16]).pk_root()`
+  - `masterPkRoot = sphincs_c10::SigningKey::keygen(masterSkSeed, masterPkSeed[..16]).pk_root()` (C10: h=18 top-layer subtree, 512 WOTS leaves)
 - **Seed → JARDÍN master entropy**: `sha256("pqwallet-jardin-master" || bip39_seed)`.
 - **Master entropy → slot entropy**: `sha256(master || "jardin_slot" || slot_index_be)`.
 - **Master entropy → r**: `sha256(master || "jardin_r" || slot_index_be)`.
@@ -321,7 +325,7 @@ unrelated to the cutover.
 | Path | Purpose |
 |------|---------|
 | `secure/src/main.rs` | Secure world entry: SAU → provision → unlock → boot NS |
-| `secure/src/crypto.rs` | BIP-39, C11 master derivation, JARDÍN master entropy, AES-GCM wrap, PIN state |
+| `secure/src/crypto.rs` | BIP-39, C10 bootstrap derivation, JARDÍN master entropy, AES-GCM wrap, PIN state |
 | `secure/src/nsc/mod.rs` | NSC gateway dispatcher (6 commands) |
 | `secure/src/nsc/state.rs` | SecureState singleton (pin_verified, master_secret, JARDIN slot cache) |
 | `secure/src/nsc/cmd_sign_userop.rs` | **The unified JARDÍN Type 1 / Type 2 state machine** |
@@ -343,13 +347,13 @@ unrelated to the cutover.
 | `nonsecure/src/e2e_test.rs` | Non-interactive end-to-end test runner |
 | `shared/src/lib.rs` | Cross-world types: NscStatus, CMD constants, wire-format sizes |
 | `jardin-fosc/*` | FORS+C signing library (no_std, SHA-256) |
-| `sphincs-c7/*` | C11 master-key signing library (no_std, SHA-256; name historical) |
+| `sphincs-c10/*` | C10 bootstrap-key signing library (no_std, SHA-256) |
 | `secure/src/hw/hash.rs` | STM32U585 HASH peripheral driver — `pqsigner_sha256_*` extern fns consumed by the signing crates under `hw-sha256` |
 | `bip39/*` | 24-word English BIP-39 (no_std) |
 | `fwmeasure/*` | Host-side firmware measurement tool |
 | `contracts/smart-wallet/src/PQJardinWallet.sol` | On-chain ERC-4337 v0.9 account |
 | `contracts/smart-wallet/src/PQJardinWalletFactory.sol` | CREATE2 factory |
-| `contracts/smart-wallet/src/verifiers/SPHINCsC11Asm.sol` | Type 1 verifier |
+| `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` | Type 1 verifier (C10, SHA-256 precompile) |
 | `contracts/smart-wallet/src/verifiers/JardinForsCVerifier.sol` | Type 2 verifier |
 | `tools/webhid_test.html` | Browser companion: sign via WebHID |
 | `Makefile` | Build orchestration |
@@ -371,6 +375,7 @@ unrelated to the cutover.
 - **Do not release Type 2 bytes to NS before flash-writing the incremented `next_q`.** Rollback attack defense: FORS+C security degrades sharply under q reuse.
 - **Do not skip the verify-before-release check** on Type 1 or Type 2 signatures. Fault-injection guard.
 - **Do not add a `rotateMasterKeys` function** to the wallet contract — would break the recovery contract.
+- **Do not add a `resetBootstrapUses` / `increaseMaxBootstrapUses` path** to the wallet or factory. `bootstrapUses` is an immutable monotonic counter capped at 65,536 per chain by design. Once a chain is exhausted, it stays exhausted — that is the invariant. A companion-side notice of impending exhaustion is fine; anything that touches the counter in the contract is not.
 - **Do not let NS world control the inactivity timer.** Timer runs on Secure-only TIM. NS pings do not reset it. Only real button presses on S-world confirm dialogs count as activity.
 - **Do not add `debug-log` or `e2e-test` features to production builds.** CI must gate on this.
 

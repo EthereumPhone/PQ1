@@ -16,7 +16,7 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 ///         lands at the same wallet address.
 contract PQJardinWalletFactory {
     IEntryPoint public immutable entryPoint;
-    ISPHINCSVerifier public immutable c11Verifier;
+    ISPHINCSVerifier public immutable c10Verifier;
     IJardinVerifier public immutable forscVerifier;
 
     event AccountCreated(
@@ -25,9 +25,9 @@ contract PQJardinWalletFactory {
         bytes32 indexed masterPkRoot
     );
 
-    constructor(IEntryPoint ep, ISPHINCSVerifier c11, IJardinVerifier forsc) {
+    constructor(IEntryPoint ep, ISPHINCSVerifier c10, IJardinVerifier forsc) {
         entryPoint = ep;
-        c11Verifier = c11;
+        c10Verifier = c10;
         forscVerifier = forsc;
     }
 
@@ -48,7 +48,7 @@ contract PQJardinWalletFactory {
         }
         bytes32 salt = _salt(masterPkSeed, masterPkRoot);
         PQJardinWallet acc = new PQJardinWallet{salt: salt}(
-            entryPoint, c11Verifier, forscVerifier, masterPkSeed, masterPkRoot
+            entryPoint, c10Verifier, forscVerifier, masterPkSeed, masterPkRoot
         );
         emit AccountCreated(address(acc), masterPkSeed, masterPkRoot);
         return acc;
@@ -64,7 +64,7 @@ contract PQJardinWalletFactory {
         bytes32 initCodeHash = keccak256(
             abi.encodePacked(
                 type(PQJardinWallet).creationCode,
-                abi.encode(entryPoint, c11Verifier, forscVerifier, masterPkSeed, masterPkRoot)
+                abi.encode(entryPoint, c10Verifier, forscVerifier, masterPkSeed, masterPkRoot)
             )
         );
         bytes32 h = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, initCodeHash));

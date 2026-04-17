@@ -2,7 +2,7 @@
 #
 # Post-SHA-256-cutover layout. Every crate listed here is needed to
 # build the firmware (secure + nonsecure + shared + bip39 + jardin-fosc
-# + sphincs-c7) or the host-side firmware measurement tool (fwmeasure).
+# + sphincs-c10) or the host-side firmware measurement tool (fwmeasure).
 #
 # The vendored `keccak-asm` crate was dropped in the SHA-256 cutover:
 # the signing stack no longer uses Keccak-f[1600]. The `sha3` crate still
@@ -22,7 +22,7 @@ members = [
     "nonsecure",
     "bip39",
     "fwmeasure",
-    "sphincs-c7",
+    "sphincs-c10",
     "jardin-fosc",
     # ZK clear-sign support: BLS12-381 pairing, Merkle DB builder, standalone
     # Groth16 verifier test harness.
@@ -42,7 +42,7 @@ edition = "2021"
 # Internal path deps
 sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
-sphincs-c7        = { path = "sphincs-c7" }
+sphincs-c10       = { path = "sphincs-c10" }
 jardin-fosc       = { path = "jardin-fosc" }
 bls12_381 = { package = "bls12_381_pka", path = "bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
 
@@ -60,14 +60,14 @@ hex = "0.4"
 [profile.dev]
 opt-level = 2
 
-[profile.dev.package.sphincs-c7]
+[profile.dev.package.sphincs-c10]
 opt-level = 3
 
 [profile.dev.package.jardin-fosc]
 opt-level = 3
 
 # PBKDF2-HMAC-SHA512 runs 2048 iterations on every unlock, and SHA-256 is
-# now the innermost loop of every SPHINCS+C11 and JARDÍN hash call
+# now the innermost loop of every SPHINCS+C10 and JARDÍN hash call
 # (235K per JARDÍN keygen). These MUST be compiled for speed, not size.
 [profile.dev.package.sha2]
 opt-level = 3
@@ -82,7 +82,7 @@ codegen-units = 1
 strip = "debuginfo"
 overflow-checks = true
 
-[profile.release.package.sphincs-c7]
+[profile.release.package.sphincs-c10]
 opt-level = 3
 
 [profile.release.package.jardin-fosc]

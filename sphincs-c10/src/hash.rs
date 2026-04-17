@@ -1,7 +1,7 @@
 //! SHA-256-based tweakable hash primitives.
 //!
 //! Every function in this module must produce byte-identical output to the
-//! corresponding Solidity/Yul code in `SPHINCsC11Asm.sol` (which calls the
+//! corresponding Solidity/Yul code in `SPHINCsC10Asm.sol` (which calls the
 //! SHA-256 precompile at address 0x02) and the host-side reference signer.
 //!
 //! Convention: all 16-byte (n=128-bit) values are stored in the **top**

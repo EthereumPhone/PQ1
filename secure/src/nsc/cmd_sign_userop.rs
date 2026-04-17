@@ -9,10 +9,11 @@
 //! The companion submits up to two EntryPoint v0.9 PackedUserOperations:
 //!
 //!   1. Type 1 — slot registration UserOp. `callData = execute(sender, 0, "")`
-//!      (a no-op call to self). Signature wraps a full SPHINCS+C11 sig
-//!      against the C11 master key, plus the raw randomiser `r` and the
-//!      N-truncated sub-key `(subPkSeed, subPkRoot)`. The wallet
-//!      contract validates the C11 sig and, as a side effect, records
+//!      (a no-op call to self). Signature wraps a full SPHINCS+C10 sig
+//!      against the C10 bootstrap key, plus the raw randomiser `r` and
+//!      the N-truncated sub-key `(subPkSeed, subPkRoot)`. The wallet
+//!      contract validates the C10 sig, increments `bootstrapUses` (the
+//!      on-chain counter capped at 65,536 per chain), and records
 //!      `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
 //!
 //!   2. Type 2 — user tx UserOp. `callData = execute(to, value, data)`.
@@ -42,7 +43,7 @@
 //! wire format.
 
 use sphincs_tz_shared::{
-    NscStatus, C11_SIG_LEN, FLAG_INCLUDE_INIT_CODE, JARDIN_CREATE_ACCOUNT_SELECTOR,
+    NscStatus, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE, JARDIN_CREATE_ACCOUNT_SELECTOR,
     JARDIN_FORSC_BODY, JARDIN_INIT_CODE_LEN, JARDIN_TYPE1_LEN, JARDIN_TYPE1_MARKER,
     JARDIN_TYPE2_HEADER_LEN, JARDIN_TYPE2_MARKER, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN,
     PQ_JARDIN_WALLET_FACTORY, SIGN_USEROP_HEADER_LEN, ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA,
@@ -610,27 +611,27 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
         };
 
-        // C11 keygen first — we need the master pubkey pair to build
+        // C10 keygen first — we need the bootstrap pubkey pair to build
         // initCode before we can bind its hash into the userOpHash.
-        ui::show_progress("C11 keygen", 0);
-        let (c11_sk, c11_pk_seed_32, c11_pk_root_32) =
-            crate::crypto::derive_c11_master_keypair_from_entropy_with_progress(
+        ui::show_progress("C10 keygen", 0);
+        let (c10_sk, c10_pk_seed_32, c10_pk_root_32) =
+            crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
                 &*entropy,
-                |p| ui::show_progress("C11 keygen", p),
+                |p| ui::show_progress("C10 keygen", p),
             );
 
         // Build the optional initCode:
         //   factory(20) || selector(4) || masterPkSeed(32) || masterPkRoot(32)
         // and precompute `keccak256(initCode)` for the Type 1 userOpHash.
-        // `c11_pk_seed_32` and `c11_pk_root_32` are already N-masked
+        // `c10_pk_seed_32` and `c10_pk_root_32` are already N-masked
         // (top 16 bytes populated, bottom 16 zero) — exactly the
         // `bytes32` shape the factory expects.
         let t1_init_code_hash = if include_init_code {
             let ic = &mut *init_code_out;
             ic[..20].copy_from_slice(&PQ_JARDIN_WALLET_FACTORY);
             ic[20..24].copy_from_slice(&JARDIN_CREATE_ACCOUNT_SELECTOR);
-            ic[24..56].copy_from_slice(&c11_pk_seed_32);
-            ic[56..88].copy_from_slice(&c11_pk_root_32);
+            ic[24..56].copy_from_slice(&c10_pk_seed_32);
+            ic[56..88].copy_from_slice(&c10_pk_root_32);
             emit_init_code = true;
             keccak256(ic.as_slice())
         } else {
@@ -652,10 +653,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let t1_call_hash = keccak256(t1_exec.as_slice());
         let t1_user_op_hash = compute_user_op_hash_v09(&t1_params, &t1_call_hash);
 
-        let c11_sig = match crate::crypto::c11_sign_verified_with_progress(
-            &c11_sk,
+        let c10_sig = match crate::crypto::c10_sign_verified_with_progress(
+            &c10_sk,
             &t1_user_op_hash,
-            c11_sign_progress,
+            c10_sign_progress,
         ) {
             Ok(s) => s,
             Err(_) => {
@@ -663,7 +664,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::CryptoError as u32;
             }
         };
-        drop(c11_sk); // Zeroise on drop.
+        drop(c10_sk); // Zeroise on drop.
 
         // Extract the newly-built sub-key commitments from the slot.
         let (sub_pk_seed, sub_pk_root) = unsafe {
@@ -687,7 +688,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         type1_out[1..33].copy_from_slice(&r);
         type1_out[33..49].copy_from_slice(&sub_pk_seed);
         type1_out[49..65].copy_from_slice(&sub_pk_root);
-        type1_out[65..65 + C11_SIG_LEN].copy_from_slice(&c11_sig);
+        type1_out[65..65 + C10_SIG_LEN].copy_from_slice(&c10_sig);
     } else if let Mode::Normal(stored) = &mode {
         h_r = stored.h_r;
     }
@@ -837,7 +838,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     //
     // Output layout:
     //   [init_code_len(4 BE)][init_code(0 or 88)]
-    //   [type1_len(4 BE)][type1_bytes(0 or 4041)]
+    //   [type1_len(4 BE)][type1_bytes(0 or 4073)]
     //   [type2_len(4 BE)][type2_bytes]
     //
     // When the companion did not set `FLAG_INCLUDE_INIT_CODE`, the first
@@ -936,8 +937,8 @@ fn add_one_to_be_u256(v: &mut [u8; 32]) {
     debug_assert!(false, "nonce seq overflow slipped past the step-4b guard");
 }
 
-fn c11_sign_progress(percent: u8) {
-    crate::ui::show_progress("C11 sign", percent);
+fn c10_sign_progress(percent: u8) {
+    crate::ui::show_progress("C10 sign", percent);
 }
 
 /// Hex-format a u32 as 8 ASCII chars into `out[..8]`.

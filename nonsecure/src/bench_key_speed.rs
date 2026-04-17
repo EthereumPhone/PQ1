@@ -7,7 +7,7 @@
 //! never needs to drive the PIN UI).
 //!
 //! Emits three measurements per run:
-//!   * first-sign on a fresh chain  → Type 1 (C11) + slot keygen + Type 2
+//!   * first-sign on a fresh chain  → Type 1 (C10) + slot keygen + Type 2
 //!   * N subsequent signs on same chain → Type 2 only (slot cached)
 //!   * first-sign on a second chain  → a second Type 1 data point
 //!
