@@ -118,7 +118,7 @@ The SE050 has its own provisioning/unlock path (`provision_with_mnemonic_se050()
 
 ### 7. HUK-SAES Key Wrapping (SE050 only)
 
-**Status:** PARTIALLY DONE
+**Status:** PARTIALLY DONE — **BLOCKED on #24 step 3** (see "Ordering dependency" below)
 
 > See also #23 for Trezor comparison context — Trezor Safe 7 uses HUK for a different purpose (seed-decryption key derivation from MCU flash); our wrapping scope (SCP03 keys only) is narrower by design because our seed never lands on MCU flash in the first place.
 
@@ -126,10 +126,12 @@ Tropic01 pairing key: **DONE** — TRNG-generated per-device key stored in secur
 
 SE050 SCP03 keys (`PLATFORM_ENC`, `PLATFORM_MAC`) are still hardcoded constants. On a real device, these should be wrapped by the STM32U585 Hardware Unique Key via the SAES peripheral.
 
+> **⚠️ Ordering dependency on #24.** Do NOT HUK-wrap the SE050 SCP03 keys using the current `hw/huk.rs::derive_device_key` — it mixes `firmware_hash` into the wrap key, and any firmware update would then make the wrapped SE050 SCP03 keys unreadable. That recreates the exact same brick scenario that hit our OPTIGA bench chip, but on SE050 where it would cost €150+ per replacement chip (prior experience). **Wait for work-todo #24 step 3 to re-root `derive_device_key` off `firmware_hash` and onto the OTP master key**; after that, wrap-key stability across firmware updates is guaranteed by construction. Full context: `docs/optiga-brick-postmortem.md` §4.
+
 **What remains:**
 - [ ] SAES peripheral driver for STM32U585
-- [ ] SE050 SCP03 key wrapping/unwrapping via HUK-SAES
-- [ ] Optional: wrap the Tropic01 pairing key with HUK-SAES for defense-in-depth (currently plaintext in secure flash, protected by RDP level 2)
+- [ ] SE050 SCP03 key wrapping/unwrapping via HUK-SAES (blocked — see above)
+- [ ] Optional: wrap the Tropic01 pairing key with HUK-SAES for defense-in-depth (currently plaintext in secure flash, protected by RDP level 2) (also blocked — same reasoning)
 
 **Files to create:** `secure/src/hw/saes.rs`
 **Files to change:** `secure/src/se050/scp03.rs`
