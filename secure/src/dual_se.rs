@@ -74,12 +74,14 @@ impl WalletStore for DualSecureElement {
         bootstrap_vk: &[u8; 32],
         pin: &[u8; 8],
     ) -> Result<(), SeError> {
-        // Generate a random mask for the XOR split.
-        // half_O = random 32 bytes (stored on OPTIGA Trust M)
-        // half_E = entropy XOR half_O (stored on SE050)
-        // Reconstruction: half_O XOR half_E = entropy
+        secure_log!("[DUAL/prov] start");
+
         let mut half_o = [0u8; 32];
-        crate::rng::fill(&mut half_o).map_err(|_| SeError::InternalError)?;
+        if crate::rng::fill(&mut half_o).is_err() {
+            secure_log!("[DUAL/prov] rng::fill FAILED");
+            return Err(SeError::InternalError);
+        }
+        secure_log!("[DUAL/prov] rng OK, calling optiga.provision");
         let half_e = xor_32(entropy, &half_o);
 
         // Both SEs get the same master_secret (derived from full entropy).
@@ -90,8 +92,15 @@ impl WalletStore for DualSecureElement {
         // SE050 stores half_E as its "entropy" behind hardware UserID PIN gating.
         //
         // The VK and bootstrap VK are identical on both chips.
-        self.optiga.provision(&half_o, master_secret, vk, bootstrap_vk, pin)?;
-        self.se050.provision(&half_e, master_secret, vk, bootstrap_vk, pin)?;
+        if let Err(e) = self.optiga.provision(&half_o, master_secret, vk, bootstrap_vk, pin) {
+            secure_log!("[DUAL/prov] optiga.provision FAILED: {:?}", e);
+            return Err(e);
+        }
+        secure_log!("[DUAL/prov] optiga OK, calling se050.provision");
+        if let Err(e) = self.se050.provision(&half_e, master_secret, vk, bootstrap_vk, pin) {
+            secure_log!("[DUAL/prov] se050.provision FAILED: {:?}", e);
+            return Err(e);
+        }
 
         half_o.zeroize();
 

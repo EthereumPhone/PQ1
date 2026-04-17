@@ -57,12 +57,33 @@ impl From<super::ifx_i2c::IfxError> for OptigaError {
 
 const CMD_CLEAR_LAST_ERROR: u8 = 0x80;
 
-const CMD_OPEN_APPLICATION:  u8 = 0x70 | CMD_CLEAR_LAST_ERROR;  // 0xF0
-const CMD_CLOSE_APPLICATION: u8 = 0x71 | CMD_CLEAR_LAST_ERROR;  // 0xF1
-const CMD_GET_DATA_OBJECT:   u8 = 0x01 | CMD_CLEAR_LAST_ERROR;  // 0x81
-const CMD_SET_DATA_OBJECT:   u8 = 0x02 | CMD_CLEAR_LAST_ERROR;  // 0x82
-const CMD_GET_RANDOM:        u8 = 0x0C | CMD_CLEAR_LAST_ERROR;  // 0x8C
-const CMD_DECRYPT_SYM:       u8 = 0x15 | CMD_CLEAR_LAST_ERROR;  // 0x95
+const CMD_OPEN_APPLICATION:      u8 = 0x70 | CMD_CLEAR_LAST_ERROR;  // 0xF0
+const CMD_CLOSE_APPLICATION:     u8 = 0x71 | CMD_CLEAR_LAST_ERROR;  // 0xF1
+const CMD_GET_DATA_OBJECT:       u8 = 0x01 | CMD_CLEAR_LAST_ERROR;  // 0x81
+const CMD_SET_DATA_OBJECT:       u8 = 0x02 | CMD_CLEAR_LAST_ERROR;  // 0x82
+const CMD_SET_OBJECT_PROTECTED:  u8 = 0x03 | CMD_CLEAR_LAST_ERROR;  // 0x83
+const CMD_GET_RANDOM:            u8 = 0x0C | CMD_CLEAR_LAST_ERROR;  // 0x8C
+const CMD_DECRYPT_SYM:           u8 = 0x15 | CMD_CLEAR_LAST_ERROR;  // 0x95
+
+/// Chunking tags for SetObjectProtected InData: `0x30 | set_obj_protected_tag`.
+///
+/// From Infineon's `optiga_cmd.c`: OPTIGA_SET_OBJECT_PROTECTED_TAG (0x30) is
+/// OR'd with the set_obj_protected_tag value (0x00=start, 0x02=continue,
+/// 0x01=final). The manifest_version (0x01 for V3) travels in the APDU param
+/// byte of the START APDU; CONTINUE and FINAL use param=0x00.
+const SET_OBJ_PROT_TAG_START:    u8 = 0x30;
+const SET_OBJ_PROT_TAG_CONTINUE: u8 = 0x32;
+const SET_OBJ_PROT_TAG_FINAL:    u8 = 0x31;
+
+/// Manifest version for OPTIGA Trust M V3 protected update.
+/// See `examples/optiga/protected_update_data_set/example_optiga_util_protected_update.h`
+/// (struct `optiga_protected_update_manifest_fragment_configuration_t`).
+pub const MANIFEST_VERSION_V3: u8 = 0x01;
+
+/// Max CONTINUE/FINAL fragment payload. Matches the `MAX_PAYLOAD_SIZE` the
+/// reference tool uses when chunking fragments (see
+/// `examples/tools/protected_update_data_set/include/protected_update_data_set.h`).
+pub const PROTECTED_UPDATE_MAX_FRAGMENT: usize = 640;
 
 /// OPTIGA Trust M unique application identifier ("GenAuthAppl" sealed in the AID).
 const OPTIGA_AID: [u8; 16] = [
@@ -303,6 +324,98 @@ pub unsafe fn open_application(ifx: &mut IfxState) -> Result<(), OptigaError> {
     let mut resp = [0u8; 64];
     let n = ifx.transceive(apdu, &mut resp)?;
     let _ = parse_response(&resp, n)?;
+    Ok(())
+}
+
+/// `SetObjectProtected` — commit a CBOR-signed manifest or fragment.
+///
+/// The chip verifies the manifest's COSE_Sign1 signature against the Trust
+/// Anchor cert at the manifest's unprotected `kid` OID (e.g. 0xE0E3), then
+/// applies the payload — bypassing the target OID's normal `Change` AC.
+///
+/// Three APDU variants, distinguished by the InData TLV tag:
+/// - START    (0x30): carries the CBOR manifest. Param = manifest_version.
+/// - CONTINUE (0x32): carries an intermediate fragment. Param = 0.
+/// - FINAL    (0x31): carries the final fragment. Param = 0.
+///
+/// Fragments are chunked at `PROTECTED_UPDATE_MAX_FRAGMENT` bytes. A payload
+/// that fits in one chunk goes straight to FINAL with no CONTINUEs.
+///
+/// The chip only accepts CONTINUE/FINAL after a successful START in the same
+/// session — START takes a strict lock, FINAL releases it.
+unsafe fn protected_update_chunk(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    param: u8,
+    inner_tag: u8,
+    buf: &[u8],
+) -> Result<(), OptigaError> {
+    // ApduBuf is 768 bytes; subtract 4-byte APDU header + 3-byte TLV tag/length.
+    if buf.len() > 761 {
+        return Err(OptigaError::BufferOverflow);
+    }
+
+    let mut ab = ApduBuf::new(CMD_SET_OBJECT_PROTECTED, param);
+    ab.write_tlv(inner_tag, buf);
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 64];
+    let n = send_command(ifx, shield, apdu, &mut resp)?;
+    let _ = parse_response(&resp, n)?;
+    Ok(())
+}
+
+/// SetObjectProtected START — send the signed CBOR manifest.
+pub unsafe fn protected_update_start(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    manifest_version: u8,
+    manifest: &[u8],
+) -> Result<(), OptigaError> {
+    protected_update_chunk(ifx, shield, manifest_version, SET_OBJ_PROT_TAG_START, manifest)
+}
+
+/// SetObjectProtected CONTINUE — send an intermediate fragment chunk.
+pub unsafe fn protected_update_continue(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    fragment: &[u8],
+) -> Result<(), OptigaError> {
+    protected_update_chunk(ifx, shield, 0x00, SET_OBJ_PROT_TAG_CONTINUE, fragment)
+}
+
+/// SetObjectProtected FINAL — send the last fragment chunk and release
+/// the chip's strict lock.
+pub unsafe fn protected_update_final(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    fragment: &[u8],
+) -> Result<(), OptigaError> {
+    protected_update_chunk(ifx, shield, 0x00, SET_OBJ_PROT_TAG_FINAL, fragment)
+}
+
+/// High-level helper: send a manifest plus its fragment payload, chunking
+/// the fragment into `PROTECTED_UPDATE_MAX_FRAGMENT`-byte pieces.
+///
+/// - One START APDU with the full manifest.
+/// - Zero or more CONTINUE APDUs carrying all but the last fragment chunk.
+/// - One FINAL APDU carrying the last chunk (or an empty buffer if the whole
+///   fragment fit in earlier CONTINUEs — not our use case).
+pub unsafe fn send_protected_manifest(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    manifest: &[u8],
+    fragment: &[u8],
+) -> Result<(), OptigaError> {
+    protected_update_start(ifx, shield, MANIFEST_VERSION_V3, manifest)?;
+
+    let mut pos = 0usize;
+    while fragment.len().saturating_sub(pos) > PROTECTED_UPDATE_MAX_FRAGMENT {
+        let end = pos + PROTECTED_UPDATE_MAX_FRAGMENT;
+        protected_update_continue(ifx, shield, &fragment[pos..end])?;
+        pos = end;
+    }
+    protected_update_final(ifx, shield, &fragment[pos..])?;
     Ok(())
 }
 

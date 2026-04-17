@@ -31,7 +31,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed qr-screen measure factory-reset
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset
 
 all: secure nonsecure
 
@@ -709,6 +709,37 @@ test-solidity:
 # Displays the same 8 BIP-39 words the device shows at boot.
 measure: secure
 	cargo run -p fwmeasure -- $(SECURE_ELF)
+
+# One-shot OPTIGA Trust M OID recovery. Regenerates reset manifests from
+# the Infineon protected_update_data_set tool, builds firmware with the
+# optiga-reset-oids feature, flashes the STM32U585, and attaches probe-rs
+# so the reset log is visible. Drop the feature from the regular flash
+# targets after the chip reports all OIDs reset OK.
+optiga-reset-oids:
+	@echo "==> Regenerating reset manifests (requires built tool)"
+	@test -x /home/nicola/repos/optiga-trust-m/examples/tools/protected_update_data_set/bin/protected_update_data_set \
+		|| (echo "Build the tool first: make -C /home/nicola/repos/optiga-trust-m/examples/tools/protected_update_data_set" && exit 1)
+	@python3 tools/optiga_reset/gen_reset_manifests.py
+
+flash-hw-optiga-reset: optiga-reset-oids
+	@echo "==> Building firmware with optiga-reset-oids"
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS) -C debug-assertions=on" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features dual-se,optiga-reset-oids,optiga-bringup-fresh,stm32u585,ui-oled,debug-log,usb
+	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Attaching probe-rs so the reset log is visible (Ctrl-C to quit)..."
+	@probe-rs reset --chip STM32U585AIIx
+	@probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

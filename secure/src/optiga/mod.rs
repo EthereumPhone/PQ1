@@ -42,6 +42,10 @@ pub mod i2c;
 pub mod ifx_i2c;
 pub mod apdu;
 pub mod shield;
+#[cfg(feature = "optiga-reset-oids")]
+pub mod reset;
+#[cfg(feature = "stm32u585")]
+pub mod reset_pin;
 
 use apdu::OptigaError;
 use ifx_i2c::IfxState;
@@ -115,15 +119,19 @@ impl OptigaTrustM {
             // Cold-boot settle: the datasheet STARTUP_TIME is worst-case
             // 12 s but typical warm-reset is 15 ms. Wait 50 ms — enough for
             // warm reset, covered by the retry loop for colder starts.
-            // 8M NOPs at 160 MHz ≈ 50 ms.
-            for _ in 0..8_000_000u32 {
-                cortex_m::asm::nop();
-            }
+            //
+            // Use `cortex_m::asm::delay(N)` instead of a hand-rolled NOP
+            // loop. LTO is legally allowed to drop the loop counter around
+            // a `for _ in 0..N { nop() }` body (nop has no observable
+            // side effect per the Rust abstract machine) and leave an
+            // infinite `bl nop; b back` behind. `delay()` is implemented
+            // with a volatile counter so it always runs the full count.
+            cortex_m::asm::delay(8_000_000);
 
             // Retry with SHORT delays. The chip goes into sleep mode and
             // NACKs until woken by I2C address detection — each probe wakes
             // it, but if we wait too long between probes it may re-sleep.
-            // Docs specify 500 µs retry interval (~80k NOPs at 160 MHz).
+            // Docs specify 500 µs retry interval (~80k cycles at 160 MHz).
             // Loop up to 2000 times = ~1 second total — covers sleep + the
             // tail of a cold boot.
             let mut acked = false;
@@ -134,10 +142,7 @@ impl OptigaTrustM {
                     ack_attempt = attempt;
                     break;
                 }
-                // ~500 µs delay
-                for _ in 0..80_000u32 {
-                    cortex_m::asm::nop();
-                }
+                cortex_m::asm::delay(80_000);
             }
 
             if !acked {
@@ -163,6 +168,105 @@ impl OptigaTrustM {
         }
 
         self.ready = true;
+        Ok(())
+    }
+
+    /// Pulse the RST line low via PE0 and re-run OpenApplication.
+    ///
+    /// Needed as a workaround for the 2-writes-per-session throttle on
+    /// this specific OPTIGA Trust M dev board: after the chip accepts
+    /// two consecutive SetData-family APDUs, all subsequent data APDUs
+    /// either time out or return `Status=0xFF`. A real silicon reset
+    /// via RST clears the throttle. NV OIDs survive; volatile state
+    /// (strict locks, per-session counters) resets.
+    #[cfg(feature = "stm32u585")]
+    fn hard_reset_and_reinit(&mut self) -> Result<(), OptigaError> {
+        secure_log!("[OPTIGA] hard-pulsing RST (PE0) to clear session throttle");
+        unsafe {
+            reset_pin::init();
+            reset_pin::hard_pulse();
+        }
+        // Hard reset invalidates our IFX DL-layer state. Start fresh.
+        self.ifx = ifx_i2c::IfxState::new();
+        self.ready = false;
+        self.init()
+    }
+
+    /// One-shot SetObjectProtected recovery flow, gated by `optiga-reset-oids`.
+    ///
+    /// Initializes the chip (`OpenApplication`), provisions a Trust Anchor
+    /// cert at OID `0xE0E3` if it isn't already there, then iterates the
+    /// embedded reset-manifest bundle and sends each one. Logs per-OID
+    /// outcome via `secure_log!`.
+    ///
+    /// Drops the `optiga-reset-oids` feature as soon as the chip is back
+    /// in a writable state — the TA cert that authorises these manifests
+    /// is a sample key from Infineon's example set, unsafe for production.
+    #[cfg(feature = "optiga-reset-oids")]
+    pub fn recover_burned_oids(&mut self) -> Result<(), OptigaError> {
+        // Before anything else, configure PE0 (= Arduino D5 on the
+        // B-U585I-IOT02A) as a GPIO output and drive it high — this
+        // is wired to the OPTIGA MTR Express V3 board's RST pin, and
+        // driving high explicitly tells the chip it's not in reset.
+        #[cfg(feature = "stm32u585")]
+        unsafe {
+            reset_pin::init();
+        }
+
+        self.init()?;
+
+        unsafe {
+            secure_log!("[OPTIGA][reset] provisioning Trust Anchor at 0xE0E3");
+            if let Err(e) = reset::provision_trust_anchor(&mut self.ifx, &mut self.shield) {
+                secure_log!(
+                    "[OPTIGA][reset] TA provisioning failed ({:?}); \
+                    assuming already provisioned and continuing",
+                    e
+                );
+            } else {
+                secure_log!("[OPTIGA][reset] TA cert + metadata written");
+            }
+
+            // After the 604-byte TA cert write, the chip wedges — it ACKs
+            // subsequent frames at DL layer but never sets RESP_READY in
+            // I2C_STATE. A soft-reset-over-I²C doesn't recover it; only
+            // a real silicon reset via the RST pin does. We also observe
+            // that every successful SetObjectProtected puts the chip back
+            // in the same wedged state, so we hard-pulse before EACH
+            // manifest, not just once before the loop. The TA cert lives
+            // in NV flash and survives the resets.
+            let mut success: usize = 0;
+            for entry in reset::iter_reset_entries() {
+                #[cfg(feature = "stm32u585")]
+                if let Err(e) = self.hard_reset_and_reinit() {
+                    secure_log!(
+                        "[OPTIGA][reset] re-init before OID 0x{:04X} FAILED: {:?}",
+                        entry.oid, e
+                    );
+                    continue;
+                }
+
+                match apdu::send_protected_manifest(
+                    &mut self.ifx,
+                    &mut self.shield,
+                    entry.manifest,
+                    entry.fragment,
+                ) {
+                    Ok(()) => {
+                        secure_log!("[OPTIGA][reset] OID 0x{:04X} reset OK", entry.oid);
+                        success += 1;
+                    }
+                    Err(e) => {
+                        secure_log!(
+                            "[OPTIGA][reset] OID 0x{:04X} FAILED: {:?}",
+                            entry.oid, e
+                        );
+                    }
+                }
+            }
+            secure_log!("[OPTIGA][reset] {} OIDs reset", success);
+        }
+
         Ok(())
     }
 
@@ -530,13 +634,25 @@ impl OptigaTrustM {
         pin: &[u8; 8],
     ) -> Result<(), OptigaError> {
         self.init()?;
+        secure_log!("[OPTIGA/prov] init OK");
 
         // 1. PBS (plain write; shielded connection disabled until the PRL
         // handshake bring-up issue is resolved — see project memory).
         // Still writes the PBS and metadata so the chip is ready to
         // handshake later. Subsequent APDUs go plaintext via ifx layer.
         if !self.shield.pbs_loaded {
-            self.setup_pbs_no_handshake()?;
+            secure_log!("[OPTIGA/prov] step 1: setup_pbs_no_handshake");
+            if let Err(e) = self.setup_pbs_no_handshake() {
+                secure_log!("[OPTIGA/prov] setup_pbs FAILED: {:?}", e);
+                return Err(e);
+            }
+            // After PBS write (2 SetData ops) the chip refuses further
+            // writes until it is hard-reset. Pulse RST (PE0) to clear
+            // the wedge; NV OIDs (including the PBS we just wrote) survive.
+            #[cfg(feature = "stm32u585")]
+            self.hard_reset_and_reinit()?;
+        } else {
+            secure_log!("[OPTIGA/prov] step 1 skipped (PBS already loaded)");
         }
 
         // 2. Auth reference
@@ -558,10 +674,16 @@ impl OptigaTrustM {
         if already_provisioned {
             secure_log!("[OPTIGA/prov] auth_ref already provisioned (bringup, skipping)");
         } else {
+            secure_log!("[OPTIGA/prov] step 2: provision_auth_ref");
             let mut pin_secret = Self::derive_pin_secret(pin);
             let result = unsafe { self.provision_auth_ref(&pin_secret) };
             pin_secret.zeroize();
-            result?;
+            if let Err(e) = result {
+                secure_log!("[OPTIGA/prov] provision_auth_ref FAILED: {:?}", e);
+                return Err(e);
+            }
+            #[cfg(feature = "stm32u585")]
+            self.hard_reset_and_reinit()?;
         }
 
         // 3. User data. While shielded is disabled we drop the Conf(E140)
@@ -572,16 +694,30 @@ impl OptigaTrustM {
         // pattern goes away if we release + reacquire the application
         // context, suggesting a per-session work buffer or transient-OID
         // slot gets exhausted otherwise.
+        // Each user OID provision = 2 SetData writes (metadata + data),
+        // and the chip wedges after 2 writes per session. Hard-pulse RST
+        // between every OID so each provision starts in a fresh session.
+        // The OpenApplication is done by hard_reset_and_reinit(). The
+        // reopen_application() call that used to live here (CloseApp +
+        // OpenApp) doesn't help on this chip — CloseApp ACKs but never
+        // emits a data response, so we just time out.
+        macro_rules! prov_with_reset {
+            ($name:literal, $call:expr) => {{
+                secure_log!("[OPTIGA/prov] step: {}", $name);
+                $call.map_err(|e| {
+                    secure_log!("[OPTIGA/prov] {} write FAILED: {:?}", $name, e); e
+                })?;
+                #[cfg(feature = "stm32u585")]
+                self.hard_reset_and_reinit()?;
+            }};
+        }
+
         unsafe {
-            self.provision_user_oid(apdu::OID_ENTROPY, entropy, false)?;
-            self.reopen_application()?;
-            self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret, false)?;
-            self.reopen_application()?;
-            self.provision_user_oid(apdu::OID_VK, vk, false)?;
-            self.reopen_application()?;
-            self.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk, false)?;
-            self.reopen_application()?;
-            self.provision_counter()?;
+            prov_with_reset!("entropy", self.provision_user_oid(apdu::OID_ENTROPY, entropy, false));
+            prov_with_reset!("master_secret", self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret, false));
+            prov_with_reset!("vk", self.provision_user_oid(apdu::OID_VK, vk, false));
+            prov_with_reset!("bootstrap_vk", self.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk, false));
+            prov_with_reset!("counter", self.provision_counter());
         }
 
         secure_log!("[OPTIGA] Provisioning complete (6 OIDs written + locked)");

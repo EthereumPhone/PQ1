@@ -391,6 +391,38 @@ fn main() -> ! {
         (&mut *core::ptr::addr_of_mut!(SE)).load_pbs();
     }
 
+    // ---- One-shot OPTIGA OID recovery (optiga-reset-oids) ----
+    // Runs before any wallet provisioning. Provisions a Trust Anchor cert
+    // at 0xE0E3 and sends SetObjectProtected reset manifests to the burned
+    // AUTHREF OID range so subsequent SetDataObject writes succeed again.
+    // Dev-only — disabled by `make prod-check`. Drop the feature once the
+    // chip is back to a writable state.
+    #[cfg(all(feature = "optiga-reset-oids", feature = "dual-se", not(test)))]
+    unsafe {
+        secure_log!("[S] optiga-reset-oids: running one-shot OID recovery");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        if let Err(e) = se.optiga.recover_burned_oids() {
+            secure_log!("[S] optiga-reset-oids: recovery failed: {:?}", e);
+        } else {
+            secure_log!("[S] optiga-reset-oids: recovery pass complete");
+        }
+    }
+    #[cfg(all(
+        feature = "optiga-reset-oids",
+        feature = "optiga-trust-m",
+        not(feature = "dual-se"),
+        not(test),
+    ))]
+    unsafe {
+        secure_log!("[S] optiga-reset-oids: running one-shot OID recovery");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        if let Err(e) = se.recover_burned_oids() {
+            secure_log!("[S] optiga-reset-oids: recovery failed: {:?}", e);
+        } else {
+            secure_log!("[S] optiga-reset-oids: recovery pass complete");
+        }
+    }
+
     // ---- Boot-time wipe resume ----
     // If a factory reset was armed but interrupted (power loss mid-wipe),
     // the wipe flag in page 125 QW 1 survives the reboot. Finish the wipe
