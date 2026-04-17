@@ -1,9 +1,14 @@
 # Workspace manifest.
 #
-# Post-JARDÍN-cutover layout. Every crate listed here is needed to
+# Post-SHA-256-cutover layout. Every crate listed here is needed to
 # build the firmware (secure + nonsecure + shared + bip39 + jardin-fosc
-# + sphincs-c7 + keccak-asm) or the host-side firmware measurement tool
-# (fwmeasure).
+# + sphincs-c7) or the host-side firmware measurement tool (fwmeasure).
+#
+# The vendored `keccak-asm` crate was dropped in the SHA-256 cutover:
+# the signing stack no longer uses Keccak-f[1600]. The `sha3` crate still
+# ships as a transitive dependency of `secure/` — Keccak-256 is kept for
+# EIP-4337 userOpHash, EIP-712, and EIP-1559 envelope hashing because those
+# are frozen by external standards, not our protocol.
 #
 # Intentionally NOT in the workspace:
 #   * tools/ob-configurator — STM32U585 option-byte unlocker, needs a
@@ -19,7 +24,6 @@ members = [
     "fwmeasure",
     "sphincs-c7",
     "jardin-fosc",
-    "keccak-asm",
     # ZK clear-sign support: BLS12-381 pairing, Merkle DB builder, standalone
     # Groth16 verifier test harness.
     "bls12_381_pka",
@@ -40,7 +44,6 @@ sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
 sphincs-c7        = { path = "sphincs-c7" }
 jardin-fosc       = { path = "jardin-fosc" }
-keccak-asm        = { path = "keccak-asm" }
 bls12_381 = { package = "bls12_381_pka", path = "bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
 
 # no_std crypto shared by `secure` + `bip39`
@@ -63,19 +66,13 @@ opt-level = 3
 [profile.dev.package.jardin-fosc]
 opt-level = 3
 
-[profile.dev.package.sha3]
-opt-level = 3
-
-[profile.dev.package.keccak]
-opt-level = 3
-
+# PBKDF2-HMAC-SHA512 runs 2048 iterations on every unlock, and SHA-256 is
+# now the innermost loop of every SPHINCS+C11 and JARDÍN hash call
+# (235K per JARDÍN keygen). These MUST be compiled for speed, not size.
 [profile.dev.package.sha2]
 opt-level = 3
 
 [profile.dev.package.hmac]
-opt-level = 3
-
-[profile.dev.package.keccak-asm]
 opt-level = 3
 
 [profile.release]
@@ -91,21 +88,11 @@ opt-level = 3
 [profile.release.package.jardin-fosc]
 opt-level = 3
 
-# The keccak-f1600 permutation is the innermost loop of every SPHINCS+C11
-# and JARDÍN hash call (tens of thousands per sign, 235K per JARDÍN keygen).
-# These MUST be compiled for speed, not size.
-[profile.release.package.sha3]
-opt-level = 3
-
-[profile.release.package.keccak]
-opt-level = 3
-
-# PBKDF2-HMAC-SHA512 runs 2048 iterations on every unlock.
+# SHA-256 (software) is the hot inner loop unless `hw-sha256` is enabled.
+# Keep it at opt-level 3 even under `hw-sha256` because PBKDF2-HMAC-SHA512
+# (BIP-39) always runs in software.
 [profile.release.package.sha2]
 opt-level = 3
 
 [profile.release.package.hmac]
-opt-level = 3
-
-[profile.release.package.keccak-asm]
 opt-level = 3

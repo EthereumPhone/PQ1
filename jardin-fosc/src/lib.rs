@@ -93,7 +93,7 @@ pub struct JardinSignature {
 impl JardinSlot {
     /// Build a new JARDIN slot from slot entropy.
     ///
-    /// This is the expensive operation (~235K keccak256 hashes). It builds
+    /// This is the expensive operation (~235K sha256 hashes). It builds
     /// all Q_MAX FORS trees and the unbalanced Merkle tree.
     pub fn keygen(entropy: [u8; 32]) -> Self {
         Self::keygen_with_progress(entropy, |_| {})
@@ -142,7 +142,7 @@ impl JardinSlot {
     /// Returns the variable-length FORS+C signature, or an error if
     /// the slot is exhausted.
     ///
-    /// Cost: ~1,670 keccak256 hashes (25 FORS tree rebuilds + ~32 grinding).
+    /// Cost: ~1,670 sha256 hashes (25 FORS tree rebuilds + ~32 grinding).
     pub fn sign(&mut self, message: &[u8; 32]) -> Result<JardinSignature, &'static str> {
         let q = self.next_q;
         if q as usize > Q_MAX {
@@ -230,12 +230,12 @@ impl JardinSlot {
         self.next_q as usize > Q_MAX
     }
 
-    /// Sub-key verifying key hash: `keccak256(subPkSeed[..16] || subPkRoot[..16])`.
+    /// Sub-key verifying key hash: `sha256(subPkSeed[..16] || subPkRoot[..16])`.
     pub fn sub_vk_hash(&self) -> [u8; 32] {
         let mut buf = [0u8; 32]; // N + N = 32
         buf[..N].copy_from_slice(&self.pk_seed[..N]);
         buf[N..32].copy_from_slice(&self.pk_root[..N]);
-        hash::keccak256(&buf)
+        hash::sha256(&buf)
     }
 }
 
@@ -499,11 +499,11 @@ mod tests {
         let entropy = [0x88u8; 32];
         let slot = JardinSlot::keygen(entropy);
         let h = slot.sub_vk_hash();
-        // Should be keccak256(pk_seed[..16] || pk_root[..16])
+        // Should be sha256(pk_seed[..16] || pk_root[..16])
         let mut buf = [0u8; 32];
         buf[..N].copy_from_slice(&slot.pk_seed[..N]);
         buf[N..32].copy_from_slice(&slot.pk_root[..N]);
-        let expected = hash::keccak256(&buf);
+        let expected = hash::sha256(&buf);
         assert_eq!(h, expected);
     }
 }

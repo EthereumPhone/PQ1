@@ -18,10 +18,10 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 ///           * **Type 1** (`0x01`): master-key C11 signature + the raw
 ///             randomiser `r` and sub-key commitments `(subPkSeed,
 ///             subPkRoot)`. Validation side-effect: the wallet records
-///             `slots[keccak256(r)] = keccak256(subPkSeed || subPkRoot)`.
+///             `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
 ///
 ///           * **Type 2** (`0x02`): FORS+C signature against a previously
-///             registered sub-key. `sig[1:33]` is `keccak256(r)` — the
+///             registered sub-key. `sig[1:33]` is `sha256(r)` — the
 ///             slotKey — and the wallet checks that the supplied
 ///             `(subPkSeed, subPkRoot)` matches what was registered.
 ///
@@ -200,14 +200,14 @@ contract PQJardinWallet is IAccount, PQOwnable {
 
             // HIGH-16 fix: `r == 0` must never be silently accepted.
             // A valid firmware-produced Type 1 always has r derived
-            // from keccak256(master || "jardin_r" || slot_index) which
+            // from sha256(master || "jardin_r" || slot_index) which
             // has negligible probability of hitting zero, so this
             // branch is an attack path, not a legitimate flow. Reject.
             if (r == bytes32(0)) return SIG_VALIDATION_FAILED;
 
             // Register (or idempotently re-confirm) the slot.
-            bytes32 slotKey = keccak256(abi.encodePacked(r));
-            bytes32 subVkHash = keccak256(abi.encodePacked(subSeed16, subRoot16));
+            bytes32 slotKey = sha256(abi.encodePacked(r));
+            bytes32 subVkHash = sha256(abi.encodePacked(subSeed16, subRoot16));
             _registerJardinSlot(slotKey, subVkHash);
             return SIG_VALIDATION_SUCCESS;
         }
@@ -225,7 +225,7 @@ contract PQJardinWallet is IAccount, PQOwnable {
             bytes16 subRoot16 = bytes16(sig[49:65]);
 
             // Slot must be registered and match the supplied sub-key.
-            bytes32 subVkHash = keccak256(abi.encodePacked(subSeed16, subRoot16));
+            bytes32 subVkHash = sha256(abi.encodePacked(subSeed16, subRoot16));
             if (_getStorage().jardinSlots[slotKey] != subVkHash) {
                 return SIG_VALIDATION_FAILED;
             }

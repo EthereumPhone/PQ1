@@ -71,7 +71,7 @@ contract PQJardinWalletFactory {
         return address(uint160(uint256(h)));
     }
 
-    function _salt(bytes32 masterPkSeed, bytes32 masterPkRoot) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(masterPkSeed, masterPkRoot));
+    function _salt(bytes32 masterPkSeed, bytes32 masterPkRoot) internal view returns (bytes32) {
+        return sha256(abi.encodePacked(masterPkSeed, masterPkRoot));
     }
 }

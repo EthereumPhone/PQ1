@@ -270,7 +270,7 @@ fn main() -> ! {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
         hw::rng::init();
-        #[cfg(feature = "sha256-hash")]
+        #[cfg(feature = "hw-sha256")]
         hw::hash::init_clock();
         // When SE050 is also active, its i2c_hw::init() configures I2C1 at
         // 400 kHz after SAU init — skip the OLED's 100 kHz init to avoid

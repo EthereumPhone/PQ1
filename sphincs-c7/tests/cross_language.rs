@@ -77,7 +77,7 @@ fn test_verify_python_bootstrap_signature() {
     let pk_seed = parse_n_bytes(tv["bootstrap"]["pkSeed"].as_str().unwrap());
     let pk_root = parse_n_bytes(tv["bootstrap"]["pkRoot"].as_str().unwrap());
 
-    // The bootstrap signature signs: keccak256("PQWALLET_INIT_V1" || mainPkSeed || mainPkRoot)
+    // The bootstrap signature signs: sha256("PQWALLET_INIT_V1" || mainPkSeed || mainPkRoot)
     let auth_msg = parse_32_bytes(tv["factoryAuthMsg"].as_str().unwrap());
     let sig = parse_sig(tv["bootstrapSig"].as_str().unwrap());
 

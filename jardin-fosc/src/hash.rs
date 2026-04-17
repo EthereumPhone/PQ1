@@ -1,37 +1,39 @@
-//! Keccak256 tweakable hash primitives for JARDIN FORS+C.
+//! SHA-256 tweakable hash primitives for JARDIN FORS+C.
 //!
 //! Every hash output is masked to 128 bits (top N bytes of the 32-byte
-//! keccak256 output) unless noted otherwise. All 16-byte values are
+//! SHA-256 output) unless noted otherwise. All 16-byte values are
 //! left-aligned in 32-byte buffers (right-zero-padded) to match the
 //! EVM uint256 representation.
 //!
-//! These match the Solidity `JardinForsCVerifier` exactly.
+//! These match the Solidity `JardinForsCVerifier` exactly (which calls the
+//! SHA-256 precompile at address 0x02).
 //!
-//! Under the optional `sha256-hash` feature the primary hash is SHA-256
-//! instead of Keccak-256. The linked binary must supply the three
-//! `pqsigner_sha256_*` extern fns below.
+//! Default build uses software `sha2::Sha256`. With the `hw-sha256`
+//! feature the crate calls three extern symbols the linked binary must
+//! provide (`pqsigner_sha256_init / update / final`) — the secure firmware
+//! routes these to the STM32U585 HASH peripheral.
 
 use crate::params::{A, K, N};
 
-#[cfg(not(feature = "sha256-hash"))]
-use keccak_asm::{Digest, Keccak256};
+#[cfg(not(feature = "hw-sha256"))]
+use sha2::{Digest, Sha256};
 
-#[cfg(feature = "sha256-hash")]
+#[cfg(feature = "hw-sha256")]
 extern "C" {
     fn pqsigner_sha256_init();
     fn pqsigner_sha256_update(ptr: *const u8, len: usize);
     fn pqsigner_sha256_final(out: *mut u8);
 }
 
-/// Compute the primary hash (Keccak-256 or SHA-256) of arbitrary data.
-pub fn keccak256(data: &[u8]) -> [u8; 32] {
-    #[cfg(not(feature = "sha256-hash"))]
+/// Compute SHA-256 of arbitrary data.
+pub fn sha256(data: &[u8]) -> [u8; 32] {
+    #[cfg(not(feature = "hw-sha256"))]
     {
-        let mut h = Keccak256::new();
+        let mut h = Sha256::new();
         h.update(data);
         h.finalize().into()
     }
-    #[cfg(feature = "sha256-hash")]
+    #[cfg(feature = "hw-sha256")]
     {
         let mut out = [0u8; 32];
         unsafe {
@@ -52,19 +54,19 @@ pub fn mask_n(mut val: [u8; 32]) -> [u8; 32] {
 
 /// Tweakable hash: th(seed, adrs, input) -> 128-bit
 ///
-/// `keccak256(seed(32) || adrs(32) || input(32))[0..N]` padded to 32 bytes.
+/// `sha256(seed(32) || adrs(32) || input(32))[0..N]` padded to 32 bytes.
 /// Total input: 96 bytes.
 pub fn th(seed: &[u8; 32], adrs: &[u8; 32], input: &[u8; 32]) -> [u8; 32] {
     let mut buf = [0u8; 96];
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(adrs);
     buf[64..96].copy_from_slice(input);
-    mask_n(keccak256(&buf))
+    mask_n(sha256(&buf))
 }
 
 /// Tweakable hash pair: th_pair(seed, adrs, left, right) -> 128-bit
 ///
-/// `keccak256(seed(32) || adrs(32) || left(32) || right(32))[0..N]` padded to 32 bytes.
+/// `sha256(seed(32) || adrs(32) || left(32) || right(32))[0..N]` padded to 32 bytes.
 /// Total input: 128 bytes.
 pub fn th_pair(seed: &[u8; 32], adrs: &[u8; 32], left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
     let mut buf = [0u8; 128];
@@ -72,12 +74,12 @@ pub fn th_pair(seed: &[u8; 32], adrs: &[u8; 32], left: &[u8; 32], right: &[u8; 3
     buf[32..64].copy_from_slice(adrs);
     buf[64..96].copy_from_slice(left);
     buf[96..128].copy_from_slice(right);
-    mask_n(keccak256(&buf))
+    mask_n(sha256(&buf))
 }
 
 /// Compress multiple values: th_multi(seed, adrs, vals[K]) -> 128-bit
 ///
-/// `keccak256(seed(32) || adrs(32) || pad(v0) || ... || pad(v_{K-1}))[0..N]`.
+/// `sha256(seed(32) || adrs(32) || pad(v0) || ... || pad(v_{K-1}))[0..N]`.
 /// For K=26: total input = 32 + 32 + 26*32 = 896 bytes.
 pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; 32]; K]) -> [u8; 32] {
     let mut buf = [0u8; 64 + K * 32]; // 896
@@ -87,13 +89,13 @@ pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; 32]; K]) -> [u8; 
         let off = 64 + i * 32;
         buf[off..off + 32].copy_from_slice(v);
     }
-    mask_n(keccak256(&buf))
+    mask_n(sha256(&buf))
 }
 
 /// JARDIN H_msg: 192-byte domain-separated hash -> full 256-bit digest.
 ///
 /// ```text
-/// keccak256(
+/// sha256(
 ///     pkSeed(32) || pkRoot(32) || R(32) || message(32) ||
 ///     counter_as_u256(32) || 0xFF..FF(32)
 /// )
@@ -121,12 +123,12 @@ pub fn jardin_h_msg(
     buf[156..160].copy_from_slice(&counter.to_be_bytes());
     // Domain separator: 32 bytes of 0xFF
     buf[160..192].fill(0xFF);
-    keccak256(&buf)
+    sha256(&buf)
 }
 
 /// Derive FORS secret for a specific (q, tree_idx, leaf_idx).
 ///
-/// `mask_n(keccak256(sk_seed || "jfors" || q.to_be || tree_idx.to_be || leaf_idx.to_be))`
+/// `mask_n(sha256(sk_seed || "jfors" || q.to_be || tree_idx.to_be || leaf_idx.to_be))`
 ///
 /// Domain tag `"jfors"` (5 bytes) separates from C11's `"fors"` (4 bytes).
 pub fn fors_secret(sk_seed: &[u8; 32], q: u32, tree_idx: u32, leaf_idx: u32) -> [u8; 32] {
@@ -136,23 +138,23 @@ pub fn fors_secret(sk_seed: &[u8; 32], q: u32, tree_idx: u32, leaf_idx: u32) -> 
     buf[37..41].copy_from_slice(&q.to_be_bytes());
     buf[41..45].copy_from_slice(&tree_idx.to_be_bytes());
     buf[45..49].copy_from_slice(&leaf_idx.to_be_bytes());
-    mask_n(keccak256(&buf))
+    mask_n(sha256(&buf))
 }
 
 /// Sentinel value for the deepest left child of the unbalanced spine.
 ///
-/// `mask_n(keccak256(seed || sk_seed || "jardin_sentinel"))`
+/// `mask_n(sha256(seed || sk_seed || "jardin_sentinel"))`
 pub fn jardin_sentinel(seed: &[u8; 32], sk_seed: &[u8; 32]) -> [u8; 32] {
     let mut buf = [0u8; 32 + 32 + 15]; // 79
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(sk_seed);
     buf[64..79].copy_from_slice(b"jardin_sentinel");
-    mask_n(keccak256(&buf))
+    mask_n(sha256(&buf))
 }
 
 /// Derive deterministic R (randomizer) for signing.
 ///
-/// `keccak256(sk_seed || "jardin_R" || message || q.to_be_bytes())`
+/// `sha256(sk_seed || "jardin_R" || message || q.to_be_bytes())`
 ///
 /// Returns full 32 bytes (not masked).
 pub fn derive_r(sk_seed: &[u8; 32], message: &[u8; 32], q: u32) -> [u8; 32] {
@@ -161,7 +163,7 @@ pub fn derive_r(sk_seed: &[u8; 32], message: &[u8; 32], q: u32) -> [u8; 32] {
     buf[32..40].copy_from_slice(b"jardin_R");
     buf[40..72].copy_from_slice(message);
     buf[72..76].copy_from_slice(&q.to_be_bytes());
-    keccak256(&buf)
+    sha256(&buf)
 }
 
 /// Extract FORS indices from the H_msg digest.
@@ -212,21 +214,21 @@ pub fn jardin_derive_keys(entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     let mut sub_buf = [0u8; 13 + 32]; // 45
     sub_buf[0..13].copy_from_slice(b"jardin_sub_v1");
     sub_buf[13..45].copy_from_slice(entropy);
-    let sub = keccak256(&sub_buf);
+    let sub = sha256(&sub_buf);
 
     // pk_seed: masked to N bytes
     // "jardin_pk_seed" (14 bytes) + sub (32 bytes)
     let mut pk_buf = [0u8; 14 + 32]; // 46
     pk_buf[0..14].copy_from_slice(b"jardin_pk_seed");
     pk_buf[14..46].copy_from_slice(&sub);
-    let pk_seed = mask_n(keccak256(&pk_buf));
+    let pk_seed = mask_n(sha256(&pk_buf));
 
     // sk_seed: full 32 bytes
     // "jardin_sk_seed" (14 bytes) + sub (32 bytes)
     let mut sk_buf = [0u8; 14 + 32]; // 46
     sk_buf[0..14].copy_from_slice(b"jardin_sk_seed");
     sk_buf[14..46].copy_from_slice(&sub);
-    let sk_seed = keccak256(&sk_buf);
+    let sk_seed = sha256(&sk_buf);
 
     (pk_seed, sk_seed)
 }
@@ -237,7 +239,7 @@ pub fn jardin_slot_entropy(master_entropy: &[u8; 32], slot_index: u32) -> [u8; 3
     buf[0..32].copy_from_slice(master_entropy);
     buf[32..43].copy_from_slice(b"jardin_slot");
     buf[43..47].copy_from_slice(&slot_index.to_be_bytes());
-    keccak256(&buf)
+    sha256(&buf)
 }
 
 /// Derive slot randomizer r (for on-chain slot key H(r)).
@@ -246,5 +248,5 @@ pub fn jardin_slot_r(master_entropy: &[u8; 32], slot_index: u32) -> [u8; 32] {
     buf[0..32].copy_from_slice(master_entropy);
     buf[32..40].copy_from_slice(b"jardin_r");
     buf[40..44].copy_from_slice(&slot_index.to_be_bytes());
-    keccak256(&buf[..44])
+    sha256(&buf[..44])
 }

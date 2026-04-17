@@ -3,7 +3,7 @@
 pub mod db_format;
 
 // ---------------------------------------------------------------------------
-// SPHINCS+C11 (keccak256-based) sizes
+// SPHINCS+C11 (SHA-256-based) sizes
 // ---------------------------------------------------------------------------
 
 pub const SIGNING_KEY_LEN: usize = 48; // sk_seed(32) + pk_seed(16)

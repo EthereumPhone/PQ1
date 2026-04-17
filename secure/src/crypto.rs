@@ -16,7 +16,7 @@
 //!         ▼ PBKDF2-HMAC-SHA512, 2048 iters
 //!     bip39_seed (64 B)
 //!         │
-//!         ▼ slhdsa_seed_from_bip39  (2 × Keccak-256 KDF)
+//!         ▼ slhdsa_seed_from_bip39  (2 × SHA-256 KDF)
 //!     SPHINCS+C7 seed (48 B)
 //!         │
 //!         ▼ SigningKey::keygen
@@ -77,12 +77,14 @@ pub fn kdf(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
     h.finalize().into()
 }
 
-/// Keccak-256 based KDF for SPHINCS+C7 seed derivation.
-/// Used by the signing key derivation paths; the SHA-256 `kdf()` above
-/// is kept for non-signing helpers (wrap-key, entropy-nonce, MACD).
-pub fn kdf_keccak(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
-    use sha3::{Digest as _, Keccak256};
-    let mut h = Keccak256::new();
+/// SHA-256 based KDF for SPHINCS+C7 / JARDÍN seed derivation.
+///
+/// Historically this was Keccak-256 but we switched to SHA-256 across the
+/// entire signing stack so the firmware can call the STM32U585 HASH
+/// peripheral (1 cycle/byte single-block, vs ~12 cycles/byte for software
+/// Keccak). Domain tags stay the same; only the hash primitive changed.
+pub fn kdf_sha256(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
+    let mut h = Sha256::new();
     h.update(domain);
     h.update(input);
     h.update([index]);
@@ -234,7 +236,7 @@ pub fn derive_signing_key(seed: &[u8; SEED_LEN]) -> SigningKey {
 /// the same mnemonic, used in a completely different wallet (e.g. BIP-44
 /// Bitcoin), produces independent key material.
 ///
-/// Two Keccak-256 chunks: one full 32-byte `sk_seed` and the first 16 bytes
+/// Two SHA-256 chunks: one full 32-byte `sk_seed` and the first 16 bytes
 /// of a second hash for `pk_seed`. The index byte is 0 for both (domain
 /// tag provides separation).
 ///
@@ -244,8 +246,8 @@ pub fn derive_signing_key(seed: &[u8; SEED_LEN]) -> SigningKey {
 /// phrase on any device that runs this firmware.
 pub fn slhdsa_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
     let mut out = [0u8; SEED_LEN];
-    let chunk0 = kdf_keccak(b"sphincsc7-sk-seed", bip39_seed, 0);
-    let chunk1 = kdf_keccak(b"sphincsc7-pk-seed", bip39_seed, 0);
+    let chunk0 = kdf_sha256(b"sphincsc7-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf_sha256(b"sphincsc7-pk-seed", bip39_seed, 0);
     out[0..32].copy_from_slice(&chunk0);       // sk_seed: full 32 bytes
     out[32..48].copy_from_slice(&chunk1[..16]); // pk_seed: first 16 bytes
     out
@@ -361,8 +363,8 @@ pub fn derive_keypair_from_entropy(
 /// and never rotates.
 pub fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
     let mut out = [0u8; SEED_LEN];
-    let chunk0 = kdf_keccak(b"pqwallet-c7-bootstrap-sk-seed", bip39_seed, 0);
-    let chunk1 = kdf_keccak(b"pqwallet-c7-bootstrap-pk-seed", bip39_seed, 0);
+    let chunk0 = kdf_sha256(b"pqwallet-c7-bootstrap-sk-seed", bip39_seed, 0);
+    let chunk1 = kdf_sha256(b"pqwallet-c7-bootstrap-pk-seed", bip39_seed, 0);
     out[0..32].copy_from_slice(&chunk0);
     out[32..48].copy_from_slice(&chunk1[..16]);
     out
@@ -386,8 +388,8 @@ pub fn main_signer_seed_from_bip39(
     input[72..76].copy_from_slice(&key_index.to_be_bytes());
 
     let mut out = [0u8; SEED_LEN];
-    let chunk0 = kdf_keccak(b"pqwallet-c7-main-sk-seed", &input, 0);
-    let chunk1 = kdf_keccak(b"pqwallet-c7-main-pk-seed", &input, 0);
+    let chunk0 = kdf_sha256(b"pqwallet-c7-main-sk-seed", &input, 0);
+    let chunk1 = kdf_sha256(b"pqwallet-c7-main-pk-seed", &input, 0);
     out[0..32].copy_from_slice(&chunk0);
     out[32..48].copy_from_slice(&chunk1[..16]);
     out
@@ -466,13 +468,13 @@ pub fn derive_main_vk_from_entropy(
 // ---------------------------------------------------------------------------
 //
 // JARDIN slots are derived deterministically from the BIP-39 seed via
-// domain-separated Keccak-256, preserving the recovery contract:
+// domain-separated SHA-256, preserving the recovery contract:
 // same 24 words + chain_id + slot_index → same JARDIN slot.
 
 /// Derive the master entropy for JARDIN FORS+C slots from the BIP-39 seed.
 /// Domain-separated so it is independent from C11 bootstrap/main keys.
 pub fn jardin_master_entropy_from_bip39(bip39_seed: &[u8; 64]) -> [u8; 32] {
-    kdf_keccak(b"pqwallet-jardin-master", bip39_seed, 0)
+    kdf_sha256(b"pqwallet-jardin-master", bip39_seed, 0)
 }
 
 /// Derive JARDIN master entropy from raw BIP-39 entropy (runs the full
@@ -492,15 +494,14 @@ pub fn jardin_master_entropy_from_entropy(
 // ---------------------------------------------------------------------------
 //
 // The master C11 keypair is the long-term identity of a JARDÍN wallet:
-// the CREATE2 salt is `keccak256(masterPkSeed || masterPkRoot)`, so the
+// the CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`, so the
 // same 24 words produce the same on-chain wallet address across every
-// chain forever.
+// chain forever — given the same hash primitive.
 //
-// Derivation matches `/home/markus/SPHINCs-/signer-wasm/src/keygen.rs`
-// byte-for-byte. The "sphincs-c6-v1" domain tag is a historical quirk
-// inherited from when the reference repo used SPHINCS+C6; it must NOT be
-// "modernised" to "sphincs-c11-v1" because that would invalidate every
-// already-written backup. This is part of the frozen recovery contract.
+// The "sphincs-c6-v1" domain tag for the HMAC-SHA512 step is a historical
+// quirk inherited from when the reference repo used SPHINCS+C6; we keep
+// it verbatim to avoid an unnecessary second drift in the recovery
+// contract. Only the final hash primitive changed (Keccak-256 → SHA-256).
 //
 // This derivation is separate from the JARDÍN master entropy above: the
 // C11 keys sign only Type 1 slot-registration payloads, never user txs.
@@ -509,21 +510,17 @@ pub fn jardin_master_entropy_from_entropy(
 ///
 /// Returns `(pk_seed_32, sk_seed_32)`.
 ///
-/// - `pk_seed_32`: the top 16 bytes are `keccak256("pk_seed" || master[0..32])[0..16]`
+/// - `pk_seed_32`: the top 16 bytes are `sha256("pk_seed" || master[0..32])[0..16]`
 ///   and the bottom 16 bytes are zero. This is the N-mask layout used by
 ///   every SPHINCS+C11 internal hash and the on-chain `masterPkSeed`
 ///   immutable.
-/// - `sk_seed_32`: the full 32 bytes of `keccak256("sk_seed" || master[0..32])`.
+/// - `sk_seed_32`: the full 32 bytes of `sha256("sk_seed" || master[0..32])`.
 ///
 /// `master = HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (only the first 32
 /// bytes are consumed; the remainder is discarded and wiped).
-///
-/// This is part of the **recovery contract** — same 24 words must produce
-/// the same keys forever. Domain tags are byte-identical to the reference.
 pub fn derive_c11_master_from_bip39_seed(bip39_seed: &[u8; 64]) -> ([u8; 32], [u8; 32]) {
     use hmac::{Hmac, Mac};
     use sha2::Sha512;
-    use sha3::{Digest as _, Keccak256};
 
     // Step 1: HMAC-SHA512("sphincs-c6-v1", bip39_seed) → 64-byte master.
     // Length note: the tag is exactly 13 ASCII bytes; NO length-prefix, NO
@@ -538,17 +535,17 @@ pub fn derive_c11_master_from_bip39_seed(bip39_seed: &[u8; 64]) -> ([u8; 32], [u
     let mut master = [0u8; 64];
     master.copy_from_slice(&master_ga);
 
-    // Step 2: pk_seed = mask_n(keccak256("pk_seed" || master[0..32]))
+    // Step 2: pk_seed = mask_n(sha256("pk_seed" || master[0..32]))
     //   mask_n keeps bytes [0..16] and zeros bytes [16..32].
-    let mut pk_hasher = Keccak256::new();
+    let mut pk_hasher = Sha256::new();
     pk_hasher.update(b"pk_seed");
     pk_hasher.update(&master[..32]);
     let pk_digest: [u8; 32] = pk_hasher.finalize().into();
     let mut pk_seed = [0u8; 32];
     pk_seed[..16].copy_from_slice(&pk_digest[..16]);
 
-    // Step 3: sk_seed = keccak256("sk_seed" || master[0..32])  (full 32 bytes, no mask).
-    let mut sk_hasher = Keccak256::new();
+    // Step 3: sk_seed = sha256("sk_seed" || master[0..32])  (full 32 bytes, no mask).
+    let mut sk_hasher = Sha256::new();
     sk_hasher.update(b"sk_seed");
     sk_hasher.update(&master[..32]);
     let sk_digest: [u8; 32] = sk_hasher.finalize().into();
@@ -812,12 +809,20 @@ mod c11_derivation_tests {
         out
     }
 
-    /// Reference values produced by `tools/scripts/derive_c11_vectors.py`
-    /// with mnemonic `abandon abandon ... abandon art`, empty passphrase.
+    /// Reference values for the SHA-256-based C11 master derivation.
+    /// Mnemonic: `abandon abandon ... abandon art` (entropy = 32 zero bytes),
+    /// empty passphrase.
+    ///
+    /// - `REF_BIP39_SEED` and `REF_MASTER` are unchanged (BIP-39 uses
+    ///   PBKDF2-HMAC-SHA512; C11 master's HMAC-SHA512 is also unchanged).
+    /// - `REF_PK_SEED` / `REF_SK_SEED` are the SHA-256 reductions over
+    ///   `"pk_seed" || master[..32]` and `"sk_seed" || master[..32]`
+    ///   — produced by the post-cutover firmware and matching the
+    ///   `sha256()` precompile on-chain.
     const REF_BIP39_SEED: &str = "408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf705489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840";
     const REF_MASTER: &str = "667261ca90c0989a022a50e6df59ae712c335076a19c252dfb81f81b06537a9a5c0dd6a84a695fdcf15c5e7279abcf9895be2905cde3fc93de929394f8feed38";
-    const REF_PK_SEED: &str = "00aa9ff74affea790b794caeb405696f00000000000000000000000000000000";
-    const REF_SK_SEED: &str = "6a0815eeea3aa64a040594f22fb1d2a525d2379526f82275ecf9458c3774750f";
+    const REF_PK_SEED: &str = "af6bc9b41afd361f3e8858a3d16826ff00000000000000000000000000000000";
+    const REF_SK_SEED: &str = "383ae7407208edc6eb7f6718a60455bdee48f6b6601dc06f6dcfebebba0a100c";
 
     #[test]
     fn bip39_seed_matches_reference() {
@@ -844,7 +849,7 @@ mod c11_derivation_tests {
     #[test]
     fn derive_c11_master_from_entropy_matches_reference() {
         // End-to-end from raw 32-byte entropy (which is what we actually
-        // have on-device) through mnemonic → PBKDF2 → HMAC-SHA512 → Keccak.
+        // have on-device) through mnemonic → PBKDF2 → HMAC-SHA512 → SHA-256.
         let (pk_seed, sk_seed) = derive_c11_master_from_entropy(&[0u8; 32]);
         assert_eq!(hex(&pk_seed), REF_PK_SEED, "end-to-end pk_seed drifted");
         assert_eq!(hex(&sk_seed), REF_SK_SEED, "end-to-end sk_seed drifted");

@@ -31,10 +31,10 @@
 //!    28    4  next_q             (u32 LE, next unused FORS+C leaf)
 //!    32    4  flags              (bit 0: slot_registered on chain_id)
 //!    36    4  reserved
-//!    40   32  h_r                (keccak256(r), the on-chain slotKey)
+//!    40   32  h_r                (sha256(r), the on-chain slotKey)
 //!    72   16  sub_pk_seed        (16 B, N-masked pkSeed of the slot)
 //!    88   16  sub_pk_root        (16 B, N-masked pkRoot of the slot)
-//!   104   16  integrity          (first 16 B of keccak256(bytes[0..104]))
+//!   104   16  integrity          (first 16 B of sha256(bytes[0..104]))
 //!   120    7  reserved
 //!   127    1  valid_marker       (0x00 = populated, 0xFF = blank)
 //! ```
@@ -209,10 +209,10 @@ impl SlotState {
     }
 }
 
-/// First 16 bytes of keccak256 over the record prefix.
+/// First 16 bytes of sha256 over the record prefix.
 fn integrity_tag(prefix: &[u8]) -> [u8; INTEGRITY_LEN] {
-    use sha3::{Digest, Keccak256};
-    let mut h = Keccak256::new();
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
     h.update(prefix);
     let digest = h.finalize();
     let mut out = [0u8; INTEGRITY_LEN];

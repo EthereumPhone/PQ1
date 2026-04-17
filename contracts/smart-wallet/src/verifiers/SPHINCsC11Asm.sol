@@ -1,18 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// @title SPHINCsC11Asm — Stateless SPHINCS+ C11 verifier (Yul-optimised)
+/// @title SPHINCsC11Asm — Stateless SPHINCS+ C11 verifier (Yul-optimised, SHA-256)
 /// @notice C11: W+C_F+C h=16 d=2 a=11 k=13 w=8 l=43 target_sum=203 sig=3976
 /// @dev Domain-separated H_msg (160 bytes). Branchless Merkle swap, hoisted
-///      chain address. Source:
-///      https://github.com/nconsigny/SPHINCs-/blob/main/src/SPHINCs-C11Asm.sol
+///      chain address. SHA-256 variant: every tweakable hash is computed by
+///      the precompile at address 0x02 so firmware running on STM32U585's
+///      HASH peripheral produces byte-identical outputs.
+///
+///      Memory layout (each hash call):
+///        [0x00..len]   input buffer (seed, adrs, data, ...)
+///        [0x600..0x620] scratch for precompile output, then AND-masked
+///                      to N=16 bytes when the caller wants a truncated value.
 contract SPHINCsC11Asm {
 
     function verify(bytes32 pkSeed, bytes32 pkRoot, bytes32 message, bytes calldata sig)
-        external pure returns (bool valid)
+        external view returns (bool valid)
     {
         assembly ("memory-safe") {
             let N_MASK := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000
+            // Scratch slot for SHA-256 precompile output. Sits above every
+            // other memory region the verifier touches (WOTS endpoints at
+            // 0x80 + 42*32 = 0x5C0 is the highest legitimate write).
+            let OUT := 0x600
 
             if iszero(eq(sig.length, 3976)) {
                 mstore(0x00, 0x08c379a000000000000000000000000000000000000000000000000000000000)
@@ -32,7 +42,8 @@ contract SPHINCsC11Asm {
             mstore(0x40, R)
             mstore(0x60, message)
             mstore(0x80, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
-            let digest := keccak256(0x00, 0xA0)
+            pop(staticcall(gas(), 0x02, 0x00, 0xA0, OUT, 32))
+            let digest := mload(OUT)
 
             // htIdx = (digest >> 143) & (2^16-1)
             let htIdx := and(shr(143, digest), 0xFFFF)
@@ -50,7 +61,8 @@ contract SPHINCsC11Asm {
                 let leafAdrs := or(shl(128, 3), or(shl(96, i), treeIdx))
                 mstore(0x20, leafAdrs)
                 mstore(0x40, secretVal)
-                let node := and(keccak256(0x00, 0x60), N_MASK)
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
+                let node := and(mload(OUT), N_MASK)
 
                 let treeAdrsBase := or(shl(128, 3), shl(96, i))
                 let pathIdx := treeIdx
@@ -66,7 +78,8 @@ contract SPHINCsC11Asm {
                     let s := shl(5, and(pathIdx, 1))
                     mstore(xor(0x40, s), node)
                     mstore(xor(0x60, s), sibling)
-                    node := and(keccak256(0x00, 0x80), N_MASK)
+                    pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
+                    node := and(mload(OUT), N_MASK)
                     pathIdx := parentIdx
                 }
                 mstore(add(0x80, shl(5, i)), node)
@@ -78,16 +91,18 @@ contract SPHINCsC11Asm {
                 mstore(0x20, or(shl(128, 3), shl(96, 12)))
                 mstore(0x40, lastSecret)
                 // 0x80 + 12*0x20 = 0x80 + 0x180 = 0x200
-                mstore(0x200, and(keccak256(0x00, 0x60), N_MASK))
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
+                mstore(0x200, and(mload(OUT), N_MASK))
             }
 
-            // Compress 13 roots: keccak256(seed || rootsAdrs || 13 roots)
+            // Compress 13 roots: sha256(seed || rootsAdrs || 13 roots)
             // = 32 + 32 + 13*32 = 480 = 0x1E0
             mstore(0x20, shl(128, 4))
             for { let i := 0 } lt(i, 13) { i := add(i, 1) } {
                 mstore(add(0x40, shl(5, i)), mload(add(0x80, shl(5, i))))
             }
-            let forsPk := and(keccak256(0x00, 0x1E0), N_MASK)
+            pop(staticcall(gas(), 0x02, 0x00, 0x1E0, OUT, 32))
+            let forsPk := and(mload(OUT), N_MASK)
 
             // Hypertree (D=2, subtree_h=8, w=8, l=43, target_sum=203)
             let currentNode := forsPk
@@ -103,10 +118,12 @@ contract SPHINCsC11Asm {
                 let countOff := add(sigOff, 688)
                 let count := shr(224, calldataload(add(sigBase, countOff)))
 
+                mstore(0x00, seed)
                 mstore(0x20, wotsAdrs)
                 mstore(0x40, currentNode)
                 mstore(0x60, count)
-                let d := keccak256(0x00, 0x80)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
+                let d := mload(OUT)
 
                 // Validate digit sum = 203 (43 base-8 digits, 3 bits each)
                 let digitSum := 0
@@ -129,19 +146,21 @@ contract SPHINCsC11Asm {
                     for { let step := 0 } lt(step, steps) { step := add(step, 1) } {
                         mstore(0x20, or(chainBase, shl(32, add(digit, step))))
                         mstore(0x40, val)
-                        val := and(keccak256(0x00, 0x60), N_MASK)
+                        pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
+                        val := and(mload(OUT), N_MASK)
                     }
                     mstore(add(0x80, shl(5, i)), val)
                 }
 
-                // PK compression: keccak256(seed || pkAdrs || 43 endpoints)
+                // PK compression: sha256(seed || pkAdrs || 43 endpoints)
                 // = 32 + 32 + 43*32 = 1440 = 0x5A0
                 let pkAdrs := or(shl(224, layer), or(shl(160, idxTree), or(shl(128, 1), shl(96, idxLeaf))))
                 mstore(0x20, pkAdrs)
                 for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
                     mstore(add(0x40, shl(5, i)), mload(add(0x80, shl(5, i))))
                 }
-                let wotsPk := and(keccak256(0x00, 0x5A0), N_MASK)
+                pop(staticcall(gas(), 0x02, 0x00, 0x5A0, OUT, 32))
+                let wotsPk := and(mload(OUT), N_MASK)
 
                 // Merkle auth path (8 levels)
                 let authOff := add(countOff, 4)
@@ -160,7 +179,8 @@ contract SPHINCsC11Asm {
                     let s := shl(5, and(mIdx, 1))
                     mstore(xor(0x40, s), merkleNode)
                     mstore(xor(0x60, s), sibling)
-                    merkleNode := and(keccak256(0x00, 0x80), N_MASK)
+                    pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
+                    merkleNode := and(mload(OUT), N_MASK)
                     mIdx := parentIdx
                 }
 

@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 /// @title ISPHINCSVerifier
-/// @notice Interface for SPHINCS+C keccak256-based signature verification.
+/// @notice Interface for SPHINCS+C SHA-256-based signature verification.
 ///         The public key is split into (pkSeed, pkRoot) — two bytes32 values.
 ///         Signature format and size depend on the variant (C6, C7, etc.).
 interface ISPHINCSVerifier {

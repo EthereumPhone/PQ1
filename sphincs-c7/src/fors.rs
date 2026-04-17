@@ -7,7 +7,7 @@
 //! saving (A * N) = 256 bytes per signature.
 
 use crate::address::make_adrs;
-use crate::hash::{fors_secret, h_msg, pad16, th, th_multi, th_pair, truncate, Digest, Keccak256};
+use crate::hash::{fors_secret, h_msg, pad16, th, th_multi, th_pair, truncate, Digest, Sha256};
 use crate::params::*;
 
 /// Extract K FORS indices from the H_msg digest.
@@ -86,8 +86,8 @@ pub fn grind_r(
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
 
     for nonce in 0..10_000_000u32 {
-        // R = keccak256("R_grind" || nonce_b32)[0..N]
-        let mut h = Keccak256::new();
+        // R = sha256("R_grind" || nonce_b32)[0..N]
+        let mut h = Sha256::new();
         h.update(b"R_grind");
         let mut nonce_b32 = [0u8; 32];
         nonce_b32[28..32].copy_from_slice(&nonce.to_be_bytes());

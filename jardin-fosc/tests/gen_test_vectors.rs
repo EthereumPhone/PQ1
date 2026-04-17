@@ -69,7 +69,7 @@ fn generate_test_vectors() {
     // Compute slot key and sub VK hash
     let master_entropy = [0x42u8; 32];
     let slot_r = jardin_fosc::hash::jardin_slot_r(&master_entropy, 0);
-    let slot_key = jardin_fosc::hash::keccak256(&slot_r);
+    let slot_key = jardin_fosc::hash::sha256(&slot_r);
 
     // Re-create the slot to get sub_vk_hash
     let slot2 = JardinSlot::keygen(entropy);

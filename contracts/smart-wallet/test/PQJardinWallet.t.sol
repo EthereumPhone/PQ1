@@ -71,8 +71,8 @@ contract PQJardinWalletTest is Test {
         uint256 vd = w.validateUserOp(_packedOp(address(w), sig), userOpHash, 0);
         assertEq(vd, 0, "Type 1 must validate");
 
-        bytes32 slotKey = keccak256(abi.encodePacked(R));
-        bytes32 subVkHash = keccak256(abi.encodePacked(SUB_PK_SEED_16, SUB_PK_ROOT_16));
+        bytes32 slotKey = sha256(abi.encodePacked(R));
+        bytes32 subVkHash = sha256(abi.encodePacked(SUB_PK_SEED_16, SUB_PK_ROOT_16));
         assertEq(w.jardinSlot(slotKey), subVkHash, "slot must be registered");
     }
 
@@ -142,7 +142,7 @@ contract PQJardinWalletTest is Test {
 
         // Step 2: Type 2 against the now-registered slot.
         forsc.setValid(true);
-        bytes32 slotKey = keccak256(abi.encodePacked(R));
+        bytes32 slotKey = sha256(abi.encodePacked(R));
         bytes memory forscSig = new bytes(2468); // q=1 length
         bytes memory t2 = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16, forscSig);
         vm.prank(ENTRY_POINT_ADDR);
@@ -154,7 +154,7 @@ contract PQJardinWalletTest is Test {
         PQJardinWallet w = factory.createAccount(MASTER_PK_SEED, MASTER_PK_ROOT);
         forsc.setValid(true);
 
-        bytes32 slotKey = keccak256(abi.encodePacked(R));
+        bytes32 slotKey = sha256(abi.encodePacked(R));
         bytes memory forscSig = new bytes(2468);
         bytes memory sig = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16, forscSig);
 
@@ -175,7 +175,7 @@ contract PQJardinWalletTest is Test {
         );
 
         forsc.setValid(true);
-        bytes32 slotKey = keccak256(abi.encodePacked(R));
+        bytes32 slotKey = sha256(abi.encodePacked(R));
         bytes16 wrongSeed = bytes16(uint128(0x1234));
         bytes memory forscSig = new bytes(2468);
         bytes memory sig = _buildType2Sig(slotKey, wrongSeed, SUB_PK_ROOT_16, forscSig);
@@ -197,7 +197,7 @@ contract PQJardinWalletTest is Test {
         );
 
         forsc.setValid(false);
-        bytes32 slotKey = keccak256(abi.encodePacked(R));
+        bytes32 slotKey = sha256(abi.encodePacked(R));
         bytes memory forscSig = new bytes(2468);
         bytes memory sig = _buildType2Sig(slotKey, SUB_PK_SEED_16, SUB_PK_ROOT_16, forscSig);
         vm.prank(ENTRY_POINT_ADDR);

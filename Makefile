@@ -281,7 +281,7 @@ test-key-speed:
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,sha256-hash
+			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \

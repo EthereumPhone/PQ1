@@ -2,7 +2,7 @@
 
 Post-quantum ERC-4337 hardware wallet. Target: **STM32U585 (Cortex-M33, TrustZone) + Infineon OPTIGA Trust M V3 + NXP SE050**. Every primitive protecting the seed is PQ or symmetric with >=256-bit keys. Signing is **JARDÍN FORS+C only** — pure post-quantum, no ECDSA, no classical fallback. The wallet is an account-abstraction smart account that talks to EntryPoint v0.9.
 
-Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. Both SE drivers (OPTIGA Trust M, SE050) working. Dual-SE XOR entropy split wired and tested. The `PQJardinWallet` smart-wallet is deployed via a deterministic CREATE2 factory whose salt is `keccak256(masterPkSeed || masterPkRoot)`, so the same 24 words produce the same address on every chain.
+Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. Both SE drivers (OPTIGA Trust M, SE050) working. Dual-SE XOR entropy split wired and tested. The `PQJardinWallet` smart-wallet is deployed via a deterministic CREATE2 factory whose salt is `sha256(masterPkSeed || masterPkRoot)`, so the same 24 words produce the same address on every chain. **SHA-256 cutover:** every hash inside the PQ signing stack (SPHINCS+C11, JARDÍN FORS+C, slot-key derivation, KDF, CREATE2 salt) is now SHA-256, routed through the STM32U585 HASH peripheral on hardware. `sha3::Keccak256` is retained only for the external-standard hashes the EVM demands (EIP-4337 userOpHash, EIP-712, EIP-1559 envelope, ERC-7201 namespace, the CREATE2 address formula itself).
 
 ## Non-Negotiable Invariants
 
@@ -20,7 +20,7 @@ Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 
 6. **`next_q` persistence before release.** Every FORS+C signature increments `next_q` in secure flash BEFORE the Type 2 bytes are released to NS. A rollback after sign-but-before-flash would otherwise allow q reuse and FORS+C security collapses under reuse (128 → 105 bits at q=2, lower with more).
 
-7. **Master C11 keys are immutable.** The on-chain CREATE2 salt is `keccak256(masterPkSeed || masterPkRoot)`. Rotating master keys would change the wallet address — seed recovery would land users at a different account. The factory has no `rotateMasterKeys` function, and there is no on-chain ownership model that could introduce one.
+7. **Master C11 keys are immutable.** The on-chain CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`. Rotating master keys would change the wallet address — seed recovery would land users at a different account. The factory has no `rotateMasterKeys` function, and there is no on-chain ownership model that could introduce one.
 
 ## Architecture at a Glance
 
@@ -32,15 +32,15 @@ Status: JARDÍN cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
                                            |  BIP-39(E) -> PBKDF2(2048) -> bip39_seed (64B)
                                            |       |
                                            |       +--- HMAC-SHA512("sphincs-c6-v1") -> master
-                                           |       |       |  +-- keccak256("pk_seed"||master[..32]) & N_MASK -> masterPkSeed
-                                           |       |       |  +-- keccak256("sk_seed"||master[..32])           -> masterSkSeed
+                                           |       |       |  +-- sha256("pk_seed"||master[..32]) & N_MASK    -> masterPkSeed
+                                           |       |       |  +-- sha256("sk_seed"||master[..32])              -> masterSkSeed
                                            |       |       +-- sphincs_c7::SigningKey::keygen(...)              -> masterPkRoot
                                            |       |              (C11 hypertree, built on-demand for Type 1)
                                            |       |
-                                           |       +--- keccak256("pqwallet-jardin-master" || bip39_seed)  -> jardin_master_entropy
+                                           |       +--- sha256("pqwallet-jardin-master" || bip39_seed)  -> jardin_master_entropy
                                            |                                                                        |
-                                           |       jardin_slot_entropy(master, slot_idx) = keccak256(master||"jardin_slot"||slot_idx)
-                                           |       jardin_slot_r(master, slot_idx)        = keccak256(master||"jardin_r"||slot_idx)
+                                           |       jardin_slot_entropy(master, slot_idx) = sha256(master||"jardin_slot"||slot_idx)
+                                           |       jardin_slot_r(master, slot_idx)        = sha256(master||"jardin_r"||slot_idx)
                                            |                                                                        |
                                            |       jardin_fosc::JardinSlot::keygen(entropy) -> sub_pk_seed, sub_pk_root, 94-node spine
                                            |                                                                        |
@@ -124,7 +124,7 @@ offset  size  field
 ### On-chain validation
 
 `PQJardinWallet.validateUserOp` dispatches on `sig[0]`:
-- `0x01` → verify master C11 sig over `userOpHash`, record `slots[keccak256(r)] = keccak256(subPkSeed || subPkRoot)`.
+- `0x01` → verify master C11 sig over `userOpHash`, record `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
 - `0x02` → look up `slots[slotKey]`, check sub-key commitment matches, verify FORS+C sig.
 
 ## Subsystem Guides
@@ -210,7 +210,7 @@ Pure-PQ account-abstraction wallet on EntryPoint v0.9.
 
 **Key files:**
 - `src/PQJardinWallet.sol` — validates Type 1 + Type 2 signatures, stores `jardinSlots` mapping.
-- `src/PQJardinWalletFactory.sol` — CREATE2 factory. Salt = `keccak256(masterPkSeed || masterPkRoot)`.
+- `src/PQJardinWalletFactory.sol` — CREATE2 factory. Salt = `sha256(masterPkSeed || masterPkRoot)` (the CREATE2 opcode itself still keccak256-hashes `0xff || addr || salt || keccak256(initCode)`; we only control the salt preimage).
 - `src/PQOwnable.sol` — minimal storage helper (`jardinSlots` mapping only).
 - `src/verifiers/SPHINCsC11Asm.sol` — stateless Yul C11 verifier.
 - `src/verifiers/JardinForsCVerifier.sol` — stateless Yul FORS+C verifier.
@@ -246,7 +246,7 @@ cargo test -p sphincs-tz-secure --tests --release
 | `ui-oled` | SSD1306 I2C OLED (hardware) |
 | `stm32u585` | Real hardware target (vs QEMU mps2-an505) |
 
-**Targets:** `thumbv8m.main-none-eabi` (both worlds). Release profile: `opt-level = "s"`, LTO, `codegen-units = 1`, `overflow-checks = true`. The `sphincs-c7`, `jardin-fosc`, `keccak-asm`, `sha3`, `sha2`, `hmac`, and `keccak` crates are always `opt-level = 3`.
+**Targets:** `thumbv8m.main-none-eabi` (both worlds). Release profile: `opt-level = "s"`, LTO, `codegen-units = 1`, `overflow-checks = true`. The `sphincs-c7`, `jardin-fosc`, `sha2`, and `hmac` crates are always `opt-level = 3` (SHA-256 is the hot inner loop).
 
 ## Code Conventions
 
@@ -259,18 +259,18 @@ cargo test -p sphincs-tz-secure --tests --release
 - Shared types between worlds: `shared/src/lib.rs` with `#[repr(C)]`.
 - Secret types are `!Copy` and `!Clone` (prevent silent duplication).
 
-## Frozen recovery contract (do not change)
+## Recovery contract (post-SHA-256 cutover)
 
 - **BIP-39 → seed**: PBKDF2-HMAC-SHA512, 2048 iters, empty passphrase (standard).
 - **Seed → C11 master**: `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (note the C6 tag — historical, do NOT modernise), then:
-  - `masterPkSeed = keccak256("pk_seed" || master[0..32]) & N_MASK` (top 16 bytes kept, bottom 16 zero)
-  - `masterSkSeed = keccak256("sk_seed" || master[0..32])`
+  - `masterPkSeed = sha256("pk_seed" || master[0..32]) & N_MASK` (top 16 bytes kept, bottom 16 zero)
+  - `masterSkSeed = sha256("sk_seed" || master[0..32])`
   - `masterPkRoot = sphincs_c7::SigningKey::keygen(masterSkSeed, masterPkSeed[..16]).pk_root()`
-- **Seed → JARDÍN master entropy**: `keccak256("pqwallet-jardin-master" || bip39_seed)`.
-- **Master entropy → slot entropy**: `keccak256(master || "jardin_slot" || slot_index_be)`.
-- **Master entropy → r**: `keccak256(master || "jardin_r" || slot_index_be)`.
+- **Seed → JARDÍN master entropy**: `sha256("pqwallet-jardin-master" || bip39_seed)`.
+- **Master entropy → slot entropy**: `sha256(master || "jardin_slot" || slot_index_be)`.
+- **Master entropy → r**: `sha256(master || "jardin_r" || slot_index_be)`.
 - **Slot entropy → sub-key**: `jardin_fosc::hash::jardin_derive_keys(slot_entropy)` (domain tags `"jardin_sub_v1"`, `"jardin_pk_seed"`, `"jardin_sk_seed"`).
-- **On-chain wallet address**: `CREATE2(factory, keccak256(masterPkSeed || masterPkRoot), creationCode_hash)`. Same on every chain.
+- **On-chain wallet address**: `CREATE2(factory, salt = sha256(masterPkSeed || masterPkRoot), creationCode_hash)`. Same on every chain. (The CREATE2 opcode itself hashes `0xff || factory || salt || keccak256(initCode)` with keccak256 — that's fixed by the EVM and cannot change; we only control the salt preimage.)
 
 ## Key File Map
 
@@ -298,9 +298,9 @@ cargo test -p sphincs-tz-secure --tests --release
 | `nonsecure/src/usb/commands.rs` | APDU v2 command router (7 INS codes) |
 | `nonsecure/src/e2e_test.rs` | Non-interactive end-to-end test runner |
 | `shared/src/lib.rs` | Cross-world types: NscStatus, CMD constants, wire-format sizes |
-| `jardin-fosc/*` | FORS+C signing library (no_std) |
-| `sphincs-c7/*` | C11 master-key signing library (no_std; name historical) |
-| `keccak-asm/*` | ARM-optimised Keccak-256 (vendored) |
+| `jardin-fosc/*` | FORS+C signing library (no_std, SHA-256) |
+| `sphincs-c7/*` | C11 master-key signing library (no_std, SHA-256; name historical) |
+| `secure/src/hw/hash.rs` | STM32U585 HASH peripheral driver — `pqsigner_sha256_*` extern fns consumed by the signing crates under `hw-sha256` |
 | `bip39/*` | 24-word English BIP-39 (no_std) |
 | `fwmeasure/*` | Host-side firmware measurement tool |
 | `contracts/smart-wallet/src/PQJardinWallet.sol` | On-chain ERC-4337 v0.9 account |

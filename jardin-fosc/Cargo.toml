@@ -2,20 +2,19 @@
 name = "jardin-fosc"
 version = "0.1.0"
 edition.workspace = true
-description = "JARDIN FORS+C compact post-quantum signatures (no_std, no alloc)"
+description = "JARDIN FORS+C compact post-quantum signatures (no_std, no alloc, SHA-256)"
 
 [dependencies]
-keccak-asm = { workspace = true }
+sha2 = { version = "0.10", default-features = false }
 zeroize = { workspace = true, features = ["zeroize_derive"] }
 
 [features]
-# Swap Keccak-256 for SHA-256 as the primary hash. Intended for embedded
-# targets with a hardware SHA-256 accelerator (e.g. STM32U585 HASH).
-# Under this feature the crate does NOT provide an implementation — the
-# linked binary must define `pqsigner_sha256_init/update/final` (see
-# `secure/src/hw/hash.rs`). Signatures are NOT cross-compatible with the
-# Keccak variant; this is a speed-bench alternative, not a protocol change.
-sha256-hash = []
+# Route all hashing through extern `pqsigner_sha256_init/update/final`.
+# Intended for embedded targets with a hardware SHA-256 accelerator (e.g.
+# STM32U585 HASH). The linked binary must provide the three symbols; see
+# `secure/src/hw/hash.rs`. Without this feature the crate uses software
+# `sha2::Sha256`, which is what host tests need.
+hw-sha256 = []
 
 [dev-dependencies]
 hex = { workspace = true }

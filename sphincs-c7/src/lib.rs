@@ -1,4 +1,4 @@
-//! SPHINCS+C11 — keccak256-based post-quantum hash-based signatures.
+//! SPHINCS+C11 — SHA-256-based post-quantum hash-based signatures.
 //!
 //! Parameter set C11: `W+C_F+C  h=16  d=2  a=11  k=13  w=8  l=43  sig=3976`
 //!

@@ -1,29 +1,30 @@
-//! Keccak256-based tweakable hash primitives.
+//! SHA-256-based tweakable hash primitives.
 //!
 //! Every function in this module must produce byte-identical output to the
-//! corresponding Solidity/Yul code in `SphincsC7Asm.sol` and the Python
-//! reference signer `signer_c7.py`.
+//! corresponding Solidity/Yul code in `SPHINCsC11Asm.sol` (which calls the
+//! SHA-256 precompile at address 0x02) and the host-side reference signer.
 //!
 //! Convention: all 16-byte (n=128-bit) values are stored in the **top**
 //! 128 bits of a 32-byte buffer (left-aligned, right-zero-padded). This
 //! matches the EVM uint256 big-endian representation where a 128-bit value
 //! occupies bytes [0..16) and bytes [16..32) are zero.
 //!
-//! Under the optional `sha256-hash` feature, `Keccak256` is aliased to a
-//! wrapper that forwards to `pqsigner_sha256_*` extern fns. The linked
-//! binary (e.g. the secure firmware) provides the implementation —
-//! typically via the STM32U585 HASH peripheral.
+//! Default build uses software `sha2::Sha256`. With the `hw-sha256`
+//! feature the crate calls three extern symbols the linked binary must
+//! provide (`pqsigner_sha256_init / update / final`) — the secure firmware
+//! routes these to the STM32U585 HASH peripheral for ~19x FORS+C keygen
+//! speedup.
 
-pub(crate) use inner::{Digest, Keccak256};
+pub(crate) use inner::{Digest, Sha256};
 
 use crate::params::N;
 
-#[cfg(not(feature = "sha256-hash"))]
+#[cfg(not(feature = "hw-sha256"))]
 mod inner {
-    pub use keccak_asm::{Digest, Keccak256};
+    pub use sha2::{Digest, Sha256};
 }
 
-#[cfg(feature = "sha256-hash")]
+#[cfg(feature = "hw-sha256")]
 mod inner {
     extern "C" {
         fn pqsigner_sha256_init();
@@ -37,9 +38,9 @@ mod inner {
         fn finalize(self) -> [u8; 32];
     }
 
-    pub struct Keccak256;
+    pub struct Sha256;
 
-    impl Digest for Keccak256 {
+    impl Digest for Sha256 {
         fn new() -> Self {
             unsafe { pqsigner_sha256_init() };
             Self
@@ -69,7 +70,7 @@ pub fn pad16(val: &[u8; N]) -> [u8; 32] {
     out
 }
 
-/// Truncate a 32-byte keccak256 digest to the top N=16 bytes.
+/// Truncate a 32-byte SHA-256 digest to the top N=16 bytes.
 #[inline]
 pub fn truncate(digest: &[u8; 32]) -> [u8; N] {
     let mut out = [0u8; N];
@@ -101,12 +102,12 @@ fn u32_to_b32(v: u32) -> [u8; 32] {
 
 /// `th(seed, adrs, val)` — tweakable hash with one 32-byte input.
 ///
-/// `keccak256(seed_b32 || adrs_b32 || val_b32)[0..N]`
+/// `sha256(seed_b32 || adrs_b32 || val_b32)[0..N]`
 ///
-/// Matches Solidity: `and(keccak256(0x00, 0x60), N_MASK)` with
+/// Matches Solidity: `and(sha256_precompile(0x00, 0x60), N_MASK)` with
 /// `mstore(0x00, seed)`, `mstore(0x20, adrs)`, `mstore(0x40, val)`.
 pub fn th(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; 32]) -> [u8; N] {
-    let mut h = Keccak256::new();
+    let mut h = Sha256::new();
     h.update(seed);
     h.update(adrs);
     h.update(val);
@@ -115,16 +116,16 @@ pub fn th(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; 32]) -> [u8; N] {
 
 /// `th_pair(seed, adrs, left, right)` — tweakable hash with two 32-byte inputs.
 ///
-/// `keccak256(seed_b32 || adrs_b32 || left_b32 || right_b32)[0..N]`
+/// `sha256(seed_b32 || adrs_b32 || left_b32 || right_b32)[0..N]`
 ///
-/// Matches Solidity: `and(keccak256(0x00, 0x80), N_MASK)`.
+/// Matches Solidity: `and(sha256_precompile(0x00, 0x80), N_MASK)`.
 pub fn th_pair(
     seed: &[u8; 32],
     adrs: &[u8; 32],
     left: &[u8; 32],
     right: &[u8; 32],
 ) -> [u8; N] {
-    let mut h = Keccak256::new();
+    let mut h = Sha256::new();
     h.update(seed);
     h.update(adrs);
     h.update(left);
@@ -134,11 +135,11 @@ pub fn th_pair(
 
 /// `th_multi(seed, adrs, vals)` — tweakable hash with variable N-byte inputs.
 ///
-/// `keccak256(seed_b32 || adrs_b32 || pad(v0) || pad(v1) || ...)[0..N]`
+/// `sha256(seed_b32 || adrs_b32 || pad(v0) || pad(v1) || ...)[0..N]`
 ///
 /// Each value in `vals` is a 16-byte N-value that gets padded to 32 bytes.
 pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
-    let mut h = Keccak256::new();
+    let mut h = Sha256::new();
     h.update(seed);
     h.update(adrs);
     for v in vals {
@@ -149,7 +150,7 @@ pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
 
 /// `h_msg(seed, root, R, message)` — domain-separated message hash.
 ///
-/// `keccak256(seed_b32 || root_b32 || R_b32 || message_b32 || 0xFF..FF_b32)`
+/// `sha256(seed_b32 || root_b32 || R_b32 || message_b32 || 0xFF..FF_b32)`
 ///
 /// Returns the **full** 32-byte digest (not truncated), because the caller
 /// needs all bits for FORS index extraction and hypertree path selection.
@@ -161,7 +162,7 @@ pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
 ///   mstore(0x40, R)
 ///   mstore(0x60, message)
 ///   mstore(0x80, 0xFFFF...FF)
-///   digest := keccak256(0x00, 0xA0)
+///   digest := sha256_precompile(0x00, 0xA0)
 /// ```
 pub fn h_msg(
     seed: &[u8; 32],
@@ -169,7 +170,7 @@ pub fn h_msg(
     r: &[u8; 32],
     message: &[u8; 32],
 ) -> [u8; 32] {
-    let mut h = Keccak256::new();
+    let mut h = Sha256::new();
     h.update(seed);
     h.update(root);
     h.update(r);
@@ -217,12 +218,9 @@ pub fn chain_hash(
 
 /// WOTS digest for count-grinding.
 ///
-/// `keccak256(seed_b32 || wotsAdrs_b32 || msgHash_b32 || count_uint256)`
+/// `sha256(seed_b32 || wotsAdrs_b32 || msgHash_b32 || count_uint256)`
 ///
 /// Returns the full 32-byte digest for base-w digit extraction.
-///
-/// Python: `_keccak_4x32(seed, hash_adrs, msg_hash, count)`
-/// — all four values are 32-byte big-endian uint256.
 pub fn wots_digest(
     seed: &[u8; 32],
     wots_adrs: &[u8; 32],
@@ -230,7 +228,7 @@ pub fn wots_digest(
     count: u32,
 ) -> [u8; 32] {
     let count_b32 = u32_to_b32(count);
-    let mut h = Keccak256::new();
+    let mut h = Sha256::new();
     h.update(seed);
     h.update(wots_adrs);
     h.update(msg_hash);
@@ -241,14 +239,8 @@ pub fn wots_digest(
 /// WOTS secret key derivation.
 ///
 /// ```text
-/// keccak256(sk_seed_b32 || "wots" || to_b4(layer) || to_b32(tree)
-///           || to_b4(kp) || to_b4(chain_idx))[0..N]
-/// ```
-///
-/// Python signer_c7.py line 148-151:
-/// ```python
-/// data = (to_b32(sk_seed) + b"wots" +
-///         to_b4(layer) + to_b32(tree) + to_b4(kp) + to_b4(chain_idx))
+/// sha256(sk_seed_b32 || "wots" || to_b4(layer) || to_b32(tree)
+///        || to_b4(kp) || to_b4(chain_idx))[0..N]
 /// ```
 ///
 /// Note the mixed widths: `layer`, `kp`, `chain_idx` are 4-byte (`to_b4`),
@@ -261,7 +253,7 @@ pub fn wots_secret(
     chain_idx: u32,
 ) -> [u8; N] {
     let tree_b32 = u64_to_b32(tree);
-    let mut h = Keccak256::new();
+    let mut h = Sha256::new();
     h.update(sk_seed);
     h.update(b"wots");
     h.update(layer.to_be_bytes()); // to_b4(layer) — 4 bytes
@@ -277,14 +269,9 @@ pub fn wots_secret(
 
 /// FORS secret key derivation.
 ///
-/// `keccak256(sk_seed_b32 || "fors" || to_b4(tree_idx) || to_b4(leaf_idx))[0..N]`
-///
-/// Python signer_c7.py line 153-155:
-/// ```python
-/// data = to_b32(sk_seed) + b"fors" + to_b4(tree_idx) + to_b4(leaf_idx)
-/// ```
+/// `sha256(sk_seed_b32 || "fors" || to_b4(tree_idx) || to_b4(leaf_idx))[0..N]`
 pub fn fors_secret(sk_seed: &[u8; 32], tree_idx: u32, leaf_idx: u32) -> [u8; N] {
-    let mut h = Keccak256::new();
+    let mut h = Sha256::new();
     h.update(sk_seed);
     h.update(b"fors");
     h.update(tree_idx.to_be_bytes()); // to_b4

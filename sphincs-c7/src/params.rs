@@ -8,7 +8,7 @@
 //! 2^20 signatures — sufficient for a wallet with OTS tracking and key
 //! rotation (h=16 gives 65,536 signing positions per epoch).
 //!
-//! Uses keccak256 as the hash function. All 16-byte values are stored in
+//! Uses sha256 as the hash function. All 16-byte values are stored in
 //! the top 128 bits of a 32-byte word (right-padded with zeros) to match
 //! the Solidity/EVM uint256 representation.
 

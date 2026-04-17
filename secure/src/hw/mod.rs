@@ -11,7 +11,7 @@ pub mod rcc;
 #[cfg(feature = "stm32u585")]
 pub mod rng;
 
-#[cfg(all(feature = "stm32u585", feature = "sha256-hash"))]
+#[cfg(all(feature = "stm32u585", feature = "hw-sha256"))]
 pub mod hash;
 
 #[cfg(all(feature = "stm32u585", feature = "ui-oled"))]

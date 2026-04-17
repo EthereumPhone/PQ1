@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// @title JardinForsCVerifier — Stateless JARDIN FORS+C verifier (shared, Yul-optimized)
+/// @title JardinForsCVerifier — Stateless JARDIN FORS+C verifier (shared, Yul-optimized, SHA-256)
 /// @notice Variant 2: k=26 a=5 n=16 Q_MAX=95 sig=2452+q*16
 ///         Compact post-quantum signatures using FORS+C with an unbalanced
-///         Merkle tree. Keccak256-based tweakable hashing, branchless Merkle swap.
-/// @dev Gas: ~66K base + ~500 per unbalanced auth node.
+///         Merkle tree. SHA-256-based tweakable hashing (matches the
+///         firmware's STM32U585 HASH peripheral byte-for-byte), branchless
+///         Merkle swap.
+/// @dev Every hash is computed by the SHA-256 precompile at address 0x02;
+///      the precompile output is written to memory [0x600..0x620) and then
+///      loaded + N-masked by the caller.
 ///      Signature layout:
 ///        [0..32)      R (randomizer, full 32 bytes)
 ///        [32..36)     counter (BE u32)
@@ -19,9 +23,13 @@ contract JardinForsCVerifier {
         bytes32 pkRoot,
         bytes32 message,
         bytes calldata sig
-    ) external pure returns (bool valid) {
+    ) external view returns (bool valid) {
         assembly ("memory-safe") {
             let N_MASK := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000
+            // Scratch slot for SHA-256 precompile output. Sits above every
+            // memory region the verifier uses (roots storage tops out at
+            // 0x80 + 25*32 + 32 = 0x3C0).
+            let OUT := 0x600
 
             // ── Step 1: Parse signature length and derive q ──
             // authBytes = sig.length - 2452; q = authBytes / 16
@@ -36,8 +44,8 @@ contract JardinForsCVerifier {
             let sigBase := sig.offset
 
             // ── Step 2: H_msg (192-byte domain-separated hash) ──
-            // keccak256(pkSeed(32) || pkRoot(32) || R(32) || message(32) ||
-            //           counter_u256(32) || 0xFF..FF(32)) = 192 bytes
+            // sha256(pkSeed(32) || pkRoot(32) || R(32) || message(32) ||
+            //        counter_u256(32) || 0xFF..FF(32)) = 192 bytes
             mstore(0x00, seed)
             mstore(0x20, root)
             // R = sig[0..32] — full 32 bytes, NOT N-masked
@@ -49,7 +57,8 @@ contract JardinForsCVerifier {
             let counterVal := shr(224, counterRaw) // extract top 4 bytes as u32
             mstore(0x80, counterVal) // counter as u256 (value in low bits)
             mstore(0xA0, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF)
-            let digest := keccak256(0x00, 0xC0) // 192 bytes
+            pop(staticcall(gas(), 0x02, 0x00, 0xC0, OUT, 32)) // 192 bytes
+            let digest := mload(OUT)
 
             // ── Step 3: Forced-zero check ──
             // last_index = (digest >> 125) & 0x1F  — tree 25, bits 125-129
@@ -71,7 +80,8 @@ contract JardinForsCVerifier {
                 let leafAdrs := or(shl(128, 3), or(shl(96, t), or(shl(64, q), treeIdx)))
                 mstore(0x20, leafAdrs)
                 mstore(0x40, secretVal)
-                let node := and(keccak256(0x00, 0x60), N_MASK)
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
+                let node := and(mload(OUT), N_MASK)
 
                 // Walk 5-level auth path
                 let treeAdrsBase := or(shl(128, 3), or(shl(96, t), shl(64, q)))
@@ -88,7 +98,8 @@ contract JardinForsCVerifier {
                     let s := shl(5, and(pathIdx, 1))
                     mstore(xor(0x40, s), node)
                     mstore(xor(0x60, s), sibling)
-                    node := and(keccak256(0x00, 0x80), N_MASK)
+                    pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
+                    node := and(mload(OUT), N_MASK)
                     pathIdx := parentIdx
                 }
 
@@ -104,12 +115,13 @@ contract JardinForsCVerifier {
                 let lastAdrs := or(shl(128, 3), or(shl(96, 25), shl(64, q)))
                 mstore(0x20, lastAdrs)
                 mstore(0x40, lastRoot)
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
                 // Store at 0x80 + 25*32 = 0x80 + 0x320 = 0x3A0
-                mstore(0x3A0, and(keccak256(0x00, 0x60), N_MASK))
+                mstore(0x3A0, and(mload(OUT), N_MASK))
             }
 
             // ── Step 6: Compress 26 FORS roots into forsPk ──
-            // keccak256(seed(32) || rootsAdrs(32) || 26 roots(26*32)) = 896 bytes
+            // sha256(seed(32) || rootsAdrs(32) || 26 roots(26*32)) = 896 bytes
             // rootsAdrs = {atype=4, ci=q}
             mstore(0x20, or(shl(128, 4), shl(64, q)))
             // Roots are already at 0x80..0x3C0 (26 * 32 = 832 bytes)
@@ -118,8 +130,9 @@ contract JardinForsCVerifier {
             for { let i := 0 } lt(i, 26) { i := add(i, 1) } {
                 mstore(add(0x40, shl(5, i)), mload(add(0x80, shl(5, i))))
             }
-            // keccak256(0x00, 32 + 32 + 26*32) = keccak256(0x00, 896)
-            let forsPk := and(keccak256(0x00, 0x380), N_MASK)
+            // sha256(0x00, 32 + 32 + 26*32) = sha256(0x00, 896)
+            pop(staticcall(gas(), 0x02, 0x00, 0x380, OUT, 32))
+            let forsPk := and(mload(OUT), N_MASK)
 
             // ── Step 7: Walk unbalanced tree auth path (q nodes) ──
             // Auth path starts at offset 2452 in sig
@@ -134,7 +147,8 @@ contract JardinForsCVerifier {
                 mstore(0x40, auth0)
                 mstore(0x60, forsPk)
             }
-            let unbNode := and(keccak256(0x00, 0x80), N_MASK)
+            pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
+            let unbNode := and(mload(OUT), N_MASK)
 
             // Steps 1..q-1: node is LEFT, auth[j] is RIGHT
             for { let j := 1 } lt(j, q) { j := add(j, 1) } {
@@ -143,7 +157,8 @@ contract JardinForsCVerifier {
                 mstore(0x20, or(shl(128, 6), shl(32, sub(sub(q, 1), j))))
                 mstore(0x40, unbNode)
                 mstore(0x60, authJ)
-                unbNode := and(keccak256(0x00, 0x80), N_MASK)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
+                unbNode := and(mload(OUT), N_MASK)
             }
 
             // ── Step 8: Compare ──

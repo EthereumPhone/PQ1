@@ -1,16 +1,17 @@
 //! STM32U585 HASH peripheral driver — SHA-256 only.
 //!
-//! Used exclusively under the `sha256-hash` feature on `sphincs-tz-secure`
-//! to replace the software Keccak-256 in `sphincs-c7` and `jardin-fosc`
-//! with hardware-accelerated SHA-256. The HASH peripheral runs at roughly
-//! 1 cycle/byte (single-block) vs ~12 cycles/byte for Keccak-asm, which
-//! dominates FORS+C signing wall time.
+//! Used under the `hw-sha256` feature on `sphincs-tz-secure` to route
+//! every SHA-256 call from `sphincs-c7` and `jardin-fosc` through the
+//! hardware accelerator. The HASH peripheral runs at roughly 1 cycle/byte
+//! (single-block) — significantly faster than the software `sha2::Sha256`
+//! fallback that non-firmware builds use, and which dominates FORS+C
+//! signing wall time when software is used.
 //!
 //! Register layout is the STM32U5 HASH v4 (same IP as STM32H5 / WBA55).
 //! Confirmed against Linux `drivers/crypto/stm32/stm32-hash.c`.
 //!
 //! This module provides three extern "C" symbols that `sphincs-c7` and
-//! `jardin-fosc` call when compiled with `sha256-hash`:
+//! `jardin-fosc` call when compiled with `hw-sha256`:
 //!
 //!   pqsigner_sha256_init()
 //!   pqsigner_sha256_update(ptr, len)

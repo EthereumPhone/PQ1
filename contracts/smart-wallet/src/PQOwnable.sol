@@ -5,7 +5,7 @@ pragma solidity 0.8.28;
 ///
 /// @custom:storage-location erc7201:pqsigner.storage.PQOwnable
 struct PQSignerStorage {
-    /// @dev JARDIN FORS+C slot registry: `H(r) => keccak256(subPkSeed || subPkRoot)`.
+    /// @dev JARDIN FORS+C slot registry: `H(r) => sha256(subPkSeed || subPkRoot)`.
     ///      Populated by Type 1 signature validation as a side effect; read
     ///      by Type 2 signature validation to look up the registered sub-key.
     mapping(bytes32 => bytes32) jardinSlots;
@@ -63,8 +63,8 @@ abstract contract PQOwnable {
     ///         side effect of Type 1 verification. Non-re-entrant by virtue
     ///         of EntryPoint's single-entry UserOp dispatch.
     ///
-    /// @param slotKey   Keccak256 hash of the slot randomiser `r`.
-    /// @param subVkHash Keccak256 hash of `subPkSeed || subPkRoot`.
+    /// @param slotKey   SHA-256 hash of the slot randomiser `r`.
+    /// @param subVkHash SHA-256 hash of `subPkSeed || subPkRoot`.
     function _registerJardinSlot(bytes32 slotKey, bytes32 subVkHash) internal {
         PQSignerStorage storage $ = _getStorage();
         bytes32 prev = $.jardinSlots[slotKey];
@@ -92,7 +92,7 @@ abstract contract PQOwnable {
     ///         live registered slot (Type 2). The public authorisation
     ///         gate is on `PQJardinWallet.revokeJardinSlot`, which
     ///         forwards here.
-    /// @param slotKey Slot identifier (`keccak256(r)`) to revoke.
+    /// @param slotKey Slot identifier (`sha256(r)`) to revoke.
     function _revokeJardinSlot(bytes32 slotKey) internal {
         PQSignerStorage storage $ = _getStorage();
         bytes32 prev = $.jardinSlots[slotKey];

@@ -58,7 +58,7 @@ pub fn derive_device_key(domain_tag: &[u8]) -> [u8; 32] {
     let uid = read_uid();
     let fw_hash = crate::measured_boot::firmware_hash();
 
-    // Single-pass Keccak/SHA domain: SHA-256(domain || uid || fw_hash)
+    // Single-pass SHA-256(domain || uid || fw_hash)
     // is deterministic, requires no alloc, and the output is
     // indistinguishable from random for every well-formed domain.
     let mut h = Sha256::new();

@@ -13,7 +13,7 @@
 //!      against the C11 master key, plus the raw randomiser `r` and the
 //!      N-truncated sub-key `(subPkSeed, subPkRoot)`. The wallet
 //!      contract validates the C11 sig and, as a side effect, records
-//!      `slots[keccak256(r)] = keccak256(subPkSeed || subPkRoot)`.
+//!      `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`.
 //!
 //!   2. Type 2 — user tx UserOp. `callData = execute(to, value, data)`.
 //!      Signature wraps a FORS+C sig against the registered sub-key.
@@ -587,7 +587,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
         // Deterministic r per (master, slot_index). H(r) is the on-chain slotKey.
         let r = jardin_fosc::hash::jardin_slot_r(&*jardin_master_entropy, new_slot_index);
-        h_r = jardin_fosc::hash::keccak256(&r);
+        h_r = jardin_fosc::hash::sha256(&r);
 
         // Type 1 callData: execute(sender, 0, "")
         let t1_tx = Eip1559Tx {
