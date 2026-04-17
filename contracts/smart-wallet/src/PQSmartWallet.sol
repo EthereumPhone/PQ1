@@ -11,31 +11,25 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 /// @title PQSmartWallet
 ///
 /// @notice Pure post-quantum ERC-4337 v0.9 account. Forked from Coinbase
-///         Smart Wallet's `CoinbaseSmartWallet` with every classical signer
-///         path (EOA / ECDSA, WebAuthn / P-256) stripped out. The only
-///         signature primitive is SPHINCS+C10 routed through the shared
-///         `c10Verifier`.
+///         Smart Wallet's `CoinbaseSmartWallet`, stripped of every classical
+///         (EOA / P-256) signer path. The only signature primitive is
+///         SPHINCS+C10 routed through `c10Verifier`.
 ///
-///         Owners are stored in `PQMultiOwnable` as 64-byte blobs:
-///         `pkSeed (32) || pkRoot (32)`. Both values use the N-mask layout
-///         (top 16 bytes populated, bottom 16 zero) that the on-chain Yul
-///         C10 verifier expects. A `SignatureWrapper` identifies which
-///         owner index signed the UserOp.
+///         **Deployment model**: this contract is the shared
+///         *implementation* behind ERC-1967 proxies. Every user wallet is a
+///         ~55-byte proxy that `DELEGATECALL`s here. The impl is deployed
+///         once per chain; per-user deploys cost ~50k gas instead of the
+///         ~1.1M a direct-deploy would cost.
 ///
-///         Roles enforced in `_validateSignature`:
-///           * **Bootstrap** (`ownerIndex == 0`) — immutable per wallet,
-///             set at construction from `masterPkSeed || masterPkRoot`.
-///             Only authorised to call `addOwnerBytes(bytes)`. Used to
-///             rotate in new slot owners once the current slot hits its
-///             cap. Bumps `bootstrapUses`, capped at `MAX_BOOTSTRAP_USES`.
+///         The per-proxy mutable state lives in `PQMultiOwnable`'s ERC-7201
+///         storage slot:
+///           * `ownerAtIndex[0]` — bootstrap C10 pubkey, immutable per wallet
+///           * `ownerAtIndex[i >= 1]` — slot C10 pubkeys, rotatable
+///           * `bootstrapUses` / `slotUses[i]` — per-chain usage counters
 ///
-///           * **Slot** (`ownerIndex >= 1`) — per-(chain, slot_index) C10
-///             key derived from the seed. Only authorised to call
-///             `execute`, `executeBatch`, or `removeOwnerAtIndex`. Bumps
-///             `slotUses[ownerIndex]`, capped at `MAX_SLOT_USES`.
-///
-///         Index 0 (bootstrap) is always slot 0 of the factory. Slot
-///         `slot_index = N` on chain X lives at `ownerIndex = N + 1`.
+///         `entryPoint` and `c10Verifier` are impl-level immutables (they
+///         are the same for every wallet on a given chain), so proxies read
+///         them straight from the impl bytecode — no per-wallet storage.
 ///
 /// @author PQSigner OS
 contract PQSmartWallet is IAccount, PQMultiOwnable {
@@ -47,20 +41,10 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
         bytes signatureData;
     }
 
-    // ── Immutables (per-wallet) ─────────────────────────────────────
+    // ── Impl-level immutables (chain-level invariants) ─────────────
 
     IEntryPoint private immutable _entryPoint;
     ISPHINCSVerifier public immutable c10Verifier;
-
-    /// @notice Bootstrap C10 public seed (N-mask layout).
-    bytes32 public immutable masterPkSeed;
-
-    /// @notice Bootstrap C10 hypertree root (N-mask layout).
-    bytes32 public immutable masterPkRoot;
-
-    /// @notice Address of the factory that CREATE2-deployed this wallet.
-    ///         Only this address may call `initialize`.
-    address public immutable factory;
 
     // ── Config constants ────────────────────────────────────────────
 
@@ -81,49 +65,63 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
 
     error NotFromEntryPoint();
     error NotFromSelf();
-    error NotFromFactory();
     error AlreadyInitialized();
-    error BootstrapCalldataMustBeAddOwner();
-    error SlotCalldataNotAllowed();
 
     // ── Init ────────────────────────────────────────────────────────
 
-    /// @dev Address dependency only on `(ep, c10, masterPkSeed, masterPkRoot)`.
-    ///      Slot-0 is NOT a constructor arg — it is added by `initialize`
-    ///      so the CREATE2 address stays identical across chains.
-    constructor(
-        IEntryPoint ep,
-        ISPHINCSVerifier c10,
-        bytes32 masterPkSeed_,
-        bytes32 masterPkRoot_
-    ) {
+    /// @dev Constructor runs ONLY on the impl contract, not on proxies.
+    ///      We seed one dummy owner at index 0 so `initialize` reverts when
+    ///      called directly on the impl (proxies have their own storage, so
+    ///      `nextOwnerIndex() == 0` for them and they still initialise).
+    constructor(IEntryPoint ep, ISPHINCSVerifier c10) {
         _entryPoint = ep;
         c10Verifier = c10;
-        masterPkSeed = masterPkSeed_;
-        masterPkRoot = masterPkRoot_;
-        factory = msg.sender;
 
-        // Pre-register the bootstrap key at ownerIndex 0. The factory
-        // will tack on slot-0 at ownerIndex 1 via `initialize` in the
-        // same tx.
-        bytes[] memory initOwners = new bytes[](1);
-        initOwners[0] = abi.encodePacked(masterPkSeed_, masterPkRoot_);
-        _initializeOwners(initOwners);
+        bytes[] memory lockOut = new bytes[](1);
+        lockOut[0] = abi.encodePacked(bytes32(0), bytes32(0));
+        _initializeOwners(lockOut);
     }
 
-    /// @notice Factory-only: append the per-chain slot-0 owner. Callable
-    ///         once, directly after CREATE2, by the factory that already
-    ///         verified the bootstrap C10 signature over the slot-0 bytes.
-    function initialize(bytes calldata slot0OwnerBytes) external {
-        if (msg.sender != factory) revert NotFromFactory();
-        if (nextOwnerIndex() != 1) revert AlreadyInitialized();
-        _addOwner(slot0OwnerBytes);
+    /// @notice Called exactly once, via the factory, right after CREATE2
+    ///         of the proxy. The factory has already verified the bootstrap
+    ///         C10 signature over `slot0OwnerBytes` before issuing this
+    ///         call, so we accept it as-is.
+    ///
+    ///         The one-shot guard (`nextOwnerIndex() != 0`) is sufficient
+    ///         because the factory invokes this atomically in the same tx
+    ///         as `LibClone.createDeterministicERC1967`; there is no window
+    ///         for a front-runner to call `initialize` first.
+    function initialize(bytes calldata bootstrapOwnerBytes, bytes calldata slot0OwnerBytes) external {
+        if (nextOwnerIndex() != 0) revert AlreadyInitialized();
+        bytes[] memory owners = new bytes[](2);
+        owners[0] = bootstrapOwnerBytes;
+        owners[1] = slot0OwnerBytes;
+        _initializeOwners(owners);
     }
 
     // ── IAccount ────────────────────────────────────────────────────
 
     function entryPoint() external view returns (IEntryPoint) {
         return _entryPoint;
+    }
+
+    /// @notice Bootstrap pubkey seed (first 32 bytes of `ownerAtIndex(0)`).
+    ///         Exposed for companion / off-chain tooling.
+    function masterPkSeed() external view returns (bytes32 seed) {
+        bytes memory b = ownerAtIndex(0);
+        if (b.length < 32) return bytes32(0);
+        assembly ("memory-safe") {
+            seed := mload(add(b, 32))
+        }
+    }
+
+    /// @notice Bootstrap pubkey root (bytes 32..64 of `ownerAtIndex(0)`).
+    function masterPkRoot() external view returns (bytes32 root) {
+        bytes memory b = ownerAtIndex(0);
+        if (b.length < 64) return bytes32(0);
+        assembly ("memory-safe") {
+            root := mload(add(b, 64))
+        }
     }
 
     /// @inheritdoc IAccount
@@ -200,11 +198,7 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
     ///         keccak implementation (there is no keccak accelerator on the
     ///         chip, only SHA-256 and SAES). By re-hashing the UserOp fields
     ///         under SHA-256 and signing THAT digest, firmware stays on the
-    ///         fast path end-to-end. The digest still covers every field
-    ///         that affects transaction semantics (sender, nonce,
-    ///         initCode, callData, gas fields, paymaster, entryPoint, chainId),
-    ///         so replay / re-binding attacks are identical to the standard
-    ///         userOpHash model.
+    ///         fast path end-to-end.
     function sphincsDigest(PackedUserOperation calldata userOp) public view returns (bytes32) {
         return sha256(
             abi.encodePacked(
@@ -233,15 +227,7 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
         //   [0..32)    ownerIndex
         //   [32..64)   offset to bytes (MUST be 0x40)
         //   [64..96)   inner sig length (MUST be C10_SIG_LEN)
-        //   [96..96+C10_SIG_LEN) inner C10 signature bytes
-        //
-        // Abi-decoding inside a try/catch turns out to consume ~40 KB of
-        // memory on a 4008-byte payload (each decode materialises the
-        // inner bytes twice), which trips the EVM's `msize` limit on
-        // some bundler sims. Parsing inline sidesteps that and lets us
-        // reject malformed sigs with SIG_VALIDATION_FAILED instead of a
-        // revert.
-        // ABI encoding pads the inner `bytes` up to a 32-byte boundary.
+        //   [96..96+padded) inner C10 sig (padded to 32-byte boundary)
         uint256 paddedInner = ((C10_SIG_LEN + 31) / 32) * 32;
         uint256 expectedLen = 96 + paddedInner;
         if (sig.length != expectedLen) return SIG_VALIDATION_FAILED;

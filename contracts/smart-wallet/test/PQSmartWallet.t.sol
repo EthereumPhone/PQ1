@@ -7,15 +7,17 @@ import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOper
 
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
+import {PQMultiOwnable} from "../src/PQMultiOwnable.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 
-/// @notice End-to-end tests for the Coinbase-derived post-quantum smart
-///         wallet + factory. Focuses on dispatch + storage invariants; the
-///         real C10 verifier is tested separately by `SPHINCsC10Asm.t.sol`.
+/// @notice End-to-end tests for the post-quantum smart wallet + proxy
+///         factory. The real C10 verifier is tested separately by
+///         `SPHINCsC10Asm.t.sol`.
 contract PQSmartWalletTest is Test {
     address constant ENTRY_POINT_ADDR = address(0x4337);
 
     MockSPHINCSVerifier internal c10;
+    PQSmartWallet internal impl;
     PQSmartWalletFactory internal factory;
 
     bytes32 internal constant MASTER_PK_SEED = bytes32(uint256(0xaaaa) << 240);
@@ -27,24 +29,24 @@ contract PQSmartWalletTest is Test {
     bytes32 internal constant SLOT1_PK_SEED = bytes32(uint256(0xeeee) << 240);
     bytes32 internal constant SLOT1_PK_ROOT = bytes32(uint256(0xffff) << 240);
 
-    bytes internal constant FACTORY_SIG = hex"aaaa"; // mock accepts any bytes when setValid(true)
+    bytes internal constant FACTORY_SIG = hex"aaaa"; // mock accepts anything when setValid(true)
 
     function setUp() public {
         c10 = new MockSPHINCSVerifier();
-        factory = new PQSmartWalletFactory(IEntryPoint(ENTRY_POINT_ADDR), c10);
+        impl = new PQSmartWallet(IEntryPoint(ENTRY_POINT_ADDR), c10);
+        factory = new PQSmartWalletFactory(address(impl), c10);
     }
 
     // ── helpers ─────────────────────────────────────────────────────
 
     function _deployWallet() internal returns (PQSmartWallet) {
         c10.setValid(true);
-        PQSmartWallet w = factory.createAccount(
+        return factory.createAccount(
             MASTER_PK_SEED, MASTER_PK_ROOT,
             SLOT0_PK_SEED, SLOT0_PK_ROOT,
             uint64(block.chainid),
             FACTORY_SIG
         );
-        return w;
     }
 
     function _wrapSig(uint256 ownerIndex, bytes memory innerSig) internal pure returns (bytes memory) {
@@ -52,7 +54,6 @@ contract PQSmartWalletTest is Test {
     }
 
     function _fakeC10Sig() internal pure returns (bytes memory) {
-        // C10 sig is always exactly 4008 bytes; content doesn't matter for the mock.
         return new bytes(4008);
     }
 
@@ -77,7 +78,8 @@ contract PQSmartWalletTest is Test {
     function test_factoryAddressPerUserStableAcrossChains() public {
         address a = factory.getAddress(MASTER_PK_SEED, MASTER_PK_ROOT);
 
-        // Switch chainId, predict again; address must NOT change.
+        // Chain-switch: address depends only on (factory, impl, salt), all
+        // invariant to chainId, so the predicted address must not move.
         vm.chainId(42161);
         address b = factory.getAddress(MASTER_PK_SEED, MASTER_PK_ROOT);
         assertEq(a, b, "wallet address must be independent of chainId");
@@ -98,6 +100,15 @@ contract PQSmartWalletTest is Test {
         assertEq(w.ownerAtIndex(1).length, 64);
     }
 
+    function test_factoryDeploysProxyNotImpl() public {
+        PQSmartWallet w = _deployWallet();
+        assertTrue(address(w).code.length > 0 && address(w).code.length < 200,
+            "wallet should be a tiny ~55B ERC-1967 proxy, not the full impl");
+        assertTrue(address(impl).code.length > 1000,
+            "impl should be the full bytecode");
+        assertTrue(address(w) != address(impl), "proxy must not be the impl");
+    }
+
     function test_factoryIdempotentSecondCall() public {
         PQSmartWallet a = _deployWallet();
         PQSmartWallet b = factory.createAccount(
@@ -107,6 +118,12 @@ contract PQSmartWalletTest is Test {
             FACTORY_SIG
         );
         assertEq(address(a), address(b));
+    }
+
+    function test_implInitializeReverts() public {
+        bytes memory b = abi.encodePacked(MASTER_PK_SEED, MASTER_PK_ROOT);
+        vm.expectRevert(PQSmartWallet.AlreadyInitialized.selector);
+        impl.initialize(b, b);
     }
 
     // ── Factory: squat defence ──────────────────────────────────────
@@ -137,10 +154,8 @@ contract PQSmartWalletTest is Test {
     }
 
     function test_factorySquatAttempt() public {
-        // Victim's bootstrap pubkey is public; attacker tries to deploy
-        // wallet at victim's address with the attacker's slot0. They do
-        // not have the bootstrap sk, so `factorySig` verification fails
-        // (mock returns false when setValid(false)).
+        // Attacker has the victim's public bootstrap key but no sk, so
+        // `factorySig` verification fails.
         c10.setValid(false);
 
         bytes32 attackerSlot0Seed = bytes32(uint256(0x1111) << 240);
@@ -154,30 +169,12 @@ contract PQSmartWalletTest is Test {
             FACTORY_SIG
         );
 
-        // Address isn't squatted — re-running with the real sig works.
+        // Real owner can still land on the same address with the real sig.
         c10.setValid(true);
         PQSmartWallet w = _deployWallet();
-        // slot-0 at ownerIndex 1 MUST be the victim's, not the attacker's.
         bytes memory got = w.ownerAtIndex(1);
         bytes memory want = abi.encodePacked(SLOT0_PK_SEED, SLOT0_PK_ROOT);
         assertEq(keccak256(got), keccak256(want), "slot0 must be victim's, not attacker's");
-    }
-
-    // ── Wallet: initialize gating ───────────────────────────────────
-
-    function test_initializeOnlyFactory() public {
-        PQSmartWallet w = _deployWallet();
-        bytes memory slot1Bytes = abi.encodePacked(SLOT1_PK_SEED, SLOT1_PK_ROOT);
-        vm.expectRevert(PQSmartWallet.NotFromFactory.selector);
-        w.initialize(slot1Bytes);
-    }
-
-    function test_initializeTwiceReverts() public {
-        PQSmartWallet w = _deployWallet();
-        bytes memory slot1Bytes = abi.encodePacked(SLOT1_PK_SEED, SLOT1_PK_ROOT);
-        vm.prank(address(factory));
-        vm.expectRevert(PQSmartWallet.AlreadyInitialized.selector);
-        w.initialize(slot1Bytes);
     }
 
     // ── Wallet: signature validation & role split ──────────────────
@@ -243,7 +240,7 @@ contract PQSmartWalletTest is Test {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
         bytes memory callData = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
-        bytes memory sig = _wrapSig(1, new bytes(4007)); // off-by-one
+        bytes memory sig = _wrapSig(1, new bytes(4007));
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(0xabc)), 0);
         assertEq(vd, 1);
@@ -265,7 +262,6 @@ contract PQSmartWalletTest is Test {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
 
-        // Bootstrap adds slot1 as ownerIndex 2.
         bytes memory slot1Bytes = abi.encodePacked(SLOT1_PK_SEED, SLOT1_PK_ROOT);
         bytes memory addOwnerCall = abi.encodeCall(w.addOwnerBytes, (slot1Bytes));
         bytes memory bootstrapSig = _wrapSig(0, _fakeC10Sig());
@@ -275,12 +271,10 @@ contract PQSmartWalletTest is Test {
             0
         );
 
-        // Simulate EntryPoint executing the addOwner self-call.
         vm.prank(address(w));
         w.addOwnerBytes(slot1Bytes);
         assertEq(w.nextOwnerIndex(), 3);
 
-        // Slot1 signs an execute.
         bytes memory execCall = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
         bytes memory slot1Sig = _wrapSig(2, _fakeC10Sig());
         vm.prank(ENTRY_POINT_ADDR);
@@ -297,16 +291,15 @@ contract PQSmartWalletTest is Test {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
 
-        // Write max-1 bootstrap uses directly into storage.
+        // bootstrapUses is field #4 of PQMultiOwnableStorage.
         bytes32 base = 0x470749eea5ac4a541d6582e535445f94e7300bac9e0e4e5577fd3336b407d000;
-        bytes32 slot = bytes32(uint256(base) + 4); // bootstrapUses is field #4 of the struct
+        bytes32 slot = bytes32(uint256(base) + 4);
         vm.store(address(w), slot, bytes32(uint256(65_535)));
 
         bytes memory slot1Bytes = abi.encodePacked(SLOT1_PK_SEED, SLOT1_PK_ROOT);
         bytes memory addOwnerCall = abi.encodeCall(w.addOwnerBytes, (slot1Bytes));
         bytes memory bootstrapSig = _wrapSig(0, _fakeC10Sig());
 
-        // 65,536th bootstrap use succeeds.
         vm.prank(ENTRY_POINT_ADDR);
         assertEq(
             w.validateUserOp(_packedOp(address(w), addOwnerCall, bootstrapSig), bytes32(uint256(1)), 0),
@@ -314,7 +307,6 @@ contract PQSmartWalletTest is Test {
         );
         assertEq(w.bootstrapUses(), 65_536);
 
-        // 65,537th is rejected — pre-check guards the verifier.
         vm.prank(ENTRY_POINT_ADDR);
         assertEq(
             w.validateUserOp(_packedOp(address(w), addOwnerCall, bootstrapSig), bytes32(uint256(2)), 0),
@@ -327,7 +319,7 @@ contract PQSmartWalletTest is Test {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
 
-        // slotUses is a mapping at field #5. Its slot for key `1` is
+        // slotUses is field #5 (mapping). Entry slot for key `1` is
         // keccak256(uint256(1) || uint256(base+5)).
         bytes32 base = 0x470749eea5ac4a541d6582e535445f94e7300bac9e0e4e5577fd3336b407d000;
         bytes32 mapSlot = bytes32(uint256(base) + 5);

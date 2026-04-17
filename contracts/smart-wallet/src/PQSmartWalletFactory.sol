@@ -1,34 +1,44 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
+import {LibClone} from "solady/utils/LibClone.sol";
 
 import {PQSmartWallet} from "./PQSmartWallet.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 
 /// @title PQSmartWalletFactory
 ///
-/// @notice Deterministic CREATE2 factory for `PQSmartWallet`. The salt is
-///         `sha256(masterPkSeed || masterPkRoot)`, so the same 24-word
-///         seed maps to the same wallet address on every EVM chain.
+/// @notice Deterministic ERC-1967 proxy factory for `PQSmartWallet`. The
+///         factory CREATE2s a ~55-byte proxy that delegate-calls to the
+///         shared `implementation` (deployed once per chain). Per-user
+///         deploy cost drops from ~1.1 M gas (direct contract deploy) to
+///         ~50 k gas (cheap proxy stub).
 ///
-///         The **front-running defence** is the `factorySig` argument:
-///         because the bootstrap pubkey is public (it appears on every
-///         UserOp), an attacker could otherwise call this factory on a
-///         chain the victim has not yet deployed on, supplying *their
-///         own* slot-0 pubkey and capturing the victim's wallet address.
-///         Requiring a C10 signature by the bootstrap key over
-///         `sha256(DOMAIN || chainId || slot0)` prevents that: the
-///         attacker lacks the bootstrap sk and cannot forge the sig.
+///         The CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`, so
+///         the same bootstrap keypair maps to the same wallet address on
+///         every chain **provided the factory and implementation are
+///         deployed at the same addresses on every chain** (achievable via
+///         a singleton deployer like Safe's).
+///
+///         **Front-running defence**: because the bootstrap pubkey is
+///         public and the salt depends only on it, an attacker could
+///         otherwise squat the victim's address on a chain they have not
+///         yet deployed on, installing the attacker's own slot-0 signer.
+///         Requiring a bootstrap-key C10 signature over
+///         `sha256(DOMAIN || chainId || slot0)` closes that hole — the
+///         attacker lacks the bootstrap sk and cannot forge it.
 ///
 /// @author PQSigner OS
 contract PQSmartWalletFactory {
-    IEntryPoint public immutable entryPoint;
+    /// @notice The shared `PQSmartWallet` implementation. Every proxy
+    ///         delegate-calls to this address.
+    address public immutable implementation;
+
+    /// @notice Stateless SPHINCS+C10 verifier used to check `factorySig`.
     ISPHINCSVerifier public immutable c10Verifier;
 
-    /// @notice Domain tag prefixed to the `factorySig` message. Any change
-    ///         to this constant MUST be mirrored in the firmware's
-    ///         `crypto.rs::factory_add_slot0_digest` helper.
+    /// @notice Domain tag prefixed to the `factorySig` message. Must match
+    ///         the firmware's `factory_add_slot0_digest` helper.
     bytes constant FACTORY_ADD_SLOT_DOMAIN = "pqwallet-factory-add-slot";
 
     event AccountCreated(
@@ -38,17 +48,18 @@ contract PQSmartWalletFactory {
         uint64 chainId
     );
 
+    error ImplementationUndeployed();
     error WrongChainId(uint64 expected, uint64 supplied);
     error InvalidFactorySignature();
-    error InvalidSlot0Length(uint256 length);
 
-    constructor(IEntryPoint ep, ISPHINCSVerifier c10) {
-        entryPoint = ep;
+    constructor(address impl, ISPHINCSVerifier c10) {
+        if (impl.code.length == 0) revert ImplementationUndeployed();
+        implementation = impl;
         c10Verifier = c10;
     }
 
-    /// @notice Deploy the wallet at its deterministic CREATE2 address, or
-    ///         return the existing deployment if the address is already
+    /// @notice Deploy the user's wallet proxy at its deterministic CREATE2
+    ///         address, or return the existing deployment if already
     ///         populated.
     ///
     /// @param masterPkSeed   Bootstrap pubkey seed (N-mask layout).
@@ -65,15 +76,17 @@ contract PQSmartWalletFactory {
         bytes32 slot0PkRoot,
         uint64 chainId,
         bytes calldata factorySig
-    ) external returns (PQSmartWallet account) {
+    ) external payable returns (PQSmartWallet account) {
         if (chainId != block.chainid) revert WrongChainId(uint64(block.chainid), chainId);
 
-        address predicted = getAddress(masterPkSeed, masterPkRoot);
+        bytes32 salt = _salt(masterPkSeed, masterPkRoot);
+        address predicted = LibClone.predictDeterministicAddressERC1967(implementation, salt, address(this));
+
         if (predicted.code.length > 0) {
             return PQSmartWallet(payable(predicted));
         }
 
-        // 1) Verify the bootstrap signature authorising slot-0 on THIS chain.
+        // Squat defence: verify bootstrap authorised this slot-0 on this chain.
         bytes32 digest = addSlot0Digest(chainId, slot0PkSeed, slot0PkRoot);
         bool ok;
         try c10Verifier.verify(masterPkSeed, masterPkRoot, digest, factorySig) returns (bool v) {
@@ -83,34 +96,30 @@ contract PQSmartWalletFactory {
         }
         if (!ok) revert InvalidFactorySignature();
 
-        // 2) CREATE2 deploy — address is determined purely by the two
-        //    master-key args and this factory's address.
-        bytes32 salt = _salt(masterPkSeed, masterPkRoot);
-        account = new PQSmartWallet{salt: salt}(entryPoint, c10Verifier, masterPkSeed, masterPkRoot);
+        // CREATE2 the ERC-1967 proxy stub (always succeeds here — we
+        // already handled the `alreadyDeployed` branch above).
+        (, address deployed) = LibClone.createDeterministicERC1967(msg.value, implementation, salt);
+        account = PQSmartWallet(payable(deployed));
 
-        // 3) Add slot-0 owner at index 1.
+        // Initialise atomically — no front-runner window between
+        // CREATE2 and this call.
+        bytes memory bootstrapBytes = abi.encodePacked(masterPkSeed, masterPkRoot);
         bytes memory slot0Bytes = abi.encodePacked(slot0PkSeed, slot0PkRoot);
-        account.initialize(slot0Bytes);
+        account.initialize(bootstrapBytes, slot0Bytes);
 
-        emit AccountCreated(address(account), masterPkSeed, masterPkRoot, chainId);
+        emit AccountCreated(deployed, masterPkSeed, masterPkRoot, chainId);
     }
 
-    /// @notice Predict the deterministic address for a bootstrap keypair.
-    ///         Slot-0 / chainId do NOT feed into the address.
+    /// @notice Predict the deterministic wallet address. Chain-independent
+    ///         provided the factory + impl are deployed at the same
+    ///         addresses on every chain.
     function getAddress(bytes32 masterPkSeed, bytes32 masterPkRoot)
         public
         view
         returns (address)
     {
         bytes32 salt = _salt(masterPkSeed, masterPkRoot);
-        bytes32 initCodeHash = keccak256(
-            abi.encodePacked(
-                type(PQSmartWallet).creationCode,
-                abi.encode(entryPoint, c10Verifier, masterPkSeed, masterPkRoot)
-            )
-        );
-        bytes32 h = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, initCodeHash));
-        return address(uint160(uint256(h)));
+        return LibClone.predictDeterministicAddressERC1967(implementation, salt, address(this));
     }
 
     /// @notice SHA-256 digest the firmware signs to authorise slot-0 on a
