@@ -558,15 +558,38 @@ pub const FLAG_INCLUDE_INIT_CODE: u32 = 0x8000_0000;
 /// single UserOp.
 pub const FLAG_REGISTER_SLOT: u32 = 0x4000_0000;
 
-/// Bit mask of the flags field reserved for the slot index.
-pub const SLOT_INDEX_MASK: u32 = !(FLAG_INCLUDE_INIT_CODE | FLAG_REGISTER_SLOT);
+/// Bit mask + shift for the BIP-44-style account index encoded in flags.
+///
+/// Flags layout (MSB to LSB):
+///   bit  31         30          29..22                     21..0
+///       INIT_CODE  REG_SLOT    account_index (8 bits)     slot_index (22 bits)
+///
+/// 8 bits gives 256 accounts per seed — well beyond what any user will
+/// realistically need. The remaining 22 bits leave room for ~4M slots
+/// per (account, chain), several orders of magnitude above the on-chain
+/// `MAX_SLOT_USES = 65_536` cap.
+///
+/// Account 0 is the legacy single-account derivation: its bootstrap C10
+/// keys and JARDÍN master entropy stay byte-identical to the pre-multi-
+/// account firmware so existing seeds still land at the same on-chain
+/// address. Accounts 1..=255 use new domain-tagged KDFs (see
+/// `secure/src/crypto.rs`).
+pub const ACCOUNT_INDEX_MASK: u32 = 0x3FC0_0000;
+pub const ACCOUNT_INDEX_SHIFT: u32 = 22;
+/// Maximum representable account index (inclusive).
+pub const MAX_ACCOUNT_INDEX: u32 = 0xFF;
+
+/// Bit mask of the flags field reserved for the slot index. Narrowed to
+/// 22 bits to make room for `ACCOUNT_INDEX_MASK`.
+pub const SLOT_INDEX_MASK: u32 =
+    !(FLAG_INCLUDE_INIT_CODE | FLAG_REGISTER_SLOT | ACCOUNT_INDEX_MASK);
 
 /// Unified CMD_SIGN_USEROP v3 payload layout.
 ///
 /// | off | size | field |
 /// |-----|------|-------|
 /// |  0  |  8  | chain_id (u64 BE) |
-/// |  8  |  4  | flags (u32 BE: bit 31 = include initCode, bit 30 = register slot, bits 29..0 = slot_index) |
+/// |  8  |  4  | flags (u32 BE: bit 31 = include initCode, bit 30 = register slot, bits 29..22 = account_index, bits 21..0 = slot_index) |
 /// | 12  | 20  | sender (PQJardinWallet address — firmware does not recompute) |
 /// | 32  | 20  | entry_point (EntryPoint v0.9 address) |
 /// | 52  | 32  | nonce (u256 BE; base nonce for Type 1 if registration needed, else Type 2) |

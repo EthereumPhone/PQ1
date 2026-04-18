@@ -471,20 +471,39 @@ pub fn derive_main_vk_from_entropy(
 // domain-separated SHA-256, preserving the recovery contract:
 // same 24 words + chain_id + slot_index → same JARDIN slot.
 
-/// Derive the master entropy for JARDIN FORS+C slots from the BIP-39 seed.
+/// Derive the master entropy for JARDIN slot keys from the BIP-39 seed.
 /// Domain-separated so it is independent from C10 bootstrap keys.
-pub fn jardin_master_entropy_from_bip39(bip39_seed: &[u8; 64]) -> [u8; 32] {
-    kdf_sha256(b"pqwallet-jardin-master", bip39_seed, 0)
+///
+/// `account_index == 0` keeps the legacy single-account formula
+/// (`kdf_sha256("pqwallet-jardin-master", bip39_seed, 0)`) so that
+/// pre-multi-account seeds derive the same slot family. Indices 1..=255
+/// fold the index into a new domain tag — different account, different
+/// slot identity.
+pub fn jardin_master_entropy_from_bip39(
+    bip39_seed: &[u8; 64],
+    account_index: u32,
+) -> [u8; 32] {
+    if account_index == 0 {
+        kdf_sha256(b"pqwallet-jardin-master", bip39_seed, 0)
+    } else {
+        let mut h = Sha256::new();
+        h.update(b"pqwallet-jardin-master-acct");
+        h.update(bip39_seed);
+        h.update(account_index.to_be_bytes());
+        h.finalize().into()
+    }
 }
 
 /// Derive JARDIN master entropy from raw BIP-39 entropy (runs the full
-/// BIP-39 chain: mnemonic → PBKDF2 → domain KDF).
+/// BIP-39 chain: mnemonic → PBKDF2 → domain KDF). See
+/// [`jardin_master_entropy_from_bip39`] for the `account_index` contract.
 pub fn jardin_master_entropy_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
+    account_index: u32,
 ) -> [u8; 32] {
     let mnemonic = Mnemonic::from_entropy(entropy);
     let mut bip39_seed = mnemonic.to_seed("");
-    let master = jardin_master_entropy_from_bip39(&bip39_seed);
+    let master = jardin_master_entropy_from_bip39(&bip39_seed, account_index);
     bip39_seed.zeroize();
     master
 }
@@ -523,19 +542,42 @@ pub fn jardin_master_entropy_from_entropy(
 ///
 /// `master = HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (only the first 32
 /// bytes are consumed; the remainder is discarded and wiped).
-pub fn derive_c10_master_from_bip39_seed(bip39_seed: &[u8; 64]) -> ([u8; 32], [u8; 32]) {
+///
+/// `account_index == 0` reproduces the legacy single-account derivation
+/// byte-for-byte (recovery contract). For accounts 1..=255 the master is
+/// `HMAC-SHA512("sphincs-c6-v1-acct", bip39_seed || account_index_be4)`,
+/// then the same `pk_seed`/`sk_seed` SHA-256 splits run on top — a fresh
+/// SPHINCS+ identity per account, but reusing the same downstream layout.
+pub fn derive_c10_master_from_bip39_seed(
+    bip39_seed: &[u8; 64],
+    account_index: u32,
+) -> ([u8; 32], [u8; 32]) {
     use hmac::{Hmac, Mac};
     use sha2::Sha512;
 
-    // Step 1: HMAC-SHA512("sphincs-c6-v1", bip39_seed) → 64-byte master.
-    // Length note: the tag is exactly 13 ASCII bytes; NO length-prefix, NO
-    // NUL terminator. Matches `keygen.rs:38` in the reference.
+    // Step 1: HMAC-SHA512(domain, key-material) → 64-byte master.
+    //
+    // Account 0: domain = b"sphincs-c6-v1" (13 ASCII bytes; NO length-
+    // prefix, NO NUL terminator — matches `keygen.rs:38` in the reference).
+    // The HMAC input is the BIP-39 seed only.
+    //
+    // Accounts 1..=255: domain = b"sphincs-c6-v1-acct"; HMAC input is
+    // bip39_seed || account_index_be4. Folds the index into the master
+    // entropy so each account has an independent C10 hypertree.
     //
     // Use the `Mac::new_from_slice` path explicitly because both `Mac`
     // and `KeyInit` traits define an identically-named constructor.
-    let mut mac = <Hmac<Sha512> as Mac>::new_from_slice(b"sphincs-c6-v1")
+    let domain: &[u8] = if account_index == 0 {
+        b"sphincs-c6-v1"
+    } else {
+        b"sphincs-c6-v1-acct"
+    };
+    let mut mac = <Hmac<Sha512> as Mac>::new_from_slice(domain)
         .expect("HMAC-SHA512 accepts any key length");
     mac.update(bip39_seed);
+    if account_index != 0 {
+        mac.update(&account_index.to_be_bytes());
+    }
     let master_ga = mac.finalize().into_bytes();
     let mut master = [0u8; 64];
     master.copy_from_slice(&master_ga);
@@ -563,13 +605,15 @@ pub fn derive_c10_master_from_bip39_seed(bip39_seed: &[u8; 64]) -> ([u8; 32], [u
 }
 
 /// Convenience wrapper: run the BIP-39 chain from 32-byte entropy, then
-/// derive the C10 bootstrap keys. Wipes the intermediate `bip39_seed`.
+/// derive the C10 bootstrap keys for `account_index`. Wipes the
+/// intermediate `bip39_seed`.
 pub fn derive_c10_master_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
+    account_index: u32,
 ) -> ([u8; 32], [u8; 32]) {
     let mnemonic = Mnemonic::from_entropy(entropy);
     let mut bip39_seed = mnemonic.to_seed("");
-    let result = derive_c10_master_from_bip39_seed(&bip39_seed);
+    let result = derive_c10_master_from_bip39_seed(&bip39_seed, account_index);
     bip39_seed.zeroize();
     result
 }
@@ -589,8 +633,9 @@ pub fn derive_c10_master_from_entropy(
 /// peripheral; on QEMU it takes much less.
 pub fn derive_c10_master_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
+    account_index: u32,
 ) -> (sphincs_c10::SigningKey, [u8; 32], [u8; 32]) {
-    derive_c10_master_keypair_from_entropy_with_progress(entropy, |_| {})
+    derive_c10_master_keypair_from_entropy_with_progress(entropy, account_index, |_| {})
 }
 
 /// Like [`derive_c10_master_keypair_from_entropy`] but reports 0..100 keygen
@@ -598,10 +643,11 @@ pub fn derive_c10_master_keypair_from_entropy(
 /// kept responsive during the multi-second operation.
 pub fn derive_c10_master_keypair_from_entropy_with_progress(
     entropy: &[u8; ENTROPY_LEN],
+    account_index: u32,
     progress: impl Fn(u8),
 ) -> (sphincs_c10::SigningKey, [u8; 32], [u8; 32]) {
     progress(0);
-    let (pk_seed_32, sk_seed_32) = derive_c10_master_from_entropy(entropy);
+    let (pk_seed_32, sk_seed_32) = derive_c10_master_from_entropy(entropy, account_index);
 
     // Pack pk_seed into the 16-byte N-slot shape the sphincs-c10 crate expects.
     let mut pk_seed_16 = [0u8; 16];
@@ -969,7 +1015,7 @@ mod c10_derivation_tests {
         let mut seed = [0u8; 64];
         decode_hex_into(REF_BIP39_SEED, &mut seed);
 
-        let (pk_seed, sk_seed) = derive_c10_master_from_bip39_seed(&seed);
+        let (pk_seed, sk_seed) = derive_c10_master_from_bip39_seed(&seed, 0);
         assert_eq!(hex(&pk_seed), REF_PK_SEED, "pk_seed drifted");
         assert_eq!(hex(&sk_seed), REF_SK_SEED, "sk_seed drifted");
     }
@@ -978,7 +1024,7 @@ mod c10_derivation_tests {
     fn derive_c10_master_from_entropy_matches_reference() {
         // End-to-end from raw 32-byte entropy (which is what we actually
         // have on-device) through mnemonic → PBKDF2 → HMAC-SHA512 → SHA-256.
-        let (pk_seed, sk_seed) = derive_c10_master_from_entropy(&[0u8; 32]);
+        let (pk_seed, sk_seed) = derive_c10_master_from_entropy(&[0u8; 32], 0);
         assert_eq!(hex(&pk_seed), REF_PK_SEED, "end-to-end pk_seed drifted");
         assert_eq!(hex(&sk_seed), REF_SK_SEED, "end-to-end sk_seed drifted");
     }
@@ -986,22 +1032,53 @@ mod c10_derivation_tests {
     #[test]
     fn c10_master_top_16_bytes_kept_bottom_zeroed() {
         // pk_seed must have its bottom 16 bytes zero (the N-mask).
-        let (pk_seed, _) = derive_c10_master_from_bip39_seed(&[0u8; 64]);
+        let (pk_seed, _) = derive_c10_master_from_bip39_seed(&[0u8; 64], 0);
         assert!(pk_seed[16..].iter().all(|&b| b == 0), "pk_seed bottom 16 must be zero");
     }
 
     #[test]
+    fn c10_master_account_indices_yield_distinct_keys() {
+        // Recovery contract: account 0 stays byte-identical to the legacy
+        // single-account derivation; accounts 1+ MUST diverge so a single
+        // seed yields independent on-chain wallet addresses per account.
+        let seed = [0xAAu8; 32];
+        let (pk0, sk0) = derive_c10_master_from_entropy(&seed, 0);
+        let (pk1, sk1) = derive_c10_master_from_entropy(&seed, 1);
+        let (pk2, sk2) = derive_c10_master_from_entropy(&seed, 2);
+        let (pk255, sk255) = derive_c10_master_from_entropy(&seed, 255);
+        assert_ne!(pk0, pk1, "account 1 must produce a distinct pk_seed");
+        assert_ne!(sk0, sk1, "account 1 must produce a distinct sk_seed");
+        assert_ne!(pk1, pk2, "account 2 must differ from account 1");
+        assert_ne!(sk1, sk2, "account 2 must differ from account 1");
+        assert_ne!(pk2, pk255, "account 255 must differ from account 2");
+        assert_ne!(sk2, sk255, "account 255 must differ from account 2");
+        // Determinism per account.
+        let (pk1b, sk1b) = derive_c10_master_from_entropy(&seed, 1);
+        assert_eq!((pk1, sk1), (pk1b, sk1b), "account 1 must be deterministic");
+    }
+
+    #[test]
+    fn jardin_master_entropy_account_indices_diverge() {
+        let seed = [0xCDu8; 32];
+        let m0 = jardin_master_entropy_from_entropy(&seed, 0);
+        let m1 = jardin_master_entropy_from_entropy(&seed, 1);
+        let m255 = jardin_master_entropy_from_entropy(&seed, 255);
+        assert_ne!(m0, m1, "JARDIN master entropy must vary per account");
+        assert_ne!(m1, m255, "JARDIN master entropy must vary per account");
+    }
+
+    #[test]
     fn c10_master_is_deterministic() {
-        let (pk1, sk1) = derive_c10_master_from_entropy(&[0xAAu8; 32]);
-        let (pk2, sk2) = derive_c10_master_from_entropy(&[0xAAu8; 32]);
+        let (pk1, sk1) = derive_c10_master_from_entropy(&[0xAAu8; 32], 0);
+        let (pk2, sk2) = derive_c10_master_from_entropy(&[0xAAu8; 32], 0);
         assert_eq!(pk1, pk2);
         assert_eq!(sk1, sk2);
     }
 
     #[test]
     fn c10_master_distinct_entropy_distinct_keys() {
-        let (pk_a, sk_a) = derive_c10_master_from_entropy(&[0u8; 32]);
-        let (pk_b, sk_b) = derive_c10_master_from_entropy(&[1u8; 32]);
+        let (pk_a, sk_a) = derive_c10_master_from_entropy(&[0u8; 32], 0);
+        let (pk_b, sk_b) = derive_c10_master_from_entropy(&[1u8; 32], 0);
         assert_ne!(pk_a, pk_b);
         assert_ne!(sk_a, sk_b);
     }
@@ -1010,7 +1087,7 @@ mod c10_derivation_tests {
     fn c10_master_keypair_produces_valid_signature() {
         // Full Type 1 flow: derive master → sign a 32-byte hash → verify.
         let (sk, master_pk_seed_32, master_pk_root_32) =
-            derive_c10_master_keypair_from_entropy(&[0x17u8; 32]);
+            derive_c10_master_keypair_from_entropy(&[0x17u8; 32], 0);
 
         // master_pk_seed_32 and master_pk_root_32 must be N-masked.
         assert!(master_pk_seed_32[16..].iter().all(|&b| b == 0));

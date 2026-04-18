@@ -37,6 +37,26 @@
   .badge { display: inline-block; padding: 2px 8px; background: #1e3a5f; color: #93c5fd; border-radius: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
   .actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .bundler-url { font-family: ui-monospace, monospace; font-size: 11px; color: #9ca3af; }
+
+  /* Address picker */
+  .picker-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .picker-controls .label { font-size: 12px; color: #9ca3af; }
+  .picker-controls input.page-jump { width: 64px; background: #0a0a0a; border: 1px solid #2a2a30; color: #e5e7eb; padding: 6px 8px; border-radius: 6px; font-family: ui-monospace, monospace; font-size: 12px; text-align: right; }
+  .picker-controls button.nav { padding: 6px 12px; font-size: 13px; }
+  .picker-controls button.nav:disabled { background: #1f2937; color: #6b7280; cursor: not-allowed; }
+  .addr-table { width: 100%; border-collapse: collapse; }
+  .addr-table th { text-align: left; font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #1e1e24; }
+  .addr-table td { padding: 8px 10px; border-bottom: 1px solid #141417; font-size: 12px; vertical-align: middle; }
+  .addr-table tr.active td { background: #0e1f33; }
+  .addr-table .col-idx { width: 56px; color: #6b7280; font-family: ui-monospace, monospace; }
+  .addr-table .col-addr { font-family: ui-monospace, monospace; word-break: break-all; }
+  .addr-table .col-addr.pending { color: #6b7280; font-style: italic; }
+  .addr-table .col-action { width: 80px; text-align: right; }
+  .addr-table button.use-btn { padding: 4px 12px; font-size: 11px; }
+  .addr-table button.use-btn.active { background: #10b981; }
+  .addr-table button.use-btn:hover:not(:disabled):not(.active) { background: #2563eb; }
+  .picker-warn { font-size: 11px; color: #f59e0b; margin-top: 8px; }
+  .picker-foot { font-size: 11px; color: #6b7280; margin-top: 10px; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -59,7 +79,7 @@
     <h2>On-chain Endpoints</h2>
     <div class="row">
       <label>Wallet (sender)</label>
-      <input id="senderAddr" placeholder="0x... CREATE2-predicted wallet address" />
+      <input id="senderAddr" placeholder="0x... CREATE2-predicted wallet address (use Accounts picker below)" />
     </div>
     <div class="row">
       <label>Factory</label>
@@ -78,8 +98,35 @@
       <input id="rpcUrl" value="https://sepolia.base.org" />
     </div>
     <div style="font-size: 12px; color: #6b7280; line-height: 1.5;">
-      Defaults = Base Sepolia PQSigner stack. Fill <strong>Wallet</strong> with the CREATE2-predicted address: <code>cast call &lt;factory&gt; "getAddress(bytes32,bytes32)(address)" &lt;pkSeed&gt; &lt;pkRoot&gt;</code>. For first deploy, the sender <em>must</em> match that prediction — otherwise the signed digest won't verify on-chain.
+      Defaults = Base Sepolia PQSigner stack. <strong>Wallet</strong> is auto-filled by the Accounts picker below. For first deploy, the sender <em>must</em> match the firmware-derived prediction — otherwise the signed digest won't verify on-chain.
     </div>
+  </div>
+
+  <div class="card">
+    <h2>Accounts (one seed → 256 wallets)</h2>
+    <div class="picker-controls">
+      <button id="prevPageBtn" class="nav secondary" disabled>◀ Prev</button>
+      <span class="label">Page</span>
+      <input id="pageJump" class="page-jump" type="number" min="1" max="26" value="1" />
+      <span class="label">of <span id="pageTotal">26</span></span>
+      <button id="nextPageBtn" class="nav secondary">Next ▶</button>
+      <button id="reloadPageBtn" class="nav secondary" title="Re-derive the visible page (forces a cache miss)">↻ Reload</button>
+      <span class="label" style="margin-left:auto">Active: <code id="activeAcctLabel">— (none)</code></span>
+    </div>
+    <table class="addr-table">
+      <thead>
+        <tr>
+          <th class="col-idx">Acct #</th>
+          <th class="col-addr">Address</th>
+          <th class="col-action"></th>
+        </tr>
+      </thead>
+      <tbody id="addrRows"></tbody>
+    </table>
+    <div class="picker-foot">
+      Each account is an independent CREATE2 wallet derived from the same seed. Account 0 keeps your existing address. Loading a fresh page takes ~6 s × 10 = ~60 s on real STM32U585 hardware (one master C10 hypertree keygen per address); revisiting a page is instant (firmware LRU cache, capacity 16).
+    </div>
+    <div class="picker-warn" id="pickerWarn" style="display:none"></div>
   </div>
 
   <div class="card">
@@ -187,9 +234,23 @@ const INS_GET_WALLET_ADDRESS = 0x60;
 const INS_GET_RESPONSE = 0xC0;
 
 // Flags field (bits 31..0, big-endian in the wire payload).
+//
+// Layout (MSB to LSB):
+//   bit  31         30          29..22                     21..0
+//       INIT_CODE  REG_SLOT    account_index (8 bits)     slot_index (22 bits)
+//
+// 8-bit account_index gives 256 distinct CREATE2 wallets per seed; the
+// 22-bit slot_index tail keeps ~4M slots per (account, chain), well
+// above the on-chain `MAX_SLOT_USES = 65_536` cap. Mirrors
+// `shared/src/lib.rs` (ACCOUNT_INDEX_MASK / SLOT_INDEX_MASK).
 const FLAG_INCLUDE_INIT_CODE = 0x80000000 >>> 0;
 const FLAG_REGISTER_SLOT     = 0x40000000;
-const SLOT_INDEX_MASK        = ~(FLAG_INCLUDE_INIT_CODE | FLAG_REGISTER_SLOT) >>> 0;
+const ACCOUNT_INDEX_MASK     = 0x3FC00000;
+const ACCOUNT_INDEX_SHIFT    = 22;
+const MAX_ACCOUNT_INDEX      = 0xFF;
+const SLOT_INDEX_MASK        = (~(FLAG_INCLUDE_INIT_CODE | FLAG_REGISTER_SLOT | ACCOUNT_INDEX_MASK)) >>> 0;
+const ACCOUNTS_PER_PAGE      = 10;
+const TOTAL_ACCOUNT_PAGES    = Math.ceil((MAX_ACCOUNT_INDEX + 1) / ACCOUNTS_PER_PAGE); // 26
 
 const P1_LAST = 0x00;
 const P1_MORE = 0x80;
@@ -234,6 +295,23 @@ const DEFAULT_GAS = {
 let device = null;
 let channelId = 0x0101;
 let lastResult = null;
+
+// Address-picker state.
+//   - `addressCache`: index → "0x…" string. Survives page flips so
+//     the user pays the ~6 s/account derivation cost only once per
+//     account per session (firmware also caches; this avoids an
+//     extra round-trip on top).
+//   - `activeAccountIndex`: the index whose address is currently in
+//     the `senderAddr` input and which `buildSignPayload` will OR
+//     into the flags field.
+//   - `pickerCurrentPage`: zero-based page (0..25).
+//   - `pickerLoading`: re-entry guard so the user can't kick off a
+//     second loadAccountPage() while the first is mid-derivation.
+const addressCache = new Map();
+let activeAccountIndex = 0;
+let pickerCurrentPage = 0;
+let pickerLoading = false;
+let cancelLoad = false;
 
 // ── DOM helpers ────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -468,12 +546,21 @@ const DeviceAPI = {
   },
 
   /// Ask the secure world for the CREATE2-predicted wallet address
-  /// derived from its bootstrap C10 pubkey. First call after unlock
-  /// triggers ~6 s of hypertree keygen in the secure world; subsequent
-  /// calls hit the in-SRAM cache.
-  async getWalletAddress() {
-    const r = await sendApdu(INS_GET_WALLET_ADDRESS, 0, 0);
-    if (r.sw !== SW_OK) throw new Error(`GET_WALLET_ADDRESS SW=0x${r.sw.toString(16)}`);
+  /// for `accountIndex` (0..=255). First call for a given index
+  /// triggers ~6 s of hypertree keygen in the secure world;
+  /// subsequent calls hit the in-SRAM LRU cache (capacity 16) and
+  /// return in <1 ms.
+  ///
+  /// `account_index` is sent as a 4-byte big-endian payload on the
+  /// APDU body. Empty body is also accepted by the firmware as
+  /// account 0 (legacy compatibility).
+  async getWalletAddress(accountIndex = 0) {
+    if (accountIndex < 0 || accountIndex > MAX_ACCOUNT_INDEX) {
+      throw new Error(`account_index out of range: ${accountIndex}`);
+    }
+    const body = u32be(accountIndex >>> 0);
+    const r = await sendApdu(INS_GET_WALLET_ADDRESS, 0, 0, body);
+    if (r.sw !== SW_OK) throw new Error(`GET_WALLET_ADDRESS(acct=${accountIndex}) SW=0x${r.sw.toString(16)}`);
     if (r.data.length !== 20) throw new Error(`unexpected address length ${r.data.length}`);
     return '0x' + bytesToHex(r.data);
   },
@@ -515,10 +602,16 @@ function buildSignPayload(p) {
   // gasFees = (maxPriorityFee << 128) | maxFee
   const gf = concatBytes([u128be(p.maxPriorityFeePerGas), u128be(p.maxFeePerGas)]);
 
-  // Flags u32: bit 31 = FLAG_INCLUDE_INIT_CODE (first deploy),
-  // bit 30 = FLAG_REGISTER_SLOT (rotation), bits 29..0 = slot_index.
-  // The two high bits are mutually exclusive; firmware rejects both set.
+  // Flags u32 layout (mirrors shared/src/lib.rs):
+  //   bit 31           = FLAG_INCLUDE_INIT_CODE (first deploy)
+  //   bit 30           = FLAG_REGISTER_SLOT     (rotation)
+  //   bits 29..22 (8)  = account_index          (BIP-44-style account)
+  //   bits 21..0  (22) = slot_index             (per-account JARDIN slot)
+  //
+  // The two top flag bits are mutually exclusive; firmware rejects both set.
+  const acctIdx = (p.accountIndex >>> 0) & MAX_ACCOUNT_INDEX;
   let flags = (p.slotIndex || 0) & SLOT_INDEX_MASK;
+  flags |= (acctIdx << ACCOUNT_INDEX_SHIFT) & ACCOUNT_INDEX_MASK;
   if (p.registerSlot) flags |= FLAG_REGISTER_SLOT;
   if (p.includeInitCode) flags |= FLAG_INCLUDE_INIT_CODE;
   if (p.registerSlot && p.includeInitCode) {
@@ -864,14 +957,141 @@ $('unlockBtn').addEventListener('click', async () => {
 });
 
 async function autoFillWalletAddress() {
-  try {
-    log('Deriving wallet address on device (first call does bootstrap keygen, ~6 s)...', 'info');
-    const addr = await DeviceAPI.getWalletAddress();
-    $('senderAddr').value = addr;
-    log(`Wallet address: ${addr}`, 'ok');
-  } catch (e) {
-    log(`Wallet-address derive failed: ${e.message} (set sender manually)`, 'warn');
+  // Boot the picker on the page that contains the active account so
+  // the user immediately sees their currently-selected wallet (and the
+  // first ~6 s of keygen is for that one address, not a wasted batch).
+  pickerCurrentPage = Math.floor(activeAccountIndex / ACCOUNTS_PER_PAGE);
+  $('pageJump').value = String(pickerCurrentPage + 1);
+  renderAccountTable();   // shows pending rows immediately
+  await loadAccountPage(pickerCurrentPage);
+  // After load, reset the active row's sender if we have one cached.
+  const cached = addressCache.get(activeAccountIndex);
+  if (cached) {
+    $('senderAddr').value = cached;
+    updateActiveLabel();
   }
+}
+
+// ── Address picker ────────────────────────────────────────────────
+//
+// Renders rows for the currently-selected page. `addressCache` survives
+// page flips, so revisiting a previously-loaded page is instant. Rows
+// without a cached address show "deriving…" text; the page-load loop
+// fills them in one APDU at a time.
+function renderAccountTable() {
+  const tbody = $('addrRows');
+  tbody.innerHTML = '';
+  const start = pickerCurrentPage * ACCOUNTS_PER_PAGE;
+  const end = Math.min(start + ACCOUNTS_PER_PAGE, MAX_ACCOUNT_INDEX + 1);
+  for (let idx = start; idx < end; idx++) {
+    const tr = document.createElement('tr');
+    if (idx === activeAccountIndex) tr.classList.add('active');
+
+    const tdIdx = document.createElement('td');
+    tdIdx.className = 'col-idx';
+    tdIdx.textContent = String(idx);
+    tr.appendChild(tdIdx);
+
+    const tdAddr = document.createElement('td');
+    tdAddr.className = 'col-addr';
+    const cached = addressCache.get(idx);
+    if (cached) {
+      tdAddr.textContent = cached;
+    } else {
+      tdAddr.classList.add('pending');
+      tdAddr.textContent = pickerLoading ? 'deriving on device…' : 'not yet derived';
+    }
+    tr.appendChild(tdAddr);
+
+    const tdAct = document.createElement('td');
+    tdAct.className = 'col-action';
+    const btn = document.createElement('button');
+    btn.className = 'use-btn' + (idx === activeAccountIndex ? ' active' : '');
+    btn.textContent = idx === activeAccountIndex ? '✓ Active' : 'Use';
+    btn.disabled = !cached;
+    btn.addEventListener('click', () => setActiveAccount(idx));
+    tdAct.appendChild(btn);
+    tr.appendChild(tdAct);
+
+    tbody.appendChild(tr);
+  }
+  $('pageTotal').textContent = String(TOTAL_ACCOUNT_PAGES);
+  $('pageJump').max = String(TOTAL_ACCOUNT_PAGES);
+  $('prevPageBtn').disabled = pickerLoading || pickerCurrentPage <= 0;
+  $('nextPageBtn').disabled = pickerLoading || pickerCurrentPage >= TOTAL_ACCOUNT_PAGES - 1;
+  $('reloadPageBtn').disabled = pickerLoading;
+  updateActiveLabel();
+}
+
+function updateActiveLabel() {
+  const lbl = $('activeAcctLabel');
+  const cached = addressCache.get(activeAccountIndex);
+  if (cached) {
+    lbl.textContent = `acct ${activeAccountIndex} → ${cached.slice(0, 10)}…${cached.slice(-6)}`;
+  } else {
+    lbl.textContent = `acct ${activeAccountIndex} (not yet derived)`;
+  }
+}
+
+function setActiveAccount(idx) {
+  if (idx < 0 || idx > MAX_ACCOUNT_INDEX) return;
+  const cached = addressCache.get(idx);
+  if (!cached) {
+    log(`Account ${idx} not derived yet — load its page first`, 'warn');
+    return;
+  }
+  activeAccountIndex = idx;
+  $('senderAddr').value = cached;
+  log(`Active account set to ${idx} (${cached})`, 'ok');
+  renderAccountTable();
+}
+
+async function loadAccountPage(page) {
+  if (pickerLoading) {
+    log('Page load already in progress — ignoring', 'warn');
+    return;
+  }
+  if (page < 0 || page >= TOTAL_ACCOUNT_PAGES) return;
+  pickerCurrentPage = page;
+  $('pageJump').value = String(page + 1);
+  pickerLoading = true;
+  cancelLoad = false;
+  setPickerWarn('');
+  renderAccountTable();
+
+  const start = page * ACCOUNTS_PER_PAGE;
+  const end = Math.min(start + ACCOUNTS_PER_PAGE, MAX_ACCOUNT_INDEX + 1);
+  let derived = 0, hits = 0;
+  const t0 = performance.now();
+  for (let idx = start; idx < end; idx++) {
+    if (cancelLoad) {
+      log(`Page load cancelled at acct ${idx}`, 'warn');
+      break;
+    }
+    if (addressCache.has(idx)) { hits++; continue; }
+    try {
+      const addr = await DeviceAPI.getWalletAddress(idx);
+      addressCache.set(idx, addr);
+      derived++;
+      // Re-render between rows so the user sees progress.
+      renderAccountTable();
+    } catch (e) {
+      log(`acct ${idx}: ${e.message}`, 'err');
+      setPickerWarn(`Stopped at acct ${idx}: ${e.message}`);
+      break;
+    }
+  }
+  const dt = ((performance.now() - t0) / 1000).toFixed(1);
+  pickerLoading = false;
+  renderAccountTable();
+  log(`Page ${page + 1}: ${derived} derived, ${hits} cache hits in ${dt}s`, 'info');
+}
+
+function setPickerWarn(text) {
+  const el = $('pickerWarn');
+  if (!text) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = text;
 }
 
 $('lockBtn').addEventListener('click', async () => {
@@ -880,6 +1100,11 @@ $('lockBtn').addEventListener('click', async () => {
     log('Locked', 'ok');
     setStatus('Locked', 'warn');
     setButtonState(true, false);
+    // Firmware wipes its bootstrap LRU on lock; the JS cache would
+    // become stale on re-unlock if the seed changed. Drop it so the
+    // next page load re-derives everything from scratch.
+    addressCache.clear();
+    renderAccountTable();
   } catch (e) { log(`Lock error: ${e.message}`, 'err'); }
 });
 
@@ -892,6 +1117,7 @@ $('signBtn').addEventListener('click', async () => {
       : '0x' + '42'.repeat(20); // fallback if the user forgot to set it
     const params = {
       chainId: BigInt($('chainId').value),
+      accountIndex: activeAccountIndex >>> 0,
       slotIndex: Number($('slotIndex').value) >>> 0,
       registerSlot: $('registerSlot').checked,
       includeInitCode: $('includeInitCode').checked,
@@ -1020,6 +1246,7 @@ $('testUsdcBtn').addEventListener('click', async () => {
   $('data').value = '0x' + bytesToHex(calldata);
   const params = {
     chainId: USDC_BASE.chainId,
+    accountIndex: activeAccountIndex >>> 0,
     slotIndex: Number($('slotIndex').value) >>> 0,
     registerSlot: $('registerSlot').checked,
     includeInitCode: $('includeInitCode').checked,
@@ -1056,6 +1283,7 @@ $('testZkAaveBtn').addEventListener('click', async () => {
   $('data').value = '0x' + bytesToHex(innerData);
   const params = {
     chainId: 1n,
+    accountIndex: activeAccountIndex >>> 0,
     slotIndex: Number($('slotIndex').value) >>> 0,
     registerSlot: $('registerSlot').checked,
     includeInitCode: $('includeInitCode').checked,
@@ -1109,6 +1337,37 @@ async function refreshStatus() {
     log(`Status error: ${e.message}`, 'err');
   }
 }
+
+// Picker button wiring (safe to attach before connect — they no-op
+// while disconnected because loadAccountPage() will fail at the APDU).
+$('prevPageBtn').addEventListener('click', () => {
+  if (pickerLoading || pickerCurrentPage <= 0) return;
+  loadAccountPage(pickerCurrentPage - 1);
+});
+$('nextPageBtn').addEventListener('click', () => {
+  if (pickerLoading || pickerCurrentPage >= TOTAL_ACCOUNT_PAGES - 1) return;
+  loadAccountPage(pickerCurrentPage + 1);
+});
+$('reloadPageBtn').addEventListener('click', () => {
+  if (pickerLoading) return;
+  // Drop just the visible page so the device gets re-asked. Useful
+  // after a `Lock` if the user wants to re-derive from scratch.
+  const start = pickerCurrentPage * ACCOUNTS_PER_PAGE;
+  for (let idx = start; idx < start + ACCOUNTS_PER_PAGE; idx++) {
+    addressCache.delete(idx);
+  }
+  loadAccountPage(pickerCurrentPage);
+});
+$('pageJump').addEventListener('change', (e) => {
+  let v = parseInt(e.target.value, 10);
+  if (!Number.isFinite(v)) v = 1;
+  v = Math.max(1, Math.min(TOTAL_ACCOUNT_PAGES, v));
+  e.target.value = String(v);
+  if (pickerLoading) return;
+  loadAccountPage(v - 1);
+});
+
+renderAccountTable(); // initial empty render so the table shape is visible
 
 log('Ready. Click Connect to select your device.', 'info');
 </script>

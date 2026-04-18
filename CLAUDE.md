@@ -113,7 +113,8 @@ offset  size  field
   0     8    chain_id (u64 BE)
   8     4    flags (u32 BE: bit 31 = FLAG_INCLUDE_INIT_CODE,
                               bit 30 = FLAG_REGISTER_SLOT,
-                              bits 29..0 = slot_index)
+                              bits 29..22 = account_index (8 bits, 0..=255),
+                              bits 21..0  = slot_index    (22 bits))
  12    20    sender (PQJardinWallet address)
  32    20    entry_point (EntryPoint v0.9 address)
  52    32    nonce (u256 BE, base nonce for the first UserOp in the bundle)
@@ -301,21 +302,32 @@ unrelated to the cutover.
 - Shared types between worlds: `shared/src/lib.rs` with `#[repr(C)]`.
 - Secret types are `!Copy` and `!Clone` (prevent silent duplication).
 
-## Recovery contract (post-all-C10 cutover)
+## Recovery contract (post-all-C10 cutover, multi-account)
+
+A single seed phrase produces **256 independent on-chain wallets**, indexed
+by `account_index ∈ [0, 255]` (BIP-44-style accounts). Account 0 reproduces
+the legacy single-account derivation **byte-for-byte** so pre-multi-account
+seeds keep their existing wallet address. Accounts 1..=255 use new
+domain-tagged KDFs that fold the index into the master entropy.
 
 - **BIP-39 → seed**: PBKDF2-HMAC-SHA512, 2048 iters, empty passphrase (standard).
-- **Seed → C10 bootstrap master**: `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (note the C6 tag — historical, do NOT modernise), then:
-  - `masterPkSeed = sha256("pk_seed" || master[0..32]) & N_MASK` (top 16 bytes kept, bottom 16 zero)
-  - `masterSkSeed = sha256("sk_seed" || master[0..32])`
-  - `masterPkRoot = sphincs_c10::SigningKey::keygen(masterSkSeed, masterPkSeed[..16]).pk_root()` (C10: h=18 top-layer subtree, 512 WOTS leaves)
-- **Seed → JARDÍN master entropy**: `sha256("pqwallet-jardin-master" || bip39_seed)`.
+- **Seed → C10 bootstrap master** (per `account_index`):
+  - `account_index == 0`: `master = HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (note the C6 tag — historical, do NOT modernise).
+  - `account_index > 0`: `master = HMAC-SHA512("sphincs-c6-v1-acct", bip39_seed || account_index_be4)`.
+  - In both cases, then:
+    - `masterPkSeed = sha256("pk_seed" || master[0..32]) & N_MASK` (top 16 bytes kept, bottom 16 zero)
+    - `masterSkSeed = sha256("sk_seed" || master[0..32])`
+    - `masterPkRoot = sphincs_c10::SigningKey::keygen(masterSkSeed, masterPkSeed[..16]).pk_root()` (C10: h=18 top-layer subtree, 512 WOTS leaves)
+- **Seed → JARDÍN master entropy** (per `account_index`):
+  - `account_index == 0`: `sha256("pqwallet-jardin-master" || bip39_seed)`.
+  - `account_index > 0`: `sha256("pqwallet-jardin-master-acct" || bip39_seed || account_index_be4)`.
 - **Master entropy → slot entropy**: `sha256(master || "jardin_slot" || slot_index_be)`.
 - **Master entropy → r**: `sha256(master || "jardin_r" || slot_index_be)`.
 - **Slot entropy → slot C10 seeds**:
   - `slot_sk_seed = sha256("jardin_slot_c10_sk_seed" || slot_entropy)` (32 B, passed directly to `SigningKey::keygen`)
   - `slot_pk_seed_32 = sha256("jardin_slot_c10_pk_seed" || slot_entropy) & N_MASK` (top 16 B populated, bottom 16 B zero — the on-chain `bytes32` shape)
   - `slot_sk = sphincs_c10::SigningKey::keygen(slot_sk_seed, slot_pk_seed_32[..16])`; `slot_pk_root = slot_sk.pk_root()`
-- **On-chain wallet address**: `CREATE2(factory, salt = sha256(masterPkSeed || masterPkRoot), creationCode_hash)`. Same on every chain. (The CREATE2 opcode itself hashes `0xff || factory || salt || keccak256(initCode)` with keccak256 — that's fixed by the EVM and cannot change; we only control the salt preimage. Since the bootstrap C10 derivation is unchanged, the wallet address is **unchanged** after the all-C10 slot cutover; only slot sub-keys change shape.)
+- **On-chain wallet address**: `CREATE2(factory, salt = sha256(masterPkSeed || masterPkRoot), creationCode_hash)`. Same on every chain *for a given `account_index`*. Different `account_index` ⇒ different `(masterPkSeed, masterPkRoot)` ⇒ different `salt` ⇒ different on-chain wallet — that's how one seed yields 256 wallets. (The CREATE2 opcode itself hashes `0xff || factory || salt || keccak256(initCode)` with keccak256 — that's fixed by the EVM and cannot change; we only control the salt preimage.) `account_index = 0` keeps the **same** wallet address as before the multi-account cutover.
 
 ## Key File Map
 
@@ -364,7 +376,7 @@ unrelated to the cutover.
 - **Do not store full entropy on a single chip.** Each chip gets exactly one XOR half.
 - **Do not add heap allocation.** `#![no_std]`, no alloc, stack-only. No `Vec`, no `Box`, no `String`.
 - **Do not use software PRNG.** All randomness from hardware TRNG (STM32 TRNG in production, semihosting `/dev/urandom` on QEMU).
-- **Do not change the key derivation domain tags** (`"sphincs-c6-v1"`, `"pk_seed"`, `"sk_seed"`, `"pqwallet-jardin-master"`, `"jardin_slot"`, `"jardin_r"`, `"jardin_slot_c10_sk_seed"`, `"jardin_slot_c10_pk_seed"`) — they are part of the recovery contract.
+- **Do not change the key derivation domain tags** (`"sphincs-c6-v1"`, `"sphincs-c6-v1-acct"`, `"pk_seed"`, `"sk_seed"`, `"pqwallet-jardin-master"`, `"pqwallet-jardin-master-acct"`, `"jardin_slot"`, `"jardin_r"`, `"jardin_slot_c10_sk_seed"`, `"jardin_slot_c10_pk_seed"`) — they are part of the recovery contract. The `-acct` variants are used only for `account_index > 0`; account 0 must continue to use the original tags so legacy seeds keep their on-chain address.
 - **Do not skip the verify-before-release check** on Type 1 or Type 2 signatures. Fault-injection guard, double-evaluated with a sentinel.
 - **Do not add a `rotateMasterKeys` function** to the wallet contract — would break the recovery contract.
 - **Do not add a `resetBootstrapUses` / `resetSlotUses` / `increaseMax*` path** to the wallet or factory. Both counters are immutable monotonic and capped at 65,536 each by design. Once a chain fully exhausts its bootstrap cap AND all currently-registered slots, the chain stays exhausted — that is the invariant. A companion-side notice of impending exhaustion is fine; anything that touches the counters in the contract is not.

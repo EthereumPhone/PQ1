@@ -74,8 +74,8 @@ mod transport {
     }
 
     #[inline]
-    pub(super) fn get_wallet_address(out_ptr: *mut u8) -> u32 {
-        unsafe { gateway_call(CMD_GET_WALLET_ADDRESS, out_ptr as u32, 0, 0) }
+    pub(super) fn get_wallet_address(out_ptr: *mut u8, account_index: u32) -> u32 {
+        unsafe { gateway_call(CMD_GET_WALLET_ADDRESS, out_ptr as u32, account_index, 0) }
     }
 }
 
@@ -91,7 +91,7 @@ mod transport {
         fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_is_unlocked() -> u32;
         fn nsc_lock() -> u32;
-        fn nsc_get_wallet_address(out_ptr: u32) -> u32;
+        fn nsc_get_wallet_address(out_ptr: u32, account_index: u32) -> u32;
     }
 
     #[inline]
@@ -124,8 +124,8 @@ mod transport {
     }
 
     #[inline]
-    pub(super) fn get_wallet_address(out_ptr: *mut u8) -> u32 {
-        unsafe { nsc_get_wallet_address(out_ptr as u32) }
+    pub(super) fn get_wallet_address(out_ptr: *mut u8, account_index: u32) -> u32 {
+        unsafe { nsc_get_wallet_address(out_ptr as u32, account_index) }
     }
 }
 
@@ -162,11 +162,15 @@ pub fn lock() -> u32 {
     transport::lock()
 }
 
-/// Compute the CREATE2-predicted wallet address from the bootstrap C10
-/// pubkey + firmware-embedded factory / proxy-init-code-hash constants.
-/// Writes 20 bytes into `out`. First call after unlock takes ~6 s
-/// (bootstrap keygen); subsequent calls hit the in-SRAM cache and return
-/// in <1 ms.
-pub fn get_wallet_address(out: &mut [u8; 20]) -> u32 {
-    transport::get_wallet_address(out.as_mut_ptr())
+/// Compute the CREATE2-predicted wallet address for `account_index`
+/// (0..=255) from the per-account bootstrap C10 pubkey + firmware-
+/// embedded factory / proxy-init-code-hash constants. Writes 20 bytes
+/// into `out`. First call for a given index takes ~6 s (bootstrap
+/// keygen); subsequent calls hit the in-SRAM LRU cache and return in
+/// <1 ms.
+///
+/// `account_index = 0` reproduces the legacy single-account address so
+/// pre-multi-account seeds keep their existing wallet.
+pub fn get_wallet_address(out: &mut [u8; 20], account_index: u32) -> u32 {
+    transport::get_wallet_address(out.as_mut_ptr(), account_index)
 }

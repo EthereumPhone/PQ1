@@ -63,26 +63,49 @@ pub(super) struct SecureState {
     /// Whether `jardin_master_entropy` has been derived this session.
     pub(super) jardin_master_derived: bool,
 
-    // -- Bootstrap C10 pubkey cache ------------------------------------
-    // Derived lazily on first `CMD_GET_WALLET_ADDRESS` call (or any
-    // sign path that already needs the master key) and cached across
-    // the session so repeat address lookups return in <1 ms instead of
-    // re-running ~6 s of hypertree keygen. Zeroized on lock/idle-wipe.
+    // -- Bootstrap C10 pubkey LRU cache --------------------------------
+    // Multi-account variant: one seed produces up to 256 independent
+    // bootstrap C10 keypairs (one per `account_index`). Each keypair
+    // takes ~6 s of hypertree keygen on real STM32U585, so we cache the
+    // derived pubkey halves keyed by `account_index`. Address-picker
+    // pagination over fresh accounts is therefore one-shot per index;
+    // repeated views (and the SIGN_USEROP fast path) hit SRAM.
+    //
+    // 16 entries comfortably covers a single rendered page of 10
+    // addresses plus a small carry-over from the previous page. On full
+    // insert we evict the oldest `last_used_tick` entry. Cache is
+    // wiped on lock / idle-wipe / panic.
+    pub(super) bootstrap_cache: [Option<CachedAccount>; BOOTSTRAP_CACHE_LEN],
 
-    /// Bootstrap C10 `pkSeed` in 32-byte N-mask layout
-    /// (top 16 bytes = `pkSeed`, bottom 16 bytes = 0).
-    pub(super) bootstrap_pk_seed: [u8; 32],
+    /// Monotonic tick stamped onto each cache entry on insert / lookup.
+    /// Wraps after 2^64 events — effectively never.
+    pub(super) bootstrap_cache_tick: u64,
+}
 
-    /// Bootstrap C10 `pkRoot` in 32-byte N-mask layout.
-    pub(super) bootstrap_pk_root: [u8; 32],
+/// Number of simultaneously-cached account bootstrap pubkey pairs.
+pub(super) const BOOTSTRAP_CACHE_LEN: usize = 16;
 
-    /// Whether `bootstrap_pk_seed`/`bootstrap_pk_root` have been derived
-    /// this session. Reset by `zeroize_sensitive`.
-    pub(super) bootstrap_pk_cached: bool,
+/// One entry in [`SecureState::bootstrap_cache`]. Stores only public
+/// material — the C10 secret key is dropped (and zeroized) immediately
+/// after `pk_seed` / `pk_root` have been extracted.
+#[derive(Clone)]
+pub(super) struct CachedAccount {
+    pub(super) account_index: u32,
+    /// 32-byte N-masked pkSeed (top 16 bytes populated, bottom 16 = 0).
+    pub(super) pk_seed: [u8; 32],
+    /// 32-byte N-masked pkRoot (top 16 bytes populated, bottom 16 = 0).
+    pub(super) pk_root: [u8; 32],
+    /// Tick stamped at last hit / insert. Used for LRU eviction.
+    pub(super) last_used_tick: u64,
 }
 
 impl SecureState {
     const fn new() -> Self {
+        // `Option::None` initialiser must spell out one entry per slot
+        // because `Option<CachedAccount>` is not `Copy`. `[None; N]`
+        // would require `Copy`; an explicit array literal is fine in
+        // const context.
+        const NONE_ENTRY: Option<CachedAccount> = None;
         Self {
             remaining_attempts: MAX_ATTEMPTS,
             pin_verified: false,
@@ -93,9 +116,8 @@ impl SecureState {
             has_signed: false,
             jardin_master_entropy: [0u8; 32],
             jardin_master_derived: false,
-            bootstrap_pk_seed: [0u8; 32],
-            bootstrap_pk_root: [0u8; 32],
-            bootstrap_pk_cached: false,
+            bootstrap_cache: [NONE_ENTRY; BOOTSTRAP_CACHE_LEN],
+            bootstrap_cache_tick: 0,
         }
     }
 
@@ -112,9 +134,20 @@ impl SecureState {
         self.has_signed = false;
         self.jardin_master_entropy.zeroize();
         self.jardin_master_derived = false;
-        self.bootstrap_pk_seed.zeroize();
-        self.bootstrap_pk_root.zeroize();
-        self.bootstrap_pk_cached = false;
+        // Bootstrap pubkey halves are technically non-secret, but wipe
+        // them anyway so a stale entry can't influence post-lock UI
+        // assumptions and so the cache reverts to a clean slate on
+        // re-unlock.
+        for entry in self.bootstrap_cache.iter_mut() {
+            if let Some(c) = entry.as_mut() {
+                c.pk_seed.zeroize();
+                c.pk_root.zeroize();
+                c.last_used_tick = 0;
+                c.account_index = 0;
+            }
+            *entry = None;
+        }
+        self.bootstrap_cache_tick = 0;
         // SAFETY: single-threaded, exclusive access via with_state.
         // JARDIN_SLOT holds a SigningKey (ZeroizeOnDrop). Replacing the
         // Option with None drops the inner key, which wipes its secret
@@ -122,6 +155,84 @@ impl SecureState {
         unsafe {
             *core::ptr::addr_of_mut!(JARDIN_SLOT) = None;
         }
+    }
+
+    /// Look up a cached bootstrap pubkey pair for `account_index`. On hit,
+    /// bumps the entry's tick (so it stays warm under LRU pressure) and
+    /// returns `(pk_seed, pk_root)`. Returns `None` on miss.
+    pub(super) fn bootstrap_cache_lookup(
+        &mut self,
+        account_index: u32,
+    ) -> Option<([u8; 32], [u8; 32])> {
+        self.bootstrap_cache_tick = self.bootstrap_cache_tick.wrapping_add(1);
+        let new_tick = self.bootstrap_cache_tick;
+        for entry in self.bootstrap_cache.iter_mut() {
+            if let Some(c) = entry.as_mut() {
+                if c.account_index == account_index {
+                    c.last_used_tick = new_tick;
+                    return Some((c.pk_seed, c.pk_root));
+                }
+            }
+        }
+        None
+    }
+
+    /// Insert (or refresh) a `(pk_seed, pk_root)` pair for
+    /// `account_index`. Evicts the oldest (`last_used_tick`-min) entry
+    /// when the cache is full. If the index is already present its
+    /// pubkey halves are overwritten — same account_index always maps
+    /// to the same derived pair, so this is a no-op rewrite.
+    pub(super) fn bootstrap_cache_insert(
+        &mut self,
+        account_index: u32,
+        pk_seed: [u8; 32],
+        pk_root: [u8; 32],
+    ) {
+        self.bootstrap_cache_tick = self.bootstrap_cache_tick.wrapping_add(1);
+        let new_tick = self.bootstrap_cache_tick;
+
+        // Refresh existing entry if present.
+        for entry in self.bootstrap_cache.iter_mut() {
+            if let Some(c) = entry.as_mut() {
+                if c.account_index == account_index {
+                    c.pk_seed = pk_seed;
+                    c.pk_root = pk_root;
+                    c.last_used_tick = new_tick;
+                    return;
+                }
+            }
+        }
+
+        // Find an empty slot, else the LRU victim.
+        let mut victim_idx: usize = 0;
+        let mut victim_tick: u64 = u64::MAX;
+        for (i, entry) in self.bootstrap_cache.iter().enumerate() {
+            match entry {
+                None => {
+                    victim_idx = i;
+                    victim_tick = 0;
+                    break;
+                }
+                Some(c) => {
+                    if c.last_used_tick < victim_tick {
+                        victim_tick = c.last_used_tick;
+                        victim_idx = i;
+                    }
+                }
+            }
+        }
+        // Wipe the victim (defensive — pubkeys are non-secret but this
+        // keeps the cache hygiene predictable).
+        if let Some(c) = self.bootstrap_cache[victim_idx].as_mut() {
+            c.pk_seed.zeroize();
+            c.pk_root.zeroize();
+        }
+        self.bootstrap_cache[victim_idx] = Some(CachedAccount {
+            account_index,
+            pk_seed,
+            pk_root,
+            last_used_tick: new_tick,
+        });
     }
 
     /// Stamp in a freshly-verified master secret and mark the device
@@ -155,13 +266,16 @@ static mut STATE: SecureState = SecureState::new();
 /// SAFETY: same single-threaded invariant as `STATE`.
 pub(super) static mut JARDIN_SLOT: Option<CachedSlot> = None;
 
-/// In-SRAM slot cache: a SigningKey tagged with the `(chain_id,
-/// slot_index)` tuple it was derived for. After the Coinbase-Smart-
-/// Wallet port, slot keys are chain-specific — signing on chain A with
-/// slot index N derives a different key than chain B with the same
-/// index, so the cache must key on both. A mismatch on either field
-/// triggers a fresh keygen (~5-6 s on hardware).
+/// In-SRAM slot cache: a SigningKey tagged with the
+/// `(account_index, chain_id, slot_index)` tuple it was derived for.
+/// After the Coinbase-Smart-Wallet port, slot keys are chain-specific —
+/// signing on chain A with slot index N derives a different key than
+/// chain B with the same index, so the cache keys on chain too. With
+/// multi-account derivation, slot keys also vary per `account_index`
+/// (the `master_entropy` they descend from is account-scoped). A
+/// mismatch on any field triggers a fresh keygen (~5-6 s on hardware).
 pub(super) struct CachedSlot {
+    pub(super) account_index: u32,
     pub(super) chain_id: u64,
     pub(super) slot_index: u32,
     pub(super) key: sphincs_c10::SigningKey,

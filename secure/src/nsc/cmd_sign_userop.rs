@@ -49,8 +49,8 @@
 
 use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
-    NscStatus, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT,
-    MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN, PQ_ADD_OWNER_BYTES_SELECTOR,
+    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE,
+    FLAG_REGISTER_SLOT, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN, PQ_ADD_OWNER_BYTES_SELECTOR,
     PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN, PQ_SMART_WALLET_FACTORY,
     SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN, SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN,
     ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN, ZK_VK_BUNDLE_MAX_LEN,
@@ -147,6 +147,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let flags = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
     let include_init_code = (flags & FLAG_INCLUDE_INIT_CODE) != 0;
     let register_slot = (flags & FLAG_REGISTER_SLOT) != 0;
+    let account_index = (flags & ACCOUNT_INDEX_MASK) >> ACCOUNT_INDEX_SHIFT;
     let slot_index = flags & SLOT_INDEX_MASK;
     let mut sender = [0u8; 20];
     sender.copy_from_slice(&snap[12..32]);
@@ -409,8 +410,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Err(_) => return NscStatus::CryptoError as u32,
         },
     );
-    let jardin_master_entropy: Zeroizing<[u8; 32]> =
-        Zeroizing::new(crate::crypto::jardin_master_entropy_from_entropy(&*entropy));
+    let jardin_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
+        crate::crypto::jardin_master_entropy_from_entropy(&*entropy, account_index),
+    );
 
     // ── 8. Build Type 2 callData: execute(to, value, data) ─────────
     let t2_exec = match reconstruct_execute_calldata(&tx_for_display, inner_data) {
@@ -430,16 +432,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         add_one_to_be_u256(&mut type2_nonce);
     }
 
-    // ── 10. Slot C10 keygen (cached by (chain_id, slot_index)) ─────
+    // ── 10. Slot C10 keygen (cached by (account_index, chain_id, slot_index)) ──
     //
-    // Post-Coinbase-port slot keys are chain-specific so the cache key
-    // must cover both fields. A cache miss on either triggers a fresh
-    // ~5-6 s keygen.
+    // Post-Coinbase-port slot keys are chain-specific. With multi-
+    // account derivation they're also account-specific (the master
+    // entropy varies per `account_index`). A cache miss on any of the
+    // three fields triggers a fresh ~5-6 s keygen.
     let need_keygen = super::state::peek_state(|_| {
         // SAFETY: single-threaded gateway.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::JARDIN_SLOT) };
         match cached {
-            Some(c) => c.chain_id != chain_id || c.slot_index != slot_index,
+            Some(c) => {
+                c.account_index != account_index
+                    || c.chain_id != chain_id
+                    || c.slot_index != slot_index
+            }
             None => true,
         }
     });
@@ -456,6 +463,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // SAFETY: single-threaded.
         unsafe {
             *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(CachedSlot {
+                account_index,
                 chain_id,
                 slot_index,
                 key: slot_sk,
@@ -516,8 +524,15 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let (c10_sk, master_pk_seed_32, master_pk_root_32) =
             crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
                 &*entropy,
+                account_index,
                 |p| ui::show_progress("C10 keygen", p),
             );
+
+        // Refresh the bootstrap pubkey cache so the address-picker
+        // doesn't have to re-keygen this account on the next look-up.
+        super::state::with_state(|s| {
+            s.bootstrap_cache_insert(account_index, master_pk_seed_32, master_pk_root_32);
+        });
 
         // ── 11a. Deploy path: build initCode + factorySig ──────────
         if include_init_code {
