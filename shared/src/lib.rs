@@ -456,13 +456,16 @@ pub const JARDIN_TYPE2_HEADER_LEN: usize = 32 + 32 + 32;
 
 /// Deployed address of the `PQSmartWalletFactory` contract.
 ///
-/// The factory is deployed via a deterministic singleton deployer so the
-/// address is identical on every chain (this is load-bearing for the
-/// recovery contract — see `CLAUDE.md`'s CREATE2 salt note). Until the
-/// production singleton deploy lands, this stays at `0x00…00` and any
-/// first-deploy UserOp will be rejected by `EntryPoint.getSenderAddress`
-/// because there is no factory at address(0).
-pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [0u8; 20];
+/// The factory is *supposed* to be deployed via a deterministic singleton
+/// deployer so the address is identical on every chain (this is
+/// load-bearing for the recovery contract — see `CLAUDE.md`'s CREATE2
+/// salt note). For the current Base Sepolia E2E bring-up we deploy via
+/// the deployer EOA, so this constant is the Base-Sepolia-specific
+/// factory until the singleton deploy lands.
+pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [
+    0x00, 0x8D, 0x55, 0x0D, 0x3E, 0x48, 0x6a, 0x5C, 0xE5, 0xF7,
+    0x32, 0x12, 0x7E, 0x34, 0xD5, 0x8C, 0x50, 0xDF, 0x91, 0xDD,
+];
 
 /// Back-compat alias for the old factory name (kept temporarily so the
 /// build doesn't break in places that haven't been renamed yet).
