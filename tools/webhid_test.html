@@ -1095,7 +1095,14 @@ async function refreshStatus() {
     log(`Status: provisioned=${s.provisioned}, locked=${s.locked}, pinRemaining=${s.pinRemaining}`);
     if (s.provisioned === 0) setStatus('Not provisioned', 'err');
     else if (s.locked) setStatus('Locked', 'warn');
-    else { setStatus('Unlocked', 'ok'); setButtonState(true, true); }
+    else {
+      setStatus('Unlocked', 'ok');
+      setButtonState(true, true);
+      // Device was already unlocked when we connected (still inside the
+      // 120 s session) — the unlock-button path never fired, so derive
+      // the wallet address here too.
+      if (!$('senderAddr').value.trim()) autoFillWalletAddress();
+    }
   } catch (e) {
     // Surface the error in the pill so the user doesn't have to hunt the log.
     setStatus(`Status error: ${e.message}`, 'err');
