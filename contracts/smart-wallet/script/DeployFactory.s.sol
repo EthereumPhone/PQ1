@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
+import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
 
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
@@ -12,9 +12,9 @@ import {SPHINCsC10Asm} from "../src/verifiers/SPHINCsC10Asm.sol";
 /// @notice Deploy the PQ wallet stack: verifier → impl → factory, with
 ///         CREATE2 salts so all three land at byte-identical addresses
 ///         on every chain (the Coinbase-Smart-Wallet cross-chain recipe).
-///         EntryPoint v0.9 is assumed to already exist at the canonical
-///         address on every target chain; its address feeds into the
-///         impl's constructor, so it must match everywhere.
+///         EntryPoint v0.6 is assumed to already exist at the canonical
+///         singleton address on every target chain; its address feeds
+///         into the impl's constructor, so it must match everywhere.
 ///
 ///         Foundry routes `new X{salt: S}(args)` through Arachnid's
 ///         deterministic CREATE2 factory at
@@ -33,9 +33,9 @@ import {SPHINCsC10Asm} from "../src/verifiers/SPHINCsC10Asm.sol";
 ///         Do NOT pass `--verify` — deployments are intentionally
 ///         unpublished.
 contract DeployFactory is Script {
-    /// @notice Canonical ERC-4337 EntryPoint v0.9 (same address on every
-    ///         chain via ERC-2470 singleton).
-    address constant ENTRY_POINT_V09 = 0x433709009B8330FDa32311DF1C2AFA402eD8D009;
+    /// @notice Canonical ERC-4337 EntryPoint v0.6 (same address on every
+    ///         chain via Nick's-method singleton).
+    address constant ENTRY_POINT_V06 = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
 
     /// @notice CREATE2 salts. Zero is fine and keeps things simple; if
     ///         we ever need to redeploy a fixed contract (e.g. patched
@@ -45,13 +45,13 @@ contract DeployFactory is Script {
     bytes32 constant SALT_FACTORY  = bytes32(0);
 
     function run() external {
-        require(ENTRY_POINT_V09.code.length > 0, "EntryPoint v0.9 not deployed on this chain");
+        require(ENTRY_POINT_V06.code.length > 0, "EntryPoint v0.6 not deployed on this chain");
 
         vm.startBroadcast();
 
         SPHINCsC10Asm verifier = new SPHINCsC10Asm{salt: SALT_VERIFIER}();
         PQSmartWallet impl = new PQSmartWallet{salt: SALT_IMPL}(
-            IEntryPoint(ENTRY_POINT_V09),
+            IEntryPoint(ENTRY_POINT_V06),
             ISPHINCSVerifier(address(verifier))
         );
         PQSmartWalletFactory factory = new PQSmartWalletFactory{salt: SALT_FACTORY}(
@@ -62,7 +62,7 @@ contract DeployFactory is Script {
         vm.stopBroadcast();
 
         console2.log("chain id         ", block.chainid);
-        console2.log("EntryPoint v0.9  ", ENTRY_POINT_V09);
+        console2.log("EntryPoint v0.6  ", ENTRY_POINT_V06);
         console2.log("SPHINCsC10Asm    ", address(verifier));
         console2.log("PQSmartWallet    ", address(impl));
         console2.log("Factory          ", address(factory));

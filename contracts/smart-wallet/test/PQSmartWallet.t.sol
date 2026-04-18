@@ -2,8 +2,8 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
-import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
+import {UserOperation06} from "account-abstraction/legacy/v06/UserOperation06.sol";
 
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
@@ -60,15 +60,17 @@ contract PQSmartWalletTest is Test {
     function _packedOp(address sender, bytes memory callData, bytes memory sig)
         internal
         pure
-        returns (PackedUserOperation memory op)
+        returns (UserOperation06 memory op)
     {
         op.sender = sender;
         op.nonce = 0;
         op.initCode = "";
         op.callData = callData;
-        op.accountGasLimits = bytes32(0);
+        op.callGasLimit = 0;
+        op.verificationGasLimit = 0;
         op.preVerificationGas = 0;
-        op.gasFees = bytes32(0);
+        op.maxFeePerGas = 0;
+        op.maxPriorityFeePerGas = 0;
         op.paymasterAndData = "";
         op.signature = sig;
     }

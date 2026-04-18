@@ -72,8 +72,8 @@ use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
 use crate::aa::userop::{
-    compute_sphincs_digest_v09, reconstruct_execute_calldata, sha256_bytes,
-    AaUserOpParamsV09Sha256, SHA256_EMPTY,
+    compute_sphincs_digest_v06, reconstruct_execute_calldata, sha256_bytes,
+    AaUserOpParamsV06Sha256, SHA256_EMPTY,
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
 use crate::erc20::calldata::{parse_erc20_calldata, Erc20Call};
@@ -155,19 +155,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     entry_point.copy_from_slice(&snap[32..52]);
     let mut nonce = [0u8; 32];
     nonce.copy_from_slice(&snap[52..84]);
-    let mut account_gas_limits = [0u8; 32];
-    account_gas_limits.copy_from_slice(&snap[84..116]);
+    let mut call_gas_limit = [0u8; 32];
+    call_gas_limit.copy_from_slice(&snap[84..116]);
+    let mut verification_gas_limit = [0u8; 32];
+    verification_gas_limit.copy_from_slice(&snap[116..148]);
     let mut pre_verification_gas = [0u8; 32];
-    pre_verification_gas.copy_from_slice(&snap[116..148]);
-    let mut gas_fees = [0u8; 32];
-    gas_fees.copy_from_slice(&snap[148..180]);
+    pre_verification_gas.copy_from_slice(&snap[148..180]);
+    let mut max_fee_per_gas = [0u8; 32];
+    max_fee_per_gas.copy_from_slice(&snap[180..212]);
+    let mut max_priority_fee_per_gas = [0u8; 32];
+    max_priority_fee_per_gas.copy_from_slice(&snap[212..244]);
     let mut paymaster_and_data_hash = [0u8; 32];
-    paymaster_and_data_hash.copy_from_slice(&snap[180..212]);
+    paymaster_and_data_hash.copy_from_slice(&snap[244..276]);
     let mut to_address = [0u8; 20];
-    to_address.copy_from_slice(&snap[212..232]);
+    to_address.copy_from_slice(&snap[276..296]);
     let mut value = [0u8; 32];
-    value.copy_from_slice(&snap[232..264]);
-    let data_len = u16::from_be_bytes([snap[264], snap[265]]) as usize;
+    value.copy_from_slice(&snap[296..328]);
+    let data_len = u16::from_be_bytes([snap[328], snap[329]]) as usize;
 
     if data_len > MAX_TX_LEN || SIGN_USEROP_HEADER_LEN + data_len > total_len {
         ui::show_status("Sign", "bad data_len");
@@ -195,7 +199,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InvalidPointer as u32;
     }
 
-    // CRIT-17: refuse nonce-seq overflow. v0.9 nonces are 192-bit key | 64-bit seq.
+    // CRIT-17: refuse nonce-seq overflow. v0.6 nonces are 192-bit key | 64-bit seq.
     // When REGISTER_SLOT is set, Type 2 nonce = base + 1 — overflowing the
     // seq would carry into the key field and silently change the nonce key.
     if register_slot && nonce[24..32] == [0xFFu8; 8] {
@@ -249,18 +253,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         nonce[24], nonce[25], nonce[26], nonce[27],
         nonce[28], nonce[29], nonce[30], nonce[31],
     ]);
-    let display_max_fee = {
-        let mut v = [0u8; 32];
-        v[16..32].copy_from_slice(&gas_fees[16..32]);
-        U256(v)
-    };
-    let display_max_prio = {
-        let mut v = [0u8; 32];
-        v[16..32].copy_from_slice(&gas_fees[0..16]);
-        U256(v)
-    };
-    let ver_gas_u128 = u128_from_be_16(&account_gas_limits[0..16]);
-    let call_gas_u128 = u128_from_be_16(&account_gas_limits[16..32]);
+    let display_max_fee = U256(max_fee_per_gas);
+    let display_max_prio = U256(max_priority_fee_per_gas);
+    let call_gas_u128 = u128_saturating_from_u256(&call_gas_limit);
+    let ver_gas_u128 = u128_saturating_from_u256(&verification_gas_limit);
     let pre_ver_u128 = u128_saturating_from_u256(&pre_verification_gas);
     let display_gas_limit: u64 = ver_gas_u128
         .saturating_add(call_gas_u128)
@@ -620,18 +616,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             let t1_call_digest = sha256_bytes(&t1_call);
 
             // Sphincs digest for the Type 1 UserOp.
-            let t1_params = AaUserOpParamsV09Sha256 {
+            let t1_params = AaUserOpParamsV06Sha256 {
                 sender,
                 entry_point,
                 chain_id,
                 nonce: U256(nonce),
                 init_code_digest: SHA256_EMPTY, // rotation never rides initCode
-                account_gas_limits,
+                call_gas_limit: U256(call_gas_limit),
+                verification_gas_limit: U256(verification_gas_limit),
                 pre_verification_gas: U256(pre_verification_gas),
-                gas_fees,
+                max_fee_per_gas: U256(max_fee_per_gas),
+                max_priority_fee_per_gas: U256(max_priority_fee_per_gas),
                 paymaster_and_data_digest: SHA256_EMPTY,
             };
-            let t1_digest = compute_sphincs_digest_v09(&t1_params, &t1_call_digest);
+            let t1_digest = compute_sphincs_digest_v06(&t1_params, &t1_call_digest);
 
             let bootstrap_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
@@ -662,18 +660,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // The on-wire `paymaster_and_data_hash` is now the SHA-256 of the
     // paymasterAndData bytes (companion sends SHA256_EMPTY when absent).
     // Staying all-sha256 means zero keccak on the sign path.
-    let t2_params = AaUserOpParamsV09Sha256 {
+    let t2_params = AaUserOpParamsV06Sha256 {
         sender,
         entry_point,
         chain_id,
         nonce: U256(type2_nonce),
         init_code_digest: t2_init_code_digest,
-        account_gas_limits,
+        call_gas_limit: U256(call_gas_limit),
+        verification_gas_limit: U256(verification_gas_limit),
         pre_verification_gas: U256(pre_verification_gas),
-        gas_fees,
+        max_fee_per_gas: U256(max_fee_per_gas),
+        max_priority_fee_per_gas: U256(max_priority_fee_per_gas),
         paymaster_and_data_digest: paymaster_and_data_hash,
     };
-    let t2_digest = compute_sphincs_digest_v09(&t2_params, &t2_call_digest);
+    let t2_digest = compute_sphincs_digest_v06(&t2_params, &t2_call_digest);
 
     ui::show_progress("Slot C10 sign", 0);
     let t2_sig = {
@@ -806,7 +806,8 @@ unsafe fn write_be_u32(out_ptr: *mut u8, write_pos: &mut usize, v: u32) {
     *write_pos += 4;
 }
 
-/// Increment the 64-bit sequence portion of an EntryPoint v0.9 nonce.
+/// Increment the 64-bit sequence portion of an EntryPoint v0.6 nonce
+/// (192-bit key | 64-bit seq, stored big-endian in bytes[24..32]).
 fn add_one_to_be_u256(v: &mut [u8; 32]) {
     for i in (24..32).rev() {
         let (sum, carry) = v[i].overflowing_add(1);
@@ -826,14 +827,6 @@ fn c10_sign_progress_slot(percent: u8) {
     crate::ui::show_progress("Slot C10 sign", percent);
 }
 
-/// Decode a 16-byte big-endian slice as `u128`.
-fn u128_from_be_16(bytes: &[u8]) -> u128 {
-    debug_assert_eq!(bytes.len(), 16);
-    let mut buf = [0u8; 16];
-    buf.copy_from_slice(&bytes[..16]);
-    u128::from_be_bytes(buf)
-}
-
 /// Decode a 32-byte BE u256 as `u128`, saturating at `u128::MAX`.
 fn u128_saturating_from_u256(bytes: &[u8; 32]) -> u128 {
     for &b in &bytes[0..16] {
@@ -841,5 +834,7 @@ fn u128_saturating_from_u256(bytes: &[u8; 32]) -> u128 {
             return u128::MAX;
         }
     }
-    u128_from_be_16(&bytes[16..32])
+    let mut buf = [0u8; 16];
+    buf.copy_from_slice(&bytes[16..32]);
+    u128::from_be_bytes(buf)
 }

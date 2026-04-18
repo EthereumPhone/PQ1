@@ -83,11 +83,11 @@
     </div>
     <div class="row">
       <label>Factory</label>
-      <input id="factoryAddr" value="0x1816a77f8C170FE847BD22ccB1E78b8c19E21904" />
+      <input id="factoryAddr" value="0x375eBb4E502B94F9e8b99Fdd0b0e882a9d9dD6fB" />
     </div>
     <div class="row">
       <label>EntryPoint</label>
-      <input id="entryPointAddr" value="0x433709009B8330FDa32311DF1C2AFA402eD8D009" />
+      <input id="entryPointAddr" value="0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789" />
     </div>
     <div class="row">
       <label>Beneficiary</label>
@@ -192,7 +192,7 @@
     <h2>Publish-ready output</h2>
     <div style="font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 12px;">
       Copy either blob and hand it to me (or pipe into your own submitter). The JSON mirrors a
-      <code>PackedUserOperation</code> struct; the <code>cast</code> one-liner posts it directly
+      <code>UserOperation06</code> struct; the <code>cast</code> one-liner posts it directly
       via <code>EntryPoint.handleOps</code> — no bundler needed.
     </div>
     <div id="publishBlocks"></div>
@@ -260,8 +260,8 @@ const SW_SECURITY = 0x6982;
 const SW_CONDITIONS = 0x6985;
 const SW_SESSION_EXPIRED = 0x6984;
 
-// EntryPoint v0.9 canonical Sepolia/mainnet address.
-const ENTRY_POINT_V09 = '0x433709009B8330FDa32311DF1C2AFA402eD8D009';
+// EntryPoint v0.6 canonical singleton address (same on every major chain).
+const ENTRY_POINT_V06 = '0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789';
 // sha256("") — the empty-bytes hash. The on-wire `paymaster_and_data_hash`
 // is now a SHA-256 digest (not keccak) to match PQSmartWallet.sphincsDigest.
 const SHA256_EMPTY = new Uint8Array([
@@ -587,7 +587,7 @@ const DeviceAPI = {
 function buildSignPayload(p) {
   const sender = hexToBytes(p.sender || '0x0000000000000000000000000000000000000000');
   if (sender.length !== 20) throw new Error('sender must be 20 bytes');
-  const entryPoint = hexToBytes(p.entryPoint || ENTRY_POINT_V09);
+  const entryPoint = hexToBytes(p.entryPoint || ENTRY_POINT_V06);
   if (entryPoint.length !== 20) throw new Error('entryPoint must be 20 bytes');
   const to = hexToBytes(p.to);
   if (to.length !== 20) throw new Error('to must be 20 bytes');
@@ -597,11 +597,7 @@ function buildSignPayload(p) {
   const erc20Bundle = p.erc20Bundle || new Uint8Array(0);
   const zkBundle = p.zkBundle || new Uint8Array(0);
 
-  // accountGasLimits = (verGas << 128) | callGas
-  const agl = concatBytes([u128be(p.verGas), u128be(p.callGas)]);
-  // gasFees = (maxPriorityFee << 128) | maxFee
-  const gf = concatBytes([u128be(p.maxPriorityFeePerGas), u128be(p.maxFeePerGas)]);
-
+  // v0.6 wire format uses individual u256 BE slots for each gas field.
   // Flags u32 layout (mirrors shared/src/lib.rs):
   //   bit 31           = FLAG_INCLUDE_INIT_CODE (first deploy)
   //   bit 30           = FLAG_REGISTER_SLOT     (rotation)
@@ -630,9 +626,11 @@ function buildSignPayload(p) {
     sender,
     entryPoint,
     u256be(p.nonce),
-    agl,
+    u256be(p.callGas),
+    u256be(p.verGas),
     u256be(p.preVerificationGas),
-    gf,
+    u256be(p.maxFeePerGas),
+    u256be(p.maxPriorityFeePerGas),
     p.paymasterAndDataHash || SHA256_EMPTY,
     to,
     u256be(p.value),
@@ -740,23 +738,19 @@ function parseInitCode(initCode) {
   };
 }
 
-function packAccountGasLimits(verGas, callGas) {
-  return concatBytes([u128be(verGas), u128be(callGas)]);
-}
-function packGasFees(maxPrio, maxFee) {
-  return concatBytes([u128be(maxPrio), u128be(maxFee)]);
-}
-
-function buildPackedUserOp({ sender, nonce, initCode, callData, verGas, callGas,
-                             preVerificationGas, maxPrio, maxFee, signature }) {
+/// Build an EntryPoint v0.6 UserOperation (10 unpacked fields).
+function buildUserOpV06({ sender, nonce, initCode, callData, callGas, verGas,
+                          preVerificationGas, maxFee, maxPrio, signature }) {
   return {
     sender,
     nonce: '0x' + BigInt(nonce).toString(16),
     initCode: '0x' + bytesToHex(initCode || new Uint8Array(0)),
     callData: '0x' + bytesToHex(callData),
-    accountGasLimits:   '0x' + bytesToHex(packAccountGasLimits(verGas, callGas)),
-    preVerificationGas: '0x' + BigInt(preVerificationGas).toString(16),
-    gasFees:            '0x' + bytesToHex(packGasFees(maxPrio, maxFee)),
+    callGasLimit:         '0x' + BigInt(callGas).toString(16),
+    verificationGasLimit: '0x' + BigInt(verGas).toString(16),
+    preVerificationGas:   '0x' + BigInt(preVerificationGas).toString(16),
+    maxFeePerGas:         '0x' + BigInt(maxFee).toString(16),
+    maxPriorityFeePerGas: '0x' + BigInt(maxPrio).toString(16),
     paymasterAndData: '0x',
     signature: '0x' + bytesToHex(signature),
   };
@@ -765,8 +759,8 @@ function buildPackedUserOp({ sender, nonce, initCode, callData, verGas, callGas,
 /// Render the UserOp as a cast-send invocation against the EntryPoint.
 /// The tuple-array arg is inlined; cast is happy with long calldata.
 function buildCastSend(op, entryPoint, beneficiary, rpcUrl) {
-  const tuple = `[(${op.sender},${op.nonce},${op.initCode},${op.callData},${op.accountGasLimits},${op.preVerificationGas},${op.gasFees},${op.paymasterAndData},${op.signature})]`;
-  const sig = 'handleOps((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)[],address)';
+  const tuple = `[(${op.sender},${op.nonce},${op.initCode},${op.callData},${op.callGasLimit},${op.verificationGasLimit},${op.preVerificationGas},${op.maxFeePerGas},${op.maxPriorityFeePerGas},${op.paymasterAndData},${op.signature})]`;
+  const sig = 'handleOps((address,uint256,bytes,bytes,uint256,uint256,uint256,uint256,uint256,bytes,bytes)[],address)';
   return [
     'cast send',
     `  ${entryPoint}`,
@@ -840,7 +834,7 @@ function makeCopyable(label, text) {
 }
 
 /// Given the firmware's {initCode, type1, type2} bundle + the tx fields
-/// signed over it, produce the ordered list of PackedUserOperations the
+/// signed over it, produce the ordered list of UserOperation06s the
 /// EntryPoint would accept. Matches secure/src/nsc/cmd_sign_userop.rs
 /// dispatch:
 ///   * initCode present (no type1): 1 op, signed by slot
@@ -870,7 +864,7 @@ function buildPublishOps({ initCode, type1, type2 }, params) {
     // rides along so the EntryPoint triggers factory.createAccount first.
     ops.push({
       label: 'first deploy + execute (slot 0)',
-      op: buildPackedUserOp({
+      op: buildUserOpV06({
         ...baseOpArgs,
         sender,
         nonce: params.nonce,
@@ -890,7 +884,7 @@ function buildPublishOps({ initCode, type1, type2 }, params) {
     log('Rotation path (Type 1 + Type 2) needs the new slot pubkey to build addOwnerBytes callData. Not yet surfaced in the firmware response — skipping Type 1 op.', 'warn');
     ops.push({
       label: 'slot execute (after rotation) — submit only AFTER Type 1 lands',
-      op: buildPackedUserOp({
+      op: buildUserOpV06({
         ...baseOpArgs,
         sender,
         nonce: BigInt(params.nonce) + 1n,
@@ -903,7 +897,7 @@ function buildPublishOps({ initCode, type1, type2 }, params) {
     // Normal slot tx on an already-deployed wallet.
     ops.push({
       label: 'slot execute',
-      op: buildPackedUserOp({
+      op: buildUserOpV06({
         ...baseOpArgs,
         sender,
         nonce: params.nonce,
@@ -1122,7 +1116,7 @@ $('signBtn').addEventListener('click', async () => {
       registerSlot: $('registerSlot').checked,
       includeInitCode: $('includeInitCode').checked,
       sender,
-      entryPoint: $('entryPointAddr').value.trim() || ENTRY_POINT_V09,
+      entryPoint: $('entryPointAddr').value.trim() || ENTRY_POINT_V06,
       nonce: BigInt($('nonce').value),
       verGas: DEFAULT_GAS.verGas,
       callGas: DEFAULT_GAS.callGas,
@@ -1251,7 +1245,7 @@ $('testUsdcBtn').addEventListener('click', async () => {
     registerSlot: $('registerSlot').checked,
     includeInitCode: $('includeInitCode').checked,
     sender: ($('senderAddr').value.trim() || ('0x' + '42'.repeat(20))),
-    entryPoint: ENTRY_POINT_V09,
+    entryPoint: ENTRY_POINT_V06,
     nonce: BigInt($('nonce').value || '0'),
     verGas: DEFAULT_GAS.verGas,
     callGas: DEFAULT_GAS.callGas,
@@ -1288,7 +1282,7 @@ $('testZkAaveBtn').addEventListener('click', async () => {
     registerSlot: $('registerSlot').checked,
     includeInitCode: $('includeInitCode').checked,
     sender: ($('senderAddr').value.trim() || ('0x' + '42'.repeat(20))),
-    entryPoint: ENTRY_POINT_V09,
+    entryPoint: ENTRY_POINT_V06,
     nonce: BigInt($('nonce').value || '0'),
     verGas: DEFAULT_GAS.verGas,
     callGas: DEFAULT_GAS.callGas,
@@ -1312,7 +1306,7 @@ $('submitBtn').addEventListener('click', async () => {
     return;
   }
   log('Bundler submission not yet wired up in this tool. Use script/submit_userop.py.', 'warn');
-  // A full implementation would construct two PackedUserOperation objects
+  // A full implementation would construct two UserOperation06 objects
   // (Type 1 at supplied nonce, Type 2 at nonce+1) and POST them to the
   // bundler via eth_sendUserOperation.
 });

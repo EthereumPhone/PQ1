@@ -36,10 +36,11 @@ fn sha256_of(data: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
-/// Mirror of `PQSmartWallet.sphincsDigest(userOp)`:
+/// Mirror of `PQSmartWallet.sphincsDigest(userOp)` under EntryPoint v0.6:
 ///   sha256(
 ///     sender || nonce || sha256(initCode) || sha256(callData) ||
-///     accountGasLimits || preVerificationGas || gasFees ||
+///     callGasLimit || verificationGasLimit || preVerificationGas ||
+///     maxFeePerGas || maxPriorityFeePerGas ||
 ///     sha256(paymasterAndData) || entryPoint || chainid
 ///   )
 #[allow(clippy::too_many_arguments)]
@@ -48,21 +49,25 @@ fn sphincs_digest(
     nonce: &[u8; 32],
     init_code: &[u8],
     call_data: &[u8],
-    account_gas_limits: &[u8; 32],
+    call_gas_limit: &[u8; 32],
+    verification_gas_limit: &[u8; 32],
     pre_verification_gas: &[u8; 32],
-    gas_fees: &[u8; 32],
+    max_fee_per_gas: &[u8; 32],
+    max_priority_fee_per_gas: &[u8; 32],
     paymaster_and_data: &[u8],
     entry_point: &[u8; 20],
     chain_id: &[u8; 32],
 ) -> [u8; 32] {
-    let mut buf = Vec::with_capacity(296);
+    let mut buf = Vec::with_capacity(360);
     buf.extend_from_slice(sender);
     buf.extend_from_slice(nonce);
     buf.extend_from_slice(&sha256_of(init_code));
     buf.extend_from_slice(&sha256_of(call_data));
-    buf.extend_from_slice(account_gas_limits);
+    buf.extend_from_slice(call_gas_limit);
+    buf.extend_from_slice(verification_gas_limit);
     buf.extend_from_slice(pre_verification_gas);
-    buf.extend_from_slice(gas_fees);
+    buf.extend_from_slice(max_fee_per_gas);
+    buf.extend_from_slice(max_priority_fee_per_gas);
     buf.extend_from_slice(&sha256_of(paymaster_and_data));
     buf.extend_from_slice(entry_point);
     buf.extend_from_slice(chain_id);
@@ -123,9 +128,11 @@ fn generate_c10_test_vectors() {
     //   nonce              = 0
     //   initCode           = ""
     //   callData           = execute(target=0xcafe, value=0, data="")
-    //   accountGasLimits   = 0
+    //   callGasLimit       = 0
+    //   verificationGasLimit = 0
     //   preVerificationGas = 0
-    //   gasFees            = 0
+    //   maxFeePerGas       = 0
+    //   maxPriorityFeePerGas = 0
     //   paymasterAndData   = ""
     //   entryPoint         = 0x0000000000000000000000000000000000004337
     //   chainId            = 31337 (forge default)
@@ -141,9 +148,11 @@ fn generate_c10_test_vectors() {
     target[18] = 0xca;
     target[19] = 0xfe;
     let call_data = build_execute_calldata(target, [0u8; 32]);
-    let account_gas_limits = [0u8; 32];
+    let call_gas_limit = [0u8; 32];
+    let verification_gas_limit = [0u8; 32];
     let pre_verification_gas = [0u8; 32];
-    let gas_fees = [0u8; 32];
+    let max_fee_per_gas = [0u8; 32];
+    let max_priority_fee_per_gas = [0u8; 32];
     let paymaster_and_data: Vec<u8> = Vec::new();
     let mut entry_point = [0u8; 20];
     entry_point[18] = 0x43;
@@ -156,9 +165,11 @@ fn generate_c10_test_vectors() {
         &nonce,
         &init_code,
         &call_data,
-        &account_gas_limits,
+        &call_gas_limit,
+        &verification_gas_limit,
         &pre_verification_gas,
-        &gas_fees,
+        &max_fee_per_gas,
+        &max_priority_fee_per_gas,
         &paymaster_and_data,
         &entry_point,
         &chain_id,
@@ -183,9 +194,11 @@ fn generate_c10_test_vectors() {
     "sender": "{}",
     "nonce": "{}",
     "callData": "{}",
-    "accountGasLimits": "{}",
+    "callGasLimit": "{}",
+    "verificationGasLimit": "{}",
     "preVerificationGas": "{}",
-    "gasFees": "{}",
+    "maxFeePerGas": "{}",
+    "maxPriorityFeePerGas": "{}",
     "entryPoint": "{}",
     "chainId": 31337,
     "digest": "{}",
@@ -200,9 +213,11 @@ fn generate_c10_test_vectors() {
         to_hex(&sender),
         to_hex(&nonce),
         to_hex(&call_data),
-        to_hex(&account_gas_limits),
+        to_hex(&call_gas_limit),
+        to_hex(&verification_gas_limit),
         to_hex(&pre_verification_gas),
-        to_hex(&gas_fees),
+        to_hex(&max_fee_per_gas),
+        to_hex(&max_priority_fee_per_gas),
         to_hex(&entry_point),
         to_hex(&user_op_digest),
         to_hex(&user_op_sig),

@@ -2,8 +2,8 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
-import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
+import {UserOperation06} from "account-abstraction/legacy/v06/UserOperation06.sol";
 
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
@@ -82,14 +82,16 @@ contract PQSmartWalletRealSigBench is Test {
         require(gotSeed == pkSeed && gotRoot == pkRoot, "slot0 pk mismatch");
     }
 
-    function _buildOp() internal view returns (PackedUserOperation memory op) {
+    function _buildOp() internal view returns (UserOperation06 memory op) {
         op.sender = senderFromVec;
         op.nonce = 0;
         op.initCode = "";
         op.callData = callDataFromVec;
-        op.accountGasLimits = bytes32(0);
+        op.callGasLimit = 0;
+        op.verificationGasLimit = 0;
         op.preVerificationGas = 0;
-        op.gasFees = bytes32(0);
+        op.maxFeePerGas = 0;
+        op.maxPriorityFeePerGas = 0;
         op.paymasterAndData = "";
         op.signature = abi.encode(uint256(1), userOpSig);
     }
@@ -97,7 +99,7 @@ contract PQSmartWalletRealSigBench is Test {
     /// @notice Sanity check: the userOp the test reconstructs must hash to
     ///         the digest the Rust generator signed.
     function test_digestMatches() public view {
-        PackedUserOperation memory op = _buildOp();
+        UserOperation06 memory op = _buildOp();
         bytes32 actual = wallet.sphincsDigest(op);
         assertEq(actual, expectedDigest, "Solidity sphincsDigest != Rust digest");
     }
@@ -116,7 +118,7 @@ contract PQSmartWalletRealSigBench is Test {
 
     /// @notice The headline gas number: validateUserOp with real C10 sig.
     function test_validateUserOp_realC10_gas() public {
-        PackedUserOperation memory op = _buildOp();
+        UserOperation06 memory op = _buildOp();
 
         vm.prank(ENTRY_POINT_ADDR);
         uint256 g0 = gasleft();

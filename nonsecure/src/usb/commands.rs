@@ -217,8 +217,8 @@ impl CommandRouter {
         RESP_BUF[p..p + 4].fill(0);
         p += 4;
 
-        // ep_version: 0x0009 (EntryPoint v0.9).
-        RESP_BUF[p..p + 2].copy_from_slice(&0x0009u16.to_be_bytes());
+        // ep_version: 0x0006 (EntryPoint v0.6).
+        RESP_BUF[p..p + 2].copy_from_slice(&0x0006u16.to_be_bytes());
         p += 2;
 
         // Wrapper-overhead: header bytes prepended to each signed tx.

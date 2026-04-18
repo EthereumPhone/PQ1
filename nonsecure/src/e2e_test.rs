@@ -16,7 +16,7 @@
 use crate::nsc_api;
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
-    FLAG_REGISTER_SLOT, JARDIN_TYPE1_LEN, JARDIN_TYPE2_LEN, JARDIN_TYPE2_MARKER,
+    FLAG_REGISTER_SLOT, JARDIN_TYPE1_LEN, JARDIN_TYPE2_LEN,
     MAX_JARDIN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
 };
 
@@ -28,16 +28,17 @@ static mut PAYLOAD_BUF: [u8; SIGN_USEROP_HEADER_LEN + 256] =
 
 // === Helpers ===============================================================
 
-/// EntryPoint v0.9 canonical Sepolia address.
-const ENTRY_POINT_V09: [u8; 20] = [
-    0x43, 0x37, 0x09, 0x00, 0x9B, 0x83, 0x30, 0xFD, 0xa3, 0x23, 0x11, 0xDF, 0x1C, 0x2A, 0xFA, 0x40,
-    0x2e, 0xD8, 0xD0, 0x09,
+/// EntryPoint v0.6 canonical singleton address.
+const ENTRY_POINT_V06: [u8; 20] = [
+    0x5F, 0xF1, 0x37, 0xD4, 0xb0, 0xFD, 0xCD, 0x49, 0xDc, 0xA3, 0x0c, 0x7C, 0xF5, 0x7E, 0x57, 0x8a,
+    0x02, 0x6d, 0x27, 0x89,
 ];
 
-/// `keccak256("")` — used for empty paymasterAndData.
-const KECCAK_EMPTY: [u8; 32] = [
-    0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
-    0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70,
+/// `sha256("")` — used for empty paymasterAndData under the all-SHA256
+/// sphincs digest.
+const SHA256_EMPTY: [u8; 32] = [
+    0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+    0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
 ];
 
 fn build_sign_payload(
@@ -54,18 +55,17 @@ fn build_sign_payload(
     let mut nonce = [0u8; 32];
     nonce[24..32].copy_from_slice(&nonce_seq.to_be_bytes());
 
-    // accountGasLimits = (300_000 << 128) | 50_000
-    let mut agl = [0u8; 32];
-    agl[0..16].copy_from_slice(&300_000u128.to_be_bytes());
-    agl[16..32].copy_from_slice(&50_000u128.to_be_bytes());
+    fn u128_be_slot(v: u128) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        out[16..32].copy_from_slice(&v.to_be_bytes());
+        out
+    }
 
-    let mut pre_gas = [0u8; 32];
-    pre_gas[28..32].copy_from_slice(&100_000u32.to_be_bytes());
-
-    // gasFees = (2 gwei << 128) | 10 gwei
-    let mut gf = [0u8; 32];
-    gf[0..16].copy_from_slice(&2_000_000_000u128.to_be_bytes());
-    gf[16..32].copy_from_slice(&10_000_000_000u128.to_be_bytes());
+    let call_gas = u128_be_slot(50_000);
+    let ver_gas = u128_be_slot(300_000);
+    let pre_gas = u128_be_slot(100_000);
+    let max_fee = u128_be_slot(10_000_000_000);
+    let max_prio = u128_be_slot(2_000_000_000);
 
     let mut value = [0u8; 32];
     value[16..32].copy_from_slice(&value_wei.to_be_bytes());
@@ -78,17 +78,21 @@ fn build_sign_payload(
     off += 4;
     buf[off..off + 20].copy_from_slice(&sender);
     off += 20;
-    buf[off..off + 20].copy_from_slice(&ENTRY_POINT_V09);
+    buf[off..off + 20].copy_from_slice(&ENTRY_POINT_V06);
     off += 20;
     buf[off..off + 32].copy_from_slice(&nonce);
     off += 32;
-    buf[off..off + 32].copy_from_slice(&agl);
+    buf[off..off + 32].copy_from_slice(&call_gas);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&ver_gas);
     off += 32;
     buf[off..off + 32].copy_from_slice(&pre_gas);
     off += 32;
-    buf[off..off + 32].copy_from_slice(&gf);
+    buf[off..off + 32].copy_from_slice(&max_fee);
     off += 32;
-    buf[off..off + 32].copy_from_slice(&KECCAK_EMPTY);
+    buf[off..off + 32].copy_from_slice(&max_prio);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&SHA256_EMPTY);
     off += 32;
     buf[off..off + 20].copy_from_slice(to);
     off += 20;
@@ -115,9 +119,6 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
         resp[t1_len_off + 3],
     ]) as usize;
     assert!(t1_len == 0 || t1_len == JARDIN_TYPE1_LEN);
-    if t1_len != 0 {
-        assert_eq!(resp[t1_len_off + 4], 0x01, "Type 1 marker must be 0x01");
-    }
     let t2_off = t1_len_off + 4 + t1_len;
     let t2_len = u32::from_be_bytes([
         resp[t2_off],
@@ -126,8 +127,6 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
         resp[t2_off + 3],
     ]) as usize;
     assert_eq!(t2_len, JARDIN_TYPE2_LEN, "Type 2 is a fixed-length C10 sig");
-    let t2_body = t2_off + 4;
-    assert_eq!(resp[t2_body], JARDIN_TYPE2_MARKER, "Type 2 marker must be 0x02");
     (t1_len != 0, t2_len)
 }
 

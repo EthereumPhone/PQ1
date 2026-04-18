@@ -1,6 +1,6 @@
 # PQSigner OS -- LLM Context
 
-Post-quantum ERC-4337 hardware wallet. Target: **STM32U585 (Cortex-M33, TrustZone) + Infineon OPTIGA Trust M V3 + NXP SE050**. Every primitive protecting the seed is PQ or symmetric with >=256-bit keys. Signing is **SPHINCS+C10 only, everywhere** — pure post-quantum, no ECDSA, no classical fallback, no FORS+C. The wallet is an account-abstraction smart account that talks to EntryPoint v0.9.
+Post-quantum ERC-4337 hardware wallet. Target: **STM32U585 (Cortex-M33, TrustZone) + Infineon OPTIGA Trust M V3 + NXP SE050**. Every primitive protecting the seed is PQ or symmetric with >=256-bit keys. Signing is **SPHINCS+C10 only, everywhere** — pure post-quantum, no ECDSA, no classical fallback, no FORS+C. The wallet is an account-abstraction smart account that talks to EntryPoint v0.6 (Coinbase-Smart-Wallet-compatible).
 
 Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. Both SE drivers (OPTIGA Trust M, SE050) working. Dual-SE XOR entropy split wired and tested. The `PQJardinWallet` smart-wallet is deployed via a deterministic CREATE2 factory whose salt is `sha256(masterPkSeed || masterPkRoot)`, so the same 24 words produce the same address on every chain. **SHA-256 everywhere:** every hash inside the PQ signing stack (bootstrap SPHINCS+C10, slot SPHINCS+C10, slot derivation, KDF, CREATE2 salt) is SHA-256, routed through the STM32U585 HASH peripheral on hardware. `sha3::Keccak256` is retained only for the external-standard hashes the EVM demands (EIP-4337 userOpHash, EIP-712, EIP-1559 envelope, ERC-7201 namespace, the CREATE2 address formula itself). **All-C10 slot cutover:** the per-slot user-tx signing key is now SPHINCS+C10 (same `h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008` parameter set as the bootstrap key). The stateful FORS+C slot scheme and its `next_q`-in-flash rollback guard are gone — C10 is stateless within its 2^18 signing-position capacity. Per-chain usage is capped by two monotonic on-chain counters on `PQJardinWallet`: `MAX_BOOTSTRAP_USES = 65_536` Type 1 slot registrations and `MAX_SLOT_USES = 65_536` Type 2 signatures per slot. Combined: each chain can service up to 65,536 × 65,536 ≈ 2^32 user transactions before it becomes permanently frozen — well inside the C10 birthday-style safety margin. **Firmware is stateless with respect to slot selection** (the companion app supplies `(chain_id, slot_index, flags)` on every sign); no flash slot store, no recovery state machine inside the secure world.
 
@@ -115,17 +115,19 @@ offset  size  field
                               bit 30 = FLAG_REGISTER_SLOT,
                               bits 29..22 = account_index (8 bits, 0..=255),
                               bits 21..0  = slot_index    (22 bits))
- 12    20    sender (PQJardinWallet address)
- 32    20    entry_point (EntryPoint v0.9 address)
+ 12    20    sender (PQSmartWallet address)
+ 32    20    entry_point (EntryPoint v0.6 address)
  52    32    nonce (u256 BE, base nonce for the first UserOp in the bundle)
- 84    32    account_gas_limits (bytes32, (verGas<<128)|callGas)
-116    32    pre_verification_gas (u256 BE)
-148    32    gas_fees (bytes32, (maxPrio<<128)|maxFee)
-180    32    paymaster_and_data_hash (keccak256, KECCAK_EMPTY when empty)
-212    20    to_address (inner tx recipient)
-232    32    value (u256 BE)
-264     2    data_len (u16 BE, 0..=4096)
-266     N    data
+ 84    32    call_gas_limit (u256 BE)
+116    32    verification_gas_limit (u256 BE)
+148    32    pre_verification_gas (u256 BE)
+180    32    max_fee_per_gas (u256 BE)
+212    32    max_priority_fee_per_gas (u256 BE)
+244    32    paymaster_and_data_hash (sha256, SHA256_EMPTY when empty)
+276    20    to_address (inner tx recipient)
+296    32    value (u256 BE)
+328     2    data_len (u16 BE, 0..=4096)
+330     N    data
 ```
 
 ### Unified sign output
@@ -203,7 +205,7 @@ At every boot, the secure world SHA-256 hashes its own flash image and displays 
 
 ### ERC-4337 Smart Contracts (`contracts/smart-wallet/`)
 
-Pure-PQ account-abstraction wallet on EntryPoint v0.9.
+Pure-PQ account-abstraction wallet on EntryPoint v0.6.
 
 **Key files:**
 - `src/PQJardinWallet.sol` — validates Type 1 + Type 2 signatures, stores `jardinSlots` + `slotUses` mappings, enforces `MAX_BOOTSTRAP_USES = 65_536` and `MAX_SLOT_USES = 65_536`.
@@ -339,7 +341,7 @@ domain-tagged KDFs that fold the index into the master entropy.
 | `secure/src/nsc/state.rs` | SecureState singleton (pin_verified, master_secret, JARDIN slot C10 cache keyed on `slot_index`) |
 | `secure/src/nsc/cmd_sign_userop.rs` | **The unified Type 1 / Type 2 all-C10 sign handler (stateless, companion-driven)** |
 | `secure/src/nsc/cmd_request_unlock.rs` | PIN entry + dual-SE unlock |
-| `secure/src/aa/userop.rs` | EntryPoint v0.9 PackedUserOperation hashing + v0.6 legacy |
+| `secure/src/aa/userop.rs` | EntryPoint v0.6 `UserOperation` hashing + SHA-256 sphincs digest |
 | `secure/src/aa/init_code.rs` | First-deploy initCode construction |
 | `secure/src/tx/eip1559.rs` | EIP-1559 envelope parser (used only for trusted-UI display) |
 | `secure/src/tx/display/` | Trusted-UI page renderers |
@@ -357,7 +359,7 @@ domain-tagged KDFs that fold the index into the master entropy.
 | `secure/src/hw/hash.rs` | STM32U585 HASH peripheral driver — `pqsigner_sha256_*` extern fns consumed by `sphincs-c10` under `hw-sha256` |
 | `bip39/*` | 24-word English BIP-39 (no_std) |
 | `fwmeasure/*` | Host-side firmware measurement tool |
-| `contracts/smart-wallet/src/PQJardinWallet.sol` | On-chain ERC-4337 v0.9 account (Type 1 + Type 2 dispatch) |
+| `contracts/smart-wallet/src/PQSmartWallet.sol` | On-chain ERC-4337 v0.6 account (bootstrap ownerIndex 0 + slot ownerIndex ≥ 1 dispatch) |
 | `contracts/smart-wallet/src/PQJardinWalletFactory.sol` | CREATE2 factory |
 | `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` | Stateless Yul C10 verifier — the wallet's single signature primitive |
 | `tools/webhid_test.html` | Browser companion: sign via WebHID |

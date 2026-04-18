@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IAccount} from "account-abstraction/interfaces/IAccount.sol";
-import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
-import {PackedUserOperation} from "account-abstraction/interfaces/PackedUserOperation.sol";
+import {IAccount06} from "account-abstraction/legacy/v06/IAccount06.sol";
+import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
+import {UserOperation06} from "account-abstraction/legacy/v06/UserOperation06.sol";
 
 import {PQMultiOwnable} from "./PQMultiOwnable.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 
 /// @title PQSmartWallet
 ///
-/// @notice Pure post-quantum ERC-4337 v0.9 account. Forked from Coinbase
-///         Smart Wallet's `CoinbaseSmartWallet`, stripped of every classical
-///         (EOA / P-256) signer path. The only signature primitive is
-///         SPHINCS+C10 routed through `c10Verifier`.
+/// @notice Pure post-quantum ERC-4337 v0.6 account. Forked from Coinbase
+///         Smart Wallet's `CoinbaseSmartWallet` (which targets v0.6),
+///         stripped of every classical (EOA / P-256) signer path. The only
+///         signature primitive is SPHINCS+C10 routed through `c10Verifier`.
 ///
 ///         **Deployment model**: this contract is the shared
 ///         *implementation* behind ERC-1967 proxies. Every user wallet is a
@@ -32,7 +32,7 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 ///         them straight from the impl bytecode — no per-wallet storage.
 ///
 /// @author PQSigner OS
-contract PQSmartWallet is IAccount, PQMultiOwnable {
+contract PQSmartWallet is IAccount06, PQMultiOwnable {
     // ── Structs ─────────────────────────────────────────────────────
 
     /// @notice ABI-encoded wrapper around a C10 sig: `(ownerIndex, sig)`.
@@ -57,7 +57,7 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
     /// @notice Per-slot (ownerIndex >= 1) sig cap.
     uint256 public constant MAX_SLOT_USES = 65_536;
 
-    /// @dev ERC-4337 v0.9 sentinel values for `validateUserOp`.
+    /// @dev ERC-4337 v0.6 sentinel values for `validateUserOp`.
     uint256 private constant SIG_VALIDATION_FAILED = 1;
     uint256 private constant SIG_VALIDATION_SUCCESS = 0;
 
@@ -124,9 +124,9 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
         }
     }
 
-    /// @inheritdoc IAccount
+    /// @inheritdoc IAccount06
     function validateUserOp(
-        PackedUserOperation calldata userOp,
+        UserOperation06 calldata userOp,
         bytes32 userOpHash,
         uint256 missingAccountFunds
     ) external override returns (uint256 validationData) {
@@ -199,16 +199,18 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
     ///         chip, only SHA-256 and SAES). By re-hashing the UserOp fields
     ///         under SHA-256 and signing THAT digest, firmware stays on the
     ///         fast path end-to-end.
-    function sphincsDigest(PackedUserOperation calldata userOp) public view returns (bytes32) {
+    function sphincsDigest(UserOperation06 calldata userOp) public view returns (bytes32) {
         return sha256(
             abi.encodePacked(
                 userOp.sender,
                 userOp.nonce,
                 sha256(userOp.initCode),
                 sha256(userOp.callData),
-                userOp.accountGasLimits,
+                userOp.callGasLimit,
+                userOp.verificationGasLimit,
                 userOp.preVerificationGas,
-                userOp.gasFees,
+                userOp.maxFeePerGas,
+                userOp.maxPriorityFeePerGas,
                 sha256(userOp.paymasterAndData),
                 address(_entryPoint),
                 block.chainid
@@ -217,7 +219,7 @@ contract PQSmartWallet is IAccount, PQMultiOwnable {
     }
 
     function _validateSignature(
-        PackedUserOperation calldata userOp,
+        UserOperation06 calldata userOp,
         bytes32 /* userOpHash — keccak-based, ignored in favour of sphincsDigest */
     ) internal returns (uint256) {
         bytes calldata sig = userOp.signature;

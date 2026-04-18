@@ -112,7 +112,8 @@ pub const CMD_CLEAR_SIGN: u32 = 5;
 ///   [612..)          : [bundle_len u32 LE][VK bundle]
 pub const CMD_CLEAR_SIGN_MSG: u32 = 6;
 
-/// CMD_SIGN_USEROP — ERC-4337 Account Abstraction UserOperation signing.
+/// CMD_SIGN_USEROP — ERC-4337 Account Abstraction UserOperation signing
+/// against **EntryPoint v0.6**.
 ///
 /// The non-secure world hands the secure world an inner EIP-1559 envelope
 /// (the "intent" tx) plus the AA wrapper parameters that are needed to
@@ -405,8 +406,8 @@ pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 3777
 // ---------------------------------------------------------------------------
 //
 // The unified sign command emits a bundle that the companion submits as
-// up to two EntryPoint v0.9 UserOps. Byte layout MUST match the on-chain
-// PQJardinWallet verifier (phase 5) exactly.
+// up to two EntryPoint v0.6 UserOps. Byte layout MUST match the on-chain
+// PQSmartWallet verifier exactly.
 
 /// SPHINCS+C10 signature length (== `SIGNATURE_LEN` as of the C10 cutover).
 pub const C10_SIG_LEN: usize = SIGNATURE_LEN;
@@ -462,12 +463,12 @@ pub const JARDIN_TYPE2_HEADER_LEN: usize = 32 + 32 + 32;
 /// Deployed via Arachnid's deterministic CREATE2 deployer at
 /// `0x4e59…4956C` (pre-deployed via Nick's method on every EVM chain)
 /// with `salt = bytes32(0)`, so this address is byte-identical on every
-/// chain that has the Arachnid deployer and EntryPoint v0.9 live. Moving
+/// chain that has the Arachnid deployer and EntryPoint v0.6 live. Moving
 /// to a different `salt`, tweaking the compiler settings, or changing
 /// the constructor args will change this address everywhere.
 pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [
-    0x18, 0x16, 0xa7, 0x7f, 0x8C, 0x17, 0x0F, 0xE8, 0x47, 0xBD,
-    0x22, 0xcc, 0xB1, 0xE7, 0x8b, 0x8c, 0x19, 0xE2, 0x19, 0x04,
+    0x37, 0x5e, 0xBb, 0x4E, 0x50, 0x2B, 0x94, 0xF9, 0xe8, 0xb9,
+    0x9F, 0xdd, 0x0b, 0x0e, 0x88, 0x2a, 0x9d, 0x9d, 0xD6, 0xfB,
 ];
 
 /// `keccak256(erc1967ProxyInitCode(impl))` where `impl` is the Coinbase-
@@ -481,10 +482,10 @@ pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [
 ///   `addr = keccak256(0xff || factory || salt || PROXY_INIT_CODE_HASH)[12..]`
 /// where `salt = sha256(masterPkSeed(32) || masterPkRoot(32))`.
 pub const PROXY_INIT_CODE_HASH: [u8; 32] = [
-    0xed, 0xa2, 0x07, 0xd5, 0x61, 0xb4, 0x50, 0x67,
-    0x11, 0xce, 0x4d, 0x24, 0xf2, 0xe8, 0xdc, 0x25,
-    0x99, 0x76, 0xb1, 0xd5, 0xb7, 0xa6, 0x13, 0x67,
-    0xa5, 0x22, 0xf2, 0x7a, 0xf5, 0xd0, 0xcc, 0xcd,
+    0xdb, 0xa8, 0xc2, 0x82, 0xfc, 0xb7, 0x9f, 0xd4,
+    0x81, 0x30, 0x8d, 0xbb, 0x76, 0xfe, 0x14, 0xa6,
+    0xe8, 0xb1, 0x19, 0x50, 0xc5, 0x4b, 0x10, 0x28,
+    0xeb, 0x36, 0xb5, 0x65, 0x5a, 0x69, 0xe8, 0x5b,
 ];
 
 /// Back-compat alias for the old factory name (kept temporarily so the
@@ -540,7 +541,7 @@ pub const MAX_JARDIN_RESPONSE_LEN: usize =
 /// deployed on this chain. Firmware synthesises `initCode` from its master
 /// pubkey pair, folds the hash into the Type 1 `userOpHash`, and emits the
 /// initCode bytes alongside the signature bundle so the companion can
-/// populate `PackedUserOperation.initCode` without ever seeing the master
+/// populate `UserOperation06.initCode` without ever seeing the master
 /// pubkey on its own. Requires `FLAG_REGISTER_SLOT` (init_code only rides
 /// on a Type 1 frame).
 pub const FLAG_INCLUDE_INIT_CODE: u32 = 0x8000_0000;
@@ -584,35 +585,40 @@ pub const MAX_ACCOUNT_INDEX: u32 = 0xFF;
 pub const SLOT_INDEX_MASK: u32 =
     !(FLAG_INCLUDE_INIT_CODE | FLAG_REGISTER_SLOT | ACCOUNT_INDEX_MASK);
 
-/// Unified CMD_SIGN_USEROP v3 payload layout.
+/// Unified CMD_SIGN_USEROP v4 payload layout (EntryPoint v0.6, unpacked gas).
 ///
 /// | off | size | field |
 /// |-----|------|-------|
 /// |  0  |  8  | chain_id (u64 BE) |
 /// |  8  |  4  | flags (u32 BE: bit 31 = include initCode, bit 30 = register slot, bits 29..22 = account_index, bits 21..0 = slot_index) |
-/// | 12  | 20  | sender (PQJardinWallet address — firmware does not recompute) |
-/// | 32  | 20  | entry_point (EntryPoint v0.9 address) |
+/// | 12  | 20  | sender (PQSmartWallet address — firmware does not recompute) |
+/// | 32  | 20  | entry_point (EntryPoint v0.6 address) |
 /// | 52  | 32  | nonce (u256 BE; base nonce for Type 1 if registration needed, else Type 2) |
-/// | 84  | 32  | account_gas_limits (bytes32, `verGas<<128 \| callGas`) |
-/// | 116 | 32  | pre_verification_gas (u256 BE) |
-/// | 148 | 32  | gas_fees (bytes32, `maxPriorityFee<<128 \| maxFee`) |
-/// | 180 | 32  | paymaster_and_data_hash (keccak256; `KECCAK_EMPTY` when empty) |
-/// | 212 | 20  | to_address (inner tx recipient) |
-/// | 232 | 32  | value (u256 BE) |
-/// | 264 |  2  | data_len (u16 BE; 0..=MAX_TX_LEN) |
-/// | 266 |  N  | data |
-/// | 266+N | 2 | erc20_bundle_len (u16 BE; 0 = no bundle) |
-/// | 268+N | B | erc20_bundle (Merkle-verified ERC-20 metadata, see `erc20::bundle`) |
-/// | 268+N+B | 2 | zk_bundle_len (u16 BE; 0 = no ZK clear-sign) |
-/// | 270+N+B | Z | zk_bundle (Groth16 proof + calldata + readable string + VK bundle) |
+/// | 84  | 32  | call_gas_limit (u256 BE) |
+/// | 116 | 32  | verification_gas_limit (u256 BE) |
+/// | 148 | 32  | pre_verification_gas (u256 BE) |
+/// | 180 | 32  | max_fee_per_gas (u256 BE) |
+/// | 212 | 32  | max_priority_fee_per_gas (u256 BE) |
+/// | 244 | 32  | paymaster_and_data_hash (sha256; `SHA256_EMPTY` when empty) |
+/// | 276 | 20  | to_address (inner tx recipient) |
+/// | 296 | 32  | value (u256 BE) |
+/// | 328 |  2  | data_len (u16 BE; 0..=MAX_TX_LEN) |
+/// | 330 |  N  | data |
+/// | 330+N | 2 | erc20_bundle_len (u16 BE; 0 = no bundle) |
+/// | 332+N | B | erc20_bundle (Merkle-verified ERC-20 metadata, see `erc20::bundle`) |
+/// | 332+N+B | 2 | zk_bundle_len (u16 BE; 0 = no ZK clear-sign) |
+/// | 334+N+B | Z | zk_bundle (Groth16 proof + calldata + readable string + VK bundle) |
 ///
 /// All three trailing sections are optional. When a section's length is
 /// zero the next section immediately follows.
+///
+/// Layout math: 8 + 4 + 20 + 20 + 32 (nonce) + 5×32 (gas fields) + 32
+/// (paymaster_and_data_hash) + 20 (to) + 32 (value) + 2 (data_len) = 330.
 pub const SIGN_USEROP_HEADER_LEN: usize =
-    8 + 4 + 20 + 20 + 32 + 32 + 32 + 32 + 32 + 20 + 32 + 2; // 266
+    8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 20 + 32 + 2; // 330
 
 /// Compile-time sanity check: header ends exactly at `data_len`.
-const _: () = assert!(SIGN_USEROP_HEADER_LEN == 266);
+const _: () = assert!(SIGN_USEROP_HEADER_LEN == 330);
 
 /// ZK clear-sign bundle header layout (prepended to the variable-length
 /// VK bundle bytes):

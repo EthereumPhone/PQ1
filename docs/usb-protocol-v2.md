@@ -86,25 +86,27 @@ firmware's state machine decides whether the response also needs a Type 1
 slot-registration UserOp; the companion just parses the two-chunk
 bundle and submits to the bundler in order.
 
-**Input payload (`SIGN_USEROP_HEADER_LEN = 266` bytes of header + inner
+**Input payload (`SIGN_USEROP_HEADER_LEN = 330` bytes of header + inner
 calldata):**
 
 ```
 offset  size  field
 ---------------------------------------------------------
   0     8    chain_id (u64 BE)
-  8     4    slot_index_hint (u32 BE, usually 0)
- 12    20    sender (PQJardinWallet address)
- 32    20    entry_point (EntryPoint v0.9 address)
+  8     4    flags (u32 BE — see shared/src/lib.rs)
+ 12    20    sender (PQSmartWallet address)
+ 32    20    entry_point (EntryPoint v0.6 address)
  52    32    nonce (u256 BE, base nonce for Type 1 if needed else Type 2)
- 84    32    account_gas_limits (bytes32, (verGas<<128)|callGas)
-116    32    pre_verification_gas (u256 BE)
-148    32    gas_fees (bytes32, (maxPrio<<128)|maxFee)
-180    32    paymaster_and_data_hash (keccak256, KECCAK_EMPTY when empty)
-212    20    to_address (inner tx recipient)
-232    32    value (u256 BE)
-264     2    data_len (u16 BE, 0..=4096)
-266     N    data
+ 84    32    call_gas_limit (u256 BE)
+116    32    verification_gas_limit (u256 BE)
+148    32    pre_verification_gas (u256 BE)
+180    32    max_fee_per_gas (u256 BE)
+212    32    max_priority_fee_per_gas (u256 BE)
+244    32    paymaster_and_data_hash (sha256, SHA256_EMPTY when empty)
+276    20    to_address (inner tx recipient)
+296    32    value (u256 BE)
+328     2    data_len (u16 BE, 0..=4096)
+330     N    data
 ```
 
 **Response:**
@@ -175,8 +177,8 @@ Returns:
 
 ### 0x01 GET_DEVICE_INFO
 
-Returns a versioning + capability header. Reports `ep_version = 0x0009`
-(EntryPoint v0.9) and `sig_param_set = 1` (JARDÍN FORS+C).
+Returns a versioning + capability header. Reports `ep_version = 0x0006`
+(EntryPoint v0.6) and `sig_param_set = 2` (SPHINCS+C10).
 
 ## Removed commands (pre-cutover)
 

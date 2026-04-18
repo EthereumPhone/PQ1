@@ -237,7 +237,7 @@ Capability discovery. **Always call first.**
 | 26     | 2    | sig_size          | u16 BE = `JARDIN_TYPE2_LEN` (4128)     |
 | 28     | 4    | erc20_db_version  | u32 BE, zero if unset                  |
 | 32     | 4    | vk_db_version     | u32 BE, zero if unset                  |
-| 36     | 2    | ep_version        | u16 BE = `0x0009` (EntryPoint v0.9)    |
+| 36     | 2    | ep_version        | u16 BE = `0x0006` (EntryPoint v0.6)    |
 | 38     | 2    | wrapper_overhead  | u16 BE = `JARDIN_TYPE2_HEADER_LEN`     |
 
 **Capability bitmap** — currently advertises `CAP_JARDIN_SIGN` only.
@@ -364,23 +364,25 @@ Drain the next chunk of a large response.
 
 ## 5. SIGN_USEROP Wire Format
 
-### Request header (266 bytes fixed)
+### Request header (330 bytes fixed)
 
 | Offset | Size | Field                     | Description                                      |
 |-------:|-----:|---------------------------|--------------------------------------------------|
 |      0 |    8 | `chain_id`                | u64 BE                                           |
 |      8 |    4 | `flags`                   | u32 BE — see below                               |
 |     12 |   20 | `sender`                  | PQSmartWallet address                            |
-|     32 |   20 | `entry_point`             | EntryPoint v0.9 address                          |
+|     32 |   20 | `entry_point`             | EntryPoint v0.6 address                          |
 |     52 |   32 | `nonce`                   | u256 BE — base nonce of the first UserOp         |
-|     84 |   32 | `account_gas_limits`      | `bytes32` = `(verGas << 128) \| callGas`         |
-|    116 |   32 | `pre_verification_gas`    | u256 BE                                          |
-|    148 |   32 | `gas_fees`                | `bytes32` = `(maxPrio << 128) \| maxFee`         |
-|    180 |   32 | `paymaster_and_data_hash` | **SHA-256** (not keccak). Use `SHA256_EMPTY` when no paymaster. |
-|    212 |   20 | `to_address`              | inner tx recipient                               |
-|    232 |   32 | `value`                   | u256 BE                                          |
-|    264 |    2 | `data_len`                | u16 BE, `0..=4096`                               |
-|    266 |    N | `data`                    | inner tx calldata                                |
+|     84 |   32 | `call_gas_limit`          | u256 BE                                          |
+|    116 |   32 | `verification_gas_limit`  | u256 BE                                          |
+|    148 |   32 | `pre_verification_gas`    | u256 BE                                          |
+|    180 |   32 | `max_fee_per_gas`         | u256 BE                                          |
+|    212 |   32 | `max_priority_fee_per_gas`| u256 BE                                          |
+|    244 |   32 | `paymaster_and_data_hash` | **SHA-256** (not keccak). Use `SHA256_EMPTY` when no paymaster. |
+|    276 |   20 | `to_address`              | inner tx recipient                               |
+|    296 |   32 | `value`                   | u256 BE                                          |
+|    328 |    2 | `data_len`                | u16 BE, `0..=4096`                               |
+|    330 |    N | `data`                    | inner tx calldata                                |
 
 > ⚠️ `paymaster_and_data_hash` is SHA-256 of `paymasterAndData`. This
 > matches `PQSmartWallet.sphincsDigest`, which re-hashes the UserOp's
@@ -607,11 +609,11 @@ interface IPQSmartWallet {
     // ── ERC-4337 ────────────────────────────────────────────────────
     function entryPoint() external view returns (address);
     function validateUserOp(
-        PackedUserOperation calldata userOp,
+        UserOperation06 calldata userOp,
         bytes32 userOpHash,
         uint256 missingAccountFunds
     ) external returns (uint256);
-    function sphincsDigest(PackedUserOperation calldata userOp)
+    function sphincsDigest(UserOperation06 calldata userOp)
         external view returns (bytes32);
 
     // ── Execution (self-call only, via EntryPoint) ──────────────────
@@ -657,20 +659,22 @@ directly — see `encodeExecuteCalldata` in the WebHID tool.
 Any other selector from a slot owner is rejected. The bootstrap owner
 (index 0) can **only** add new owners — never move funds directly.
 
-### EntryPoint v0.9
+### EntryPoint v0.6
 
-Canonical address (mainnet + Sepolia + Base Sepolia):
-`0x433709009B8330FDa32311DF1C2AFA402eD8D009`.
+Canonical singleton address (same on every major chain):
+`0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789`.
 
 ```solidity
-struct PackedUserOperation {
+struct UserOperation06 {
     address sender;
     uint256 nonce;
     bytes   initCode;
     bytes   callData;
-    bytes32 accountGasLimits;   // (verGas << 128) | callGas
+    uint256 callGasLimit;
+    uint256 verificationGasLimit;
     uint256 preVerificationGas;
-    bytes32 gasFees;            // (maxPrio << 128) | maxFee
+    uint256 maxFeePerGas;
+    uint256 maxPriorityFeePerGas;
     bytes   paymasterAndData;
     bytes   signature;
 }
@@ -797,9 +801,10 @@ GET_WALLET_ADDRESS(account_index=0) → ~6 s first time, then wallet address
 
 7. Parse response:
      initCode (4280 B), type1=null, type2 (4128 B)
-8. Build PackedUserOperation:
+8. Build UserOperation06:
      sender, nonce=0, initCode, callData = execute(to,value,data),
-     accountGasLimits, preVerificationGas, gasFees,
+     callGasLimit, verificationGasLimit, preVerificationGas,
+     maxFeePerGas, maxPriorityFeePerGas,
      paymasterAndData = "0x",
      signature = type2
 9. Submit via eth_sendUserOperation
@@ -824,7 +829,7 @@ maxFeePerGas         = 1   gwei
 4. flags   = (accountIndex << 22) | slotIdx    // no flag bits set
 
 5. SIGN_USEROP(…) → initCode=null, type1=null, type2 (4128 B)
-6. Build PackedUserOperation with signature = type2.
+6. Build UserOperation06 with signature = type2.
 7. Submit via bundler.
 ```
 
@@ -1089,8 +1094,10 @@ issue.
 
 | Contract                 | Address                                      |
 |--------------------------|----------------------------------------------|
-| EntryPoint v0.9          | `0x433709009B8330FDa32311DF1C2AFA402eD8D009` |
-| PQSmartWalletFactory     | `0x1816a77f8C170FE847BD22ccB1E78b8c19E21904` |
+| EntryPoint v0.6          | `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789` |
+| SPHINCsC10Asm verifier   | `0x2f9DA5543957c5933aC326E109e775097f0079d9` |
+| PQSmartWallet impl       | `0x2f590E0a3FF41C706d25CD6BC8b496DD84a2f679` |
+| PQSmartWalletFactory     | `0x375eBb4E502B94F9e8b99Fdd0b0e882a9d9dD6fB` |
 
 Run-the-tool defaults (RPC: `https://sepolia.base.org`, beneficiary:
 `0x00137482d6b37eBb235A463D748191D925D92eB3`). Mainnet / other L2

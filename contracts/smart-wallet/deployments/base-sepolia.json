@@ -10,12 +10,12 @@
     "factory":  "0x0000000000000000000000000000000000000000000000000000000000000000"
   },
   "contracts": {
-    "EntryPointV09": "0x433709009B8330FDa32311DF1C2AFA402eD8D009",
+    "EntryPointV06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
     "SPHINCsC10Asm": "0x2f9DA5543957c5933aC326E109e775097f0079d9",
-    "PQSmartWalletImpl": "0xDba5098C7233915b500388987b3845c66079d304",
-    "PQSmartWalletFactory": "0x1816a77f8C170FE847BD22ccB1E78b8c19E21904"
+    "PQSmartWalletImpl": "0x2f590E0a3FF41C706d25CD6BC8b496DD84a2f679",
+    "PQSmartWalletFactory": "0x375eBb4E502B94F9e8b99Fdd0b0e882a9d9dD6fB"
   },
-  "proxyInitCodeHash": "0xeda207d561b4506711ce4d24f2e8dc259976b1d5b7a61367a522f27af5d0cccd",
+  "proxyInitCodeHash": "0xdba8c282fcb79fd481308dbb76fe14a6e8b11950c54b1028eb36b5655a69e85b",
   "verified": false,
-  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Source intentionally NOT published."
+  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Impl+factory regenerated after EntryPoint v0.9 → v0.6 migration. Source intentionally NOT published."
 }
