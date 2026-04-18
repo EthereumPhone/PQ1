@@ -63,7 +63,7 @@
     </div>
     <div class="row">
       <label>Factory</label>
-      <input id="factoryAddr" value="0x008D550D3E486a5Ce5F732127e34d58C50df91dd" />
+      <input id="factoryAddr" value="0x1816a77f8C170FE847BD22ccB1E78b8c19E21904" />
     </div>
     <div class="row">
       <label>EntryPoint</label>
@@ -183,6 +183,7 @@ const INS_GET_STATUS = 0x02;
 const INS_UNLOCK = 0x10;
 const INS_LOCK = 0x11;
 const INS_SIGN_USEROP = 0x30;
+const INS_GET_WALLET_ADDRESS = 0x60;
 const INS_GET_RESPONSE = 0xC0;
 
 // Flags field (bits 31..0, big-endian in the wire payload).
@@ -456,6 +457,17 @@ const DeviceAPI = {
   async lock() {
     const r = await sendApdu(INS_LOCK, 0, 0);
     return r.sw;
+  },
+
+  /// Ask the secure world for the CREATE2-predicted wallet address
+  /// derived from its bootstrap C10 pubkey. First call after unlock
+  /// triggers ~6 s of hypertree keygen in the secure world; subsequent
+  /// calls hit the in-SRAM cache.
+  async getWalletAddress() {
+    const r = await sendApdu(INS_GET_WALLET_ADDRESS, 0, 0);
+    if (r.sw !== SW_OK) throw new Error(`GET_WALLET_ADDRESS SW=0x${r.sw.toString(16)}`);
+    if (r.data.length !== 20) throw new Error(`unexpected address length ${r.data.length}`);
+    return '0x' + bytesToHex(r.data);
   },
 
   /// Unified sign: returns { type1, type2 } Uint8Arrays (type1 can be null).
@@ -835,11 +847,24 @@ $('unlockBtn').addEventListener('click', async () => {
       log('Unlocked', 'ok');
       setStatus('Unlocked', 'ok');
       setButtonState(true, true);
+      // Auto-derive wallet address (~6 s first time, <1 ms afterwards).
+      autoFillWalletAddress();
     } else {
       log(`Unlock failed: SW=0x${sw.toString(16)}`, 'err');
     }
   } catch (e) { log(`Unlock error: ${e.message}`, 'err'); }
 });
+
+async function autoFillWalletAddress() {
+  try {
+    log('Deriving wallet address on device (first call does bootstrap keygen, ~6 s)...', 'info');
+    const addr = await DeviceAPI.getWalletAddress();
+    $('senderAddr').value = addr;
+    log(`Wallet address: ${addr}`, 'ok');
+  } catch (e) {
+    log(`Wallet-address derive failed: ${e.message} (set sender manually)`, 'warn');
+  }
+}
 
 $('lockBtn').addEventListener('click', async () => {
   try {

@@ -3,12 +3,19 @@
   "chainName": "base-sepolia",
   "rpcUrl": "https://sepolia.base.org",
   "deployer": "0x00137482d6b37eBb235A463D748191D925D92eB3",
+  "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+  "salts": {
+    "verifier": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "impl":     "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "factory":  "0x0000000000000000000000000000000000000000000000000000000000000000"
+  },
   "contracts": {
     "EntryPointV09": "0x433709009B8330FDa32311DF1C2AFA402eD8D009",
-    "SPHINCsC10Asm": "0xc9d0B4b50AAD3D939871Cfc05C6d489954F2EC94",
-    "PQSmartWalletImpl": "0x7F9e3123eA002adaf12f44496DB33A236bb8B642",
-    "PQSmartWalletFactory": "0x008D550D3E486a5Ce5F732127e34d58C50df91dd"
+    "SPHINCsC10Asm": "0x2f9DA5543957c5933aC326E109e775097f0079d9",
+    "PQSmartWalletImpl": "0xDba5098C7233915b500388987b3845c66079d304",
+    "PQSmartWalletFactory": "0x1816a77f8C170FE847BD22ccB1E78b8c19E21904"
   },
+  "proxyInitCodeHash": "0xeda207d561b4506711ce4d24f2e8dc259976b1d5b7a61367a522f27af5d0cccd",
   "verified": false,
-  "note": "Source intentionally NOT published. Unverified on BaseScan."
+  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Source intentionally NOT published."
 }

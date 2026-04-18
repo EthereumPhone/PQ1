@@ -49,6 +49,7 @@
 //!     [`cmd_clear_sign`], [`cmd_clear_sign_msg`], [`cmd_sign_userop`].
 
 mod cmd_get_remaining;
+mod cmd_get_wallet_address;
 mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_request_unlock;
@@ -87,8 +88,8 @@ compile_error!(
 
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
-    NscStatus, CMD_GET_REMAINING, CMD_IS_UNLOCKED, CMD_LOCK, CMD_NONE,
-    CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
+    NscStatus, CMD_GET_REMAINING, CMD_GET_WALLET_ADDRESS, CMD_IS_UNLOCKED, CMD_LOCK,
+    CMD_NONE, CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -253,6 +254,7 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_GET_REMAINING => cmd_get_remaining::run(),
         CMD_REQUEST_UNLOCK => cmd_request_unlock::run(),
         CMD_SIGN_USEROP => cmd_sign_userop::run(args),
+        CMD_GET_WALLET_ADDRESS => cmd_get_wallet_address::run(args),
         CMD_IS_UNLOCKED => cmd_is_unlocked::run(),
         CMD_LOCK => cmd_lock::run(),
         _ => NscStatus::InternalError as u32,
@@ -314,5 +316,13 @@ pub extern "cmse-nonsecure-entry" fn nsc_is_unlocked() -> u32 {
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
     unsafe { cmd_lock::run() }
+}
+
+/// CMD_GET_WALLET_ADDRESS — compute CREATE2-predicted wallet address.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_wallet_address(out_ptr: u32) -> u32 {
+    let args = GatewayArgs { arg0: out_ptr, arg1: 0, arg2: 0 };
+    unsafe { cmd_get_wallet_address::run(&args) }
 }
 

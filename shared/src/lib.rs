@@ -245,17 +245,20 @@ pub const CMD_LOCK: u32 = 12;
 /// (WRAPPER_TOTAL_LEN bytes) into the NS output buffer.
 pub const CMD_SIGN_MESSAGE: u32 = 13;
 
-/// CMD_GET_WALLET_ADDRESS — compute CREATE2 wallet address from stored
-/// bootstrap VK + caller-supplied factory parameters, display it on
-/// the trusted OLED for independent verification.
+/// CMD_GET_WALLET_ADDRESS — compute the CREATE2-predicted wallet
+/// address from the bootstrap C10 pubkey + the firmware-embedded
+/// `PQ_SMART_WALLET_FACTORY` / `PROXY_INIT_CODE_HASH` constants.
 ///
-/// Payload wire format:
-///   [0..8)    chain_id         u64 BE  (displayed to user)
-///   [8..28)   factory_address  20 bytes
-///   [28..60)  init_code_hash   32 bytes
+/// Requires an unlocked device (the bootstrap C10 keygen reads the
+/// dual-SE entropy); first call after unlock takes ~6 s, subsequent
+/// calls reuse the cached bootstrap pubkey and return in <1 ms.
+///
+/// No input payload — everything the formula needs is either in
+/// secure-world state (masterPkSeed / masterPkRoot) or a build-time
+/// constant (factory / proxy init-code hash).
 ///
 /// On success the secure world writes the 20-byte address to the NS
-/// output buffer and displays it on the OLED.
+/// output buffer at `arg0`.
 pub const CMD_GET_WALLET_ADDRESS: u32 = 14;
 
 // ---------------------------------------------------------------------------
@@ -456,15 +459,32 @@ pub const JARDIN_TYPE2_HEADER_LEN: usize = 32 + 32 + 32;
 
 /// Deployed address of the `PQSmartWalletFactory` contract.
 ///
-/// The factory is *supposed* to be deployed via a deterministic singleton
-/// deployer so the address is identical on every chain (this is
-/// load-bearing for the recovery contract — see `CLAUDE.md`'s CREATE2
-/// salt note). For the current Base Sepolia E2E bring-up we deploy via
-/// the deployer EOA, so this constant is the Base-Sepolia-specific
-/// factory until the singleton deploy lands.
+/// Deployed via Arachnid's deterministic CREATE2 deployer at
+/// `0x4e59…4956C` (pre-deployed via Nick's method on every EVM chain)
+/// with `salt = bytes32(0)`, so this address is byte-identical on every
+/// chain that has the Arachnid deployer and EntryPoint v0.9 live. Moving
+/// to a different `salt`, tweaking the compiler settings, or changing
+/// the constructor args will change this address everywhere.
 pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [
-    0x00, 0x8D, 0x55, 0x0D, 0x3E, 0x48, 0x6a, 0x5C, 0xE5, 0xF7,
-    0x32, 0x12, 0x7E, 0x34, 0xD5, 0x8C, 0x50, 0xDF, 0x91, 0xDD,
+    0x18, 0x16, 0xa7, 0x7f, 0x8C, 0x17, 0x0F, 0xE8, 0x47, 0xBD,
+    0x22, 0xcc, 0xB1, 0xE7, 0x8b, 0x8c, 0x19, 0xE2, 0x19, 0x04,
+];
+
+/// `keccak256(erc1967ProxyInitCode(impl))` where `impl` is the Coinbase-
+/// Smart-Wallet-style `PQSmartWallet` implementation. Baked in because
+/// the impl address is itself CREATE2-deterministic (same on every
+/// chain), so this hash is a build-time constant rather than a chain
+/// lookup.
+///
+/// Used by `cmd_get_wallet_address` to compute the CREATE2 sender
+/// locally via
+///   `addr = keccak256(0xff || factory || salt || PROXY_INIT_CODE_HASH)[12..]`
+/// where `salt = sha256(masterPkSeed(32) || masterPkRoot(32))`.
+pub const PROXY_INIT_CODE_HASH: [u8; 32] = [
+    0xed, 0xa2, 0x07, 0xd5, 0x61, 0xb4, 0x50, 0x67,
+    0x11, 0xce, 0x4d, 0x24, 0xf2, 0xe8, 0xdc, 0x25,
+    0x99, 0x76, 0xb1, 0xd5, 0xb7, 0xa6, 0x13, 0x67,
+    0xa5, 0x22, 0xf2, 0x7a, 0xf5, 0xd0, 0xcc, 0xcd,
 ];
 
 /// Back-compat alias for the old factory name (kept temporarily so the

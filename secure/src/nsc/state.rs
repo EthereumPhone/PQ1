@@ -62,6 +62,23 @@ pub(super) struct SecureState {
 
     /// Whether `jardin_master_entropy` has been derived this session.
     pub(super) jardin_master_derived: bool,
+
+    // -- Bootstrap C10 pubkey cache ------------------------------------
+    // Derived lazily on first `CMD_GET_WALLET_ADDRESS` call (or any
+    // sign path that already needs the master key) and cached across
+    // the session so repeat address lookups return in <1 ms instead of
+    // re-running ~6 s of hypertree keygen. Zeroized on lock/idle-wipe.
+
+    /// Bootstrap C10 `pkSeed` in 32-byte N-mask layout
+    /// (top 16 bytes = `pkSeed`, bottom 16 bytes = 0).
+    pub(super) bootstrap_pk_seed: [u8; 32],
+
+    /// Bootstrap C10 `pkRoot` in 32-byte N-mask layout.
+    pub(super) bootstrap_pk_root: [u8; 32],
+
+    /// Whether `bootstrap_pk_seed`/`bootstrap_pk_root` have been derived
+    /// this session. Reset by `zeroize_sensitive`.
+    pub(super) bootstrap_pk_cached: bool,
 }
 
 impl SecureState {
@@ -76,6 +93,9 @@ impl SecureState {
             has_signed: false,
             jardin_master_entropy: [0u8; 32],
             jardin_master_derived: false,
+            bootstrap_pk_seed: [0u8; 32],
+            bootstrap_pk_root: [0u8; 32],
+            bootstrap_pk_cached: false,
         }
     }
 
@@ -92,6 +112,9 @@ impl SecureState {
         self.has_signed = false;
         self.jardin_master_entropy.zeroize();
         self.jardin_master_derived = false;
+        self.bootstrap_pk_seed.zeroize();
+        self.bootstrap_pk_root.zeroize();
+        self.bootstrap_pk_cached = false;
         // SAFETY: single-threaded, exclusive access via with_state.
         // JARDIN_SLOT holds a SigningKey (ZeroizeOnDrop). Replacing the
         // Option with None drops the inner key, which wipes its secret

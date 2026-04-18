@@ -29,6 +29,7 @@ mod transport {
     const CMD_SIGN_USEROP: u32 = 7;
     const CMD_IS_UNLOCKED: u32 = 11;
     const CMD_LOCK: u32 = 12;
+    const CMD_GET_WALLET_ADDRESS: u32 = 14;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -71,6 +72,11 @@ mod transport {
     pub(super) fn lock() -> u32 {
         unsafe { gateway_call(CMD_LOCK, 0, 0, 0) }
     }
+
+    #[inline]
+    pub(super) fn get_wallet_address(out_ptr: *mut u8) -> u32 {
+        unsafe { gateway_call(CMD_GET_WALLET_ADDRESS, out_ptr as u32, 0, 0) }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +91,7 @@ mod transport {
         fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_is_unlocked() -> u32;
         fn nsc_lock() -> u32;
+        fn nsc_get_wallet_address(out_ptr: u32) -> u32;
     }
 
     #[inline]
@@ -114,6 +121,11 @@ mod transport {
     #[inline]
     pub(super) fn lock() -> u32 {
         unsafe { nsc_lock() }
+    }
+
+    #[inline]
+    pub(super) fn get_wallet_address(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_get_wallet_address(out_ptr as u32) }
     }
 }
 
@@ -148,4 +160,13 @@ pub fn is_unlocked() -> bool {
 /// Explicitly lock the device: zeroize cached secrets and mark as locked.
 pub fn lock() -> u32 {
     transport::lock()
+}
+
+/// Compute the CREATE2-predicted wallet address from the bootstrap C10
+/// pubkey + firmware-embedded factory / proxy-init-code-hash constants.
+/// Writes 20 bytes into `out`. First call after unlock takes ~6 s
+/// (bootstrap keygen); subsequent calls hit the in-SRAM cache and return
+/// in <1 ms.
+pub fn get_wallet_address(out: &mut [u8; 20]) -> u32 {
+    transport::get_wallet_address(out.as_mut_ptr())
 }

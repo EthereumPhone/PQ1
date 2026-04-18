@@ -128,6 +128,7 @@ impl CommandRouter {
             INS_V2_GET_STATUS => return self.cmd_get_status(),
             INS_V2_UNLOCK => return self.cmd_unlock(),
             INS_V2_LOCK => return self.cmd_lock(),
+            INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(),
             _ => {}
         }
 
@@ -263,6 +264,22 @@ impl CommandRouter {
     unsafe fn cmd_lock(&self) -> Response {
         nsc_api::lock();
         self.sw_response(SW_OK)
+    }
+
+    /// 0x60 GET_WALLET_ADDRESS — return the 20-byte CREATE2-predicted
+    /// sender for this device's bootstrap C10 pubkey. Requires unlock.
+    unsafe fn cmd_get_wallet_address(&self) -> Response {
+        let mut addr = [0u8; 20];
+        let status = nsc_api::get_wallet_address(&mut addr);
+        if status != NscStatus::Ok as u32 {
+            return self.nsc_status_to_response(status);
+        }
+        RESP_BUF[..20].copy_from_slice(&addr);
+        RESP_BUF[20..22].copy_from_slice(&SW_OK.to_be_bytes());
+        Response {
+            ptr: RESP_BUF.as_ptr(),
+            len: 22,
+        }
     }
 
     /// 0x30 SIGN_USEROP — unified JARDÍN Type 1 / Type 2 state machine.
