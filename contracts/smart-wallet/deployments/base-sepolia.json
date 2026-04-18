@@ -1,0 +1,14 @@
+{
+  "chainId": 84532,
+  "chainName": "base-sepolia",
+  "rpcUrl": "https://sepolia.base.org",
+  "deployer": "0x00137482d6b37eBb235A463D748191D925D92eB3",
+  "contracts": {
+    "EntryPointV09": "0x433709009B8330FDa32311DF1C2AFA402eD8D009",
+    "SPHINCsC10Asm": "0xc9d0B4b50AAD3D939871Cfc05C6d489954F2EC94",
+    "PQSmartWalletImpl": "0x7F9e3123eA002adaf12f44496DB33A236bb8B642",
+    "PQSmartWalletFactory": "0x008D550D3E486a5Ce5F732127e34d58C50df91dd"
+  },
+  "verified": false,
+  "note": "Source intentionally NOT published. Unverified on BaseScan."
+}

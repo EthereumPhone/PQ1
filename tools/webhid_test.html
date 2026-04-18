@@ -56,10 +56,37 @@
   </div>
 
   <div class="card">
+    <h2>On-chain Endpoints</h2>
+    <div class="row">
+      <label>Wallet (sender)</label>
+      <input id="senderAddr" placeholder="0x... CREATE2-predicted wallet address" />
+    </div>
+    <div class="row">
+      <label>Factory</label>
+      <input id="factoryAddr" value="0x008D550D3E486a5Ce5F732127e34d58C50df91dd" />
+    </div>
+    <div class="row">
+      <label>EntryPoint</label>
+      <input id="entryPointAddr" value="0x433709009B8330FDa32311DF1C2AFA402eD8D009" />
+    </div>
+    <div class="row">
+      <label>Beneficiary</label>
+      <input id="beneficiaryAddr" value="0x00137482d6b37eBb235A463D748191D925D92eB3" />
+    </div>
+    <div class="row">
+      <label>RPC URL</label>
+      <input id="rpcUrl" value="https://sepolia.base.org" />
+    </div>
+    <div style="font-size: 12px; color: #6b7280; line-height: 1.5;">
+      Defaults = Base Sepolia PQSigner stack. Fill <strong>Wallet</strong> with the CREATE2-predicted address: <code>cast call &lt;factory&gt; "getAddress(bytes32,bytes32)(address)" &lt;pkSeed&gt; &lt;pkRoot&gt;</code>. For first deploy, the sender <em>must</em> match that prediction — otherwise the signed digest won't verify on-chain.
+    </div>
+  </div>
+
+  <div class="card">
     <h2>Sign Transaction</h2>
     <div class="row">
       <label>Chain ID</label>
-      <input id="chainId" value="11155111" />
+      <input id="chainId" value="84532" />
     </div>
     <div class="row">
       <label>Slot index</label>
@@ -112,6 +139,16 @@
       <div class="stat"><div class="label">Type 2 wrapper (slot)</div><div class="value" id="t2Len">—</div></div>
       <div class="stat"><div class="label">Owner index (T2)</div><div class="value" id="t2OwnerIdx">—</div></div>
     </div>
+  </div>
+
+  <div class="card" id="publishCard" style="display:none">
+    <h2>Publish-ready output</h2>
+    <div style="font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 12px;">
+      Copy either blob and hand it to me (or pipe into your own submitter). The JSON mirrors a
+      <code>PackedUserOperation</code> struct; the <code>cast</code> one-liner posts it directly
+      via <code>EntryPoint.handleOps</code> — no bundler needed.
+    </div>
+    <div id="publishBlocks"></div>
   </div>
 
   <div class="card">
@@ -536,6 +573,236 @@ function parseSignResponse(resp) {
   return { initCode, type1, type2 };
 }
 
+// ── Publish helpers ──────────────────────────────────────────────
+//
+// PQSmartWallet selectors (stable — part of the on-chain ABI):
+//   execute(address,uint256,bytes)           → 0xb61d27f6
+//   addOwnerBytes(bytes)                     → 0x101490cb
+//
+// Both confirmed via `cast sig` against the Solidity ABI. The execute
+// selector is also cross-checked by
+// `PQSmartWalletRealSigBench.test_callDataMatchesEncoder` every forge run.
+const SELECTOR_EXECUTE = new Uint8Array([0xb6, 0x1d, 0x27, 0xf6]);
+const SELECTOR_ADD_OWNER_BYTES = new Uint8Array([0x10, 0x14, 0x90, 0xcb]);
+
+function encodeExecuteCalldata(to, value, data) {
+  const toBytes = hexToBytes(to);
+  if (toBytes.length !== 20) throw new Error('execute `to` must be 20 bytes');
+  const addr32 = new Uint8Array(32);
+  addr32.set(toBytes, 12);
+  // Dynamic-bytes encoding: offset 0x60 (3 static slots precede it),
+  // then length, then data padded to a 32-byte multiple.
+  const dataLen = data ? data.length : 0;
+  const padLen = (32 - (dataLen % 32)) % 32;
+  const lenWord = u256be(BigInt(dataLen));
+  const offsetWord = u256be(0x60n);
+  const dataPadded = new Uint8Array(dataLen + padLen);
+  if (dataLen) dataPadded.set(data, 0);
+  return concatBytes([
+    SELECTOR_EXECUTE, addr32, u256be(value), offsetWord, lenWord, dataPadded,
+  ]);
+}
+
+function encodeAddOwnerBytesCalldata(ownerBytes) {
+  if (ownerBytes.length !== 64) throw new Error('owner bytes must be 64B (pkSeed || pkRoot)');
+  // abi.encode(bytes): offset 0x20, length 0x40 (64), data (64 padded to 64)
+  const offsetWord = u256be(0x20n);
+  const lenWord = u256be(BigInt(ownerBytes.length));
+  return concatBytes([SELECTOR_ADD_OWNER_BYTES, offsetWord, lenWord, ownerBytes]);
+}
+
+/// Parse the 4280-byte initCode blob emitted by the firmware. Layout
+/// (from secure/src/nsc/cmd_sign_userop.rs §11a):
+///   factory(20) || selector(4) || masterPkSeed(32) || masterPkRoot(32)
+///   || slot0PkSeed(32) || slot0PkRoot(32) || chainId(32) || offset(32)
+///   || length(32) || factorySig(4008 padded to 4032)
+function parseInitCode(initCode) {
+  if (!initCode || initCode.length !== 4280) return null;
+  return {
+    factory:       '0x' + bytesToHex(initCode.slice(0, 20)),
+    masterPkSeed:  '0x' + bytesToHex(initCode.slice(24, 56)),
+    masterPkRoot:  '0x' + bytesToHex(initCode.slice(56, 88)),
+    slot0PkSeed:   '0x' + bytesToHex(initCode.slice(88, 120)),
+    slot0PkRoot:   '0x' + bytesToHex(initCode.slice(120, 152)),
+  };
+}
+
+function packAccountGasLimits(verGas, callGas) {
+  return concatBytes([u128be(verGas), u128be(callGas)]);
+}
+function packGasFees(maxPrio, maxFee) {
+  return concatBytes([u128be(maxPrio), u128be(maxFee)]);
+}
+
+function buildPackedUserOp({ sender, nonce, initCode, callData, verGas, callGas,
+                             preVerificationGas, maxPrio, maxFee, signature }) {
+  return {
+    sender,
+    nonce: '0x' + BigInt(nonce).toString(16),
+    initCode: '0x' + bytesToHex(initCode || new Uint8Array(0)),
+    callData: '0x' + bytesToHex(callData),
+    accountGasLimits:   '0x' + bytesToHex(packAccountGasLimits(verGas, callGas)),
+    preVerificationGas: '0x' + BigInt(preVerificationGas).toString(16),
+    gasFees:            '0x' + bytesToHex(packGasFees(maxPrio, maxFee)),
+    paymasterAndData: '0x',
+    signature: '0x' + bytesToHex(signature),
+  };
+}
+
+/// Render the UserOp as a cast-send invocation against the EntryPoint.
+/// The tuple-array arg is inlined; cast is happy with long calldata.
+function buildCastSend(op, entryPoint, beneficiary, rpcUrl) {
+  const tuple = `[(${op.sender},${op.nonce},${op.initCode},${op.callData},${op.accountGasLimits},${op.preVerificationGas},${op.gasFees},${op.paymasterAndData},${op.signature})]`;
+  const sig = 'handleOps((address,uint256,bytes,bytes,bytes32,uint256,bytes32,bytes,bytes)[],address)';
+  return [
+    'cast send',
+    `  ${entryPoint}`,
+    `  "${sig}"`,
+    `  '${tuple}'`,
+    `  ${beneficiary}`,
+    `  --rpc-url ${rpcUrl}`,
+    '  --account pqsigner-deploy',
+    '  --password ""',
+  ].join(' \\\n');
+}
+
+function renderPublishBlocks(ops) {
+  const card = $('publishCard');
+  const container = $('publishBlocks');
+  container.innerHTML = '';
+  if (ops.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const entryPoint = $('entryPointAddr').value.trim();
+  const beneficiary = $('beneficiaryAddr').value.trim();
+  const rpcUrl = $('rpcUrl').value.trim();
+  ops.forEach((entry, idx) => {
+    const block = document.createElement('div');
+    block.style.marginBottom = '16px';
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size: 12px; color: #9ca3af; margin-bottom: 6px;';
+    title.textContent = `UserOp ${idx + 1} — ${entry.label}`;
+    block.appendChild(title);
+
+    const jsonText = JSON.stringify({
+      chainId: Number($('chainId').value),
+      entryPoint,
+      op: entry.op,
+    }, null, 2);
+    block.appendChild(makeCopyable('JSON', jsonText));
+
+    const castCmd = buildCastSend(entry.op, entryPoint, beneficiary, rpcUrl);
+    block.appendChild(makeCopyable('cast send', castCmd));
+
+    container.appendChild(block);
+  });
+}
+
+function makeCopyable(label, text) {
+  const wrap = document.createElement('div');
+  wrap.style.marginBottom = '8px';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;';
+  const lab = document.createElement('span');
+  lab.style.cssText = 'font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em;';
+  lab.textContent = label;
+  const btn = document.createElement('button');
+  btn.className = 'secondary';
+  btn.textContent = 'Copy';
+  btn.style.cssText = 'padding: 4px 10px; font-size: 11px;';
+  btn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+    } catch (e) { btn.textContent = 'Copy failed'; }
+  });
+  row.appendChild(lab); row.appendChild(btn);
+  const ta = document.createElement('textarea');
+  ta.readOnly = true;
+  ta.value = text;
+  ta.style.cssText = 'width:100%; min-height:90px; background:#070708; border:1px solid #1e1e24; border-radius:8px; padding:10px; color:#e5e7eb; font-family: ui-monospace, monospace; font-size: 11px; resize: vertical;';
+  wrap.appendChild(row);
+  wrap.appendChild(ta);
+  return wrap;
+}
+
+/// Given the firmware's {initCode, type1, type2} bundle + the tx fields
+/// signed over it, produce the ordered list of PackedUserOperations the
+/// EntryPoint would accept. Matches secure/src/nsc/cmd_sign_userop.rs
+/// dispatch:
+///   * initCode present (no type1): 1 op, signed by slot
+///   * type1 + type2 (rotation):    2 ops, bootstrap addOwner then slot execute
+///   * type2 only (normal):         1 op, signed by slot
+function buildPublishOps({ initCode, type1, type2 }, params) {
+  const sender = $('senderAddr').value.trim();
+  if (!sender || sender === '0x' || sender.length !== 42) {
+    log('Wallet (sender) address not set — fill it in before signing so the JSON is usable', 'warn');
+  }
+  const toBytes = hexToBytes(params.to);
+  const dataBytes = params.data ? hexToBytes(params.data) : new Uint8Array(0);
+  const executeCalldata = encodeExecuteCalldata(params.to, params.value, dataBytes);
+
+  const baseOpArgs = {
+    verGas: params.verGas,
+    callGas: params.callGas,
+    preVerificationGas: params.preVerificationGas,
+    maxPrio: params.maxPriorityFeePerGas,
+    maxFee: params.maxFeePerGas,
+  };
+
+  const ops = [];
+
+  if (initCode && !type1) {
+    // First-deploy path. Single UserOp: slot-0 signs execute() + initCode
+    // rides along so the EntryPoint triggers factory.createAccount first.
+    ops.push({
+      label: 'first deploy + execute (slot 0)',
+      op: buildPackedUserOp({
+        ...baseOpArgs,
+        sender,
+        nonce: params.nonce,
+        initCode,
+        callData: executeCalldata,
+        signature: type2,
+      }),
+    });
+  } else if (type1 && type2) {
+    // Rotation path. Two UserOps: bootstrap addOwner (nonce base), then
+    // slot execute (nonce base+1).
+    //
+    // We need the new slot owner bytes to build Type 1's callData. They
+    // aren't in the firmware response, so we reject rotation for now and
+    // surface a TODO. A follow-up wire-format bump can emit the 64-byte
+    // slot_N_owner_bytes alongside the wrapper.
+    log('Rotation path (Type 1 + Type 2) needs the new slot pubkey to build addOwnerBytes callData. Not yet surfaced in the firmware response — skipping Type 1 op.', 'warn');
+    ops.push({
+      label: 'slot execute (after rotation) — submit only AFTER Type 1 lands',
+      op: buildPackedUserOp({
+        ...baseOpArgs,
+        sender,
+        nonce: BigInt(params.nonce) + 1n,
+        initCode: null,
+        callData: executeCalldata,
+        signature: type2,
+      }),
+    });
+  } else if (type2) {
+    // Normal slot tx on an already-deployed wallet.
+    ops.push({
+      label: 'slot execute',
+      op: buildPackedUserOp({
+        ...baseOpArgs,
+        sender,
+        nonce: params.nonce,
+        initCode: null,
+        callData: executeCalldata,
+        signature: type2,
+      }),
+    });
+  }
+  return ops;
+}
+
 // Decode the owner index (first 32 bytes) of an abi.encode-wrapped sig.
 function wrapperOwnerIndex(wrapper) {
   if (!wrapper || wrapper.length < 32) return null;
@@ -586,13 +853,17 @@ $('lockBtn').addEventListener('click', async () => {
 $('signBtn').addEventListener('click', async () => {
   $('signBtn').disabled = true;
   try {
+    const senderInput = $('senderAddr').value.trim();
+    const sender = senderInput && senderInput.length === 42
+      ? senderInput
+      : '0x' + '42'.repeat(20); // fallback if the user forgot to set it
     const params = {
       chainId: BigInt($('chainId').value),
       slotIndex: Number($('slotIndex').value) >>> 0,
       registerSlot: $('registerSlot').checked,
       includeInitCode: $('includeInitCode').checked,
-      sender: '0x' + '42'.repeat(20), // TODO: compute from master pk via factory
-      entryPoint: ENTRY_POINT_V09,
+      sender,
+      entryPoint: $('entryPointAddr').value.trim() || ENTRY_POINT_V09,
       nonce: BigInt($('nonce').value),
       verGas: DEFAULT_GAS.verGas,
       callGas: DEFAULT_GAS.callGas,
@@ -623,6 +894,17 @@ $('signBtn').addEventListener('click', async () => {
     }
     log(`Type 2 wrapper (ownerIdx=${t2Owner}): ${type2.length}B`, 'ok');
     $('submitBtn').disabled = false;
+
+    // Render publish-ready UserOp(s).
+    if (initCode) {
+      const parsed = parseInitCode(initCode);
+      if (parsed) {
+        log(`initCode decoded — factory=${parsed.factory} masterPkSeed=${parsed.masterPkSeed.slice(0,18)}… slot0PkSeed=${parsed.slot0PkSeed.slice(0,18)}…`, 'info');
+        log(`To compute sender: cast call ${parsed.factory} "getAddress(bytes32,bytes32)(address)" ${parsed.masterPkSeed} ${parsed.masterPkRoot} --rpc-url ${$('rpcUrl').value}`, 'info');
+      }
+    }
+    const ops = buildPublishOps({ initCode, type1, type2 }, params);
+    renderPublishBlocks(ops);
   } catch (e) {
     log(`Sign failed: ${e.message}`, 'err');
   } finally {
@@ -685,6 +967,8 @@ async function runSignWithParams(params, description) {
     }
     log(`Type 2 wrapper (ownerIdx=${t2Owner}): ${type2.length}B`, 'ok');
     $('submitBtn').disabled = false;
+    const ops = buildPublishOps({ initCode, type1, type2 }, params);
+    renderPublishBlocks(ops);
   } catch (e) {
     log(`${description} failed: ${e.message}`, 'err');
   } finally {
@@ -706,7 +990,7 @@ $('testUsdcBtn').addEventListener('click', async () => {
     slotIndex: Number($('slotIndex').value) >>> 0,
     registerSlot: $('registerSlot').checked,
     includeInitCode: $('includeInitCode').checked,
-    sender: '0x' + '42'.repeat(20),
+    sender: ($('senderAddr').value.trim() || ('0x' + '42'.repeat(20))),
     entryPoint: ENTRY_POINT_V09,
     nonce: BigInt($('nonce').value || '0'),
     verGas: DEFAULT_GAS.verGas,
@@ -742,7 +1026,7 @@ $('testZkAaveBtn').addEventListener('click', async () => {
     slotIndex: Number($('slotIndex').value) >>> 0,
     registerSlot: $('registerSlot').checked,
     includeInitCode: $('includeInitCode').checked,
-    sender: '0x' + '42'.repeat(20),
+    sender: ($('senderAddr').value.trim() || ('0x' + '42'.repeat(20))),
     entryPoint: ENTRY_POINT_V09,
     nonce: BigInt($('nonce').value || '0'),
     verGas: DEFAULT_GAS.verGas,

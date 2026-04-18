@@ -10,6 +10,7 @@
 //! Release mode is strongly recommended — the hypertree keygen runs in
 //! software sha2 and takes O(seconds) on a laptop, O(30+ s) in debug.
 
+use sha2::{Digest, Sha256};
 use sphincs_c10::params::{N, SIGNATURE_LEN};
 use sphincs_c10::{verify, SigningKey};
 use std::fs;
@@ -27,6 +28,62 @@ fn pad_to_b32_hex(val: &[u8; N]) -> String {
     let mut out = [0u8; 32];
     out[..N].copy_from_slice(val);
     to_hex(&out)
+}
+
+fn sha256_of(data: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(data);
+    h.finalize().into()
+}
+
+/// Mirror of `PQSmartWallet.sphincsDigest(userOp)`:
+///   sha256(
+///     sender || nonce || sha256(initCode) || sha256(callData) ||
+///     accountGasLimits || preVerificationGas || gasFees ||
+///     sha256(paymasterAndData) || entryPoint || chainid
+///   )
+#[allow(clippy::too_many_arguments)]
+fn sphincs_digest(
+    sender: &[u8; 20],
+    nonce: &[u8; 32],
+    init_code: &[u8],
+    call_data: &[u8],
+    account_gas_limits: &[u8; 32],
+    pre_verification_gas: &[u8; 32],
+    gas_fees: &[u8; 32],
+    paymaster_and_data: &[u8],
+    entry_point: &[u8; 20],
+    chain_id: &[u8; 32],
+) -> [u8; 32] {
+    let mut buf = Vec::with_capacity(296);
+    buf.extend_from_slice(sender);
+    buf.extend_from_slice(nonce);
+    buf.extend_from_slice(&sha256_of(init_code));
+    buf.extend_from_slice(&sha256_of(call_data));
+    buf.extend_from_slice(account_gas_limits);
+    buf.extend_from_slice(pre_verification_gas);
+    buf.extend_from_slice(gas_fees);
+    buf.extend_from_slice(&sha256_of(paymaster_and_data));
+    buf.extend_from_slice(entry_point);
+    buf.extend_from_slice(chain_id);
+    sha256_of(&buf)
+}
+
+/// Build the calldata for `PQSmartWallet.execute(target, value, data)` with
+/// `data == ""`. Selector `0xb61d27f6` matches `execute(address,uint256,bytes)`
+/// — verified at runtime by the Foundry side via `abi.encodeCall`.
+fn build_execute_calldata(target: [u8; 20], value: [u8; 32]) -> Vec<u8> {
+    let mut cd = Vec::with_capacity(132);
+    cd.extend_from_slice(&[0xb6, 0x1d, 0x27, 0xf6]);
+    let mut a = [0u8; 32];
+    a[12..].copy_from_slice(&target);
+    cd.extend_from_slice(&a);
+    cd.extend_from_slice(&value);
+    let mut off = [0u8; 32];
+    off[31] = 0x60;
+    cd.extend_from_slice(&off);
+    cd.extend_from_slice(&[0u8; 32]);
+    cd
 }
 
 #[test]
@@ -59,19 +116,96 @@ fn generate_c10_test_vectors() {
         "Rust verify must accept freshly-generated sig"
     );
 
+    // ── userOp-shaped vector for the wallet validateUserOp gas bench ──
+    //
+    // Fixed userOp shape (matches `PQSmartWallet.t.sol` bench):
+    //   sender             = 0x000000000000000000000000000000000000beef
+    //   nonce              = 0
+    //   initCode           = ""
+    //   callData           = execute(target=0xcafe, value=0, data="")
+    //   accountGasLimits   = 0
+    //   preVerificationGas = 0
+    //   gasFees            = 0
+    //   paymasterAndData   = ""
+    //   entryPoint         = 0x0000000000000000000000000000000000004337
+    //   chainId            = 31337 (forge default)
+    //
+    // The slot pubkey installed at ownerIndex==1 is the same C10 keypair
+    // as above, so we re-use `sk` for signing.
+    let mut sender = [0u8; 20];
+    sender[18] = 0xbe;
+    sender[19] = 0xef;
+    let nonce = [0u8; 32];
+    let init_code: Vec<u8> = Vec::new();
+    let mut target = [0u8; 20];
+    target[18] = 0xca;
+    target[19] = 0xfe;
+    let call_data = build_execute_calldata(target, [0u8; 32]);
+    let account_gas_limits = [0u8; 32];
+    let pre_verification_gas = [0u8; 32];
+    let gas_fees = [0u8; 32];
+    let paymaster_and_data: Vec<u8> = Vec::new();
+    let mut entry_point = [0u8; 20];
+    entry_point[18] = 0x43;
+    entry_point[19] = 0x37;
+    let mut chain_id = [0u8; 32];
+    chain_id[28..].copy_from_slice(&31337u32.to_be_bytes());
+
+    let user_op_digest = sphincs_digest(
+        &sender,
+        &nonce,
+        &init_code,
+        &call_data,
+        &account_gas_limits,
+        &pre_verification_gas,
+        &gas_fees,
+        &paymaster_and_data,
+        &entry_point,
+        &chain_id,
+    );
+
+    println!("Signing userOp digest…");
+    let user_op_sig = sk.sign(&user_op_digest, None);
+    assert_eq!(user_op_sig.len(), SIGNATURE_LEN);
+    assert!(
+        verify(sk.pk_seed(), sk.pk_root(), &user_op_digest, &user_op_sig),
+        "Rust verify must accept freshly-generated userOp sig"
+    );
+
     let json = format!(
         r#"{{
   "pkSeed": "{}",
   "pkRoot": "{}",
   "message": "{}",
   "signature": "{}",
-  "sigLen": {}
+  "sigLen": {},
+  "userOpBench": {{
+    "sender": "{}",
+    "nonce": "{}",
+    "callData": "{}",
+    "accountGasLimits": "{}",
+    "preVerificationGas": "{}",
+    "gasFees": "{}",
+    "entryPoint": "{}",
+    "chainId": 31337,
+    "digest": "{}",
+    "signature": "{}"
+  }}
 }}"#,
         pad_to_b32_hex(sk.pk_seed()),
         pad_to_b32_hex(sk.pk_root()),
         to_hex(&msg),
         to_hex(&sig),
-        sig.len()
+        sig.len(),
+        to_hex(&sender),
+        to_hex(&nonce),
+        to_hex(&call_data),
+        to_hex(&account_gas_limits),
+        to_hex(&pre_verification_gas),
+        to_hex(&gas_fees),
+        to_hex(&entry_point),
+        to_hex(&user_op_digest),
+        to_hex(&user_op_sig),
     );
 
     let out_path = concat!(
