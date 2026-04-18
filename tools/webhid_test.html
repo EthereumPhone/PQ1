@@ -214,13 +214,21 @@ const C10_SIG_LEN = 4008;
 const SIG_WRAPPER_LEN = 32 + 32 + 32 + (Math.ceil(C10_SIG_LEN / 32) * 32); // 4128
 const PQ_INIT_CODE_LEN = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 
-// Gas defaults for Sepolia.
+// Gas defaults for Base Sepolia (chain 84532). A first-deploy UserOp
+// needs verGas to cover both the factory call (~547k: CREATE2 proxy
+// deploy + real C10 verify of factorySig + initialize) AND the wallet's
+// own validateUserOp (~214k: real C10 verify of the Type 2 sig). That's
+// why 300k is not enough — the EntryPoint raises "AA13 initCode failed
+// or OOG" during the factory deploy.
+//
+// Fees tuned for an L2 (~0.006 gwei real). 0.1 / 1 gwei is generous but
+// keeps requiredPrefund around 0.001 ETH instead of 0.01 ETH.
 const DEFAULT_GAS = {
-  verGas: 300_000n,
-  callGas: 50_000n,
-  preVerificationGas: 100_000n,
-  maxPriorityFeePerGas: 2_000_000_000n, // 2 gwei
-  maxFeePerGas: 10_000_000_000n,        // 10 gwei
+  verGas: 800_000n,                    // factory 547k + validate 214k + buffer
+  callGas: 50_000n,                    // execute() to a non-contract is ~3k
+  preVerificationGas: 150_000n,        // ~4.5 kB calldata + EntryPoint overhead
+  maxPriorityFeePerGas: 100_000_000n,  // 0.1 gwei
+  maxFeePerGas: 1_000_000_000n,        // 1 gwei
 };
 
 let device = null;
