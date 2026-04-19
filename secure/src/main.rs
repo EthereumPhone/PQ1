@@ -878,10 +878,12 @@ fn SysTick() {
     // already do via the idle callback to `wait_button`).
     if timeout::is_idle() && nsc::is_unlocked() && !nsc::handler_is_busy() {
         nsc::zeroize_sensitive_state();
-        ui::show_status("Locked", "(idle wipe)");
 
         // Trigger PendSV to run the re-unlock flow outside the ISR.
         // PendSV has the lowest priority so it won't block SysTick.
+        // PendSV drives the PIN entry screen directly — no intermediate
+        // "(idle wipe)" status page, which could otherwise get stuck
+        // visible if PendSV is delayed.
         #[cfg(feature = "stm32u585")]
         unsafe {
             const ICSR: *mut u32 = 0xE000_ED04 as *mut u32;
@@ -937,17 +939,13 @@ fn PendSV() {
         use zeroize::Zeroize;
 
         loop {
-            ui::show_status("Press button", "to unlock");
-
-            // Wait for any button press before showing PIN entry
-            let _ = ui::input().wait_button(&mut timeout::idle_check);
+            ui::show_status("Enter PIN", "to unlock");
 
             timeout::reset_activity();
 
             let mut pin = match enter_pin() {
                 PinEntryResult::Pin(p) => p,
                 PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {
-                    ui::show_status("Locked", "");
                     continue;
                 }
                 PinEntryResult::Mismatch => continue,

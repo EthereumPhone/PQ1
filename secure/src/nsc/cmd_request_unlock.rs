@@ -27,7 +27,6 @@ pub(super) unsafe fn run() -> u32 {
         }
         PinEntryResult::IdleWipe => {
             super::zeroize_sensitive_state();
-            ui::show_status("Locked", "(idle wipe)");
             return NscStatus::IdleWipe as u32;
         }
     };
