@@ -25,10 +25,10 @@ use crate::nsc_api;
 // ---------------------------------------------------------------------------
 
 /// Maximum accumulated command data across chained APDUs. Size reflects
-/// the worst-case unified sign payload: 266-byte header + max inner-tx
-/// calldata (MAX_TX_LEN) + optional 2-byte prefix + max ERC-20 bundle +
-/// optional 2-byte prefix + max ZK clear-sign bundle (proof + calldata
-/// + readable + VK bundle).
+/// the worst-case unified sign payload: `SIGN_USEROP_HEADER_LEN`-byte
+/// header + max inner-tx calldata (`MAX_TX_LEN`) + optional 2-byte prefix
+/// + max ERC-20 bundle + optional 2-byte prefix + max ZK clear-sign
+/// bundle (proof + calldata + readable + VK bundle).
 const CHAIN_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN
     + MAX_TX_LEN
     + 2
@@ -379,7 +379,7 @@ impl CommandRouter {
             return received_len;
         }
 
-        let data_len = u16::from_be_bytes([CHAIN_BUF[264], CHAIN_BUF[265]]) as usize;
+        let data_len = u16::from_be_bytes([CHAIN_BUF[328], CHAIN_BUF[329]]) as usize;
         let payload_end = SIGN_USEROP_HEADER_LEN + data_len;
         if payload_end > received_len {
             return received_len;
@@ -405,7 +405,7 @@ impl CommandRouter {
             CHAIN_BUF[7],
         ]);
         let mut to = [0u8; 20];
-        to.copy_from_slice(&CHAIN_BUF[212..232]);
+        to.copy_from_slice(&CHAIN_BUF[276..296]);
 
         // Matches `MAX_ERC20_BUNDLE_LEN` in `secure/src/erc20/bundle.rs`.
         let mut bundle_buf = [0u8; 1120];
@@ -439,7 +439,7 @@ impl CommandRouter {
             return received_len;
         }
 
-        let data_len = u16::from_be_bytes([CHAIN_BUF[264], CHAIN_BUF[265]]) as usize;
+        let data_len = u16::from_be_bytes([CHAIN_BUF[328], CHAIN_BUF[329]]) as usize;
         let after_data = SIGN_USEROP_HEADER_LEN + data_len;
         if after_data + 2 > received_len {
             return received_len;
@@ -478,7 +478,7 @@ impl CommandRouter {
             CHAIN_BUF[7],
         ]);
         let mut to = [0u8; 20];
-        to.copy_from_slice(&CHAIN_BUF[212..232]);
+        to.copy_from_slice(&CHAIN_BUF[276..296]);
 
         let mut vk_bundle_buf = [0u8; ZK_VK_BUNDLE_MAX_LEN];
         let Some(vk_bundle_len) = crate::vk_db::build_bundle(chain_id, &to, &mut vk_bundle_buf)
