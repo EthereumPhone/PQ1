@@ -24,7 +24,12 @@ zeroize = { workspace = true }
 # Uses our fork which adds a `pka` feature for STM32U585 hardware acceleration.
 bls12_381 = { workspace = true }
 
-# TROPIC01 secure element (for real chip mode)
+# TROPIC01 secure element (for real chip mode).
+#
+# SECURITY: `rev =` is the ONLY supply-chain pin here — there is no
+# checksum for git deps in Cargo.lock. Never relax this to `branch =`
+# or `tag =`, both of which are mutable upstream. `make verify-pins`
+# hard-fails if this line has no 40-char hex `rev =`.
 tropic01 = { git = "https://github.com/tropicsquare/libtropic-rs", rev = "0cacb5ed94e5df491bfbb39e8702cc47598f7d63", features = ["keys"], optional = true }
 x25519-dalek = { version = "2.0.1", default-features = false, features = ["static_secrets"], optional = true }
 embedded-hal = { version = "1", optional = true }

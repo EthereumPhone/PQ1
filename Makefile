@@ -76,19 +76,27 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
 
-all: secure nonsecure
+# Supply-chain audit. Hard-fails if any dependency is not cryptographically
+# pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
+# checked-out submodules, circuits/package-lock.json SRI integrity,
+# dated-nightly rust-toolchain). See tools/verify_pins.sh for the exact
+# rules. Every release-path target below depends on this.
+verify-pins:
+	@tools/verify_pins.sh
+
+all: verify-pins secure nonsecure
 
 secure:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features $(FEATURES)
 	@echo "==> Secure world built (features: $(FEATURES))."
 
 nonsecure: secure
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
 	@echo "==> Non-secure world built."
 
 # Run with mock SE (no real TROPIC01 chip needed).
@@ -126,12 +134,12 @@ play: all
 play-hw-display:
 	@echo "==> Building secure + nonsecure for interactive OLED play"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/secure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-oled,stm32u585
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features stm32u585
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
@@ -247,11 +255,11 @@ flash-hw: build-hw
 e2e:
 	@echo "==> Building secure + nonsecure with e2e-test feature (QEMU mailbox transport)"
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
-		cargo build --release --target $(TARGET) --target-dir target/secure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
-		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test
 	@echo "==> Running e2e suite under QEMU"
 	@out=$$(qemu-system-arm \
@@ -324,12 +332,12 @@ e2e:
 test-key-speed:
 	@echo "==> Building secure (e2e-test auto-provision) + NS (bench-key-speed) + SHA-256 HW accel"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/secure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features bench-key-speed,stm32u585
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
@@ -364,12 +372,12 @@ test-key-speed:
 e2e-hw:
 	@echo "==> Building e2e + stm32u585"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/secure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
@@ -389,12 +397,12 @@ e2e-hw:
 e2e-hw-display:
 	@echo "==> Building e2e + stm32u585 + OLED display"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/secure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-oled,e2e-test,stm32u585
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
@@ -417,11 +425,11 @@ build-hw-usb:
 # NS world: usb feature for USB HID main loop.
 build-hw-usb-test:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> USB test build ready (auto-provisioned, no semihosting)."
 
 # Flash auto-provisioned USB build.
@@ -441,11 +449,11 @@ flash-hw-usb-test: build-hw-usb-test
 # NS world: usb feature for USB HID main loop.
 build-hw-se050-usb-test:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> SE050 + USB test build ready."
 
 flash-hw-se050-usb-test: build-hw-se050-usb-test
@@ -462,11 +470,11 @@ flash-hw-se050-usb-test: build-hw-se050-usb-test
 # SE050 + USB test with semihosting debug output (requires probe-rs attach).
 build-hw-se050-usb-test-debug:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,debug-log
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> SE050 + USB test (debug) build ready."
 
 flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
@@ -487,11 +495,11 @@ flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
 flash-hw-se050-buttons:
 	@echo "==> Building SE050 + GPIO buttons + semihosting UI"
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,debug-log,ui-semihosting,stm32u585,usb
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
 	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -508,7 +516,7 @@ flash-hw-se050-buttons:
 button-test:
 	@echo "==> Building GPIO button test firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features button-test,debug-log,ui-semihosting
 	@echo "==> Flashing button test firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -522,7 +530,7 @@ button-test:
 qr-screen:
 	@echo "==> Building QR-screen test firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features qr-screen-test,debug-log
 	@echo "==> Flashing QR-screen firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -534,7 +542,7 @@ qr-screen:
 stsafe-probe:
 	@echo "==> Building STSAFE-A110 I2C2 probe firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features stsafe-probe,debug-log,ui-semihosting
 	@echo "==> Flashing probe firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -553,7 +561,7 @@ se050-reset:
 	@echo "    Assumes dev PIN in {00000000, 12345678, 11111111}"
 	@echo "    and stale UserID at 0x7B06_0000 or 0x7B00_2000."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-factory-reset,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing reset firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -603,7 +611,7 @@ factory-reset:
 	@echo "==> Step 1/2: building + running SE050 factory-reset firmware"
 	@echo "    (20s timeout — proceeds even if SE050 isn't attached)"
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-		cargo build --release --target $(TARGET) --target-dir target/secure \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features se050-factory-reset,ui-noop,stm32u585,debug-log
 	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -626,7 +634,7 @@ factory-reset:
 se050-reset-e2e:
 	@echo "==> Building SE050 reset-roundtrip e2e firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-reset-e2e,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing e2e firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -645,7 +653,7 @@ se050-reset-e2e:
 se050-crash-safety-e2e:
 	@echo "==> Building SE050 crash-safety e2e firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-crash-safety-e2e,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing crash-safety firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -670,7 +678,7 @@ se050-crash-safety-e2e:
 se050-admin-wipe-e2e:
 	@echo "==> Building SE050 admin-wipe e2e firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-admin-wipe-e2e,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing admin-wipe e2e firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -682,11 +690,11 @@ se050-admin-wipe-e2e:
 # Both the SSD1306 OLED and SE050 share I2C1 (PB8/PB9) at 400 kHz.
 build-hw-se050-oled:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-oled,stm32u585,usb,debug-log
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> SE050 + OLED interactive build ready."
 
@@ -694,11 +702,11 @@ build-hw-se050-oled:
 # USB-C power and no debugger attached. BKPT-free.
 build-hw-se050-oled-standalone:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-oled,stm32u585,usb
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> Standalone build ready (no semihosting, USB-C only)."
 
@@ -745,7 +753,7 @@ test: test-unit test-solidity e2e
 # Host-side Rust unit tests for pure logic (aa, tx modules).
 test-unit:
 	@echo "==> Running Rust unit tests (host)"
-	@cargo test -p sphincs-tz-secure
+	@cargo test --locked -p sphincs-tz-secure
 
 # Foundry tests for the PQ smart-wallet contracts.
 test-solidity:
@@ -755,7 +763,7 @@ test-solidity:
 # Compute firmware measurement words from the secure ELF.
 # Displays the same 8 BIP-39 words the device shows at boot.
 measure: secure
-	cargo run -p fwmeasure -- $(SECURE_ELF)
+	cargo run --locked -p fwmeasure -- $(SECURE_ELF)
 
 # Build the first-stage bootloader for real STM32U585 hardware.
 #
@@ -771,7 +779,7 @@ measure: secure
 fsbl:
 	@echo "==> Building FSBL (FSBL_VENDOR_PUBKEY=$${FSBL_VENDOR_PUBKEY:-<dev fixture>})"
 	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
-		cargo build --release --target $(TARGET) --target-dir target/fsbl -p pqsigner-fsbl
+		cargo build --locked --release --target $(TARGET) --target-dir target/fsbl -p pqsigner-fsbl
 	@echo "==> FSBL built: $(FSBL_ELF)"
 	@size $(FSBL_ELF) 2>/dev/null || arm-none-eabi-size $(FSBL_ELF)
 
@@ -838,11 +846,11 @@ _repro_one:
 	@mkdir -p $(OUT)
 	@echo "==> Build $(OUT): secure"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE)" \
-		cargo build --release --target $(TARGET) --target-dir $(OUT)/secure \
+		cargo build --locked --release --target $(TARGET) --target-dir $(OUT)/secure \
 			-p sphincs-tz-secure --no-default-features --features $(FEATURES)
 	@echo "==> Build $(OUT): nonsecure"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE)" \
-		cargo build --release --target $(TARGET) --target-dir $(OUT)/nonsecure \
+		cargo build --locked --release --target $(TARGET) --target-dir $(OUT)/nonsecure \
 			-p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
 
 # Release build: reproducibility-verified secure + nonsecure ELFs plus
@@ -865,10 +873,10 @@ release:
 	    target/release/nonsecure.elf
 	@echo ""
 	@echo "==> Secure measurement:"
-	@cargo run -q -p fwmeasure -- target/release/secure.elf 2>/dev/null | sed 's/^/    /'
+	@cargo run --locked -q -p fwmeasure -- target/release/secure.elf 2>/dev/null | sed 's/^/    /'
 	@echo ""
 	@echo "==> Nonsecure measurement:"
-	@cargo run -q -p fwmeasure -- target/release/nonsecure.elf 2>/dev/null | sed 's/^/    /'
+	@cargo run --locked -q -p fwmeasure -- target/release/nonsecure.elf 2>/dev/null | sed 's/^/    /'
 	@echo ""
 	@echo "==> Release artifacts in target/release/"
 	@echo "    Next: fwsign sign --key vendor-key.enc --version N ..."
@@ -914,12 +922,12 @@ flash-hw-optiga-bringup:
 	@echo "==> Building OPTIGA Stage-1 bring-up test (Phase B: full PRL)"
 	@echo "    (optiga-trust-m + otp-hardcoded-master-key + e2e-test)"
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
 		--features optiga-trust-m,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
@@ -959,12 +967,12 @@ flash-hw-optiga-bringup-write-only:
 	@echo "==> Building OPTIGA Stage-1 bring-up test (Phase A: write + halt)"
 	@echo "    (optiga-trust-m + otp-hardcoded-master-key + e2e-test + e2e-skip-unlock)"
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
 		--features optiga-trust-m,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key,e2e-skip-unlock
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
@@ -992,11 +1000,11 @@ optiga-reset-oids:
 flash-hw-optiga-reset: optiga-reset-oids
 	@echo "==> Building firmware with optiga-reset-oids"
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW) -C debug-assertions=on" \
-	cargo build --release --target $(TARGET) --target-dir target/secure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
 		--features dual-se,optiga-reset-oids,stm32u585,ui-oled,debug-log,usb
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
