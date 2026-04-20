@@ -173,6 +173,105 @@ pub const VK_ENTRY_OFF_VK_ID: usize = 28;
 pub const VK_ENTRY_OFF_SHA_PFX: usize = 29;
 // 32 done
 
+// === Address-name DB =======================================================
+//
+// Third DB, parallel to the ERC20 + VK DBs. Maps (chain_id, address) to a
+// short display name like "Uniswap V3 Router" or "Lido stETH" so the
+// trusted UI can render a friendly label in place of the raw 40-hex
+// address. Same Merkle trust model as the others: NS holds the full
+// blob, secure holds only the root, lookups cross as (canonical,
+// proof) bundles.
+//
+// Storage optimisation: the in-blob sorted index uses a 16-byte
+// `short_key = sha256("pqsigner-name-key-v1" || chain_id_be || addr)[..16]`
+// instead of the 28 raw bytes of (chain_id, contract). That shaves
+// 12 B per entry and lets the NS binary-search directly on the
+// companion-supplied (chain_id, addr) hash. The Merkle leaf, by
+// contrast, still binds to the full (chain_id, address, name) triple
+// so short-key collisions cannot substitute names.
+//
+// ## Names DB layout (`b"NAMS"`)
+//
+// ```text
+// Header (32 B):
+//   magic        [u8; 4] = b"NAMS"
+//   version      u32 LE  = 1
+//   flags        u32 LE
+//   entry_cnt    u32 LE
+//   pool_off     u32 LE
+//   pool_size    u32 LE
+//   proof_depth  u32 LE
+//   proofs_off   u32 LE
+//
+// Entries (entry_cnt × 20 B, sorted by short_key):
+//   short_key  [u8; 16]   // sha256("pqsigner-name-key-v1"||chain_id_be||addr)[..16]
+//   name_off   u32 LE     // offset into string pool
+//                  = 20
+//
+// String pool:
+//   [len: u8][bytes: len], interned.
+//
+// Proofs:
+//   entry_cnt × (proof_depth × 32 B).
+// ```
+//
+// ## Canonical leaf encoding (Names)
+//
+// ```text
+//   chain_id  (8 LE) ‖
+//   address   (20)   ‖
+//   name_len  (1)    ‖ name_bytes
+// ```
+//
+// Hashed as `sha256(0x00 || canonical_bytes)`; internal nodes
+// `sha256(0x01 || left || right)` — identical scheme to ERC20 + VK.
+
+pub const NAMES_DB_MAGIC: [u8; 4] = *b"NAMS";
+pub const NAMES_DB_VERSION: u32 = 1;
+pub const NAMES_DB_HEADER_LEN: usize = 32;
+pub const NAMES_DB_ENTRY_LEN: usize = 20;
+
+pub const NAMES_HDR_OFF_MAGIC: usize = 0;
+pub const NAMES_HDR_OFF_VERSION: usize = 4;
+pub const NAMES_HDR_OFF_FLAGS: usize = 8;
+pub const NAMES_HDR_OFF_ENTRY_CNT: usize = 12;
+pub const NAMES_HDR_OFF_POOL_OFF: usize = 16;
+pub const NAMES_HDR_OFF_POOL_SIZE: usize = 20;
+pub const NAMES_HDR_OFF_PROOF_DEPTH: usize = 24;
+pub const NAMES_HDR_OFF_PROOFS_OFF: usize = 28;
+
+pub const NAMES_ENTRY_OFF_SHORT_KEY: usize = 0;
+pub const NAMES_ENTRY_OFF_NAME_OFF: usize = 16;
+// 20 done
+
+/// Domain tag used in the short-key hash. 20 bytes.
+pub const NAMES_SHORT_KEY_TAG: &[u8; 20] = b"pqsigner-name-key-v1";
+
+/// Cosmetic upper bound on the name string. Must fit across two
+/// 16-column display rows.
+pub const NAMES_MAX_LEN: usize = 32;
+
+// The 16-byte short key is computed as:
+//   short_key = sha256(NAMES_SHORT_KEY_TAG || chain_id_u64_be || addr_20)[..16]
+// Each consumer computes it locally using its own sha2 impl — the
+// `shared` crate has zero dependencies so we don't pull sha2 in just
+// for this helper.
+//
+// ## Chain-agnostic entries (`chain_id == 0` sentinel)
+//
+// EIP-155 reserves chain_id=0 ("legacy / none"), so no real EVM chain
+// uses it. The names DB uses `chain_id = 0` as a wildcard meaning
+// "this address resolves to this name on every chain". At lookup time
+// each layer performs a two-phase match:
+//
+//   1. exact `(chain_id, address)`
+//   2. on miss, `(0, address)` — chain-agnostic fallback
+//
+// This keeps the on-disk format byte-identical to the keyed form;
+// wildcard rows are stored just like any other, they simply happen
+// to have `chain_id = 0` in their canonical leaf encoding.
+pub const NAMES_WILDCARD_CHAIN_ID: u64 = 0;
+
 // === Little-endian readers (shared by writer + reader) =====================
 
 #[inline]

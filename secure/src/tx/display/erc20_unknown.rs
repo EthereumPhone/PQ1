@@ -4,15 +4,20 @@
 //! unknown, so amounts render as the raw `uint256` with no decimals.
 
 use super::primitives::{
-    chain_name, write_addr_full, write_chain, write_fee_budget_row, write_gas, write_gwei,
+    chain_name, write_addr_full_or_name, write_chain, write_fee_budget_row, write_gas, write_gwei,
     write_line, write_nonce_row, write_tip_row,
 };
 use super::Pages;
 use crate::erc20::calldata::{is_unlimited_amount, Erc20Call};
+use crate::names::NameResolver;
 use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::ui::DISPLAY_COLS;
 
-pub fn render_erc20_unknown_pages(tx: &Eip1559Tx, call: &Erc20Call) -> Pages {
+pub fn render_erc20_unknown_pages(
+    tx: &Eip1559Tx,
+    call: &Erc20Call,
+    resolver: &NameResolver<'_>,
+) -> Pages {
     let mut pages = Pages::with_len(8);
 
     // ── Page 0: Warning banner + method ────────────────────────────
@@ -30,7 +35,7 @@ pub fn render_erc20_unknown_pages(tx: &Eip1559Tx, call: &Erc20Call) -> Pages {
     write_line(&mut pages.buf[1][0], "Contract:");
     if let Some(addr) = &tx.to {
         let [_lbl, a, b, c] = &mut pages.buf[1];
-        write_addr_full(a, b, c, addr);
+        write_addr_full_or_name(a, b, c, addr, tx.chain_id, resolver);
     }
 
     // ── Page 2: Recipient / Spender ────────────────────────────────
@@ -46,7 +51,7 @@ pub fn render_erc20_unknown_pages(tx: &Eip1559Tx, call: &Erc20Call) -> Pages {
     };
     {
         let [_lbl, a, b, c] = &mut pages.buf[2];
-        write_addr_full(a, b, c, &recipient);
+        write_addr_full_or_name(a, b, c, &recipient, tx.chain_id, resolver);
     }
 
     // ── Page 3: Raw uint256 amount (two-row) ───────────────────────

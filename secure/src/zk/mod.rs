@@ -88,6 +88,7 @@ pub fn verify_clear_sign_proof(
 pub fn render_clear_sign_pages(
     tx: &crate::tx::eip1559::Eip1559Tx,
     readable: &[u8; STRING_LEN],
+    resolver: &crate::names::NameResolver<'_>,
 ) -> crate::tx::display::Pages {
     use crate::tx::display::Pages;
     use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
@@ -127,7 +128,7 @@ pub fn render_clear_sign_pages(
     // Delegate to the normal value-transfer renderer for those pages by
     // calling `render_pages` on the tx and copying the produced pages
     // 1..4 into our pages 1..4. (We already used page 0 for the readable.)
-    let base = crate::tx::display::render_pages(tx);
+    let base = crate::tx::display::render_pages(tx, resolver);
     let base_slice = base.as_slice();
     let copy_count = core::cmp::min(base_slice.len(), 3);
     for i in 0..copy_count {

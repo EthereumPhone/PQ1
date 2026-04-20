@@ -57,6 +57,8 @@ mod crypto;
 mod db_roots;
 #[cfg(not(test))]
 mod erc20;
+#[cfg(not(test))]
+mod names;
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
 mod host_rng;
 #[cfg(all(any(feature = "pka-accel", feature = "stm32u585"), not(test)))]

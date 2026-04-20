@@ -31,6 +31,9 @@ cortex-m-rt          = { workspace = true }
 cortex-m-semihosting = { workspace = true }
 panic-semihosting    = "0.6"
 panic-halt = "1.0"
+# SHA-256 for the names-DB short_key derivation. `sphincs-tz-shared`
+# has a zero-dep policy so the hashing helper lives in each consumer.
+sha2                 = { version = "0.10", default-features = false }
 
 # USB HID (optional, for hardware builds with host communication)
 usb-device = { version = "0.3", default-features = false, optional = true }

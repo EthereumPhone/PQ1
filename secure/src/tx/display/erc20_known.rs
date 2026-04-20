@@ -16,19 +16,21 @@
 //!     `unlimited` instead of a ~1e77 number that looks finite.
 
 use super::primitives::{
-    chain_name, write_addr_full, write_chain, write_erc20_header, write_fee_budget_row, write_gas,
-    write_gwei, write_line, write_nonce_row, write_tip_row, write_token_amount_two_rows,
-    write_token_name, AmountFit,
+    chain_name, write_addr_full_or_name, write_chain, write_erc20_header, write_fee_budget_row,
+    write_gas, write_gwei, write_line, write_nonce_row, write_tip_row,
+    write_token_amount_two_rows, write_token_name, AmountFit,
 };
 use super::Pages;
 use crate::erc20::bundle::Erc20Metadata;
 use crate::erc20::calldata::{is_unlimited_amount, Erc20Call};
+use crate::names::NameResolver;
 use crate::tx::eip1559::{Eip1559Tx, U256};
 
 pub fn render_erc20_known_pages(
     tx: &Eip1559Tx,
     call: &Erc20Call,
     meta: &Erc20Metadata<'_>,
+    resolver: &NameResolver<'_>,
 ) -> Pages {
     let mut pages = Pages::with_len(8);
 
@@ -55,7 +57,7 @@ pub fn render_erc20_known_pages(
     };
     {
         let [_lbl, a, b, c] = &mut pages.buf[1];
-        write_addr_full(a, b, c, &recipient);
+        write_addr_full_or_name(a, b, c, &recipient, tx.chain_id, resolver);
     }
 
     // ── Page 2: Amount ──────────────────────────────────────────────
@@ -85,7 +87,7 @@ pub fn render_erc20_known_pages(
     write_line(&mut pages.buf[3][0], "Contract:");
     if let Some(addr) = &tx.to {
         let [_lbl, a, b, c] = &mut pages.buf[3];
-        write_addr_full(a, b, c, addr);
+        write_addr_full_or_name(a, b, c, addr, tx.chain_id, resolver);
     }
 
     // ── Page 4: Chain ──────────────────────────────────────────────

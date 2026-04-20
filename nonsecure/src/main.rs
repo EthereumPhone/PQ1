@@ -28,6 +28,7 @@ mod e2e_test;
 #[cfg(feature = "bench-key-speed")]
 mod bench_key_speed;
 mod erc20_db;
+mod names_db;
 mod nsc_api;
 #[cfg(feature = "usb")]
 mod usb;

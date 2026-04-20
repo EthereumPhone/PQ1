@@ -1750,6 +1750,7 @@ dependencies = [
  "fw-manifest",
  "panic-halt",
  "panic-semihosting",
+ "sha2 0.10.9",
  "sphincs-tz-shared",
  "synopsys-usb-otg",
  "usb-device",

@@ -77,6 +77,7 @@ use crate::aa::userop::{
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
 use crate::erc20::calldata::{parse_erc20_calldata, Erc20Call};
+use crate::names::{verify_name_bundle, NameResolver, MAX_NAME_BUNDLES, MAX_NAME_BUNDLE_LEN};
 use crate::tx::display::{
     render_blind_sign_pages, render_erc20_known_pages, render_erc20_unknown_pages, render_pages,
 };
@@ -84,11 +85,13 @@ use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::ui;
 
 /// Reserve enough room to TOCTOU-snapshot the largest valid input the
-/// gateway will accept.
+/// gateway will accept. The trailing `1 + MAX_NAME_BUNDLES * (2 +
+/// MAX_NAME_BUNDLE_LEN)` block is the address-name bundle section.
 const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + MAX_TX_LEN
     + 2 + MAX_ERC20_BUNDLE_LEN
-    + 2 + ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN;
+    + 2 + ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
+    + 1 + MAX_NAME_BUNDLES * (2 + MAX_NAME_BUNDLE_LEN);
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     use crate::ui::confirm::{confirm, ConfirmResult};
@@ -243,6 +246,48 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let zk_bundle_start = cursor;
     cursor += zk_bundle_len;
 
+    // ── 4c. Optional trailer: address-name bundles ────────────────────
+    //
+    // Zero or more merkle-verified (chain_id, address, name) bundles.
+    // The companion emits up to MAX_NAME_BUNDLES entries, one per
+    // address it found in its local names DB across the tx's display
+    // surface (tx.to, ERC-20 recipient/spender, paymaster, ...). The
+    // secure world verifies each bundle against NAMES_DB_ROOT and
+    // collects the survivors into a NameResolver for the display
+    // layer.
+    //
+    // Absence of this trailer is legal — legacy callers that never
+    // upgrade their NS code still produce a zero-trailer sign request.
+    let names_count = if cursor < total_len {
+        snap[cursor] as usize
+    } else {
+        0
+    };
+    let names_start;
+    if names_count > 0 {
+        cursor += 1;
+        names_start = cursor;
+        if names_count > MAX_NAME_BUNDLES {
+            ui::show_status("Sign", "bad names count");
+            return NscStatus::InvalidPointer as u32;
+        }
+        for _ in 0..names_count {
+            if cursor + 2 > total_len {
+                ui::show_status("Sign", "bad names frame");
+                return NscStatus::InvalidPointer as u32;
+            }
+            let l = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
+            cursor += 2;
+            if l > MAX_NAME_BUNDLE_LEN || cursor + l > total_len {
+                ui::show_status("Sign", "bad names len");
+                return NscStatus::InvalidPointer as u32;
+            }
+            cursor += l;
+        }
+    } else {
+        names_start = cursor;
+    }
+
     if cursor != total_len {
         ui::show_status("Sign", "trailing bytes");
         return NscStatus::InvalidPointer as u32;
@@ -352,21 +397,44 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None
     };
 
+    // ── 6d. Verify each supplied address-name bundle ───────────────
+    //
+    // Every bundle crosses the Merkle gate against NAMES_DB_ROOT.
+    // Bundles that don't verify are silently dropped — the affected
+    // address just renders as 40-hex, which is always safe. A bundle
+    // IS verified against the DB but the (chain_id, address) pair in
+    // the verified metadata is NOT necessarily the tx chain_id or
+    // tx.to; the resolver matches those against the tx-derived values
+    // at display time.
+    let mut resolver = NameResolver::new();
+    {
+        let mut walk = names_start;
+        for _ in 0..names_count {
+            let l = u16::from_be_bytes([snap[walk], snap[walk + 1]]) as usize;
+            walk += 2;
+            let bundle_slice = &snap[walk..walk + l];
+            if let Some(meta) = verify_name_bundle(bundle_slice) {
+                resolver.push(meta);
+            }
+            walk += l;
+        }
+    }
+
     // ── 6c. Pick the render flavour ────────────────────────────────
     let pages = if let Some((_, readable)) = zk_verified.as_ref() {
-        crate::zk::render_clear_sign_pages(&tx_for_display, readable)
+        crate::zk::render_clear_sign_pages(&tx_for_display, readable, &resolver)
     } else if inner_data.is_empty() {
-        render_pages(&tx_for_display)
+        render_pages(&tx_for_display, &resolver)
     } else {
         match parse_erc20_calldata(inner_data) {
             Some(call) => {
                 if let Some(meta) = verified_meta.as_ref() {
-                    render_erc20_known_pages(&tx_for_display, &call, meta)
+                    render_erc20_known_pages(&tx_for_display, &call, meta, &resolver)
                 } else {
-                    render_erc20_unknown_pages(&tx_for_display, &call)
+                    render_erc20_unknown_pages(&tx_for_display, &call, &resolver)
                 }
             }
-            None => render_blind_sign_pages(&tx_for_display, inner_data),
+            None => render_blind_sign_pages(&tx_for_display, inner_data, &resolver),
         }
     };
     let _erc20_type_marker: Option<Erc20Call> = None;

@@ -262,6 +262,69 @@ pub(super) fn write_addr_full(
     }
 }
 
+/// Like [`write_addr_full`] but first consults the merkle-verified
+/// address-name DB via the supplied [`NameResolver`]. On a DB hit the
+/// three rows render as:
+///
+/// ```text
+///   row1: "+ <name row 1 ...>"     (up to 14 chars after the sentinel)
+///   row2: " <name row 2 ...>"      (up to 15 chars; blank if name fits row1)
+///   row3: "0xAABBCCDD…EEFFAABB"    (first 4 + last 4 bytes, disambiguation)
+/// ```
+///
+/// The leading `+` sentinel is user-visible proof that the secure world
+/// matched the address against a signed DB entry — raw-hex fallback
+/// never carries it. On a DB miss we delegate to [`write_addr_full`].
+pub(super) fn write_addr_full_or_name(
+    row1: &mut [u8; DISPLAY_COLS],
+    row2: &mut [u8; DISPLAY_COLS],
+    row3: &mut [u8; DISPLAY_COLS],
+    addr: &[u8; 20],
+    chain_id: u64,
+    resolver: &crate::names::NameResolver<'_>,
+) {
+    if let Some(name) = resolver.lookup(chain_id, addr) {
+        *row1 = [b' '; DISPLAY_COLS];
+        *row2 = [b' '; DISPLAY_COLS];
+        *row3 = [b' '; DISPLAY_COLS];
+
+        // Rows 0..=1: sentinel + name, split across two rows if needed.
+        row1[0] = b'+';
+        row1[1] = b' ';
+        let name_room_r1 = DISPLAY_COLS - 2; // after "+ "
+        let n1 = core::cmp::min(name.len(), name_room_r1);
+        row1[2..2 + n1].copy_from_slice(&name[..n1]);
+        if name.len() > name_room_r1 {
+            // Leave col 0 blank, start at col 1 to align visually under
+            // the name's first char.
+            let rest = &name[name_room_r1..];
+            let room_r2 = DISPLAY_COLS - 1;
+            let n2 = core::cmp::min(rest.len(), room_r2);
+            row2[1..1 + n2].copy_from_slice(&rest[..n2]);
+        }
+
+        // Row 2: truncated hex for disambiguation — "0xAABBCCDD…EEFFAABB"
+        // (first 4 bytes, ellipsis, last 4 bytes). 2 + 8 + 1 + 8 = 19 chars,
+        // fits in 16? No — we only have 16 cols. Use 3 + 3 bytes instead:
+        // "0x112233…AABBCC" = 2+6+1+6 = 15 chars.
+        row3[0] = b'0';
+        row3[1] = b'x';
+        for i in 0..3 {
+            row3[2 + i * 2] = hex_nibble(addr[i] >> 4);
+            row3[2 + i * 2 + 1] = hex_nibble(addr[i] & 0x0f);
+        }
+        row3[8] = b'.';
+        // compact one-dot ellipsis in a single column
+        for i in 0..3 {
+            let b = addr[17 + i];
+            row3[9 + i * 2] = hex_nibble(b >> 4);
+            row3[9 + i * 2 + 1] = hex_nibble(b & 0x0f);
+        }
+    } else {
+        write_addr_full(row1, row2, row3, addr);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Chain identification
 // ---------------------------------------------------------------------------

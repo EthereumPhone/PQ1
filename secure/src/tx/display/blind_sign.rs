@@ -12,14 +12,19 @@
 use sha2::{Digest, Sha256};
 
 use super::primitives::{
-    chain_name, write_addr_full, write_calldata_hash_rows, write_chain, write_data_len_row,
+    chain_name, write_addr_full_or_name, write_calldata_hash_rows, write_chain, write_data_len_row,
     write_eth_two_rows, write_fee_budget_row, write_gas, write_gwei, write_line, write_nonce_row,
     write_selector_row, write_tip_row, AmountFit,
 };
 use super::Pages;
+use crate::names::NameResolver;
 use crate::tx::eip1559::Eip1559Tx;
 
-pub fn render_blind_sign_pages(tx: &Eip1559Tx, data: &[u8]) -> Pages {
+pub fn render_blind_sign_pages(
+    tx: &Eip1559Tx,
+    data: &[u8],
+    resolver: &NameResolver<'_>,
+) -> Pages {
     let mut pages = Pages::with_len(9);
 
     // ── Page 0: loud banner ─────────────────────────────────────────
@@ -32,7 +37,7 @@ pub fn render_blind_sign_pages(tx: &Eip1559Tx, data: &[u8]) -> Pages {
     write_line(&mut pages.buf[1][0], "To:");
     if let Some(addr) = &tx.to {
         let [_lbl, a, b, c] = &mut pages.buf[1];
-        write_addr_full(a, b, c, addr);
+        write_addr_full_or_name(a, b, c, addr, tx.chain_id, resolver);
     } else {
         write_line(&mut pages.buf[1][1], "(contract create)");
     }

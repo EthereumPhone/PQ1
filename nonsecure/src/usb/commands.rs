@@ -41,6 +41,12 @@ const CHAIN_BUF_LEN_SIGN: usize = SIGN_USEROP_HEADER_LEN
     + 2
     + ZK_CLEAR_SIGN_FIXED_LEN
     + ZK_VK_BUNDLE_MAX_LEN
+    // Names trailer: 1-byte count + up to 4 × (2-byte length + bundle).
+    // The 1200-byte-per-bundle figure is the MAX_NAME_BUNDLE_LEN upper
+    // bound plus the 2-byte length prefix, rounded to the 32-bit
+    // proof-depth cap.
+    + 1
+    + 4 * (2 + 1200)
     + 64;
 const CHAIN_BUF_LEN_FW: usize = fw_manifest::MANIFEST_SIZE + 64;
 const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN > CHAIN_BUF_LEN_FW {
@@ -353,6 +359,10 @@ impl CommandRouter {
         // (chain_id, tx.to) and append it so the secure world's
         // Groth16 verifier has a Merkle-proven key to work with.
         let effective_len = Self::maybe_inject_vk_bundle(effective_len);
+        // Append address-name bundles for every tx address that hits
+        // the NS names DB. Secure world merkle-verifies each before
+        // letting any name reach the trusted UI.
+        let effective_len = Self::maybe_inject_names_bundles(effective_len);
 
         let status = nsc_api::sign_userop(
             &CHAIN_BUF[..effective_len],
@@ -523,6 +533,128 @@ impl CommandRouter {
         CHAIN_BUF[zk_end..new_len].copy_from_slice(&vk_bundle_buf[..vk_bundle_len]);
         CHAIN_BUF[zk_len_off..zk_len_off + 2].copy_from_slice(&(new_zk_len as u16).to_be_bytes());
         new_len
+    }
+
+    /// Append address-name bundles for every candidate address the
+    /// trusted UI is about to display whose `(chain_id, addr)` matches
+    /// an entry in the NS names DB. The secure world re-verifies each
+    /// bundle against the embedded `NAMES_DB_ROOT`, so failed or
+    /// tampered bundles only ever degrade the display back to raw hex.
+    ///
+    /// Candidates scanned (in order, deduplicated):
+    ///   * `tx.to`
+    ///   * ERC-20 `transfer` / `transferFrom` recipient
+    ///   * ERC-20 `approve` spender
+    ///
+    /// Trailer wire format (appended at `CHAIN_BUF[received_len..]`):
+    ///   `[count u8][len u16 BE][bundle] ... repeat `count` times`
+    ///
+    /// A count of 0 is never emitted — if there are no hits the
+    /// trailer is absent, which the secure world treats as "no
+    /// names bundles".
+    unsafe fn maybe_inject_names_bundles(received_len: usize) -> usize {
+        if received_len < SIGN_USEROP_HEADER_LEN {
+            return received_len;
+        }
+
+        let chain_id = u64::from_be_bytes([
+            CHAIN_BUF[0],
+            CHAIN_BUF[1],
+            CHAIN_BUF[2],
+            CHAIN_BUF[3],
+            CHAIN_BUF[4],
+            CHAIN_BUF[5],
+            CHAIN_BUF[6],
+            CHAIN_BUF[7],
+        ]);
+        let mut tx_to = [0u8; 20];
+        tx_to.copy_from_slice(&CHAIN_BUF[276..296]);
+
+        // Collect up to 4 distinct candidate addresses.
+        let mut candidates: [[u8; 20]; 4] = [[0u8; 20]; 4];
+        let mut cand_n = 0usize;
+        let mut push = |buf: &mut [[u8; 20]; 4], n: &mut usize, a: &[u8; 20]| {
+            if *a == [0u8; 20] {
+                return;
+            }
+            for i in 0..*n {
+                if buf[i] == *a {
+                    return;
+                }
+            }
+            if *n < buf.len() {
+                buf[*n] = *a;
+                *n += 1;
+            }
+        };
+        push(&mut candidates, &mut cand_n, &tx_to);
+
+        // Parse ERC-20 calldata off the unsigned tx to surface
+        // recipient/spender addresses too.
+        let data_len =
+            u16::from_be_bytes([CHAIN_BUF[328], CHAIN_BUF[329]]) as usize;
+        let data_end = SIGN_USEROP_HEADER_LEN + data_len;
+        if data_end <= received_len && data_len >= 4 + 32 + 32 {
+            let data = &CHAIN_BUF[SIGN_USEROP_HEADER_LEN..data_end];
+            let sel = &data[..4];
+            // transfer(address,uint256) = 0xa9059cbb
+            // approve(address,uint256)  = 0x095ea7b3
+            // transferFrom(address,address,uint256) = 0x23b872dd
+            if sel == [0xa9, 0x05, 0x9c, 0xbb] || sel == [0x09, 0x5e, 0xa7, 0xb3] {
+                let mut a = [0u8; 20];
+                a.copy_from_slice(&data[4 + 12..4 + 32]);
+                push(&mut candidates, &mut cand_n, &a);
+            } else if sel == [0x23, 0xb8, 0x72, 0xdd] && data_len >= 4 + 32 + 32 + 32 {
+                let mut from_a = [0u8; 20];
+                from_a.copy_from_slice(&data[4 + 12..4 + 32]);
+                let mut to_a = [0u8; 20];
+                to_a.copy_from_slice(&data[4 + 32 + 12..4 + 64]);
+                push(&mut candidates, &mut cand_n, &from_a);
+                push(&mut candidates, &mut cand_n, &to_a);
+            }
+        }
+
+        if cand_n == 0 {
+            return received_len;
+        }
+
+        // Reserve the count byte; we backfill it once we know how many
+        // bundles actually verified.
+        let count_off = received_len;
+        if count_off + 1 > CHAIN_BUF_LEN {
+            return received_len;
+        }
+        let mut cursor = count_off + 1;
+        let mut emitted = 0u8;
+        let mut bundle_buf = [0u8; 1200];
+
+        for i in 0..cand_n {
+            let addr = &candidates[i];
+            let Some(bundle_len) =
+                crate::names_db::build_bundle(chain_id, addr, &mut bundle_buf)
+            else {
+                continue;
+            };
+            if cursor + 2 + bundle_len > CHAIN_BUF_LEN || bundle_len > u16::MAX as usize {
+                break;
+            }
+            CHAIN_BUF[cursor..cursor + 2].copy_from_slice(&(bundle_len as u16).to_be_bytes());
+            cursor += 2;
+            CHAIN_BUF[cursor..cursor + bundle_len].copy_from_slice(&bundle_buf[..bundle_len]);
+            cursor += bundle_len;
+            emitted += 1;
+            if emitted as usize >= crate::names_db::MAX_NAME_BUNDLES {
+                break;
+            }
+        }
+
+        if emitted == 0 {
+            // Revert: nothing to attach, don't emit a lone count byte.
+            return received_len;
+        }
+
+        CHAIN_BUF[count_off] = emitted;
+        cursor
     }
 
     // ===================================================================
