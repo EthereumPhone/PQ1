@@ -695,7 +695,13 @@ fn main() -> ! {
         // raw mutable reference to a `static mut`. The single-threaded
         // boot sequence makes aliasing impossible by construction; this
         // is the same pattern the `nsc::cmd_*` handlers use.
+        #[cfg(not(feature = "e2e-skip-provision"))]
         crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
+        #[cfg(feature = "e2e-skip-provision")]
+        {
+            let _ = &mnemonic; // silence unused warning under this feature
+            secure_log!("[S][e2e] e2e-skip-provision active: skipping provision_from_mnemonic (chip assumed already provisioned)");
+        }
 
         // `e2e-skip-unlock` halts the boot flow right after provisioning so
         // that `ensure_shield` never runs — which keeps the OPTIGA chip at

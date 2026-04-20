@@ -22,16 +22,34 @@ Last updated: 2026-04-16. Tracks the state of the OPTIGA Trust M V3 driver again
 
 ## ❌ Still broken — needs new investigation
 
-### 1. Shielded Connection handshake (BLOCKING for unlock + signing)
+### 1. Shielded Connection handshake — partial progress 2026-04-20
 
-`OptigaTrustM::unlock` → `authenticate_and_read` → `establish` → `MasterHello` works (chip DL-ACKs the frame and emits a 4-byte response). But the response is **`SlaveHello = [00, 00, 00, 00]`** instead of the expected 38 bytes (`SCTR(1) + ProtoVer(1) + Random(32) + Seq(4)`). Without SlaveHello we can't derive session keys, so `DecryptSym`-based PIN verify never even runs.
+**UPDATE 2026-04-20:** Two of the four suspects below are now resolved, and the third (SlaveHello silence) no longer reproduces on the fresh TRUSTMV3SHIELDTOBO1 with our corrected code.
 
-This is the **same bug the prior session tracked** in `project_optiga_bringup.md`. Suspect list, in rough priority:
+Current state on the fresh chip:
 
-- **Chip-side PRL state requires LcsO=Operational on `0xE140`.** Currently `build_metadata_pbs_final` sets LcsO=Creation (0x01) per a comment "keep LcsO at Creation during bring-up". The Infineon reference example bumps it to Operational (0x07) before doing the handshake. Test: write a metadata-only update raising LcsO to 0x07 right after PBS provisioning, before unlock.
-- **Security Event Counter (`0xE0C5`) above PRL threshold.** Read `0xE0C5` right before `establish()` and log it. If it's ≥ a small number, the chip will refuse PRL even with valid PBS. Reset it via the documented mechanism (or accept it'll decay over time on its own).
-- **MasterHello byte format off-by-one.** Compare our `secure/src/optiga/shield.rs::establish()` MasterHello bytes against the reference C lib's `optiga_comms_setup_secure_session` on a logic analyser. Suspect SCTR / ProtoVer / Sequence-counter byte ordering.
-- **PBS cleared by RST hard-pulse.** PBS is in NV flash and *should* survive silicon reset — but if E140's LcsO=Creation lets the chip drop the value on reset, our MCU-side cached PBS no longer matches. Test: read back E140 after a hard pulse and compare.
+| Step | Observed |
+|---|---|
+| MasterHello over PRL | Sent cleanly |
+| SlaveHello | **38 bytes received** (not the prior `[00, 00, 00, 00]` — chip engages PRL normally now) |
+| Session-key derivation | Runs locally |
+| MasterFinished | Sent |
+| SlaveFinished | **Chip returns a 7-byte error frame (`0a 00 02 08 40 75 d4 00`) instead of the expected ~45-byte SlaveFinished.** `shield.establish` bails with `HandshakeFailed` at the length check. |
+
+The "SlaveHello=0000" failure on the original bench chip was likely a symptom of multiple underlying issues on that specific (recovered-via-SetObjectProtected) unit; on pristine silicon the chip does emit a proper SlaveHello.
+
+**Resolved / false-positive:**
+
+- ~~Chip-side PRL state requires LcsO=Operational on `0xE140`.~~ **FALSE.** The Infineon pairing example (`example_pair_host_and_optiga_using_pre_shared_secret.c:30-35`) explicitly uses `#define FINAL_LCSO_STATE (LCSO_STATE_CREATION)` during pairing, and the PRL dispatcher (`ifx_i2c_presentation_layer.c:820-829`) has no LcsO check. The SRM "Pairing Use Case Pre-conditions" (L912-913) actually requires `LcsO < operational`, not `= operational`. Our `ensure_shield` used to bump LcsO=op before `establish` — that call is now removed so PRL runs with E140 at Creation (fully reversible).
+- ~~PBS cleared by RST hard-pulse.~~ **FALSE.** With the PE4 RST pulse correctly reaching the chip + fingerprint logging in `load_pbs`, we confirmed PBS matches byte-for-byte between MCU derivation and what E140 retains across resets. The earlier chip's MasterHello silence was unrelated to RST-induced PBS loss.
+
+**Still suspect — next debug step for MasterFinished:**
+
+- **Session-key derivation / AAD-nonce construction mismatch.** SlaveHello arrives fine (38 bytes), so MasterHello bytes are correct. Rejection of MasterFinished suggests our TLS-PRF-SHA256 output or our CCM-8 AAD/nonce layout diverges from the Infineon reference. Use LA to capture the MasterFinished payload bytes on the wire and cross-check against `ifx_i2c_presentation_layer.c::prl_derive_session_keys` + `prl_encrypt_payload`. PBS matches (confirmed via fingerprint), so the bug is in the PRF or frame-assembly code, not in the secret.
+- **Security Event Counter (`0xE0C5`) above PRL threshold.** Still a possibility. Read `0xE0C5` right before `establish()` and log it. If ≥ threshold, chip refuses PRL even with valid PBS.
+- **MasterHello byte format subtly off.** SlaveHello came through, so MasterHello is *mostly* right, but some field inside (ProtoVer byte, seq seeding) could still be off enough to trigger a later Finished-mismatch.
+
+The fix that enabled this progress is in `secure/src/optiga/mod.rs::ensure_shield` — the unnecessary `ensure_pbs_lcso_operational()` call was removed (doc note preserved in that function). With that call gone, shielded messaging testing is reversible and can happen in Creation mode, exactly as Infineon's reference demonstrates.
 
 ### 2. SLH-DSA sign on real silicon (BLOCKED by #1)
 

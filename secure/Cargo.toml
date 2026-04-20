@@ -96,6 +96,14 @@ otp-hardcoded-master-key = []
 # was written to the chip without committing the chip to that PBS.
 # Only meaningful in combination with `e2e-test`.
 e2e-skip-unlock = []
+# Under `e2e-test`, skip the `crypto::provision_from_mnemonic` call. Used when
+# the OPTIGA chip is already provisioned from a prior run and its user-OID
+# metadata has been locked at LcsO=op — re-running `store_objects` would fail
+# on the first `set_metadata` APDU because the target OID is already frozen.
+# With this feature set, we jump straight to `SE.unlock(pin)` which triggers
+# the PRL handshake against the existing PBS + PIN secret on the chip. Only
+# meaningful in combination with `e2e-test`.
+e2e-skip-provision = []
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.

@@ -357,12 +357,21 @@ impl OptigaTrustM {
                 if !self.shield.pbs_loaded {
                     return Err(OptigaError::Shield);
                 }
-                // Chip-side pre-condition for PRL handshake: E140 LcsO=op.
-                // For chips that were provisioned under an older firmware
-                // revision that kept LcsO at Creation, bump it here — no-op
-                // if already Operational.
+                // The PRL state machine does NOT require E140 at LcsO=op —
+                // this was an earlier misread of the SRM on our side. The
+                // Infineon pairing example explicitly runs with E140 at
+                // LcsO=Creation (see `example_pair_host_and_optiga_using_
+                // pre_shared_secret.c:30-35`, `#define FINAL_LCSO_STATE
+                // (LCSO_STATE_CREATION)`), and the presentation-layer code
+                // (`ifx_i2c_presentation_layer.c:820-829`) has no LcsO check
+                // in the handshake dispatch. The SRM "Pairing Use Case
+                // Pre-conditions" explicitly requires `LcsO < operational`,
+                // not `= operational`. Bumping LcsO=op is a production-
+                // hardening step (it locks the PBS in place so only `Conf
+                // (E140)` can rewrite it afterwards), invoked via the
+                // `optiga-lock-operational` Cargo feature at production
+                // provisioning time — NOT a prerequisite here.
                 unsafe {
-                    self.ensure_pbs_lcso_operational()?;
                     self.shield.establish(&mut self.ifx)
                         .map_err(|_| OptigaError::Shield)?;
                 }
@@ -490,16 +499,24 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// Make sure E140 is at LcsO=Operational. Required before any PRL
-    /// handshake attempt: on a chip where previous provisioning left E140
-    /// at LcsO=Creation (e.g. earlier firmware revisions of this driver),
-    /// the chip refuses to emit SlaveHello.
+    /// Bump E140 to `LcsO=Operational` if it isn't already.
+    ///
+    /// **NOT required for the PRL handshake** (earlier comment in this
+    /// function claimed otherwise, incorrectly — see `ensure_shield` for
+    /// the corrected rationale with references into the Infineon host
+    /// library and SRM). This is a production-only hardening step: once
+    /// LcsO=op the chip stops accepting `Change` via `LcsO<op`, so E140
+    /// can only be rewritten via `Conf(E140)` (shielded connection with
+    /// the matching PBS). Currently only called from the explicit
+    /// production-commit path (see `optiga-lock-operational` feature in
+    /// `secure/Cargo.toml`). Dead elsewhere.
     ///
     /// Reads metadata first and only writes when needed so we don't burn
     /// an NVM cycle on every boot once the chip is already Operational.
     /// Metadata reads are Change=ALW on the LcsO tag (SRM §"Metadata
     /// associated with data and key objects"), no shielded connection
     /// required.
+    #[allow(dead_code)] // retained for explicit production-commit callers
     unsafe fn ensure_pbs_lcso_operational(&mut self) -> Result<(), OptigaError> {
         let mut meta = [0u8; 64];
         let n = apdu::get_metadata(

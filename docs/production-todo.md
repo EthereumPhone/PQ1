@@ -48,10 +48,14 @@ passed against sacrificial parts.
 
 - [ ] **E140 LcsO=Operational.** PBS metadata frozen, chip accepts
       Change only via `Conf(E140)` (shielded connection with matching
-      PBS). Required for the PRL state machine to emit SlaveHello, so
-      production chips *must* land here eventually — but only after
-      the PBS derivation is fully validated (hardcoded-key + OTP-burn
-      paths both green on sacrificial parts).
+      PBS). NOTE: PRL does NOT need this — Shielded Connection works
+      with E140 at LcsO=Creation per the Infineon pairing example +
+      SRM "Pairing Use Case Pre-conditions" (requires `LcsO <
+      operational`). This transition is purely a *post-pairing
+      hardening* step that locks the PBS against plaintext rewrite.
+      Production chips land here once the PBS derivation is fully
+      validated and we're ready to seal the chip's pairing against
+      tampering.
 - [ ] **F1D0 (AUTH_REF) LcsO=Operational.** Metadata frozen at
       `{Change=ALW, Read=NEV, Exec=ALW, DataType=AUTHREF}`. After
       commit, the chip hard-enforces "PIN HMAC auth only" semantics
