@@ -41,15 +41,15 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 ///
 /// Must be at least as large as the longest `render_*_pages` output:
 ///
-///   * plain value transfer                 → 5 pages
-///   * erc20_known / erc20_unknown          → 7 pages
-///   * blind_sign                           → 7 pages
-///   * contract_creation                    → 6 pages
+///   * plain value transfer                 → 6 pages
+///   * erc20_known / erc20_unknown          → 8 pages
+///   * blind_sign                           → 9 pages
+///   * contract_creation                    → 8 pages
 ///   * cowswap EIP-712 render (see
 ///     `crate::tx::eip712::cowswap_display`) → 10 pages
 ///
-/// Bumping this costs `MAX_PAGES × 4 × 16 = 64` extra stack bytes per
-/// page, so grow it deliberately and not speculatively.
+/// Bumping this costs `4 × 16 = 64` extra stack bytes per page, so
+/// grow it deliberately and not speculatively.
 pub const MAX_PAGES: usize = 10;
 
 /// A buffer of up to [`MAX_PAGES`] pre-rendered confirmation pages.

@@ -1,11 +1,11 @@
-//! Trust level 2.5 — decoded ERC20 method but the contract is NOT in
-//! the metadata DB. The method structure is trusted (selectors +
-//! calldata ABI decoded safely) but the token identity is unknown,
-//! so amounts are shown as raw uint256 without decimals.
+//! Trust level 2.5 — decoded ERC-20 method but the contract is NOT in
+//! the Merkle-verified metadata DB. The method structure is trusted
+//! (selectors + calldata ABI decoded safely) but token identity is
+//! unknown, so amounts render as the raw `uint256` with no decimals.
 
 use super::primitives::{
-    chain_name, write_addr, write_chain, write_gas, write_gwei, write_line, write_nonce_row,
-    write_tip_row,
+    chain_name, write_addr_full, write_chain, write_fee_budget_row, write_gas, write_gwei,
+    write_line, write_nonce_row, write_tip_row,
 };
 use super::Pages;
 use crate::erc20::calldata::{is_unlimited_amount, Erc20Call};
@@ -13,9 +13,9 @@ use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::ui::DISPLAY_COLS;
 
 pub fn render_erc20_unknown_pages(tx: &Eip1559Tx, call: &Erc20Call) -> Pages {
-    let mut pages = Pages::with_len(7);
+    let mut pages = Pages::with_len(8);
 
-    // Page 0: warning header
+    // ── Page 0: Warning banner + method ────────────────────────────
     write_line(&mut pages.buf[0][0], "! Unknown token");
     let method = match call {
         Erc20Call::Transfer { .. } => "transfer",
@@ -23,18 +23,17 @@ pub fn render_erc20_unknown_pages(tx: &Eip1559Tx, call: &Erc20Call) -> Pages {
         Erc20Call::Approve { .. } => "approve",
     };
     write_line(&mut pages.buf[0][1], method);
-    write_line(&mut pages.buf[0][2], "(decimals=?)");
+    write_line(&mut pages.buf[0][2], "(decimals = ?)");
     write_line(&mut pages.buf[0][3], "> next");
 
-    // Page 1: contract address
+    // ── Page 1: Contract address ───────────────────────────────────
     write_line(&mut pages.buf[1][0], "Contract:");
     if let Some(addr) = &tx.to {
-        let (left, right) = pages.buf[1].split_at_mut(2);
-        write_addr(&mut left[1], &mut right[0], addr);
+        let [_lbl, a, b, c] = &mut pages.buf[1];
+        write_addr_full(a, b, c, addr);
     }
-    write_line(&mut pages.buf[1][3], "> next");
 
-    // Page 2: recipient
+    // ── Page 2: Recipient / Spender ────────────────────────────────
     let recipient_label: &str = match call {
         Erc20Call::Transfer { .. } | Erc20Call::TransferFrom { .. } => "Recipient:",
         Erc20Call::Approve { .. } => "Spender:",
@@ -46,12 +45,11 @@ pub fn render_erc20_unknown_pages(tx: &Eip1559Tx, call: &Erc20Call) -> Pages {
         Erc20Call::Approve { spender, .. } => *spender,
     };
     {
-        let (left, right) = pages.buf[2].split_at_mut(2);
-        write_addr(&mut left[1], &mut right[0], &recipient);
+        let [_lbl, a, b, c] = &mut pages.buf[2];
+        write_addr_full(a, b, c, &recipient);
     }
-    write_line(&mut pages.buf[2][3], "> next");
 
-    // Page 3: amount as raw uint256 (no decimals known)
+    // ── Page 3: Raw uint256 amount (two-row) ───────────────────────
     write_line(&mut pages.buf[3][0], "Amount (raw):");
     let amount: U256 = match call {
         Erc20Call::Transfer { amount, .. } => *amount,
@@ -61,30 +59,47 @@ pub fn render_erc20_unknown_pages(tx: &Eip1559Tx, call: &Erc20Call) -> Pages {
     if matches!(call, Erc20Call::Approve { .. }) && is_unlimited_amount(&amount) {
         write_line(&mut pages.buf[3][1], "unlimited");
     } else {
-        let mut tmp = [0u8; 16];
-        let n = amount.format_decimal(0, 0, &mut tmp);
-        let copy = core::cmp::min(n, DISPLAY_COLS);
-        pages.buf[3][1][..copy].copy_from_slice(&tmp[..copy]);
+        // Raw integer: emit as a 78-digit max decimal across rows 1+2.
+        let mut tmp = [0u8; 96];
+        match amount.format_decimal(0, 0, false, &mut tmp) {
+            Some(n) if n <= DISPLAY_COLS => {
+                pages.buf[3][1][..n].copy_from_slice(&tmp[..n]);
+            }
+            Some(n) if n <= 2 * DISPLAY_COLS => {
+                pages.buf[3][1].copy_from_slice(&tmp[..DISPLAY_COLS]);
+                pages.buf[3][2][..n - DISPLAY_COLS]
+                    .copy_from_slice(&tmp[DISPLAY_COLS..n]);
+            }
+            _ => {
+                write_line(&mut pages.buf[3][1], "!OVERFLOW");
+            }
+        }
     }
     write_line(&mut pages.buf[3][3], "> next");
 
-    // Page 4: chain
+    // ── Page 4: Chain ──────────────────────────────────────────────
     write_line(&mut pages.buf[4][0], "Chain:");
     write_chain(&mut pages.buf[4][1], tx.chain_id);
     write_line(&mut pages.buf[4][2], chain_name(tx.chain_id));
     write_line(&mut pages.buf[4][3], "> next");
 
-    // Page 5: fees
+    // ── Page 5: Max fee + tip ──────────────────────────────────────
     write_line(&mut pages.buf[5][0], "Max fee:");
-    write_gwei(&mut pages.buf[5][1], &tx.max_fee_per_gas);
+    let _ = write_gwei(&mut pages.buf[5][1], &tx.max_fee_per_gas);
     write_tip_row(&mut pages.buf[5][2], &tx.max_priority_fee_per_gas);
     write_line(&mut pages.buf[5][3], "> next");
 
-    // Page 6: nonce + buttons
-    write_nonce_row(&mut pages.buf[6][0], tx.nonce);
-    write_gas(&mut pages.buf[6][1], tx.gas_limit);
-    write_line(&mut pages.buf[6][2], "L=Cancel");
-    write_line(&mut pages.buf[6][3], "R=Confirm");
+    // ── Page 6: Worst-case fee budget + gas ────────────────────────
+    write_line(&mut pages.buf[6][0], "Worst-case:");
+    write_fee_budget_row(&mut pages.buf[6][1], &tx.max_fee_per_gas, tx.gas_limit);
+    write_gas(&mut pages.buf[6][2], tx.gas_limit);
+    write_line(&mut pages.buf[6][3], "> next");
+
+    // ── Page 7: Nonce + buttons ────────────────────────────────────
+    write_nonce_row(&mut pages.buf[7][0], tx.nonce);
+    write_line(&mut pages.buf[7][1], "");
+    write_line(&mut pages.buf[7][2], "L=Cancel");
+    write_line(&mut pages.buf[7][3], "R=Confirm");
 
     pages
 }
