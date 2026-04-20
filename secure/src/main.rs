@@ -76,6 +76,8 @@ mod nsc;
 #[cfg(not(test))]
 mod rng;
 mod pin;
+#[cfg(all(feature = "stm32u585", feature = "optiga-trust-m", not(test)))]
+mod pin_diag;
 #[cfg(not(test))]
 mod sau;
 mod secure_element;

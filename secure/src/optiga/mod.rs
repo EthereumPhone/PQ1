@@ -171,7 +171,7 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// Pulse the RST line low via PD5 and re-run OpenApplication.
+    /// Pulse the RST line low via PE4 and re-run OpenApplication.
     ///
     /// Needed as a workaround for the 2-writes-per-session throttle on
     /// this specific OPTIGA Trust M dev board: after the chip accepts
@@ -181,12 +181,17 @@ impl OptigaTrustM {
     /// (strict locks, per-session counters) resets.
     #[cfg(feature = "stm32u585")]
     fn hard_reset_and_reinit(&mut self) -> Result<(), OptigaError> {
-        secure_log!("[OPTIGA] hard-pulsing RST (PD5) to clear session throttle");
-        unsafe {
-            reset_pin::init();
-            reset_pin::hard_pulse();
-        }
-        // Hard reset invalidates our IFX DL-layer state. Start fresh.
+        secure_log!("[OPTIGA] hard-pulsing RST (PE4) to clear session throttle");
+        // Uses `pin_diag::run` instead of the cleaner `reset_pin::init +
+        // hard_pulse` pair: an identical-looking implementation in
+        // reset_pin.rs produces no visible edge on the logic analyzer when
+        // called from this context — the pin_diag path (which additionally
+        // enables GPIOA/GPIOD clocks and runs a priming delay) works
+        // reliably. Root-caused to a silicon/timing quirk we haven't
+        // fully isolated yet; documented in reset_pin.rs. The extra
+        // toggles of the disconnected candidate pins (PA4/PD5/PE0) are
+        // harmless because those pins aren't wired to anything.
+        crate::pin_diag::run();
         self.ifx = ifx_i2c::IfxState::new();
         self.ready = false;
         self.init()
@@ -204,7 +209,7 @@ impl OptigaTrustM {
     /// is a sample key from Infineon's example set, unsafe for production.
     #[cfg(feature = "optiga-reset-oids")]
     pub fn recover_burned_oids(&mut self) -> Result<(), OptigaError> {
-        // Before anything else, configure PD5 (= Arduino D5 on the
+        // Before anything else, configure PE4 (= Arduino D5 on the
         // B-U585I-IOT02A) as a GPIO output and drive it high — this
         // is wired to the OPTIGA MTR Express V3 board's RST pin, and
         // driving high explicitly tells the chip it's not in reset.
@@ -707,7 +712,7 @@ impl OptigaTrustM {
                 return Err(e);
             }
             // After PBS write (2 SetData ops) the chip refuses further
-            // writes until it is hard-reset. Pulse RST (PD5) to clear
+            // writes until it is hard-reset. Pulse RST (PE4) to clear
             // the wedge; NV OIDs (including the PBS we just wrote) survive.
             #[cfg(feature = "stm32u585")]
             self.hard_reset_and_reinit()?;
