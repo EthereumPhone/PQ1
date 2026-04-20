@@ -597,11 +597,20 @@ Fix is structural, modelled on Trezor's production design (`~/repos/trezor-firmw
 - [ ] **Hardware monotonic counter for PIN attempts**: migrate `OID_COUNTER` from `0xF1E1` (software, glitch-fragile, `Conf(E140)`-gated) → `0xE120` (OPTIGA built-in monotonic counter with `Auto(LUC)` access conditions). Drop the firmware-side decrement-before-verify gymnastics in `authenticate_and_read`. Closes the concern noted in `project_optiga_bringup.md` memory.
 - [ ] **Typed `OptigaMetadata` struct** replacing the tag-by-tag `push_ac_simple`/`push_lcso_op` builders in `apdu.rs`. Pure refactor; makes merge-vs-overwrite semantics explicit. Mirror of Trezor's `optiga_metadata`.
 
-**What's needed — P2 (validation):**
+**What's needed — P2 (reversible validation, dev-safe):**
 
-- [x] End-to-end Phase-A test on a fresh TRUSTMV3SHIELDTOBO1 shield (2026-04-20): flashed with `otp-hardcoded-master-key` + `e2e-skip-unlock`, LA1010 on PB8/PB9/PE4. Verified: (a) 64-byte PBS derivation matches expected fingerprint `8ca52e4bc284d822` across multiple reflashes with different `firmware_hash` values, (b) E140 accepts 64-byte PBS + metadata at LcsO=Creation (Sta=0x00), (c) hard-RST pulse on PE4 reaches silicon (LA-confirmed 22 ms falling-edge on CH2 / Arduino D5), (d) all six user OIDs (F1D0 AUTH_REF, F1D1 ENTROPY, F1D2 MASTER_SECRET, F1D3 VK, F1D4 BOOTSTRAP_VK, F1E1 COUNTER) provisioned cleanly and locked, (e) chip still at LcsO=Creation on E140 (fully recoverable). The `firmware_hash`-in-wrap-key brick is genuinely gone.
-- [ ] Phase-B test (full PRL handshake + unlock, commits E140 LcsO=Operational): run on a fresh chip *after* the trusted-UI / unlock path is restored. Phase-B flips `e2e-skip-unlock` off, keeps `otp-hardcoded-master-key` on, and exercises `ensure_shield` + `shield.establish`. Deferred because it's a one-way commitment of the specific test chip to the hardcoded-constant-derived PBS.
-- [ ] First-boot TRNG-burn path on a SECOND fresh chip: flip `otp-hardcoded-master-key` off so `ensure_device_master` generates a fresh 32 B, burns into OTP, and derives a per-device PBS. Validates the production path. `optiga-lock-operational` stays OFF throughout until many-rebuild cycles prove stability.
+- [x] End-to-end Phase-A test on a fresh TRUSTMV3SHIELDTOBO1 shield (2026-04-20): flashed with `otp-hardcoded-master-key` + `e2e-skip-unlock`, LA1010 on PB8/PB9/PE4. Verified: (a) 64-byte PBS derivation matches expected fingerprint `8ca52e4bc284d822` across multiple reflashes with different `firmware_hash` values, (b) E140 accepts 64-byte PBS + metadata at LcsO=Creation (Sta=0x00), (c) hard-RST pulse on PE4 reaches silicon (LA-confirmed 22 ms falling-edge on CH2 / Arduino D5), (d) all six user OIDs (F1D0 AUTH_REF, F1D1 ENTROPY, F1D2 MASTER_SECRET, F1D3 VK, F1D4 BOOTSTRAP_VK, F1E1 COUNTER) provisioned cleanly (user-OID `lock_oid` calls committed on that run — since corrected to be gated by `optiga-lock-operational`, see below), (e) chip still at LcsO=Creation on E140. The `firmware_hash`-in-wrap-key brick is genuinely gone.
+- [x] `lock_oid` gated behind `optiga-lock-operational` (2026-04-20 follow-up): default dev builds (`optiga-lock-operational` OFF) no longer commit user-OID LcsO=op. Every OID stays at LcsO=Creation through all normal Phase-A iteration. Logs `[OPTIGA/prov] OID 0xNNNN lock_oid SKIPPED (optiga-lock-operational OFF ...)` on each gated call. This is the main "never waste another chip in dev" guardrail.
+- [ ] Rerun Phase-A on a third fresh chip with the gate in place and confirm the chip stays fully at LcsO=Creation post-provision (all 7 OIDs readable + rewriteable afterwards). Completes the reversibility proof.
+
+**What's out of scope here — moved to `docs/production-todo.md`:**
+
+- Phase-B (E140 LcsO=op commit + full PRL handshake) — one-way.
+- First-boot STM32 OTP master-key burn validation — one-way.
+- User-OID LcsO=op commits — one-way (our Phase A flipped these accidentally on the 2026-04-20 chip; follow-up landed the `optiga-lock-operational` gate so the default flow no longer does).
+- RDP=2, WRP1A, SECBOOTADD0, vendor-key bake-in, SE050 SCP03 rotation, supply-chain manifest signing — all silicon- or fleet-committing actions.
+
+Everything in `docs/production-todo.md` must be validated on sacrificial parts and only executed during explicit factory / end-to-end production provisioning runs with `optiga-lock-operational` (and the other relevant gates) enabled. Dev day-to-day iteration never flips those.
 
 **What we're NOT porting from Trezor** (decision record; full rationale in §6.4 of the postmortem):
 

@@ -568,10 +568,43 @@ impl OptigaTrustM {
         apdu::open_application(&mut self.ifx)
     }
 
-    /// Lock an OID's lifecycle to Operational (irreversible).
-    unsafe fn lock_oid(&mut self, oid: u16) -> Result<(), OptigaError> {
-        let (lock_meta, lock_len) = apdu::build_metadata_lock();
-        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &lock_meta[..lock_len])
+    /// Lock an OID's lifecycle to Operational.
+    ///
+    /// **Irreversible** per SRM §"Life Cycle Status": `LcsO` is monotonic
+    /// (`Creation → Initialization → Operational → Termination`, no
+    /// reverse path). Once an OID is at Operational its metadata is
+    /// frozen and can only be re-provisioned via a SetObjectProtected
+    /// recovery flow authorised by a Trust Anchor — not something dev
+    /// iteration can undo. See `docs/production-todo.md`.
+    ///
+    /// Gated behind the `optiga-lock-operational` Cargo feature so that
+    /// the default dev / Phase-A build leaves **all OIDs at
+    /// `LcsO=Creation`**. Dev builds iterate freely on chip state; only
+    /// explicit "we're committing this specific chip to production"
+    /// builds flip the feature on. See `docs/work-todo.md` #24 P2 for
+    /// the reversible test matrix and `docs/production-todo.md` for the
+    /// one-way items that belong in that gated production flow.
+    unsafe fn lock_oid(&mut self, _oid: u16) -> Result<(), OptigaError> {
+        #[cfg(not(feature = "optiga-lock-operational"))]
+        {
+            secure_log!(
+                "[OPTIGA/prov] OID 0x{:04x} lock_oid SKIPPED \
+                 (optiga-lock-operational OFF; LcsO stays at Creation, \
+                 metadata still mutable)",
+                _oid
+            );
+            Ok(())
+        }
+        #[cfg(feature = "optiga-lock-operational")]
+        {
+            let (lock_meta, lock_len) = apdu::build_metadata_lock();
+            apdu::set_metadata(&mut self.ifx, &mut self.shield, _oid, &lock_meta[..lock_len])?;
+            secure_log!(
+                "[OPTIGA/prov] OID 0x{:04x} LcsO bumped to Operational (irreversible)",
+                _oid
+            );
+            Ok(())
+        }
     }
 
     /// Provision the auth-reference OID: write the PIN-derived secret,
