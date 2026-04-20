@@ -92,13 +92,33 @@ mod state;
         feature = "ui-semihosting",
         feature = "ui-mirror",
         feature = "mock-se",
+        feature = "otp-hardcoded-master-key",
     )
 ))]
 compile_error!(
     "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
-     debug-log / ui-semihosting / ui-mirror / mock-se. These features leak \
-     secure-world state or replace the SE with a mock. Hardware test images \
-     may opt in by also enabling `e2e-test`."
+     debug-log / ui-semihosting / ui-mirror / mock-se / otp-hardcoded-master-key. \
+     These features leak secure-world state, replace the SE with a mock, or \
+     replace the per-device OTP master key with a shared compile-time constant. \
+     Hardware test images may opt in by also enabling `e2e-test`."
+);
+
+// Dedicated guard: `otp-hardcoded-master-key` + `optiga-lock-operational` is
+// a specifically catastrophic combination. The lock-operational feature
+// commits the E140 LcsO=Operational bump, which is hardware-irreversible;
+// the hardcoded-master-key feature makes the PBS derivation a compile-time
+// constant shared by every device built with the feature. Combining them
+// would lock a chip to a PBS that is identical across every dev board —
+// effectively publishing the Shielded Connection key. Refuse to build.
+#[cfg(all(
+    feature = "otp-hardcoded-master-key",
+    feature = "optiga-lock-operational",
+))]
+compile_error!(
+    "otp-hardcoded-master-key and optiga-lock-operational are mutually \
+     exclusive. Enabling both would bump E140 LcsO=Operational (irreversible) \
+     against a PBS derived from a shared compile-time constant, effectively \
+     publishing the Shielded Connection pairing secret."
 );
 
 #[cfg(not(feature = "stm32u585"))]

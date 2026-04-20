@@ -74,10 +74,28 @@ e2e-test = []
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
 se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
 optiga-trust-m = []  # Infineon OPTIGA Trust M V3 via I2C1 (TRUSTMV3SHIELDTOBO1 on Arduino R3 headers)
-optiga-bringup-fresh = []  # Erase MCU-side PBS flash at boot to force a fresh chip pairing. Dev-only; bricks already-provisioned chips from this MCU. Slated for removal — see docs/optiga-brick-postmortem.md §7.
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
 optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Production: bump E140 LcsO to Operational at end of PBS provisioning. Irreversible. Default OFF — dev chips stay at LcsO=Creation (rewriteable) so firmware rebuilds cannot brick them. ONLY enable when (a) OTP master key is burned, (b) PBS is OTP-derived (work-todo #24 step 2), (c) chip is intended for production ship. See docs/optiga-brick-postmortem.md §5 + §7.
+# Dev/bring-up ONLY: swap the STM32U585 OTP-stored device master key for a
+# compile-time fixed 32-byte constant. Lets us exercise the whole hw/otp.rs
+# + hw/secret_keys.rs + OPTIGA pairing-secret derivation pipeline on bench
+# boards without burning real OTP (OTP is one-way; a mistake costs the
+# board). The test pattern is plain ASCII ("PQSIGNER-TEST-OTP-MASTER-DNS-
+# v1!") so it cannot be confused for a real key. Guarded against production
+# via a compile_error! in secure/src/main.rs that fires unless debug-log or
+# e2e-test is also enabled. NEVER ship — a device built with this feature
+# shares its pairing secret with every other device built with this feature,
+# which would let a logic-analyzer snoop decrypt the Shielded Connection
+# across every unit.
+otp-hardcoded-master-key = []
+# Under `e2e-test`, halt the boot flow right after `provision_from_mnemonic`
+# returns, BEFORE `SE.unlock` would trigger the OPTIGA PRL handshake + the
+# irreversible E140 LcsO=op bump. Used for the Phase-A hardware-validation
+# target (`flash-hw-optiga-bringup-write-only`): we want to prove the PBS
+# was written to the chip without committing the chip to that PBS.
+# Only meaningful in combination with `e2e-test`.
+e2e-skip-unlock = []
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.

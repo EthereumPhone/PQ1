@@ -873,6 +873,111 @@ release:
 	@echo "==> Release artifacts in target/release/"
 	@echo "    Next: fwsign sign --key vendor-key.enc --version N ..."
 
+# Hardware bring-up test for the OTP-derived OPTIGA Shielded Connection
+# path landed in work-todo #24.
+#
+# Build config:
+#   - optiga-trust-m + stm32u585   : real chip over I2C1 (no SE050 needed)
+#   - otp-hardcoded-master-key     : PBS derives from the fixed ASCII
+#                                    constant, no real OTP is burned — the
+#                                    chip can be re-paired across multiple
+#                                    reflashes with a *stable* PBS. This is
+#                                    the test we couldn't run before #24.
+#   - e2e-test                     : pre-provisions the test mnemonic +
+#                                    auto-verifies the PIN, so the OPTIGA
+#                                    provisioning pipeline runs end-to-end
+#                                    without interactive input.
+#   - optiga-lock-operational      : deliberately NOT set. E140 stays at
+#                                    LcsO=Creation so the chip is rewriteable
+#                                    if anything in the derivation needs
+#                                    iterating.
+#
+# What to watch for on the probe-rs semihosting stream:
+#   [OPTIGA] PBS derived from OTP master and loaded
+#   [OPTIGA/prov] step 1: setup_pbs_no_handshake
+#   [OPTIGA/prov] E140 LcsO bump SKIPPED (optiga-lock-operational OFF; ...)
+#   [OPTIGA/shield] establish: start
+#   [OPTIGA/shield] sending MasterHello
+#   [OPTIGA/shield] MasterHello response n=38
+#   [OPTIGA/shield] PRL handshake OK — encrypted I2C active
+#   [OPTIGA] Provisioning complete (6 OIDs written + locked)
+#   [S][e2e] gateway pre-unlocked, ready for tests
+#
+# Rebuild-stability test: after the first successful run, edit any comment
+# in the source, rerun `make flash-hw-optiga-bringup`, and confirm the
+# same markers appear again. The chip still holds the PBS from the first
+# run; the MCU re-derives the same 32 bytes from the hardcoded master;
+# the handshake succeeds with the existing chip-side pairing state.
+# That's the concrete proof that the firmware_hash-in-wrap-key brick
+# class is gone.
+flash-hw-optiga-bringup:
+	@echo "==> Building OPTIGA Stage-1 bring-up test (Phase B: full PRL)"
+	@echo "    (optiga-trust-m + otp-hardcoded-master-key + e2e-test)"
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-trust-m,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting and attaching — watch for PRL handshake markers."
+	@echo "    (Ctrl-C to abort; rerun the target after a code change to"
+	@echo "     prove the PBS is stable across rebuilds.)"
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# Phase A of the OPTIGA Stage-1 hardware validation.
+#
+# Same build as `flash-hw-optiga-bringup` PLUS `e2e-skip-unlock`, which
+# halts the boot flow immediately after `provision_from_mnemonic` returns
+# and BEFORE `SE.unlock` runs. The practical effect:
+#
+#   - `setup_pbs_no_handshake` WRITES the 64-byte PBS to OID E140 via
+#     plaintext APDU. The chip records it at LcsO=Creation (rewriteable).
+#   - Each user OID (F1D0..F1E1) is provisioned plaintext, LcsO=Creation.
+#   - `authenticate_and_read` / `ensure_shield` / `shield.establish` are
+#     NEVER called, so `ensure_pbs_lcso_operational` cannot bump E140 to
+#     LcsO=Operational. The chip remains fully recoverable.
+#
+# If the write succeeds, we see `[OPTIGA] PBS provisioned (handshake
+# deferred)` followed by `[S][e2e] e2e-skip-unlock active: halting after
+# provisioning`. At that point the chip holds our PBS but is still rewrite-
+# able via plaintext I2C (LcsO<op), so Phase B's PRL test can commit it
+# properly, or a re-run with a different PBS can overwrite it.
+#
+# If the write FAILS (e.g., the chip refuses the 64-byte size, or some
+# APDU-level error), we see a `set_data_object FAILED` line and Phase B
+# is definitively off the table until the root cause is understood.
+flash-hw-optiga-bringup-write-only:
+	@echo "==> Building OPTIGA Stage-1 bring-up test (Phase A: write + halt)"
+	@echo "    (optiga-trust-m + otp-hardcoded-master-key + e2e-test + e2e-skip-unlock)"
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-trust-m,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key,e2e-skip-unlock
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting and attaching — Phase-A validation (no LcsO=op bump)."
+	@echo "    Watch for the PBS fingerprint + '[OPTIGA] PBS provisioned'"
+	@echo "    followed by 'e2e-skip-unlock active: halting after provisioning'."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # One-shot OPTIGA Trust M OID recovery. Regenerates reset manifests from
 # the Infineon protected_update_data_set tool, builds firmware with the
 # optiga-reset-oids feature, flashes the STM32U585, and attaches probe-rs
@@ -889,7 +994,7 @@ flash-hw-optiga-reset: optiga-reset-oids
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW) -C debug-assertions=on" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se,optiga-reset-oids,optiga-bringup-fresh,stm32u585,ui-oled,debug-log,usb
+		--features dual-se,optiga-reset-oids,stm32u585,ui-oled,debug-log,usb
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb

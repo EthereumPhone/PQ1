@@ -40,10 +40,12 @@ TRUST_ANCHOR_OID = 0xE0E3
 #
 # 0xE140: Platform Binding Secret. Needs a different reset metadata because
 # after provisioning its LcsO is Operational and Change becomes Conf(E140),
-# making normal rewrites impossible once the host-side PBS is lost (e.g.
-# after `optiga-bringup-fresh` erases MCU flash page 126). The custom
-# metadata restores it to Creation with data_type=PBS so
-# `setup_pbs_no_handshake` can re-run end-to-end on the next boot.
+# making normal rewrites impossible once the host-side PBS is lost. The
+# custom metadata restores it to Creation with data_type=PBS so
+# `setup_pbs_no_handshake` can re-run end-to-end on the next boot. Post
+# work-todo #24 the PBS is re-derived from the OTP master on every boot,
+# so this reset path is only useful for chips that were paired under the
+# pre-#24 driver and whose MCU-side PBS copy was subsequently lost.
 TARGET_OIDS: list[tuple[int, Path]] = [
     (oid, META_FILE_DEFAULT) for oid in range(0xF1D0, 0xF1E0)
 ] + [

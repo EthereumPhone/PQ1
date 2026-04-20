@@ -171,7 +171,7 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// Pulse the RST line low via PE0 and re-run OpenApplication.
+    /// Pulse the RST line low via PD5 and re-run OpenApplication.
     ///
     /// Needed as a workaround for the 2-writes-per-session throttle on
     /// this specific OPTIGA Trust M dev board: after the chip accepts
@@ -181,7 +181,7 @@ impl OptigaTrustM {
     /// (strict locks, per-session counters) resets.
     #[cfg(feature = "stm32u585")]
     fn hard_reset_and_reinit(&mut self) -> Result<(), OptigaError> {
-        secure_log!("[OPTIGA] hard-pulsing RST (PE0) to clear session throttle");
+        secure_log!("[OPTIGA] hard-pulsing RST (PD5) to clear session throttle");
         unsafe {
             reset_pin::init();
             reset_pin::hard_pulse();
@@ -204,7 +204,7 @@ impl OptigaTrustM {
     /// is a sample key from Infineon's example set, unsafe for production.
     #[cfg(feature = "optiga-reset-oids")]
     pub fn recover_burned_oids(&mut self) -> Result<(), OptigaError> {
-        // Before anything else, configure PE0 (= Arduino D5 on the
+        // Before anything else, configure PD5 (= Arduino D5 on the
         // B-U585I-IOT02A) as a GPIO output and drive it high — this
         // is wired to the OPTIGA MTR Express V3 board's RST pin, and
         // driving high explicitly tells the chip it's not in reset.
@@ -270,27 +270,18 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// Load the Platform Binding Secret from secure flash (page 126).
+    /// Load the Platform Binding Secret into the Shielded Connection
+    /// state.
     ///
-    /// Called at boot. If the PBS page is blank (first boot), this is a
-    /// no-op — PBS will be generated during `setup_pbs` on first
-    /// provisioning.
+    /// Post-work-todo-#24: the PBS is re-derived from the per-device
+    /// OTP master key every boot via
+    /// `hw::secret_keys::optiga_pairing_secret`. No flash seal, no
+    /// blank-page check, no AES-GCM unseal. First boot triggers the
+    /// one-time OTP master burn as a side-effect of the HKDF call.
     ///
-    /// Under `optiga-bringup-fresh` the PBS page is erased at boot. This
-    /// forces `setup_pbs` to generate a fresh secret, which is what we
-    /// want when the chip's OID 0xE140 is still in LcsO=Creation state
-    /// (fresh silicon) or when we've re-flashed the MCU but the chip was
-    /// never successfully provisioned. Should NEVER be enabled in
-    /// production — it orphans any already-provisioned chip from the MCU.
-    ///
-    /// Under `optiga-no-shield`: flash-page-126 unseal is skipped
-    /// entirely. We don't need a PBS because PRL never runs.
-    ///
-    /// NOTE (work-todo #24 step 2): the whole flash-page-126 seal/unseal
-    /// path goes away once PBS is derived deterministically from the
-    /// OTP master key. This function becomes a single line: load the
-    /// HKDF-derived PBS into `self.shield`. See
-    /// `docs/optiga-brick-postmortem.md` §5.
+    /// Under `optiga-no-shield` this is a no-op — we never attempt
+    /// PRL on chips where E140 is unreachable. See
+    /// `docs/optiga-brick-postmortem.md` §7.
     #[cfg(feature = "stm32u585")]
     pub fn load_pbs(&mut self) {
         #[cfg(feature = "optiga-no-shield")]
@@ -298,48 +289,36 @@ impl OptigaTrustM {
             secure_log!("[OPTIGA] load_pbs skipped (feature optiga-no-shield)");
             return;
         }
-        #[cfg(feature = "optiga-bringup-fresh")]
-        unsafe {
-            if !crate::hw::flash::is_pbs_blank() {
-                secure_log!("[OPTIGA] optiga-bringup-fresh: erasing stale PBS flash page");
-                match crate::hw::flash::erase_pbs_page() {
-                    Ok(()) => {
-                        let still_dirty = !crate::hw::flash::is_pbs_blank();
-                        secure_log!(
-                            "[OPTIGA] erase returned Ok, is_pbs_blank post-erase: {}",
-                            !still_dirty
-                        );
-                    }
-                    Err(_) => {
-                        secure_log!("[OPTIGA] erase_pbs_page returned Err");
-                    }
-                }
-            } else {
-                secure_log!("[OPTIGA] optiga-bringup-fresh: PBS page already blank");
-            }
-        }
-
-        unsafe {
-            if crate::hw::flash::is_pbs_blank() {
-                secure_log!("[OPTIGA] PBS page blank (first boot)");
-                return;
-            }
-            let mut pbs = [0u8; 32];
-            match crate::hw::flash::read_pbs(&mut pbs) {
-                Ok(()) => {
+        #[cfg(not(feature = "optiga-no-shield"))]
+        {
+            use zeroize::Zeroize;
+            match crate::hw::secret_keys::optiga_pairing_secret() {
+                Ok(mut pbs) => {
+                    // Fingerprint log: first 8 bytes of the derived PBS.
+                    // Stable across rebuilds iff the OTP master + HKDF
+                    // label haven't changed. If this line ever differs
+                    // between two boots of the same chip, the PBS we're
+                    // about to hand to the PRL handshake will not match
+                    // what the chip was paired with — STOP before writing
+                    // anything to E140, because LcsO=op makes rewrites
+                    // impossible. The hardcoded test constant is in
+                    // source; printing 8 bytes of its HKDF output leaks
+                    // nothing a code reader doesn't already have.
+                    secure_log!(
+                        "[OPTIGA] PBS fingerprint: {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                        pbs[0], pbs[1], pbs[2], pbs[3],
+                        pbs[4], pbs[5], pbs[6], pbs[7]
+                    );
                     self.shield.load_pbs(&pbs);
                     pbs.zeroize();
-                    secure_log!("[OPTIGA] PBS unsealed from flash page 126");
+                    secure_log!("[OPTIGA] PBS derived from OTP master and loaded");
                 }
                 Err(e) => {
-                    // CRIT-9: either the flash was tampered with, the
-                    // chip was swapped under this firmware, or this
-                    // firmware revision changed the wrap-key domain.
-                    // All three collapse to "treat as unprovisioned
-                    // and re-run first-boot provisioning" — the admin
-                    // factory-reset path handles the clean-up.
-                    pbs.zeroize();
-                    secure_log!("[OPTIGA] PBS unseal FAILED: {:?}; treating as blank", e);
+                    // Only reachable if OTP itself failed (RNG failure on
+                    // first-boot burn, ReadbackMismatch, etc.). Shielded
+                    // Connection will be unavailable; the provisioning
+                    // path + PIN flow surface a diagnostic upstream.
+                    secure_log!("[OPTIGA] load_pbs FAILED: {:?}", e);
                 }
             }
         }
@@ -347,50 +326,7 @@ impl OptigaTrustM {
 
     #[cfg(not(feature = "stm32u585"))]
     pub fn load_pbs(&mut self) {
-        secure_log!("[OPTIGA] load_pbs: no flash on QEMU");
-    }
-
-    /// Generate + provision the Platform Binding Secret, lock it to
-    /// Operational, and establish the first shielded connection.
-    ///
-    /// Only runs when LcsO of 0xE140 is < Operational (i.e. first boot).
-    /// On subsequent boots `load_pbs()` restores the secret from flash and
-    /// this function is skipped.
-    fn setup_pbs(&mut self) -> Result<(), OptigaError> {
-        let mut pbs = [0u8; 32];
-        crate::rng::fill(&mut pbs).map_err(|_| OptigaError::Transport)?;
-
-        unsafe {
-            apdu::set_data_object(
-                &mut self.ifx, &mut self.shield,
-                apdu::OID_PBS, &pbs,
-            )?;
-
-            let (meta, meta_len) = apdu::build_metadata_pbs_final();
-            apdu::set_metadata(
-                &mut self.ifx, &mut self.shield,
-                apdu::OID_PBS, &meta[..meta_len],
-            )?;
-        }
-
-        self.shield.load_pbs(&pbs);
-
-        #[cfg(feature = "stm32u585")]
-        unsafe {
-            crate::hw::flash::write_pbs(&pbs)
-                .map_err(|_| OptigaError::Transport)?;
-            secure_log!("[OPTIGA] PBS written to flash page 126");
-        }
-
-        pbs.zeroize();
-
-        unsafe {
-            self.shield.establish(&mut self.ifx)
-                .map_err(|_| OptigaError::Shield)?;
-        }
-
-        secure_log!("[OPTIGA] PBS provisioned, shielded connection active");
-        Ok(())
+        secure_log!("[OPTIGA] load_pbs: non-stm32u585 build, no-op");
     }
 
     /// Ensure the shielded connection is active, establishing it on demand
@@ -425,37 +361,73 @@ impl OptigaTrustM {
                     self.shield.establish(&mut self.ifx)
                         .map_err(|_| OptigaError::Shield)?;
                 }
+                secure_log!("[OPTIGA/shield] PRL handshake OK — encrypted I2C active");
             }
             Ok(())
         }
     }
 
     /// PBS provisioning without attempting the shielded-connection
-    /// handshake. Writes PBS to OID 0xE140 + sets its metadata (LcsO,
-    /// type=0x22), saves PBS to MCU flash, but does NOT call
-    /// `shield.establish`. Used while the PRL handshake is being
-    /// debugged against real silicon.
+    /// handshake. Writes the 32-byte Platform Binding Secret to OID
+    /// 0xE140 and installs the PRL-compatible metadata, but does NOT
+    /// call `shield.establish`. Used during bring-up while the PRL
+    /// handshake itself is being debugged against real silicon.
     ///
-    /// The final LcsO=Operational bump is gated behind the
-    /// `optiga-lock-operational` Cargo feature. Per SRM §"Platform Binding
-    /// Secret" the chip requires `E140.LcsO=op` for the presentation-layer
-    /// state machine to emit SlaveHello — so production builds must enable
-    /// the feature, but dev builds leave it off so a firmware rebuild does
-    /// not produce an unrecoverable chip. Full rationale in
+    /// ## Source of the PBS (work-todo #24)
+    ///
+    /// The PBS is derived on demand from the per-device OTP master key
+    /// via `hw::secret_keys::optiga_pairing_secret` (HMAC-SHA256 with
+    /// label `"pqsigner/optiga-pbs-v1"`). Two properties matter:
+    ///
+    /// - **Deterministic across firmware rebuilds.** The PBS is a pure
+    ///   function of the OTP master (burned once per physical board)
+    ///   and the HKDF label — both stable for the device's lifetime.
+    ///   Any firmware reflash reproduces the same 32 bytes. The old
+    ///   `rng::fill`-generated PBS + flash-page-126 AES-GCM seal is
+    ///   gone (`hw::flash::write_pbs` deleted), along with its
+    ///   dependency on `measured_boot::firmware_hash` inside the wrap
+    ///   key — that coupling is what bricked bench units on every
+    ///   rebuild (see `docs/optiga-brick-postmortem.md`).
+    /// - **First boot self-provisions the master.** On a blank MCU the
+    ///   inner `ensure_device_master` call inside `optiga_pairing_
+    ///   secret` programs 32 TRNG bytes into OTP and locks the region.
+    ///   Every subsequent boot is a pure OTP read + one HMAC.
+    ///
+    /// ## LcsO=Operational bump
+    ///
+    /// Per SRM §"Platform Binding Secret" the chip requires
+    /// `E140.LcsO=op` for the PRL state machine to emit SlaveHello, so
+    /// production builds must enable the `optiga-lock-operational`
+    /// Cargo feature. Dev builds leave it off so a firmware rebuild
+    /// does not produce an unrecoverable chip. See
     /// `docs/optiga-brick-postmortem.md` §3 and §7.
     ///
-    /// TODO (work-todo #24 step 2): replace `rng::fill(&mut pbs)` with an
-    /// HKDF expansion of the STM32U585 OTP master key
-    /// (`secret_keys::optiga_pairing_secret()`). Until that lands, the PBS
-    /// is random-per-provisioning and the flash-seal still depends on
-    /// `firmware_hash()`, so enabling `optiga-lock-operational` on top of
-    /// this code *will* re-produce the brick scenario on firmware update.
-    /// The Cargo feature therefore serves as a deliberate check: it is
-    /// trivially easy to not flip it, and flipping it acknowledges the
-    /// commitment.
+    /// The bump additionally refuses to proceed unless the OTP master
+    /// has actually been burned (`is_device_master_burned`). On a
+    /// board where the master is still blank, committing LcsO=op would
+    /// lock E140 against a PBS the driver cannot reproduce after the
+    /// very next reset — that is the exact class of reliability bug
+    /// #24 was written to eliminate.
     fn setup_pbs_no_handshake(&mut self) -> Result<(), OptigaError> {
-        let mut pbs = [0u8; 32];
-        crate::rng::fill(&mut pbs).map_err(|_| OptigaError::Transport)?;
+        // Derive the PBS from the OTP master on real hardware; fall
+        // back to a TRNG-filled ephemeral value on pure-host/QEMU
+        // builds (which don't exercise real OPTIGA I/O anyway — the
+        // driver is `optiga-trust-m`-gated and `stm32u585`-gated
+        // peripherals are what deliver APDUs).
+        //
+        // 64-byte size per OPTIGA Trust M SRM §"Platform Binding Secret".
+        #[cfg(feature = "stm32u585")]
+        let mut pbs = crate::hw::secret_keys::optiga_pairing_secret()
+            .map_err(|e| {
+                secure_log!("[OPTIGA/prov] optiga_pairing_secret FAILED: {:?}", e);
+                OptigaError::Transport
+            })?;
+        #[cfg(not(feature = "stm32u585"))]
+        let mut pbs = {
+            let mut p = [0u8; 64];
+            crate::rng::fill(&mut p).map_err(|_| OptigaError::Transport)?;
+            p
+        };
 
         unsafe {
             apdu::set_data_object(
@@ -471,10 +443,24 @@ impl OptigaTrustM {
 
             // LcsO = Operational. Irreversible per SRM §"Life Cycle Status".
             // Gated behind `optiga-lock-operational` so dev builds cannot
-            // commit to an irreversible pairing on a chip whose PBS
-            // derivation isn't yet deterministic (work-todo #24 step 2).
+            // commit to an irreversible pairing; additionally gated on
+            // `is_device_master_burned` so an accidental feature-flip on
+            // an unburned board cannot reproduce the brick scenario.
             #[cfg(feature = "optiga-lock-operational")]
             {
+                #[cfg(feature = "stm32u585")]
+                {
+                    if !crate::hw::otp::is_device_master_burned() {
+                        secure_log!(
+                            "[OPTIGA/prov] REFUSE LcsO=op: OTP master is blank; \
+                             the PBS cannot be reproduced across resets, locking \
+                             E140 would brick the chip on next boot"
+                        );
+                        pbs.zeroize();
+                        return Err(OptigaError::Transport);
+                    }
+                }
+
                 let (lock_meta, lock_len) = apdu::build_metadata_lock();
                 if let Err(e) = apdu::set_metadata(
                     &mut self.ifx, &mut self.shield,
@@ -493,14 +479,6 @@ impl OptigaTrustM {
         }
 
         self.shield.load_pbs(&pbs);
-
-        #[cfg(feature = "stm32u585")]
-        unsafe {
-            crate::hw::flash::write_pbs(&pbs)
-                .map_err(|_| OptigaError::Transport)?;
-            secure_log!("[OPTIGA] PBS written to flash page 126");
-        }
-
         pbs.zeroize();
 
         secure_log!("[OPTIGA] PBS provisioned (handshake deferred)");
@@ -576,37 +554,6 @@ impl OptigaTrustM {
         }
     }
 
-    /// Check if the auth-ref OID already has data_type = 0x31 (AUTHREF).
-    /// Used by bringup-fresh to skip re-provisioning across runs when
-    /// the secret on-chip is already the one we'd write.
-    #[cfg(feature = "optiga-bringup-fresh")]
-    unsafe fn auth_ref_is_authref_typed(&mut self) -> bool {
-        let mut meta = [0u8; 64];
-        match apdu::get_metadata(
-            &mut self.ifx, &mut self.shield,
-            apdu::OID_AUTH_REF, &mut meta,
-        ) {
-            Ok(n) => {
-                // Walk the TLV tree looking for tag 0xE8 (data type) = 0x31.
-                if n < 2 || meta[0] != 0x20 { return false; }
-                let root_len = meta[1] as usize;
-                if 2 + root_len > n { return false; }
-                let mut pos = 2;
-                while pos + 2 <= 2 + root_len {
-                    let tag = meta[pos];
-                    let tlen = meta[pos + 1] as usize;
-                    if pos + 2 + tlen > 2 + root_len { break; }
-                    if tag == 0xE8 && tlen == 1 && meta[pos + 2] == 0x31 {
-                        return true;
-                    }
-                    pos += 2 + tlen;
-                }
-                false
-            }
-            Err(_) => false,
-        }
-    }
-
     /// Close + reopen the OPTIGA application context. Frees the chip's
     /// per-session work buffer between long chains of writes where the
     /// chip otherwise starts returning Status=0xff after a few operations.
@@ -617,27 +564,31 @@ impl OptigaTrustM {
     }
 
     /// Lock an OID's lifecycle to Operational (irreversible).
-    ///
-    /// Under `optiga-bringup-fresh` we skip this call so the OIDs stay in
-    /// Creation state and can be rewritten on the next test run. Without
-    /// this escape hatch each provisioning attempt permanently consumes
-    /// one entry from the chip's arbitrary-data-object budget.
-    unsafe fn lock_oid(&mut self, _oid: u16) -> Result<(), OptigaError> {
-        #[cfg(feature = "optiga-bringup-fresh")]
-        {
-            secure_log!("[OPTIGA/prov] OID 0x{:04x}: lock_oid SKIPPED (bring-up)", _oid);
-            return Ok(());
-        }
-        #[cfg(not(feature = "optiga-bringup-fresh"))]
-        {
-            let (lock_meta, lock_len) = apdu::build_metadata_lock();
-            apdu::set_metadata(&mut self.ifx, &mut self.shield, _oid, &lock_meta[..lock_len])
-        }
+    unsafe fn lock_oid(&mut self, oid: u16) -> Result<(), OptigaError> {
+        let (lock_meta, lock_len) = apdu::build_metadata_lock();
+        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &lock_meta[..lock_len])
     }
 
-    /// Provision the auth-reference OID: install AC + data-type, write the
-    /// PIN-derived secret, lock LcsO.
+    /// Provision the auth-reference OID: write the PIN-derived secret,
+    /// install AC + data-type, lock LcsO.
+    ///
+    /// Order matters (aligned with `provision_user_oid`, which was the
+    /// fix identified in commit d8e54d7 "data-first write"): while the
+    /// OID is at LcsO=Creation with default allow-all Change AC, the
+    /// data write goes through plaintext. Installing the AUTHREF data-
+    /// type metadata *before* the data is written fails on a fresh chip
+    /// with Status=0xFF — the chip apparently refuses to apply
+    /// `type=AUTHREF` to an empty OID.
     unsafe fn provision_auth_ref(&mut self, pin_secret: &[u8; 32]) -> Result<(), OptigaError> {
+        secure_log!("[OPTIGA/prov] auth_ref: set_data_object");
+        if let Err(e) = apdu::set_data_object(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, pin_secret,
+        ) {
+            secure_log!("[OPTIGA/prov] auth_ref set_data FAILED: {:?}", e);
+            return Err(e);
+        }
+
         secure_log!("[OPTIGA/prov] auth_ref: set_metadata");
         let (meta, meta_len) = apdu::build_metadata_auth_ref();
         if let Err(e) = apdu::set_metadata(
@@ -645,15 +596,6 @@ impl OptigaTrustM {
             apdu::OID_AUTH_REF, &meta[..meta_len],
         ) {
             secure_log!("[OPTIGA/prov] auth_ref set_metadata FAILED: {:?}", e);
-            return Err(e);
-        }
-
-        secure_log!("[OPTIGA/prov] auth_ref: set_data_object");
-        if let Err(e) = apdu::set_data_object(
-            &mut self.ifx, &mut self.shield,
-            apdu::OID_AUTH_REF, pin_secret,
-        ) {
-            secure_log!("[OPTIGA/prov] auth_ref set_data FAILED: {:?}", e);
             return Err(e);
         }
 
@@ -677,7 +619,7 @@ impl OptigaTrustM {
         &mut self,
         oid: u16,
         data: &[u8],
-        _require_shielded_read: bool,
+        require_shielded_read: bool,
     ) -> Result<(), OptigaError> {
         secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_data ({} bytes)", oid, data.len());
         if let Err(e) = apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data) {
@@ -685,23 +627,15 @@ impl OptigaTrustM {
             return Err(e);
         }
 
-        // Bring-up: skip AC install + LcsO lock entirely. Leaves OID in
-        // Creation state with default "allow all" access — fine for
-        // validating the provisioning / unlock round trip on real silicon
-        // but MUST be re-enabled (via build_metadata_protected) before
-        // shipping. See project memory for the chip-reset story.
-        #[cfg(not(feature = "optiga-bringup-fresh"))]
-        {
-            let (meta, meta_len) =
-                apdu::build_metadata_protected(apdu::OID_AUTH_REF, _require_shielded_read);
-            if let Err(e) = apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len]) {
-                secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_metadata FAILED: {:?}", oid, e);
-                return Err(e);
-            }
-            if let Err(e) = self.lock_oid(oid) {
-                secure_log!("[OPTIGA/prov] OID 0x{:04x}: lock FAILED: {:?}", oid, e);
-                return Err(e);
-            }
+        let (meta, meta_len) =
+            apdu::build_metadata_protected(apdu::OID_AUTH_REF, require_shielded_read);
+        if let Err(e) = apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len]) {
+            secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_metadata FAILED: {:?}", oid, e);
+            return Err(e);
+        }
+        if let Err(e) = self.lock_oid(oid) {
+            secure_log!("[OPTIGA/prov] OID 0x{:04x}: lock FAILED: {:?}", oid, e);
+            return Err(e);
         }
         Ok(())
     }
@@ -740,57 +674,48 @@ impl OptigaTrustM {
         self.init()?;
         secure_log!("[OPTIGA/prov] init OK");
 
-        // 1. PBS (plain write; shielded connection disabled until the PRL
-        // handshake bring-up issue is resolved — see project memory).
-        // Still writes the PBS and metadata so the chip is ready to
-        // handshake later. Subsequent APDUs go plaintext via ifx layer.
+        // 1. PBS (plain write to E140 at LcsO=Creation). Unconditionally
+        // runs on every provisioning attempt under `optiga-trust-m`:
+        // setup_pbs_no_handshake is idempotent against LcsO=Creation
+        // (Change AC defaults to ALW until metadata is installed, and
+        // then the `LcsO<op OR Conf(E140)` branch allows the plaintext
+        // re-write), so re-running it on a partially-provisioned chip
+        // just rewrites the same 64 bytes.
         //
-        // Under `optiga-no-shield` the entire PBS setup is skipped — we
-        // never use shielded connection, so we never write E140. This
-        // keeps a chip with a bricked E140 (LcsO=op with lost PBS) usable
-        // for all non-PRL paths. See docs/optiga-brick-postmortem.md §7.
+        // Pre-#24 this was gated on `!self.shield.pbs_loaded`, which
+        // worked when `load_pbs` only set `pbs_loaded=true` after an
+        // unsealed flash read succeeded. Post-#24, `load_pbs` always
+        // succeeds (PBS is derived from the OTP master on every boot),
+        // so that gate would now skip the chip-side write on every
+        // fresh chip — which is exactly the bug surfaced on Phase-A
+        // hardware validation of 2026-04-20.
+        //
+        // Under `optiga-no-shield` the entire PBS setup is skipped —
+        // we never use shielded connection, so we never write E140.
+        // Keeps a chip with a bricked E140 (LcsO=op with lost PBS)
+        // usable for all non-PRL paths. See
+        // `docs/optiga-brick-postmortem.md` §7.
         #[cfg(feature = "optiga-no-shield")]
         {
             secure_log!("[OPTIGA/prov] step 1 skipped (feature optiga-no-shield; PRL is disabled)");
         }
         #[cfg(not(feature = "optiga-no-shield"))]
         {
-            if !self.shield.pbs_loaded {
-                secure_log!("[OPTIGA/prov] step 1: setup_pbs_no_handshake");
-                if let Err(e) = self.setup_pbs_no_handshake() {
-                    secure_log!("[OPTIGA/prov] setup_pbs FAILED: {:?}", e);
-                    return Err(e);
-                }
-                // After PBS write (2 SetData ops) the chip refuses further
-                // writes until it is hard-reset. Pulse RST (PE0) to clear
-                // the wedge; NV OIDs (including the PBS we just wrote) survive.
-                #[cfg(feature = "stm32u585")]
-                self.hard_reset_and_reinit()?;
-            } else {
-                secure_log!("[OPTIGA/prov] step 1 skipped (PBS already loaded)");
+            secure_log!("[OPTIGA/prov] step 1: setup_pbs_no_handshake");
+            if let Err(e) = self.setup_pbs_no_handshake() {
+                secure_log!("[OPTIGA/prov] setup_pbs FAILED: {:?}", e);
+                return Err(e);
             }
+            // After PBS write (2 SetData ops) the chip refuses further
+            // writes until it is hard-reset. Pulse RST (PD5) to clear
+            // the wedge; NV OIDs (including the PBS we just wrote) survive.
+            #[cfg(feature = "stm32u585")]
+            self.hard_reset_and_reinit()?;
         }
 
         // 2. Auth reference
-        //
-        // Under bringup-fresh, skip if the OID already holds our secret
-        // (the PIN-derived secret is deterministic across runs since PIN
-        // + KDF domain are fixed, so re-provisioning would just rewrite
-        // the same bytes — and the chip refuses the second write because
-        // AUTHREF-typed OIDs are effectively write-once). Check by
-        // reading the OID's metadata and looking for data_type = 0x31.
-        let already_provisioned = {
-            #[cfg(feature = "optiga-bringup-fresh")]
-            {
-                unsafe { self.auth_ref_is_authref_typed() }
-            }
-            #[cfg(not(feature = "optiga-bringup-fresh"))]
-            { false }
-        };
-        if already_provisioned {
-            secure_log!("[OPTIGA/prov] auth_ref already provisioned (bringup, skipping)");
-        } else {
-            secure_log!("[OPTIGA/prov] step 2: provision_auth_ref");
+        secure_log!("[OPTIGA/prov] step 2: provision_auth_ref");
+        {
             let mut pin_secret = Self::derive_pin_secret(pin);
             let result = unsafe { self.provision_auth_ref(&pin_secret) };
             pin_secret.zeroize();

@@ -43,12 +43,18 @@ pub mod otp;
 #[cfg(feature = "stm32u585")]
 pub mod boot_state;
 
-/// Device-bound wrap-key derivation (UID + firmware measurement). Only
-/// pulled in on real hardware because the QEMU flash backend is a RAM
-/// buffer — there's no persistent flash to seal and the QEMU UID is
-/// a constant anyway.
+/// Device-bound wrap-key derivation (UID + OTP master). Only pulled
+/// in on real hardware because the QEMU flash backend is a RAM
+/// buffer and the QEMU UID is a constant.
 #[cfg(feature = "stm32u585")]
 pub mod huk;
+
+/// Domain-separated per-purpose subkeys derived from the OTP master
+/// (OPTIGA PBS, SE050 SCP03, TROPIC01 pairing, ...). Only compiled on
+/// real hardware — the underlying OTP master key lives in STM32U585-
+/// specific flash OTP.
+#[cfg(feature = "stm32u585")]
+pub mod secret_keys;
 
 #[cfg(feature = "stsafe-probe")]
 pub mod i2c2_probe;

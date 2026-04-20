@@ -2,13 +2,16 @@
 //!
 //! On the dev setup (B-U585I-IOT02A + OPTIGA MTR Express V3 on a
 //! breadboard), the MTR board's `RST` pin is jumpered to Arduino **D5**,
-//! which on the B-U585I-IOT02A's CN13 header is STM32 pin **PE0**.
+//! which on this board's solder-bridge configuration is STM32 pin
+//! **PD5**. (An earlier bring-up iteration used PE0 under a different
+//! solder-bridge selection; if a future board variant reroutes D5 back
+//! to PE0, update the GPIO-port + pin-number constants below.)
 //!
-//! The chip's RST is active-low: driving PE0 low holds the chip in reset,
-//! driving high (or floating — chip has an internal pull-up) releases it.
-//! We drive the pin explicitly rather than leaving it to the pull-up so
-//! that a brownout or glitch on the breadboard rail cannot silently put
-//! the chip in reset mid-session.
+//! The chip's RST is active-low: driving PD5 low holds the chip in
+//! reset, driving high (or floating — chip has an internal pull-up)
+//! releases it. We drive the pin explicitly rather than leaving it to
+//! the pull-up so that a brownout or glitch on the breadboard rail
+//! cannot silently put the chip in reset mid-session.
 //!
 //! A hard pulse clears whatever per-session state has wedged the chip
 //! after N successful APDUs (see `project_optiga_reset_oids.md`). Unlike
@@ -25,55 +28,55 @@ use core::ptr::{read_volatile, write_volatile};
 // ---------------------------------------------------------------------------
 
 const RCC_AHB2ENR1: *mut u32 = 0x5602_0C8C as *mut u32;
-const GPIOE_MODER:   *mut u32 = 0x5202_1000 as *mut u32; // +0x00
-const GPIOE_OTYPER:  *mut u32 = 0x5202_1004 as *mut u32; // +0x04
-const GPIOE_OSPEEDR: *mut u32 = 0x5202_1008 as *mut u32; // +0x08
-const GPIOE_PUPDR:   *mut u32 = 0x5202_100C as *mut u32; // +0x0C
-const GPIOE_BSRR:    *mut u32 = 0x5202_1018 as *mut u32; // +0x18
+const GPIOD_MODER:   *mut u32 = 0x5202_0C00 as *mut u32; // +0x00
+const GPIOD_OTYPER:  *mut u32 = 0x5202_0C04 as *mut u32; // +0x04
+const GPIOD_OSPEEDR: *mut u32 = 0x5202_0C08 as *mut u32; // +0x08
+const GPIOD_PUPDR:   *mut u32 = 0x5202_0C0C as *mut u32; // +0x0C
+const GPIOD_BSRR:    *mut u32 = 0x5202_0C18 as *mut u32; // +0x18
 
-const RCC_GPIOEEN: u32 = 1 << 4;
+const RCC_GPIODEN: u32 = 1 << 3;
 
-/// PE0 bit position in BSRR: set bit 0, reset bit 16.
-const BSRR_PE0_SET:   u32 = 1 << 0;
-const BSRR_PE0_RESET: u32 = 1 << 16;
+/// PD5 bit position in BSRR: set bit 5, reset bit (16 + 5) = 21.
+const BSRR_PD5_SET:   u32 = 1 << 5;
+const BSRR_PD5_RESET: u32 = 1 << 21;
 
-/// Configure PE0 as push-pull output, drive high (release chip reset).
+/// Configure PD5 as push-pull output, drive high (release chip reset).
 ///
-/// Safe to call multiple times. Does not touch any pin other than PE0
-/// and does not disturb pins PE1..PE15 (they remain whatever the rest
-/// of the firmware configured them to be).
+/// Safe to call multiple times. Only touches bits for pin 5 so
+/// PD0..PD4 / PD6..PD15 are left alone.
 pub unsafe fn init() {
-    // 1. Enable the GPIOE bus clock. Idempotent — OR in the bit.
+    // 1. Enable the GPIOD bus clock. Idempotent — OR in the bit.
     let ahb2 = read_volatile(RCC_AHB2ENR1);
-    write_volatile(RCC_AHB2ENR1, ahb2 | RCC_GPIOEEN);
+    write_volatile(RCC_AHB2ENR1, ahb2 | RCC_GPIODEN);
 
     // 2. Drive high BEFORE switching to output so there's no low-glitch.
-    write_volatile(GPIOE_BSRR, BSRR_PE0_SET);
+    write_volatile(GPIOD_BSRR, BSRR_PD5_SET);
 
-    // 3. PE0: push-pull output, medium speed, no pull. Only touch bits
-    //    [1:0] of each register so PE1..PE15 are left alone.
-    let moder = read_volatile(GPIOE_MODER);
-    write_volatile(GPIOE_MODER, (moder & !0x0000_0003) | 0x0000_0001);    // 01 = output
+    // 3. PD5: push-pull output, medium speed, no pull. Each register's
+    //    MODER / OSPEEDR / PUPDR field is 2 bits at [11:10] for pin 5;
+    //    OTYPER is 1 bit at position 5.
+    let moder = read_volatile(GPIOD_MODER);
+    write_volatile(GPIOD_MODER, (moder & !0x0000_0C00) | 0x0000_0400);    // 01 = output
 
-    let otyper = read_volatile(GPIOE_OTYPER);
-    write_volatile(GPIOE_OTYPER, otyper & !0x0000_0001);                  // 0 = push-pull
+    let otyper = read_volatile(GPIOD_OTYPER);
+    write_volatile(GPIOD_OTYPER, otyper & !0x0000_0020);                  // 0 = push-pull
 
-    let ospeedr = read_volatile(GPIOE_OSPEEDR);
-    write_volatile(GPIOE_OSPEEDR, (ospeedr & !0x0000_0003) | 0x0000_0001); // 01 = medium
+    let ospeedr = read_volatile(GPIOD_OSPEEDR);
+    write_volatile(GPIOD_OSPEEDR, (ospeedr & !0x0000_0C00) | 0x0000_0400); // 01 = medium
 
-    let pupdr = read_volatile(GPIOE_PUPDR);
-    write_volatile(GPIOE_PUPDR, pupdr & !0x0000_0003);                    // 00 = no pull
+    let pupdr = read_volatile(GPIOD_PUPDR);
+    write_volatile(GPIOD_PUPDR, pupdr & !0x0000_0C00);                    // 00 = no pull
 }
 
-/// Pulse PE0 low for ~10 ms, then high, then wait ~50 ms for the chip
+/// Pulse PD5 low for ~10 ms, then high, then wait ~50 ms for the chip
 /// to finish its internal boot. The 50 ms matches the same settle delay
 /// we use in `OptigaTrustM::init` before probing I²C.
 pub unsafe fn hard_pulse() {
-    write_volatile(GPIOE_BSRR, BSRR_PE0_RESET);
+    write_volatile(GPIOD_BSRR, BSRR_PD5_RESET);
     // ~10 ms at 160 MHz = 1.6M cycles. `delay` has a volatile counter so
     // LTO can't elide it.
     cortex_m::asm::delay(1_600_000);
-    write_volatile(GPIOE_BSRR, BSRR_PE0_SET);
+    write_volatile(GPIOD_BSRR, BSRR_PD5_SET);
     // Match the cold-boot settle in `OptigaTrustM::init()`.
     cortex_m::asm::delay(8_000_000);
 }

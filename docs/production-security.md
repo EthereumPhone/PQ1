@@ -52,6 +52,19 @@ factory-reset design see `docs/se050-factory-reset.md`.
    Stage 2 needs to land before any talk of production. *Source:
    bundle A + C.*
 
+6. **OPTIGA Shielded-Connection pairing secret is sealed to flash
+   under a wrap key that mixes in `measured_boot::firmware_hash()`.**
+   Any firmware update — a one-byte edit is enough — changes the
+   hash, changes the wrap key, fails AES-GCM authentication on the
+   next boot, and renders the chip-side PBS permanently unreachable.
+   Every production customer would brick on their first update. We
+   already reproduced the failure on a bench chip whose pairing is
+   now unrecoverable (§1 of `docs/optiga-brick-postmortem.md`). Fix
+   is a Trezor-style OTP-derived PBS with HKDF-scoped subkeys, no
+   flash seal, plus re-rooting `hw/huk.rs` off the OTP master instead
+   of `firmware_hash`. See §2.6. *Source: bench failure, 2026-04-17;
+   Trezor STM32U5 reference (`core/embed/sec/secret_keys/stm32u5/`).*
+
 ## 2. Per-topic summary
 
 ### 2.1 Fault injection (bundle A → todo #18)
@@ -424,6 +437,135 @@ boot is free. Recommendation: **go with Bundle E's SLH-DSA manifest**;
 retire Bundle B's ECDSA binding record design. This is a material
 change to work-todo #20 scope.
 
+### 2.6 Device root-key architecture (work-todo #24)
+
+**Threat context.** The OPTIGA Trust M pairing-secret flow that landed
+during early bring-up (`setup_pbs_no_handshake`, `hw/huk.rs`, flash page
+126) has a concrete reliability failure: every legitimate firmware
+update bricks the device. The bench chip that surfaced this is
+permanently unpaired for Shielded Connection. Fixing the underlying
+root-key architecture before silicon ships is a production gate.
+
+Full root-cause analysis: `docs/optiga-brick-postmortem.md`.
+
+**The bug in two sentences.** The Platform Binding Secret is generated
+from the STM32 TRNG and persisted to flash page 126 under an AES-256-
+GCM seal whose wrap key mixes in `measured_boot::firmware_hash()`. Any
+firmware rebuild — a one-byte diff is enough — changes the hash,
+changes the key, fails GCM authentication on next boot, leaves the
+chip-side PBS (which is locked at LcsO=Operational) reachable only to
+a PBS value the MCU can no longer reconstruct. One-way brick of the
+bus-encryption path.
+
+**Architectural response — Trezor's layered root-key model on STM32U5.**
+
+Reading `~/repos/trezor-firmware/core/embed/sec/{secret_keys,secret,
+secure_aes}/stm32u5/` shows Trezor stacks three keys:
+
+| Layer | What | When generated | Software access | Survives FW update |
+|---|---|---|---|---|
+| **DHUK** | Factory-fused 256-bit per-chip key in ST silicon | At wafer test (ST) | SAES-only (`CRYP_KEYSEL_HW`); never in memory | Yes |
+| **BHK** | 32 B of device TRNG in HDP-protected flash page, loaded into TAMP backup registers at boot | First boot, on-device | SAES-only after `TAMP_SECCFGR.BHKLOCK`; software can't read post-boot | Yes (regeneration = factory reset) |
+| **OTP master** | 32 B of device TRNG in flash OTP block | First boot, on-device (`secret_keys.c:177-194`) | Readable by secure-world firmware | Yes (OTP is permanent per silicon) |
+
+Trezor derives per-purpose keys (OPTIGA pairing, TROPIC01 pairing,
+storage salt, NRF auth, MCU device-auth) from the OTP master via HMAC.
+The DHUK and BHK additionally encrypt the OTP master and other secrets
+at rest in the "secret" flash page, so a flash dump alone doesn't leak
+raw key bytes.
+
+**Our staged adoption plan.**
+
+*Stage 1 — OTP-derived master with HKDF subkey layer* (this doc
+landing + current implementation). Reserve bytes 128..160 of STM32U585
+OTP (two quad-words past the rollback tally) for a 32-byte device
+master key. On first secure-world boot, if the region is unburned,
+fill 32 bytes from STM32 TRNG and program (irreversible). On every
+subsequent boot, `read_device_master` returns those 32 bytes. A new
+`secure/src/hw/secret_keys.rs` exposes domain-labelled HKDF-SHA256
+subkeys: `optiga_pairing_secret`, `se050_scp03_enc_key`,
+`se050_scp03_mac_key`, `tropic01_pairing_key`. `setup_pbs_no_handshake`
+consumes `optiga_pairing_secret` instead of `rng::fill`; the flash-
+page-126 AES-GCM seal is deleted outright. `hw/huk.rs::derive_device_
+key` re-roots off the OTP master — the line that reads `h.update(&fw_
+hash)` becomes `h.update(&hw::otp::read_device_master())`. `measured_
+boot::firmware_hash()` is preserved unchanged: it still drives the 8-
+BIP-39-word OLED attestation and will feed the #22 supply-chain
+manifest; it just stops being an input to wrap-key derivation. Closes
+the brick scenario.
+
+*Stage 2 — SAES + BHK uplift* (merges with work-todo #7 HUK-SAES).
+Port Trezor's BHK pattern: first-boot TRNG into an HDP-protected flash
+page, load into TAMP backup registers at boot, set `TAMP_SECCFGR.BHKL
+OCK` so secure-world code can only *use* the key via SAES, not read
+it. Wrap the OTP master with DHUK at rest so a chip decap alone
+doesn't yield the raw bytes. The `secret_keys::*` API surface stays
+unchanged — OPTIGA / SE050 / Tropic drivers do not move.
+
+**Why first-boot self-provisioning beats a factory-burn workflow** for
+an open-source wallet: the TRNG output only ever exists on the user's
+own hardware, never passes through the vendor's hands, and the factory
+does not need to hold or protect any per-device secret. The customer
+can independently verify on unboxing that OTP is still unburned before
+powering the device up, which is a stronger property than trusting a
+factory tamper-evident bag. This matches Trezor's `flash_otp_is_locked
+? read : (fill + write + lock)` pattern exactly (`secret_keys.c:177-
+194`). The residual supply-chain concern is that "first boot" must
+happen on a device running our signed firmware — otherwise an attacker
+who intercepts the device pre-first-boot could flash a key-exfiltrating
+stub, boot once to capture TRNG, then restore the real firmware.
+Defence stack: secure boot (work-todo #13) + tamper-evident packaging
++ a user-side verification script that confirms the binding manifest
+(work-todo #22) matches the device before first power-on.
+
+**Testing posture — hardcoded key during bring-up.** Until we are
+confident the derivation is stable across rebuilds, we do *not* want
+to burn real OTP on our dev bench. `secure/Cargo.toml` gains an
+`otp-hardcoded-master-key` Cargo feature, OFF by default. When
+enabled, `read_device_master` returns a fixed 32-byte constant
+(deliberately distinctive byte pattern so it cannot be confused for a
+real key in logs), `is_device_master_burned` returns true, and
+`ensure_device_master` is a no-op. A loud boot-time warning via
+`secure_log!` flags the insecure configuration. A `compile_error!`
+guard fails the build if the feature is set without `debug-log` or
+`e2e-test` also enabled (i.e. on a production profile). Flip the
+feature off and the first-boot TRNG path takes over. We validate end-
+to-end on a fresh OPTIGA chip only after the hardcoded path is proven
+stable across reflashes with differing firmware hashes.
+
+**Extraction cost across layers.**
+
+| Attacker capability | Stage-1 OTP master | Stage-2 OTP master under SAES | Stage-2 BHK post-lock |
+|---|---|---|---|
+| Secure-world RCE, read memory | Reads the 32 bytes directly via `read_volatile(0x0BFA_0080)` | Same — OTP remains plain-readable; DHUK wrap protects only at rest | Cannot read; can only USE via SAES on this device |
+| Flash-dump + transplant to second board | UID of target board is wrong → derived keys wrong anyway; not viable | Same, with DHUK also wrong → ciphertext undecipherable on target | Same, and BHK never lived in transferable flash |
+| Debug port after RDP regression | OTP survives RDP regression | Same | BHK regeneration on RDP2→0 wipes TAMP-backed key |
+| Decap + microprobe OTP cells | Feasible ($10–100K, destructive, single device) | Same, then attacker still needs DHUK from silicon | BHK lives transiently in TAMP; substantially harder |
+| Supply-chain attacker between factory and user | No key on-device yet; attacker can substitute their own TRNG | Same | Same |
+
+Stage 1 solves the brick. Stage 2 additionally raises the bar from
+"secure-world RCE = remote key exfiltration" to "attacker must keep
+running code on *this specific device* for every signature they want
+to forge" — a qualitative change in the attacker cost model.
+
+**Files touched in Stage 1.**
+
+- `secure/src/hw/otp.rs` — add `read_device_master`, `burn_device_
+  master`, `is_device_master_burned`, `ensure_device_master`.
+- `secure/src/hw/secret_keys.rs` *(new)* — HKDF-SHA256 wrappers.
+- `secure/src/hw/mod.rs` — register `secret_keys` module.
+- `secure/src/hw/huk.rs` — swap `firmware_hash` → OTP master in
+  `derive_device_key`.
+- `secure/src/optiga/mod.rs` — rewrite `setup_pbs_no_handshake`,
+  simplify `load_pbs`.
+- `secure/src/hw/flash.rs` — delete `read_pbs` / `write_pbs` /
+  `erase_pbs_page` / `PBS_PAGE_ADDR` / `PbsLoadError` / `PBS_WRAP_
+  DOMAIN` / `PBS_BLOB_LEN` / `is_pbs_blank`.
+- `secure/Cargo.toml` — drop `optiga-bringup-fresh`, add `otp-
+  hardcoded-master-key`.
+- `secure/src/measured_boot.rs` — unchanged (keeps driving OLED
+  attestation + #22 manifest).
+
 ## 3. Hallucination + verification log
 
 The research-round prompts told the AI to cite primary sources and
@@ -485,7 +627,17 @@ forward: verify-then-flag, not flag-then-verify.
 
 ## 4. Implementation sequencing
 
-See todo items #18-22 for the full work list. Suggested phasing:
+See todo items #18-24 for the full work list. Suggested phasing:
+
+**Phase 0 — Device root-key architecture (todo #24)** — ~3 days
+Land `hw/otp.rs` master-key API (read / burn / ensure) + `hw/secret_
+keys.rs` HKDF subkeys + OPTIGA `setup_pbs_no_handshake` rewrite +
+`hw/huk.rs` re-root off `firmware_hash`. Delete `PBS_PAGE_ADDR` flash-
+seal infrastructure and the `optiga-bringup-fresh` Cargo feature.
+Closes the production-breaking firmware-update brick (§2.6). Unblocks
+#7 (HUK-SAES) and #20 (factory provisioning) downstream. Initial
+testing under `otp-hardcoded-master-key`; real OTP burn proven on a
+fresh OPTIGA shield before this phase is considered complete.
 
 **Phase 1 — Stage 2 brownout foundation (todo #21)** — ~1 week
 Landing BOR/IWDG/ECC/PVD/TAMP/CSS at factory defaults to secure config.

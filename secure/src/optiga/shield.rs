@@ -87,8 +87,11 @@ pub struct ShieldedConnection {
     dec_seq: u32,
     /// Whether the shielded connection is active.
     pub active: bool,
-    /// Platform Binding Secret (loaded from secure flash).
-    pbs: [u8; 32],
+    /// Platform Binding Secret. 64 bytes per OPTIGA Trust M SRM §
+    /// "Platform Binding Secret" ("It shall be 64 bytes …") — derived
+    /// on demand from the OTP master via `hw::secret_keys::optiga_
+    /// pairing_secret`.
+    pbs: [u8; 64],
     /// Whether PBS has been loaded.
     pub pbs_loaded: bool,
 }
@@ -103,13 +106,13 @@ impl ShieldedConnection {
             enc_seq: 0,
             dec_seq: 0,
             active: false,
-            pbs: [0; 32],
+            pbs: [0; 64],
             pbs_loaded: false,
         }
     }
 
     /// Load the Platform Binding Secret from caller-provided buffer.
-    pub fn load_pbs(&mut self, pbs: &[u8; 32]) {
+    pub fn load_pbs(&mut self, pbs: &[u8; 64]) {
         self.pbs.copy_from_slice(pbs);
         self.pbs_loaded = true;
     }

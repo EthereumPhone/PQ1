@@ -695,13 +695,31 @@ fn main() -> ! {
         // is the same pattern the `nsc::cmd_*` handlers use.
         crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
 
-        // Run the verify path so MASTER_SECRET + PIN_VERIFIED end up
-        // in the same state as a real unlock.
-        match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
-            Ok(master) => nsc::set_e2e_unlocked(master),
-            Err(_) => panic!("e2e: verify_pin failed after provision"),
+        // `e2e-skip-unlock` halts the boot flow right after provisioning so
+        // that `ensure_shield` never runs — which keeps the OPTIGA chip at
+        // LcsO=Creation on E140 and rewriteable. Used for the Phase-A
+        // hardware-validation target (`flash-hw-optiga-bringup-write-only`)
+        // where we want to prove the PBS was written to the chip without
+        // committing the irreversible LcsO=Operational bump.
+        #[cfg(feature = "e2e-skip-unlock")]
+        {
+            secure_log!("[S][e2e] e2e-skip-unlock active: halting after provisioning");
+            secure_log!("[S][e2e] PBS should now be in E140 at LcsO=Creation (still rewriteable)");
+            loop {
+                cortex_m::asm::wfi();
+            }
         }
-        secure_log!("[S][e2e] gateway pre-unlocked, ready for tests");
+
+        // Normal e2e-test path: run the verify flow so MASTER_SECRET +
+        // PIN_VERIFIED end up in the same state as a real unlock.
+        #[cfg(not(feature = "e2e-skip-unlock"))]
+        {
+            match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
+                Ok(master) => nsc::set_e2e_unlocked(master),
+                Err(_) => panic!("e2e: verify_pin failed after provision"),
+            }
+            secure_log!("[S][e2e] gateway pre-unlocked, ready for tests");
+        }
     }
 
     // Provision on first boot only.
