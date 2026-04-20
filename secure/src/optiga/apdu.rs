@@ -127,18 +127,22 @@ pub const OID_SESSION: u16 = 0xE100;
 
 /// Platform Binding Secret (shielded-connection root of trust).
 pub const OID_PBS:           u16 = 0xE140;
-// Bring-up note: F1D0–F1D5 were locked during an earlier test run, so the
-// auth-ref NEV metadata cannot be rewritten on this specific chip. Rotated
-// to F1D6–F1DB for the current debugging pass. TODO: once `lock_oid` is
-// understood (see store_objects), revert to the canonical range so the
-// chip's 16-arbitrary-data-object budget isn't consumed by dev iterations.
-// Second rotation: F1DC–F1E1 are completely untouched. Once the state
-// machine is stable we can commit to the canonical F1D0–F1D5 range.
-pub const OID_AUTH_REF:      u16 = 0xF1DC;
-pub const OID_ENTROPY:       u16 = 0xF1DD;
-pub const OID_MASTER_SECRET: u16 = 0xF1DE;
-pub const OID_VK:            u16 = 0xF1DF;
-pub const OID_BOOTSTRAP_VK:  u16 = 0xF1E0;
+// Arbitrary data object OIDs. The SRM (§"Data Objects", OID table) lists
+// the type-3 arbitrary-data range as **0xF1D0..0xF1DB only** (12 slots)
+// — not 0xF1D0..0xF1DF as a loose reading of the SRM text suggests.
+// 0xF1DC..0xF1DF are undefined gap addresses on fresh silicon; writes
+// return Status=0xFF. An earlier bring-up iteration had rotated these
+// assignments to F1DC..F1DF to avoid F1D0..F1D5 being locked from
+// prior tests on the bench chip, but that rotation silently broke
+// end-to-end provisioning against any pristine chip — caught by the
+// 2026-04-20 logic-analyzer capture of the failing F1D0 SetDataObject.
+// Back on the canonical range now. 0xF1E0..0xF1E1 are type-2 arbitrary
+// data objects (also valid).
+pub const OID_AUTH_REF:      u16 = 0xF1D0;
+pub const OID_ENTROPY:       u16 = 0xF1D1;
+pub const OID_MASTER_SECRET: u16 = 0xF1D2;
+pub const OID_VK:            u16 = 0xF1D3;
+pub const OID_BOOTSTRAP_VK:  u16 = 0xF1D4;
 pub const OID_COUNTER:       u16 = 0xF1E1;
 
 // ---------------------------------------------------------------------------
