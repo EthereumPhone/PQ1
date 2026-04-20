@@ -38,6 +38,11 @@
 use sha3::{Digest, Keccak256};
 
 pub mod cowswap;
+// cowswap_display pulls in `crate::ui` (hardware display primitives),
+// so it's gated out of host test builds. Pure EIP-712 logic
+// (`cowswap`, keccak primitives above) is always compiled so its
+// cross-check invariants can be unit-tested on the host.
+#[cfg(not(test))]
 pub mod cowswap_display;
 
 // ---------------------------------------------------------------------------

@@ -143,12 +143,17 @@ template Eip712OrderProof() {
     signal input  sell_frac_digits[FRAC_DIGITS];
     signal input  sell_n_lz;
     signal input  sell_remainder;
+    // Sub-precision mode flag (0/1). See FormatTrimmedAmount docs —
+    // when 1, the amount renders as "         <0.0001" instead of the
+    // trimmed " XXXXXXXXXX.YYYY" format.
+    signal input  sell_is_sub_precision;
 
     // FormatTrimmedAmount witnesses for the buy side.
     signal input  buy_int_digits[MAX_INT_DIGITS];
     signal input  buy_frac_digits[FRAC_DIGITS];
     signal input  buy_n_lz;
     signal input  buy_remainder;
+    signal input  buy_is_sub_precision;
 
     // ─ (1) PoseidonBytes(canonical) === H_tx ────────────────────────
     component h_tx = PoseidonBytes(CANONICAL_LEN);
@@ -231,6 +236,7 @@ template Eip712OrderProof() {
     for (var i = 0; i < FRAC_DIGITS;    i++) sell_fmt.frac_digits[i] <== sell_frac_digits[i];
     sell_fmt.n_leading_zeros <== sell_n_lz;
     sell_fmt.remainder       <== sell_remainder;
+    sell_fmt.is_sub_precision <== sell_is_sub_precision;
     sell_fmt.ok === 1;
 
     // ─ (7) Buy amount: same ────────────────────────────────────────
@@ -244,6 +250,7 @@ template Eip712OrderProof() {
     for (var i = 0; i < FRAC_DIGITS;    i++) buy_fmt.frac_digits[i] <== buy_frac_digits[i];
     buy_fmt.n_leading_zeros <== buy_n_lz;
     buy_fmt.remainder       <== buy_remainder;
+    buy_fmt.is_sub_precision <== buy_is_sub_precision;
     buy_fmt.ok === 1;
 
     // ─ (8) Line 0: "CowSwap SELL    " or "CowSwap BUY     " ────────

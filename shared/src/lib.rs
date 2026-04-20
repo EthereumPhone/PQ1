@@ -750,6 +750,72 @@ pub const ZK_CLEAR_SIGN_FIXED_LEN: usize = ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_S
 /// ZK_CLEAR_SIGN_FIXED_LEN prefix.
 pub const ZK_VK_BUNDLE_MAX_LEN: usize = 2048;
 
+// ---------------------------------------------------------------------------
+// v3 CoW EIP-712 clear-sign trailer (shared by SIGN_USEROP)
+// ---------------------------------------------------------------------------
+//
+// When the companion sends a CoW swap UserOp whose inner calldata is
+// `setPreSignature(orderUid, true)` on GPv2Settlement, it attaches a
+// third trailer section after the legacy `zk_bundle` slot:
+//
+//   [zk_v3_len u16 BE] [zk_v3_bundle]
+//
+// where `zk_v3_bundle` layout is:
+//
+//   [  0..  384) proof2     — 384-byte BLS12-381 Groth16 proof for
+//                             the v3 `cowswap_eip712_order` circuit.
+//   [384..  588) canonical  — 204-byte packed GPv2Order struct.
+//   [588..  716) readable2  — 128-byte 8×16 ASCII readable. The
+//                             firmware renders this byte-for-byte
+//                             across the middle pages of the trusted
+//                             UI flow.
+//   [716..     ) vk_bundle2 — 3-pub VK bundle injected by the NS
+//                             gateway (companion sends exactly
+//                             716 bytes; NS appends the bundle).
+//
+// The v3 circuit binds `canonical` to `readable2` via Poseidon, and
+// the secure world natively re-keccaks `canonical` → orderDigest →
+// cross-checks against the calldata's `[100..132)` slice. Together
+// these replace the legacy v1 proof entirely for CoW setPreSignature.
+
+/// Fixed prefix of the v3 trailer (proof2 + canonical + readable2).
+/// The NS gateway appends the VK bundle; see
+/// `nonsecure/src/usb/commands.rs::maybe_inject_vk_bundle_v3`.
+pub const ZK_V3_FIXED_LEN: usize = EIP712_PROOF_LEN + EIP712_CANONICAL_LEN + EIP712_STRING_LEN;
+
+/// Offsets within the v3 trailer's fixed prefix.
+pub const ZK_V3_OFF_PROOF: usize = 0;
+pub const ZK_V3_OFF_CANONICAL: usize = ZK_V3_OFF_PROOF + EIP712_PROOF_LEN;
+pub const ZK_V3_OFF_READABLE: usize = ZK_V3_OFF_CANONICAL + EIP712_CANONICAL_LEN;
+
+/// Function selector for `setPreSignature(bytes,bool)` on
+/// `GPv2Settlement` — companion's calldata[0..4] match against this
+/// triggers the mandatory-v3 gate in the secure world.
+pub const SET_PRE_SIGNATURE_SELECTOR: [u8; 4] = [0xec, 0x6c, 0xb1, 0x3f];
+
+/// DB-lookup sentinel address for the v3 `cowswap_eip712_order` VK.
+///
+/// Differs from the real `GPV2Settlement` contract address
+/// (`0x9008...ab41`) by its last byte (`0x42`). Never appears on
+/// Ethereum — it is a pure (chain_id, contract) → VK DB key that
+/// distinguishes "v3 CoW EIP-712 VK" from "v1 setPreSignature calldata
+/// VK" without bumping `VK_DB_VERSION`.
+pub const COWSWAP_EIP712_SENTINEL: [u8; 20] = [
+    0x90, 0x08, 0xd1, 0x9f, 0x58, 0xaa, 0xbd, 0x9e, 0xd0, 0xd6, 0x09, 0x71, 0x56, 0x5a, 0xa8,
+    0x51, 0x05, 0x60, 0xab, 0x42,
+];
+
+/// Real `GPv2Settlement` contract address on every EVM chain CoW
+/// Protocol supports (CREATE2-deployed, address-identical). Used by
+/// the secure world as the `verifyingContract` field in the EIP-712
+/// domain separator AND as the downgrade-mitigation gate: when
+/// `parsed.tx.to == GPV2_SETTLEMENT_ADDRESS && selector == setPreSignature`,
+/// a v3 trailer is MANDATORY.
+pub const GPV2_SETTLEMENT_ADDRESS: [u8; 20] = [
+    0x90, 0x08, 0xd1, 0x9f, 0x58, 0xaa, 0xbd, 0x9e, 0xd0, 0xd6, 0x09, 0x71, 0x56, 0x5a, 0xa8,
+    0x51, 0x05, 0x60, 0xab, 0x41,
+];
+
 /// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
 /// **DEPRECATED** along with CMD_SIGN_BOOTSTRAP.
 pub const CTX_DEPLOY: u8 = 0x00;

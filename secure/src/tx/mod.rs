@@ -5,12 +5,13 @@
 //! copied into a secure stack buffer, parsed here, displayed for user
 //! confirmation, and only then hashed + signed.
 
-// display and eip712 depend on crate::ui (hardware), so they're gated
-// out in host test builds. eip1559, hash, and rlp are pure logic.
+// display depends on crate::ui (hardware), so it's gated out in host
+// test builds. eip1559, eip712 core, hash, and rlp are pure logic.
+// eip712 itself is compiled in test mode but its `cowswap_display`
+// submodule is gated at the submodule level (see eip712/mod.rs).
 #[cfg(not(test))]
 pub mod display;
 pub mod eip1559;
-#[cfg(not(test))]
 pub mod eip712;
 pub mod hash;
 pub mod rlp;

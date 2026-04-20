@@ -294,3 +294,28 @@ pub fn verify_clear_signing_proof(
     // 2. Verify Groth16 proof with computed public signals
     groth16_verify(proof, vk, h_tx, h_str)
 }
+
+/// 3-public-signal sibling of `verify_clear_signing_proof`. Mirrors the
+/// binding the v3 `cowswap_eip712_order` circuit enforces:
+///
+///   H_tx   = Poseidon(canonical, 204)
+///   H_str  = Poseidon(readable,  128)
+///   H_root = erc20_poseidon_root                    ← rodata pin
+///
+/// The caller supplies `erc20_poseidon_root` as a pre-validated
+/// `Scalar` (produced from the firmware's `db_roots::ERC20_POSEIDON_ROOT`
+/// byte constant). Using the rodata root as a public signal means a
+/// proof produced against any OTHER root will fail the pairing check —
+/// the companion cannot pick a root of its choosing and hide behind a
+/// valid-looking proof.
+pub fn verify_clear_signing_proof_v3(
+    canonical: &[u8; 204],
+    readable: &[u8; 128],
+    proof: &Groth16Proof,
+    vk: &VerificationKeyV3,
+    erc20_poseidon_root: Scalar,
+) -> bool {
+    let h_tx = poseidon_bytes(canonical, 204);
+    let h_str = poseidon_bytes(readable, 128);
+    groth16_verify_3pub(proof, vk, h_tx, h_str, erc20_poseidon_root)
+}

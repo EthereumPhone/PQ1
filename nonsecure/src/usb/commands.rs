@@ -41,6 +41,10 @@ const CHAIN_BUF_LEN_SIGN: usize = SIGN_USEROP_HEADER_LEN
     + 2
     + ZK_CLEAR_SIGN_FIXED_LEN
     + ZK_VK_BUNDLE_MAX_LEN
+    // v3 CoW EIP-712 trailer: 2-byte length + fixed prefix + VK bundle.
+    + 2
+    + ZK_V3_FIXED_LEN
+    + ZK_VK_BUNDLE_MAX_LEN
     // Names trailer: 1-byte count + up to 4 × (2-byte length + bundle).
     // The 1200-byte-per-bundle figure is the MAX_NAME_BUNDLE_LEN upper
     // bound plus the 2-byte length prefix, rounded to the 32-bit
@@ -359,6 +363,11 @@ impl CommandRouter {
         // (chain_id, tx.to) and append it so the secure world's
         // Groth16 verifier has a Merkle-proven key to work with.
         let effective_len = Self::maybe_inject_vk_bundle(effective_len);
+        // v3 CoW EIP-712 clear-sign: same treatment, but the lookup key
+        // is the COWSWAP_EIP712_SENTINEL rather than `tx.to` (the real
+        // GPv2Settlement contract). Must run AFTER the v1 injector so
+        // the outer trailer shape it parses is stable.
+        let effective_len = Self::maybe_inject_vk_bundle_v3(effective_len);
         // Append address-name bundles for every tx address that hits
         // the NS names DB. Secure world merkle-verifies each before
         // letting any name reach the trusted UI.
@@ -532,6 +541,92 @@ impl CommandRouter {
 
         CHAIN_BUF[zk_end..new_len].copy_from_slice(&vk_bundle_buf[..vk_bundle_len]);
         CHAIN_BUF[zk_len_off..zk_len_off + 2].copy_from_slice(&(new_zk_len as u16).to_be_bytes());
+        new_len
+    }
+
+    /// Companion of `maybe_inject_vk_bundle`, but for the v3 CoW
+    /// EIP-712 clear-sign trailer: when the companion sends a 716-byte
+    /// `zk_v3` section (proof + canonical + readable, no VK bundle),
+    /// look up the v3 VK at `(chain_id, COWSWAP_EIP712_SENTINEL)` in
+    /// the VK DB and append the matching bundle so the secure world's
+    /// 3-pub Groth16 verifier has a Merkle-proven key.
+    ///
+    /// Trailer layout we're extending:
+    ///
+    /// ```text
+    /// header(330) || data
+    ///   || erc20_len u16 || erc20
+    ///   || zk_len    u16 || zk
+    ///   || zk_v3_len u16 || zk_v3     ← we pad this
+    /// ```
+    ///
+    /// Only acts when `zk_v3_len == ZK_V3_FIXED_LEN`. Any other shape
+    /// (already has a VK bundle, malformed, or absent) falls through
+    /// to the secure world which will reject accordingly.
+    unsafe fn maybe_inject_vk_bundle_v3(received_len: usize) -> usize {
+        if received_len < SIGN_USEROP_HEADER_LEN {
+            return received_len;
+        }
+
+        let data_len = u16::from_be_bytes([CHAIN_BUF[328], CHAIN_BUF[329]]) as usize;
+        let after_data = SIGN_USEROP_HEADER_LEN + data_len;
+        if after_data + 2 > received_len {
+            return received_len;
+        }
+        let erc20_len =
+            u16::from_be_bytes([CHAIN_BUF[after_data], CHAIN_BUF[after_data + 1]]) as usize;
+        let after_erc20 = after_data + 2 + erc20_len;
+        if after_erc20 + 2 > received_len {
+            return received_len;
+        }
+        let zk_len =
+            u16::from_be_bytes([CHAIN_BUF[after_erc20], CHAIN_BUF[after_erc20 + 1]]) as usize;
+        let after_zk = after_erc20 + 2 + zk_len;
+        if after_zk + 2 > received_len {
+            return received_len;
+        }
+
+        let v3_len_off = after_zk;
+        let v3_len =
+            u16::from_be_bytes([CHAIN_BUF[v3_len_off], CHAIN_BUF[v3_len_off + 1]]) as usize;
+        // Only act on an exact-716-byte v3 block — anything else either
+        // already has a bundle appended, is malformed, or is the pre-v3
+        // shape.
+        if v3_len != ZK_V3_FIXED_LEN {
+            return received_len;
+        }
+        let v3_end = v3_len_off + 2 + v3_len;
+        if v3_end != received_len {
+            return received_len;
+        }
+
+        let chain_id = u64::from_be_bytes([
+            CHAIN_BUF[0], CHAIN_BUF[1], CHAIN_BUF[2], CHAIN_BUF[3],
+            CHAIN_BUF[4], CHAIN_BUF[5], CHAIN_BUF[6], CHAIN_BUF[7],
+        ]);
+
+        // Look up the v3 VK by the sentinel, NOT by `tx.to` — the real
+        // GPv2Settlement address keys the v1 setPreSignature VK; the
+        // sentinel keys the v3 order VK. Both live in the same VK DB
+        // under the same `(chain_id, contract)` schema.
+        let mut vk_bundle_buf = [0u8; ZK_VK_BUNDLE_MAX_LEN];
+        let Some(vk_bundle_len) = crate::vk_db::build_bundle(
+            chain_id,
+            &COWSWAP_EIP712_SENTINEL,
+            &mut vk_bundle_buf,
+        ) else {
+            return received_len;
+        };
+
+        let new_v3_len = v3_len + vk_bundle_len;
+        let new_len = v3_end + vk_bundle_len;
+        if new_len > CHAIN_BUF_LEN || new_v3_len > u16::MAX as usize {
+            return received_len;
+        }
+
+        CHAIN_BUF[v3_end..new_len].copy_from_slice(&vk_bundle_buf[..vk_bundle_len]);
+        CHAIN_BUF[v3_len_off..v3_len_off + 2]
+            .copy_from_slice(&(new_v3_len as u16).to_be_bytes());
         new_len
     }
 

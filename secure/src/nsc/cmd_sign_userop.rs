@@ -49,11 +49,13 @@
 
 use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
-    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE,
-    FLAG_REGISTER_SLOT, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN, PQ_ADD_OWNER_BYTES_SELECTOR,
-    PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN, PQ_SMART_WALLET_FACTORY,
-    SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN, SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN,
-    ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN, ZK_VK_BUNDLE_MAX_LEN,
+    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, COWSWAP_EIP712_SENTINEL,
+    EIP712_CANONICAL_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN, FLAG_INCLUDE_INIT_CODE,
+    FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN,
+    PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
+    PQ_SMART_WALLET_FACTORY, SET_PRE_SIGNATURE_SELECTOR, SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN,
+    SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN,
+    ZK_V3_FIXED_LEN, ZK_V3_OFF_CANONICAL, ZK_V3_OFF_READABLE, ZK_VK_BUNDLE_MAX_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -91,6 +93,7 @@ const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + MAX_TX_LEN
     + 2 + MAX_ERC20_BUNDLE_LEN
     + 2 + ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
+    + 2 + ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
     + 1 + MAX_NAME_BUNDLES * (2 + MAX_NAME_BUNDLE_LEN);
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
@@ -246,6 +249,35 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let zk_bundle_start = cursor;
     cursor += zk_bundle_len;
 
+    // ── 4b'. Optional v3 CoW EIP-712 clear-sign trailer ───────────────
+    //
+    // Layout: [zk_v3_len u16 BE] [zk_v3_bundle].
+    //
+    // `zk_v3_bundle` = `proof2(384) || canonical(204) || readable2(128) ||
+    //                   vk_bundle_v3`. Companion sends exactly the 716-byte
+    // fixed prefix; the NS gateway's `maybe_inject_vk_bundle_v3`
+    // appends the 3-pub VK bundle.
+    //
+    // Absent trailer is legal for every non-CoW UserOp. For CoW
+    // setPreSignature it is mandatory — enforced by the downgrade-gate
+    // check downstream, NOT by requiring the trailer to be present
+    // here. That keeps the parser layout-agnostic.
+    let zk_v3_bundle_len = if cursor + 2 <= total_len {
+        let l = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
+        cursor += 2;
+        l
+    } else {
+        0
+    };
+    if zk_v3_bundle_len > ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
+        || cursor + zk_v3_bundle_len > total_len
+    {
+        ui::show_status("Sign", "bad zk v3 bundle");
+        return NscStatus::InvalidPointer as u32;
+    }
+    let zk_v3_bundle_start = cursor;
+    cursor += zk_v3_bundle_len;
+
     // ── 4c. Optional trailer: address-name bundles ────────────────────
     //
     // Zero or more merkle-verified (chain_id, address, name) bundles.
@@ -397,6 +429,106 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None
     };
 
+    // ── 6b'. Verify optional v3 CoW EIP-712 clear-sign bundle ──────
+    //
+    // Pipeline (every step must succeed — no partial-success fallback):
+    //   (1) Bundle structure: 384 B proof + 204 B canonical + 128 B
+    //       readable + variable VK bundle.
+    //   (2) Groth16 pairing against the Merkle-verified 3-pub VK AND
+    //       the rodata-pinned ERC20_POSEIDON_ROOT as H_root.
+    //   (3) VK bundle's (chain_id, contract) equals (tx.chain_id,
+    //       COWSWAP_EIP712_SENTINEL). The sentinel keys the v3 VK in
+    //       the DB distinctly from the v1 setPreSignature VK.
+    //   (4) Native setPreSignature shape check (selector, offsets,
+    //       `signed==true`, tail zero-pad) — replaces what the v1
+    //       circuit used to assert.
+    //   (5) Cross-check canonical → orderDigest → calldata[100..132];
+    //       validTo bytes match; orderUid owner equals UserOp sender.
+    //       Binds the v3-displayed order to the exact orderUid the
+    //       chain will see.
+    //
+    // Any Err here → no `zk_v3_verified` set → downgrade-mitigation
+    // gate below will reject the UserOp outright (for CoW setPreSig).
+    let zk_v3_verified: Option<([u8; EIP712_CANONICAL_LEN], [u8; EIP712_STRING_LEN])> =
+        if zk_v3_bundle_len >= ZK_V3_FIXED_LEN {
+            let v3_slice = &snap[zk_v3_bundle_start..zk_v3_bundle_start + zk_v3_bundle_len];
+            let proof_bytes: &[u8; EIP712_PROOF_LEN] =
+                v3_slice[..EIP712_PROOF_LEN].try_into().unwrap();
+            let canonical_bytes: &[u8; EIP712_CANONICAL_LEN] = v3_slice
+                [ZK_V3_OFF_CANONICAL..ZK_V3_OFF_CANONICAL + EIP712_CANONICAL_LEN]
+                .try_into()
+                .unwrap();
+            let readable_bytes: &[u8; EIP712_STRING_LEN] = v3_slice
+                [ZK_V3_OFF_READABLE..ZK_V3_OFF_READABLE + EIP712_STRING_LEN]
+                .try_into()
+                .unwrap();
+            let vk_bundle = &v3_slice[ZK_V3_FIXED_LEN..];
+
+            match crate::zk::verify_clear_sign_proof_v3(
+                proof_bytes,
+                canonical_bytes,
+                readable_bytes,
+                vk_bundle,
+            ) {
+                Ok(verified) => {
+                    // Sentinel + chain binding.
+                    let sentinel_ok = verified.chain_id == chain_id
+                        && verified.contract == COWSWAP_EIP712_SENTINEL;
+                    if !sentinel_ok {
+                        None
+                    } else if inner_data.len() != ZK_MAX_CALLDATA {
+                        // setPreSignature calldata is always exactly 164 bytes.
+                        // An inner_data of any other length cannot be the
+                        // CoW flow; refuse to apply v3 display to it.
+                        None
+                    } else {
+                        let calldata_array: &[u8; ZK_MAX_CALLDATA] =
+                            inner_data[..ZK_MAX_CALLDATA].try_into().unwrap();
+                        let shape_ok = crate::tx::eip712::cowswap::check_setpresig_calldata_shape(
+                            calldata_array,
+                        )
+                        .is_ok();
+                        let cross_ok =
+                            crate::tx::eip712::cowswap::cross_check_setpresig_calldata(
+                                canonical_bytes,
+                                calldata_array,
+                                verified.chain_id,
+                                &sender,
+                            )
+                            .is_ok();
+                        if shape_ok && cross_ok {
+                            let mut c = [0u8; EIP712_CANONICAL_LEN];
+                            c.copy_from_slice(canonical_bytes);
+                            let mut r = [0u8; EIP712_STRING_LEN];
+                            r.copy_from_slice(readable_bytes);
+                            Some((c, r))
+                        } else {
+                            None
+                        }
+                    }
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+    // ── 6b''. Downgrade-mitigation gate ───────────────────────────
+    //
+    // The v1 clear-sign flow only binds the setPreSignature calldata
+    // to a static "Pre-sign CowSwap order" string. That's safe — but
+    // if an attacker strips the v3 trailer from a CoW UserOp, the
+    // user would confirm that static string instead of the rich 8-page
+    // v3 display and end up pre-signing an orderUid they never saw
+    // the contents of. So: for CoW setPreSignature specifically,
+    // require v3 verification. No fallback.
+    let selector_ok = inner_data.len() >= 4 && &inner_data[..4] == SET_PRE_SIGNATURE_SELECTOR;
+    let to_gpv2 = to_address == GPV2_SETTLEMENT_ADDRESS;
+    if selector_ok && to_gpv2 && zk_v3_verified.is_none() {
+        ui::show_status("CoW sign", "v3 required");
+        return NscStatus::InvalidPointer as u32;
+    }
+
     // ── 6d. Verify each supplied address-name bundle ───────────────
     //
     // Every bundle crosses the Merkle gate against NAMES_DB_ROOT.
@@ -421,7 +553,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 6c. Pick the render flavour ────────────────────────────────
-    let pages = if let Some((_, readable)) = zk_verified.as_ref() {
+    //
+    // v3 CoW EIP-712 flow has first claim: when verified, render the
+    // 8-page order breakdown (kind, tokens, amounts, receiver, expiry,
+    // fee, appData) from the circuit-bound canonical + readable. The
+    // rodata-pinned display renderer consumes those bytes directly;
+    // every field the user sees is Poseidon-bound back to the proof,
+    // and the orderUid linkage to the calldata was cross-checked above.
+    let pages = if let Some((canonical, readable)) = zk_v3_verified.as_ref() {
+        let _ = &tx_for_display; // intentionally unused — v3 renders from canonical
+        crate::tx::eip712::cowswap_display::render_cowswap_pages(canonical, readable)
+    } else if let Some((_, readable)) = zk_verified.as_ref() {
         crate::zk::render_clear_sign_pages(&tx_for_display, readable, &resolver)
     } else if inner_data.is_empty() {
         render_pages(&tx_for_display, &resolver)

@@ -246,3 +246,326 @@ pub fn compute_digest(canonical: &[u8; 204], chain_id: u64) -> Result<[u8; 32], 
     let sh = struct_hash(&order);
     Ok(final_digest(&dom, &sh))
 }
+
+// ---------------------------------------------------------------------------
+// setPreSignature orderUid cross-check — the v3 security gate
+// ---------------------------------------------------------------------------
+//
+// When a UserOp's inner calldata is `setPreSignature(orderUid, true)`
+// and the companion attaches a v3 trailer (canonical GPv2Order), the
+// secure world must prove that the canonical the user *saw* on the
+// 8-page display is the order the *on-chain* settlement contract will
+// act on. The only thing bridging those two worlds is the 56-byte
+// `orderUid` in the setPreSignature calldata. So: compute the orderUid
+// natively from the canonical bytes + the UserOp's sender, and
+// byte-compare it against the calldata.
+
+/// Extents of the 56-byte orderUid inside a 164-byte setPreSignature
+/// calldata. The calldata ABI layout is
+/// `selector(4) || bytes_offset(32)=0x40 || bool_signed(32)=1 ||
+///  bytes_len(32)=56 || orderUid(56) || zero_pad(8)` — so the orderUid
+/// starts at byte 100 and is 56 bytes wide.
+pub const SETPRESIG_ORDERUID_OFFSET: usize = 100;
+pub const SETPRESIG_ORDERUID_LEN: usize = 56;
+/// Slice of `orderUid` that is the 32-byte EIP-712 order digest.
+pub const SETPRESIG_ORDER_DIGEST_OFFSET: usize = SETPRESIG_ORDERUID_OFFSET;
+pub const SETPRESIG_ORDER_DIGEST_LEN: usize = 32;
+/// Slice of `orderUid` that is the 20-byte owner.
+pub const SETPRESIG_OWNER_OFFSET: usize = SETPRESIG_ORDERUID_OFFSET + 32;
+pub const SETPRESIG_OWNER_LEN: usize = 20;
+/// Slice of `orderUid` that is the 4-byte BE validTo.
+pub const SETPRESIG_VALID_TO_OFFSET: usize = SETPRESIG_OWNER_OFFSET + SETPRESIG_OWNER_LEN;
+pub const SETPRESIG_VALID_TO_LEN: usize = 4;
+
+/// Failure modes for the v3 `setPreSignature` cross-check. Kept as a
+/// discriminated enum (rather than a `Result<(), ()>`) so the caller
+/// can surface a precise error to telemetry + trusted UI even when the
+/// outer return value is unit-valued rejection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrderUidMismatch {
+    /// Canonical bytes failed to decode (malformed enum byte).
+    CanonicalDecode,
+    /// `canonical.chain_id` did not equal the VK bundle's chain_id.
+    ChainIdMismatch,
+    /// `canonical.valid_to` ≠ calldata's validTo.
+    ValidToMismatch,
+    /// The 32-byte orderDigest derived from the canonical does not
+    /// match the orderDigest in the calldata's orderUid.
+    OrderDigestMismatch,
+    /// The 20-byte owner in the calldata's orderUid does not match
+    /// the UserOp's sender (the smart account address).
+    OwnerMismatch,
+}
+
+/// Cross-check a v3-verified canonical GPv2Order against the
+/// setPreSignature calldata + UserOp sender.
+///
+/// Invariants enforced (in order — first failure wins so the reject
+/// reason maps cleanly to a user-facing error):
+///
+///  1. `canonical.chain_id == bundle_chain_id` (also enforced
+///     internally by `compute_digest`, duplicated here so the caller
+///     can distinguish this failure from a bad digest).
+///  2. `canonical.valid_to` == `orderUid[52..56]` (byte-compare, no
+///     integer parse — a zero-validTo attacker can't get a false pass
+///     via endianness confusion).
+///  3. `compute_digest(canonical)[..]` equals `orderUid[0..32]`. This
+///     binds EVERY field of the GPv2Order struct (appData, fee, kind,
+///     balance enums, amounts, both token addresses, receiver, …) —
+///     struct_hash is a keccak over all 12 fields plus ORDER_TYPEHASH,
+///     so equality here subsumes the per-field byte checks.
+///  4. `orderUid[32..52]` == UserOp sender (the smart account
+///     address). CoW's settlement contract requires
+///     `msg.sender == uid.owner` for pre-signing; signing an
+///     orderUid whose owner is someone else would either revert
+///     on-chain (wasted gas) or, worse, pre-sign a third party's
+///     order as ours. Either way: reject.
+pub fn cross_check_setpresig_calldata(
+    canonical: &[u8; 204],
+    calldata: &[u8; 164],
+    bundle_chain_id: u64,
+    userop_sender: &[u8; 20],
+) -> Result<(), OrderUidMismatch> {
+    // (1) decode + chain_id match — compute_digest does both.
+    let order_digest = match compute_digest(canonical, bundle_chain_id) {
+        Ok(d) => d,
+        Err(Eip712Error::ChainIdMismatch) => return Err(OrderUidMismatch::ChainIdMismatch),
+        Err(_) => return Err(OrderUidMismatch::CanonicalDecode),
+    };
+
+    // (2) validTo — byte-for-byte.
+    let canonical_valid_to = &canonical[164..168];
+    let calldata_valid_to =
+        &calldata[SETPRESIG_VALID_TO_OFFSET..SETPRESIG_VALID_TO_OFFSET + SETPRESIG_VALID_TO_LEN];
+    if canonical_valid_to != calldata_valid_to {
+        return Err(OrderUidMismatch::ValidToMismatch);
+    }
+
+    // (3) orderDigest — the heavy invariant. struct_hash covers every
+    //     GPv2Order field, so byte equality here locks the entire
+    //     order into the calldata the chain will see.
+    let calldata_digest = &calldata
+        [SETPRESIG_ORDER_DIGEST_OFFSET..SETPRESIG_ORDER_DIGEST_OFFSET + SETPRESIG_ORDER_DIGEST_LEN];
+    if order_digest.as_slice() != calldata_digest {
+        return Err(OrderUidMismatch::OrderDigestMismatch);
+    }
+
+    // (4) owner — must equal the UserOp sender.
+    let calldata_owner = &calldata[SETPRESIG_OWNER_OFFSET..SETPRESIG_OWNER_OFFSET + SETPRESIG_OWNER_LEN];
+    if calldata_owner != userop_sender.as_slice() {
+        return Err(OrderUidMismatch::OwnerMismatch);
+    }
+
+    Ok(())
+}
+
+/// Check the structural shape of a setPreSignature calldata — the
+/// selector, ABI encoding bytes, `signed == true` flag, bytes-length
+/// prefix, and zero-padding tail. This replaces the bytes-level
+/// guarantees that the v1 `cowswap_set_pre_signature` circuit used to
+/// make; the firmware checks them natively now instead of running a
+/// separate proof.
+pub fn check_setpresig_calldata_shape(calldata: &[u8; 164]) -> Result<(), OrderUidMismatch> {
+    // Selector.
+    if &calldata[0..4] != &[0xec, 0x6c, 0xb1, 0x3f] {
+        return Err(OrderUidMismatch::CanonicalDecode);
+    }
+    // ABI bytes offset = 0x40 at slot 0.
+    for b in &calldata[4..35] {
+        if *b != 0 {
+            return Err(OrderUidMismatch::CanonicalDecode);
+        }
+    }
+    if calldata[35] != 0x40 {
+        return Err(OrderUidMismatch::CanonicalDecode);
+    }
+    // Bool signed == true at slot 1.
+    for b in &calldata[36..67] {
+        if *b != 0 {
+            return Err(OrderUidMismatch::CanonicalDecode);
+        }
+    }
+    if calldata[67] != 1 {
+        return Err(OrderUidMismatch::CanonicalDecode);
+    }
+    // Bytes length = 56 at slot 2.
+    for b in &calldata[68..99] {
+        if *b != 0 {
+            return Err(OrderUidMismatch::CanonicalDecode);
+        }
+    }
+    if calldata[99] != 56 {
+        return Err(OrderUidMismatch::CanonicalDecode);
+    }
+    // Zero padding at [156..164).
+    for b in &calldata[156..164] {
+        if *b != 0 {
+            return Err(OrderUidMismatch::CanonicalDecode);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod cross_check_tests {
+    use super::*;
+
+    // 1000 USDC → ≥ 0.5 WETH fixture — matches companion e2e_vector.
+    fn fixture_canonical() -> [u8; 204] {
+        let mut c = [0u8; 204];
+        c[0..8].copy_from_slice(&1u64.to_be_bytes()); // chain_id
+        c[8..28].copy_from_slice(&[
+            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a, 0x2e, 0x9e,
+            0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
+        ]); // USDC
+        c[28..48].copy_from_slice(&[
+            0xc0, 0x2a, 0xaa, 0x39, 0xb2, 0x23, 0xfe, 0x8d, 0x0a, 0x0e, 0x5c, 0x4f, 0x27, 0xea,
+            0xd9, 0x08, 0x3c, 0x75, 0x6c, 0xc2,
+        ]); // WETH
+        c[48..68].copy_from_slice(&[
+            0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc,
+            0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
+        ]); // receiver
+            // sell_amount = 1_000_000_000 at [68..100]
+        c[96..100].copy_from_slice(&1_000_000_000u32.to_be_bytes());
+        // buy_amount = 0x06F05B59D3B20000 at [100..132]
+        c[124..132].copy_from_slice(&0x06F05B59D3B20000u64.to_be_bytes());
+        // fee_amount = 0 at [132..164]
+        // valid_to = 0x68000000 at [164..168]
+        c[164..168].copy_from_slice(&0x68000000u32.to_be_bytes());
+        c[168] = 0; // kind = Sell
+        c[169] = 0;
+        c[170] = 0;
+        c[171] = 0;
+        c[172..204].copy_from_slice(&[
+            0x83, 0xb9, 0xdc, 0xb2, 0x31, 0x6e, 0x54, 0xfc, 0x04, 0xc1, 0x0f, 0x74, 0xc9, 0xa3,
+            0xd5, 0xdd, 0x66, 0xa9, 0xe4, 0xc4, 0x3c, 0x04, 0xcc, 0xef, 0xb9, 0xc0, 0xc0, 0x3e,
+            0x61, 0xe5, 0xfb, 0x28,
+        ]);
+        c
+    }
+
+    fn fixture_owner() -> [u8; 20] {
+        [0xfb, 0x3c, 0x7e, 0xb9, 0x36, 0xcA, 0xA1, 0x2B, 0x5A, 0x88, 0x4d, 0x61, 0x23, 0x93, 0x96, 0x9A, 0x55, 0x7d, 0x43, 0x07]
+    }
+
+    /// Hand-build a setPreSignature calldata for the fixture owner +
+    /// canonical. Reuses `compute_digest` for the orderDigest slice.
+    fn fixture_calldata() -> [u8; 164] {
+        let canonical = fixture_canonical();
+        let digest = compute_digest(&canonical, 1).unwrap();
+        let owner = fixture_owner();
+        let mut cd = [0u8; 164];
+        cd[0..4].copy_from_slice(&[0xec, 0x6c, 0xb1, 0x3f]);
+        cd[35] = 0x40;
+        cd[67] = 1;
+        cd[99] = 56;
+        cd[100..132].copy_from_slice(&digest);
+        cd[132..152].copy_from_slice(&owner);
+        cd[152..156].copy_from_slice(&canonical[164..168]);
+        cd
+    }
+
+    #[test]
+    fn happy_path_passes() {
+        let canonical = fixture_canonical();
+        let calldata = fixture_calldata();
+        let owner = fixture_owner();
+        assert!(cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner).is_ok());
+        assert!(check_setpresig_calldata_shape(&calldata).is_ok());
+    }
+
+    #[test]
+    fn chain_id_mismatch_rejected() {
+        let canonical = fixture_canonical();
+        let calldata = fixture_calldata();
+        let owner = fixture_owner();
+        assert_eq!(
+            cross_check_setpresig_calldata(&canonical, &calldata, 137, &owner),
+            Err(OrderUidMismatch::ChainIdMismatch)
+        );
+    }
+
+    #[test]
+    fn valid_to_mismatch_rejected() {
+        let canonical = fixture_canonical();
+        let mut calldata = fixture_calldata();
+        calldata[152] = calldata[152].wrapping_add(1);
+        let owner = fixture_owner();
+        // The valid_to check runs before the digest check, so this
+        // bubbles out as ValidToMismatch (digest would also fail).
+        assert_eq!(
+            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
+            Err(OrderUidMismatch::ValidToMismatch)
+        );
+    }
+
+    #[test]
+    fn order_digest_flip_rejected() {
+        let canonical = fixture_canonical();
+        let mut calldata = fixture_calldata();
+        calldata[100] ^= 0x01;
+        let owner = fixture_owner();
+        assert_eq!(
+            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
+            Err(OrderUidMismatch::OrderDigestMismatch)
+        );
+    }
+
+    #[test]
+    fn canonical_field_flip_rejected_via_digest() {
+        // Flip any single byte of canonical that isn't chain_id or
+        // valid_to and the orderDigest will diverge — catching the
+        // attack "swap the appData silently behind a verified proof".
+        let mut canonical = fixture_canonical();
+        canonical[172] ^= 0xFF; // appData MSB
+        let calldata = fixture_calldata();
+        let owner = fixture_owner();
+        assert_eq!(
+            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
+            Err(OrderUidMismatch::OrderDigestMismatch)
+        );
+    }
+
+    #[test]
+    fn owner_mismatch_rejected() {
+        let canonical = fixture_canonical();
+        let mut calldata = fixture_calldata();
+        calldata[132] ^= 0x01;
+        let owner = fixture_owner();
+        assert_eq!(
+            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
+            Err(OrderUidMismatch::OwnerMismatch)
+        );
+    }
+
+    #[test]
+    fn shape_check_rejects_bad_selector() {
+        let mut cd = fixture_calldata();
+        cd[0] ^= 0xFF;
+        assert_eq!(
+            check_setpresig_calldata_shape(&cd),
+            Err(OrderUidMismatch::CanonicalDecode)
+        );
+    }
+
+    #[test]
+    fn shape_check_rejects_signed_false() {
+        let mut cd = fixture_calldata();
+        cd[67] = 0;
+        assert_eq!(
+            check_setpresig_calldata_shape(&cd),
+            Err(OrderUidMismatch::CanonicalDecode)
+        );
+    }
+
+    #[test]
+    fn shape_check_rejects_nonzero_tail_padding() {
+        let mut cd = fixture_calldata();
+        cd[163] = 1;
+        assert_eq!(
+            check_setpresig_calldata_shape(&cd),
+            Err(OrderUidMismatch::CanonicalDecode)
+        );
+    }
+}

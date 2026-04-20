@@ -22,7 +22,10 @@ mod poseidon_constants;
 pub mod test_vectors;
 pub mod vk_bundle;
 
-pub use groth16::{Groth16Proof, VerificationKey, verify_clear_signing_proof};
+pub use groth16::{
+    verify_clear_signing_proof, verify_clear_signing_proof_v3, Groth16Proof, VerificationKey,
+    VerificationKeyV3,
+};
 // Deeper items (`poseidon::poseidon_bytes`, `vk_bundle::{verify_vk_bundle,
 // VerifiedVk}`) are imported through their sub-path at the call site so
 // the compiler can flag dead code — no flat re-exports.
@@ -72,6 +75,60 @@ pub fn verify_clear_sign_proof(
     let verified_vk = vk_bundle::verify_vk_bundle(vk_bundle).ok_or(ClearSignError)?;
     let vk = VerificationKey::from_bytes(verified_vk.vk_as_2pub()).ok_or(ClearSignError)?;
     if !verify_clear_signing_proof(calldata, readable, &proof, &vk) {
+        return Err(ClearSignError);
+    }
+    Ok(VerifiedClearSign {
+        chain_id: verified_vk.chain_id,
+        contract: verified_vk.contract,
+    })
+}
+
+/// End-to-end verification of a v3 CoW EIP-712 clear-sign bundle.
+///
+/// This is the hardened path for `setPreSignature` UserOps — the one
+/// the companion uses when it wants the device to render a full 8-page
+/// breakdown of the GPv2Order struct the user is about to authorise.
+///
+/// On success returns the VK's claimed `(chain_id, contract)` pair so
+/// the caller (`cmd_sign_userop`) can cross-check it against the tx's
+/// chain_id + an independent rodata-pinned `GPv2Settlement` address.
+/// Every failure collapses to [`ClearSignError`] — the caller MUST
+/// treat it as a hard reject, never as a reason to fall through to the
+/// 2-pub path for the same tx.
+///
+/// ## Trust chain
+///
+/// 1. **VK bundle Merkle-verifies** against the firmware-embedded
+///    `VK_DB_ROOT`. No NS-supplied VK bytes are trusted before this
+///    clears.
+/// 2. **Contract field equals `COWSWAP_EIP712_SENTINEL`.** The VK DB
+///    distinguishes this 3-pub VK from the 2-pub setPreSignature VK
+///    (which keys off the real `GPV2_SETTLEMENT_ADDRESS`). The caller
+///    gates this externally — this function does NOT check, so the
+///    helper stays protocol-agnostic.
+/// 3. **Groth16 verifies with `H_root = rodata ERC20_POSEIDON_ROOT`.**
+///    Supplying the rodata root as the third public input means a
+///    proof produced against any other root fails the pairing equation.
+pub fn verify_clear_sign_proof_v3(
+    proof_bytes: &[u8; PROOF_LEN],
+    canonical: &[u8; 204],
+    readable: &[u8; 128],
+    vk_bundle: &[u8],
+) -> Result<VerifiedClearSign, ClearSignError> {
+    let proof = Groth16Proof::from_bytes(proof_bytes).ok_or(ClearSignError)?;
+    let verified_vk = vk_bundle::verify_vk_bundle(vk_bundle).ok_or(ClearSignError)?;
+    let vk = VerificationKeyV3::from_bytes(verified_vk.vk_as_3pub()).ok_or(ClearSignError)?;
+
+    // Load the rodata-pinned Poseidon root and convert to a canonical
+    // scalar. Reject at startup-validation time if the bytes happen not
+    // to fit in the BLS12 scalar field — dbgen always writes a
+    // canonical value, so this is belt-and-suspenders.
+    let root_scalar: bls12_381::Scalar = Option::from(bls12_381::Scalar::from_bytes(
+        &crate::db_roots::ERC20_POSEIDON_ROOT,
+    ))
+    .ok_or(ClearSignError)?;
+
+    if !verify_clear_signing_proof_v3(canonical, readable, &proof, &vk, root_scalar) {
         return Err(ClearSignError);
     }
     Ok(VerifiedClearSign {
