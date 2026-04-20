@@ -32,6 +32,17 @@ pub mod spi;
 #[cfg(feature = "stm32u585")]
 pub mod flash;
 
+/// OTP rollback-counter access for the firmware-update subsystem. Only
+/// built on real hardware; the QEMU flash backend doesn't model OTP.
+#[cfg(feature = "stm32u585")]
+pub mod otp;
+
+/// Boot-state page (try-once / active-slot tracking) for the
+/// firmware-update subsystem. Uses flash primitives + CRC from
+/// fw-manifest, so it's pulled in on real hardware only.
+#[cfg(feature = "stm32u585")]
+pub mod boot_state;
+
 /// Device-bound wrap-key derivation (UID + firmware measurement). Only
 /// pulled in on real hardware because the QEMU flash backend is a RAM
 /// buffer — there's no persistent flash to seal and the QEMU UID is

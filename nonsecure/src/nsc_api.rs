@@ -92,6 +92,13 @@ mod transport {
         fn nsc_is_unlocked() -> u32;
         fn nsc_lock() -> u32;
         fn nsc_get_wallet_address(out_ptr: u32, account_index: u32) -> u32;
+
+        // Firmware-update veneers.
+        fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32;
+        fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32) -> u32;
+        fn nsc_fw_commit() -> u32;
+        fn nsc_fw_status(out_ptr: u32) -> u32;
+        fn nsc_fw_abort() -> u32;
     }
 
     #[inline]
@@ -126,6 +133,27 @@ mod transport {
     #[inline]
     pub(super) fn get_wallet_address(out_ptr: *mut u8, account_index: u32) -> u32 {
         unsafe { nsc_get_wallet_address(out_ptr as u32, account_index) }
+    }
+
+    #[inline]
+    pub(super) fn fw_begin_call(manifest_ptr: *const u8, manifest_len: u32) -> u32 {
+        unsafe { nsc_fw_begin(manifest_ptr as u32, manifest_len) }
+    }
+    #[inline]
+    pub(super) fn fw_chunk_call(chunk_ptr: *const u8, chunk_len: u32) -> u32 {
+        unsafe { nsc_fw_chunk(chunk_ptr as u32, chunk_len) }
+    }
+    #[inline]
+    pub(super) fn fw_commit_call() -> u32 {
+        unsafe { nsc_fw_commit() }
+    }
+    #[inline]
+    pub(super) fn fw_status_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_fw_status(out_ptr as u32) }
+    }
+    #[inline]
+    pub(super) fn fw_abort_call() -> u32 {
+        unsafe { nsc_fw_abort() }
     }
 }
 
@@ -173,4 +201,47 @@ pub fn lock() -> u32 {
 /// pre-multi-account seeds keep their existing wallet.
 pub fn get_wallet_address(out: &mut [u8; 20], account_index: u32) -> u32 {
     transport::get_wallet_address(out.as_mut_ptr(), account_index)
+}
+
+// ---------------------------------------------------------------------------
+// Firmware-update command wrappers
+// ---------------------------------------------------------------------------
+//
+// Each of these is a thin pass-through to the CMSE veneer. The secure
+// world is the one doing all the work — validating the manifest, writing
+// flash, re-hashing images, waiting for the user's confirm. NS just
+// handles USB framing and progress reporting.
+
+/// CMD_FW_BEGIN — kick off an update with the supplied 8 KB manifest.
+///
+/// Only works on the STM32U585 transport (the QEMU mailbox path doesn't
+/// expose the update commands). Returns `FwUpdate*` / `NotInitialized`
+/// status codes — the caller maps them to SW words for the APDU response.
+#[cfg(feature = "stm32u585")]
+pub fn fw_begin(manifest: &[u8]) -> u32 {
+    transport::fw_begin_call(manifest.as_ptr(), manifest.len() as u32)
+}
+
+/// CMD_FW_CHUNK — stream one pre-assembled header+data chunk.
+#[cfg(feature = "stm32u585")]
+pub fn fw_chunk(chunk: &[u8]) -> u32 {
+    transport::fw_chunk_call(chunk.as_ptr(), chunk.len() as u32)
+}
+
+/// CMD_FW_COMMIT — finalise; may reset the device on success.
+#[cfg(feature = "stm32u585")]
+pub fn fw_commit() -> u32 {
+    transport::fw_commit_call()
+}
+
+/// CMD_FW_STATUS — read current progress into `out`.
+#[cfg(feature = "stm32u585")]
+pub fn fw_status(out: &mut [u8; sphincs_tz_shared::FW_STATUS_RESPONSE_LEN]) -> u32 {
+    transport::fw_status_call(out.as_mut_ptr())
+}
+
+/// CMD_FW_ABORT — discard any in-progress session.
+#[cfg(feature = "stm32u585")]
+pub fn fw_abort() -> u32 {
+    transport::fw_abort_call()
 }

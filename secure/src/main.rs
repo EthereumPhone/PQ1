@@ -63,6 +63,12 @@ mod host_rng;
 mod hw;
 #[cfg(not(test))]
 mod reset_cause;
+/// Firmware-update state machine. Built on the STM32U585 hardware path
+/// because it uses the bank-2 flash primitives in `hw::flash` that only
+/// exist on real silicon. QEMU builds omit the module — the mailbox
+/// transport doesn't expose the update commands either.
+#[cfg(all(feature = "stm32u585", not(test)))]
+mod fw_update;
 #[cfg(not(test))]
 mod nsc;
 #[cfg(not(test))]

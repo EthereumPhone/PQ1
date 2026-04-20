@@ -263,6 +263,100 @@ pub const CMD_SIGN_MESSAGE: u32 = 13;
 pub const CMD_GET_WALLET_ADDRESS: u32 = 14;
 
 // ---------------------------------------------------------------------------
+// Firmware-update gateway commands
+// ---------------------------------------------------------------------------
+
+/// CMD_FW_BEGIN — initiate a firmware-update streaming session.
+///
+/// Payload at `arg0` is the 8 KB manifest page (see `fw_manifest::MANIFEST_SIZE`).
+/// Secure world:
+///   1. Rejects if `pin_verified == false` (update requires unlock).
+///   2. Runs the full verify chain (magic, CRC, digest, vendor fpr,
+///      C10 signature, rollback floor) on the supplied manifest.
+///   3. Determines the inactive A/B slot.
+///   4. Erases the inactive slot's secure + NS pages + target
+///      manifest page.
+///   5. Seeds an in-SRAM streaming context keyed on
+///      `(inactive_slot, expected_s_len, expected_ns_len, running_hashes)`.
+///   6. Resets the idle activity timer (update is user-consented).
+///
+/// Returns `NscStatus::Ok` on success, or a descriptive error.
+pub const CMD_FW_BEGIN: u32 = 20;
+
+/// CMD_FW_CHUNK — stream one image chunk into the inactive slot.
+///
+/// Payload at `arg0` is:
+/// ```text
+/// offset  size  field
+///    0     4   chunk_offset  u32 BE (bytes within the target image)
+///    4     1   image_kind    0 = secure, 1 = nonsecure
+///    5     1   reserved
+///    6     2   chunk_len     u16 BE, 1..=FW_MAX_CHUNK
+///    8     N   chunk data
+/// ```
+/// The offset must monotonically increase within a given `image_kind`.
+/// Secure world writes the data into the inactive slot's flash, updates
+/// the running SHA-256, and returns `Ok`. Idle timer is NOT reset by
+/// chunks (the BEGIN/COMMIT button presses frame the update window).
+pub const CMD_FW_CHUNK: u32 = 21;
+
+/// CMD_FW_COMMIT — finalise the staged update.
+///
+/// No payload (arg0 is ignored; the already-staged image + manifest in
+/// flash is the input). Secure world:
+///   1. Re-reads the inactive slot and re-hashes both images.
+///   2. Compares against `manifest.secure_hash` + `manifest.nonsecure_hash`.
+///   3. Verifies the C10 signature one more time.
+///   4. Displays the new measurement (8 BIP-39 words) + "confirm
+///      update?" prompt on the OLED.
+///   5. On user confirm: writes the manifest page (with
+///      `try_once = TRIED`), bumps the OTP rollback floor, writes the
+///      boot-state page pointing at the new slot, and triggers a
+///      system reset.
+///   6. On cancel: rolls back (manifest + boot state untouched); the
+///      inactive slot stays erased.
+pub const CMD_FW_COMMIT: u32 = 22;
+
+/// CMD_FW_STATUS — read update progress.
+///
+/// Returns `[state:u8 | received_s:u32 BE | received_ns:u32 BE]` into
+/// the output buffer. Useful for the companion app's progress bar.
+pub const CMD_FW_STATUS: u32 = 23;
+
+/// CMD_FW_ABORT — discard a partial update.
+///
+/// Clears the in-SRAM streaming context. The inactive slot stays
+/// erased (no-op rollback) — no harm done; a future `CMD_FW_BEGIN`
+/// can start fresh.
+pub const CMD_FW_ABORT: u32 = 24;
+
+/// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
+/// comfortably within the NS-side 8 KB chain accumulator with header
+/// space; picked over the tighter 1024-ish USB HID MTU because chunks
+/// arrive as APDU v2 payloads and the extra accumulator capacity lets
+/// the companion batch up to 8 chunks per APDU if it wants.
+pub const FW_MAX_CHUNK: usize = 1024;
+
+/// Chunk header size preceding the data bytes.
+pub const FW_CHUNK_HEADER_LEN: usize = 8;
+
+/// Kind byte values used in the CHUNK header.
+pub const FW_IMAGE_KIND_SECURE: u8 = 0;
+pub const FW_IMAGE_KIND_NONSECURE: u8 = 1;
+
+/// CMD_FW_STATUS response layout.
+pub const FW_STATUS_RESPONSE_LEN: usize = 1 + 4 + 4 + 1;
+pub const FW_STATUS_STATE_OFFSET: usize = 0;
+pub const FW_STATUS_RECV_S_OFFSET: usize = 1;
+pub const FW_STATUS_RECV_NS_OFFSET: usize = 5;
+pub const FW_STATUS_SLOT_OFFSET: usize = 9;
+
+/// FW update state-machine states reported by CMD_FW_STATUS.
+pub const FW_STATE_IDLE: u8 = 0;
+pub const FW_STATE_RECEIVING: u8 = 1;
+pub const FW_STATE_STAGED: u8 = 2;
+
+// ---------------------------------------------------------------------------
 // CMD_GET_MAIN_PUBKEY wire format
 // ---------------------------------------------------------------------------
 
@@ -374,6 +468,28 @@ pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
 
 // -- Address & account helpers (0x60-0x6F) --
 pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
+
+// ---------------------------------------------------------------------------
+// Firmware-update INS codes (companion → device)
+// ---------------------------------------------------------------------------
+
+/// INS_V2_FW_BEGIN — initiate update. Payload: 8 KB manifest.
+/// Chained (P1=0x80 on non-final, P1=0x00 on final — the manifest is
+/// 8 KB which exceeds the 253-byte APDU payload, so it MUST be chained).
+pub const INS_V2_FW_BEGIN: u8 = 0x70;
+
+/// INS_V2_FW_CHUNK — one image chunk. Payload: 8-byte header + data.
+/// Not chained; each CMD_FW_CHUNK is one APDU.
+pub const INS_V2_FW_CHUNK: u8 = 0x71;
+
+/// INS_V2_FW_COMMIT — finalize. No payload.
+pub const INS_V2_FW_COMMIT: u8 = 0x72;
+
+/// INS_V2_FW_STATUS — read update progress. No payload.
+pub const INS_V2_FW_STATUS: u8 = 0x73;
+
+/// INS_V2_FW_ABORT — discard partial update. No payload.
+pub const INS_V2_FW_ABORT: u8 = 0x74;
 
 // INS range 0x70-0x7F (formerly JARDIN FORS+C compact signing — retired
 // with the C10 slot cutover).
@@ -760,6 +876,37 @@ pub enum NscStatus {
     IdleWipe = 7,
     // 8 (was SlotExhausted) is retired — post-C10 slot cutover, per-slot
     // exhaustion is enforced on-chain by MAX_SLOT_USES, not by firmware.
+
+    // Firmware-update status codes. These fire from the CMD_FW_*
+    // handlers and surface to the companion app via the USB status-word
+    // mapping.
+    /// A chunk / commit arrived without a prior BEGIN, or BEGIN was
+    /// called while another session was in progress.
+    FwUpdateBadState = 10,
+    /// The manifest failed structural / CRC / digest / vendor-fpr /
+    /// signature verification. The supplied manifest is not a
+    /// vendor-signed release for this device.
+    FwUpdateBadManifest = 11,
+    /// The manifest is structurally valid but its `fw_version` is
+    /// below the OTP rollback floor.
+    FwUpdateBadVersion = 12,
+    /// A chunk's offset is non-monotonic, its length exceeds
+    /// `FW_MAX_CHUNK`, or it would run past the image's declared
+    /// length. The streaming session is left in `Receiving` — the
+    /// companion can retry the chunk or abort.
+    FwUpdateBadChunk = 13,
+    /// Post-streaming, the re-hashed image bytes don't match the
+    /// manifest's signed hashes. Either the companion sent a different
+    /// image than the one it signed, or flash writes were torn.
+    FwUpdateBadImage = 14,
+    /// An internal flash program / erase operation failed. The inactive
+    /// slot may be in an undefined state; retry a fresh BEGIN.
+    FwUpdateFlashError = 15,
+    /// OTP rollback budget exhausted — this device can no longer
+    /// accept any further firmware updates. A tracked companion-side
+    /// warning should have fired well before this.
+    FwUpdateOtpExhausted = 16,
+
     InternalError = 0xFFFF_FFFF,
 }
 
@@ -774,6 +921,13 @@ impl From<u32> for NscStatus {
             5 => Self::NotInitialized,
             6 => Self::UserRejected,
             7 => Self::IdleWipe,
+            10 => Self::FwUpdateBadState,
+            11 => Self::FwUpdateBadManifest,
+            12 => Self::FwUpdateBadVersion,
+            13 => Self::FwUpdateBadChunk,
+            14 => Self::FwUpdateBadImage,
+            15 => Self::FwUpdateFlashError,
+            16 => Self::FwUpdateOtpExhausted,
             _ => Self::InternalError,
         }
     }

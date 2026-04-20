@@ -1,0 +1,32 @@
+# Reproducible-build foundation for the PQSigner firmware.
+#
+# The goal is that `cargo build --target thumbv8m.main-none-eabi --release`
+# on commit X always produces byte-identical ELFs, regardless of:
+#   * which developer's laptop ran the build,
+#   * what the project checkout path is,
+#   * the clock time of the build,
+#   * whether it's built in Docker / CI / bare metal.
+#
+# This is what makes the 8-BIP-39 "measurement" words shown at boot time
+# verifiable by anyone — they are a deterministic function of source +
+# toolchain, nothing else.
+#
+# Precedence notes:
+#   - Cargo gives CARGO_TARGET_<TRIPLE>_RUSTFLAGS (set by the Makefile) full
+#     precedence over this config; it REPLACES these rustflags rather than
+#     merging. The Makefile therefore also carries the same flags, factored
+#     into the RUSTFLAGS_COMMON variable. If you change flags here, mirror
+#     them in the Makefile's RUSTFLAGS_{SECURE,NONSECURE} variables.
+#   - rustc does NOT expand $HOME / $PWD inside --remap-path-prefix strings,
+#     so path remappings live in the Makefile (which can compute them from
+#     $(CURDIR) / $(HOME) at invocation time). The non-path reproducibility
+#     flags live here.
+
+[target.thumbv8m.main-none-eabi]
+rustflags = [
+  # Strip the linker-generated build-id (otherwise it embeds a hash of the
+  # .note section ordering, which can shift between builds). This config
+  # assumes arm-none-eabi-ld (invoked directly, not through gcc), so no
+  # -Wl, wrapper.
+  "-C", "link-arg=--build-id=none",
+]

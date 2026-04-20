@@ -1,0 +1,47 @@
+[package]
+name = "pqsigner-fsbl"
+version = "0.1.0"
+edition.workspace = true
+description = "PQSigner first-stage bootloader — immutable, vendor-C10-verified A/B slot selector for the firmware-update subsystem."
+
+[[bin]]
+name = "pqsigner-fsbl"
+path = "src/main.rs"
+
+[dependencies]
+# Signature verification — same crate the main firmware uses, so the
+# Rust and Solidity verifiers remain byte-compatible. Verify-only (no
+# keygen, no sign).
+#
+# NOTE: we use the SOFTWARE SHA-256 path in FSBL, not `hw-sha256`.
+# Wiring up the HASH peripheral here would require porting RCC init,
+# the HASH driver, and the `pqsigner_sha256_*` extern fns from the
+# secure crate. Software SHA-256 at 16 MHz takes about 1 s for a full
+# FSBL boot (verify + image-hash both manifests + both slots). That's
+# acceptable as a boot budget; the HW-SHA acceleration is a tracked
+# follow-up optimization.
+sphincs-c10 = { workspace = true }
+
+# Manifest / boot-state layout. no_std, no alloc.
+fw-manifest = { workspace = true }
+
+# SHA-256 for the verify_digest path and the slot-image re-hash.
+# sha2 is gated behind fw-manifest's default-off std feature, but the
+# direct dep here ensures we can call it from verify.rs too.
+sha2        = { version = "0.10", default-features = false }
+
+# Cortex-M runtime.
+cortex-m     = { workspace = true, features = ["critical-section-single-core"] }
+cortex-m-rt  = { workspace = true }
+
+# Panic handler (halts). Never unwinds — we can't recover into a
+# "please reboot" UI since the OLED isn't reliable at FSBL time.
+panic-halt   = "1"
+
+[build-dependencies]
+# build.rs pre-computes the vendor-pubkey fingerprint (so the runtime
+# check is a memcmp) and derives the dev-fixture pubkey from a fixed
+# seed when FSBL_VENDOR_PUBKEY isn't set (so dev builds don't depend
+# on a committed binary file). Host-only; not in the final binary.
+sha2        = "0.10"
+sphincs-c10 = { workspace = true }

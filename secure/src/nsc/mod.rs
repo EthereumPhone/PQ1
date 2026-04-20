@@ -54,6 +54,21 @@ mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_request_unlock;
 mod cmd_sign_userop;
+
+// Firmware-update commands. Only built for the STM32U585 target
+// because they depend on the bank-2 flash / OTP primitives that the
+// QEMU build doesn't model.
+#[cfg(feature = "stm32u585")]
+mod cmd_fw_abort;
+#[cfg(feature = "stm32u585")]
+mod cmd_fw_begin;
+#[cfg(feature = "stm32u585")]
+mod cmd_fw_chunk;
+#[cfg(feature = "stm32u585")]
+mod cmd_fw_commit;
+#[cfg(feature = "stm32u585")]
+mod cmd_fw_status;
+
 mod ptr_validate;
 mod state;
 
@@ -316,6 +331,58 @@ pub extern "cmse-nonsecure-entry" fn nsc_is_unlocked() -> u32 {
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
     unsafe { cmd_lock::run() }
+}
+
+// ---------------------------------------------------------------------------
+// Firmware-update CMSE veneers
+// ---------------------------------------------------------------------------
+
+/// CMD_FW_BEGIN — initiate firmware-update streaming session.
+/// arg0 = manifest_ptr, arg2 = MANIFEST_SIZE (8192).
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: manifest_ptr,
+        arg1: 0,
+        arg2: manifest_len,
+    };
+    unsafe { cmd_fw_begin::run(&args) }
+}
+
+/// CMD_FW_CHUNK — stream one image chunk. arg0 = chunk_ptr, arg2 = chunk_len.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: chunk_ptr,
+        arg1: 0,
+        arg2: chunk_len,
+    };
+    unsafe { cmd_fw_chunk::run(&args) }
+}
+
+/// CMD_FW_COMMIT — finalize staged update. No args.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_fw_commit() -> u32 {
+    let args = GatewayArgs { arg0: 0, arg1: 0, arg2: 0 };
+    unsafe { cmd_fw_commit::run(&args) }
+}
+
+/// CMD_FW_STATUS — read update progress. arg1 = out_ptr.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_fw_status(out_ptr: u32) -> u32 {
+    let args = GatewayArgs { arg0: 0, arg1: out_ptr, arg2: 0 };
+    unsafe { cmd_fw_status::run(&args) }
+}
+
+/// CMD_FW_ABORT — discard partial update.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_fw_abort() -> u32 {
+    unsafe { cmd_fw_abort::run() }
 }
 
 /// CMD_GET_WALLET_ADDRESS — compute CREATE2-predicted wallet address for

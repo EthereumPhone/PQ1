@@ -19,6 +19,23 @@ const FLASH_SECKEYR: *mut u32 = (FLASH + 0x0C) as *mut u32;
 const FLASH_SECSR: *mut u32 = (FLASH + 0x24) as *mut u32;
 const FLASH_SECCR: *mut u32 = (FLASH + 0x2C) as *mut u32;
 
+// Non-secure-controller registers (accessible from secure world via the
+// secure peripheral bus — the NS/S distinction here selects which side's
+// watermark rules apply, not who can reach the register). Used for
+// programming bank 2 (NS flash) pages during firmware updates: NS pages
+// are rejected by SECCR because the watermark forbids secure-side
+// programming of NS flash, so NSCR is the only controller that can
+// write them. The secure world owns the update mechanism end-to-end, so
+// NS-world code never touches NSCR directly.
+const FLASH_NSKEYR: *mut u32 = (FLASH + 0x08) as *mut u32;
+const FLASH_NSSR: *mut u32 = (FLASH + 0x20) as *mut u32;
+const FLASH_NSCR: *mut u32 = (FLASH + 0x28) as *mut u32;
+
+/// Selects which bank the flash controller targets. Only meaningful for
+/// dual-bank operations; bank 1 is S-flash, bank 2 is NS-flash in our
+/// layout. NSCR.BKER bit.
+const BKER: u32 = 1 << 11;
+
 // Unlock key sequence (same as all STM32 families)
 const KEY1: u32 = 0x4567_0123;
 const KEY2: u32 = 0xCDEF_89AB;
@@ -545,4 +562,341 @@ pub unsafe fn arm_wipe_flag() -> Result<(), ()> {
 pub unsafe fn is_wipe_armed() -> bool {
     let src = (ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET) as *const u8;
     read_volatile(src) == WIPE_FLAG_ARMED
+}
+
+// ===========================================================================
+// Firmware-update plumbing: bank-2 (non-secure) flash + slot geometry
+// ===========================================================================
+//
+// The firmware-update subsystem writes new firmware images into the
+// inactive A/B slot. The secure world owns the entire update flow — NS
+// code never programs flash directly — so we provide bank-2 primitives
+// on the secure side, accessed through the FLASH_NS{KEYR,SR,CR} register
+// aliases. These registers are on the secure peripheral bus and are
+// reachable from secure-world code; the "NS" prefix refers to which
+// side's watermarks the controller honours (NSCR programs pages that
+// SECCR refuses because of the SECWMn watermark).
+//
+// Slot layout (see docs/firmware-update.md for the full picture):
+//
+//   Bank 1 (secure):
+//     FSBL             pages   0..3    0x0C00_0000  (32 KB, WRP-locked)
+//     Manifest A       page    4       0x0C00_8000  (8 KB)
+//     Manifest B       page    5       0x0C00_A000  (8 KB)
+//     Boot state       page    6       0x0C00_C000  (8 KB, redundant)
+//     Slot A secure    pages   7..64   0x0C00_E000  (464 KB)
+//     Slot B secure    pages  65..122  0x0C08_2000  (464 KB)
+//     (reserved)       pages 123..127  legacy + PBS + SE050 admin
+//
+//   Bank 2 (non-secure):
+//     Slot A NS        pages   0..63   0x0810_0000  (512 KB)
+//     Slot B NS        pages  64..127  0x0818_0000  (512 KB)
+
+/// A/B slot identifier. FSBL chooses one at boot based on manifest
+/// validity + rollback floor + try-once semantics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Slot {
+    A,
+    B,
+}
+
+impl Slot {
+    pub fn other(self) -> Self {
+        match self {
+            Slot::A => Slot::B,
+            Slot::B => Slot::A,
+        }
+    }
+}
+
+// --- Manifest page addresses --------------------------------------------------
+
+pub const MANIFEST_A_ADDR: u32 = 0x0C00_8000;
+pub const MANIFEST_A_PAGE: u32 = 4;
+pub const MANIFEST_B_ADDR: u32 = 0x0C00_A000;
+pub const MANIFEST_B_PAGE: u32 = 5;
+
+pub fn manifest_addr(slot: Slot) -> u32 {
+    match slot {
+        Slot::A => MANIFEST_A_ADDR,
+        Slot::B => MANIFEST_B_ADDR,
+    }
+}
+
+pub fn manifest_page_num(slot: Slot) -> u32 {
+    match slot {
+        Slot::A => MANIFEST_A_PAGE,
+        Slot::B => MANIFEST_B_PAGE,
+    }
+}
+
+// --- Boot state page ----------------------------------------------------------
+
+pub const BOOT_STATE_ADDR: u32 = 0x0C00_C000;
+pub const BOOT_STATE_PAGE: u32 = 6;
+
+// --- Slot image addresses -----------------------------------------------------
+
+pub const SLOT_A_SECURE_ADDR: u32 = 0x0C00_E000;
+pub const SLOT_A_SECURE_FIRST_PAGE: u32 = 7;
+pub const SLOT_A_SECURE_LAST_PAGE: u32 = 64;
+
+pub const SLOT_B_SECURE_ADDR: u32 = 0x0C08_2000;
+pub const SLOT_B_SECURE_FIRST_PAGE: u32 = 65;
+pub const SLOT_B_SECURE_LAST_PAGE: u32 = 122;
+
+/// Secure-slot usable byte capacity (bytes writable into one slot).
+/// 58 pages × 8 KB = 464 KB. Firmware images larger than this are
+/// rejected at `CMD_FW_BEGIN`.
+pub const SLOT_SECURE_CAPACITY: u32 = 58 * 8 * 1024;
+
+pub const SLOT_A_NS_ADDR: u32 = 0x0810_0000;
+pub const SLOT_A_NS_FIRST_PAGE: u32 = 0;
+pub const SLOT_A_NS_LAST_PAGE: u32 = 63;
+
+pub const SLOT_B_NS_ADDR: u32 = 0x0818_0000;
+pub const SLOT_B_NS_FIRST_PAGE: u32 = 64;
+pub const SLOT_B_NS_LAST_PAGE: u32 = 127;
+
+/// NS-slot usable byte capacity. 64 pages × 8 KB = 512 KB.
+pub const SLOT_NS_CAPACITY: u32 = 64 * 8 * 1024;
+
+pub fn slot_secure_addr(slot: Slot) -> u32 {
+    match slot {
+        Slot::A => SLOT_A_SECURE_ADDR,
+        Slot::B => SLOT_B_SECURE_ADDR,
+    }
+}
+
+pub fn slot_ns_addr(slot: Slot) -> u32 {
+    match slot {
+        Slot::A => SLOT_A_NS_ADDR,
+        Slot::B => SLOT_B_NS_ADDR,
+    }
+}
+
+pub fn slot_secure_pages(slot: Slot) -> (u32, u32) {
+    match slot {
+        Slot::A => (SLOT_A_SECURE_FIRST_PAGE, SLOT_A_SECURE_LAST_PAGE),
+        Slot::B => (SLOT_B_SECURE_FIRST_PAGE, SLOT_B_SECURE_LAST_PAGE),
+    }
+}
+
+pub fn slot_ns_pages(slot: Slot) -> (u32, u32) {
+    match slot {
+        Slot::A => (SLOT_A_NS_FIRST_PAGE, SLOT_A_NS_LAST_PAGE),
+        Slot::B => (SLOT_B_NS_FIRST_PAGE, SLOT_B_NS_LAST_PAGE),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bank-2 (NS flash) program + erase primitives
+// ---------------------------------------------------------------------------
+
+/// Unlock the NS flash controller. Symmetric to [`unlock`] but uses the
+/// NSKEYR register, enabling programming of pages covered by the NS
+/// watermark (bank 2 in our layout). A failed unlock latches OPTLOCK;
+/// recovery requires a system reset.
+unsafe fn unlock_ns() {
+    unsafe {
+        write_volatile(FLASH_NSKEYR, KEY1);
+        write_volatile(FLASH_NSKEYR, KEY2);
+    }
+}
+
+/// Lock the NS flash controller after a program/erase sequence.
+unsafe fn lock_ns() {
+    unsafe {
+        let cr = read_volatile(FLASH_NSCR);
+        write_volatile(FLASH_NSCR, cr | LOCK);
+    }
+}
+
+unsafe fn wait_bsy_ns() {
+    while unsafe { read_volatile(FLASH_NSSR) } & BSY != 0 {
+        cortex_m::asm::nop();
+    }
+}
+
+unsafe fn clear_errors_ns() {
+    let sr = unsafe { read_volatile(FLASH_NSSR) };
+    if sr & ERR_MASK != 0 {
+        unsafe { write_volatile(FLASH_NSSR, sr & ERR_MASK) };
+    }
+}
+
+/// Erase one page of bank 2. `page` is the in-bank index (0..=127);
+/// physical address is `0x0810_0000 + page * 8192`.
+///
+/// Returns `Err(())` on any error flag in NSSR (including WRPERR if
+/// the pages are write-protected, which would catch an accidental
+/// attempt to erase a slot that the FSBL has marked locked — though
+/// WRP in our design only covers the FSBL pages themselves, not the
+/// slots).
+pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
+    assert!(page <= 127, "ns-bank page out of range");
+    let page = page as u32;
+
+    cortex_m::interrupt::free(|_| unsafe {
+        wait_bsy_ns();
+        clear_errors_ns();
+        unlock_ns();
+
+        // BKER=1 selects bank 2.
+        let cr = PER | BKER | (page << PNB_SHIFT);
+        write_volatile(FLASH_NSCR, cr);
+        write_volatile(FLASH_NSCR, cr | STRT);
+
+        wait_bsy_ns();
+
+        write_volatile(FLASH_NSCR, 0);
+        let sr = read_volatile(FLASH_NSSR);
+        lock_ns();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors_ns();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
+}
+
+/// Program one quad-word to bank 2 at `addr`. Unlike
+/// `write_quadword`, this routes through NSCR so the NS watermark is
+/// honoured. `addr` must be inside bank-2 (`0x0810_0000..0x0820_0000`)
+/// and quad-word-aligned, and the 16 bytes at `addr` must already be
+/// erased (all 0xFF).
+///
+/// Same semantics as `write_quadword`: returns `Err(())` only on a
+/// flagged error. **Not** read-back verified — for persistence use
+/// [`write_ns_quadword_verified`] which adds the brown-out guard.
+unsafe fn write_ns_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
+    debug_assert!(addr >= 0x0810_0000 && addr < 0x0820_0000);
+    debug_assert_eq!(addr & 0xF, 0);
+
+    cortex_m::interrupt::free(|_| unsafe {
+        wait_bsy_ns();
+        clear_errors_ns();
+        unlock_ns();
+
+        write_volatile(FLASH_NSCR, PG);
+
+        let dst = addr as *mut u32;
+        for i in 0..4 {
+            let word = u32::from_le_bytes([
+                data[i * 4],
+                data[i * 4 + 1],
+                data[i * 4 + 2],
+                data[i * 4 + 3],
+            ]);
+            write_volatile(dst.add(i), word);
+        }
+
+        wait_bsy_ns();
+
+        write_volatile(FLASH_NSCR, 0);
+        let sr = read_volatile(FLASH_NSSR);
+        lock_ns();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors_ns();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
+}
+
+/// Program one bank-2 quad-word and verify the bytes landed. Defends
+/// against silent torn writes (brown-out mid-program leaving some bits
+/// committed) — same invariant as [`write_quadword_verified`] on bank 1.
+pub unsafe fn write_ns_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
+    unsafe {
+        write_ns_quadword(addr, data)?;
+
+        let src = addr as *const u8;
+        for i in 0..16 {
+            if read_volatile(src.add(i)) != data[i] {
+                return Err(());
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Erase a page that's part of a slot (dispatches to SECCR for secure
+/// bank-1 pages and NSCR for NS bank-2 pages based on the absolute
+/// page index). Used by `CMD_FW_BEGIN` to prepare the inactive slot
+/// before streaming starts.
+pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {
+    assert!(page <= 127, "bank-1 page out of range");
+    cortex_m::interrupt::free(|_| unsafe {
+        wait_bsy();
+        clear_errors();
+        unlock();
+
+        let cr = PER | (page << PNB_SHIFT);
+        write_volatile(FLASH_SECCR, cr);
+        write_volatile(FLASH_SECCR, cr | STRT);
+
+        wait_bsy();
+
+        write_volatile(FLASH_SECCR, 0);
+        let sr = read_volatile(FLASH_SECSR);
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
+}
+
+/// Erase the full set of pages owned by `slot` — both secure and
+/// non-secure halves. Used at `CMD_FW_BEGIN` after the host declares
+/// which inactive slot it's about to stream into. Order matters: we
+/// erase the manifest last so a power-fail midway leaves the old
+/// manifest still intact (and the now-partially-erased slot unusable,
+/// which matches the previous state exactly — the old manifest
+/// pointed at the *other* slot).
+pub unsafe fn erase_slot(slot: Slot) -> Result<(), ()> {
+    let (first_s, last_s) = slot_secure_pages(slot);
+    let (first_ns, last_ns) = slot_ns_pages(slot);
+
+    for p in first_ns..=last_ns {
+        unsafe { erase_ns_page(p as u8)? };
+    }
+    for p in first_s..=last_s {
+        unsafe { erase_secure_page(p)? };
+    }
+    // Erase the target manifest last: this is what FSBL keys off to
+    // decide whether the slot is active. While the manifest is erased
+    // (all-0xFF), FSBL will reject it as BadMagic, so it cannot be
+    // booted — and the other slot's manifest is still whole.
+    unsafe { erase_secure_page(manifest_page_num(slot))? };
+
+    Ok(())
+}
+
+/// Program a single quad-word anywhere inside a slot. Routes to the
+/// correct controller (SECCR for bank 1, NSCR for bank 2) based on
+/// the address. Returns `Err(())` on any flagged error or torn-write
+/// detection.
+pub unsafe fn write_slot_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
+    if (0x0810_0000..0x0820_0000).contains(&addr) {
+        unsafe { write_ns_quadword_verified(addr, data) }
+    } else if (0x0C00_0000..0x0C10_0000).contains(&addr) {
+        unsafe { write_quadword_verified(addr, data) }
+    } else {
+        Err(())
+    }
 }

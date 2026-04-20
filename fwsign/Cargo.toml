@@ -1,0 +1,40 @@
+[package]
+name = "fwsign"
+version = "0.1.0"
+edition.workspace = true
+description = "PQSigner firmware release-signing tool — signs update bundles with the vendor SPHINCS+C10 root key and emits .pqfw artifacts."
+
+# Host-only tool. Never cross-compiled to the device.
+[[bin]]
+name = "fwsign"
+path = "src/main.rs"
+
+[dependencies]
+# Crypto + manifest
+sphincs-c10       = { workspace = true }
+fw-manifest       = { workspace = true, features = ["std"] }
+sphincs-tz-bip39  = { workspace = true }
+sha2              = { version = "0.10", default-features = false }
+# fwsign is std, so use the full zeroize feature set (alloc enables
+# Vec<u8>: Zeroize which keystore.rs relies on).
+zeroize           = { version = "1.8", features = ["alloc", "zeroize_derive"] }
+
+# Key storage (encrypted vendor SK blob)
+argon2      = "0.5"
+chacha20poly1305 = "0.10"
+rand_core   = { version = "0.6", features = ["std"] }
+
+# CLI + IO
+clap         = { version = "4", features = ["derive"] }
+hex          = { workspace = true }
+anyhow       = "1"
+rpassword    = "7"
+
+# ELF → flat image (reuses same logic as fwmeasure)
+object       = { version = "0.36", features = ["read_core", "elf", "std"] }
+
+# .pqfw bundle packing
+tar          = "0.4"
+
+[dev-dependencies]
+tempfile = "3"

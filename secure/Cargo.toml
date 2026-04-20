@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 sphincs-tz-shared = { workspace = true }
 sphincs-tz-bip39  = { workspace = true }
+fw-manifest       = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }

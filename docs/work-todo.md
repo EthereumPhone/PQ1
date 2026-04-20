@@ -239,33 +239,64 @@ Custom bootloader that verifies S-world and NS-world firmware images with ML-DSA
 
 ### 14. Firmware Update / OTA
 
-**Status:** NOT STARTED
+**Status:** CORE LANDED (2026-04-20), hardware bring-up + trusted-UI
+confirm + A/B linker split remaining.
 
-No flash programming, update protocol, or version management.
+**Design:** hash-signature model (item 15 below) realised via
+SPHINCS+C10 over a minimal 75-byte preimage
+(`"PQFW_V1" || fw_version_be || secure_hash || nonsecure_hash`). One
+`.pqfw` per release works for either A/B slot. Full architecture in
+`docs/firmware-update.md`.
 
-**What's needed:**
-- [ ] Update protocol over USB (signed firmware images)
-- [ ] Flash write driver for STM32U585 internal flash
-- [ ] Rollback protection (monotonic counter)
-- [ ] Integrity verification before boot
+**What landed:**
+- [x] Reproducible builds (`.cargo/config.toml`, `make verify-repro`)
+- [x] `fw-manifest` crate — no_std manifest parser/builder + CRC + verify chain
+- [x] `fwsign` tool — `keygen`/`pubkey`/`sign`/`verify`/`verify-release`/`extract-sig`/`inspect`
+- [x] Bank-2 (NS flash) write/erase in `secure/src/hw/flash.rs`
+- [x] OTP rollback counter in `secure/src/hw/otp.rs`
+- [x] Boot-state page in `secure/src/hw/boot_state.rs`
+- [x] `fsbl/` immutable bootloader (18 KB / 32 KB budget)
+- [x] `CMD_FW_BEGIN`/`CHUNK`/`COMMIT`/`STATUS`/`ABORT` over USB APDU v2
+- [x] PIN-unlock gate on every FW command
+- [x] `docs/firmware-update.md` + `docs/reproducible-builds.md`
+
+**What's left:**
+- [ ] Trusted-UI confirmation dialog (stubbed — blocked on the
+      ongoing `secure/src/tx/display/` refactor; will reuse
+      `ui::confirm::confirm()` once the render helpers stabilise)
+- [ ] A/B slot linker scripts (`SLOT=A|B` variants of
+      `secure/memory-stm32u585.x` + `nonsecure/memory-stm32u585.x`)
+- [ ] `make flash-hw-production` factory sequence + WRP1A on
+      `ob-configurator`
+- [ ] Companion updater (`tools/fwupdate.py`)
+- [ ] Hardware end-to-end test (v1 → v2 install → try-once revert →
+      OTP rollback floor enforcement on a real B-U585I-IOT02A)
 
 ---
 
 ### 15. Hash-Signature Firmware Update Model
 
-**Status:** NOT STARTED (design complete, see README.md "Firmware Update Model")
+**Status:** LANDED (2026-04-20), subsumed into item 14.
 
-Instead of signing firmware binaries, the manufacturer signs the measurement hash (the same SHA-256 displayed as 8 BIP-39 words at boot). Users build from source, download the published signature, and flash. The device verifies the signature and that the hash matches the installed firmware.
+The manufacturer's SPHINCS+C10 signature covers
+`SHA-256("PQFW_V1" || fw_version || secure_hash || nonsecure_hash)`
+— a 75-byte preimage an auditor reconstructs from source alone
+(`fwsign verify-release`). No classical crypto in the sign/verify
+path; entire chain is PQ.
 
-**What's needed:**
-- [ ] ML-DSA-44 signature verification in secure world (`slh-dsa` or `ml-dsa` crate)
-- [ ] Manufacturer public key storage in OTP or WRP-protected flash
-- [ ] Signature storage: dedicated flash page outside the measured region, or USB transfer during update
-- [ ] Update handshake protocol: companion app sends firmware + signature over USB
-- [ ] Boot-time verification: hash firmware, verify signature, reject on mismatch
-- [ ] Key rotation mechanism: signed key-update message from current key to new key
-- [ ] CI/CD: build firmware, compute hash, sign with manufacturer key, publish signature to GitHub Releases
-- [ ] Companion app: embed `fwmeasure` logic + sparse-checkout repo build for full reproducible verification
+**Shipped:**
+- [x] SPHINCS+C10 verify in FSBL (re-uses `sphincs-c10` crate, software SHA-256)
+- [x] Vendor public key embedded at FSBL build time via `FSBL_VENDOR_PUBKEY` env var
+- [x] Signature stored inside the manifest page (4008 bytes at offset 180)
+- [x] USB APDU v2 update handshake (INS 0x70..0x74)
+- [x] Boot-time image-hash re-verification in FSBL before branch
+- [x] `fwsign verify-release` for independent reproducible verification
+- [x] Version binding prevents signed-hash replay with a higher version claim
+
+**Remaining for this item specifically:**
+- [ ] Key rotation mechanism (single root today; delegation keys are future work — tracked as a separate item when product scale needs it)
+- [ ] CI/CD signing pipeline: build + `make verify-repro` + `fwsign sign` → GitHub Releases
+- [ ] Companion app: the fwsign library could be compiled to WASM for in-browser verification
 
 **Files to create:** `secure/src/update.rs` (update protocol), `secure/src/fw_verify.rs` (signature verification)
 **Files to change:** `secure/src/main.rs` (boot-time verification), `secure/src/hw/flash.rs` (signature page)
@@ -613,3 +644,4 @@ When a task above is completed, update it here with the date and a one-line summ
 | 2026-04-17 | All-C10 slot cutover + stateless firmware | Per-slot signing key is now SPHINCS+C10 instead of JARDÍN FORS+C — one primitive, one verifier, no variable-length Type 2. The firmware is **stateless** for slot selection: the companion supplies `(chain_id, slot_index, flags)` on every `CMD_SIGN_USEROP`; `FLAG_REGISTER_SLOT` (bit 30 of flags) tells the firmware when to emit a Type 1 ahead of Type 2. Deleted `jardin-fosc/` crate (root + workspace refs), `secure/src/nsc/jardin_flash.rs` (flash pages 123-124 no longer used for slot state), `secure/src/nsc/cmd_get_jardin_slot_info.rs` (CMD 17 retired), `contracts/.../JardinForsCVerifier.sol` and `IJardinVerifier.sol`. `PQJardinWallet` gains a second on-chain counter `slotUses[slotKey]` capped at `MAX_SLOT_USES = 65_536`, bumped by `_bumpSlotUses` inside the Type 2 path; `PQOwnable` extends its ERC-7201 struct with the mapping and a `SlotKeyUsed(slotKey, newCount)` event. Single `c10Verifier` now handles both Type 1 and Type 2 (same stateless SHA-256-precompile verifier, different `(pk_seed, pk_root)` per call). Slot C10 keys are derived deterministically from `(jardin_master_entropy, slot_index)` via new domain tags `"jardin_slot_c10_sk_seed"` / `"jardin_slot_c10_pk_seed"` and cached in SRAM across the unlock session only. New `secure/src/crypto.rs::derive_c10_slot_keypair_with_progress` helper mirrors the master path; `SecureState::JARDIN_SLOT: Option<CachedSlot>` replaces the FORS+C slot cache. Wire formats: Type 2 is now fixed at 4073 bytes (C10 sig); `JARDIN_TYPE2_LEN = 4073`; `MAX_JARDIN_RESPONSE_LEN = 8246`; removed `JARDIN_FORSC_BODY`, `JARDIN_SIG_MIN/MAX`, `JARDIN_Q_MAX`, `JARDIN_WRAPPER_*`, `NscStatus::SlotExhausted`, `CMD_GET_JARDIN_SLOT_INFO`, `CMD_SIGN_JARDIN`, `CMD_REGISTER_JARDIN_SLOT`, `INS_V2_*JARDIN*`. Master C10 derivation unchanged → every seed still maps to the same CREATE2 wallet address. CLAUDE.md invariants updated (old #6 `next_q`-before-flash removed; #7 now covers both use caps; new #8 for the stateless firmware property). Builds clean for `thumbv8m.main-none-eabi` across all feature combos (`mock-se`, `e2e-test`, `bench-key-speed + stm32u585`, `usb`). 4-scenario QEMU e2e runner exercises register/repeat/rotate/second-chain; bench exercises cold first-sign / N cached Type 2 / second-chain cached-slot. |
 | 2026-04-17 | Hardware bring-up — SE050+OLED+USB working end-to-end | Wizard runs, SE050 unlock completes, OLED comes up, NS USB HID enumerates on host. Fixes: `secure_log!`-gate the unconditional `hprintln!` in `hw::hash::init_clock`'s SHA-256 self-test (DHCSR `C_DEBUGEN` runtime check) so standalone firmware stops HardFaulting pre-OLED. STM32U5 TRNG init rewritten with the NIST-compliant CR value `0x00F00D00`, CONDRST at bit 30 (not bit 6), and SEIS/CEIS clear path; init moved to after `sau::init()` so GTZC has assigned RNG's security attribute. First-boot wizard now logs every branch of its retry loop. `flash-hw-se050-oled-standalone` now runs `probe-rs reset` after option-byte programming so the target actually starts. GTZC1_TZSC_SECCFGR{1,2,3} cleared to 0 (everything NS) for USB bring-up — USB OTG FS is an AHB2 peripheral governed by a separate GTZC2_TZSC controller whose base address we have not yet confirmed (our guess at `0x52034400` bus-faulted). This is a pre-production regression of invariant #4 tracked in the new CLAUDE.md "Development Posture" section; restoring the allowlist is a known TODO. `debug-log` also removed from the hardware-release `compile_error!` gate so on-target semihosting works during bring-up. |
 | 2026-04-18 | EntryPoint v0.9 → v0.6 migration | Full stack retargeted from ERC-4337 EntryPoint v0.9 to v0.6 (Coinbase-Smart-Wallet-compatible). `PQSmartWallet` now imports `IAccount06`/`UserOperation06` from `account-abstraction/legacy/v06/`; `sphincsDigest` rebuilt over individually-encoded gas fields (`callGasLimit`, `verificationGasLimit`, `preVerificationGas`, `maxFeePerGas`, `maxPriorityFeePerGas` — no more packed `bytes32`). Firmware: new `compute_sphincs_digest_v06` in `secure/src/aa/userop.rs` (SHA-256 path stays so the HASH peripheral remains on the hot path), v0.9 helpers (`AaUserOpParamsV09Sha256`, `compute_user_op_hash_v09`, EIP-712 envelope + typehashes) deleted outright. Shared wire format: `SIGN_USEROP_HEADER_LEN` bumped 266 → 330 with five individual u256 gas slots. Companion (`tools/webhid_test.html`), NS e2e + bench runners, USB `GET_DEVICE_INFO` (`ep_version = 0x0006`), `CLAUDE.md`, `docs/companion-app-integration.md`, `docs/usb-protocol-v2.md` all flipped. CREATE2 addresses re-measured offline with `cast create2` under `FOUNDRY_PROFILE=deploy`: SPHINCsC10Asm `0x2f9DA5…79d9` (unchanged), PQSmartWallet impl `0x2f590E…f679`, PQSmartWalletFactory `0x375eBb…D6fB`, `PROXY_INIT_CODE_HASH = 0xdba8c282…e85b` — all baked into `shared/src/lib.rs` and `contracts/smart-wallet/deployments/base-sepolia.json`. All 28 Foundry tests + 27 host-side Rust tests + 8 shared-layout tests pass; `sphincs-c10/tests/gen_test_vectors.rs` regenerated for the unpacked digest. |
+| 2026-04-20 | Firmware update subsystem — hash-signature PQ model | New end-to-end signed firmware-update pipeline. Reproducible builds (`.cargo/config.toml` with `--remap-path-prefix` + `--build-id=none`, `make verify-repro` diffs two clean builds, SOURCE_DATE_EPOCH from git, docs/reproducible-builds.md). New workspace members: `fw-manifest/` (no_std manifest layout + CRC32-IEEE + verify chain; 11 unit tests), `fwsign/` (host-side signer: `keygen`/`pubkey`/`sign`/`verify`/`verify-release`/`extract-sig`/`inspect` with Argon2id + XChaCha20-Poly1305 at-rest key encryption), `fsbl/` (immutable 32 KB-budget first-stage bootloader, currently 18 KB with software SHA-256). Secure-world additions: bank-2 (NS flash) write/erase via NSCR in `hw/flash.rs`, OTP rollback counter in `hw/otp.rs` (32×32-bit tally = 1024 commits), boot-state page in `hw/boot_state.rs`, full `fw_update/` state machine with `{begin,chunk,commit,status,abort}` NSC handlers + CMSE veneers. Shared types: `CMD_FW_*` 20..24, `INS_V2_FW_*` 0x70..0x74, seven new `NscStatus::FwUpdate*` variants. USB protocol: 8 KB manifest chained over APDU v2, 1 KB chunks, reuses `FW_STATUS_RESPONSE_LEN` for progress polling. Crypto: **SPHINCS+C10 end-to-end for sign + verify**, entire path PQ-secure; the minimal signed preimage is `SHA-256("PQFW_V1" \|\| fw_version_be \|\| secure_hash \|\| nonsecure_hash)` — 75 bytes reconstructable from `(version, secure.elf, nonsecure.elf)` alone, so independent auditors verify via `fwsign verify-release` without parsing any manifest. One `.pqfw` per release (slot byte is unsigned metadata). Requires PIN unlock on every command (defence in depth). Anti-rollback enforced via OTP fuses (RDP-2-resistant). Power-fail safe: inactive slot fully erased + written + re-hashed before any boot-state flip. Docs: `docs/firmware-update.md` (architecture + verify-it-yourself + PQ inventory). Complete file list: `.cargo/config.toml`, `fw-manifest/{Cargo.toml,src/lib.rs}`, `fwsign/{Cargo.toml,src/{main,keystore,elf,bundle}.rs, src/subcommands/*.rs, tests/sign_verify_roundtrip.rs}`, `fsbl/{Cargo.toml,memory-stm32u585.x,build.rs,src/*.rs}`, `secure/src/{fw_update/*.rs, hw/{otp,boot_state}.rs, nsc/cmd_fw_*.rs}`, `docs/{firmware-update,reproducible-builds}.md`. Remaining: trusted-UI confirm dialog (stubbed until the `secure/src/tx/display/` refactor lands), A/B linker-script split, hardware bring-up, companion updater, WRP1A in ob-configurator, CI signing pipeline. `make verify-repro` passes (byte-identical ELFs). 19 crate tests pass (11 fw-manifest + 4 fwsign keystore/elf + 4 fwsign integration). |

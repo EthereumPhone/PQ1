@@ -21,6 +21,11 @@ usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communicati
 
 [dependencies]
 sphincs-tz-shared    = { workspace = true }
+# fw-manifest is used only for the 8 KB MANIFEST_SIZE constant in the
+# chain-buffer sizing and the CHUNK payload bounds check. No crypto
+# imports on the NS side — all the verification happens in the secure
+# world and NS only shuttles bytes.
+fw-manifest          = { workspace = true }
 cortex-m             = { workspace = true }
 cortex-m-rt          = { workspace = true }
 cortex-m-semihosting = { workspace = true }

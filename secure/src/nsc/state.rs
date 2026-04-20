@@ -154,6 +154,15 @@ impl SecureState {
         // material automatically.
         unsafe {
             *core::ptr::addr_of_mut!(JARDIN_SLOT) = None;
+            // Idle-wipe also drops any in-progress firmware-update
+            // session. The inactive slot's erased pages stay erased
+            // (harmless), and the companion must restart from BEGIN.
+            // FwUpdateCtx is ZeroizeOnDrop so this clears the 8 KB
+            // manifest buffer plus the running SHA-256 state.
+            #[cfg(feature = "stm32u585")]
+            {
+                *core::ptr::addr_of_mut!(FW_UPDATE) = None;
+            }
         }
     }
 
@@ -265,6 +274,19 @@ static mut STATE: SecureState = SecureState::new();
 ///
 /// SAFETY: same single-threaded invariant as `STATE`.
 pub(super) static mut JARDIN_SLOT: Option<CachedSlot> = None;
+
+/// Active firmware-update session state. Populated by `CMD_FW_BEGIN`
+/// and drained by `CMD_FW_COMMIT` / `CMD_FW_ABORT`. Lives in SRAM only
+/// — any reset or idle-wipe restarts the companion from BEGIN.
+///
+/// Kept separate from `SecureState` because the 8 KB manifest buffer
+/// inside `FwUpdateCtx` dwarfs the rest of state, and we want explicit
+/// zeroize-on-wipe semantics. See `fw_update::mod`.
+///
+/// SAFETY: same single-threaded invariant as `STATE`. `FwUpdateCtx`
+/// is `ZeroizeOnDrop`.
+#[cfg(feature = "stm32u585")]
+pub(super) static mut FW_UPDATE: Option<crate::fw_update::FwUpdateCtx> = None;
 
 /// In-SRAM slot cache: a SigningKey tagged with the
 /// `(account_index, chain_id, slot_index)` tuple it was derived for.

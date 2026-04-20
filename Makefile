@@ -15,8 +15,53 @@ SECURE_CMSE_FLAGS =
 NS_VENEERS_FLAG   =
 endif
 
+# Reproducible-build flags. Rebuilding the same commit on a different
+# laptop (or inside CI) must produce byte-identical ELFs so that
+# `make measure` yields the same 8 BIP-39 words. The flags below
+# normalize three sources of build-host variance:
+#
+#   1. --remap-path-prefix rewrites any absolute file paths that end up
+#      in panic messages / debug info / OUT_DIR references to a stable
+#      prefix. Without this, two laptops with different $HOME values
+#      produce different ELFs.
+#   2. -Wl,--build-id=none strips the GNU build-id note, which is a
+#      hash over the other note sections and shifts with any re-link.
+#   3. -Wl,--no-insert-timestamp prevents the linker from stamping
+#      build time into the PE-ish note sections (ld is usually quiet
+#      about this on ELF, but we still pass the flag as a belt-and-
+#      braces measure).
+#
+# SOURCE_DATE_EPOCH is exported for any build script that embeds a
+# timestamp. When built from a git checkout it's the commit time
+# (deterministic for a given commit); otherwise it falls back to the
+# POSIX epoch.
+REPRO_REMAP = --remap-path-prefix=$(HOME)/.cargo=/cargo \
+              --remap-path-prefix=$(HOME)/.rustup=/rustup \
+              --remap-path-prefix=$(CURDIR)=/pqsigner
+# The Makefile invokes arm-none-eabi-ld directly (no gcc driver), so linker
+# flags are passed bare — not wrapped in -Wl,. arm-none-eabi-ld has
+# --build-id= but not --no-insert-timestamp (that one's PE-only).
+REPRO_LINK  = -C link-arg=--build-id=none
+REPRO_FLAGS = $(REPRO_REMAP) $(REPRO_LINK)
+
+export SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || echo 0)
+
+# Factored RUSTFLAGS strings for the two firmware worlds. Every target
+# that invokes cargo on the ARM tree uses one of these variables so
+# reproducibility flags are applied consistently and can't drift.
+# Cargo gives CARGO_TARGET_<TRIPLE>_RUSTFLAGS precedence over
+# `.cargo/config.toml`, so that file is only a fallback for ad-hoc
+# `cargo build` invocations — the canonical flags live here.
+RUSTFLAGS_SECURE    = -C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS) $(SECURE_CMSE_FLAGS)
+RUSTFLAGS_NONSECURE = -C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS) $(NS_VENEERS_FLAG)
+# Variants for hardware targets that unconditionally emit CMSE veneers
+# (independent of the $(FEATURES) content — used by the hw- targets).
+RUSTFLAGS_SECURE_HW    = -C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS) -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)
+RUSTFLAGS_NONSECURE_HW = -C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS) -C link-arg=$(VENEERS)
+
 SECURE_ELF   = target/secure/$(TARGET)/release/sphincs-tz-secure
 NONSECURE_ELF = target/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure
+FSBL_ELF      = target/fsbl/$(TARGET)/release/pqsigner-fsbl
 
 # Default: mock secure element + semihosting UI mock (no real hardware needed)
 # debug-log enables semihosting output from the secure world.
@@ -36,13 +81,13 @@ NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),
 all: secure nonsecure
 
 secure:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(SECURE_CMSE_FLAGS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features $(FEATURES)
 	@echo "==> Secure world built (features: $(FEATURES))."
 
 nonsecure: secure
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(NS_VENEERS_FLAG)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
 	@echo "==> Non-secure world built."
 
@@ -80,12 +125,12 @@ play: all
 # Requires: ST-LINK connected, SSD1306 OLED wired to PB8/PB9/3V3/GND.
 play-hw-display:
 	@echo "==> Building secure + nonsecure for interactive OLED play"
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-oled,stm32u585
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features stm32u585
 	@echo "==> Flashing..."
@@ -201,11 +246,11 @@ flash-hw: build-hw
 # Pass → exits 0. Any missing assertion or non-zero status → exits 1.
 e2e:
 	@echo "==> Building secure + nonsecure with e2e-test feature (QEMU mailbox transport)"
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x" \
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x" \
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test
 	@echo "==> Running e2e suite under QEMU"
@@ -278,12 +323,12 @@ e2e:
 # Fail: exits 1 if any sign returns non-Ok or the PASS line is missing.
 test-key-speed:
 	@echo "==> Building secure (e2e-test auto-provision) + NS (bench-key-speed) + SHA-256 HW accel"
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features bench-key-speed,stm32u585
 	@echo "==> Flashing..."
@@ -318,12 +363,12 @@ test-key-speed:
 # Requires: ST-LINK connected, STM32_Programmer_CLI on PATH.
 e2e-hw:
 	@echo "==> Building e2e + stm32u585"
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
 	@echo "==> Flashing..."
@@ -343,12 +388,12 @@ e2e-hw:
 # Requires: ST-LINK connected, SSD1306 OLED wired to PB8/PB9/3V3/GND.
 e2e-hw-display:
 	@echo "==> Building e2e + stm32u585 + OLED display"
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-oled,e2e-test,stm32u585
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
 	@echo "==> Flashing..."
@@ -371,11 +416,11 @@ build-hw-usb:
 # Secure world: e2e-test auto-provisions, ui-semihosting for compile compat.
 # NS world: usb feature for USB HID main loop.
 build-hw-usb-test:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> USB test build ready (auto-provisioned, no semihosting)."
 
@@ -395,11 +440,11 @@ flash-hw-usb-test: build-hw-usb-test
 # Secure world: se050 (real SE via I2C1), ui-noop, USB hardware init, e2e-test auto-provision.
 # NS world: usb feature for USB HID main loop.
 build-hw-se050-usb-test:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> SE050 + USB test build ready."
 
@@ -416,11 +461,11 @@ flash-hw-se050-usb-test: build-hw-se050-usb-test
 
 # SE050 + USB test with semihosting debug output (requires probe-rs attach).
 build-hw-se050-usb-test-debug:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,debug-log
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> SE050 + USB test (debug) build ready."
 
@@ -441,11 +486,11 @@ flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
 # Interactive: PIN entry, seed wizard, signing — all on real hardware.
 flash-hw-se050-buttons:
 	@echo "==> Building SE050 + GPIO buttons + semihosting UI"
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,debug-log,ui-semihosting,stm32u585,usb
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
@@ -462,7 +507,7 @@ flash-hw-se050-buttons:
 # Requires: jumper wires on CN14 (D8=LEFT, D9=RIGHT, pin7=GND).
 button-test:
 	@echo "==> Building GPIO button test firmware..."
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features button-test,debug-log,ui-semihosting
 	@echo "==> Flashing button test firmware..."
@@ -476,7 +521,7 @@ button-test:
 # reset to re-run. Requires the SSD1306 OLED on I2C1 (PB8/PB9).
 qr-screen:
 	@echo "==> Building QR-screen test firmware..."
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features qr-screen-test,debug-log
 	@echo "==> Flashing QR-screen firmware..."
@@ -488,7 +533,7 @@ qr-screen:
 # Scans I2C2 (PH4/PH5) for the STSAFE-A110 at 0x20 and any other devices.
 stsafe-probe:
 	@echo "==> Building STSAFE-A110 I2C2 probe firmware..."
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features stsafe-probe,debug-log,ui-semihosting
 	@echo "==> Flashing probe firmware..."
@@ -507,7 +552,7 @@ se050-reset:
 	@echo "==> Building SE050 factory-reset firmware..."
 	@echo "    Assumes dev PIN in {00000000, 12345678, 11111111}"
 	@echo "    and stale UserID at 0x7B06_0000 or 0x7B00_2000."
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-factory-reset,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing reset firmware..."
@@ -557,7 +602,7 @@ factory-reset:
 	@echo ""
 	@echo "==> Step 1/2: building + running SE050 factory-reset firmware"
 	@echo "    (20s timeout — proceeds even if SE050 isn't attached)"
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features se050-factory-reset,ui-noop,stm32u585,debug-log
@@ -580,7 +625,7 @@ factory-reset:
 # Watch semihosting for "[E2E] FACTORY-RESET ROUNDTRIP: PASS"/"FAIL".
 se050-reset-e2e:
 	@echo "==> Building SE050 reset-roundtrip e2e firmware..."
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-reset-e2e,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing e2e firmware..."
@@ -599,7 +644,7 @@ se050-reset-e2e:
 # Watch semihosting for "PHASE 2 — CRASH-SAFETY RESUME: PASS"/"FAIL".
 se050-crash-safety-e2e:
 	@echo "==> Building SE050 crash-safety e2e firmware..."
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-crash-safety-e2e,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing crash-safety firmware..."
@@ -624,7 +669,7 @@ se050-crash-safety-e2e:
 # Watch semihosting for "[E2E-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS"/"FAIL".
 se050-admin-wipe-e2e:
 	@echo "==> Building SE050 admin-wipe e2e firmware..."
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050-admin-wipe-e2e,ui-noop,stm32u585,debug-log
 	@echo "==> Flashing admin-wipe e2e firmware..."
@@ -636,11 +681,11 @@ se050-admin-wipe-e2e:
 # Full first-boot wizard: user enters PIN and creates/restores mnemonic.
 # Both the SSD1306 OLED and SE050 share I2C1 (PB8/PB9) at 400 kHz.
 build-hw-se050-oled:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-oled,stm32u585,usb,debug-log
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> SE050 + OLED interactive build ready."
@@ -648,11 +693,11 @@ build-hw-se050-oled:
 # Standalone build: no debug-log, no semihosting. Safe to run with only
 # USB-C power and no debugger attached. BKPT-free.
 build-hw-se050-oled-standalone:
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,ui-oled,stm32u585,usb
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> Standalone build ready (no semihosting, USB-C only)."
@@ -712,6 +757,122 @@ test-solidity:
 measure: secure
 	cargo run -p fwmeasure -- $(SECURE_ELF)
 
+# Build the first-stage bootloader for real STM32U585 hardware.
+#
+# FSBL_VENDOR_PUBKEY: path to the 32-byte vendor pubkey (`pk_seed[16]
+# || pk_root[16]`, produced by `fwsign pubkey`). If unset, a fixed dev
+# fixture key is derived inline by fsbl/build.rs — the resulting FSBL
+# is for development use only and will not accept production-signed
+# firmware, and vice versa.
+#
+# Budget: 32 KB at 0x0C00_0000 (pages 0–3 of bank 1). Current footprint
+# is ~18 KB with software SHA-256.
+.PHONY: fsbl
+fsbl:
+	@echo "==> Building FSBL (FSBL_VENDOR_PUBKEY=$${FSBL_VENDOR_PUBKEY:-<dev fixture>})"
+	@$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
+		cargo build --release --target $(TARGET) --target-dir target/fsbl -p pqsigner-fsbl
+	@echo "==> FSBL built: $(FSBL_ELF)"
+	@size $(FSBL_ELF) 2>/dev/null || arm-none-eabi-size $(FSBL_ELF)
+
+# Production-only: refuse to build the FSBL without FSBL_VENDOR_PUBKEY.
+# Use this in the release pipeline.
+.PHONY: fsbl-release
+fsbl-release:
+	@if [ -z "$${FSBL_VENDOR_PUBKEY}" ]; then \
+		echo "ERROR: fsbl-release requires FSBL_VENDOR_PUBKEY=path/to/pubkey.bin"; \
+		echo "       Use 'make fsbl' for dev builds with the built-in fixture."; \
+		exit 1; \
+	fi
+	@$(MAKE) fsbl
+
+# Verify byte-for-byte reproducibility of the secure + nonsecure ELFs.
+#
+# Builds each world twice in isolated target directories with the same
+# FEATURES + toolchain, then diffs the resulting ELFs. Any divergence
+# means some source of non-determinism has leaked into the build — the
+# release is not safe to ship because an independent rebuild would
+# produce different measurement words than the vendor publishes.
+#
+# This target is the canonical reproducibility gate. CI runs it on
+# every PR; the release pipeline runs it before signing.
+#
+# Two builds share the same VENEERS path (build A writes it, build B
+# links against the identical file), which is fine: linking the same
+# implib into identical NS crates yields an identical NS ELF, so the
+# whole reproducibility story holds.
+.PHONY: verify-repro
+verify-repro:
+	@echo "==> Reproducibility check (FEATURES=$(FEATURES))"
+	@rm -rf target/repro-a target/repro-b
+	@$(MAKE) --no-print-directory _repro_one \
+		OUT=target/repro-a VENEERS=$(CURDIR)/target/repro-a/veneers.o FEATURES="$(FEATURES)"
+	@$(MAKE) --no-print-directory _repro_one \
+		OUT=target/repro-b VENEERS=$(CURDIR)/target/repro-b/veneers.o FEATURES="$(FEATURES)"
+	@echo "==> Comparing ELFs"
+	@if cmp -s target/repro-a/secure/$(TARGET)/release/sphincs-tz-secure \
+	           target/repro-b/secure/$(TARGET)/release/sphincs-tz-secure; then \
+		echo "    secure.elf:    IDENTICAL"; \
+	else \
+		echo "    secure.elf:    DIFFERS — reproducibility broken"; \
+		echo "    Re-run with VERBOSE=1 and inspect with diffoscope"; \
+		exit 1; \
+	fi
+	@if cmp -s target/repro-a/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure \
+	           target/repro-b/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure; then \
+		echo "    nonsecure.elf: IDENTICAL"; \
+	else \
+		echo "    nonsecure.elf: DIFFERS — reproducibility broken"; \
+		exit 1; \
+	fi
+	@echo "==> verify-repro: PASS"
+
+# Internal helper — one end-to-end build into $(OUT). Invoked twice by
+# verify-repro with different OUT dirs and different VENEERS paths.
+# Reuses the canonical RUSTFLAGS_SECURE / RUSTFLAGS_NONSECURE variables
+# (which honour the $(FEATURES) gate that decides whether --cmse-implib
+# is emitted), so we implicitly get correct behaviour for both QEMU
+# and STM32U585 feature sets.
+.PHONY: _repro_one
+_repro_one:
+	@mkdir -p $(OUT)
+	@echo "==> Build $(OUT): secure"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE)" \
+		cargo build --release --target $(TARGET) --target-dir $(OUT)/secure \
+			-p sphincs-tz-secure --no-default-features --features $(FEATURES)
+	@echo "==> Build $(OUT): nonsecure"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE)" \
+		cargo build --release --target $(TARGET) --target-dir $(OUT)/nonsecure \
+			-p sphincs-tz-nonsecure $(NS_FEATURES_ARG)
+
+# Release build: reproducibility-verified secure + nonsecure ELFs plus
+# their measurement words. This is what the vendor's release-signing
+# pipeline consumes as input. Writes artifacts to target/release/.
+#
+# Note: --features are taken from $(RELEASE_FEATURES); the default is
+# the production feature set (no debug-log, no e2e-test, no mock-se).
+# Pass RELEASE_FEATURES=... on the command line to override.
+RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-oled
+.PHONY: release
+release:
+	@echo "==> Release build (features: $(RELEASE_FEATURES))"
+	@echo "==> SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH)"
+	@$(MAKE) verify-repro FEATURES=$(RELEASE_FEATURES)
+	@mkdir -p target/release
+	@cp target/repro-a/secure/$(TARGET)/release/sphincs-tz-secure \
+	    target/release/secure.elf
+	@cp target/repro-a/nonsecure/$(TARGET)/release/sphincs-tz-nonsecure \
+	    target/release/nonsecure.elf
+	@echo ""
+	@echo "==> Secure measurement:"
+	@cargo run -q -p fwmeasure -- target/release/secure.elf 2>/dev/null | sed 's/^/    /'
+	@echo ""
+	@echo "==> Nonsecure measurement:"
+	@cargo run -q -p fwmeasure -- target/release/nonsecure.elf 2>/dev/null | sed 's/^/    /'
+	@echo ""
+	@echo "==> Release artifacts in target/release/"
+	@echo "    Next: fwsign sign --key vendor-key.enc --version N ..."
+
 # One-shot OPTIGA Trust M OID recovery. Regenerates reset manifests from
 # the Infineon protected_update_data_set tool, builds firmware with the
 # optiga-reset-oids feature, flashes the STM32U585, and attaches probe-rs
@@ -725,11 +886,11 @@ optiga-reset-oids:
 
 flash-hw-optiga-reset: optiga-reset-oids
 	@echo "==> Building firmware with optiga-reset-oids"
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=--cmse-implib -C link-arg=--out-implib=$(VENEERS) -C debug-assertions=on" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW) -C debug-assertions=on" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
 		--features dual-se,optiga-reset-oids,optiga-bringup-fresh,stm32u585,ui-oled,debug-log,usb
-	$(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x -C link-arg=$(VENEERS)" \
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585,usb
 	@echo "==> Flashing..."

@@ -203,6 +203,25 @@ At every boot, the secure world SHA-256 hashes its own flash image and displays 
 
 **Key files:** `secure/src/measured_boot.rs`, `fwmeasure/src/main.rs`.
 
+### Firmware Update (Hash-Signature PQ Model)
+
+End-to-end firmware-update pipeline: vendor signs a 75-byte preimage (`"PQFW_V1" || fw_version_be || secure_hash || nonsecure_hash`) with their SPHINCS+C10 private key; an immutable FSBL at `0x0C00_0000` verifies the same preimage against the compiled-in vendor public key and picks the higher-version valid A/B slot to boot. Companion updater app streams the new release to the device over USB HID; on COMMIT the device re-hashes what it wrote, shows the new measurement words on the OLED, waits for long-right confirm, bumps the OTP rollback floor, and resets. **Signature chain is PQ end-to-end** (SPHINCS+C10 + SHA-256) — a CRQC that breaks ECDSA does not forge updates. Sign preimage is reconstructable from `(version, secure.elf, nonsecure.elf)` alone, so any auditor can rebuild + verify via `fwsign verify-release` without parsing a manifest. See `docs/firmware-update.md` for the full spec and `docs/reproducible-builds.md` for the verification recipe.
+
+**Key files:**
+- `fw-manifest/src/lib.rs` — wire-format + parser + CRC + verify chain (shared by FSBL, secure, fwsign)
+- `fsbl/src/*.rs` — 18 KB immutable bootloader (no_std, PQ verify, slot selector)
+- `fwsign/src/*.rs` — host-side signer + independent verifier
+- `secure/src/fw_update/*.rs` — streaming state machine (BEGIN → CHUNK* → COMMIT)
+- `secure/src/hw/{flash,otp,boot_state}.rs` — bank-2 writes, OTP rollback fuses, boot-state page
+- `secure/src/nsc/cmd_fw_*.rs` — five NSC commands + CMSE veneers
+
+**Cross-cutting invariants:**
+- **PIN unlock required on every CMD_FW_\*.** Wallet seed never accessed during update, but the unlock gate prevents silent re-flashing of a stolen locked device.
+- **FSBL is immutable after provisioning** (WRP1A on pages 0–3 before RDP-2 burn). Any FSBL bug → device replacement.
+- **Anti-rollback via OTP fuses**, not flash. 32 × 32-bit tally = 1024 increments, survives RDP regression.
+- **Signed preimage binds version + two image hashes; nothing else.** Slot identifier, vendor fingerprint, build_id, lengths are unsigned metadata — one `.pqfw` installs into either A or B.
+- **No classical crypto in the signature path.** SPHINCS+C10 + SHA-256 only. Argon2id + XChaCha20-Poly1305 appear only in the vendor's at-rest SK blob, never in the verification path.
+
 ### ERC-4337 Smart Contracts (`contracts/smart-wallet/`)
 
 Pure-PQ account-abstraction wallet on EntryPoint v0.6.
@@ -359,6 +378,13 @@ domain-tagged KDFs that fold the index into the master entropy.
 | `secure/src/hw/hash.rs` | STM32U585 HASH peripheral driver — `pqsigner_sha256_*` extern fns consumed by `sphincs-c10` under `hw-sha256` |
 | `bip39/*` | 24-word English BIP-39 (no_std) |
 | `fwmeasure/*` | Host-side firmware measurement tool |
+| `fw-manifest/*` | no_std firmware-update manifest format + verify chain (shared by FSBL, secure, fwsign) |
+| `fwsign/*` | Host-side release-signing tool — `keygen`/`pubkey`/`sign`/`verify`/`verify-release`/`extract-sig`/`inspect` |
+| `fsbl/*` | Immutable first-stage bootloader — vendor-C10-verified A/B slot selector |
+| `secure/src/fw_update/*` | Firmware-update streaming state machine (BEGIN → CHUNK → COMMIT) |
+| `secure/src/hw/otp.rs` | OTP rollback counter (1024 bits = 1024 commits, RDP-regression-resistant) |
+| `secure/src/hw/boot_state.rs` | Boot-state page for try-once slot tracking |
+| `secure/src/nsc/cmd_fw_*.rs` | Five NSC firmware-update handlers (begin / chunk / commit / status / abort) |
 | `contracts/smart-wallet/src/PQSmartWallet.sol` | On-chain ERC-4337 v0.6 account (bootstrap ownerIndex 0 + slot ownerIndex ≥ 1 dispatch) |
 | `contracts/smart-wallet/src/PQJardinWalletFactory.sol` | CREATE2 factory |
 | `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` | Stateless Yul C10 verifier — the wallet's single signature primitive |
@@ -385,6 +411,11 @@ domain-tagged KDFs that fold the index into the master entropy.
 - **Do not reintroduce per-signature flash state.** The all-C10 slot cutover made the firmware stateless with respect to slot selection; any code that writes `next_q`-like counters to flash is a regression.
 - **Do not let NS world control the inactivity timer.** Timer runs on Secure-only TIM. NS pings do not reset it. Only real button presses on S-world confirm dialogs count as activity.
 - **Do not add `debug-log` or `e2e-test` features to production builds.** CI must gate on this.
+- **Do not expand the signed firmware-update preimage.** It's intentionally the 75 bytes `"PQFW_V1" || fw_version_be || secure_hash || nonsecure_hash` so any auditor can reconstruct it from source. Adding slot/vendor-fpr/build_id into the preimage would break that property; if you think you need a new input in there, first question whether it can instead be derived or checked independently.
+- **Do not introduce classical signatures into the firmware-update path.** Signer + verifier are SPHINCS+C10 end-to-end; SHA-256 is the only hash. Argon2id + XChaCha20-Poly1305 appear only in the *at-rest* vendor SK blob on the signing machine — never in what the device evaluates.
+- **Do not add a classical-fallback firmware-update verifier.** The FSBL has one pubkey and one algorithm. A "just in case PQ is broken" fallback defeats the PQ property.
+- **Do not add a "reset rollback floor" path.** OTP is one-way by design; exposing a reset would break anti-rollback. Devices that exhaust the 1024-bit OTP budget are end-of-life for updates — that's the contract.
+- **Do not write to FSBL flash pages from runtime firmware.** Pages 0–3 are WRP1A-locked in production. Any code that attempts to program them silently fails (WRPERR) and is a regression to delete.
 
 ## Work Tracking
 

@@ -29,7 +29,12 @@ use crate::nsc_api;
 /// header + max inner-tx calldata (`MAX_TX_LEN`) + optional 2-byte prefix
 /// + max ERC-20 bundle + optional 2-byte prefix + max ZK clear-sign
 /// bundle (proof + calldata + readable + VK bundle).
-const CHAIN_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN
+///
+/// Also accommodates `INS_V2_FW_BEGIN`'s 8 KB manifest — the max
+/// function below resolves to whichever of the two use cases is
+/// larger. `const fn max` isn't available in no_std stable, so we
+/// hand-expand via a pair of `const` branches and compile-asserts.
+const CHAIN_BUF_LEN_SIGN: usize = SIGN_USEROP_HEADER_LEN
     + MAX_TX_LEN
     + 2
     + 1120
@@ -37,6 +42,12 @@ const CHAIN_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN
     + ZK_CLEAR_SIGN_FIXED_LEN
     + ZK_VK_BUNDLE_MAX_LEN
     + 64;
+const CHAIN_BUF_LEN_FW: usize = fw_manifest::MANIFEST_SIZE + 64;
+const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN > CHAIN_BUF_LEN_FW {
+    CHAIN_BUF_LEN_SIGN
+} else {
+    CHAIN_BUF_LEN_FW
+};
 
 /// Response buffer — sized for the maximum unified JARDÍN output plus
 /// the 2-byte SW.
@@ -129,6 +140,21 @@ impl CommandRouter {
             INS_V2_UNLOCK => return self.cmd_unlock(),
             INS_V2_LOCK => return self.cmd_lock(),
             INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(data),
+
+            // Firmware-update non-chained commands. CHUNK carries the
+            // 8-byte header + up to 1024 bytes of data — well under
+            // the 253-byte APDU data limit, so it's NOT chained:
+            // each CMD_FW_CHUNK is exactly one APDU. COMMIT / STATUS
+            // / ABORT have no payload.
+            #[cfg(feature = "stm32u585")]
+            INS_V2_FW_CHUNK => return self.cmd_fw_chunk(data),
+            #[cfg(feature = "stm32u585")]
+            INS_V2_FW_COMMIT => return self.cmd_fw_commit(),
+            #[cfg(feature = "stm32u585")]
+            INS_V2_FW_STATUS => return self.cmd_fw_status(),
+            #[cfg(feature = "stm32u585")]
+            INS_V2_FW_ABORT => return self.cmd_fw_abort(),
+
             _ => {}
         }
 
@@ -179,6 +205,8 @@ impl CommandRouter {
 
         match ins {
             INS_V2_SIGN_USEROP => self.cmd_sign_userop(len),
+            #[cfg(feature = "stm32u585")]
+            INS_V2_FW_BEGIN => self.cmd_fw_begin(len),
             _ => self.sw_response(SW_INS_NOT_SUPPORTED),
         }
     }
@@ -531,6 +559,70 @@ impl CommandRouter {
     }
 
     // ===================================================================
+    // Firmware-update command handlers (STM32U585 only)
+    // ===================================================================
+
+    /// CMD_FW_BEGIN — the 8 KB manifest has been accumulated in
+    /// `CHAIN_BUF[..len]`. Hand the whole buffer to the secure world.
+    #[cfg(feature = "stm32u585")]
+    unsafe fn cmd_fw_begin(&self, len: usize) -> Response {
+        if len != fw_manifest::MANIFEST_SIZE {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let status = nsc_api::fw_begin(&CHAIN_BUF[..len]);
+        self.sw_response(nsc_status_to_sw(status))
+    }
+
+    /// CMD_FW_CHUNK — one APDU, payload is `[header(8) | data(N)]`.
+    /// Pass straight through; the secure world does the monotonic /
+    /// bounds checks against its in-SRAM streaming state.
+    #[cfg(feature = "stm32u585")]
+    unsafe fn cmd_fw_chunk(&self, data: &[u8]) -> Response {
+        if data.len() < FW_CHUNK_HEADER_LEN
+            || data.len() > FW_CHUNK_HEADER_LEN + FW_MAX_CHUNK
+        {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let status = nsc_api::fw_chunk(data);
+        self.sw_response(nsc_status_to_sw(status))
+    }
+
+    /// CMD_FW_COMMIT — may not return if the commit succeeds (the
+    /// device resets). Maps to a cancelled status word if the user
+    /// rejects the dialog.
+    #[cfg(feature = "stm32u585")]
+    unsafe fn cmd_fw_commit(&self) -> Response {
+        let status = nsc_api::fw_commit();
+        self.sw_response(nsc_status_to_sw(status))
+    }
+
+    /// CMD_FW_STATUS — returns `[state|recv_s|recv_ns|slot]` + SW.
+    #[cfg(feature = "stm32u585")]
+    unsafe fn cmd_fw_status(&self) -> Response {
+        let mut out = [0u8; FW_STATUS_RESPONSE_LEN];
+        let status = nsc_api::fw_status(&mut out);
+        if status != 0 {
+            return self.sw_response(nsc_status_to_sw(status));
+        }
+        // Copy response + SW into RESP_BUF.
+        RESP_BUF[..FW_STATUS_RESPONSE_LEN].copy_from_slice(&out);
+        RESP_BUF[FW_STATUS_RESPONSE_LEN] = (SW_OK >> 8) as u8;
+        RESP_BUF[FW_STATUS_RESPONSE_LEN + 1] = (SW_OK & 0xFF) as u8;
+        Response {
+            ptr: RESP_BUF.as_ptr(),
+            len: FW_STATUS_RESPONSE_LEN + 2,
+        }
+    }
+
+    /// CMD_FW_ABORT — discard partial update. Always returns OK; the
+    /// secure-side drop is idempotent.
+    #[cfg(feature = "stm32u585")]
+    unsafe fn cmd_fw_abort(&self) -> Response {
+        let status = nsc_api::fw_abort();
+        self.sw_response(nsc_status_to_sw(status))
+    }
+
+    // ===================================================================
     // Helpers
     // ===================================================================
 
@@ -574,17 +666,41 @@ impl CommandRouter {
     }
 
     unsafe fn nsc_status_to_response(&self, status: u32) -> Response {
-        let sw = match NscStatus::from(status) {
-            NscStatus::Ok => SW_OK,
-            NscStatus::PinIncorrect => SW_SECURITY_NOT_SATISFIED,
-            NscStatus::PinLocked => SW_CONDITIONS_NOT_SATISFIED,
-            NscStatus::NotInitialized => SW_CONDITIONS_NOT_SATISFIED,
-            NscStatus::UserRejected => SW_SECURITY_NOT_SATISFIED,
-            NscStatus::InvalidPointer => SW_INTERNAL_ERROR,
-            NscStatus::CryptoError => SW_INTERNAL_ERROR,
-            NscStatus::IdleWipe => SW_REFERENCED_DATA_INVALIDATED,
-            NscStatus::InternalError => SW_INTERNAL_ERROR,
-        };
-        self.sw_response(sw)
+        self.sw_response(nsc_status_to_sw(status))
+    }
+}
+
+/// Free function so new FW_* command handlers can reuse the mapping
+/// without going through a `&self` method. (The existing sign path
+/// keeps using `nsc_status_to_response` which wraps this.)
+fn nsc_status_to_sw(status: u32) -> u16 {
+    match NscStatus::from(status) {
+        NscStatus::Ok => SW_OK,
+        NscStatus::PinIncorrect => SW_SECURITY_NOT_SATISFIED,
+        NscStatus::PinLocked => SW_CONDITIONS_NOT_SATISFIED,
+        NscStatus::NotInitialized => SW_CONDITIONS_NOT_SATISFIED,
+        NscStatus::UserRejected => SW_SECURITY_NOT_SATISFIED,
+        NscStatus::InvalidPointer => SW_INTERNAL_ERROR,
+        NscStatus::CryptoError => SW_INTERNAL_ERROR,
+        NscStatus::IdleWipe => SW_REFERENCED_DATA_INVALIDATED,
+        // Firmware-update statuses. Map to APDU status words that
+        // distinguish "transient retriable" from "permanent — abort".
+        //
+        // BadState, BadChunk, FlashError → SW_CONDITIONS_NOT_SATISFIED
+        //   The companion can issue CMD_FW_ABORT and retry from BEGIN.
+        // BadManifest, BadVersion, BadImage → SW_WRONG_DATA
+        //   The release the companion holds is unacceptable to this
+        //   device. The companion must fetch a different release.
+        // OtpExhausted → SW_FEATURE_NOT_SUPPORTED
+        //   This device will never accept another update. Surface a
+        //   clear end-of-life message in the companion UI.
+        NscStatus::FwUpdateBadState => SW_CONDITIONS_NOT_SATISFIED,
+        NscStatus::FwUpdateBadChunk => SW_CONDITIONS_NOT_SATISFIED,
+        NscStatus::FwUpdateFlashError => SW_CONDITIONS_NOT_SATISFIED,
+        NscStatus::FwUpdateBadManifest => SW_WRONG_DATA,
+        NscStatus::FwUpdateBadVersion => SW_WRONG_DATA,
+        NscStatus::FwUpdateBadImage => SW_WRONG_DATA,
+        NscStatus::FwUpdateOtpExhausted => SW_FEATURE_NOT_SUPPORTED,
+        NscStatus::InternalError => SW_INTERNAL_ERROR,
     }
 }

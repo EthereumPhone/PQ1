@@ -25,6 +25,10 @@ members = [
     "bip39",
     "fwmeasure",
     "sphincs-c10",
+    # Firmware update subsystem.
+    "fw-manifest",   # no_std manifest format shared by FSBL / secure / fwsign
+    "fwsign",        # host-side release-signing tool
+    "fsbl",          # immutable first-stage bootloader (ARM-only, no_std)
     # ZK clear-sign support: BLS12-381 pairing, Merkle DB builder, standalone
     # Groth16 verifier test harness.
     "bls12_381_pka",
@@ -44,6 +48,7 @@ edition = "2021"
 sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
 sphincs-c10       = { path = "sphincs-c10" }
+fw-manifest       = { path = "fw-manifest" }
 bls12_381 = { package = "bls12_381_pka", path = "bls12_381_pka", default-features = false, features = ["groups", "pairings"] }
 
 # no_std crypto shared by `secure` + `bip39`

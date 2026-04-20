@@ -1,0 +1,21 @@
+[package]
+name = "fw-manifest"
+version = "0.1.0"
+edition.workspace = true
+description = "PQSigner firmware-update manifest format — shared by FSBL, secure firmware, and the vendor release-signing tool."
+
+# This crate is deliberately no_std and no_alloc so it can be consumed by
+# the FSBL (which has a 32 KB budget and no heap) and by host tools
+# (fwsign, fwmeasure) alike. The manifest layout is the single source of
+# truth for the firmware-update wire contract; changing it is a breaking
+# change that invalidates every already-signed release bundle.
+
+[dependencies]
+sha2 = { version = "0.10", default-features = false }
+sphincs-c10 = { workspace = true }
+
+[features]
+default = []
+# Enables `std::io`-based helpers (currently only used by the host
+# `fwsign` tool). FSBL and the secure firmware never turn this on.
+std = []

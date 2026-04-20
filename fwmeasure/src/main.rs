@@ -7,10 +7,22 @@
 //! Usage:
 //!
 //!   cargo run -p fwmeasure -- path/to/sphincs-tz-secure
+//!   cargo run -p fwmeasure -- path/to/image.elf --flash-base 0x0C00_E000
 //!
 //! Or via the Makefile:
 //!
 //!   make measure
+//!
+//! ## Slot-aware measurement
+//!
+//! The firmware-update subsystem places each A/B slot at a different
+//! base address. When measuring a release artifact destined for a
+//! specific slot, pass `--flash-base=<hex>` to override the computed
+//! base (the default uses the lowest `p_paddr` of the ELF's LOAD
+//! segments, which is correct for the whole-firmware measurement but
+//! not for per-slot measurement). Optional `--flash-end=<hex>`
+//! overrides the measurement end — useful when the ELF was linked
+//! at a different base than it will ultimately land.
 
 use object::elf::PT_LOAD;
 use object::read::elf::{ElfFile32, ProgramHeader};
@@ -26,13 +38,34 @@ const MAX_FLASH_SIZE: u64 = 2 * 1024 * 1024;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        eprintln!("Usage: fwmeasure <firmware.elf>");
+    if args.len() < 2 {
+        eprintln!("Usage: fwmeasure <firmware.elf> [--flash-base=0xHEX] [--flash-end=0xHEX]");
         process::exit(1);
     }
 
-    let elf_data = fs::read(&args[1]).unwrap_or_else(|e| {
-        eprintln!("Cannot read {}: {e}", args[1]);
+    let mut elf_path: Option<String> = None;
+    let mut flash_base_override: Option<u64> = None;
+    let mut flash_end_override: Option<u64> = None;
+    for arg in &args[1..] {
+        if let Some(rest) = arg.strip_prefix("--flash-base=") {
+            flash_base_override = Some(parse_hex(rest));
+        } else if let Some(rest) = arg.strip_prefix("--flash-end=") {
+            flash_end_override = Some(parse_hex(rest));
+        } else {
+            if elf_path.is_some() {
+                eprintln!("Multiple ELF paths: {:?} and {arg}", elf_path.unwrap());
+                process::exit(1);
+            }
+            elf_path = Some(arg.clone());
+        }
+    }
+    let elf_path = elf_path.unwrap_or_else(|| {
+        eprintln!("Missing ELF path");
+        process::exit(1);
+    });
+
+    let elf_data = fs::read(&elf_path).unwrap_or_else(|e| {
+        eprintln!("Cannot read {elf_path}: {e}");
         process::exit(1);
     });
 
@@ -59,12 +92,13 @@ fn main() {
     let le = LittleEndian;
     let phdrs = elf.elf_program_headers();
 
-    let flash_base = phdrs
+    let computed_flash_base = phdrs
         .iter()
         .filter(|ph| ph.p_type(le) == PT_LOAD && ph.p_filesz(le) > 0)
         .map(|ph| ph.p_paddr(le) as u64)
         .min()
         .expect("No LOAD segments found in ELF");
+    let flash_base = flash_base_override.unwrap_or(computed_flash_base);
 
     // ---- Determine measurement end ------------------------------------------
 
@@ -72,10 +106,10 @@ fn main() {
     // On QEMU, build.rs redirects .gnu.sgstubs to > NSC (0x103FF000+),
     // so __veneer_limit is NOT in the flash region. Fall back to the end
     // of .data initial values: __sidata + (__edata - __sdata).
-    let measurement_end = match veneer_limit {
+    let measurement_end = flash_end_override.unwrap_or_else(|| match veneer_limit {
         Some(vl) if vl >= flash_base && vl < flash_base + MAX_FLASH_SIZE => vl,
         _ => sidata + (edata - sdata),
-    };
+    });
 
     let size = (measurement_end - flash_base) as usize;
 
@@ -126,4 +160,12 @@ fn main() {
     for (i, &idx) in indices.iter().enumerate() {
         println!("{} {}", i + 1, WORDLIST[idx as usize]);
     }
+}
+
+fn parse_hex(s: &str) -> u64 {
+    let s = s.trim_start_matches("0x").replace('_', "");
+    u64::from_str_radix(&s, 16).unwrap_or_else(|e| {
+        eprintln!("Cannot parse hex address {s:?}: {e}");
+        process::exit(1);
+    })
 }
