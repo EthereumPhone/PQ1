@@ -137,8 +137,8 @@ optiga-admin-wipe-e2e = ["optiga-trust-m"]
 # imply `optiga-lock-operational` — no LcsO advance on OPTIGA; SE050
 # has no LcsO concept. Uses current production object ranges on both
 # chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0E_xxxx — v5). Use
-# `make dual-se-unlock-e2e`.
-dual-se-unlock-e2e = ["dual-se"]
+# `make dual-se-admin-wipe-e2e`.
+dual-se-admin-wipe-e2e = ["dual-se"]
 se050-crash-safety-e2e = ["se050"]  # 2-phase test: partial wipe + reset + resume. Use `make se050-crash-safety-e2e`.
 spi1-arduino = []  # Use SPI1/PE12-PE15 (Arduino R3 headers) instead of SPI2/PB12-PB15 for TROPIC01
 stsafe-probe = ["stm32u585", "mock-se"]  # I2C2 bus scan to detect on-board STSAFE-A110

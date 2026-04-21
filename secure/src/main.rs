@@ -643,7 +643,7 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
-    // ---- Dual-SE (OPTIGA + SE050) unlock roundtrip e2e ----
+    // ---- Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e ----
     // Exercises `DualSecureElement::provision` + `DualSecureElement::
     // unlock` end-to-end on real silicon: pre-clean → provision →
     // unlock (XOR-reconstruct) → verify master_secret. Destroys any
@@ -660,19 +660,19 @@ fn main() -> ! {
     // chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0E_xxxx — v5, the
     // latest bumped range past every legacy stuck region).
     //
-    // Triggered by: make dual-se-unlock-e2e
-    #[cfg(feature = "dual-se-unlock-e2e")]
+    // Triggered by: make dual-se-admin-wipe-e2e
+    #[cfg(feature = "dual-se-admin-wipe-e2e")]
     unsafe {
-        ui::show_status("Dual unlock", "running...");
+        ui::show_status("Dual wipe", "running...");
         let se = &mut *core::ptr::addr_of_mut!(SE);
-        match se.run_unlock_roundtrip() {
+        match se.run_admin_wipe_roundtrip() {
             Ok(()) => {
-                secure_log!("[S] [E2E-DUAL-UNLOCK] DUAL-UNLOCK ROUNDTRIP: PASS");
-                ui::show_status("Dual unlock", "PASS");
+                secure_log!("[S] [E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: PASS");
+                ui::show_status("Dual wipe", "PASS");
             }
             Err(_e) => {
-                secure_log!("[S] [E2E-DUAL-UNLOCK] DUAL-UNLOCK ROUNDTRIP: FAIL ({:?})", _e);
-                ui::show_status("Dual unlock", "FAIL");
+                secure_log!("[S] [E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("Dual wipe", "FAIL");
             }
         }
         loop { cortex_m::asm::wfi(); }

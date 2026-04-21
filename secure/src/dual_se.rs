@@ -248,47 +248,50 @@ impl WalletStore for DualSecureElement {
 }
 
 impl DualSecureElement {
-    /// End-to-end roundtrip test of the dual-SE provision + unlock
-    /// integration. Validates the XOR-split entropy reconstruction
-    /// across OPTIGA + SE050 — the unique dual-SE value-add that is
-    /// not covered by either single-SE test.
+    /// End-to-end roundtrip test of the full dual-SE admin-wipe
+    /// integration. Covers both: the XOR-split entropy reconstruction
+    /// (unique dual-SE value-add) AND the `factory_reset_admin`
+    /// dispatch that wipes both chips.
     ///
     /// Scope: `DualSecureElement::provision` + `DualSecureElement::
-    /// unlock`. Does NOT test `factory_reset_admin` — that's deferred
-    /// to a factory-only target (`dual-se-admin-wipe-e2e-fresh-chip`,
-    /// see Makefile) because the admin-wipe integration fails
-    /// deterministically on any SE050 whose admin-PIN flash slot has
-    /// drifted out of sync with the on-chip admin UserID (e.g. after
-    /// cross-test contamination). The OPTIGA wipe + SE050 admin wipe
-    /// primitives are individually covered by `optiga-admin-wipe-e2e`
-    /// and `se050-admin-wipe-e2e`.
+    /// unlock` + `DualSecureElement::factory_reset_admin`, all on
+    /// real production OID ranges.
     ///
     /// Flow:
-    /// 1. Pre-clean cascade (see inline comments for the three
-    ///    stages). Tolerates prior test contamination.
+    /// 1. Pre-clean cascade (admin-auth → user-PIN → unauth). Tolerates
+    ///    prior test contamination.
     /// 2. Verify both chips report `!is_provisioned()` after step 1.
     /// 3. Provision fresh test data: entropy=0x55 pattern, master_secret
     ///    derived via the same `kdf("sphincs-master", entropy, 0)` the
-    ///    DualSE unlock path uses (so the cross-check at line ~170 of
-    ///    this file passes), vk=0xAA, bootstrap_vk=0xBB,
-    ///    pin=`b"dualwipe"`.
+    ///    DualSE unlock path uses (so the consistency check passes),
+    ///    vk=0xAA, bootstrap_vk=0xBB, pin=`b"dualwipe"`.
     /// 4. Verify both chips now report `is_provisioned()`.
     /// 5. Call `unlock(test_pin)` and verify the returned master_secret
     ///    byte-exactly matches what we provisioned. Proves both chips
     ///    authenticated AND the XOR reconstruction matches.
+    /// 6. Call `factory_reset_admin()` — the production dispatch that
+    ///    wipes both chips in sequence.
+    /// 7. Verify both chips report `!is_provisioned()` post-wipe.
+    /// 8. Call `unlock(test_pin)` again — must fail (no seed derivable
+    ///    from a wiped pair).
     ///
     /// Uses the REAL production object ranges: OPTIGA F1D0..F1D4 + F1E1,
-    /// SE050 0x7B0E_xxxx. This test DESTROYS any prior wallet state on
-    /// both chips (pre-clean wipes before re-provisioning under test
-    /// credentials). Re-run the normal first-boot wizard afterwards to
-    /// restore.
+    /// SE050 0x7B0E_xxxx (v5). This test DESTROYS any prior wallet
+    /// state on both chips. Re-run the normal first-boot wizard
+    /// afterwards to restore.
     ///
-    /// LcsO-safety: the `dual-se-unlock-e2e` feature MUST NOT imply
+    /// LcsO-safety: the `dual-se-admin-wipe-e2e` feature MUST NOT imply
     /// `optiga-lock-operational`. All OPTIGA operations on the
     /// exercised paths stay at LcsO=Creation — `lock_oid` is a no-op
     /// under the default feature set.
-    #[cfg(feature = "dual-se-unlock-e2e")]
-    pub fn run_unlock_roundtrip(&mut self) -> Result<(), SeError> {
+    ///
+    /// Robustness: relies on the conditional page-125 erase in
+    /// `Se050::factory_reset_admin` (landed 2026-04-21) — an
+    /// unconditional erase would desync flash admin PIN from chip
+    /// admin UserID on any Transport glitch, stucking the v5 range
+    /// the same way that bug stuck v3 and v4.
+    #[cfg(feature = "dual-se-admin-wipe-e2e")]
+    pub fn run_admin_wipe_roundtrip(&mut self) -> Result<(), SeError> {
         let test_entropy: [u8; 32] = [0x55; 32];
         let test_master = crate::crypto::kdf(b"sphincs-master", &test_entropy, 0);
         let test_vk: [u8; 32] = [0xAA; 32];
@@ -315,11 +318,11 @@ impl DualSecureElement {
         //    SE050 admin-first then user-PIN-fallback cascade. Erase
         //    page 125 at the end so `provision()` below generates a
         //    fresh admin PIN.
-        secure_log!("[DUAL-E2E-UNLOCK] step 1: pre-clean");
+        secure_log!("[DUAL-E2E-ADMIN] step 1: pre-clean");
 
         // OPTIGA: Conf(E140) wipe. Idempotent on blank chips.
         if let Err(e) = self.optiga.factory_reset() {
-            secure_log!("[DUAL-E2E-UNLOCK] step 1: OPTIGA factory_reset error {:?} (continuing)", e);
+            secure_log!("[DUAL-E2E-ADMIN] step 1: OPTIGA factory_reset error {:?} (continuing)", e);
         }
 
         // SE050 wipe cascade. Each stage only fires if the prior
@@ -349,18 +352,18 @@ impl DualSecureElement {
         unsafe {
             // Stage (a): admin auth if page 125 has a PIN.
             let admin_blank = crate::hw::flash::is_admin_pin_blank();
-            secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (a): admin_pin_blank={}", admin_blank);
+            secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (a): admin_pin_blank={}", admin_blank);
             if !admin_blank {
                 let mut admin_pin = [0u8; 16];
                 crate::hw::flash::read_admin_pin(&mut admin_pin);
                 let r = self.se050.admin_factory_reset(&admin_pin);
-                secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (a): admin_factory_reset → {:?}", r.as_ref().err());
+                secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (a): admin_factory_reset → {:?}", r.as_ref().err());
                 admin_pin.zeroize();
             }
 
             // Stage (b): user-PIN cascade if USERID_OBJ survived.
             let se_prov_before = self.se050.is_provisioned();
-            secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (b): se050.is_provisioned()={}", se_prov_before);
+            secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (b): se050.is_provisioned()={}", se_prov_before);
             if se_prov_before {
                 const PIN_CANDIDATES: &[&[u8]] = &[
                     b"00000000", // e2e-test fast-path default (most common)
@@ -371,7 +374,7 @@ impl DualSecureElement {
                 for &pin in PIN_CANDIDATES {
                     let r = self.se050.user_factory_reset(pin);
                     secure_log!(
-                        "[DUAL-E2E-UNLOCK] pre-clean stage (b): user_factory_reset({:?}) → {:?}",
+                        "[DUAL-E2E-ADMIN] pre-clean stage (b): user_factory_reset({:?}) → {:?}",
                         core::str::from_utf8(pin).unwrap_or("?"),
                         r.as_ref().err(),
                     );
@@ -383,7 +386,7 @@ impl DualSecureElement {
 
             // Stage (c): unauthenticated sweep as final catch-all.
             let se_prov_mid = self.se050.is_provisioned();
-            secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (c): se050.is_provisioned()={}", se_prov_mid);
+            secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (c): se050.is_provisioned()={}", se_prov_mid);
             let _ = self.se050.iterative_wipe(None, None);
 
             // Deliberately NO `erase_admin_page()` here. Page 125's
@@ -402,50 +405,88 @@ impl DualSecureElement {
 
         // ---- 2. Verify both chips unprovisioned after pre-clean ----
         if self.optiga.is_provisioned() {
-            secure_log!("[DUAL-E2E-UNLOCK] step 2 FAILED: OPTIGA still provisioned after pre-clean");
+            secure_log!("[DUAL-E2E-ADMIN] step 2 FAILED: OPTIGA still provisioned after pre-clean");
             return Err(SeError::InternalError);
         }
         if self.se050.is_provisioned() {
-            secure_log!("[DUAL-E2E-UNLOCK] step 2 FAILED: SE050 still provisioned after pre-clean");
+            secure_log!("[DUAL-E2E-ADMIN] step 2 FAILED: SE050 still provisioned after pre-clean");
             return Err(SeError::InternalError);
         }
-        secure_log!("[DUAL-E2E-UNLOCK] step 2: both chips unprovisioned after pre-clean OK");
+        secure_log!("[DUAL-E2E-ADMIN] step 2: both chips unprovisioned after pre-clean OK");
 
         // ---- 3. Provision fresh test data ----
-        secure_log!("[DUAL-E2E-UNLOCK] step 3: provision");
+        secure_log!("[DUAL-E2E-ADMIN] step 3: provision");
         self.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &test_pin)?;
-        secure_log!("[DUAL-E2E-UNLOCK] step 3: provision OK");
+        secure_log!("[DUAL-E2E-ADMIN] step 3: provision OK");
 
         // ---- 4. Verify both chips provisioned ----
         if !self.optiga.is_provisioned() {
-            secure_log!("[DUAL-E2E-UNLOCK] step 4 FAILED: OPTIGA not provisioned after provision");
+            secure_log!("[DUAL-E2E-ADMIN] step 4 FAILED: OPTIGA not provisioned after provision");
             return Err(SeError::InternalError);
         }
         if !self.se050.is_provisioned() {
-            secure_log!("[DUAL-E2E-UNLOCK] step 4 FAILED: SE050 not provisioned after provision");
+            secure_log!("[DUAL-E2E-ADMIN] step 4 FAILED: SE050 not provisioned after provision");
             return Err(SeError::InternalError);
         }
-        secure_log!("[DUAL-E2E-UNLOCK] step 4: both chips provisioned OK");
+        secure_log!("[DUAL-E2E-ADMIN] step 4: both chips provisioned OK");
 
         // ---- 5. Pre-wipe unlock: master_secret roundtrip ----
         //    Authenticates both chips, reads both entropy halves, XORs
         //    them back, derives master_secret from full entropy, and
         //    cross-checks against what each chip returned. All three
         //    branches have to agree for unlock to return Ok.
-        secure_log!("[DUAL-E2E-UNLOCK] step 5: unlock");
+        secure_log!("[DUAL-E2E-ADMIN] step 5: unlock");
         let recovered = match self.unlock(&test_pin) {
             Ok(m) => m,
             Err(e) => {
-                secure_log!("[DUAL-E2E-UNLOCK] step 5 FAILED: unlock returned {:?}", e);
+                secure_log!("[DUAL-E2E-ADMIN] step 5 FAILED: unlock returned {:?}", e);
                 return Err(SeError::InternalError);
             }
         };
         if recovered != test_master {
-            secure_log!("[DUAL-E2E-UNLOCK] step 5 FAILED: master_secret mismatch post-unlock");
+            secure_log!("[DUAL-E2E-ADMIN] step 5 FAILED: master_secret mismatch post-unlock");
             return Err(SeError::InternalError);
         }
-        secure_log!("[DUAL-E2E-UNLOCK] step 5: unlock OK (master_secret matches)");
+        secure_log!("[DUAL-E2E-ADMIN] step 5: unlock OK (master_secret matches)");
 
-        Ok(())
+        // ---- 6. The wipe proper — production dispatch ----
+        //    Calls `DualSecureElement::factory_reset_admin` (via the
+        //    WalletStore trait on self). That cascades to OPTIGA's
+        //    factory_reset (Conf(E140) path) + SE050's
+        //    factory_reset_admin (admin-auth DELETE of user UserID
+        //    and gated data, plus admin self-delete). Page 125 now
+        //    only gets erased if admin UserID is confirmed gone from
+        //    the chip (conditional erase, landed alongside this
+        //    test).
+        secure_log!("[DUAL-E2E-ADMIN] step 6: factory_reset_admin");
+        self.factory_reset_admin()?;
+        secure_log!("[DUAL-E2E-ADMIN] step 6: factory_reset_admin OK");
+
+        // ---- 7. Verify both chips unprovisioned ----
+        if self.optiga.is_provisioned() {
+            secure_log!("[DUAL-E2E-ADMIN] step 7 FAILED: OPTIGA still provisioned after wipe");
+            return Err(SeError::InternalError);
+        }
+        if self.se050.is_provisioned() {
+            secure_log!("[DUAL-E2E-ADMIN] step 7 FAILED: SE050 still provisioned after wipe");
+            return Err(SeError::InternalError);
+        }
+        secure_log!("[DUAL-E2E-ADMIN] step 7: both chips unprovisioned post-wipe OK");
+
+        // ---- 8. Post-wipe unlock must fail ----
+        //    The contract is "no seed derivable from a wiped pair."
+        //    OPTIGA hits the sentinel path → NotProvisioned. SE050
+        //    has no objects to read → auth fails. Either ERROR is
+        //    fine; only Ok(_) is a test failure.
+        match self.unlock(&test_pin) {
+            Ok(_) => {
+                secure_log!("[DUAL-E2E-ADMIN] step 8 FAILED: unlock SUCCEEDED after wipe");
+                Err(SeError::InternalError)
+            }
+            Err(e) => {
+                secure_log!("[DUAL-E2E-ADMIN] step 8: post-wipe unlock correctly failed ({:?})", e);
+                Ok(())
+            }
+        }
     }
 }

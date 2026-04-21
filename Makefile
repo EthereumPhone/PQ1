@@ -1133,7 +1133,7 @@ optiga-admin-wipe-e2e:
 	@echo "==> Running admin-wipe e2e (watch semihosting for PASS/FAIL)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
-# Dual-SE (OPTIGA + SE050) unlock roundtrip e2e. Exercises
+# Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e. Exercises
 # `DualSecureElement::provision` + `DualSecureElement::unlock` end-to-end:
 # pre-clean both chips (tolerates prior test contamination via a
 # three-stage cascade: admin-PIN → user-PIN candidates → unauthenticated
@@ -1167,14 +1167,14 @@ optiga-admin-wipe-e2e:
 # production guard in nsc/mod.rs. The e2e-test fast-path itself is
 # dead code here — our dispatcher halts before it runs.
 #
-# Watch semihosting for "[E2E-DUAL-UNLOCK] DUAL-UNLOCK ROUNDTRIP: PASS"/"FAIL".
-dual-se-unlock-e2e:
+# Watch semihosting for "[E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: PASS"/"FAIL".
+dual-se-admin-wipe-e2e:
 	@echo "==> Building dual-SE unlock roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se-unlock-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+		--features dual-se-admin-wipe-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
