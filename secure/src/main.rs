@@ -713,6 +713,30 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- OPTIGA "nuclear" counter wipe (no shield, no OTP) ----
+    // Forces F1E1 to RESET_SENTINEL (0xFF) so the next boot reports the
+    // chip as unprovisioned. Pure-plaintext path: skips PBS setup and
+    // the shielded connection entirely, so it works on boards where
+    // OTP programming (and therefore PBS derivation) is blocked.
+    //
+    // Triggered by: make optiga-factory-reset-hw
+    #[cfg(feature = "optiga-nuclear-reset")]
+    unsafe {
+        ui::show_status("OPTIGA wipe", "nuclear...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        match se.nuclear_reset_counter() {
+            Ok(()) => {
+                secure_log!("[S] [NUCLEAR-RESET] F1E1 = RESET_SENTINEL — PASS");
+                ui::show_status("OPTIGA wipe", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [NUCLEAR-RESET] FAIL ({:?})", _e);
+                ui::show_status("OPTIGA wipe", "FAIL");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- SE050 factory-reset roundtrip e2e test ----
     // Provisions a fresh test UserID + 2 gated data objects under a
     // known PIN, then exercises user_factory_reset and verifies all
@@ -748,6 +772,7 @@ fn main() -> ! {
     unsafe {
         use sphincs_tz_bip39::Mnemonic;
         secure_log!("[S][e2e] auto-provisioning with fixed test mnemonic");
+        ui::show_status("e2e-test", "provisioning");
 
         // 24 BIP-39 words from a known test vector. Determined entirely
         // by this constant — restore on a clean device with these words
@@ -812,11 +837,17 @@ fn main() -> ! {
         // PIN_VERIFIED end up in the same state as a real unlock.
         #[cfg(not(feature = "e2e-skip-unlock"))]
         {
+            ui::show_status("e2e-test", "unlock");
             match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
                 Ok(master) => nsc::set_e2e_unlocked(master),
-                Err(_) => panic!("e2e: verify_pin failed after provision"),
+                Err(_e) => {
+                    secure_log!("[S][e2e] unlock FAILED: {:?}", _e);
+                    ui::show_status("e2e unlock", "FAIL");
+                    loop { cortex_m::asm::wfi(); }
+                }
             }
             secure_log!("[S][e2e] gateway pre-unlocked, ready for tests");
+            ui::show_status("PQSigner OS", "Ready");
         }
     }
 

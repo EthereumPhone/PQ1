@@ -689,6 +689,9 @@ factory-reset:
 	@echo "==> Factory reset complete. Chip is blank."
 	@echo "    Re-flash firmware to use the device again, e.g.:"
 	@echo "      make flash-hw-se050-oled-standalone   # SE050 + OLED, production"
+	@echo "      make flash-hw-optiga-oled-standalone  # OPTIGA Trust M + OLED (LcsO=Creation)"
+	@echo "      make optiga-factory-reset-hw          # OPTIGA wipe -> next boot = fresh wizard"
+	@echo "      make optiga-preprovision-hw           # OPTIGA pre-provisioned w/ PIN=00000000"
 	@echo "      make flash-hw-se050-usb-test          # SE050 + USB, auto-provisioned test"
 
 # SE050 factory-reset roundtrip e2e test on real hardware.
@@ -787,6 +790,219 @@ flash-hw-se050-oled-standalone: build-hw-se050-oled-standalone
 	@probe-rs reset --chip STM32U585AIIx
 	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
 	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
+
+# OPTIGA Trust M + OLED standalone — single-SE variant of the SE050
+# standalone target above. Uses Infineon OPTIGA Trust M V3 on I2C1
+# (TRUSTMV3SHIELDTOBO1 on Arduino R3 headers). No semihosting, USB-C
+# only. Deliberately does NOT include `optiga-lock-operational`, so
+# every user OID (E140, F1D0..F1D4, F1E1) stays at LcsO=Creation
+# throughout provisioning — metadata remains mutable, data rewriteable,
+# no irreversible LcsO=Operational bump. This build is intended for
+# bench/dev use; see docs/optiga-brick-postmortem.md §5 + §7 before
+# adding `optiga-lock-operational` for a real production unit.
+#
+# NOTE: this target violates invariant #1 (dual-chip seed split) — the
+# full entropy lives on OPTIGA alone. It is the single-SE OPTIGA twin of
+# `flash-hw-se050-oled-standalone`, not a production dual-SE build.
+build-hw-optiga-oled-standalone:
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features optiga-trust-m,gpio-buttons,ui-oled,stm32u585,usb
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> Standalone OPTIGA build ready (no semihosting, USB-C only, LcsO=Creation)."
+
+flash-hw-optiga-oled-standalone: build-hw-optiga-oled-standalone
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting target..."
+	@probe-rs reset --chip STM32U585AIIx
+	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
+	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
+
+# ---------------------------------------------------------------------------
+# OPTIGA Trust M dev-convenience helpers for the standalone target.
+#
+# Both targets assume the same hardware shape as `flash-hw-optiga-oled-
+# standalone`: STM32U585 + OPTIGA Trust M V3 on I2C1 + SSD1306 OLED +
+# GPIO buttons. Neither target uses `otp-hardcoded-master-key`, so OTP is
+# burned from TRNG on first boot and every subsequent reflash (including
+# back to the real standalone target) derives the same PBS from the same
+# OTP master — i.e. shield handshake and PIN auth remain consistent
+# across reflashes.
+#
+# LcsO-safety: neither target includes `optiga-lock-operational`. Every
+# OID stays at LcsO=Creation; nothing is ratcheted to Operational.
+# ---------------------------------------------------------------------------
+
+# Factory-reset the connected board's OPTIGA chip so the next standalone
+# boot sees it as never-provisioned. Reuses the `optiga-admin-wipe-e2e`
+# exercise, which provisions throwaway test data, verifies unlock, then
+# calls `factory_reset` — ending with F1D5 = RESET_SENTINEL (0xFF) and
+# F1D0..F1D4 blanked. Post-state: `check_provisioned()` returns false →
+# first-boot wizard runs on the next `flash-hw-optiga-oled-standalone`.
+#
+# Typical usage after the wizard got into a bad state:
+#   make optiga-factory-reset-hw            # wipes OPTIGA, watch OLED
+#   make flash-hw-optiga-oled-standalone    # reflash; wizard runs fresh
+#
+# Runs non-interactively: `probe-rs reset` starts the firmware, OLED
+# shows "OPTIGA wipe: running..." → "OPTIGA wipe: PASS" (or FAIL), then
+# the device halts in `wfi`. The STM32_Programmer_CLI call re-asserts the
+# TZ option bytes (safe to repeat; ST-LINK may reset them between runs).
+optiga-factory-reset-hw:
+	@echo "==> Building OPTIGA factory-reset firmware (nuclear path)..."
+	@echo "    Writes 0xFF to F1E1 (counter sentinel) via plaintext APDUs."
+	@echo "    Skips OTP burn, PBS derivation, shielded connection, and"
+	@echo "    the provision-first dance — so it works on boards where"
+	@echo "    the OTP master can't be programmed."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-nuclear-reset,stm32u585,ui-oled,gpio-buttons,debug-log
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo ""
+	@echo "==> Running with semihosting attached. Watch for:"
+	@echo "      [OPTIGA/prov] step: ..."
+	@echo "      [OPTIGA-E2E-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS/FAIL"
+	@echo "    Ctrl+C to detach once PASS/FAIL lines appear."
+	@echo ""
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# Pre-provision the connected board's OPTIGA chip with a known mnemonic
+# + PIN, skipping the interactive wizard. Uses the `e2e-test` fast-path
+# (fixed test mnemonic + PIN baked into `secure/src/main.rs`) plus
+# `e2e-skip-unlock`, which halts right after `provision_from_mnemonic`
+# returns so the gateway never auto-unlocks.
+#
+# Bake-in credentials:
+#   PIN:      00000000  (type "0" eight times in the PIN UI)
+#   Mnemonic: abandon x23 + "art"  (standard BIP-39 test vector)
+#
+# After this target runs, the OPTIGA chip is in the same state a real
+# user would leave it in by typing those credentials into the wizard.
+# Reflash `flash-hw-optiga-oled-standalone` and the next boot skips the
+# wizard, prompts "Enter PIN", and accepts 00000000.
+#
+# Typical usage to skip the wizard on a fresh board:
+#   make optiga-preprovision-hw             # provisions OPTIGA, halts
+#   make flash-hw-optiga-oled-standalone    # reflash
+#   <type 00000000 at the PIN prompt>       # device unlocks
+#
+# OTP handling: no `otp-hardcoded-master-key`, so OTP burns real TRNG on
+# first boot. The standalone build reflashed afterwards reads the same
+# OTP key and derives the same PBS — shield handshake and PIN-derived
+# auth secret stay consistent across the reflash.
+optiga-preprovision-hw:
+	@echo "==> Building OPTIGA pre-provision firmware (testkey PBS)..."
+	@echo "    Adds otp-hardcoded-master-key so provisioning works on boards"
+	@echo "    where OTP burn is blocked. Must be paired with the testkey"
+	@echo "    standalone variant below so both firmwares derive the same PBS."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-trust-m,stm32u585,ui-oled,gpio-buttons,e2e-test,e2e-skip-unlock,otp-hardcoded-master-key,debug-log
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,e2e-test
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo ""
+	@echo "==> Running with semihosting — watch for PBS fingerprint + provision OK."
+	@echo "    Ctrl+C once you see '[OPTIGA] Provisioning complete' + halt."
+	@echo ""
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# Testkey standalone build — byte-for-byte the interactive
+# `flash-hw-optiga-oled-standalone` flow, with the single difference
+# that `otp-hardcoded-master-key` replaces the per-device OTP master
+# with a compile-time constant so the PBS derives without needing OTP
+# to be programmable. The dev-testkey feature is the explicit opt-out
+# from the `nsc/mod.rs` production guard that would otherwise refuse
+# to compile `otp-hardcoded-master-key` in a non-e2e-test release.
+#
+# Interactive: first boot runs the seed wizard (PIN + mnemonic),
+# subsequent boots prompt "Enter PIN" like the real standalone build.
+# No auto-provision, no auto-unlock.
+#
+# Use this on boards where OTP writes fail (WRPERR at 0x0BFA_0080)
+# so the normal OTP-burn path can't run. PBS is the shared test
+# constant across every dev board built with this feature — NEVER
+# promote this target into production.
+flash-hw-optiga-oled-standalone-testkey:
+	@echo "==> Building OPTIGA standalone w/ dev-testkey (interactive, hardcoded PBS)..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-trust-m,gpio-buttons,ui-oled,stm32u585,usb,dev-testkey,debug-log
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting target..."
+	@probe-rs reset --chip STM32U585AIIx
+	@echo "==> Flashed. Interactive first-boot wizard runs on a blank chip."
+	@echo "    PBS is the shared dev-testkey constant (NOT device-unique)."
+	@echo "    To wipe wallet state:           make optiga-factory-reset-hw"
+	@echo "    To see semihosting output:      probe-rs run --chip STM32U585AIIx $(SECURE_ELF)"
+
+# Same interactive dev-testkey build as above, but flashes and then
+# stays attached via `probe-rs run` so semihosting (`secure_log!`,
+# debug-log prints) streams live to the terminal while the firmware
+# executes. Hardware buttons (PC1/PA8) still drive the UI — the
+# semihosting channel is read-only for logs, not for input.
+#
+# Use when you need to watch the boot flow during bench iteration.
+# Ctrl+C to detach (leaves firmware running on-device).
+flash-hw-optiga-oled-testkey:
+	@echo "==> Building OPTIGA dev-testkey (interactive, hardcoded PBS, debug-log)..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-trust-m,gpio-buttons,ui-oled,stm32u585,usb,dev-testkey,debug-log
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo ""
+	@echo "==> Running with semihosting attached. Ctrl+C to detach."
+	@echo "    Hardware buttons (PC1 LEFT / PA8 RIGHT) drive the UI."
+	@echo ""
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 flash-hw-se050-oled: build-hw-se050-oled
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)

@@ -433,18 +433,33 @@ impl Input {
 
         #[cfg(feature = "debug-log")]
         {
-            use cortex_m_semihosting::syscall;
-            let path = b"/input\0";
-            let fd = unsafe {
-                syscall!(OPEN, path.as_ptr(), 0usize, path.len() - 1)
+            // DHCSR.C_DEBUGEN gate: the semihosting OPEN below is a
+            // `BKPT 0xAB` instruction. With a debugger attached the
+            // probe intercepts it and returns a file descriptor (or
+            // an error under probe-rs, which lacks `--semihosting-file`
+            // support). **Without a debugger**, the BKPT escalates to
+            // a DebugMonitor fault and then HardFault — the device
+            // hangs before finishing UI init, which is what broke the
+            // standalone-testkey build. Skipping the OPEN when
+            // `C_DEBUGEN == 0` keeps the GPIO-button path working on
+            // USB-C-only power.
+            let c_debugen = unsafe {
+                core::ptr::read_volatile(0xE000_EDF0 as *const u32) & 1
             };
-            if fd != usize::MAX {
-                self.fd = fd;
-                secure_log!("[S][OLED] button input ready (fd={})", fd);
-            } else {
-                secure_log!("[S][OLED] no button input (semihosting OPEN failed)");
-                #[cfg(not(feature = "gpio-buttons"))]
-                secure_log!("[S][OLED]   use `make play-hw-display` for interactive mode");
+            if c_debugen != 0 {
+                use cortex_m_semihosting::syscall;
+                let path = b"/input\0";
+                let fd = unsafe {
+                    syscall!(OPEN, path.as_ptr(), 0usize, path.len() - 1)
+                };
+                if fd != usize::MAX {
+                    self.fd = fd;
+                    secure_log!("[S][OLED] button input ready (fd={})", fd);
+                } else {
+                    secure_log!("[S][OLED] no button input (semihosting OPEN failed)");
+                    #[cfg(not(feature = "gpio-buttons"))]
+                    secure_log!("[S][OLED]   use `make play-hw-display` for interactive mode");
+                }
             }
         }
     }

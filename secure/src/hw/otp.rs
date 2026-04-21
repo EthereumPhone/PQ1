@@ -254,15 +254,18 @@ unsafe fn program_otp_qw(addr: u32, data: &[u8; 16]) -> Result<(), OtpError> {
             cortex_m::asm::nop();
         }
         // Clear stale error flags.
-        let sr = read_volatile(FLASH_SECSR);
-        if sr & ERR_MASK != 0 {
-            write_volatile(FLASH_SECSR, sr & ERR_MASK);
+        let sr_pre = read_volatile(FLASH_SECSR);
+        if sr_pre & ERR_MASK != 0 {
+            write_volatile(FLASH_SECSR, sr_pre & ERR_MASK);
         }
+        let cr_pre = read_volatile(FLASH_SECCR);
         // Unlock SECCR.
         write_volatile(FLASH_SECKEYR, KEY1);
         write_volatile(FLASH_SECKEYR, KEY2);
+        let cr_after_unlock = read_volatile(FLASH_SECCR);
 
         write_volatile(FLASH_SECCR, PG);
+        let cr_after_pg = read_volatile(FLASH_SECCR);
 
         let dst = addr as *mut u32;
         for i in 0..4 {
@@ -288,9 +291,17 @@ unsafe fn program_otp_qw(addr: u32, data: &[u8; 16]) -> Result<(), OtpError> {
         cortex_m::asm::isb();
 
         if sr & ERR_MASK != 0 {
+            secure_log!(
+                "[OTP/prog] FAIL addr=0x{:08x} SR_pre=0x{:08x} CR_pre=0x{:08x} CR_after_unlock=0x{:08x} CR_after_pg=0x{:08x} SR_final=0x{:08x}",
+                addr, sr_pre, cr_pre, cr_after_unlock, cr_after_pg, sr
+            );
             write_volatile(FLASH_SECSR, sr & ERR_MASK);
             Err(OtpError::ProgramError)
         } else {
+            secure_log!(
+                "[OTP/prog] OK   addr=0x{:08x} SR_pre=0x{:08x} CR_pre=0x{:08x} CR_after_unlock=0x{:08x} CR_after_pg=0x{:08x} SR_final=0x{:08x}",
+                addr, sr_pre, cr_pre, cr_after_unlock, cr_after_pg, sr
+            );
             Ok(())
         }
     })

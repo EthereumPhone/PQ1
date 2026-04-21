@@ -1231,6 +1231,80 @@ impl OptigaTrustM {
         Ok(())
     }
 
+    /// "Nuclear" counter wipe — forces F1E1 to RESET_SENTINEL without
+    /// requiring a shielded connection, even on a chip where F1E1's
+    /// Change AC has been previously set to `Conf(E140)` by full
+    /// provisioning.
+    ///
+    /// Strategy (valid only at LcsO=Creation):
+    /// 1. Rewrite F1E1 metadata with Change = Always (metadata itself is
+    ///    always mutable at LcsO=Creation, regardless of the data Change AC).
+    /// 2. Plaintext `set_data_object(F1E1, 0xFF)` — succeeds because the
+    ///    step-1 metadata relaxed the gate.
+    /// 3. Read back and verify F1E1 == RESET_SENTINEL.
+    ///
+    /// After this returns Ok, `check_provisioned()` reads F1E1, gets
+    /// `0xFF`, and returns `false` — the next boot of the standalone
+    /// build will run the first-boot wizard fresh.
+    ///
+    /// This function is the fallback used when the regular shielded
+    /// `factory_reset` path cannot run because OTP is blank and the
+    /// PBS-derived shield key can't be loaded (see the
+    /// `optiga-factory-reset-hw` Makefile target).
+    ///
+    /// Preconditions:
+    /// - Chip's OIDs must still be at LcsO=Creation (they are in every
+    ///   build that doesn't enable `optiga-lock-operational`).
+    /// - Intended to be called with `optiga-no-shield` active so
+    ///   `ensure_shield()` is a no-op; the internal `set_metadata` and
+    ///   `set_data_object` calls therefore traverse plaintext I2C.
+    pub fn nuclear_reset_counter(&mut self) -> Result<(), OptigaError> {
+        self.init()?;
+        secure_log!("[OPTIGA/nuclear] init OK");
+
+        // Step 1: relax F1E1's Change AC back to Always.
+        let (relaxed_meta, meta_len) = apdu::build_metadata_relaxed();
+        secure_log!(
+            "[OPTIGA/nuclear] step 1: set_metadata(F1E1, Change=Always) len={}",
+            meta_len
+        );
+        unsafe {
+            apdu::set_metadata(
+                &mut self.ifx,
+                &mut self.shield,
+                apdu::OID_COUNTER,
+                &relaxed_meta[..meta_len],
+            )?;
+        }
+
+        // Step 2: write RESET_SENTINEL. Plaintext now accepted.
+        secure_log!("[OPTIGA/nuclear] step 2: set_data_object(F1E1, 0xFF)");
+        unsafe {
+            apdu::set_data_object(
+                &mut self.ifx,
+                &mut self.shield,
+                apdu::OID_COUNTER,
+                &[RESET_SENTINEL],
+            )?;
+        }
+
+        // Step 3: verify.
+        let counter = unsafe { self.read_counter_raw() };
+        match counter {
+            Some(v) if v == RESET_SENTINEL => {
+                secure_log!("[OPTIGA/nuclear] step 3: F1E1 = 0xFF OK");
+                Ok(())
+            }
+            other => {
+                secure_log!(
+                    "[OPTIGA/nuclear] step 3 FAILED: F1E1 = {:?}, expected 0x{:02x}",
+                    other, RESET_SENTINEL
+                );
+                Err(OptigaError::Transport)
+            }
+        }
+    }
+
     /// End-to-end roundtrip exercising the `factory_reset` primitive on a
     /// live chip. Scope is deliberately the wipe PRIMITIVE — NOT the
     /// PIN-lockout-triggers-wipe flow, which is a separate integration

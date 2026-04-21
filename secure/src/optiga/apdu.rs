@@ -870,6 +870,21 @@ pub fn build_metadata_counter() -> (MetaBuf, usize) {
     wrap_meta(inner, c)
 }
 
+/// Metadata with Change/Read = Always. Used by the nuclear-reset path to
+/// unlock an OID whose Change AC was previously set to `Conf(E140)` so
+/// plaintext writes can proceed without a shielded connection. Only
+/// meaningful at LcsO=Creation, where metadata itself is always mutable.
+pub fn build_metadata_relaxed() -> (MetaBuf, usize) {
+    let mut inner = [0u8; 64];
+    let mut c = 0usize;
+
+    push_ac_simple(&mut inner, &mut c, META_CHANGE, AC_ALW);
+    push_ac_simple(&mut inner, &mut c, META_READ, AC_ALW);
+    push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_NEV);
+
+    wrap_meta(inner, c)
+}
+
 /// Metadata that raises LcsO to Operational (irreversible).
 pub fn build_metadata_lock() -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
