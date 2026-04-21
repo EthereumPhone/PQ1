@@ -938,7 +938,16 @@ impl OptigaTrustM {
             prov_with_reset!("counter", self.provision_counter());
         }
 
-        secure_log!("[OPTIGA] Provisioning complete (6 OIDs written + locked)");
+        // Stale-log hazard: this message used to say "6 OIDs written +
+        // locked". Under the current feature set (`optiga-lock-
+        // operational` OFF) and the LcsO-Op skip path, `lock_oid` is
+        // either a no-op (feature off) or not called at all (object
+        // already Op). Say exactly what happened.
+        secure_log!(
+            "[OPTIGA] Provisioning complete (data for 6 OIDs written; \
+             no lock_oid calls this run — `optiga-lock-operational` \
+             OFF and/or LcsO already Op)"
+        );
         Ok(())
     }
 
