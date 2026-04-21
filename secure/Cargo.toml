@@ -136,7 +136,7 @@ optiga-admin-wipe-e2e = ["optiga-trust-m"]
 # re-provisioning under test credentials). Deliberately does NOT
 # imply `optiga-lock-operational` — no LcsO advance on OPTIGA; SE050
 # has no LcsO concept. Uses current production object ranges on both
-# chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0C_xxxx — v4). Use
+# chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0E_xxxx — v5). Use
 # `make dual-se-unlock-e2e`.
 dual-se-unlock-e2e = ["dual-se"]
 se050-crash-safety-e2e = ["se050"]  # 2-phase test: partial wipe + reset + resume. Use `make se050-crash-safety-e2e`.

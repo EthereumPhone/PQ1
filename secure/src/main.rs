@@ -502,7 +502,7 @@ fn main() -> ! {
     // Actually wipes user objects via ReadIDList + DeleteSecureObject.
     // Three authentication attempts to catch objects gated by every
     // UserID this firmware lineage has ever provisioned:
-    //   - 0x7B0C_0000 : current dual-SE / standalone SE050 UserID (v4)
+    //   - 0x7B0E_0000 : current dual-SE / standalone SE050 UserID (v5)
     //   - 0x7B06_0000 : retired v3 range (2026-04-21, bench chips only)
     //   - 0x7B00_2000 : legacy UserID from early f44fd92-era builds
     // PIN is `b"00000000"` — the PIN baked into the e2e-test fast-path
@@ -518,7 +518,7 @@ fn main() -> ! {
         // wrong PIN consumes one SE050 attempt against that UserID
         // (10-attempt budget); a correct PIN auto-resets the counter.
         // PIN order is best-guess to minimise consumed attempts.
-        const USERIDS: &[u32] = &[0x7B0C_0000, 0x7B06_0000, 0x7B00_2000];
+        const USERIDS: &[u32] = &[0x7B0E_0000, 0x7B06_0000, 0x7B00_2000];
         const PIN_CANDIDATES: &[&[u8]] = &[
             b"00000000", // e2e default + most common dev PIN
             b"12345678",
@@ -657,7 +657,7 @@ fn main() -> ! {
     //
     // LcsO safety: does NOT imply `optiga-lock-operational`. SE050 has
     // no LcsO concept. Uses current production object ranges on both
-    // chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0C_xxxx — v4, the
+    // chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0E_xxxx — v5, the
     // latest bumped range past every legacy stuck region).
     //
     // Triggered by: make dual-se-unlock-e2e

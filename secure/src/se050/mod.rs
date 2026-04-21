@@ -20,26 +20,32 @@ use t1oi2c::T1State;
 // ---------------------------------------------------------------------------
 
 /// UserID authentication object — hardware-enforced PIN.
-/// Range v4 (0x7B0Cxxxx). Previous ranges are retired on bench chips
-/// after cross-test contamination left their UserIDs / admin-UserIDs
-/// stuck with no software recovery path:
+/// Range v5 (0x7B0Exxxx). Previous ranges retire on bench chips after
+/// cross-test contamination leaves their UserIDs / admin-UserIDs stuck
+/// with no software recovery path:
 ///   v1 (0x7B00_0000/2/3/5) — early-firmware sweep, policy gaps
 ///   v2 (0x7B00_2000)       — same era, ditto
-///   v3 (0x7B06_xxxx)       — retired 2026-04-21 after the
-///                            dual-SE admin-PIN-mismatch incident
-///                            (see work-todo entry + project memory).
+///   v3 (0x7B06_xxxx)       — retired 2026-04-21 after cross-test
+///                            admin-PIN-mismatch incident
+///   v4 (0x7B0C_xxxx)       — retired 2026-04-21 same day, after a
+///                            Transport glitch mid-`admin_factory_reset`
+///                            left admin UserID on chip while the
+///                            unconditional page-125 erase burned the
+///                            matching flash PIN (production-wrapper
+///                            bug fixed in this commit, see
+///                            `WalletStore::factory_reset_admin` impl).
 /// Bumping the range yields a chip as usable as a fresh one — the
 /// stuck OIDs occupy <100 bytes of ~130 KB persistent storage.
-pub const USERID_OBJ: u32 = 0x7B0C_0000;
+pub const USERID_OBJ: u32 = 0x7B0E_0000;
 
 /// Raw BIP-39 entropy (32 bytes), policy requires UserID auth.
-pub const ENTROPY_OBJ: u32 = 0x7B0C_0001;
+pub const ENTROPY_OBJ: u32 = 0x7B0E_0001;
 
 /// Verifying key (32 bytes), policy requires UserID auth.
-pub const VK_OBJ: u32 = 0x7B0C_0002;
+pub const VK_OBJ: u32 = 0x7B0E_0002;
 
 /// Bootstrap verifying key (32 bytes), policy requires UserID auth.
-pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B0C_0003;
+pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B0E_0003;
 
 /// Admin wipe UserID. Second auth object, created at provisioning with
 /// a per-device random PIN stored in secure flash page 125. Used only
@@ -48,20 +54,25 @@ pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B0C_0003;
 /// every user object (which all carry an admin-delete policy entry
 /// pointing here).
 ///
-/// **Known fragility** (tracked in work-todo #7 early-adopt item): the
-/// current implementation persists the admin PIN in page 125, so any
-/// action that erases page 125 without also deleting the on-chip
-/// admin UserID renders the chip un-wipe-able at this OID — the exact
-/// failure mode that retired the v3 range. Fix is to derive the PIN
-/// from `hw::secret_keys::se050_admin_pin()` (HKDF over OTP master)
-/// instead, matching the `derive_se050_admin_pin(&pbs)` API sketched
-/// in the original design.
-pub const ADMIN_WIPE_OBJ: u32 = 0x7B0C_00A0;
+/// **Invariant**: flash page 125's admin-PIN slot MUST mirror the
+/// chip's admin UserID state. `erase_admin_page()` is only called
+/// after we've verified the admin UserID is actually gone from the
+/// chip — see the conditional erase in `Se050::factory_reset_admin`.
+/// Violating the invariant (i.e. erasing flash while admin survives
+/// on chip) is exactly what retired v3 and v4.
+///
+/// Future hardening (work-todo #7 early-adopt item): derive the admin
+/// PIN via `hw::secret_keys::se050_admin_pin()` (HKDF over OTP master)
+/// so the on-chip admin UserID's PIN is reproducible per device without
+/// any flash pairing — eliminates this invariant entirely. Tracked
+/// separately; the conditional erase makes the flash-paired design
+/// durable until then.
+pub const ADMIN_WIPE_OBJ: u32 = 0x7B0E_00A0;
 
 // -- Factory-reset self-test object IDs --
 // Distinct from production IDs so the test never collides with a real
 // provisioning, and is repeatable on a chip that already has prod
-// objects at 0x7B0C_xxxx.
+// objects at 0x7B0E_xxxx.
 #[cfg(feature = "se050-reset-e2e")]
 const TEST_USERID_OBJ: u32 = 0x7B07_0000;
 #[cfg(feature = "se050-reset-e2e")]
@@ -148,6 +159,21 @@ impl Se050 {
     /// Iteratively delete every user-created object on the SE050 via
     /// `Se05x_API_DeleteAll_Iterative` semantics.
     ///
+    /// Check whether the admin-wipe UserID object exists on the chip.
+    /// Used by the dual-SE pre-clean cascade to decide whether it's
+    /// safe to erase secure-flash page 125 (don't erase if the admin
+    /// UserID is still on the chip — the flash PIN is the only way
+    /// to delete it on the next attempt).
+    pub fn admin_exists(&mut self) -> bool {
+        if self.init().is_err() {
+            return false;
+        }
+        unsafe {
+            apdu::check_exists(&mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ)
+                .unwrap_or(false)
+        }
+    }
+
     /// Two-pass: first unauthenticated SCP03 sweep, then (if `auth_obj_id`
     /// + `pin` provided) an authenticated retry against that UserID. The
     /// UserID itself is self-deleted at the end if it was created with
@@ -1024,15 +1050,15 @@ impl Se050 {
     /// the canary survives — guardrail against future byte-order bugs in
     /// the policy TLV construction.
     ///
-    /// Uses object IDs 0x7B0C_00B0 / 0x7B0C_00B1 (distinct from production
-    /// UserID/data range but inside the same v4 block). Caller provides
+    /// Uses object IDs 0x7B0E_00B0 / 0x7B0E_00B1 (distinct from production
+    /// UserID/data range but inside the same v5 block). Caller provides
     /// the admin PIN so the test exercises the SAME auth path the real
     /// wipe will use.
     pub fn policy_roundtrip_selftest(&mut self, admin_pin: &[u8; 16]) -> Result<(), Se050Error> {
         self.init()?;
 
-        const CANARY_USERID: u32 = 0x7B0C_00B0;
-        const CANARY_DATA: u32 = 0x7B0C_00B1;
+        const CANARY_USERID: u32 = 0x7B0E_00B0;
+        const CANARY_DATA: u32 = 0x7B0E_00B1;
         let canary_pin: [u8; 8] = *b"00000000";
 
         unsafe {
@@ -1358,8 +1384,20 @@ impl WalletStore for Se050 {
     #[cfg(feature = "stm32u585")]
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
         // Load admin PIN from flash (populated at first-boot provision),
-        // arm the wipe flag for crash-safety, wipe SE050 under admin auth,
-        // then erase page 125 to clear both the PIN and the flag.
+        // arm the wipe flag for crash-safety, wipe SE050 under admin
+        // auth, then CONDITIONALLY erase page 125.
+        //
+        // The erase was previously unconditional, which was the root
+        // cause of the v3 and v4 OID-range retirements (2026-04-21): a
+        // Transport glitch mid-`admin_factory_reset` can leave the
+        // admin UserID on the chip while returning Err, and an
+        // unconditional erase in that state would blow away the only
+        // PIN that could re-try the admin delete. We now gate the
+        // erase on `admin_exists()` so the flash-side PIN survives any
+        // partial wipe — next boot's resume path retries with the
+        // matching credential and converges.
+        //
+        // See `ADMIN_WIPE_OBJ` docstring for the invariant statement.
         unsafe {
             if crate::hw::flash::is_admin_pin_blank() {
                 // Nothing provisioned via the admin flow — best-effort
@@ -1372,18 +1410,23 @@ impl WalletStore for Se050 {
 
                 let _ = crate::hw::flash::arm_wipe_flag();
 
-                if self.admin_factory_reset(&admin_pin).is_err() {
-                    // Admin session failed (rare — chip glitch, corrupted
-                    // SCP03). Fall back to iterative delete so we still
-                    // clear everything we can.
-                    let _ = self.iterative_wipe(None, None);
-                }
+                // Errors deliberately swallowed. The `iterative_wipe`
+                // fallback that used to run here couldn't delete the
+                // policy-gated admin UserID anyway (same auth gate),
+                // so the only path out on error is preserving flash
+                // state for the next retry.
+                let _ = self.admin_factory_reset(&admin_pin);
 
                 use zeroize::Zeroize;
                 admin_pin.zeroize();
             }
 
-            let _ = crate::hw::flash::erase_admin_page();
+            // Conditional erase: only burn the flash state if the chip
+            // confirms the admin UserID is actually gone. Otherwise
+            // leave page 125 intact so the next resume retries.
+            if !self.admin_exists() {
+                let _ = crate::hw::flash::erase_admin_page();
+            }
         }
 
         self.zeroize_caches();
