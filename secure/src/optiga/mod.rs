@@ -1168,12 +1168,28 @@ impl OptigaTrustM {
     /// `Auto OR Conf` AC lets it through via Conf) and everything resumes
     /// normally. We deliberately leave LcsO alone — raising it is
     /// irreversible, and that would prevent future rotation.
+    /// Factory reset — zero out F1D0..F1D4 and mark the counter as
+    /// RESET_SENTINEL. Triggered by `trigger_lockout_wipe` on PIN
+    /// exhaustion. Works at any LcsO (including Operational): LcsO=Op
+    /// freezes metadata, not data, and every user OID's Change AC has
+    /// a `Conf(E140)` arm satisfied by the Shielded Connection.
+    ///
+    /// # Preconditions
+    /// - Caller must have called `init` previously or this call will
+    ///   OpenApplication again (cheap).
+    /// - `shield.pbs_loaded` must be true (set by `setup_pbs_no_handshake`
+    ///   or `load_pbs_from_otp`). `ensure_shield()` below will return
+    ///   `OptigaError::Shield` otherwise — correct failure, not a
+    ///   regression.
     pub fn factory_reset(&mut self) -> Result<(), OptigaError> {
         self.init()?;
-        // Shielded path is disabled while PRL is being debugged; Change AC
-        // for user OIDs is currently Auto(F1D0) only, so factory reset
-        // needs a valid PIN session. TODO: re-enable Conf(E140) path once
-        // the handshake is green.
+        // Bring the Shielded Connection up so every subsequent write
+        // satisfies the `Conf(E140)` arm of the user OID's Change AC.
+        // `authenticate_and_read` already brings it up on the PIN-
+        // lockout path, but the e2e test harness calls `factory_reset`
+        // directly — be explicit so correctness doesn't depend on
+        // caller ordering.
+        self.ensure_shield()?;
 
         // HIGH-18 fix: arm the shared wipe flag BEFORE starting any
         // destructive OID write. A power loss between two OID wipes
@@ -1212,6 +1228,147 @@ impl OptigaTrustM {
         self.remaining = MAX_ATTEMPTS;
 
         secure_log!("[OPTIGA] Factory reset complete");
+        Ok(())
+    }
+
+    /// End-to-end roundtrip exercising the `factory_reset` primitive on a
+    /// live chip. Scope is deliberately the wipe PRIMITIVE — NOT the
+    /// PIN-lockout-triggers-wipe flow, which is a separate integration
+    /// deferred to a later test.
+    ///
+    /// Flow:
+    /// 1. Provision F1D0..F1D4 + F1E1 with known-distinct test vectors
+    ///    via `store_objects` — the same code path production uses.
+    /// 2. Call `authenticate_and_read(test_pin)` — must succeed and
+    ///    return the exact `master_secret` we provisioned.
+    /// 3. Call `factory_reset()` — the path `trigger_lockout_wipe`
+    ///    invokes on PIN exhaustion.
+    /// 4. Read F1E1 raw; must equal `RESET_SENTINEL` (0xFF).
+    /// 5. Call `authenticate_and_read(test_pin)` again — must fail
+    ///    with `OptigaError::NotProvisioned` (the sentinel path).
+    /// 6. `check_provisioned()` must return false — the integration
+    ///    contract that triggers the first-boot wizard on next boot.
+    ///
+    /// Uses real production OIDs (`apdu::OID_*`) because `factory_reset`
+    /// hardcodes them. That means this test DESTROYS any wallet state
+    /// already on the chip. Caller (the `make optiga-admin-wipe-e2e`
+    /// target) is responsible for running on a dev bench chip.
+    ///
+    /// Idempotent across runs: `store_objects` is idempotent against a
+    /// partially-provisioned chip (user OIDs' `Change = Auto(F1D0) OR
+    /// Conf(E140)` — the Conf arm keeps data writable via the shield
+    /// regardless of what the previous run left behind).
+    ///
+    /// LcsO-safety: all writes this test performs go through
+    /// `set_data_object` or `set_metadata` (the latter with
+    /// `lock_oid` gated behind `optiga-lock-operational`, which is NOT
+    /// implied by `optiga-admin-wipe-e2e`). No OID is promoted to
+    /// `LcsO=Operational` by running this test.
+    #[cfg(feature = "optiga-admin-wipe-e2e")]
+    pub fn run_admin_wipe_roundtrip(&mut self) -> Result<(), OptigaError> {
+        self.init()?;
+
+        // Distinct byte patterns so a mixed-up readback (e.g. returning
+        // entropy when we asked for master_secret) is immediately visible.
+        let entropy: [u8; 32] = [0x11; 32];
+        let master_secret: [u8; 32] = [0x22; 32];
+        let vk: [u8; 32] = [0x33; 32];
+        let bootstrap_vk: [u8; 32] = [0x44; 32];
+        let test_pin: [u8; 8] = *b"testopt!";
+
+        // ---- 1. Provision with known test data ----
+        secure_log!("[OPTIGA-E2E-ADMIN] step 1: provision via store_objects");
+        self.store_objects(&entropy, &master_secret, &vk, &bootstrap_vk, &test_pin)?;
+        secure_log!("[OPTIGA-E2E-ADMIN] step 1: provision OK");
+
+        // ---- 2. Pre-wipe unlock must succeed AND return the right master_secret ----
+        secure_log!("[OPTIGA-E2E-ADMIN] step 2: pre-wipe authenticate_and_read");
+        let recovered = match self.authenticate_and_read(&test_pin) {
+            Ok(ms) => ms,
+            Err(e) => {
+                secure_log!("[OPTIGA-E2E-ADMIN] step 2 FAILED: unlock pre-wipe returned {:?}", e);
+                return Err(e);
+            }
+        };
+        if recovered != master_secret {
+            secure_log!("[OPTIGA-E2E-ADMIN] step 2 FAILED: master_secret mismatch");
+            return Err(OptigaError::Shield);
+        }
+        secure_log!("[OPTIGA-E2E-ADMIN] step 2: pre-wipe unlock OK (master_secret matches)");
+
+        // ---- 3. Run factory_reset (the path PIN lockout triggers) ----
+        secure_log!("[OPTIGA-E2E-ADMIN] step 3: factory_reset");
+        self.factory_reset()?;
+        secure_log!("[OPTIGA-E2E-ADMIN] step 3: factory_reset OK");
+
+        // ---- 4. Counter must now read RESET_SENTINEL (0xFF) ----
+        //    Read AC on F1E1 is ALW, no shield or PIN required.
+        let counter = unsafe { self.read_counter_raw() };
+        match counter {
+            Some(v) if v == RESET_SENTINEL => {
+                secure_log!("[OPTIGA-E2E-ADMIN] step 4: counter = RESET_SENTINEL OK");
+            }
+            other => {
+                secure_log!(
+                    "[OPTIGA-E2E-ADMIN] step 4 FAILED: counter = {:?}, expected 0x{:02x}",
+                    other, RESET_SENTINEL
+                );
+                return Err(OptigaError::Shield);
+            }
+        }
+
+        // ---- 5. Post-wipe unlock must return NotProvisioned ----
+        //    This is the key integration contract: the sentinel path in
+        //    `authenticate_and_read` short-circuits BEFORE bumping the
+        //    counter, so a wiped chip cannot have its lockout counter
+        //    re-exhausted by an attacker spamming unlock attempts.
+        secure_log!("[OPTIGA-E2E-ADMIN] step 5: post-wipe authenticate_and_read");
+        match self.authenticate_and_read(&test_pin) {
+            Err(OptigaError::NotProvisioned) => {
+                secure_log!("[OPTIGA-E2E-ADMIN] step 5: unlock returned NotProvisioned OK");
+            }
+            Ok(_) => {
+                secure_log!("[OPTIGA-E2E-ADMIN] step 5 FAILED: unlock SUCCEEDED after wipe");
+                return Err(OptigaError::Shield);
+            }
+            Err(e) => {
+                secure_log!(
+                    "[OPTIGA-E2E-ADMIN] step 5 FAILED: unlock returned {:?} (expected NotProvisioned)",
+                    e
+                );
+                return Err(e);
+            }
+        }
+
+        // ---- 6. is_provisioned() must return false ----
+        //    Boot-path contract: main.rs checks this to decide whether to
+        //    run the first-boot wizard. If it still returns true after
+        //    factory_reset, the wizard would be skipped on next boot and
+        //    the device would sit in a wiped-but-locked state.
+        if self.check_provisioned() {
+            secure_log!("[OPTIGA-E2E-ADMIN] step 6 FAILED: check_provisioned() returned true after wipe");
+            return Err(OptigaError::Shield);
+        }
+        secure_log!("[OPTIGA-E2E-ADMIN] step 6: check_provisioned() = false OK");
+
+        // ---- 7. Post-test hygiene: clear the wipe-in-progress flag ----
+        //    `factory_reset` arms the page-125 wipe flag for dual-SE
+        //    crash-safety resume. In OPTIGA-only builds the flag is
+        //    vestigial (the boot-time resume path is gated on se050 /
+        //    dual-se), but a tester who later flashes a dual-SE build
+        //    onto this chip would see an unexpected "wipe resume" fire
+        //    with no valid admin PIN. Clear the flag now so the chip
+        //    ends the test in a clean state.
+        #[cfg(feature = "stm32u585")]
+        unsafe {
+            if let Err(()) = crate::hw::flash::erase_admin_page() {
+                secure_log!("[OPTIGA-E2E-ADMIN] cleanup WARNING: erase_admin_page failed");
+                // Not a test failure — the wipe itself was confirmed.
+            } else {
+                secure_log!("[OPTIGA-E2E-ADMIN] post-test: page-125 wipe flag cleared");
+            }
+        }
+
         Ok(())
     }
 

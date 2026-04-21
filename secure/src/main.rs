@@ -642,6 +642,41 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- OPTIGA Trust M factory_reset roundtrip e2e ----
+    // Exercises the `factory_reset` primitive end-to-end on real silicon:
+    // provision F1D0..F1D4 + F1E1 with known test vectors, verify the
+    // unlock path works, call `factory_reset`, then verify the counter
+    // sentinel + `NotProvisioned` error + `check_provisioned() == false`
+    // post-wipe contract.
+    //
+    // Scope: the factory_reset PRIMITIVE only — NOT the PIN-lockout
+    // integration path that calls it (deferred to a later test).
+    //
+    // Destroys any wallet state on the chip because it uses the real
+    // production OIDs (`factory_reset` hardcodes them). Re-run the real
+    // first-boot wizard or `make flash-hw-optiga-unlock-test` afterwards
+    // to restore. Idempotent across repeated runs on the same chip.
+    //
+    // Does NOT imply `optiga-lock-operational` → no LcsO ratcheting.
+    //
+    // Triggered by: make optiga-admin-wipe-e2e
+    #[cfg(feature = "optiga-admin-wipe-e2e")]
+    unsafe {
+        ui::show_status("OPTIGA wipe", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        match se.run_admin_wipe_roundtrip() {
+            Ok(()) => {
+                secure_log!("[S] [E2E-OPTIGA-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS");
+                ui::show_status("OPTIGA wipe", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E-OPTIGA-ADMIN] ADMIN-WIPE ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("OPTIGA wipe", "FAIL");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- SE050 factory-reset roundtrip e2e test ----
     // Provisions a fresh test UserID + 2 gated data objects under a
     // known PIN, then exercises user_factory_reset and verifies all

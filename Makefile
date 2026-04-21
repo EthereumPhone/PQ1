@@ -1086,6 +1086,53 @@ flash-hw-optiga-unlock-test:
 	@echo "==> Resetting and attaching — expect 'gateway pre-unlocked, ready for tests'"
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# OPTIGA factory_reset roundtrip e2e. Exercises `factory_reset` end-to-end
+# on the real chip: provision F1D0..F1D4 + F1E1 with known test vectors,
+# unlock, factory_reset, then verify the counter == RESET_SENTINEL + unlock
+# returns NotProvisioned + check_provisioned() == false.
+#
+# !!! WARNING: this target DESTROYS any wallet state on the chip !!!
+# `factory_reset` hardcodes the production OIDs (F1D0..F1D4 + F1E1), so
+# the test wipes them. Re-run `make flash-hw-optiga-unlock-test` or the
+# real first-boot wizard afterwards to restore. Safe to run on any dev
+# bench chip; idempotent across repeated runs.
+#
+# Scope: exercises the factory_reset PRIMITIVE, NOT the PIN-lockout→wipe
+# integration path (that's a separate deferred test).
+#
+# LcsO-safety: deliberately does NOT include `optiga-lock-operational`.
+# Every metadata write in the provisioning step goes via
+# `build_metadata_auth_ref` / `build_metadata_user_oid` /
+# `build_metadata_counter` (no LCS tag), and `lock_oid` is a no-op. No
+# OID is promoted to LcsO=Operational by running this target.
+#
+# `e2e-test` is required because `otp-hardcoded-master-key` trips the
+# production guard in nsc/mod.rs unless the unambiguous "not-shippable"
+# marker is set. The e2e-test fast-path itself is dead code here — our
+# dispatcher at main.rs halts before the fast-path ever runs.
+#
+# Watch semihosting for "[E2E-OPTIGA-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS"/"FAIL".
+optiga-admin-wipe-e2e:
+	@echo "==> Building OPTIGA factory_reset roundtrip e2e firmware..."
+	@echo "    WARNING: this build will WIPE any wallet state on the target chip."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-admin-wipe-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running admin-wipe e2e (watch semihosting for PASS/FAIL)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # Shield-handshake-only test. Skips `provision_from_mnemonic` entirely
 # and runs `init` → `load_pbs_from_otp` → `ensure_shield` against an
 # already-provisioned chip. Use this to validate the Shielded Connection
