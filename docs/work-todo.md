@@ -283,18 +283,68 @@ Adds post-quantum confidentiality on top of the classical encrypted channels (No
 
 ---
 
-### 11. SCP03 Key Rotation for SE050
+### 11. SCP03 Key Rotation for SE050 (wire derived-root + GP PUT KEY ceremony)
 
-**Status:** NOT IMPLEMENTED (uses hardcoded NXP OEF 0xA921 platform keys)
+**Status:** NOT IMPLEMENTED — dormant derivation infrastructure landed in #24, feature flag + ceremony still owed. Wire-up is the immediate parallel to OPTIGA's OTP-derived PBS.
 
-Same keys across all SE050 chips of the same OEM firmware edition. Should be rotated to per-device keys during factory provisioning.
+Today `secure/src/se050/scp03.rs:21-30` hardcodes the NXP AN12436 Rev 2.4 defaults for SE050E OEF `0xA921` (`PLATFORM_ENC` + `PLATFORM_MAC` 16-byte constants, `KEY_VERSION = 0x0B`). Every device built from the same firmware presents identical static keys → single-firmware-extraction breaks the entire fleet's SE050 channel.
 
-**What's needed:**
-- [ ] SCP03 key rotation APDU
-- [ ] Per-device key derivation (from device UID or HUK)
-- [ ] Integration with HUK-SAES wrapping (item 7)
+**The deterministic-root infrastructure already exists** (landed in #24, currently dormant):
+```rust
+// secure/src/hw/secret_keys.rs:126-137
+pub fn se050_scp03_enc_key() -> Result<[u8; 16], OtpError> { ... }
+pub fn se050_scp03_mac_key() -> Result<[u8; 16], OtpError> { ... }
+```
+Both currently `HKDF-Expand(OTP_master, "pqsigner/se050-scp03-{enc,mac}-v1")`. Under #7 Tier 1 migration the internal primitive becomes `SAES-CMAC(DHUK, label)`; under Tier 2 it shifts to `SAES-CMAC(BHK, label)` for the per-SE selector split. Callers never change.
 
-**Files to change:** `secure/src/se050/scp03.rs`, `secure/src/se050/apdu.rs`
+#### The problem with a naive swap
+
+`PLATFORM_ENC`/`PLATFORM_MAC` are what the firmware uses; the *chip* has its own copy of the same bytes at keyset `0x0B` (factory-provisioned by NXP). They have to match byte-for-byte for `INITIALIZE UPDATE` to produce a matching CardCryptogram. So:
+
+- Changing just firmware to use derived keys → SCP03 establishment fails against a factory-default chip (key mismatch at the MAC step).
+- We must do a GP `PUT KEY` ceremony against the chip THAT MATCHES the firmware's new derivation, and then commit the firmware to use the new keyset version.
+
+This is a two-build, one-chip-operation flow.
+
+#### Three-stage landing
+
+**Stage A — derivation plumbing (reversible, ready to land now):**
+- [ ] Add a helper `secure/src/se050/scp03.rs::load_platform_keys()` that returns `Result<([u8; 16], [u8; 16]), Se050Error>`. Default variant returns `(PLATFORM_ENC, PLATFORM_MAC)` (hardcoded); gated variant under a new Cargo feature returns `(secret_keys::se050_scp03_enc_key()?, secret_keys::se050_scp03_mac_key()?)`.
+- [ ] Change `scp03.rs:211-213` `kdf(&PLATFORM_ENC, ...)` → `kdf(&platform_enc, ...)` where `platform_enc` comes from `load_platform_keys()`.
+- [ ] Change `KEY_VERSION = 0x0B` (scp03.rs:30) to a const that flips to `0x11` under the same feature.
+- [ ] **Feature name**: `se050-derived-scp03` (narrower than "rotate" — this step picks the root, doesn't mutate chip state yet).
+- [ ] Under the feature ON: a build that targets a post-rotation chip. Under the feature OFF: the default build, targets a factory-default chip. Either can talk to its own chip, neither can talk to the other — a device committed to derived keys is boot-incompatible with default-key firmware.
+
+**Stage B — one-shot rotation ceremony (irreversible per chip; sacrificial-part-first):**
+- [ ] New `se050-rotate-scp03` Cargo feature (P0 guardrail, default OFF, implies `se050-derived-scp03`). At first boot of a fresh chip:
+  1. Establish SCP03 against default keyset `0x0B` with hardcoded constants (revert helper to hardcoded path for just this one boot).
+  2. Compute new keys via `secret_keys::se050_scp03_{enc,mac}_key()`.
+  3. Compute Key Check Value for each: `KCV = AES-ECB-Enc(key, zeros)[..3]` (per GP 2.3 §11.8 + AN12436 §5.2).
+  4. AES-ECB-wrap each new key under the corresponding current key: `wrapped = AES-ECB-Enc(current_key, new_key)`.
+  5. Send GP `PUT KEY` (`CLA=0x84 INS=0xD8 P1=0x81 P2=<new_kvn=0x11>`) with body:
+     `[new_kvn] [key_type=0x88 (AES)] [len=0x10] [wrapped_enc] [kcv_enc_len=0x03] [kcv_enc]`
+     × 3 for ENC / MAC / DEK (SCP03 always installs all three even if we don't use DEK — AN12436 §5.2.3).
+  6. Verify SW=9000.
+  7. Mark a "SCP03 rotated" flag — location TBD, not flash page 125 (colocated with admin PIN — we've already seen cross-test hygiene burn us). Candidates: OTP one-shot bit, a dedicated flash page, or probe-on-boot (try 0x11 first, fall back to 0x0B if rotation hasn't happened yet — simplest, skip the flag entirely).
+  8. All subsequent boots establish against `KVN=0x11` with derived keys.
+- [ ] **Brick class after rotation**: lose derivation root → cannot re-establish → same "lose the derivation, lose the chip" failure mode as OPTIGA PBS loss. Work-todo #7 Tier 1/2 closes this by moving the root off a readable OTP master onto DHUK/BHK.
+- [ ] **Probe-on-boot fallback** (stage B sub-option): skip the rotation flag. Instead, `establish()` tries `KVN=0x11` + derived keys first; on `SW=0x6A88` (key not found) or MAC failure, retry with `KVN=0x0B` + hardcoded defaults. One extra failed auth per boot on un-rotated chips; zero on rotated ones. Avoids adding persistent state.
+
+**Stage C — clone-resistance binding (optional, per #20 P0):**
+- [ ] Mix SE050 UID into the derivation context: `secret_keys::se050_scp03_*_key_bound(uid: &[u8; 18]) -> [u8; 16]` that does `HKDF(OTP_master, "pqsigner/se050-scp03-{enc,mac}-v1" || uid)`. Defeats "clone a device's OTP master to a different SE050" — the derivation is only valid for the specific SE050 UID it was rotated against.
+- [ ] SE050 UID read via `Se05x_API_ReadObject` on object `0xA000_F00E` (standard NXP-provisioned UID). No SCP03 needed to read.
+- [ ] Documented but not mandatory for Stage B — adds 14 bytes of binding + one extra APDU per boot.
+
+#### Cross-references
+
+- #7 (three-tier DHUK + BHK + OTP) — rotates the derivation primitive under `secret_keys` without touching this item's ceremony.
+- #20 (production key management) — the factory-ceremony superset that includes this rotation, OPTIGA PBS commit, binding manifest.
+- #24 (OPTIGA pairing restructure, LANDED) — established the `hw::secret_keys` API that this item consumes.
+- Production-todo §"SE050 — SCP03 + ADMIN provisioning" — mirror-image checklist for the irreversible side of stage B.
+
+**Files to change (Stage A):** `secure/src/se050/scp03.rs` (helper + `KEY_VERSION` const + feature gate), `secure/Cargo.toml` (new `se050-derived-scp03` feature).
+
+**Files to change (Stage B):** `secure/src/se050/scp03.rs` (rotation APDU), `secure/src/se050/apdu.rs` (`put_key` helper), `secure/Cargo.toml` (`se050-rotate-scp03` feature), `secure/src/main.rs` (one-shot dispatcher, pattern-identical to the existing `se050-admin-wipe-e2e` block), new `Makefile` target `make flash-hw-se050-rotate-scp03` with the same sacrificial-chip warning as `optiga-admin-wipe-e2e`.
 
 ---
 

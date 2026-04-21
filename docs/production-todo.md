@@ -210,33 +210,119 @@ escape hatch exists for user OIDs only.
 The SE050 half of the dual-SE also has irreversible steps (per
 `docs/se050-factory-reset.md` + work-todo #20). Summarising here:
 
-- [ ] **SCP03 keys rotated per device**. Derivation root migrates
-      alongside work-todo #7 tiers:
-      - Today: hardcoded AN12436 defaults.
-      - Post-#24 (OTP tier, **landed**): per-device via
+- [ ] **SCP03 keys rotated per device** (work-todo #11). Derivation
+      root migrates alongside work-todo #7 tiers:
+      - Today: hardcoded AN12436 Rev 2.4 defaults for OEF `0xA921`
+        at `secure/src/se050/scp03.rs:21-30`. `KEY_VERSION = 0x0B`.
+        Every device of the same firmware build shares identical
+        keys.
+      - Post-#11 Stage A (derivation plumbing, reversible): firmware
+        pulls root from `secret_keys::se050_scp03_{enc,mac}_key()`
+        under the `se050-derived-scp03` Cargo feature. Chip state
+        unchanged at this stage — build just targets what it talks to.
+      - Post-#24 (OTP tier, **landed**): derivation is
         `HKDF(OTP_master, "se050-scp03-{enc,mac}-v1")`.
       - Post-#7 Tier 1 (DHUK): same API surface, underlying primitive
         becomes `SAES-CMAC(DHUK, "se050-scp03-{enc,mac}-v1")`.
       - Post-#7 Tier 2 (BHK, final recommended split): `SAES-CMAC(BHK,
         "se050-scp03-{enc,mac}-v1")` per the per-SE selector split in
         work-todo #7.
-      PUT KEY `INS=0xD8` from KVN=0x0B to KVN=0x11 at rotation. Once
-      rotated, losing the derivation root means losing the chip — same
-      class of failure as the OPTIGA PBS brick.
-- [ ] **Admin UserID at 0x7B06_00A0** with two-entry TAG_POLICY
-      provisioned. Admin PIN migrates alongside work-todo #7:
+
+      **The irreversible part — GP PUT KEY ceremony (stage B)**:
+
+      1. Establish SCP03 against default keyset `KVN=0x0B` with the
+         hardcoded AN12436 constants.
+      2. Compute per-device keys via `secret_keys::se050_scp03_*_key()`.
+      3. Compute Key Check Value per key: `KCV = AES-ECB-Enc(key, zeros)[..3]`.
+      4. Wrap each new key: `wrapped = AES-ECB-Enc(current_key, new_key)`.
+      5. Send GP `PUT KEY` (`CLA=0x84 INS=0xD8 P1=0x81 P2=0x11`) with
+         body `[0x11] [0x88 0x10 wrapped_enc 0x03 kcv_enc]×3` for ENC /
+         MAC / DEK (SCP03 always installs all three — AN12436 §5.2.3).
+      6. Verify `SW=0x9000`.
+      7. Optional stage C (#11): mix SE050 UID into derivation label for
+         clone defense. One extra `ReadObject(0xA000_F00E)` on every
+         subsequent boot.
+
+      **Failure modes after commit:**
+      - Lose derivation root → cannot re-establish → hard brick,
+        same class as OPTIGA PBS loss. Mitigated long-term by #7
+        Tier 1/2 (derivation moves off readable OTP master onto
+        DHUK/BHK).
+      - RDP2→RDP0 regression clears MCU flash but OTP survives →
+        derivation still reproduces → rotated keyset `0x11` still
+        authenticatable. Recoverable.
+      - Partial `PUT KEY` (brown-out mid-rotation): potentially leaves
+        the chip with one-of-three keys updated, breaking SCP03. Pre-
+        commit checklist rehearsal on sacrificial parts MUST verify
+        that `PUT KEY` is atomic at the chip level (NXP spec says it
+        is; confirm empirically).
+- [ ] **Admin UserID at 0x7B0C_00A0** (range v4, bumped 2026-04-21 from
+      v3 `0x7B06_00A0` after bench-chip cross-contamination) with two-
+      entry TAG_POLICY provisioned. Admin PIN migrates alongside
+      work-todo #7:
       - Today: TRNG-generated at first-boot, persisted plaintext to
         STM32 secure-flash page 125 (`ADMIN_PAGE_ADDR`). Wiped at
-        `erase_admin_page()`.
-      - Post-#7 Tier 2: derived on demand from BHK as
-        `SAES-CMAC(BHK, "se050-admin-pin-v1")`. Page 125 retires.
-        Wipe flag migrates to a new home (OTP one-shot bit or a
-        dedicated flash page).
-      Wipe flow validated today via `make se050-admin-wipe-e2e` +
-      `make dual-se-admin-wipe-e2e` (pending, work-todo deferred).
+        `erase_admin_page()`. **This is the fragility that retired
+        the v3 range** — any action that erases page 125 without
+        also deleting the on-chip admin UserID makes the chip un-wipe-
+        able at that OID. Fix in work-todo #7 early-adopt item:
+        `hw::secret_keys::se050_admin_pin()` derived from OTP master.
+      - Post-#7 early-adopt (pre-Tier-1): derived via
+        `HKDF(OTP_master, "pqsigner/se050-admin-pin-v1")`. Page 125
+        admin-PIN slot retires; wipe flag moves to a dedicated small
+        page or an OTP one-shot bit.
+      - Post-#7 Tier 2: `SAES-CMAC(BHK, "se050-admin-pin-v1")`.
+      Wipe flow validated today via `make se050-admin-wipe-e2e` on
+      isolated OIDs + `make dual-se-unlock-e2e` PASS on real silicon
+      (2026-04-21).
 - [ ] **User UserID PIN storage.** Change the UserID's policy to
       whatever we ultimately ship (currently in `docs/se050-userid-
       pin-auth.md`); post-provision, policy is frozen.
+
+#### SE050 SCP03 rotation pre-commit checklist (sacrificial parts)
+
+Before flipping `se050-rotate-scp03=on` on any real unit:
+
+1. On sacrificial SE050 #1: build + flash with `se050-derived-scp03`
+   only (no rotate feature). Confirm the build talks to a factory-
+   default chip → SCP03 establishment FAILS with key mismatch. This
+   is the expected behaviour: post-plumbing-only builds CANNOT talk
+   to un-rotated chips. Log the error, no chip state committed.
+2. On sacrificial SE050 #2: build + flash with `se050-rotate-scp03`.
+   First boot: firmware sees default keyset, runs PUT KEY ceremony,
+   rotates to `KVN=0x11` with derived keys. Second boot on the same
+   chip: firmware uses `KVN=0x11` + derived keys → SCP03 establishes.
+   Third boot: reflash with a comment-only code edit, confirm SCP03
+   still establishes (derivation stable across firmware rebuilds).
+4. On sacrificial SE050 #3: same as #2 but induce a brown-out
+   mid-`PUT KEY` by cutting VCC between the ENC and MAC key writes.
+   Verify on restore: either all three keys rotated (atomic), or
+   chip reports specific error the code can detect and retry. If
+   partial rotation survives the brown-out → halt the rollout and
+   re-design.
+5. On sacrificial SE050 #4 (only if stage C is shipping): repeat #2
+   with UID binding enabled. Confirm derivation depends on UID:
+   swap the rotated SE050 to a different STM32 board with
+   `se050-rotate-scp03` built for that STM32's OTP → SCP03 establish
+   fails (different OTP → different derived keys → key mismatch).
+   Swap back → works. This is the clone-resistance proof.
+6. Only then: production line runs per-unit `PUT KEY` → provision →
+   admin UserID + user UserID install → option-byte lock. Per-part
+   logs record: SE050 UID, KVN 0x11 KCV (3 bytes per key), post-
+   rotation SCP03 establishment success, first-boot admin PIN
+   derivation fingerprint.
+
+#### SE050 SCP03 rotation — escape hatch
+
+**None.** Unlike OPTIGA's SetObjectProtected + Trust Anchor recovery
+(which can reset user OIDs at `LcsO=Op`), SE050 has no reset-to-
+factory-keys path for SCP03. The `0x0B` default keyset still exists
+on the chip (GP `PUT KEY` installs new keysets, doesn't replace the
+default), but once the firmware commits to `KVN=0x11` there's no
+build-time path back to `0x0B` without an explicit rollback feature
+— and rolling back exposes every device to the same factory default
+that made rotation necessary in the first place. Treat a lost
+derivation root as a total loss of that chip.
 
 ### Supply-chain attestation (work-todo #22)
 
