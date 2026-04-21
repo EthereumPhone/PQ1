@@ -346,15 +346,20 @@ impl DualSecureElement {
         #[cfg(feature = "stm32u585")]
         unsafe {
             // Stage (a): admin auth if page 125 has a PIN.
-            if !crate::hw::flash::is_admin_pin_blank() {
+            let admin_blank = crate::hw::flash::is_admin_pin_blank();
+            secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (a): admin_pin_blank={}", admin_blank);
+            if !admin_blank {
                 let mut admin_pin = [0u8; 16];
                 crate::hw::flash::read_admin_pin(&mut admin_pin);
-                let _ = self.se050.admin_factory_reset(&admin_pin);
+                let r = self.se050.admin_factory_reset(&admin_pin);
+                secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (a): admin_factory_reset → {:?}", r.as_ref().err());
                 admin_pin.zeroize();
             }
 
             // Stage (b): user-PIN cascade if USERID_OBJ survived.
-            if self.se050.is_provisioned() {
+            let se_prov_before = self.se050.is_provisioned();
+            secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (b): se050.is_provisioned()={}", se_prov_before);
+            if se_prov_before {
                 const PIN_CANDIDATES: &[&[u8]] = &[
                     b"00000000", // e2e-test fast-path default (most common)
                     b"dualwipe", // our own test PIN (prior run)
@@ -362,20 +367,21 @@ impl DualSecureElement {
                     b"11111111",
                 ];
                 for &pin in PIN_CANDIDATES {
-                    if self.se050.user_factory_reset(pin).is_ok() {
+                    let r = self.se050.user_factory_reset(pin);
+                    secure_log!(
+                        "[DUAL-E2E-UNLOCK] pre-clean stage (b): user_factory_reset({:?}) → {:?}",
+                        core::str::from_utf8(pin).unwrap_or("?"),
+                        r.as_ref().err(),
+                    );
+                    if r.is_ok() {
                         break;
                     }
-                    // user_factory_reset self-deletes the UserID on
-                    // success, so on failure the UserID is still
-                    // there and we can retry the next candidate.
                 }
             }
 
             // Stage (c): unauthenticated sweep as final catch-all.
-            // Deletes any admin UserID created with a self-deletable
-            // policy that somehow survived stage (a) (e.g. page-125
-            // PIN mismatch) plus catches stray policyless objects.
-            // Idempotent — if nothing's left to delete, no-op.
+            let se_prov_mid = self.se050.is_provisioned();
+            secure_log!("[DUAL-E2E-UNLOCK] pre-clean stage (c): se050.is_provisioned()={}", se_prov_mid);
             let _ = self.se050.iterative_wipe(None, None);
 
             // Erase page 125 so provision() below generates a fresh
