@@ -750,11 +750,20 @@ pub const ZK_CLEAR_SIGN_FIXED_LEN: usize = ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_S
 /// ZK_CLEAR_SIGN_FIXED_LEN prefix.
 pub const ZK_VK_BUNDLE_MAX_LEN: usize = 2048;
 
-// ---------------------------------------------------------------------------
-// v3 CoW EIP-712 clear-sign trailer (shared by SIGN_USEROP)
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+//   CoW Protocol / GPv2Settlement — EIP-712 clear-sign v3
+// ═══════════════════════════════════════════════════════════════════════════
 //
-// When the companion sends a CoW swap UserOp whose inner calldata is
+// All constants for the v3 "render the full GPv2Order on the trusted UI"
+// flow live in this block. Three sub-groups:
+//
+//   1. Trailer layout          — ZK_V3_* shapes the SIGN_USEROP payload.
+//   2. Trailer field offsets   — ZK_V3_OFF_* index into the fixed prefix.
+//   3. Protocol-identity       — the setPreSignature selector, the real
+//                                GPv2Settlement contract address, and the
+//                                DB-lookup sentinel that keys the v3 VK.
+//
+// When the companion sends a CoW UserOp whose inner calldata is
 // `setPreSignature(orderUid, true)` on GPv2Settlement, it attaches a
 // third trailer section after the legacy `zk_bundle` slot:
 //
@@ -778,15 +787,23 @@ pub const ZK_VK_BUNDLE_MAX_LEN: usize = 2048;
 // cross-checks against the calldata's `[100..132)` slice. Together
 // these replace the legacy v1 proof entirely for CoW setPreSignature.
 
+// ─── 1. Trailer layout ─────────────────────────────────────────────────────
+
 /// Fixed prefix of the v3 trailer (proof2 + canonical + readable2).
 /// The NS gateway appends the VK bundle; see
 /// `nonsecure/src/usb/commands.rs::maybe_inject_vk_bundle_v3`.
 pub const ZK_V3_FIXED_LEN: usize = EIP712_PROOF_LEN + EIP712_CANONICAL_LEN + EIP712_STRING_LEN;
 
-/// Offsets within the v3 trailer's fixed prefix.
+// ─── 2. Trailer field offsets ──────────────────────────────────────────────
+
+/// Offset of the 384-byte Groth16 proof within the fixed prefix.
 pub const ZK_V3_OFF_PROOF: usize = 0;
+/// Offset of the 204-byte canonical GPv2Order within the fixed prefix.
 pub const ZK_V3_OFF_CANONICAL: usize = ZK_V3_OFF_PROOF + EIP712_PROOF_LEN;
+/// Offset of the 128-byte readable ASCII string within the fixed prefix.
 pub const ZK_V3_OFF_READABLE: usize = ZK_V3_OFF_CANONICAL + EIP712_CANONICAL_LEN;
+
+// ─── 3. Protocol-identity constants ────────────────────────────────────────
 
 /// Function selector for `setPreSignature(bytes,bool)` on
 /// `GPv2Settlement` — companion's calldata[0..4] match against this

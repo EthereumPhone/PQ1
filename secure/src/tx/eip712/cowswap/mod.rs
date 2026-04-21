@@ -30,8 +30,35 @@
 //! EIP-712 digest, so NS can't supply a mismatched VK.
 //!
 //! `appData` is now genuinely bound — v2 pinned it to `bytes32(0)`.
+//!
+//! ## Submodule layout
+//!
+//! Keeping this module tight for auditors — domain/struct/digest and
+//! the setPreSignature cross-check live in this file; wrapper glue
+//! and test fixtures sit in siblings:
+//!
+//!   * [`verify`] — the top-level `verify_and_bind_trailer` that the
+//!     gateway handler calls. Composes `zk::verify_clear_sign_proof_v3`
+//!     with the sentinel + length + shape + cross-check guards.
+//!   * `test_vectors` (cfg(test) only) — 1000 USDC → WETH fixture and
+//!     the 9 cross-check / shape regression tests, kept off the
+//!     production build entirely.
 
 use super::{eip712_domain_separator, final_digest, keccak, Eip712Error};
+
+// `verify` depends on `crate::zk`, which is `#[cfg(not(test))]`-gated
+// in `main.rs` (Groth16 pulls in bls12_381 types that don't round-trip
+// through `cargo test --release` without hardware-specific glue). Keep
+// the verify wrapper compiled only for firmware builds; host tests
+// exercise the lower-level `compute_digest`, `cross_check_*`, and
+// `check_setpresig_calldata_shape` primitives below.
+#[cfg(not(test))]
+pub mod verify;
+#[cfg(not(test))]
+pub use verify::{verify_and_bind_trailer, VerifiedCowswapV3};
+
+#[cfg(test)]
+mod test_vectors;
 
 // ---------------------------------------------------------------------------
 // Public addresses
@@ -63,8 +90,19 @@ pub const SENTINEL: [u8; 20] = [
 // EIP-712 typehashes (constant preimages, hashed lazily on first use).
 // ---------------------------------------------------------------------------
 
-/// `keccak256("Order(address sellToken,address buyToken,address receiver,uint256 sellAmount,uint256 buyAmount,uint32 validTo,bytes32 appData,uint256 feeAmount,bytes32 kind,bool partiallyFillable,bytes32 sellTokenBalance,bytes32 buyTokenBalance)")`.
-const ORDER_TYPEHASH_PREIMAGE: &[u8] = b"Order(address sellToken,address buyToken,address receiver,uint256 sellAmount,uint256 buyAmount,uint32 validTo,bytes32 appData,uint256 feeAmount,bytes32 kind,bool partiallyFillable,bytes32 sellTokenBalance,bytes32 buyTokenBalance)";
+// NOTE: the CoW EIP-712 TYPE_HASH preimage declares `kind`,
+// `sellTokenBalance`, and `buyTokenBalance` as `string`, not `bytes32`,
+// even though the Solidity `GPv2Order.Data` struct stores them as
+// `bytes32`. The value hashed into the struct is the same 32-byte
+// `keccak256` of an ASCII identifier ("sell"/"buy"/"erc20"/"external"/
+// "internal"), which matches EIP-712's `keccak256(bytes(string_value))`
+// rule — but the typehash itself differs. Getting this wrong yields
+// `0x1a59c8ff…` instead of the canonical `0xd5a25ba2…` and every
+// orderUid we derive diverges from what the orderbook + on-chain
+// settlement compute. Verified against a real filled Base order
+// (`0x59ebcff5…`).
+/// `keccak256("Order(address sellToken,address buyToken,address receiver,uint256 sellAmount,uint256 buyAmount,uint32 validTo,bytes32 appData,uint256 feeAmount,string kind,bool partiallyFillable,string sellTokenBalance,string buyTokenBalance)")`.
+const ORDER_TYPEHASH_PREIMAGE: &[u8] = b"Order(address sellToken,address buyToken,address receiver,uint256 sellAmount,uint256 buyAmount,uint32 validTo,bytes32 appData,uint256 feeAmount,string kind,bool partiallyFillable,string sellTokenBalance,string buyTokenBalance)";
 
 const COWSWAP_DOMAIN_NAME: &[u8] = b"Gnosis Protocol";
 const COWSWAP_DOMAIN_VERSION: &[u8] = b"v2";
@@ -404,168 +442,4 @@ pub fn check_setpresig_calldata_shape(calldata: &[u8; 164]) -> Result<(), OrderU
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod cross_check_tests {
-    use super::*;
-
-    // 1000 USDC → ≥ 0.5 WETH fixture — matches companion e2e_vector.
-    fn fixture_canonical() -> [u8; 204] {
-        let mut c = [0u8; 204];
-        c[0..8].copy_from_slice(&1u64.to_be_bytes()); // chain_id
-        c[8..28].copy_from_slice(&[
-            0xa0, 0xb8, 0x69, 0x91, 0xc6, 0x21, 0x8b, 0x36, 0xc1, 0xd1, 0x9d, 0x4a, 0x2e, 0x9e,
-            0xb0, 0xce, 0x36, 0x06, 0xeb, 0x48,
-        ]); // USDC
-        c[28..48].copy_from_slice(&[
-            0xc0, 0x2a, 0xaa, 0x39, 0xb2, 0x23, 0xfe, 0x8d, 0x0a, 0x0e, 0x5c, 0x4f, 0x27, 0xea,
-            0xd9, 0x08, 0x3c, 0x75, 0x6c, 0xc2,
-        ]); // WETH
-        c[48..68].copy_from_slice(&[
-            0x74, 0x2d, 0x35, 0xcc, 0x66, 0x34, 0xc0, 0x53, 0x29, 0x25, 0xa3, 0xb8, 0x44, 0xbc,
-            0x45, 0x4e, 0x44, 0x38, 0xf4, 0x4e,
-        ]); // receiver
-            // sell_amount = 1_000_000_000 at [68..100]
-        c[96..100].copy_from_slice(&1_000_000_000u32.to_be_bytes());
-        // buy_amount = 0x06F05B59D3B20000 at [100..132]
-        c[124..132].copy_from_slice(&0x06F05B59D3B20000u64.to_be_bytes());
-        // fee_amount = 0 at [132..164]
-        // valid_to = 0x68000000 at [164..168]
-        c[164..168].copy_from_slice(&0x68000000u32.to_be_bytes());
-        c[168] = 0; // kind = Sell
-        c[169] = 0;
-        c[170] = 0;
-        c[171] = 0;
-        c[172..204].copy_from_slice(&[
-            0x83, 0xb9, 0xdc, 0xb2, 0x31, 0x6e, 0x54, 0xfc, 0x04, 0xc1, 0x0f, 0x74, 0xc9, 0xa3,
-            0xd5, 0xdd, 0x66, 0xa9, 0xe4, 0xc4, 0x3c, 0x04, 0xcc, 0xef, 0xb9, 0xc0, 0xc0, 0x3e,
-            0x61, 0xe5, 0xfb, 0x28,
-        ]);
-        c
-    }
-
-    fn fixture_owner() -> [u8; 20] {
-        [0xfb, 0x3c, 0x7e, 0xb9, 0x36, 0xcA, 0xA1, 0x2B, 0x5A, 0x88, 0x4d, 0x61, 0x23, 0x93, 0x96, 0x9A, 0x55, 0x7d, 0x43, 0x07]
-    }
-
-    /// Hand-build a setPreSignature calldata for the fixture owner +
-    /// canonical. Reuses `compute_digest` for the orderDigest slice.
-    fn fixture_calldata() -> [u8; 164] {
-        let canonical = fixture_canonical();
-        let digest = compute_digest(&canonical, 1).unwrap();
-        let owner = fixture_owner();
-        let mut cd = [0u8; 164];
-        cd[0..4].copy_from_slice(&[0xec, 0x6c, 0xb1, 0x3f]);
-        cd[35] = 0x40;
-        cd[67] = 1;
-        cd[99] = 56;
-        cd[100..132].copy_from_slice(&digest);
-        cd[132..152].copy_from_slice(&owner);
-        cd[152..156].copy_from_slice(&canonical[164..168]);
-        cd
-    }
-
-    #[test]
-    fn happy_path_passes() {
-        let canonical = fixture_canonical();
-        let calldata = fixture_calldata();
-        let owner = fixture_owner();
-        assert!(cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner).is_ok());
-        assert!(check_setpresig_calldata_shape(&calldata).is_ok());
-    }
-
-    #[test]
-    fn chain_id_mismatch_rejected() {
-        let canonical = fixture_canonical();
-        let calldata = fixture_calldata();
-        let owner = fixture_owner();
-        assert_eq!(
-            cross_check_setpresig_calldata(&canonical, &calldata, 137, &owner),
-            Err(OrderUidMismatch::ChainIdMismatch)
-        );
-    }
-
-    #[test]
-    fn valid_to_mismatch_rejected() {
-        let canonical = fixture_canonical();
-        let mut calldata = fixture_calldata();
-        calldata[152] = calldata[152].wrapping_add(1);
-        let owner = fixture_owner();
-        // The valid_to check runs before the digest check, so this
-        // bubbles out as ValidToMismatch (digest would also fail).
-        assert_eq!(
-            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
-            Err(OrderUidMismatch::ValidToMismatch)
-        );
-    }
-
-    #[test]
-    fn order_digest_flip_rejected() {
-        let canonical = fixture_canonical();
-        let mut calldata = fixture_calldata();
-        calldata[100] ^= 0x01;
-        let owner = fixture_owner();
-        assert_eq!(
-            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
-            Err(OrderUidMismatch::OrderDigestMismatch)
-        );
-    }
-
-    #[test]
-    fn canonical_field_flip_rejected_via_digest() {
-        // Flip any single byte of canonical that isn't chain_id or
-        // valid_to and the orderDigest will diverge — catching the
-        // attack "swap the appData silently behind a verified proof".
-        let mut canonical = fixture_canonical();
-        canonical[172] ^= 0xFF; // appData MSB
-        let calldata = fixture_calldata();
-        let owner = fixture_owner();
-        assert_eq!(
-            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
-            Err(OrderUidMismatch::OrderDigestMismatch)
-        );
-    }
-
-    #[test]
-    fn owner_mismatch_rejected() {
-        let canonical = fixture_canonical();
-        let mut calldata = fixture_calldata();
-        calldata[132] ^= 0x01;
-        let owner = fixture_owner();
-        assert_eq!(
-            cross_check_setpresig_calldata(&canonical, &calldata, 1, &owner),
-            Err(OrderUidMismatch::OwnerMismatch)
-        );
-    }
-
-    #[test]
-    fn shape_check_rejects_bad_selector() {
-        let mut cd = fixture_calldata();
-        cd[0] ^= 0xFF;
-        assert_eq!(
-            check_setpresig_calldata_shape(&cd),
-            Err(OrderUidMismatch::CanonicalDecode)
-        );
-    }
-
-    #[test]
-    fn shape_check_rejects_signed_false() {
-        let mut cd = fixture_calldata();
-        cd[67] = 0;
-        assert_eq!(
-            check_setpresig_calldata_shape(&cd),
-            Err(OrderUidMismatch::CanonicalDecode)
-        );
-    }
-
-    #[test]
-    fn shape_check_rejects_nonzero_tail_padding() {
-        let mut cd = fixture_calldata();
-        cd[163] = 1;
-        assert_eq!(
-            check_setpresig_calldata_shape(&cd),
-            Err(OrderUidMismatch::CanonicalDecode)
-        );
-    }
 }

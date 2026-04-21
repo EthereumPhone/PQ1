@@ -137,6 +137,86 @@ pub fn verify_clear_sign_proof_v3(
     })
 }
 
+/// A v1 ZK clear-sign trailer that passed the full verify-and-bind
+/// pipeline. The handler holds both byte arrays on the stack until the
+/// trusted-UI render is done; nothing else references them.
+pub struct VerifiedClearSignV1 {
+    pub calldata: [u8; MAX_CALLDATA],
+    pub readable: [u8; STRING_LEN],
+}
+
+/// End-to-end verification of a v1 ZK clear-sign trailer against the
+/// surrounding UserOp.
+///
+/// Wraps `verify_clear_sign_proof` with the four additional binding
+/// checks the gateway handler needs:
+///
+///   1. Trailer length ≥ `ZK_CLEAR_SIGN_FIXED_LEN` — anything shorter
+///      is a malformed bundle and returns `None`.
+///   2. Groth16 + VK bundle Merkle verification via
+///      `verify_clear_sign_proof`.
+///   3. The verified VK must claim the tx's `chain_id` AND the tx's
+///      `to_address`. (v3 uses a sentinel address for the same role;
+///      v1 keys off the real contract because the v1 VK *is* the
+///      target-contract VK.)
+///   4. The tx's `inner_data` must match the circuit-attested
+///      calldata byte-for-byte — prefix equality plus a zero-tail
+///      check closes the "attester signs calldata A, we execute
+///      calldata B" gap.
+///
+/// Returns owned copies of the calldata + readable string on success
+/// so the caller can drop the snapshot buffer before rendering.
+pub fn verify_and_bind_trailer_v1(
+    zk_bundle: &[u8],
+    inner_data: &[u8],
+    chain_id: u64,
+    to_address: &[u8; 20],
+) -> Option<VerifiedClearSignV1> {
+    use sphincs_tz_shared::ZK_CLEAR_SIGN_FIXED_LEN;
+
+    if zk_bundle.len() < ZK_CLEAR_SIGN_FIXED_LEN {
+        return None;
+    }
+    if inner_data.len() > MAX_CALLDATA {
+        return None;
+    }
+
+    let proof_bytes: &[u8; PROOF_LEN] = zk_bundle[..PROOF_LEN].try_into().ok()?;
+    let calldata_bytes: &[u8; MAX_CALLDATA] = zk_bundle[PROOF_LEN..PROOF_LEN + MAX_CALLDATA]
+        .try_into()
+        .ok()?;
+    let readable_bytes: &[u8; STRING_LEN] = zk_bundle
+        [PROOF_LEN + MAX_CALLDATA..ZK_CLEAR_SIGN_FIXED_LEN]
+        .try_into()
+        .ok()?;
+    let vk_bundle = &zk_bundle[ZK_CLEAR_SIGN_FIXED_LEN..];
+
+    let verified = verify_clear_sign_proof(proof_bytes, calldata_bytes, readable_bytes, vk_bundle)
+        .ok()?;
+    if verified.chain_id != chain_id || verified.contract != *to_address {
+        return None;
+    }
+
+    // Calldata binding: attested prefix must equal what the tx will
+    // actually execute, and the rest of the attested slot must be
+    // zero-padded (the circuit right-pads to MAX_CALLDATA).
+    let user_len = inner_data.len();
+    let calldata_prefix = &inner_data[..user_len];
+    let attested_prefix = &calldata_bytes[..user_len];
+    if calldata_prefix != attested_prefix {
+        return None;
+    }
+    if calldata_bytes[user_len..].iter().any(|&b| b != 0) {
+        return None;
+    }
+
+    let mut calldata = [0u8; MAX_CALLDATA];
+    calldata.copy_from_slice(calldata_bytes);
+    let mut readable = [0u8; STRING_LEN];
+    readable.copy_from_slice(readable_bytes);
+    Some(VerifiedClearSignV1 { calldata, readable })
+}
+
 /// Render a trusted-UI confirmation screen for a ZK-verified clear-sign
 /// tx. The 64-byte readable string is displayed across the first three
 /// rows (12 visible cols × 4 = 48 chars + continuation), followed by a

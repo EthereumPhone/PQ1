@@ -71,6 +71,7 @@ mod cmd_fw_status;
 
 mod ptr_validate;
 mod state;
+mod trailer;
 
 // HIGH-2 fix: refuse to build hardware images that also enable any of
 // the dev-only features. `debug-log` and `ui-semihosting` leak secure-

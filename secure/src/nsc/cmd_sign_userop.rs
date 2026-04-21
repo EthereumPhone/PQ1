@@ -49,13 +49,11 @@
 
 use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
-    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, COWSWAP_EIP712_SENTINEL,
-    EIP712_CANONICAL_LEN, EIP712_PROOF_LEN, EIP712_STRING_LEN, FLAG_INCLUDE_INIT_CODE,
+    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE,
     FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN,
     PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
     PQ_SMART_WALLET_FACTORY, SET_PRE_SIGNATURE_SELECTOR, SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN,
-    SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN, ZK_MAX_CALLDATA, ZK_PROOF_LEN, ZK_STRING_LEN,
-    ZK_V3_FIXED_LEN, ZK_V3_OFF_CANONICAL, ZK_V3_OFF_READABLE, ZK_VK_BUNDLE_MAX_LEN,
+    SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN, ZK_V3_FIXED_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -78,11 +76,8 @@ use crate::aa::userop::{
     AaUserOpParamsV06Sha256, SHA256_EMPTY,
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
-use crate::erc20::calldata::{parse_erc20_calldata, Erc20Call};
 use crate::names::{verify_name_bundle, NameResolver, MAX_NAME_BUNDLES, MAX_NAME_BUNDLE_LEN};
-use crate::tx::display::{
-    render_blind_sign_pages, render_erc20_known_pages, render_erc20_unknown_pages, render_pages,
-};
+use crate::tx::display::pick_sign_pages;
 use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::ui;
 
@@ -216,69 +211,58 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let inner_data: &[u8] =
         &snap[SIGN_USEROP_HEADER_LEN..SIGN_USEROP_HEADER_LEN + data_len];
 
-    // ── 4b. Optional trailer: ERC-20 + ZK bundles ─────────────────────
+    // ── 5. Parse optional trailers ─────────────────────────────────
+    //
+    // Three independently-optional length-prefixed trailers (ERC-20
+    // bundle, v1 ZK clear-sign, v3 CoW EIP-712), followed by the
+    // address-name bundles section. Each uses the same
+    // `[u16 BE len][payload]` framing, delegated to the `trailer`
+    // helper so bounds-checking and error-label routing stay
+    // consistent. Absent trailer == trailer with len == 0.
     let mut cursor = SIGN_USEROP_HEADER_LEN + data_len;
 
-    let erc20_bundle_len = if cursor + 2 <= total_len {
-        let l = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
-        cursor += 2;
-        l
-    } else {
-        0
+    let erc20 = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        MAX_ERC20_BUNDLE_LEN,
+        "bad erc20 bundle",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
     };
-    if erc20_bundle_len > MAX_ERC20_BUNDLE_LEN || cursor + erc20_bundle_len > total_len {
-        ui::show_status("Sign", "bad erc20 bundle");
-        return NscStatus::InvalidPointer as u32;
-    }
-    let erc20_bundle_start = cursor;
-    cursor += erc20_bundle_len;
+    cursor = erc20.next_cursor;
 
-    let zk_bundle_len = if cursor + 2 <= total_len {
-        let l = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
-        cursor += 2;
-        l
-    } else {
-        0
+    let zk_v1 = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN,
+        "bad zk bundle",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
     };
-    if zk_bundle_len > ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
-        || cursor + zk_bundle_len > total_len
-    {
-        ui::show_status("Sign", "bad zk bundle");
-        return NscStatus::InvalidPointer as u32;
-    }
-    let zk_bundle_start = cursor;
-    cursor += zk_bundle_len;
+    cursor = zk_v1.next_cursor;
 
-    // ── 4b'. Optional v3 CoW EIP-712 clear-sign trailer ───────────────
-    //
-    // Layout: [zk_v3_len u16 BE] [zk_v3_bundle].
-    //
-    // `zk_v3_bundle` = `proof2(384) || canonical(204) || readable2(128) ||
-    //                   vk_bundle_v3`. Companion sends exactly the 716-byte
-    // fixed prefix; the NS gateway's `maybe_inject_vk_bundle_v3`
-    // appends the 3-pub VK bundle.
-    //
-    // Absent trailer is legal for every non-CoW UserOp. For CoW
-    // setPreSignature it is mandatory — enforced by the downgrade-gate
-    // check downstream, NOT by requiring the trailer to be present
-    // here. That keeps the parser layout-agnostic.
-    let zk_v3_bundle_len = if cursor + 2 <= total_len {
-        let l = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
-        cursor += 2;
-        l
-    } else {
-        0
+    // v3 CoW EIP-712 trailer: proof(384) || canonical(204) ||
+    // readable(128) || VK bundle. Companion sends the 716-byte fixed
+    // prefix; the NS gateway's `maybe_inject_vk_bundle_v3` appends
+    // the bundle. Absent is legal for non-CoW tx — the CoW
+    // downgrade-mitigation gate below enforces presence when needed.
+    let zk_v3 = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN,
+        "bad zk v3 bundle",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
     };
-    if zk_v3_bundle_len > ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
-        || cursor + zk_v3_bundle_len > total_len
-    {
-        ui::show_status("Sign", "bad zk v3 bundle");
-        return NscStatus::InvalidPointer as u32;
-    }
-    let zk_v3_bundle_start = cursor;
-    cursor += zk_v3_bundle_len;
+    cursor = zk_v3.next_cursor;
 
-    // ── 4c. Optional trailer: address-name bundles ────────────────────
+    // ── 5b. Optional address-name bundles ─────────────────────────
     //
     // Zero or more merkle-verified (chain_id, address, name) bundles.
     // The companion emits up to MAX_NAME_BUNDLES entries, one per
@@ -290,6 +274,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     //
     // Absence of this trailer is legal — legacy callers that never
     // upgrade their NS code still produce a zero-trailer sign request.
+    // Framing differs from the three trailers above (1-byte count +
+    // variable-count 2-byte-len entries), so it parses inline.
     let names_count = if cursor < total_len {
         snap[cursor] as usize
     } else {
@@ -325,7 +311,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InvalidPointer as u32;
     }
 
-    // ── 5. Build display-time Eip1559Tx shim ───────────────────────
+    // ── 6. Build display-time Eip1559Tx shim ───────────────────────
     let display_nonce = u64::from_be_bytes([
         nonce[24], nonce[25], nonce[26], nonce[27],
         nonce[28], nonce[29], nonce[30], nonce[31],
@@ -353,10 +339,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         signing_hash: [0u8; 32],
     };
 
-    // ── 6a. Verify optional ERC-20 bundle ──────────────────────────
-    let verified_meta: Option<Erc20Metadata<'_>> = if erc20_bundle_len > 0 {
-        let bundle_slice =
-            &snap[erc20_bundle_start..erc20_bundle_start + erc20_bundle_len];
+    // ── 7. Verify optional trailers ────────────────────────────────
+
+    // 7a. ERC-20 bundle — Merkle-verified token metadata, cross-checked
+    // against the tx's chain_id + recipient address.
+    let verified_meta: Option<Erc20Metadata<'_>> = if erc20.len > 0 {
+        let bundle_slice = &snap[erc20.start..erc20.start + erc20.len];
         match verify_erc20_bundle(bundle_slice) {
             Some(meta) => {
                 let contract_match = match tx_for_display.to {
@@ -375,161 +363,52 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None
     };
 
-    // ── 6b. Verify optional ZK clear-sign bundle ───────────────────
-    let zk_verified: Option<([u8; ZK_MAX_CALLDATA], [u8; ZK_STRING_LEN])> = if zk_bundle_len > 0
-        && zk_bundle_len >= ZK_CLEAR_SIGN_FIXED_LEN
-    {
-        let zk_slice = &snap[zk_bundle_start..zk_bundle_start + zk_bundle_len];
-        let proof_bytes: &[u8; ZK_PROOF_LEN] = zk_slice[..ZK_PROOF_LEN].try_into().unwrap();
-        let calldata_bytes: &[u8; ZK_MAX_CALLDATA] = zk_slice
-            [ZK_PROOF_LEN..ZK_PROOF_LEN + ZK_MAX_CALLDATA]
-            .try_into()
-            .unwrap();
-        let readable_bytes: &[u8; ZK_STRING_LEN] = zk_slice
-            [ZK_PROOF_LEN + ZK_MAX_CALLDATA..ZK_CLEAR_SIGN_FIXED_LEN]
-            .try_into()
-            .unwrap();
-        let vk_bundle = &zk_slice[ZK_CLEAR_SIGN_FIXED_LEN..];
-
-        if inner_data.len() > ZK_MAX_CALLDATA {
-            None
-        } else {
-            match crate::zk::verify_clear_sign_proof(
-                proof_bytes,
-                calldata_bytes,
-                readable_bytes,
-                vk_bundle,
-            ) {
-                Ok(verified) => {
-                    if verified.chain_id != chain_id || verified.contract != to_address {
-                        None
-                    } else {
-                        let calldata_prefix =
-                            &inner_data[..inner_data.len().min(ZK_MAX_CALLDATA)];
-                        let attested_prefix = &calldata_bytes[..calldata_prefix.len()];
-                        if calldata_prefix == attested_prefix
-                            && calldata_bytes[calldata_prefix.len()..]
-                                .iter()
-                                .all(|&b| b == 0)
-                        {
-                            let mut cd = [0u8; ZK_MAX_CALLDATA];
-                            cd.copy_from_slice(calldata_bytes);
-                            let mut rd = [0u8; ZK_STRING_LEN];
-                            rd.copy_from_slice(readable_bytes);
-                            Some((cd, rd))
-                        } else {
-                            None
-                        }
-                    }
-                }
-                Err(_) => None,
-            }
-        }
+    // 7b. v1 ZK clear-sign — circuit-attested (calldata, readable)
+    // pair + VK bundle Merkle-committed to VK_DB_ROOT. See
+    // `zk::verify_and_bind_trailer_v1` for the full trust chain.
+    let zk_v1_verified = if zk_v1.len > 0 {
+        crate::zk::verify_and_bind_trailer_v1(
+            &snap[zk_v1.start..zk_v1.start + zk_v1.len],
+            inner_data,
+            chain_id,
+            &to_address,
+        )
     } else {
         None
     };
 
-    // ── 6b'. Verify optional v3 CoW EIP-712 clear-sign bundle ──────
-    //
-    // Pipeline (every step must succeed — no partial-success fallback):
-    //   (1) Bundle structure: 384 B proof + 204 B canonical + 128 B
-    //       readable + variable VK bundle.
-    //   (2) Groth16 pairing against the Merkle-verified 3-pub VK AND
-    //       the rodata-pinned ERC20_POSEIDON_ROOT as H_root.
-    //   (3) VK bundle's (chain_id, contract) equals (tx.chain_id,
-    //       COWSWAP_EIP712_SENTINEL). The sentinel keys the v3 VK in
-    //       the DB distinctly from the v1 setPreSignature VK.
-    //   (4) Native setPreSignature shape check (selector, offsets,
-    //       `signed==true`, tail zero-pad) — replaces what the v1
-    //       circuit used to assert.
-    //   (5) Cross-check canonical → orderDigest → calldata[100..132];
-    //       validTo bytes match; orderUid owner equals UserOp sender.
-    //       Binds the v3-displayed order to the exact orderUid the
-    //       chain will see.
-    //
-    // Any Err here → no `zk_v3_verified` set → downgrade-mitigation
-    // gate below will reject the UserOp outright (for CoW setPreSig).
-    let zk_v3_verified: Option<([u8; EIP712_CANONICAL_LEN], [u8; EIP712_STRING_LEN])> =
-        if zk_v3_bundle_len >= ZK_V3_FIXED_LEN {
-            let v3_slice = &snap[zk_v3_bundle_start..zk_v3_bundle_start + zk_v3_bundle_len];
-            let proof_bytes: &[u8; EIP712_PROOF_LEN] =
-                v3_slice[..EIP712_PROOF_LEN].try_into().unwrap();
-            let canonical_bytes: &[u8; EIP712_CANONICAL_LEN] = v3_slice
-                [ZK_V3_OFF_CANONICAL..ZK_V3_OFF_CANONICAL + EIP712_CANONICAL_LEN]
-                .try_into()
-                .unwrap();
-            let readable_bytes: &[u8; EIP712_STRING_LEN] = v3_slice
-                [ZK_V3_OFF_READABLE..ZK_V3_OFF_READABLE + EIP712_STRING_LEN]
-                .try_into()
-                .unwrap();
-            let vk_bundle = &v3_slice[ZK_V3_FIXED_LEN..];
+    // 7c. v3 CoW EIP-712 — 5-step pipeline (Groth16 + H_root pin →
+    // sentinel + chain → length → shape → cross-check). Returns
+    // `None` on any failure; no partial-success fallback. See
+    // `tx::eip712::cowswap::verify_and_bind_trailer` for specifics.
+    let zk_v3_verified = if zk_v3.len > 0 {
+        crate::tx::eip712::cowswap::verify_and_bind_trailer(
+            &snap[zk_v3.start..zk_v3.start + zk_v3.len],
+            inner_data,
+            chain_id,
+            &sender,
+        )
+    } else {
+        None
+    };
 
-            match crate::zk::verify_clear_sign_proof_v3(
-                proof_bytes,
-                canonical_bytes,
-                readable_bytes,
-                vk_bundle,
-            ) {
-                Ok(verified) => {
-                    // Sentinel + chain binding.
-                    let sentinel_ok = verified.chain_id == chain_id
-                        && verified.contract == COWSWAP_EIP712_SENTINEL;
-                    if !sentinel_ok {
-                        None
-                    } else if inner_data.len() != ZK_MAX_CALLDATA {
-                        // setPreSignature calldata is always exactly 164 bytes.
-                        // An inner_data of any other length cannot be the
-                        // CoW flow; refuse to apply v3 display to it.
-                        None
-                    } else {
-                        let calldata_array: &[u8; ZK_MAX_CALLDATA] =
-                            inner_data[..ZK_MAX_CALLDATA].try_into().unwrap();
-                        let shape_ok = crate::tx::eip712::cowswap::check_setpresig_calldata_shape(
-                            calldata_array,
-                        )
-                        .is_ok();
-                        let cross_ok =
-                            crate::tx::eip712::cowswap::cross_check_setpresig_calldata(
-                                canonical_bytes,
-                                calldata_array,
-                                verified.chain_id,
-                                &sender,
-                            )
-                            .is_ok();
-                        if shape_ok && cross_ok {
-                            let mut c = [0u8; EIP712_CANONICAL_LEN];
-                            c.copy_from_slice(canonical_bytes);
-                            let mut r = [0u8; EIP712_STRING_LEN];
-                            r.copy_from_slice(readable_bytes);
-                            Some((c, r))
-                        } else {
-                            None
-                        }
-                    }
-                }
-                Err(_) => None,
-            }
-        } else {
-            None
-        };
-
-    // ── 6b''. Downgrade-mitigation gate ───────────────────────────
+    // 7d. Downgrade-mitigation gate.
     //
     // The v1 clear-sign flow only binds the setPreSignature calldata
     // to a static "Pre-sign CowSwap order" string. That's safe — but
     // if an attacker strips the v3 trailer from a CoW UserOp, the
-    // user would confirm that static string instead of the rich 8-page
-    // v3 display and end up pre-signing an orderUid they never saw
-    // the contents of. So: for CoW setPreSignature specifically,
+    // user would confirm that static string instead of the rich
+    // 8-page v3 display and end up pre-signing an orderUid they never
+    // saw the contents of. So: for CoW setPreSignature specifically,
     // require v3 verification. No fallback.
-    let selector_ok = inner_data.len() >= 4 && &inner_data[..4] == SET_PRE_SIGNATURE_SELECTOR;
-    let to_gpv2 = to_address == GPV2_SETTLEMENT_ADDRESS;
-    if selector_ok && to_gpv2 && zk_v3_verified.is_none() {
+    let cow_selector = inner_data.len() >= 4 && &inner_data[..4] == SET_PRE_SIGNATURE_SELECTOR;
+    let cow_target = to_address == GPV2_SETTLEMENT_ADDRESS;
+    if cow_selector && cow_target && zk_v3_verified.is_none() {
         ui::show_status("CoW sign", "v3 required");
         return NscStatus::InvalidPointer as u32;
     }
 
-    // ── 6d. Verify each supplied address-name bundle ───────────────
+    // 7e. Address-name bundles.
     //
     // Every bundle crosses the Merkle gate against NAMES_DB_ROOT.
     // Bundles that don't verify are silently dropped — the affected
@@ -552,34 +431,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // ── 6c. Pick the render flavour ────────────────────────────────
+    // ── 8. Render + confirm ────────────────────────────────────────
     //
-    // v3 CoW EIP-712 flow has first claim: when verified, render the
-    // 8-page order breakdown (kind, tokens, amounts, receiver, expiry,
-    // fee, appData) from the circuit-bound canonical + readable. The
-    // rodata-pinned display renderer consumes those bytes directly;
-    // every field the user sees is Poseidon-bound back to the proof,
-    // and the orderUid linkage to the calldata was cross-checked above.
-    let pages = if let Some((canonical, readable)) = zk_v3_verified.as_ref() {
-        let _ = &tx_for_display; // intentionally unused — v3 renders from canonical
-        crate::tx::eip712::cowswap_display::render_cowswap_pages(canonical, readable)
-    } else if let Some((_, readable)) = zk_verified.as_ref() {
-        crate::zk::render_clear_sign_pages(&tx_for_display, readable, &resolver)
-    } else if inner_data.is_empty() {
-        render_pages(&tx_for_display, &resolver)
-    } else {
-        match parse_erc20_calldata(inner_data) {
-            Some(call) => {
-                if let Some(meta) = verified_meta.as_ref() {
-                    render_erc20_known_pages(&tx_for_display, &call, meta, &resolver)
-                } else {
-                    render_erc20_unknown_pages(&tx_for_display, &call, &resolver)
-                }
-            }
-            None => render_blind_sign_pages(&tx_for_display, inner_data, &resolver),
-        }
-    };
-    let _erc20_type_marker: Option<Erc20Call> = None;
+    // The priority ladder (v3 → v1 → value/ERC-20/blind-sign) lives in
+    // `display::pick_sign_pages`. Ordering is load-bearing: v3 beats
+    // v1 so a CoW setPreSig that satisfied both circuits renders the
+    // 8-page order, not the weaker string. The gate above made this
+    // the only legal outcome for CoW setPreSig already.
+    let pages = pick_sign_pages(
+        &tx_for_display,
+        inner_data,
+        zk_v3_verified.as_ref(),
+        zk_v1_verified.as_ref(),
+        verified_meta.as_ref(),
+        &resolver,
+    );
     match confirm(pages.as_slice()) {
         ConfirmResult::Confirmed => {}
         ConfirmResult::Cancelled => {
@@ -592,7 +458,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // ── 7. Reconstruct entropy + derive JARDÍN master ──────────────
+    // ── 9. Reconstruct entropy + derive JARDÍN master ──────────────
     //
     // HIGH-6: wrap every stack-local secret in Zeroizing.
     let master_secret: Zeroizing<[u8; 32]> =
@@ -619,7 +485,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         crate::crypto::jardin_master_entropy_from_entropy(&*entropy, account_index),
     );
 
-    // ── 8. Build Type 2 callData: execute(to, value, data) ─────────
+    // ── 10. Build Type 2 callData: execute(to, value, data) ────────
     let t2_exec = match reconstruct_execute_calldata(&tx_for_display, inner_data) {
         Ok(c) => c,
         Err(_) => {
@@ -628,7 +494,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // ── 9. Type 2 nonce ────────────────────────────────────────────
+    // ── 11. Type 2 nonce ───────────────────────────────────────────
     // When REGISTER_SLOT is set, the Type 1 UserOp consumes the supplied
     // base nonce and Type 2 uses base+1. In the other two modes Type 2
     // uses the supplied base directly.
@@ -637,7 +503,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         add_one_to_be_u256(&mut type2_nonce);
     }
 
-    // ── 10. Slot C10 keygen (cached by (account_index, chain_id, slot_index)) ──
+    // ── 12. Slot C10 keygen (cached by (account_index, chain_id, slot_index)) ──
     //
     // Post-Coinbase-port slot keys are chain-specific. With multi-
     // account derivation they're also account-specific (the master
@@ -706,7 +572,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     slot_owner_bytes[..32].copy_from_slice(&slot_pk_seed_32);
     slot_owner_bytes[32..].copy_from_slice(&slot_pk_root_32);
 
-    // ── 11. Build Type 1 (optional) + initCode (optional) ──────────
+    // ── 13. Build Type 1 (optional) + initCode (optional) ──────────
     //
     // We need the bootstrap C10 key in three cases:
     //   * FLAG_INCLUDE_INIT_CODE — to sign the factorySig for slot-0.
@@ -739,7 +605,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             s.bootstrap_cache_insert(account_index, master_pk_seed_32, master_pk_root_32);
         });
 
-        // ── 11a. Deploy path: build initCode + factorySig ──────────
+        // ── 13a. Deploy path: build initCode + factorySig ──────────
         if include_init_code {
             ui::show_status("Factory", "signing slot-0");
 
@@ -810,7 +676,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             t1_init_code_digest = sha256_bytes(ic.as_slice());
         }
 
-        // ── 11b. Rotation path: build addOwnerBytes UserOp + Type 1 sig ──
+        // ── 13b. Rotation path: build addOwnerBytes UserOp + Type 1 sig ──
         if register_slot {
             ui::show_status("Slot register", "signing addOwner");
 
@@ -859,7 +725,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         drop(c10_sk); // ZeroizeOnDrop.
     }
 
-    // ── 12. Type 2: slot C10 signs the user's UserOp sphincs digest ──
+    // ── 14. Type 2: slot C10 signs the user's UserOp sphincs digest ──
     let t2_call_digest = sha256_bytes(t2_exec.as_slice());
     let t2_init_code_digest = if include_init_code {
         t1_init_code_digest
@@ -935,7 +801,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
     encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
 
-    // ── 13. Assemble output bundle ─────────────────────────────────
+    // ── 15. Assemble output bundle ─────────────────────────────────
     //
     // Layout:
     //   [init_code_len(4 BE)][init_code(0 or 4280)]
@@ -970,7 +836,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     debug_assert_eq!(write_pos - (4 + init_code_len + 4 + type1_len + 4), SIG_WRAPPER_LEN);
     let _ = write_pos;
 
-    // ── 14. Zeroise transients ─────────────────────────────────────
+    // ── 16. Zeroise transients ─────────────────────────────────────
     entropy.zeroize();
     type1_wrapper_out.zeroize();
     type2_wrapper_out.zeroize();

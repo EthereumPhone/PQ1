@@ -126,3 +126,53 @@ impl Pages {
         Self::empty_with_len(len)
     }
 }
+
+/// Pick the right renderer for a CMD_SIGN_USEROP trusted-UI confirm.
+///
+/// Centralises the priority ladder — the handler stays a pure
+/// orchestrator and the "which display wins when multiple trailers
+/// verify" decision lives in one place:
+///
+///   1. v3 CoW EIP-712 (full 8-page GPv2Order breakdown from the
+///      circuit-bound canonical + readable).
+///   2. v1 ZK clear-sign (circuit-attested readable string + EIP-1559
+///      summary pages).
+///   3. Plain value transfer (empty inner calldata).
+///   4. ERC-20 with verified metadata (token name/symbol/decimals).
+///   5. ERC-20 shape-only (unverified token — bare hex decode).
+///   6. Blind-sign (calldata that doesn't decode as ERC-20).
+///
+/// Ordering is load-bearing. In particular (1) beats (2) so a CoW
+/// setPreSignature UserOp that also happens to satisfy the v1 circuit
+/// renders the 8-page order, not the weaker "Pre-sign CowSwap order"
+/// string. The handler's downgrade-mitigation gate enforces this
+/// separately at refuse-to-sign level.
+#[cfg(not(test))]
+pub fn pick_sign_pages(
+    tx: &crate::tx::eip1559::Eip1559Tx,
+    inner_data: &[u8],
+    v3: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
+    v1: Option<&crate::zk::VerifiedClearSignV1>,
+    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    resolver: &crate::names::NameResolver<'_>,
+) -> Pages {
+    if let Some(v3) = v3 {
+        return crate::tx::eip712::cowswap_display::render_cowswap_pages(
+            &v3.canonical,
+            &v3.readable,
+        );
+    }
+    if let Some(v1) = v1 {
+        return crate::zk::render_clear_sign_pages(tx, &v1.readable, resolver);
+    }
+    if inner_data.is_empty() {
+        return render_pages(tx, resolver);
+    }
+    match crate::erc20::calldata::parse_erc20_calldata(inner_data) {
+        Some(call) => match erc20 {
+            Some(meta) => render_erc20_known_pages(tx, &call, meta, resolver),
+            None => render_erc20_unknown_pages(tx, &call, resolver),
+        },
+        None => render_blind_sign_pages(tx, inner_data, resolver),
+    }
+}
