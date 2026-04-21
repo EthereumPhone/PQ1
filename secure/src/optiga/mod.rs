@@ -670,27 +670,40 @@ impl OptigaTrustM {
             return Err(e);
         }
 
-        // DIAGNOSTIC: dump the chip's current F1D0 metadata before we
-        // attempt to re-write it. On a partially-provisioned chip this
-        // lets us see LcsO (tag 0xC0), Change (0xD0), Read (0xD1),
-        // Execute (0xD3), and DataType (0xE8) as they stand right now —
-        // vs. the bytes we're about to send. Removes all speculation
-        // about what "Status(255)" on set_metadata actually means.
+        // Inspect F1D0's current metadata. If LcsO is already Operational
+        // (from a prior provisioning run before commit 0b412b4, where
+        // `lock_oid` was unconditional), the one-way ratchet blocks any
+        // `set_metadata` — we'd see Status(255) regardless of Change AC
+        // or DataType. In that case the metadata is already in the exact
+        // shape `build_metadata_auth_ref` would write (Change=ALW,
+        // Read=NEV, Execute=ALW, DataType=AUTHREF) modulo chip-internal
+        // size tags, so skipping the re-write is functionally
+        // equivalent to re-applying it.
         let mut cur_meta = [0u8; 128];
-        match apdu::get_metadata(
+        let cur_len = match apdu::get_metadata(
             &mut self.ifx, &mut self.shield,
             apdu::OID_AUTH_REF, &mut cur_meta,
         ) {
             Ok(n) => {
-                let show = n.min(64);
                 secure_log!(
                     "[OPTIGA/prov] F1D0 current metadata ({}B): {:02x?}",
-                    n, &cur_meta[..show]
+                    n, &cur_meta[..n.min(64)]
                 );
+                n
             }
             Err(e) => {
                 secure_log!("[OPTIGA/prov] F1D0 get_metadata FAILED: {:?}", e);
+                0
             }
+        };
+
+        if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+            secure_log!(
+                "[OPTIGA/prov] F1D0 at LcsO=Operational — metadata write \
+                 blocked by one-way ratchet; skipping set_metadata + \
+                 lock_oid (object already in final state)"
+            );
+            return Ok(());
         }
 
         let (meta, meta_len) = apdu::build_metadata_auth_ref();
@@ -735,6 +748,25 @@ impl OptigaTrustM {
             return Err(e);
         }
 
+        // Same LcsO-ratchet guard as provision_auth_ref: if the OID was
+        // bumped to Operational by a pre-0b412b4 run, re-writing the
+        // metadata is forever blocked. The already-installed AC
+        // (Change=Auto(F1D0) OR Conf(E140), Read depending on
+        // `require_shielded_read`, Execute=NEV) is identical to what we
+        // would write, so skipping is functionally equivalent.
+        let mut cur_meta = [0u8; 128];
+        let cur_len = apdu::get_metadata(
+            &mut self.ifx, &mut self.shield, oid, &mut cur_meta,
+        ).unwrap_or(0);
+        if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+            secure_log!(
+                "[OPTIGA/prov] OID 0x{:04x} at LcsO=Operational — \
+                 skipping set_metadata + lock_oid",
+                oid
+            );
+            return Ok(());
+        }
+
         let (meta, meta_len) =
             apdu::build_metadata_protected(apdu::OID_AUTH_REF, require_shielded_read);
         if let Err(e) = apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len]) {
@@ -754,6 +786,23 @@ impl OptigaTrustM {
             &mut self.ifx, &mut self.shield,
             apdu::OID_COUNTER, &[0u8],
         )?;
+
+        // LcsO-ratchet guard (same rationale as provision_auth_ref /
+        // provision_user_oid). F1D5's Change = Conf(E140) — still
+        // writable via shield when LcsO < Op, but blocked at LcsO=Op.
+        let mut cur_meta = [0u8; 128];
+        let cur_len = apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_COUNTER, &mut cur_meta,
+        ).unwrap_or(0);
+        if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+            secure_log!(
+                "[OPTIGA/prov] OID 0x{:04x} (counter) at LcsO=Operational — \
+                 skipping set_metadata + lock_oid",
+                apdu::OID_COUNTER
+            );
+            return Ok(());
+        }
 
         let (meta, meta_len) = apdu::build_metadata_counter();
         apdu::set_metadata(
