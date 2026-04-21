@@ -1052,6 +1052,34 @@ flash-hw-optiga-bringup-write-only:
 	@echo "    followed by 'e2e-skip-unlock active: halting after provisioning'."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Shield-handshake-only test. Skips `provision_from_mnemonic` entirely
+# and runs `init` → `load_pbs_from_otp` → `ensure_shield` against an
+# already-provisioned chip. Use this to validate the Shielded Connection
+# handshake in isolation without re-writing any F1Dx state. The chip's
+# E140 must already have the OTP-derived PBS from a prior run of
+# `flash-hw-optiga-bringup-write-only`; the PBS itself is reproduced
+# deterministically from the STM32U585's OTP master on every boot.
+flash-hw-optiga-shield-handshake-only:
+	@echo "==> Building OPTIGA shield-handshake-only test"
+	@echo "    (e2e-skip-provision: reuses existing E140 PBS, tests PRL only)"
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-trust-m,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key,e2e-skip-unlock,e2e-skip-provision
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting and attaching — expect '[S][e2e] SHIELD UP — PRL handshake succeeded'."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # One-shot OPTIGA Trust M OID recovery. Regenerates reset manifests from
 # the Infineon protected_update_data_set tool, builds firmware with the
 # optiga-reset-oids feature, flashes the STM32U585, and attaches probe-rs

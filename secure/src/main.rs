@@ -700,7 +700,26 @@ fn main() -> ! {
         #[cfg(feature = "e2e-skip-provision")]
         {
             let _ = &mnemonic; // silence unused warning under this feature
+            let _ = &pin;
             secure_log!("[S][e2e] e2e-skip-provision active: skipping provision_from_mnemonic (chip assumed already provisioned)");
+
+            // Bring-up path: load PBS host-side from OTP and run the PRL
+            // handshake against the already-provisioned E140 so we can
+            // validate `shield::establish` in isolation, without touching
+            // any F1Dx metadata.
+            #[cfg(all(feature = "optiga-trust-m", not(feature = "dual-se"), feature = "stm32u585"))]
+            {
+                let se = &mut *core::ptr::addr_of_mut!(SE);
+                if let Err(e) = se.init() {
+                    secure_log!("[S][e2e] OPTIGA init FAILED: {:?}", e);
+                } else if let Err(e) = se.load_pbs_from_otp() {
+                    secure_log!("[S][e2e] load_pbs_from_otp FAILED: {:?}", e);
+                } else if let Err(e) = se.ensure_shield() {
+                    secure_log!("[S][e2e] ensure_shield FAILED: {:?}", e);
+                } else {
+                    secure_log!("[S][e2e] SHIELD UP — PRL handshake succeeded");
+                }
+            }
         }
 
         // `e2e-skip-unlock` halts the boot flow right after provisioning so

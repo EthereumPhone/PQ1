@@ -343,7 +343,7 @@ impl OptigaTrustM {
     /// test chip), so that non-PRL paths (PIN HMAC verify, entropy
     /// read/write, factory reset of F1Dx) can still be exercised. See
     /// `docs/optiga-brick-postmortem.md` §7.
-    fn ensure_shield(&mut self) -> Result<(), OptigaError> {
+    pub(crate) fn ensure_shield(&mut self) -> Result<(), OptigaError> {
         #[cfg(feature = "optiga-no-shield")]
         {
             // Mode-of-operation: bus-level I2C encryption is intentionally
@@ -379,6 +379,25 @@ impl OptigaTrustM {
             }
             Ok(())
         }
+    }
+
+    /// Derive PBS from the OTP master and load it into the shield state
+    /// WITHOUT touching E140 on the chip. For bring-up test paths where
+    /// E140 is already provisioned from a prior boot — we only need the
+    /// host-side PBS in place so `establish()` can run. Does nothing
+    /// under `optiga-no-shield`.
+    #[cfg(feature = "stm32u585")]
+    pub(crate) fn load_pbs_from_otp(&mut self) -> Result<(), OptigaError> {
+        let mut pbs = crate::hw::secret_keys::optiga_pairing_secret()
+            .map_err(|e| {
+                secure_log!("[OPTIGA/bringup] optiga_pairing_secret FAILED: {:?}", e);
+                OptigaError::Transport
+            })?;
+        self.shield.load_pbs(&pbs);
+        use zeroize::Zeroize;
+        pbs.zeroize();
+        secure_log!("[OPTIGA/bringup] PBS loaded from OTP (E140 untouched)");
+        Ok(())
     }
 
     /// PBS provisioning without attempting the shielded-connection

@@ -117,23 +117,23 @@ impl ShieldedConnection {
         self.pbs_loaded = true;
     }
 
-    /// Derive session keys from the PBS and exchanged random values.
+    /// Derive session keys from the PBS and the chip-provided `random_S`.
     ///
     /// Uses TLS 1.2 PRF (HMAC-SHA256) to expand:
-    ///   `PRF(pbs, "Platform Binding", random_m || random_s)` → 40 bytes
+    ///   `PRF(pbs, "Platform Binding", random_S)` → 40 bytes
     ///
-    /// Output layout:
+    /// Note: Infineon's PRL only uses `random_S` (single 32-byte buffer
+    /// `p_ctx->prl.random`); there is no `random_M` in the handshake —
+    /// see `ifx_i2c_presentation_layer.c:285-319,497-500`.
+    ///
+    /// Output layout (matches `PRL_MASTER_*_OFFSET` in the reference):
     ///   [0..16]  = Master Encryption Key (host→chip)
     ///   [16..32] = Master Decryption Key (chip→host)
     ///   [32..36] = Encryption nonce base
     ///   [36..40] = Decryption nonce base
-    fn derive_session_keys(&mut self, random_m: &[u8; 32], random_s: &[u8; 32]) {
-        let mut seed = [0u8; 64];
-        seed[..32].copy_from_slice(random_m);
-        seed[32..].copy_from_slice(random_s);
-
+    fn derive_session_keys(&mut self, random_s: &[u8; 32]) {
         let mut key_material = [0u8; SESSION_KEY_LEN];
-        tls_prf_sha256(&self.pbs, PRF_LABEL, &seed, &mut key_material);
+        tls_prf_sha256(&self.pbs, PRF_LABEL, random_s, &mut key_material);
 
         self.enc_key.copy_from_slice(&key_material[0..16]);
         self.dec_key.copy_from_slice(&key_material[16..32]);
@@ -143,7 +143,6 @@ impl ShieldedConnection {
         self.dec_seq = 0;
 
         key_material.zeroize();
-        seed.zeroize();
     }
 
     /// Build the 8-byte CCM nonce from base + sequence counter.
@@ -324,13 +323,11 @@ impl ShieldedConnection {
 
         secure_log!("[OPTIGA/shield] establish: start");
 
-        // Generate master random from TRNG
-        let mut random_m = [0u8; RANDOM_LEN];
-        crate::rng::fill(&mut random_m).map_err(|_| ShieldError::HandshakeFailed)?;
-        secure_log!("[OPTIGA/shield] random_m generated");
-
         // Step 1: Send MasterHello via the presentation-layer path
         // (PRESENCE_BIT set in PCTR). Format: SCTR(0x00) | ProtoVer(0x01).
+        // Note: Infineon PRL does NOT send a master random — the handshake
+        // uses only `random_S` from SlaveHello. See `ifx_i2c_presentation_
+        // layer.c:451-472`.
         let hello = [SCTR_HANDSHAKE_HELLO, PROTOCOL_VERSION];
         let mut resp = [0u8; 64];
         secure_log!("[OPTIGA/shield] sending MasterHello");
@@ -344,10 +341,10 @@ impl ShieldedConnection {
 
         // Step 2: Parse SlaveHello — 38 bytes total per Infineon
         // `ifx_i2c_presentation_layer.c::PRL_SLAVE_HELLO_LENGTH = 0x26`:
-        //   byte 0      : SCTR
-        //   byte 1      : ProtocolVersion
+        //   byte 0      : SCTR (0x00)
+        //   byte 1      : ProtocolVersion (0x01)
         //   bytes 2..34 : Random_S (32 bytes)
-        //   bytes 34..38: SeqNum_S (4 bytes)
+        //   bytes 34..38: SeqNum_S (4 bytes, big-endian)
         const SLAVE_HELLO_RANDOM_OFFSET: usize = 2;
         const SLAVE_HELLO_SEQ_OFFSET: usize = 34;
         const SLAVE_HELLO_LEN: usize = 38;
@@ -364,22 +361,29 @@ impl ShieldedConnection {
         random_s.copy_from_slice(
             &resp[SLAVE_HELLO_RANDOM_OFFSET..SLAVE_HELLO_RANDOM_OFFSET + RANDOM_LEN]
         );
-        let mut seq_s = [0u8; 4];
-        seq_s.copy_from_slice(
-            &resp[SLAVE_HELLO_SEQ_OFFSET..SLAVE_HELLO_SEQ_OFFSET + 4]
-        );
+        let slave_seq = u32::from_be_bytes([
+            resp[SLAVE_HELLO_SEQ_OFFSET],
+            resp[SLAVE_HELLO_SEQ_OFFSET + 1],
+            resp[SLAVE_HELLO_SEQ_OFFSET + 2],
+            resp[SLAVE_HELLO_SEQ_OFFSET + 3],
+        ]);
+        secure_log!("[OPTIGA/shield] slave_seq={:#010x}", slave_seq);
 
-        // Step 3: Derive session keys
-        self.derive_session_keys(&random_m, &random_s);
+        // Step 3: Derive session keys from PBS + random_S.
+        self.derive_session_keys(&random_s);
 
-        // Step 4: Send MasterFinished
-        // Encrypt: Random_M(32) + SeqNum_S(4) with derived enc_key
+        // Step 4: Send MasterFinished.
+        // Plaintext = random_S (32) || slave_seq_num (4 BE) = 36 bytes
+        //   — see `ifx_i2c_presentation_layer.c:512-521`.
+        // All three of {CCM nonce counter, AAD seq, header seq} are the
+        // slave_sequence_number (not zero). See `ifx_i2c_presentation_
+        // layer.c:523-542`.
         let mut finished_plain = [0u8; 36];
-        finished_plain[..32].copy_from_slice(&random_m);
-        finished_plain[32..36].copy_from_slice(&seq_s);
+        finished_plain[..32].copy_from_slice(&random_s);
+        finished_plain[32..36].copy_from_slice(&slave_seq.to_be_bytes());
 
-        let nonce = Self::build_nonce(&self.enc_nonce_base, 0);
-        let aad = Self::build_aad(SCTR_HANDSHAKE_FINISHED, 0, 36);
+        let nonce = Self::build_nonce(&self.enc_nonce_base, slave_seq);
+        let aad = Self::build_aad(SCTR_HANDSHAKE_FINISHED, slave_seq, 36);
 
         let mut finished_enc = [0u8; 64];
         let ct_len = aes128_ccm_encrypt(
@@ -389,26 +393,42 @@ impl ShieldedConnection {
             &finished_plain,
             &mut finished_enc,
         );
+        // ct_len = 36 plaintext + 8 MAC = 44
 
-        // Build finished message: SCTR(0x08) | SeqNum(4) | ciphertext+tag
+        // Frame: SCTR(0x08) | SeqNum=slave_seq(4 BE) | ciphertext+tag(44)
+        // = 5 + 44 = 49 bytes (PRL_FINISHED_DATA_LENGTH + 1).
         let mut finished_msg = [0u8; 128];
         finished_msg[0] = SCTR_HANDSHAKE_FINISHED;
-        finished_msg[1..5].copy_from_slice(&[0, 0, 0, 0]); // seq = 0
+        finished_msg[1..5].copy_from_slice(&slave_seq.to_be_bytes());
         finished_msg[5..5 + ct_len].copy_from_slice(&finished_enc[..ct_len]);
         let msg_len = 5 + ct_len;
 
         let mut resp2 = [0u8; 128];
+        secure_log!("[OPTIGA/shield] sending MasterFinished ({}B)", msg_len);
         let n2 = ifx.transceive_prl(&finished_msg[..msg_len], &mut resp2)
             .map_err(|_| ShieldError::HandshakeFailed)?;
+        secure_log!(
+            "[OPTIGA/shield] MasterFinished response n={}, SCTR={:02x}",
+            n2, resp2[0]
+        );
 
-        // Step 5: Verify SlaveFinished
+        // Step 5: Verify SlaveFinished.
+        // Format: SCTR(0x08) | master_seq(4 BE) | ct(36) | MAC(8) = 49 B.
+        // See `ifx_i2c_presentation_layer.c:559-607`.
         if n2 < SC_HEADER_LEN + CCM_TAG_LEN {
             return Err(ShieldError::HandshakeFailed);
         }
-        let dec_nonce = Self::build_nonce(&self.dec_nonce_base, 0);
+        if resp2[0] != SCTR_HANDSHAKE_FINISHED {
+            secure_log!("[OPTIGA/shield] SlaveFinished SCTR unexpected: {:02x}", resp2[0]);
+            return Err(ShieldError::HandshakeFailed);
+        }
+        let master_seq = u32::from_be_bytes([resp2[1], resp2[2], resp2[3], resp2[4]]);
+        secure_log!("[OPTIGA/shield] master_seq={:#010x}", master_seq);
+
+        let dec_nonce = Self::build_nonce(&self.dec_nonce_base, master_seq);
         let slave_ct = &resp2[SC_HEADER_LEN..n2];
         let slave_pt_len = slave_ct.len() - CCM_TAG_LEN;
-        let dec_aad = Self::build_aad(SCTR_HANDSHAKE_FINISHED, 0, slave_pt_len as u16);
+        let dec_aad = Self::build_aad(SCTR_HANDSHAKE_FINISHED, master_seq, slave_pt_len as u16);
 
         let mut slave_plain = [0u8; 64];
         let ok = aes128_ccm_decrypt(
@@ -419,17 +439,46 @@ impl ShieldedConnection {
             &mut slave_plain,
         );
         if !ok {
+            secure_log!("[OPTIGA/shield] SlaveFinished decrypt FAILED");
             return Err(ShieldError::HandshakeFailed);
         }
 
-        // Session established — start sequence counters at 1
-        self.enc_seq = 1;
-        self.dec_seq = 1;
+        // Plaintext of SlaveFinished must be `random_S (32) || master_seq (4 BE)`.
+        if slave_pt_len < 36 {
+            return Err(ShieldError::HandshakeFailed);
+        }
+        let mut diff: u8 = 0;
+        for i in 0..RANDOM_LEN {
+            diff |= slave_plain[i] ^ random_s[i];
+        }
+        if diff != 0 {
+            secure_log!("[OPTIGA/shield] SlaveFinished random_S mismatch");
+            return Err(ShieldError::HandshakeFailed);
+        }
+        let echoed_master_seq = u32::from_be_bytes([
+            slave_plain[32], slave_plain[33], slave_plain[34], slave_plain[35],
+        ]);
+        if echoed_master_seq != master_seq {
+            secure_log!("[OPTIGA/shield] SlaveFinished master_seq mismatch");
+            return Err(ShieldError::HandshakeFailed);
+        }
+
+        // Session established. Subsequent protected records use the
+        // master_sequence_number counter (bumped before each send), and
+        // the slave's responses carry their own slave_sequence_number we
+        // extract on the fly in `unwrap_response`. We initialise enc_seq
+        // = master_seq + 1 so the first `wrap_command` sends that value
+        // (we use-then-increment). dec_seq=0 lets any seq ≥ 0 through;
+        // the chip's slave_sequence_number monotonicity is what we rely
+        // on for replay protection.
+        self.enc_seq = master_seq.saturating_add(1);
+        self.dec_seq = 0;
         self.active = true;
 
-        random_m.zeroize();
         finished_plain.zeroize();
+        slave_plain.zeroize();
 
+        secure_log!("[OPTIGA/shield] establish: DONE");
         Ok(())
     }
 }
