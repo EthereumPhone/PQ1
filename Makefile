@@ -76,7 +76,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
 
 # Supply-chain audit. Hard-fails if any dependency is not cryptographically
 # pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
@@ -364,6 +364,72 @@ test-key-speed:
 		exit 0; \
 	else \
 		echo "==> test-key-speed: FAIL (missing PASS marker)"; \
+		exit 1; \
+	fi
+
+# Automated, non-destructive test of the firmware-update (CMD_FW_*)
+# logic on real STM32U585 hardware.  NS side runs `fwup_hw_test.rs`,
+# which walks every FW_* command through its verify chain and rejects
+# paths — including a full-chain "valid-but-rollback-rejected" manifest
+# that proves structural + CRC + digest + vendor-fpr all work end-to-end.
+#
+# WHAT THIS DOES NOT DO (on purpose — both are irreversible / destructive
+# to the currently-running firmware on the pre-A/B-split branch):
+#
+#   * Never calls CMD_FW_COMMIT → no OTP rollback bit is burned.
+#     (1024 bits of OTP budget per device.  Each COMMIT burns at least
+#      one bit, permanently.  This test burns zero.)
+#   * Never lets CMD_FW_BEGIN reach `flash::erase_slot(inactive)`.  On
+#     the current linker layout the inactive slot's manifest page (page
+#     5 @ 0x0C00_A000) still sits inside the running secure firmware's
+#     .text region — erasing it would hard-fault the CPU.  We craft the
+#     happy-path test manifest with fw_version=0 so it exercises
+#     structural / CRC / digest / fpr checks and then rejects at the
+#     rollback-floor gate (fw_version > floor is strict, floor >= 0),
+#     which is the last check before `erase_slot` would run.
+#
+# The only first-boot one-way side-effect is `otp::ensure_device_master`
+# (burns the per-device OTP master key on first-boot of a blank MCU —
+# this happens on every hardware boot of this firmware, not just this
+# target, so there is nothing new here).
+#
+# Requires: ST-LINK connected, STM32_Programmer_CLI on PATH.
+# Pass: exits 0 with "[NS][fwup-test] === PASS ===" on stdout.
+# Fail: exits 1 if any test case fails or the PASS marker is missing.
+test-update-hw:
+	@echo "==> Building secure (e2e-test auto-unlock) + NS (fwup-hw-test) + SHA-256 HW accel"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features fwup-hw-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running firmware-update logic test (safe mode)..."
+	@echo "    (no COMMIT, no slot erase — nothing irreversible will happen)"
+	@log=$$(mktemp -t test-update-hw.XXXXXX.log); \
+	rc_file=$$(mktemp -t test-update-hw-rc.XXXXXX); \
+	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
+	{ probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; echo $$? >"$$rc_file"; } | tee "$$log"; \
+	rc=$$(cat "$$rc_file"); \
+	echo "===================================="; \
+	if [ "$$rc" != "0" ] && [ "$$rc" != "130" ]; then \
+		echo "==> test-update-hw: FAIL (probe-rs exited $$rc)"; \
+		exit 1; \
+	fi; \
+	if grep -q "\[NS\]\[fwup-test\] === PASS ===" "$$log"; then \
+		echo "==> test-update-hw: PASS"; \
+		exit 0; \
+	else \
+		echo "==> test-update-hw: FAIL (missing PASS marker)"; \
 		exit 1; \
 	fi
 

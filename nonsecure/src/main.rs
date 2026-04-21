@@ -1,11 +1,13 @@
 #![no_std]
 #![no_main]
 // The `e2e-test` build swaps out the interactive main() for a scripted
-// runner in e2e_test.rs; `bench-key-speed` swaps it for a timing bench.
-// Both repurpose the crate entry point, so the interactive imports and
-// helpers end up unused — silence the resulting warnings.
+// runner in e2e_test.rs; `bench-key-speed` swaps it for a timing bench;
+// `fwup-hw-test` swaps it for the non-destructive FW_* logic checker.
+// All three repurpose the crate entry point, so the interactive imports
+// and helpers end up unused — silence the resulting warnings.
 #![cfg_attr(feature = "e2e-test", allow(dead_code))]
 #![cfg_attr(feature = "bench-key-speed", allow(dead_code, unused_imports))]
+#![cfg_attr(feature = "fwup-hw-test", allow(dead_code, unused_imports))]
 
 #[cfg(not(feature = "usb"))]
 use cortex_m_semihosting::{debug, hprintln};
@@ -18,7 +20,7 @@ use panic_halt as _;
 // Type 1 / Type 2 sign command to sign a single value-transfer tx.
 #[cfg(all(not(feature = "e2e-test"), feature = "usb"))]
 use cortex_m_semihosting::{debug, hprintln};
-#[cfg(not(feature = "e2e-test"))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "fwup-hw-test")))]
 use sphincs_tz_shared::{
     NscStatus, MAX_JARDIN_RESPONSE_LEN, SIGN_USEROP_HEADER_LEN,
 };
@@ -27,6 +29,8 @@ use sphincs_tz_shared::{
 mod e2e_test;
 #[cfg(feature = "bench-key-speed")]
 mod bench_key_speed;
+#[cfg(feature = "fwup-hw-test")]
+mod fwup_hw_test;
 mod erc20_db;
 mod names_db;
 mod nsc_api;
@@ -36,20 +40,20 @@ mod usb;
 mod vk_db;
 
 /// Scratch buffer for the unified sign command response (Type 1 + Type 2).
-#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
 static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN] = [0u8; MAX_JARDIN_RESPONSE_LEN];
 
 /// Scratch buffer for a sign payload (header + up to 256B inner calldata).
-#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
 const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 256;
-#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
 static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
 
 // ---------------------------------------------------------------------------
 // USB main loop: polls USB HID, dispatches APDUs to the NSC gateway.
 // Active when the `usb` feature is enabled (hardware builds with host comms).
 // ---------------------------------------------------------------------------
-#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     ns_debug_log("[NS] main() entered");
@@ -108,7 +112,7 @@ fn main() -> ! {
 /// Emit a semihosting log line only if a debugger is attached (DHCSR.C_DEBUGEN=1).
 /// Required because NS uses `panic_halt` and `hprintln!` without a debugger
 /// BKPTs → HardFault → silent halt.
-#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed")))]
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
 fn ns_debug_log(msg: &str) {
     const DHCSR: *const u32 = 0xE000_EDF0 as *const u32;
     let c_debugen = unsafe { core::ptr::read_volatile(DHCSR) } & 1;
@@ -121,7 +125,7 @@ fn ns_debug_log(msg: &str) {
 // Interactive QEMU demo (no USB). Exercises the unified JARDÍN sign
 // command end-to-end: unlock → sign a value-transfer → print result.
 // ---------------------------------------------------------------------------
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS] Non-secure world started!");
@@ -169,7 +173,7 @@ fn main() -> ! {
 
 /// Build a unified-sign payload for a value-transfer tx.
 /// Output layout matches `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN`.
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
 fn build_value_transfer_payload(buf: &mut [u8]) -> usize {
     // Sepolia chain_id, slot 0 with FLAG_REGISTER_SLOT so the demo first-
     // sign emits the expected Type 1 + Type 2 bundle. (The stateless

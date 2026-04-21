@@ -16,6 +16,13 @@ e2e-test = []
 # pre-unlock) and `stm32u585` (for the 160 MHz PLL path). Hardware only —
 # the QEMU transport has no DWT.  Use `make test-key-speed`.
 bench-key-speed = []
+# Replaces the interactive main() with the non-destructive firmware-
+# update logic test runner. Pairs with the secure crate's `e2e-test`
+# feature (pre-unlock). Exercises every CMD_FW_* surface without ever
+# calling COMMIT (→ would burn an OTP bit) or letting BEGIN reach
+# `flash::erase_slot` (→ on pre-A/B-split builds that would corrupt
+# the running firmware). Use `make test-update-hw`.
+fwup-hw-test = ["stm32u585"]
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
 
