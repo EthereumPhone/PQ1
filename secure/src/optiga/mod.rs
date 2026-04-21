@@ -194,6 +194,13 @@ impl OptigaTrustM {
         crate::pin_diag::run();
         self.ifx = ifx_i2c::IfxState::new();
         self.ready = false;
+        // An RST pulse wipes the chip's PRL session. Reflect that on the
+        // host side so the next `ensure_shield()` runs a fresh handshake
+        // — leaving `shield.active=true` would have us sending records
+        // encrypted with keys the chip has discarded, and every APDU
+        // would bounce with an integrity-violated alert. `pbs_loaded`
+        // stays intact so the handshake can re-derive session keys.
+        self.shield.active = false;
         self.init()
     }
 
@@ -663,8 +670,35 @@ impl OptigaTrustM {
             return Err(e);
         }
 
-        secure_log!("[OPTIGA/prov] auth_ref: set_metadata");
+        // DIAGNOSTIC: dump the chip's current F1D0 metadata before we
+        // attempt to re-write it. On a partially-provisioned chip this
+        // lets us see LcsO (tag 0xC0), Change (0xD0), Read (0xD1),
+        // Execute (0xD3), and DataType (0xE8) as they stand right now —
+        // vs. the bytes we're about to send. Removes all speculation
+        // about what "Status(255)" on set_metadata actually means.
+        let mut cur_meta = [0u8; 128];
+        match apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, &mut cur_meta,
+        ) {
+            Ok(n) => {
+                let show = n.min(64);
+                secure_log!(
+                    "[OPTIGA/prov] F1D0 current metadata ({}B): {:02x?}",
+                    n, &cur_meta[..show]
+                );
+            }
+            Err(e) => {
+                secure_log!("[OPTIGA/prov] F1D0 get_metadata FAILED: {:?}", e);
+            }
+        }
+
         let (meta, meta_len) = apdu::build_metadata_auth_ref();
+        secure_log!(
+            "[OPTIGA/prov] F1D0 proposed metadata ({}B): {:02x?}",
+            meta_len, &meta[..meta_len]
+        );
+        secure_log!("[OPTIGA/prov] auth_ref: set_metadata");
         if let Err(e) = apdu::set_metadata(
             &mut self.ifx, &mut self.shield,
             apdu::OID_AUTH_REF, &meta[..meta_len],
@@ -787,6 +821,18 @@ impl OptigaTrustM {
             self.hard_reset_and_reinit()?;
         }
 
+        // Bring the Shielded Connection up now — every subsequent APDU
+        // (auth_ref + user OIDs + counter) needs `Conf(E140)` satisfied
+        // on re-provisioning. `send_command` auto-wraps once shield is
+        // active. On a fresh chip the Change ACs on F1D1..F1D4 default
+        // to ALW so the shield is technically optional, but bringing it
+        // up unconditionally makes the flow identical on fresh and
+        // partially-provisioned chips — and idempotency is the
+        // non-negotiable contract (mod.rs:716-720). No-op under
+        // `optiga-no-shield`.
+        secure_log!("[OPTIGA/prov] step 1b: ensure_shield (pre-auth_ref)");
+        self.ensure_shield()?;
+
         // 2. Auth reference
         secure_log!("[OPTIGA/prov] step 2: provision_auth_ref");
         {
@@ -798,7 +844,11 @@ impl OptigaTrustM {
                 return Err(e);
             }
             #[cfg(feature = "stm32u585")]
-            self.hard_reset_and_reinit()?;
+            {
+                self.hard_reset_and_reinit()?;
+                secure_log!("[OPTIGA/prov] post-auth_ref: re-establishing shield");
+                self.ensure_shield()?;
+            }
         }
 
         // 3. User data. While shielded is disabled we drop the Conf(E140)
@@ -812,10 +862,10 @@ impl OptigaTrustM {
         // Each user OID provision = 2 SetData writes (metadata + data),
         // and the chip wedges after 2 writes per session. Hard-pulse RST
         // between every OID so each provision starts in a fresh session.
-        // The OpenApplication is done by hard_reset_and_reinit(). The
-        // reopen_application() call that used to live here (CloseApp +
-        // OpenApp) doesn't help on this chip — CloseApp ACKs but never
-        // emits a data response, so we just time out.
+        // The RST also wipes the chip's PRL session, so `hard_reset_and_
+        // reinit` clears our `shield.active` flag and we re-handshake
+        // before the next provision call (`Conf(E140)` satisfaction
+        // requirement).
         macro_rules! prov_with_reset {
             ($name:literal, $call:expr) => {{
                 secure_log!("[OPTIGA/prov] step: {}", $name);
@@ -823,7 +873,11 @@ impl OptigaTrustM {
                     secure_log!("[OPTIGA/prov] {} write FAILED: {:?}", $name, e); e
                 })?;
                 #[cfg(feature = "stm32u585")]
-                self.hard_reset_and_reinit()?;
+                {
+                    self.hard_reset_and_reinit()?;
+                    secure_log!("[OPTIGA/prov] post-{}: re-establishing shield", $name);
+                    self.ensure_shield()?;
+                }
             }};
         }
 

@@ -313,7 +313,12 @@ unsafe fn send_command(
             .map_err(|_| OptigaError::Shield)?;
 
         let mut enc_resp = [0u8; 900];
-        let n = ifx.transceive(&enc_buf[..enc_len], &mut enc_resp)?;
+        // Protected records MUST be routed through the PRL layer via
+        // PCTR_PRESENCE_BIT — that's the same flag path handshake
+        // messages used. A plain `transceive` drops the frame into the
+        // chip's APDU parser, which reads our SCTR byte (0x23) as a
+        // CMD and the PRL responds with a fatal alert (SCTR=0x40).
+        let n = ifx.transceive_prl(&enc_buf[..enc_len], &mut enc_resp)?;
 
         let dec_len = shield.unwrap_response(&enc_resp[..n], resp_buf)
             .map_err(|_| OptigaError::Shield)?;
