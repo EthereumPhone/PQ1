@@ -62,9 +62,6 @@ const MAX_ATTEMPTS: u8 = sphincs_tz_shared::MAX_ATTEMPTS;
 /// Domain tag for deriving the PIN authorization secret.
 const PIN_AUTH_DOMAIN: &[u8] = b"optiga-pin-auth-v1";
 
-/// HMAC challenge length from OPTIGA TRNG during auth.
-const AUTH_CHALLENGE_LEN: usize = 32;
-
 /// Counter sentinel written by `factory_reset()` so `is_provisioned()` can
 /// distinguish a wiped chip from an in-use one after LcsO has been locked.
 const RESET_SENTINEL: u8 = 0xFF;
@@ -1029,37 +1026,64 @@ impl OptigaTrustM {
                 return Err(OptigaError::PinLocked);
             }
 
-            // 4. Get challenge. CRIT-8 fix: route through the shielded
-            //    channel AND XOR with host TRNG, so a bus MITM can't
-            //    force a fixed challenge and a compromised chip RNG
-            //    can't feed us a predictable one.
-            secure_log!("[OPTIGA/auth] GetRandom (shielded + host-mixed)");
-            let mut challenge = [0u8; AUTH_CHALLENGE_LEN];
-            if let Err(e) =
-                apdu::get_random_mixed(&mut self.ifx, &mut self.shield, &mut challenge)
-            {
-                secure_log!("[OPTIGA/auth] GetRandom FAILED: {:?}", e);
+            // 4. Acquire auth-code session + HMAC verify, mirroring the
+            //    reference `example_optiga_hmac_verify_with_authorization_
+            //    reference.c` layout exactly:
+            //      optional_data(16) || chip_random(32) || arbitrary_data(16) = 64 B
+            //    Chip's session at 0xE100 ends up storing
+            //    (optional_data || chip_random) = 48 B.
+            //    `hmac_verify` compares input_data[0..48] to the session
+            //    and then runs HMAC(F1D0, input_data) over the full 64 B.
+            //    Host-side: 16 B host_nonce as optional_data (CRIT-8
+            //    style entropy injection) and 16 B host_tag as arbitrary
+            //    suffix — both host-generated so a compromised chip RNG
+            //    can't control the full challenge.
+            let mut host_nonce = [0u8; 16];
+            let mut host_tag = [0u8; 16];
+            crate::rng::fill(&mut host_nonce).map_err(|_| OptigaError::Transport)?;
+            crate::rng::fill(&mut host_tag).map_err(|_| OptigaError::Transport)?;
+            let mut chip_random = [0u8; 32];
+            secure_log!("[OPTIGA/auth] GenerateAuthCode (session=0xE100, opt=16, random=32)");
+            if let Err(e) = apdu::generate_auth_code(
+                &mut self.ifx, &mut self.shield,
+                apdu::OID_SESSION,
+                &host_nonce,
+                &mut chip_random,
+            ) {
+                secure_log!("[OPTIGA/auth] GenerateAuthCode FAILED: {:?}", e);
                 return Err(e);
             }
+
+            // Assemble input_data exactly like the Infineon example:
+            //   input = host_nonce(16) || chip_random(32) || host_tag(16)
+            let mut hmac_input = [0u8; 64];
+            hmac_input[..16].copy_from_slice(&host_nonce);
+            hmac_input[16..48].copy_from_slice(&chip_random);
+            hmac_input[48..].copy_from_slice(&host_tag);
             secure_log!(
-                "[OPTIGA/auth] challenge[0..4]={:02x}{:02x}{:02x}{:02x}",
-                challenge[0], challenge[1], challenge[2], challenge[3]
+                "[OPTIGA/auth] input[0..4]={:02x}{:02x}{:02x}{:02x} (opt) / [16..20]={:02x}{:02x}{:02x}{:02x} (chip) / [48..52]={:02x}{:02x}{:02x}{:02x} (arb)",
+                hmac_input[0], hmac_input[1], hmac_input[2], hmac_input[3],
+                hmac_input[16], hmac_input[17], hmac_input[18], hmac_input[19],
+                hmac_input[48], hmac_input[49], hmac_input[50], hmac_input[51]
             );
 
             let mut pin_secret = Self::derive_pin_secret(pin);
-            let mut hmac = Self::hmac_sha256(&pin_secret, &challenge);
+            let mut hmac = Self::hmac_sha256(&pin_secret, &hmac_input);
             pin_secret.zeroize();
 
-            secure_log!("[OPTIGA/auth] hmac_verify via DecryptSym");
+            secure_log!("[OPTIGA/auth] hmac_verify via DecryptSym (input=64B)");
             let verify_result = apdu::hmac_verify(
                 &mut self.ifx, &mut self.shield,
                 apdu::OID_AUTH_REF,
                 apdu::OID_SESSION,
-                &challenge,
+                &hmac_input,
                 &hmac,
             );
             hmac.zeroize();
-            challenge.zeroize();
+            hmac_input.zeroize();
+            host_nonce.zeroize();
+            host_tag.zeroize();
+            chip_random.zeroize();
 
             match verify_result {
                 Ok(()) => {

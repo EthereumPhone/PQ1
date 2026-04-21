@@ -107,7 +107,13 @@ const PARAM_METADATA:    u8 = 0x01;
 /// SetDataObject: erase the full object then write from offset 0.
 const PARAM_ERASE_WRITE: u8 = 0x40;
 /// DecryptSym operation mode: HMAC verify against an auth-ref secret.
-const PARAM_HMAC_MODE:   u8 = 0x02;
+/// DecryptSym `cmd_param` selecting HMAC-SHA-256 mode. Per Infineon
+/// `optiga_hmac_type_t::OPTIGA_HMAC_SHA_256` in
+/// `common/optiga_lib_common.h:213`. Writing any other value here gets
+/// the chip to reject the whole HMAC-verify APDU with Status=0xFF
+/// regardless of input construction or AUTHREF state — it's selecting
+/// a different symmetric mode entirely (0x02 is an AES variant).
+const PARAM_HMAC_MODE:   u8 = 0x20;
 
 /// DecryptSym sequence byte: single-shot message (START + FINAL).
 const SYM_SEQ_START_FINAL: u8 = 0x01;
@@ -469,6 +475,57 @@ pub unsafe fn get_random(
     let length = out.len() as u16;
     let mut ab = ApduBuf::new(CMD_GET_RANDOM, 0x00);
     ab.write_u16(length);
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 512];
+    let n = send_command(ifx, shield, apdu, &mut resp)?;
+    let payload = parse_response(&resp, n)?;
+
+    let copy_len = payload.len().min(out.len());
+    out[..copy_len].copy_from_slice(&payload[..copy_len]);
+    Ok(copy_len)
+}
+
+/// `GenerateAuthCode` — `GetRandom` variant that *also binds* the random
+/// (prefixed by `optional_data`) into the chip's session context at
+/// `session_oid`. The resulting session state is what
+/// `optiga_crypt_hmac_verify` (against an AUTHREF secret) is specified
+/// to consume (`optiga_crypt.h:2390`, "Session has already been
+/// acquired by optiga_crypt_generate_auth_code").
+///
+/// Wire-level InData (matches `optiga_cmd.c::optiga_cmd_get_random_
+/// handler` with `store_in_session=TRUE`):
+///
+/// ```text
+///   length(2 BE)                ← `out.len()` random bytes requested
+///   session_oid(2 BE)           ← where chip stores optional_data || random
+///   0x41 | opt_len(2 BE) | optional_data(opt_len)
+/// ```
+///
+/// Chip returns the `length` random bytes. The chip's internal session
+/// at `session_oid` now holds `optional_data || random`, which is what
+/// `hmac_verify` will check against the first `optional_data.len() +
+/// length` bytes of `input_data`.
+///
+/// Size constraints (SRM §"GetRandom"):
+/// - `length >= 8`
+/// - `opt_len + length <= 0x42` (66 bytes of auth code material)
+///
+/// `optional_data` serves as a host-contributed entropy prefix — a
+/// compromised chip TRNG can't dictate the full challenge if the host
+/// adds 16 fresh bytes of its own.
+pub unsafe fn generate_auth_code(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    session_oid: u16,
+    optional_data: &[u8],
+    out: &mut [u8],
+) -> Result<usize, OptigaError> {
+    let length = out.len() as u16;
+    let mut ab = ApduBuf::new(CMD_GET_RANDOM, 0x00);
+    ab.write_u16(length);
+    ab.write_u16(session_oid);
+    ab.write_tlv(0x41, optional_data);
     let apdu = ab.finish();
 
     let mut resp = [0u8; 512];

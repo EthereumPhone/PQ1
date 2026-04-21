@@ -1052,6 +1052,40 @@ flash-hw-optiga-bringup-write-only:
 	@echo "    followed by 'e2e-skip-unlock active: halting after provisioning'."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Full unlock test: provision + verify_pin + read all secrets through
+# the Shielded Connection. Identical features to
+# `flash-hw-optiga-bringup-write-only` minus `e2e-skip-unlock` so the
+# e2e runner falls through to `SE.unlock(pin)`, which exercises:
+#   - `ensure_shield` (handshake / re-handshake)
+#   - counter bump + readback (F1E1, data only)
+#   - GetRandom → DecryptSym HMAC-verify against F1D0 (silicon PIN gate)
+#   - Auto(F1D0)-gated reads of F1D1..F1D4
+#   - counter reset to 0 on success
+# Critically: `optiga-lock-operational` stays OUT of the feature set,
+# so `lock_oid` is a no-op and nothing bumps any OID to Operational.
+# No `set_metadata` call is reachable on this path either.
+flash-hw-optiga-unlock-test:
+	@echo "==> Building OPTIGA unlock test (provision → verify_pin → read secrets)"
+	@echo "    Features match bringup-write-only MINUS e2e-skip-unlock."
+	@echo "    LcsO on every OID stays at whatever it was on entry."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-trust-m,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting and attaching — expect 'gateway pre-unlocked, ready for tests'"
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # Shield-handshake-only test. Skips `provision_from_mnemonic` entirely
 # and runs `init` → `load_pbs_from_otp` → `ensure_shield` against an
 # already-provisioned chip. Use this to validate the Shielded Connection
