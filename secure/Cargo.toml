@@ -122,16 +122,23 @@ se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated O
 # dev bench chips and will NOT ratchet any OID to Operational. Use
 # `make optiga-admin-wipe-e2e`.
 optiga-admin-wipe-e2e = ["optiga-trust-m"]
-# Dual-SE (OPTIGA + SE050) admin-wipe e2e: pre-clean → provision both halves
-# → unlock + XOR-reconstruct master_secret → factory_reset_admin → verify
-# both chips unprovisioned → verify unlock fails. Exercises the
-# `DualSecureElement::factory_reset_admin` integration on real silicon.
-# DESTROYS wallet state on BOTH chips. Deliberately does NOT imply
-# `optiga-lock-operational` — no LcsO advance on OPTIGA; SE050 has no
-# LcsO concept. Uses current production object ranges on both chips
-# (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B06_xxxx). Use
-# `make dual-se-admin-wipe-e2e`.
-dual-se-admin-wipe-e2e = ["dual-se"]
+# Dual-SE (OPTIGA + SE050) unlock e2e: pre-clean → provision both halves
+# → unlock + XOR-reconstruct master_secret → verify. Exercises
+# `DualSecureElement::provision` + `DualSecureElement::unlock` on real
+# silicon; the XOR reconstruction is the unique dual-SE value-add not
+# covered by either single-SE test. Does NOT test
+# `factory_reset_admin` — that integration path is deferred to a
+# factory-only target that requires a fresh SE050 (an admin UserID
+# whose PIN has drifted out of sync with page-125 flash cannot be
+# wiped without admin auth, which is a real production guarantee but
+# also means this test on a contaminated bench chip is not meaningful).
+# DESTROYS wallet state on BOTH chips (pre-clean wipes before
+# re-provisioning under test credentials). Deliberately does NOT
+# imply `optiga-lock-operational` — no LcsO advance on OPTIGA; SE050
+# has no LcsO concept. Uses current production object ranges on both
+# chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B06_xxxx). Use
+# `make dual-se-unlock-e2e`.
+dual-se-unlock-e2e = ["dual-se"]
 se050-crash-safety-e2e = ["se050"]  # 2-phase test: partial wipe + reset + resume. Use `make se050-crash-safety-e2e`.
 spi1-arduino = []  # Use SPI1/PE12-PE15 (Arduino R3 headers) instead of SPI2/PB12-PB15 for TROPIC01
 stsafe-probe = ["stm32u585", "mock-se"]  # I2C2 bus scan to detect on-board STSAFE-A110

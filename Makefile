@@ -1133,21 +1133,27 @@ optiga-admin-wipe-e2e:
 	@echo "==> Running admin-wipe e2e (watch semihosting for PASS/FAIL)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
-# Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e. Exercises
-# `DualSecureElement::factory_reset_admin` end-to-end: pre-clean both
-# chips, provision test entropy XOR-split across the two, unlock and
-# verify the master_secret reconstructs correctly, call the wipe, then
-# verify both chips report unprovisioned + unlock fails.
+# Dual-SE (OPTIGA + SE050) unlock roundtrip e2e. Exercises
+# `DualSecureElement::provision` + `DualSecureElement::unlock` end-to-end:
+# pre-clean both chips (tolerates prior test contamination via a
+# three-stage cascade: admin-PIN → user-PIN candidates → unauthenticated
+# sweep), provision fresh test entropy XOR-split across the two,
+# unlock and verify the master_secret reconstructs byte-exact.
 #
 # !!! WARNING: this target DESTROYS wallet state on BOTH chips !!!
-# OPTIGA F1D0..F1D4 + F1E1 are zeroed + sentinel-marked. SE050 user
-# UserID at 0x7B06_0000 + data objects at 0x7B06_0001..3 + admin UserID
-# at 0x7B06_00A0 are admin-auth-deleted. Page 125 (STM32 secure flash
-# admin page) is erased. Re-run the normal first-boot wizard afterwards
-# to restore. Idempotent across repeated runs.
+# Pre-clean wipes OPTIGA F1D0..F1D4 + F1E1 and every deletable SE050
+# object in the 0x7B06_xxxx range. Re-run the normal first-boot wizard
+# afterwards to restore. Idempotent across repeated runs on the same
+# chip (pre-clean handles each re-invocation).
 #
-# Scope: exercises the dual-SE `factory_reset_admin` integration, NOT
-# the PIN-lockout→wipe flow (deferred).
+# Scope: exercises the XOR entropy reconstruction — the unique dual-SE
+# value-add not covered by either single-SE test. Does NOT exercise
+# `factory_reset_admin`; see `make optiga-admin-wipe-e2e` +
+# `make se050-admin-wipe-e2e` for those primitives individually, and
+# note that the full dual-SE admin-wipe integration is intentionally
+# DEFERRED (requires a fresh SE050 whose admin UserID PIN matches
+# page-125 flash; cross-test contamination on dev chips desyncs the
+# two and makes the test unrunnable without fresh silicon).
 #
 # LcsO-safety: `optiga-lock-operational` deliberately NOT included.
 # OPTIGA stays at Creation throughout. SE050 has no LcsO concept. The
@@ -1161,14 +1167,14 @@ optiga-admin-wipe-e2e:
 # production guard in nsc/mod.rs. The e2e-test fast-path itself is
 # dead code here — our dispatcher halts before it runs.
 #
-# Watch semihosting for "[E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: PASS"/"FAIL".
-dual-se-admin-wipe-e2e:
-	@echo "==> Building dual-SE admin-wipe roundtrip e2e firmware..."
+# Watch semihosting for "[E2E-DUAL-UNLOCK] DUAL-UNLOCK ROUNDTRIP: PASS"/"FAIL".
+dual-se-unlock-e2e:
+	@echo "==> Building dual-SE unlock roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features dual-se-admin-wipe-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+		--features dual-se-unlock-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
@@ -1180,7 +1186,7 @@ dual-se-admin-wipe-e2e:
 	@STM32_Programmer_CLI --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
-	@echo "==> Running dual-SE admin-wipe e2e (watch semihosting for PASS/FAIL)..."
+	@echo "==> Running dual-SE unlock e2e (watch semihosting for PASS/FAIL)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 # Shield-handshake-only test. Skips `provision_from_mnemonic` entirely

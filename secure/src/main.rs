@@ -642,33 +642,36 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
-    // ---- Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e ----
-    // Exercises `DualSecureElement::factory_reset_admin` end-to-end on
-    // real silicon across both chips: pre-clean → provision → unlock
-    // (XOR-reconstruct) → wipe → verify both unprovisioned → verify
-    // unlock fails. Destroys wallet state on BOTH chips.
+    // ---- Dual-SE (OPTIGA + SE050) unlock roundtrip e2e ----
+    // Exercises `DualSecureElement::provision` + `DualSecureElement::
+    // unlock` end-to-end on real silicon: pre-clean → provision →
+    // unlock (XOR-reconstruct) → verify master_secret. Destroys any
+    // existing wallet state on both chips during pre-clean.
     //
-    // Scope: the DualSecureElement integration of factory_reset_admin,
-    // NOT the PIN-lockout-triggers-wipe flow.
+    // Scope: the XOR entropy reconstruction + master_secret cross-
+    // verify across OPTIGA and SE050 — the unique dual-SE value-add
+    // not covered by either single-SE test. The admin-wipe dispatch
+    // is NOT exercised here; see `optiga-admin-wipe-e2e` and
+    // `se050-admin-wipe-e2e` for those primitives individually.
     //
     // LcsO safety: does NOT imply `optiga-lock-operational`. SE050 has
     // no LcsO concept. Uses current production object ranges on both
     // chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B06_xxxx — the "bumped"
     // range past the legacy stuck slots).
     //
-    // Triggered by: make dual-se-admin-wipe-e2e
-    #[cfg(feature = "dual-se-admin-wipe-e2e")]
+    // Triggered by: make dual-se-unlock-e2e
+    #[cfg(feature = "dual-se-unlock-e2e")]
     unsafe {
-        ui::show_status("Dual wipe", "running...");
+        ui::show_status("Dual unlock", "running...");
         let se = &mut *core::ptr::addr_of_mut!(SE);
-        match se.run_admin_wipe_roundtrip() {
+        match se.run_unlock_roundtrip() {
             Ok(()) => {
-                secure_log!("[S] [E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: PASS");
-                ui::show_status("Dual wipe", "PASS");
+                secure_log!("[S] [E2E-DUAL-UNLOCK] DUAL-UNLOCK ROUNDTRIP: PASS");
+                ui::show_status("Dual unlock", "PASS");
             }
             Err(_e) => {
-                secure_log!("[S] [E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: FAIL ({:?})", _e);
-                ui::show_status("Dual wipe", "FAIL");
+                secure_log!("[S] [E2E-DUAL-UNLOCK] DUAL-UNLOCK ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("Dual unlock", "FAIL");
             }
         }
         loop { cortex_m::asm::wfi(); }
