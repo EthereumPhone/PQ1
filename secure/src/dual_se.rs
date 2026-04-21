@@ -109,34 +109,30 @@ impl WalletStore for DualSecureElement {
     }
 
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
-        // Unlock OPTIGA Trust M first (HMAC auth reference → master_secret).
+        // Unlock OPTIGA Trust M first (HMAC auth reference). OPTIGA
+        // stores master_secret explicitly so `unlock` returns what
+        // provision wrote — this is the authoritative value used for
+        // the consistency check below and for the final return.
         let master_o = self.optiga.unlock(pin)?;
 
-        // Unlock SE050 (UserID PIN → master_secret).
-        // If this fails, the OPTIGA has already consumed an attempt.
-        // The dual-chip PIN lockout sync (intent log) is a separate
-        // hardening item — for now, best-effort.
+        // Unlock SE050 (UserID PIN). SE050 stores only its entropy
+        // half, not master_secret, so the master_secret value its
+        // `unlock` derives (`kdf("sphincs-master", half_e, 0)`) is
+        // meaningful only in single-SE mode where `entropy = full
+        // entropy`. In dual-SE it's just "auth succeeded" — we
+        // discard the return value and rely on the full-entropy
+        // consistency check further down.
+        //
+        // If SE050 unlock fails, OPTIGA has already consumed an
+        // attempt. The dual-chip PIN lockout sync (intent log) is a
+        // separate hardening item — for now, best-effort.
         let master_e = self.se050.unlock(pin).map_err(|e| {
-            // Zeroize the OPTIGA master_secret on SE050 failure
             let mut m = master_o;
             m.zeroize();
             e
         })?;
-
-        // Cross-verify: both SEs must return the same master_secret
-        // (derived from the same full entropy at provisioning time).
-        // If they disagree, one chip has been tampered with or replaced.
-        let match_ok: bool = master_o.ct_eq(&master_e).into();
-
-        let mut me = master_e;
-        me.zeroize();
-
-        if !match_ok {
-            let mut mo = master_o;
-            mo.zeroize();
-            secure_log!("[DUAL] CRITICAL: master secret mismatch between SEs!");
-            return Err(UnlockError::InternalError);
-        }
+        // Keep master_e alive — it's the key SE050 used to encrypt
+        // its own entropy_blob cache. Zeroize after decrypt below.
 
         // Now reconstruct the full entropy from both halves, encrypt it
         // under master_secret, and cache the blob for the signing flow.
@@ -154,10 +150,16 @@ impl WalletStore for DualSecureElement {
         let mut blob_e = [0u8; 64];
         let blob_e_len = self.se050.read_entropy_blob(&mut blob_e)
             .map_err(|_| UnlockError::InternalError)?;
+        // SE050's blob is encrypted under ITS master_secret
+        // (`kdf("sphincs-master", half_e, 0)`), not OPTIGA's. The
+        // two chips encrypt their caches independently; each must
+        // be decrypted with the matching key.
         let mut half_e = crypto::decrypt_entropy_blob(
-            &blob_e[..blob_e_len], &master_o
+            &blob_e[..blob_e_len], &master_e
         ).map_err(|_| UnlockError::InternalError)?;
         blob_e.zeroize();
+        let mut me = master_e;
+        me.zeroize();
 
         // Reconstruct the full entropy
         let mut full_entropy = xor_32(&half_o, &half_e);
