@@ -115,18 +115,57 @@ escape hatch exists for user OIDs only.
       MCU. Gated today by the absence of the `otp-hardcoded-master-key`
       feature; `ensure_device_master` burns on demand once, locks the
       region, reads back thereafter. Per-MCU, one-way, not rewriteable.
+      **Once work-todo #7 Tier 1 (DHUK) lands**, the master-key region
+      demotes to salt duty and may be repurposed — at which point burning
+      it stops being required for SE-pairing, and the irreversibility
+      concern narrows to "whatever salt consumers we later add." Until
+      then, this burn stays mandatory.
 - [ ] **OTP rollback-counter tally** (`ROLLBACK_WORDS = 32`, 1024
       commits). Each accepted firmware-update CHUNK+COMMIT clears one
       bit; never reset. Exhausted parts are update-dead — treat that as
       the device's end-of-life.
+- [ ] **BHK page first-write** (work-todo #7 Tier 2). 32 TRNG bytes
+      DHUK-ECB-wrapped and written to the dedicated BHK secret-flash
+      page on first-boot provisioning. The wrapped bytes themselves are
+      not a silicon commit (flash can be re-erased), BUT once any SE is
+      paired with a `secret_keys::*_v1` derivation that consumed this
+      BHK, re-generating BHK invalidates that pairing — which is the
+      same class of brick as a lost PBS. Treat the first BHK write as
+      a per-device one-way event even though the underlying storage is
+      erasable. Firmware-update paths MUST NOT touch the BHK page; the
+      linker script carves it out of the bank-2 update region and
+      `fw_update` rejects writes that overlap it.
+- [ ] **DHUK availability probe** (work-todo #7 Tier 1). Before any
+      DHUK-based derivation, verify SAES returns stable output for a
+      known test vector (`SAES-CMAC(DHUK, b"dhuk-probe-v1") == X_for_this_die`).
+      The output is per-die — we cannot pre-compute it at the factory
+      across a fleet, but we CAN record each production chip's probe
+      output alongside its UID at provisioning time, and compare against
+      the same probe on every subsequent boot. A mismatch means chip
+      transplant / DHUK regression / SAES peripheral glitch — device
+      refuses to unlock. Probe output is non-secret (only proves DHUK
+      is reachable, same as a UID read), safe to store in the binding
+      manifest from #22.
 - [ ] **RDP = Level 2.** Once the factory burns RDP=2, debug access is
       permanently disabled. No JTAG, no SWD, no read-out of flash.
       Required before shipping to prevent flash extraction. Note:
       RDP2 → RDP0 regression on STM32U5 does a mass erase but survives
-      for OTP (confirmed behaviour; OTP is the anchor of trust).
+      for OTP (confirmed behaviour; OTP is the anchor of trust). Also
+      confirmed: **DHUK survives RDP2→RDP0 regression** — it's silicon-
+      fused, not in flash — so Tier 1 derivations still reproduce after
+      a mass erase. **BHK does NOT survive** — its DHUK-wrapped bytes
+      live in flash, which is mass-erased. A regressed + re-provisioned
+      device generates a fresh BHK → Tier 2 pairings re-key, which means
+      SE050 + TROPIC01 (if on BHK per the work-todo #7 split) must be
+      re-paired via the normal first-boot provisioning path. Document
+      this in the refurbishment / RMA flow.
 - [ ] **WRP1A on FSBL pages (0..3).** Writes to the first-stage
       bootloader flash region are rejected post-commit. Makes the FSBL
       immutable in the field.
+- [ ] **WRP on BHK page** (work-todo #7 Tier 2). Write-protect the BHK
+      page via WRP1B or a second WRP group so no rogue firmware can
+      overwrite DHUK-wrapped BHK bytes and force a pairing mismatch.
+      Erase-allowed only during factory provisioning.
 - [ ] **SECBOOTADD0 set to the FSBL base.** Secure boot points to the
       signed entry.
 
@@ -139,31 +178,62 @@ escape hatch exists for user OIDs only.
 3. OTP master burn validated on at least two sacrificial MCUs —
    first-boot burn + subsequent-boot read back both produce the
    expected derivation outputs.
-4. RDP=0 → RDP=1 transition rehearsed on a sacrificial part. Device
+4. **DHUK probe recorded per part** (work-todo #7 Tier 1). At first
+   boot of the sacrificial MCU, compute `SAES-CMAC(DHUK, b"dhuk-probe-v1")`
+   and log the 16-byte output. Reboot and confirm it reproduces. This
+   per-die value becomes the authenticated anchor stored in the #22
+   binding manifest.
+5. **BHK first-write + DHUK-wrap readback** (work-todo #7 Tier 2). On
+   the same sacrificial MCU: TRNG 32 bytes → SAES-ECB-encrypt under
+   DHUK → write to BHK page. Reboot. DHUK-ECB-decrypt the page → compare
+   to pre-wrap bytes. Apply a firmware-update cycle (simulated `.pqfw`
+   install) and confirm the BHK page is preserved byte-for-byte and
+   the re-wrap still yields the same bytes — this is the "BHK survives
+   legitimate updates" regression gate. Then rehearse an RDP2→RDP0
+   regression on a SECOND sacrificial MCU and confirm the BHK page
+   is erased (expected) while DHUK is still reachable.
+6. RDP=0 → RDP=1 transition rehearsed on a sacrificial part. Device
    still boots, firmware updates still accepted, debug access denied.
-5. RDP=1 → RDP=2 rehearsed on a second sacrificial part. Confirm:
+7. RDP=1 → RDP=2 rehearsed on a second sacrificial part. Confirm:
    firmware updates still accepted; no debug interface; OTP survives
    an RDP2→RDP0 regression (mass erase clears main flash, OTP
-   persists).
-6. Only then: production line flips each part through OTP-burn →
-   OPTIGA-provision → option-byte lock in sequence, with per-part
+   persists); DHUK probe still reproduces post-regression; BHK page
+   is confirmed gone post-regression (and re-provisionable).
+8. Only then: production line flips each part through OTP-burn →
+   DHUK-probe-record → BHK-first-write → OPTIGA-provision →
+   SE050-provision → option-byte lock in sequence, with per-part
    logs recording every step's observable (fingerprints, return
-   codes, readback matches).
+   codes, readback matches, DHUK probe output).
 
 ### SE050 — SCP03 + ADMIN provisioning
 
 The SE050 half of the dual-SE also has irreversible steps (per
 `docs/se050-factory-reset.md` + work-todo #20). Summarising here:
 
-- [ ] **SCP03 keys rotated per device** (default keys → per-device
-      `HKDF(OTP_master, "se050-scp03-{enc,mac}-v1")`). PUT KEY
-      `INS=0xD8` from KVN=0x0B to KVN=0x11. Once rotated, losing the
-      new keys means losing the chip — same class of failure as the
-      OPTIGA PBS brick.
+- [ ] **SCP03 keys rotated per device**. Derivation root migrates
+      alongside work-todo #7 tiers:
+      - Today: hardcoded AN12436 defaults.
+      - Post-#24 (OTP tier, **landed**): per-device via
+        `HKDF(OTP_master, "se050-scp03-{enc,mac}-v1")`.
+      - Post-#7 Tier 1 (DHUK): same API surface, underlying primitive
+        becomes `SAES-CMAC(DHUK, "se050-scp03-{enc,mac}-v1")`.
+      - Post-#7 Tier 2 (BHK, final recommended split): `SAES-CMAC(BHK,
+        "se050-scp03-{enc,mac}-v1")` per the per-SE selector split in
+        work-todo #7.
+      PUT KEY `INS=0xD8` from KVN=0x0B to KVN=0x11 at rotation. Once
+      rotated, losing the derivation root means losing the chip — same
+      class of failure as the OPTIGA PBS brick.
 - [ ] **Admin UserID at 0x7B06_00A0** with two-entry TAG_POLICY
-      provisioned. Admin PIN stored in STM32 flash page 125 (today
-      plaintext; when HUK-SAES lands, wrap with device key). Wipe
-      flow validated via `make se050-admin-wipe-e2e`.
+      provisioned. Admin PIN migrates alongside work-todo #7:
+      - Today: TRNG-generated at first-boot, persisted plaintext to
+        STM32 secure-flash page 125 (`ADMIN_PAGE_ADDR`). Wiped at
+        `erase_admin_page()`.
+      - Post-#7 Tier 2: derived on demand from BHK as
+        `SAES-CMAC(BHK, "se050-admin-pin-v1")`. Page 125 retires.
+        Wipe flag migrates to a new home (OTP one-shot bit or a
+        dedicated flash page).
+      Wipe flow validated today via `make se050-admin-wipe-e2e` +
+      `make dual-se-admin-wipe-e2e` (pending, work-todo deferred).
 - [ ] **User UserID PIN storage.** Change the UserID's policy to
       whatever we ultimately ship (currently in `docs/se050-userid-
       pin-auth.md`); post-provision, policy is frozen.
@@ -207,10 +277,11 @@ reversible sibling appear in work-todo.md.
 
 ## Current validation state
 
-As of 2026-04-20:
+As of 2026-04-21:
 
 - **Phase A (reversible) validated** on a TRUSTMV3SHIELDTOBO1 —
-  `docs/work-todo.md` #24 P2.
+  `docs/work-todo.md` #24 P2. Shielded Connection + PIN unlock +
+  factory_reset roundtrip all PASS on real silicon.
 - **Phase B (irreversible, E140 LcsO=op)** not yet attempted. No
   sacrificial part burned yet. When it happens, it goes against a
   fresh TRUSTMV3 shield with the pre-commit checklist above fully
@@ -218,6 +289,11 @@ As of 2026-04-20:
 - **OTP master burn path** still under the hardcoded-master-key
   feature on every dev build. First-burn validation on a
   sacrificial MCU is still owed.
+- **DHUK + BHK tiers** (work-todo #7) not implemented yet. All SE
+  pairings today derive from the readable OTP master; Tier 1
+  migration has not started. The DHUK probe → per-part record flow
+  and BHK first-write are all factory-only actions that land
+  concurrently with #7.
 - **RDP + WRP1A + SECBOOTADD0** never exercised. `make stm32-harden-
   opts` in the Makefile sets BOR/SRAM2_RST only.
 

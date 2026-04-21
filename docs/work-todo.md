@@ -116,25 +116,79 @@ The SE050 has its own provisioning/unlock path (`provision_with_mnemonic_se050()
 
 ---
 
-### 7. HUK-SAES Key Wrapping (SE050 only)
+### 7. Three-tier key hierarchy (DHUK + BHK + OTP), Trezor-parity
 
-**Status:** PARTIALLY DONE — **BLOCKED on #24 step 3** (see "Ordering dependency" below)
+**Status:** PARTIALLY DONE — OTP tier landed under #24; DHUK + BHK tiers NOT STARTED. Ordering: DHUK before BHK (BHK is DHUK-wrapped at rest).
 
-> See also #23 for Trezor comparison context — Trezor Safe 7 uses HUK for a different purpose (seed-decryption key derivation from MCU flash); our wrapping scope (SCP03 keys only) is narrower by design because our seed never lands on MCU flash in the first place.
+Mirrors Trezor Safe 3/5's three-tier model on STM32U5. Verbatim references into `/home/nicola/repos/trezor-firmware` noted per tier below.
 
-Tropic01 pairing key: **DONE** — TRNG-generated per-device key stored in secure flash page 127 (`0x0C0FE000`) via `hw/flash.rs`. Written at first provisioning, read on every boot. Devkit keys (slot 0) kept as fallback.
+> See also #23 (Safe 7 gap closure), #20 (production key rotation), #24 (OPTIGA pairing restructure — the OTP tier that this item extends). Trezor Safe 7 extends the three-tier model with seed-decryption-key derivation from MCU flash; our wrapping scope here stays narrower by design because our seed never lands on MCU flash (dual-SE XOR split — see CLAUDE.md invariant #1).
 
-SE050 SCP03 keys (`PLATFORM_ENC`, `PLATFORM_MAC`) are still hardcoded constants. On a real device, these should be wrapped by the STM32U585 Hardware Unique Key via the SAES peripheral.
+#### Tier 1 — DHUK (silicon-fused, software-inaccessible)
 
-> **⚠️ Ordering dependency on #24.** Do NOT HUK-wrap the SE050 SCP03 keys using the current `hw/huk.rs::derive_device_key` — it mixes `firmware_hash` into the wrap key, and any firmware update would then make the wrapped SE050 SCP03 keys unreadable. That recreates the exact same brick scenario that hit our OPTIGA bench chip, but on SE050 where it would cost €150+ per replacement chip (prior experience). **Wait for work-todo #24 step 3 to re-root `derive_device_key` off `firmware_hash` and onto the OTP master key**; after that, wrap-key stability across firmware updates is guaranteed by construction. Full context: `docs/optiga-brick-postmortem.md` §4.
+**What it is.** STM32U5 Device Hardware Unique Key, TRNG-burnt by ST at wafer sort, never exposed to firmware. Usable only as a key *selector* through the SAES peripheral. Trezor wrapper: `core/embed/sec/secure_aes/stm32u5/secure_aes.c:48-60` (`get_keysel()`, `SECURE_AES_KEY_DHUK_SP`) + ECB driver at lines 73-220. Used as KEK for master-key slots in flash (`core/embed/sec/secret/stm32u5/secret.c:326,366`).
 
-**What remains:**
-- [ ] SAES peripheral driver for STM32U585
-- [ ] SE050 SCP03 key wrapping/unwrapping via HUK-SAES (blocked — see above)
-- [ ] Optional: wrap the Tropic01 pairing key with HUK-SAES for defense-in-depth (currently plaintext in secure flash, protected by RDP level 2) (also blocked — same reasoning)
+**What it replaces in our codebase.** `hw::secret_keys::derive_into` currently does `HKDF-Expand(OTP_master_read_from_flash, label)`. DHUK migration replaces it with `SAES-CMAC(DHUK_selector, domain_label || counter)`. Caller API `domain_tag → bytes` stays identical — every existing consumer (`optiga_pairing_secret`, `se050_scp03_{enc,mac}_key`, `tropic01_pairing_key`) is transparent.
 
-**Files to create:** `secure/src/hw/saes.rs`
-**Files to change:** `secure/src/se050/scp03.rs`
+**Threat closed.** Post-migration, secure-world RCE can still *use* SAES to compute the derivation with DHUK as the key, but cannot dump DHUK bytes to exfiltrate or replay on a different chip or in emulation. The current "dump OTP master → replicate all pairings off-chip" path closes entirely.
+
+**What's needed — P0:**
+- [ ] `secure/src/hw/saes.rs`: SAES driver. Init (enable clock, check `RCC_AHB2ENR2.SAESEN`), ECB encrypt/decrypt under `KEYSEL=DHUK`, CMAC mode for 32-byte derivations. Follow `stm32u5xx_hal_cryp.c` for register layout.
+- [ ] Confirm SAES bit-field positions against RM0456 + CMSIS `stm32u585xx.h` (flagged unverified in #20 — same lookup applies here).
+- [ ] Rewrite `hw::secret_keys::derive_into` to use SAES-CMAC(DHUK, info) for 32-byte outputs, chained CMAC for 64-byte outputs (PBS). Delete the HKDF path but preserve the `otp-hardcoded-master-key` dev feature — under that feature, fall back to the HKDF-over-constant path so QEMU + bench without SAES-DHUK still work.
+- [ ] Remove `hw::otp::read_device_master` / `ensure_device_master` / `burn_device_master` once no caller remains. `MASTER_KEY_ADDR..MASTER_KEY_ADDR+32` becomes reserved.
+
+#### Tier 2 — BHK (Boot Hardware Key, flash-stored, software-inaccessible after boot)
+
+**What it is.** 32 bytes of TRNG output generated once at first-boot provisioning, encrypted under DHUK via SAES-ECB, stored in a dedicated secure-flash page. At every subsequent boot: unwrap with DHUK into STM32 TAMP backup registers, then **lock** `TAMP_S->SECCFGR` so only the SAES peripheral can use it (as a second key selector — `SECURE_AES_KEY_BHK`). Firmware can never read BHK bytes after boot lock.
+
+Trezor references: `core/embed/sec/secret/stm32u5/secret.c:426-442` (`secret_bhk_regenerate` — TRNG fill + flash write), `secret.c:593-612` (`secret_prepare_fw` — TAMP load + lock at boot), `secret.c:177-179` (the lock comment quoted above). Layout: `core/embed/models/T3W1/secret_layout.h:57-58` (`SECRET_BHK_OFFSET=0x2000`, `SECRET_BHK_LEN=0x20`). SAES selector: `secure_aes.c:52` (`SECURE_AES_KEY_BHK`).
+
+**Why BHK in addition to DHUK.** Defense-in-depth across two *independent* SAES key selectors. Compromising DHUK alone (hypothetical SAES glitch, or ST errata disclosing DHUK semantics) leaves BHK-wrapped operations sealed — the attacker would also need to read flash *before* `TAMP_S->SECCFGR` lock completes at boot. Compromising BHK alone (e.g. flash dump of wrapped BHK + offline DHUK-ECB crack) does not unlock DHUK-wrapped master-key slots. Neither alone defeats the user PIN path because that also consumes OTP randomness (tier 3).
+
+Quoted from Trezor `secret.c:593-595`:
+> "The BHK is copied to the backup registers, which are accessible by the SAES peripheral. The BHK register is locked, so the BHK can't be accessed by the software."
+
+**Which SE goes under which key.** Recommended split:
+- DHUK → OPTIGA PBS (current derivation), user-PIN storage-wrap (if we ever add one)
+- BHK → SE050 SCP03 enc+mac, SE050 admin PIN, TROPIC01 pairing
+
+That way a compromise of one selector exposes at most one SE's channel. If BHK provisioning is deferred (dev boards), a "BHK absent → fall back to DHUK for those keys" gate keeps builds running, with a stern log line so production firmware can refuse to boot BHK-less.
+
+**What's needed — P0 (requires Tier 1 landed first):**
+- [ ] `secure/src/hw/bhk.rs`: first-boot generation (`rng::fill` 32 bytes), DHUK-ECB wrap via `hw::saes`, flash write to a new dedicated secret-flash page (TBD — new region, distinct from current `ADMIN_PAGE_ADDR=0x0C0F_A000`). Subsequent-boot load + TAMP-write + SECCFGR lock.
+- [ ] `TAMP_S->SECCFGR` lock sequence: set `BHKLOCK` bit (STM32U5 has this per RM0456 §"TAMP" — verify exact bit). Once locked, register is read-0 from software; SAES peripheral still sees it.
+- [ ] Extend `hw::secret_keys` with a second derive path that uses `SAES-CMAC(BHK_selector, info)`. Split existing callers per the DHUK/BHK table above.
+- [ ] Dev gate: `otp-hardcoded-master-key` also hardcodes a BHK test constant (distinctive ASCII, e.g. `"PQSIGNER-TEST-BHK-DHUK-WRAP-v1!!"`) so bench boards without real SAES can exercise derivations.
+- [ ] Integration check: a reflash that preserves OTP also preserves the DHUK-wrapped-BHK on flash (same page across updates). If a firmware update would erase that page, restore-from-wrap fails and the chip falls into the same class of brick as the original OPTIGA bug. Treat the BHK page as **write-once-at-provisioning, read-only from firmware** — no firmware-update path may touch it.
+
+#### Tier 3 — OTP randomness (software-readable, per-device salt)
+
+**What it is today.** `hw::otp::read_device_master` returns 32 TRNG bytes burnt at first-boot into `0x0BFA_0080..0x0BFA_00A0`. Used via `hw::secret_keys` for all SE pairing derivations.
+
+**What Trezor does with OTP.** 256 TRNG bytes at factory into `FLASH_OTP_BLOCK_RANDOMNESS` (`otp_layout.h:4-12`), consumed as `hardware_salt = SHA256(OTP_randomness)` in the PBKDF2 PIN-stretching chain (`storage.c:76,978` `derive_kek_v4`). Independent of DHUK/BHK.
+
+**Direction after DHUK lands.** Repurpose OTP bytes 128..160 solely as PBKDF2 salt input for any future PIN-gated MCU-side storage — not as a direct derivation root. All SE pairing secrets move up to tiers 1+2. Specifically:
+- [ ] Expose `hw::otp::read_otp_randomness() -> [u8; 32]` (public read; bytes are non-secret — they're salt, not key).
+- [ ] When a future PIN-gated MCU storage wrap lands (e.g. for at-rest cached companion objects), its KDF is `PBKDF2(user_pin, SHA256(otp_randomness) || storage_salt, 20_000)` matching Trezor's `derive_kek_v4`.
+
+#### Ordering / dependencies
+
+1. `otp-hardcoded-master-key` stays as the dev-bench safety valve throughout all three tier migrations. Never ship. Guarded by compile_error gate already in `nsc/mod.rs`.
+2. #24 (OPTIGA pairing restructure) landed the OTP tier + `hw::secret_keys` API + re-rooted `hw::huk::derive_device_key` off `firmware_hash`. **Done.**
+3. Work-todo #20 (production key rotation) still assumes the HKDF-over-OTP path for SE050 SCP03 + TROPIC01 migration. When Tier 1 lands, #20 pivots to calling the same `secret_keys` API (now SAES-CMAC-backed) — no change in #20's scope, only in the underlying implementation.
+4. Tier 2 (BHK) after Tier 1, because BHK-at-rest is DHUK-wrapped.
+5. After Tier 1+2, `hw::huk::derive_device_key` becomes the last software-readable root and should be deleted — see header comment in that file which already flags this retirement.
+
+#### Files
+
+**Create:** `secure/src/hw/saes.rs`, `secure/src/hw/bhk.rs`.
+
+**Change:** `secure/src/hw/secret_keys.rs` (swap HKDF → SAES-CMAC under a compile-time selector), `secure/src/hw/otp.rs` (narrow the master-key region to salt duty, or deprecate entirely once DHUK lands), `secure/src/hw/huk.rs` (delete after tier 2), `secure/src/hw/flash.rs` (add BHK page region), `secure/Cargo.toml` (new dev-gate feature for hardcoded BHK under `otp-hardcoded-master-key`).
+
+#### Wipe-flow impact (cross-ref the dual-SE admin wipe)
+
+None visible to SE-side wipe code. The SE drivers continue to call `secret_keys::optiga_pairing_secret()` / `secret_keys::se050_scp03_enc_key()` etc. What changes underneath: Tier 1 migration makes those bytes computable only via SAES on-chip. The wipe sequence (OPTIGA `Conf(E140)` DATA overwrites + SE050 admin-UserID DELETE) is unchanged. One new cleanup question: if the BHK page becomes corrupted (brown-out mid-wipe, bit-flip), what's recovery? Options: (a) treat as permanent brick (Trezor's answer), (b) fall through to DHUK-only with every-SE-pairing re-derivation + forced re-provisioning of both SEs. Decide before shipping.
 
 ---
 
