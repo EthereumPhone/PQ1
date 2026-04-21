@@ -1351,23 +1351,29 @@ impl OptigaTrustM {
         }
         secure_log!("[OPTIGA-E2E-ADMIN] step 6: check_provisioned() = false OK");
 
-        // ---- 7. Post-test hygiene: clear the wipe-in-progress flag ----
-        //    `factory_reset` arms the page-125 wipe flag for dual-SE
-        //    crash-safety resume. In OPTIGA-only builds the flag is
-        //    vestigial (the boot-time resume path is gated on se050 /
-        //    dual-se), but a tester who later flashes a dual-SE build
-        //    onto this chip would see an unexpected "wipe resume" fire
-        //    with no valid admin PIN. Clear the flag now so the chip
-        //    ends the test in a clean state.
-        #[cfg(feature = "stm32u585")]
-        unsafe {
-            if let Err(()) = crate::hw::flash::erase_admin_page() {
-                secure_log!("[OPTIGA-E2E-ADMIN] cleanup WARNING: erase_admin_page failed");
-                // Not a test failure — the wipe itself was confirmed.
-            } else {
-                secure_log!("[OPTIGA-E2E-ADMIN] post-test: page-125 wipe flag cleared");
-            }
-        }
+        // ---- 7. Post-test hygiene: leave page 125 alone ----
+        //    Earlier iteration of this test called `erase_admin_page()`
+        //    here to clear the wipe-in-progress flag that
+        //    `factory_reset` arms. The problem: on a dual-SE bench
+        //    chip, page 125 ALSO holds the SE050 admin PIN. Erasing
+        //    it from an OPTIGA-only test silently breaks any
+        //    subsequent dual-SE admin-wipe test on the same chip (SE050
+        //    objects survive with stale user PIN; admin-auth delete has
+        //    no PIN to use).
+        //
+        //    The armed flag is vestigial in an OPTIGA-only build —
+        //    the boot-time resume path at main.rs is gated on
+        //    `any(feature = "se050", feature = "dual-se")`. On the
+        //    next OPTIGA-only boot it's inert. On a later dual-SE
+        //    flash against the same chip it would fire an extra
+        //    `factory_reset_admin`, which is idempotent (page 125
+        //    admin PIN either present → uses it, or blank → iterative
+        //    sweep). So leaving the flag armed is harmless; erasing
+        //    it cross-contaminates the SE050 admin slot.
+        //
+        //    Conclusion: flag stays armed. Dual-SE admin-wipe test
+        //    does its own cleanup including page-125 erase at the
+        //    right moment.
 
         Ok(())
     }

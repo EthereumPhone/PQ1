@@ -642,6 +642,38 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e ----
+    // Exercises `DualSecureElement::factory_reset_admin` end-to-end on
+    // real silicon across both chips: pre-clean → provision → unlock
+    // (XOR-reconstruct) → wipe → verify both unprovisioned → verify
+    // unlock fails. Destroys wallet state on BOTH chips.
+    //
+    // Scope: the DualSecureElement integration of factory_reset_admin,
+    // NOT the PIN-lockout-triggers-wipe flow.
+    //
+    // LcsO safety: does NOT imply `optiga-lock-operational`. SE050 has
+    // no LcsO concept. Uses current production object ranges on both
+    // chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B06_xxxx — the "bumped"
+    // range past the legacy stuck slots).
+    //
+    // Triggered by: make dual-se-admin-wipe-e2e
+    #[cfg(feature = "dual-se-admin-wipe-e2e")]
+    unsafe {
+        ui::show_status("Dual wipe", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        match se.run_admin_wipe_roundtrip() {
+            Ok(()) => {
+                secure_log!("[S] [E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: PASS");
+                ui::show_status("Dual wipe", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("Dual wipe", "FAIL");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- OPTIGA Trust M factory_reset roundtrip e2e ----
     // Exercises the `factory_reset` primitive end-to-end on real silicon:
     // provision F1D0..F1D4 + F1E1 with known test vectors, verify the

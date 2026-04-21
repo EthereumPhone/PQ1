@@ -1133,6 +1133,56 @@ optiga-admin-wipe-e2e:
 	@echo "==> Running admin-wipe e2e (watch semihosting for PASS/FAIL)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e. Exercises
+# `DualSecureElement::factory_reset_admin` end-to-end: pre-clean both
+# chips, provision test entropy XOR-split across the two, unlock and
+# verify the master_secret reconstructs correctly, call the wipe, then
+# verify both chips report unprovisioned + unlock fails.
+#
+# !!! WARNING: this target DESTROYS wallet state on BOTH chips !!!
+# OPTIGA F1D0..F1D4 + F1E1 are zeroed + sentinel-marked. SE050 user
+# UserID at 0x7B06_0000 + data objects at 0x7B06_0001..3 + admin UserID
+# at 0x7B06_00A0 are admin-auth-deleted. Page 125 (STM32 secure flash
+# admin page) is erased. Re-run the normal first-boot wizard afterwards
+# to restore. Idempotent across repeated runs.
+#
+# Scope: exercises the dual-SE `factory_reset_admin` integration, NOT
+# the PIN-lockout→wipe flow (deferred).
+#
+# LcsO-safety: `optiga-lock-operational` deliberately NOT included.
+# OPTIGA stays at Creation throughout. SE050 has no LcsO concept. The
+# only "slot commitments" on SE050 are policy installs on freshly-
+# created objects within the 0x7B06_xxxx range; `store_objects` skips
+# creation if objects already exist, so repeat runs don't write new
+# policies. Legacy stuck SE050 objects outside 0x7B06_xxxx are not
+# touched.
+#
+# `e2e-test` is required because `otp-hardcoded-master-key` trips the
+# production guard in nsc/mod.rs. The e2e-test fast-path itself is
+# dead code here — our dispatcher halts before it runs.
+#
+# Watch semihosting for "[E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: PASS"/"FAIL".
+dual-se-admin-wipe-e2e:
+	@echo "==> Building dual-SE admin-wipe roundtrip e2e firmware..."
+	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features dual-se-admin-wipe-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running dual-SE admin-wipe e2e (watch semihosting for PASS/FAIL)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # Shield-handshake-only test. Skips `provision_from_mnemonic` entirely
 # and runs `init` → `load_pbs_from_otp` → `ensure_shield` against an
 # already-provisioned chip. Use this to validate the Shielded Connection
