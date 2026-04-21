@@ -227,7 +227,7 @@ impl WalletStore for DualSecureElement {
     /// OIDs are now blank.
     ///
     /// SE050: delegates to its own `factory_reset_admin` which uses the
-    /// admin UserID at 0x7B06_00A0 to delete user objects.
+    /// admin UserID at 0x7B0C_00A0 to delete user objects.
     ///
     /// A best-effort attempt is made on each backend — if one fails we
     /// still try the other and wipe SRAM state.
@@ -276,7 +276,7 @@ impl DualSecureElement {
     ///    authenticated AND the XOR reconstruction matches.
     ///
     /// Uses the REAL production object ranges: OPTIGA F1D0..F1D4 + F1E1,
-    /// SE050 0x7B06_xxxx. This test DESTROYS any prior wallet state on
+    /// SE050 0x7B0C_xxxx. This test DESTROYS any prior wallet state on
     /// both chips (pre-clean wipes before re-provisioning under test
     /// credentials). Re-run the normal first-boot wizard afterwards to
     /// restore.
@@ -307,7 +307,7 @@ impl DualSecureElement {
         //        through to `iterative_wipe(None, None)` which is
         //        unauthenticated — user objects with the two-entry
         //        TAG_POLICY cannot be deleted that way. We have to
-        //        try user-PIN candidates to wipe SE050 `0x7B06_xxxx`.
+        //        try user-PIN candidates to wipe SE050 `0x7B0C_xxxx`.
         //
         //    Strategy: OPTIGA unconditional (Conf(E140) always works),
         //    SE050 admin-first then user-PIN-fallback cascade. Erase
@@ -341,7 +341,7 @@ impl DualSecureElement {
         // the chip picked up from early-build firmware are permanently
         // stuck (user noted — specific range was bumped to skip them).
         // They will remain after pre-clean. That's fine: `is_provisioned`
-        // only checks the current USERID_OBJ (0x7b060000), so the
+        // only checks the current USERID_OBJ (0x7b0c0000), so the
         // stuck legacy objects don't affect the test.
         #[cfg(feature = "stm32u585")]
         unsafe {

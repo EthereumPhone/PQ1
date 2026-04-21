@@ -20,32 +20,48 @@ use t1oi2c::T1State;
 // ---------------------------------------------------------------------------
 
 /// UserID authentication object — hardware-enforced PIN.
-/// Range v3 (0x7B06xxxx) to avoid stale objects from old firmware.
-pub const USERID_OBJ: u32 = 0x7B06_0000;
+/// Range v4 (0x7B0Cxxxx). Previous ranges are retired on bench chips
+/// after cross-test contamination left their UserIDs / admin-UserIDs
+/// stuck with no software recovery path:
+///   v1 (0x7B00_0000/2/3/5) — early-firmware sweep, policy gaps
+///   v2 (0x7B00_2000)       — same era, ditto
+///   v3 (0x7B06_xxxx)       — retired 2026-04-21 after the
+///                            dual-SE admin-PIN-mismatch incident
+///                            (see work-todo entry + project memory).
+/// Bumping the range yields a chip as usable as a fresh one — the
+/// stuck OIDs occupy <100 bytes of ~130 KB persistent storage.
+pub const USERID_OBJ: u32 = 0x7B0C_0000;
 
 /// Raw BIP-39 entropy (32 bytes), policy requires UserID auth.
-pub const ENTROPY_OBJ: u32 = 0x7B06_0001;
+pub const ENTROPY_OBJ: u32 = 0x7B0C_0001;
 
 /// Verifying key (32 bytes), policy requires UserID auth.
-pub const VK_OBJ: u32 = 0x7B06_0002;
+pub const VK_OBJ: u32 = 0x7B0C_0002;
 
 /// Bootstrap verifying key (32 bytes), policy requires UserID auth.
-pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B06_0003;
+pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B0C_0003;
 
-/// Admin wipe UserID. Second auth object, created at provisioning with a
-/// per-device random PIN derived from the OPTIGA PBS. Used only by the
-/// PIN-lockout factory-reset path: after 10 failed user PIN attempts,
-/// firmware authenticates against this object and deletes every user
-/// object (which all carry an admin-delete policy entry pointing here).
+/// Admin wipe UserID. Second auth object, created at provisioning with
+/// a per-device random PIN stored in secure flash page 125. Used only
+/// by the PIN-lockout factory-reset path: after 10 failed user PIN
+/// attempts, firmware authenticates against this object and deletes
+/// every user object (which all carry an admin-delete policy entry
+/// pointing here).
 ///
-/// The admin PIN itself is never persisted in plaintext anywhere —
-/// derived on demand via `crypto::derive_se050_admin_pin(&pbs)`.
-pub const ADMIN_WIPE_OBJ: u32 = 0x7B06_00A0;
+/// **Known fragility** (tracked in work-todo #7 early-adopt item): the
+/// current implementation persists the admin PIN in page 125, so any
+/// action that erases page 125 without also deleting the on-chip
+/// admin UserID renders the chip un-wipe-able at this OID — the exact
+/// failure mode that retired the v3 range. Fix is to derive the PIN
+/// from `hw::secret_keys::se050_admin_pin()` (HKDF over OTP master)
+/// instead, matching the `derive_se050_admin_pin(&pbs)` API sketched
+/// in the original design.
+pub const ADMIN_WIPE_OBJ: u32 = 0x7B0C_00A0;
 
 // -- Factory-reset self-test object IDs --
 // Distinct from production IDs so the test never collides with a real
 // provisioning, and is repeatable on a chip that already has prod
-// objects at 0x7B06_xxxx.
+// objects at 0x7B0C_xxxx.
 #[cfg(feature = "se050-reset-e2e")]
 const TEST_USERID_OBJ: u32 = 0x7B07_0000;
 #[cfg(feature = "se050-reset-e2e")]
@@ -1008,14 +1024,15 @@ impl Se050 {
     /// the canary survives — guardrail against future byte-order bugs in
     /// the policy TLV construction.
     ///
-    /// Uses object IDs 0x7B06_00B0 / 0x7B06_00B1 (distinct from production
-    /// range). Caller provides the admin PIN so the test exercises the
-    /// SAME auth path the real wipe will use.
+    /// Uses object IDs 0x7B0C_00B0 / 0x7B0C_00B1 (distinct from production
+    /// UserID/data range but inside the same v4 block). Caller provides
+    /// the admin PIN so the test exercises the SAME auth path the real
+    /// wipe will use.
     pub fn policy_roundtrip_selftest(&mut self, admin_pin: &[u8; 16]) -> Result<(), Se050Error> {
         self.init()?;
 
-        const CANARY_USERID: u32 = 0x7B06_00B0;
-        const CANARY_DATA: u32 = 0x7B06_00B1;
+        const CANARY_USERID: u32 = 0x7B0C_00B0;
+        const CANARY_DATA: u32 = 0x7B0C_00B1;
         let canary_pin: [u8; 8] = *b"00000000";
 
         unsafe {

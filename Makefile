@@ -1142,7 +1142,7 @@ optiga-admin-wipe-e2e:
 #
 # !!! WARNING: this target DESTROYS wallet state on BOTH chips !!!
 # Pre-clean wipes OPTIGA F1D0..F1D4 + F1E1 and every deletable SE050
-# object in the 0x7B06_xxxx range. Re-run the normal first-boot wizard
+# object in the 0x7B0C_xxxx (v4) range. Re-run the normal first-boot wizard
 # afterwards to restore. Idempotent across repeated runs on the same
 # chip (pre-clean handles each re-invocation).
 #
@@ -1158,10 +1158,10 @@ optiga-admin-wipe-e2e:
 # LcsO-safety: `optiga-lock-operational` deliberately NOT included.
 # OPTIGA stays at Creation throughout. SE050 has no LcsO concept. The
 # only "slot commitments" on SE050 are policy installs on freshly-
-# created objects within the 0x7B06_xxxx range; `store_objects` skips
-# creation if objects already exist, so repeat runs don't write new
-# policies. Legacy stuck SE050 objects outside 0x7B06_xxxx are not
-# touched.
+# created objects within the 0x7B0C_xxxx (v4) range; `store_objects`
+# skips creation if objects already exist, so repeat runs don't write
+# new policies. Stuck SE050 objects outside 0x7B0C_xxxx (v3 + older)
+# are not touched.
 #
 # `e2e-test` is required because `otp-hardcoded-master-key` trips the
 # production guard in nsc/mod.rs. The e2e-test fast-path itself is
