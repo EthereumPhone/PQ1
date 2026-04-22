@@ -151,6 +151,15 @@ pub const OID_VK:            u16 = 0xF1D3;
 pub const OID_BOOTSTRAP_VK:  u16 = 0xF1D4;
 pub const OID_COUNTER:       u16 = 0xF1E1;
 
+/// Silicon monotonic counter used under `optiga-hw-counter` to replace
+/// the soft `OID_COUNTER` (F1E1). `0xE120` is the first of the four
+/// OPTIGA Trust M V3 Lifetime-Usage-Counter objects (E120..E123 per
+/// Infineon SRM §"Data Objects"). The chip auto-increments this counter
+/// each time an AuthRef whose `Execute` AC references it via LUC is
+/// exercised (success + failure), and rejects the AuthRef once the
+/// counter reaches its threshold until the counter is re-written.
+pub const OID_PIN_CTR: u16 = 0xE120;
+
 // ---------------------------------------------------------------------------
 // Metadata tags and access-condition identifiers
 // ---------------------------------------------------------------------------
@@ -185,12 +194,27 @@ const AC_OP_AUTO_REF: u8 = 0x23;
 ///
 /// Wire format: `0x20 OID_HI OID_LO` (3 bytes, OID references the PBS).
 const AC_OP_CONF:     u8 = 0x20;
+/// Access condition operand: LUC (Lifetime Usage Counter) — the AC is
+/// gated by a counter object at `<OID>`; each evaluation increments the
+/// counter and the AC is denied once the counter hits its threshold.
+///
+/// Wire format: `0x40 OID_HI OID_LO` (3 bytes). Primary source:
+/// `trezor-firmware/core/embed/sec/optiga/inc/sec/optiga_commands.h:102`
+/// (`OPTIGA_ACCESS_COND_LUC = 0x40`) and the 3-byte-per-operand
+/// `OPTIGA_ACCESS_CONDITION` macro on the same file. Used only under
+/// `optiga-hw-counter`.
+const AC_OP_LUC:      u8 = 0x40;
 
 /// LcsO values (the reachable ones; Termination is one-way).
 const LCS_OPERATIONAL: u8 = 0x07;
 
 /// Data types (tag 0xE8).
 const DTYPE_BSTR:    u8 = 0x00;
+/// Monotonic Up-Counter (UPCTR). Object data is always 8 bytes:
+/// `[current_u32_be | limit_u32_be]`. Primary source:
+/// `trezor-firmware/core/embed/sec/optiga/inc/sec/optiga_commands.h:87`
+/// (`OPTIGA_DATA_TYPE_UPCTR = 0x01`).
+const DTYPE_UPCTR:   u8 = 0x01;
 const DTYPE_PBS:     u8 = 0x22;
 const DTYPE_AUTHREF: u8 = 0x31;
 
@@ -778,6 +802,20 @@ fn push_ac_conf(buf: &mut MetaBuf, c: &mut usize, tag: u8) {
     *c += 5;
 }
 
+/// Push an LUC (Lifetime Usage Counter) access-condition entry. The
+/// resulting metadata TLV is `tag | 0x03 | 0x40 | CTR_HI | CTR_LO`.
+/// Used under `optiga-hw-counter` to bind the F1D0 AuthRef's Execute
+/// AC to the E120 counter object.
+#[cfg(feature = "optiga-hw-counter")]
+fn push_ac_luc(buf: &mut MetaBuf, c: &mut usize, tag: u8, ctr_oid: u16) {
+    buf[*c] = tag;
+    buf[*c + 1] = 0x03;
+    buf[*c + 2] = AC_OP_LUC;
+    buf[*c + 3] = (ctr_oid >> 8) as u8;
+    buf[*c + 4] = ctr_oid as u8;
+    *c += 5;
+}
+
 fn push_data_type(buf: &mut MetaBuf, c: &mut usize, ty: u8) {
     buf[*c] = META_DATA_TYPE;
     buf[*c + 1] = 0x01;
@@ -868,6 +906,86 @@ pub fn build_metadata_counter() -> (MetaBuf, usize) {
     push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_NEV);
 
     wrap_meta(inner, c)
+}
+
+/// Metadata for the silicon PIN counter (0xE120) — `optiga-hw-counter`.
+///
+/// - **Change**: `Auto(OID_AUTH_REF)` — only a session that has already
+///   HMAC-verified F1D0 can rewrite the counter. This is how
+///   "reset-on-successful-PIN" works without requiring `Conf(E140)`:
+///   a PBS-extraction attacker who has not authed via F1D0 cannot reset
+///   the counter, so the silicon lockout is real against them.
+/// - **Read**: Always (counter remaining is non-secret).
+/// - **Execute**: Never (counters aren't executable).
+/// - **Data type**: `UPCTR` (0x01) — 8-byte `[current_u32_be | limit_u32_be]`.
+///
+/// Provisioning order matters: this OID MUST be created before F1D0's
+/// `build_metadata_auth_ref_luc()` metadata is installed, because the
+/// F1D0 Execute AC will reference E120 — referencing a non-existent
+/// counter may brick the AuthRef on the LcsO ratchet.
+#[cfg(feature = "optiga-hw-counter")]
+pub fn build_metadata_pin_ctr() -> (MetaBuf, usize) {
+    let mut inner = [0u8; 64];
+    let mut c = 0usize;
+
+    push_ac_auto(&mut inner, &mut c, META_CHANGE, OID_AUTH_REF);
+    push_ac_simple(&mut inner, &mut c, META_READ, AC_ALW);
+    push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_NEV);
+    push_data_type(&mut inner, &mut c, DTYPE_UPCTR);
+
+    wrap_meta(inner, c)
+}
+
+/// Metadata for the F1D0 AuthRef under `optiga-hw-counter`.
+///
+/// Same as [`build_metadata_auth_ref`] except `Execute = LUC(E120)` —
+/// every HMAC verify against F1D0 auto-increments E120 inside the chip,
+/// and once E120 hits its threshold the AuthRef silently refuses to
+/// authenticate regardless of the PIN bytes. Firmware resets E120 back
+/// to `(0, limit)` after a successful auth (Change AC on E120 is
+/// `Auto(F1D0)`, so the very authentication that just succeeded
+/// authorizes the reset).
+///
+/// - **Change**: Always (dev variant — MUST be tightened to `Conf(E140)`
+///   or `LcsO<op` before shipping; same constraint as non-hw-counter
+///   build).
+/// - **Read**: Never.
+/// - **Execute**: `LUC(OID_PIN_CTR)`.
+/// - **Data type**: AUTHREF (0x31).
+#[cfg(feature = "optiga-hw-counter")]
+pub fn build_metadata_auth_ref_luc() -> (MetaBuf, usize) {
+    let mut inner = [0u8; 64];
+    let mut c = 0usize;
+
+    push_ac_simple(&mut inner, &mut c, META_CHANGE, AC_ALW);
+    push_ac_simple(&mut inner, &mut c, META_READ, AC_NEV);
+    push_ac_luc(&mut inner, &mut c, META_EXECUTE, OID_PIN_CTR);
+    push_data_type(&mut inner, &mut c, DTYPE_AUTHREF);
+
+    wrap_meta(inner, c)
+}
+
+/// Encode an 8-byte UPCTR data object: `[current_u32_be | limit_u32_be]`.
+/// Matches `optiga_reset_counter` in
+/// `trezor-firmware/core/embed/sec/optiga/optiga_commands.c:1096`.
+#[cfg(feature = "optiga-hw-counter")]
+pub fn encode_pin_ctr(current: u32, limit: u32) -> [u8; 8] {
+    let mut out = [0u8; 8];
+    out[0..4].copy_from_slice(&current.to_be_bytes());
+    out[4..8].copy_from_slice(&limit.to_be_bytes());
+    out
+}
+
+/// Parse an 8-byte UPCTR data object into `(current, limit)`. Returns
+/// `None` on wrong length. Remaining attempts = `limit.saturating_sub(current)`.
+#[cfg(feature = "optiga-hw-counter")]
+pub fn parse_pin_ctr(data: &[u8]) -> Option<(u32, u32)> {
+    if data.len() != 8 {
+        return None;
+    }
+    let current = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
+    let limit = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+    Some((current, limit))
 }
 
 /// Metadata that raises LcsO to Operational (irreversible).

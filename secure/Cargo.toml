@@ -79,6 +79,25 @@ e2e-test = []
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
 se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
 optiga-trust-m = []  # Infineon OPTIGA Trust M V3 via I2C1 (TRUSTMV3SHIELDTOBO1 on Arduino R3 headers)
+# Silicon-enforced OPTIGA PIN counter via the E120 Lifetime Usage
+# Counter bound to F1D0's Execute access condition (LUC). Parity with
+# Trezor Safe's OPTIGA PIN lockout: each HMAC verify auto-increments
+# the counter inside the chip, and the AuthRef refuses auth once the
+# counter hits its threshold — immune to Platform Binding Secret
+# extraction (unlike the soft F1E1 counter). Firmware resets the
+# counter to (0, limit) after every successful PIN via Change=Auto(F1D0)
+# on E120.
+#
+# DESTRUCTIVE on first provisioning: rewrites F1D0 metadata with
+# Execute=LUC(E120). If F1D0 is already at LcsO=Operational with the
+# non-LUC metadata installed, the ratchet blocks the rewrite — the chip
+# would need a SetObjectProtected recovery pass (same mechanism as
+# `optiga-reset-oids`) before this feature can be enabled. See
+# `docs/optiga-brick-postmortem.md` for the recovery story.
+#
+# Feature is pure-additive against non-`optiga-hw-counter` builds: all
+# new code is cfg-gated, no behavioural change without it.
+optiga-hw-counter = ["optiga-trust-m"]
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
 optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Production: bump LcsO to Operational on BOTH E140 (PBS) AND every user OID (F1D0..F1D4 + F1E1) at end of provisioning. Irreversible per OPTIGA SRM §"Life Cycle Status" — LcsO is monotonic, no reverse path exists. Default OFF so dev chips stay at LcsO=Creation throughout all iteration (metadata still mutable, data rewriteable without AC constraints). ONLY enable when (a) STM32 OTP master is burned, (b) PBS is OTP-derived, (c) this specific chip is intended to become a production unit and you have validated the provisioning flow against sacrificial parts. See docs/production-todo.md for the full pre-ship checklist and docs/optiga-brick-postmortem.md §5 + §7 for the history.

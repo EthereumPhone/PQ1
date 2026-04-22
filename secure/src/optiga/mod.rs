@@ -703,6 +703,9 @@ impl OptigaTrustM {
             return Ok(());
         }
 
+        #[cfg(feature = "optiga-hw-counter")]
+        let (meta, meta_len) = apdu::build_metadata_auth_ref_luc();
+        #[cfg(not(feature = "optiga-hw-counter"))]
         let (meta, meta_len) = apdu::build_metadata_auth_ref();
         secure_log!(
             "[OPTIGA/prov] F1D0 proposed metadata ({}B): {:02x?}",
@@ -775,6 +778,137 @@ impl OptigaTrustM {
             return Err(e);
         }
         Ok(())
+    }
+
+    // ---------------------------------------------------------------
+    // Hardware PIN counter (`optiga-hw-counter`) — E120 + LUC binding.
+    // ---------------------------------------------------------------
+    //
+    // Silicon-enforced Trezor-parity PIN lockout. The chip at 0xE120
+    // is a monotonic Lifetime Usage Counter (data type UPCTR, 0x01)
+    // whose 8-byte object carries `[current_u32_be | limit_u32_be]`.
+    // Every HMAC-verify against F1D0 auto-increments the counter inside
+    // the chip (the `Execute = LUC(E120)` AC on F1D0 is what wires
+    // this). When `current == limit`, F1D0's Execute AC refuses auth
+    // regardless of PIN bytes — Platform-Binding-Secret extraction
+    // cannot bypass this because the reset path writes E120 via
+    // Change=Auto(F1D0), which requires the very HMAC auth we're
+    // trying to protect.
+    //
+    // See Trezor `core/embed/sec/optiga/optiga.c` for the reference
+    // implementation (`optiga_reset_counter`, `OID_STRETCHED_PIN_CTR`).
+
+    /// Lifetime-failure threshold for the silicon PIN counter.
+    ///
+    /// This is an emergency / anti-extraction backstop, NOT the
+    /// user-facing "3 consecutive" lockout — MCU flash page 124 handles
+    /// consecutive-failure semantics with reset-on-success (see
+    /// `hw::flash::pin_attempts_{read,bump,reset}` and
+    /// `nsc::gated_unlock`). Silicon counter's value-add is the case
+    /// where an attacker extracts PBS and replays against the chip
+    /// directly, bypassing the MCU gate — silicon then fires after
+    /// `HW_PIN_CTR_LIMIT` lifetime attempts. 32 is well above the
+    /// birthday budget of legitimate typo-bursts over the device
+    /// lifetime yet well below any plausible brute-force attempt
+    /// count.
+    #[cfg(feature = "optiga-hw-counter")]
+    pub const HW_PIN_CTR_LIMIT: u32 = 32;
+
+    /// Provision the silicon PIN counter at `apdu::OID_PIN_CTR` (0xE120).
+    ///
+    /// MUST be called BEFORE `provision_auth_ref` under this feature —
+    /// F1D0's new metadata references E120 via `Execute = LUC(E120)`,
+    /// and while referencing a non-existent counter is not strictly a
+    /// brick, it would leave F1D0 inert until the counter is created.
+    /// The LcsO ratchet on F1D0 is one-way, so ordering matters.
+    ///
+    /// Writes the 8-byte UPCTR data `[0,0,0,0, L,L,L,L]` first (allowed
+    /// at the default Creation-state ALW Change AC), THEN installs the
+    /// metadata that narrows Change to `Auto(OID_AUTH_REF)`. Installing
+    /// metadata first would likely be accepted by the chip at Creation
+    /// but mirrors the `provision_user_oid` observation that the
+    /// reverse order triggers Status=0xff on some chips.
+    #[cfg(feature = "optiga-hw-counter")]
+    unsafe fn provision_hw_pin_counter(&mut self, limit: u32) -> Result<(), OptigaError> {
+        let data = apdu::encode_pin_ctr(0, limit);
+        secure_log!(
+            "[OPTIGA/prov] hw-ctr 0x{:04x}: set_data ({}B, limit={})",
+            apdu::OID_PIN_CTR, data.len(), limit
+        );
+        if let Err(e) = apdu::set_data_object(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, &data,
+        ) {
+            secure_log!("[OPTIGA/prov] hw-ctr set_data FAILED: {:?}", e);
+            return Err(e);
+        }
+
+        // LcsO-ratchet skip (identical pattern to provision_user_oid).
+        let mut cur_meta = [0u8; 128];
+        let cur_len = apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, &mut cur_meta,
+        ).unwrap_or(0);
+        if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+            secure_log!(
+                "[OPTIGA/prov] hw-ctr 0x{:04x} at LcsO=Operational — \
+                 skipping set_metadata",
+                apdu::OID_PIN_CTR
+            );
+            return Ok(());
+        }
+
+        let (meta, meta_len) = apdu::build_metadata_pin_ctr();
+        secure_log!(
+            "[OPTIGA/prov] hw-ctr 0x{:04x} proposed metadata ({}B): {:02x?}",
+            apdu::OID_PIN_CTR, meta_len, &meta[..meta_len]
+        );
+        if let Err(e) = apdu::set_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, &meta[..meta_len],
+        ) {
+            secure_log!("[OPTIGA/prov] hw-ctr set_metadata FAILED: {:?}", e);
+            return Err(e);
+        }
+        // Deliberately NOT locking to LcsO=Op. Change AC is already
+        // Auto(OID_AUTH_REF) and enforced at Creation too (per the
+        // store_objects comment at mod.rs:731); locking would only
+        // freeze the metadata shape, not the data. Keeping LcsO at
+        // Creation leaves room for a future firmware to widen the
+        // threshold without a factory-reset pass.
+        Ok(())
+    }
+
+    /// Reset the silicon PIN counter back to `(0, HW_PIN_CTR_LIMIT)`.
+    ///
+    /// MUST be called inside a session that has already HMAC-verified
+    /// `OID_AUTH_REF` this session — E120's Change AC is
+    /// `Auto(OID_AUTH_REF)`, so without that the SetDataObject rejects
+    /// with `OPTIGA_ERR_ACCESS_DENIED`. `authenticate_and_read` calls
+    /// this right after a successful `hmac_verify` (same session, same
+    /// AuthRef still authorized).
+    #[cfg(feature = "optiga-hw-counter")]
+    unsafe fn reset_hw_pin_counter(&mut self) -> Result<(), OptigaError> {
+        let data = apdu::encode_pin_ctr(0, Self::HW_PIN_CTR_LIMIT);
+        apdu::set_data_object(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, &data,
+        )
+    }
+
+    /// Read the silicon PIN counter, returning `(current, limit)` or
+    /// `None` if the OID is unprovisioned / the read fails.
+    /// Remaining attempts = `limit.saturating_sub(current)`.
+    #[cfg(feature = "optiga-hw-counter")]
+    pub unsafe fn read_hw_pin_counter(&mut self) -> Option<(u32, u32)> {
+        let mut buf = [0u8; 8];
+        match apdu::get_data_object(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, 0, 8, &mut buf,
+        ) {
+            Ok(8) => apdu::parse_pin_ctr(&buf),
+            _ => None,
+        }
     }
 
     /// Provision the attempt counter: write 0, install AC, lock.
@@ -879,6 +1013,27 @@ impl OptigaTrustM {
         secure_log!("[OPTIGA/prov] step 1b: ensure_shield (pre-auth_ref)");
         self.ensure_shield()?;
 
+        // 1c. (optiga-hw-counter) Silicon PIN counter MUST be provisioned
+        //     BEFORE auth_ref — the F1D0 Execute AC will reference E120
+        //     via LUC, and the one-way LcsO ratchet on F1D0 means we
+        //     only get one shot at getting that reference right.
+        #[cfg(feature = "optiga-hw-counter")]
+        {
+            secure_log!("[OPTIGA/prov] step 1c: provision_hw_pin_counter (E120)");
+            unsafe {
+                if let Err(e) = self.provision_hw_pin_counter(Self::HW_PIN_CTR_LIMIT) {
+                    secure_log!("[OPTIGA/prov] provision_hw_pin_counter FAILED: {:?}", e);
+                    return Err(e);
+                }
+            }
+            #[cfg(feature = "stm32u585")]
+            {
+                self.hard_reset_and_reinit()?;
+                secure_log!("[OPTIGA/prov] post-hw-ctr: re-establishing shield");
+                self.ensure_shield()?;
+            }
+        }
+
         // 2. Auth reference
         secure_log!("[OPTIGA/prov] step 2: provision_auth_ref");
         {
@@ -982,49 +1137,79 @@ impl OptigaTrustM {
         self.ensure_shield()?;
 
         unsafe {
-            let attempts = match self.read_counter_raw() {
-                Some(v) if v == RESET_SENTINEL => {
-                    secure_log!("[OPTIGA/auth] counter = RESET_SENTINEL → NotProvisioned");
-                    return Err(OptigaError::NotProvisioned);
+            // Under `optiga-hw-counter` the silicon counter at E120
+            // replaces the F1E1 soft counter:
+            //   - "attempts exceeded" gate is enforced by the chip via
+            //     LUC(E120) on F1D0's Execute AC; a locked-out chip
+            //     returns `OPTIGA_ERR_COUNTER_EXCEEDED` from hmac_verify
+            //     without consuming further silicon budget.
+            //   - The pre-verify bump (and its CRIT-6 readback) is gone
+            //     — silicon does the bump atomically, a glitch that
+            //     suppresses it also suppresses the verify itself
+            //     (same APDU, same path).
+            //   - A separate "NotProvisioned" probe: read E120; if it
+            //     returns (0, 0) or fails, the chip is unprovisioned.
+            #[cfg(feature = "optiga-hw-counter")]
+            {
+                match self.read_hw_pin_counter() {
+                    Some((_, 0)) | None => {
+                        secure_log!("[OPTIGA/auth] hw-ctr unset → NotProvisioned");
+                        return Err(OptigaError::NotProvisioned);
+                    }
+                    Some((curr, limit)) => {
+                        secure_log!("[OPTIGA/auth] hw-ctr = {}/{}", curr, limit);
+                        if curr >= limit {
+                            return Err(OptigaError::PinLocked);
+                        }
+                    }
                 }
-                Some(v) => {
-                    secure_log!("[OPTIGA/auth] counter = {}", v);
-                    v
+            }
+            #[cfg(not(feature = "optiga-hw-counter"))]
+            let _ = {
+                let attempts = match self.read_counter_raw() {
+                    Some(v) if v == RESET_SENTINEL => {
+                        secure_log!("[OPTIGA/auth] counter = RESET_SENTINEL → NotProvisioned");
+                        return Err(OptigaError::NotProvisioned);
+                    }
+                    Some(v) => {
+                        secure_log!("[OPTIGA/auth] counter = {}", v);
+                        v
+                    }
+                    None => {
+                        secure_log!("[OPTIGA/auth] counter read returned None → NotProvisioned");
+                        return Err(OptigaError::NotProvisioned);
+                    }
+                };
+                if attempts >= MAX_ATTEMPTS {
+                    return Err(OptigaError::PinLocked);
                 }
-                None => {
-                    secure_log!("[OPTIGA/auth] counter read returned None → NotProvisioned");
-                    return Err(OptigaError::NotProvisioned);
+
+                // 3. Bump counter BEFORE verify (so a power cut can't refund
+                //    the attempt). CRIT-6 fix: add a read-back assertion
+                //    that the written value actually landed — a glitch or
+                //    bus-MITM that produces a nominal-success response for
+                //    a failed write would otherwise leave the counter at
+                //    `attempts` and allow a re-try. On mismatch we refuse
+                //    the whole unlock and zeroize; the counter is advisory
+                //    but the firmware-level assertion is not.
+                let new_attempts = attempts + 1;
+                secure_log!("[OPTIGA/auth] bumping counter to {}", new_attempts);
+                if let Err(e) = apdu::set_data_object(
+                    &mut self.ifx, &mut self.shield,
+                    apdu::OID_COUNTER, &[new_attempts],
+                ) {
+                    secure_log!("[OPTIGA/auth] counter bump FAILED: {:?}", e);
+                    return Err(e);
+                }
+                let readback = self.read_counter_raw().ok_or(OptigaError::PinLocked)?;
+                if readback != new_attempts {
+                    secure_log!(
+                        "[OPTIGA/auth] counter readback mismatch: wrote {} read {} — PinLocked",
+                        new_attempts, readback
+                    );
+                    return Err(OptigaError::PinLocked);
                 }
             };
-            if attempts >= MAX_ATTEMPTS {
-                return Err(OptigaError::PinLocked);
-            }
-
-            // 3. Bump counter BEFORE verify (so a power cut can't refund
-            //    the attempt). CRIT-6 fix: add a read-back assertion
-            //    that the written value actually landed — a glitch or
-            //    bus-MITM that produces a nominal-success response for
-            //    a failed write would otherwise leave the counter at
-            //    `attempts` and allow a re-try. On mismatch we refuse
-            //    the whole unlock and zeroize; the counter is advisory
-            //    but the firmware-level assertion is not.
-            let new_attempts = attempts + 1;
-            secure_log!("[OPTIGA/auth] bumping counter to {}", new_attempts);
-            if let Err(e) = apdu::set_data_object(
-                &mut self.ifx, &mut self.shield,
-                apdu::OID_COUNTER, &[new_attempts],
-            ) {
-                secure_log!("[OPTIGA/auth] counter bump FAILED: {:?}", e);
-                return Err(e);
-            }
-            let readback = self.read_counter_raw().ok_or(OptigaError::PinLocked)?;
-            if readback != new_attempts {
-                secure_log!(
-                    "[OPTIGA/auth] counter readback mismatch: wrote {} read {} — PinLocked",
-                    new_attempts, readback
-                );
-                return Err(OptigaError::PinLocked);
-            }
 
             // 4. Acquire auth-code session + HMAC verify, mirroring the
             //    reference `example_optiga_hmac_verify_with_authorization_
@@ -1125,7 +1310,22 @@ impl OptigaTrustM {
                 apdu::OID_BOOTSTRAP_VK, 0, 32, &mut bootstrap_vk,
             )?;
 
-            // 8. Reset counter now that we know the PIN was right
+            // 8. Reset counter now that we know the PIN was right.
+            //    Under `optiga-hw-counter` the authoritative counter is
+            //    E120 (silicon) — reset it via `reset_hw_pin_counter`,
+            //    which SetDataObject-writes `[0,0,0,0, L,L,L,L]`.
+            //    E120's Change AC is `Auto(OID_AUTH_REF)`, satisfied
+            //    because the `hmac_verify` above just activated F1D0
+            //    in this session. F1E1 stays written-zeroed on the
+            //    non-hw-counter path for back-compat of factory_reset.
+            #[cfg(feature = "optiga-hw-counter")]
+            {
+                if let Err(e) = self.reset_hw_pin_counter() {
+                    secure_log!("[OPTIGA/auth] reset_hw_pin_counter FAILED: {:?}", e);
+                    return Err(e);
+                }
+            }
+            #[cfg(not(feature = "optiga-hw-counter"))]
             apdu::set_data_object(
                 &mut self.ifx, &mut self.shield,
                 apdu::OID_COUNTER, &[0u8],
