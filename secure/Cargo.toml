@@ -152,6 +152,31 @@ se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated O
 # dev bench chips and will NOT ratchet any OID to Operational. Use
 # `make optiga-admin-wipe-e2e`.
 optiga-admin-wipe-e2e = ["optiga-trust-m"]
+# Minimal "nuclear" OPTIGA wipe: no provision-first dance, no shielded
+# connection, no OTP/PBS dependency. Relaxes F1E1's Change AC via
+# set_metadata (always mutable at LcsO=Creation), then writes
+# RESET_SENTINEL to F1E1 via plaintext set_data_object. Used by
+# `make optiga-factory-reset-hw` as the recovery path for boards where
+# the shielded-connection primitives can't run (e.g. OTP programming
+# blocked by chip product state). Requires `optiga-no-shield` so the
+# internal apdu helpers traverse plaintext. Use `make optiga-factory-
+# reset-hw`.
+optiga-nuclear-reset = ["optiga-trust-m", "optiga-no-shield"]
+# Dev escape hatch: allow an interactive STM32U585 release build that
+# bypasses OTP programming via `otp-hardcoded-master-key` WITHOUT
+# enabling `e2e-test` (which would replace the interactive wizard
+# with an auto-provision fast-path). Used on bench boards where the
+# specific STM32U585 can't program user OTP (see the "STM32 OTP
+# master-key burn" pre-production-validation note in
+# `docs/production-todo.md`) but the developer still wants to
+# exercise the real first-boot wizard + PIN entry + standalone
+# unlock flow. Only meaningful alongside `otp-hardcoded-master-key`.
+# Like `otp-hardcoded-master-key`, makes the PBS a compile-time
+# constant shared across every dev board built with the feature — a
+# logic-analyzer snoop on any such board recovers the pairing secret
+# of every other. NEVER enter production with this feature enabled.
+# Paired Makefile target: `flash-hw-optiga-oled-standalone-testkey`.
+dev-testkey = ["otp-hardcoded-master-key"]
 # Dual-SE (OPTIGA + SE050) unlock e2e: pre-clean → provision both halves
 # → unlock + XOR-reconstruct master_secret → verify. Exercises
 # `DualSecureElement::provision` + `DualSecureElement::unlock` on real

@@ -120,6 +120,40 @@ escape hatch exists for user OIDs only.
       it stops being required for SE-pairing, and the irreversibility
       concern narrows to "whatever salt consumers we later add." Until
       then, this burn stays mandatory.
+
+      **Pre-production validation — verify OTP actually programs on the
+      target chip before shipping.** Not every STM32U585 with clean
+      option bytes accepts user-OTP writes. On one B-U585I-IOT02A
+      (`Rev W`) dev board we hit `SECSR=0x90` (`WRPERR|PGSERR`) on every
+      quad-word in `0x0BFA_0080..0x0BFA_00A0`, with:
+      - `RDP = 0xAA` (Level 0)
+      - `OTPBLR_CUR = OTPBLR_PRG = 0`
+      - No WRP coverage of OTP
+      - `HDP1EN = HDP2EN = 0`
+      - `TZEN = 1`
+
+      Option bytes looked identical to a known-good board. Suspected
+      root cause is a non-display-able RSS / debug-authentication /
+      OBK-seal state left by some prior programming session, or a
+      silicon quirk on that specific revision (see ST errata ES0499).
+      `STM32_Programmer_CLI -psrss` returns "not supported for this
+      device" on U5, so there's no host-side command to introspect or
+      regress the state once it's latched.
+
+      Production gate: for each chip, **flash a minimal test image that
+      calls `otp::ensure_device_master` and confirms the burn + readback
+      succeeds** before committing the unit to fulfillment. A chip that
+      can't program user OTP cannot run the shipping firmware
+      (no real PBS → no Shielded Connection → no dual-SE pairing) and
+      must be rejected, not patched with `otp-hardcoded-master-key`.
+      The dev-only `optiga-factory-reset-hw` /
+      `optiga-preprovision-hw` /
+      `flash-hw-optiga-oled-standalone-testkey` targets sidestep this
+      check by using a compile-time shared-across-dev-boards PBS
+      constant — never enter production with that feature set. The
+      `make prod-check` CI gate is what catches this;
+      `otp-hardcoded-master-key` in a non-`e2e-test` release build is
+      already a `compile_error!` in `secure/src/nsc/mod.rs`.
 - [ ] **OTP rollback-counter tally** (`ROLLBACK_WORDS = 32`, 1024
       commits). Each accepted firmware-update CHUNK+COMMIT clears one
       bit; never reset. Exhausted parts are update-dead — treat that as

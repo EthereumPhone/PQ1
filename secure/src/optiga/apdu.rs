@@ -1005,16 +1005,39 @@ pub fn build_metadata_counter() -> (MetaBuf, usize) {
     wrap_meta(inner, c)
 }
 
+/// Metadata with Change/Read = Always. Used by the nuclear-reset path to
+/// unlock an OID whose Change AC was previously set to `Conf(E140)` so
+/// plaintext writes can proceed without a shielded connection. Only
+/// meaningful at LcsO=Creation, where metadata itself is always mutable.
+pub fn build_metadata_relaxed() -> (MetaBuf, usize) {
+    let mut inner = [0u8; 64];
+    let mut c = 0usize;
+
+    push_ac_simple(&mut inner, &mut c, META_CHANGE, AC_ALW);
+    push_ac_simple(&mut inner, &mut c, META_READ, AC_ALW);
+    push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_NEV);
+
+    wrap_meta(inner, c)
+}
+
 /// Metadata for the silicon PIN counter (0xE120) — `optiga-hw-counter`.
 ///
-/// - **Change**: `Auto(OID_AUTH_REF)` — only a session that has already
-///   HMAC-verified F1D0 can rewrite the counter. This is how
-///   "reset-on-successful-PIN" works without requiring `Conf(E140)`:
-///   a PBS-extraction attacker who has not authed via F1D0 cannot reset
-///   the counter, so the silicon lockout is real against them.
-/// - **Read**: Always (counter remaining is non-secret).
-/// - **Execute**: Never (counters aren't executable).
-/// - **Data type**: `UPCTR` (0x01) — 8-byte `[current_u32_be | limit_u32_be]`.
+/// Matches Trezor `core/embed/sec/optiga/optiga.c:454-457`:
+///   - **Change**: `Auto(OID_AUTH_REF)` — only a session that has
+///     already HMAC-verified F1D0 can rewrite the counter. This is how
+///     "reset-on-successful-PIN" works without requiring `Conf(E140)`:
+///     a PBS-extraction attacker who has not authed via F1D0 cannot
+///     reset the counter, so the silicon lockout is real against them.
+///   - **Read**: Always (counter remaining is non-secret).
+///   - **Execute**: Always — critical: LUC evaluation on F1D0
+///     increments E120 by EXECUTING the counter. Exec=NEV blocks the
+///     increment → the entire F1D0 DecryptSym fails with Status(0xFF)
+///     because the AC chain can't complete. Verified 2026-04-22 on
+///     TRUSTMV3SHIELDTOBO1.
+///
+/// No data_type tag — 0xE120..0xE123 are pre-configured as monotonic
+/// counters by the chip; writing DataType=UPCTR is redundant at best
+/// and Trezor does not do it.
 ///
 /// Provisioning order matters: this OID MUST be created before F1D0's
 /// `build_metadata_auth_ref_luc()` metadata is installed, because the
@@ -1025,18 +1048,6 @@ pub fn build_metadata_pin_ctr() -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
-    // Matches Trezor `core/embed/sec/optiga/optiga.c:454-457`:
-    //   change  = ACCESS_PIN_SECRET (Auto(OID_AUTH_REF))
-    //   read    = ALWAYS
-    //   execute = ALWAYS  ← critical: LUC evaluation on F1D0 increments
-    //                       E120 by EXECUTING the counter. Exec=NEV
-    //                       blocks the increment → the entire F1D0
-    //                       DecryptSym fails with Status(0xFF) because
-    //                       the AC chain can't complete. Verified
-    //                       2026-04-22 against TRUSTMV3SHIELDTOBO1.
-    // No data_type tag — 0xE120..0xE123 are pre-configured as
-    // monotonic counters by the chip; writing DataType=UPCTR is
-    // redundant at best and Trezor does not do it.
     push_ac_auto(&mut inner, &mut c, META_CHANGE, OID_AUTH_REF);
     push_ac_simple(&mut inner, &mut c, META_READ, AC_ALW);
     push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_ALW);

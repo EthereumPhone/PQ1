@@ -89,6 +89,7 @@ mod trailer;
     feature = "stm32u585",
     not(debug_assertions),
     not(feature = "e2e-test"),
+    not(feature = "dev-testkey"),
     any(
         feature = "ui-semihosting",
         feature = "ui-mirror",
@@ -101,7 +102,9 @@ compile_error!(
      debug-log / ui-semihosting / ui-mirror / mock-se / otp-hardcoded-master-key. \
      These features leak secure-world state, replace the SE with a mock, or \
      replace the per-device OTP master key with a shared compile-time constant. \
-     Hardware test images may opt in by also enabling `e2e-test`."
+     Hardware test images may opt in by also enabling `e2e-test` (auto-\
+     provisioning, non-interactive) or `dev-testkey` (interactive UI, OTP \
+     substituted with a compile-time constant)."
 );
 
 // Dedicated guard: `otp-hardcoded-master-key` + `optiga-lock-operational` is
@@ -373,14 +376,20 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32 {
-    unsafe { cmd_get_remaining::run() }
+    secure_log!("[NSC] get_remaining_attempts");
+    let r = unsafe { cmd_get_remaining::run() };
+    secure_log!("[NSC] get_remaining_attempts -> {}", r);
+    r
 }
 
 /// CMD_REQUEST_UNLOCK — secure UI prompts for PIN, never crosses NS.
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_request_unlock() -> u32 {
-    unsafe { cmd_request_unlock::run() }
+    secure_log!("[NSC] request_unlock");
+    let r = unsafe { cmd_request_unlock::run() };
+    secure_log!("[NSC] request_unlock -> {}", r);
+    r
 }
 
 /// CMD_SIGN_USEROP — unified JARDÍN Type 1 / Type 2 sign command.
@@ -391,22 +400,31 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop(
     sig_out_ptr: u32,
     total_len: u32,
 ) -> u32 {
+    secure_log!("[NSC] sign_userop (len={})", total_len);
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
-    unsafe { cmd_sign_userop::run(&args) }
+    let r = unsafe { cmd_sign_userop::run(&args) };
+    secure_log!("[NSC] sign_userop -> {}", r);
+    r
 }
 
 /// CMD_IS_UNLOCKED — return 1 if unlocked, 0 if locked.
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_is_unlocked() -> u32 {
-    unsafe { cmd_is_unlocked::run() }
+    secure_log!("[NSC] is_unlocked");
+    let r = unsafe { cmd_is_unlocked::run() };
+    secure_log!("[NSC] is_unlocked -> {}", r);
+    r
 }
 
 /// CMD_LOCK — zeroize secrets and lock the device.
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
-    unsafe { cmd_lock::run() }
+    secure_log!("[NSC] lock");
+    let r = unsafe { cmd_lock::run() };
+    secure_log!("[NSC] lock -> {}", r);
+    r
 }
 
 // ---------------------------------------------------------------------------
@@ -471,7 +489,10 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_wallet_address(
     out_ptr: u32,
     account_index: u32,
 ) -> u32 {
+    secure_log!("[NSC] get_wallet_address (acct={})", account_index);
     let args = GatewayArgs { arg0: out_ptr, arg1: account_index, arg2: 0 };
-    unsafe { cmd_get_wallet_address::run(&args) }
+    let r = unsafe { cmd_get_wallet_address::run(&args) };
+    secure_log!("[NSC] get_wallet_address -> {}", r);
+    r
 }
 
