@@ -1468,6 +1468,22 @@ fn main() -> ! {
         }
         secure_log!("[S] [E2E-WIPE] MCU counter erased OK");
 
+        // E120 must also have been reset by the Trezor-parity transient-
+        // auth path inside `factory_reset`. Without it, E120 carries over
+        // at `expected_e120_end` (baseline + MAX_ATTEMPTS) and multi-wipe
+        // cycles eventually saturate the silicon LUC counter at
+        // HW_PIN_CTR_LIMIT → soft-brick DoS. A post-wipe value of 0 proves
+        // the transient-auth reset ran and succeeded.
+        let e120_post = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        secure_log!(
+            "[SYNC] wipe-e2e post-wipe E120: {} (expected 0, pre-wipe was {})",
+            e120_post, expected_e120_end
+        );
+        if e120_post != 0 {
+            wfail!("E120 not reset by transient-auth path during factory_reset");
+        }
+        secure_log!("[S] [E2E-WIPE] E120 counter reset via transient-auth OK");
+
         // ── Recovery proof: re-provision and do one clean unlock ──
         if let Err(_e) = se.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &correct_pin) {
             wfail!("post-wipe re-provision FAILED");

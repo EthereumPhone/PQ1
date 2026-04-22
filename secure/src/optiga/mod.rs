@@ -1085,6 +1085,106 @@ impl OptigaTrustM {
         )
     }
 
+    /// Reset E120 to (0, limit) from the admin-wipe path, without needing
+    /// the user's PIN. Mirrors Trezor's `optiga_pin_set(PIN_EMPTY, ...)`
+    /// wipe sequence (`core/embed/sec/optiga/optiga.c:782-847`).
+    ///
+    /// Why this exists: the normal `reset_hw_pin_counter` call above
+    /// requires F1D0 (AuthRef) to have just been successfully HMAC-
+    /// verified — the counter's Change AC is `Auto(F1D0)`. During
+    /// `factory_reset` we do NOT have the user's PIN, so we can't
+    /// satisfy that AC by running the normal authenticate-with-user-
+    /// PIN flow. Without this helper, E120's counter value survives
+    /// every wipe cycle. After a few multi-wipe sequences
+    /// (10 wrong → wipe, repeat) E120 saturates at `HW_PIN_CTR_LIMIT`
+    /// and the `curr >= limit` pre-check in `authenticate_and_read`
+    /// starts rejecting every subsequent auth, regardless of PIN —
+    /// a soft-brick DoS.
+    ///
+    /// The trick: F1D0's Change AC is `ALW` (always writeable), which
+    /// means we can rewrite F1D0's content to a transient, device-
+    /// controlled secret without knowing the user's PIN. Once F1D0
+    /// holds a value we know, we can HMAC-verify against it, opening
+    /// F1D0's session. With F1D0 authenticated, the counter's Change
+    /// AC is satisfied and `reset_hw_pin_counter` can write (0, limit).
+    ///
+    /// The `factory_reset` wipe loop that runs next overwrites F1D0
+    /// with zeros anyway, so the transient secret only ever exists
+    /// inside this function's stack frame.
+    ///
+    /// One E120 slot is consumed per call: the HMAC-verify step fires
+    /// the LUC counter on F1D0's Execute AC (success path), but the
+    /// subsequent `reset_hw_pin_counter` immediately snaps it back to
+    /// 0. Net effect per wipe: E120 = 0 afterwards.
+    ///
+    /// Security review: the transient secret is 32 TRNG bytes,
+    /// unguessable. An attacker who already holds E140 PBS (the only
+    /// way to reach this path) can derive or replay the secret
+    /// themselves — but if they have PBS, they already own the chip;
+    /// no new capability is introduced by this helper.
+    #[cfg(feature = "optiga-hw-counter")]
+    unsafe fn reset_e120_via_transient_auth(&mut self) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+
+        // 1. Generate 32 random bytes to use as the transient F1D0 value.
+        let mut transient_secret = [0u8; 32];
+        crate::rng::fill(&mut transient_secret).map_err(|_| OptigaError::Transport)?;
+
+        // 2. Write them to F1D0 under the active Shielded Connection
+        //    (Conf(E140)) — Change AC is ALW, so the write always
+        //    succeeds regardless of LcsO state.
+        secure_log!("[OPTIGA/wipe] transient-auth: writing random to F1D0");
+        if let Err(e) = apdu::set_data_object(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, &transient_secret,
+        ) {
+            transient_secret.zeroize();
+            secure_log!("[OPTIGA/wipe] transient-auth: F1D0 write FAILED: {:?}", e);
+            return Err(e);
+        }
+
+        // 3. Fetch 16 random bytes into the session nonce OID (same
+        //    APDU shape the normal PIN unlock uses — Trezor parity).
+        let mut nonce = [0u8; 16];
+        if let Err(e) = apdu::get_random_auto_state(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_SESSION, &mut nonce,
+        ) {
+            transient_secret.zeroize();
+            secure_log!("[OPTIGA/wipe] transient-auth: GetRandom FAILED: {:?}", e);
+            return Err(e);
+        }
+
+        // 4. HMAC-SHA256(transient_secret, nonce) → 32B tag, then
+        //    DecryptSym-auto-state against F1D0 with the 18B data
+        //    block `(nonce_oid || nonce)`. Success opens F1D0's
+        //    session. LUC fires on E120 (counter advances by 1).
+        let mut hmac = Self::hmac_sha256(&transient_secret, &nonce);
+        transient_secret.zeroize();
+
+        let verify_result = apdu::hmac_verify_auto_state(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, apdu::OID_SESSION,
+            &nonce, &hmac,
+        );
+        nonce.zeroize();
+        hmac.zeroize();
+
+        if let Err(e) = verify_result {
+            secure_log!("[OPTIGA/wipe] transient-auth: hmac_verify FAILED: {:?}", e);
+            return Err(e);
+        }
+
+        // 5. F1D0 is now authenticated. Reset E120 to (0, limit).
+        if let Err(e) = self.reset_hw_pin_counter() {
+            secure_log!("[OPTIGA/wipe] transient-auth: reset_hw_pin_counter FAILED: {:?}", e);
+            return Err(e);
+        }
+
+        secure_log!("[OPTIGA/wipe] transient-auth: E120 reset to (0, limit)");
+        Ok(())
+    }
+
     /// Read the silicon PIN counter, returning `(current, limit)` or
     /// `None` if the OID is unprovisioned / the read fails.
     /// Remaining attempts = `limit.saturating_sub(current)`.
@@ -1653,6 +1753,28 @@ impl OptigaTrustM {
         #[cfg(feature = "stm32u585")]
         unsafe {
             let _ = crate::hw::flash::arm_wipe_flag();
+        }
+
+        // Before wiping F1D0, reset E120 to (0, limit) via transient-
+        // auth (Trezor parity). Without this step the silicon LUC
+        // counter carries over every wipe and eventually saturates,
+        // soft-bricking the device. Safe to fail tolerantly: if the
+        // transient-auth step errors (transport glitch, chip state
+        // issue), we still proceed with the wipe — the soft-brick
+        // risk is probabilistic and a failed reset here just defers
+        // the fix to the next wipe cycle, it doesn't corrupt anything.
+        // Non-hw-counter builds skip this — the counter isn't
+        // silicon-enforced on that path.
+        #[cfg(feature = "optiga-hw-counter")]
+        unsafe {
+            if let Err(e) = self.reset_e120_via_transient_auth() {
+                secure_log!(
+                    "[OPTIGA] Factory reset: E120 reset via transient-auth FAILED: {:?} — \
+                     counter will carry over, next wipe cycle will retry",
+                    e
+                );
+                // Fall through — do not abort the wipe.
+            }
         }
 
         let blank = [0u8; 32];
