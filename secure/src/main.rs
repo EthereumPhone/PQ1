@@ -698,6 +698,139 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- PIN-gate roundtrip (MCU flash counter + gated_unlock) ----
+    // Direct validation of the work-todo #4 Phase 1 dual-SE PIN lockout
+    // sync fix. No buttons or USB UI required — hardcoded right/wrong
+    // PINs drive `nsc::gated_unlock` through its happy and sad paths
+    // while reading page 126 directly to verify the counter state.
+    //
+    // Flow:
+    //   0. factory_reset_admin + pin_attempts_reset → known blank state.
+    //      Verify pin_attempts_read() == 0.
+    //   1. provision(entropy, master, vk, bvk, CORRECT_PIN) via
+    //      WalletStore. Counter stays at 0 (provision doesn't gate).
+    //   2. gated_unlock(WRONG_PIN) × 3. Each returns PinIncorrect.
+    //      After each, assert pin_attempts_read() == 1, 2, 3.
+    //   3. gated_unlock(CORRECT_PIN). Returns Ok(master_secret).
+    //      Assert pin_attempts_read() == 0 (page erased on success).
+    //   4. Repeat bump (× 2) + reset (correct PIN) to prove the
+    //      counter cycle is repeatable, not a one-shot.
+    //   5. Log PASS. Halts in WFI.
+    //
+    // Does NOT exhaust all 10 attempts — that would burn the SE050
+    // user UserID's silicon retry budget (can't reset without
+    // admin-auth deleting the UserID). Counter max + PinLocked path
+    // is provable by inspection: the check in gated_unlock is a
+    // simple `pre_count >= MAX_ATTEMPTS` comparison.
+    //
+    // Triggered by: make pin-gate-e2e
+    #[cfg(feature = "pin-gate-e2e")]
+    unsafe {
+        use crate::secure_element::{UnlockError, WalletStore};
+
+        ui::show_status("PIN gate", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+
+        // ── Step 0: known blank state ─────────────────────────────
+        let _ = se.factory_reset_admin();
+        let _ = hw::flash::pin_attempts_reset();
+        let count0 = hw::flash::pin_attempts_read();
+        if count0 != 0 {
+            secure_log!("[PIN-GATE] step 0 FAILED: count after reset = {} (expected 0)", count0);
+            ui::show_status("PIN gate", "FAIL: setup");
+            loop { cortex_m::asm::wfi(); }
+        }
+        secure_log!("[PIN-GATE] step 0: blank state OK");
+
+        // ── Step 1: provision with known-correct PIN ─────────────
+        let test_entropy: [u8; 32] = [0x42; 32];
+        let test_master = crypto::kdf(b"sphincs-master", &test_entropy, 0);
+        let test_vk: [u8; 32] = [0xCC; 32];
+        let test_bvk: [u8; 32] = [0xDD; 32];
+        let correct_pin: [u8; 8] = *b"00000000";
+        let wrong_pin: [u8; 8] = *b"99999999";
+
+        if let Err(_e) = se.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &correct_pin) {
+            secure_log!("[PIN-GATE] step 1 FAILED: provision returned error");
+            ui::show_status("PIN gate", "FAIL: prov");
+            loop { cortex_m::asm::wfi(); }
+        }
+        secure_log!("[PIN-GATE] step 1: provision OK");
+
+        // ── Step 2: 3× wrong-PIN, counter 0→1→2→3 ────────────────
+        for expected in 1u8..=3 {
+            match nsc::gated_unlock(se, &wrong_pin) {
+                Err(UnlockError::PinIncorrect) => {}
+                other => {
+                    secure_log!(
+                        "[PIN-GATE] step 2.{}: expected PinIncorrect, got {:?}",
+                        expected, other.as_ref().err()
+                    );
+                    ui::show_status("PIN gate", "FAIL: bad-pin");
+                    loop { cortex_m::asm::wfi(); }
+                }
+            }
+            let c = hw::flash::pin_attempts_read();
+            if c != expected {
+                secure_log!("[PIN-GATE] step 2.{} FAILED: count={} expected {}", expected, c, expected);
+                ui::show_status("PIN gate", "FAIL: counter");
+                loop { cortex_m::asm::wfi(); }
+            }
+            secure_log!("[PIN-GATE] step 2.{}: wrong PIN → count={} OK", expected, c);
+        }
+
+        // ── Step 3: correct PIN resets counter to 0 ──────────────
+        match nsc::gated_unlock(se, &correct_pin) {
+            Ok(_master) => {}
+            other => {
+                secure_log!(
+                    "[PIN-GATE] step 3 FAILED: expected Ok, got {:?}",
+                    other.as_ref().err()
+                );
+                ui::show_status("PIN gate", "FAIL: good-pin");
+                loop { cortex_m::asm::wfi(); }
+            }
+        }
+        let c3 = hw::flash::pin_attempts_read();
+        if c3 != 0 {
+            secure_log!("[PIN-GATE] step 3 FAILED: count after success={} (expected 0)", c3);
+            ui::show_status("PIN gate", "FAIL: reset");
+            loop { cortex_m::asm::wfi(); }
+        }
+        secure_log!("[PIN-GATE] step 3: correct PIN → counter reset OK");
+
+        // ── Step 4: another bump+reset cycle to prove repeatability ──
+        for expected in 1u8..=2 {
+            if !matches!(nsc::gated_unlock(se, &wrong_pin), Err(UnlockError::PinIncorrect)) {
+                secure_log!("[PIN-GATE] step 4.{} FAILED: wrong PIN not rejected", expected);
+                ui::show_status("PIN gate", "FAIL: cycle");
+                loop { cortex_m::asm::wfi(); }
+            }
+            let c = hw::flash::pin_attempts_read();
+            if c != expected {
+                secure_log!("[PIN-GATE] step 4.{} FAILED: count={} expected {}", expected, c, expected);
+                ui::show_status("PIN gate", "FAIL: cycle");
+                loop { cortex_m::asm::wfi(); }
+            }
+        }
+        if !matches!(nsc::gated_unlock(se, &correct_pin), Ok(_)) {
+            secure_log!("[PIN-GATE] step 4 FAILED: second correct PIN rejected");
+            ui::show_status("PIN gate", "FAIL: cycle");
+            loop { cortex_m::asm::wfi(); }
+        }
+        let c4 = hw::flash::pin_attempts_read();
+        if c4 != 0 {
+            secure_log!("[PIN-GATE] step 4 FAILED: count after 2nd reset={} (expected 0)", c4);
+            ui::show_status("PIN gate", "FAIL: cycle");
+            loop { cortex_m::asm::wfi(); }
+        }
+        secure_log!("[PIN-GATE] step 4: second cycle OK");
+
+        secure_log!("[S] [E2E-PIN-GATE] PIN-GATE ROUNDTRIP: PASS");
+        ui::show_status("PIN gate", "PASS");
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- OPTIGA Trust M factory_reset roundtrip e2e ----
     // Exercises the `factory_reset` primitive end-to-end on real silicon:
     // provision F1D0..F1D4 + F1E1 with known test vectors, verify the

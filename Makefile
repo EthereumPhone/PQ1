@@ -1189,6 +1189,43 @@ dual-se-admin-wipe-e2e:
 	@echo "==> Running dual-SE unlock e2e (watch semihosting for PASS/FAIL)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# PIN-gate roundtrip e2e. Direct non-interactive test of the MCU-side
+# PIN attempt counter at flash page 126 + the `nsc::gated_unlock`
+# pre-commit pattern. No buttons, no USB — hardcoded right/wrong PINs
+# + semihosting PASS/FAIL.
+#
+# Validates work-todo #4 Phase 1 (dual-SE PIN lockout sync): counter
+# bumps on wrong PIN, counter resets to 0 on correct PIN, cycle is
+# repeatable. Does not test the PinLocked path (would burn SE050's
+# silicon retry counter and brick the v5 UserID for an otherwise-
+# provable inspection-only check).
+#
+# Destroys any wallet state on both chips (the initial factory_reset_
+# admin + fresh provision with a test PIN). Re-run the normal first-
+# boot wizard afterwards to restore.
+#
+# Watch semihosting for "[E2E-PIN-GATE] PIN-GATE ROUNDTRIP: PASS".
+pin-gate-e2e:
+	@echo "==> Building PIN-gate roundtrip e2e firmware..."
+	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features pin-gate-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running PIN-gate e2e (watch semihosting for PASS/FAIL)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # Shield-handshake-only test. Skips `provision_from_mnemonic` entirely
 # and runs `init` → `load_pbs_from_otp` → `ensure_shield` against an
 # already-provisioned chip. Use this to validate the Shielded Connection
