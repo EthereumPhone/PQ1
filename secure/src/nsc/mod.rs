@@ -229,6 +229,61 @@ pub fn unlock_with_master(master: [u8; 32]) {
     state::with_state(|s| s.mark_unlocked(master));
 }
 
+/// Gated unlock — every PIN verify MUST go through this.
+///
+/// Wraps the raw `WalletStore::unlock` with the MCU-side attempt
+/// counter at secure-flash page 126:
+///
+///   1. Check the counter. If ≥ MAX_ATTEMPTS, refuse — return
+///      `PinLocked`. Caller is responsible for running
+///      `trigger_lockout_wipe` on that signal.
+///   2. **Pre-commit**: bump the counter BEFORE calling the SE
+///      driver. A power loss or glitch between here and the chip
+///      verify leaves the attempt charged. Without this, an
+///      attacker who reliably cuts power mid-verify could brute-
+///      force without burning MCU attempts.
+///   3. Call `WalletStore::unlock`. On `Ok`, erase the counter
+///      (fresh start); on `Err`, leave the bump committed.
+///   4. If the flash bump itself fails (PROGERR or post-write
+///      readback mismatch), refuse the attempt with
+///      `InternalError`. Prevents the "glitch flash writes to
+///      burn SE attempts without MCU attempts" attack.
+///
+/// QEMU (no `stm32u585`): passthrough — no flash, no counter, just
+/// `se.unlock(pin)`. The counter gate is a production hardware
+/// hardening; dev QEMU builds don't need it.
+///
+/// See `trigger_lockout_wipe` in `cmd_request_unlock.rs` for the
+/// wipe path that follows from `PinLocked`.
+pub unsafe fn gated_unlock(
+    se: &mut impl crate::secure_element::WalletStore,
+    pin: &[u8; 8],
+) -> Result<[u8; 32], crate::secure_element::UnlockError> {
+    use crate::secure_element::UnlockError;
+
+    #[cfg(feature = "stm32u585")]
+    {
+        let pre_count = crate::hw::flash::pin_attempts_read();
+        if pre_count >= sphincs_tz_shared::MAX_ATTEMPTS {
+            return Err(UnlockError::PinLocked);
+        }
+        if crate::hw::flash::pin_attempts_bump().is_err() {
+            // Flash write fault (PROGERR or readback mismatch).
+            // Refuse without ever calling the SE driver.
+            return Err(UnlockError::InternalError);
+        }
+    }
+
+    match se.unlock(pin) {
+        Ok(master) => {
+            #[cfg(feature = "stm32u585")]
+            let _ = crate::hw::flash::pin_attempts_reset();
+            Ok(master)
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Zeroize all sensitive global state. Called from the panic handler,
 /// the inactivity wipe, and the cancel/idle-wipe branches of every
 /// interactive dialog.

@@ -487,13 +487,33 @@ fn main() -> ! {
     ))]
     unsafe {
         use secure_element::WalletStore;
-        if hw::flash::is_wipe_armed() {
-            secure_log!("[S] Wipe-in-progress flag set — resuming factory reset");
+
+        // Two triggers for boot-time wipe:
+        //   (a) page-125 wipe-in-progress flag is armed — a prior
+        //       `factory_reset_admin` was interrupted mid-flight.
+        //   (b) page-126 MCU attempt counter is at MAX_ATTEMPTS — a
+        //       prior session burned the last attempt but crashed
+        //       before `trigger_lockout_wipe` could complete. Without
+        //       this check, the device would boot and let the user
+        //       try a PIN they've already been locked out of.
+        let wipe_armed = hw::flash::is_wipe_armed();
+        let attempts_exhausted =
+            hw::flash::pin_attempts_read() >= sphincs_tz_shared::MAX_ATTEMPTS;
+
+        if wipe_armed || attempts_exhausted {
+            if wipe_armed {
+                secure_log!("[S] Wipe-in-progress flag set — resuming factory reset");
+            }
+            if attempts_exhausted {
+                secure_log!("[S] MCU attempt counter at MAX — triggering wipe");
+            }
             ui::show_status("WIPING", "resuming from interrupt");
             let _ = (&mut *core::ptr::addr_of_mut!(SE)).factory_reset_admin();
             // factory_reset_admin ends with erase_admin_page() which clears
-            // both the PIN and the flag, so next boot sees an unprovisioned
-            // state and falls through to the first-boot wizard.
+            // both the page-125 PIN and the wipe flag. Also reset page 126
+            // (MCU attempt counter) so next boot sees unprovisioned state +
+            // blank counter → first-boot wizard, not another lockout loop.
+            let _ = hw::flash::pin_attempts_reset();
             ui::show_status("WALLET WIPED", "restore from seed");
         }
     }
@@ -810,6 +830,12 @@ fn main() -> ! {
 
         // Normal e2e-test path: run the verify flow so MASTER_SECRET +
         // PIN_VERIFIED end up in the same state as a real unlock.
+        //
+        // Bypasses `nsc::gated_unlock` for the same reason as the
+        // first-boot auto-unlock: PIN was just written to the chip
+        // above; this is a test harness, not a user-facing entry
+        // point. Going through the gate would burn a flash page
+        // cycle per test run with no security benefit.
         #[cfg(not(feature = "e2e-skip-unlock"))]
         {
             match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
@@ -869,6 +895,14 @@ fn main() -> ! {
 
             // Auto-unlock with the PIN the user just entered so the device
             // is immediately usable (caches entropy blob + VK for signing).
+            //
+            // Bypasses `nsc::gated_unlock` — the PIN was just written to
+            // the SE's auth object a few lines above (store_objects), so
+            // verification is guaranteed correct. Going through the
+            // MCU-counter gate would cost a flash page erase per
+            // provision for no security gain (can't be an attack path:
+            // we control both the PIN and the PIN target in the same
+            // call).
             match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
                 Ok(master) => {
                     nsc::unlock_with_master(master);
@@ -906,7 +940,13 @@ fn main() -> ! {
 
                 ui::show_status("Verifying...", "");
 
-                let result = (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin);
+                // Route through the MCU-counter-gated unlock so every
+                // user-typed PIN burns the same MCU budget, regardless
+                // of entry point (boot-interactive here, PendSV re-
+                // unlock, CMD_REQUEST_UNLOCK from NS). See
+                // `nsc::gated_unlock` docstring for the full rationale.
+                let se_ref = &mut *core::ptr::addr_of_mut!(SE);
+                let result = nsc::gated_unlock(se_ref, &pin);
 
                 pin.zeroize();
 
@@ -1077,7 +1117,12 @@ fn PendSV() {
 
             ui::show_status("Verifying...", "");
 
-            let result = (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin);
+            // Route through the MCU-counter-gated unlock so re-unlock
+            // after idle wipe respects the same lockout budget as a
+            // fresh CMD_REQUEST_UNLOCK. Without this, a PendSV-reached
+            // re-unlock could brute-force the PIN bypassing page 126.
+            let se = &mut *core::ptr::addr_of_mut!(SE);
+            let result = nsc::gated_unlock(se, &pin);
 
             pin.zeroize();
 

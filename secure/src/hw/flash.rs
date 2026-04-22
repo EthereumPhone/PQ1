@@ -365,6 +365,145 @@ pub unsafe fn is_wipe_armed() -> bool {
     read_volatile(src) == WIPE_FLAG_ARMED
 }
 
+// ---------------------------------------------------------------------------
+// MCU-side PIN attempt counter — page 126
+// ---------------------------------------------------------------------------
+//
+// Authoritative PIN-attempt counter. Trezor-parity design (see
+// `storage/storage.c:1171-1311` in trezor-firmware): the MCU-side
+// counter is the source of truth, incremented BEFORE every SE verify
+// (pre-commit), reset only after a successful PIN match. SE-side
+// counters (OPTIGA F1E1, SE050 silicon retry on UserID) are
+// secondary redundant defenses — if they disagree with the MCU
+// counter at boot, the MCU counter wins.
+//
+// Why MCU-authoritative: OPTIGA's F1E1 counter is soft (writable via
+// `Conf(E140)`), so an attacker with PBS extraction can reset it.
+// Without an MCU counter, that collapses to "SE050 is the only real
+// lockout," burning only SE050's silicon budget. With MCU counter,
+// OPTIGA reset attacks cost nothing — the gate is still MCU flash.
+//
+// Layout of page 126 (0x0C0F_C000, 8 KB):
+//   QW 0..(MAX_ATTEMPTS-1): one programmed QW per attempt (any non-
+//                           blank pattern marks consumed).
+//   Remaining QWs: unused, 0xFF after erase (reserved headroom).
+//
+// Programmed sentinel: `[0x00; 16]`. Blank sentinel: `[0xFF; 16]`.
+//
+// Encoding rationale:
+//   - STM32U5 flash does NOT allow re-programming an already-
+//     programmed word (ECC locks the value). A counter implemented
+//     as "rewrite a single byte with the new count" would need a
+//     page erase every bump — catastrophic flash wear.
+//   - One-QW-per-attempt needs only a fresh blank QW per bump, no
+//     rewrite. Page erase only on successful unlock.
+//
+// Lifecycle:
+//   - First boot / successful unlock: page blank (all 0xFF).
+//     `pin_attempts_read()` returns 0.
+//   - Wrong PIN attempt N: `pin_attempts_bump()` programs QW N-1
+//     with `[0x00; 16]`. Post-bump read returns N.
+//   - Reach `MAX_ATTEMPTS`: wallet locks out. `trigger_lockout_wipe`
+//     wipes SEs + erases page 126 via `pin_attempts_reset()`.
+
+const PIN_ATTEMPTS_PAGE_ADDR: u32 = 0x0C0F_C000;
+const PIN_ATTEMPTS_PAGE_NUM: u32 = 126;
+
+/// Maximum counter capacity supported by the current layout. Bigger
+/// than `sphincs_tz_shared::MAX_ATTEMPTS` so future relaxation of the
+/// PIN policy doesn't need a flash layout change.
+const PIN_ATTEMPTS_CAPACITY: u32 = 32;
+const PIN_ATTEMPTS_QW_SIZE: u32 = 16;
+
+/// Read the current PIN-attempt count (0..=`PIN_ATTEMPTS_CAPACITY`).
+/// Reads the per-QW sentinel bytes and counts how many have been
+/// programmed (any non-0xFF byte in QW N). A partially-programmed
+/// QW (brown-out mid-write) counts as programmed — conservative:
+/// the user gets at most one fewer attempt than the silicon actually
+/// recorded, never one more.
+pub unsafe fn pin_attempts_read() -> u8 {
+    let base = PIN_ATTEMPTS_PAGE_ADDR as *const u8;
+    let mut count: u8 = 0;
+    for qw_idx in 0..PIN_ATTEMPTS_CAPACITY {
+        let qw_base = base.add((qw_idx * PIN_ATTEMPTS_QW_SIZE) as usize);
+        // Any non-0xFF byte inside this QW marks it "programmed".
+        let mut programmed = false;
+        for byte_idx in 0..PIN_ATTEMPTS_QW_SIZE {
+            if read_volatile(qw_base.add(byte_idx as usize)) != 0xFF {
+                programmed = true;
+                break;
+            }
+        }
+        if programmed {
+            count = count.saturating_add(1);
+        } else {
+            // Once we hit a blank QW, all subsequent QWs are also blank
+            // (we program them in order). Early-exit.
+            break;
+        }
+    }
+    count
+}
+
+/// Bump the attempt counter by one. Programs the next blank QW
+/// (at index == pre-bump count) with `[0x00; 16]` and verifies
+/// the post-bump count is exactly one higher. Returns the new count.
+///
+/// Fault-injection note: a glitch that skips the program entirely
+/// would leave the count unchanged. The post-bump read-back rejects
+/// that with `Err(())` — caller must halt / refuse the attempt on
+/// failure. A glitch that writes a DIFFERENT QW would leave gaps
+/// (blank QWs between programmed ones); `pin_attempts_read` counts
+/// strictly in-order and stops at the first blank, so such a write
+/// is detected as "count unchanged" and similarly rejected.
+pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
+    let pre = pin_attempts_read();
+    if (pre as u32) >= PIN_ATTEMPTS_CAPACITY {
+        return Err(());
+    }
+
+    let target_addr =
+        PIN_ATTEMPTS_PAGE_ADDR + (pre as u32) * PIN_ATTEMPTS_QW_SIZE;
+    let sentinel = [0u8; 16];
+    write_quadword_verified(target_addr, &sentinel)?;
+
+    let post = pin_attempts_read();
+    if post != pre + 1 {
+        return Err(());
+    }
+    Ok(post)
+}
+
+/// Erase page 126 — clears every attempt marker back to blank.
+/// Called only after a successful PIN verify completes end-to-end
+/// on both SEs. After this, `pin_attempts_read()` returns 0.
+pub unsafe fn pin_attempts_reset() -> Result<(), ()> {
+    cortex_m::interrupt::free(|_| {
+        wait_bsy();
+        clear_errors();
+        unlock();
+
+        let cr = PER | (PIN_ATTEMPTS_PAGE_NUM << PNB_SHIFT);
+        write_volatile(FLASH_SECCR, cr);
+        write_volatile(FLASH_SECCR, cr | STRT);
+
+        wait_bsy();
+
+        write_volatile(FLASH_SECCR, 0);
+        let sr = read_volatile(FLASH_SECSR);
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
+}
+
 // ===========================================================================
 // Firmware-update plumbing: bank-2 (non-secure) flash + slot geometry
 // ===========================================================================

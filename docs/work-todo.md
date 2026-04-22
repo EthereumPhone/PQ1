@@ -67,18 +67,29 @@ The OLED UI backend (`secure/src/ui/oled.rs`) has button input explicitly marked
 
 ### 4. Dual-Chip PIN Lockout Synchronization
 
-**Status:** NOT STARTED
+**Status:** PHASE 1 LANDED — authoritative MCU-side counter in place. Phase 2 (reconciliation + FI-hardening + OPTIGA monotonic-counter migration) still owed.
 
-Each SE has independent retry counters (Tropic01: 10 MACD-based attempts, SE050: 10 UserID attempts). The design requires atomic unlock of both chips or neither.
+Originally scoped for Tropic01 + SE050 before the OPTIGA + SE050 dual-SE cutover. The core problem remains the same: each SE has an independent retry counter, and without a shared gate an attacker who resets one (e.g. OPTIGA F1E1 via `Conf(E140)` PBS rewrite) can bypass the lockout on the other.
 
-**What's needed:**
-- [ ] Intent log in secure flash: write `PENDING{attempt=N}` before attempting either chip
-- [ ] Boot-time recovery: if intent log found, reconcile both chips to post-attempt state
-- [ ] Wipe-on-disagreement: if the two counters ever disagree, erase everything
-- [ ] Coordinate MAX_ATTEMPTS across both SEs (pick min of 9 and 10, or align)
+**Phase 1 — MCU-side authoritative counter (LANDED):**
+- [x] **Secure-flash page 126 as attempt counter.** Each wrong PIN burns one QW (`[0x00; 16]`). Counter = number of programmed QWs. Reset = page erase (only after successful PIN). Capacity 32 attempts per layout; MAX_ATTEMPTS is 10. `secure/src/hw/flash.rs::pin_attempts_{read,bump,reset}`.
+- [x] **Pre-commit pattern.** `nsc::gated_unlock` bumps the MCU counter BEFORE calling `WalletStore::unlock`, so a power-loss or glitch mid-SE-verify still charges the attempt. Mirrors Trezor `storage/storage.c:1171-1311`. `secure/src/nsc/mod.rs::gated_unlock`.
+- [x] **Fault-injection guard.** Post-bump readback; if the programmed QW count didn't advance by exactly one, refuse the attempt with `InternalError` and do NOT call the SE driver. Prevents "glitch flash writes to burn SE attempts without MCU attempts."
+- [x] **Every PIN entry point routes through `gated_unlock`:** `CMD_REQUEST_UNLOCK` (`nsc/cmd_request_unlock.rs`), PendSV idle-wipe re-unlock (`main.rs:PendSV`), post-first-boot interactive unlock. First-boot auto-unlock and e2e-test fast-path deliberately bypass (PIN is known-correct by construction; bypass avoids a flash page cycle per provisioning).
+- [x] **Boot-time lockout check.** `main.rs` checks page 126 at boot; if already at MAX, run `factory_reset_admin` + erase page 126 before any unlock path runs. Handles "prior session burned last attempt but crashed before `trigger_lockout_wipe` completed."
+- [x] **Lockout path clears counter.** `trigger_lockout_wipe` erases page 126 after the SE wipe so the next boot sees unprovisioned-state + blank counter → first-boot wizard, not a lockout loop.
 
-**Files to create:** `secure/src/intent_log.rs`
-**Files to change:** `secure/src/main.rs`, `secure/src/crypto.rs`, `secure/src/pin.rs`
+**Phase 2 (not yet started):**
+- [ ] **Boot-time reconciliation against OPTIGA F1E1.** Trezor `storage.c:1677-1700` pattern: read both MCU remaining + OPTIGA remaining, accept the minimum. Today the OPTIGA soft counter (F1E1) still bumps independently via `authenticate_and_read`; if it disagrees with the MCU counter (e.g. attacker reset OPTIGA), the stricter of the two wins via independent lockout, but explicit reconciliation would harden the "attacker can run until BOTH lock out" upper bound.
+- [ ] **Cryptographic FI checksum on the bump.** Trezor uses a paired counter (`ctr` + `ctr_ck`) and `handle_fault()` on mismatch. Our current post-bump readback catches most fault classes but doesn't distinguish "flash glitch" from "all state intact but count wrong" — a checksum would tighten it.
+- [ ] **SE050 reconciliation.** SE050's silicon retry counter can't be read without burning an attempt (only surfaces via `SW=0x63Cx` in verify response). A voluntary "peek" via a known-wrong PIN would burn one attempt to sync — counter-productive. Design TBD; the current defense ("SE050 is the silicon-hard final gate, we trust it") is acceptable.
+- [ ] **Migrate OPTIGA counter to `0xE120` hardware-monotonic.** Tracked separately in #24 P1 — closes the "OPTIGA counter is soft" hole entirely. Once `0xE120` lands, OPTIGA is silicon-hard too, and the MCU counter becomes a redundant consistency gate rather than the sole authoritative source.
+
+**Files created / changed in Phase 1:**
+- Added: `pin_attempts_{read,bump,reset}` + `PIN_ATTEMPTS_PAGE_ADDR/NUM` in `secure/src/hw/flash.rs`.
+- Added: `nsc::gated_unlock` in `secure/src/nsc/mod.rs`.
+- Changed: `secure/src/nsc/cmd_request_unlock.rs` — routes through `gated_unlock`, adds lockout-boot-check in wipe path.
+- Changed: `secure/src/main.rs` — PendSV + boot-interactive unlock paths route through `gated_unlock`; boot-time lockout check.
 
 ---
 

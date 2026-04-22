@@ -42,29 +42,40 @@ pub(super) unsafe fn run() -> u32 {
 }
 
 unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
-    use crate::secure_element::WalletStore;
+    use sphincs_tz_shared::MAX_ATTEMPTS;
 
     let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-    match se.unlock(pin) {
+
+    // `super::gated_unlock` handles the MCU-side counter (page 126):
+    // pre-commit bump before SE verify, reset on success, refuse
+    // on flash fault. See its docstring for the full Trezor-style
+    // gating rationale.
+    match super::gated_unlock(se, pin) {
         Ok(master) => {
-            state::with_state(|s| s.mark_unlocked(master));
+            state::with_state(|s| {
+                s.mark_unlocked(master);
+                s.remaining_attempts = MAX_ATTEMPTS;
+            });
             timeout::reset_activity();
             ui::show_status("Unlocked", "");
             NscStatus::Ok as u32
         }
         Err(UnlockError::PinIncorrect) => {
-            let new_remaining = state::with_state(|s| {
-                if s.remaining_attempts > 0 {
-                    s.remaining_attempts -= 1;
-                }
-                s.remaining_attempts
-            });
-            if new_remaining == 0 {
-                // Last attempt just failed — the SE has blocked itself.
-                // Fall through to the lockout handler below.
+            // MCU counter advanced inside gated_unlock. Read the fresh
+            // count to compute remaining — authoritative regardless of
+            // what the SE-side counters report.
+            #[cfg(feature = "stm32u585")]
+            let count = crate::hw::flash::pin_attempts_read();
+            #[cfg(not(feature = "stm32u585"))]
+            let count: u8 = 0; // QEMU: no counter, UI-only display
+
+            let remaining_after = MAX_ATTEMPTS.saturating_sub(count);
+            state::with_state(|s| s.remaining_attempts = remaining_after);
+
+            if remaining_after == 0 {
                 return trigger_lockout_wipe();
             }
-            if new_remaining == 1 {
+            if remaining_after == 1 {
                 ui::show_status("LAST ATTEMPT", "wallet wipes on fail");
             } else {
                 ui::show_status("Wrong PIN", "");
@@ -72,10 +83,16 @@ unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
             NscStatus::PinIncorrect as u32
         }
         Err(UnlockError::PinLocked) => {
+            // Either the MCU counter hit MAX inside gated_unlock, or
+            // one of the SEs surfaced its own lockout. Either way, wipe.
             state::with_state(|s| s.remaining_attempts = 0);
             trigger_lockout_wipe()
         }
         Err(UnlockError::InternalError) => {
+            // Includes the "flash bump failed" fault-injection refusal
+            // from gated_unlock. MCU counter is not bumped in that
+            // case — neither is SE counter, because we never called
+            // the chip. Attack surface bounded.
             NscStatus::InternalError as u32
         }
     }
@@ -95,6 +112,14 @@ unsafe fn trigger_lockout_wipe() -> u32 {
 
     let se = &mut *core::ptr::addr_of_mut!(crate::SE);
     let _ = se.factory_reset_admin();
+
+    // Reset the MCU-side attempt counter now that both SEs have been
+    // wiped. Otherwise the next boot would read a full counter + an
+    // unprovisioned chip, trigger the boot-time lockout check, and
+    // loop. Erasing here makes the device ready for a fresh first-
+    // boot wizard.
+    #[cfg(feature = "stm32u585")]
+    let _ = crate::hw::flash::pin_attempts_reset();
 
     // Zeroize every TrustZone-side secret.
     super::zeroize_sensitive_state();
