@@ -381,6 +381,63 @@ derivation root as a total loss of that chip.
       an FSBL update, which requires WRP1A unlock, which requires
       RDP regression (mass erase). So: lose the key, lose the fleet.
 
+### Hardening regressions — restore before production
+
+These are pre-production regressions the bring-up branch knowingly
+ships with, flagged in `CLAUDE.md` §"Development Posture" and
+surfaced by the three-way PIN-sync validation runs (2026-04-22).
+None of them affect the PIN-sync / wipe-dispatch paths that were
+validated on silicon — the three-way lockstep, boot-time cache
+re-sync, and MCU-MAX wipe dispatch all work today. They DO affect
+the broader secure-world isolation that production will need.
+
+- [ ] **GTZC1_TZSC_SECCFGR{1,2,3} allowlist restored to invariant #4.**
+      Currently `secure/src/sau.rs` clears these to 0 (everything NS)
+      because the first attempt at the "CRIT-4 all-secure baseline"
+      mis-identified which controller governs USB OTG FS on STM32U585
+      — USB OTG FS is AHB2, governed by a separate **GTZC2_TZSC** block
+      whose base address we have not yet confirmed (`0x5203_4400`
+      bus-faulted on first guess). This makes peripherals like I2C1,
+      AES, HASH, PKA, SAES, RNG reachable from the non-secure world —
+      a regression of CLAUDE.md invariant #4 ("all secrets live ONLY
+      in TrustZone secure world"). Fix: locate the GTZC2 base
+      empirically on the STM32U585 silicon (or via RM0456 rev C2+ if
+      it lists the address), reinstate a conservative allowlist that
+      lets USB OTG FS reach NS while keeping I2C1 / HASH / PKA / SAES
+      / RNG strictly secure.
+
+- [ ] **Debug instrumentation stripped from release builds.** The
+      bring-up branch shipped with `debug-log` allowed on hardware
+      release (the `compile_error!` gate in `secure/src/nsc/mod.rs`
+      was removed), `hw::hash::init_clock`'s semihosting prints are
+      `DHCSR.C_DEBUGEN`-gated rather than deleted, `secure_log!`
+      calls litter the first-boot wizard, and the NS `main()` emits
+      pre-USB register dumps. Production CI must gate shipped
+      firmware on `debug-log`, `e2e-test`, and `mock-se` being OFF —
+      the existing `make prod-check` target is the right hook, but
+      needs to actually fail the build rather than warn when these
+      features are present.
+
+- [ ] **`pin-gate-wipe-e2e` / `pin-gate-hw-counter-e2e` feature
+      fence.** These two destructive / semi-destructive test targets
+      exist for silicon validation and must not reach production
+      firmware. They transitively require `e2e-test`, which is
+      already in the `compile_error!` gate, but call out explicitly
+      in the `make prod-check` enumeration so a future refactor that
+      adds new destructive e2e features inherits the fence.
+
+- [ ] **`optiga-lock-operational=ON` production commit.** Every
+      validated test run to date has kept every OID at
+      `LcsO=Creation`. The production bump to `LcsO=Operational` is
+      covered by this document's OPTIGA section (and is the defining
+      commit ceremony of the OPTIGA subsystem), but also needs
+      explicit cross-validation against the PIN-sync paths before
+      flipping: confirm that `reset_hw_pin_counter`,
+      `factory_reset`, and the three-way lockstep all still work on
+      an OID set with `LcsO=Op` metadata. See work-todo.md #25 Gap 5
+      for the reversible dry-run on a sacrificial chip that must
+      precede any production LcsO=Op flip.
+
 ## Where items come from
 
 When an item is moved out of `docs/work-todo.md` into here, the diff
