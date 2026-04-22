@@ -1447,6 +1447,29 @@ dual-se-admin-wipe-e2e:
 # boot wizard afterwards to restore.
 #
 # Watch semihosting for "[E2E-PIN-GATE] PIN-GATE ROUNDTRIP: PASS".
+pin-gate-hw-counter-e2e:
+	@echo "==> Building combined sync + desync recovery e2e firmware..."
+	@echo "    Exercises MCU page-124 + OPTIGA E120 + SE050 UserID counters"
+	@echo "    together under dual-se + optiga-hw-counter. WIPES wallet state"
+	@echo "    on BOTH chips. Does NOT bump any OID to LcsO=Operational."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features pin-gate-hw-counter-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running combined sync + desync e2e (watch for SYNC+DESYNC ROUNDTRIP: PASS)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 pin-gate-e2e:
 	@echo "==> Building PIN-gate roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."

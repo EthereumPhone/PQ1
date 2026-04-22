@@ -959,6 +959,190 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- Combined MCU + OPTIGA E120 + SE050 sync + desync recovery ----
+    // Exercises the full PIN lockout pipeline under `dual-se +
+    // optiga-hw-counter` and asserts MCU page-124 stays in lockstep
+    // with OPTIGA E120.current at every step. Also drives the system
+    // into two deliberate desync states — MCU-ahead and OPTIGA-ahead —
+    // and verifies a correct-PIN `gated_unlock` recovers both counters
+    // back to (0, 0).
+    //
+    // Phases:
+    //   0. pin_attempts_reset → fresh MCU counter. Provision via
+    //      DualSecureElement::provision (idempotent: hw-counter skip
+    //      fires if E120 already correctly provisioned from a prior
+    //      run of this test on the same chip).
+    //   1. Normal sync: gated_unlock(wrong) → MCU=1, E120=1;
+    //      gated_unlock(correct) → MCU=0, E120=0.
+    //   2. MCU-ahead desync: direct pin_attempts_bump() × 2 → MCU=2
+    //      without touching OPTIGA. Correct PIN recovers (bump to 3,
+    //      SE.unlock succeeds, reset to 0). Assert MCU=0, E120=0.
+    //   3. OPTIGA-ahead desync: direct se.optiga.unlock(wrong) bumps
+    //      E120 via LUC without incrementing MCU (bypasses gated_unlock).
+    //      Correct PIN recovers identically.
+    //
+    // Uses the real production OIDs on both chips — destroys any
+    // existing wallet state. Does NOT imply optiga-lock-operational.
+    //
+    // Triggered by: make pin-gate-hw-counter-e2e
+    #[cfg(feature = "pin-gate-hw-counter-e2e")]
+    unsafe {
+        use crate::secure_element::{UnlockError, WalletStore};
+
+        ui::show_status("SYNC", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+
+        let test_entropy: [u8; 32] = [0x42; 32];
+        let test_master = crypto::kdf(b"sphincs-master", &test_entropy, 0);
+        let test_vk: [u8; 32] = [0xCC; 32];
+        let test_bvk: [u8; 32] = [0xDD; 32];
+        let correct_pin: [u8; 8] = *b"00000000";
+        let wrong_pin: [u8; 8] = *b"99999999";
+
+        macro_rules! fail { ($msg:expr) => {{
+            secure_log!("[S] [E2E-SYNC] FAIL: {}", $msg);
+            ui::show_status("SYNC", "FAIL");
+            loop { cortex_m::asm::wfi(); }
+        }}}
+
+        // Read MCU + E120 and assert they match expected values. Macro
+        // (not closure) so the borrow of `se.optiga` ends at each
+        // expansion site — we need `se` free for the `gated_unlock`
+        // and `provision` calls that follow.
+        macro_rules! check_sync {
+            ($phase:expr, $mcu_exp:expr, $e120_exp:expr) => {{
+                let mcu = hw::flash::pin_attempts_read();
+                let e120_curr = se.optiga.read_hw_pin_counter()
+                    .map(|(c, _)| c)
+                    .unwrap_or(u32::MAX);
+                secure_log!(
+                    "[SYNC] {}: MCU={} E120.curr={} (expected MCU={} E120={})",
+                    $phase, mcu, e120_curr, $mcu_exp, $e120_exp
+                );
+                (mcu == $mcu_exp) && (e120_curr == $e120_exp)
+            }};
+        }
+
+        // ── Phase 0: known blank state + provision ─────────────────
+        // `pin_attempts_reset` clears the MCU page-124 counter. We
+        // DON'T call `check_sync!` pre-provision because
+        // `read_hw_pin_counter` needs an initialised OPTIGA app
+        // session, which `provision` installs via `store_objects`.
+        let _ = hw::flash::pin_attempts_reset();
+        let pre = hw::flash::pin_attempts_read();
+        if pre != 0 {
+            secure_log!("[S] [E2E-SYNC] phase-0 pre-provision: MCU={} expected 0", pre);
+            fail!("phase-0 pre-provision MCU counter");
+        }
+        secure_log!("[S] [E2E-SYNC] phase-0 pre-provision: MCU=0 OK");
+
+        // Pre-clean SE050 user objects — prior test runs in this chip
+        // may have left stale ENTROPY/VK/BOOTSTRAP_VK. SE050's
+        // `store_objects` is idempotent (skips writes when objects
+        // already exist); without the wipe, `half_e` on SE050 from a
+        // prior run survives while OPTIGA gets a fresh random
+        // `half_o` → `half_o XOR half_e ≠ test_entropy` and
+        // DualSecureElement::unlock's consistency check returns
+        // InternalError. `factory_reset_admin` is best-effort: if the
+        // chip was never admin-provisioned, the unauthenticated
+        // iterative_wipe sweep runs instead; if everything is already
+        // clean, both paths no-op. OPTIGA's side of factory_reset_admin
+        // wipes user data OIDs but preserves F1D0 metadata + E120 LUC
+        // binding (those are metadata-level, re-provision overwrites
+        // the data only).
+        secure_log!("[S] [E2E-SYNC] phase-0: pre-cleaning SE050 user objects");
+        let _ = se.factory_reset_admin();
+
+        if let Err(_e) = se.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &correct_pin) {
+            fail!("phase-0: provision returned error");
+        }
+        if !check_sync!("phase-0 post-provision", 0u8, 0u32) {
+            fail!("phase-0 post-provision: counters not zero");
+        }
+        secure_log!("[S] [E2E-SYNC] phase-0: provisioned, counters clean");
+
+        // ── Phase 1: normal wrong → correct cycle, both counters advance ───
+        match nsc::gated_unlock(se, &wrong_pin) {
+            Err(UnlockError::PinIncorrect) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-1 wrong: expected PinIncorrect, got {:?}", other.as_ref().err());
+                fail!("phase-1 wrong PIN not rejected");
+            }
+        }
+        if !check_sync!("phase-1 after wrong", 1u8, 1u32) {
+            fail!("phase-1: MCU or E120 not at 1 after wrong PIN");
+        }
+
+        match nsc::gated_unlock(se, &correct_pin) {
+            Ok(_) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-1 correct: got {:?}", other.as_ref().err());
+                fail!("phase-1 correct PIN rejected");
+            }
+        }
+        if !check_sync!("phase-1 after correct", 0u8, 0u32) {
+            fail!("phase-1: counters did not reset on correct PIN");
+        }
+        secure_log!("[S] [E2E-SYNC] phase-1: normal sync OK");
+
+        // ── Phase 2: MCU-ahead desync recovery ─────────────────────
+        // Direct MCU bumps leave OPTIGA untouched — simulates a flash
+        // corruption / partial-write scenario where the MCU counter
+        // got ahead of silicon.
+        hw::flash::pin_attempts_bump().ok();
+        hw::flash::pin_attempts_bump().ok();
+        if !check_sync!("phase-2 desync (MCU ahead)", 2u8, 0u32) {
+            fail!("phase-2 desync setup failed");
+        }
+
+        // Correct PIN: MCU pre-check passes (2 < 3), bumps to 3,
+        // SE.unlock succeeds (E120 bumps to 1 via LUC, firmware resets
+        // to 0), MCU resets to 0.
+        match nsc::gated_unlock(se, &correct_pin) {
+            Ok(_) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-2 recovery: got {:?}", other.as_ref().err());
+                fail!("phase-2 recovery PIN rejected");
+            }
+        }
+        if !check_sync!("phase-2 after recovery", 0u8, 0u32) {
+            fail!("phase-2: counters not synced after recovery");
+        }
+        secure_log!("[S] [E2E-SYNC] phase-2: MCU-ahead desync recovered OK");
+
+        // ── Phase 3: OPTIGA-ahead desync recovery ──────────────────
+        // Direct call to se.optiga.unlock bypasses gated_unlock, so
+        // MCU stays at 0 while LUC silicon bumps E120. Simulates an
+        // attacker with PBS who can replay HMAC-verify APDUs directly
+        // against the chip without touching MCU flash.
+        match se.optiga.unlock(&wrong_pin) {
+            Err(UnlockError::PinIncorrect) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-3 direct-wrong: got {:?}", other.as_ref().err());
+                fail!("phase-3 direct optiga.unlock did not reject");
+            }
+        }
+        if !check_sync!("phase-3 desync (OPTIGA ahead)", 0u8, 1u32) {
+            fail!("phase-3 desync setup: E120 did not bump");
+        }
+
+        match nsc::gated_unlock(se, &correct_pin) {
+            Ok(_) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-3 recovery: got {:?}", other.as_ref().err());
+                fail!("phase-3 recovery PIN rejected");
+            }
+        }
+        if !check_sync!("phase-3 after recovery", 0u8, 0u32) {
+            fail!("phase-3: counters not synced after recovery");
+        }
+        secure_log!("[S] [E2E-SYNC] phase-3: OPTIGA-ahead desync recovered OK");
+
+        secure_log!("[S] [E2E-SYNC] SYNC+DESYNC ROUNDTRIP: PASS");
+        ui::show_status("SYNC", "PASS");
+        loop { cortex_m::asm::wfi(); }
+    }
+
     #[cfg(feature = "optiga-admin-wipe-e2e")]
     unsafe {
         ui::show_status("OPTIGA wipe", "running...");

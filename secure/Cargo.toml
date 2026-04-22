@@ -109,6 +109,13 @@ optiga-hw-counter = ["optiga-trust-m"]
 # Uses standalone OPTIGA path (not dual-se) so the test isolates
 # OPTIGA behaviour from SE050. Use `make optiga-hw-counter-e2e`.
 optiga-hw-counter-e2e = ["optiga-hw-counter"]
+# Combined MCU page-124 + OPTIGA E120 + SE050 counter sync + desync
+# recovery e2e. Under dual-se with hw-counter, exercises the full PIN
+# lockout pipeline AND asserts all three counters stay in sync through
+# normal + desync flows. Deliberately desyncs MCU-ahead and OPTIGA-ahead
+# to verify recovery on the next correct PIN. Use
+# `make pin-gate-hw-counter-e2e`.
+pin-gate-hw-counter-e2e = ["dual-se", "optiga-hw-counter"]
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
 optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Production: bump LcsO to Operational on BOTH E140 (PBS) AND every user OID (F1D0..F1D4 + F1E1) at end of provisioning. Irreversible per OPTIGA SRM §"Life Cycle Status" — LcsO is monotonic, no reverse path exists. Default OFF so dev chips stay at LcsO=Creation throughout all iteration (metadata still mutable, data rewriteable without AC constraints). ONLY enable when (a) STM32 OTP master is burned, (b) PBS is OTP-derived, (c) this specific chip is intended to become a production unit and you have validated the provisioning flow against sacrificial parts. See docs/production-todo.md for the full pre-ship checklist and docs/optiga-brick-postmortem.md §5 + §7 for the history.
