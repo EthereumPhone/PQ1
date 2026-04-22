@@ -516,6 +516,22 @@ fn main() -> ! {
             let _ = hw::flash::pin_attempts_reset();
             ui::show_status("WALLET WIPED", "restore from seed");
         }
+
+        // Post-wipe-check, pre-unlock: sync the SE drivers' in-RAM
+        // remaining-attempts mirrors against the MCU page-124 counter.
+        // The `SE.*.remaining` fields are `const fn new()`-initialised
+        // to `MAX_ATTEMPTS` on every boot, but MCU flash retains the
+        // real count across power-cycles. Without this ratchet-down,
+        // `remaining_attempts()` / `cmd_get_remaining` would over-
+        // report after a mid-lockout reboot until the next successful
+        // unlock resynced the cache. `sync_remaining_with_mcu` only
+        // lowers the cache (min-of-two), never raises it, so calling
+        // it here is safe regardless of prior state.
+        {
+            use crate::secure_element::WalletStore;
+            let used = hw::flash::pin_attempts_read();
+            (&mut *core::ptr::addr_of_mut!(SE)).sync_remaining_with_mcu(used);
+        }
     }
 
     // ---- SE050 factory reset (iterative wipe) ----
@@ -1208,6 +1224,70 @@ fn main() -> ! {
             fail!("phase-4: counters not synced after recovery");
         }
         secure_log!("[S] [E2E-SYNC] phase-4: SE050-ahead desync recovered OK");
+
+        // ── Phase 5: boot-time SE050 cache re-sync across simulated reboot ──
+        // Proves that `sync_remaining_with_mcu` correctly ratchets the
+        // SE050 (and OPTIGA) software mirror down to match the MCU
+        // page-124 counter after a power cycle, so a post-lockout-window
+        // reboot doesn't over-report remaining attempts. Real reboot is
+        // simulated by manually writing `MAX_ATTEMPTS` back into the
+        // drivers' cache fields after 3 failed unlocks — the same
+        // stale-high state a genuine boot would produce via
+        // `const fn new()` initialisation.
+        for _ in 0..3 {
+            match nsc::gated_unlock(se, &wrong_pin) {
+                Err(UnlockError::PinIncorrect) => {}
+                other => {
+                    secure_log!("[S] [E2E-SYNC] phase-5 wrong: got {:?}", other.as_ref().err());
+                    fail!("phase-5 wrong PIN not rejected");
+                }
+            }
+        }
+        if !check_sync!("phase-5 pre-reboot-sim", 3u8, 3u32, max_rem - 3) {
+            fail!("phase-5 pre-reboot-sim: counters not at (3,3,7)");
+        }
+
+        // Simulate reboot: force both SE driver caches back to MAX,
+        // which is exactly what `const fn new()` yields on power-on.
+        // MCU page-124 counter (durable) still reads 3.
+        se.optiga._e2e_force_remaining_to_max();
+        se.se050._e2e_force_remaining_to_max();
+        {
+            use crate::secure_element::WalletStore;
+            let rem_before_sync = se.remaining_attempts();
+            secure_log!(
+                "[SYNC] phase-5 post-reboot-sim (caches stale): SE-pair min={} (expected {})",
+                rem_before_sync, max_rem
+            );
+            if rem_before_sync != max_rem {
+                fail!("phase-5: cache reset simulation failed — min should be MAX");
+            }
+
+            let used = hw::flash::pin_attempts_read();
+            se.sync_remaining_with_mcu(used);
+
+            let rem_after_sync = se.remaining_attempts();
+            secure_log!(
+                "[SYNC] phase-5 after sync(used={}): SE-pair min={} (expected {})",
+                used, rem_after_sync, max_rem - 3
+            );
+            if rem_after_sync != max_rem - 3 {
+                fail!("phase-5: sync_remaining_with_mcu did not ratchet down to 7");
+            }
+        }
+
+        // Recover to clean state for any subsequent run.
+        match nsc::gated_unlock(se, &correct_pin) {
+            Ok(_) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-5 recovery: got {:?}", other.as_ref().err());
+                fail!("phase-5 recovery PIN rejected");
+            }
+        }
+        if !check_sync!("phase-5 after recovery", 0u8, 0u32, max_rem) {
+            fail!("phase-5: counters not synced after recovery");
+        }
+        secure_log!("[S] [E2E-SYNC] phase-5: post-reboot cache re-sync OK");
 
         secure_log!("[S] [E2E-SYNC] SYNC+DESYNC ROUNDTRIP: PASS");
         ui::show_status("SYNC", "PASS");

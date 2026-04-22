@@ -1380,6 +1380,13 @@ impl WalletStore for Se050 {
         self.remaining
     }
 
+    fn sync_remaining_with_mcu(&mut self, mcu_used: u8) {
+        let mcu_remaining = sphincs_tz_shared::MAX_ATTEMPTS.saturating_sub(mcu_used);
+        if mcu_remaining < self.remaining {
+            self.remaining = mcu_remaining;
+        }
+    }
+
     fn zeroize_caches(&mut self) {
         use zeroize::Zeroize;
         self.entropy_blob_cache.zeroize();
@@ -1440,5 +1447,18 @@ impl WalletStore for Se050 {
 
         self.zeroize_caches();
         Ok(())
+    }
+}
+
+#[cfg(feature = "e2e-test")]
+impl Se050 {
+    /// e2e-only: reset the in-RAM `remaining` cache to `MAX_ATTEMPTS`
+    /// without touching any durable state. Simulates the post-reboot
+    /// condition where `const fn new()` yields MAX but the chip's own
+    /// UserID counter retains its actual value. Used by
+    /// `pin-gate-hw-counter-e2e` phase-5 to exercise the boot-time
+    /// `sync_remaining_with_mcu` path without power-cycling the board.
+    pub fn _e2e_force_remaining_to_max(&mut self) {
+        self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
     }
 }

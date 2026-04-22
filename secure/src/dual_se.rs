@@ -239,6 +239,11 @@ impl WalletStore for DualSecureElement {
         o.min(e)
     }
 
+    fn sync_remaining_with_mcu(&mut self, mcu_used: u8) {
+        self.optiga.sync_remaining_with_mcu(mcu_used);
+        self.se050.sync_remaining_with_mcu(mcu_used);
+    }
+
     fn zeroize_caches(&mut self) {
         self.entropy_blob_cache.zeroize();
         self.blob_cached = false;

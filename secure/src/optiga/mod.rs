@@ -1985,11 +1985,28 @@ impl WalletStore for OptigaTrustM {
         self.remaining
     }
 
+    fn sync_remaining_with_mcu(&mut self, mcu_used: u8) {
+        let mcu_remaining = MAX_ATTEMPTS.saturating_sub(mcu_used);
+        if mcu_remaining < self.remaining {
+            self.remaining = mcu_remaining;
+        }
+    }
+
     fn zeroize_caches(&mut self) {
         self.zeroize_caches_internal();
     }
 
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
         self.factory_reset().map_err(|_| SeError::InternalError)
+    }
+}
+
+#[cfg(feature = "e2e-test")]
+impl OptigaTrustM {
+    /// e2e-only counterpart of `Se050::_e2e_force_remaining_to_max`.
+    /// Mirrors the post-reboot stale-cache state without power-cycling
+    /// the board. See the SE050 version for full rationale.
+    pub fn _e2e_force_remaining_to_max(&mut self) {
+        self.remaining = MAX_ATTEMPTS;
     }
 }

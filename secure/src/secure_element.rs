@@ -72,6 +72,21 @@ pub trait WalletStore {
     /// Return the number of remaining PIN attempts.
     fn remaining_attempts(&mut self) -> u8;
 
+    /// Re-sync the in-RAM remaining-attempts cache against the MCU
+    /// page-124 counter. Called once at boot to correct for the
+    /// software mirror resetting to `MAX_ATTEMPTS` on every power-on
+    /// while the chips themselves keep durable state.
+    ///
+    /// `mcu_used` is the count read from flash; the impl must keep
+    /// the cache at `min(self.remaining, MAX_ATTEMPTS - mcu_used)`
+    /// — a stale-high cache can only be ratcheted DOWN, never up,
+    /// so this is safe to call even when the cache is already
+    /// authoritative (fresh provision, mid-session state).
+    ///
+    /// Default no-op: correct for Mock (reads r-mem directly) and
+    /// Tropic01 (queries the chip on every `remaining_attempts`).
+    fn sync_remaining_with_mcu(&mut self, _mcu_used: u8) {}
+
     /// Zeroize any cached secrets (called on idle wipe / lock / panic).
     fn zeroize_caches(&mut self);
 
