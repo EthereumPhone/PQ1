@@ -52,6 +52,58 @@ const BSY: u32 = 1 << 16; // Busy
 const ERR_MASK: u32 = 0xFA; // PROGERR | WRPERR | PGAERR | SIZERR | PGSERR
 
 // ---------------------------------------------------------------------------
+// Instruction cache (ICACHE) — must be invalidated after every flash
+// erase or program, or subsequent reads return stale cached bytes.
+// ---------------------------------------------------------------------------
+//
+// STM32U5 has a transparent instruction/data cache in front of flash
+// (ICACHE at 0x4003_0400 NS / 0x5003_0400 S, enabled at boot by
+// default). Cache lines are NOT automatically invalidated when the
+// flash contents underneath change — software must issue a `CACHEINV`
+// after every flash mutation that touches a region the CPU may have
+// cached.
+//
+// Symptom when missing: `write_quadword_verified` writes fresh bytes,
+// the flash controller reports Ok (no SR error), but the immediately-
+// following readback returns the OLD pre-write bytes — because the
+// CPU is reading from the cache. `write_quadword_verified` then fails
+// the compare and returns Err, with the actual flash having the correct
+// content. The bug is trivially reproducible when a region is read
+// before the flash mutation (so it's cached), then erased/programmed,
+// then read again.
+//
+// Fix: after every successful erase or program (before returning Ok),
+// call `icache_invalidate()`. The call is a handful of cycles and
+// completely eliminates the "silent readback mismatch" failure mode.
+
+// ICACHE registers live at 0x4003_0400 (NS alias) / 0x5003_0400 (S alias).
+// We're secure-world code; use the S alias for symmetry with the FLASH
+// register block above. The wrong base (0x4003_0000 — off by 0x400) lands
+// in a reserved region on AHB1 and provokes unpredictable behaviour
+// (previously: u64_div_rem HardFault shortly after the first write).
+const ICACHE_BASE: u32 = 0x5003_0400;
+const ICACHE_CR: *mut u32 = ICACHE_BASE as *mut u32;
+const ICACHE_SR: *const u32 = (ICACHE_BASE + 0x04) as *const u32;
+const ICACHE_CR_CACHEINV: u32 = 1 << 1;
+const ICACHE_SR_BUSYF: u32 = 1 << 0;
+
+/// Invalidate the entire ICACHE so subsequent flash reads see fresh
+/// post-erase / post-program bytes rather than stale cached lines.
+/// Must be called inside the same interrupt-free block as the flash
+/// mutation that triggered it — interleaving isn't a correctness bug
+/// (invalidation is idempotent) but keeps the cache-coherency window
+/// tight.
+unsafe fn icache_invalidate() {
+    let cr = read_volatile(ICACHE_CR);
+    write_volatile(ICACHE_CR, cr | ICACHE_CR_CACHEINV);
+    while read_volatile(ICACHE_SR) & ICACHE_SR_BUSYF != 0 {
+        cortex_m::asm::nop();
+    }
+    cortex_m::asm::dsb();
+    cortex_m::asm::isb();
+}
+
+// ---------------------------------------------------------------------------
 // Key storage page — last 8 KB of secure flash bank 1 (page 127)
 // ---------------------------------------------------------------------------
 
@@ -123,6 +175,7 @@ pub unsafe fn erase_key_page() -> Result<(), ()> {
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
+        icache_invalidate();
 
         if sr & ERR_MASK != 0 {
             clear_errors();
@@ -180,6 +233,7 @@ unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
+        icache_invalidate();
 
         if sr & ERR_MASK != 0 {
             clear_errors();
@@ -303,6 +357,7 @@ pub unsafe fn erase_admin_page() -> Result<(), ()> {
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
+        icache_invalidate();
 
         if sr & ERR_MASK != 0 {
             clear_errors();
@@ -502,6 +557,7 @@ pub unsafe fn pin_attempts_reset() -> Result<(), ()> {
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
+        icache_invalidate();
 
         if sr & ERR_MASK != 0 {
             clear_errors();
