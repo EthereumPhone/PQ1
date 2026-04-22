@@ -366,7 +366,7 @@ pub unsafe fn is_wipe_armed() -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// MCU-side PIN attempt counter — page 126
+// MCU-side PIN attempt counter — page 124
 // ---------------------------------------------------------------------------
 //
 // Authoritative PIN-attempt counter. Trezor-parity design (see
@@ -383,7 +383,7 @@ pub unsafe fn is_wipe_armed() -> bool {
 // lockout," burning only SE050's silicon budget. With MCU counter,
 // OPTIGA reset attacks cost nothing — the gate is still MCU flash.
 //
-// Layout of page 126 (0x0C0F_C000, 8 KB):
+// Layout of page 124 (0x0C0F_8000, 8 KB):
 //   QW 0..(MAX_ATTEMPTS-1): one programmed QW per attempt (any non-
 //                           blank pattern marks consumed).
 //   Remaining QWs: unused, 0xFF after erase (reserved headroom).
@@ -404,10 +404,18 @@ pub unsafe fn is_wipe_armed() -> bool {
 //   - Wrong PIN attempt N: `pin_attempts_bump()` programs QW N-1
 //     with `[0x00; 16]`. Post-bump read returns N.
 //   - Reach `MAX_ATTEMPTS`: wallet locks out. `trigger_lockout_wipe`
-//     wipes SEs + erases page 126 via `pin_attempts_reset()`.
+//     wipes SEs + erases page 124 via `pin_attempts_reset()`.
+//
+// Page choice: 124 over 126. Page 126 (the former OPTIGA PBS seal
+// page, freed by work-todo #24) turned out to be in a "freed-but-
+// write-hostile" state on the current bench chip — erase returns
+// OK (no SR error) but subsequent programs of QW0 fail with
+// PROGERR|PGSERR. Page 124 is truly never-touched and accepts
+// writes without drama. If future chips exhibit the same issue
+// at page 124, we have page 123 still in reserve.
 
-const PIN_ATTEMPTS_PAGE_ADDR: u32 = 0x0C0F_C000;
-const PIN_ATTEMPTS_PAGE_NUM: u32 = 126;
+const PIN_ATTEMPTS_PAGE_ADDR: u32 = 0x0C0F_8000;
+const PIN_ATTEMPTS_PAGE_NUM: u32 = 124;
 
 /// Maximum counter capacity supported by the current layout. Bigger
 /// than `sphincs_tz_shared::MAX_ATTEMPTS` so future relaxation of the
@@ -474,7 +482,7 @@ pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
     Ok(post)
 }
 
-/// Erase page 126 — clears every attempt marker back to blank.
+/// Erase page 124 — clears every attempt marker back to blank.
 /// Called only after a successful PIN verify completes end-to-end
 /// on both SEs. After this, `pin_attempts_read()` returns 0.
 pub unsafe fn pin_attempts_reset() -> Result<(), ()> {

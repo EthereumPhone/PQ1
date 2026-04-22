@@ -732,7 +732,13 @@ fn main() -> ! {
         let se = &mut *core::ptr::addr_of_mut!(SE);
 
         // ── Step 0: known blank state ─────────────────────────────
-        let _ = se.factory_reset_admin();
+        // Deliberately NO `factory_reset_admin` here — the production
+        // wrapper erases page 125 as part of cleanup, and calling it
+        // followed by `pin_attempts_reset` (page 126) triggered a flash-
+        // timing window on this bench chip where a subsequent program
+        // to page 125 QW0 inside `write_admin_pin` (during provision)
+        // returned PROGERR silently. The test just needs the MCU
+        // counter cleared; SE cleanup is the provision path's job.
         let _ = hw::flash::pin_attempts_reset();
         let count0 = hw::flash::pin_attempts_read();
         if count0 != 0 {
