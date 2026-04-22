@@ -855,6 +855,110 @@ fn main() -> ! {
     // Does NOT imply `optiga-lock-operational` → no LcsO ratcheting.
     //
     // Triggered by: make optiga-admin-wipe-e2e
+    // ---- OPTIGA hardware PIN counter e2e test ----
+    // Exercises the E120 LUC binding on F1D0. DESTRUCTIVE — rewrites
+    // F1D0 metadata to the LUC variant on first run.
+    //
+    // Flow:
+    //  1. Provision via WalletStore (runs store_objects which now
+    //     provisions E120 before F1D0 with Exec=LUC(E120)).
+    //  2. Read E120 — expect (0, HW_PIN_CTR_LIMIT).
+    //  3. Wrong PIN → expect UnlockError::PinIncorrect AND E120.current == 1.
+    //  4. Correct PIN → expect Ok(...) AND E120.current == 0 (reset on success).
+    //  5. Two more wrong PINs → E120.current == 2.
+    //  6. Correct PIN → E120.current == 0.
+    //
+    // On any unexpected state, loops wfi() with FAIL displayed.
+    // Triggered by: make optiga-hw-counter-e2e
+    #[cfg(feature = "optiga-hw-counter-e2e")]
+    unsafe {
+        use crate::secure_element::{UnlockError, WalletStore};
+
+        ui::show_status("HW-CTR", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+
+        let test_entropy: [u8; 32] = [0x42; 32];
+        let test_master = crypto::kdf(b"sphincs-master", &test_entropy, 0);
+        let test_vk: [u8; 32] = [0xCC; 32];
+        let test_bvk: [u8; 32] = [0xDD; 32];
+        let correct_pin: [u8; 8] = *b"00000000";
+        let wrong_pin: [u8; 8] = *b"99999999";
+
+        macro_rules! fail { ($msg:expr) => {{
+            secure_log!("[S] [E2E-OPTIGA-HW-CTR] FAIL: {}", $msg);
+            ui::show_status("HW-CTR", "FAIL");
+            loop { cortex_m::asm::wfi(); }
+        }}}
+
+        // ── Step 1: provision ────────────────────────────────────
+        if let Err(_e) = se.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &correct_pin) {
+            fail!("provision returned error (chip likely at LcsO=Op with non-LUC F1D0 — run optiga-reset-oids first)");
+        }
+        secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 1: provision OK");
+
+        // ── Step 2: E120 initial state = (0, HW_PIN_CTR_LIMIT) ───
+        let (c0, limit) = match se.read_hw_pin_counter() {
+            Some(p) => p,
+            None => fail!("read_hw_pin_counter returned None"),
+        };
+        if c0 != 0 || limit != optiga::OptigaTrustM::HW_PIN_CTR_LIMIT {
+            secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 2: E120 = ({},{}) expected (0,{})", c0, limit, optiga::OptigaTrustM::HW_PIN_CTR_LIMIT);
+            fail!("initial E120 state wrong");
+        }
+        secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 2: E120 initial = (0,{}) OK", limit);
+
+        // ── Step 3: wrong PIN bumps E120 ─────────────────────────
+        match se.unlock(&wrong_pin) {
+            Err(UnlockError::PinIncorrect) => {}
+            other => { secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 3: wrong PIN got {:?}", other.as_ref().err()); fail!("wrong PIN not rejected"); }
+        }
+        let (c1, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        if c1 != 1 {
+            secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 3: E120.current={} expected 1", c1);
+            fail!("E120 did not bump after wrong PIN");
+        }
+        secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 3: wrong PIN → E120.current=1 OK");
+
+        // ── Step 4: correct PIN resets E120 ──────────────────────
+        match se.unlock(&correct_pin) {
+            Ok(_) => {}
+            other => { secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 4: correct PIN got {:?}", other.as_ref().err()); fail!("correct PIN rejected"); }
+        }
+        let (c4, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        if c4 != 0 {
+            secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 4: E120.current={} expected 0", c4);
+            fail!("E120 not reset after correct PIN");
+        }
+        secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 4: correct PIN → E120 reset to 0 OK");
+
+        // ── Step 5: two wrong PINs in a row ──────────────────────
+        for i in 1u32..=2 {
+            if !matches!(se.unlock(&wrong_pin), Err(UnlockError::PinIncorrect)) {
+                fail!("wrong PIN not rejected in burst");
+            }
+            let (c, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+            if c != i {
+                secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 5.{}: E120.current={} expected {}", i, c, i);
+                fail!("E120 mismatch during burst");
+            }
+        }
+        secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 5: burst 2 wrong PINs → E120.current=2 OK");
+
+        // ── Step 6: second correct PIN resets again ──────────────
+        if !matches!(se.unlock(&correct_pin), Ok(_)) {
+            fail!("second correct PIN rejected");
+        }
+        let (c6, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        if c6 != 0 {
+            fail!("E120 not reset on repeat correct PIN");
+        }
+        secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 6: repeat correct PIN → E120 reset OK");
+
+        secure_log!("[S] [E2E-OPTIGA-HW-CTR] HW-COUNTER ROUNDTRIP: PASS");
+        ui::show_status("HW-CTR", "PASS");
+        loop { cortex_m::asm::wfi(); }
+    }
+
     #[cfg(feature = "optiga-admin-wipe-e2e")]
     unsafe {
         ui::show_status("OPTIGA wipe", "running...");

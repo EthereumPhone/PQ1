@@ -1112,6 +1112,32 @@ flash-hw-optiga-unlock-test:
 # dispatcher at main.rs halts before the fast-path ever runs.
 #
 # Watch semihosting for "[E2E-OPTIGA-ADMIN] ADMIN-WIPE ROUNDTRIP: PASS"/"FAIL".
+optiga-hw-counter-e2e:
+	@echo "==> Building OPTIGA hardware PIN counter (E120 + LUC) e2e firmware..."
+	@echo "    This rewrites F1D0 metadata to the LUC-binding variant and"
+	@echo "    provisions E120 as the silicon PIN counter. LcsO stays at"
+	@echo "    Creation on every touched OID (optiga-lock-operational OFF)."
+	@echo "    If F1D0 is somehow already at LcsO=Operational with legacy"
+	@echo "    non-LUC metadata the firmware aborts loudly (Status 0xE0) —"
+	@echo "    run optiga-reset-oids first in that case."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features optiga-hw-counter-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running hw-counter e2e (watch semihosting for PASS/FAIL)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 optiga-admin-wipe-e2e:
 	@echo "==> Building OPTIGA factory_reset roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE any wallet state on the target chip."

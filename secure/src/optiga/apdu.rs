@@ -1089,3 +1089,28 @@ pub fn is_metadata_operational(metadata: &[u8], len: usize) -> bool {
         _ => false,
     }
 }
+
+/// Returns true if the metadata's Execute AC is `LUC(ctr_oid)`.
+/// Used by `optiga-hw-counter` to distinguish "F1D0 already has LUC
+/// binding in place" (accept + proceed) from "F1D0 has legacy non-LUC
+/// metadata and cannot be rewritten because LcsO=Operational" (the
+/// fail-closed case — the chip cannot be updated to LUC without a
+/// factory-reset recovery pass).
+///
+/// Shape check: the Execute tag carries a 3-byte value whose bytes
+/// are exactly `[0x40, ctr_hi, ctr_lo]`. A longer expression (e.g.
+/// `LUC(E120) AND Conf(E140)`) would also be acceptable in principle,
+/// but we only produce the simple 3-byte form via
+/// `build_metadata_auth_ref_luc`, so anything else means "not our
+/// shape — abort and let the user recover."
+#[cfg(feature = "optiga-hw-counter")]
+pub fn metadata_has_luc_execute(metadata: &[u8], len: usize, ctr_oid: u16) -> bool {
+    match find_metadata_tag(metadata, len, META_EXECUTE) {
+        Some(v) if v.len() == 3 => {
+            v[0] == AC_OP_LUC
+                && v[1] == (ctr_oid >> 8) as u8
+                && v[2] == ctr_oid as u8
+        }
+        _ => false,
+    }
+}

@@ -695,6 +695,25 @@ impl OptigaTrustM {
         };
 
         if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+            // Under `optiga-hw-counter` this skip is only safe if the
+            // current metadata ALREADY has the LUC Execute binding —
+            // otherwise the chip has legacy non-LUC F1D0 frozen at
+            // LcsO=Op and the hw-counter feature is inert. Surface
+            // this loudly rather than continuing with what looks like
+            // a hw-counter-enabled build but behaves like the soft
+            // counter. Recovery: run a SetObjectProtected reset pass
+            // on F1D0 (see `optiga-reset-oids`) to return it to
+            // LcsO=Initialization, then re-provision.
+            #[cfg(feature = "optiga-hw-counter")]
+            if !apdu::metadata_has_luc_execute(&cur_meta, cur_len, apdu::OID_PIN_CTR) {
+                secure_log!(
+                    "[OPTIGA/prov] FAIL: F1D0 at LcsO=Op with non-LUC \
+                     Execute AC — hw-counter cannot be enabled without \
+                     a SetObjectProtected reset of F1D0 first. \
+                     See docs/optiga-brick-postmortem.md."
+                );
+                return Err(OptigaError::Status(0xE0));
+            }
             secure_log!(
                 "[OPTIGA/prov] F1D0 at LcsO=Operational — metadata write \
                  blocked by one-way ratchet; skipping set_metadata + \
