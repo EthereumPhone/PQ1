@@ -1005,21 +1005,36 @@ fn main() -> ! {
             loop { cortex_m::asm::wfi(); }
         }}}
 
-        // Read MCU + E120 and assert they match expected values. Macro
-        // (not closure) so the borrow of `se.optiga` ends at each
-        // expansion site — we need `se` free for the `gated_unlock`
-        // and `provision` calls that follow.
+        // Read MCU + E120 + SE050 cached remaining and assert they match
+        // expected values. Macro (not closure) so the borrow of `se`
+        // ends at each expansion site — we need `se` free for the
+        // `gated_unlock` and `provision` calls that follow.
+        //
+        // SE050 cache semantics: the `remaining` field is a display
+        // mirror of the chip's UserID counter (see `se050/mod.rs`
+        // doc comment on the field). Within a single boot it advances
+        // in lockstep with the chip, so asserting its value here is a
+        // valid regression guard against accidental skip-SE050
+        // refactors. Across reboots the cache resets to `MAX_ATTEMPTS`
+        // while the chip retains state — not exercised by this test.
         macro_rules! check_sync {
-            ($phase:expr, $mcu_exp:expr, $e120_exp:expr) => {{
+            ($phase:expr, $mcu_exp:expr, $e120_exp:expr, $se050_rem_exp:expr) => {{
                 let mcu = hw::flash::pin_attempts_read();
                 let e120_curr = se.optiga.read_hw_pin_counter()
                     .map(|(c, _)| c)
                     .unwrap_or(u32::MAX);
+                let se050_rem = {
+                    use crate::secure_element::WalletStore;
+                    se.se050.remaining_attempts()
+                };
                 secure_log!(
-                    "[SYNC] {}: MCU={} E120.curr={} (expected MCU={} E120={})",
-                    $phase, mcu, e120_curr, $mcu_exp, $e120_exp
+                    "[SYNC] {}: MCU={} E120.curr={} SE050.rem={} (expected MCU={} E120={} SE050.rem={})",
+                    $phase, mcu, e120_curr, se050_rem,
+                    $mcu_exp, $e120_exp, $se050_rem_exp
                 );
-                (mcu == $mcu_exp) && (e120_curr == $e120_exp)
+                (mcu == $mcu_exp)
+                    && (e120_curr == $e120_exp)
+                    && (se050_rem == $se050_rem_exp)
             }};
         }
 
@@ -1056,12 +1071,30 @@ fn main() -> ! {
         if let Err(_e) = se.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &correct_pin) {
             fail!("phase-0: provision returned error");
         }
-        if !check_sync!("phase-0 post-provision", 0u8, 0u32) {
-            fail!("phase-0 post-provision: counters not zero");
+        let max_rem = sphincs_tz_shared::MAX_ATTEMPTS;
+
+        // `provision_hw_pin_counter` is idempotent — if E120's metadata
+        // is already Change=Auto(F1D0), Exec=ALW (set by a prior run)
+        // it early-returns without rewriting the counter data. So E120
+        // may carry forward a non-zero `current` from a previous
+        // failed test run. Fire one clean correct-PIN unlock here to
+        // force `reset_hw_pin_counter` on the success path: this snaps
+        // MCU page-124 (erase on success), E120 (firmware-side reset),
+        // and SE050 chip+cache (auto-reset on successful auth) to
+        // their full-budget state regardless of prior history.
+        match nsc::gated_unlock(se, &correct_pin) {
+            Ok(_) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-0 reset-via-unlock: got {:?}", other.as_ref().err());
+                fail!("phase-0 reset-via-unlock rejected");
+            }
+        }
+        if !check_sync!("phase-0 post-provision", 0u8, 0u32, max_rem) {
+            fail!("phase-0 post-provision: counters not clean after reset-via-unlock");
         }
         secure_log!("[S] [E2E-SYNC] phase-0: provisioned, counters clean");
 
-        // ── Phase 1: normal wrong → correct cycle, both counters advance ───
+        // ── Phase 1: normal wrong → correct cycle, all three counters advance ───
         match nsc::gated_unlock(se, &wrong_pin) {
             Err(UnlockError::PinIncorrect) => {}
             other => {
@@ -1069,8 +1102,8 @@ fn main() -> ! {
                 fail!("phase-1 wrong PIN not rejected");
             }
         }
-        if !check_sync!("phase-1 after wrong", 1u8, 1u32) {
-            fail!("phase-1: MCU or E120 not at 1 after wrong PIN");
+        if !check_sync!("phase-1 after wrong", 1u8, 1u32, max_rem - 1) {
+            fail!("phase-1: MCU / E120 / SE050 not all +1 after wrong PIN");
         }
 
         match nsc::gated_unlock(se, &correct_pin) {
@@ -1080,24 +1113,24 @@ fn main() -> ! {
                 fail!("phase-1 correct PIN rejected");
             }
         }
-        if !check_sync!("phase-1 after correct", 0u8, 0u32) {
+        if !check_sync!("phase-1 after correct", 0u8, 0u32, max_rem) {
             fail!("phase-1: counters did not reset on correct PIN");
         }
         secure_log!("[S] [E2E-SYNC] phase-1: normal sync OK");
 
         // ── Phase 2: MCU-ahead desync recovery ─────────────────────
-        // Direct MCU bumps leave OPTIGA untouched — simulates a flash
-        // corruption / partial-write scenario where the MCU counter
-        // got ahead of silicon.
+        // Direct MCU bumps leave OPTIGA and SE050 untouched — simulates
+        // a flash corruption / partial-write scenario where the MCU
+        // counter got ahead of silicon.
         hw::flash::pin_attempts_bump().ok();
         hw::flash::pin_attempts_bump().ok();
-        if !check_sync!("phase-2 desync (MCU ahead)", 2u8, 0u32) {
+        if !check_sync!("phase-2 desync (MCU ahead)", 2u8, 0u32, max_rem) {
             fail!("phase-2 desync setup failed");
         }
 
-        // Correct PIN: MCU pre-check passes (2 < 3), bumps to 3,
-        // SE.unlock succeeds (E120 bumps to 1 via LUC, firmware resets
-        // to 0), MCU resets to 0.
+        // Correct PIN: MCU pre-check passes, MCU bumps, SE.unlock
+        // succeeds, firmware resets E120 to 0, SE050 chip auto-resets
+        // on successful auth (cache mirrors), MCU resets to 0.
         match nsc::gated_unlock(se, &correct_pin) {
             Ok(_) => {}
             other => {
@@ -1105,16 +1138,17 @@ fn main() -> ! {
                 fail!("phase-2 recovery PIN rejected");
             }
         }
-        if !check_sync!("phase-2 after recovery", 0u8, 0u32) {
+        if !check_sync!("phase-2 after recovery", 0u8, 0u32, max_rem) {
             fail!("phase-2: counters not synced after recovery");
         }
         secure_log!("[S] [E2E-SYNC] phase-2: MCU-ahead desync recovered OK");
 
         // ── Phase 3: OPTIGA-ahead desync recovery ──────────────────
         // Direct call to se.optiga.unlock bypasses gated_unlock, so
-        // MCU stays at 0 while LUC silicon bumps E120. Simulates an
-        // attacker with PBS who can replay HMAC-verify APDUs directly
-        // against the chip without touching MCU flash.
+        // MCU stays at 0 and SE050 stays untouched while LUC silicon
+        // bumps E120. Simulates an attacker with PBS who can replay
+        // HMAC-verify APDUs directly against the OPTIGA chip without
+        // touching MCU flash or triggering SE050 auth.
         match se.optiga.unlock(&wrong_pin) {
             Err(UnlockError::PinIncorrect) => {}
             other => {
@@ -1122,7 +1156,7 @@ fn main() -> ! {
                 fail!("phase-3 direct optiga.unlock did not reject");
             }
         }
-        if !check_sync!("phase-3 desync (OPTIGA ahead)", 0u8, 1u32) {
+        if !check_sync!("phase-3 desync (OPTIGA ahead)", 0u8, 1u32, max_rem) {
             fail!("phase-3 desync setup: E120 did not bump");
         }
 
@@ -1133,10 +1167,47 @@ fn main() -> ! {
                 fail!("phase-3 recovery PIN rejected");
             }
         }
-        if !check_sync!("phase-3 after recovery", 0u8, 0u32) {
+        if !check_sync!("phase-3 after recovery", 0u8, 0u32, max_rem) {
             fail!("phase-3: counters not synced after recovery");
         }
         secure_log!("[S] [E2E-SYNC] phase-3: OPTIGA-ahead desync recovered OK");
+
+        // ── Phase 4: SE050-ahead desync recovery ────────────────────
+        // Direct call to se.se050.unlock bypasses gated_unlock and
+        // never touches OPTIGA — so MCU stays at 0, E120 stays at 0,
+        // but SE050's silicon UserID counter decrements by 1 and the
+        // driver's `self.remaining` cache mirrors. Simulates an
+        // attacker with SCP03 session keys who replays VerifySession
+        // UserID APDUs against the SE050 chip directly.
+        //
+        // Recovery path: gated_unlock(correct_pin) → MCU pre-bump,
+        // DualSecureElement::unlock runs OPTIGA first (HMAC succeeds,
+        // firmware resets E120 to 0) then SE050 (UserID auth succeeds,
+        // chip auto-resets its attempt counter to max_attempts, cache
+        // follows). MCU resets to 0 on success. All three back to
+        // their full-budget state.
+        match se.se050.unlock(&wrong_pin) {
+            Err(UnlockError::PinIncorrect) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-4 direct-wrong: got {:?}", other.as_ref().err());
+                fail!("phase-4 direct se050.unlock did not reject");
+            }
+        }
+        if !check_sync!("phase-4 desync (SE050 ahead)", 0u8, 0u32, max_rem - 1) {
+            fail!("phase-4 desync setup: SE050 remaining did not decrement");
+        }
+
+        match nsc::gated_unlock(se, &correct_pin) {
+            Ok(_) => {}
+            other => {
+                secure_log!("[S] [E2E-SYNC] phase-4 recovery: got {:?}", other.as_ref().err());
+                fail!("phase-4 recovery PIN rejected");
+            }
+        }
+        if !check_sync!("phase-4 after recovery", 0u8, 0u32, max_rem) {
+            fail!("phase-4: counters not synced after recovery");
+        }
+        secure_log!("[S] [E2E-SYNC] phase-4: SE050-ahead desync recovered OK");
 
         secure_log!("[S] [E2E-SYNC] SYNC+DESYNC ROUNDTRIP: PASS");
         ui::show_status("SYNC", "PASS");

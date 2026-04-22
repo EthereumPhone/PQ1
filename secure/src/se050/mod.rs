@@ -100,6 +100,15 @@ pub struct Se050 {
     vk_cached: bool,
     bootstrap_vk_cache: [u8; 32],
     bootstrap_vk_cached: bool,
+    /// In-RAM mirror of the SE050 UserID remaining-attempts counter.
+    /// Display cache only — never a control-flow gate. The chip's own
+    /// UserID counter is authoritative and durable across reboots;
+    /// this field resets to `MAX_ATTEMPTS` in the driver constructor
+    /// and on every successful unlock, so after a power cycle with
+    /// prior failures the cache can temporarily report more remaining
+    /// than the chip. The next successful unlock re-syncs both to
+    /// `MAX_ATTEMPTS` (chip auto-resets on success, cache mirrors).
+    /// Do NOT promote this value to a lockout or skip-SE gate.
     remaining: u8,
 }
 

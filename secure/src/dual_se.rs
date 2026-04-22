@@ -109,28 +109,54 @@ impl WalletStore for DualSecureElement {
     }
 
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
-        // Unlock OPTIGA Trust M first (HMAC auth reference). OPTIGA
-        // stores master_secret explicitly so `unlock` returns what
-        // provision wrote — this is the authoritative value used for
-        // the consistency check below and for the final return.
-        let master_o = self.optiga.unlock(pin)?;
-
-        // Unlock SE050 (UserID PIN). SE050 stores only its entropy
-        // half, not master_secret, so the master_secret value its
-        // `unlock` derives (`kdf("sphincs-master", half_e, 0)`) is
-        // meaningful only in single-SE mode where `entropy = full
-        // entropy`. In dual-SE it's just "auth succeeded" — we
-        // discard the return value and rely on the full-entropy
-        // consistency check further down.
+        // Three-counter lockstep: call SE050 on every PIN attempt,
+        // even when OPTIGA rejects it, so SE050's UserID silicon
+        // counter advances in sync with MCU page-124 and OPTIGA E120
+        // LUC. Skip SE050 only on a non-PIN OPTIGA error (I2C /
+        // session fault) — don't burn an SE050 silicon attempt slot
+        // for a transient comm glitch.
         //
-        // If SE050 unlock fails, OPTIGA has already consumed an
-        // attempt. The dual-chip PIN lockout sync (intent log) is a
-        // separate hardening item — for now, best-effort.
-        let master_e = self.se050.unlock(pin).map_err(|e| {
-            let mut m = master_o;
-            m.zeroize();
-            e
-        })?;
+        // OPTIGA stores master_secret explicitly; its `unlock` returns
+        // what provision wrote — this is the authoritative value for
+        // the consistency check below and for the final return.
+        // SE050's `unlock` returns `kdf("sphincs-master", half_e, 0)`
+        // which is meaningful here as the decrypt key for SE050's own
+        // entropy_blob cache (different from OPTIGA's master).
+        let optiga_result = self.optiga.unlock(pin);
+
+        let se050_result = match &optiga_result {
+            Ok(_) | Err(UnlockError::PinIncorrect) => {
+                Some(self.se050.unlock(pin))
+            }
+            Err(_) => None,
+        };
+
+        // Resolve OPTIGA first. If OPTIGA rejected the PIN, zeroize
+        // any master SE050 accidentally returned (pathological
+        // desync: PIN matched SE050 but not OPTIGA — chip-swap or
+        // out-of-band SE050 reset scenario) and propagate the OPTIGA
+        // error to the caller BEFORE any downstream SE050 read path.
+        let master_o = match optiga_result {
+            Ok(mo) => mo,
+            Err(e) => {
+                if let Some(Ok(mut me)) = se050_result {
+                    me.zeroize();
+                }
+                return Err(e);
+            }
+        };
+
+        // OPTIGA accepted → SE050 was called. Resolve its result.
+        let master_e = match se050_result
+            .expect("OPTIGA Ok branch always calls SE050")
+        {
+            Ok(me) => me,
+            Err(e) => {
+                let mut m = master_o;
+                m.zeroize();
+                return Err(e);
+            }
+        };
         // Keep master_e alive — it's the key SE050 used to encrypt
         // its own entropy_blob cache. Zeroize after decrypt below.
 
