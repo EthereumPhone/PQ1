@@ -1470,6 +1470,31 @@ pin-gate-hw-counter-e2e:
 	@echo "==> Running combined sync + desync e2e (watch for SYNC+DESYNC ROUNDTRIP: PASS)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+pin-gate-wipe-e2e:
+	@echo "==> Building MCU-MAX-ATTEMPTS lockout-wipe dispatch e2e firmware..."
+	@echo "    DESTRUCTIVE: burns 10 wrong PINs → SE050 UserID silicon-locks,"
+	@echo "    MCU counter saturates, E120 LUC at 10. Then fires"
+	@echo "    factory_reset_admin + pin_attempts_reset to prove the lockout-"
+	@echo "    wipe dispatch path end-to-end. Re-provisions at the end to"
+	@echo "    prove recovery. Does NOT bump any OID to LcsO=Operational."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features pin-gate-wipe-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running wipe dispatch e2e (watch for WIPE+RECOVERY ROUNDTRIP: PASS)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 pin-gate-e2e:
 	@echo "==> Building PIN-gate roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."

@@ -1294,6 +1294,201 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ==================== pin-gate-wipe-e2e ====================
+    //
+    // End-to-end validation of the MCU-MAX-ATTEMPTS → lockout-wipe
+    // dispatch path under real dual-SE silicon. Burns 10 wrong PINs
+    // through `gated_unlock` until all three counters saturate
+    // (MCU=10, E120=10, SE050 UserID chip-locked), then fires
+    // `factory_reset_admin` + `pin_attempts_reset` — the same steps
+    // `trigger_lockout_wipe` in `cmd_request_unlock` performs — and
+    // verifies the device is back to an unprovisioned state that a
+    // fresh first-boot wizard could re-provision.
+    //
+    // What this proves that `pin-gate-e2e` and `pin-gate-hw-counter-e2e`
+    // do not:
+    //   - MCU counter reaching MAX_ATTEMPTS in a combined flow where
+    //     the SE050 UserID silicon-lock fires on the same attempt.
+    //   - `factory_reset_admin` successfully deletes a silicon-locked
+    //     user UserID via the admin UserID (max_attempts=0 unlimited).
+    //   - Post-wipe MCU counter erase works.
+    //   - Re-provision after wipe succeeds (recovery proven).
+    //
+    // Destructive but recoverable:
+    //   - SE050 user UserID locks at attempt 10, then gets deleted by
+    //     `factory_reset_admin` and re-created with a fresh attempt
+    //     budget during re-provision.
+    //   - OPTIGA E120 goes from 0 → 10. Still inside the 32 limit, so
+    //     no lockout at the E120 layer. Reset to 0 by `reset_hw_pin_counter`
+    //     on the next correct PIN after re-provision.
+    //   - MCU page 124 takes 10 QW-programs + 1 erase per run. Well
+    //     inside flash wear budget.
+    //
+    // Triggered by: make pin-gate-wipe-e2e
+    #[cfg(feature = "pin-gate-wipe-e2e")]
+    unsafe {
+        use crate::secure_element::{UnlockError, WalletStore};
+
+        ui::show_status("WIPE e2e", "start");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+
+        let test_entropy: [u8; 32] = [0x42; 32];
+        let test_master = crypto::kdf(b"sphincs-master", &test_entropy, 0);
+        let test_vk: [u8; 32] = [0xCC; 32];
+        let test_bvk: [u8; 32] = [0xDD; 32];
+        let correct_pin: [u8; 8] = *b"00000000";
+        let wrong_pin: [u8; 8] = *b"99999999";
+
+        macro_rules! wfail { ($msg:expr) => {{
+            secure_log!("[S] [E2E-WIPE] FAIL: {}", $msg);
+            ui::show_status("WIPE", "FAIL");
+            loop { cortex_m::asm::wfi(); }
+        }}}
+
+        // ── Setup: pre-clean + provision ──
+        //
+        // We deliberately do NOT do a clean-unlock here to verify the
+        // post-provision XOR-consistency. On a chip that survived
+        // several prior test runs, SE050's `store_objects` idempotency
+        // (skip-if-exists for ENTROPY_OBJ / VK_OBJ / BOOTSTRAP_VK_OBJ)
+        // means a partially-failed earlier `factory_reset_admin` can
+        // leave stale `half_e` on SE050. Combined with a fresh random
+        // `half_o` on OPTIGA, `half_o XOR half_e ≠ test_entropy` and
+        // the unlock fails CRITICAL.
+        //
+        // For the wipe test specifically this doesn't matter: the
+        // 10 wrong-PIN iterations below exercise the **failure path**
+        // of SE050 auth, which decrements the chip counter without
+        // involving the XOR check. What we actually need to prove is
+        // (a) counters advance in lockstep on wrong PIN even with
+        // stale half_e, (b) the wipe-dispatch path fires at MAX, and
+        // (c) post-wipe re-provision + clean-unlock works on a truly
+        // clean chip. (c) is where the XOR check must pass, and the
+        // post-wipe state guarantees it.
+        let _ = hw::flash::pin_attempts_reset();
+        secure_log!("[S] [E2E-WIPE] setup: pre-cleaning SE050 user objects");
+        let _ = se.factory_reset_admin();
+
+        if let Err(_e) = se.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &correct_pin) {
+            wfail!("setup: provision returned error");
+        }
+
+        // Capture initial counters — these may not be (0, 0, MAX) if
+        // prior runs left non-zero silicon state on E120 / SE050.
+        // Iteration deltas below compare relative to these baselines.
+        let mcu_init = hw::flash::pin_attempts_read();
+        let e120_init = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let se050_init = se.se050.remaining_attempts();
+        secure_log!(
+            "[SYNC] wipe-e2e setup-init: MCU={} E120.curr={} SE050.rem={} (baseline)",
+            mcu_init, e120_init, se050_init
+        );
+        if mcu_init != 0 {
+            wfail!("setup: pin_attempts_reset did not zero MCU counter");
+        }
+
+        // ── Burn MAX_ATTEMPTS wrong PINs through gated_unlock ──
+        // The 10th failed attempt leaves SE050's UserID silicon-locked
+        // (chip decrements from 1 → 0, permalock).
+        let max = sphincs_tz_shared::MAX_ATTEMPTS;
+        for i in 1..=max {
+            match nsc::gated_unlock(se, &wrong_pin) {
+                Err(UnlockError::PinIncorrect) => {}
+                Err(UnlockError::PinLocked) => {
+                    secure_log!("[S] [E2E-WIPE] iter {}: early PinLocked (MCU already at MAX?)", i);
+                    wfail!("early PinLocked before full burn");
+                }
+                other => {
+                    secure_log!("[S] [E2E-WIPE] iter {}: unexpected {:?}", i, other.as_ref().err());
+                    wfail!("wrong PIN did not return PinIncorrect");
+                }
+            }
+            let mcu = hw::flash::pin_attempts_read();
+            let e120 = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+            let se050 = se.se050.remaining_attempts();
+            secure_log!(
+                "[E2E-WIPE] iter {}/{}: MCU={} E120.curr={} SE050.rem={}",
+                i, max, mcu, e120, se050
+            );
+            // Delta checks: MCU counts up from 0; E120 advances by +1
+            // per iter (LUC silicon-side) regardless of starting value;
+            // SE050 counts down from its initial, saturating at 0.
+            let expected_mcu = i as u8;
+            let expected_e120 = e120_init + i as u32;
+            let expected_se050 = se050_init.saturating_sub(i as u8);
+            if mcu != expected_mcu || e120 != expected_e120 || se050 != expected_se050 {
+                secure_log!(
+                    "[E2E-WIPE] iter {}: mismatch expected MCU={} E120={} SE050={}",
+                    i, expected_mcu, expected_e120, expected_se050
+                );
+                wfail!("counter delta mismatch during burn");
+            }
+        }
+
+        // ── Verify counters saturated at expected values ──
+        let mcu_end = hw::flash::pin_attempts_read();
+        let e120_end = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let se050_end = se.se050.remaining_attempts();
+        let expected_e120_end = e120_init + max as u32;
+        secure_log!(
+            "[SYNC] wipe-e2e post-burn: MCU={} E120.curr={} SE050.rem={} (expected {}, {}, 0)",
+            mcu_end, e120_end, se050_end, max, expected_e120_end
+        );
+        if mcu_end != max || e120_end != expected_e120_end || se050_end != 0 {
+            wfail!("post-burn: counters did not saturate");
+        }
+
+        // ── Verify gated_unlock now gates via MCU pre-check ──
+        // 11th attempt should short-circuit: pre_count >= MAX → PinLocked
+        // without touching either SE.
+        match nsc::gated_unlock(se, &correct_pin) {
+            Err(UnlockError::PinLocked) => {}
+            other => {
+                secure_log!("[S] [E2E-WIPE] post-burn gate: got {:?}", other.as_ref().err());
+                wfail!("post-burn gate did not return PinLocked");
+            }
+        }
+        secure_log!("[S] [E2E-WIPE] MCU pre-check lockout gate OK");
+
+        // ── Fire the wipe (mirror of cmd_request_unlock::trigger_lockout_wipe) ──
+        ui::show_status("WIPING", "do not power off");
+        secure_log!("[S] [E2E-WIPE] invoking factory_reset_admin");
+        if let Err(e) = se.factory_reset_admin() {
+            secure_log!("[S] [E2E-WIPE] factory_reset_admin FAILED: {:?}", e);
+            wfail!("factory_reset_admin error");
+        }
+        let _ = hw::flash::pin_attempts_reset();
+        nsc::zeroize_sensitive_state();
+
+        // ── Verify wiped state ──
+        let mcu_post = hw::flash::pin_attempts_read();
+        if mcu_post != 0 {
+            secure_log!("[S] [E2E-WIPE] MCU counter not erased: {}", mcu_post);
+            wfail!("MCU counter not zero after wipe");
+        }
+        secure_log!("[S] [E2E-WIPE] MCU counter erased OK");
+
+        // ── Recovery proof: re-provision and do one clean unlock ──
+        if let Err(_e) = se.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &correct_pin) {
+            wfail!("post-wipe re-provision FAILED");
+        }
+        if nsc::gated_unlock(se, &correct_pin).is_err() {
+            wfail!("post-wipe unlock FAILED");
+        }
+        let se050_recovered = se.se050.remaining_attempts();
+        secure_log!(
+            "[SYNC] wipe-e2e post-recovery: MCU=0 E120=0 SE050.rem={} (expected {})",
+            se050_recovered, max
+        );
+        if se050_recovered != max {
+            wfail!("post-recovery: SE050 UserID budget not restored");
+        }
+
+        secure_log!("[S] [E2E-WIPE] WIPE+RECOVERY ROUNDTRIP: PASS");
+        ui::show_status("WIPE", "PASS");
+        loop { cortex_m::asm::wfi(); }
+    }
+
     #[cfg(feature = "optiga-admin-wipe-e2e")]
     unsafe {
         ui::show_status("OPTIGA wipe", "running...");
