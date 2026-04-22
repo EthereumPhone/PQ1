@@ -1293,6 +1293,20 @@ optiga-reset-oids:
 
 flash-hw-optiga-reset: optiga-reset-oids
 	@echo "==> Building firmware with optiga-reset-oids"
+	@echo ""
+	@echo "    ### DOES NOT WORK ON TRUSTMV3SHIELDTOBO1 ###"
+	@echo "    Verified 2026-04-22: all 17 target OIDs return Status(0xFF)"
+	@echo "    because E0E3 on this shield is Infineon's device cert slot"
+	@echo "    (DataType 0x12), not a mutable Trust Anchor slot (0x11)."
+	@echo "    SetDataObject accepts our TA cert bytes but the chip does"
+	@echo "    not promote the slot to act as a TA, so every subsequent"
+	@echo "    SetObjectProtected manifest fails signature verification."
+	@echo "    See memory/project_optiga_reset_oids.md for full trace."
+	@echo ""
+	@echo "    Continue only if you have a DIFFERENT OPTIGA chip where"
+	@echo "    E0E3 is known-blank (fresh engineering samples). Ctrl-C"
+	@echo "    now to abort."
+	@echo ""
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW) -C debug-assertions=on" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
