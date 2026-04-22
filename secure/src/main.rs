@@ -1549,35 +1549,57 @@ fn main() -> ! {
     //     cycling the board is enough — no re-flash needed.
     //
     // Triggered by: `make wipe-for-wizard`
+    //
+    // Idempotency: this block checks the provisioned state of both
+    // SEs first. Provisioned → wipe + show "WIPED" + halt so the
+    // developer can intentionally power-cycle into a clean boot.
+    // Unprovisioned → skip wipe entirely and fall through to the
+    // normal main() flow, which triggers `run_first_boot_wizard()`
+    // at line ~1745 (gated on `not(feature = "e2e-test")` — we use
+    // `dev-testkey` here precisely to keep that branch live).
+    //
+    // The two-boot loop is:
+    //   - Boot 1 (chip provisioned from prior state): wipe, halt.
+    //     User power-cycles.
+    //   - Boot 2 (chip now unprovisioned): skip wipe, fall through
+    //     to the interactive wizard, user enters fresh seed + PIN.
     #[cfg(feature = "wipe-for-wizard")]
     unsafe {
         use crate::secure_element::WalletStore;
 
-        ui::show_status("WIPE", "running...");
         let se = &mut *core::ptr::addr_of_mut!(SE);
 
-        secure_log!("[S] [WIPE] dispatching factory_reset_admin on both chips");
-        if let Err(e) = se.factory_reset_admin() {
-            secure_log!("[S] [WIPE] factory_reset_admin FAILED: {:?}", e);
-            ui::show_status("WIPE FAIL", "see semihosting");
+        if se.is_provisioned() {
+            ui::show_status("WIPE", "running...");
+            secure_log!("[S] [WIPE] chip provisioned — dispatching factory_reset_admin");
+
+            if let Err(e) = se.factory_reset_admin() {
+                secure_log!("[S] [WIPE] factory_reset_admin FAILED: {:?}", e);
+                ui::show_status("WIPE FAIL", "see semihosting");
+                loop { cortex_m::asm::wfi(); }
+            }
+
+            // MCU-side PIN counter erase. SE050 side owns page 125 via
+            // its conditional erase inside factory_reset_admin; we only
+            // touch page 124 here.
+            #[cfg(feature = "stm32u585")]
+            if let Err(e) = hw::flash::pin_attempts_reset() {
+                secure_log!("[S] [WIPE] pin_attempts_reset FAILED: {:?}", e);
+                ui::show_status("WIPE FAIL", "MCU page 124");
+                loop { cortex_m::asm::wfi(); }
+            }
+
+            nsc::zeroize_sensitive_state();
+
+            secure_log!("[S] [WIPE] complete — power-cycle to start wizard");
+            ui::show_status("WIPED", "power-cycle me");
             loop { cortex_m::asm::wfi(); }
+        } else {
+            secure_log!("[S] [WIPE] chip already unprovisioned — skipping wipe, falling through to wizard");
+            // Fall through to the normal main() flow. The first-boot
+            // wizard block at line ~1745 will run because the chip
+            // reports unprovisioned.
         }
-
-        // MCU-side PIN counter erase. SE050 side owns page 125 via
-        // its conditional erase inside factory_reset_admin; we only
-        // touch page 124 here.
-        #[cfg(feature = "stm32u585")]
-        if let Err(e) = hw::flash::pin_attempts_reset() {
-            secure_log!("[S] [WIPE] pin_attempts_reset FAILED: {:?}", e);
-            ui::show_status("WIPE FAIL", "MCU page 124");
-            loop { cortex_m::asm::wfi(); }
-        }
-
-        nsc::zeroize_sensitive_state();
-
-        secure_log!("[S] [WIPE] complete — power-cycle to start wizard");
-        ui::show_status("WIPED", "power-cycle me");
-        loop { cortex_m::asm::wfi(); }
     }
 
     #[cfg(feature = "optiga-admin-wipe-e2e")]

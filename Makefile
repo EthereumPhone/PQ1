@@ -1501,16 +1501,17 @@ wipe-for-wizard:
 	@echo "    SE050 user objects + admin UserID, MCU page 124."
 	@echo "    PRESERVES: STM32 OTP master, OPTIGA E140 PBS, all OID"
 	@echo "    metadata (LcsO stays at Creation), resident firmware."
-	@echo "    Next power-cycle boots straight into the first-boot"
-	@echo "    wizard — no re-flash needed."
+	@echo "    Boot 1: wipes + halts on 'WIPED — power-cycle me'."
+	@echo "    Boot 2 (after power-cycle): drops into interactive"
+	@echo "    first-boot wizard for fresh mnemonic + PIN entry."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features wipe-for-wizard,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+		--features wipe-for-wizard,stm32u585,debug-log
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585
 	@echo "==> Flashing..."
 	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
 	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
@@ -1518,7 +1519,7 @@ wipe-for-wizard:
 	@STM32_Programmer_CLI --connect port=SWD \
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
-	@echo "==> Running wipe (watch OLED / semihosting for 'WIPED — power-cycle me')..."
+	@echo "==> Running wipe (watch OLED for 'WIPED — power-cycle me')..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 pin-gate-e2e:
