@@ -739,6 +739,26 @@ impl OptigaTrustM {
             return Err(e);
         }
 
+        // Diagnostic readback: OPTIGA is known to accept SetMetadata APDUs
+        // on unsupported AC constructs (returns OK, stores nothing). Log
+        // what the chip actually stored so we can compare against the
+        // "proposed" bytes and catch silent rejections.
+        let mut after_meta = [0u8; 128];
+        match apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, &mut after_meta,
+        ) {
+            Ok(n) => {
+                secure_log!(
+                    "[OPTIGA/prov] F1D0 readback metadata ({}B): {:02x?}",
+                    n, &after_meta[..n.min(64)]
+                );
+            }
+            Err(e) => {
+                secure_log!("[OPTIGA/prov] F1D0 readback FAILED: {:?}", e);
+            }
+        }
+
         secure_log!("[OPTIGA/prov] auth_ref: lock_oid");
         if let Err(e) = self.lock_oid(apdu::OID_AUTH_REF) {
             secure_log!("[OPTIGA/prov] auth_ref lock FAILED: {:?}", e);
@@ -848,7 +868,52 @@ impl OptigaTrustM {
     /// but mirrors the `provision_user_oid` observation that the
     /// reverse order triggers Status=0xff on some chips.
     #[cfg(feature = "optiga-hw-counter")]
-    unsafe fn provision_hw_pin_counter(&mut self, limit: u32) -> Result<(), OptigaError> {
+    unsafe fn provision_hw_pin_counter(
+        &mut self,
+        limit: u32,
+        pin_secret: &[u8; 32],
+    ) -> Result<(), OptigaError> {
+        // Idempotency pre-check: if E120 metadata is already exactly
+        // what we'd install (Change=Auto(F1D0), Exec=ALW), the chip is
+        // already correctly provisioned from a previous run — further
+        // writes would be rejected because Change=Auto(F1D0) isn't
+        // satisfied until PIN auth succeeds. This also serves as the
+        // advisor-requested readback diagnostic for the metadata
+        // actually stored on the chip.
+        let mut pre_meta = [0u8; 128];
+        let pre_len = apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, &mut pre_meta,
+        ).unwrap_or(0);
+        secure_log!(
+            "[OPTIGA/prov] hw-ctr 0x{:04x} pre-read metadata ({}B): {:02x?}",
+            apdu::OID_PIN_CTR, pre_len, &pre_meta[..pre_len.min(64)]
+        );
+        let change_ok = pre_len > 0
+            && apdu::metadata_change_is_auto_authref(&pre_meta, pre_len);
+        let exec_ok = pre_len > 0
+            && apdu::metadata_execute_is_always(&pre_meta, pre_len);
+        if change_ok && exec_ok {
+            secure_log!(
+                "[OPTIGA/prov] hw-ctr 0x{:04x} already provisioned correctly (Change=Auto(F1D0), Exec=ALW) — skipping writes",
+                apdu::OID_PIN_CTR
+            );
+            return Ok(());
+        }
+        if change_ok && !exec_ok {
+            // BROKEN STATE: previous provisioning run wrote Exec=NEV
+            // which blocks LUC from being able to increment E120 on
+            // F1D0 DecryptSym. Recovery is possible because F1D0's
+            // Change=ALW — we can temporarily strip the LUC binding,
+            // auth via the non-LUC shape, then rewrite E120 metadata
+            // with the correct Exec=ALW. See recover_hw_counter_metadata.
+            secure_log!(
+                "[OPTIGA/prov] hw-ctr 0x{:04x} BROKEN (Change=Auto(F1D0) but Exec!=ALW) — running recovery",
+                apdu::OID_PIN_CTR
+            );
+            return self.recover_hw_counter_metadata(pin_secret);
+        }
+
         let data = apdu::encode_pin_ctr(0, limit);
         secure_log!(
             "[OPTIGA/prov] hw-ctr 0x{:04x}: set_data ({}B, limit={})",
@@ -889,12 +954,117 @@ impl OptigaTrustM {
             secure_log!("[OPTIGA/prov] hw-ctr set_metadata FAILED: {:?}", e);
             return Err(e);
         }
+
+        // Diagnostic readback: same silent-accept concern as F1D0 —
+        // OPTIGA may take unsupported AC constructs and not store them.
+        let mut after_meta = [0u8; 128];
+        match apdu::get_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, &mut after_meta,
+        ) {
+            Ok(n) => {
+                secure_log!(
+                    "[OPTIGA/prov] hw-ctr 0x{:04x} readback metadata ({}B): {:02x?}",
+                    apdu::OID_PIN_CTR, n, &after_meta[..n.min(64)]
+                );
+            }
+            Err(e) => {
+                secure_log!(
+                    "[OPTIGA/prov] hw-ctr 0x{:04x} readback FAILED: {:?}",
+                    apdu::OID_PIN_CTR, e
+                );
+            }
+        }
+
         // Deliberately NOT locking to LcsO=Op. Change AC is already
         // Auto(OID_AUTH_REF) and enforced at Creation too (per the
         // store_objects comment at mod.rs:731); locking would only
         // freeze the metadata shape, not the data. Keeping LcsO at
         // Creation leaves room for a future firmware to widen the
         // threshold without a factory-reset pass.
+        Ok(())
+    }
+
+    /// Repair a chip whose E120 metadata was installed with the wrong
+    /// Execute AC (NEV instead of ALW) by an earlier buggy provisioning
+    /// run. Only reachable from `provision_hw_pin_counter` when the
+    /// metadata readback says `Change=Auto(F1D0)` AND Exec is not ALW.
+    ///
+    /// Path exists because F1D0's Change AC is ALW — we can strip the
+    /// LUC binding from F1D0 metadata without authentication, auth via
+    /// the legacy 64-byte DecryptSym shape (which works because LUC is
+    /// no longer on F1D0's Execute AC), then with F1D0 auth-state
+    /// active satisfy E120's Change=Auto(F1D0) to install correct
+    /// metadata, finally restore the LUC binding on F1D0.
+    ///
+    /// On success, the chip's E120 has Exec=ALW and F1D0's Execute AC
+    /// is LUC(E120) again — the state we should have produced on fresh
+    /// provisioning. On failure, F1D0 may be left in the no-LUC variant
+    /// but the chip is still usable for PIN auth (just without silicon
+    /// counter enforcement).
+    #[cfg(feature = "optiga-hw-counter")]
+    unsafe fn recover_hw_counter_metadata(
+        &mut self,
+        pin_secret: &[u8; 32],
+    ) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+
+        // Step 1: strip LUC from F1D0. Allowed: F1D0 Change=ALW.
+        secure_log!("[OPTIGA/recover] step 1: rewrite F1D0 metadata without LUC");
+        let (no_luc_meta, no_luc_len) = apdu::build_metadata_auth_ref();
+        apdu::set_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, &no_luc_meta[..no_luc_len],
+        )?;
+
+        // Step 2: auth via legacy 64B DecryptSym shape. Only possible
+        // because F1D0 no longer has LUC binding after step 1.
+        secure_log!("[OPTIGA/recover] step 2: auth F1D0 via legacy 64B shape");
+        let mut host_nonce = [0u8; 16];
+        let mut host_tag = [0u8; 16];
+        crate::rng::fill(&mut host_nonce).map_err(|_| OptigaError::Transport)?;
+        crate::rng::fill(&mut host_tag).map_err(|_| OptigaError::Transport)?;
+        let mut chip_random = [0u8; 32];
+        apdu::generate_auth_code(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_SESSION, &host_nonce, &mut chip_random,
+        )?;
+        let mut hmac_input = [0u8; 64];
+        hmac_input[..16].copy_from_slice(&host_nonce);
+        hmac_input[16..48].copy_from_slice(&chip_random);
+        hmac_input[48..].copy_from_slice(&host_tag);
+        let mut hmac = Self::hmac_sha256(pin_secret, &hmac_input);
+        let verify_result = apdu::hmac_verify(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, apdu::OID_SESSION,
+            &hmac_input, &hmac,
+        );
+        hmac.zeroize();
+        hmac_input.zeroize();
+        host_nonce.zeroize();
+        host_tag.zeroize();
+        chip_random.zeroize();
+        verify_result?;
+        secure_log!("[OPTIGA/recover] step 2: auth OK");
+
+        // Step 3: rewrite E120 metadata. F1D0 auth-state active in
+        // session so Change=Auto(F1D0) is satisfied.
+        secure_log!("[OPTIGA/recover] step 3: rewrite E120 metadata with Exec=ALW");
+        let (e120_meta, e120_len) = apdu::build_metadata_pin_ctr();
+        apdu::set_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_PIN_CTR, &e120_meta[..e120_len],
+        )?;
+
+        // Step 4: restore LUC binding on F1D0. Change=ALW still.
+        secure_log!("[OPTIGA/recover] step 4: restore F1D0 LUC binding");
+        let (luc_meta, luc_len) = apdu::build_metadata_auth_ref_luc();
+        apdu::set_metadata(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_AUTH_REF, &luc_meta[..luc_len],
+        )?;
+
+        secure_log!("[OPTIGA/recover] complete — hw-counter metadata fixed");
         Ok(())
     }
 
@@ -1036,14 +1206,21 @@ impl OptigaTrustM {
         //     BEFORE auth_ref — the F1D0 Execute AC will reference E120
         //     via LUC, and the one-way LcsO ratchet on F1D0 means we
         //     only get one shot at getting that reference right.
+        //     Passes pin_secret so the recovery path (when a prior
+        //     buggy provisioning left Exec=NEV on E120) can authenticate
+        //     against F1D0 before rewriting E120 metadata.
         #[cfg(feature = "optiga-hw-counter")]
         {
             secure_log!("[OPTIGA/prov] step 1c: provision_hw_pin_counter (E120)");
-            unsafe {
-                if let Err(e) = self.provision_hw_pin_counter(Self::HW_PIN_CTR_LIMIT) {
-                    secure_log!("[OPTIGA/prov] provision_hw_pin_counter FAILED: {:?}", e);
-                    return Err(e);
-                }
+            let pin_secret = Self::derive_pin_secret(pin);
+            let result = unsafe {
+                self.provision_hw_pin_counter(Self::HW_PIN_CTR_LIMIT, &pin_secret)
+            };
+            let mut ps = pin_secret;
+            ps.zeroize();
+            if let Err(e) = result {
+                secure_log!("[OPTIGA/prov] provision_hw_pin_counter FAILED: {:?}", e);
+                return Err(e);
             }
             #[cfg(feature = "stm32u585")]
             {
@@ -1230,64 +1407,103 @@ impl OptigaTrustM {
                 }
             };
 
-            // 4. Acquire auth-code session + HMAC verify, mirroring the
-            //    reference `example_optiga_hmac_verify_with_authorization_
-            //    reference.c` layout exactly:
-            //      optional_data(16) || chip_random(32) || arbitrary_data(16) = 64 B
-            //    Chip's session at 0xE100 ends up storing
-            //    (optional_data || chip_random) = 48 B.
-            //    `hmac_verify` compares input_data[0..48] to the session
-            //    and then runs HMAC(F1D0, input_data) over the full 64 B.
-            //    Host-side: 16 B host_nonce as optional_data (CRIT-8
-            //    style entropy injection) and 16 B host_tag as arbitrary
-            //    suffix — both host-generated so a compromised chip RNG
-            //    can't control the full challenge.
-            let mut host_nonce = [0u8; 16];
-            let mut host_tag = [0u8; 16];
-            crate::rng::fill(&mut host_nonce).map_err(|_| OptigaError::Transport)?;
-            crate::rng::fill(&mut host_tag).map_err(|_| OptigaError::Transport)?;
-            let mut chip_random = [0u8; 32];
-            secure_log!("[OPTIGA/auth] GenerateAuthCode (session=0xE100, opt=16, random=32)");
-            if let Err(e) = apdu::generate_auth_code(
-                &mut self.ifx, &mut self.shield,
-                apdu::OID_SESSION,
-                &host_nonce,
-                &mut chip_random,
-            ) {
-                secure_log!("[OPTIGA/auth] GenerateAuthCode FAILED: {:?}", e);
-                return Err(e);
-            }
+            // 4. Acquire auth-code session + HMAC verify.
+            //
+            // Under `optiga-hw-counter` the wire shape must match
+            // Trezor's `optiga_set_auto_state` exactly (GetRandom with
+            // no optional_data, 16B nonce, DecryptSym with a 18B data
+            // block of `nonce_oid || nonce`). That specific shape is
+            // what triggers LUC evaluation on F1D0's Execute AC — the
+            // 64-byte compound shape used by the Infineon
+            // `hmac_verify_with_authorization_reference.c` example
+            // successfully authorizes F1D0 for subsequent reads on
+            // this silicon but does NOT advance the LUC counter.
+            // Verified 2026-04-22 by reading back stored E120 metadata
+            // (`d3 03 40 e1 20` present) while observing E120.current
+            // stayed at 0 after a failed auth.
+            //
+            // Non-hw-counter builds keep the original shape unchanged.
+            #[cfg(feature = "optiga-hw-counter")]
+            let (mut hmac, verify_result) = {
+                let mut pin_secret = Self::derive_pin_secret(pin);
 
-            // Assemble input_data exactly like the Infineon example:
-            //   input = host_nonce(16) || chip_random(32) || host_tag(16)
-            let mut hmac_input = [0u8; 64];
-            hmac_input[..16].copy_from_slice(&host_nonce);
-            hmac_input[16..48].copy_from_slice(&chip_random);
-            hmac_input[48..].copy_from_slice(&host_tag);
-            secure_log!(
-                "[OPTIGA/auth] input[0..4]={:02x}{:02x}{:02x}{:02x} (opt) / [16..20]={:02x}{:02x}{:02x}{:02x} (chip) / [48..52]={:02x}{:02x}{:02x}{:02x} (arb)",
-                hmac_input[0], hmac_input[1], hmac_input[2], hmac_input[3],
-                hmac_input[16], hmac_input[17], hmac_input[18], hmac_input[19],
-                hmac_input[48], hmac_input[49], hmac_input[50], hmac_input[51]
-            );
+                let mut nonce = [0u8; 16];
+                secure_log!("[OPTIGA/auth] GetRandom auto-state (nonce_oid=0xE100, 16B)");
+                if let Err(e) = apdu::get_random_auto_state(
+                    &mut self.ifx, &mut self.shield,
+                    apdu::OID_SESSION, &mut nonce,
+                ) {
+                    pin_secret.zeroize();
+                    secure_log!("[OPTIGA/auth] GetRandom auto-state FAILED: {:?}", e);
+                    return Err(e);
+                }
 
-            let mut pin_secret = Self::derive_pin_secret(pin);
-            let mut hmac = Self::hmac_sha256(&pin_secret, &hmac_input);
-            pin_secret.zeroize();
+                let mut hmac = Self::hmac_sha256(&pin_secret, &nonce);
+                pin_secret.zeroize();
 
-            secure_log!("[OPTIGA/auth] hmac_verify via DecryptSym (input=64B)");
-            let verify_result = apdu::hmac_verify(
-                &mut self.ifx, &mut self.shield,
-                apdu::OID_AUTH_REF,
-                apdu::OID_SESSION,
-                &hmac_input,
-                &hmac,
-            );
+                secure_log!(
+                    "[OPTIGA/auth] DecryptSym auto-state verify (key=0xF1D0, data=18B, trezor shape)"
+                );
+                let r = apdu::hmac_verify_auto_state(
+                    &mut self.ifx, &mut self.shield,
+                    apdu::OID_AUTH_REF, apdu::OID_SESSION,
+                    &nonce, &hmac,
+                );
+                nonce.zeroize();
+                (hmac, r)
+            };
+            #[cfg(not(feature = "optiga-hw-counter"))]
+            let (mut hmac, verify_result) = {
+                // Infineon "hmac_verify_with_authorization_reference"
+                // shape: input_data = host_nonce(16) || chip_random(32)
+                //                     || host_tag(16).
+                let mut host_nonce = [0u8; 16];
+                let mut host_tag = [0u8; 16];
+                crate::rng::fill(&mut host_nonce).map_err(|_| OptigaError::Transport)?;
+                crate::rng::fill(&mut host_tag).map_err(|_| OptigaError::Transport)?;
+                let mut chip_random = [0u8; 32];
+                secure_log!("[OPTIGA/auth] GenerateAuthCode (session=0xE100, opt=16, random=32)");
+                if let Err(e) = apdu::generate_auth_code(
+                    &mut self.ifx, &mut self.shield,
+                    apdu::OID_SESSION,
+                    &host_nonce,
+                    &mut chip_random,
+                ) {
+                    secure_log!("[OPTIGA/auth] GenerateAuthCode FAILED: {:?}", e);
+                    return Err(e);
+                }
+
+                let mut hmac_input = [0u8; 64];
+                hmac_input[..16].copy_from_slice(&host_nonce);
+                hmac_input[16..48].copy_from_slice(&chip_random);
+                hmac_input[48..].copy_from_slice(&host_tag);
+                secure_log!(
+                    "[OPTIGA/auth] input[0..4]={:02x}{:02x}{:02x}{:02x} (opt) / [16..20]={:02x}{:02x}{:02x}{:02x} (chip) / [48..52]={:02x}{:02x}{:02x}{:02x} (arb)",
+                    hmac_input[0], hmac_input[1], hmac_input[2], hmac_input[3],
+                    hmac_input[16], hmac_input[17], hmac_input[18], hmac_input[19],
+                    hmac_input[48], hmac_input[49], hmac_input[50], hmac_input[51]
+                );
+
+                let mut pin_secret = Self::derive_pin_secret(pin);
+                let hmac = Self::hmac_sha256(&pin_secret, &hmac_input);
+                pin_secret.zeroize();
+
+                secure_log!("[OPTIGA/auth] hmac_verify via DecryptSym (input=64B)");
+                let r = apdu::hmac_verify(
+                    &mut self.ifx, &mut self.shield,
+                    apdu::OID_AUTH_REF,
+                    apdu::OID_SESSION,
+                    &hmac_input,
+                    &hmac,
+                );
+                hmac_input.zeroize();
+                host_nonce.zeroize();
+                host_tag.zeroize();
+                chip_random.zeroize();
+                (hmac, r)
+            };
+
             hmac.zeroize();
-            hmac_input.zeroize();
-            host_nonce.zeroize();
-            host_tag.zeroize();
-            chip_random.zeroize();
 
             match verify_result {
                 Ok(()) => {

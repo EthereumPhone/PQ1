@@ -561,6 +561,103 @@ pub unsafe fn generate_auth_code(
     Ok(copy_len)
 }
 
+/// Trezor-shape GetRandom — stores exactly 16 chip-TRNG bytes into
+/// `nonce_oid`, with NO optional-data prefix, and returns the same 16
+/// bytes to the host. Paired with [`hmac_verify_auto_state`] under
+/// `optiga-hw-counter`.
+///
+/// Wire format (from
+/// `trezor-firmware/core/embed/sec/optiga/optiga_commands.c:564-574`):
+///
+/// ```text
+///   CMD   = 0x8C               (= 0x0C | CLEAR_LAST_ERROR)
+///   Param = 0x00               (TRNG source)
+///   InLen = 7
+///   InData: size(2 BE = 0x0010) | nonce_oid(2 BE) | 0x41 | 0x0000
+/// ```
+///
+/// Differs from [`generate_auth_code`] in two ways that appear to
+/// matter for LUC evaluation on OPTIGA Trust M V3:
+/// 1. No optional_data — the chip's session stores 16 bytes, not 48.
+/// 2. Request size = 16, matching the nonce length used by Trezor's
+///    PIN HMAC verify. A 32-byte request (our generate_auth_code) may
+///    push the chip onto a different internal path.
+#[cfg(feature = "optiga-hw-counter")]
+pub unsafe fn get_random_auto_state(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    nonce_oid: u16,
+    out_nonce: &mut [u8; 16],
+) -> Result<(), OptigaError> {
+    let mut ab = ApduBuf::new(CMD_GET_RANDOM, 0x00);
+    ab.write_u16(16);
+    ab.write_u16(nonce_oid);
+    ab.write_tlv(0x41, &[]); // pre-pending optional data tag, zero-length
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 64];
+    let n = send_command(ifx, shield, apdu, &mut resp)?;
+    let payload = parse_response(&resp, n)?;
+    if payload.len() < 16 {
+        return Err(OptigaError::Transport);
+    }
+    out_nonce.copy_from_slice(&payload[..16]);
+    Ok(())
+}
+
+/// Trezor-shape DecryptSym HMAC-verify — the specific APDU Trezor uses
+/// to trigger LUC evaluation on an AuthRef whose Execute AC is
+/// `LUC(counter_oid)`. Must be preceded by a call to
+/// [`get_random_auto_state`] that populated `nonce_oid` with the same
+/// 16-byte nonce we pass here.
+///
+/// Wire format (from
+/// `trezor-firmware/core/embed/sec/optiga/optiga_commands.c:585-601`):
+///
+/// ```text
+///   CMD   = 0x95               (= 0x15 | CLEAR_LAST_ERROR)
+///   Param = 0x20               (HMAC-SHA256 mode)
+///   InLen = 58
+///   InData:
+///     key_oid(2 BE)
+///     0x01                          (start + final block)
+///     data_len(2 BE) = 18
+///       nonce_oid(2 BE)
+///       nonce(16)
+///     0x43                          (verification tag)
+///     0x0020
+///     hmac(32)   // HMAC-SHA256(key, nonce_16)
+/// ```
+///
+/// Key difference from [`hmac_verify`]: data block is 18 bytes
+/// (`nonce_oid(2) | nonce(16)`) vs our compound 66 bytes. The HMAC
+/// covers only the 16-byte nonce. On Trust M V3 this is the shape
+/// that promotes the AuthRef to "auto-state active" AND evaluates
+/// `Execute = LUC(ctr)`, incrementing the counter.
+#[cfg(feature = "optiga-hw-counter")]
+pub unsafe fn hmac_verify_auto_state(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    key_oid: u16,
+    nonce_oid: u16,
+    nonce: &[u8; 16],
+    hmac: &[u8; 32],
+) -> Result<(), OptigaError> {
+    let mut ab = ApduBuf::new(CMD_DECRYPT_SYM, PARAM_HMAC_MODE);
+    ab.write_u16(key_oid);
+    ab.write_u8(SYM_SEQ_START_FINAL);
+    ab.write_u16(2 + 16); // data length = nonce_oid(2) + nonce(16) = 18
+    ab.write_u16(nonce_oid);
+    ab.write(nonce);
+    ab.write_tlv(TAG_VERIFICATION_DATA, hmac);
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 64];
+    let n = send_command(ifx, shield, apdu, &mut resp)?;
+    let _ = parse_response(&resp, n)?;
+    Ok(())
+}
+
 /// `GetRandom` with host-side XOR mixing.
 ///
 /// Even when the shielded connection encrypts the chip's reply, a
@@ -928,12 +1025,37 @@ pub fn build_metadata_pin_ctr() -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
+    // Matches Trezor `core/embed/sec/optiga/optiga.c:454-457`:
+    //   change  = ACCESS_PIN_SECRET (Auto(OID_AUTH_REF))
+    //   read    = ALWAYS
+    //   execute = ALWAYS  ← critical: LUC evaluation on F1D0 increments
+    //                       E120 by EXECUTING the counter. Exec=NEV
+    //                       blocks the increment → the entire F1D0
+    //                       DecryptSym fails with Status(0xFF) because
+    //                       the AC chain can't complete. Verified
+    //                       2026-04-22 against TRUSTMV3SHIELDTOBO1.
+    // No data_type tag — 0xE120..0xE123 are pre-configured as
+    // monotonic counters by the chip; writing DataType=UPCTR is
+    // redundant at best and Trezor does not do it.
     push_ac_auto(&mut inner, &mut c, META_CHANGE, OID_AUTH_REF);
     push_ac_simple(&mut inner, &mut c, META_READ, AC_ALW);
-    push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_NEV);
-    push_data_type(&mut inner, &mut c, DTYPE_UPCTR);
+    push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_ALW);
 
     wrap_meta(inner, c)
+}
+
+/// Returns true if the metadata's Execute AC is `ALWAYS` (`d3 01 00`).
+/// Used together with [`metadata_change_is_auto_authref`] to detect the
+/// specific broken state our first hw-counter provisioning run left
+/// behind: `Change=Auto(F1D0)` but `Execute=NEV` (instead of ALW). On a
+/// correctly-provisioned counter, both should be true; on broken state,
+/// only the Change check passes.
+#[cfg(feature = "optiga-hw-counter")]
+pub fn metadata_execute_is_always(metadata: &[u8], len: usize) -> bool {
+    match find_metadata_tag(metadata, len, META_EXECUTE) {
+        Some(v) if v.len() == 1 => v[0] == AC_ALW,
+        _ => false,
+    }
 }
 
 /// Metadata for the F1D0 AuthRef under `optiga-hw-counter`.
@@ -1086,6 +1208,25 @@ fn find_metadata_tag<'a>(metadata: &'a [u8], len: usize, tag: u8) -> Option<&'a 
 pub fn is_metadata_operational(metadata: &[u8], len: usize) -> bool {
     match find_metadata_tag(metadata, len, META_LCSO) {
         Some(v) if v.len() == 1 => v[0] == LCS_OPERATIONAL,
+        _ => false,
+    }
+}
+
+/// Returns true if the metadata's Change AC operand is `Auto(OID_AUTH_REF)`.
+/// A fresh OPTIGA OID has Change=ALW (`d0 01 00`) by default. The only
+/// way to see `d0 03 23 f1 d0` in the stored metadata is if we installed
+/// it (the hw-counter-specific metadata for E120). Used as an idempotency
+/// marker for re-runs of `provision_hw_pin_counter`: when this returns
+/// true we know the chip is already provisioned and re-writing E120 data
+/// would require PIN auth — skip instead.
+#[cfg(feature = "optiga-hw-counter")]
+pub fn metadata_change_is_auto_authref(metadata: &[u8], len: usize) -> bool {
+    match find_metadata_tag(metadata, len, META_CHANGE) {
+        Some(v) if v.len() == 3 => {
+            v[0] == AC_OP_AUTO_REF
+                && v[1] == (OID_AUTH_REF >> 8) as u8
+                && v[2] == OID_AUTH_REF as u8
+        }
         _ => false,
     }
 }
