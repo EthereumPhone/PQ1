@@ -1354,6 +1354,21 @@ impl OptigaTrustM {
                     }
                     Some((curr, limit)) => {
                         secure_log!("[OPTIGA/auth] hw-ctr = {}/{}", curr, limit);
+                        // SAFETY/COVERAGE: this gate is validated by
+                        // inspection, not by an e2e run on silicon.
+                        // Exercising it requires burning `limit` (=32)
+                        // consecutive wrong PINs on a single bench chip,
+                        // with unknown cumulative wear on the E120 OID
+                        // from repeated reset-on-success cycles. We have
+                        // one remaining provisioned TRUSTMV3SHIELDTOBO1;
+                        // the risk of an unknown-unknown on the last
+                        // bench chip outweighs the marginal coverage
+                        // versus inspection + LUC increment proven
+                        // by optiga-hw-counter-e2e. The silicon-side
+                        // LUC enforcement itself (E120 increments on
+                        // failed verify) is covered by that e2e; the
+                        // firmware-side `curr >= limit` compare is a
+                        // trivial conditional kept short on purpose.
                         if curr >= limit {
                             return Err(OptigaError::PinLocked);
                         }
