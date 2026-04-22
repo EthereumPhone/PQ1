@@ -1505,6 +1505,81 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ==================== wipe-for-wizard ====================
+    //
+    // One-shot developer wipe target. Not a test — just nukes every
+    // wallet-side piece of state so the next cold boot lands in the
+    // first-boot wizard with a clean slate. Intended for the "change
+    // my dev PIN" / "iterate on the provisioning flow" workflow,
+    // where `make factory-reset` (which also mass-erases the firmware
+    // and forces a re-flash) is heavier than needed.
+    //
+    // What this wipes:
+    //   - OPTIGA user OIDs (F1D0 AuthRef / F1D1 Entropy / F1D2 Master /
+    //     F1D3 VK / F1D4 BootstrapVK / F1E1 Counter) via
+    //     `factory_reset()` on the Conf(E140) shielded-connection
+    //     path. Inherits the Trezor-parity E120 transient-auth reset
+    //     so the silicon LUC counter returns to 0.
+    //   - SE050 user objects (ENTROPY_OBJ / VK_OBJ / BOOTSTRAP_VK_OBJ
+    //     / user UserID) + admin UserID self-delete via
+    //     `factory_reset_admin()`. This path also erases page 125
+    //     (admin PIN slot) conditionally, i.e. only if the chip
+    //     confirms the admin UserID is actually gone post-wipe — so
+    //     a partial wipe leaves the flash PIN intact for the next
+    //     boot's resume retry.
+    //   - MCU page 124 (PIN-attempt counter) via
+    //     `hw::flash::pin_attempts_reset()`.
+    //   - SRAM secret caches via `nsc::zeroize_sensitive_state()`.
+    //
+    // What this deliberately preserves (required for re-provisioning):
+    //   - STM32 OTP master (one-way by nature, survives any wipe).
+    //   - OPTIGA E140 PBS — derived from OTP master, re-established by
+    //     the shielded-connection handshake on the next boot. Stays
+    //     at LcsO=Creation.
+    //   - Every OPTIGA OID's metadata (Change / Read / Execute ACs).
+    //     We rewrite the data to zero but leave metadata alone so the
+    //     next `provision()` can write fresh data through the same
+    //     Conf(E140) AC path.
+    //   - LcsO=Creation on every OID — the non-negotiable development
+    //     invariant. This target MUST NOT imply
+    //     `optiga-lock-operational`; the feature definition in
+    //     `Cargo.toml` enforces that.
+    //   - The resident firmware image itself. Unlike `make
+    //     factory-reset`, we don't mass-erase the STM32, so power-
+    //     cycling the board is enough — no re-flash needed.
+    //
+    // Triggered by: `make wipe-for-wizard`
+    #[cfg(feature = "wipe-for-wizard")]
+    unsafe {
+        use crate::secure_element::WalletStore;
+
+        ui::show_status("WIPE", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+
+        secure_log!("[S] [WIPE] dispatching factory_reset_admin on both chips");
+        if let Err(e) = se.factory_reset_admin() {
+            secure_log!("[S] [WIPE] factory_reset_admin FAILED: {:?}", e);
+            ui::show_status("WIPE FAIL", "see semihosting");
+            loop { cortex_m::asm::wfi(); }
+        }
+
+        // MCU-side PIN counter erase. SE050 side owns page 125 via
+        // its conditional erase inside factory_reset_admin; we only
+        // touch page 124 here.
+        #[cfg(feature = "stm32u585")]
+        if let Err(e) = hw::flash::pin_attempts_reset() {
+            secure_log!("[S] [WIPE] pin_attempts_reset FAILED: {:?}", e);
+            ui::show_status("WIPE FAIL", "MCU page 124");
+            loop { cortex_m::asm::wfi(); }
+        }
+
+        nsc::zeroize_sensitive_state();
+
+        secure_log!("[S] [WIPE] complete — power-cycle to start wizard");
+        ui::show_status("WIPED", "power-cycle me");
+        loop { cortex_m::asm::wfi(); }
+    }
+
     #[cfg(feature = "optiga-admin-wipe-e2e")]
     unsafe {
         ui::show_status("OPTIGA wipe", "running...");
