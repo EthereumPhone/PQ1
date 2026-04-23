@@ -290,25 +290,34 @@ The SE050 half of the dual-SE also has irreversible steps (per
         commit checklist rehearsal on sacrificial parts MUST verify
         that `PUT KEY` is atomic at the chip level (NXP spec says it
         is; confirm empirically).
-- [ ] **Admin UserID at 0x7B0C_00A0** (range v4, bumped 2026-04-21 from
-      v3 `0x7B06_00A0` after bench-chip cross-contamination) with two-
-      entry TAG_POLICY provisioned. Admin PIN migrates alongside
-      work-todo #7:
-      - Today: TRNG-generated at first-boot, persisted plaintext to
-        STM32 secure-flash page 125 (`ADMIN_PAGE_ADDR`). Wiped at
-        `erase_admin_page()`. **This is the fragility that retired
-        the v3 range** — any action that erases page 125 without
-        also deleting the on-chip admin UserID makes the chip un-wipe-
-        able at that OID. Fix in work-todo #7 early-adopt item:
-        `hw::secret_keys::se050_admin_pin()` derived from OTP master.
-      - Post-#7 early-adopt (pre-Tier-1): derived via
-        `HKDF(OTP_master, "pqsigner/se050-admin-pin-v1")`. Page 125
-        admin-PIN slot retires; wipe flag moves to a dedicated small
-        page or an OTP one-shot bit.
-      - Post-#7 Tier 2: `SAES-CMAC(BHK, "se050-admin-pin-v1")`.
-      Wipe flow validated today via `make se050-admin-wipe-e2e` on
-      isolated OIDs + `make dual-se-unlock-e2e` PASS on real silicon
-      (2026-04-21).
+- [ ] **Admin UserID at 0x7B10_00A0** (range v6, bumped 2026-04-22 from
+      v5 `0x7B0E_00A0` / v4 `0x7B0C_00A0` / v3 `0x7B06_00A0` across
+      bench-chip cross-contamination events) with two-entry
+      TAG_POLICY provisioned. Admin PIN derivation status:
+      - **Today (since 2026-04-23):** derived on demand via
+        `hw::secret_keys::se050_admin_pin()` = `HKDF(OTP_master,
+        "pqsigner/se050-admin-pin-v1")`. Both `Se050::store_objects`
+        (provisioning) and `Se050::factory_reset_admin` (wipe) use
+        the derivation — page 125's PIN slot is no longer read on
+        the production path. The page still holds the wipe-in-progress
+        flag at offset 16 (unchanged). Same HKDF label will flip from
+        OTP-master-rooted to DHUK-rooted under #7 Tier 1 with a
+        one-shot on-chip rotation.
+      - **Cleanup still owed (reversible, tracked in work-todo #7
+        early-adopt item):** delete the remaining callers of
+        `hw::flash::read_admin_pin` / `write_admin_pin` in
+        `se050/mod.rs`, `dual_se.rs`, `main.rs` (five legacy / test
+        paths); retire `ADMIN_PIN_OFFSET` entirely. The slot is
+        dead storage today — already no code path on a clean
+        provisioning reads it — but still burns a flash quadword
+        per page.
+      - **Post-#7 Tier 2:** same API surface, primitive becomes
+        `SAES-CMAC(BHK, "se050-admin-pin-v1")` (work-todo #7).
+      Wipe flow validated today via `make dual-se-admin-wipe-e2e`
+      (full 8-step roundtrip including step 7 "both chips
+      unprovisioned post-wipe") + `make dual-se-multi-unlock-e2e`
+      (15 unlocks across 3 cold reboots) PASS on real silicon
+      (2026-04-23).
 - [ ] **User UserID PIN storage.** Change the UserID's policy to
       whatever we ultimately ship (currently in `docs/se050-userid-
       pin-auth.md`); post-provision, policy is frozen.
@@ -418,13 +427,19 @@ the broader secure-world isolation that production will need.
       needs to actually fail the build rather than warn when these
       features are present.
 
-- [ ] **`pin-gate-wipe-e2e` / `pin-gate-hw-counter-e2e` feature
-      fence.** These two destructive / semi-destructive test targets
-      exist for silicon validation and must not reach production
-      firmware. They transitively require `e2e-test`, which is
-      already in the `compile_error!` gate, but call out explicitly
-      in the `make prod-check` enumeration so a future refactor that
-      adds new destructive e2e features inherits the fence.
+- [ ] **Destructive / dev-only test feature fence.** The following
+      targets exist for silicon validation or bring-up diagnostics
+      and must not reach production firmware: `pin-gate-wipe-e2e`,
+      `pin-gate-hw-counter-e2e`, `dual-se-admin-wipe-e2e`,
+      `dual-se-multi-unlock-e2e`, `optiga-admin-wipe-e2e`,
+      `se050-admin-wipe-e2e`, `wipe-for-wizard`, `pin-diag-boot`,
+      `dev-testkey`, `otp-hardcoded-master-key`. Most transitively
+      require `e2e-test`, which is already in the `compile_error!`
+      gate in `secure/src/nsc/mod.rs`, but `make prod-check` must
+      fail the build when ANY of these features is enabled — the
+      current gate only covers `e2e-test` + `debug-log` + `mock-se`.
+      Adding a new destructive / dev-only e2e feature must land
+      with a matching `prod-check` entry in the same commit.
 
 - [ ] **`optiga-lock-operational=ON` production commit.** Every
       validated test run to date has kept every OID at
@@ -454,18 +469,36 @@ reversible sibling appear in work-todo.md.
 
 ## Current validation state
 
-As of 2026-04-21:
+As of 2026-04-23:
 
-- **Phase A (reversible) validated** on a TRUSTMV3SHIELDTOBO1 —
+- **Phase A (reversible) validated** on TRUSTMV3SHIELDTOBO1 —
   `docs/work-todo.md` #24 P2. Shielded Connection + PIN unlock +
   factory_reset roundtrip all PASS on real silicon.
+- **Dual-SE entropy reconstruction validated across reboots.**
+  `make dual-se-multi-unlock-e2e` does 5 unlocks per boot across
+  3 cold boots (15 unlocks total). Boots 2 + 3 detect
+  already-provisioned state and skip re-provision → pure NVM
+  read + XOR reconstruction, master_secret reproduces byte-identical
+  every time. Closes the colleague-reported "works once, fails on
+  reboot" class caused by OPTIGA RST jumper on D5 cross-coupling
+  into SE050 ENA via the OM-SE050ARD shield. RST wire physically
+  moved to D6 (= STM32 PE0 empirically on this board; `header_sweep`
+  retained as pre-flight validator for any future board rev).
+- **Dual-SE admin-wipe validated end-to-end.** `make dual-se-admin-
+  wipe-e2e` PASSES all 8 steps including step 7 (both chips
+  unprovisioned post-wipe). Admin PIN derivation now OTP-rooted
+  in both provisioning and wipe paths; 6-canary selftest proves
+  the 6-delete-under-one-session shape that production
+  `admin_factory_reset` depends on is stable on the chip.
 - **Phase B (irreversible, E140 LcsO=op)** not yet attempted. No
   sacrificial part burned yet. When it happens, it goes against a
   fresh TRUSTMV3 shield with the pre-commit checklist above fully
   passed.
 - **OTP master burn path** still under the hardcoded-master-key
   feature on every dev build. First-burn validation on a
-  sacrificial MCU is still owed.
+  sacrificial MCU is still owed. The admin-PIN derivation now
+  depends on this — migrating off `otp-hardcoded-master-key` is
+  a prerequisite for any chip ever leaving the bench.
 - **DHUK + BHK tiers** (work-todo #7) not implemented yet. All SE
   pairings today derive from the readable OTP master; Tier 1
   migration has not started. The DHUK probe → per-part record flow
