@@ -1,0 +1,69 @@
+AN13539
+
+OM-SE05xARD hardware overview
+Rev. 1.2 — 8 November 2022
+
+Application note
+
+Document information
+Information
+
+Content
+
+Keywords
+
+OM-SE050ARD-E, OM-SE050ARD-F, OM-SE051ARD, OM-SE051ARD-W,
+OM-SE051ARD-H, OM-SE05xARD, EdgeLock SE05x
+
+Abstract
+
+This document describes the OM-SE05xARD development kits and details
+how to use its jumpers to configure the different communication options with
+the EdgeLock SE05x security IC.
+
+AN13539
+
+NXP Semiconductors
+
+OM-SE05xARD hardware overview
+
+Revision history
+Revision history
+Revision
+number
+
+Date
+
+Description
+
+1.0
+
+2022-03-23
+
+First release
+
+1.1
+
+2022-05-19
+
+Correct J22 pin assignment in Figure 2
+
+1.2
+
+2022-11-08
+
+Add board OM-SE051ARD-H
+
+AN13539
+
+Application note
+
+All information provided in this document is subject to legal disclaimers.
+
+Rev. 1.2 — 8 November 2022
+
+© NXP B.V. 2022. All rights reserved.
+
+2 / 26
+
+

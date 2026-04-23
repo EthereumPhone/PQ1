@@ -536,9 +536,11 @@ fn main() -> ! {
 
     // ---- SE050 factory reset (iterative wipe) ----
     // Actually wipes user objects via ReadIDList + DeleteSecureObject.
-    // Three authentication attempts to catch objects gated by every
-    // UserID this firmware lineage has ever provisioned:
-    //   - 0x7B0E_0000 : current dual-SE / standalone SE050 UserID (v5)
+    // Authentication attempts against every UserID this firmware
+    // lineage has ever provisioned:
+    //   - 0x7B10_0000 : current dual-SE / standalone SE050 UserID (v6)
+    //   - 0x7B0E_0000 : retired v5 range (2026-04-22, bench chip stuck
+    //                   admin with unrecoverable random PIN)
     //   - 0x7B06_0000 : retired v3 range (2026-04-21, bench chips only)
     //   - 0x7B00_2000 : legacy UserID from early f44fd92-era builds
     // PIN is `b"00000000"` — the PIN baked into the e2e-test fast-path
@@ -554,7 +556,7 @@ fn main() -> ! {
         // wrong PIN consumes one SE050 attempt against that UserID
         // (10-attempt budget); a correct PIN auto-resets the counter.
         // PIN order is best-guess to minimise consumed attempts.
-        const USERIDS: &[u32] = &[0x7B0E_0000, 0x7B06_0000, 0x7B00_2000];
+        const USERIDS: &[u32] = &[0x7B10_0000, 0x7B0E_0000, 0x7B06_0000, 0x7B00_2000];
         const PIN_CANDIDATES: &[&[u8]] = &[
             b"00000000", // e2e default + most common dev PIN
             b"12345678",
@@ -693,7 +695,7 @@ fn main() -> ! {
     //
     // LcsO safety: does NOT imply `optiga-lock-operational`. SE050 has
     // no LcsO concept. Uses current production object ranges on both
-    // chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0E_xxxx — v5, the
+    // chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B10_xxxx — v6, the
     // latest bumped range past every legacy stuck region).
     //
     // Triggered by: make dual-se-admin-wipe-e2e
@@ -1569,9 +1571,27 @@ fn main() -> ! {
 
         let se = &mut *core::ptr::addr_of_mut!(SE);
 
-        if se.is_provisioned() {
+        // "Needs wipe" = fully-provisioned chip OR chip with stranded
+        // admin residue from an aborted prior wipe. The admin-residue
+        // case matters because a previous partial wipe / provisioning
+        // crash can leave ADMIN_WIPE_OBJ + policy-gated canaries on
+        // chip while USERID_OBJ is gone — `is_provisioned()` only
+        // checks USERID_OBJ, so a plain `if provisioned` check would
+        // skip the wipe and fall through to the wizard, which would
+        // then crash on the stranded canaries during
+        // `policy_roundtrip_selftest`. Include `admin_exists()` in
+        // the predicate so wipe-for-wizard self-heals that state too.
+        let user_prov = se.is_provisioned();
+        let admin_residue = se.se050.admin_exists();
+        let needs_wipe = user_prov || admin_residue;
+        secure_log!(
+            "[S] [WIPE] predicate: user_provisioned={} admin_residue={} needs_wipe={}",
+            user_prov, admin_residue, needs_wipe
+        );
+
+        if needs_wipe {
             ui::show_status("WIPE", "running...");
-            secure_log!("[S] [WIPE] chip provisioned — dispatching factory_reset_admin");
+            secure_log!("[S] [WIPE] dispatching factory_reset_admin");
 
             if let Err(e) = se.factory_reset_admin() {
                 secure_log!("[S] [WIPE] factory_reset_admin FAILED: {:?}", e);
@@ -1579,27 +1599,38 @@ fn main() -> ! {
                 loop { cortex_m::asm::wfi(); }
             }
 
-            // MCU-side PIN counter erase. SE050 side owns page 125 via
-            // its conditional erase inside factory_reset_admin; we only
-            // touch page 124 here.
-            #[cfg(feature = "stm32u585")]
+            nsc::zeroize_sensitive_state();
+        } else {
+            secure_log!("[S] [WIPE] nothing to wipe (user + admin both absent)");
+        }
+
+        // Unconditional MCU-side flash cleanup. Runs in BOTH branches so
+        // that a subsequent flash of the standalone firmware boots into
+        // a pristine page-124/125 state — no stale wipe-in-progress flag
+        // to trigger the boot-time wipe resume in the standalone build,
+        // no stale attempt counter. factory_reset_admin erases page 125
+        // conditionally (only if `admin_exists()` is false), which is
+        // the right call inside the PIN-lockout recovery path, but
+        // `wipe-for-wizard` is a developer target whose whole contract
+        // is "leave the chip unambiguously wiped" — unconditional is
+        // correct here, and erasing already-blank flash is idempotent.
+        #[cfg(feature = "stm32u585")]
+        {
             if let Err(e) = hw::flash::pin_attempts_reset() {
                 secure_log!("[S] [WIPE] pin_attempts_reset FAILED: {:?}", e);
                 ui::show_status("WIPE FAIL", "MCU page 124");
                 loop { cortex_m::asm::wfi(); }
             }
-
-            nsc::zeroize_sensitive_state();
-
-            secure_log!("[S] [WIPE] complete — power-cycle to start wizard");
-            ui::show_status("WIPED", "power-cycle me");
-            loop { cortex_m::asm::wfi(); }
-        } else {
-            secure_log!("[S] [WIPE] chip already unprovisioned — skipping wipe, falling through to wizard");
-            // Fall through to the normal main() flow. The first-boot
-            // wizard block at line ~1745 will run because the chip
-            // reports unprovisioned.
+            if let Err(e) = hw::flash::erase_admin_page() {
+                secure_log!("[S] [WIPE] erase_admin_page FAILED: {:?}", e);
+                ui::show_status("WIPE FAIL", "MCU page 125");
+                loop { cortex_m::asm::wfi(); }
+            }
         }
+
+        secure_log!("[S] [WIPE] complete — halting. Flash the standalone firmware to continue.");
+        ui::show_status("WIPED", "flash standalone");
+        loop { cortex_m::asm::wfi(); }
     }
 
     #[cfg(feature = "optiga-admin-wipe-e2e")]
@@ -1697,6 +1728,68 @@ fn main() -> ! {
         // raw mutable reference to a `static mut`. The single-threaded
         // boot sequence makes aliasing impossible by construction; this
         // is the same pattern the `nsc::cmd_*` handlers use.
+        //
+        // Pre-clean on `dual-se` hardware. SE050's `store_objects` is
+        // idempotent (skips writes when objects already exist), so a
+        // previous test run's stale admin/user UserID + gated data
+        // would survive a bare `factory_reset_admin` if page 125's
+        // admin PIN is blank (unauthenticated `iterative_wipe` can't
+        // delete policy-gated objects). Mirror the full three-stage
+        // cascade from `DualSecureElement::run_admin_wipe_roundtrip`
+        // (admin-auth → user-PIN candidates → unauthenticated sweep)
+        // so the test survives arbitrary prior-provisioning states.
+        #[cfg(all(feature = "dual-se", feature = "stm32u585", not(feature = "e2e-skip-provision")))]
+        {
+            use zeroize::Zeroize;
+            secure_log!("[S][e2e] dual-se pre-clean: cascade start");
+            let se = &mut *core::ptr::addr_of_mut!(SE);
+
+            let _ = se.optiga.factory_reset();
+
+            let admin_blank = crate::hw::flash::is_admin_pin_blank();
+            secure_log!("[S][e2e] dual-se pre-clean: admin_pin_blank={}", admin_blank);
+            if !admin_blank {
+                let mut admin_pin = [0u8; 16];
+                crate::hw::flash::read_admin_pin(&mut admin_pin);
+                let _ = se.se050.admin_factory_reset(&admin_pin);
+                admin_pin.zeroize();
+            }
+
+            if se.se050.is_provisioned() {
+                const PIN_CANDIDATES: &[&[u8]] = &[
+                    b"00000000", // e2e-test fast-path default
+                    b"dualwipe", // dual-se-admin-wipe-e2e
+                    b"12345678",
+                    b"11111111",
+                ];
+                for &pin in PIN_CANDIDATES {
+                    let r = se.se050.user_factory_reset(pin);
+                    secure_log!(
+                        "[S][e2e] dual-se pre-clean: user_factory_reset({:?}) → {:?}",
+                        core::str::from_utf8(pin).unwrap_or("?"),
+                        r.as_ref().err(),
+                    );
+                    if r.is_ok() {
+                        break;
+                    }
+                }
+            }
+
+            let _ = se.se050.iterative_wipe(None, None);
+
+            // Conditional flash-page-125 erase so the next provision
+            // generates a fresh admin PIN that matches a blank chip.
+            // Safe only once SE050 confirms admin UserID is gone.
+            if !se.se050.admin_exists() {
+                let _ = crate::hw::flash::erase_admin_page();
+            }
+
+            secure_log!(
+                "[S][e2e] dual-se pre-clean: OPTIGA.provisioned={} SE050.provisioned={}",
+                se.optiga.is_provisioned(),
+                se.se050.is_provisioned(),
+            );
+        }
         #[cfg(not(feature = "e2e-skip-provision"))]
         crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
         #[cfg(feature = "e2e-skip-provision")]

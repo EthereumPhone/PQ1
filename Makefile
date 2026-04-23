@@ -76,7 +76,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display build-hw flash-hw test test-unit test-solidity test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
 
 # Supply-chain audit. Hard-fails if any dependency is not cryptographically
 # pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
@@ -480,6 +480,63 @@ e2e-hw-display:
 	@echo "==> Running e2e on hardware with OLED display (Ctrl-C to abort)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Full JARDÍN sign e2e on real STM32U585 with *both* real SEs (OPTIGA
+# Trust M + SE050, XOR-split entropy) driving the SSD1306 OLED.
+#
+# Exercises the post-cutover stateless-slot flow (Type 1 + Type 2,
+# cross-chain slot rotation) end-to-end through real silicon:
+#   * dual-se   — OPTIGA + SE050 XOR-split provision + unlock
+#   * ui-oled   — status on the physical SSD1306 (PB8=SCL, PB9=SDA)
+#   * e2e-test  — auto-provisions fixed mnemonic + PIN, pre-unlocks
+#                 the gateway (probe-rs cannot serve SYS_READC)
+#   * otp-hardcoded-master-key — avoids burning real OTP each run
+#                                (same choice as dual-se-admin-wipe-e2e)
+#
+# Requires: ST-LINK, STM32_Programmer_CLI, OPTIGA Trust M + SE050 on
+# the I2C bus, SSD1306 OLED wired to PB8/PB9/3V3/GND.
+#
+# Watch semihosting for "[NS][e2e] === All scenarios passed! ===".
+# OLED will show "e2e Sign N/4" + "T1+T2"/"T2 only" on each sign.
+e2e-hw-dual-se:
+	@echo "==> Building e2e + stm32u585 + dual-SE (OPTIGA + SE050) + OLED"
+	@echo "    WARNING: re-provisions wallet state on BOTH chips with the"
+	@echo "    fixed e2e test mnemonic (abandon × 23 || art, PIN 00000000)."
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features dual-se,ui-oled,debug-log,e2e-test,e2e-skip-admin-wipe,stm32u585,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running dual-SE e2e on hardware..."
+	@echo "    (streaming semihosting; looks for 'All scenarios passed!'"
+	@echo "     then exits — hit Ctrl-C if it hangs past 2 min)"
+	@log=$$(mktemp -t e2e-hw-dual-se.XXXXXX.log); \
+	rc_file=$$(mktemp -t e2e-hw-dual-se-rc.XXXXXX); \
+	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
+	{ timeout 300 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; \
+	  echo $$? >"$$rc_file"; } | tee "$$log"; \
+	rc=$$(cat "$$rc_file"); \
+	echo "===================================="; \
+	if grep -q "All scenarios passed!" "$$log"; then \
+		echo "==> e2e-hw-dual-se: PASS"; \
+		exit 0; \
+	elif grep -q "PANIC\|FAIL" "$$log"; then \
+		echo "==> e2e-hw-dual-se: FAIL (see log above)"; \
+		exit 1; \
+	else \
+		echo "==> e2e-hw-dual-se: FAIL (no PASS/FAIL marker; rc=$$rc)"; \
+		exit 1; \
+	fi
+
 # Real STM32U585 hardware build with USB HID host communication.
 # Uses mock SE + semihosting debug output + USB transport.
 build-hw-usb:
@@ -790,6 +847,108 @@ flash-hw-se050-oled-standalone: build-hw-se050-oled-standalone
 	@probe-rs reset --chip STM32U585AIIx
 	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
 	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
+
+# Dual-SE + OLED standalone — production-shape dual-chip build (OPTIGA
+# Trust M + SE050, XOR entropy split across both). Mirrors the
+# `wipe-for-wizard` feature set so the admin PIN is derived from the
+# same OTP source and wipe-for-wizard can delete what this target
+# provisioned (and vice versa). No semihosting, no debug-log — safe to
+# run on USB-C power alone with no debugger attached.
+#
+# Feature set: `dual-se` (= optiga-trust-m + se050), `optiga-hw-counter`
+# (OPTIGA E120 for the PIN-attempt counter), `dev-testkey` (stable OTP
+# master across flashes so the derived SE050 admin PIN matches what
+# wipe-for-wizard derives), `ui-oled`, `gpio-buttons`, `stm32u585`,
+# `usb`. Deliberately DOES NOT include `optiga-lock-operational`;
+# every OPTIGA user OID stays at LcsO=Creation through provisioning.
+#
+# Invariants respected:
+#   #1 dual-chip seed split (half_O on OPTIGA, half_E on SE050).
+#   #2 hardware-level PIN gating (OPTIGA auth-ref + SE050 UserID).
+#   #3 E2E encrypted tunnels (Shielded Connection + SCP03).
+#   #4/#5/#6/#7/#8 — all in force; this is just a feature-set wrapper.
+#
+# Intended workflow for bench iteration:
+#   1. `make wipe-for-wizard`   — nukes OPTIGA F1Dx/E1Ex + SE050
+#                                 user+admin+canary objects, halts.
+#   2. Disconnect ST-LINK and USB-C, reconnect USB-C only.
+#   3. `make flash-hw-dual-se-oled-standalone` (this target) — flashes
+#      the standalone firmware. First boot: chip is unprovisioned, OLED
+#      shows the first-boot wizard, user enters a mnemonic + PIN,
+#      firmware provisions both chips with the XOR-split entropy.
+#      Subsequent boots: OLED shows the unlock dialog.
+#   4. Use the wallet via USB HID from the companion app.
+build-hw-dual-se-oled-standalone:
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features dual-se,optiga-hw-counter,dev-testkey,gpio-buttons,ui-oled,stm32u585,usb
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> Dual-SE standalone build ready (no semihosting, USB-C only, LcsO=Creation)."
+
+flash-hw-dual-se-oled-standalone: build-hw-dual-se-oled-standalone
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting target..."
+	@probe-rs reset --chip STM32U585AIIx
+	@echo "==> Flashed and reset. Disconnect ST-LINK, connect only USB-C if desired."
+	@echo "    Set JP4 to 5V_UCPD for USB-C power (or keep 5V_USB_STLK if using both cables)."
+
+# Same build as `flash-hw-dual-se-oled-standalone` PLUS `debug-log`, so
+# `secure_log!` / `hprintln!` output streams over the ST-LINK SWO/SWD
+# semihosting channel. Flashes with `probe-rs run` at the end — that
+# command keeps the debugger attached and forwards every secure-world
+# log line to this terminal, so you can cold-power-cycle the board
+# (long-press RESET or pull+reinsert VCC) while watching the host
+# stdout to see exactly which branch of `is_provisioned()` / wizard /
+# unlock path fires.
+#
+# Use this to diagnose the "wizard re-runs after a successful setup"
+# class of bug: on the second boot, look for one of:
+#   [S] Device already provisioned — requesting PIN unlock
+#   [S] Unprovisioned — running first-boot wizard
+# and the `[OPTIGA] Init: ...` + `[SE050] Init: ...` breadcrumbs above
+# it to see whether one of the SE `init()` calls is timing out on cold
+# boot.
+#
+# NOT for production — `debug-log` leaks device-internal state over
+# semihosting (mnemonic words are printed when the wizard runs, per
+# `main.rs`'s debug-only log block). Keep ST-LINK attached throughout;
+# disconnecting kills the semihosting channel but the device will
+# continue to run. Safe against the `probe-rs` `SYS_READC` gap (see
+# CLAUDE.md "Hardware testing under probe-rs") because this build uses
+# `gpio-buttons` + `ui-oled` — PIN / mnemonic entry goes through real
+# button presses, not semihosting input.
+build-hw-dual-se-oled-standalone-debug:
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features dual-se,optiga-hw-counter,dev-testkey,gpio-buttons,ui-oled,stm32u585,usb,debug-log
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> Dual-SE standalone DEBUG build ready (debug-log ON, USB-C + ST-LINK)."
+
+flash-hw-dual-se-oled-standalone-debug: build-hw-dual-se-oled-standalone-debug
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Attaching probe-rs run — semihosting stream follows. Ctrl-C to detach."
+	@echo "    Power-cycle the board (pull+replug USB-C, or press the B2 RESET button)"
+	@echo "    to see the full boot sequence. Wizard + PIN entry are driven by the"
+	@echo "    physical buttons as usual; probe-rs only captures stdout."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 # OPTIGA Trust M + OLED standalone — single-SE variant of the SE050
 # standalone target above. Uses Infineon OPTIGA Trust M V3 on I2C1
@@ -1493,6 +1652,30 @@ pin-gate-wipe-e2e:
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running wipe dispatch e2e (watch for WIPE+RECOVERY ROUNDTRIP: PASS)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# Re-run the currently-flashed wipe-for-wizard firmware under probe-rs
+# with semihosting, WITHOUT rebuilding, re-downloading non-secure, or
+# re-configuring TrustZone option bytes. The normal `make wipe-for-
+# wizard` flow detaches probe-rs right after the "WIPED — power-cycle
+# me" halt, so the subsequent physical power-cycle boots blind — there
+# is no semihosting sink attached to capture the wizard path's output.
+#
+# This target re-enters the flow by issuing an SWD reset through
+# probe-rs and streaming the new boot's logs. Functionally equivalent
+# to a physical power-cycle with the probe still attached. The secure
+# ELF is re-downloaded (same image — effectively a no-op) so we can
+# piggyback `probe-rs run`'s built-in reset + attach sequence; the
+# non-secure ELF stays whatever was last flashed by `wipe-for-wizard`.
+#
+# Pre-req: a prior `make wipe-for-wizard` (or any target that flashed
+# both secure + non-secure ELFs and set TZEN/SECBOOTADD0). Use this
+# when you see a successful wipe halt but nothing visible on the next
+# boot — the semihosting trace will show whether the chip is in the
+# "nothing to wipe → fall through to wizard" branch or failing earlier.
+wipe-for-wizard-rerun:
+	@echo "==> Re-running already-flashed wipe-for-wizard firmware under probe-rs semihosting..."
+	@echo "    (no rebuild, no NS re-flash, no TZ option-byte rewrite)"
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 wipe-for-wizard:

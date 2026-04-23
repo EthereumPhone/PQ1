@@ -145,3 +145,31 @@ pub fn tropic01_pairing_key() -> Result<[u8; 32], OtpError> {
     derive_into(b"pqsigner/tropic01-pair-v1", &mut out)?;
     Ok(out)
 }
+
+/// 16-byte SE050 admin-wipe PIN. Backs `ADMIN_WIPE_OBJ` (the admin
+/// UserID that holds `DELETE` authority on every user object via the
+/// two-entry TAG_POLICY). Being OTP-derived means:
+///
+/// - **Stable across power cycles.** No flash pairing — page 125's
+///   admin-PIN slot becomes redundant. Previous design stored a
+///   TRNG-generated PIN in page 125 and mirrored it against the
+///   on-chip admin UserID; any operation that erased the flash PIN
+///   while the on-chip admin survived desynchronised the two, which
+///   retired OID ranges v3 (0x7B06), v4 (0x7B0C), and v5 (0x7B0E).
+///   OTP is one-way and survives flash mass-erase, so the derivation
+///   is the one credential the chip can always reproduce.
+/// - **Deterministic under `dev-testkey`.** The `otp-hardcoded-master-
+///   key` feature (which `dev-testkey` pulls in) substitutes the
+///   32-byte ASCII test master for the real OTP read, so every dev
+///   board + fresh-flashed firmware combination yields the same
+///   admin PIN — swap chips, reflash, power-cycle, and the admin
+///   UserID from the previous run is still delete-able.
+/// - **Per-device in production.** Without `otp-hardcoded-master-key`
+///   the OTP master is a per-board TRNG burn, so the admin PIN is
+///   unique per device. A flash dump of one device cannot admin-wipe
+///   another.
+pub fn se050_admin_pin() -> Result<[u8; 16], OtpError> {
+    let mut out = [0u8; 16];
+    derive_into(b"pqsigner/se050-admin-pin-v1", &mut out)?;
+    Ok(out)
+}

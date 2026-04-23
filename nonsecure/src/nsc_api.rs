@@ -77,6 +77,15 @@ mod transport {
     pub(super) fn get_wallet_address(out_ptr: *mut u8, account_index: u32) -> u32 {
         unsafe { gateway_call(CMD_GET_WALLET_ADDRESS, out_ptr as u32, account_index, 0) }
     }
+
+    #[cfg(feature = "e2e-test")]
+    const CMD_TEST_PIN_LOCKOUT: u32 = 200;
+
+    #[cfg(feature = "e2e-test")]
+    #[inline]
+    pub(super) fn test_pin_lockout() -> u32 {
+        unsafe { gateway_call(CMD_TEST_PIN_LOCKOUT, 0, 0, 0) }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +108,9 @@ mod transport {
         fn nsc_fw_commit() -> u32;
         fn nsc_fw_status(out_ptr: u32) -> u32;
         fn nsc_fw_abort() -> u32;
+
+        #[cfg(feature = "e2e-test")]
+        fn nsc_test_pin_lockout() -> u32;
     }
 
     #[inline]
@@ -155,6 +167,12 @@ mod transport {
     pub(super) fn fw_abort_call() -> u32 {
         unsafe { nsc_fw_abort() }
     }
+
+    #[cfg(feature = "e2e-test")]
+    #[inline]
+    pub(super) fn test_pin_lockout() -> u32 {
+        unsafe { nsc_test_pin_lockout() }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -188,6 +206,15 @@ pub fn is_unlocked() -> bool {
 /// Explicitly lock the device: zeroize cached secrets and mark as locked.
 pub fn lock() -> u32 {
     transport::lock()
+}
+
+/// Test-only: drive the secure-world PIN lockout self-test.
+/// Returns `NscStatus::Ok` when brute-force is blocked (correct PIN
+/// rejected after MAX_ATTEMPTS wrong attempts), `CryptoError` when
+/// brute-force would succeed. Compiled out unless `e2e-test` is set.
+#[cfg(feature = "e2e-test")]
+pub fn test_pin_lockout() -> u32 {
+    transport::test_pin_lockout()
 }
 
 /// Compute the CREATE2-predicted wallet address for `account_index`

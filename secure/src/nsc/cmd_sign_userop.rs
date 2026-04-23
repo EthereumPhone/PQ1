@@ -150,6 +150,30 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let register_slot = (flags & FLAG_REGISTER_SLOT) != 0;
     let account_index = (flags & ACCOUNT_INDEX_MASK) >> ACCOUNT_INDEX_SHIFT;
     let slot_index = flags & SLOT_INDEX_MASK;
+
+    #[cfg(all(feature = "e2e-test", feature = "ui-oled"))]
+    {
+        static mut E2E_CALL_NO: u8 = 0;
+        let n = unsafe {
+            E2E_CALL_NO = E2E_CALL_NO.wrapping_add(1);
+            E2E_CALL_NO
+        };
+        let title: &str = match n {
+            1 => "e2e Sign 1/4",
+            2 => "e2e Sign 2/4",
+            3 => "e2e Sign 3/4",
+            4 => "e2e Sign 4/4",
+            _ => "e2e Sign ?",
+        };
+        let kind = if include_init_code {
+            "Deploy"
+        } else if register_slot {
+            "T1+T2"
+        } else {
+            "T2 only"
+        };
+        ui::show_status(title, kind);
+    }
     let mut sender = [0u8; 20];
     sender.copy_from_slice(&snap[12..32]);
     let mut entry_point = [0u8; 20];

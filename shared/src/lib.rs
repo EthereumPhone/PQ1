@@ -330,6 +330,22 @@ pub const CMD_FW_STATUS: u32 = 23;
 /// can start fresh.
 pub const CMD_FW_ABORT: u32 = 24;
 
+/// CMD_TEST_PIN_LOCKOUT — non-interactive PIN-lockout verification.
+///
+/// Test-only gateway command, compiled out unless `e2e-test` is set on
+/// the secure build. Drives `nsc::gated_unlock` through `MAX_ATTEMPTS`
+/// wrong-PIN attempts followed by one correct-PIN attempt and asserts
+/// that the correct-PIN attempt is rejected (MCU gate already at max).
+/// Returns `NscStatus::Ok` on the expected lockout outcome, or
+/// `NscStatus::CryptoError` if the correct PIN is accepted — which
+/// would mean brute-force protection is broken.
+///
+/// Destructive: leaves the SE050 user UserID silicon-locked and the
+/// MCU attempt counter at MAX. Requires the admin-wipe install on
+/// SE050 (i.e. NOT `e2e-skip-admin-wipe`) so the boot-time recovery
+/// path can wipe + re-provision on the next boot.
+pub const CMD_TEST_PIN_LOCKOUT: u32 = 200;
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks

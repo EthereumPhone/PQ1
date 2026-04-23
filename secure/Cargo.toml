@@ -167,6 +167,18 @@ e2e-skip-unlock = []
 # the PRL handshake against the existing PBS + PIN secret on the chip. Only
 # meaningful in combination with `e2e-test`.
 e2e-skip-provision = []
+# Under `e2e-test`, route the SE050 `WalletStore::provision` impl through the
+# simpler single-policy path (the one already used on non-stm32u585 targets).
+# Skips `provision_admin` + `policy_roundtrip_selftest` + the two-entry
+# `TAG_POLICY` with admin-delete references. Used by the dual-SE hardware e2e
+# target (`e2e-hw-dual-se`) so the test does not depend on mutable chip state
+# around `ADMIN_WIPE_OBJ` — which can get stuck across firmware revisions
+# when the on-chip admin UserID was created by a previous build whose admin
+# PIN is no longer in flash (unauthenticated `iterative_wipe` can't delete
+# policy-gated objects). Must NOT be enabled for `dual-se-admin-wipe-e2e` —
+# that test's whole point is to exercise the admin-wipe install.
+# Only meaningful in combination with `e2e-test` + `se050` (or `dual-se`).
+e2e-skip-admin-wipe = []
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.

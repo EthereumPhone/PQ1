@@ -151,13 +151,15 @@ fn main() -> ! {
         0x90, 0xab, 0xcd, 0xef, 0x12,
     ];
 
-    // Scenario 1: first-sign with FLAG_REGISTER_SLOT — expect Type 1 + Type 2.
-    hprintln!("[NS][e2e] Scenario 1: register slot 0 on chain A (Type 1 + Type 2)");
+    // Scenario 1: rotation to slot 1 on chain A — expect Type 1 + Type 2.
+    // (Post-Coinbase-port: REGISTER_SLOT requires slot_index >= 1 —
+    // slot 0 is pre-registered by the factory at deploy time.)
+    hprintln!("[NS][e2e] Scenario 1: register slot 1 on chain A (Type 1 + Type 2)");
     unsafe {
         let len = build_sign_payload(
             &mut PAYLOAD_BUF,
             11_155_111, // Sepolia
-            0,          // slot_index
+            1,          // slot_index
             true,       // register_slot
             1,          // base nonce
             &to_alice,
@@ -172,12 +174,12 @@ fn main() -> ! {
     }
 
     // Scenario 2: repeat sign on same chain/slot, no flag — expect Type 2 only.
-    hprintln!("[NS][e2e] Scenario 2: repeat sign on chain A slot 0 (Type 2 only)");
+    hprintln!("[NS][e2e] Scenario 2: repeat sign on chain A slot 1 (Type 2 only)");
     unsafe {
         let len = build_sign_payload(
             &mut PAYLOAD_BUF,
             11_155_111,
-            0,
+            1,
             false, // slot already registered
             2,
             &to_alice,
@@ -191,14 +193,14 @@ fn main() -> ! {
         hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
 
-    // Scenario 3: companion rotates to slot 1 on the same chain — expect
+    // Scenario 3: companion rotates to slot 2 on the same chain — expect
     // Type 1 (new slot registration) + Type 2.
-    hprintln!("[NS][e2e] Scenario 3: rotate to slot 1 on chain A (Type 1 + Type 2)");
+    hprintln!("[NS][e2e] Scenario 3: rotate to slot 2 on chain A (Type 1 + Type 2)");
     unsafe {
         let len = build_sign_payload(
             &mut PAYLOAD_BUF,
             11_155_111,
-            1, // new slot
+            2, // new slot
             true,
             3,
             &to_alice,
@@ -212,15 +214,15 @@ fn main() -> ! {
         hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
 
-    // Scenario 4: FirstSign on a different chain_id with slot 0 — expect
-    // Type 1 + Type 2 (per-chain slot registration, firmware doesn't know
-    // or care that chain A already registered slot 0).
-    hprintln!("[NS][e2e] Scenario 4: register slot 0 on chain B (Type 1 + Type 2)");
+    // Scenario 4: FirstSign on a different chain_id — expect
+    // Type 1 + Type 2. Uses slot_index=1 per the post-Coinbase-port
+    // rule (slot 0 is the factory-deployed slot).
+    hprintln!("[NS][e2e] Scenario 4: register slot 1 on chain B (Type 1 + Type 2)");
     unsafe {
         let len = build_sign_payload(
             &mut PAYLOAD_BUF,
             84_532, // Base Sepolia
-            0,
+            1,
             true,
             1,
             &to_alice,
@@ -233,6 +235,22 @@ fn main() -> ! {
         assert!(t1_present, "scenario 4 must emit a Type 1");
         hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
     }
+
+    // Scenario 5: brute-force protection check. Drives the secure-
+    // world `CMD_TEST_PIN_LOCKOUT` handler which burns MAX_ATTEMPTS
+    // wrong PINs followed by one correct PIN and verifies the MCU
+    // gate rejects the correct attempt. Destructive — leaves MCU
+    // counter at MAX and SE050 user UserID silicon-locked; next boot
+    // recovers via `trigger_lockout_wipe` + fresh admin-wipe
+    // re-provision.
+    hprintln!("[NS][e2e] Scenario 5: brute-force protection (10 wrong PINs + 1 correct)");
+    let lockout_status = nsc_api::test_pin_lockout();
+    assert_eq!(
+        lockout_status, NscStatus::Ok as u32,
+        "scenario 5 must report brute-force blocked (got status {})",
+        lockout_status
+    );
+    hprintln!("[NS][e2e]   → brute-force blocked (correct PIN rejected after exhaustion)");
 
     hprintln!("[NS][e2e] === All scenarios passed! ===");
     debug::exit(debug::EXIT_SUCCESS);

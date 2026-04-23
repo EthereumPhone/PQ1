@@ -54,6 +54,8 @@ mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_request_unlock;
 mod cmd_sign_userop;
+#[cfg(feature = "e2e-test")]
+mod cmd_test_pin_lockout;
 
 // Firmware-update commands. Only built for the STM32U585 target
 // because they depend on the bank-2 flash / OTP primitives that the
@@ -351,6 +353,8 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_GET_WALLET_ADDRESS => cmd_get_wallet_address::run(args),
         CMD_IS_UNLOCKED => cmd_is_unlocked::run(),
         CMD_LOCK => cmd_lock::run(),
+        #[cfg(feature = "e2e-test")]
+        sphincs_tz_shared::CMD_TEST_PIN_LOCKOUT => cmd_test_pin_lockout::run(),
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -424,6 +428,18 @@ pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
     secure_log!("[NSC] lock");
     let r = unsafe { cmd_lock::run() };
     secure_log!("[NSC] lock -> {}", r);
+    r
+}
+
+/// CMD_TEST_PIN_LOCKOUT — non-interactive brute-force verification.
+/// Destructive (locks SE050 silicon + maxes MCU counter); only built
+/// under `e2e-test`. See `cmd_test_pin_lockout.rs` for the contract.
+#[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
+    secure_log!("[NSC] test_pin_lockout");
+    let r = unsafe { cmd_test_pin_lockout::run() };
+    secure_log!("[NSC] test_pin_lockout -> {}", r);
     r
 }
 
