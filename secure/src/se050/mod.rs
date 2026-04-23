@@ -1265,15 +1265,22 @@ impl Se050 {
         // the "wallet data is erased" contract to hold. Admin UserID
         // survival is tracked separately below — the caller's
         // `admin_exists()` check drives flash-page-125 erase decisions.
-        const CANARY_USERID_CLEANUP: u32 = 0x7B10_00B0;
-        const CANARY_DATA_CLEANUP: u32 = 0x7B10_00B1;
+        //
+        // Cleanup list covers the full v6 canary range (0x7B10_00B0..B5)
+        // — matches what `policy_roundtrip_selftest` writes (Bug 3 /
+        // work-todo #29). If the selftest crashed between write and
+        // its own cleanup, admin_factory_reset sweeps the stragglers.
         const USER_OBJS: &[(u32, &str)] = &[
             (ENTROPY_OBJ, "ENTROPY_OBJ"),
             (VK_OBJ, "VK_OBJ"),
             (BOOTSTRAP_VK_OBJ, "BOOTSTRAP_VK_OBJ"),
             (USERID_OBJ, "USERID_OBJ"),
-            (CANARY_DATA_CLEANUP, "CANARY_DATA_CLEANUP"),
-            (CANARY_USERID_CLEANUP, "CANARY_USERID_CLEANUP"),
+            (0x7B10_00B0, "CANARY_USERID"),
+            (0x7B10_00B1, "CANARY_DATA_1"),
+            (0x7B10_00B2, "CANARY_DATA_2"),
+            (0x7B10_00B3, "CANARY_DATA_3"),
+            (0x7B10_00B4, "CANARY_DATA_4"),
+            (0x7B10_00B5, "CANARY_DATA_5"),
         ];
 
         unsafe {
@@ -1409,28 +1416,40 @@ impl Se050 {
         Ok(())
     }
 
-    /// Round-trip self-test: write a canary UserID + gated data object with
-    /// the same TAG_POLICY template used by real provisioning, then verify
-    /// the admin-delete path actually clears them. Aborts provisioning if
-    /// the canary survives — guardrail against future byte-order bugs in
-    /// the policy TLV construction.
+    /// Round-trip self-test: write a canary UserID + 5 gated data objects
+    /// with the same TAG_POLICY template used by real provisioning, then
+    /// admin-auth-delete all 6 in a single session — the exact shape
+    /// the real `admin_factory_reset` uses (6 user objects under one
+    /// ADMIN_WIPE_OBJ session). Aborts provisioning if any canary
+    /// survives.
     ///
-    /// Uses object IDs 0x7B10_00B0 / 0x7B10_00B1 (distinct from production
-    /// UserID/data range but inside the same v6 block). Caller provides
-    /// the admin PIN so the test exercises the SAME auth path the real
-    /// wipe will use.
+    /// Bug 3 (work-todo #29) hardening: the pre-refactor version only
+    /// wrote + deleted 2 canaries, so a session-invalidation quirk
+    /// that bites on the Nth (for N > 2) delete would pass selftest
+    /// while breaking production. The 6-canary shape catches that.
+    ///
+    /// Uses object IDs 0x7B10_00B0..0x7B10_00B5 (inside the v6 block
+    /// but distinct from the production UserID/data range).
     pub fn policy_roundtrip_selftest(&mut self, admin_pin: &[u8; 16]) -> Result<(), Se050Error> {
         self.init().map_err(|e| {
             secure_log!("[SE050/selftest] init() FAILED: {:?}", e);
             e
         })?;
 
+        // 6 canary objects = 1 UserID (for its own delete) + 5 data
+        // objects. Matches production's USER_OBJS count
+        // (ENTROPY + VK + BOOTSTRAP_VK + USERID + 2 cleanup canaries = 6).
         const CANARY_USERID: u32 = 0x7B10_00B0;
-        const CANARY_DATA: u32 = 0x7B10_00B1;
+        const CANARY_DATA_OBJS: &[(u32, &str)] = &[
+            (0x7B10_00B1, "CANARY_DATA_1"),
+            (0x7B10_00B2, "CANARY_DATA_2"),
+            (0x7B10_00B3, "CANARY_DATA_3"),
+            (0x7B10_00B4, "CANARY_DATA_4"),
+            (0x7B10_00B5, "CANARY_DATA_5"),
+        ];
         let canary_pin: [u8; 8] = *b"00000000";
 
         unsafe {
-            // Ensure admin UserID exists for the test (it should at this point).
             let admin_exists = match apdu::check_exists(
                 &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ
             ) {
@@ -1449,13 +1468,9 @@ impl Se050 {
                 return Err(Se050Error::NotProvisioned);
             }
 
-            // Admin-authenticated cleanup of any stranded canary objects
+            // Admin-authenticated cleanup of any stranded canary residue
             // from a prior interrupted selftest run. Unauthenticated
-            // delete cannot touch them — they carry an admin-delete
-            // policy entry, so `apdu::delete_object` (plain SCP03) is
-            // rejected with 0x6986 and the wrapper silently maps that
-            // to Ok, leaving the objects on chip. Use the admin PIN we
-            // already have to evict them properly.
+            // delete can't touch them (they carry an admin-delete policy).
             secure_log!("[SE050/selftest] admin-auth cleanup of canary residue");
             let cleanup_sid = apdu::create_session(
                 &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ,
@@ -1472,26 +1487,20 @@ impl Se050 {
                 );
                 return Err(e);
             }
-            if let Err(e) = apdu::delete_object_authed(
-                &mut self.t1, &mut self.scp03, &cleanup_sid, CANARY_DATA,
-            ) {
-                secure_log!(
-                    "[SE050/selftest] cleanup delete CANARY_DATA non-fatal ERR: {:?} (likely absent)",
-                    e
+            for (obj_id, _name) in CANARY_DATA_OBJS {
+                let _ = apdu::delete_object_authed(
+                    &mut self.t1, &mut self.scp03, &cleanup_sid, *obj_id,
                 );
             }
-            if let Err(e) = apdu::delete_object_authed(
+            let _ = apdu::delete_object_authed(
                 &mut self.t1, &mut self.scp03, &cleanup_sid, CANARY_USERID,
-            ) {
-                secure_log!(
-                    "[SE050/selftest] cleanup delete CANARY_USERID non-fatal ERR: {:?} (likely absent)",
-                    e
-                );
-            }
+            );
             let _ = apdu::close_session(
                 &mut self.t1, &mut self.scp03, &cleanup_sid,
             );
 
+            // Write the canary UserID first — data objects reference it
+            // as their primary auth.
             secure_log!("[SE050/selftest] write CANARY_USERID");
             apdu::write_userid(
                 &mut self.t1, &mut self.scp03,
@@ -1501,24 +1510,34 @@ impl Se050 {
                 e
             })?;
 
-            let canary_data: [u8; 4] = [0xDE, 0xAD, 0xBE, 0xEF];
-            secure_log!("[SE050/selftest] write CANARY_DATA");
-            apdu::write_binary_gated(
-                &mut self.t1, &mut self.scp03,
-                CANARY_DATA, &canary_data, CANARY_USERID, Some(ADMIN_WIPE_OBJ),
-            ).map_err(|e| {
-                secure_log!("[SE050/selftest] write CANARY_DATA FAILED: {:?}", e);
-                e
-            })?;
+            for (obj_id, name) in CANARY_DATA_OBJS {
+                let payload: [u8; 4] = [
+                    0xDE, 0xAD, (*obj_id & 0xFF) as u8, 0xEF,
+                ];
+                secure_log!("[SE050/selftest] write {} (0x{:08x})", name, obj_id);
+                apdu::write_binary_gated(
+                    &mut self.t1, &mut self.scp03,
+                    *obj_id, &payload, CANARY_USERID, Some(ADMIN_WIPE_OBJ),
+                ).map_err(|e| {
+                    secure_log!(
+                        "[SE050/selftest] write {} (0x{:08x}) FAILED: {:?}",
+                        name, obj_id, e,
+                    );
+                    e
+                })?;
+            }
 
-            secure_log!("[SE050/selftest] create_session against ADMIN_WIPE_OBJ");
+            // ONE admin session → 6 deletes (5 data + 1 UserID),
+            // matching production's admin_factory_reset shape. Per-delete
+            // logging mirrors the production path, so a session-
+            // invalidation pattern shows up identically in both.
+            secure_log!("[SE050/selftest] create_session against ADMIN_WIPE_OBJ (6-delete path)");
             let sid = apdu::create_session(
                 &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ,
             ).map_err(|e| {
                 secure_log!("[SE050/selftest] create_session FAILED: {:?}", e);
                 e
             })?;
-            secure_log!("[SE050/selftest] verify_session with admin_pin");
             if let Err(e) = apdu::verify_session(
                 &mut self.t1, &mut self.scp03, &sid, admin_pin,
             ) {
@@ -1526,50 +1545,75 @@ impl Se050 {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                 return Err(e);
             }
-            secure_log!("[SE050/selftest] delete_object_authed CANARY_DATA");
-            if let Err(e) = apdu::delete_object_authed(
-                &mut self.t1, &mut self.scp03, &sid, CANARY_DATA,
-            ) {
-                secure_log!(
-                    "[SE050/selftest] delete_object_authed(CANARY_DATA) non-fatal ERR: {:?}",
-                    e
-                );
+
+            for (obj_id, name) in CANARY_DATA_OBJS {
+                match apdu::delete_object_authed(
+                    &mut self.t1, &mut self.scp03, &sid, *obj_id,
+                ) {
+                    Ok(()) => {
+                        secure_log!(
+                            "[SE050/selftest] delete {} (0x{:08x}): Ok",
+                            name, obj_id,
+                        );
+                    }
+                    Err(e) => {
+                        secure_log!(
+                            "[SE050/selftest] delete {} (0x{:08x}): Err({:?})",
+                            name, obj_id, e,
+                        );
+                    }
+                }
             }
-            secure_log!("[SE050/selftest] delete_object_authed CANARY_USERID");
-            if let Err(e) = apdu::delete_object_authed(
+            match apdu::delete_object_authed(
                 &mut self.t1, &mut self.scp03, &sid, CANARY_USERID,
             ) {
+                Ok(()) => {
+                    secure_log!("[SE050/selftest] delete CANARY_USERID (0x{:08x}): Ok", CANARY_USERID);
+                }
+                Err(e) => {
+                    secure_log!(
+                        "[SE050/selftest] delete CANARY_USERID (0x{:08x}): Err({:?})",
+                        CANARY_USERID, e,
+                    );
+                }
+            }
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+
+            // Post-check every canary — any survivor means the
+            // production 6-delete shape is broken.
+            let mut survivors: u32 = 0;
+            for (obj_id, name) in CANARY_DATA_OBJS {
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj_id)
+                    .unwrap_or(false)
+                {
+                    survivors += 1;
+                    secure_log!(
+                        "[SE050/selftest] post-delete SURVIVOR: {} (0x{:08x})",
+                        name, obj_id,
+                    );
+                }
+            }
+            if apdu::check_exists(&mut self.t1, &mut self.scp03, CANARY_USERID)
+                .unwrap_or(false)
+            {
+                survivors += 1;
                 secure_log!(
-                    "[SE050/selftest] delete_object_authed(CANARY_USERID) non-fatal ERR: {:?}",
-                    e
+                    "[SE050/selftest] post-delete SURVIVOR: CANARY_USERID (0x{:08x})",
+                    CANARY_USERID,
                 );
             }
-            if let Err(e) = apdu::close_session(&mut self.t1, &mut self.scp03, &sid) {
-                secure_log!("[SE050/selftest] close_session non-fatal ERR: {:?}", e);
-            }
 
-            // Verify both canary objects are gone.
-            let data_gone = !apdu::check_exists(
-                &mut self.t1, &mut self.scp03, CANARY_DATA,
-            ).unwrap_or(true);
-            let user_gone = !apdu::check_exists(
-                &mut self.t1, &mut self.scp03, CANARY_USERID,
-            ).unwrap_or(true);
-            secure_log!(
-                "[SE050/selftest] post-delete: data_gone={} user_gone={}",
-                data_gone, user_gone
-            );
-
-            if !(data_gone && user_gone) {
+            if survivors > 0 {
                 secure_log!(
-                    "[SE050/selftest] FAILED: admin-delete policy byte-order regression (data_gone={} user_gone={})",
-                    data_gone, user_gone
+                    "[SE050/selftest] FAILED: {} canary/canaries survived the 6-delete admin session \
+                     (policy TLV byte-order regression OR session-invalidation quirk)",
+                    survivors,
                 );
                 return Err(Se050Error::Status(0x6986));
             }
         }
 
-        secure_log!("[SE050/selftest] PASS");
+        secure_log!("[SE050/selftest] PASS (6 canaries admin-deleted in one session)");
         Ok(())
     }
 
