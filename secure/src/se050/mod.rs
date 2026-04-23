@@ -1227,6 +1227,21 @@ impl Se050 {
         use zeroize::Zeroize;
         self.init()?;
 
+        // Objects that MUST be gone after a successful admin wipe for
+        // the "wallet data is erased" contract to hold. Admin UserID
+        // survival is tracked separately below — the caller's
+        // `admin_exists()` check drives flash-page-125 erase decisions.
+        const CANARY_USERID_CLEANUP: u32 = 0x7B10_00B0;
+        const CANARY_DATA_CLEANUP: u32 = 0x7B10_00B1;
+        const USER_OBJS: &[(u32, &str)] = &[
+            (ENTROPY_OBJ, "ENTROPY_OBJ"),
+            (VK_OBJ, "VK_OBJ"),
+            (BOOTSTRAP_VK_OBJ, "BOOTSTRAP_VK_OBJ"),
+            (USERID_OBJ, "USERID_OBJ"),
+            (CANARY_DATA_CLEANUP, "CANARY_DATA_CLEANUP"),
+            (CANARY_USERID_CLEANUP, "CANARY_USERID_CLEANUP"),
+        ];
+
         unsafe {
             // If the admin UserID doesn't exist, there's nothing structured
             // to wipe via this path — fall back to plain iterative delete.
@@ -1235,8 +1250,9 @@ impl Se050 {
             ).unwrap_or(false);
 
             if !admin_exists {
-                #[cfg(feature = "debug-log")]
-                secure_log!("[SE050] admin_factory_reset: no admin obj, falling back to iterative_delete_all");
+                secure_log!(
+                    "[SE050/admin-wipe] no admin UserID on chip, falling back to iterative_delete_all"
+                );
                 let _ = apdu::iterative_delete_all(
                     &mut self.t1, &mut self.scp03, None, None,
                 );
@@ -1248,6 +1264,7 @@ impl Se050 {
                 if let Err(e) = apdu::verify_session(
                     &mut self.t1, &mut self.scp03, &session_id, admin_pin,
                 ) {
+                    secure_log!("[SE050/admin-wipe] verify_session FAILED: {:?}", e);
                     let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
                     return Err(e);
                 }
@@ -1257,21 +1274,39 @@ impl Se050 {
                 // otherwise a selftest that crashed between write and
                 // admin-delete leaves them stranded with an admin-
                 // delete policy that unauth delete can't clear.
-                const CANARY_USERID_CLEANUP: u32 = 0x7B10_00B0;
-                const CANARY_DATA_CLEANUP: u32 = 0x7B10_00B1;
-                for obj in &[
-                    ENTROPY_OBJ, VK_OBJ, BOOTSTRAP_VK_OBJ, USERID_OBJ,
-                    CANARY_DATA_CLEANUP, CANARY_USERID_CLEANUP,
-                ] {
-                    let _ = apdu::delete_object_authed(
-                        &mut self.t1, &mut self.scp03, &session_id, *obj,
-                    );
+                //
+                // Log the delete-APDU status per object so downstream
+                // diagnosis can tell policy-rejection (chip-side
+                // `0x6982`/`0x6986`) apart from session-invalidation
+                // after Nth delete. Silent `let _ = ...` was masking
+                // both patterns indistinguishably — see work-todo Bug 1.
+                for (obj_id, name) in USER_OBJS {
+                    match apdu::delete_object_authed(
+                        &mut self.t1, &mut self.scp03, &session_id, *obj_id,
+                    ) {
+                        Ok(()) => {
+                            secure_log!("[SE050/admin-wipe] delete {} (0x{:08x}): Ok", name, obj_id);
+                        }
+                        Err(e) => {
+                            secure_log!(
+                                "[SE050/admin-wipe] delete {} (0x{:08x}): Err({:?})",
+                                name, obj_id, e
+                            );
+                        }
+                    }
                 }
 
                 // Self-delete the admin UserID inside its own session.
-                let _ = apdu::delete_object_authed(
+                match apdu::delete_object_authed(
                     &mut self.t1, &mut self.scp03, &session_id, ADMIN_WIPE_OBJ,
-                );
+                ) {
+                    Ok(()) => {
+                        secure_log!("[SE050/admin-wipe] delete ADMIN_WIPE_OBJ (self): Ok");
+                    }
+                    Err(e) => {
+                        secure_log!("[SE050/admin-wipe] delete ADMIN_WIPE_OBJ (self): Err({:?})", e);
+                    }
+                }
 
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
             }
@@ -1282,6 +1317,49 @@ impl Se050 {
             let _ = apdu::iterative_delete_all(
                 &mut self.t1, &mut self.scp03, None, None,
             );
+
+            // Post-wipe verification. Each user object MUST be gone; if
+            // any survived the admin-auth delete the wipe is incomplete
+            // and the caller (flash-page-125 erase, multi-chip wipe
+            // coordinator) needs to know so it doesn't falsely advance
+            // state. Admin UserID survival is NOT a hard failure here:
+            // it matters for page-125 lifecycle but user-data wipe
+            // (the security guarantee) is orthogonal.
+            let mut first_survivor: Option<(u32, &str)> = None;
+            let mut surviving_count: u32 = 0;
+            for (obj_id, name) in USER_OBJS {
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj_id).unwrap_or(false) {
+                    surviving_count += 1;
+                    secure_log!(
+                        "[SE050/admin-wipe] post-check {} (0x{:08x}): SURVIVED",
+                        name, obj_id
+                    );
+                    if first_survivor.is_none() {
+                        first_survivor = Some((*obj_id, name));
+                    }
+                }
+            }
+
+            let admin_post = apdu::check_exists(
+                &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ,
+            ).unwrap_or(false);
+            secure_log!(
+                "[SE050/admin-wipe] post-check ADMIN_WIPE_OBJ: {}",
+                if admin_post { "SURVIVED (page-125 erase will be skipped)" } else { "gone" },
+            );
+
+            if surviving_count > 0 {
+                secure_log!(
+                    "[SE050/admin-wipe] FAILED: {} user object(s) survived (first: {})",
+                    surviving_count,
+                    first_survivor.map(|(_, n)| n).unwrap_or("?"),
+                );
+                // Don't clear caches — the wipe was incomplete, the
+                // caller needs to retry or escalate. Zeroizing caches
+                // now would leave the driver in a "ready for fresh
+                // provision" state that doesn't match the chip.
+                return Err(Se050Error::Status(0x6986));
+            }
         }
 
         self.entropy_blob_cache.zeroize();
@@ -1292,8 +1370,7 @@ impl Se050 {
         self.bootstrap_vk_cached = false;
         self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
 
-        #[cfg(feature = "debug-log")]
-        secure_log!("[SE050] Admin factory reset complete");
+        secure_log!("[SE050/admin-wipe] Admin factory reset complete (all user objects gone)");
 
         Ok(())
     }
@@ -1748,49 +1825,64 @@ impl WalletStore for Se050 {
 
     #[cfg(feature = "stm32u585")]
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
-        // Load admin PIN from flash (populated at first-boot provision),
-        // arm the wipe flag for crash-safety, wipe SE050 under admin
-        // auth, then CONDITIONALLY erase page 125.
+        // Re-derive the admin PIN from OTP master — the same derivation
+        // the provisioning path uses (`store_objects` calls
+        // `crate::hw::secret_keys::se050_admin_pin()` to write the
+        // admin UserID). The flash-page-125 PIN slot is a legacy of
+        // pre-v6 provisionings and is deliberately blank on chips
+        // provisioned under the v6 OTP-derived admin scheme — reading
+        // it and branching on `is_admin_pin_blank()` would route
+        // every v6 wipe into `iterative_wipe(None, None)`, which
+        // can't touch admin-gated user objects and leaves the wallet
+        // seed on-chip.
         //
-        // The erase was previously unconditional, which was the root
-        // cause of the v3 and v4 OID-range retirements (2026-04-21): a
-        // Transport glitch mid-`admin_factory_reset` can leave the
-        // admin UserID on the chip while returning Err, and an
-        // unconditional erase in that state would blow away the only
-        // PIN that could re-try the admin delete. We now gate the
-        // erase on `admin_exists()` so the flash-side PIN survives any
-        // partial wipe — next boot's resume path retries with the
-        // matching credential and converges.
-        //
-        // See `ADMIN_WIPE_OBJ` docstring for the invariant statement.
-        unsafe {
-            if crate::hw::flash::is_admin_pin_blank() {
-                // Nothing provisioned via the admin flow — best-effort
-                // unauthenticated sweep in case the chip still has legacy
-                // objects around.
-                let _ = self.iterative_wipe(None, None);
-            } else {
-                let mut admin_pin = [0u8; 16];
-                crate::hw::flash::read_admin_pin(&mut admin_pin);
+        // Page 125 still holds the wipe-in-progress flag (for crash-
+        // safe resume) which we arm below; the flag offset is
+        // separate from the legacy PIN slot so flag operations
+        // don't touch the PIN.
+        use zeroize::Zeroize;
 
-                let _ = crate::hw::flash::arm_wipe_flag();
-
-                // Errors deliberately swallowed. The `iterative_wipe`
-                // fallback that used to run here couldn't delete the
-                // policy-gated admin UserID anyway (same auth gate),
-                // so the only path out on error is preserving flash
-                // state for the next retry.
-                let _ = self.admin_factory_reset(&admin_pin);
-
-                use zeroize::Zeroize;
-                admin_pin.zeroize();
+        let mut admin_pin = match crate::hw::secret_keys::se050_admin_pin() {
+            Ok(p) => p,
+            Err(e) => {
+                secure_log!(
+                    "[SE050/factory_reset_admin] se050_admin_pin() FAILED: {:?} — \
+                     falling back to unauth sweep (user objects will survive)",
+                    e
+                );
+                unsafe {
+                    let _ = self.iterative_wipe(None, None);
+                }
+                self.zeroize_caches();
+                return Ok(());
             }
+        };
+
+        unsafe {
+            let _ = crate::hw::flash::arm_wipe_flag();
+
+            // Propagate any error from admin_factory_reset — now that
+            // it returns Err when user objects survive, the trait-
+            // level dispatch can tell whether the wipe actually
+            // completed and let the page-125 erase gate on real
+            // chip state rather than a silent swallow.
+            let wipe_result = self.admin_factory_reset(&admin_pin);
+            admin_pin.zeroize();
 
             // Conditional erase: only burn the flash state if the chip
             // confirms the admin UserID is actually gone. Otherwise
             // leave page 125 intact so the next resume retries.
             if !self.admin_exists() {
                 let _ = crate::hw::flash::erase_admin_page();
+            }
+
+            if let Err(e) = wipe_result {
+                secure_log!(
+                    "[SE050/factory_reset_admin] admin_factory_reset returned Err({:?}) — \
+                     wipe incomplete; flash state preserved for resume",
+                    e
+                );
+                return Err(SeError::InternalError);
             }
         }
 
