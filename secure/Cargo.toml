@@ -137,6 +137,14 @@ pin-gate-wipe-e2e = ["dual-se", "optiga-hw-counter", "e2e-test"]
 # at `LcsO=Creation` so metadata remains mutable for further dev
 # iteration. Use `make wipe-for-wizard`.
 wipe-for-wizard = ["dual-se", "optiga-hw-counter", "dev-testkey", "ui-oled", "gpio-buttons"]
+# One-shot diagnostic: at the top of `main()`, fire `pin_diag::run()`
+# (a 6-pulse train on PA4/PD5/PE0/PE4/PE5/PB6 with distinct widths)
+# and halt. Used to identify which STM32 pin is electrically wired to
+# the Arduino D6 header on the B-U585I-IOT02A — the target of the
+# OPTIGA RST move off D5 (which cross-couples into SE050 ENA on the
+# stacked OM-SE050ARD shield). No secrets, no provisioning, no
+# destructive flash writes. Use `make pin-diag-boot-hw`.
+pin-diag-boot = ["stm32u585", "optiga-trust-m"]
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
 optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Production: bump LcsO to Operational on BOTH E140 (PBS) AND every user OID (F1D0..F1D4 + F1E1) at end of provisioning. Irreversible per OPTIGA SRM §"Life Cycle Status" — LcsO is monotonic, no reverse path exists. Default OFF so dev chips stay at LcsO=Creation throughout all iteration (metadata still mutable, data rewriteable without AC constraints). ONLY enable when (a) STM32 OTP master is burned, (b) PBS is OTP-derived, (c) this specific chip is intended to become a production unit and you have validated the provisioning flow against sacrificial parts. See docs/production-todo.md for the full pre-ship checklist and docs/optiga-brick-postmortem.md §5 + §7 for the history.
@@ -234,6 +242,17 @@ dev-testkey = ["otp-hardcoded-master-key"]
 # chips (OPTIGA F1D0..F1D4 + F1E1; SE050 0x7B0E_xxxx — v5). Use
 # `make dual-se-admin-wipe-e2e`.
 dual-se-admin-wipe-e2e = ["dual-se"]
+# Multi-unlock / cross-reboot validation. First boot: provision both
+# chips with a fixed test mnemonic+PIN, do N unlocks in a row (each one
+# re-reads both halves from NVM and re-XORs), verify every reconstruction
+# matches the expected master_secret. Subsequent boots: detect already-
+# provisioned state, skip provisioning, do N unlocks again. Paired with
+# a Makefile target that invokes `probe-rs run` 3× to force 3 cold
+# reboots through the same firmware image, proving SE050 NVM survives
+# the full provisioning pulse sequence and stays stable across reboots
+# — the exact scenario where the old PE4→ENA cross-coupling corrupted
+# ENTROPY_OBJ. Use `make dual-se-multi-unlock-e2e`.
+dual-se-multi-unlock-e2e = ["dual-se"]
 # Direct test of the MCU-side PIN attempt counter (page 126) + the
 # `nsc::gated_unlock` pre-commit pattern. Hardcoded right/wrong PINs
 # + semihosting PASS/FAIL output; no buttons or PIN UI needed.

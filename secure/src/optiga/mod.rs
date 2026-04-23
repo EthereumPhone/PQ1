@@ -113,6 +113,22 @@ impl OptigaTrustM {
         }
 
         unsafe {
+            // Pulse RST (PE0 = Arduino D6 on this board) low→high at
+            // the top of init. At POR the STM32's PE0 is a floating
+            // input; holding the line merely HIGH does not wake the
+            // chip from a latched/locked state left over from a prior
+            // session (observed on 2026-04-23 during dual-SE bring-up
+            // — LA showed RST cleanly HIGH for 20 s, yet the chip
+            // never ACK'd on I²C; a proper LOW→HIGH pulse is the only
+            // thing that forces a fresh chip boot). `pin_diag::run`
+            // is used instead of `reset_pin::hard_pulse` because the
+            // former's longer "enable GPIOA/D/E clocks + two decoy
+            // pulses + 50 ms priming" sequence is what empirically
+            // produces a visible edge on this silicon / call-stack
+            // (documented in `pin_diag.rs` module-level doc).
+            #[cfg(feature = "stm32u585")]
+            crate::pin_diag::run();
+
             // Cold-boot settle: the datasheet STARTUP_TIME is worst-case
             // 12 s but typical warm-reset is 15 ms. Wait 50 ms — enough for
             // warm reset, covered by the retry loop for colder starts.
@@ -168,7 +184,7 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// Pulse the RST line low via PE4 and re-run OpenApplication.
+    /// Pulse the RST line low via PE0 (Arduino D6) and re-run OpenApplication.
     ///
     /// Needed as a workaround for the 2-writes-per-session throttle on
     /// this specific OPTIGA Trust M dev board: after the chip accepts
@@ -178,7 +194,7 @@ impl OptigaTrustM {
     /// (strict locks, per-session counters) resets.
     #[cfg(feature = "stm32u585")]
     fn hard_reset_and_reinit(&mut self) -> Result<(), OptigaError> {
-        secure_log!("[OPTIGA] hard-pulsing RST (PE4) to clear session throttle");
+        secure_log!("[OPTIGA] hard-pulsing RST (PE0/D6) to clear session throttle");
         // Uses `pin_diag::run` instead of the cleaner `reset_pin::init +
         // hard_pulse` pair: an identical-looking implementation in
         // reset_pin.rs produces no visible edge on the logic analyzer when

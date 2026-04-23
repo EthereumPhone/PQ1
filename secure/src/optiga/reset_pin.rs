@@ -1,19 +1,26 @@
 //! GPIO-driven hard reset of the OPTIGA Trust M via the chip's RST line.
 //!
 //! On the B-U585I-IOT02A Discovery board the Arduino UNO R3 connector's
-//! `D5` pin is wired to STM32U585 pin **PE4** — confirmed empirically by
-//! `pin_diag::run()` toggling all four candidates (PA4 / PD5 / PE0 / PE4)
-//! with distinct pulse widths and watching the logic-analyzer probe on
-//! the physical D5 header: exactly one pulse appeared, at the PE4 width.
-//! Prior bring-up iterations of this file targeted PE0, PD5, and PA4 on
-//! docs / user reports that didn't match the silkscreen; none of them
-//! toggled an electrically-connected pin, so the "hard RST pulse" was
-//! effectively a no-op and the chip was only ever being reset via the
-//! I²C-level `soft_reset` (REG_SOFT_RESET=0x88). That happened to be
-//! enough on a previously-burned bench chip (recovered via SetObject-
-//! Protected) but not on pristine silicon.
+//! `D6` pin was empirically confirmed to be STM32U585 pin **PE0** via
+//! `pin_diag::run()` + LA capture on 2026-04-23.
 //!
-//! The chip's RST is active-low: driving PE4 low holds the chip in
+//! This disagrees with ST's UM2839 Table 24, which lists `D5 = PE0` and
+//! `D6 = PB6`. Earlier on this same board the old "D5 header" also
+//! resolved to a different pin than UM2839 claimed (it was PE4, not
+//! PE0). The consistent observation is that the silkscreen / Arduino
+//! header positions on this specific board are offset by one slot from
+//! UM2839's table. When re-targeting the RST pin, ALWAYS use
+//! `pin_diag::run()` + LA capture to verify, never the manual.
+//!
+//! Why we moved the RST wire off D5 (PE4): the OM-SE050ARD shield
+//! routes its Arduino `D5` header to the SE050's ENA (enable) line.
+//! Driving PE4 low to reset the OPTIGA also powered down the SE050
+//! mid-NVM-write, corrupting `ENTROPY_OBJ` and producing the
+//! "reconstruction works once, fails after reboot" symptom. D6 on the
+//! OM-SE050ARD has no SE050 net, so OPTIGA resets no longer disturb
+//! SE050 NVM.
+//!
+//! The chip's RST is active-low: driving PE0 low holds the chip in
 //! reset, driving high (or floating — chip has an internal pull-up)
 //! releases it. We drive the pin explicitly rather than leaving it to
 //! the pull-up so that a brownout or glitch on the breadboard rail
@@ -22,14 +29,16 @@
 //! ## Implementation note
 //!
 //! The init + toggle sequence mirrors the one in `pin_diag::run()` that
-//! we empirically know produces a visible PE4 pulse on the logic
-//! analyzer. An earlier pure-BSRR implementation in this file did *not*
-//! yield a visible edge in the same wiring — something about the write
-//! sequencing on this particular silicon revision made the BSRR stores
-//! disappear even with DSB barriers. The pattern we now use (OR in the
-//! RCC bit, then a full read-modify-write on MODER/OTYPER/OSPEEDR/
-//! PUPDR *before* any BSRR store, then 50 ms idle-high settle) is the
-//! one that survives that silicon quirk.
+//! we empirically know produces a visible edge on the logic analyzer
+//! (originally validated on PE4; the write-ordering quirk is silicon-
+//! level, not pin-level, so the same pattern applies to PE5). An earlier
+//! pure-BSRR implementation in this file did *not* yield a visible edge
+//! in the same wiring — something about the write sequencing on this
+//! particular silicon revision made the BSRR stores disappear even with
+//! DSB barriers. The pattern we now use (OR in the RCC bit, then a full
+//! read-modify-write on MODER/OTYPER/OSPEEDR/PUPDR *before* any BSRR
+//! store, then 50 ms idle-high settle) is the one that survives that
+//! silicon quirk.
 
 #![cfg(feature = "stm32u585")]
 
@@ -39,7 +48,9 @@ const RCC_AHB2ENR1: *mut u32 = 0x5602_0C8C as *mut u32;
 const GPIOE_BASE: u32 = 0x5202_1000;
 
 const RCC_GPIOEEN_BIT: u32 = 4;
-const RST_PIN: u32 = 4; // PE4
+const RST_PIN: u32 = 0; // PE0 — empirically D6 on this B-U585I-IOT02A
+                        // (LA capture 2026-04-23; UM2839 claims PB6
+                        // but that mapping is wrong on this board).
 
 /// Enable the GPIOE bus clock. Idempotent.
 unsafe fn enable_gpioe_clock() {
@@ -48,10 +59,10 @@ unsafe fn enable_gpioe_clock() {
     cortex_m::asm::dsb();
 }
 
-/// Configure PE4 as push-pull output driving high, matching the full
-/// MODER/OTYPER/OSPEEDR/PUPDR sequence from `pin_diag::config_output_
-/// high`.
-unsafe fn config_pe4_output_high() {
+/// Configure the RST pin as push-pull output driving high, matching the
+/// full MODER/OTYPER/OSPEEDR/PUPDR sequence from
+/// `pin_diag::config_output_high`.
+unsafe fn config_rst_output_high() {
     let moder = GPIOE_BASE as *mut u32;
     let otyper = (GPIOE_BASE + 0x04) as *mut u32;
     let ospeedr = (GPIOE_BASE + 0x08) as *mut u32;
@@ -61,45 +72,46 @@ unsafe fn config_pe4_output_high() {
     // Drive high first so there's no low-glitch when we flip to output.
     write_volatile(bsrr, 1u32 << RST_PIN);
 
-    // MODER[9:8] = 01 (output)
+    // MODER[2*RST_PIN+1 : 2*RST_PIN] = 01 (output)
     let mask = 0b11u32 << (2 * RST_PIN);
     let m = read_volatile(moder);
     write_volatile(moder, (m & !mask) | (0b01u32 << (2 * RST_PIN)));
 
-    // OTYPER[4] = 0 (push-pull)
+    // OTYPER[RST_PIN] = 0 (push-pull)
     let o = read_volatile(otyper);
     write_volatile(otyper, o & !(1u32 << RST_PIN));
 
-    // OSPEEDR[9:8] = 01 (medium speed)
+    // OSPEEDR[2*RST_PIN+1 : 2*RST_PIN] = 01 (medium speed)
     let s = read_volatile(ospeedr);
     write_volatile(ospeedr, (s & !mask) | (0b01u32 << (2 * RST_PIN)));
 
-    // PUPDR[9:8] = 00 (no pull)
+    // PUPDR[2*RST_PIN+1 : 2*RST_PIN] = 00 (no pull)
     let pu = read_volatile(pupdr);
     write_volatile(pupdr, pu & !mask);
 }
 
-/// Configure PE4 as push-pull output, drive high (release chip reset).
+/// Configure the RST pin (PE0, Arduino D6 header) as push-pull output,
+/// drive high (release chip reset).
 ///
-/// Safe to call multiple times. Only touches bits for pin 4; PE0..PE3
-/// and PE5..PE15 are left alone.
+/// Safe to call multiple times. Only touches bits for `RST_PIN`; the
+/// other 15 pins of GPIOE are left alone.
 pub unsafe fn init() {
     enable_gpioe_clock();
-    config_pe4_output_high();
+    config_rst_output_high();
     // 50 ms idle-high settle before the first pulse, matching the lead-
     // in delay in `pin_diag::run`.
     cortex_m::asm::delay(160_000 * 50);
 }
 
-/// Pulse PE4 low for ~10 ms, then high, then wait ~50 ms for the chip
-/// to finish its internal boot. The 50 ms matches the same settle delay
-/// we use in `OptigaTrustM::init` before probing I²C.
+/// Pulse the RST pin low for ~10 ms, then high, then wait ~50 ms for
+/// the chip to finish its internal boot. The 50 ms matches the same
+/// settle delay we use in `OptigaTrustM::init` before probing I²C.
 pub unsafe fn hard_pulse() {
     let bsrr = (GPIOE_BASE + 0x18) as *mut u32;
 
     // Re-apply output config defensively in case some later peripheral
-    // init reconfigured PE4 between our last `init()` and now.
-    config_pe4_output_high();
+    // init reconfigured the RST pin between our last `init()` and now.
+    config_rst_output_high();
 
     // Pulse low for 10 ms.
     write_volatile(bsrr, 1u32 << (16 + RST_PIN));

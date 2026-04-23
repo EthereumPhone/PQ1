@@ -520,4 +520,157 @@ impl DualSecureElement {
             }
         }
     }
+
+    /// Multi-unlock / cross-reboot validation for the SE050 entropy-
+    /// corruption fix (PE0 RST, no more shield ENA cross-coupling).
+    ///
+    /// Flow:
+    /// - If both chips already provisioned: reuse state (this is the
+    ///   "we already booted once" branch — the interesting one).
+    /// - Else: run the same pre-clean cascade as `run_admin_wipe_
+    ///   roundtrip` then provision fresh.
+    /// - Do `iterations` consecutive unlock() calls. Each one
+    ///   re-authenticates both chips, reads both entropy halves, XORs
+    ///   them, derives master_secret, cross-checks. All iterations
+    ///   must return the SAME master_secret (== `test_master`). Any
+    ///   drift between iterations flags SE050 NVM corruption.
+    ///
+    /// Does NOT wipe at the end — that's how we preserve state so the
+    /// next cold boot (re-invocation of `probe-rs run`) can exercise
+    /// the already-provisioned branch.
+    #[cfg(feature = "dual-se-multi-unlock-e2e")]
+    pub fn run_multi_unlock_roundtrip(&mut self, iterations: u32) -> Result<(), SeError> {
+        let test_entropy: [u8; 32] = [0x55; 32];
+        let test_master = crate::crypto::kdf(b"sphincs-master", &test_entropy, 0);
+        let test_vk: [u8; 32] = [0xAA; 32];
+        let test_bvk: [u8; 32] = [0xBB; 32];
+        let test_pin: [u8; 8] = *b"dualwipe";
+
+        // Probe by attempting an unlock with the test PIN. If both chips
+        // are already provisioned with matching state from a prior boot,
+        // this returns the expected master_secret and no pre-clean is
+        // needed. Otherwise we fall through to wipe + fresh-provision.
+        // `optiga.is_provisioned()` can't be used as the discriminator
+        // because it needs the shielded connection up, which cold boot
+        // hasn't established yet → false negative.
+        secure_log!("[DUAL-MULTI] probing unlock() to detect prior provisioning...");
+        let probe = self.unlock(&test_pin);
+        match &probe {
+            Ok(m) if m == &test_master => {
+                secure_log!("[DUAL-MULTI] probe: Ok(master matches)");
+            }
+            Ok(_) => {
+                secure_log!("[DUAL-MULTI] probe: Ok BUT master_secret mismatch — state corruption?");
+            }
+            Err(e) => {
+                secure_log!("[DUAL-MULTI] probe: Err({:?})", e);
+            }
+        }
+        let already_provisioned = matches!(probe, Ok(ref m) if *m == test_master);
+
+        if already_provisioned {
+            secure_log!("[DUAL-MULTI] boot state: ALREADY PROVISIONED (probe unlock matched)");
+            secure_log!("[DUAL-MULTI] phase A: skipping pre-clean + provision");
+            // The probe unlock counts as iteration 1; do N-1 more.
+            secure_log!("[DUAL-MULTI] iter 1/{}: master_secret matches (via boot probe)", iterations);
+            for i in 2..=iterations {
+                let recovered = match self.unlock(&test_pin) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        secure_log!("[DUAL-MULTI] iter {}/{}: unlock FAILED {:?}", i, iterations, e);
+                        return Err(SeError::InternalError);
+                    }
+                };
+                if recovered != test_master {
+                    secure_log!("[DUAL-MULTI] iter {}/{}: master_secret MISMATCH", i, iterations);
+                    return Err(SeError::InternalError);
+                }
+                secure_log!("[DUAL-MULTI] iter {}/{}: master_secret matches", i, iterations);
+            }
+        } else {
+            // Probe failed → chips are fresh / stale / mismatched. Wipe,
+            // provision, then do `iterations` unlocks.
+            if let Ok(_) = probe {
+                secure_log!("[DUAL-MULTI] boot state: probe unlocked but master mismatched — reprovisioning");
+            } else {
+                secure_log!("[DUAL-MULTI] boot state: probe unlock FAILED → fresh provisioning");
+            }
+
+            if let Err(e) = self.optiga.factory_reset() {
+                secure_log!("[DUAL-MULTI] pre-clean: OPTIGA factory_reset error {:?} (continuing)", e);
+            }
+
+            #[cfg(feature = "stm32u585")]
+            unsafe {
+                let admin_blank = crate::hw::flash::is_admin_pin_blank();
+                if !admin_blank {
+                    let mut admin_pin = [0u8; 16];
+                    crate::hw::flash::read_admin_pin(&mut admin_pin);
+                    let _ = self.se050.admin_factory_reset(&admin_pin);
+                    admin_pin.zeroize();
+                }
+                if self.se050.is_provisioned() {
+                    const PIN_CANDIDATES: &[&[u8]] = &[
+                        b"00000000", b"dualwipe", b"12345678", b"11111111",
+                    ];
+                    for &pin in PIN_CANDIDATES {
+                        if self.se050.user_factory_reset(pin).is_ok() {
+                            break;
+                        }
+                    }
+                }
+                let _ = self.se050.iterative_wipe(None, None);
+            }
+
+            if self.optiga.is_provisioned() {
+                secure_log!("[DUAL-MULTI] pre-clean FAILED: OPTIGA still provisioned");
+                return Err(SeError::InternalError);
+            }
+            if self.se050.is_provisioned() {
+                secure_log!("[DUAL-MULTI] pre-clean FAILED: SE050 still provisioned");
+                return Err(SeError::InternalError);
+            }
+
+            secure_log!("[DUAL-MULTI] pre-clean OK; provisioning fresh");
+            self.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &test_pin)?;
+            secure_log!("[DUAL-MULTI] phase A: provision OK");
+
+            for i in 1..=iterations {
+                let recovered = match self.unlock(&test_pin) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        secure_log!("[DUAL-MULTI] iter {}/{}: unlock FAILED {:?}", i, iterations, e);
+                        return Err(SeError::InternalError);
+                    }
+                };
+                if recovered != test_master {
+                    secure_log!("[DUAL-MULTI] iter {}/{}: master_secret MISMATCH", i, iterations);
+                    return Err(SeError::InternalError);
+                }
+                secure_log!("[DUAL-MULTI] iter {}/{}: master_secret matches", i, iterations);
+            }
+        }
+
+        secure_log!("[DUAL-MULTI] all {} unlocks verified; state preserved for next cold boot", iterations);
+
+        // Clear stale MCU wipe-flag + PIN attempts left over from prior
+        // failed `dual-se-admin-wipe-e2e` runs or from our own pre-clean.
+        // Without this, the boot-time wipe trigger in `main.rs`
+        // re-fires on every reboot, wiping both chips and defeating the
+        // "cross-boot already-provisioned" branch this test is meant to
+        // exercise. Safe because the chips are now provisioned cleanly
+        // and SE050's admin UserID lifecycle is the pre-existing bug
+        // tracked in `project_se050_admin_wipe.md`, not our concern.
+        #[cfg(feature = "stm32u585")]
+        unsafe {
+            if crate::hw::flash::is_wipe_armed() {
+                if crate::hw::flash::erase_admin_page().is_ok() {
+                    secure_log!("[DUAL-MULTI] cleared stale wipe flag (page 125 erased)");
+                }
+            }
+            let _ = crate::hw::flash::pin_attempts_reset();
+        }
+
+        Ok(())
+    }
 }

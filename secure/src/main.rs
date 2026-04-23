@@ -354,6 +354,24 @@ fn main() -> ! {
     sau::init();
     secure_log!("[S] SAU + MPC configured");
 
+    // D6 pin identification diagnostic: pulse the candidate pins in a
+    // known pattern, then park the CPU so the LA can capture cleanly.
+    // Read `pin_diag::run`'s docstring for the pulse-width table — the
+    // width that shows up on CH3 (hooked to the D6 header) identifies
+    // the STM32 pin electrically wired to D6.
+    #[cfg(feature = "pin-diag-boot")]
+    {
+        secure_log!("[S][pin-diag] running Arduino-header sweep");
+        // Run twice with a gap so the LA has two chances to catch it.
+        crate::pin_diag::header_sweep();
+        cortex_m::asm::delay(160_000 * 500);
+        crate::pin_diag::header_sweep();
+        secure_log!("[S][pin-diag] done — halting; inspect LA on target header");
+        loop {
+            cortex_m::asm::wfe();
+        }
+    }
+
     // RNG init now that GTZC/TZSC has assigned RNG as a secure peripheral
     // and the SAU is live. Safe to touch 0x520C_0800 from the secure world.
     #[cfg(feature = "stm32u585")]
@@ -713,6 +731,34 @@ fn main() -> ! {
                 ui::show_status("Dual wipe", "FAIL");
             }
         }
+        loop { cortex_m::asm::wfi(); }
+    }
+
+    // Multi-unlock / cross-reboot test: provisions on first boot,
+    // re-uses state on subsequent boots, runs 5 unlock+verify cycles
+    // each boot. Pair with `make dual-se-multi-unlock-e2e` which
+    // invokes probe-rs run 3× to force 3 cold reboots = 15 unlocks
+    // across 3 boot sessions.
+    #[cfg(feature = "dual-se-multi-unlock-e2e")]
+    unsafe {
+        ui::show_status("Dual multi-unlock", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        let rc = match se.run_multi_unlock_roundtrip(5) {
+            Ok(()) => {
+                secure_log!("[S] [E2E-DUAL-MULTI] MULTI-UNLOCK ROUNDTRIP: PASS");
+                ui::show_status("Dual multi-unlock", "PASS");
+                cortex_m_semihosting::debug::EXIT_SUCCESS
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E-DUAL-MULTI] MULTI-UNLOCK ROUNDTRIP: FAIL ({:?})", _e);
+                ui::show_status("Dual multi-unlock", "FAIL");
+                cortex_m_semihosting::debug::EXIT_FAILURE
+            }
+        };
+        // SYS_EXIT: probe-rs sees ADP_Stopped_ApplicationExit and detaches
+        // cleanly. Without this, probe-rs stays attached on `wfi` and the
+        // USB interface isn't released for the next `probe-rs run` cycle.
+        cortex_m_semihosting::debug::exit(rc);
         loop { cortex_m::asm::wfi(); }
     }
 

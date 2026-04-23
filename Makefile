@@ -1569,6 +1569,51 @@ optiga-admin-wipe-e2e:
 # dead code here — our dispatcher halts before it runs.
 #
 # Watch semihosting for "[E2E-DUAL-ADMIN] DUAL-WIPE ROUNDTRIP: PASS"/"FAIL".
+# Multi-unlock / cross-reboot validation for the SE050-corruption fix.
+# First cold boot: provisions both chips with a fixed test mnemonic+PIN,
+# then does 5 consecutive unlock+XOR-reconstruct+verify cycles.
+# Subsequent cold boots: detects the provisioned state, skips
+# re-provisioning, does another 5 unlocks. Across the 3 runs below =
+# 15 unlocks spread over 3 full power-cycle equivalents (probe-rs reset
+# + run). PASS on all three proves SE050 ENTROPY_OBJ survives the full
+# provisioning pulse sequence AND stays stable across reboots — the
+# exact "works once, fails on reboot" scenario from the old cross-
+# coupling bug. Use `make dual-se-multi-unlock-e2e`.
+dual-se-multi-unlock-e2e:
+	@echo "==> Building dual-SE multi-unlock / reboot e2e firmware..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features dual-se-multi-unlock-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo ""
+	@for n in 1 2 3; do \
+		echo "==> Boot $$n/3..."; \
+		log=$$(mktemp -t dual-se-multi-b$$n.XXXXXX.log); \
+		probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log"; \
+		sleep 3; \
+		if grep -q "MULTI-UNLOCK ROUNDTRIP: PASS" "$$log"; then \
+			echo "==> Boot $$n PASS"; \
+			rm -f "$$log"; \
+		else \
+			echo "==> Boot $$n FAIL"; rm -f "$$log"; exit 1; \
+		fi; \
+		echo ""; \
+	done
+	@echo "==> ALL 3 BOOTS PASS — 15 unlocks across 3 cold reboots"
+	@echo ""
+	@echo "==> ALL 3 BOOTS PASS — 15 unlocks across 3 cold reboots, master_secret reproduces every time"
+
 dual-se-admin-wipe-e2e:
 	@echo "==> Building dual-SE unlock roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."
@@ -1703,6 +1748,37 @@ wipe-for-wizard:
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running wipe (watch OLED for 'WIPED — power-cycle me')..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
+# One-shot D6 pin-identification diagnostic.
+# Builds a minimal secure-world firmware that runs `pin_diag::run()`
+# at the top of `main()` (pulsing PA4/PD5/PE0/PE4/PE5/PB6 with
+# distinct widths) and then parks the CPU in `wfe`. No provisioning,
+# no SE init beyond the GPIO toggling — safe to flash over any
+# existing state.
+# Workflow:
+#   1. `sigrok-cli --driver kingst-la2016 --channels CH3 --time 5000 \
+#          --config samplerate=1m -o /tmp/d6.sr` in one terminal
+#   2. `make pin-diag-boot-hw` in another (flashes + runs)
+#   3. The width visible on CH3 identifies the STM32 pin on D6.
+pin-diag-boot-hw:
+	@echo "==> Building pin-diag-boot firmware (one-shot D6 finder)..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features pin-diag-boot,debug-log,ui-noop
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running (pulses fire once, then CPU halts in wfe)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
 pin-gate-e2e:
