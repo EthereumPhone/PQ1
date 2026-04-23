@@ -30,6 +30,7 @@ mod transport {
     const CMD_IS_UNLOCKED: u32 = 11;
     const CMD_LOCK: u32 = 12;
     const CMD_GET_WALLET_ADDRESS: u32 = 14;
+    const CMD_GET_INIT_CODE: u32 = 15;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -78,6 +79,15 @@ mod transport {
         unsafe { gateway_call(CMD_GET_WALLET_ADDRESS, out_ptr as u32, account_index, 0) }
     }
 
+    #[inline]
+    pub(super) fn get_init_code(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+        in_len: u32,
+    ) -> u32 {
+        unsafe { gateway_call(CMD_GET_INIT_CODE, in_ptr as u32, out_ptr as u32, in_len) }
+    }
+
     #[cfg(feature = "e2e-test")]
     const CMD_TEST_PIN_LOCKOUT: u32 = 200;
 
@@ -101,6 +111,7 @@ mod transport {
         fn nsc_is_unlocked() -> u32;
         fn nsc_lock() -> u32;
         fn nsc_get_wallet_address(out_ptr: u32, account_index: u32) -> u32;
+        fn nsc_get_init_code(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
 
         // Firmware-update veneers.
         fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32;
@@ -145,6 +156,15 @@ mod transport {
     #[inline]
     pub(super) fn get_wallet_address(out_ptr: *mut u8, account_index: u32) -> u32 {
         unsafe { nsc_get_wallet_address(out_ptr as u32, account_index) }
+    }
+
+    #[inline]
+    pub(super) fn get_init_code(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+        in_len: u32,
+    ) -> u32 {
+        unsafe { nsc_get_init_code(in_ptr as u32, out_ptr as u32, in_len) }
     }
 
     #[inline]
@@ -228,6 +248,23 @@ pub fn test_pin_lockout() -> u32 {
 /// pre-multi-account seeds keep their existing wallet.
 pub fn get_wallet_address(out: &mut [u8; 20], account_index: u32) -> u32 {
     transport::get_wallet_address(out.as_mut_ptr(), account_index)
+}
+
+/// Compute the 4280-byte ERC-4337 initCode for
+/// `(account_index, chain_id)`. Used by the companion's gas estimator
+/// to include a cryptographically-valid factory call in
+/// `eth_estimateUserOperationGas` for not-yet-deployed wallets. The
+/// produced bytes are byte-identical to what the deploy path of
+/// `sign_userop` would emit, and safe to cache (SPHINCS+C10 is
+/// stateless; the signed message depends only on chain_id + slot-0
+/// keys). Requires an unlocked device.
+///
+/// `input` MUST be 12 bytes: `[account_index(u32 BE) || chain_id(u64 BE)]`.
+/// `out` MUST be `PQ_INIT_CODE_LEN` (4280) bytes. First call for a
+/// given `(account, chain)` incurs ~10 s of keygens; subsequent
+/// calls reuse the SRAM slot cache.
+pub fn get_init_code(input: &[u8], out: &mut [u8]) -> u32 {
+    transport::get_init_code(input.as_ptr(), out.as_mut_ptr(), input.len() as u32)
 }
 
 // ---------------------------------------------------------------------------

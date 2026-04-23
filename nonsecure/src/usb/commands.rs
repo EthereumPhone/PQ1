@@ -14,6 +14,8 @@
 //! | 0x10 | UNLOCK                   |
 //! | 0x11 | LOCK                     |
 //! | 0x30 | SIGN_USEROP (unified)    |
+//! | 0x60 | GET_WALLET_ADDRESS       |
+//! | 0x61 | GET_INIT_CODE            |
 //! | 0xC0 | GET_RESPONSE             |
 
 use sphincs_tz_shared::*;
@@ -150,6 +152,7 @@ impl CommandRouter {
             INS_V2_UNLOCK => return self.cmd_unlock(),
             INS_V2_LOCK => return self.cmd_lock(),
             INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(data),
+            INS_V2_GET_INIT_CODE => return self.cmd_get_init_code(data),
 
             // Firmware-update non-chained commands. CHUNK carries the
             // 8-byte header + up to 1024 bytes of data — well under
@@ -329,6 +332,32 @@ impl CommandRouter {
             ptr: RESP_BUF.as_ptr(),
             len: 22,
         }
+    }
+
+    /// 0x61 GET_INIT_CODE — return the 4280-byte ERC-4337 initCode for
+    /// `(account_index, chain_id)`. Used by the companion's gas
+    /// estimator for not-yet-deployed wallets; the bytes are
+    /// byte-identical to what the deploy path of SIGN_USEROP emits
+    /// and safe to cache. Requires an unlocked device.
+    ///
+    /// APDU body: 12 bytes `[account_index u32 BE || chain_id u64 BE]`.
+    /// Response: 4280 bytes streamed via `GET_RESPONSE` chaining.
+    unsafe fn cmd_get_init_code(&self, data: &[u8]) -> Response {
+        if data.len() != 12 {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let status = nsc_api::get_init_code(
+            data,
+            &mut SIG_BUF[..PQ_INIT_CODE_LEN],
+        );
+        if status != NscStatus::Ok as u32 {
+            return self.nsc_status_to_response(status);
+        }
+        // PQ_INIT_CODE_LEN = 4280 > APDU_MAX_RESP (253), so this always
+        // enters the GET_RESPONSE chaining path. The chunker lives in
+        // `setup_chunked_response` and reuses the caller's existing
+        // PENDING_PTR/LEN/POS cursor.
+        self.setup_chunked_response(PQ_INIT_CODE_LEN)
     }
 
     /// 0x30 SIGN_USEROP — unified JARDÍN Type 1 / Type 2 state machine.
@@ -613,7 +642,71 @@ impl CommandRouter {
     /// A count of 0 is never emitted — if there are no hits the
     /// trailer is absent, which the secure world treats as "no
     /// names bundles".
+    /// Ensure the `[erc20][v1_zk][v3_zk]` u16-prefixed trailer skeleton
+    /// is fully present before `received_len`, padding any missing
+    /// prefix with `[0x00, 0x00]`.
+    ///
+    /// Background: the secure-world sign_userop parser walks trailers
+    /// positionally in that exact order and then reads the `names`
+    /// trailer at whatever cursor lands after the three. If the
+    /// companion sent a bare payload (no trailers) and the NS router
+    /// auto-injected only the erc20 bundle, positions where `v1_zk`
+    /// and `v3_zk` length headers should live are either past
+    /// `received_len` or contain stale CHAIN_BUF bytes from a prior
+    /// sign. Without the pad, the subsequent names-trailer injection
+    /// writes its `[count][bundle_len][bundle]` starting at a byte the
+    /// secure parser interprets as the v1_zk length header — AA13-style
+    /// misalignment, surfaces on the OLED as "Sign v3 len>cap" because
+    /// the u16 the parser eventually consumes as the v3 length is a
+    /// random byte pair from the middle of a names bundle.
+    ///
+    /// This helper walks the current trailer chain and appends empty
+    /// `[0,0]` u16 prefixes for any section not yet encoded, returning
+    /// the updated `received_len`. For a payload that already contains
+    /// a full skeleton (companion emitted all three prefixes, as it
+    /// does whenever any trailer is present) this is a no-op.
+    unsafe fn ensure_trailer_skeleton(received_len: usize) -> usize {
+        if received_len < SIGN_USEROP_HEADER_LEN {
+            return received_len;
+        }
+        let data_len =
+            u16::from_be_bytes([CHAIN_BUF[328], CHAIN_BUF[329]]) as usize;
+        let after_data = SIGN_USEROP_HEADER_LEN + data_len;
+        if after_data > received_len {
+            return received_len;
+        }
+        let mut pos = after_data;
+        let mut new_len = received_len;
+        // Three empty u16 prefixes to ensure: erc20, v1_zk, v3_zk.
+        for _ in 0..3 {
+            if pos + 2 > new_len {
+                if pos + 2 > CHAIN_BUF_LEN {
+                    return new_len;
+                }
+                CHAIN_BUF[pos..pos + 2].copy_from_slice(&0u16.to_be_bytes());
+                new_len = pos + 2;
+                pos += 2;
+            } else {
+                let section_len =
+                    u16::from_be_bytes([CHAIN_BUF[pos], CHAIN_BUF[pos + 1]]) as usize;
+                pos += 2 + section_len;
+                if pos > new_len {
+                    // Declared section extends past received_len — leave
+                    // it to the secure parser to reject; don't attempt
+                    // recovery that could mask a real truncation bug.
+                    return new_len;
+                }
+            }
+        }
+        new_len
+    }
+
     unsafe fn maybe_inject_names_bundles(received_len: usize) -> usize {
+        // Complete the `[erc20][v1_zk][v3_zk]` skeleton before appending
+        // names. See `ensure_trailer_skeleton` for the full rationale —
+        // without this, NS-injected names mis-parse as v1/v3 zk lengths
+        // in the secure world and fire "Sign v3 len>cap".
+        let received_len = Self::ensure_trailer_skeleton(received_len);
         if received_len < SIGN_USEROP_HEADER_LEN {
             return received_len;
         }

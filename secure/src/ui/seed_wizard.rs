@@ -216,19 +216,53 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
     let mut indices = [0u8; 3];
     pick_three_distinct(&mut indices);
 
-    for &probe in &indices {
+    #[cfg(feature = "debug-log")]
+    secure_log!(
+        "[wizard] verify_mnemonic: probes=[{}, {}, {}] (1-indexed on screen: {}, {}, {})",
+        indices[0], indices[1], indices[2],
+        indices[0] + 1, indices[1] + 1, indices[2] + 1,
+    );
+
+    for (step, &probe) in indices.iter().enumerate() {
         let title_buf = build_check_title(probe + 1);
         let title_s = unsafe { core::str::from_utf8_unchecked(&title_buf) };
 
+        #[cfg(feature = "debug-log")]
+        secure_log!(
+            "[wizard] verify step {}/3: asking for word #{} (expected \"{}\", BIP39 idx {})",
+            step + 1, probe + 1, m.word(probe as usize), m.word_index(probe as usize),
+        );
+
         match enter_single_word(title_s) {
             EnterWordResult::Word(idx) => {
-                if idx != m.word_index(probe as usize) {
+                let expected = m.word_index(probe as usize);
+                if idx != expected {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!(
+                        "[wizard] verify step {}/3: MISMATCH — got BIP39 idx {} (\"{}\") but expected {} (\"{}\") at word #{}",
+                        step + 1, idx, WORDLIST[idx as usize],
+                        expected, m.word(probe as usize),
+                        probe + 1,
+                    );
                     show_status("Wrong word", "retrying...");
                     return WizardResult::Cancelled;
                 }
+                #[cfg(feature = "debug-log")]
+                secure_log!("[wizard] verify step {}/3: OK", step + 1);
             }
-            EnterWordResult::Cancelled => return WizardResult::Cancelled,
-            EnterWordResult::IdleWipe => return WizardResult::IdleWipe,
+            EnterWordResult::Cancelled => {
+                #[cfg(feature = "debug-log")]
+                secure_log!(
+                    "[wizard] verify step {}/3: enter_single_word cancelled (long-Left at position 0)",
+                    step + 1,
+                );
+                return WizardResult::Cancelled;
+            }
+            EnterWordResult::IdleWipe => {
+                #[cfg(feature = "debug-log")]
+                secure_log!("[wizard] verify step {}/3: idle wipe", step + 1);
+                return WizardResult::IdleWipe;
+            }
         }
     }
 
@@ -249,8 +283,11 @@ fn pick_three_distinct(out: &mut [u8; 3]) {
 }
 
 fn build_check_title(human_index: u8) -> [u8; DISPLAY_COLS] {
+    // "Check word NN" rather than "Enter word NN" — makes clear the user
+    // must type the specific numbered word, not just the next word in
+    // sequence. Same 13-char footprint either way; both fit DISPLAY_COLS.
     let mut row = [b' '; DISPLAY_COLS];
-    let prefix = b"Enter word ";
+    let prefix = b"Check word ";
     row[1..1 + prefix.len()].copy_from_slice(prefix);
     let mut p = 1 + prefix.len();
     if human_index >= 10 {

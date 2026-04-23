@@ -913,8 +913,15 @@ impl Se050 {
     /// is a 16-byte random derived from the OPTIGA PBS, so brute force is
     /// infeasible and the wipe path must not lock itself out.
     ///
-    /// Skips objects that already exist (re-provisioning without wipe is
-    /// rejected at the SE050 level by the existing policies).
+    /// Re-provisioning semantics: on the `admin_pin = Some(..)` path (real
+    /// hardware), any stale user objects (USERID + 3 data blobs) from a
+    /// prior session are deleted via admin auth before the fresh writes,
+    /// so this function produces the committed `(entropy, vk,
+    /// bootstrap_vk, pin)` regardless of prior chip state. On the
+    /// `admin_pin = None` path (QEMU / `e2e-skip-admin-wipe`), existing
+    /// user objects are preserved (there is no admin auth to delete them
+    /// with, and those paths don't carry persistent chip state in
+    /// practice).
     fn store_objects(
         &mut self,
         pin: &[u8],
@@ -964,6 +971,93 @@ impl Se050 {
                 "[SE050/store] admin_ref={}",
                 if admin_ref.is_some() { "ADMIN_WIPE_OBJ" } else { "None" }
             );
+
+            // Stale-user-object sweep. `DualSecureElement::is_provisioned`
+            // is the AND of both SEs, so the wizard runs whenever OPTIGA
+            // reports unprovisioned — even if SE050 still holds the user
+            // objects from a prior session. Without this sweep, the
+            // `!exists` skip branches below would retain the stale
+            // USERID_OBJ (wrong PIN if the user picked a different one)
+            // and stale ENTROPY_OBJ (old half_E), desyncing the XOR split
+            // against the fresh half_O written to OPTIGA. On unlock, the
+            // dual-SE consistency check fails with `CRITICAL: reconstructed
+            // entropy doesn't match master!`.
+            //
+            // Gated on `admin_pin.is_some()` — the only code path that
+            // can reach a persistent chip with stale user objects, and
+            // the only one that has admin auth to delete them. QEMU and
+            // `e2e-skip-admin-wipe` keep the existing skip-if-exists
+            // semantics (no persistent state / fixed test fixtures).
+            if let Some(admin) = admin_pin {
+                const STALE_OBJS: [u32; 4] = [
+                    USERID_OBJ, ENTROPY_OBJ, VK_OBJ, BOOTSTRAP_VK_OBJ,
+                ];
+                let mut present = [false; 4];
+                let mut any_stale = false;
+                for (i, obj) in STALE_OBJS.iter().enumerate() {
+                    if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj)
+                        .unwrap_or(false)
+                    {
+                        present[i] = true;
+                        any_stale = true;
+                    }
+                }
+
+                if any_stale {
+                    secure_log!(
+                        "[SE050/store] stale user objects — userid={} entropy={} vk={} bvk={}",
+                        present[0], present[1], present[2], present[3]
+                    );
+                    let session_id = apdu::create_session(
+                        &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ,
+                    ).map_err(|e| {
+                        secure_log!(
+                            "[SE050/store] stale sweep: create_session FAILED: {:?}", e
+                        );
+                        e
+                    })?;
+
+                    if let Err(e) = apdu::verify_session(
+                        &mut self.t1, &mut self.scp03, &session_id, admin,
+                    ) {
+                        secure_log!(
+                            "[SE050/store] stale sweep: verify_session FAILED: {:?}", e
+                        );
+                        let _ = apdu::close_session(
+                            &mut self.t1, &mut self.scp03, &session_id,
+                        );
+                        return Err(e);
+                    }
+
+                    // Data objects first, USERID_OBJ last. Only delete
+                    // confirmed-present objects so any error propagated
+                    // below is a real failure, not delete-on-absent. Order
+                    // within {data objects} is cosmetic — admin-auth
+                    // delete doesn't chain through USERID_OBJ.
+                    for idx in [1usize, 2, 3, 0] {
+                        if present[idx] {
+                            if let Err(e) = apdu::delete_object_authed(
+                                &mut self.t1, &mut self.scp03,
+                                &session_id, STALE_OBJS[idx],
+                            ) {
+                                secure_log!(
+                                    "[SE050/store] stale sweep: delete(0x{:08x}) FAILED: {:?}",
+                                    STALE_OBJS[idx], e
+                                );
+                                let _ = apdu::close_session(
+                                    &mut self.t1, &mut self.scp03, &session_id,
+                                );
+                                return Err(e);
+                            }
+                        }
+                    }
+
+                    let _ = apdu::close_session(
+                        &mut self.t1, &mut self.scp03, &session_id,
+                    );
+                    secure_log!("[SE050/store] stale sweep complete");
+                }
+            }
 
             // User UserID: skip if already exists.
             let userid_exists = match apdu::check_exists(

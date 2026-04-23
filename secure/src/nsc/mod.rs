@@ -48,6 +48,7 @@
 //!   * [`cmd_get_remaining`], [`cmd_request_unlock`], [`cmd_get_pubkey`],
 //!     [`cmd_clear_sign`], [`cmd_clear_sign_msg`], [`cmd_sign_userop`].
 
+mod cmd_get_init_code;
 mod cmd_get_remaining;
 mod cmd_get_wallet_address;
 mod cmd_is_unlocked;
@@ -129,8 +130,8 @@ compile_error!(
 
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
-    NscStatus, CMD_GET_REMAINING, CMD_GET_WALLET_ADDRESS, CMD_IS_UNLOCKED, CMD_LOCK,
-    CMD_NONE, CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
+    NscStatus, CMD_GET_INIT_CODE, CMD_GET_REMAINING, CMD_GET_WALLET_ADDRESS, CMD_IS_UNLOCKED,
+    CMD_LOCK, CMD_NONE, CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -351,6 +352,7 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_REQUEST_UNLOCK => cmd_request_unlock::run(),
         CMD_SIGN_USEROP => cmd_sign_userop::run(args),
         CMD_GET_WALLET_ADDRESS => cmd_get_wallet_address::run(args),
+        CMD_GET_INIT_CODE => cmd_get_init_code::run(args),
         CMD_IS_UNLOCKED => cmd_is_unlocked::run(),
         CMD_LOCK => cmd_lock::run(),
         #[cfg(feature = "e2e-test")]
@@ -509,6 +511,25 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_wallet_address(
     let args = GatewayArgs { arg0: out_ptr, arg1: account_index, arg2: 0 };
     let r = unsafe { cmd_get_wallet_address::run(&args) };
     secure_log!("[NSC] get_wallet_address -> {}", r);
+    r
+}
+
+/// CMD_GET_INIT_CODE — return the 4280-byte ERC-4337 initCode for
+/// `(account_index, chain_id)`. Companion uses it to get accurate
+/// gas estimates for first-deploy UserOps; the same bytes are
+/// emitted by the deploy path of `CMD_SIGN_USEROP`. See the command
+/// docs in `shared::CMD_GET_INIT_CODE`.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_get_init_code(
+    in_ptr: u32,
+    out_ptr: u32,
+    in_len: u32,
+) -> u32 {
+    secure_log!("[NSC] get_init_code (len={})", in_len);
+    let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
+    let r = unsafe { cmd_get_init_code::run(&args) };
+    secure_log!("[NSC] get_init_code -> {}", r);
     r
 }
 

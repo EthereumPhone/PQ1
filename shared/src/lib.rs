@@ -262,6 +262,40 @@ pub const CMD_SIGN_MESSAGE: u32 = 13;
 /// output buffer at `arg0`.
 pub const CMD_GET_WALLET_ADDRESS: u32 = 14;
 
+/// CMD_GET_INIT_CODE — return the 4280-byte ERC-4337 `initCode` that
+/// `CMD_SIGN_USEROP` would emit when first-deploying the wallet for
+/// `(account_index, chain_id)`.
+///
+/// The companion needs this for `eth_estimateUserOperationGas` on a
+/// not-yet-deployed account: without a real SPHINCS+C10 factory
+/// signature in the placeholder, the factory's on-chain
+/// `createAccount` reverts during simulation (AA13), gas can't be
+/// estimated, and the companion has to fall back to hard-coded
+/// ceilings. Calling `CMD_GET_INIT_CODE` once after unlock yields a
+/// valid initCode the companion can cache for every estimation on
+/// that `(account_index, chain_id)` pair until the wallet is
+/// actually deployed on-chain.
+///
+/// The signed message is
+/// `sha256("pqwallet-factory-add-slot" || chain_id(8 BE) ||
+/// slot0PkSeed(32) || slot0PkRoot(32))` — identical to what the
+/// deploy path of `CMD_SIGN_USEROP` already signs. Because SPHINCS+
+/// is stateless and the message depends only on
+/// `(chain_id, slot0_keys)`, the result is safely reusable across
+/// retries, re-estimates, and the final signed UserOp submission.
+///
+/// Requires an unlocked device. No OLED confirmation: this command
+/// only pre-computes bytes the user will confirm later when they
+/// approve the actual transaction in `CMD_SIGN_USEROP`.
+///
+/// Wire layout:
+///   * `arg0` — NS read buffer (12 bytes):
+///       [0..4)  `account_index` (u32 BE, 0..=255)
+///       [4..12) `chain_id`      (u64 BE)
+///   * `arg1` — NS write buffer, `PQ_INIT_CODE_LEN` bytes.
+///   * `arg2` — input length, must equal 12.
+pub const CMD_GET_INIT_CODE: u32 = 15;
+
 // ---------------------------------------------------------------------------
 // Firmware-update gateway commands
 // ---------------------------------------------------------------------------
@@ -484,6 +518,7 @@ pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
 
 // -- Address & account helpers (0x60-0x6F) --
 pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
+pub const INS_V2_GET_INIT_CODE: u8 = 0x61;
 
 // ---------------------------------------------------------------------------
 // Firmware-update INS codes (companion → device)

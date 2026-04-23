@@ -274,15 +274,83 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // prefix; the NS gateway's `maybe_inject_vk_bundle_v3` appends
     // the bundle. Absent is legal for non-CoW tx — the CoW
     // downgrade-mitigation gate below enforces presence when needed.
-    let zk_v3 = match super::trailer::read_optional_u16_prefixed(
-        snap,
-        cursor,
-        total_len,
-        ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN,
-        "bad zk v3 bundle",
-    ) {
-        Ok(t) => t,
-        Err(s) => return s,
+    //
+    // Inlined instead of `trailer::read_optional_u16_prefixed` so the
+    // OLED distinguishes the two failure modes (oversized declared
+    // length vs. declared length overflowing the payload) — makes
+    // companion-vs-NS-router layout disagreements trivial to triage.
+    let zk_v3 = if cursor + 2 > total_len {
+        super::trailer::Trailer {
+            start: cursor,
+            len: 0,
+            next_cursor: cursor,
+        }
+    } else {
+        let declared = u16::from_be_bytes([snap[cursor], snap[cursor + 1]]) as usize;
+        let payload_start = cursor + 2;
+        if declared > ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN {
+            // Dump four values across the 4-line OLED:
+            //   line 1: "Sign v3 len>cap"
+            //   line 2: "d=XXXX (data_len)"
+            //   line 3: "e=XXXX z=XXXX   "   (erc20 + v1 zk declared len)
+            //   line 4: "v3=XXXX        "
+            // Expected happy values for a CoW swap on Base:
+            //   d=00a4 (164), e=0000, z=0000, v3=0790 (or 02cc bare).
+            const HEX: &[u8] = b"0123456789abcdef";
+            let d = data_len as u16;
+            let e = erc20.len as u16;
+            let z = zk_v1.len as u16;
+            let v = declared as u16;
+
+            let mut line2 = [b' '; 16];
+            line2[0] = b'd';
+            line2[1] = b'=';
+            line2[2] = HEX[((d >> 12) & 0xF) as usize];
+            line2[3] = HEX[((d >> 8) & 0xF) as usize];
+            line2[4] = HEX[((d >> 4) & 0xF) as usize];
+            line2[5] = HEX[(d & 0xF) as usize];
+
+            let mut line3 = [b' '; 16];
+            line3[0] = b'e';
+            line3[1] = b'=';
+            line3[2] = HEX[((e >> 12) & 0xF) as usize];
+            line3[3] = HEX[((e >> 8) & 0xF) as usize];
+            line3[4] = HEX[((e >> 4) & 0xF) as usize];
+            line3[5] = HEX[(e & 0xF) as usize];
+            line3[7] = b'z';
+            line3[8] = b'=';
+            line3[9] = HEX[((z >> 12) & 0xF) as usize];
+            line3[10] = HEX[((z >> 8) & 0xF) as usize];
+            line3[11] = HEX[((z >> 4) & 0xF) as usize];
+            line3[12] = HEX[(z & 0xF) as usize];
+
+            let mut line4 = [b' '; 16];
+            line4[0] = b'v';
+            line4[1] = b'3';
+            line4[2] = b'=';
+            line4[3] = HEX[((v >> 12) & 0xF) as usize];
+            line4[4] = HEX[((v >> 8) & 0xF) as usize];
+            line4[5] = HEX[((v >> 4) & 0xF) as usize];
+            line4[6] = HEX[(v & 0xF) as usize];
+
+            let d2 = ui::display();
+            d2.clear();
+            d2.draw_line(0, "Sign v3 len>cap");
+            d2.draw_line(1, core::str::from_utf8(&line2).unwrap_or(""));
+            d2.draw_line(2, core::str::from_utf8(&line3).unwrap_or(""));
+            d2.draw_line(3, core::str::from_utf8(&line4).unwrap_or(""));
+            d2.flush();
+            return NscStatus::InvalidPointer as u32;
+        }
+        if payload_start + declared > total_len {
+            ui::show_status("Sign", "v3 len > payload");
+            return NscStatus::InvalidPointer as u32;
+        }
+        super::trailer::Trailer {
+            start: payload_start,
+            len: declared,
+            next_cursor: payload_start + declared,
+        }
     };
     cursor = zk_v3.next_cursor;
 
