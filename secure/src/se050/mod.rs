@@ -1060,6 +1060,19 @@ impl Se050 {
             }
 
             // User UserID: skip if already exists.
+            //
+            // Bug 2 (work-todo #28) hardening: if `admin_pin` is provided
+            // the stale sweep above should have admin-auth-deleted any
+            // prior USERID_OBJ, so `exists` should be false here. If it
+            // IS still true we're in one of two states, both worth
+            // surfacing loudly:
+            //   1. The sweep's admin_factory_reset silently failed
+            //      (Bug 1 would have masked this; now fixed).
+            //   2. The on-chip object pre-dates v6 and its admin-delete
+            //      policy entry doesn't match our current ADMIN_WIPE_OBJ,
+            //      so the sweep couldn't touch it.
+            // Either way, skipping would inherit a stale policy shape
+            // permanently. Fail loud.
             let userid_exists = match apdu::check_exists(
                 &mut self.t1, &mut self.scp03, USERID_OBJ
             ) {
@@ -1077,6 +1090,16 @@ impl Se050 {
                 USERID_OBJ, userid_exists
             );
 
+            if userid_exists && admin_pin.is_some() {
+                secure_log!(
+                    "[SE050/store] FAILED: USERID_OBJ exists after stale sweep \
+                     (Bug #28 — prior firmware's admin-delete policy doesn't \
+                     match current ADMIN_WIPE_OBJ; re-provisioning would \
+                     inherit the stale policy)"
+                );
+                return Err(Se050Error::Status(0x6986));
+            }
+
             if !userid_exists {
                 secure_log!(
                     "[SE050/store] writing USERID_OBJ (pin_len={} max_attempts={})",
@@ -1091,7 +1114,9 @@ impl Se050 {
                 })?;
             }
 
-            // Binary data objects: skip if already exist.
+            // Binary data objects: skip if already exist. Same Bug 2
+            // hardening as USERID_OBJ — if an object survives the
+            // stale sweep under admin mode, fail loud.
             let objs: [(u32, &[u8]); 3] = [
                 (ENTROPY_OBJ, entropy),
                 (VK_OBJ, vk),
@@ -1112,6 +1137,15 @@ impl Se050 {
                     }
                 };
                 secure_log!("[SE050/store] 0x{:08x} exists={}", obj_id, exists);
+
+                if exists && admin_pin.is_some() {
+                    secure_log!(
+                        "[SE050/store] FAILED: 0x{:08x} exists after stale sweep \
+                         (Bug #28 — stale policy shape on chip)",
+                        obj_id,
+                    );
+                    return Err(Se050Error::Status(0x6986));
+                }
 
                 if !exists {
                     secure_log!(
