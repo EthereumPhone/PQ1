@@ -32,7 +32,14 @@
 
 use core::ptr::{read_volatile, write_volatile};
 
-// USART1 register map (secure alias).
+// USART1 register map — SECURE alias.
+//
+// Even though `sau::init` sets `GTZC1_TZSC_SECCFGR2=0` (making APB2
+// peripherals NS), the Secure alias still works from Secure CPU state
+// for USART1 on this silicon — the NS-alias theory was wrong, the
+// actual silent-drop was GPIOA not being clocked. Keeping secure
+// alias for consistency with `hw/i2c_hw.rs` which also uses S aliases
+// (RCC 0x5602_0C00, GPIOB 0x5202_0400, I2C1 0x5000_5400).
 const USART1: u32 = 0x5001_3800;
 const USART1_CR1: *mut u32 = USART1 as *mut u32;
 const USART1_BRR: *mut u32 = (USART1 + 0x0C) as *mut u32;
@@ -43,16 +50,26 @@ const CR1_UE: u32 = 1 << 0;
 const CR1_TE: u32 = 1 << 3;
 const ISR_TXE_FNF: u32 = 1 << 7; // TX data register empty (legacy) / FIFO-not-full
 const ISR_TC: u32 = 1 << 6;
+const ISR_TEACK: u32 = 1 << 21; // Transmit enable acknowledge
 
-// RCC APB2ENR (NS alias, matches `hw::rcc::init` convention).
-const RCC_APB2ENR: *mut u32 = (0x4602_0C00 + 0xA4) as *mut u32;
+// RCC registers — SECURE alias.
+//
+// With TZEN=1 the Secure RCC alias (0x5602_0C00) is the only one that
+// can clock-gate peripherals classified Secure-by-default. `pin_diag.rs`
+// uses the same pattern and empirically works; `hw::rcc::init()` uses
+// the NS alias but only touches PLL / SYSCLK / RNG, which happen to be
+// tolerant of NS-alias writes on this silicon. Diagnostic runs showed
+// that writing GPIOAEN via NS-alias AHB2ENR1 leaves the bit clear →
+// GPIOA stays unclocked → all GPIOA reads return 0xABFFFFFF (bus junk)
+// and all writes silently drop. Secure-alias writes land correctly.
+const RCC_APB2ENR: *mut u32 = (0x5602_0C00 + 0xA4) as *mut u32;
 const RCC_APB2ENR_USART1EN: u32 = 1 << 14;
 
-// RCC AHB2ENR1 for GPIOA clock enable (bit 0 = GPIOAEN).
-const RCC_AHB2ENR1: *mut u32 = (0x4602_0C00 + 0x8C) as *mut u32;
+const RCC_AHB2ENR1: *mut u32 = (0x5602_0C00 + 0x8C) as *mut u32;
 const RCC_AHB2ENR1_GPIOAEN: u32 = 1 << 0;
 
-// GPIOA register map (secure alias). AHB2 at 0x5202_0000, GPIOA at +0.
+// GPIOA register map — Secure alias (0x5202_0000).
+// Matches `pin_diag.rs` and `i2c_hw.rs` which both use S-alias GPIO.
 const GPIOA: u32 = 0x5202_0000;
 const GPIOA_MODER: *mut u32 = GPIOA as *mut u32;
 const GPIOA_OTYPER: *mut u32 = (GPIOA + 0x04) as *mut u32;
@@ -92,11 +109,29 @@ pub fn init() {
         let afrh = read_volatile(GPIOA_AFRH);
         write_volatile(GPIOA_AFRH, (afrh & !(0xF << 4)) | (0x7 << 4));
 
-        // --- 3. Program USART1: disable → BRR → re-enable ---
+        // --- 3. Program USART1 ---
+        // RM0456 init sequence: configure CR1 word length / parity while
+        // UE=0, program BRR, set UE=1, THEN toggle TE 0→1 (the TE
+        // enable edge must happen AFTER UE is high — setting both in a
+        // single atomic write is ambiguous hardware behaviour).
+        // Defaults after reset: M=00 (8-bit), OVER8=0 (16× oversampling),
+        // STOP=00 (1 stop bit), parity off. We don't touch CR2/CR3.
         write_volatile(USART1_CR1, 0);
         // PCLK2 = 160 MHz, OVER8 = 0, BRR = 160_000_000 / 115_200 ≈ 1389 (0x56D).
         write_volatile(USART1_BRR, 1389);
+        write_volatile(USART1_CR1, CR1_UE);
         write_volatile(USART1_CR1, CR1_UE | CR1_TE);
+        // Wait for the transmitter to acknowledge — empirically the
+        // first byte is silently dropped on STM32U5 if we write TDR
+        // before TEACK asserts. Bounded so we don't hang if the
+        // peripheral is in a wedged state.
+        let mut t: u32 = 10_000_000;
+        while read_volatile(USART1_ISR) & ISR_TEACK == 0 {
+            t -= 1;
+            if t == 0 {
+                return;
+            }
+        }
     }
 }
 
