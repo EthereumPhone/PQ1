@@ -194,9 +194,15 @@ impl WalletStore for DualSecureElement {
 
         // Verify consistency: kdf("sphincs-master", full_entropy, 0) must
         // equal the master_secret we already got from both SEs.
+        //
+        // FI hardening: two independent `ct_eq` compares with a volatile
+        // delay between, gated through `fi::check_true` so the boolean
+        // cannot be faulted to `true` via a single skip.
         let derived_master = crypto::kdf(b"sphincs-master", &full_entropy, 0);
-        let consistent: bool = derived_master.ct_eq(&master_o).into();
-        if !consistent {
+        let c1: bool = derived_master.ct_eq(&master_o).into();
+        crate::fi::wait_random();
+        let c2: bool = derived_master.ct_eq(&master_o).into();
+        if !crate::fi::check_true(|| c1 && c2) {
             full_entropy.zeroize();
             let mut mo = master_o;
             mo.zeroize();

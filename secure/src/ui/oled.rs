@@ -53,6 +53,14 @@ impl Framebuf {
     fn clear(&mut self) {
         self.buf = [0; 512];
     }
+
+    /// Read-only access to the raw 512-byte SSD1306 page buffer.
+    /// Used by `ui::capture` (feature-gated) to hash the exact pixels
+    /// that will be pushed to the OLED.
+    #[cfg(feature = "ui-capture")]
+    fn pages(&self) -> &[u8; 512] {
+        &self.buf
+    }
 }
 
 impl DrawTarget for Framebuf {
@@ -192,6 +200,14 @@ impl Display {
                 .draw(&mut self.fb);
         }
         self.flush_fb();
+
+        // Screenshot-hash capture (feature-gated). Emit a SHA-256
+        // fingerprint of the raw SSD1306 page bytes. Captures actual
+        // pixels, not the char grid — catches font / position drift.
+        #[cfg(feature = "ui-capture")]
+        {
+            super::capture::emit(self.fb.pages());
+        }
     }
 
     /// Play the plug-in boot animation.

@@ -30,6 +30,12 @@ pub use noop::{Display, Input};
 #[cfg(feature = "ui-mirror")]
 pub mod mirror;
 
+/// Screenshot-hash capture — emits a SHA-256 fingerprint per displayed
+/// frame over the secure log, parsed by `tools/ui_fixture.py` for UI
+/// regression testing. See `docs/trezor-comparison.md §2.3`.
+#[cfg(feature = "ui-capture")]
+pub mod capture;
+
 pub mod confirm;
 pub mod pin_entry;
 pub mod seed_wizard;

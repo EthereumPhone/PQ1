@@ -691,7 +691,15 @@ pub fn c10_sign_verified_with_progress(
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
     let sig = sk.sign_with_progress(msg_hash, None, progress);
     // Verify before release (fault-injection guard).
-    if !sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig) {
+    //
+    // The boolean check is wrapped by `fi::check_true` so a glitch that
+    // skips the `if` requires cooperating skips of the double-evaluation
+    // AND the hamming-distant sentinel compare. `wait_random()` immediately
+    // before the verify defeats clock-aligned fault bursts that time their
+    // glitch to the verify's fixed-shape control flow.
+    crate::fi::wait_random();
+    let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
+    if !crate::fi::check_true(|| v) {
         return Err(());
     }
     Ok(sig)

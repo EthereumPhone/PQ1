@@ -77,6 +77,19 @@ impl Display {
             hprintln!("    |{}|", s);
         }
         hprintln!("    +----------------+");
+
+        // Screenshot-hash capture (feature-gated). Flatten the 4×16
+        // grid into 64 contiguous bytes and emit a SHA-256 fingerprint.
+        // Parsed by `tools/ui_fixture.py` for UI regression testing.
+        #[cfg(feature = "ui-capture")]
+        {
+            let mut flat = [0u8; super::DISPLAY_COLS * super::DISPLAY_ROWS];
+            for (ri, row) in self.rows.iter().enumerate() {
+                let off = ri * super::DISPLAY_COLS;
+                flat[off..off + super::DISPLAY_COLS].copy_from_slice(row);
+            }
+            super::capture::emit(&flat);
+        }
     }
 }
 

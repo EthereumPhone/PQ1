@@ -866,7 +866,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // Verify-before-release, double-evaluated (HIGH-3).
+    // Verify-before-release, double-evaluated (HIGH-3) with FI hardening.
+    // A random-length volatile delay separates the two verifies so a
+    // glitch-burst that spans one verify cannot skip the second.
     let (v1, v2) = {
         let cached = unsafe { &*core::ptr::addr_of!(super::state::JARDIN_SLOT) };
         let slot_ref = match cached {
@@ -877,11 +879,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
         };
         let v1 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_digest, &t2_sig);
+        crate::fi::wait_random();
         let v2 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_digest, &t2_sig);
         (v1, v2)
     };
-    let ok_sentinel: u32 = if v1 && v2 { 0xA5A5_A5A5 } else { 0x5A5A_5A5A };
-    if ok_sentinel != 0xA5A5_A5A5 || !v1 || !v2 {
+    crate::fi::wait_random();
+    let ok_sentinel: u32 = if v1 && v2 { crate::fi::OK_SENTINEL } else { crate::fi::FAIL_SENTINEL };
+    if ok_sentinel != crate::fi::OK_SENTINEL || !v1 || !v2 {
         entropy.zeroize();
         ui::show_status("Sig verify", "FAIL");
         return NscStatus::CryptoError as u32;

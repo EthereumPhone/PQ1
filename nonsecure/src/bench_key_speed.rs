@@ -161,7 +161,12 @@ fn main() -> ! {
     //
     // Companion-driven slot registration. Cold slot cache + master C10
     // keygen path — the slowest possible sign.
-    let a = time_one_sign(1, 0, true, 1);
+    //
+    // `slot_index = 1` because FLAG_REGISTER_SLOT requires `slot_index >= 1`
+    // per the Coinbase Smart Wallet port (handler rejects slot 0 + register
+    // with "register needs slot>=1"). The only slot-0 path is the deploy
+    // flow (FLAG_INCLUDE_INIT_CODE), which isn't what this bench measures.
+    let a = time_one_sign(1, 1, true, 1);
     if a.status != NscStatus::Ok as u32 {
         hprintln!("[NS][bench] FAIL: first-sign on chain 1 = status {}", a.status);
         debug::exit(debug::EXIT_FAILURE);
@@ -176,7 +181,9 @@ fn main() -> ! {
     const N: u32 = 5;
     let mut total_b: u64 = 0;
     for i in 0..N {
-        let b = time_one_sign(1, 0, false, 2 + i as u64);
+        // slot_index matches the register-slot step above so the cached
+        // slot key is the one we just keygened in step A.
+        let b = time_one_sign(1, 1, false, 2 + i as u64);
         if b.status != NscStatus::Ok as u32 {
             hprintln!(
                 "[NS][bench] FAIL: type2 #{} on chain 1 = status {}",
@@ -205,7 +212,7 @@ fn main() -> ! {
     // keygen + Type 2. The slot SigningKey is cached from A (slot
     // derivation is chain-agnostic) so only the bootstrap C10 keygen
     // runs — this is the "new chain, same slot" steady state.
-    let c = time_one_sign(2, 0, true, 1);
+    let c = time_one_sign(2, 1, true, 1);
     if c.status != NscStatus::Ok as u32 {
         hprintln!("[NS][bench] FAIL: first-sign on chain 2 = status {}", c.status);
         debug::exit(debug::EXIT_FAILURE);

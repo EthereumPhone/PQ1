@@ -530,8 +530,18 @@ pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
     let sentinel = [0u8; 16];
     write_quadword_verified(target_addr, &sentinel)?;
 
+    // FI hardening: volatile-delay between write and readback so a
+    // clock-aligned glitch that skipped the write cannot also suppress
+    // the readback of the old value on the same cycle.
+    crate::fi::wait_random();
+
     let post = pin_attempts_read();
     if post != pre + 1 {
+        return Err(());
+    }
+    // Re-read under a sentinel-gated check — a glitch that skips the
+    // `if post != pre + 1` bypass has to also defeat `fi::check_true`.
+    if !crate::fi::check_true(|| pin_attempts_read() == pre + 1) {
         return Err(());
     }
     Ok(post)
