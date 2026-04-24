@@ -1781,6 +1781,42 @@ pin-diag-boot-hw:
 	@echo "==> Running (pulses fire once, then CPU halts in wfe)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# One-shot SAES self-test on real silicon. Boots the firmware just far
+# enough to init SAES (Tier 1 of work-todo #7), runs the software-key
+# round-trip + DHUK-vs-SW domain-separation + DHUK round-trip self-
+# tests, prints an 8-byte DHUK fingerprint, then exits cleanly via
+# SYS_EXIT. No OTP burn, no flash writes, no TAMP access, no SE I/O.
+# Cross-boot check: run this twice on the same board — the DHUK
+# fingerprint must be byte-identical across reboots. Running on
+# different boards should yield different fingerprints.
+saes-self-test-hw:
+	@echo "==> Building SAES Tier-1 self-test firmware..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features saes-self-test,debug-log,ui-noop,e2e-test,mock-se
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running SAES self-test..."
+	@log=$$(mktemp -t saes-self-test.XXXXXX.log); \
+	trap 'rm -f "$$log"' EXIT; \
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log"; \
+	echo "===================================="; \
+	if grep -q "=== self_test PASS ===" "$$log"; then \
+		echo "==> saes-self-test: PASS"; exit 0; \
+	else \
+		echo "==> saes-self-test: FAIL (missing PASS marker)"; exit 1; \
+	fi
+
 pin-gate-e2e:
 	@echo "==> Building PIN-gate roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."

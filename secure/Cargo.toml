@@ -145,6 +145,23 @@ wipe-for-wizard = ["dual-se", "optiga-hw-counter", "dev-testkey", "ui-oled", "gp
 # stacked OM-SE050ARD shield). No secrets, no provisioning, no
 # destructive flash writes. Use `make pin-diag-boot-hw`.
 pin-diag-boot = ["stm32u585", "optiga-trust-m"]
+# Tier 1 of work-todo #7 (three-tier key hierarchy). Compiles
+# `secure/src/hw/saes.rs` — the STM32U585 Secure AES coprocessor driver
+# with AES-256 ECB primitives under KEYSEL={Software, DHUK, BHK, DHUK^BHK}.
+# OFF by default: landing the driver under its own gate lets us bench-test
+# it on silicon before `hw::secret_keys::derive_into` flips over to
+# `SAES-CMAC(DHUK, label)` (that's task #31). Pure-additive — does not
+# change any existing call site.
+saes-dhuk = ["stm32u585"]
+# Boot-time SAES self-test runner. Under this feature, `main()` runs
+# `hw::saes::init` + `hw::saes::self_test` right after the RNG/TRNG
+# init and halts with PASS/FAIL on the semihosting console via the
+# existing `secure_log!` macro (which requires `debug-log`). Used to
+# validate the Tier-1 driver on real silicon before flipping any
+# derivation call sites. Results appear only when the target is paired
+# with `debug-log` at the make-target level (see `saes-self-test-hw`).
+# Use `make saes-self-test-hw`.
+saes-self-test = ["saes-dhuk"]
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
 optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Production: bump LcsO to Operational on BOTH E140 (PBS) AND every user OID (F1D0..F1D4 + F1E1) at end of provisioning. Irreversible per OPTIGA SRM §"Life Cycle Status" — LcsO is monotonic, no reverse path exists. Default OFF so dev chips stay at LcsO=Creation throughout all iteration (metadata still mutable, data rewriteable without AC constraints). ONLY enable when (a) STM32 OTP master is burned, (b) PBS is OTP-derived, (c) this specific chip is intended to become a production unit and you have validated the provisioning flow against sacrificial parts. See docs/production-todo.md for the full pre-ship checklist and docs/optiga-brick-postmortem.md §5 + §7 for the history.

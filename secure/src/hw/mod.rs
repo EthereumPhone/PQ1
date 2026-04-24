@@ -49,6 +49,13 @@ pub mod boot_state;
 #[cfg(feature = "stm32u585")]
 pub mod huk;
 
+/// STM32U585 Secure AES (SAES) coprocessor driver — AES-256 ECB under
+/// KEYSEL={Software, DHUK, BHK, DHUK^BHK}. Tier 1 of the three-tier
+/// key hierarchy (work-todo #7). OFF by default; gated behind
+/// `saes-dhuk` until bench-validated.
+#[cfg(feature = "saes-dhuk")]
+pub mod saes;
+
 /// Domain-separated per-purpose subkeys derived from the OTP master
 /// (OPTIGA PBS, SE050 SCP03, TROPIC01 pairing, ...). Only compiled on
 /// real hardware — the underlying OTP master key lives in STM32U585-

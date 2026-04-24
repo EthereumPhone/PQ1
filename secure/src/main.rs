@@ -139,6 +139,39 @@ static mut SE: optiga::OptigaTrustM = optiga::OptigaTrustM::new();
 #[cfg(all(feature = "dual-se", not(test)))]
 static mut SE: dual_se::DualSecureElement = dual_se::DualSecureElement::new();
 
+/// SAES Tier-1 bring-up self-test — runs under `saes-self-test` only.
+/// Initialises the SAES peripheral, executes the in-driver self-tests
+/// (software-key round-trip + DHUK vs SW domain separation + DHUK
+/// round-trip), logs PASS/FAIL and a short DHUK fingerprint, then exits
+/// cleanly via `SYS_EXIT` so `probe-rs run` returns. Never returns.
+#[cfg(feature = "saes-self-test")]
+fn saes_self_test_and_halt() -> ! {
+    match hw::saes::init() {
+        Ok(()) => {
+            secure_log!("[S][saes] init OK");
+        }
+        Err(e) => {
+            secure_log!("[S][saes] init FAIL: {:?} — halting", e);
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
+    }
+    match hw::saes::self_test() {
+        Ok(()) => {
+            secure_log!("[S][saes] === self_test PASS ===");
+        }
+        Err(e) => {
+            secure_log!("[S][saes] === self_test FAIL === {:?}", e);
+        }
+    }
+    secure_log!("[S][saes] self-test complete — halting");
+    cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
+    loop {
+        cortex_m::asm::wfe();
+    }
+}
+
 /// SysTick reload value for ~1 ms tick.
 /// QEMU mps2-an505: 25 MHz → 25_000.  STM32U585: set dynamically from rcc::init().
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
@@ -379,6 +412,12 @@ fn main() -> ! {
         hw::rng::init();
         secure_log!("[S] TRNG initialised");
     }
+
+    // SAES self-test (Tier 1 of work-todo #7). Runs once at boot,
+    // halts on PASS/FAIL. Does nothing unless `saes-self-test` is
+    // enabled — the driver module itself is gated on `saes-dhuk`.
+    #[cfg(feature = "saes-self-test")]
+    saes_self_test_and_halt();
 
     // Initialize I2C1 for SE050 and/or OPTIGA Trust M BEFORE any SE operations.
     // Both chips share I2C1 (SE050 at 0x48, OPTIGA at 0x30). No address conflict.
