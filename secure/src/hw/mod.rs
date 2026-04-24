@@ -32,6 +32,20 @@ pub mod spi;
 #[cfg(feature = "stm32u585")]
 pub mod flash;
 
+/// STM32U585 TAMP (tamper detection) — log-only dev harness. Feature-gated
+/// because enabling crypto-peripheral-fault monitoring (ITAMP9) during a
+/// probe-rs debug session on a dev board can false-trigger on glitch-sensitive
+/// SAES sequences. Port of Trezor's tamper driver; see
+/// `docs/trezor-comparison.md §2.5`.
+#[cfg(all(feature = "stm32u585", feature = "tamp"))]
+pub mod tamp;
+
+/// TIM2-PWM power-consumption mask on PA5. Simplified (no-DMA) port of
+/// Trezor's `sec/consumption_mask/`; see `docs/trezor-comparison.md §3.1`.
+/// Feature-gated; init() + randomize() are no-ops without the feature.
+#[cfg(all(feature = "stm32u585", feature = "consumption-mask"))]
+pub mod consumption_mask;
+
 /// OTP rollback-counter access for the firmware-update subsystem. Only
 /// built on real hardware; the QEMU flash backend doesn't model OTP.
 #[cfg(feature = "stm32u585")]
@@ -55,6 +69,13 @@ pub mod huk;
 /// `saes-dhuk` until bench-validated.
 #[cfg(feature = "saes-dhuk")]
 pub mod saes;
+
+/// Minimal USART1 driver routed to the B-U585I-IOT02A ST-LINK VCP
+/// (PA9 TX). Used under `uart-console` for diagnostic output from
+/// builds that can't rely on semihosting — specifically the RDP1
+/// SAES self-test target.
+#[cfg(feature = "uart-console")]
+pub mod uart;
 
 /// Domain-separated per-purpose subkeys derived from the OTP master
 /// (OPTIGA PBS, SE050 SCP03, TROPIC01 pairing, ...). Only compiled on

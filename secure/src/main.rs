@@ -53,11 +53,14 @@ mod tx;
 #[cfg(not(test))]
 mod boot_ns;
 mod crypto;
-#[cfg(not(test))]
+mod fi;
+#[cfg(test)]
+mod fuzz_props;
+// Pure-logic modules: no hardware deps. Available under `cargo test`
+// so the proptest harnesses in `fuzz_props` can exercise them on the
+// host.
 mod db_roots;
-#[cfg(not(test))]
 mod erc20;
-#[cfg(not(test))]
 mod names;
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
 mod host_rng;
@@ -146,12 +149,27 @@ static mut SE: dual_se::DualSecureElement = dual_se::DualSecureElement::new();
 /// cleanly via `SYS_EXIT` so `probe-rs run` returns. Never returns.
 #[cfg(feature = "saes-self-test")]
 fn saes_self_test_and_halt() -> ! {
+    // Bring UART up first so anything that follows (PASS/FAIL line +
+    // fingerprint) reaches the ST-LINK VCP even at RDP ≥ 1, where
+    // semihosting is dead. No-op when `uart-console` isn't in the
+    // feature set (RDP0 runs still pass via probe-rs + semihosting).
+    #[cfg(feature = "uart-console")]
+    {
+        hw::uart::init();
+        hw::uart::write_str("[S][saes] UART up, starting self-test\r\n");
+    }
+
     match hw::saes::init() {
         Ok(()) => {
             secure_log!("[S][saes] init OK");
         }
         Err(e) => {
             secure_log!("[S][saes] init FAIL: {:?} — halting", e);
+            #[cfg(feature = "uart-console")]
+            {
+                hw::uart::write_str("[S][saes] init FAIL\r\n");
+                hw::uart::flush();
+            }
             loop {
                 cortex_m::asm::wfe();
             }
@@ -163,9 +181,16 @@ fn saes_self_test_and_halt() -> ! {
         }
         Err(e) => {
             secure_log!("[S][saes] === self_test FAIL === {:?}", e);
+            #[cfg(feature = "uart-console")]
+            {
+                hw::uart::write_str("[S][saes] === self_test FAIL ===\r\n");
+                hw::uart::flush();
+            }
         }
     }
     secure_log!("[S][saes] self-test complete — halting");
+    // SYS_EXIT is a no-op at RDP ≥ 1 (debug port closed) but still
+    // does the right thing at RDP0 via probe-rs — keep it.
     cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
     loop {
         cortex_m::asm::wfe();

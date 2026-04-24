@@ -99,16 +99,18 @@ mod trailer;
         feature = "mock-se",
         feature = "otp-hardcoded-master-key",
         feature = "saes-self-test",
+        feature = "uart-console",
     )
 ))]
 compile_error!(
     "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
      debug-log / ui-semihosting / ui-mirror / mock-se / otp-hardcoded-master-key / \
-     saes-self-test. These features leak secure-world state, replace the SE with \
-     a mock, replace the per-device OTP master key with a shared compile-time \
-     constant, or halt the boot flow after a diagnostic. Hardware test images may \
-     opt in by also enabling `e2e-test` (auto-provisioning, non-interactive) or \
-     `dev-testkey` (interactive UI, OTP substituted with a compile-time constant)."
+     saes-self-test / uart-console. These features leak secure-world state, \
+     replace the SE with a mock, replace the per-device OTP master key with a \
+     shared compile-time constant, halt the boot flow after a diagnostic, or \
+     stream diagnostic bytes on PA9 UART. Hardware test images may opt in by also \
+     enabling `e2e-test` (auto-provisioning, non-interactive) or `dev-testkey` \
+     (interactive UI, OTP substituted with a compile-time constant)."
 );
 
 // Dedicated guard: `otp-hardcoded-master-key` + `optiga-lock-operational` is

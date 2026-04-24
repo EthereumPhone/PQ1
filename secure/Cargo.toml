@@ -78,6 +78,29 @@ hw-sha256 = ["sphincs-c10/hw-sha256"]
 e2e-test = []
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
 se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
+# STM32U585 TAMP (tamper detection) — backup-domain voltage, LSE clock,
+# crypto-peripheral-fault, JTAG/SWD-when-RDP>0 monitoring. Log-only IRQ
+# handler (prints reason + WFE halt) so a false ITAMP9 during a probe-rs
+# debug session doesn't wipe a bench chip. Implies `stm32u585`. Port of
+# Trezor's `core/embed/sec/tamper/stm32u5/tamper.c`; see
+# `docs/trezor-comparison.md §2.5` for the adoption rationale.
+tamp = ["stm32u585"]
+# Power-consumption side-channel mask. Drives TIM2 CH1 PWM on PA5 with a
+# randomised duty cycle so the mask-pin power draw is uncorrelated with
+# the crypto work happening elsewhere on the die. Simpler than Trezor's
+# GPDMA linked-list version — callers must invoke
+# `hw::consumption_mask::randomize()` periodically (e.g. SysTick IRQ or
+# inline between signing rounds). Implies `stm32u585`.
+# See `docs/trezor-comparison.md §3.1`.
+consumption-mask = ["stm32u585"]
+# Screenshot-hash capture for UI regression testing. Emits a SHA-256
+# fingerprint of every displayed frame via `secure_log!` (requires
+# `debug-log`). Host-side `tools/ui_fixture.py` parses the stream
+# and compares against `tests/ui_fixtures.json`. See
+# `docs/trezor-comparison.md §2.3` for the rationale. NEVER ship in
+# production — spams the secure log and is a test-only observability
+# hook. Implies `debug-log`.
+ui-capture = ["debug-log"]
 optiga-trust-m = []  # Infineon OPTIGA Trust M V3 via I2C1 (TRUSTMV3SHIELDTOBO1 on Arduino R3 headers)
 # Silicon-enforced OPTIGA PIN counter via the E120 Lifetime Usage
 # Counter bound to F1D0's Execute access condition (LUC). Parity with
@@ -162,6 +185,18 @@ saes-dhuk = ["stm32u585"]
 # with `debug-log` at the make-target level (see `saes-self-test-hw`).
 # Use `make saes-self-test-hw`.
 saes-self-test = ["saes-dhuk"]
+# Minimal USART1 → ST-LINK-VCP driver for diagnostic output that
+# survives RDP ≥ 1 (where SWD debug — and therefore semihosting — is
+# disabled). Pairs with `saes-self-test` for the RDP1 DHUK fingerprint
+# capture: the target flashes at RDP0, programs RDP=0xBB, the chip
+# re-runs the self-test at RDP1 with the real per-die DHUK, and the
+# 8-byte fingerprint is captured over the ST-LINK's USB virtual-COM-
+# port (which is an ST-LINK MCU feature independent of target RDP).
+# Pure-additive; no effect when inactive. NEVER ship — production
+# boards go up to RDP2 and have no debug UART. Implies `stm32u585`.
+# Use alongside `make saes-self-test-hw-rdp1` +
+# `make saes-self-test-hw-rdp0-regress`.
+uart-console = ["stm32u585"]
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
 optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Production: bump LcsO to Operational on BOTH E140 (PBS) AND every user OID (F1D0..F1D4 + F1E1) at end of provisioning. Irreversible per OPTIGA SRM §"Life Cycle Status" — LcsO is monotonic, no reverse path exists. Default OFF so dev chips stay at LcsO=Creation throughout all iteration (metadata still mutable, data rewriteable without AC constraints). ONLY enable when (a) STM32 OTP master is burned, (b) PBS is OTP-derived, (c) this specific chip is intended to become a production unit and you have validated the provisioning flow against sacrificial parts. See docs/production-todo.md for the full pre-ship checklist and docs/optiga-brick-postmortem.md §5 + §7 for the history.
@@ -294,3 +329,17 @@ qrcodegen = "1.8"
 
 [dev-dependencies]
 hex = { workspace = true }
+# Property-based testing for host-side parser fuzzing. Runs under
+# `cargo test -p sphincs-tz-secure --tests` on host builds only
+# (std-backed, not compiled into the no_std firmware). Every parser
+# that consumes NS-world bytes (APDU headers, trailer chunks, RLP
+# envelopes, ERC-20 / name bundles) must never panic, deadlock, or
+# buffer-overrun on arbitrary input. proptest generates random byte
+# strings to cover the edge cases a hand-written test suite misses.
+#
+# This is PQSigner's answer to Trezor's `crypto/fuzzer/` libFuzzer
+# harnesses — see `docs/trezor-comparison.md §2.4`. Proptest is
+# ~80% of the value of cargo-fuzz with zero Cargo.toml refactoring
+# (cargo-fuzz needs a `[lib]` target which `sphincs-tz-secure`
+# currently lacks). Coverage-guided libFuzzer is a follow-up.
+proptest = "1"

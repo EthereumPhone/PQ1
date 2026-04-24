@@ -315,10 +315,11 @@ pub fn self_test() -> Result<(), SaesError> {
     }
 
     // Operator-visible fingerprint for cross-boot consistency check.
-    // Same 8 bytes of DHUK(pt) across reboots ⇒ DHUK is stable; different
-    // bytes across boards ⇒ DHUK is per-die as specified.
+    // Same 8 bytes of DHUK(pt) across reboots ⇒ DHUK is stable; at
+    // RDP0 identical across every STM32U585 (ST substitutes a constant
+    // DHUK at RDP0); at RDP ≥ 1 unique per die.
     #[allow(unused_variables)]
-    let fp = [
+    let fp: [u8; 8] = [
         ct_dhuk[0], ct_dhuk[1], ct_dhuk[2], ct_dhuk[3], ct_dhuk[4], ct_dhuk[5], ct_dhuk[6],
         ct_dhuk[7],
     ];
@@ -333,6 +334,17 @@ pub fn self_test() -> Result<(), SaesError> {
         fp[6],
         fp[7]
     );
+
+    // Mirror the PASS line over UART (ST-LINK VCP) so it survives
+    // RDP ≥ 1, where semihosting / probe-rs run can't reach us. The
+    // caller is responsible for `hw::uart::init()` before this.
+    #[cfg(feature = "uart-console")]
+    {
+        crate::hw::uart::write_str("[SAES] self_test PASS  DHUK(fp)=");
+        crate::hw::uart::write_hex_8(&fp);
+        crate::hw::uart::write_str("\r\n");
+        crate::hw::uart::flush();
+    }
 
     Ok(())
 }

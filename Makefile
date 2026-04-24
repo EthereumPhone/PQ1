@@ -1817,6 +1817,117 @@ saes-self-test-hw:
 		echo "==> saes-self-test: FAIL (missing PASS marker)"; exit 1; \
 	fi
 
+# RDP1 variant of the SAES self-test — captures the REAL per-die DHUK
+# fingerprint by stepping the chip to RDP1 (where ST activates the real
+# DHUK, instead of the RDP0 placeholder constant shared across every
+# STM32U585). Because RDP1 disables SWD debug, semihosting / probe-rs
+# can't see the output — we route the PASS line over USART1 → ST-LINK
+# VCP instead. The ST-LINK's VCP is a feature of the on-board debugger
+# MCU and works independently of the target's RDP level.
+#
+# Flow:
+#   1. Build firmware with `uart-console` so the fp goes out PA9.
+#   2. Flash firmware at RDP0 (the only RDP where flash-via-SWD works
+#      without OEM keys).
+#   3. Start capturing /dev/serial/by-id/*STLINK* in the background.
+#   4. Program RDP=0xBB to step to RDP1 — the chip resets, firmware
+#      re-runs with the real per-die DHUK.
+#   5. Wait ~5 seconds for the fp line, then kill capture.
+#   6. Grep for the PASS line + extract the fingerprint.
+#
+# IMPORTANT: run `make saes-self-test-hw-rdp0-regress` afterward to
+# restore the board to RDP0 for normal dev iteration. Leaving a board
+# at RDP1 is fine (reversible), but you can't re-flash via probe-rs
+# until you regress.
+saes-self-test-hw-rdp1:
+	@echo "==> Building SAES Tier-1 self-test firmware (UART console)..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features saes-self-test,uart-console,debug-log,ui-noop,e2e-test,mock-se
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing at RDP0..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Ensuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@set -e; \
+	vcp=$$(ls /dev/serial/by-id/*STLINK*-if02* 2>/dev/null | head -1); \
+	if [ -z "$$vcp" ]; then \
+		vcp=$$(ls /dev/serial/by-id/*STLINK* 2>/dev/null | head -1); \
+	fi; \
+	if [ -z "$$vcp" ]; then \
+		echo "==> saes-self-test-hw-rdp1: FAIL — no ST-LINK VCP at /dev/serial/by-id/*STLINK*"; \
+		exit 1; \
+	fi; \
+	echo "==> Using ST-LINK VCP: $$vcp"; \
+	stty -F "$$vcp" 115200 cs8 -cstopb -parenb raw -echo -ixon -ixoff 2>/dev/null || true; \
+	log=$$(mktemp -t saes-rdp1.XXXXXX.log); \
+	timeout 8 cat "$$vcp" > "$$log" 2>&1 & \
+	cat_pid=$$!; \
+	sleep 0.3; \
+	echo "==> Stepping chip to RDP1 (RDP=0xBB) — chip resets + firmware runs at RDP1..."; \
+	STM32_Programmer_CLI --connect port=SWD mode=UR --optionbytes RDP=0xBB || \
+		STM32_Programmer_CLI --connect port=SWD mode=HotPlug --optionbytes RDP=0xBB || true; \
+	wait $$cat_pid 2>/dev/null || true; \
+	echo "===================================="; \
+	echo "==> ST-LINK VCP capture:"; \
+	cat "$$log"; \
+	echo "===================================="; \
+	ret=1; \
+	if grep -q "self_test PASS" "$$log"; then \
+		fp=$$(grep "DHUK(fp)=" "$$log" | head -1 | sed 's/.*DHUK(fp)=//;s/[^0-9a-f].*//'); \
+		echo "==> saes-self-test-hw-rdp1: PASS"; \
+		echo "==> RDP1 DHUK fingerprint: $$fp"; \
+		echo "==> Board is now at RDP1. Run 'make saes-self-test-hw-rdp0-regress' to return to RDP0."; \
+		ret=0; \
+	else \
+		echo "==> saes-self-test-hw-rdp1: FAIL — no PASS line captured on VCP."; \
+		echo "==> Chip may be at RDP1 now; 'make saes-self-test-hw-rdp0-regress' will recover."; \
+	fi; \
+	rm -f "$$log"; \
+	exit $$ret
+
+# Regress a board from RDP1 (or above, with OEM2 password) back to RDP0.
+# Mirrors ST's own `Projects/B-U585I-IOT02A/Applications/SBSFU/SBSFU_Boot/
+# STM32CubeIDE/regression.sh` pattern: writes RDP=0xAA, strips WRP1/WRP2
+# + SECWM, forces an `-e all` mass erase, and restores default option
+# bytes. ST's OpenBootloader source confirms: "Going from RDP level 1 to
+# RDP level 0 erase all the flash" (Middlewares/ST/OpenBootloader/
+# Modules/I2C/openbl_i2c_cmd.c:399).
+#
+# Caveats:
+#   - Mass-erases both flash banks. MCU-side wallet state (pages 123-125)
+#     is wiped; OTP survives (OTP is silicon-level one-way, not tied to
+#     RDP). SE050 / OPTIGA NVM is untouched (separate chips).
+#   - No OEM2 password is set or expected. If you've ever burnt one, you
+#     need to add `--readunprotect <password>` or similar to the CLI call.
+#   - Does NOT step RDP2 → RDP1 (RDP2 is permanent). Only RDP1 → RDP0.
+saes-self-test-hw-rdp0-regress:
+	@echo "==> Regressing RDP1 → RDP0 (mass-erase will wipe flash banks 1+2)..."
+	@echo "    Note: OTP survives; SE050 / OPTIGA NVM are separate chips and unaffected."
+	@STM32_Programmer_CLI --connect port=SWD mode=UR --optionbytes RDP=0xAA \
+		UNLOCK_1A=1 UNLOCK_1B=1 UNLOCK_2A=1 UNLOCK_2B=1 || \
+		STM32_Programmer_CLI --connect port=SWD mode=HotPlug --optionbytes RDP=0xAA \
+			UNLOCK_1A=1 UNLOCK_1B=1 UNLOCK_2A=1 UNLOCK_2B=1
+	@echo "==> Stripping write-protect + secure watermarks..."
+	@STM32_Programmer_CLI --connect port=SWD --optionbytes \
+		WRP1A_PSTRT=0x7F WRP1A_PEND=0x0 WRP1B_PSTRT=0x7F WRP1B_PEND=0x0 \
+		WRP2A_PSTRT=0x7F WRP2A_PEND=0x0 WRP2B_PSTRT=0x7F WRP2B_PEND=0x0 \
+		SECWM1_PSTRT=0x7F SECWM1_PEND=0x0 SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 || true
+	@echo "==> Mass-erase both banks..."
+	@STM32_Programmer_CLI --connect port=SWD -e all
+	@echo "==> Restoring default option bytes (TZEN=1 + full-secure banks + SECBOOTADD0)..."
+	@STM32_Programmer_CLI --connect port=SWD --optionbytes \
+		TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Regression complete — board is back at RDP0."
+
 pin-gate-e2e:
 	@echo "==> Building PIN-gate roundtrip e2e firmware..."
 	@echo "    WARNING: this build will WIPE wallet state on BOTH chips."
