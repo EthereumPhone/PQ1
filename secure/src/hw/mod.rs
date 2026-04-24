@@ -70,6 +70,12 @@ pub mod huk;
 #[cfg(feature = "saes-dhuk")]
 pub mod saes;
 
+/// Software CMAC-AES-256 layered on top of `saes::encrypt_ecb_block`
+/// with `KeySel::Dhuk`. The derivation primitive for the Tier-1
+/// `hw::secret_keys` rewrite (task #31).
+#[cfg(feature = "saes-dhuk")]
+pub mod saes_cmac;
+
 /// Minimal USART1 driver routed to the B-U585I-IOT02A ST-LINK VCP
 /// (PA9 TX). Used under `uart-console` for diagnostic output from
 /// builds that can't rely on semihosting — specifically the RDP1

@@ -1,44 +1,63 @@
-//! Domain-separated per-purpose subkeys derived from the device OTP
-//! master key.
+//! Domain-separated per-purpose subkeys derived from a hardware-bound
+//! root key.
 //!
 //! This is the PQSigner parallel to Trezor's
 //! `core/embed/sec/secret_keys/stm32u5/secret_keys.c`: every SE pairing
 //! secret, storage salt, or authenticator key that would otherwise live
 //! as a hardcoded constant or a per-provisioning random is derived on
-//! demand from the per-device OTP master via a domain-labelled HMAC-
-//! SHA256 expansion.
+//! demand from a device-bound root via a domain-labelled expansion.
+//!
+//! ## Two derivation paths
+//!
+//! The root depends on the build configuration:
+//!
+//! 1. **Production / post-Tier-1 — `saes-dhuk` feature ON:** the root
+//!    is the silicon DHUK, accessed only via the SAES peripheral's
+//!    `KEYSEL=001` selector. DHUK bytes never appear in CPU-visible
+//!    memory. Each 16-byte output block is produced by
+//!    `SAES-CMAC(DHUK, label || counter)` where `counter` is a single
+//!    byte starting at 1 and incrementing per block. This is a
+//!    simplified SP 800-108-style CMAC-based counter KDF (we don't
+//!    emit the `0x00 || Context || L_be` suffix SP 800-108 §5.1
+//!    specifies; safe here because each label is fixed-purpose and
+//!    produces a single fixed-length output, so each counter value
+//!    gives a domain-separated block).
+//!
+//! 2. **Dev / bench — `otp-hardcoded-master-key` feature ON:** the
+//!    root is the 32-byte OTP-master-shaped ASCII constant, and
+//!    outputs come from `HKDF-Expand-HMAC-SHA256(constant, label)`.
+//!    This preserves the derivation byte-for-byte across every dev
+//!    board that uses the feature — swap chips, re-flash, power
+//!    cycle, and the admin UserID / SCP03 / PBS from the previous
+//!    run is still usable.
+//!
+//! The caller API (e.g. `optiga_pairing_secret()`) is identical for
+//! both paths — callers cannot tell which derivation is in use.
 //!
 //! ## Properties
 //!
 //! - **Deterministic per device.** Same board, same domain label →
-//!   same bytes every boot. Survives firmware updates because the
-//!   master lives in OTP; survives flash mass-erase because OTP does
-//!   not erase.
-//! - **Unique per device.** Different boards → different OTP masters
-//!   → different derived bytes, so a flash dump of one device cannot
-//!   decrypt another (even if the firmware is byte-identical).
-//! - **Domain-separated.** HMAC's PRF security property means each
-//!   label produces an independent-looking output; an attacker who
-//!   learns one derived key (e.g. via an SE pairing compromise) learns
-//!   nothing about the others.
-//!
-//! ## HKDF vs raw HMAC
-//!
-//! For 32-byte output a single HMAC-SHA256(master, label) call is the
-//! inner loop of HKDF-Expand (counter byte = 0x01, no prev) and is
-//! equivalent for our use. We avoid pulling in the `hkdf` crate to
-//! keep the dep footprint narrow. For 16-byte SE050 SCP03 keys we
-//! compute the full 32-byte HMAC and truncate — that's HKDF-Expand
-//! with `L=16` produced by the same single-block inner call.
+//!   same bytes every boot.
+//! - **Unique per die (production).** Different STM32U585 silicon →
+//!   different DHUK → different derived bytes at RDP ≥ 1. (At RDP0
+//!   DHUK is a shared ST-substituted constant; all dev boards
+//!   produce the same derivations. See `docs/work-todo.md §7 Tier 1`
+//!   for the RDP/DHUK semantics.)
+//! - **Domain-separated.** CMAC / HMAC as PRFs give independent-
+//!   looking outputs per label.
+//! - **Root-key-invisible (production).** Secure-world RCE can still
+//!   *call* SAES-CMAC(DHUK, ...) to reproduce the same outputs, but
+//!   cannot dump DHUK bytes to exfiltrate or replay on a different
+//!   chip or in emulation.
 //!
 //! ## Label hygiene
 //!
-//! Labels are versioned (`-v1`). Changing a label without a matching
-//! on-chip rotation is a silent data-corruption bug — the SE would
-//! still be paired with the old derived key. If we ever need to
-//! rotate a derivation (e.g. to upgrade the underlying primitive),
-//! bump the version suffix and accept a coordinated re-pairing step
-//! for affected SEs as part of the migration.
+//! Labels are versioned (`-v1`). The SAES-CMAC path yields DIFFERENT
+//! values from the HKDF-over-constant path for the same label — that
+//! is expected and handled by the Tier-1 rollout plan (re-pair SEs
+//! during production provisioning). Within a single build config the
+//! labels are stable; changing a label without an on-chip rotation
+//! is a silent data-corruption bug — bump the version suffix.
 
 use hmac::Mac;
 use sha2::Sha256;
@@ -87,21 +106,76 @@ fn hkdf_expand(prk: &[u8; 32], info: &[u8], output: &mut [u8]) {
     prev_t.zeroize();
 }
 
-/// Common path: pull the OTP master, run HKDF-Expand with `label` into
-/// `output`, zeroize the master-key scratch on the way out.
+/// Common path: derive `output.len()` domain-separated bytes from the
+/// device root key, using `label` as the domain tag. Dispatches on the
+/// compile-time feature set (see module docstring).
 ///
-/// On the first boot of a blank MCU the inner `ensure_device_master`
-/// call triggers the one-time 32-TRNG-byte OTP burn. Every subsequent
-/// call is a pure OTP read + HKDF-Expand.
+/// Under `otp-hardcoded-master-key` the root is the compile-time ASCII
+/// constant and the derivation is HKDF-Expand-HMAC-SHA256 (unchanged
+/// from pre-Tier-1 behaviour — byte-for-byte compatible for bench
+/// boards). Otherwise the root is the silicon DHUK and the derivation
+/// is `SAES-CMAC(DHUK, label || counter)` with a single-byte counter
+/// starting at 1, RFC-5869-KDF-Expand-shaped.
 fn derive_into(label: &[u8], output: &mut [u8]) -> Result<(), OtpError> {
-    // SAFETY: `ensure_device_master` may program OTP on the very first
-    // invocation of a blank MCU. Callers (SE provisioning, main's
-    // boot-time warm-up) run single-threaded before SE init, so no
-    // other flash op races with this write.
-    let mut master = unsafe { otp::ensure_device_master()? };
-    hkdf_expand(&master, label, output);
-    master.zeroize();
-    Ok(())
+    #[cfg(feature = "otp-hardcoded-master-key")]
+    {
+        // Dev-path: HKDF over the hardcoded master. Preserves every
+        // bench board's existing derivation byte-for-byte.
+        // SAFETY: `ensure_device_master` is a const-return under this
+        // feature — no OTP side effects.
+        let mut master = unsafe { otp::ensure_device_master()? };
+        hkdf_expand(&master, label, output);
+        master.zeroize();
+        Ok(())
+    }
+    #[cfg(all(not(feature = "otp-hardcoded-master-key"), feature = "saes-dhuk"))]
+    {
+        derive_into_saes_kdf(label, output)
+    }
+    #[cfg(all(not(feature = "otp-hardcoded-master-key"), not(feature = "saes-dhuk")))]
+    {
+        // Legacy path: neither feature enabled. Keeps the historical
+        // OTP-master + HKDF path available so existing hardware test
+        // builds don't regress until they opt into `saes-dhuk`. Remove
+        // this arm once every caller is building with `saes-dhuk`.
+        let mut master = unsafe { otp::ensure_device_master()? };
+        hkdf_expand(&master, label, output);
+        master.zeroize();
+        Ok(())
+    }
+}
+
+/// SAES-DHUK adaptor for the generic `kdf_cmac_counter_generic` KDF.
+/// All the counter/packing logic lives in `crate::cmac`; this file
+/// just supplies the SAES closure and maps errors to `OtpError`.
+#[cfg(all(not(feature = "otp-hardcoded-master-key"), feature = "saes-dhuk"))]
+fn derive_into_saes_kdf(label: &[u8], output: &mut [u8]) -> Result<(), OtpError> {
+    use crate::cmac::{kdf_cmac_counter_generic, KdfError};
+    use crate::hw::saes::{self, KeySel};
+
+    // No heap — use a stack buffer big enough for any label we
+    // currently define (`pqsigner/*-v1`, ≤ 32 bytes). Bump the
+    // constant if a future label exceeds this; the labels themselves
+    // are known at compile time.
+    const MAX_LABEL: usize = 64;
+    let mut info = [0u8; MAX_LABEL + 1];
+
+    let result = kdf_cmac_counter_generic(
+        label,
+        &mut info,
+        |block| saes::encrypt_ecb_block(KeySel::Dhuk, None, block),
+        output,
+    );
+
+    // Zeroize the info buffer — label is not secret, but the last-
+    // counter variant of it was used as CMAC input.
+    info.zeroize();
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(KdfError::LabelTooLong | KdfError::OutputTooLong) => Err(OtpError::ProgramError),
+        Err(KdfError::Backend(_)) => Err(OtpError::ProgramError),
+    }
 }
 
 /// 64-byte OPTIGA Trust M Platform Binding Secret.

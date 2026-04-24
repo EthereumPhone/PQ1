@@ -47,6 +47,11 @@ macro_rules! secure_log {
 // Pure-logic modules: no hardware dependencies, testable on the host.
 mod aa;
 mod tx;
+// Generic CMAC-AES core (RFC 4493). Always compiled — the firmware
+// pulls it in via the SAES-DHUK backend in `hw::saes_cmac`, and host
+// tests exercise the same function against the NIST SP 800-38B
+// AES-256 vectors. No hardware deps.
+mod cmac;
 
 // Hardware-dependent modules: gated out in test builds so `cargo test`
 // compiles only the pure logic on x86_64.
@@ -443,6 +448,25 @@ fn main() -> ! {
     // enabled — the driver module itself is gated on `saes-dhuk`.
     #[cfg(feature = "saes-self-test")]
     saes_self_test_and_halt();
+
+    // SAES init for the Tier-1 derivation path. Only needed when we're
+    // actually going to call `SAES-CMAC(DHUK, ...)` — i.e., `saes-dhuk`
+    // is ON and the `otp-hardcoded-master-key` dev shortcut is OFF.
+    // Under `otp-hardcoded-master-key` the derivation stays on the
+    // HKDF-over-constant fallback and SAES is never touched by
+    // `secret_keys`, so skipping the init keeps dev-path builds
+    // unaffected.
+    #[cfg(all(feature = "saes-dhuk", not(feature = "otp-hardcoded-master-key"), not(feature = "saes-self-test")))]
+    {
+        match hw::saes::init() {
+            Ok(()) => {
+                secure_log!("[S] SAES initialised (Tier-1 DHUK path)");
+            }
+            Err(e) => {
+                secure_log!("[S] SAES init FAIL: {:?} — derivations will error", e);
+            }
+        }
+    }
 
     // Initialize I2C1 for SE050 and/or OPTIGA Trust M BEFORE any SE operations.
     // Both chips share I2C1 (SE050 at 0x48, OPTIGA at 0x30). No address conflict.
