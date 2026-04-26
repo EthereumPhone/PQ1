@@ -49,10 +49,11 @@
 
 use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
-    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE,
-    FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN,
-    PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
-    PQ_SMART_WALLET_FACTORY, SET_PRE_SIGNATURE_SELECTOR, SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN,
+    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, APPROVE_HASH_CALLDATA_LEN,
+    APPROVE_HASH_SELECTOR, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT,
+    GPV2_SETTLEMENT_ADDRESS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN, PQ_ADD_OWNER_BYTES_SELECTOR,
+    PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN, PQ_SMART_WALLET_FACTORY,
+    SAFE_V1_PAYLOAD_MAX, SET_PRE_SIGNATURE_SELECTOR, SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN,
     SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN, ZK_V3_FIXED_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
@@ -89,6 +90,7 @@ const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + 2 + MAX_ERC20_BUNDLE_LEN
     + 2 + ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
     + 2 + ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
+    + 2 + SAFE_V1_PAYLOAD_MAX
     + 1 + MAX_NAME_BUNDLES * (2 + MAX_NAME_BUNDLE_LEN);
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
@@ -354,6 +356,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     cursor = zk_v3.next_cursor;
 
+    // 5a-bis. Optional Safe-multisig `approveHash` clear-sign trailer
+    // (`safe_v1`). Layout: canonical(281) || u16 raw_data_len ||
+    // raw_data. Absence is legal for non-Safe tx; the downgrade gate
+    // below mandates presence whenever the inner calldata claims to
+    // be `approveHash(bytes32)`.
+    let safe_v1 = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        SAFE_V1_PAYLOAD_MAX,
+        "bad safe bundle",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
+    };
+    cursor = safe_v1.next_cursor;
+
     // ── 5b. Optional address-name bundles ─────────────────────────
     //
     // Zero or more merkle-verified (chain_id, address, name) bundles.
@@ -484,6 +503,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None
     };
 
+    // 7c-bis. `safe_v1` Safe-multisig `approveHash` cross-check —
+    // 8-step all-native pipeline (length → selector → calldata len →
+    // chain pin → safe-address pin → operation gate → data_hash bind
+    // → safeTxHash bind). No Groth16; the approveHash digest is in the
+    // calldata itself, so the firmware natively recomputes both
+    // keccak chains and byte-compares.
+    let safe_v1_verified = if safe_v1.len > 0 {
+        crate::tx::eip712::safe::verify_and_bind_trailer(
+            &snap[safe_v1.start..safe_v1.start + safe_v1.len],
+            inner_data,
+            chain_id,
+            &to_address,
+        )
+    } else {
+        None
+    };
+
     // 7d. Downgrade-mitigation gate.
     //
     // The v1 clear-sign flow only binds the setPreSignature calldata
@@ -497,6 +533,18 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let cow_target = to_address == GPV2_SETTLEMENT_ADDRESS;
     if cow_selector && cow_target && zk_v3_verified.is_none() {
         ui::show_status("CoW sign", "v3 required");
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // Symmetric Safe `approveHash` gate. If the inner calldata claims
+    // to be `approveHash(bytes32)`, a `safe_v1` trailer is mandatory.
+    // Without this gate a hostile NS could strip the trailer and
+    // coerce the user into blind-signing the bytes32 hash with no
+    // visibility into what SafeTx it commits to.
+    let safe_selector = inner_data.len() >= 4 && inner_data[..4] == APPROVE_HASH_SELECTOR;
+    let safe_calldata_len = inner_data.len() == APPROVE_HASH_CALLDATA_LEN;
+    if safe_selector && safe_calldata_len && safe_v1_verified.is_none() {
+        ui::show_status("Safe sign", "safe_v1 required");
         return NscStatus::InvalidPointer as u32;
     }
 
@@ -535,6 +583,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         inner_data,
         zk_v3_verified.as_ref(),
         zk_v1_verified.as_ref(),
+        safe_v1_verified.as_ref(),
         verified_meta.as_ref(),
         &resolver,
     );

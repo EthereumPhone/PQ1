@@ -854,6 +854,96 @@ pub const GPV2_SETTLEMENT_ADDRESS: [u8; 20] = [
     0x51, 0x05, 0x60, 0xab, 0x41,
 ];
 
+// ---------------------------------------------------------------------------
+// Safe multisig (`approveHash`) clear-signing trailer — `safe_v1`
+// ---------------------------------------------------------------------------
+//
+// Targets Safe contracts v1.3.0 and later (the dominant deployments on
+// mainnet and L2s). Older Safes use a domain separator without
+// `chainId` — they self-police: our recomputed safeTxHash will fail
+// the calldata cross-check and the trailer is rejected. Companion is
+// responsible for refusing to send a `safe_v1` trailer for a v1.1.x
+// Safe.
+//
+// The `approveHash(bytes32)` selector puts the EIP-712 digest *in the
+// calldata*, so unlike the CoW v3 path there is no Groth16 — the
+// firmware natively keccaks (raw_data → data_hash) and (canonical →
+// safeTxHash), then byte-compares safeTxHash against
+// `inner_data[4..36]`.
+
+/// Function selector for `approveHash(bytes32)` on Safe `Singleton`
+/// contracts. Equals `keccak256("approveHash(bytes32)")[..4]`.
+pub const APPROVE_HASH_SELECTOR: [u8; 4] = [0xd4, 0xd9, 0xbd, 0xcd];
+
+/// Total length of the `approveHash(bytes32)` calldata: selector +
+/// 32-byte hash argument.
+pub const APPROVE_HASH_CALLDATA_LEN: usize = 4 + 32;
+
+/// `keccak256("EIP712Domain(uint256 chainId,address verifyingContract)")`.
+/// The Safe v1.3.0+ domain typehash. (Earlier Safes use a domain
+/// without `chainId`, which produces a different hash and is naturally
+/// rejected by the cross-check.)
+pub const SAFE_DOMAIN_TYPEHASH: [u8; 32] = [
+    0x47, 0xe7, 0x95, 0x34, 0xa2, 0x45, 0x95, 0x2e, 0x8b, 0x16, 0x89, 0x3a, 0x33, 0x6b, 0x85,
+    0xa3, 0xd9, 0xea, 0x9f, 0xa8, 0xc5, 0x73, 0xf3, 0xd8, 0x03, 0xaf, 0xb9, 0x2a, 0x79, 0x46,
+    0x92, 0x18,
+];
+
+/// `keccak256("SafeTx(address to,uint256 value,bytes data,uint8 operation,
+/// uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,
+/// address refundReceiver,uint256 nonce)")`.
+pub const SAFE_TX_TYPEHASH: [u8; 32] = [
+    0xbb, 0x83, 0x10, 0xd4, 0x86, 0x36, 0x8d, 0xb6, 0xbd, 0x6f, 0x84, 0x94, 0x02, 0xfd, 0xd7,
+    0x3a, 0xd5, 0x3d, 0x31, 0x6b, 0x5a, 0x4b, 0x26, 0x44, 0xad, 0x6e, 0xfe, 0x0f, 0x94, 0x12,
+    0x86, 0xd8,
+];
+
+/// Length of the packed canonical SafeTx encoding the `safe_v1` trailer
+/// carries. Layout (big-endian, fixed offsets):
+///
+/// ```text
+///   [  0..  8)  chain_id           u64 BE
+///   [  8.. 28)  safe_address       20 B
+///   [ 28.. 48)  to                 20 B
+///   [ 48.. 80)  value              uint256 BE
+///   [ 80..112)  data_hash          keccak256(data) — verified by firmware
+///   [112]       operation          0=Call, 1=DelegateCall (refused in v1)
+///   [113..145)  safe_tx_gas        uint256 BE
+///   [145..177)  base_gas           uint256 BE
+///   [177..209)  gas_price          uint256 BE
+///   [209..229)  gas_token          20 B
+///   [229..249)  refund_receiver    20 B
+///   [249..281)  nonce              uint256 BE
+/// ```
+pub const SAFE_V1_CANONICAL_LEN: usize = 281;
+
+/// Maximum size of the `raw_data` carried alongside the canonical in
+/// the `safe_v1` trailer. Set to `MAX_TX_LEN` so any inner Safe call
+/// the wallet would otherwise accept as a UserOp's inner data fits.
+pub const SAFE_V1_RAW_DATA_MAX: usize = MAX_TX_LEN;
+
+/// Maximum size of the full `safe_v1` trailer payload:
+/// `canonical (281) + u16 raw_data_len (2) + raw_data (≤4096)`.
+pub const SAFE_V1_PAYLOAD_MAX: usize = SAFE_V1_CANONICAL_LEN + 2 + SAFE_V1_RAW_DATA_MAX;
+
+// Canonical SafeTx field offsets — used by both the firmware decoder
+// and the host-side companion when assembling the trailer.
+pub const SAFE_OFF_CHAIN_ID: usize = 0;
+pub const SAFE_OFF_SAFE_ADDRESS: usize = 8;
+pub const SAFE_OFF_TO: usize = 28;
+pub const SAFE_OFF_VALUE: usize = 48;
+pub const SAFE_OFF_DATA_HASH: usize = 80;
+pub const SAFE_OFF_OPERATION: usize = 112;
+pub const SAFE_OFF_SAFE_TX_GAS: usize = 113;
+pub const SAFE_OFF_BASE_GAS: usize = 145;
+pub const SAFE_OFF_GAS_PRICE: usize = 177;
+pub const SAFE_OFF_GAS_TOKEN: usize = 209;
+pub const SAFE_OFF_REFUND_RECEIVER: usize = 229;
+pub const SAFE_OFF_NONCE: usize = 249;
+
+// Sanity assertion: the canonical layout adds up to SAFE_V1_CANONICAL_LEN.
+const _: () = assert!(SAFE_OFF_NONCE + 32 == SAFE_V1_CANONICAL_LEN);
+
 /// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
 /// **DEPRECATED** along with CMD_SIGN_BOOTSTRAP.
 pub const CTX_DEPLOY: u8 = 0x00;

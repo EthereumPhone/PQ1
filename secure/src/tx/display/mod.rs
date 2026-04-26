@@ -26,12 +26,16 @@ mod contract_creation;
 mod erc20_known;
 mod erc20_unknown;
 pub(super) mod primitives;
+#[cfg(not(test))]
+mod safe_display;
 mod value_transfer;
 
 pub use blind_sign::render_blind_sign_pages;
 pub use contract_creation::render_contract_creation_pages;
 pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;
+#[cfg(not(test))]
+pub use safe_display::render_safe_v1_pages;
 pub use value_transfer::render_pages;
 
 use crate::ui::confirm::Page;
@@ -153,6 +157,7 @@ pub fn pick_sign_pages(
     inner_data: &[u8],
     v3: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
     v1: Option<&crate::zk::VerifiedClearSignV1>,
+    safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
     erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
     resolver: &crate::names::NameResolver<'_>,
 ) -> Pages {
@@ -164,6 +169,26 @@ pub fn pick_sign_pages(
     }
     if let Some(v1) = v1 {
         return crate::zk::render_clear_sign_pages(tx, &v1.readable, resolver);
+    }
+    if let Some(safe) = safe_v1 {
+        // For Safe inner-tx ERC-20 rendering, only apply the outer
+        // ERC-20 metadata bundle when its contract address matches the
+        // inner-tx target — a Safe call carrying USDC metadata is
+        // useful only if the inner `to` is in fact USDC.
+        let inner_meta: Option<&crate::erc20::bundle::Erc20Metadata<'_>> = erc20.and_then(|m| {
+            // Decode inner `to` from the canonical (offset 28..48 per
+            // SAFE_OFF_TO). We can compare directly against m.contract.
+            let inner_to: [u8; 20] = {
+                let mut t = [0u8; 20];
+                t.copy_from_slice(
+                    &safe.canonical[sphincs_tz_shared::SAFE_OFF_TO
+                        ..sphincs_tz_shared::SAFE_OFF_TO + 20],
+                );
+                t
+            };
+            if m.contract == inner_to { Some(m) } else { None }
+        });
+        return render_safe_v1_pages(safe, inner_meta, resolver);
     }
     if inner_data.is_empty() {
         return render_pages(tx, resolver);

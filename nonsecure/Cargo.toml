@@ -41,6 +41,10 @@ panic-halt = "1.0"
 # SHA-256 for the names-DB short_key derivation. `sphincs-tz-shared`
 # has a zero-dep policy so the hashing helper lives in each consumer.
 sha2                 = { version = "0.10", default-features = false }
+# Keccak-256 used by the e2e Safe-multisig scenario to assemble a
+# `safe_v1` trailer (data_hash + safeTxHash) on the NS side. The
+# companion app uses the same primitive in production.
+sha3                 = { version = "0.10", default-features = false }
 
 # USB HID (optional, for hardware builds with host communication)
 usb-device = { version = "0.3", default-features = false, optional = true }
