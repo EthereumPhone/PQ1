@@ -219,8 +219,7 @@ pub const CMD_GET_MAIN_PUBKEY: u32 = 9;
 /// into the NS output buffer.
 pub const CMD_SIGN_BOOTSTRAP: u32 = 10;
 
-// CMDs 15/16/17 — pre-unified-sign JARDIN commands (CMD_SIGN_JARDIN,
-// CMD_REGISTER_JARDIN_SLOT, CMD_GET_JARDIN_SLOT_INFO) are retired. With the
+// CMDs 15/16/17 — the legacy slot-management commands are retired. With the
 // all-C10 cutover, the firmware is stateless for slot selection: the
 // companion drives `(chain_id, slot_index, flags)` per call via
 // `CMD_SIGN_USEROP`, so no separate slot-info / registration commands exist.
@@ -542,7 +541,7 @@ pub const INS_V2_FW_STATUS: u8 = 0x73;
 /// INS_V2_FW_ABORT — discard partial update. No payload.
 pub const INS_V2_FW_ABORT: u8 = 0x74;
 
-// INS range 0x70-0x7F (formerly JARDIN FORS+C compact signing — retired
+// INS range 0x70-0x7F (formerly compact-signing instructions — retired
 // with the C10 slot cutover).
 
 // -- Continuation (shared with v1) --
@@ -569,7 +568,7 @@ pub const WRAPPER_HEADER_LEN: usize = 1 + 4 + 4 + 32 + 32; // 73
 pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 3777
 
 // ---------------------------------------------------------------------------
-// Unified JARDÍN Type 1 / Type 2 wire format (CMD_SIGN_USEROP)
+// Unified Type 1 / Type 2 wire format (CMD_SIGN_USEROP)
 // ---------------------------------------------------------------------------
 //
 // The unified sign command emits a bundle that the companion submits as
@@ -600,29 +599,29 @@ pub const SIG_WRAPPER_LEN: usize = {
 /// The firmware builds a synthetic addOwner UserOp internally, hashes it
 /// with SHA-256, signs the hash with the bootstrap C10 key, and wraps the
 /// sig as `(ownerIndex = 0, inner_sig = c10_sig)`.
-pub const JARDIN_TYPE1_LEN: usize = SIG_WRAPPER_LEN;
+pub const SIG_TYPE1_LEN: usize = SIG_WRAPPER_LEN;
 
 /// Type 2 = slot-signed user-tx UserOp signature wrapper.
 ///
 /// Emitted on every sign request. `ownerIndex = slot_index + 1` (slot 0 is
 /// at on-chain ownerIndex 1 since ownerIndex 0 is the bootstrap key).
-pub const JARDIN_TYPE2_LEN: usize = SIG_WRAPPER_LEN;
+pub const SIG_TYPE2_LEN: usize = SIG_WRAPPER_LEN;
 
 /// Type 1 / 2 markers are deprecated — dispatch now happens on-chain via
 /// `SignatureWrapper.ownerIndex`, not a leading byte. Kept only as a
 /// historic `0x01 = bootstrap` / `0x02 = slot` mnemonic for the companion
 /// UI.
-pub const JARDIN_TYPE1_MARKER: u8 = 0x01;
-pub const JARDIN_TYPE2_MARKER: u8 = 0x02;
+pub const SIG_TYPE1_MARKER: u8 = 0x01;
+pub const SIG_TYPE2_MARKER: u8 = 0x02;
 
 /// Back-compat constant: the abi.encode header that precedes the raw 4008-
 /// byte C10 sig inside a SignatureWrapper (32 ownerIndex + 32 offset +
 /// 32 length = 96 bytes). Surfaced over USB in GET_DEVICE_INFO so the
 /// host companion can slice the wrapper without embedding the constant.
-pub const JARDIN_TYPE2_HEADER_LEN: usize = 32 + 32 + 32;
+pub const SIG_TYPE2_HEADER_LEN: usize = 32 + 32 + 32;
 
 // ---------------------------------------------------------------------------
-// PQJardinWalletFactory initCode (first-deploy UserOps)
+// PQSmartWalletFactory initCode (first-deploy UserOps)
 // ---------------------------------------------------------------------------
 
 /// Deployed address of the `PQSmartWalletFactory` contract.
@@ -655,17 +654,10 @@ pub const PROXY_INIT_CODE_HASH: [u8; 32] = [
     0xeb, 0x36, 0xb5, 0x65, 0x5a, 0x69, 0xe8, 0x5b,
 ];
 
-/// Back-compat alias for the old factory name (kept temporarily so the
-/// build doesn't break in places that haven't been renamed yet).
-pub const PQ_JARDIN_WALLET_FACTORY: [u8; 20] = PQ_SMART_WALLET_FACTORY;
-
 /// ABI selector for
 /// `PQSmartWalletFactory.createAccount(bytes32,bytes32,bytes32,bytes32,uint64,bytes)`.
 /// Equals `keccak256("createAccount(bytes32,bytes32,bytes32,bytes32,uint64,bytes)")[..4]`.
 pub const PQ_CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0xf6, 0x18, 0x2a, 0x73];
-
-/// Back-compat alias.
-pub const JARDIN_CREATE_ACCOUNT_SELECTOR: [u8; 4] = PQ_CREATE_ACCOUNT_SELECTOR;
 
 /// ABI selector for `PQSmartWallet.addOwnerBytes(bytes)`.
 /// Equals `keccak256("addOwnerBytes(bytes)")[..4]`.
@@ -691,9 +683,6 @@ pub const PQ_ADD_OWNER_BYTES_SELECTOR: [u8; 4] = [0x10, 0x14, 0x90, 0xcb];
 /// = 20 + 4 + (5 × 32) + 32 + 32 + 4032 = 4280 bytes.
 pub const PQ_INIT_CODE_LEN: usize = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 
-/// Back-compat alias for the old initCode-length name.
-pub const JARDIN_INIT_CODE_LEN: usize = PQ_INIT_CODE_LEN;
-
 /// Maximum unified response from `CMD_SIGN_USEROP`:
 ///
 /// ```text
@@ -701,8 +690,8 @@ pub const JARDIN_INIT_CODE_LEN: usize = PQ_INIT_CODE_LEN;
 ///   [type1_len(4 BE)][type1_wrapper(0 or SIG_WRAPPER_LEN)]
 ///   [type2_len(4 BE)][type2_wrapper(SIG_WRAPPER_LEN)]
 /// ```
-pub const MAX_JARDIN_RESPONSE_LEN: usize =
-    4 + PQ_INIT_CODE_LEN + 4 + JARDIN_TYPE1_LEN + 4 + JARDIN_TYPE2_LEN;
+pub const MAX_SIGN_RESPONSE_LEN: usize =
+    4 + PQ_INIT_CODE_LEN + 4 + SIG_TYPE1_LEN + 4 + SIG_TYPE2_LEN;
 
 /// Flags bit 31 — set by the companion when the wallet has not yet been
 /// deployed on this chain. Firmware synthesises `initCode` from its master
@@ -738,7 +727,7 @@ pub const FLAG_REGISTER_SLOT: u32 = 0x4000_0000;
 /// `MAX_SLOT_USES = 65_536` cap.
 ///
 /// Account 0 is the legacy single-account derivation: its bootstrap C10
-/// keys and JARDÍN master entropy stay byte-identical to the pre-multi-
+/// keys and slot master entropy stay byte-identical to the pre-multi-
 /// account firmware so existing seeds still land at the same on-chain
 /// address. Accounts 1..=255 use new domain-tagged KDFs (see
 /// `secure/src/crypto.rs`).

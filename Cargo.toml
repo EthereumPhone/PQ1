@@ -2,9 +2,9 @@
 #
 # Post-all-C10-cutover layout. Every crate listed here is needed to build
 # the firmware (secure + nonsecure + shared + bip39 + sphincs-c10) or the
-# host-side firmware measurement tool (fwmeasure). The retired
-# `jardin-fosc` crate was removed when the per-slot signing primitive
-# switched from FORS+C to SPHINCS+C10.
+# host-side firmware measurement tool (fwmeasure). The previous per-slot
+# signing crate was removed when the per-slot signing primitive switched
+# from FORS+C to SPHINCS+C10.
 #
 # The vendored `keccak-asm` crate was dropped in the SHA-256 cutover:
 # the signing stack no longer uses Keccak-f[1600]. The `sha3` crate still

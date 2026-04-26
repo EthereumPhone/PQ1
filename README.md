@@ -129,7 +129,7 @@ sphincs_rust/
 +-- secure/                     # TrustZone SECURE world firmware
 |   +-- src/
 |   |   +-- main.rs              # Boot: SAU → RCC → SAES self-test → provision → unlock → boot NS
-|   |   +-- crypto.rs            # BIP-39, C10 bootstrap derivation, C10 slot derivation, JARDÍN master entropy
+|   |   +-- crypto.rs            # BIP-39, C10 bootstrap derivation, C10 slot derivation, slot master entropy
 |   |   +-- sau.rs               # SAU + GTZC configuration
 |   |   +-- nsc/                 # NSC gateway: dispatcher, ptr_validate, gated_unlock, per-cmd handlers
 |   |   |   +-- mod.rs           #   Dispatcher + gated_unlock (page-124 pre-commit + FI guard)
@@ -426,7 +426,7 @@ Every primitive that touches a secret is listed below with its post-quantum stat
 | **Tier 3 root key** | OTP-master 32-byte TRNG burn at first boot (`0x0BFA_0080..0x0BFA_00A0`) | 32 B | ✅ PQ | Today: dev fallback for the per-purpose KDF. Post-Tier-2: repurposed to PBKDF2 salt for any future MCU-side PIN-gated wrap |
 | **Auth-key derivation (per SE)** | `hw::secret_keys` API (`optiga_pairing_secret`, `se050_scp03_*`, `se050_admin_pin`, `tropic01_pairing_key`) | 16 / 32 / 64 B | ✅ PQ | Stable caller API across all three tiers; underlying KDF flips between Tier 1 / Tier 3 on a single feature flag |
 | **BIP-39 → C10 master expansion** | PBKDF2-HMAC-SHA512 (2048 iters) → `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (account 0) or `…("sphincs-c6-v1-acct", bip39_seed‖account_index_be)` (accounts 1..=255) | 64 B | ✅ PQ | The `"sphincs-c6-v1"` tag is historical (carried through the all-C10 cutover). Account 0 reproduces the legacy single-account derivation byte-for-byte; accounts 1..=255 use the `-acct` variants |
-| **JARDÍN slot derivation** | `slot_entropy = sha256(master‖"jardin_slot"‖slot_index_be)`; `slot_sk_seed = sha256("jardin_slot_c10_sk_seed"‖slot_entropy)`; `slot_pk_seed = sha256("jardin_slot_c10_pk_seed"‖slot_entropy) & N_MASK` | 32 B sk, 16 B pk | ✅ PQ | Stateless within the C10 tree's 2^18 capacity. Cached in SRAM across the unlock session only |
+| **Slot derivation** | `slot_entropy = sha256(master‖"slot_entropy"‖slot_index_be)`; `slot_sk_seed = sha256("slot_c10_sk_seed"‖slot_entropy)`; `slot_pk_seed = sha256("slot_c10_pk_seed"‖slot_entropy) & N_MASK` | 32 B sk, 16 B pk | ✅ PQ | Stateless within the C10 tree's 2^18 capacity. Cached in SRAM across the unlock session only |
 | **Anti-rollback monotonic counter** | OTP fuses (1024 bits = 1024 commits, RDP-regression-resistant) | — | ✅ PQ | Survives RDP regression; one-way by design (no reset path) |
 | **TRNG entropy mixing** | STM32 TRNG today; planned mixing with OPTIGA + SE050 TRNG | 32 B | ✅ PQ | Quantum mechanics offers nothing against true randomness |
 | **Recovery encoding** | BIP-39 24 words ↔ 256-bit entropy | 32 B | ✅ PQ | 256 bits ≥ 128-bit PQ security |
@@ -443,7 +443,7 @@ Every primitive that touches a secret is listed below with its post-quantum stat
 | BIP-39 → C10 master expansion | `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (account 0) / `HMAC-SHA512("sphincs-c6-v1-acct", bip39_seed‖account_index_be)` (accounts 1..=255) | "C6" is historical — the underlying scheme is C10 today; the tag was written when we were on a different parameter set. Pre-production, this CAN still be cleaned up before launch (no shipped users to break); we just don't want silent drift inside an unrelated PR. |
 | Master pubkey shape | `masterPkSeed = sha256("pk_seed"‖master[..32]) & N_MASK` (top 16 B kept, bottom 16 B zero), `masterSkSeed = sha256("sk_seed"‖master[..32])` | The N_MASK shape matches the on-chain `bytes32` packing |
 | CREATE2 salt | `sha256(masterPkSeed ‖ masterPkRoot)` | Defines the on-chain wallet address; same on every chain *for a given* `account_index` |
-| Slot tags | `"jardin_slot"`, `"jardin_r"`, `"jardin_slot_c10_sk_seed"`, `"jardin_slot_c10_pk_seed"`, `"pqwallet-jardin-master"` (acct 0) / `"pqwallet-jardin-master-acct"` (accts 1..=255) | All carried through the all-C10 cutover; the JARDÍN domain tags are KDF labels only — the underlying signing scheme is C10 |
+| Slot tags | `"slot_entropy"`, `"slot_r"`, `"slot_c10_sk_seed"`, `"slot_c10_pk_seed"`, `"pqwallet-slot-master"` (acct 0) / `"pqwallet-slot-master-acct"` (accts 1..=255) | All carried through the all-C10 cutover; these are KDF labels only — the underlying signing scheme is C10 |
 
 ## Quantum Threat Model
 
@@ -603,13 +603,13 @@ Every step below runs in the **secure world**. The non-secure world drives nothi
 │    masterPkSeed = sha256("pk_seed"‖master[..32]) & N_MASK    │
 │    masterSkSeed = sha256("sk_seed"‖master[..32])             │
 │    master_sk    = sphincs_c10::SigningKey::keygen(...)       │
-│    jardin_master_entropy = sha256("pqwallet-jardin-master"   │
-│                                   ‖ bip39_seed)              │
+│    slot_master_entropy = sha256("pqwallet-slot-master"       │
+│                                  ‖ bip39_seed)               │
 │                                                              │
 │    Cached for the active window:                             │
-│      { E, master_sk, master_pk, jardin_master, slot cache }  │
+│      { E, master_sk, master_pk, slot_master, slot cache }    │
 │    Slot keys are derived deterministically per-call from     │
-│    (jardin_master, slot_index) and cached in SRAM only.      │
+│    (slot_master, slot_index) and cached in SRAM only.        │
 └──────────────────────────────────────────────────────────────┘
       │
       ▼
@@ -652,7 +652,7 @@ Every step below runs in the **secure world**. The non-secure world drives nothi
 │                                                              │
 │    Wipe ISR:                                                 │
 │      zeroize { E, master_sk, master_pk, slot cache,          │
-│                jardin_master, any stack region used by sign }│
+│                slot_master, any stack region used by sign }  │
 │      clear caches, clear CPU registers                       │
 │      loop-twice + verify (defensive against single-fault)    │
 │      return to "Locked" screen → next sign needs PIN again   │
@@ -665,7 +665,7 @@ Every step below runs in the **secure world**. The non-secure world drives nothi
 2. **The PIN buffer never crosses the NSC boundary in either direction.** PIN entry happens in S-world; the gateway doesn't have an `enter_pin(bytes)` call — it has `request_unlock()` which kicks the S-world UI loop and returns only success/failure.
 3. **Activity is defined by the S-world, never the NS world.** A compromised NS image cannot keep the seed alive by spamming pings. Only physical user input on a real S-world dialog counts.
 4. **PIN counter sync is three-way.** MCU page 124 (FI-hardened pre-commit) + OPTIGA E120 LUC + SE050 silicon UserID. `MAX_ATTEMPTS = 10` on any one of them dispatches `factory_reset_admin` + page-124 erase. Boot reconciliation accepts the strictest of the three.
-5. **Firmware is stateless with respect to slot selection.** No `next_q`-in-flash, no per-signature flash writes. The companion supplies `(chain_id, slot_index, flags)` on every sign call; slot keys are deterministically re-derived from `(jardin_master_entropy, slot_index)` and cached in SRAM across the unlock session only. SPHINCS+C10 is stateless within its 2^18 tree capacity, so flash state would be a regression.
+5. **Firmware is stateless with respect to slot selection.** No `next_q`-in-flash, no per-signature flash writes. The companion supplies `(chain_id, slot_index, flags)` on every sign call; slot keys are deterministically re-derived from `(slot_master_entropy, slot_index)` and cached in SRAM across the unlock session only. SPHINCS+C10 is stateless within its 2^18 tree capacity, so flash state would be a regression.
 
 ### Why two secure elements?
 
@@ -971,7 +971,7 @@ Nothing in this list is optional. Each item is something that has bricked, leake
 
 ### F2. Post-quantum cryptography
 
-- [ ] **Recovery contract committed at launch** in the protocol spec: SPHINCS+C10 (W+C_F+C, h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008), BIP-39 → C10 master expansion (whatever tag the team finalises — the in-tree placeholder is `"sphincs-c6-v1"` / `"sphincs-c6-v1-acct"`), CREATE2 salt `sha256(masterPkSeed‖masterPkRoot)`, slot tags (currently `"jardin_slot"` / `"jardin_r"` / `"jardin_slot_c10_sk_seed"` / `"jardin_slot_c10_pk_seed"`). After the first device ships, any change to these is a user-visible hard fork. Before launch this is a coordination cost only.
+- [ ] **Recovery contract committed at launch** in the protocol spec: SPHINCS+C10 (W+C_F+C, h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008), BIP-39 → C10 master expansion (whatever tag the team finalises — the in-tree placeholder is `"sphincs-c6-v1"` / `"sphincs-c6-v1-acct"`), CREATE2 salt `sha256(masterPkSeed‖masterPkRoot)`, slot tags (currently `"slot_entropy"` / `"slot_r"` / `"slot_c10_sk_seed"` / `"slot_c10_pk_seed"`). After the first device ships, any change to these is a user-visible hard fork. Before launch this is a coordination cost only.
 - [ ] **SPHINCS+ test vectors pass** for the C10 parameter set on-target, not just on the host. Output bytes match `SPHINCsC10Asm.sol` byte-for-byte (the verifier and signer are co-engineered)
 - [ ] **Differential test** the in-tree `sphincs-c10` crate against a second hash-based-signature implementation and against the recovery-contract test vectors in `sphincs-c10/tests/gen_test_vectors.rs`
 - [ ] **NIST PQC test vectors pass** for ML-KEM-1024 (planned inner-wrap) — on-target, not just on the host

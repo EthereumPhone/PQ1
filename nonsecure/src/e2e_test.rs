@@ -1,5 +1,5 @@
 // Post-cutover e2e test runner: exercises the stateless, companion-driven
-// JARDÍN sign command end-to-end (all-SPHINCS+C10).
+// sign-userop command end-to-end (all-SPHINCS+C10).
 //
 // The companion decides whether to ask for a Type 1 slot registration
 // by setting `FLAG_REGISTER_SLOT` in the flags u32, and picks the slot
@@ -16,13 +16,13 @@
 use crate::nsc_api;
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
-    FLAG_REGISTER_SLOT, JARDIN_TYPE1_LEN, JARDIN_TYPE2_LEN,
-    MAX_JARDIN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
+    FLAG_REGISTER_SLOT, SIG_TYPE1_LEN, SIG_TYPE2_LEN,
+    MAX_SIGN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
 };
 
 // === Scratch buffers =======================================================
 
-static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN] = [0u8; MAX_JARDIN_RESPONSE_LEN];
+static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
 static mut PAYLOAD_BUF: [u8; SIGN_USEROP_HEADER_LEN + 256] =
     [0u8; SIGN_USEROP_HEADER_LEN + 256];
 
@@ -118,7 +118,7 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
         resp[t1_len_off + 2],
         resp[t1_len_off + 3],
     ]) as usize;
-    assert!(t1_len == 0 || t1_len == JARDIN_TYPE1_LEN);
+    assert!(t1_len == 0 || t1_len == SIG_TYPE1_LEN);
     let t2_off = t1_len_off + 4 + t1_len;
     let t2_len = u32::from_be_bytes([
         resp[t2_off],
@@ -126,13 +126,13 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
         resp[t2_off + 2],
         resp[t2_off + 3],
     ]) as usize;
-    assert_eq!(t2_len, JARDIN_TYPE2_LEN, "Type 2 is a fixed-length C10 sig");
+    assert_eq!(t2_len, SIG_TYPE2_LEN, "Type 2 is a fixed-length C10 sig");
     (t1_len != 0, t2_len)
 }
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    hprintln!("[NS][e2e] === JARDÍN unified sign runner ===");
+    hprintln!("[NS][e2e] === unified sign runner ===");
 
     // The secure `e2e-test` feature auto-provisions and pre-unlocks the
     // gateway at boot. Under probe-rs the PIN-entry dialog would spin on

@@ -49,19 +49,19 @@ pub(super) struct SecureState {
     /// Whether any signature has been produced this session.
     pub(super) has_signed: bool,
 
-    // -- JARDÍN slot cache (session-scoped) -----------------------------
+    // -- Slot cache (session-scoped) ------------------------------------
     // Post-C10-cutover the firmware is stateless with respect to slot
     // selection: the companion sends `(chain_id, slot_index, flags)` on
-    // every sign. We cache the derived JARDÍN master entropy across the
+    // every sign. We cache the derived slot master entropy across the
     // unlock session (one BIP-39 → SHA-256 pass) and the derived slot
     // SigningKey (one multi-second hypertree keygen) to amortise repeat
     // signs. Both are dropped on lock / idle-wipe / panic.
 
-    /// JARDÍN master entropy (derived once per unlock from BIP-39 seed).
-    pub(super) jardin_master_entropy: [u8; 32],
+    /// Slot master entropy (derived once per unlock from BIP-39 seed).
+    pub(super) slot_master_entropy: [u8; 32],
 
-    /// Whether `jardin_master_entropy` has been derived this session.
-    pub(super) jardin_master_derived: bool,
+    /// Whether `slot_master_entropy` has been derived this session.
+    pub(super) slot_master_derived: bool,
 
     // -- Bootstrap C10 pubkey LRU cache --------------------------------
     // Multi-account variant: one seed produces up to 256 independent
@@ -114,8 +114,8 @@ impl SecureState {
             last_key_index: 0,
             last_ots_index: 0,
             has_signed: false,
-            jardin_master_entropy: [0u8; 32],
-            jardin_master_derived: false,
+            slot_master_entropy: [0u8; 32],
+            slot_master_derived: false,
             bootstrap_cache: [NONE_ENTRY; BOOTSTRAP_CACHE_LEN],
             bootstrap_cache_tick: 0,
         }
@@ -132,8 +132,8 @@ impl SecureState {
         self.last_key_index = 0;
         self.last_ots_index = 0;
         self.has_signed = false;
-        self.jardin_master_entropy.zeroize();
-        self.jardin_master_derived = false;
+        self.slot_master_entropy.zeroize();
+        self.slot_master_derived = false;
         // Bootstrap pubkey halves are technically non-secret, but wipe
         // them anyway so a stale entry can't influence post-lock UI
         // assumptions and so the cache reverts to a clean slate on
@@ -149,11 +149,11 @@ impl SecureState {
         }
         self.bootstrap_cache_tick = 0;
         // SAFETY: single-threaded, exclusive access via with_state.
-        // JARDIN_SLOT holds a SigningKey (ZeroizeOnDrop). Replacing the
+        // SLOT_CACHE holds a SigningKey (ZeroizeOnDrop). Replacing the
         // Option with None drops the inner key, which wipes its secret
         // material automatically.
         unsafe {
-            *core::ptr::addr_of_mut!(JARDIN_SLOT) = None;
+            *core::ptr::addr_of_mut!(SLOT_CACHE) = None;
             // Idle-wipe also drops any in-progress firmware-update
             // session. The inactive slot's erased pages stay erased
             // (harmless), and the companion must restart from BEGIN.
@@ -273,7 +273,7 @@ static mut STATE: SecureState = SecureState::new();
 /// cannot be const-constructed; `Option<None>` lives in BSS.
 ///
 /// SAFETY: same single-threaded invariant as `STATE`.
-pub(super) static mut JARDIN_SLOT: Option<CachedSlot> = None;
+pub(super) static mut SLOT_CACHE: Option<CachedSlot> = None;
 
 /// Active firmware-update session state. Populated by `CMD_FW_BEGIN`
 /// and drained by `CMD_FW_COMMIT` / `CMD_FW_ABORT`. Lives in SRAM only

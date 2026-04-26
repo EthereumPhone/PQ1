@@ -33,7 +33,7 @@
 //!     transaction later, in `CMD_SIGN_USEROP`. What this command
 //!     produces is a deterministic factory authorisation that
 //!     carries no value transfer.
-//!   * Per-slot keygen hits the same cache (`JARDIN_SLOT`) as
+//!   * Per-slot keygen hits the same cache (`SLOT_CACHE`) as
 //!     `CMD_SIGN_USEROP`, so a later sign on the same
 //!     `(account_index, chain_id)` skips the ~5-6 s keygen.
 //!   * `c10_sk` is stack-local and dropped before return; ZeroizeOnDrop
@@ -110,11 +110,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InvalidPointer as u32;
     }
 
-    // ── 4. Reconstruct entropy + derive JARDÍN master per-account ──
+    // ── 4. Reconstruct entropy + derive slot master per-account ───
     //
     // Mirrors `cmd_sign_userop.rs` §9: every call reads the entropy
     // blob out of the SE, decrypts with the session master_secret,
-    // and derives the per-account JARDIN master. The C10 keygens
+    // and derives the per-account slot master. The C10 keygens
     // below operate on these.
     let master_secret: Zeroizing<[u8; 32]> =
         Zeroizing::new(super::state::peek_state(|s| s.master_secret));
@@ -142,8 +142,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
         },
     );
-    let jardin_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
-        crate::crypto::jardin_master_entropy_from_entropy(&*entropy, account_index),
+    let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
+        crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
 
     // ── 5. Slot-0 C10 keygen (cached by (account_index, chain_id, 0)) ──
@@ -152,7 +152,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // (account, chain, slot=0) skips this ~5-6 s keygen.
     const SLOT_INDEX: u32 = 0;
     let need_keygen = super::state::peek_state(|_| {
-        let cached = unsafe { &*core::ptr::addr_of!(super::state::JARDIN_SLOT) };
+        let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
             Some(c) => {
                 c.account_index != account_index
@@ -167,13 +167,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         crate::ui::show_progress("Slot keygen", 0);
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(
-                &*jardin_master_entropy,
+                &*slot_master_entropy,
                 chain_id,
                 SLOT_INDEX,
                 |p| crate::ui::show_progress("Slot keygen", p),
             );
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(CachedSlot {
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
                 account_index,
                 chain_id,
                 slot_index: SLOT_INDEX,
@@ -181,9 +181,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             });
         }
         super::state::with_state(|s| {
-            s.jardin_master_entropy.zeroize();
-            s.jardin_master_entropy = *jardin_master_entropy;
-            s.jardin_master_derived = true;
+            s.slot_master_entropy.zeroize();
+            s.slot_master_entropy = *slot_master_entropy;
+            s.slot_master_derived = true;
         });
     }
 
@@ -191,7 +191,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // extraction in `cmd_sign_userop.rs` (N-byte pkSeed/pkRoot copied
     // into the low 16 bytes of a 32-byte zero-init buffer).
     let (slot_pk_seed_32, slot_pk_root_32) = unsafe {
-        match &*core::ptr::addr_of!(super::state::JARDIN_SLOT) {
+        match &*core::ptr::addr_of!(super::state::SLOT_CACHE) {
             Some(c) => {
                 let mut seed = [0u8; 32];
                 let mut root = [0u8; 32];

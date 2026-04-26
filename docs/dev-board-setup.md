@@ -233,7 +233,7 @@ What it switches:
   [S] hash: HW SHA-256 self-test PASS
   [S] hash: HW SHA-256 self-test FAIL — HALT
   ```
-  The `stm32u585` feature implies `hw-sha256`, so every real-hardware build routes every SPHINCS+C11 and JARDIN FORS+C hash through the STM32U585 HASH peripheral. Software `sha2::Sha256` is only used on host tests / QEMU.
+  The `stm32u585` feature implies `hw-sha256`, so every real-hardware build routes every SPHINCS+C10 hash (bootstrap + slot) through the STM32U585 HASH peripheral. Software `sha2::Sha256` is only used on host tests / QEMU.
 
 - **Running at 160 MHz** (post `85673a8`). The firmware configures PLL1 to drive the CPU at 160 MHz via `hw::rcc::init()`. Matches the VOS Range 1 / flash latency combo the datasheet specifies. On 16 MHz HSI fallback builds (ancient commits) signing is ~10× slower.
 

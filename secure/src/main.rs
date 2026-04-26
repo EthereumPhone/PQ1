@@ -2178,7 +2178,7 @@ fn SysTick() {
     //
     // HIGH-7 fix: don't wipe when a long-running gateway handler is
     // busy — it's holding stack-local copies of master_secret /
-    // entropy / jardin_master_entropy and they would disagree with
+    // entropy / slot_master_entropy and they would disagree with
     // the freshly-zeroed BSS copy, leaving the handler to sign a
     // transaction for a session the user no longer is unlocked for.
     // Let the handler observe `timeout::is_idle()` at its own

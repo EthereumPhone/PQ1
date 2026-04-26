@@ -209,11 +209,11 @@ pub fn request_unlock() -> u32 {
     transport::request_unlock()
 }
 
-/// Unified JARDÍN sign command (Type 1 + Type 2 state machine).
+/// Unified sign-userop command (Type 1 + Type 2 state machine).
 ///
 /// `payload` is the `SIGN_USEROP_HEADER_LEN`-byte header plus the
 /// inner-tx calldata. `sig_buf` must be large enough to hold the
-/// bundled response (`MAX_JARDIN_RESPONSE_LEN` bytes).
+/// bundled response (`MAX_SIGN_RESPONSE_LEN` bytes).
 pub fn sign_userop(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
     transport::sign_userop_call(payload.as_ptr(), sig_buf.as_mut_ptr(), payload.len() as u32)
 }

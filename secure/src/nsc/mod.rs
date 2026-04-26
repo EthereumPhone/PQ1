@@ -401,7 +401,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_request_unlock() -> u32 {
     r
 }
 
-/// CMD_SIGN_USEROP — unified JARDÍN Type 1 / Type 2 sign command.
+/// CMD_SIGN_USEROP — unified Type 1 / Type 2 sign command.
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_sign_userop(

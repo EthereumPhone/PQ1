@@ -212,7 +212,7 @@ After the cutover there are only **six** instructions plus the
 Any other INS returns `SW=0x6D00` (INS not supported). If you find
 documentation referring to `GET_BOOTSTRAP_VK` (0x20), `GET_MAIN_VK` (0x21),
 `SIGN_CLEAR_USEROP` (0x31), `SIGN_MESSAGE` (0x40), `SIGN_EIP712` (0x41),
-`SIGN_BOOTSTRAP` (0x50), or the JARDIN triplet (0x70 / 0x71 / 0x72), it
+`SIGN_BOOTSTRAP` (0x50), or the legacy slot triplet (0x70 / 0x71 / 0x72), it
 predates the unified-sign cutover — those instructions are gone. ZK
 clear-sign, ERC-20 display, EIP-712, and EIP-191 all now ride as optional
 trailers on `SIGN_USEROP`.
@@ -234,13 +234,13 @@ Capability discovery. **Always call first.**
 | 5      | 16   | device_uid        | STM32 UID96; zeros on dev builds       |
 | 21     | 4    | capabilities      | u32 BE bitmap (see below)              |
 | 25     | 1    | sig_param_set     | `2` = SPHINCS+C10 (128-bit)            |
-| 26     | 2    | sig_size          | u16 BE = `JARDIN_TYPE2_LEN` (4128)     |
+| 26     | 2    | sig_size          | u16 BE = `SIG_TYPE2_LEN` (4128)     |
 | 28     | 4    | erc20_db_version  | u32 BE, zero if unset                  |
 | 32     | 4    | vk_db_version     | u32 BE, zero if unset                  |
 | 36     | 2    | ep_version        | u16 BE = `0x0006` (EntryPoint v0.6)    |
-| 38     | 2    | wrapper_overhead  | u16 BE = `JARDIN_TYPE2_HEADER_LEN`     |
+| 38     | 2    | wrapper_overhead  | u16 BE = `SIG_TYPE2_HEADER_LEN`     |
 
-**Capability bitmap** — currently advertises `CAP_JARDIN_SIGN` only.
+**Capability bitmap** — currently advertises `CAP_SIGN_USEROP` only.
 All other legacy flags are zero. Do not rely on individual bits beyond
 this; instead branch on `ep_version` and `sig_param_set`.
 
@@ -733,20 +733,20 @@ For each account_index ∈ [0, 255]:
   masterPkRoot = sphincs_c10::SigningKey::keygen(masterSkSeed, masterPkSeed).pk_root()
 
   if account_index == 0:
-      jardin_master = sha256("pqwallet-jardin-master" || bip39_seed)
+      slot_master = sha256("pqwallet-slot-master" || bip39_seed)
   else:
-      jardin_master = sha256("pqwallet-jardin-master-acct" || bip39_seed || account_index_BE4)
+      slot_master = sha256("pqwallet-slot-master-acct" || bip39_seed || account_index_BE4)
 
   salt    = sha256(masterPkSeed || masterPkRoot)
   address = LibClone.predictDeterministicAddressERC1967(impl, salt, factory)
 ```
 
-Per-slot derivation from `jardin_master` + `slot_index`:
+Per-slot derivation from `slot_master` + `slot_index`:
 ```
-slot_entropy = sha256(jardin_master || "jardin_slot" || slot_index_BE4)
-slot_r       = sha256(jardin_master || "jardin_r"    || slot_index_BE4)
-slot_sk_seed = sha256("jardin_slot_c10_sk_seed" || slot_entropy)
-slot_pk_seed = sha256("jardin_slot_c10_pk_seed" || slot_entropy) & N_MASK
+slot_entropy = sha256(slot_master || "slot_entropy" || slot_index_BE4)
+slot_r       = sha256(slot_master || "slot_r"    || slot_index_BE4)
+slot_sk_seed = sha256("slot_c10_sk_seed" || slot_entropy)
+slot_pk_seed = sha256("slot_c10_pk_seed" || slot_entropy) & N_MASK
 slot_sk      = sphincs_c10::SigningKey::keygen(slot_sk_seed, slot_pk_seed)
 ```
 

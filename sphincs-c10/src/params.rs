@@ -2,15 +2,14 @@
 //!
 //! C10: W+C_F+C  h=18  d=2  a=11  k=13  w=8  l=43  target_sum=205  sig=4008
 //!
-//! C10 is the **bootstrap** (master) identity of the PQSigner OS wallet.
-//! It signs slot-registration Type 1 messages only; per-transaction signing
-//! is handled by the stateful FORS+C JARDÍN slot keys. The hypertree holds
-//! 2^18 = 262,144 signing positions, but the on-chain `bootstrapUses`
-//! counter caps actual usage at 65,536 per chain to leave a conservative
-//! security margin on the SPHINCS+ birthday-style bounds. After 65,536
-//! slot-registration Type 1s on a given chain the wallet freezes further
-//! rotations on that chain; the active FORS+C slot keeps signing until its
-//! own `Q_MAX`.
+//! C10 is used both for the **bootstrap** (master) identity of the PQSigner
+//! OS wallet and for every per-slot signing key. The hypertree holds
+//! 2^18 = 262,144 signing positions; the on-chain `bootstrapUses` and
+//! `slotUses` counters cap actual usage at 65,536 per chain (per slot) to
+//! leave a conservative security margin on the SPHINCS+ birthday-style
+//! bounds. After 65,536 slot-registration Type 1s on a given chain the
+//! wallet freezes further rotations on that chain; the active slot keeps
+//! signing until its own slotUses cap.
 //!
 //! Uses sha256 as the hash function. All 16-byte values are stored in
 //! the top 128 bits of a 32-byte word (right-padded with zeros) to match

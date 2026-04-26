@@ -602,7 +602,7 @@ function buildSignPayload(p) {
   //   bit 31           = FLAG_INCLUDE_INIT_CODE (first deploy)
   //   bit 30           = FLAG_REGISTER_SLOT     (rotation)
   //   bits 29..22 (8)  = account_index          (BIP-44-style account)
-  //   bits 21..0  (22) = slot_index             (per-account JARDIN slot)
+  //   bits 21..0  (22) = slot_index             (per-account slot index)
   //
   // The two top flag bits are mutually exclusive; firmware rejects both set.
   const acctIdx = (p.accountIndex >>> 0) & MAX_ACCOUNT_INDEX;

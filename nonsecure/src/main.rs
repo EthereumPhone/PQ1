@@ -16,13 +16,13 @@ use panic_semihosting as _;
 #[cfg(feature = "usb")]
 use panic_halt as _;
 
-// Interactive demo (mainly for `make play`): uses the unified JARDÍN
+// Interactive demo (mainly for `make play`): uses the unified
 // Type 1 / Type 2 sign command to sign a single value-transfer tx.
 #[cfg(all(not(feature = "e2e-test"), feature = "usb"))]
 use cortex_m_semihosting::{debug, hprintln};
 #[cfg(all(not(feature = "e2e-test"), not(feature = "fwup-hw-test")))]
 use sphincs_tz_shared::{
-    NscStatus, MAX_JARDIN_RESPONSE_LEN, SIGN_USEROP_HEADER_LEN,
+    NscStatus, MAX_SIGN_RESPONSE_LEN, SIGN_USEROP_HEADER_LEN,
 };
 
 #[cfg(feature = "e2e-test")]
@@ -41,7 +41,7 @@ mod vk_db;
 
 /// Scratch buffer for the unified sign command response (Type 1 + Type 2).
 #[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
-static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN] = [0u8; MAX_JARDIN_RESPONSE_LEN];
+static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
 
 /// Scratch buffer for a sign payload (header + up to 256B inner calldata).
 #[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
@@ -122,7 +122,7 @@ fn ns_debug_log(msg: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// Interactive QEMU demo (no USB). Exercises the unified JARDÍN sign
+// Interactive QEMU demo (no USB). Exercises the unified sign
 // command end-to-end: unlock → sign a value-transfer → print result.
 // ---------------------------------------------------------------------------
 #[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]

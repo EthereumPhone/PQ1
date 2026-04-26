@@ -22,8 +22,9 @@ MEMORY
      *                            free for reuse after full Tropic01 removal)
      *   page 126 (0x0C0FC000) = OPTIGA Trust M PBS (dual-SE only)
      *   page 125 (0x0C0FA000) = SE050 admin-wipe state (PIN at QW0, flag at QW1)
-     *   pages 123-124        = reserved (formerly JARDÍN slot state; freed
-     *                            by the all-C10 stateless-firmware cutover)
+     *   pages 123-124        = reserved (formerly per-slot persistent
+     *                            state; freed by the all-C10 stateless-
+     *                            firmware cutover)
      * See hw/flash.rs. */
     FLASH : ORIGIN = 0x0C000000, LENGTH = 984K
 

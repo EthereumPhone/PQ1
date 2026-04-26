@@ -6,9 +6,9 @@ Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 
 ## Development Posture (read first)
 
-**The project is in pre-production development, not hardening.** The end-to-end system — wizard, unlock, SPHINCS+C10 signing, JARDÍN slot derivation, NS USB HID, on-chain contracts — is being brought up on real STM32U585 hardware for the first time on this branch. Breadth-first bring-up takes priority over tightening every security boundary on every commit. The eventual hardening pass will happen later on a separate branch; until then:
+**The project is in pre-production development, not hardening.** The end-to-end system — wizard, unlock, SPHINCS+C10 signing, slot derivation, NS USB HID, on-chain contracts — is being brought up on real STM32U585 hardware for the first time on this branch. Breadth-first bring-up takes priority over tightening every security boundary on every commit. The eventual hardening pass will happen later on a separate branch; until then:
 
-- **No devices have shipped, no on-chain wallets hold funds.** Every "recovery contract", "frozen", or "hard fork" line below describes a property the team *intends* to commit to at launch — it does NOT describe a constraint imposed by a deployed user base. Domain tags (`"sphincs-c6-v1"`, `"jardin_slot"`, etc.), the C10 parameter set, the CREATE2 salt formula — all of these can still be renamed or restructured cleanly before first shipment, including in ways that change the wallet address every seed maps to. They are sticky in the sense that we don't want to flap them mid-bring-up (cross-developer + cross-bench-board reproducibility breaks if we do), not in the sense that real users would lose access.
+- **No devices have shipped, no on-chain wallets hold funds.** Every "recovery contract", "frozen", or "hard fork" line below describes a property the team *intends* to commit to at launch — it does NOT describe a constraint imposed by a deployed user base. Domain tags (`"sphincs-c6-v1"`, `"slot_entropy"`, etc.), the C10 parameter set, the CREATE2 salt formula — all of these can still be renamed or restructured cleanly before first shipment, including in ways that change the wallet address every seed maps to. They are sticky in the sense that we don't want to flap them mid-bring-up (cross-developer + cross-bench-board reproducibility breaks if we do), not in the sense that real users would lose access.
 
 - **Known regressions from hardening are acceptable** when they block bring-up. For example, `secure/src/sau.rs` currently clears GTZC1_TZSC_SECCFGR{1,2,3} to 0 (everything NS) because the "CRIT-4 all-secure baseline" patch mis-identified which controller governs USB OTG FS on STM32U585 — USB OTG FS is AHB2, governed by a separate **GTZC2_TZSC** block whose base address we have not yet confirmed (our first guess at `0x5203_4400` bus-faulted). This makes peripherals like I2C1 / AES / HASH / PKA / SAES / RNG reachable from NS — a **pre-production regression of invariant #4 below**. Restoring the invariant is a tracked TODO, not a reason to revert working USB bring-up.
 - **Debug instrumentation may ship in this branch.** `debug-log` is allowed on hardware release builds (the `compile_error!` gate in `secure/src/nsc/mod.rs` was removed), `hw::hash::init_clock`'s semihosting prints are `DHCSR.C_DEBUGEN`-gated rather than removed, `secure_log!` calls litter the first-boot wizard, and the NS `main()` emits pre-USB register dumps. These are kept for continued bring-up and must be cleaned up before production. CI must still gate shipped firmware on `debug-log` / `e2e-test` / `mock-se` being OFF.
@@ -49,13 +49,13 @@ Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
                                            |       |       +-- sphincs_c10::SigningKey::keygen(...)             -> masterPkRoot
                                            |       |              (C10 hypertree, rebuilt on every Type 1)
                                            |       |
-                                           |       +--- sha256("pqwallet-jardin-master" || bip39_seed)  -> jardin_master_entropy
+                                           |       +--- sha256("pqwallet-slot-master" || bip39_seed)    -> slot_master_entropy
                                            |                                                                        |
-                                           |       jardin_slot_entropy(master, slot_idx) = sha256(master||"jardin_slot"||slot_idx)
-                                           |       jardin_slot_r(master, slot_idx)        = sha256(master||"jardin_r"||slot_idx)
+                                           |       slot_entropy(master, slot_idx) = sha256(master||"slot_entropy"||slot_idx)
+                                           |       slot_r(master, slot_idx)       = sha256(master||"slot_r"||slot_idx)
                                            |                                                                        |
-                                           |       slot_sk_seed = sha256("jardin_slot_c10_sk_seed" || slot_entropy)
-                                           |       slot_pk_seed = sha256("jardin_slot_c10_pk_seed" || slot_entropy) & N_MASK
+                                           |       slot_sk_seed = sha256("slot_c10_sk_seed" || slot_entropy)
+                                           |       slot_pk_seed = sha256("slot_c10_pk_seed" || slot_entropy) & N_MASK
                                            |       sphincs_c10::SigningKey::keygen(slot_sk_seed, slot_pk_seed)      -> slot C10 keypair
                                            |              (cached in SRAM across the unlock session; no flash state)
                                            |                                                                        |
@@ -168,8 +168,8 @@ Implements **C10** (W+C_F+C, h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, s
 **Cross-cutting invariants:**
 - Output matches `SPHINCsC10Asm.sol` (Yul-optimised Solidity verifier) byte-for-byte.
 - 4,008-byte signature.
-- `SigningKey` is `ZeroizeOnDrop`; never leaves secure SRAM. Slot keys are cached in the `JARDIN_SLOT: Option<CachedSlot>` static (SRAM only) and dropped on lock / idle-wipe / panic.
-- Slot-key derivation: `slot_entropy = sha256(master_entropy || "jardin_slot" || slot_index_be)`, then `(sk_seed, pk_seed) = (sha256("jardin_slot_c10_sk_seed" || slot_entropy), sha256("jardin_slot_c10_pk_seed" || slot_entropy) & N_MASK)`, then `SigningKey::keygen(sk_seed, pk_seed[..16])`.
+- `SigningKey` is `ZeroizeOnDrop`; never leaves secure SRAM. Slot keys are cached in the `SLOT_CACHE: Option<CachedSlot>` static (SRAM only) and dropped on lock / idle-wipe / panic.
+- Slot-key derivation: `slot_entropy = sha256(master_entropy || "slot_entropy" || slot_index_be)`, then `(sk_seed, pk_seed) = (sha256("slot_c10_sk_seed" || slot_entropy), sha256("slot_c10_pk_seed" || slot_entropy) & N_MASK)`, then `SigningKey::keygen(sk_seed, pk_seed[..16])`.
 
 ### OPTIGA Trust M Integration
 
@@ -289,7 +289,7 @@ Pure-PQ account-abstraction wallet on EntryPoint v0.6, deployed via ERC-1967 pro
 ```bash
 make play                       # Interactive: drive wallet with arrow keys in QEMU
 make run                        # Non-interactive smoke test (QEMU, mock SE)
-make e2e                        # Automated end-to-end: unified JARDÍN sign (QEMU)
+make e2e                        # Automated end-to-end: unified sign (QEMU)
 make e2e-hw                     # End-to-end on real STM32U585 via ST-LINK + probe-rs
 make play-hw-display            # Interactive OLED + arrow-key forwarding on hardware
 make test-key-speed             # Fully-automated DWT-timed signing bench on hardware
@@ -403,14 +403,14 @@ into the master entropy.
     - `masterPkSeed = sha256("pk_seed" || master[0..32]) & N_MASK` (top 16 bytes kept, bottom 16 zero)
     - `masterSkSeed = sha256("sk_seed" || master[0..32])`
     - `masterPkRoot = sphincs_c10::SigningKey::keygen(masterSkSeed, masterPkSeed[..16]).pk_root()` (C10: h=18 top-layer subtree, 512 WOTS leaves)
-- **Seed → JARDÍN master entropy** (per `account_index`):
-  - `account_index == 0`: `sha256("pqwallet-jardin-master" || bip39_seed)`.
-  - `account_index > 0`: `sha256("pqwallet-jardin-master-acct" || bip39_seed || account_index_be4)`.
-- **Master entropy → slot entropy**: `sha256(master || "jardin_slot" || slot_index_be)`.
-- **Master entropy → r**: `sha256(master || "jardin_r" || slot_index_be)`.
+- **Seed → slot master entropy** (per `account_index`):
+  - `account_index == 0`: `sha256("pqwallet-slot-master" || bip39_seed)`.
+  - `account_index > 0`: `sha256("pqwallet-slot-master-acct" || bip39_seed || account_index_be4)`.
+- **Master entropy → slot entropy**: `sha256(master || "slot_entropy" || slot_index_be)`.
+- **Master entropy → r**: `sha256(master || "slot_r" || slot_index_be)`.
 - **Slot entropy → slot C10 seeds**:
-  - `slot_sk_seed = sha256("jardin_slot_c10_sk_seed" || slot_entropy)` (32 B, passed directly to `SigningKey::keygen`)
-  - `slot_pk_seed_32 = sha256("jardin_slot_c10_pk_seed" || slot_entropy) & N_MASK` (top 16 B populated, bottom 16 B zero — the on-chain `bytes32` shape)
+  - `slot_sk_seed = sha256("slot_c10_sk_seed" || slot_entropy)` (32 B, passed directly to `SigningKey::keygen`)
+  - `slot_pk_seed_32 = sha256("slot_c10_pk_seed" || slot_entropy) & N_MASK` (top 16 B populated, bottom 16 B zero — the on-chain `bytes32` shape)
   - `slot_sk = sphincs_c10::SigningKey::keygen(slot_sk_seed, slot_pk_seed_32[..16])`; `slot_pk_root = slot_sk.pk_root()`
 - **On-chain wallet address**: `CREATE2(factory, salt = sha256(masterPkSeed || masterPkRoot), creationCode_hash)`. Same on every chain *for a given `account_index`*. Different `account_index` ⇒ different `(masterPkSeed, masterPkRoot)` ⇒ different `salt` ⇒ different on-chain wallet — that's how one seed yields 256 wallets. (The CREATE2 opcode itself hashes `0xff || factory || salt || keccak256(initCode)` with keccak256 — that's fixed by the EVM and cannot change; we only control the salt preimage.) `account_index = 0` keeps the **same** wallet address as before the multi-account cutover.
 
@@ -419,9 +419,9 @@ into the master entropy.
 | Path | Purpose |
 |------|---------|
 | `secure/src/main.rs` | Secure world entry: SAU → RCC → SAES self-test → provision → unlock → boot NS |
-| `secure/src/crypto.rs` | BIP-39, C10 bootstrap derivation, C10 slot derivation, JARDÍN master entropy, AES-GCM wrap, PIN state |
+| `secure/src/crypto.rs` | BIP-39, C10 bootstrap derivation, C10 slot derivation, slot master entropy, AES-GCM wrap, PIN state |
 | `secure/src/nsc/mod.rs` | NSC gateway dispatcher + `gated_unlock` (MCU page-124 attempt counter + FI-hardened pre-commit) |
-| `secure/src/nsc/state.rs` | SecureState singleton (pin_verified, master_secret, JARDIN slot C10 cache keyed on `slot_index`) |
+| `secure/src/nsc/state.rs` | SecureState singleton (pin_verified, master_secret, slot C10 cache keyed on `slot_index`) |
 | `secure/src/nsc/cmd_sign_userop.rs` | **The unified Type 1 / Type 2 all-C10 sign handler (stateless, companion-driven)** |
 | `secure/src/nsc/cmd_request_unlock.rs` | PIN entry + dual-SE unlock through `gated_unlock` |
 | `secure/src/nsc/cmd_get_wallet_address.rs` | CREATE2-predicted proxy address from cached bootstrap pubkey |
@@ -481,7 +481,7 @@ into the master entropy.
 - **Do not store full entropy on a single chip.** Each chip gets exactly one XOR half.
 - **Do not add heap allocation.** `#![no_std]`, no alloc, stack-only. No `Vec`, no `Box`, no `String`.
 - **Do not use software PRNG.** All randomness from hardware TRNG (STM32 TRNG in production, semihosting `/dev/urandom` on QEMU).
-- **Do not change the key derivation domain tags casually mid-bring-up** (`"sphincs-c6-v1"`, `"sphincs-c6-v1-acct"`, `"pk_seed"`, `"sk_seed"`, `"pqwallet-jardin-master"`, `"pqwallet-jardin-master-acct"`, `"jardin_slot"`, `"jardin_r"`, `"jardin_slot_c10_sk_seed"`, `"jardin_slot_c10_pk_seed"`). Pre-production rationale: every change re-provisions every bench board and invalidates every testnet wallet we've stood up. There are no real users yet, so a deliberate, coordinated tag cleanup before launch is fine — what's not fine is silent drift inside an unrelated PR. The `-acct` variants are used only for `account_index > 0`; account 0 must continue to use the original tags so bench seeds keep their cross-developer-reproducible on-chain address.
+- **Do not change the key derivation domain tags casually mid-bring-up** (`"sphincs-c6-v1"`, `"sphincs-c6-v1-acct"`, `"pk_seed"`, `"sk_seed"`, `"pqwallet-slot-master"`, `"pqwallet-slot-master-acct"`, `"slot_entropy"`, `"slot_r"`, `"slot_c10_sk_seed"`, `"slot_c10_pk_seed"`). Pre-production rationale: every change re-provisions every bench board and invalidates every testnet wallet we've stood up. There are no real users yet, so a deliberate, coordinated tag cleanup before launch is fine — what's not fine is silent drift inside an unrelated PR. The `-acct` variants are used only for `account_index > 0`; account 0 must continue to use the original tags so bench seeds keep their cross-developer-reproducible on-chain address.
 - **Do not skip the verify-before-release check** on Type 1 or Type 2 signatures. Fault-injection guard, double-evaluated with a sentinel.
 - **Do not add a `rotateMasterKeys` function** to the wallet contract — that's the launch invariant for bootstrap-key immutability (see invariant #6).
 - **Do not add a `resetBootstrapUses` / `resetSlotUses` / `increaseMax*` path** to the wallet or factory. Both counters are immutable monotonic and capped at 65,536 each by design. Once a chain fully exhausts its bootstrap cap AND all currently-registered slots, the chain stays exhausted — that is the invariant. A companion-side notice of impending exhaustion is fine; anything that touches the counters in the contract is not.

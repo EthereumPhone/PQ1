@@ -1,6 +1,6 @@
 //! Key-speed bench runner.
 //!
-//! Measures wall-clock JARDÍN signing time on real STM32U585 hardware
+//! Measures wall-clock sign-userop time on real STM32U585 hardware
 //! at 160 MHz, using the DWT cycle counter enabled by the secure world.
 //! Pairs with the `e2e-test` feature on the secure crate (auto-provisions
 //! a fixed test mnemonic and pre-unlocks the gateway, so this runner
@@ -19,12 +19,12 @@
 use crate::nsc_api;
 use cortex_m_semihosting::{debug, hprintln};
 use sphincs_tz_shared::{
-    FLAG_REGISTER_SLOT, MAX_JARDIN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
+    FLAG_REGISTER_SLOT, MAX_SIGN_RESPONSE_LEN, NscStatus, SIGN_USEROP_HEADER_LEN,
 };
 
 // === Scratch buffers =======================================================
 
-static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN] = [0u8; MAX_JARDIN_RESPONSE_LEN];
+static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
 static mut PAYLOAD_BUF: [u8; SIGN_USEROP_HEADER_LEN + 64] =
     [0u8; SIGN_USEROP_HEADER_LEN + 64];
 
@@ -146,7 +146,7 @@ fn time_one_sign(chain_id: u64, slot_index: u32, register_slot: bool, nonce_seq:
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    hprintln!("[NS][bench] === JARDÍN key-speed bench @ 160 MHz ===");
+    hprintln!("[NS][bench] === key-speed bench @ 160 MHz ===");
 
     // Secure `e2e-test` auto-provisions + pre-unlocks. Verify, don't drive
     // the PIN UI (there's no button input in this automated flow).

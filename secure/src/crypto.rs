@@ -77,7 +77,7 @@ pub fn kdf(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
     h.finalize().into()
 }
 
-/// SHA-256 based KDF for SPHINCS+C10 / JARDÍN seed derivation.
+/// SHA-256 based KDF for SPHINCS+C10 / slot seed derivation.
 ///
 /// Historically this was Keccak-256 but we switched to SHA-256 across the
 /// entire signing stack so the firmware can call the STM32U585 HASH
@@ -464,46 +464,44 @@ pub fn derive_main_vk_from_entropy(
 }
 
 // ---------------------------------------------------------------------------
-// JARDIN FORS+C key derivation
+// Slot-key master-entropy derivation
 // ---------------------------------------------------------------------------
 //
-// JARDIN slots are derived deterministically from the BIP-39 seed via
-// domain-separated SHA-256, preserving the recovery contract:
-// same 24 words + chain_id + slot_index → same JARDIN slot.
+// Slot keys are derived deterministically from the BIP-39 seed via
+// domain-separated SHA-256: same 24 words + slot_index → same slot keypair.
 
-/// Derive the master entropy for JARDIN slot keys from the BIP-39 seed.
+/// Derive the master entropy for slot keys from the BIP-39 seed.
 /// Domain-separated so it is independent from C10 bootstrap keys.
 ///
-/// `account_index == 0` keeps the legacy single-account formula
-/// (`kdf_sha256("pqwallet-jardin-master", bip39_seed, 0)`) so that
-/// pre-multi-account seeds derive the same slot family. Indices 1..=255
-/// fold the index into a new domain tag — different account, different
-/// slot identity.
-pub fn jardin_master_entropy_from_bip39(
+/// `account_index == 0` uses the single-account formula
+/// (`kdf_sha256("pqwallet-slot-master", bip39_seed, 0)`).
+/// Indices 1..=255 fold the index into a separate domain tag —
+/// different account, different slot identity.
+pub fn slot_master_entropy_from_bip39(
     bip39_seed: &[u8; 64],
     account_index: u32,
 ) -> [u8; 32] {
     if account_index == 0 {
-        kdf_sha256(b"pqwallet-jardin-master", bip39_seed, 0)
+        kdf_sha256(b"pqwallet-slot-master", bip39_seed, 0)
     } else {
         let mut h = Sha256::new();
-        h.update(b"pqwallet-jardin-master-acct");
+        h.update(b"pqwallet-slot-master-acct");
         h.update(bip39_seed);
         h.update(account_index.to_be_bytes());
         h.finalize().into()
     }
 }
 
-/// Derive JARDIN master entropy from raw BIP-39 entropy (runs the full
+/// Derive slot master entropy from raw BIP-39 entropy (runs the full
 /// BIP-39 chain: mnemonic → PBKDF2 → domain KDF). See
-/// [`jardin_master_entropy_from_bip39`] for the `account_index` contract.
-pub fn jardin_master_entropy_from_entropy(
+/// [`slot_master_entropy_from_bip39`] for the `account_index` contract.
+pub fn slot_master_entropy_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     account_index: u32,
 ) -> [u8; 32] {
     let mnemonic = Mnemonic::from_entropy(entropy);
     let mut bip39_seed = mnemonic.to_seed("");
-    let master = jardin_master_entropy_from_bip39(&bip39_seed, account_index);
+    let master = slot_master_entropy_from_bip39(&bip39_seed, account_index);
     bip39_seed.zeroize();
     master
 }
@@ -512,7 +510,7 @@ pub fn jardin_master_entropy_from_entropy(
 // SPHINCS+C10 bootstrap keypair derivation (SPHINCs--compatible)
 // ---------------------------------------------------------------------------
 //
-// The bootstrap C10 keypair is the long-term identity of a JARDÍN wallet:
+// The bootstrap C10 keypair is the long-term identity of a wallet:
 // the CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`, so the
 // same 24 words produce the same on-chain wallet address across every
 // chain forever — given the same hash primitive and the same `h` tree
@@ -525,10 +523,10 @@ pub fn jardin_master_entropy_from_entropy(
 // contract. The underlying hash primitive is SHA-256; the master identity
 // SPHINCS+ parameter set is C10.
 //
-// This derivation is separate from the JARDÍN master entropy above: the
-// C10 keys sign only Type 1 slot-registration payloads (max 65,536 per
-// chain, enforced on-chain by `PQJardinWallet.bootstrapUses`), never user
-// txs. Per-tx signing uses the stateful FORS+C JARDÍN slot keys.
+// This derivation is separate from the slot master entropy above: the
+// C10 bootstrap keys sign only Type 1 slot-registration payloads (max
+// 65,536 per chain, enforced on-chain by `PQSmartWallet.bootstrapUses`),
+// never user txs. Per-tx signing uses the per-slot C10 keypairs.
 
 /// SPHINCS+C10 bootstrap-key derivation from the 64-byte BIP-39 seed.
 ///
@@ -706,27 +704,22 @@ pub fn c10_sign_verified_with_progress(
 }
 
 // ---------------------------------------------------------------------------
-// JARDÍN slot C10 keypair derivation
+// Per-slot C10 keypair derivation
 // ---------------------------------------------------------------------------
 //
 // Post-cutover the per-slot signing key is itself a SPHINCS+C10 keypair. The
 // firmware is stateless with respect to slot selection — it re-derives the
-// keypair deterministically from `(jardin_master_entropy, slot_index)` on
+// keypair deterministically from `(slot_master_entropy, slot_index)` on
 // every sign (and caches the result in SRAM for the remainder of the unlock
 // session).
 //
 // Derivation chain:
 //
-//   jardin_master_entropy = sha256("pqwallet-jardin-master" || bip39_seed)
-//   slot_entropy          = sha256(master || "jardin_slot" || slot_index_be)
-//   r                     = sha256(master || "jardin_r"    || slot_index_be)
-//   slot_sk_seed          = sha256("jardin_slot_c10_sk_seed" || slot_entropy)
-//   slot_pk_seed_16       = sha256("jardin_slot_c10_pk_seed" || slot_entropy)[0..16]
-//
-// The first three rules preserve the domain tags that were already part of
-// the recovery contract (only the consumer of `slot_entropy` changed from
-// FORS+C keygen to C10 keygen). The last two are new tags for the C10 slot
-// seed/pk derivation.
+//   slot_master_entropy = sha256("pqwallet-slot-master" || bip39_seed)
+//   slot_entropy        = sha256(master || "slot_entropy" || slot_index_be)
+//   r                   = sha256(master || "slot_r"        || slot_index_be)
+//   slot_sk_seed        = sha256("slot_c10_sk_seed" || slot_entropy)
+//   slot_pk_seed_16     = sha256("slot_c10_pk_seed" || slot_entropy)[0..16]
 
 /// Compute the deterministic slot entropy for a given `(chain_id, slot_index)`.
 ///
@@ -734,28 +727,26 @@ pub fn c10_sign_verified_with_progress(
 /// produces different slot identities on different chains. This is the
 /// cryptographic underpinning of the role-split design: an attacker
 /// who learned a slot key on chain A still cannot impersonate the user
-/// on chain B. The domain tag stays `"jardin_slot"` so the first byte
-/// of entropy is compatible with the pre-port layout for slot 0 on a
-/// single-chain setup; higher chains produce distinct entropy.
-pub fn jardin_slot_entropy(
+/// on chain B.
+pub fn slot_entropy(
     master_entropy: &[u8; 32],
     chain_id: u64,
     slot_index: u32,
 ) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(master_entropy);
-    h.update(b"jardin_slot");
+    h.update(b"slot_entropy");
     h.update(chain_id.to_be_bytes());
     h.update(slot_index.to_be_bytes());
     h.finalize().into()
 }
 
 /// Compute the per-slot randomiser `r`. Same chain-binding rule as
-/// `jardin_slot_entropy`.
-pub fn jardin_slot_r(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) -> [u8; 32] {
+/// [`slot_entropy`].
+pub fn slot_r(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(master_entropy);
-    h.update(b"jardin_r");
+    h.update(b"slot_r");
     h.update(chain_id.to_be_bytes());
     h.update(slot_index.to_be_bytes());
     h.finalize().into()
@@ -766,12 +757,12 @@ pub fn jardin_slot_r(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) 
 /// zero) to match the on-chain `bytes32` shape expected by the C10 verifier.
 fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     let mut sk_h = Sha256::new();
-    sk_h.update(b"jardin_slot_c10_sk_seed");
+    sk_h.update(b"slot_c10_sk_seed");
     sk_h.update(slot_entropy);
     let sk_seed: [u8; 32] = sk_h.finalize().into();
 
     let mut pk_h = Sha256::new();
-    pk_h.update(b"jardin_slot_c10_pk_seed");
+    pk_h.update(b"slot_c10_pk_seed");
     pk_h.update(slot_entropy);
     let pk_digest: [u8; 32] = pk_h.finalize().into();
     let mut pk_seed = [0u8; 32];
@@ -804,9 +795,9 @@ pub fn derive_c10_slot_keypair_with_progress(
     progress: impl Fn(u8),
 ) -> (SigningKey, [u8; 32], [u8; 32]) {
     progress(0);
-    let mut slot_entropy = jardin_slot_entropy(master_entropy, chain_id, slot_index);
-    let (sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&slot_entropy);
-    slot_entropy.zeroize();
+    let mut entropy = slot_entropy(master_entropy, chain_id, slot_index);
+    let (sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&entropy);
+    entropy.zeroize();
 
     let mut pk_seed_16 = [0u8; 16];
     pk_seed_16.copy_from_slice(&pk_seed_32[..16]);
@@ -1066,13 +1057,13 @@ mod c10_derivation_tests {
     }
 
     #[test]
-    fn jardin_master_entropy_account_indices_diverge() {
+    fn slot_master_entropy_account_indices_diverge() {
         let seed = [0xCDu8; 32];
-        let m0 = jardin_master_entropy_from_entropy(&seed, 0);
-        let m1 = jardin_master_entropy_from_entropy(&seed, 1);
-        let m255 = jardin_master_entropy_from_entropy(&seed, 255);
-        assert_ne!(m0, m1, "JARDIN master entropy must vary per account");
-        assert_ne!(m1, m255, "JARDIN master entropy must vary per account");
+        let m0 = slot_master_entropy_from_entropy(&seed, 0);
+        let m1 = slot_master_entropy_from_entropy(&seed, 1);
+        let m255 = slot_master_entropy_from_entropy(&seed, 255);
+        assert_ne!(m0, m1, "slot master entropy must vary per account");
+        assert_ne!(m1, m255, "slot master entropy must vary per account");
     }
 
     #[test]

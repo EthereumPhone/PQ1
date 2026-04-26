@@ -33,7 +33,7 @@
 //!
 //! Earlier revisions had an `init_code` helper that built the
 //! initCode for first-deployment UserOps against the now-deleted
-//! `PQCoinbaseSmartWalletFactory`. The new `PQJardinWalletFactory`
+//! `PQCoinbaseSmartWalletFactory`. The current `PQSmartWalletFactory`
 //! takes only `(bytes32 masterPkSeed, bytes32 masterPkRoot)` — no
 //! bootstrap signature, no on-device factory call payload — so the
 //! wallet is deployed **externally** (by the companion, a relayer, or

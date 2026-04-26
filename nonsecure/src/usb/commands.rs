@@ -2,7 +2,7 @@
 //!
 //! One class byte: `APDU_CLA_V2 = 0xF0`. One signing command. Every
 //! legacy shim (v1 Keycard Shell, bootstrap/main signing, ZK clear-
-//! signing, EIP-191, EIP-712) is gone — the single JARDÍN Type 1 /
+//! signing, EIP-191, EIP-712) is gone — the single sign-userop Type 1 /
 //! Type 2 state machine in the secure world absorbs the lot.
 //!
 //! Supported v2 instructions:
@@ -61,9 +61,9 @@ const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN > CHAIN_BUF_LEN_FW {
     CHAIN_BUF_LEN_FW
 };
 
-/// Response buffer — sized for the maximum unified JARDÍN output plus
+/// Response buffer — sized for the maximum unified output plus
 /// the 2-byte SW.
-static mut SIG_BUF: [u8; MAX_JARDIN_RESPONSE_LEN + 2] = [0u8; MAX_JARDIN_RESPONSE_LEN + 2];
+static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN + 2] = [0u8; MAX_SIGN_RESPONSE_LEN + 2];
 
 /// Short response buffer (non-signature responses).
 static mut RESP_BUF: [u8; 256] = [0u8; 256];
@@ -86,7 +86,7 @@ const FW_VERSION: [u8; 3] = [0x03, 0x00, 0x00];
 // Capability bits (reported by GET_DEVICE_INFO).
 // ---------------------------------------------------------------------------
 
-const CAP_JARDIN_SIGN: u32 = 1 << 0; // the one sign command
+const CAP_SIGN_USEROP: u32 = 1 << 0; // the one sign command
 // Bit 1 (CAP_FLASH_NEXT_Q) is retired — post-C10-cutover the firmware
 // is stateless for slot selection; the companion drives rotation.
 
@@ -241,15 +241,15 @@ impl CommandRouter {
         RESP_BUF[p..p + 16].fill(0); // device_uid placeholder
         p += 16;
 
-        let caps = CAP_JARDIN_SIGN;
+        let caps = CAP_SIGN_USEROP;
         RESP_BUF[p..p + 4].copy_from_slice(&caps.to_be_bytes());
         p += 4;
 
         RESP_BUF[p] = 2; // sig_param_set: 2 = SPHINCS+C10 (128-bit) everywhere
         p += 1;
 
-        // Type 2 sig size — now fixed at `JARDIN_TYPE2_LEN` bytes.
-        RESP_BUF[p..p + 2].copy_from_slice(&(JARDIN_TYPE2_LEN as u16).to_be_bytes());
+        // Type 2 sig size — now fixed at `SIG_TYPE2_LEN` bytes.
+        RESP_BUF[p..p + 2].copy_from_slice(&(SIG_TYPE2_LEN as u16).to_be_bytes());
         p += 2;
 
         // Unused legacy version fields, zeroed.
@@ -263,7 +263,7 @@ impl CommandRouter {
         p += 2;
 
         // Wrapper-overhead: header bytes prepended to each signed tx.
-        RESP_BUF[p..p + 2].copy_from_slice(&(JARDIN_TYPE2_HEADER_LEN as u16).to_be_bytes());
+        RESP_BUF[p..p + 2].copy_from_slice(&(SIG_TYPE2_HEADER_LEN as u16).to_be_bytes());
         p += 2;
 
         RESP_BUF[p] = (SW_OK >> 8) as u8;
@@ -360,7 +360,7 @@ impl CommandRouter {
         self.setup_chunked_response(PQ_INIT_CODE_LEN)
     }
 
-    /// 0x30 SIGN_USEROP — unified JARDÍN Type 1 / Type 2 state machine.
+    /// 0x30 SIGN_USEROP — unified Type 1 / Type 2 state machine.
     ///
     /// The payload is the `SIGN_USEROP_HEADER_LEN`-byte header plus
     /// the inner tx calldata (see `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN`
@@ -404,7 +404,7 @@ impl CommandRouter {
 
         let status = nsc_api::sign_userop(
             &CHAIN_BUF[..effective_len],
-            &mut SIG_BUF[..MAX_JARDIN_RESPONSE_LEN],
+            &mut SIG_BUF[..MAX_SIGN_RESPONSE_LEN],
         );
         if status != NscStatus::Ok as u32 {
             return self.nsc_status_to_response(status);
@@ -412,7 +412,7 @@ impl CommandRouter {
 
         // Parse the three-chunk bundle to compute the total length.
         let ic_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]) as usize;
-        if 4 + ic_len + 4 > MAX_JARDIN_RESPONSE_LEN {
+        if 4 + ic_len + 4 > MAX_SIGN_RESPONSE_LEN {
             return self.sw_response(SW_INTERNAL_ERROR);
         }
         let t1_len_off = 4 + ic_len;
@@ -422,7 +422,7 @@ impl CommandRouter {
             SIG_BUF[t1_len_off + 2],
             SIG_BUF[t1_len_off + 3],
         ]) as usize;
-        if t1_len_off + 4 + t1_len + 4 > MAX_JARDIN_RESPONSE_LEN {
+        if t1_len_off + 4 + t1_len + 4 > MAX_SIGN_RESPONSE_LEN {
             return self.sw_response(SW_INTERNAL_ERROR);
         }
         let t2_len_off = t1_len_off + 4 + t1_len;
@@ -433,7 +433,7 @@ impl CommandRouter {
             SIG_BUF[t2_len_off + 3],
         ]) as usize;
         let total = t2_len_off + 4 + t2_len;
-        if total > MAX_JARDIN_RESPONSE_LEN {
+        if total > MAX_SIGN_RESPONSE_LEN {
             return self.sw_response(SW_INTERNAL_ERROR);
         }
 

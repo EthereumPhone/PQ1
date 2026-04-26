@@ -1,4 +1,4 @@
-# PQSigner USB Protocol v2 (post-JARDÍN cutover)
+# PQSigner USB Protocol v2 (post-all-C10 cutover)
 
 Companion app integration guide for the PQSigner post-quantum hardware wallet.
 
@@ -66,7 +66,7 @@ Device → Host:  [remaining bytes] SW=0x9000
 
 ## Instruction Set
 
-After the JARDÍN cutover, the v2 protocol exposes a small, focused set
+After the all-C10 cutover, the v2 protocol exposes a small, focused set
 of commands:
 
 | INS  | Name                   | Chained? | P1         |
@@ -76,10 +76,9 @@ of commands:
 | 0x10 | UNLOCK                 | No       | 0          |
 | 0x11 | LOCK                   | No       | 0          |
 | 0x30 | SIGN_USEROP (unified)  | Yes      | 0x00/0x80  |
-| 0x72 | GET_JARDIN_SLOT_INFO   | No       | 0          |
 | 0xC0 | GET_RESPONSE           | No       | 0          |
 
-### 0x30 SIGN_USEROP — unified JARDÍN sign
+### 0x30 SIGN_USEROP — unified sign
 
 **This is the only signing command in the post-cutover wallet.** The
 firmware's state machine decides whether the response also needs a Type 1
@@ -140,26 +139,6 @@ appropriate `callData`:
 - **Type 2 UserOp**: `callData = execute(to, value, data)` (the user's
   actual tx).
 
-### 0x72 GET_JARDIN_SLOT_INFO
-
-Query the persisted slot state for a given chain. Useful for the
-companion to display "slot N, next_q=M, 95-M signatures remaining".
-
-**Input (8 bytes):**
-```
-chain_id (u64 BE)
-```
-
-**Response (45 bytes):**
-```
-[slot_index u32 BE] [next_q u32 BE] [flags u32 BE] [active u8] [h_r 32B]
-```
-
-- `active == 0` means no record exists for this `chain_id` (including
-  the fresh-wallet case).
-- `flags & 1` is the `FLAG_SLOT_REGISTERED` bit.
-- `h_r` is the on-chain slotKey (all zeros when `active == 0`).
-
 ### 0x10 UNLOCK
 
 No arguments. The secure world takes over the trusted UI, prompts the
@@ -191,8 +170,9 @@ The following pre-cutover commands no longer exist:
 - `0x41 SIGN_EIP712` — no EIP-712 path
 - `0x50 SIGN_BOOTSTRAP` — no bootstrap signer
 - `0x60 GET_WALLET_ADDRESS` — companion derives via factory CREATE2
-- `0x70 SIGN_JARDIN` (split) — folded into 0x30
-- `0x71 REGISTER_JARDIN_SLOT` (split) — folded into 0x30
+- `0x70 SIGN_SLOT` (split) — folded into 0x30
+- `0x71 REGISTER_SLOT` (split) — folded into 0x30
+- `0x72 GET_SLOT_INFO` — slot state is no longer persisted in firmware
 
 ## Status words
 
@@ -200,7 +180,7 @@ The following pre-cutover commands no longer exist:
 |--------|---------|
 | 0x9000 | OK |
 | 0x6100..0x61FF | More data available; send GET_RESPONSE |
-| 0x6501 | JARDÍN slot exhausted (rotation path failed) |
+| 0x6501 | Slot exhausted (rotation path failed) |
 | 0x6700 | Wrong length |
 | 0x6982 | Security condition not satisfied (bad PIN, cancelled sign) |
 | 0x6984 | Session expired (idle wipe) |

@@ -306,7 +306,7 @@ e2e:
 		exit 1; \
 	fi
 
-# Fully-automated JARDÍN signing benchmark on real STM32U585.
+# Fully-automated signing benchmark on real STM32U585.
 #
 # Clocks the MCU to 160 MHz (hw::rcc::init, the default for the stm32u585
 # build path) and uses the DWT cycle counter (armed in secure main.rs
@@ -480,7 +480,7 @@ e2e-hw-display:
 	@echo "==> Running e2e on hardware with OLED display (Ctrl-C to abort)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
-# Full JARDÍN sign e2e on real STM32U585 with *both* real SEs (OPTIGA
+# Full sign e2e on real STM32U585 with *both* real SEs (OPTIGA
 # Trust M + SE050, XOR-split entropy) driving the SSD1306 OLED.
 #
 # Exercises the post-cutover stateless-slot flow (Type 1 + Type 2,
@@ -703,10 +703,8 @@ se050-reset:
 #     SE050's 10 PIN attempts).
 #   * All STM32 secure flash — mass-erased via STM32_Programmer_CLI,
 #     which clears:
-#       - page 123 — JARDÍN slot-state shadow buffer
-#       - page 124 — JARDÍN slot-state primary (next_q, sub-key commits,
-#                    h_r) — the invariant that makes every Type 2
-#                    signature advance q persistently
+#       - page 124 — MCU PIN-attempt counter (one programmed QW per
+#                    attempt; capacity 32, lockout at 10)
 #       - page 125 — SE050 admin PIN + crash-safety wipe flag
 #       - page 126 — OPTIGA Trust M Platform Binding Secret
 #       - page 127 — Tropic01 pairing key slot

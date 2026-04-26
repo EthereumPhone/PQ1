@@ -3,11 +3,11 @@ pragma solidity 0.8.28;
 
 /// @title SPHINCsC10Asm — Stateless SPHINCS+ C10 verifier (Yul-optimised, SHA-256)
 /// @notice C10: W+C_F+C h=18 d=2 a=11 k=13 w=8 l=43 target_sum=205 sig=4008
-/// @dev C10 is the **bootstrap** (master) identity of the PQSigner OS wallet.
-///      It signs slot-registration Type 1 messages only; per-transaction
-///      signing uses the stateful FORS+C JARDÍN slot keys. The hypertree
-///      holds 2^18 signing positions, and `PQJardinWallet.bootstrapUses`
-///      caps actual on-chain Type 1 usage at 65,536 per chain.
+/// @dev C10 is used both for the **bootstrap** (master) identity of the
+///      PQSigner OS wallet and for every per-slot signing key. The hypertree
+///      holds 2^18 signing positions, and `PQSmartWallet.bootstrapUses` /
+///      `slotUses` cap actual on-chain Type 1 / Type 2 usage at 65,536 per
+///      chain (per slot).
 ///
 ///      Domain-separated H_msg (160 bytes). Branchless Merkle swap, hoisted
 ///      chain address. SHA-256 variant: every tweakable hash is computed by

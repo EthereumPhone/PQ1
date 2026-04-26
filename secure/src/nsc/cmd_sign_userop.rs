@@ -50,7 +50,7 @@
 use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
     NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE,
-    FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_JARDIN_RESPONSE_LEN, MAX_TX_LEN,
+    FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN,
     PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
     PQ_SMART_WALLET_FACTORY, SET_PRE_SIGNATURE_SELECTOR, SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN,
     SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN, ZK_V3_FIXED_LEN, ZK_VK_BUNDLE_MAX_LEN,
@@ -120,7 +120,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign", "bad ptr");
         return NscStatus::InvalidPointer as u32;
     }
-    if !validate_ns_write_ptr(args.arg1, MAX_JARDIN_RESPONSE_LEN) {
+    if !validate_ns_write_ptr(args.arg1, MAX_SIGN_RESPONSE_LEN) {
         ui::show_status("Sign", "bad out");
         return NscStatus::InvalidPointer as u32;
     }
@@ -550,7 +550,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // ── 9. Reconstruct entropy + derive JARDÍN master ──────────────
+    // ── 9. Reconstruct entropy + derive slot master ────────────────
     //
     // HIGH-6: wrap every stack-local secret in Zeroizing.
     let master_secret: Zeroizing<[u8; 32]> =
@@ -573,8 +573,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Err(_) => return NscStatus::CryptoError as u32,
         },
     );
-    let jardin_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
-        crate::crypto::jardin_master_entropy_from_entropy(&*entropy, account_index),
+    let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
+        crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
 
     // ── 10. Build Type 2 callData: execute(to, value, data) ────────
@@ -603,7 +603,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // three fields triggers a fresh ~5-6 s keygen.
     let need_keygen = super::state::peek_state(|_| {
         // SAFETY: single-threaded gateway.
-        let cached = unsafe { &*core::ptr::addr_of!(super::state::JARDIN_SLOT) };
+        let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
             Some(c) => {
                 c.account_index != account_index
@@ -618,14 +618,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_progress("Slot keygen", 0);
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(
-                &*jardin_master_entropy,
+                &*slot_master_entropy,
                 chain_id,
                 slot_index,
                 |p| ui::show_progress("Slot keygen", p),
             );
         // SAFETY: single-threaded.
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::JARDIN_SLOT) = Some(CachedSlot {
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
                 account_index,
                 chain_id,
                 slot_index,
@@ -633,9 +633,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             });
         }
         super::state::with_state(|s| {
-            s.jardin_master_entropy.zeroize();
-            s.jardin_master_entropy = *jardin_master_entropy;
-            s.jardin_master_derived = true;
+            s.slot_master_entropy.zeroize();
+            s.slot_master_entropy = *slot_master_entropy;
+            s.slot_master_derived = true;
         });
     }
 
@@ -643,7 +643,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // verifier takes `bytes32` pkSeed + pkRoot directly from the 64-byte
     // owner bytes, so the old N-mask truncation to 16 bytes is gone.
     let (slot_pk_seed_32, slot_pk_root_32) = unsafe {
-        match &*core::ptr::addr_of!(super::state::JARDIN_SLOT) {
+        match &*core::ptr::addr_of!(super::state::SLOT_CACHE) {
             Some(c) => {
                 let mut seed = [0u8; 32];
                 let mut root = [0u8; 32];
@@ -845,7 +845,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_progress("Slot C10 sign", 0);
     let t2_sig = {
         // SAFETY: single-threaded; cache guaranteed populated above.
-        let cached = unsafe { &*core::ptr::addr_of!(super::state::JARDIN_SLOT) };
+        let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
             Some(c) => &c.key,
             None => {
@@ -870,7 +870,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // A random-length volatile delay separates the two verifies so a
     // glitch-burst that spans one verify cannot skip the second.
     let (v1, v2) = {
-        let cached = unsafe { &*core::ptr::addr_of!(super::state::JARDIN_SLOT) };
+        let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
             Some(c) => &c.key,
             None => {
@@ -928,7 +928,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
     write_pos += SIG_WRAPPER_LEN;
 
-    debug_assert!(write_pos <= MAX_JARDIN_RESPONSE_LEN);
+    debug_assert!(write_pos <= MAX_SIGN_RESPONSE_LEN);
     debug_assert_eq!(write_pos - (4 + init_code_len + 4 + type1_len + 4), SIG_WRAPPER_LEN);
     let _ = write_pos;
 
