@@ -73,19 +73,6 @@ pub const GPV2_SETTLEMENT_ADDRESS: [u8; 20] = [
     0x09, 0x71, 0x56, 0x5a, 0xa8, 0x51, 0x05, 0x60, 0xab, 0x41,
 ];
 
-/// Sentinel address that this protocol uses as its lookup key in
-/// the VK DB. The trailing `0xab42` differs from the real
-/// `GPV2_SETTLEMENT_ADDRESS` (which ends in `0xab41`) so the
-/// `(chain_id, contract)` lookup key remains unique against the
-/// existing M3 setPreSignature entries (which key on the real
-/// address). The sentinel never makes it onto Ethereum: it is a
-/// pure DB key. The firmware hardcodes the real
-/// `GPV2_SETTLEMENT_ADDRESS` in the EIP-712 domain separator below.
-pub const SENTINEL: [u8; 20] = [
-    0x90, 0x08, 0xd1, 0x9f, 0x58, 0xaa, 0xbd, 0x9e, 0xd0, 0xd6,
-    0x09, 0x71, 0x56, 0x5a, 0xa8, 0x51, 0x05, 0x60, 0xab, 0x42,
-];
-
 // ---------------------------------------------------------------------------
 // EIP-712 typehashes (constant preimages, hashed lazily on first use).
 // ---------------------------------------------------------------------------
@@ -260,7 +247,7 @@ pub fn struct_hash(order: &GpV2Order) -> [u8; 32] {
 }
 
 // ---------------------------------------------------------------------------
-// Top-level digest entrypoint (matches Eip712ProtocolEntry::compute)
+// Top-level digest entrypoint
 // ---------------------------------------------------------------------------
 
 /// Compute the EIP-712 digest the wallet signs for a CowSwap

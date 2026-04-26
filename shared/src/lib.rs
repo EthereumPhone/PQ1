@@ -93,24 +93,9 @@ pub const CMD_REQUEST_UNLOCK: u32 = 2;
 pub const CMD_GET_PUBKEY: u32 = 3;
 // CMD 4 reserved (was CMD_SIGN in v1)
 pub const CMD_CLEAR_SIGN: u32 = 5;
-/// CMD_CLEAR_SIGN_MSG — EIP-712 typed-data clear signing (M4).
-///
-/// Unlike `CMD_CLEAR_SIGN` which signs an EIP-1559 tx envelope, this
-/// command signs an EIP-712 message digest. There is no on-chain tx
-/// to wrap; the wallet produces a signature over the EIP-712 digest
-/// directly. The Groth16 proof binds a 164-byte canonical encoding of
-/// the typed data (the order struct fields) to a 64-byte readable
-/// string. The secure world independently keccak-hashes the same
-/// canonical bytes (re-expanded into the 416-byte abi.encode of the
-/// 12-field GPv2Order struct) to produce the EIP-712 digest that
-/// actually gets signed with SLH-DSA.
-///
-/// Payload layout:
-///   [0..384)         : Groth16 proof (π.A || π.B || π.C)
-///   [384..548)       : canonical bytes (164 bytes, packed GPv2Order)
-///   [548..612)       : readable string (64 bytes, null-padded)
-///   [612..)          : [bundle_len u32 LE][VK bundle]
-pub const CMD_CLEAR_SIGN_MSG: u32 = 6;
+// CMD 6 reserved (was CMD_CLEAR_SIGN_MSG — standalone EIP-712 typed-data
+// signing; the only EIP-712 consumer is now the v3 trailer cross-check
+// inside CMD_SIGN_USEROP, so the standalone path was removed).
 
 /// CMD_SIGN_USEROP — ERC-4337 Account Abstraction UserOperation signing
 /// against **EntryPoint v0.6**.
@@ -453,10 +438,6 @@ pub const EIP712_STRING_LEN: usize = 128;
 
 /// Same Groth16 proof size as the EIP-1559 clear-sign path.
 pub const EIP712_PROOF_LEN: usize = 384;
-
-/// Total fixed header length for the CMD_CLEAR_SIGN_MSG payload.
-pub const EIP712_HEADER_LEN: usize =
-    EIP712_PROOF_LEN + EIP712_CANONICAL_LEN + EIP712_STRING_LEN;
 
 // ---------------------------------------------------------------------------
 // USB APDU protocol constants (Keycard Shell compatible)

@@ -25,7 +25,6 @@
 //! | 2  | REQUEST_UNLOCK  | —                                        | secure UI prompts for PIN |
 //! | 3  | GET_PUBKEY      | out_ptr, out_len                         | reads slot 2 |
 //! | 5  | CLEAR_SIGN      | payload_ptr, sig_out_ptr, total_len      | ZK verify → display → UserOp sign |
-//! | 6  | CLEAR_SIGN_MSG  | payload_ptr, sig_out_ptr, total_len      | ZK verify → EIP-712 → sign |
 //! | 7  | SIGN_USEROP     | payload_ptr, sig_out_ptr, total_len      | parse AA + inner tx → confirm → UserOp sign |
 //!
 //! ## Layout
@@ -45,8 +44,7 @@
 //!   * [`userop_tail`]  — shared "reconstruct execute() callData →
 //!     compute userOpHash → decrypt_and_sign" tail used by every
 //!     UserOp signing command.
-//!   * [`cmd_get_remaining`], [`cmd_request_unlock`], [`cmd_get_pubkey`],
-//!     [`cmd_clear_sign`], [`cmd_clear_sign_msg`], [`cmd_sign_userop`].
+//!   * [`cmd_get_remaining`], [`cmd_request_unlock`], [`cmd_sign_userop`].
 
 mod cmd_get_init_code;
 mod cmd_get_remaining;

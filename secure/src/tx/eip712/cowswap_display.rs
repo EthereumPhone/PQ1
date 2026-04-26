@@ -1,8 +1,8 @@
 //! Trusted-UI page renderer for CowSwap EIP-712 v3 orders.
 //!
 //! This module owns the 8-page confirmation flow that the secure
-//! world shows the user after a successful Groth16 verification in
-//! `cmd_clear_sign_msg`. It consumes two byte slices:
+//! world shows the user after a successful v3 trailer verification
+//! inside `cmd_sign_userop`. It consumes two byte slices:
 //!
 //!   * `readable` (128 B, bound via `H_str`) — the amounts + symbols
 //!      the circuit formatted into ASCII. We splice this verbatim
