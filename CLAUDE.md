@@ -2,11 +2,13 @@
 
 Post-quantum ERC-4337 hardware wallet. Target: **STM32U585 (Cortex-M33, TrustZone) + Infineon OPTIGA Trust M V3 + NXP SE050**. Every primitive protecting the seed is PQ or symmetric with >=256-bit keys. Signing is **SPHINCS+C10 only, everywhere** — pure post-quantum, no ECDSA, no classical fallback, no FORS+C. The wallet is an account-abstraction smart account that talks to EntryPoint v0.6 (Coinbase-Smart-Wallet-compatible).
 
-Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. Both SE drivers (OPTIGA Trust M, SE050) working. Dual-SE XOR entropy split wired and tested. The `PQJardinWallet` smart-wallet is deployed via a deterministic CREATE2 factory whose salt is `sha256(masterPkSeed || masterPkRoot)`, so the same 24 words produce the same address on every chain. **SHA-256 everywhere:** every hash inside the PQ signing stack (bootstrap SPHINCS+C10, slot SPHINCS+C10, slot derivation, KDF, CREATE2 salt) is SHA-256, routed through the STM32U585 HASH peripheral on hardware. `sha3::Keccak256` is retained only for the external-standard hashes the EVM demands (EIP-4337 userOpHash, EIP-712, EIP-1559 envelope, ERC-7201 namespace, the CREATE2 address formula itself). **All-C10 slot cutover:** the per-slot user-tx signing key is now SPHINCS+C10 (same `h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008` parameter set as the bootstrap key). The stateful FORS+C slot scheme and its `next_q`-in-flash rollback guard are gone — C10 is stateless within its 2^18 signing-position capacity. Per-chain usage is capped by two monotonic on-chain counters on `PQJardinWallet`: `MAX_BOOTSTRAP_USES = 65_536` Type 1 slot registrations and `MAX_SLOT_USES = 65_536` Type 2 signatures per slot. Combined: each chain can service up to 65,536 × 65,536 ≈ 2^32 user transactions before it becomes permanently frozen — well inside the C10 birthday-style safety margin. **Firmware is stateless with respect to slot selection** (the companion app supplies `(chain_id, slot_index, flags)` on every sign); no flash slot store, no recovery state machine inside the secure world.
+Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU mps2-an505. Both SE drivers (OPTIGA Trust M, SE050) working with PIN unlock through Shielded Connection (OPTIGA) + admin-UserID SCP03 (SE050). Dual-SE XOR entropy split wired and tested. Three-way PIN counter sync (MCU page 124 + OPTIGA E120 LUC + SE050 silicon UserID) validated end-to-end on real silicon, including 10-wrong-PIN brick + admin-wipe recovery. Tier-1 SAES-CMAC(DHUK) KDF landed; `secret_keys::derive_into` flips between `HKDF(OTP_master)` (dev) and `SAES-CMAC(DHUK)` (production) on a single feature flag. The `PQSmartWallet` is deployed via a deterministic ERC-1967 proxy factory whose salt is `sha256(masterPkSeed || masterPkRoot)`, so the same 24 words produce the same address on every chain (factory + impl pinned at the same addresses across chains, e.g. via a singleton deployer). **SHA-256 everywhere:** every hash inside the PQ signing stack (bootstrap SPHINCS+C10, slot SPHINCS+C10, slot derivation, KDF, CREATE2 salt) is SHA-256, routed through the STM32U585 HASH peripheral on hardware. `sha3::Keccak256` is retained only for the external-standard hashes the EVM demands (EIP-4337 userOpHash, EIP-712, EIP-1559 envelope, ERC-7201 namespace, the CREATE2 address formula itself). **All-C10 slot cutover:** the per-slot user-tx signing key is now SPHINCS+C10 (same `h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008` parameter set as the bootstrap key). The stateful FORS+C slot scheme and its `next_q`-in-flash rollback guard are gone — C10 is stateless within its 2^18 signing-position capacity. Per-chain usage is capped by two monotonic on-chain counters on `PQSmartWallet`: `MAX_BOOTSTRAP_USES = 65_536` Type 1 slot registrations and `MAX_SLOT_USES = 65_536` Type 2 signatures per slot. Combined: each chain can service up to 65,536 × 65,536 ≈ 2^32 user transactions before it becomes permanently frozen — well inside the C10 birthday-style safety margin. **Firmware is stateless with respect to slot selection** (the companion app supplies `(chain_id, slot_index, flags)` on every sign); no flash slot store, no recovery state machine inside the secure world.
 
 ## Development Posture (read first)
 
 **The project is in pre-production development, not hardening.** The end-to-end system — wizard, unlock, SPHINCS+C10 signing, JARDÍN slot derivation, NS USB HID, on-chain contracts — is being brought up on real STM32U585 hardware for the first time on this branch. Breadth-first bring-up takes priority over tightening every security boundary on every commit. The eventual hardening pass will happen later on a separate branch; until then:
+
+- **No devices have shipped, no on-chain wallets hold funds.** Every "recovery contract", "frozen", or "hard fork" line below describes a property the team *intends* to commit to at launch — it does NOT describe a constraint imposed by a deployed user base. Domain tags (`"sphincs-c6-v1"`, `"jardin_slot"`, etc.), the C10 parameter set, the CREATE2 salt formula — all of these can still be renamed or restructured cleanly before first shipment, including in ways that change the wallet address every seed maps to. They are sticky in the sense that we don't want to flap them mid-bring-up (cross-developer + cross-bench-board reproducibility breaks if we do), not in the sense that real users would lose access.
 
 - **Known regressions from hardening are acceptable** when they block bring-up. For example, `secure/src/sau.rs` currently clears GTZC1_TZSC_SECCFGR{1,2,3} to 0 (everything NS) because the "CRIT-4 all-secure baseline" patch mis-identified which controller governs USB OTG FS on STM32U585 — USB OTG FS is AHB2, governed by a separate **GTZC2_TZSC** block whose base address we have not yet confirmed (our first guess at `0x5203_4400` bus-faulted). This makes peripherals like I2C1 / AES / HASH / PKA / SAES / RNG reachable from NS — a **pre-production regression of invariant #4 below**. Restoring the invariant is a tracked TODO, not a reason to revert working USB bring-up.
 - **Debug instrumentation may ship in this branch.** `debug-log` is allowed on hardware release builds (the `compile_error!` gate in `secure/src/nsc/mod.rs` was removed), `hw::hash::init_clock`'s semihosting prints are `DHCSR.C_DEBUGEN`-gated rather than removed, `secure_log!` calls litter the first-boot wizard, and the NS `main()` emits pre-USB register dumps. These are kept for continued bring-up and must be cleaned up before production. CI must still gate shipped firmware on `debug-log` / `e2e-test` / `mock-se` being OFF.
@@ -18,7 +20,7 @@ Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 
 1. **Dual-chip seed split.** BIP-39 entropy is XOR-split: `half_O` on OPTIGA Trust M, `half_E` on SE050. Neither chip alone reveals any bit of the seed. Code that stores the full entropy on a single chip, or transmits one half to the other chip, breaks the design.
 
-2. **Hardware-level PIN gating.** The PIN decision is made by the secure element silicon, never by MCU firmware. SE050 uses UserID auth (object `0x7B06_0000`, max 10 attempts, hardware constant-time comparison). OPTIGA Trust M uses hardware-enforced authorization references (OID `0xF1D0`, access conditions enforced by chip silicon). Firmware that compares PINs in software, or bypasses the SE's auth gate to read secrets, breaks the design.
+2. **Hardware-level PIN gating, three-way lockstep.** The PIN decision is made by the secure element silicon, never by MCU firmware. SE050 uses UserID auth (max 10 attempts, hardware constant-time comparison; current OID range `0x7B0C_*`). OPTIGA Trust M uses hardware-enforced authorization references (OID `0xF1D0`, Execute access bound to a `0xE120` Lifetime Usage Counter — silicon-monotonic, immune to Platform Binding Secret extraction). The MCU additionally tracks a flash-page-124 attempt counter (FI-hardened pre-commit pattern in `nsc::gated_unlock`) so a power glitch mid-SE-verify still charges the attempt. All three counters are kept in three-way lockstep: any disagreement on boot is reconciled toward the strictest, and `MAX_ATTEMPTS = 10` on any one of them dispatches `factory_reset_admin` + page-124 erase. Firmware that compares PINs in software, or bypasses the SE's auth gate to read secrets, breaks the design.
 
 3. **E2E encrypted tunnel between TrustZone secure world and each SE.** OPTIGA Trust M: Shielded Connection (TLS-PRF + AES-128-CCM-8) per session; Platform Binding Secret stored in secure flash page 126. SE050: SCP03 (AES-CMAC + AES-CBC) authenticated+encrypted channel. Planned: ML-KEM-1024 inner wrap so even a CRQC break of the classical channels reveals only opaque PQ ciphertext. No plaintext secret ever touches the I2C bus.
 
@@ -26,9 +28,9 @@ Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 
 5. **One signature primitive, post-quantum only.** SPHINCS+C10 signs both Type 1 (bootstrap slot registration) and Type 2 (per-slot user tx) — no FORS+C, no classical signer (secp256k1, P-256, Ed25519) anywhere. The on-chain wallet contract has a single `c10Verifier` wired to both dispatch paths; there is no classical verifier path.
 
-6. **Bootstrap C10 keys are immutable.** The on-chain CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`. Rotating the bootstrap key would change the wallet address — seed recovery would land users at a different account. The factory has no `rotateMasterKeys` function, and there is no on-chain ownership model that could introduce one.
+6. **Bootstrap C10 keys are immutable per-wallet (design property for launch).** The on-chain CREATE2 salt is `sha256(masterPkSeed || masterPkRoot)`. Once the project ships, rotating the bootstrap key for a given seed would change the wallet address — seed recovery would land users at a different account. The factory has no `rotateMasterKeys` function, and there is no on-chain ownership model that could introduce one. Pre-production: this is a planned launch invariant, not a constraint over deployed users (there are none yet).
 
-7. **Per-chain usage capped by two monotonic counters.** `PQJardinWallet.bootstrapUses` is bumped on every accepted Type 1 and checked against `MAX_BOOTSTRAP_USES = 65_536`; `slotUses[slotKey]` is bumped on every accepted Type 2 and checked against `MAX_SLOT_USES = 65_536`. Both caps are well inside the C10 `h=18` tree's 2^18 = 262,144 signing positions, leaving a conservative birthday-style safety margin. A chain that hits the bootstrap cap can still sign Type 2 on already-registered slots (until each slot hits its own cap); once a slot's `slotUses` is at the cap, the companion rotates to `slot_index + 1` via a new Type 1. A chain whose bootstrap cap is exhausted AND whose last-registered slot is also exhausted is permanently frozen — the companion surfaces this as an irrecoverable per-chain freeze. There is no `resetBootstrapUses` / `resetSlotUses` path anywhere in the contract.
+7. **Per-chain usage capped by two monotonic counters.** `PQSmartWallet.bootstrapUses` is bumped on every accepted Type 1 and checked against `MAX_BOOTSTRAP_USES = 65_536`; `slotUses[ownerIndex]` is bumped on every accepted Type 2 and checked against `MAX_SLOT_USES = 65_536`. Both caps are well inside the C10 `h=18` tree's 2^18 = 262,144 signing positions, leaving a conservative birthday-style safety margin. A chain that hits the bootstrap cap can still sign Type 2 on already-registered slots (until each slot hits its own cap); once a slot's `slotUses` is at the cap, the companion rotates to `ownerIndex + 1` via a new Type 1. A chain whose bootstrap cap is exhausted AND whose last-registered slot is also exhausted is permanently frozen — the companion surfaces this as an irrecoverable per-chain freeze. There is no `resetBootstrapUses` / `resetSlotUses` path anywhere in the contract.
 
 8. **Firmware is stateless with respect to slot selection.** The companion app supplies `(chain_id, slot_index, flags)` on every `CMD_SIGN_USEROP`; the secure world keeps zero flash state about which chain has registered which slot. Slot keys are deterministically re-derived from `(master_entropy, slot_index)` on demand and cached in SRAM across the unlock session only. This replaces the pre-cutover FORS+C `next_q` persistence invariant — SPHINCS+C10 is stateless within its tree capacity, so per-signature flash writes are not required.
 
@@ -71,11 +73,15 @@ Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 
 | CMD | Name | What it does |
 |-----|------|--------------|
-| 1 | GET_REMAINING | Return remaining PIN attempts |
-| 2 | REQUEST_UNLOCK | S-world prompts PIN via trusted UI, unlocks both SEs |
+| 1 | GET_REMAINING | Return remaining PIN attempts (min over the three-way MCU/OPTIGA/SE050 counter cache) |
+| 2 | REQUEST_UNLOCK | S-world prompts PIN via trusted UI, runs `gated_unlock` (MCU page-124 pre-commit + dual-SE unlock) |
 | 7 | SIGN_USEROP | **The one sign command.** Parses input header + inner tx, reads flags for `FLAG_INCLUDE_INIT_CODE` and `FLAG_REGISTER_SLOT`, emits `[init_code_len | ic | type1_len | t1 | type2_len | t2]` bundle. `type1_len == 0` means the companion did not request a slot registration this call. |
 | 11 | IS_UNLOCKED | Returns 1/0 |
 | 12 | LOCK | Zeroize cached secrets |
+| 14 | GET_WALLET_ADDRESS | Compute the CREATE2-predicted ERC-1967 proxy address from the cached bootstrap pubkey + the firmware-embedded factory + proxy-init-code-hash constants. First call after unlock costs ~6 s (master C10 keygen); subsequent calls are <1 ms. |
+| 15 | GET_INIT_CODE | Pre-compute the 4280-byte ERC-4337 `initCode` for `(account_index, chain_id)` — same bytes the deploy path of CMD 7 would emit — so the companion can run `eth_estimateUserOperationGas` against a not-yet-deployed account. Stateless C10 means the result is reusable across retries and the eventual real submission. |
+| 20–24 | FW_BEGIN/CHUNK/COMMIT/STATUS/ABORT | Streaming firmware-update state machine (see `secure/src/fw_update/`). PIN unlock required on every call. |
+| 200 | TEST_PIN_LOCKOUT | E2E-only — burns a wrong-PIN cycle to validate the three-way counter sync. Compiled out of production builds. |
 
 **Lifecycle:** Boot → SAU/GTZC config → (attest both SEs) → PIN entry in S-world → unlock both SEs → reconstruct seed in S-SRAM → active signing window (120s idle timeout) → zeroize on lock/tamper/brownout/inactivity.
 
@@ -144,9 +150,9 @@ offset  size  field
 
 ### On-chain validation
 
-`PQJardinWallet.validateUserOp` dispatches on `sig[0]`:
-- `0x01` → check `bootstrapUses < MAX_BOOTSTRAP_USES` (= 65,536), verify bootstrap C10 sig over `userOpHash`, record `slots[sha256(r)] = sha256(subPkSeed || subPkRoot)`, then bump the counter and emit `BootstrapKeyUsed(newCount)`.
-- `0x02` → look up `slots[slotKey]`, check sub-key commitment matches, check `slotUses[slotKey] < MAX_SLOT_USES` (= 65,536), verify slot C10 sig via the same `c10Verifier`, bump `slotUses[slotKey]` and emit `SlotKeyUsed(slotKey, newCount)`. (Does NOT touch `bootstrapUses` — Type 2 keeps working after the bootstrap cap is hit, up to each slot's own `MAX_SLOT_USES`.)
+`PQSmartWallet.validateUserOp` ABI-decodes the signature wrapper (`SignatureWrapper(uint256 ownerIndex, bytes signatureData)`) and dispatches on `ownerIndex`:
+- `ownerIndex == 0` (bootstrap / Type 1) → check `bootstrapUses < MAX_BOOTSTRAP_USES` (= 65,536), verify bootstrap C10 sig over `userOpHash`, install slot pubkey at the `ownerIndex` carried in the wrapper, bump `bootstrapUses`, emit `BootstrapKeyUsed(newCount)`.
+- `ownerIndex >= 1` (slot / Type 2) → look up the slot pubkey, check `slotUses[ownerIndex] < MAX_SLOT_USES` (= 65,536), verify slot C10 sig via the same `c10Verifier`, bump `slotUses[ownerIndex]` and emit `SlotKeyUsed(slotKey, newCount)`. (Does NOT touch `bootstrapUses` — Type 2 keeps working after the bootstrap cap is hit, up to each slot's own `MAX_SLOT_USES`.)
 
 ## Subsystem Guides
 
@@ -197,6 +203,42 @@ On STM32U585: real CMSE `cmse-nonsecure-entry` veneers. On QEMU: shared-memory m
 
 **Key files:** `secure/src/crypto.rs`, `secure/src/ui/seed_wizard.rs`, `bip39/`.
 
+### Three-tier key hierarchy (DHUK + BHK + OTP)
+
+Trezor-parity per-purpose subkey derivation for SE pairing secrets, storage salts, and authenticator keys. Single caller API in `hw::secret_keys` — the underlying root depends on the build:
+
+| Tier | Root | Status | Used by |
+|------|------|--------|---------|
+| 1 — DHUK | STM32U585 silicon DHUK, accessible only via the SAES peripheral's `KEYSEL=001` selector. DHUK bytes never appear in CPU-visible memory; production uses `SAES-CMAC(DHUK, label‖counter)` as a simplified SP 800-108-style counter KDF. | **Landed (production path).** `saes-dhuk` feature flips `secret_keys::derive_into` to the SAES-CMAC path. RDP0-constant placeholder is shared across all bench boards; per-die uniqueness only at RDP ≥ 1 (validated by cross-board `saes-self-test-hw` finding the identical fingerprint at RDP0 — that's a Tier-1 success, not a bug). | All callers below |
+| 2 — BHK | TRNG-burnt at first boot, DHUK-wrapped at rest, loaded into TAMP backup registers + `TAMP_S->SECCFGR` locked at every subsequent boot so SAES alone can use it as a second key selector. | NOT STARTED. Defense-in-depth on top of Tier 1; planned to host SE050 SCP03 + TROPIC01 pairing while DHUK keeps OPTIGA PBS. | `secure/src/hw/bhk.rs` (planned) |
+| 3 — OTP randomness | 32 bytes of TRNG burnt at first boot into `0x0BFA_0080..0x0BFA_00A0`. Software-readable; today drives the dev fallback `HKDF-Expand(OTP_master, label)` derivation. After Tier 2 lands, repurpose to PBKDF2 salt for any future MCU-side PIN-gated storage wrap. | OTP-master self-burn done; salt-only repurpose planned. | Dev fallback under `otp-hardcoded-master-key`, plus PBKDF2 salt (planned) |
+
+**Caller API (stable across tiers):**
+
+```rust
+hw::secret_keys::optiga_pairing_secret() -> [u8; 64]    // OPTIGA Trust M PBS (chained 2× CMAC)
+hw::secret_keys::se050_scp03_enc_key()  -> [u8; 16]    // SE050 SCP03 ENC
+hw::secret_keys::se050_scp03_mac_key()  -> [u8; 16]    // SE050 SCP03 MAC
+hw::secret_keys::se050_admin_pin()      -> [u8; 16]    // OTP-derived; replaces page-125 random PIN
+hw::secret_keys::tropic01_pairing_key() -> [u8; 32]    // standalone Tropic01 only
+```
+
+When Tier 2 lands, the SE050 calls move from `KEYSEL=DHUK` to `KEYSEL=BHK` with no caller-side change.
+
+### Three-way PIN counter sync (MCU + OPTIGA + SE050)
+
+The PIN brick threshold (`MAX_ATTEMPTS = 10`) is enforced by three independent counters that are kept in lockstep on every unlock. Any two of them being silicon-monotonic is enough to defeat single-chip tamper attacks.
+
+| Counter | Storage | Bumped by | Reset by |
+|---------|---------|-----------|----------|
+| MCU | Flash page 124 (one programmed QW per attempt; counter = number of programmed QWs; capacity 32, lockout at 10) | `nsc::gated_unlock` pre-commit, *before* the SE driver is touched. FI-hardened: post-bump readback must show the count advanced by exactly 1 or the attempt is refused with `InternalError`. | Page erase on successful unlock; full erase by `trigger_lockout_wipe` after a successful admin-wipe of both SEs |
+| OPTIGA Trust M | Object `0xE120` Lifetime Usage Counter, bound to `F1D0`'s Execute access condition (LUC). Silicon auto-increments on every `authenticate_and_read`; the AuthRef refuses auth once the counter hits its threshold — immune to PBS extraction (unlike the legacy soft `F1E1` counter). | OPTIGA silicon | `Change=Auto(F1D0)` write of `(0, limit)` after every successful PIN, via the Trezor transient-auth pattern |
+| SE050 | Silicon UserID retry counter (max 10). Surfaces only via `SW=0x63Cx` after a wrong-PIN response. | SE050 silicon | Hardware-cleared by a successful PIN inside an admin SCP03 session |
+
+The companion-visible `CMD_GET_REMAINING` returns the **minimum** of the three (so the UI never overstates how many attempts the user has). Boot-time reconciliation walks `(MCU, OPTIGA, SE050)` and accepts the strictest; if the three disagree (e.g. an attacker wedged a probe between OPTIGA and SE050 increments), the wallet refuses to unlock and surfaces the desync as an irrecoverable failure path.
+
+**Key files:** `secure/src/hw/flash.rs::pin_attempts_*`, `secure/src/nsc/mod.rs::gated_unlock`, `secure/src/optiga/mod.rs` (E120 LUC binding under `optiga-hw-counter`), `secure/src/se050/mod.rs` (admin-UserID factory-reset path).
+
 ### Firmware Measurement (Measured Boot)
 
 At every boot, the secure world SHA-256 hashes its own flash image and displays the first 88 bits as 8 BIP-39 words on the OLED. Host companion tool: `cargo run -p fwmeasure -- <firmware.elf>`.
@@ -224,30 +266,39 @@ End-to-end firmware-update pipeline: vendor signs a 75-byte preimage (`"PQFW_V1"
 
 ### ERC-4337 Smart Contracts (`contracts/smart-wallet/`)
 
-Pure-PQ account-abstraction wallet on EntryPoint v0.6.
+Pure-PQ account-abstraction wallet on EntryPoint v0.6, deployed via ERC-1967 proxies for ~50 k-gas per-user deploys.
+
+**Deployment model.** `PQSmartWallet` is the shared *implementation* — deployed once per chain by the project deployer. Every user wallet is a ~55-byte ERC-1967 proxy that `DELEGATECALL`s into the impl. `entryPoint` and `c10Verifier` are impl-level immutables; per-proxy state lives in `PQMultiOwnable`'s ERC-7201 storage slot (`ownerAtIndex` mapping + `bootstrapUses` counter + `slotUses[i]` mapping).
 
 **Key files:**
-- `src/PQJardinWallet.sol` — validates Type 1 + Type 2 signatures, stores `jardinSlots` + `slotUses` mappings, enforces `MAX_BOOTSTRAP_USES = 65_536` and `MAX_SLOT_USES = 65_536`.
-- `src/PQJardinWalletFactory.sol` — CREATE2 factory. Salt = `sha256(masterPkSeed || masterPkRoot)` (the CREATE2 opcode itself still keccak256-hashes `0xff || addr || salt || keccak256(initCode)`; we only control the salt preimage).
-- `src/PQOwnable.sol` — minimal storage helper (`jardinSlots` mapping + `bootstrapUses` counter + `slotUses` mapping) plus `_bumpBootstrapUses(cap)` and `_bumpSlotUses(slotKey, cap)`.
+- `src/PQSmartWallet.sol` — validates Type 1 + Type 2 signatures by dispatching on `ownerIndex` (0 = bootstrap, ≥1 = slot). Enforces `MAX_BOOTSTRAP_USES = 65_536` and `MAX_SLOT_USES = 65_536`. `C10_SIG_LEN = 4008`.
+- `src/PQSmartWalletFactory.sol` — CREATE2 factory for the ERC-1967 proxy stub via Solady's `LibClone.createDeterministicERC1967`. Salt = `sha256(masterPkSeed || masterPkRoot)` (the CREATE2 opcode itself still keccak256-hashes `0xff || factory || salt || keccak256(proxyCode)`; we only control the salt preimage). `createAccount` requires a bootstrap C10 sig over `addSlot0Digest(chainId, slot0PkSeed, slot0PkRoot) = sha256(FACTORY_ADD_SLOT_DOMAIN || chainId || slot0PkSeed || slot0PkRoot)` so a hostile observer of the public bootstrap pubkey cannot squat the victim's address on a chain they have not yet deployed on. The pre-image and signed message are identical to what `CMD_GET_INIT_CODE` and the deploy path of `CMD_SIGN_USEROP` produce.
+- `src/PQMultiOwnable.sol` — ERC-7201-storage helper (`ownerAtIndex` mapping + `bootstrapUses` counter + `slotUses[i]` mapping) plus `_bumpBootstrapUses(cap)` and `_bumpSlotUses(ownerIndex, cap)`. Emits `BootstrapKeyUsed(newCount)` and `SlotKeyUsed(slotKey, newCount)`.
 - `src/verifiers/SPHINCsC10Asm.sol` — stateless Yul C10 verifier (SHA-256 precompile). Used for both Type 1 and Type 2 verification; the wallet holds a single `c10Verifier` immutable and calls it with different `(pk_seed, pk_root)` for each dispatch path.
+- `src/verifiers/ISPHINCSVerifier.sol` — verifier interface (allows test/prod swap).
 
 **Cross-cutting invariants:**
 - No classical signer path anywhere in the contract.
-- Bootstrap C10 keys immutable after construction.
-- `bootstrapUses` and every `slotUses[slotKey]` monotonically increase; no reset path anywhere in the contract or factory.
+- Bootstrap C10 keys immutable after wallet initialisation; the salt depends only on them, so the address is stable across chains *for a given* `account_index`.
+- `bootstrapUses` and every `slotUses[ownerIndex]` monotonically increase; no reset path anywhere in the contract or factory.
+- Factory squat-defence is non-negotiable — `createAccount` MUST verify the bootstrap C10 signature over `addSlot0Digest(...)` before deploying.
 - Wire formats consumed here MUST match the firmware's output byte-for-byte.
 
 ## Build and Test
 
 ```bash
-make play              # Interactive: drive wallet with arrow keys in QEMU
-make run               # Non-interactive smoke test (QEMU, mock SE)
-make e2e               # Automated end-to-end: unified JARDÍN sign (QEMU)
-make e2e-hw            # End-to-end on real STM32U585 via ST-LINK + probe-rs
-make play-hw-display   # Interactive OLED + arrow-key forwarding on hardware
-make test-key-speed    # Fully-automated DWT-timed signing bench on hardware
-make measure           # Build firmware + print 8 BIP-39 measurement words
+make play                       # Interactive: drive wallet with arrow keys in QEMU
+make run                        # Non-interactive smoke test (QEMU, mock SE)
+make e2e                        # Automated end-to-end: unified JARDÍN sign (QEMU)
+make e2e-hw                     # End-to-end on real STM32U585 via ST-LINK + probe-rs
+make play-hw-display            # Interactive OLED + arrow-key forwarding on hardware
+make test-key-speed             # Fully-automated DWT-timed signing bench on hardware
+make measure                    # Build firmware + print 8 BIP-39 measurement words
+make saes-self-test-hw          # Boot SAES driver, run DHUK round-trip + fingerprint, SYS_EXIT
+make optiga-hw-counter-e2e      # Provision OPTIGA under E120 LUC + drive wrong/right-PIN cycles
+make pin-gate-hw-counter-e2e    # Three-way MCU(124) + OPTIGA(E120) + SE050 counter sync e2e
+make pin-gate-wipe-e2e          # Burn 10 wrong PINs → assert factory-reset-admin fires on both SEs
+make wipe-for-wizard            # Dev-only: factory_reset_admin + page-124 erase + halt; cold boot re-enters wizard
 cd contracts/smart-wallet && forge test -vv
 cargo test -p sphincs-tz-secure --tests --release
 ```
@@ -301,12 +352,22 @@ unrelated to the cutover.
 | `mock-se` | Mock secure element in SRAM (default, QEMU) |
 | `se050` | Real SE050 via I2C + SCP03 |
 | `optiga-trust-m` | Real OPTIGA Trust M V3 via I2C + IFX I2C + Shielded Connection |
+| `optiga-hw-counter` | Silicon-enforced OPTIGA PIN counter via E120 LUC bound to F1D0 Execute. Trezor-parity, immune to PBS extraction. **Destructive on first provisioning** — rewrites F1D0 metadata. |
 | `tropic01-se` | Real Tropic01 via SPI (standalone only, not used in dual-SE) |
 | `dual-se` | Both SEs active with XOR entropy split (implies `optiga-trust-m` + `se050`) |
+| `saes-dhuk` | Re-root `hw::secret_keys::derive_into` on `SAES-CMAC(DHUK, label‖counter)`. At RDP0 DHUK is an ST-substituted constant shared across boards; per-die uniqueness only kicks in at RDP ≥ 1. Without this, the dev path keeps using `HKDF(OTP_master, label)`. |
+| `saes-self-test` | Boot self-test of the SAES driver — software-key round-trip + DHUK-vs-SW domain separation + DHUK round-trip + 8-byte fingerprint print. SYS_EXITs on completion. Compiled out of production builds via the `nsc/mod.rs` `compile_error!` fence. |
+| `otp-hardcoded-master-key` | Dev-only: replace the per-die TRNG OTP-burn with a fixed ASCII constant so re-flashed bench boards keep the same admin UserID / SCP03 / PBS bytes across power cycles. NEVER ship. |
+| `tamp` | STM32U585 TAMP (tamper detection). Trezor-port; log-only IRQ on this branch (production must flip to `trigger_lockout_wipe()`). Implies `stm32u585`. |
+| `consumption-mask` | Power-side-channel mask via TIM2 CH1 PWM on PA5 (randomised duty cycle). Caller must call `hw::consumption_mask::randomize()` periodically. Implies `stm32u585`. |
+| `ui-capture` | UI regression-test harness — emits SHA-256 fingerprint of every displayed frame via `secure_log!`. Implies `debug-log`. NEVER ship. |
+| `usb` | Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication |
+| `pka-accel` | Route BLS12-381 Fp arithmetic through the STM32U585 PKA |
 | `debug-log` | Semihosting debug output (NEVER in production) |
 | `e2e-test` | Non-interactive scripted test mode (NEVER ship). Pre-provisions a fixed mnemonic + PIN, short-circuits every secure-side `confirm()` / `enter_pin()`. NS-side runners may still call `CMD_REQUEST_UNLOCK` — harmless in QEMU, stalls under probe-rs. |
 | `ui-semihosting` | Console UI (QEMU or probe-rs `print`-forwarded; `SYS_READC` only works under QEMU) |
 | `ui-oled` | SSD1306 I2C OLED (hardware) |
+| `ui-noop` | Silent no-op UI for standalone USB operation (no debugger / no OLED) |
 | `stm32u585` | Real STM32U585 hardware (vs QEMU mps2-an505). **Implies `hw-sha256`** — every hardware build routes SHA-256 through the HASH peripheral automatically. |
 | `hw-sha256` | Route `sphincs-c10` SHA-256 calls through the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`. Pulled in transitively by `stm32u585`; never needed by itself on host/QEMU. |
 
@@ -323,17 +384,20 @@ unrelated to the cutover.
 - Shared types between worlds: `shared/src/lib.rs` with `#[repr(C)]`.
 - Secret types are `!Copy` and `!Clone` (prevent silent duplication).
 
-## Recovery contract (post-all-C10 cutover, multi-account)
+## Recovery contract (intended launch shape — pre-production, not yet committed to real users)
+
+The current derivation is the shape we plan to freeze at launch. Nothing here is committed to real users yet — no devices have shipped, no on-chain wallets hold funds. If we want to rename a tag or change a parameter before first shipment, we can; the only cost is re-provisioning bench boards and any test wallets we've stood up against testnets. The "byte-for-byte" wording below describes self-imposed cross-developer reproducibility during bring-up, not a recovery promise to users.
 
 A single seed phrase produces **256 independent on-chain wallets**, indexed
 by `account_index ∈ [0, 255]` (BIP-44-style accounts). Account 0 reproduces
-the legacy single-account derivation **byte-for-byte** so pre-multi-account
-seeds keep their existing wallet address. Accounts 1..=255 use new
-domain-tagged KDFs that fold the index into the master entropy.
+the pre-multi-account-cutover single-account derivation **byte-for-byte** so
+bench seeds provisioned before that cutover still resolve to the same address
+on the bench. Accounts 1..=255 use new domain-tagged KDFs that fold the index
+into the master entropy.
 
 - **BIP-39 → seed**: PBKDF2-HMAC-SHA512, 2048 iters, empty passphrase (standard).
 - **Seed → C10 bootstrap master** (per `account_index`):
-  - `account_index == 0`: `master = HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (note the C6 tag — historical, do NOT modernise).
+  - `account_index == 0`: `master = HMAC-SHA512("sphincs-c6-v1", bip39_seed)` (the "C6" in the tag is historical — we were on a different parameter set when the tag was first written; the underlying scheme is now C10. We have NOT renamed it because cross-bench-board reproducibility during bring-up matters; the tag CAN still be renamed before launch since no users exist yet).
   - `account_index > 0`: `master = HMAC-SHA512("sphincs-c6-v1-acct", bip39_seed || account_index_be4)`.
   - In both cases, then:
     - `masterPkSeed = sha256("pk_seed" || master[0..32]) & N_MASK` (top 16 bytes kept, bottom 16 zero)
@@ -354,40 +418,53 @@ domain-tagged KDFs that fold the index into the master entropy.
 
 | Path | Purpose |
 |------|---------|
-| `secure/src/main.rs` | Secure world entry: SAU → provision → unlock → boot NS |
+| `secure/src/main.rs` | Secure world entry: SAU → RCC → SAES self-test → provision → unlock → boot NS |
 | `secure/src/crypto.rs` | BIP-39, C10 bootstrap derivation, C10 slot derivation, JARDÍN master entropy, AES-GCM wrap, PIN state |
-| `secure/src/nsc/mod.rs` | NSC gateway dispatcher (5 commands) |
+| `secure/src/nsc/mod.rs` | NSC gateway dispatcher + `gated_unlock` (MCU page-124 attempt counter + FI-hardened pre-commit) |
 | `secure/src/nsc/state.rs` | SecureState singleton (pin_verified, master_secret, JARDIN slot C10 cache keyed on `slot_index`) |
 | `secure/src/nsc/cmd_sign_userop.rs` | **The unified Type 1 / Type 2 all-C10 sign handler (stateless, companion-driven)** |
-| `secure/src/nsc/cmd_request_unlock.rs` | PIN entry + dual-SE unlock |
+| `secure/src/nsc/cmd_request_unlock.rs` | PIN entry + dual-SE unlock through `gated_unlock` |
+| `secure/src/nsc/cmd_get_wallet_address.rs` | CREATE2-predicted proxy address from cached bootstrap pubkey |
+| `secure/src/nsc/cmd_get_init_code.rs` | Pre-computed 4280-byte initCode for companion gas-estimation |
 | `secure/src/aa/userop.rs` | EntryPoint v0.6 `UserOperation` hashing + SHA-256 sphincs digest |
-| `secure/src/aa/init_code.rs` | First-deploy initCode construction |
+| `secure/src/aa/init_code.rs` | First-deploy initCode construction (factory call + bootstrap factorySig) |
 | `secure/src/tx/eip1559.rs` | EIP-1559 envelope parser (used only for trusted-UI display) |
 | `secure/src/tx/display/` | Trusted-UI page renderers |
 | `secure/src/erc20.rs` | Minimal ERC-20 calldata decoder for display |
-| `secure/src/optiga/*` | OPTIGA Trust M driver + Shielded Connection |
-| `secure/src/se050/*` | SE050 driver + SCP03 |
-| `secure/src/dual_se.rs` | XOR entropy split across OPTIGA + SE050 |
+| `secure/src/optiga/*` | OPTIGA Trust M driver + Shielded Connection (IFX I2C, AC opcodes, E120 LUC, F1D0 reset path) |
+| `secure/src/se050/*` | SE050 driver + SCP03 (admin/user UserID, factory-reset-admin, OTP-derived admin PIN) |
+| `secure/src/dual_se.rs` | XOR entropy split across OPTIGA + SE050; admin-wipe orchestration |
 | `secure/src/measured_boot.rs` | Boot-time firmware SHA-256 hash → 8 BIP-39 words on OLED |
 | `nonsecure/src/main.rs` | Non-secure world entry (USB or interactive demo) |
-| `nonsecure/src/nsc_api.rs` | NS-side gateway caller (5 commands) |
+| `nonsecure/src/nsc_api.rs` | NS-side gateway caller |
 | `nonsecure/src/usb/commands.rs` | APDU v2 command router |
 | `nonsecure/src/e2e_test.rs` | Non-interactive end-to-end test runner |
-| `shared/src/lib.rs` | Cross-world types: NscStatus, CMD constants, wire-format sizes |
+| `shared/src/lib.rs` | Cross-world types: NscStatus, CMD constants, wire-format sizes, `PQ_INIT_CODE_LEN = 4280` |
 | `sphincs-c10/*` | SPHINCS+C10 signing library — powers both bootstrap and slot keys (no_std, SHA-256) |
 | `secure/src/hw/hash.rs` | STM32U585 HASH peripheral driver — `pqsigner_sha256_*` extern fns consumed by `sphincs-c10` under `hw-sha256` |
+| `secure/src/hw/saes.rs` | SAES driver — AES-256-ECB under `KEYSEL ∈ {Software, DHUK, BHK, DHUK^BHK}`. Boot self-test under `saes-self-test` |
+| `secure/src/hw/saes_cmac.rs` | `cmac_dhuk(msg) -> tag` thin SAES adaptor for CMAC-based KDF over DHUK |
+| `secure/src/hw/secret_keys.rs` | `optiga_pairing_secret`, `se050_scp03_{enc,mac}_key`, `se050_admin_pin`, `tropic01_pairing_key` — domain-separated per-purpose subkeys. Production path: `SAES-CMAC(DHUK, label‖counter)`. Dev path: `HKDF-Expand(OTP_master, label)` under `otp-hardcoded-master-key` |
+| `secure/src/hw/otp.rs` | OTP rollback counter (1024 bits = 1024 commits, RDP-regression-resistant) + the OTP master-key region used by the dev KDF path |
+| `secure/src/hw/huk.rs` | Per-die wrap key `derive_device_key(label) = HKDF(UID‖OTP_master, label)` — host of the still-software-readable seal helper |
+| `secure/src/hw/flash.rs` | Bank-2 writes, ICACHE invalidate after every mutation, `pin_attempts_{read,bump,reset}` on page 124, admin-page (125) wipe-flag |
+| `secure/src/hw/tamp.rs` | STM32U585 TAMP driver (Trezor-port). Log-only IRQ on the bring-up branch; production must flip to `trigger_lockout_wipe()` |
+| `secure/src/hw/consumption_mask.rs` | Power-side-channel mask via TIM2 CH1 PWM on PA5 (randomised duty cycle) |
+| `secure/src/hw/uart.rs` | USART1 VCP driver (GPIOA AF7), used by the SAES RDP1 self-test harness and dev logging |
+| `secure/src/hw/boot_state.rs` | Boot-state page for try-once slot tracking |
+| `secure/src/hw/buttons.rs`, `spi.rs`, `spi_hw.rs`, `i2c.rs`, `i2c_hw.rs`, `rcc.rs`, `rng.rs`, `pka.rs`, `usb_hw.rs` | Bare-metal STM32U585 peripheral drivers |
 | `bip39/*` | 24-word English BIP-39 (no_std) |
 | `fwmeasure/*` | Host-side firmware measurement tool |
 | `fw-manifest/*` | no_std firmware-update manifest format + verify chain (shared by FSBL, secure, fwsign) |
 | `fwsign/*` | Host-side release-signing tool — `keygen`/`pubkey`/`sign`/`verify`/`verify-release`/`extract-sig`/`inspect` |
 | `fsbl/*` | Immutable first-stage bootloader — vendor-C10-verified A/B slot selector |
 | `secure/src/fw_update/*` | Firmware-update streaming state machine (BEGIN → CHUNK → COMMIT) |
-| `secure/src/hw/otp.rs` | OTP rollback counter (1024 bits = 1024 commits, RDP-regression-resistant) |
-| `secure/src/hw/boot_state.rs` | Boot-state page for try-once slot tracking |
 | `secure/src/nsc/cmd_fw_*.rs` | Five NSC firmware-update handlers (begin / chunk / commit / status / abort) |
-| `contracts/smart-wallet/src/PQSmartWallet.sol` | On-chain ERC-4337 v0.6 account (bootstrap ownerIndex 0 + slot ownerIndex ≥ 1 dispatch) |
-| `contracts/smart-wallet/src/PQJardinWalletFactory.sol` | CREATE2 factory |
-| `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` | Stateless Yul C10 verifier — the wallet's single signature primitive |
+| `contracts/smart-wallet/src/PQSmartWallet.sol` | On-chain ERC-4337 v0.6 account behind an ERC-1967 proxy. `validateUserOp` dispatches on `ownerIndex` (0 = bootstrap, ≥1 = slot) |
+| `contracts/smart-wallet/src/PQSmartWalletFactory.sol` | CREATE2 factory for the ERC-1967 proxy stub. `salt = sha256(masterPkSeed‖masterPkRoot)`; `createAccount` requires a bootstrap C10 sig over `sha256(FACTORY_ADD_SLOT_DOMAIN‖chainId‖slot0PkSeed‖slot0PkRoot)` (squat-defence) |
+| `contracts/smart-wallet/src/PQMultiOwnable.sol` | ERC-7201 storage helper — `ownerAtIndex` mapping, `bootstrapUses` counter, `slotUses[i]` mapping, plus `_bumpBootstrapUses(cap)` / `_bumpSlotUses(idx, cap)` |
+| `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` | Stateless Yul C10 verifier — the wallet's single signature primitive (called for both Type 1 and Type 2) |
+| `contracts/smart-wallet/src/verifiers/ISPHINCSVerifier.sol` | C10 verifier interface (allows test/prod swap) |
 | `tools/webhid_test.html` | Browser companion: sign via WebHID |
 | `Makefile` | Build orchestration |
 | `docs/architecture.md` | Detailed technical architecture |
@@ -404,9 +481,9 @@ domain-tagged KDFs that fold the index into the master entropy.
 - **Do not store full entropy on a single chip.** Each chip gets exactly one XOR half.
 - **Do not add heap allocation.** `#![no_std]`, no alloc, stack-only. No `Vec`, no `Box`, no `String`.
 - **Do not use software PRNG.** All randomness from hardware TRNG (STM32 TRNG in production, semihosting `/dev/urandom` on QEMU).
-- **Do not change the key derivation domain tags** (`"sphincs-c6-v1"`, `"sphincs-c6-v1-acct"`, `"pk_seed"`, `"sk_seed"`, `"pqwallet-jardin-master"`, `"pqwallet-jardin-master-acct"`, `"jardin_slot"`, `"jardin_r"`, `"jardin_slot_c10_sk_seed"`, `"jardin_slot_c10_pk_seed"`) — they are part of the recovery contract. The `-acct` variants are used only for `account_index > 0`; account 0 must continue to use the original tags so legacy seeds keep their on-chain address.
+- **Do not change the key derivation domain tags casually mid-bring-up** (`"sphincs-c6-v1"`, `"sphincs-c6-v1-acct"`, `"pk_seed"`, `"sk_seed"`, `"pqwallet-jardin-master"`, `"pqwallet-jardin-master-acct"`, `"jardin_slot"`, `"jardin_r"`, `"jardin_slot_c10_sk_seed"`, `"jardin_slot_c10_pk_seed"`). Pre-production rationale: every change re-provisions every bench board and invalidates every testnet wallet we've stood up. There are no real users yet, so a deliberate, coordinated tag cleanup before launch is fine — what's not fine is silent drift inside an unrelated PR. The `-acct` variants are used only for `account_index > 0`; account 0 must continue to use the original tags so bench seeds keep their cross-developer-reproducible on-chain address.
 - **Do not skip the verify-before-release check** on Type 1 or Type 2 signatures. Fault-injection guard, double-evaluated with a sentinel.
-- **Do not add a `rotateMasterKeys` function** to the wallet contract — would break the recovery contract.
+- **Do not add a `rotateMasterKeys` function** to the wallet contract — that's the launch invariant for bootstrap-key immutability (see invariant #6).
 - **Do not add a `resetBootstrapUses` / `resetSlotUses` / `increaseMax*` path** to the wallet or factory. Both counters are immutable monotonic and capped at 65,536 each by design. Once a chain fully exhausts its bootstrap cap AND all currently-registered slots, the chain stays exhausted — that is the invariant. A companion-side notice of impending exhaustion is fine; anything that touches the counters in the contract is not.
 - **Do not reintroduce per-signature flash state.** The all-C10 slot cutover made the firmware stateless with respect to slot selection; any code that writes `next_q`-like counters to flash is a regression.
 - **Do not let NS world control the inactivity timer.** Timer runs on Secure-only TIM. NS pings do not reset it. Only real button presses on S-world confirm dialogs count as activity.
