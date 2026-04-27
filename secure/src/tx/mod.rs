@@ -6,15 +6,19 @@
 //! confirmation, and only then hashed + signed.
 
 // display depends on crate::ui (hardware), so it's gated out in host
-// test builds. eip1559, eip712 core, hash, and rlp are pure logic.
-// eip712 itself is compiled in test mode but its `cowswap_display`
-// submodule is gated at the submodule level (see eip712/mod.rs).
+// test builds. eip1559, eip712 core, hash, rlp, and typed_call (Phase 2
+// calldata decoder) are pure logic. eip712 itself is compiled in test
+// mode but its `cowswap_display` submodule is gated at the submodule
+// level (see eip712/mod.rs); same pattern for typed_call —
+// `display::typed_call` is the renderer half (gated), `typed_call`
+// here is the parser + ABI walker (always compiled, host-testable).
 #[cfg(not(test))]
 pub mod display;
 pub mod eip1559;
 pub mod eip712;
 pub mod hash;
 pub mod rlp;
+pub mod typed_call;
 
 // No flat re-exports of `eip1559::*` — call sites import through the
 // `eip1559::` sub-path so accidentally-dead items surface as warnings.

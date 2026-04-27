@@ -484,23 +484,28 @@ fn main() -> ! {
         hprintln!("[NS][e2e]   → safe_v1 verified, t2_len={}", t2_len);
     }
 
-    // Scenario 5b: Verified function-selector → text-signature bundle.
+    // Scenario 5b: Verified function-selector → text-signature bundle,
+    // typed-args render path (Phase 2).
     //
     // Build calldata for `balanceOf(address)` (selector 0x70a08231).
     // This selector is NOT one of the three hardcoded ERC-20
     // selectors (transfer / transferFrom / approve), so the dispatch
-    // ladder falls through to `render_blind_sign_pages` — the new
-    // FUNCTION page is what the user actually sees on the OLED.
+    // ladder falls through past the ERC-20 branch — and into the
+    // Phase 2 typed-args gate that fires before BLIND SIGN.
     //
     // The secure side must:
     //   1. parse the optional selector trailer,
     //   2. Merkle-verify the bundle against SELECTOR_DB_ROOT_E2E,
     //   3. cross-check `bundle.selector == calldata[0..4]`,
-    //   4. plumb the verified meta into pick_sign_pages,
-    //   5. render a 10-page blind-sign flow with "FUNCTION:" as page 1.
+    //   4. parse the verified text_sig "balanceOf(address)",
+    //   5. ABI-walk the 32-byte body and decode the single address arg,
+    //   6. render the typed-args flow (banner + 1 typed arg + To +
+    //      Chain + 2 fee pages + Nonce — Value page skipped since
+    //      value is zero on this UserOp).
     //
     // Asserting Ok proves the full happy path; the OLED capture in
-    // the QEMU log shows the FUNCTION page text.
+    // the QEMU log shows the typed render with "arg 0 address:"
+    // followed by the decoded recipient.
     hprintln!("[NS][e2e] Scenario 5b: verified function-selector bundle");
     unsafe {
         // Calldata = balanceOf(0xQUERY_ADDRESS) — selector 0x70a08231.
@@ -601,6 +606,66 @@ fn main() -> ! {
         assert!(!t1_present, "scenario 5c must NOT emit Type 1");
         hprintln!(
             "[NS][e2e]   → mismatched bundle dropped, sign proceeded as blind, t2_len={}",
+            t2_len
+        );
+    }
+
+    // Scenario 5d: Phase 2 typed walker declines on shape mismatch ⇒
+    // graceful fallback to BLIND SIGN with the FUNCTION page intact.
+    //
+    // Build calldata that LOOKS like a `transfer(address,uint256)`
+    // call (selector 0xa9059cbb matches the bundle) but supplies only
+    // 32 bytes of body — far short of the 64-byte head the type list
+    // demands. The walker's static-shape check refuses, so
+    // `try_render_typed_call` returns `None` and the caller falls
+    // through to `render_blind_sign_pages` with the verified meta
+    // still in hand.
+    //
+    // Outcome on the OLED: 10-page Phase-1-style flow (banner,
+    // FUNCTION page, To, Value, Sel+Data, Data hash, Chain, Max fee,
+    // Worst-case, Nonce). The signed tx is the same as it would be
+    // for an unrecognised call — Phase 2 never produces a partial
+    // typed render.
+    hprintln!("[NS][e2e] Scenario 5d: typed walker declines, blind-sign fallback");
+    unsafe {
+        // 4 bytes of selector + only ONE 32-byte word of body — a
+        // canonical-encoded `transfer(address,uint256)` would need 64.
+        let mut calldata = [0u8; 4 + 32];
+        calldata[..4].copy_from_slice(&[0xa9, 0x05, 0x9c, 0xbb]);
+        // Half-fill an address word so the bytes aren't all zero.
+        calldata[16..36].copy_from_slice(&[0xcd; 20]);
+
+        let unknown_contract: [u8; 20] = [0xfe; 20];
+        let chain_id: u64 = 11_155_111;
+
+        let mut len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            chain_id,
+            1,
+            false,
+            7,
+            &unknown_contract,
+            0u128,
+            &calldata,
+        );
+        let new_len = append_selector_only_trailers(
+            &mut PAYLOAD_BUF,
+            len,
+            &[0xa9, 0x05, 0x9c, 0xbb],
+        )
+        .expect("selector bundle build failed");
+        len = new_len;
+
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "scenario 5d must succeed (typed walker declines, blind-sign fires)"
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 5d must NOT emit Type 1");
+        hprintln!(
+            "[NS][e2e]   → walker declined, blind-sign fallback rendered, t2_len={}",
             t2_len
         );
     }

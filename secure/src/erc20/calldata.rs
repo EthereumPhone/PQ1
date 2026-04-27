@@ -78,7 +78,7 @@ pub fn parse_erc20_calldata(data: &[u8]) -> Option<Erc20Call> {
 
 /// Decode a 32-byte ABI word as an Ethereum address. The address is
 /// right-justified in the word; the top 12 bytes MUST be zero.
-fn decode_address_word(word: &[u8]) -> Option<[u8; 20]> {
+pub(crate) fn decode_address_word(word: &[u8]) -> Option<[u8; 20]> {
     if word.len() != 32 {
         return None;
     }
@@ -91,7 +91,7 @@ fn decode_address_word(word: &[u8]) -> Option<[u8; 20]> {
 }
 
 /// Decode a 32-byte big-endian ABI word as a U256.
-fn decode_u256_word(word: &[u8]) -> U256 {
+pub(crate) fn decode_u256_word(word: &[u8]) -> U256 {
     let mut out = [0u8; 32];
     out.copy_from_slice(word);
     U256(out)

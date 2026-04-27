@@ -28,6 +28,7 @@ mod erc20_unknown;
 pub(super) mod primitives;
 #[cfg(not(test))]
 mod safe_display;
+mod typed_call;
 mod value_transfer;
 
 pub use blind_sign::render_blind_sign_pages;
@@ -52,10 +53,13 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 ///   * contract_creation                    → 8 pages
 ///   * cowswap EIP-712 render (see
 ///     `crate::tx::eip712::cowswap_display`) → 10 pages
+///   * typed_call (Phase 2 calldata decode) → up to 14 pages
+///     (banner + up to 6 typed args + To + Value + Chain + 2 fee
+///     pages + Nonce; declines past `MAX_TYPED_ARGS_RENDERED = 6`)
 ///
 /// Bumping this costs `4 × 16 = 64` extra stack bytes per page, so
 /// grow it deliberately and not speculatively.
-pub const MAX_PAGES: usize = 10;
+pub const MAX_PAGES: usize = 14;
 
 /// A buffer of up to [`MAX_PAGES`] pre-rendered confirmation pages.
 ///
@@ -201,11 +205,21 @@ pub fn pick_sign_pages(
             None => render_erc20_unknown_pages(tx, &call, resolver),
         },
         // The verified selector → text-sig mapping (if any) is only
-        // consulted when nothing else has decoded the calldata. It
-        // surfaces above the existing BLIND SIGN screen as an extra
-        // "FUNCTION:" page; the warning header itself is unchanged
-        // because Phase 1 only attests the function NAME, not its
-        // behavior on this contract.
-        None => render_blind_sign_pages(tx, inner_data, selector, resolver),
+        // consulted when nothing else has decoded the calldata. Phase 2
+        // first tries to ABI-decode the calldata against the verified
+        // type list; on any parse / shape failure (or any type the
+        // first cut declines) we fall through to the Phase 1 BLIND
+        // SIGN flow, which itself surfaces the FUNCTION page above
+        // the warning header.
+        None => {
+            if let Some(meta) = selector {
+                if let Some(pages) =
+                    typed_call::try_render_typed_call(tx, inner_data, meta, resolver)
+                {
+                    return pages;
+                }
+            }
+            render_blind_sign_pages(tx, inner_data, selector, resolver)
+        }
     }
 }
