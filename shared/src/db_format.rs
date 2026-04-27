@@ -272,6 +272,91 @@ pub const NAMES_MAX_LEN: usize = 32;
 // to have `chain_id = 0` in their canonical leaf encoding.
 pub const NAMES_WILDCARD_CHAIN_ID: u64 = 0;
 
+// === Function-selector → text-signature DB ================================
+//
+// Fourth DB. Maps a 4-byte EVM function selector (keccak256(text_sig)[..4])
+// back to its canonical Solidity text signature (e.g. `0xa9059cbb` →
+// `transfer(address,uint256)`) so the trusted UI can show a function
+// name instead of just the raw selector when it has to fall back to the
+// blind-sign screen.
+//
+// **Where the blob lives.** Unlike the ERC-20, VK, and Names DBs, the
+// selectors blob does NOT ship in the firmware image. It lives on the
+// host (companion app, future) as a separate `selectors_db.bin` artifact
+// — `dbgen` writes it under `tools/companion-stub/`. Only the 32-byte
+// `SELECTOR_DB_ROOT` is bound into the secure image, exactly as it is
+// for the other three DBs. The companion app supplies a
+// `(selector, text_sig, leaf_index, proof)` bundle through the gateway
+// and the secure world Merkle-verifies it against the embedded root
+// before trusting any byte for display.
+//
+// **Trust property.** The companion is treated as untrusted relay: it
+// cannot forge a bundle (proof fails), cannot substitute one selector's
+// metadata onto a different calldata (cross-check `bundle.selector ==
+// calldata[0..4]` fails), cannot inject non-printable bytes (ASCII gate),
+// and cannot exceed the bounded text length (`SELECTOR_TEXT_SIG_MAX_LEN`).
+// Adversarial 4byte collisions are filtered at curation time so the
+// Merkle root only commits to a single canonical signature per selector.
+//
+// ## Selectors DB layout (`b"SEL4"`)
+//
+// ```text
+// Header (32 B):
+//   magic        [u8; 4] = b"SEL4"
+//   version      u32 LE  = 1
+//   flags        u32 LE
+//   entry_cnt    u32 LE
+//   pool_off     u32 LE
+//   pool_size    u32 LE
+//   proof_depth  u32 LE
+//   proofs_off   u32 LE
+//
+// Entries (entry_cnt × 8 B, sorted by selector):
+//   selector    [u8; 4]              (4)
+//   text_off    u32 LE               (4)   // offset into string pool
+//                                    = 8
+//
+// String pool:
+//   [len: u8][bytes: len], interned. Each text_sig is printable ASCII
+//   (0x20..=0x7e), 1..=SELECTOR_TEXT_SIG_MAX_LEN bytes long.
+//
+// Proofs:
+//   entry_cnt × (proof_depth × 32 B). Same structure as ERC20 / Names.
+// ```
+//
+// ## Canonical leaf encoding (Selectors)
+//
+// ```text
+//   selector      (4)    ‖
+//   text_sig_len  (1)    ‖ text_sig_bytes
+// ```
+//
+// Hashed as `sha256(0x00 || canonical_bytes)`; internal nodes
+// `sha256(0x01 || left || right)` — identical scheme to the other DBs.
+
+pub const SELECTOR_DB_MAGIC: [u8; 4] = *b"SEL4";
+pub const SELECTOR_DB_VERSION: u32 = 1;
+pub const SELECTOR_DB_HEADER_LEN: usize = 32;
+pub const SELECTOR_DB_ENTRY_LEN: usize = 8;
+
+pub const SELECTOR_HDR_OFF_MAGIC: usize = 0;
+pub const SELECTOR_HDR_OFF_VERSION: usize = 4;
+pub const SELECTOR_HDR_OFF_FLAGS: usize = 8;
+pub const SELECTOR_HDR_OFF_ENTRY_CNT: usize = 12;
+pub const SELECTOR_HDR_OFF_POOL_OFF: usize = 16;
+pub const SELECTOR_HDR_OFF_POOL_SIZE: usize = 20;
+pub const SELECTOR_HDR_OFF_PROOF_DEPTH: usize = 24;
+pub const SELECTOR_HDR_OFF_PROOFS_OFF: usize = 28;
+
+pub const SELECTOR_ENTRY_OFF_SELECTOR: usize = 0;
+pub const SELECTOR_ENTRY_OFF_TEXT_OFF: usize = 4;
+// 8 done
+
+/// Cosmetic upper bound on the text signature string. Must fit across
+/// at most three 16-column display rows after the "FUNCTION:" header
+/// line, with room for a continuation marker.
+pub const SELECTOR_TEXT_SIG_MAX_LEN: usize = 63;
+
 // === Little-endian readers (shared by writer + reader) =====================
 
 #[inline]

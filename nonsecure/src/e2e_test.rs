@@ -239,11 +239,47 @@ fn append_safe_only_trailers(
     buf[off + 4..off + 6].copy_from_slice(&0u16.to_be_bytes());
     let mut o = off + 6;
     o = append_safe_v1_trailer(buf, o, canonical, raw_data);
-    // No names-count byte: the parser treats `cursor == total_len`
-    // (no byte to read) as `count == 0`. Writing an explicit zero
-    // here would leave one trailing byte the cursor doesn't advance
-    // past, tripping the `"trailing bytes"` final check.
+    // No selector trailer, no names-count byte: the parser treats
+    // `cursor == total_len` (no byte to read) as `count == 0`.
+    // Writing an explicit zero here would leave one trailing byte
+    // the cursor doesn't advance past, tripping the
+    // `"trailing bytes"` final check.
     o
+}
+
+/// Append the four trailers that come BEFORE the selector trailer
+/// (erc20=0, zkv1=0, zkv3=0, safe_v1=0) followed by a selector
+/// bundle built by the host-stub `selectors_db::build_bundle` for
+/// `selector`. Returns the new offset. Caller is responsible for
+/// keeping `buf` large enough.
+///
+/// Wire shape after this function:
+///   off..off+2  : erc20_len = 0
+///   off+2..+4   : zk_v1_len = 0
+///   off+4..+6   : zk_v3_len = 0
+///   off+6..+8   : safe_v1_len = 0
+///   off+8..+10  : selector_len (u16 BE)
+///   off+10..    : selector bundle bytes
+///
+/// No trailing names section — `cursor == total_len` after the
+/// selector bundle is treated as zero name bundles.
+fn append_selector_only_trailers(
+    buf: &mut [u8],
+    off: usize,
+    selector: &[u8; 4],
+) -> Option<usize> {
+    buf[off..off + 2].copy_from_slice(&0u16.to_be_bytes());
+    buf[off + 2..off + 4].copy_from_slice(&0u16.to_be_bytes());
+    buf[off + 4..off + 6].copy_from_slice(&0u16.to_be_bytes());
+    buf[off + 6..off + 8].copy_from_slice(&0u16.to_be_bytes());
+    let mut scratch = [0u8; 1100];
+    let n = crate::selectors_db::build_bundle(selector, &mut scratch)?;
+    if n > u16::MAX as usize {
+        return None;
+    }
+    buf[off + 8..off + 10].copy_from_slice(&(n as u16).to_be_bytes());
+    buf[off + 10..off + 10 + n].copy_from_slice(&scratch[..n]);
+    Some(off + 10 + n)
 }
 
 /// Parse a `[ic_len|ic][type1_len|t1][type2_len|t2]` bundle and assert
@@ -446,6 +482,127 @@ fn main() -> ! {
         let (t1_present, t2_len) = parse_response(&SIG_BUF);
         assert!(!t1_present, "scenario 5 must NOT emit Type 1 (slot already registered)");
         hprintln!("[NS][e2e]   → safe_v1 verified, t2_len={}", t2_len);
+    }
+
+    // Scenario 5b: Verified function-selector → text-signature bundle.
+    //
+    // Build calldata for `balanceOf(address)` (selector 0x70a08231).
+    // This selector is NOT one of the three hardcoded ERC-20
+    // selectors (transfer / transferFrom / approve), so the dispatch
+    // ladder falls through to `render_blind_sign_pages` — the new
+    // FUNCTION page is what the user actually sees on the OLED.
+    //
+    // The secure side must:
+    //   1. parse the optional selector trailer,
+    //   2. Merkle-verify the bundle against SELECTOR_DB_ROOT_E2E,
+    //   3. cross-check `bundle.selector == calldata[0..4]`,
+    //   4. plumb the verified meta into pick_sign_pages,
+    //   5. render a 10-page blind-sign flow with "FUNCTION:" as page 1.
+    //
+    // Asserting Ok proves the full happy path; the OLED capture in
+    // the QEMU log shows the FUNCTION page text.
+    hprintln!("[NS][e2e] Scenario 5b: verified function-selector bundle");
+    unsafe {
+        // Calldata = balanceOf(0xQUERY_ADDRESS) — selector 0x70a08231.
+        let query_addr: [u8; 20] = [0xab; 20];
+        let mut calldata = [0u8; 4 + 32];
+        calldata[..4].copy_from_slice(&[0x70, 0xa0, 0x82, 0x31]);
+        calldata[16..36].copy_from_slice(&query_addr);
+
+        // Target an address NOT in the ERC-20 DB; it doesn't matter
+        // for this path (balanceOf isn't an ERC-20 hardcoded
+        // selector) but keeps the test independent of token
+        // metadata.
+        let unknown_contract: [u8; 20] = [0xfe; 20];
+
+        let chain_id: u64 = 11_155_111; // Sepolia (slot 1 already registered)
+        let mut len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            chain_id,
+            1,     // already-registered slot 1
+            false, // no slot rotation
+            5,     // base nonce
+            &unknown_contract,
+            0u128,
+            &calldata,
+        );
+
+        // Append the four zero-length trailers + selector bundle.
+        let new_len = append_selector_only_trailers(
+            &mut PAYLOAD_BUF,
+            len,
+            &[0x70, 0xa0, 0x82, 0x31],
+        )
+        .expect("selector bundle build failed");
+        len = new_len;
+
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "scenario 5b must succeed (got {})",
+            status
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 5b must NOT emit Type 1");
+        hprintln!(
+            "[NS][e2e]   → selector bundle verified, t2_len={}",
+            t2_len
+        );
+    }
+
+    // Scenario 5c: Selector cross-check enforcement.
+    //
+    // Use the same `balanceOf` calldata as 5b but attach a
+    // `transfer(address,uint256)` bundle (selector 0xa9059cbb). The
+    // Merkle proof verifies (transfer is in the curated e2e set), but
+    // the cross-check `bundle.selector == calldata[0..4]` fails
+    // (`0xa9059cbb` != `0x70a08231`), so the firmware SILENTLY drops
+    // the bundle. The displayed pages must NOT include a FUNCTION
+    // page — the OLED log shows the standard 9-page blind-sign flow.
+    // The signed tx is identical to one with no selector bundle at
+    // all; the test asserts Ok and Type 2 only.
+    hprintln!("[NS][e2e] Scenario 5c: cross-check rejects mismatched selector");
+    unsafe {
+        let query_addr: [u8; 20] = [0xab; 20];
+        let mut calldata = [0u8; 4 + 32];
+        calldata[..4].copy_from_slice(&[0x70, 0xa0, 0x82, 0x31]); // balanceOf
+        calldata[16..36].copy_from_slice(&query_addr);
+
+        let unknown_contract: [u8; 20] = [0xfe; 20];
+        let chain_id: u64 = 11_155_111;
+
+        let mut len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            chain_id,
+            1,
+            false,
+            6,
+            &unknown_contract,
+            0u128,
+            &calldata,
+        );
+        let new_len = append_selector_only_trailers(
+            &mut PAYLOAD_BUF,
+            len,
+            // Mismatched selector: transfer, not balanceOf.
+            &[0xa9, 0x05, 0x9c, 0xbb],
+        )
+        .expect("selector bundle build failed");
+        len = new_len;
+
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "scenario 5c must still succeed (mismatched bundle is silently dropped)"
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 5c must NOT emit Type 1");
+        hprintln!(
+            "[NS][e2e]   → mismatched bundle dropped, sign proceeded as blind, t2_len={}",
+            t2_len
+        );
     }
 
     // Scenario 6: brute-force protection check. Drives the secure-

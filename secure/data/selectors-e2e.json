@@ -1,0 +1,18 @@
+[
+  {
+    "selector": "0xa9059cbb",
+    "text_sig": "transfer(address,uint256)"
+  },
+  {
+    "selector": "0x095ea7b3",
+    "text_sig": "approve(address,uint256)"
+  },
+  {
+    "selector": "0x23b872dd",
+    "text_sig": "transferFrom(address,address,uint256)"
+  },
+  {
+    "selector": "0x70a08231",
+    "text_sig": "balanceOf(address)"
+  }
+]

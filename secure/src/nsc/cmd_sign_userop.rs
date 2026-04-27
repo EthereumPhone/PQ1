@@ -78,6 +78,7 @@ use crate::aa::userop::{
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
 use crate::names::{verify_name_bundle, NameResolver, MAX_NAME_BUNDLES, MAX_NAME_BUNDLE_LEN};
+use crate::selectors::{verify_selector_bundle, SelectorMeta, MAX_SELECTOR_BUNDLE_LEN};
 use crate::tx::display::pick_sign_pages;
 use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::ui;
@@ -85,12 +86,15 @@ use crate::ui;
 /// Reserve enough room to TOCTOU-snapshot the largest valid input the
 /// gateway will accept. The trailing `1 + MAX_NAME_BUNDLES * (2 +
 /// MAX_NAME_BUNDLE_LEN)` block is the address-name bundle section.
+/// The selector-bundle trailer (host-resident DB) sits between
+/// `safe_v1` and the names section.
 const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + MAX_TX_LEN
     + 2 + MAX_ERC20_BUNDLE_LEN
     + 2 + ZK_CLEAR_SIGN_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
     + 2 + ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
     + 2 + SAFE_V1_PAYLOAD_MAX
+    + 2 + MAX_SELECTOR_BUNDLE_LEN
     + 1 + MAX_NAME_BUNDLES * (2 + MAX_NAME_BUNDLE_LEN);
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
@@ -373,6 +377,26 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     cursor = safe_v1.next_cursor;
 
+    // 5a-ter. Optional function-selector → text-signature trailer.
+    // Layout is the same `[u16 BE len][bundle]` framing every other
+    // trailer uses. The DB itself lives on the host (companion
+    // app/stub) — only its 32-byte Merkle root rides in the secure
+    // image. Absence is legal — when missing, the calldata renders
+    // as a raw selector via the existing blind-sign path. Sits
+    // BEFORE the names section so the names `[count:u8]` framing
+    // remains the very last thing in the payload.
+    let selector_trailer = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        MAX_SELECTOR_BUNDLE_LEN,
+        "bad selector bundle",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
+    };
+    cursor = selector_trailer.next_cursor;
+
     // ── 5b. Optional address-name bundles ─────────────────────────
     //
     // Zero or more merkle-verified (chain_id, address, name) bundles.
@@ -520,6 +544,32 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None
     };
 
+    // 7c-ter. Selector → text-signature bundle.
+    //
+    // The host-side DB lookup is a pure trust-anchor pull through the
+    // Merkle gate. We additionally cross-check the verified selector
+    // against `inner_data[0..4]` so a host that signs a valid
+    // `transfer` bundle while the actual calldata starts with a
+    // different selector cannot mislead the trusted UI. The verified
+    // result is only consulted on the blind-sign render path; it has
+    // no effect on the v3 / v1 / safe_v1 / erc20 priority rungs above.
+    let selector_verified: Option<SelectorMeta<'_>> = if selector_trailer.len > 0 {
+        let bundle_slice =
+            &snap[selector_trailer.start..selector_trailer.start + selector_trailer.len];
+        match verify_selector_bundle(bundle_slice) {
+            Some(meta) => {
+                if inner_data.len() >= 4 && meta.selector == inner_data[..4] {
+                    Some(meta)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+
     // 7d. Downgrade-mitigation gate.
     //
     // The v1 clear-sign flow only binds the setPreSignature calldata
@@ -585,6 +635,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         zk_v1_verified.as_ref(),
         safe_v1_verified.as_ref(),
         verified_meta.as_ref(),
+        selector_verified.as_ref(),
         &resolver,
     );
     match confirm(pages.as_slice()) {

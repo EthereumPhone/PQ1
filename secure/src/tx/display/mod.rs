@@ -47,7 +47,8 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 ///
 ///   * plain value transfer                 → 6 pages
 ///   * erc20_known / erc20_unknown          → 8 pages
-///   * blind_sign                           → 9 pages
+///   * blind_sign (no selector bundle)      → 9 pages
+///   * blind_sign (with verified FUNCTION)  → 10 pages
 ///   * contract_creation                    → 8 pages
 ///   * cowswap EIP-712 render (see
 ///     `crate::tx::eip712::cowswap_display`) → 10 pages
@@ -159,6 +160,7 @@ pub fn pick_sign_pages(
     v1: Option<&crate::zk::VerifiedClearSignV1>,
     safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
     erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    selector: Option<&crate::selectors::SelectorMeta<'_>>,
     resolver: &crate::names::NameResolver<'_>,
 ) -> Pages {
     if let Some(v3) = v3 {
@@ -198,6 +200,12 @@ pub fn pick_sign_pages(
             Some(meta) => render_erc20_known_pages(tx, &call, meta, resolver),
             None => render_erc20_unknown_pages(tx, &call, resolver),
         },
-        None => render_blind_sign_pages(tx, inner_data, resolver),
+        // The verified selector → text-sig mapping (if any) is only
+        // consulted when nothing else has decoded the calldata. It
+        // surfaces above the existing BLIND SIGN screen as an extra
+        // "FUNCTION:" page; the warning header itself is unchanged
+        // because Phase 1 only attests the function NAME, not its
+        // behavior on this contract.
+        None => render_blind_sign_pages(tx, inner_data, selector, resolver),
     }
 }

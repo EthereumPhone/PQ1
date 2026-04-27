@@ -34,6 +34,11 @@ mod fwup_hw_test;
 mod erc20_db;
 mod names_db;
 mod nsc_api;
+// The selectors DB blob lives on the host; only the e2e-test build
+// stubs in a companion-side bundle builder so the QEMU NS test
+// driver can act as a dev-only companion.
+#[cfg(feature = "e2e-test")]
+mod selectors_db;
 #[cfg(feature = "usb")]
 mod usb;
 #[cfg(feature = "usb")]

@@ -1,0 +1,8002 @@
+[
+  {
+    "selector": "0xa9059cbb",
+    "text_sig": "transfer(address,uint256)"
+  },
+  {
+    "selector": "0xef343588",
+    "text_sig": "trade(uint256[8],address[4],uint8[2],bytes32[4])"
+  },
+  {
+    "selector": "0x23b872dd",
+    "text_sig": "transferFrom(address,address,uint256)"
+  },
+  {
+    "selector": "0x095ea7b3",
+    "text_sig": "approve(address,uint256)"
+  },
+  {
+    "selector": "0xd0e30db0",
+    "text_sig": "deposit()"
+  },
+  {
+    "selector": "0x70a08231",
+    "text_sig": "balanceOf(address)"
+  },
+  {
+    "selector": "0x8da5cb5b",
+    "text_sig": "owner()"
+  },
+  {
+    "selector": "0x1a695230",
+    "text_sig": "transfer(address)"
+  },
+  {
+    "selector": "0x338b5dea",
+    "text_sig": "depositToken(address,uint256)"
+  },
+  {
+    "selector": "0xf2c298be",
+    "text_sig": "register(string)"
+  },
+  {
+    "selector": "0x6ea056a9",
+    "text_sig": "sweep(address,uint256)"
+  },
+  {
+    "selector": "0xb9b8af0b",
+    "text_sig": "halted()"
+  },
+  {
+    "selector": "0xb269681d",
+    "text_sig": "destination()"
+  },
+  {
+    "selector": "0x3c18d318",
+    "text_sig": "sweeperOf(address)"
+  },
+  {
+    "selector": "0x97dc97cb",
+    "text_sig": "authorizedCaller()"
+  },
+  {
+    "selector": "0x28090abb",
+    "text_sig": "logSweep(address,address,address,uint256)"
+  },
+  {
+    "selector": "0x88c2a0bf",
+    "text_sig": "giveBirth(uint256)"
+  },
+  {
+    "selector": "0x16c72721",
+    "text_sig": "forked()"
+  },
+  {
+    "selector": "0x0f2c9329",
+    "text_sig": "split(address,address)"
+  },
+  {
+    "selector": "0xdd62ed3e",
+    "text_sig": "allowance(address,address)"
+  },
+  {
+    "selector": "0xc31e0547",
+    "text_sig": "quickConverter()"
+  },
+  {
+    "selector": "0x18160ddd",
+    "text_sig": "totalSupply()"
+  },
+  {
+    "selector": "0xf7d8c883",
+    "text_sig": "breedWithAuto(uint256,uint256)"
+  },
+  {
+    "selector": "0x4e71d92d",
+    "text_sig": "claim()"
+  },
+  {
+    "selector": "0x313ce567",
+    "text_sig": "decimals()"
+  },
+  {
+    "selector": "0x867904b4",
+    "text_sig": "issue(address,uint256)"
+  },
+  {
+    "selector": "0x4b75f54f",
+    "text_sig": "formula()"
+  },
+  {
+    "selector": "0x5e5144eb",
+    "text_sig": "change(address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0x38cc4831",
+    "text_sig": "getAddress()"
+  },
+  {
+    "selector": "0x29a00e7c",
+    "text_sig": "calculatePurchaseReturn(uint256,uint256,uint32,uint256)"
+  },
+  {
+    "selector": "0x49f9b0f7",
+    "text_sig": "calculateSaleReturn(uint256,uint256,uint32,uint256)"
+  },
+  {
+    "selector": "0xa24835d1",
+    "text_sig": "destroy(address,uint256)"
+  },
+  {
+    "selector": "0x2e1a7d4d",
+    "text_sig": "withdraw(uint256)"
+  },
+  {
+    "selector": "0xd0679d34",
+    "text_sig": "send(address,uint256)"
+  },
+  {
+    "selector": "0xf7654176",
+    "text_sig": "split()"
+  },
+  {
+    "selector": "0x488725a0",
+    "text_sig": "versions(address)"
+  },
+  {
+    "selector": "0x1d6456c4",
+    "text_sig": "_transfer(address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0x9e281a98",
+    "text_sig": "withdrawToken(address,uint256)"
+  },
+  {
+    "selector": "0x23de6651",
+    "text_sig": "emitTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0x515c1457",
+    "text_sig": "emitTransfer(address,address,bytes32,uint256,string)"
+  },
+  {
+    "selector": "0x0d9f5aed",
+    "text_sig": "mixGenes(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x1801fbe5",
+    "text_sig": "mint(uint256,bytes32)"
+  },
+  {
+    "selector": "0x27ebe40a",
+    "text_sig": "createAuction(uint256,uint256,uint256,uint256,address)"
+  },
+  {
+    "selector": "0x3ccfd60b",
+    "text_sig": "withdraw()"
+  },
+  {
+    "selector": "0x454a2ab3",
+    "text_sig": "bid(uint256)"
+  },
+  {
+    "selector": "0x379607f5",
+    "text_sig": "claim(uint256)"
+  },
+  {
+    "selector": "0x1962df71",
+    "text_sig": "_performTransferWithReference(address,uint256,string,address)"
+  },
+  {
+    "selector": "0x39125215",
+    "text_sig": "sendMultiSig(address,uint256,bytes,uint256,uint256,bytes)"
+  },
+  {
+    "selector": "0x3452f51d",
+    "text_sig": "push(address,uint128)"
+  },
+  {
+    "selector": "0x4a393149",
+    "text_sig": "onTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0xf088d547",
+    "text_sig": "buy(address)"
+  },
+  {
+    "selector": "0xb0c80972",
+    "text_sig": "setBalance(uint256,bool)"
+  },
+  {
+    "selector": "0x64887334",
+    "text_sig": "setCompactData(bytes14[],bytes14[],uint256,uint256[])"
+  },
+  {
+    "selector": "0x6352211e",
+    "text_sig": "ownerOf(uint256)"
+  },
+  {
+    "selector": "0x40c10f19",
+    "text_sig": "mint(address,uint256)"
+  },
+  {
+    "selector": "0xc281d19e",
+    "text_sig": "cbAddress()"
+  },
+  {
+    "selector": "0x2ef3accc",
+    "text_sig": "getPrice(string,uint256)"
+  },
+  {
+    "selector": "0x764358e6",
+    "text_sig": "logSweep(address,address,uint256)"
+  },
+  {
+    "selector": "0x15dacbea",
+    "text_sig": "transferFrom(address,address,address,uint256)"
+  },
+  {
+    "selector": "0xbeabacc8",
+    "text_sig": "transfer(address,address,uint256)"
+  },
+  {
+    "selector": "0x2cf86006",
+    "text_sig": "calculateDividends(uint256)"
+  },
+  {
+    "selector": "0x688abbf7",
+    "text_sig": "myDividends(bool)"
+  },
+  {
+    "selector": "0x02571be3",
+    "text_sig": "owner(bytes32)"
+  },
+  {
+    "selector": "0xa90cf6f4",
+    "text_sig": "getLedgerValue(string,address)"
+  },
+  {
+    "selector": "0xddf9d613",
+    "text_sig": "getCustomBuyerLimit(address,address)"
+  },
+  {
+    "selector": "0x3d7d3f5a",
+    "text_sig": "createSaleAuction(uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x38bbfa50",
+    "text_sig": "__callback(bytes32,string,bytes)"
+  },
+  {
+    "selector": "0x205c2878",
+    "text_sig": "withdrawTo(address,uint256)"
+  },
+  {
+    "selector": "0xa6f2ae3a",
+    "text_sig": "buy()"
+  },
+  {
+    "selector": "0x4f161245",
+    "text_sig": "getUIntValue(string)"
+  },
+  {
+    "selector": "0xdc6dd152",
+    "text_sig": "playerRollDice(uint256)"
+  },
+  {
+    "selector": "0xc51be90f",
+    "text_sig": "query_withGasLimit(uint256,string,string,uint256)"
+  },
+  {
+    "selector": "0xa1add510",
+    "text_sig": "hasRelation(bytes32,bytes32,address)"
+  },
+  {
+    "selector": "0xc8ee0c6b",
+    "text_sig": "withdrawBySubscription(address,uint256,bytes32,string)"
+  },
+  {
+    "selector": "0x336077c3",
+    "text_sig": "getApprovedBuyer(address,address)"
+  },
+  {
+    "selector": "0xc8fea2fb",
+    "text_sig": "collect(address,address,uint256)"
+  },
+  {
+    "selector": "0xec7c637d",
+    "text_sig": "getBalanceLimit(address)"
+  },
+  {
+    "selector": "0xe671fab5",
+    "text_sig": "getBooleanMapValue(string,address)"
+  },
+  {
+    "selector": "0xcedc7277",
+    "text_sig": "getBuyPrice(address)"
+  },
+  {
+    "selector": "0xb5802ae6",
+    "text_sig": "getCirculationCap(address)"
+  },
+  {
+    "selector": "0xeec5d076",
+    "text_sig": "getTotalUnvestedAndUnreleasedTokens(address)"
+  },
+  {
+    "selector": "0x5cb0c16f",
+    "text_sig": "totalInCirculation()"
+  },
+  {
+    "selector": "0x7e1c0c09",
+    "text_sig": "totalTokens()"
+  },
+  {
+    "selector": "0xe31c71c4",
+    "text_sig": "safeToSub(uint256,uint256)"
+  },
+  {
+    "selector": "0x4e30a66c",
+    "text_sig": "safeToAdd(uint256,uint256)"
+  },
+  {
+    "selector": "0x47872b42",
+    "text_sig": "unsealBid(bytes32,uint256,bytes32)"
+  },
+  {
+    "selector": "0x05b34410",
+    "text_sig": "creationDate()"
+  },
+  {
+    "selector": "0x3fa4f245",
+    "text_sig": "value()"
+  },
+  {
+    "selector": "0x4cfe3e7f",
+    "text_sig": "debitAccount(address,uint256)"
+  },
+  {
+    "selector": "0x5643a711",
+    "text_sig": "increaseMonsterExp(uint64,uint32)"
+  },
+  {
+    "selector": "0x06ab5923",
+    "text_sig": "setSubnodeOwner(bytes32,bytes32,address)"
+  },
+  {
+    "selector": "0x01c6adc3",
+    "text_sig": "transferFrom(address,uint256)"
+  },
+  {
+    "selector": "0xa68a76cc",
+    "text_sig": "createForwarder()"
+  },
+  {
+    "selector": "0x983b94fb",
+    "text_sig": "finalizeAuction(bytes32)"
+  },
+  {
+    "selector": "0x3ec862a8",
+    "text_sig": "hatchEggs(address)"
+  },
+  {
+    "selector": "0x425189e0",
+    "text_sig": "getFashion(uint256)"
+  },
+  {
+    "selector": "0xc1d6cbd8",
+    "text_sig": "getPlayerPoint(uint32)"
+  },
+  {
+    "selector": "0x6b4dff1f",
+    "text_sig": "validateGasPrice(uint256)"
+  },
+  {
+    "selector": "0x21e92d49",
+    "text_sig": "transferByOwner(address,uint256)"
+  },
+  {
+    "selector": "0xe0cb3aa0",
+    "text_sig": "buyWithLimit(uint256,uint256)"
+  },
+  {
+    "selector": "0xf0843ba9",
+    "text_sig": "quickConvert(address[],uint256,uint256)"
+  },
+  {
+    "selector": "0xf7ebc39a",
+    "text_sig": "isTransferAllowed(address,address,uint256)"
+  },
+  {
+    "selector": "0xfe173b97",
+    "text_sig": "gasPrice()"
+  },
+  {
+    "selector": "0x961a929c",
+    "text_sig": "gasPriceLimit()"
+  },
+  {
+    "selector": "0xe724529c",
+    "text_sig": "freezeAccount(address,bool)"
+  },
+  {
+    "selector": "0x19774d43",
+    "text_sig": "orderFills(address,bytes32)"
+  },
+  {
+    "selector": "0x9cc477b2",
+    "text_sig": "createFashion(address,uint16[9],uint16)"
+  },
+  {
+    "selector": "0x58d1aebd",
+    "text_sig": "claim(string,string,string,bytes32,bytes)"
+  },
+  {
+    "selector": "0x394c21e7",
+    "text_sig": "cancelOrder(address[5],uint256[6],uint256)"
+  },
+  {
+    "selector": "0x1cbd0519",
+    "text_sig": "accountLevel(address)"
+  },
+  {
+    "selector": "0x1b33d412",
+    "text_sig": "offer(uint256,address,uint256,address,uint256)"
+  },
+  {
+    "selector": "0x4ad8c938",
+    "text_sig": "createSiringAuction(uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xeac9d94c",
+    "text_sig": "averageGen0SalePrice()"
+  },
+  {
+    "selector": "0x2d3e579a",
+    "text_sig": "hasRole(address,bytes32,address)"
+  },
+  {
+    "selector": "0xfdb5a03e",
+    "text_sig": "reinvest()"
+  },
+  {
+    "selector": "0xb4f9b6c8",
+    "text_sig": "kill(bytes32)"
+  },
+  {
+    "selector": "0x3b007512",
+    "text_sig": "ICDClaims(address)"
+  },
+  {
+    "selector": "0x186d9d88",
+    "text_sig": "unblockAddress(address)"
+  },
+  {
+    "selector": "0xe97fe114",
+    "text_sig": "tradeModifiers(address,address)"
+  },
+  {
+    "selector": "0xb863bd37",
+    "text_sig": "random(uint256)"
+  },
+  {
+    "selector": "0x610b1abd",
+    "text_sig": "lottery(uint256,uint256)"
+  },
+  {
+    "selector": "0xb46310f6",
+    "text_sig": "setBalanceOf(address,uint256)"
+  },
+  {
+    "selector": "0x742cd75d",
+    "text_sig": "mintPCD(address,uint256)"
+  },
+  {
+    "selector": "0xf501d8b8",
+    "text_sig": "transferFromICO(address,uint256)"
+  },
+  {
+    "selector": "0x158a4988",
+    "text_sig": "distributeTokens(address,uint256)"
+  },
+  {
+    "selector": "0x21f8a721",
+    "text_sig": "getAddress(bytes32)"
+  },
+  {
+    "selector": "0xcb3c28c7",
+    "text_sig": "trade(address,uint256,address,address,uint256,uint256,address)"
+  },
+  {
+    "selector": "0x0378f83f",
+    "text_sig": "destroyFashion(uint256,uint16)"
+  },
+  {
+    "selector": "0xd1058e59",
+    "text_sig": "claimAll()"
+  },
+  {
+    "selector": "0xc3bea9af",
+    "text_sig": "createGen0Auction(uint256)"
+  },
+  {
+    "selector": "0xbd02d0f5",
+    "text_sig": "getUint(bytes32)"
+  },
+  {
+    "selector": "0xb8e9c22e",
+    "text_sig": "getRate(address,uint256,bool,uint256)"
+  },
+  {
+    "selector": "0x7cd44272",
+    "text_sig": "getConversionRate(address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0xcb9fa366",
+    "text_sig": "init(address,bool)"
+  },
+  {
+    "selector": "0xe2a4853a",
+    "text_sig": "setUint(bytes32,uint256)"
+  },
+  {
+    "selector": "0x6432679f",
+    "text_sig": "getUserCapInWei(address)"
+  },
+  {
+    "selector": "0x6cf69811",
+    "text_sig": "trade(address,uint256,address,address,uint256,bool)"
+  },
+  {
+    "selector": "0xc6fd2103",
+    "text_sig": "recordImbalance(address,int256,uint256,uint256)"
+  },
+  {
+    "selector": "0xfd062d3b",
+    "text_sig": "handleFees(uint256,address,address)"
+  },
+  {
+    "selector": "0x395ede4d",
+    "text_sig": "collectToken(address)"
+  },
+  {
+    "selector": "0x929268b8",
+    "text_sig": "setBooleanMapValue(string,address,bool)"
+  },
+  {
+    "selector": "0x6ace6dc8",
+    "text_sig": "setApprovedBuyer(address,address,bool)"
+  },
+  {
+    "selector": "0xfebefd61",
+    "text_sig": "startAuctionsAndBid(bytes32[],bytes32)"
+  },
+  {
+    "selector": "0x14712e2f",
+    "text_sig": "proxyApprove(address,uint256,bytes32,address)"
+  },
+  {
+    "selector": "0xd54c8c87",
+    "text_sig": "emitApprove(address,address,bytes32,uint256)"
+  },
+  {
+    "selector": "0x23385089",
+    "text_sig": "emitApprove(address,address,uint256)"
+  },
+  {
+    "selector": "0x06011b14",
+    "text_sig": "getUnitInfo(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x853828b6",
+    "text_sig": "withdrawAll()"
+  },
+  {
+    "selector": "0x65e2409b",
+    "text_sig": "getPlayerEnergyByAddress(address)"
+  },
+  {
+    "selector": "0x976f37fd",
+    "text_sig": "lowCompose(uint256,uint256)"
+  },
+  {
+    "selector": "0x2bfd2e06",
+    "text_sig": "buyBasicUnit(uint256,uint256)"
+  },
+  {
+    "selector": "0xf4f3bdc1",
+    "text_sig": "minus(uint256,uint256)"
+  },
+  {
+    "selector": "0x70994b31",
+    "text_sig": "getCollectibleDetails(uint256)"
+  },
+  {
+    "selector": "0xc7a86dd2",
+    "text_sig": "updateEnergy(uint32,uint32,uint256)"
+  },
+  {
+    "selector": "0x48e06300",
+    "text_sig": "isEquipedAny2(address,uint256,uint256)"
+  },
+  {
+    "selector": "0xa5c464b3",
+    "text_sig": "isOnSaleAny2(uint256,uint256)"
+  },
+  {
+    "selector": "0x3955f0fe",
+    "text_sig": "sellEggs()"
+  },
+  {
+    "selector": "0x5dc22cce",
+    "text_sig": "attackPlayer(address)"
+  },
+  {
+    "selector": "0x96b5a755",
+    "text_sig": "cancelAuction(uint256)"
+  },
+  {
+    "selector": "0xcd905dff",
+    "text_sig": "isOperational()"
+  },
+  {
+    "selector": "0x163f7522",
+    "text_sig": "isUserRegistered(address)"
+  },
+  {
+    "selector": "0x103aeda7",
+    "text_sig": "isContractAuthorized(address)"
+  },
+  {
+    "selector": "0x69632f56",
+    "text_sig": "unitAttack(uint256)"
+  },
+  {
+    "selector": "0x6101a1f7",
+    "text_sig": "unitStealingCapacity(uint256)"
+  },
+  {
+    "selector": "0x6026bb86",
+    "text_sig": "battleUnitIdRange()"
+  },
+  {
+    "selector": "0x21446cfe",
+    "text_sig": "unitDefense(uint256)"
+  },
+  {
+    "selector": "0x7f9c8974",
+    "text_sig": "getAssetCollectedOreBallancesArray(uint256)"
+  },
+  {
+    "selector": "0x85dc6721",
+    "text_sig": "emptyShipCargo(uint32)"
+  },
+  {
+    "selector": "0x0d09c62d",
+    "text_sig": "updatePlayerPoint(uint32,uint32,uint32,uint32)"
+  },
+  {
+    "selector": "0xe34f7137",
+    "text_sig": "_performApprove(address,uint256,address)"
+  },
+  {
+    "selector": "0x515f25ae",
+    "text_sig": "launchShipOnMEA(uint256,uint8)"
+  },
+  {
+    "selector": "0x8ede1817",
+    "text_sig": "getReturnTime(uint256)"
+  },
+  {
+    "selector": "0x7bcdc2f0",
+    "text_sig": "_forwardApprove(address,uint256,address)"
+  },
+  {
+    "selector": "0x023eff9f",
+    "text_sig": "airdrop(uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xaffcba25",
+    "text_sig": "createNewMintableUser(address)"
+  },
+  {
+    "selector": "0x4d15642a",
+    "text_sig": "startMEAMission(uint256,uint256,uint8,uint256)"
+  },
+  {
+    "selector": "0xc01a8c84",
+    "text_sig": "confirmTransaction(uint256)"
+  },
+  {
+    "selector": "0xed1b71ea",
+    "text_sig": "registerUser(address,address,address)"
+  },
+  {
+    "selector": "0xc55d0f56",
+    "text_sig": "getCurrentPrice(uint256)"
+  },
+  {
+    "selector": "0xd8a26e3a",
+    "text_sig": "get(uint32)"
+  },
+  {
+    "selector": "0xe4849b32",
+    "text_sig": "sell(uint256)"
+  },
+  {
+    "selector": "0xa21f74b8",
+    "text_sig": "fundGooResearch(uint256)"
+  },
+  {
+    "selector": "0xed60ade6",
+    "text_sig": "bidOnSiringAuction(uint256,uint256)"
+  },
+  {
+    "selector": "0xa58092b7",
+    "text_sig": "getSanityRate(address,address)"
+  },
+  {
+    "selector": "0xc98fefed",
+    "text_sig": "convertFor(address[],uint256,uint256,address)"
+  },
+  {
+    "selector": "0xf761720a",
+    "text_sig": "isEquiped(address,uint256)"
+  },
+  {
+    "selector": "0x98d2fb55",
+    "text_sig": "transferMulti(address,address[],uint256[])"
+  },
+  {
+    "selector": "0x0f3de489",
+    "text_sig": "newAuction(uint256,uint64)"
+  },
+  {
+    "selector": "0x27ab9f20",
+    "text_sig": "botIndexToOwner(uint256)"
+  },
+  {
+    "selector": "0xf0f2805f",
+    "text_sig": "isOnSale(uint256)"
+  },
+  {
+    "selector": "0xc46e3e85",
+    "text_sig": "unitGooProduction(uint256)"
+  },
+  {
+    "selector": "0x58c039cd",
+    "text_sig": "getQuestion(bytes32)"
+  },
+  {
+    "selector": "0x27dc297e",
+    "text_sig": "__callback(bytes32,string)"
+  },
+  {
+    "selector": "0x07202460",
+    "text_sig": "getMonsterObj(uint64)"
+  },
+  {
+    "selector": "0x6bf0f4a1",
+    "text_sig": "roll(uint8)"
+  },
+  {
+    "selector": "0x0cb1a3a9",
+    "text_sig": "setLedgerValue(string,address,uint256)"
+  },
+  {
+    "selector": "0xe5225381",
+    "text_sig": "collect()"
+  },
+  {
+    "selector": "0xda14c723",
+    "text_sig": "setCustomBuyer(address,uint256)"
+  },
+  {
+    "selector": "0x4989b0b6",
+    "text_sig": "setCustomBuyerLimit(address,address,uint256)"
+  },
+  {
+    "selector": "0x6a630ee7",
+    "text_sig": "__transferWithReference(address,uint256,string,address)"
+  },
+  {
+    "selector": "0x6138889b",
+    "text_sig": "distribute(address[])"
+  },
+  {
+    "selector": "0x4e054a67",
+    "text_sig": "setBlacklist(address)"
+  },
+  {
+    "selector": "0xf7888aec",
+    "text_sig": "balanceOf(address,address)"
+  },
+  {
+    "selector": "0x5c975abb",
+    "text_sig": "paused()"
+  },
+  {
+    "selector": "0x963f2334",
+    "text_sig": "settleCaller(address,address,uint256)"
+  },
+  {
+    "selector": "0x7da40b65",
+    "text_sig": "isPlatformOrSupportManager(address)"
+  },
+  {
+    "selector": "0x2a54d313",
+    "text_sig": "pay(address,address,address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xf5537ede",
+    "text_sig": "transferToken(address,address,uint256)"
+  },
+  {
+    "selector": "0x659de63b",
+    "text_sig": "distributeToken(address[],uint256[])"
+  },
+  {
+    "selector": "0x62b21ad7",
+    "text_sig": "getElementInArrayType(uint8,uint64,uint256)"
+  },
+  {
+    "selector": "0x59e02dd7",
+    "text_sig": "peek()"
+  },
+  {
+    "selector": "0xb7009613",
+    "text_sig": "canCall(address,address,bytes4)"
+  },
+  {
+    "selector": "0x0daf999a",
+    "text_sig": "heroContract()"
+  },
+  {
+    "selector": "0xcc0e97c9",
+    "text_sig": "logicContract()"
+  },
+  {
+    "selector": "0xc0ee0b8a",
+    "text_sig": "tokenFallback(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x21e5383a",
+    "text_sig": "addBalance(address,uint256)"
+  },
+  {
+    "selector": "0x508493bc",
+    "text_sig": "tokens(address,address)"
+  },
+  {
+    "selector": "0x3ef13367",
+    "text_sig": "flushTokens(address)"
+  },
+  {
+    "selector": "0x2da03409",
+    "text_sig": "flushForwarderTokens(address,address)"
+  },
+  {
+    "selector": "0x9dc29fac",
+    "text_sig": "burn(address,uint256)"
+  },
+  {
+    "selector": "0x7ae1cfca",
+    "text_sig": "getBool(bytes32)"
+  },
+  {
+    "selector": "0x6bfaa903",
+    "text_sig": "increaseOwnershipTokenCount(address)"
+  },
+  {
+    "selector": "0x6f626eb3",
+    "text_sig": "onList(address)"
+  },
+  {
+    "selector": "0x7c59f828",
+    "text_sig": "getWizzType(uint256[2])"
+  },
+  {
+    "selector": "0x40a401d0",
+    "text_sig": "setMonsterIndexToOwner(uint256,address)"
+  },
+  {
+    "selector": "0xe26fdc12",
+    "text_sig": "equipDown(uint256)"
+  },
+  {
+    "selector": "0xcf8eeb7e",
+    "text_sig": "subBalance(address,uint256)"
+  },
+  {
+    "selector": "0x6ad80a9e",
+    "text_sig": "doAirdrop()"
+  },
+  {
+    "selector": "0x9507d39a",
+    "text_sig": "get(uint256)"
+  },
+  {
+    "selector": "0x062c41fd",
+    "text_sig": "isLockup()"
+  },
+  {
+    "selector": "0xabfdcced",
+    "text_sig": "setBool(bytes32,bool)"
+  },
+  {
+    "selector": "0x63bd1d4a",
+    "text_sig": "payout()"
+  },
+  {
+    "selector": "0xfc0c546a",
+    "text_sig": "token()"
+  },
+  {
+    "selector": "0x40ceb451",
+    "text_sig": "increasePromoCreatedCount()"
+  },
+  {
+    "selector": "0xbf4a5485",
+    "text_sig": "extLockBot(uint256,uint16)"
+  },
+  {
+    "selector": "0x5a686699",
+    "text_sig": "post(uint128,uint32,address)"
+  },
+  {
+    "selector": "0x18178358",
+    "text_sig": "poke()"
+  },
+  {
+    "selector": "0x88d695b2",
+    "text_sig": "batchTransfer(address[],uint256[])"
+  },
+  {
+    "selector": "0xb61d27f6",
+    "text_sig": "execute(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x12a837b4",
+    "text_sig": "transfer(address,address,uint256,bytes)"
+  },
+  {
+    "selector": "0x5f74bbde",
+    "text_sig": "vote(address,uint256)"
+  },
+  {
+    "selector": "0x4ea801c5",
+    "text_sig": "writeRate(string,uint256)"
+  },
+  {
+    "selector": "0xf4e76a46",
+    "text_sig": "getBalanace(bytes32,address)"
+  },
+  {
+    "selector": "0xa309f2ee",
+    "text_sig": "setBalanace(bytes32,address,uint256)"
+  },
+  {
+    "selector": "0xbf735b13",
+    "text_sig": "createSale(bytes32,uint256)"
+  },
+  {
+    "selector": "0x6d705ebb",
+    "text_sig": "register(address,uint256)"
+  },
+  {
+    "selector": "0x7b422184",
+    "text_sig": "giveBirth(uint256,uint256)"
+  },
+  {
+    "selector": "0xf340fa01",
+    "text_sig": "deposit(address)"
+  },
+  {
+    "selector": "0x74c90d0d",
+    "text_sig": "sellAllCookies()"
+  },
+  {
+    "selector": "0x042cb150",
+    "text_sig": "batchSend(uint256,address[])"
+  },
+  {
+    "selector": "0xdc1279d4",
+    "text_sig": "getPureFromGene(uint256[2])"
+  },
+  {
+    "selector": "0x278ecde1",
+    "text_sig": "refund(uint256)"
+  },
+  {
+    "selector": "0xd55ec697",
+    "text_sig": "upgrade()"
+  },
+  {
+    "selector": "0xa1be79a0",
+    "text_sig": "equipUp(uint256[6])"
+  },
+  {
+    "selector": "0x6c85cf67",
+    "text_sig": "canTransfer(address,address)"
+  },
+  {
+    "selector": "0xbbf89803",
+    "text_sig": "addBuyer(address)"
+  },
+  {
+    "selector": "0xa1ba444d",
+    "text_sig": "createOrder(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x2972b0f0",
+    "text_sig": "isAuthorized(address,uint256)"
+  },
+  {
+    "selector": "0xc67415f3",
+    "text_sig": "mineCrystals(uint256)"
+  },
+  {
+    "selector": "0x2a1bbc34",
+    "text_sig": "generate()"
+  },
+  {
+    "selector": "0x1940a936",
+    "text_sig": "isPregnant(uint256)"
+  },
+  {
+    "selector": "0x1e83409a",
+    "text_sig": "claim(address)"
+  },
+  {
+    "selector": "0xa81af46e",
+    "text_sig": "claimBonusTokens(address)"
+  },
+  {
+    "selector": "0xa647e8ec",
+    "text_sig": "mint(address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x647e61f1",
+    "text_sig": "setLargeInvestorApproval(address,uint256)"
+  },
+  {
+    "selector": "0xf5c15237",
+    "text_sig": "isPlatformManager(address)"
+  },
+  {
+    "selector": "0xd0174145",
+    "text_sig": "create(address,address,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xc9a99f19",
+    "text_sig": "subscribeCaller(address,address,uint256,address,uint256)"
+  },
+  {
+    "selector": "0xb324e80d",
+    "text_sig": "depositEscrow(address,uint256)"
+  },
+  {
+    "selector": "0x771602f7",
+    "text_sig": "add(uint256,uint256)"
+  },
+  {
+    "selector": "0x41c0e1b5",
+    "text_sig": "kill()"
+  },
+  {
+    "selector": "0x9267b291",
+    "text_sig": "getGameStarted()"
+  },
+  {
+    "selector": "0x18ad052b",
+    "text_sig": "safeTransferByContract(uint256,address)"
+  },
+  {
+    "selector": "0x971ce641",
+    "text_sig": "getCoinBase()"
+  },
+  {
+    "selector": "0x4f558e79",
+    "text_sig": "exists(uint256)"
+  },
+  {
+    "selector": "0xa6d49dca",
+    "text_sig": "emitTransferEvent(address,address,uint256)"
+  },
+  {
+    "selector": "0x9d95f1cc",
+    "text_sig": "addNode(address)"
+  },
+  {
+    "selector": "0xe6d66ac8",
+    "text_sig": "sendTokens(address,address,uint256)"
+  },
+  {
+    "selector": "0xa1c90a11",
+    "text_sig": "updatePlayersCoinByPurchase(address,uint256)"
+  },
+  {
+    "selector": "0xfeb8c438",
+    "text_sig": "joinMatch(uint256)"
+  },
+  {
+    "selector": "0xe04f31e9",
+    "text_sig": "forward(address,uint256,bytes,bool)"
+  },
+  {
+    "selector": "0xd7f31eb9",
+    "text_sig": "forward(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x3a178d99",
+    "text_sig": "isAvailable(uint256)"
+  },
+  {
+    "selector": "0xf3fef3a3",
+    "text_sig": "withdraw(address,uint256)"
+  },
+  {
+    "selector": "0xd8470576",
+    "text_sig": "genome(uint256)"
+  },
+  {
+    "selector": "0xe0bb933b",
+    "text_sig": "getDragon(uint256)"
+  },
+  {
+    "selector": "0x9670c0bc",
+    "text_sig": "getPrecision()"
+  },
+  {
+    "selector": "0x722ded24",
+    "text_sig": "exeSequence(uint256,uint256[])"
+  },
+  {
+    "selector": "0x64371977",
+    "text_sig": "set(uint256,string)"
+  },
+  {
+    "selector": "0xbfcece9f",
+    "text_sig": "startTraining(uint64,uint8,uint8,uint8,uint8)"
+  },
+  {
+    "selector": "0xa9b1d507",
+    "text_sig": "makeWallet()"
+  },
+  {
+    "selector": "0xe1fa8e84",
+    "text_sig": "register(bytes32)"
+  },
+  {
+    "selector": "0xd868f4c0",
+    "text_sig": "generate(uint256,uint256)"
+  },
+  {
+    "selector": "0xdcb3b30e",
+    "text_sig": "placeBet(uint8,uint256)"
+  },
+  {
+    "selector": "0x61b6683c",
+    "text_sig": "destroyedBots()"
+  },
+  {
+    "selector": "0xd1b12b4e",
+    "text_sig": "extCreateBot(uint256,uint256,uint256,uint256,address)"
+  },
+  {
+    "selector": "0x6d5f3e15",
+    "text_sig": "settleBet(address)"
+  },
+  {
+    "selector": "0x4029a3ce",
+    "text_sig": "mintMany(address[],uint256[])"
+  },
+  {
+    "selector": "0xda682aeb",
+    "text_sig": "onApprove(address,address,uint256)"
+  },
+  {
+    "selector": "0x5f70d9ac",
+    "text_sig": "getBot(uint256)"
+  },
+  {
+    "selector": "0x57de26a4",
+    "text_sig": "read()"
+  },
+  {
+    "selector": "0x6a327b7d",
+    "text_sig": "getSupportManager()"
+  },
+  {
+    "selector": "0xcae9ca51",
+    "text_sig": "approveAndCall(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x8d182f01",
+    "text_sig": "removeSale(bytes32)"
+  },
+  {
+    "selector": "0x9b504387",
+    "text_sig": "controllerTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0xd96a094a",
+    "text_sig": "buy(uint256)"
+  },
+  {
+    "selector": "0x8e6ddab1",
+    "text_sig": "createMonster(uint256,uint256,uint256,uint256,uint256,bytes)"
+  },
+  {
+    "selector": "0x27e235e3",
+    "text_sig": "balances(address)"
+  },
+  {
+    "selector": "0x73b31190",
+    "text_sig": "heroData(uint256)"
+  },
+  {
+    "selector": "0x10fe9ae8",
+    "text_sig": "getTokenAddress()"
+  },
+  {
+    "selector": "0xda72c1e8",
+    "text_sig": "adminTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0xc6427474",
+    "text_sig": "submitTransaction(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x94636cee",
+    "text_sig": "createPromoMonster(uint32,bytes,address)"
+  },
+  {
+    "selector": "0xc8a4ac9c",
+    "text_sig": "mul(uint256,uint256)"
+  },
+  {
+    "selector": "0x720c4798",
+    "text_sig": "workshop()"
+  },
+  {
+    "selector": "0x5d0be9de",
+    "text_sig": "softWithdrawRevenueFor(address)"
+  },
+  {
+    "selector": "0x196ecd25",
+    "text_sig": "getOwnedCount(address,uint256)"
+  },
+  {
+    "selector": "0xa425b752",
+    "text_sig": "destroyStake(address,bytes32,uint256,uint256)"
+  },
+  {
+    "selector": "0xa645ff5f",
+    "text_sig": "send(address[],uint256[])"
+  },
+  {
+    "selector": "0x4f71ef81",
+    "text_sig": "parse(bytes32)"
+  },
+  {
+    "selector": "0x9076c166",
+    "text_sig": "setAllocation(address,uint256)"
+  },
+  {
+    "selector": "0x82367b2d",
+    "text_sig": "updatePrice(uint256,uint256)"
+  },
+  {
+    "selector": "0x53a01f68",
+    "text_sig": "createWizzPanda(uint256[2],uint256,address)"
+  },
+  {
+    "selector": "0xfd01249c",
+    "text_sig": "createGen0Auction(uint256,uint256)"
+  },
+  {
+    "selector": "0xf794eb58",
+    "text_sig": "getBonusRate()"
+  },
+  {
+    "selector": "0x42966c68",
+    "text_sig": "burn(uint256)"
+  },
+  {
+    "selector": "0xda46098c",
+    "text_sig": "setAllowance(address,address,uint256)"
+  },
+  {
+    "selector": "0x495d32cb",
+    "text_sig": "par()"
+  },
+  {
+    "selector": "0x3c4b07de",
+    "text_sig": "extUnlockBot(uint256,uint16)"
+  },
+  {
+    "selector": "0x28e69b16",
+    "text_sig": "setBalances(address,uint256)"
+  },
+  {
+    "selector": "0xeacbc236",
+    "text_sig": "emitTransferToICAP(address,address,bytes32,uint256,string)"
+  },
+  {
+    "selector": "0xecb70fb7",
+    "text_sig": "hasEnded()"
+  },
+  {
+    "selector": "0x26180224",
+    "text_sig": "newChallenge(uint64,uint64)"
+  },
+  {
+    "selector": "0x98ea5fca",
+    "text_sig": "depositEther()"
+  },
+  {
+    "selector": "0x7da5efc8",
+    "text_sig": "drop(address,address[],uint256[])"
+  },
+  {
+    "selector": "0x66098d4f",
+    "text_sig": "plus(uint256,uint256)"
+  },
+  {
+    "selector": "0x90b98a11",
+    "text_sig": "sendCoin(address,uint256)"
+  },
+  {
+    "selector": "0xe278fe6f",
+    "text_sig": "closeRound()"
+  },
+  {
+    "selector": "0x26bda739",
+    "text_sig": "addElementToArrayType(uint8,uint64,uint8)"
+  },
+  {
+    "selector": "0xe1a6f014",
+    "text_sig": "offer(uint256,address,uint256,address,uint256,bool)"
+  },
+  {
+    "selector": "0xfb6f93a4",
+    "text_sig": "setEthUsdRate(uint256)"
+  },
+  {
+    "selector": "0x733480b7",
+    "text_sig": "transferToICAP(bytes32,uint256)"
+  },
+  {
+    "selector": "0xf696c4ed",
+    "text_sig": "fightAgon(uint64,uint64,uint256,uint256)"
+  },
+  {
+    "selector": "0xa90ae887",
+    "text_sig": "claimPayment(uint256,uint256,bytes)"
+  },
+  {
+    "selector": "0x9714a27c",
+    "text_sig": "miningOneFree()"
+  },
+  {
+    "selector": "0xd0946d00",
+    "text_sig": "subFreeMineral(address)"
+  },
+  {
+    "selector": "0xc782fc60",
+    "text_sig": "getExtraBalance(address)"
+  },
+  {
+    "selector": "0x47c17bac",
+    "text_sig": "getMonsterDexSize(address)"
+  },
+  {
+    "selector": "0x12b1cc95",
+    "text_sig": "createHash(uint256)"
+  },
+  {
+    "selector": "0x9d29cac4",
+    "text_sig": "getMonsterClass(uint32)"
+  },
+  {
+    "selector": "0x9c9a1061",
+    "text_sig": "buy(bytes32)"
+  },
+  {
+    "selector": "0x681551d1",
+    "text_sig": "catchMonster(uint32,string)"
+  },
+  {
+    "selector": "0x630e0ae6",
+    "text_sig": "createPersonGen0(string,string,uint64,bool)"
+  },
+  {
+    "selector": "0x3f55b895",
+    "text_sig": "delegate(uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xa436e33b",
+    "text_sig": "getUintsOwnerCount(address)"
+  },
+  {
+    "selector": "0xb55cdbf9",
+    "text_sig": "setExtraBalance(address,uint256)"
+  },
+  {
+    "selector": "0xca6ad1e4",
+    "text_sig": "setCustomGasPrice(uint256)"
+  },
+  {
+    "selector": "0x341367ec",
+    "text_sig": "getMaxCAP()"
+  },
+  {
+    "selector": "0xf9c71f79",
+    "text_sig": "isEquipedAny3(address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xf3b42c40",
+    "text_sig": "isOnSaleAny3(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xca02620a",
+    "text_sig": "bind(uint8,string)"
+  },
+  {
+    "selector": "0xfc4756df",
+    "text_sig": "setUintsOwnerCount(address,uint256,bool)"
+  },
+  {
+    "selector": "0xe7001b84",
+    "text_sig": "setOwnedCount(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x63ff195d",
+    "text_sig": "stakeOnBehalf(address,uint256,bytes32,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xe16c7d98",
+    "text_sig": "getContract(bytes32)"
+  },
+  {
+    "selector": "0x91b7f5ed",
+    "text_sig": "setPrice(uint256)"
+  },
+  {
+    "selector": "0x4d30b6be",
+    "text_sig": "balanceOf(address,bytes32)"
+  },
+  {
+    "selector": "0xfdacd576",
+    "text_sig": "setCompleted(uint256)"
+  },
+  {
+    "selector": "0xa5a2cb19",
+    "text_sig": "buyUpgrade(uint256)"
+  },
+  {
+    "selector": "0x91702ddc",
+    "text_sig": "highCompose(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x28a42e9d",
+    "text_sig": "getUpgradeInfo(uint256)"
+  },
+  {
+    "selector": "0xe90459f8",
+    "text_sig": "emitError(bytes32)"
+  },
+  {
+    "selector": "0xc63c1a27",
+    "text_sig": "calcFight(uint64,uint64,uint256,uint256)"
+  },
+  {
+    "selector": "0x4ee2cd7e",
+    "text_sig": "balanceOfAt(address,uint256)"
+  },
+  {
+    "selector": "0xfff07241",
+    "text_sig": "playerExist(address)"
+  },
+  {
+    "selector": "0xa87e0c33",
+    "text_sig": "newAgon(uint64,uint64)"
+  },
+  {
+    "selector": "0x219bc76c",
+    "text_sig": "currentRoundInitialized()"
+  },
+  {
+    "selector": "0x2c3ca924",
+    "text_sig": "handleProductionIncrease(address,uint256)"
+  },
+  {
+    "selector": "0x049878f3",
+    "text_sig": "join(uint256)"
+  },
+  {
+    "selector": "0xfc01dfbb",
+    "text_sig": "mintUpto(address,uint256)"
+  },
+  {
+    "selector": "0x8a19c8bc",
+    "text_sig": "currentRound()"
+  },
+  {
+    "selector": "0x35f097f3",
+    "text_sig": "isOnBattle(uint64)"
+  },
+  {
+    "selector": "0xbb0a64b6",
+    "text_sig": "batchTransfer(address[],uint256[],address)"
+  },
+  {
+    "selector": "0xe43252d7",
+    "text_sig": "addToWhitelist(address)"
+  },
+  {
+    "selector": "0xf359671c",
+    "text_sig": "withdrawWithReference(address,uint256,string)"
+  },
+  {
+    "selector": "0xce29555f",
+    "text_sig": "setUintCoinProduction(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0xb1622818",
+    "text_sig": "softWithdrawRewardFor(address)"
+  },
+  {
+    "selector": "0x00000094",
+    "text_sig": "gdkbcaeihjf()"
+  },
+  {
+    "selector": "0xf2d5d56b",
+    "text_sig": "pull(address,uint256)"
+  },
+  {
+    "selector": "0x79c310a6",
+    "text_sig": "increasePlayersJadeProduction(address,uint256)"
+  },
+  {
+    "selector": "0x6ae459bd",
+    "text_sig": "bulkMint(address[],uint256[])"
+  },
+  {
+    "selector": "0x1040762d",
+    "text_sig": "setExchangeRates(uint256)"
+  },
+  {
+    "selector": "0xb3b77a51",
+    "text_sig": "lock(bytes32,uint256)"
+  },
+  {
+    "selector": "0x278e07ce",
+    "text_sig": "setStatus(address,uint8)"
+  },
+  {
+    "selector": "0x60c6ccb2",
+    "text_sig": "removeMonsterIdMapping(address,uint64)"
+  },
+  {
+    "selector": "0xf01fe692",
+    "text_sig": "create(uint256,address)"
+  },
+  {
+    "selector": "0x60a06040",
+    "text_sig": "rugPullAll((uint240),(bytes4),int88[],bytes4,int136)"
+  },
+  {
+    "selector": "0x440f19ba",
+    "text_sig": "draw(bytes32,uint256)"
+  },
+  {
+    "selector": "0xabaa5f3e",
+    "text_sig": "randomDS_getSessionPubKeyHash()"
+  },
+  {
+    "selector": "0xa847a71c",
+    "text_sig": "isOnTrading(uint64)"
+  },
+  {
+    "selector": "0x48547d69",
+    "text_sig": "slots()"
+  },
+  {
+    "selector": "0x42842e0e",
+    "text_sig": "safeTransferFrom(address,address,uint256)"
+  },
+  {
+    "selector": "0x34fcf437",
+    "text_sig": "setRate(uint256)"
+  },
+  {
+    "selector": "0xe1f21c67",
+    "text_sig": "approve(address,address,uint256)"
+  },
+  {
+    "selector": "0x3702ab03",
+    "text_sig": "buyBasicCards(uint256,uint256)"
+  },
+  {
+    "selector": "0x89850fae",
+    "text_sig": "nextStep(uint256)"
+  },
+  {
+    "selector": "0xf2fde38b",
+    "text_sig": "transferOwnership(address)"
+  },
+  {
+    "selector": "0x80dfa34a",
+    "text_sig": "saveBatch(string)"
+  },
+  {
+    "selector": "0x9248019e",
+    "text_sig": "addMonsterIdMapping(address,uint64)"
+  },
+  {
+    "selector": "0x751c4d70",
+    "text_sig": "contributeDelegated(address,uint256)"
+  },
+  {
+    "selector": "0xe27fe50f",
+    "text_sig": "startAuctions(bytes32[])"
+  },
+  {
+    "selector": "0x5aec50ab",
+    "text_sig": "register(address,address,uint256)"
+  },
+  {
+    "selector": "0x153154fd",
+    "text_sig": "getRecommender(address)"
+  },
+  {
+    "selector": "0xdc86e6f0",
+    "text_sig": "baseUnit(bytes32)"
+  },
+  {
+    "selector": "0xce8ae9f3",
+    "text_sig": "giveReward(address,uint256)"
+  },
+  {
+    "selector": "0xfacd743b",
+    "text_sig": "isValidator(address)"
+  },
+  {
+    "selector": "0x4f64b2be",
+    "text_sig": "tokens(uint256)"
+  },
+  {
+    "selector": "0xbfb231d2",
+    "text_sig": "items(uint256)"
+  },
+  {
+    "selector": "0x3f83acff",
+    "text_sig": "get_contract(bytes32)"
+  },
+  {
+    "selector": "0xc55c1cb6",
+    "text_sig": "queryN_withGasLimit(uint256,string,bytes,uint256)"
+  },
+  {
+    "selector": "0x809b296d",
+    "text_sig": "consumeOperation(bytes32,uint256)"
+  },
+  {
+    "selector": "0x524f3889",
+    "text_sig": "getPrice(string)"
+  },
+  {
+    "selector": "0x7eb30cd0",
+    "text_sig": "checkTreeStructure(address,address)"
+  },
+  {
+    "selector": "0xe946ad4a",
+    "text_sig": "getUpgradesOwned(address,uint256)"
+  },
+  {
+    "selector": "0x73f9421d",
+    "text_sig": "getUpgradeCardsInfo(uint256,uint256)"
+  },
+  {
+    "selector": "0x59d667a5",
+    "text_sig": "bid(address,uint256)"
+  },
+  {
+    "selector": "0x47ee0394",
+    "text_sig": "addToWhiteList(address)"
+  },
+  {
+    "selector": "0xe9fad8ee",
+    "text_sig": "exit()"
+  },
+  {
+    "selector": "0x2a288272",
+    "text_sig": "setUpgradesOwned(address,uint256)"
+  },
+  {
+    "selector": "0xf8a74501",
+    "text_sig": "getCastleBasicInfo(address)"
+  },
+  {
+    "selector": "0xf3746947",
+    "text_sig": "giveBirth(uint256,uint256[2],uint256[2])"
+  },
+  {
+    "selector": "0xe6898a7d",
+    "text_sig": "getSex(uint256[2])"
+  },
+  {
+    "selector": "0x1896f70a",
+    "text_sig": "setResolver(bytes32,address)"
+  },
+  {
+    "selector": "0x8f4ffcb1",
+    "text_sig": "receiveApproval(address,uint256,address,bytes)"
+  },
+  {
+    "selector": "0x69328dec",
+    "text_sig": "withdraw(address,uint256,address)"
+  },
+  {
+    "selector": "0x62a5af3b",
+    "text_sig": "freeze()"
+  },
+  {
+    "selector": "0x4a63464d",
+    "text_sig": "adminClaimAirdrop(address,uint256)"
+  },
+  {
+    "selector": "0x0621b4f6",
+    "text_sig": "sellAllAmount(address,uint256,address,uint256)"
+  },
+  {
+    "selector": "0x46a7551d",
+    "text_sig": "isOnBattle(address,uint64)"
+  },
+  {
+    "selector": "0x1e1401f8",
+    "text_sig": "getReturn(address,address,uint256)"
+  },
+  {
+    "selector": "0x0991bb09",
+    "text_sig": "makeSperm(address)"
+  },
+  {
+    "selector": "0x26b3293f",
+    "text_sig": "deposit(address,uint256,bytes32)"
+  },
+  {
+    "selector": "0xc3059c63",
+    "text_sig": "buyUpgradeCard(uint256)"
+  },
+  {
+    "selector": "0xb753a98c",
+    "text_sig": "push(address,uint256)"
+  },
+  {
+    "selector": "0x51cfa44b",
+    "text_sig": "getStarTotalSupply(uint8)"
+  },
+  {
+    "selector": "0xe1fa7638",
+    "text_sig": "attack(uint256,uint256)"
+  },
+  {
+    "selector": "0x19165587",
+    "text_sig": "release(address)"
+  },
+  {
+    "selector": "0xff70c4d1",
+    "text_sig": "getBuyerAddress(uint16,uint16)"
+  },
+  {
+    "selector": "0x2020e9ea",
+    "text_sig": "bid(uint16,uint16)"
+  },
+  {
+    "selector": "0xdee4b246",
+    "text_sig": "buyTokens(uint64,uint256,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0x961c9ae4",
+    "text_sig": "createAuction(address,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xe9970b6c",
+    "text_sig": "isLessThan(uint256,uint256)"
+  },
+  {
+    "selector": "0xca446dd9",
+    "text_sig": "setAddress(bytes32,address)"
+  },
+  {
+    "selector": "0x702123ae",
+    "text_sig": "unitCoinProduction(uint256)"
+  },
+  {
+    "selector": "0x19045a25",
+    "text_sig": "recover(bytes32,bytes)"
+  },
+  {
+    "selector": "0x030ba25d",
+    "text_sig": "withdraw(uint256,bytes)"
+  },
+  {
+    "selector": "0xe01c6d4e",
+    "text_sig": "cashin()"
+  },
+  {
+    "selector": "0xa77af36e",
+    "text_sig": "read_demurrage_config()"
+  },
+  {
+    "selector": "0x8d6cc56d",
+    "text_sig": "updatePrice(uint256)"
+  },
+  {
+    "selector": "0x388f3cd3",
+    "text_sig": "cashin(address,uint256)"
+  },
+  {
+    "selector": "0x09a0c130",
+    "text_sig": "read_user_for_demurrage(address)"
+  },
+  {
+    "selector": "0x7e9abb50",
+    "text_sig": "getUnavailableTakerTokenAmount(bytes32)"
+  },
+  {
+    "selector": "0x6922eb06",
+    "text_sig": "sellPackToAddress(uint16,uint16,address)"
+  },
+  {
+    "selector": "0x6310d902",
+    "text_sig": "getAddressBoughtCount(uint16,address)"
+  },
+  {
+    "selector": "0x514fcac7",
+    "text_sig": "cancelOrder(uint256)"
+  },
+  {
+    "selector": "0x3bc764f7",
+    "text_sig": "depositCPT(address,uint256,bytes32)"
+  },
+  {
+    "selector": "0xff429fc8",
+    "text_sig": "getCooldown(uint16)"
+  },
+  {
+    "selector": "0x7b7054c8",
+    "text_sig": "__approve(address,uint256,address)"
+  },
+  {
+    "selector": "0x49606455",
+    "text_sig": "take(bytes32,uint128)"
+  },
+  {
+    "selector": "0x3dd83fe1",
+    "text_sig": "newPlayer(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x59b9a192",
+    "text_sig": "buildToken(uint192,uint192,uint160,uint32)"
+  },
+  {
+    "selector": "0xd5abeb01",
+    "text_sig": "maxSupply()"
+  },
+  {
+    "selector": "0xce92dced",
+    "text_sig": "newBid(bytes32)"
+  },
+  {
+    "selector": "0x4f74acfe",
+    "text_sig": "buyEggs()"
+  },
+  {
+    "selector": "0x92846ab6",
+    "text_sig": "put_transfer(address,address,address,uint256,bool)"
+  },
+  {
+    "selector": "0x38ec8116",
+    "text_sig": "deduct_demurrage(address)"
+  },
+  {
+    "selector": "0x2c3dcdcf",
+    "text_sig": "issueDuringICO(address,uint256)"
+  },
+  {
+    "selector": "0x13af4035",
+    "text_sig": "setOwner(address)"
+  },
+  {
+    "selector": "0x1326a78a",
+    "text_sig": "update_user_for_demurrage(address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x8e768288",
+    "text_sig": "isSane(address)"
+  },
+  {
+    "selector": "0x82771c8e",
+    "text_sig": "isSane()"
+  },
+  {
+    "selector": "0x3bed33ce",
+    "text_sig": "withdrawEther(uint256)"
+  },
+  {
+    "selector": "0x2d171243",
+    "text_sig": "getUnitsProduction(address,uint256,uint256)"
+  },
+  {
+    "selector": "0xee4827ea",
+    "text_sig": "getCardInfo(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x000000b6",
+    "text_sig": "matchByAdmin_TwH36(uint256[])"
+  },
+  {
+    "selector": "0xe2958974",
+    "text_sig": "read_transfer_config()"
+  },
+  {
+    "selector": "0xe0fe1d46",
+    "text_sig": "read_user_for_transfer(address)"
+  },
+  {
+    "selector": "0x8fafb286",
+    "text_sig": "claimResearchDividends(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x6a10d4d6",
+    "text_sig": "createToken(address,uint256)"
+  },
+  {
+    "selector": "0x0cf7f3b5",
+    "text_sig": "changePrice(uint256,uint64)"
+  },
+  {
+    "selector": "0xf8a6c595",
+    "text_sig": "constructor(address)"
+  },
+  {
+    "selector": "0x6103d70b",
+    "text_sig": "withdrawPayments()"
+  },
+  {
+    "selector": "0x4525f804",
+    "text_sig": "constructor(address,address)"
+  },
+  {
+    "selector": "0x6ba2aefc",
+    "text_sig": "transferMultisig(address,address,uint256)"
+  },
+  {
+    "selector": "0x3fedcc31",
+    "text_sig": "transfer(uint256,address,address,address,uint256,bytes,bytes)"
+  },
+  {
+    "selector": "0x1833fa4c",
+    "text_sig": "update(uint256,string,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xd5fa2b00",
+    "text_sig": "setAddr(bytes32,address)"
+  },
+  {
+    "selector": "0x411cc791",
+    "text_sig": "transferWithParams(address,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x3e2e806d",
+    "text_sig": "rewardTokensFloor(address,uint256,uint32)"
+  },
+  {
+    "selector": "0x216ea239",
+    "text_sig": "miningResolve(uint256,uint256)"
+  },
+  {
+    "selector": "0x1038a54e",
+    "text_sig": "activeHero(address)"
+  },
+  {
+    "selector": "0xf0dda65c",
+    "text_sig": "mintTokens(address,uint256)"
+  },
+  {
+    "selector": "0xc281309e",
+    "text_sig": "feeTake()"
+  },
+  {
+    "selector": "0x228cb733",
+    "text_sig": "reward()"
+  },
+  {
+    "selector": "0x1c8d5d38",
+    "text_sig": "allowance(address,address,bytes32)"
+  },
+  {
+    "selector": "0xa8d4a03b",
+    "text_sig": "heroes(uint256)"
+  },
+  {
+    "selector": "0xdff90b5b",
+    "text_sig": "sendFees()"
+  },
+  {
+    "selector": "0xcb3e394d",
+    "text_sig": "transferFromWithFee(address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0x5b8ed9e2",
+    "text_sig": "claimLoot(uint256)"
+  },
+  {
+    "selector": "0x9c908f61",
+    "text_sig": "acceptTokens(address,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xb5c5f672",
+    "text_sig": "withdraw(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x65216a41",
+    "text_sig": "airDrop(address[],uint256[])"
+  },
+  {
+    "selector": "0x05fefda7",
+    "text_sig": "setPrices(uint256,uint256)"
+  },
+  {
+    "selector": "0xf40e28f2",
+    "text_sig": "createGen0Auction(uint256,uint256,uint256,uint256,address)"
+  },
+  {
+    "selector": "0x86481d40",
+    "text_sig": "getLevel(uint256)"
+  },
+  {
+    "selector": "0x25e16063",
+    "text_sig": "withdrawEth(address)"
+  },
+  {
+    "selector": "0x96cd9187",
+    "text_sig": "withdrawToken(uint256,address,address,uint256)"
+  },
+  {
+    "selector": "0x8d068043",
+    "text_sig": "requiredSignatures()"
+  },
+  {
+    "selector": "0x1d3b9edf",
+    "text_sig": "times(uint256,uint256)"
+  },
+  {
+    "selector": "0x18a4155e",
+    "text_sig": "calculatePrice(uint256,uint256,uint256,address,uint256)"
+  },
+  {
+    "selector": "0x8b23b40b",
+    "text_sig": "getUint8(bytes32)"
+  },
+  {
+    "selector": "0xe19593e5",
+    "text_sig": "cashout(uint256,address,address,address,uint256,bytes,bytes)"
+  },
+  {
+    "selector": "0xdcd7dd2e",
+    "text_sig": "setKYCLevel(address,uint8)"
+  },
+  {
+    "selector": "0xd126dac4",
+    "text_sig": "cashout(address,address,uint256)"
+  },
+  {
+    "selector": "0xaad13b15",
+    "text_sig": "fight(address,string)"
+  },
+  {
+    "selector": "0x8d8f95d1",
+    "text_sig": "collectDrugs(address)"
+  },
+  {
+    "selector": "0x3edd1128",
+    "text_sig": "deposit(address,uint256,bool)"
+  },
+  {
+    "selector": "0x1f1e6c4e",
+    "text_sig": "createCollectible(uint256,uint256,address)"
+  },
+  {
+    "selector": "0xe1e2ccd2",
+    "text_sig": "sellDrugs()"
+  },
+  {
+    "selector": "0x5d4293a0",
+    "text_sig": "hatchPoohs(address)"
+  },
+  {
+    "selector": "0xd868c718",
+    "text_sig": "scheduleFight()"
+  },
+  {
+    "selector": "0xaf944fc7",
+    "text_sig": "getQueueLenght()"
+  },
+  {
+    "selector": "0x9dd3045b",
+    "text_sig": "TransferToken(address,uint256)"
+  },
+  {
+    "selector": "0x38eada1c",
+    "text_sig": "addAddress(address)"
+  },
+  {
+    "selector": "0x212ebbd6",
+    "text_sig": "addTokenLock(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x1698c7ff",
+    "text_sig": "removeOrc(address)"
+  },
+  {
+    "selector": "0x14db8c7d",
+    "text_sig": "getGladiatorPower(address)"
+  },
+  {
+    "selector": "0xbe760488",
+    "text_sig": "assign(address,uint256)"
+  },
+  {
+    "selector": "0x9bf08a06",
+    "text_sig": "joinArena()"
+  },
+  {
+    "selector": "0x4000aea0",
+    "text_sig": "transferAndCall(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x14b11651",
+    "text_sig": "setPoolAndAmount(address,uint256)"
+  },
+  {
+    "selector": "0xd6febde8",
+    "text_sig": "buy(uint256,uint256)"
+  },
+  {
+    "selector": "0xa2d83b5e",
+    "text_sig": "update(address,uint256)"
+  },
+  {
+    "selector": "0x8d8b1b88",
+    "text_sig": "mixGenes(uint256,uint256)"
+  },
+  {
+    "selector": "0x5a6ad1e1",
+    "text_sig": "multivestBuy(address,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0x9652713e",
+    "text_sig": "runSigned(uint40,uint256,address)"
+  },
+  {
+    "selector": "0xec8ac4d8",
+    "text_sig": "buyTokens(address)"
+  },
+  {
+    "selector": "0xc1d1faf3",
+    "text_sig": "createAuction(uint40,uint128,uint128,uint40,address)"
+  },
+  {
+    "selector": "0x7deb6025",
+    "text_sig": "buy(uint256,address)"
+  },
+  {
+    "selector": "0xf07c44c2",
+    "text_sig": "appropriate(uint256)"
+  },
+  {
+    "selector": "0xef11e18b",
+    "text_sig": "log_transfer(address,address,uint256)"
+  },
+  {
+    "selector": "0x693ec85e",
+    "text_sig": "get(string)"
+  },
+  {
+    "selector": "0x65599c72",
+    "text_sig": "batchAirDrop(address,address[],uint256)"
+  },
+  {
+    "selector": "0x624bd6c4",
+    "text_sig": "depositToken(address,uint16,uint256)"
+  },
+  {
+    "selector": "0xb6acd931",
+    "text_sig": "payDAPP(address,uint256,address)"
+  },
+  {
+    "selector": "0xa59ac6dd",
+    "text_sig": "buy(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x7f7de185",
+    "text_sig": "handleProductionDecrease(address,uint256)"
+  },
+  {
+    "selector": "0x773e1e84",
+    "text_sig": "fight(uint32,uint16)"
+  },
+  {
+    "selector": "0x2f9c1df6",
+    "text_sig": "createDeposit(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x1209b1f6",
+    "text_sig": "ticketPrice()"
+  },
+  {
+    "selector": "0xf37bdaac",
+    "text_sig": "transferSig(bytes32,uint256,address)"
+  },
+  {
+    "selector": "0x9c91ae20",
+    "text_sig": "getGeneration(uint40)"
+  },
+  {
+    "selector": "0x86ce0285",
+    "text_sig": "allocateTokens(address,uint256)"
+  },
+  {
+    "selector": "0x1cff79cd",
+    "text_sig": "execute(address,bytes)"
+  },
+  {
+    "selector": "0x0f3f53c1",
+    "text_sig": "dappsBonusCalc(address,uint256)"
+  },
+  {
+    "selector": "0x05ab421d",
+    "text_sig": "sendTokens(address,uint256)"
+  },
+  {
+    "selector": "0xb763150d",
+    "text_sig": "registerCustomer(address,address)"
+  },
+  {
+    "selector": "0xadf59f99",
+    "text_sig": "query(uint256,string,string)"
+  },
+  {
+    "selector": "0x66dc860a",
+    "text_sig": "getBreedingFee(uint40,uint40)"
+  },
+  {
+    "selector": "0x4a96712e",
+    "text_sig": "confirm(bytes32,address,uint256,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xc30bc5ef",
+    "text_sig": "breedWith(uint40,uint40)"
+  },
+  {
+    "selector": "0xbb35783b",
+    "text_sig": "move(address,address,uint256)"
+  },
+  {
+    "selector": "0xb7db7f0f",
+    "text_sig": "allowTransfer(address,address,address,uint256,bytes)"
+  },
+  {
+    "selector": "0xf751cd8f",
+    "text_sig": "drop()"
+  },
+  {
+    "selector": "0x5511f319",
+    "text_sig": "cancelledOrFilled(bytes32)"
+  },
+  {
+    "selector": "0x4420e486",
+    "text_sig": "register(address)"
+  },
+  {
+    "selector": "0x3f6b6f2e",
+    "text_sig": "Airdrop()"
+  },
+  {
+    "selector": "0x2e325020",
+    "text_sig": "getStage(uint256)"
+  },
+  {
+    "selector": "0x1a9caab9",
+    "text_sig": "createGen0(uint256)"
+  },
+  {
+    "selector": "0x16066e69",
+    "text_sig": "areAllTokensRegistered(address[])"
+  },
+  {
+    "selector": "0x00a16cab",
+    "text_sig": "checkCutoffsBatch(address[],bytes20[],uint256[])"
+  },
+  {
+    "selector": "0xe30443bc",
+    "text_sig": "setBalance(address,uint256)"
+  },
+  {
+    "selector": "0xdf1b817e",
+    "text_sig": "setupCutie(uint40,uint16)"
+  },
+  {
+    "selector": "0xca77ea25",
+    "text_sig": "createTokenByAtes(address,uint256,string)"
+  },
+  {
+    "selector": "0xa6472906",
+    "text_sig": "getAxie(uint256)"
+  },
+  {
+    "selector": "0x732606fc",
+    "text_sig": "getCooldownIndexCount()"
+  },
+  {
+    "selector": "0x6518ad22",
+    "text_sig": "placeETHBid(uint8)"
+  },
+  {
+    "selector": "0x5757dcdf",
+    "text_sig": "getCooldownIndexFromGeneration(uint16)"
+  },
+  {
+    "selector": "0x3fa615b0",
+    "text_sig": "minCap()"
+  },
+  {
+    "selector": "0x28619814",
+    "text_sig": "trade(uint256[],address[],bytes32[])"
+  },
+  {
+    "selector": "0x1af97fb7",
+    "text_sig": "getBabyGen(uint16,uint16)"
+  },
+  {
+    "selector": "0x06347def",
+    "text_sig": "getCooldownEndTimeFromIndex(uint16)"
+  },
+  {
+    "selector": "0xd9caed12",
+    "text_sig": "withdraw(address,address,uint256)"
+  },
+  {
+    "selector": "0xd47c0fb0",
+    "text_sig": "onIncome()"
+  },
+  {
+    "selector": "0xbb83dc2a",
+    "text_sig": "getVotes(address,address)"
+  },
+  {
+    "selector": "0xa4238d31",
+    "text_sig": "receiveBalanceUpdate(address)"
+  },
+  {
+    "selector": "0x91c05b0b",
+    "text_sig": "distribute(uint256)"
+  },
+  {
+    "selector": "0x83264100",
+    "text_sig": "setVotes(address,address,uint256)"
+  },
+  {
+    "selector": "0x76cab952",
+    "text_sig": "show_demurraged_balance(address)"
+  },
+  {
+    "selector": "0x64edfbf0",
+    "text_sig": "purchase()"
+  },
+  {
+    "selector": "0x4d798717",
+    "text_sig": "floorContracts(uint32)"
+  },
+  {
+    "selector": "0x1e279a37",
+    "text_sig": "get_balance(address)"
+  },
+  {
+    "selector": "0x065da698",
+    "text_sig": "createDutchAuction(address,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xe3643106",
+    "text_sig": "getLatest(uint256,uint256)"
+  },
+  {
+    "selector": "0x73b38101",
+    "text_sig": "wipe(bytes32,uint256)"
+  },
+  {
+    "selector": "0x03e1b3c6",
+    "text_sig": "sellAllAmountBuyEth(address,address,uint256,address,uint256)"
+  },
+  {
+    "selector": "0x01c543c2",
+    "text_sig": "claimOreOnlyFromAssetId(uint256)"
+  },
+  {
+    "selector": "0x01681a62",
+    "text_sig": "sweep(address)"
+  },
+  {
+    "selector": "0xf5db370f",
+    "text_sig": "setSanityRates(address[],uint256[])"
+  },
+  {
+    "selector": "0xefef39a1",
+    "text_sig": "purchase(uint256)"
+  },
+  {
+    "selector": "0x767fa723",
+    "text_sig": "getPresaleInfo()"
+  },
+  {
+    "selector": "0x69a5e902",
+    "text_sig": "multiAccessCall(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x57e5eea5",
+    "text_sig": "getCurrentBonus()"
+  },
+  {
+    "selector": "0x40e58ee5",
+    "text_sig": "cancel(uint256)"
+  },
+  {
+    "selector": "0x17dbe4f1",
+    "text_sig": "burnPassportToken(address,uint256)"
+  },
+  {
+    "selector": "0xa64f829a",
+    "text_sig": "addDungeonRewards(uint256,uint256)"
+  },
+  {
+    "selector": "0x91feea93",
+    "text_sig": "withdrawBoth(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x83f12fec",
+    "text_sig": "batchTransfer(address[],uint256)"
+  },
+  {
+    "selector": "0x7db5bd52",
+    "text_sig": "buy(uint32)"
+  },
+  {
+    "selector": "0x7c2da7aa",
+    "text_sig": "setValue(string,uint256)"
+  },
+  {
+    "selector": "0x2a8ade3a",
+    "text_sig": "TotalCapacity()"
+  },
+  {
+    "selector": "0x1f8d1d50",
+    "text_sig": "setTotal(uint256)"
+  },
+  {
+    "selector": "0x1f6b28bf",
+    "text_sig": "valueOf(string)"
+  },
+  {
+    "selector": "0x79c65068",
+    "text_sig": "mintToken(address,uint256)"
+  },
+  {
+    "selector": "0x73964787",
+    "text_sig": "batchAddCancelledOrFilled(bytes32[])"
+  },
+  {
+    "selector": "0x4390a4f8",
+    "text_sig": "batchTransferToken(address,address,address,uint8,bytes32[])"
+  },
+  {
+    "selector": "0xd1f276d3",
+    "text_sig": "releaseAgent()"
+  },
+  {
+    "selector": "0x949e8acd",
+    "text_sig": "myTokens()"
+  },
+  {
+    "selector": "0x042b5fed",
+    "text_sig": "placeBet(bytes32)"
+  },
+  {
+    "selector": "0xc2b303d0",
+    "text_sig": "placeSellOrder(uint64,uint256)"
+  },
+  {
+    "selector": "0xbbe42771",
+    "text_sig": "closeDeed(uint256)"
+  },
+  {
+    "selector": "0x956e958a",
+    "text_sig": "dungeons(uint256)"
+  },
+  {
+    "selector": "0x3ef5e445",
+    "text_sig": "subtract(uint256,uint256)"
+  },
+  {
+    "selector": "0x2917f162",
+    "text_sig": "getCooldownIndex(uint40)"
+  },
+  {
+    "selector": "0x2827d4ca",
+    "text_sig": "TokenSale(uint256)"
+  },
+  {
+    "selector": "0x23b3c771",
+    "text_sig": "getFreeShrimp()"
+  },
+  {
+    "selector": "0x1d833aae",
+    "text_sig": "drop(address,address[],uint256)"
+  },
+  {
+    "selector": "0x165c4a16",
+    "text_sig": "multiply(uint256,uint256)"
+  },
+  {
+    "selector": "0xb6cb3777",
+    "text_sig": "collectAnts(address)"
+  },
+  {
+    "selector": "0x7f8661a1",
+    "text_sig": "exit(uint256)"
+  },
+  {
+    "selector": "0x688dcfd7",
+    "text_sig": "setProofType(bytes1)"
+  },
+  {
+    "selector": "0x387787ed",
+    "text_sig": "setProperty(address,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xb65c2b40",
+    "text_sig": "incrementLastTokenId()"
+  },
+  {
+    "selector": "0x54605549",
+    "text_sig": "setCoinBalance(address,uint256,uint8,bool)"
+  },
+  {
+    "selector": "0x1998aeef",
+    "text_sig": "bid()"
+  },
+  {
+    "selector": "0xede8acdb",
+    "text_sig": "startAuction(bytes32)"
+  },
+  {
+    "selector": "0x9de8302f",
+    "text_sig": "createGen0Auction(uint256,uint128,uint128,uint40)"
+  },
+  {
+    "selector": "0x769edf6a",
+    "text_sig": "createHash(uint256,address)"
+  },
+  {
+    "selector": "0x3af0dbc1",
+    "text_sig": "contributionsOf(address)"
+  },
+  {
+    "selector": "0xad9d4ba3",
+    "text_sig": "depositEth(address)"
+  },
+  {
+    "selector": "0x9413f25c",
+    "text_sig": "distributeFees(address)"
+  },
+  {
+    "selector": "0x598647f8",
+    "text_sig": "bid(uint256,uint256)"
+  },
+  {
+    "selector": "0xef46e0ca",
+    "text_sig": "executeOrder(uint256,uint256)"
+  },
+  {
+    "selector": "0x6e4df96e",
+    "text_sig": "produceWine()"
+  },
+  {
+    "selector": "0x07ec4b42",
+    "text_sig": "unicornBreedingAddress()"
+  },
+  {
+    "selector": "0xfe542c9b",
+    "text_sig": "getProductOwner(uint256)"
+  },
+  {
+    "selector": "0x42e94c90",
+    "text_sig": "contributions(address)"
+  },
+  {
+    "selector": "0x267b6922",
+    "text_sig": "entries(bytes32)"
+  },
+  {
+    "selector": "0xe8d320e6",
+    "text_sig": "coinBalanceOf(address,uint8)"
+  },
+  {
+    "selector": "0xc955b514",
+    "text_sig": "addCancelled(bytes32,uint256)"
+  },
+  {
+    "selector": "0x51c8244a",
+    "text_sig": "updateExp(uint256,uint256)"
+  },
+  {
+    "selector": "0x26fed988",
+    "text_sig": "addCancelledOrFilled(bytes32,uint256)"
+  },
+  {
+    "selector": "0xd6f551e4",
+    "text_sig": "buyItem(uint64)"
+  },
+  {
+    "selector": "0x79ce9fac",
+    "text_sig": "transfer(bytes32,address)"
+  },
+  {
+    "selector": "0x648bf774",
+    "text_sig": "recover(address,address)"
+  },
+  {
+    "selector": "0x475a9fa9",
+    "text_sig": "issueTokens(address,uint256)"
+  },
+  {
+    "selector": "0x32921690",
+    "text_sig": "checkDepth(address,uint256)"
+  },
+  {
+    "selector": "0x21835af6",
+    "text_sig": "__dig(uint256)"
+  },
+  {
+    "selector": "0xce90a2cb",
+    "text_sig": "addReferee(address,address)"
+  },
+  {
+    "selector": "0xbf1fe420",
+    "text_sig": "setGasPrice(uint256)"
+  },
+  {
+    "selector": "0x797af627",
+    "text_sig": "confirm(bytes32)"
+  },
+  {
+    "selector": "0x5d3171d9",
+    "text_sig": "transferFromPrivileged(address,address,uint256)"
+  },
+  {
+    "selector": "0x4c123019",
+    "text_sig": "tokenFallback(address,address,uint256,bytes)"
+  },
+  {
+    "selector": "0xe931fa0c",
+    "text_sig": "setMonsterGene(uint64,uint256)"
+  },
+  {
+    "selector": "0xb12de559",
+    "text_sig": "invalidateOrdersBefore(address,uint256)"
+  },
+  {
+    "selector": "0xad8733ca",
+    "text_sig": "multisend(address,address[],uint256[])"
+  },
+  {
+    "selector": "0xa7b2bfc7",
+    "text_sig": "multyTransfer(address[],uint256[])"
+  },
+  {
+    "selector": "0x82ab890a",
+    "text_sig": "update(uint256)"
+  },
+  {
+    "selector": "0x5cc1ad7f",
+    "text_sig": "toTileId(uint8,uint8)"
+  },
+  {
+    "selector": "0x57cc5941",
+    "text_sig": "getTileClaimerAndBlockValue(uint16)"
+  },
+  {
+    "selector": "0x04d6878f",
+    "text_sig": "closeMicroWallet(uint256)"
+  },
+  {
+    "selector": "0xd87692d9",
+    "text_sig": "transferAllAndCall(address,bytes)"
+  },
+  {
+    "selector": "0x82ef351a",
+    "text_sig": "getTotalMonster()"
+  },
+  {
+    "selector": "0x58476a7a",
+    "text_sig": "mintForSale(address,uint256)"
+  },
+  {
+    "selector": "0x51f91066",
+    "text_sig": "tag()"
+  },
+  {
+    "selector": "0x4557a579",
+    "text_sig": "addWeapon(uint256,string,string,string,address)"
+  },
+  {
+    "selector": "0xf8b2cb4f",
+    "text_sig": "getBalance(address)"
+  },
+  {
+    "selector": "0xb8087ac0",
+    "text_sig": "goalMet()"
+  },
+  {
+    "selector": "0xa5cd184e",
+    "text_sig": "free(bytes32,uint256)"
+  },
+  {
+    "selector": "0x8a653c93",
+    "text_sig": "extGetLock(uint256)"
+  },
+  {
+    "selector": "0x36b69367",
+    "text_sig": "parentFees(address)"
+  },
+  {
+    "selector": "0x2f5e80c3",
+    "text_sig": "withdrawToken(address,uint16)"
+  },
+  {
+    "selector": "0xca05588a",
+    "text_sig": "setPricing(uint256,uint256)"
+  },
+  {
+    "selector": "0xc1756a2c",
+    "text_sig": "sendEther(address,uint256)"
+  },
+  {
+    "selector": "0x8de93222",
+    "text_sig": "purchase(address,uint256)"
+  },
+  {
+    "selector": "0x8d4777c8",
+    "text_sig": "claimGooDepositDividends(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x7dbedad5",
+    "text_sig": "createReward(uint256,uint256)"
+  },
+  {
+    "selector": "0x77fcb91d",
+    "text_sig": "forward(address,bool)"
+  },
+  {
+    "selector": "0x7004fb84",
+    "text_sig": "breedWith(uint256,uint256)"
+  },
+  {
+    "selector": "0x49a92910",
+    "text_sig": "setPlayer(address,uint64,uint64,uint64,uint64,uint64,uint64)"
+  },
+  {
+    "selector": "0x2c4e722e",
+    "text_sig": "rate()"
+  },
+  {
+    "selector": "0xeb246b64",
+    "text_sig": "sendAirdrop(address[],uint256)"
+  },
+  {
+    "selector": "0xac307773",
+    "text_sig": "claimFunds()"
+  },
+  {
+    "selector": "0x91318874",
+    "text_sig": "setRates(uint32,uint32)"
+  },
+  {
+    "selector": "0x4654b6e2",
+    "text_sig": "addMonsterObj(uint64,uint256,uint32,address,string,string)"
+  },
+  {
+    "selector": "0x3b478fc5",
+    "text_sig": "ethUsdRate()"
+  },
+  {
+    "selector": "0x358cfa25",
+    "text_sig": "setTotalEtherPool(uint256,uint8,bool)"
+  },
+  {
+    "selector": "0x00f3e717",
+    "text_sig": "mrate()"
+  },
+  {
+    "selector": "0xf6dfcff7",
+    "text_sig": "getCooldownEndTime(uint40)"
+  },
+  {
+    "selector": "0xe9b58225",
+    "text_sig": "extDestroyBot(uint256)"
+  },
+  {
+    "selector": "0xc4791421",
+    "text_sig": "changeCooldownEndTime(uint40,uint40)"
+  },
+  {
+    "selector": "0xc16c0851",
+    "text_sig": "miningOneSelf()"
+  },
+  {
+    "selector": "0x4e91db08",
+    "text_sig": "setBytes32(bytes32,bytes32)"
+  },
+  {
+    "selector": "0x35e64aaa",
+    "text_sig": "transferLand(int256,int256,address)"
+  },
+  {
+    "selector": "0x30184635",
+    "text_sig": "getMinCap(address)"
+  },
+  {
+    "selector": "0x1be19560",
+    "text_sig": "sweepToken(address)"
+  },
+  {
+    "selector": "0xd3fd9eba",
+    "text_sig": "transferAuction(address,address,uint256)"
+  },
+  {
+    "selector": "0x818d4b5d",
+    "text_sig": "owns(address,uint256)"
+  },
+  {
+    "selector": "0x37603132",
+    "text_sig": "RollLottery(uint64)"
+  },
+  {
+    "selector": "0x14131611",
+    "text_sig": "setChibiForFusion(uint256,uint256)"
+  },
+  {
+    "selector": "0x0b66f3f5",
+    "text_sig": "multisendToken(address,address[],uint256[])"
+  },
+  {
+    "selector": "0xddceafa9",
+    "text_sig": "recovery()"
+  },
+  {
+    "selector": "0xb25d4571",
+    "text_sig": "getUnitCoinProductionMultiplier(address,uint256)"
+  },
+  {
+    "selector": "0xb2570b1c",
+    "text_sig": "getBattleCardInfo(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x581c5ae6",
+    "text_sig": "invest(address,uint8)"
+  },
+  {
+    "selector": "0x4ab3ff5a",
+    "text_sig": "setUnitCoinProductionIncreases(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0xfcfff16f",
+    "text_sig": "open()"
+  },
+  {
+    "selector": "0xe74730a1",
+    "text_sig": "setUint8(bytes32,uint8)"
+  },
+  {
+    "selector": "0xd0699c98",
+    "text_sig": "calcFees(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xb6136dca",
+    "text_sig": "alt()"
+  },
+  {
+    "selector": "0x975d080c",
+    "text_sig": "transferAll(address[],uint256[])"
+  },
+  {
+    "selector": "0x8f929c4a",
+    "text_sig": "createAccount(bytes16,string)"
+  },
+  {
+    "selector": "0x8a0e5a75",
+    "text_sig": "addToPublicSaleWhitelist(address[])"
+  },
+  {
+    "selector": "0x6a61e5fc",
+    "text_sig": "setTokenPrice(uint256)"
+  },
+  {
+    "selector": "0x677ba3d3",
+    "text_sig": "onTokenTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0x52180208",
+    "text_sig": "take(address,uint256)"
+  },
+  {
+    "selector": "0x2dfd8ffe",
+    "text_sig": "isDead(uint256)"
+  },
+  {
+    "selector": "0x21a78f68",
+    "text_sig": "ref()"
+  },
+  {
+    "selector": "0xc2f0d93f",
+    "text_sig": "icoAbandoned()"
+  },
+  {
+    "selector": "0xb9a45aac",
+    "text_sig": "whitelistAddress(address,bool)"
+  },
+  {
+    "selector": "0xce699a41",
+    "text_sig": "releaseVestedTokens(address)"
+  },
+  {
+    "selector": "0x9a7614ee",
+    "text_sig": "acceptEther(uint8)"
+  },
+  {
+    "selector": "0x7a99ba4f",
+    "text_sig": "investETH(address)"
+  },
+  {
+    "selector": "0x687c4fa7",
+    "text_sig": "setOwnership(uint256,address)"
+  },
+  {
+    "selector": "0x2d580ef6",
+    "text_sig": "add(address,bytes32)"
+  },
+  {
+    "selector": "0xe5a7b51f",
+    "text_sig": "parentChange(address,uint256)"
+  },
+  {
+    "selector": "0xdfafe10f",
+    "text_sig": "addParticipant(address)"
+  },
+  {
+    "selector": "0xde48ff52",
+    "text_sig": "updateState(int128,uint128,uint8,bytes32,bytes32,bool)"
+  },
+  {
+    "selector": "0xc0f40163",
+    "text_sig": "issueFTT(address,uint256)"
+  },
+  {
+    "selector": "0xb6a9ed31",
+    "text_sig": "sellAnts()"
+  },
+  {
+    "selector": "0xb6a5d7de",
+    "text_sig": "authorize(address)"
+  },
+  {
+    "selector": "0xb60d4288",
+    "text_sig": "fund()"
+  },
+  {
+    "selector": "0xb15a3647",
+    "text_sig": "trade(uint256,uint256[3],bytes32,bytes32,uint8)"
+  },
+  {
+    "selector": "0x9ee679e8",
+    "text_sig": "requestWithdrawal(uint256)"
+  },
+  {
+    "selector": "0x9607610a",
+    "text_sig": "withdrawFor(address,uint256,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0x7dc0d1d0",
+    "text_sig": "oracle()"
+  },
+  {
+    "selector": "0x706f6937",
+    "text_sig": "airdropTokens(address[],uint256[])"
+  },
+  {
+    "selector": "0x68955fb1",
+    "text_sig": "icoPhase()"
+  },
+  {
+    "selector": "0x520e7b0e",
+    "text_sig": "offer_energy(uint32,uint32,uint64,uint64)"
+  },
+  {
+    "selector": "0xf31dec5a",
+    "text_sig": "getCastleBasicInfoById(uint32)"
+  },
+  {
+    "selector": "0xb6fe87fb",
+    "text_sig": "remoteBettingClose()"
+  },
+  {
+    "selector": "0x797e2aec",
+    "text_sig": "addCharacters(uint8)"
+  },
+  {
+    "selector": "0x748538d9",
+    "text_sig": "isTokenEnabled(address)"
+  },
+  {
+    "selector": "0x30e1f16f",
+    "text_sig": "claimDividendAll()"
+  },
+  {
+    "selector": "0xfc4d20f5",
+    "text_sig": "addMonsterObj(uint32,address,string)"
+  },
+  {
+    "selector": "0xe2f8b790",
+    "text_sig": "buyBlueStarEgg(uint256,uint16)"
+  },
+  {
+    "selector": "0xdb00b848",
+    "text_sig": "_performGeneric(bytes,address)"
+  },
+  {
+    "selector": "0xd73dd623",
+    "text_sig": "increaseApproval(address,uint256)"
+  },
+  {
+    "selector": "0xa22cb465",
+    "text_sig": "setApprovalForAll(address,bool)"
+  },
+  {
+    "selector": "0x859b97fe",
+    "text_sig": "cancelAuction(address,uint256)"
+  },
+  {
+    "selector": "0x81d434e9",
+    "text_sig": "transferToICAP(string,uint256)"
+  },
+  {
+    "selector": "0x69ea1771",
+    "text_sig": "updateRate(uint256)"
+  },
+  {
+    "selector": "0x47cf8971",
+    "text_sig": "attackCastle(uint32,uint64,uint64,uint64,uint64,uint64,uint64)"
+  },
+  {
+    "selector": "0x42958b54",
+    "text_sig": "issue(address[],uint256)"
+  },
+  {
+    "selector": "0xb2237ba3",
+    "text_sig": "setRatio(uint256)"
+  },
+  {
+    "selector": "0xad4b558c",
+    "text_sig": "monsterIndexToOwner(uint256)"
+  },
+  {
+    "selector": "0x8d6c58ab",
+    "text_sig": "isTransferToICAPAllowed(address,bytes32,uint256)"
+  },
+  {
+    "selector": "0x6869b20e",
+    "text_sig": "saveToken(uint256)"
+  },
+  {
+    "selector": "0x3f48ae1a",
+    "text_sig": "initInsecure(address)"
+  },
+  {
+    "selector": "0x32214874",
+    "text_sig": "verifyAmount(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x2d8aa855",
+    "text_sig": "playerInput(address)"
+  },
+  {
+    "selector": "0x0230a07c",
+    "text_sig": "releaseDeed(bytes32)"
+  },
+  {
+    "selector": "0xf83d08ba",
+    "text_sig": "lock()"
+  },
+  {
+    "selector": "0xc204642c",
+    "text_sig": "airdrop(address[],uint256)"
+  },
+  {
+    "selector": "0xbf8554ff",
+    "text_sig": "fireOnOfferingChanged(uint256,bytes32,uint256[])"
+  },
+  {
+    "selector": "0xb2e6ceeb",
+    "text_sig": "takeOwnership(uint256)"
+  },
+  {
+    "selector": "0x8bc7fa9c",
+    "text_sig": "getCrop(uint256)"
+  },
+  {
+    "selector": "0x2efd5632",
+    "text_sig": "candyLandAddress()"
+  },
+  {
+    "selector": "0x1072cbea",
+    "text_sig": "transferToken(address,uint256)"
+  },
+  {
+    "selector": "0xfa99d7ae",
+    "text_sig": "enterDungeon(uint256[4],uint32)"
+  },
+  {
+    "selector": "0xe156c593",
+    "text_sig": "getProgressOfAddressAndId(address,uint32)"
+  },
+  {
+    "selector": "0xd3dd9a18",
+    "text_sig": "addManyAuthorizeToWhitelist(address[])"
+  },
+  {
+    "selector": "0xce3f865f",
+    "text_sig": "collect(uint256)"
+  },
+  {
+    "selector": "0xac35caee",
+    "text_sig": "transferWithReference(address,uint256,string)"
+  },
+  {
+    "selector": "0xa3b9b8d1",
+    "text_sig": "receivePaymentForOraclize()"
+  },
+  {
+    "selector": "0x8fb25f82",
+    "text_sig": "sellCells()"
+  },
+  {
+    "selector": "0x893bb0bf",
+    "text_sig": "getExtra(uint256)"
+  },
+  {
+    "selector": "0x730bdc96",
+    "text_sig": "getHeroDetails(uint256)"
+  },
+  {
+    "selector": "0x70876c98",
+    "text_sig": "purchase(uint256,uint256)"
+  },
+  {
+    "selector": "0x66479c08",
+    "text_sig": "payOraclize(uint256)"
+  },
+  {
+    "selector": "0x64dd891a",
+    "text_sig": "attack(uint256)"
+  },
+  {
+    "selector": "0x52346412",
+    "text_sig": "transfers(address[],uint256[])"
+  },
+  {
+    "selector": "0x3bbd2235",
+    "text_sig": "commitVote(bytes32,bytes32)"
+  },
+  {
+    "selector": "0x24b1babf",
+    "text_sig": "claimEarnings(uint256)"
+  },
+  {
+    "selector": "0x1e688c14",
+    "text_sig": "fulfillBounty(uint256,string)"
+  },
+  {
+    "selector": "0x1e466eee",
+    "text_sig": "triggerVolcanoEruption()"
+  },
+  {
+    "selector": "0x0d1fce42",
+    "text_sig": "getBankroll()"
+  },
+  {
+    "selector": "0x081812fc",
+    "text_sig": "getApproved(uint256)"
+  },
+  {
+    "selector": "0x07da68f5",
+    "text_sig": "stop()"
+  },
+  {
+    "selector": "0xc4d66de8",
+    "text_sig": "initialize(address)"
+  },
+  {
+    "selector": "0xc2bc2efc",
+    "text_sig": "get(address)"
+  },
+  {
+    "selector": "0x9abd3572",
+    "text_sig": "claimDividend(uint256)"
+  },
+  {
+    "selector": "0x91e078bb",
+    "text_sig": "startAuction(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x0a9ffdb7",
+    "text_sig": "allocateToken(address,uint256)"
+  },
+  {
+    "selector": "0x04433bbc",
+    "text_sig": "getContractAddress(string)"
+  },
+  {
+    "selector": "0x01d43945",
+    "text_sig": "getCastleObjInfo(uint32)"
+  },
+  {
+    "selector": "0xe6a9026b",
+    "text_sig": "submitTransaction(address,uint256,string,bytes)"
+  },
+  {
+    "selector": "0xd1f69902",
+    "text_sig": "getHeroClassId(uint256)"
+  },
+  {
+    "selector": "0xbb583f19",
+    "text_sig": "getCastleWinLose(uint32)"
+  },
+  {
+    "selector": "0xb44848f5",
+    "text_sig": "growToAdultAxie(uint256)"
+  },
+  {
+    "selector": "0xa4fd6f56",
+    "text_sig": "isEnded()"
+  },
+  {
+    "selector": "0xa0712d68",
+    "text_sig": "mint(uint256)"
+  },
+  {
+    "selector": "0x94b67b1c",
+    "text_sig": "getWeakenedDefensePower(uint256)"
+  },
+  {
+    "selector": "0x8fa54b81",
+    "text_sig": "setUserBattleValue(address,uint256)"
+  },
+  {
+    "selector": "0x7f4da132",
+    "text_sig": "goldFee()"
+  },
+  {
+    "selector": "0x7d9c68f7",
+    "text_sig": "getUserBattleValue(address)"
+  },
+  {
+    "selector": "0x7b12e074",
+    "text_sig": "getSiringWithId(uint256)"
+  },
+  {
+    "selector": "0x76390144",
+    "text_sig": "getCorrectedStats(uint256)"
+  },
+  {
+    "selector": "0x75e39f26",
+    "text_sig": "getHeroInfo(uint256)"
+  },
+  {
+    "selector": "0x6ccd5cbe",
+    "text_sig": "getClassInfo(uint32)"
+  },
+  {
+    "selector": "0x6c0d2c8b",
+    "text_sig": "getHeroPower(uint256,uint256)"
+  },
+  {
+    "selector": "0x6386c1c7",
+    "text_sig": "getUserInfo(address)"
+  },
+  {
+    "selector": "0x630cea8e",
+    "text_sig": "submitSignature(bytes,bytes)"
+  },
+  {
+    "selector": "0x62e61a63",
+    "text_sig": "setAuction(uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x61b69abd",
+    "text_sig": "createProxy(address,bytes)"
+  },
+  {
+    "selector": "0x5b0fc9c3",
+    "text_sig": "setOwner(bytes32,address)"
+  },
+  {
+    "selector": "0x431f21da",
+    "text_sig": "createAuction(uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x3d6a71e4",
+    "text_sig": "endedAt()"
+  },
+  {
+    "selector": "0x284fb363",
+    "text_sig": "deploy(uint256,uint32,uint256)"
+  },
+  {
+    "selector": "0x1debbe2f",
+    "text_sig": "addExp(uint256,uint32)"
+  },
+  {
+    "selector": "0x00119f34",
+    "text_sig": "getObjBattleInfo(uint64)"
+  },
+  {
+    "selector": "0xee08388e",
+    "text_sig": "parentOf(address)"
+  },
+  {
+    "selector": "0xea70bdad",
+    "text_sig": "attackTileForExistingUser(uint16,uint256,bool,bool)"
+  },
+  {
+    "selector": "0xe7bf7dfc",
+    "text_sig": "getProductPrice(uint256)"
+  },
+  {
+    "selector": "0xd6d0be9f",
+    "text_sig": "getProductData(uint256)"
+  },
+  {
+    "selector": "0xd2e1d201",
+    "text_sig": "setstring(string,string)"
+  },
+  {
+    "selector": "0xc7ceac99",
+    "text_sig": "calculateBattleBoost(uint16,address,address)"
+  },
+  {
+    "selector": "0xa7f1b77a",
+    "text_sig": "addReferralDeposit(address,uint256)"
+  },
+  {
+    "selector": "0xa26e1186",
+    "text_sig": "deposit(string)"
+  },
+  {
+    "selector": "0x94a0b878",
+    "text_sig": "fromTileId(uint16)"
+  },
+  {
+    "selector": "0x8b50cd34",
+    "text_sig": "attackTile(address,uint16,uint256,bool,bool)"
+  },
+  {
+    "selector": "0x6f75b00c",
+    "text_sig": "removeBuyer(address)"
+  },
+  {
+    "selector": "0x570aea8a",
+    "text_sig": "getTotalProducts()"
+  },
+  {
+    "selector": "0x42c71f1d",
+    "text_sig": "getApp(bytes32)"
+  },
+  {
+    "selector": "0x145f8ba2",
+    "text_sig": "getPainting(uint256)"
+  },
+  {
+    "selector": "0xfbe00e8e",
+    "text_sig": "receiveEtherFromGameAddress()"
+  },
+  {
+    "selector": "0xca1d209d",
+    "text_sig": "fund(uint256)"
+  },
+  {
+    "selector": "0xc5487661",
+    "text_sig": "proxyTransferToICAPWithReference(bytes32,uint256,string)"
+  },
+  {
+    "selector": "0xbecd0580",
+    "text_sig": "payEtherToWinner(uint256,address)"
+  },
+  {
+    "selector": "0xae39279f",
+    "text_sig": "sendFee()"
+  },
+  {
+    "selector": "0x9057f289",
+    "text_sig": "createListing(address,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x74e7493b",
+    "text_sig": "changeRate(uint256)"
+  },
+  {
+    "selector": "0x2c84bfa6",
+    "text_sig": "generate(address,bytes)"
+  },
+  {
+    "selector": "0x20e9aac3",
+    "text_sig": "playerTimestamp(address)"
+  },
+  {
+    "selector": "0x07957360",
+    "text_sig": "verifyOwnership(address,address)"
+  },
+  {
+    "selector": "0xfebe4909",
+    "text_sig": "approve(uint256,address)"
+  },
+  {
+    "selector": "0xc73c2a45",
+    "text_sig": "WriteBible(uint16,uint16,uint16,uint16,string)"
+  },
+  {
+    "selector": "0xc62b0795",
+    "text_sig": "isAllowed(address,address,address)"
+  },
+  {
+    "selector": "0xafc81953",
+    "text_sig": "createGame(bytes32,uint256,uint256,bytes32,bytes)"
+  },
+  {
+    "selector": "0x7c435e6f",
+    "text_sig": "updateEursPerEth(uint256)"
+  },
+  {
+    "selector": "0x75b599c0",
+    "text_sig": "changeFashionAttr(uint256,uint16[4],uint16[4],uint16)"
+  },
+  {
+    "selector": "0x73c4726b",
+    "text_sig": "minHouseStake(uint256)"
+  },
+  {
+    "selector": "0x527f4ff1",
+    "text_sig": "setTransferAddressUser(address,address)"
+  },
+  {
+    "selector": "0x176d0780",
+    "text_sig": "createMicroWallet(uint256,uint256)"
+  },
+  {
+    "selector": "0xc4270574",
+    "text_sig": "userRollDice(uint256,address)"
+  },
+  {
+    "selector": "0xb6206e67",
+    "text_sig": "unitBattlePLATCost(uint256)"
+  },
+  {
+    "selector": "0xb5c83592",
+    "text_sig": "offerExists(uint256)"
+  },
+  {
+    "selector": "0xae67b4c3",
+    "text_sig": "evolveAxie(uint256,uint256)"
+  },
+  {
+    "selector": "0xae012367",
+    "text_sig": "withdrawTopForTeam(address,uint256)"
+  },
+  {
+    "selector": "0xa8aeecd9",
+    "text_sig": "getCostForBattleCards(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x9613bc90",
+    "text_sig": "isEvolvementAllowed(uint256,uint256)"
+  },
+  {
+    "selector": "0x73ad468a",
+    "text_sig": "maxBalance()"
+  },
+  {
+    "selector": "0x7255d729",
+    "text_sig": "createGame()"
+  },
+  {
+    "selector": "0x5fee0aac",
+    "text_sig": "giveBattleBonus(address,uint256)"
+  },
+  {
+    "selector": "0x5dcc6dbc",
+    "text_sig": "spawnAxie(uint256,address)"
+  },
+  {
+    "selector": "0x56e3df97",
+    "text_sig": "getGeneration(uint256)"
+  },
+  {
+    "selector": "0x43214675",
+    "text_sig": "setMintAgent(address,bool)"
+  },
+  {
+    "selector": "0x101f13e2",
+    "text_sig": "verifyProof(bytes,bytes32,bytes32)"
+  },
+  {
+    "selector": "0x0e972421",
+    "text_sig": "isSpawningAllowed(uint256,address)"
+  },
+  {
+    "selector": "0x0e5c011e",
+    "text_sig": "harvest(address)"
+  },
+  {
+    "selector": "0x000000c7",
+    "text_sig": "lend_during(uint256,uint256,uint64,uint32)"
+  },
+  {
+    "selector": "0xf080e0bf",
+    "text_sig": "cancelDutchAuction(address,uint256)"
+  },
+  {
+    "selector": "0xc97c1505",
+    "text_sig": "readRate(string)"
+  },
+  {
+    "selector": "0xb78d27dc",
+    "text_sig": "bond(uint256,address)"
+  },
+  {
+    "selector": "0xaad3ec96",
+    "text_sig": "claim(address,uint256)"
+  },
+  {
+    "selector": "0xa40156b8",
+    "text_sig": "incrementProgressOfAddressAndId(address,uint32)"
+  },
+  {
+    "selector": "0x9ed26fe8",
+    "text_sig": "setEtherInUSD(string)"
+  },
+  {
+    "selector": "0x56f2fc89",
+    "text_sig": "deployIdeas(address)"
+  },
+  {
+    "selector": "0x4a4666c1",
+    "text_sig": "addAuthorizer(address)"
+  },
+  {
+    "selector": "0x3fc0234d",
+    "text_sig": "train1(uint256,uint256)"
+  },
+  {
+    "selector": "0x2389a290",
+    "text_sig": "joinGame(address)"
+  },
+  {
+    "selector": "0x12243b67",
+    "text_sig": "deletePlayer(address)"
+  },
+  {
+    "selector": "0xf3f11bc3",
+    "text_sig": "purchaseToken(uint256,address)"
+  },
+  {
+    "selector": "0xebe7e852",
+    "text_sig": "calculateResult(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xbabcc539",
+    "text_sig": "isAllowed(address)"
+  },
+  {
+    "selector": "0xaeb94f48",
+    "text_sig": "getFreePacifist()"
+  },
+  {
+    "selector": "0xae81f51b",
+    "text_sig": "mintTokens2(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x89749adb",
+    "text_sig": "BuyTokens(uint256)"
+  },
+  {
+    "selector": "0x7fc1c035",
+    "text_sig": "sendTokensTo(address,uint256)"
+  },
+  {
+    "selector": "0x641bbdfe",
+    "text_sig": "claim(uint256,uint8,bytes32,bytes32,uint8)"
+  },
+  {
+    "selector": "0x5be1d5c3",
+    "text_sig": "buyBlueStarEgg(address,uint256,uint16)"
+  },
+  {
+    "selector": "0x590e1ae3",
+    "text_sig": "refund()"
+  },
+  {
+    "selector": "0x5550e4f3",
+    "text_sig": "blackBoxAddress()"
+  },
+  {
+    "selector": "0x521eb273",
+    "text_sig": "wallet()"
+  },
+  {
+    "selector": "0x44dc4dec",
+    "text_sig": "registerForRace(uint256)"
+  },
+  {
+    "selector": "0x3c4293d8",
+    "text_sig": "refund_my_ether()"
+  },
+  {
+    "selector": "0x38e998a7",
+    "text_sig": "buyLand(int32,int32)"
+  },
+  {
+    "selector": "0x37e246ad",
+    "text_sig": "isOnAuction(uint256)"
+  },
+  {
+    "selector": "0x3270f753",
+    "text_sig": "depositHouseTakeout()"
+  },
+  {
+    "selector": "0x316524e5",
+    "text_sig": "setGene(uint256,bytes)"
+  },
+  {
+    "selector": "0x26699576",
+    "text_sig": "playSystem(uint256,address)"
+  },
+  {
+    "selector": "0x20ea8d86",
+    "text_sig": "revokeConfirmation(uint256)"
+  },
+  {
+    "selector": "0x1d0136a6",
+    "text_sig": "getAccountLock(address)"
+  },
+  {
+    "selector": "0x0a3b0a4f",
+    "text_sig": "add(address)"
+  },
+  {
+    "selector": "0xd0def521",
+    "text_sig": "mint(address,string)"
+  },
+  {
+    "selector": "0xb3f05b97",
+    "text_sig": "finalized()"
+  },
+  {
+    "selector": "0x64ef212e",
+    "text_sig": "proxyTransferWithReference(address,uint256,bytes32,string)"
+  },
+  {
+    "selector": "0x55afee43",
+    "text_sig": "validateKYC(address,bool)"
+  },
+  {
+    "selector": "0x3fdb372a",
+    "text_sig": "buildWinery()"
+  },
+  {
+    "selector": "0x2f54bf6e",
+    "text_sig": "isOwner(address)"
+  },
+  {
+    "selector": "0x299cdc9d",
+    "text_sig": "changeEtherCost(uint256)"
+  },
+  {
+    "selector": "0x24d7806c",
+    "text_sig": "isAdmin(address)"
+  },
+  {
+    "selector": "0x23e5d13c",
+    "text_sig": "declareWinner(address,bool)"
+  },
+  {
+    "selector": "0x1aa3a008",
+    "text_sig": "register()"
+  },
+  {
+    "selector": "0xf3701da2",
+    "text_sig": "build(address)"
+  },
+  {
+    "selector": "0xf2653966",
+    "text_sig": "createReleaseAuction(uint256,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xd3f8cc95",
+    "text_sig": "exhaustAfterFusion(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x902a83cd",
+    "text_sig": "addReleaseAuction(uint256,uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x8d4e4083",
+    "text_sig": "isFinalized()"
+  },
+  {
+    "selector": "0x8185402b",
+    "text_sig": "buyAllAmount(address,uint256,address,uint256)"
+  },
+  {
+    "selector": "0x783370b5",
+    "text_sig": "setEditionLimits(uint256,uint8,uint8,uint8)"
+  },
+  {
+    "selector": "0x71ced69d",
+    "text_sig": "mintNewDNC(address,uint256)"
+  },
+  {
+    "selector": "0x53a04b05",
+    "text_sig": "play(uint8)"
+  },
+  {
+    "selector": "0x474da79a",
+    "text_sig": "contracts(uint256)"
+  },
+  {
+    "selector": "0x055ee253",
+    "text_sig": "claim_reward()"
+  },
+  {
+    "selector": "0xfda08958",
+    "text_sig": "isServer(address)"
+  },
+  {
+    "selector": "0xba91d87b",
+    "text_sig": "mintForWorker(address,uint256)"
+  },
+  {
+    "selector": "0xb440f7ff",
+    "text_sig": "setInterestor(address,uint256,uint256)"
+  },
+  {
+    "selector": "0xa9cc4718",
+    "text_sig": "fail()"
+  },
+  {
+    "selector": "0x9bf6eb60",
+    "text_sig": "mintTokensExternal(address,uint256)"
+  },
+  {
+    "selector": "0x505fb46c",
+    "text_sig": "add(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x45977d03",
+    "text_sig": "upgrade(uint256)"
+  },
+  {
+    "selector": "0x3d944953",
+    "text_sig": "withdrawCollectedResources()"
+  },
+  {
+    "selector": "0x3c1b87f9",
+    "text_sig": "setSettings(uint256,uint64,uint64,uint256)"
+  },
+  {
+    "selector": "0xf12d394f",
+    "text_sig": "execute(uint8[],bytes32[],bytes32[],address,uint256,bytes)"
+  },
+  {
+    "selector": "0x9cfad128",
+    "text_sig": "calculateFee(address,bool,bool,uint256,uint256)"
+  },
+  {
+    "selector": "0x87d79f8a",
+    "text_sig": "buyIceDrangon()"
+  },
+  {
+    "selector": "0x7b25de45",
+    "text_sig": "isNewToken()"
+  },
+  {
+    "selector": "0x753e88e5",
+    "text_sig": "upgradeFrom(address,uint256)"
+  },
+  {
+    "selector": "0x71c74e17",
+    "text_sig": "onlyOwner(address)"
+  },
+  {
+    "selector": "0x256fa241",
+    "text_sig": "distributeTokens(address[],uint256)"
+  },
+  {
+    "selector": "0x13e7c9d8",
+    "text_sig": "operators(address)"
+  },
+  {
+    "selector": "0x0c9fcec9",
+    "text_sig": "setApproval(address,address,uint256)"
+  },
+  {
+    "selector": "0xee34c6ad",
+    "text_sig": "hybridizationExists(uint256)"
+  },
+  {
+    "selector": "0xcbde2ff0",
+    "text_sig": "isUnfreezed(uint256)"
+  },
+  {
+    "selector": "0x9f8a13d7",
+    "text_sig": "isActive(address)"
+  },
+  {
+    "selector": "0x827f32c0",
+    "text_sig": "generateTokens(address,uint256)"
+  },
+  {
+    "selector": "0x7b9417c8",
+    "text_sig": "addAddressToWhitelist(address)"
+  },
+  {
+    "selector": "0x67220fd7",
+    "text_sig": "adminClaimAirdropMultiple(address[],uint256)"
+  },
+  {
+    "selector": "0x4769ed8f",
+    "text_sig": "buyFromRC(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x29daf3ce",
+    "text_sig": "create(bytes32,address,address,uint256)"
+  },
+  {
+    "selector": "0x10a6fdc2",
+    "text_sig": "updateEtherPrice(uint256,uint256)"
+  },
+  {
+    "selector": "0x0ecda113",
+    "text_sig": "freezeEndTime(uint256)"
+  },
+  {
+    "selector": "0xf4347c85",
+    "text_sig": "setUnitDefenseIncreases(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0xe3b61135",
+    "text_sig": "reinvestProfit()"
+  },
+  {
+    "selector": "0xdd1b89c6",
+    "text_sig": "freezeExists(uint256)"
+  },
+  {
+    "selector": "0xdb0dd71e",
+    "text_sig": "addAbility(string,bool,uint8,uint8,uint8,uint256,uint256)"
+  },
+  {
+    "selector": "0xc868a569",
+    "text_sig": "canBreed(uint40,uint256,uint40,uint256)"
+  },
+  {
+    "selector": "0xb3204b8b",
+    "text_sig": "setParent(address,address)"
+  },
+  {
+    "selector": "0xb31d61b0",
+    "text_sig": "whitelistAddress(address[])"
+  },
+  {
+    "selector": "0x9c1f020a",
+    "text_sig": "sendCrowdsaleTokens(address,uint256)"
+  },
+  {
+    "selector": "0x98c9faac",
+    "text_sig": "cancelActiveAuction(uint40)"
+  },
+  {
+    "selector": "0x91256ed0",
+    "text_sig": "freezeMustCalculate(uint256)"
+  },
+  {
+    "selector": "0x8a6bc85a",
+    "text_sig": "getInterestor(address)"
+  },
+  {
+    "selector": "0x7773c36e",
+    "text_sig": "createResource(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x6f4c6443",
+    "text_sig": "invite(address,address)"
+  },
+  {
+    "selector": "0x614984d1",
+    "text_sig": "getUnicornGenByte(uint256,uint256)"
+  },
+  {
+    "selector": "0x611efc09",
+    "text_sig": "sale(address,uint256)"
+  },
+  {
+    "selector": "0x3bf30f85",
+    "text_sig": "execute(address[],bytes)"
+  },
+  {
+    "selector": "0x2f54a61e",
+    "text_sig": "setClaimerForTile(uint16,address)"
+  },
+  {
+    "selector": "0x21bc9a55",
+    "text_sig": "buyTokens(address,address)"
+  },
+  {
+    "selector": "0x0ce90ec2",
+    "text_sig": "levelUp(uint256)"
+  },
+  {
+    "selector": "0xf8b608a1",
+    "text_sig": "addTournamentContender(address,uint256[])"
+  },
+  {
+    "selector": "0xf7fb0a4b",
+    "text_sig": "AddPlayers(address)"
+  },
+  {
+    "selector": "0xf3fbad25",
+    "text_sig": "assignResourceChecksumPair(uint256,uint256)"
+  },
+  {
+    "selector": "0xf09dd7c6",
+    "text_sig": "withdrawAffiliateCommision()"
+  },
+  {
+    "selector": "0xe50278a6",
+    "text_sig": "sellAllAmountPayEth(address,address,address,uint256)"
+  },
+  {
+    "selector": "0xdd49756e",
+    "text_sig": "depositTokens(uint256)"
+  },
+  {
+    "selector": "0xd70cf105",
+    "text_sig": "moveBalance(address,address,uint256)"
+  },
+  {
+    "selector": "0xb1e35242",
+    "text_sig": "getMeOutOfHere()"
+  },
+  {
+    "selector": "0x8b147245",
+    "text_sig": "update(bytes32)"
+  },
+  {
+    "selector": "0x8119c065",
+    "text_sig": "swap()"
+  },
+  {
+    "selector": "0x66552e15",
+    "text_sig": "addVestingForBeneficiaries(address[],uint256[])"
+  },
+  {
+    "selector": "0x63fd91dc",
+    "text_sig": "signUpForTournament(uint256[])"
+  },
+  {
+    "selector": "0x5eddd157",
+    "text_sig": "claim(uint256,uint256,bytes)"
+  },
+  {
+    "selector": "0x4bb278f3",
+    "text_sig": "finalize()"
+  },
+  {
+    "selector": "0x41099135",
+    "text_sig": "mintTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0x3cf2eb85",
+    "text_sig": "dispossess(address,uint256)"
+  },
+  {
+    "selector": "0x3a38b90f",
+    "text_sig": "fusionChibis(uint256,uint256,uint256,string,string,uint8)"
+  },
+  {
+    "selector": "0x386bc05a",
+    "text_sig": "donate(address,address,uint256)"
+  },
+  {
+    "selector": "0x2f745c59",
+    "text_sig": "tokenOfOwnerByIndex(address,uint256)"
+  },
+  {
+    "selector": "0x24abfc02",
+    "text_sig": "getTournamentThresholdFee()"
+  },
+  {
+    "selector": "0x1befcbaf",
+    "text_sig": "buyRareEgg(uint8,uint256,address)"
+  },
+  {
+    "selector": "0x18836994",
+    "text_sig": "get_allowance(address,address)"
+  },
+  {
+    "selector": "0x0d02369b",
+    "text_sig": "takeSellOrder(address,uint256,uint256,address)"
+  },
+  {
+    "selector": "0x0b3464c3",
+    "text_sig": "activeHeroGenome(address)"
+  },
+  {
+    "selector": "0x0121b93f",
+    "text_sig": "vote(uint256)"
+  },
+  {
+    "selector": "0xfe562ee6",
+    "text_sig": "moveBlockValue(address,uint8,uint8,uint8,uint8,uint256)"
+  },
+  {
+    "selector": "0xfdf8e11c",
+    "text_sig": "getTotalAngels()"
+  },
+  {
+    "selector": "0xf5d82b6b",
+    "text_sig": "add(address,uint256)"
+  },
+  {
+    "selector": "0xf01de8c3",
+    "text_sig": "getNextBattleTime(uint64)"
+  },
+  {
+    "selector": "0xea21c6be",
+    "text_sig": "find_and_or_register_user(address,address)"
+  },
+  {
+    "selector": "0xe4779d73",
+    "text_sig": "register_user(address)"
+  },
+  {
+    "selector": "0xde35be81",
+    "text_sig": "submitSellOrder(bytes32,uint256,uint256)"
+  },
+  {
+    "selector": "0xd8b964e6",
+    "text_sig": "approved(address)"
+  },
+  {
+    "selector": "0xcc4bf6a3",
+    "text_sig": "miningTen()"
+  },
+  {
+    "selector": "0xbff10815",
+    "text_sig": "deleteOffer(uint16)"
+  },
+  {
+    "selector": "0xbdc963d8",
+    "text_sig": "getUIntValue(bytes32)"
+  },
+  {
+    "selector": "0xa540db73",
+    "text_sig": "triggerCooldown(uint256)"
+  },
+  {
+    "selector": "0xa4a4c224",
+    "text_sig": "setAngelLastBattleTime(uint64)"
+  },
+  {
+    "selector": "0x9ea69541",
+    "text_sig": "updateTileBlockValue(uint16,uint256)"
+  },
+  {
+    "selector": "0x9d23c4c7",
+    "text_sig": "tokenRegistry()"
+  },
+  {
+    "selector": "0x9d069353",
+    "text_sig": "getAngel(uint64)"
+  },
+  {
+    "selector": "0x976d16d5",
+    "text_sig": "getTotalAccessories()"
+  },
+  {
+    "selector": "0x974fd2f3",
+    "text_sig": "setLastBattleResult(uint64,uint16)"
+  },
+  {
+    "selector": "0x957b2e56",
+    "text_sig": "reinvestDividends()"
+  },
+  {
+    "selector": "0x9060091c",
+    "text_sig": "setAmountToken(uint256)"
+  },
+  {
+    "selector": "0x8e5152d6",
+    "text_sig": "addToAngelExperienceLevel(uint64,uint256)"
+  },
+  {
+    "selector": "0x8beb9f12",
+    "text_sig": "moveBlockValue(uint8,uint8,uint8,uint8,uint256)"
+  },
+  {
+    "selector": "0x84b76824",
+    "text_sig": "cancelWithdraw()"
+  },
+  {
+    "selector": "0x8491b49c",
+    "text_sig": "rain(address[],uint256[])"
+  },
+  {
+    "selector": "0x80f03fa6",
+    "text_sig": "getTotalPets()"
+  },
+  {
+    "selector": "0x7d72aa65",
+    "text_sig": "addRole(address,string)"
+  },
+  {
+    "selector": "0x7d70892d",
+    "text_sig": "setUnitAttackIncreases(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x7a0e03ec",
+    "text_sig": "getUInt8Value(bytes32)"
+  },
+  {
+    "selector": "0x754ad981",
+    "text_sig": "MoveFish(uint256,uint256)"
+  },
+  {
+    "selector": "0x7249fbb6",
+    "text_sig": "refund(bytes32)"
+  },
+  {
+    "selector": "0x704b6c02",
+    "text_sig": "setAdmin(address)"
+  },
+  {
+    "selector": "0x63f29011",
+    "text_sig": "breedOwnedAxies(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x59d55194",
+    "text_sig": "getPet(uint256)"
+  },
+  {
+    "selector": "0x5715c5b7",
+    "text_sig": "getTokenAddressByIndex(uint256)"
+  },
+  {
+    "selector": "0x532af7d2",
+    "text_sig": "calculateResult(uint256,uint256)"
+  },
+  {
+    "selector": "0x4579268a",
+    "text_sig": "getOffer(uint256)"
+  },
+  {
+    "selector": "0x2f866f73",
+    "text_sig": "debtRegistry()"
+  },
+  {
+    "selector": "0x2e414890",
+    "text_sig": "challenge(uint256,uint256)"
+  },
+  {
+    "selector": "0x2c39da94",
+    "text_sig": "batchSend(address,uint160,uint256[])"
+  },
+  {
+    "selector": "0x2be9da97",
+    "text_sig": "getBestAngel()"
+  },
+  {
+    "selector": "0x29cf90f3",
+    "text_sig": "sellUnicorn(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x1f6d4942",
+    "text_sig": "contributors(address)"
+  },
+  {
+    "selector": "0x1e2e35a4",
+    "text_sig": "sellPoohs()"
+  },
+  {
+    "selector": "0x1d365669",
+    "text_sig": "transferDirectoryToken(uint256,address,uint256)"
+  },
+  {
+    "selector": "0x10b23ceb",
+    "text_sig": "isAdjacent(uint8,uint8,uint8,uint8)"
+  },
+  {
+    "selector": "0x0b4964a8",
+    "text_sig": "addDungeonNewFloor(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x0374fc6f",
+    "text_sig": "getBestOffer(address,address)"
+  },
+  {
+    "selector": "0xfe3c5d80",
+    "text_sig": "becomeSnailmaster()"
+  },
+  {
+    "selector": "0xfdef9106",
+    "text_sig": "hasPermission(address,address,bytes32,bytes)"
+  },
+  {
+    "selector": "0xf6f494c9",
+    "text_sig": "getTermsContract(bytes32)"
+  },
+  {
+    "selector": "0xed33e00c",
+    "text_sig": "participantClaimCredits()"
+  },
+  {
+    "selector": "0xd69dbf63",
+    "text_sig": "getIssuanceBlockTimestamp(bytes32)"
+  },
+  {
+    "selector": "0xd664caaf",
+    "text_sig": "requestDefault()"
+  },
+  {
+    "selector": "0xcf7e69f8",
+    "text_sig": "changeCooldownIndex(uint40,uint16)"
+  },
+  {
+    "selector": "0xce5a5df7",
+    "text_sig": "createUnicorn(address)"
+  },
+  {
+    "selector": "0xc4ae16a8",
+    "text_sig": "getPlayerId(address)"
+  },
+  {
+    "selector": "0xbaa8529c",
+    "text_sig": "give(bytes32,address)"
+  },
+  {
+    "selector": "0xb214faa5",
+    "text_sig": "deposit(bytes32)"
+  },
+  {
+    "selector": "0xa0bd1ec1",
+    "text_sig": "hodlerTransfer(address,uint256)"
+  },
+  {
+    "selector": "0x8456cb59",
+    "text_sig": "pause()"
+  },
+  {
+    "selector": "0x79cc6790",
+    "text_sig": "burnFrom(address,uint256)"
+  },
+  {
+    "selector": "0x6f2293ab",
+    "text_sig": "transferFrom(address,address,uint256,bool)"
+  },
+  {
+    "selector": "0x69af0634",
+    "text_sig": "cancelAllBuyOrders(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x64c34364",
+    "text_sig": "hodl(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x5c251cbf",
+    "text_sig": "releaseStake(address,bytes32,uint256,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x50bc6bba",
+    "text_sig": "createSaleAuction(uint40,uint128,uint128,uint40)"
+  },
+  {
+    "selector": "0x4dbdb0fd",
+    "text_sig": "signUpForPVP(uint256)"
+  },
+  {
+    "selector": "0x4c6226fc",
+    "text_sig": "oraclizeFee()"
+  },
+  {
+    "selector": "0x4ba4079a",
+    "text_sig": "enableSwitch(bytes32)"
+  },
+  {
+    "selector": "0x3f4ba83a",
+    "text_sig": "unpause()"
+  },
+  {
+    "selector": "0x3892be14",
+    "text_sig": "payoutPreviousRoll()"
+  },
+  {
+    "selector": "0x3732e153",
+    "text_sig": "ETHPrice()"
+  },
+  {
+    "selector": "0x3562fd20",
+    "text_sig": "setUIntValue(bytes32,uint256)"
+  },
+  {
+    "selector": "0x314a522e",
+    "text_sig": "getTermsContractParameters(bytes32)"
+  },
+  {
+    "selector": "0x24c2362b",
+    "text_sig": "buyCrySolObject(uint256)"
+  },
+  {
+    "selector": "0x23165b75",
+    "text_sig": "acceptBidForPunk(uint256,uint256)"
+  },
+  {
+    "selector": "0x220772a9",
+    "text_sig": "starUpZero(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x1d36e06c",
+    "text_sig": "tokenIndexToOwner(uint256)"
+  },
+  {
+    "selector": "0x141926fa",
+    "text_sig": "updateAccount(string)"
+  },
+  {
+    "selector": "0x0f18ac07",
+    "text_sig": "transferFromOwner(address,uint256)"
+  },
+  {
+    "selector": "0x04bbc255",
+    "text_sig": "isPricingStrategy()"
+  },
+  {
+    "selector": "0x0075a317",
+    "text_sig": "mintTo(address,string)"
+  },
+  {
+    "selector": "0xf3e4877c",
+    "text_sig": "distribution(address[],uint256)"
+  },
+  {
+    "selector": "0xe457e1e5",
+    "text_sig": "charge(uint256)"
+  },
+  {
+    "selector": "0xdef86cbb",
+    "text_sig": "modifyWhitelist(address[],address[])"
+  },
+  {
+    "selector": "0xd9583497",
+    "text_sig": "acceptFulfillment(uint256,uint256)"
+  },
+  {
+    "selector": "0xca9c4b33",
+    "text_sig": "hatchEgg()"
+  },
+  {
+    "selector": "0xc6685617",
+    "text_sig": "record(address,uint256)"
+  },
+  {
+    "selector": "0xb84d2106",
+    "text_sig": "shut(bytes32)"
+  },
+  {
+    "selector": "0xa99306e7",
+    "text_sig": "addPVPContender(address,uint256)"
+  },
+  {
+    "selector": "0xa31f61fc",
+    "text_sig": "setGroupCap(address[],uint256)"
+  },
+  {
+    "selector": "0x954cbe3f",
+    "text_sig": "mintSpecial(string,string,uint8,uint256,uint256)"
+  },
+  {
+    "selector": "0x91c259ea",
+    "text_sig": "transferby(address,uint256)"
+  },
+  {
+    "selector": "0x8c10671c",
+    "text_sig": "addManyToWhitelist(address[])"
+  },
+  {
+    "selector": "0x88e114cc",
+    "text_sig": "log_approve(address,address,uint256)"
+  },
+  {
+    "selector": "0x71b5da11",
+    "text_sig": "allowTransaction(address,address,uint256)"
+  },
+  {
+    "selector": "0x710ad128",
+    "text_sig": "getHatchingEggData(address)"
+  },
+  {
+    "selector": "0x6f27ea4c",
+    "text_sig": "update_account_spender_allowance(address,address,uint256)"
+  },
+  {
+    "selector": "0x674f220f",
+    "text_sig": "previousOwner()"
+  },
+  {
+    "selector": "0x63749225",
+    "text_sig": "getPVPEntranceFee(uint256)"
+  },
+  {
+    "selector": "0x4f60f334",
+    "text_sig": "multiAccessAddOwner(address)"
+  },
+  {
+    "selector": "0x3dde1598",
+    "text_sig": "redeemBattleCrates()"
+  },
+  {
+    "selector": "0x3719427e",
+    "text_sig": "acceptDividends(uint256,uint32)"
+  },
+  {
+    "selector": "0x2e92abdd",
+    "text_sig": "withdrawDividends()"
+  },
+  {
+    "selector": "0x2cc88401",
+    "text_sig": "wirePurchase(address,uint256)"
+  },
+  {
+    "selector": "0x26f4b3de",
+    "text_sig": "userTakeOrder(address,address,uint256,uint256,address)"
+  },
+  {
+    "selector": "0x1be6ce57",
+    "text_sig": "decreaseOwnershipTokenCount(address)"
+  },
+  {
+    "selector": "0x1249c58b",
+    "text_sig": "mint()"
+  },
+  {
+    "selector": "0x0dd3fd03",
+    "text_sig": "buySpins(uint256)"
+  },
+  {
+    "selector": "0x0bd85158",
+    "text_sig": "setUInt8Value(bytes32,uint8)"
+  },
+  {
+    "selector": "0xdd3ff4f6",
+    "text_sig": "sendFeeToWallet(address,address)"
+  },
+  {
+    "selector": "0xd1729a4a",
+    "text_sig": "sendTokensManually(address,uint256)"
+  },
+  {
+    "selector": "0xbbf48d6f",
+    "text_sig": "convertReward()"
+  },
+  {
+    "selector": "0xb9247673",
+    "text_sig": "buyListing(bytes32,uint256)"
+  },
+  {
+    "selector": "0xa6bdcc17",
+    "text_sig": "isAtLeast(uint256,uint256)"
+  },
+  {
+    "selector": "0x751fef65",
+    "text_sig": "sellUnit(uint256,uint256)"
+  },
+  {
+    "selector": "0x73053410",
+    "text_sig": "newVersion(uint16[3],address,bytes)"
+  },
+  {
+    "selector": "0x7065cb48",
+    "text_sig": "addOwner(address)"
+  },
+  {
+    "selector": "0x6dc92426",
+    "text_sig": "makeSellOrder(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x5f689fed",
+    "text_sig": "startPVE(uint256)"
+  },
+  {
+    "selector": "0x5db2a233",
+    "text_sig": "awailableDividends(address)"
+  },
+  {
+    "selector": "0x47ba65d2",
+    "text_sig": "get(bytes8)"
+  },
+  {
+    "selector": "0x41e34be9",
+    "text_sig": "unitSellable(uint256)"
+  },
+  {
+    "selector": "0x3edc65d3",
+    "text_sig": "recordWithdraw(address)"
+  },
+  {
+    "selector": "0x3eccca1e",
+    "text_sig": "transferAllTokens(address,address)"
+  },
+  {
+    "selector": "0x34d2c4cb",
+    "text_sig": "mintProxyWithoutCap(address,uint256)"
+  },
+  {
+    "selector": "0x2f81bc71",
+    "text_sig": "multiMint(address[],uint256[])"
+  },
+  {
+    "selector": "0x2eab93cb",
+    "text_sig": "takeOrder(uint256,uint256)"
+  },
+  {
+    "selector": "0x29ff4f53",
+    "text_sig": "setReleaseAgent(address)"
+  },
+  {
+    "selector": "0x2394a797",
+    "text_sig": "makeHybridization(uint256,uint256)"
+  },
+  {
+    "selector": "0x1a017f3f",
+    "text_sig": "transferPrivileged(address,uint256)"
+  },
+  {
+    "selector": "0x0f822b78",
+    "text_sig": "admin_transfer(address,uint256)"
+  },
+  {
+    "selector": "0x051cb630",
+    "text_sig": "mintRandomCards(address,uint8,uint8)"
+  },
+  {
+    "selector": "0x0107a8df",
+    "text_sig": "withdraw_bonus()"
+  },
+  {
+    "selector": "0xfc906720",
+    "text_sig": "setSiringWithId(uint256,uint32)"
+  },
+  {
+    "selector": "0xf2ddc772",
+    "text_sig": "confirm(bytes)"
+  },
+  {
+    "selector": "0xed436a47",
+    "text_sig": "growToPetiteAxie(uint256)"
+  },
+  {
+    "selector": "0xdc45bfb3",
+    "text_sig": "buyPack(uint256)"
+  },
+  {
+    "selector": "0xdc35a900",
+    "text_sig": "createOffer(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xd6c8f93c",
+    "text_sig": "getCooldownIndex(uint256)"
+  },
+  {
+    "selector": "0xd0febe4c",
+    "text_sig": "buyTokens()"
+  },
+  {
+    "selector": "0xcc57e4f8",
+    "text_sig": "increasePregnantCounter()"
+  },
+  {
+    "selector": "0xcae61d2e",
+    "text_sig": "offer(string,uint256,uint256,address)"
+  },
+  {
+    "selector": "0xc170fd54",
+    "text_sig": "bid(uint40)"
+  },
+  {
+    "selector": "0xbf212637",
+    "text_sig": "getMatronId(uint256)"
+  },
+  {
+    "selector": "0xac3df1da",
+    "text_sig": "claimLeftover(address)"
+  },
+  {
+    "selector": "0xa5cbe71c",
+    "text_sig": "getCooldownEndBlock(uint256)"
+  },
+  {
+    "selector": "0xa24247f1",
+    "text_sig": "getStartLockTime()"
+  },
+  {
+    "selector": "0xa230c524",
+    "text_sig": "isMember(address)"
+  },
+  {
+    "selector": "0xa0557818",
+    "text_sig": "getSireId(uint256)"
+  },
+  {
+    "selector": "0xa035b1fe",
+    "text_sig": "price()"
+  },
+  {
+    "selector": "0x96fe6e74",
+    "text_sig": "external_oraclize_randomDS_setCommitment(bytes32,bytes32)"
+  },
+  {
+    "selector": "0x940d72ec",
+    "text_sig": "buyPack(uint8)"
+  },
+  {
+    "selector": "0x8d1c8048",
+    "text_sig": "transport(uint256)"
+  },
+  {
+    "selector": "0x7d55923d",
+    "text_sig": "click()"
+  },
+  {
+    "selector": "0x6b27909d",
+    "text_sig": "getStopLockTime()"
+  },
+  {
+    "selector": "0x647aac0c",
+    "text_sig": "race(uint32)"
+  },
+  {
+    "selector": "0x534e3f81",
+    "text_sig": "finishPVP()"
+  },
+  {
+    "selector": "0x47e7ef24",
+    "text_sig": "deposit(address,uint256)"
+  },
+  {
+    "selector": "0x41db1875",
+    "text_sig": "makeBuyOrder(address,uint256)"
+  },
+  {
+    "selector": "0x3af32abf",
+    "text_sig": "isWhitelisted(address)"
+  },
+  {
+    "selector": "0x32fb082f",
+    "text_sig": "hasOrderedRobotParts(uint256[])"
+  },
+  {
+    "selector": "0x2dd7030b",
+    "text_sig": "removeAuction(uint256)"
+  },
+  {
+    "selector": "0x2a804835",
+    "text_sig": "setCooldownEndBlock(uint256,uint64)"
+  },
+  {
+    "selector": "0x28b60031",
+    "text_sig": "ownerTokens(address,uint256)"
+  },
+  {
+    "selector": "0x278bee92",
+    "text_sig": "_receiveMakePlant(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x2525f5c1",
+    "text_sig": "cancelBid(address,bytes32)"
+  },
+  {
+    "selector": "0x1f6d2086",
+    "text_sig": "setCooldownIndex(uint256)"
+  },
+  {
+    "selector": "0x1eabc116",
+    "text_sig": "buy(uint16)"
+  },
+  {
+    "selector": "0x1bfe0308",
+    "text_sig": "removeRole(address,string)"
+  },
+  {
+    "selector": "0x156e29f6",
+    "text_sig": "mint(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x11f02c87",
+    "text_sig": "createHybridization(uint256,uint256)"
+  },
+  {
+    "selector": "0x091dbfd2",
+    "text_sig": "enterBidForPunk(uint256)"
+  },
+  {
+    "selector": "0xff5ce378",
+    "text_sig": "_addTokenTo(address,uint256)"
+  },
+  {
+    "selector": "0xfb932108",
+    "text_sig": "distribute(address,uint256)"
+  },
+  {
+    "selector": "0xfb3220fe",
+    "text_sig": "addNodalblockData(string)"
+  },
+  {
+    "selector": "0xea8a1af0",
+    "text_sig": "cancel()"
+  },
+  {
+    "selector": "0xe98b7f4d",
+    "text_sig": "getKitty(uint256)"
+  },
+  {
+    "selector": "0xe61b762b",
+    "text_sig": "cancelAllSellOrders(address,uint256,uint256)"
+  },
+  {
+    "selector": "0xe1c7392a",
+    "text_sig": "init()"
+  },
+  {
+    "selector": "0xdf6e1331",
+    "text_sig": "drawGame(uint256,string)"
+  },
+  {
+    "selector": "0xdcf6a592",
+    "text_sig": "isGreaterThan(uint256,uint256)"
+  },
+  {
+    "selector": "0xdc9564d5",
+    "text_sig": "buy(uint256,string,address,address,address,address)"
+  },
+  {
+    "selector": "0xd4dd1594",
+    "text_sig": "updateLandData(int256,int256,string)"
+  },
+  {
+    "selector": "0xd199168d",
+    "text_sig": "claimedTokens(address,uint256)"
+  },
+  {
+    "selector": "0xad94d901",
+    "text_sig": "ownsAll(address,uint256[])"
+  },
+  {
+    "selector": "0xab7891f5",
+    "text_sig": "deleteSiringWithId(uint256)"
+  },
+  {
+    "selector": "0x9c2f5f8f",
+    "text_sig": "closeCurrentGame(uint256)"
+  },
+  {
+    "selector": "0x95a2251f",
+    "text_sig": "redeem(address)"
+  },
+  {
+    "selector": "0x950dad19",
+    "text_sig": "burnToken(address)"
+  },
+  {
+    "selector": "0x94a5601a",
+    "text_sig": "getMaxCap(address)"
+  },
+  {
+    "selector": "0x91378456",
+    "text_sig": "publicTGEEndBlockTimeStamp()"
+  },
+  {
+    "selector": "0x907b0305",
+    "text_sig": "createERC20(address,uint256,string,uint8,string)"
+  },
+  {
+    "selector": "0x904de64e",
+    "text_sig": "TRSOffset()"
+  },
+  {
+    "selector": "0x8ee93cf3",
+    "text_sig": "post(string)"
+  },
+  {
+    "selector": "0x8d8afd3d",
+    "text_sig": "vote(bytes32,address)"
+  },
+  {
+    "selector": "0x87a9c6c5",
+    "text_sig": "buyAndTopup(address)"
+  },
+  {
+    "selector": "0x801a1467",
+    "text_sig": "swapFor(address)"
+  },
+  {
+    "selector": "0x5f065346",
+    "text_sig": "pay(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x503c449f",
+    "text_sig": "decreasePregnantCounter()"
+  },
+  {
+    "selector": "0x4f5af739",
+    "text_sig": "getBirthTime(uint256)"
+  },
+  {
+    "selector": "0x4f26ef80",
+    "text_sig": "buyAd(uint256,string,string)"
+  },
+  {
+    "selector": "0x4403ee2b",
+    "text_sig": "setIFS(address,uint256)"
+  },
+  {
+    "selector": "0x1e9a6950",
+    "text_sig": "redeem(address,uint256)"
+  },
+  {
+    "selector": "0xfed26772",
+    "text_sig": "zeroFeeTransferByowner(address,address,uint256)"
+  },
+  {
+    "selector": "0xfd7d7948",
+    "text_sig": "getTranformedId(uint64)"
+  },
+  {
+    "selector": "0xf26c159f",
+    "text_sig": "freezeAccount(address)"
+  },
+  {
+    "selector": "0xf26be2a8",
+    "text_sig": "createResourceSet(uint256,uint256,uint256[],uint256)"
+  },
+  {
+    "selector": "0xd9856c21",
+    "text_sig": "addNewToken(string)"
+  },
+  {
+    "selector": "0xc86283c8",
+    "text_sig": "withdrawTo(uint256,address)"
+  },
+  {
+    "selector": "0xc4076876",
+    "text_sig": "pay(address,uint256)"
+  },
+  {
+    "selector": "0xc3310517",
+    "text_sig": "reservedTokensDestinationsLen()"
+  },
+  {
+    "selector": "0xc2cb9927",
+    "text_sig": "reward(address,uint256,uint256,string)"
+  },
+  {
+    "selector": "0xae1cad3a",
+    "text_sig": "tip(address,string,uint256,string)"
+  },
+  {
+    "selector": "0xa6ed563e",
+    "text_sig": "getBytes32(bytes32)"
+  },
+  {
+    "selector": "0xa59af340",
+    "text_sig": "isInvestorApproved(address)"
+  },
+  {
+    "selector": "0x9655e4b0",
+    "text_sig": "sellIdeas()"
+  },
+  {
+    "selector": "0x84e60e8b",
+    "text_sig": "ico_promo_reward(address,uint256)"
+  },
+  {
+    "selector": "0x84e5eed0",
+    "text_sig": "getFeeRate()"
+  },
+  {
+    "selector": "0x7c8f76a1",
+    "text_sig": "issueTokens(address[],uint256[])"
+  },
+  {
+    "selector": "0x7c0176df",
+    "text_sig": "starUp(uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x78e97925",
+    "text_sig": "startTime()"
+  },
+  {
+    "selector": "0x6cd02297",
+    "text_sig": "processOfflinePurchase(address,uint256)"
+  },
+  {
+    "selector": "0x639bef41",
+    "text_sig": "setRecommender(address,address)"
+  },
+  {
+    "selector": "0x614cb904",
+    "text_sig": "isFinalizeAgent()"
+  },
+  {
+    "selector": "0x5a2bf25a",
+    "text_sig": "setAddressValue(bytes32,address)"
+  },
+  {
+    "selector": "0x55c081d4",
+    "text_sig": "setTier(address)"
+  },
+  {
+    "selector": "0x555ac876",
+    "text_sig": "makeOrder(uint256,uint256,address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0x54b67057",
+    "text_sig": "setTranformed(uint64,uint64)"
+  },
+  {
+    "selector": "0x51cff8d9",
+    "text_sig": "withdraw(address)"
+  },
+  {
+    "selector": "0x22ed96a0",
+    "text_sig": "getInvestorsFee()"
+  },
+  {
+    "selector": "0x1e4bd42c",
+    "text_sig": "claimAllTokens()"
+  },
+  {
+    "selector": "0x19b667da",
+    "text_sig": "setFinalizeAgent(address)"
+  },
+  {
+    "selector": "0x12065fe0",
+    "text_sig": "getBalance()"
+  },
+  {
+    "selector": "0x085f8ebb",
+    "text_sig": "transform(uint64,uint64,uint64,uint64)"
+  },
+  {
+    "selector": "0xfeda38bc",
+    "text_sig": "setCrowdsaleOpen(bool)"
+  },
+  {
+    "selector": "0xf750aaa6",
+    "text_sig": "withdrawEverything(address)"
+  },
+  {
+    "selector": "0xeeca6df7",
+    "text_sig": "getFreeVines()"
+  },
+  {
+    "selector": "0xe6effbe9",
+    "text_sig": "createAuction(address,uint256,uint256,uint256,uint256,address)"
+  },
+  {
+    "selector": "0xe515a4d1",
+    "text_sig": "gen0Limit()"
+  },
+  {
+    "selector": "0xe16e0f84",
+    "text_sig": "removeSellOrder(uint64)"
+  },
+  {
+    "selector": "0xc6e994d7",
+    "text_sig": "shareWithdraw()"
+  },
+  {
+    "selector": "0xc06ed0c2",
+    "text_sig": "ClaimTokens(uint256)"
+  },
+  {
+    "selector": "0xbe040fb0",
+    "text_sig": "redeem()"
+  },
+  {
+    "selector": "0xbbb896ad",
+    "text_sig": "isCurrentAdmin(address)"
+  },
+  {
+    "selector": "0xba6cc6c3",
+    "text_sig": "open(bytes32,address,uint32)"
+  },
+  {
+    "selector": "0xb9a1bd86",
+    "text_sig": "registerPrivateContribution(address,uint256)"
+  },
+  {
+    "selector": "0xb8dc491b",
+    "text_sig": "sweep(address,address)"
+  },
+  {
+    "selector": "0xb30387a4",
+    "text_sig": "gen0Count()"
+  },
+  {
+    "selector": "0xae2e933b",
+    "text_sig": "feePool()"
+  },
+  {
+    "selector": "0xa2c17459",
+    "text_sig": "getCreateUnicornFullPriceInCandy()"
+  },
+  {
+    "selector": "0x9f04996d",
+    "text_sig": "bid(uint256,address)"
+  },
+  {
+    "selector": "0x9729ec26",
+    "text_sig": "generateWarrior(uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x8fcbeeb7",
+    "text_sig": "getFreeDragon()"
+  },
+  {
+    "selector": "0x8ba8ffc6",
+    "text_sig": "buyGrapes()"
+  },
+  {
+    "selector": "0x89fcd099",
+    "text_sig": "getApproval(address,address)"
+  },
+  {
+    "selector": "0x89efa1b5",
+    "text_sig": "registerEtherBalance(address)"
+  },
+  {
+    "selector": "0x854c23e1",
+    "text_sig": "setUnitAttackMultiplier(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x7fcaf666",
+    "text_sig": "setString(string)"
+  },
+  {
+    "selector": "0x6ff96d17",
+    "text_sig": "accountBalances(address)"
+  },
+  {
+    "selector": "0x6e638d3b",
+    "text_sig": "claimIFSReward(address)"
+  },
+  {
+    "selector": "0x6d8062ee",
+    "text_sig": "createChecksum(uint256,uint256,bytes)"
+  },
+  {
+    "selector": "0x643a7695",
+    "text_sig": "verifyParticipant(address)"
+  },
+  {
+    "selector": "0x614bbc33",
+    "text_sig": "privateContribution(address,uint256)"
+  },
+  {
+    "selector": "0x6057361d",
+    "text_sig": "store(uint256)"
+  },
+  {
+    "selector": "0x5fe2535c",
+    "text_sig": "completedRaces(uint256)"
+  },
+  {
+    "selector": "0x5c752f6b",
+    "text_sig": "incGen0Count()"
+  },
+  {
+    "selector": "0x5b86f599",
+    "text_sig": "increaseBalance(address,uint256)"
+  },
+  {
+    "selector": "0x565a2e2c",
+    "text_sig": "getBeneficiary()"
+  },
+  {
+    "selector": "0x52fa1ac2",
+    "text_sig": "createUnicornForCandy()"
+  },
+  {
+    "selector": "0x4fb2e45d",
+    "text_sig": "transferOwner(address)"
+  },
+  {
+    "selector": "0x4dd60ff9",
+    "text_sig": "buyNDC(uint256,uint256,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0x3b3b57de",
+    "text_sig": "addr(bytes32)"
+  },
+  {
+    "selector": "0x22d4e0fd",
+    "text_sig": "pay2(address,uint256,address)"
+  },
+  {
+    "selector": "0x16b57509",
+    "text_sig": "killBounty(uint256)"
+  },
+  {
+    "selector": "0x14174f33",
+    "text_sig": "withDraw(uint256)"
+  },
+  {
+    "selector": "0x0fa6002e",
+    "text_sig": "sellCharacter(uint32)"
+  },
+  {
+    "selector": "0x0474a68e",
+    "text_sig": "bet(address)"
+  },
+  {
+    "selector": "0x0178b8bf",
+    "text_sig": "resolver(bytes32)"
+  },
+  {
+    "selector": "0xfa2f29b6",
+    "text_sig": "claimEOSclassicFor(address)"
+  },
+  {
+    "selector": "0xf65d226f",
+    "text_sig": "getTotalBetAmount(bytes32,bytes32)"
+  },
+  {
+    "selector": "0xf5866066",
+    "text_sig": "setStringValue(bytes32,string)"
+  },
+  {
+    "selector": "0xe7a99bde",
+    "text_sig": "batchTransfer(uint256,address[])"
+  },
+  {
+    "selector": "0xe6153d1b",
+    "text_sig": "mint(string,bytes16,uint256,uint32,address)"
+  },
+  {
+    "selector": "0xe47e7e66",
+    "text_sig": "ask(uint256)"
+  },
+  {
+    "selector": "0xe1f5eb3f",
+    "text_sig": "convertTokens(uint256,address)"
+  },
+  {
+    "selector": "0xc7024b98",
+    "text_sig": "deleteHybridization(uint256)"
+  },
+  {
+    "selector": "0xc12eb191",
+    "text_sig": "updateEarlyParticipantWhitelist(address,uint256)"
+  },
+  {
+    "selector": "0xbec3fa17",
+    "text_sig": "transferTokens(address,uint256)"
+  },
+  {
+    "selector": "0xbd50b3b4",
+    "text_sig": "transferAndLock(address,uint256)"
+  },
+  {
+    "selector": "0xba20dda4",
+    "text_sig": "getBeneficiary(bytes32)"
+  },
+  {
+    "selector": "0xa73c0ba2",
+    "text_sig": "play(uint256,uint16,uint8)"
+  },
+  {
+    "selector": "0xa6c4ec0e",
+    "text_sig": "hasUser(address)"
+  },
+  {
+    "selector": "0xa4c0ed36",
+    "text_sig": "onTokenTransfer(address,uint256,bytes)"
+  },
+  {
+    "selector": "0xa1ac727f",
+    "text_sig": "airdrop(address,address[],uint256)"
+  },
+  {
+    "selector": "0xa14ff857",
+    "text_sig": "setBytes32(bytes32,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xa007bc45",
+    "text_sig": "getRateStages(uint256)"
+  },
+  {
+    "selector": "0x9e5faafc",
+    "text_sig": "attack()"
+  },
+  {
+    "selector": "0x9cb7de4b",
+    "text_sig": "setHandler(address,bool)"
+  },
+  {
+    "selector": "0x94d45856",
+    "text_sig": "placeBet(bytes32,bytes32,bytes32)"
+  },
+  {
+    "selector": "0x92e8438c",
+    "text_sig": "issueTokensMulti(address[],uint256[])"
+  },
+  {
+    "selector": "0x8cf5dbc6",
+    "text_sig": "recruitHero()"
+  },
+  {
+    "selector": "0x86f1f2d4",
+    "text_sig": "mintDigitalArt(string)"
+  },
+  {
+    "selector": "0x81788e2b",
+    "text_sig": "addAllowedAddress(address)"
+  },
+  {
+    "selector": "0x79ba5097",
+    "text_sig": "acceptOwnership()"
+  },
+  {
+    "selector": "0x5f4eab65",
+    "text_sig": "hasEditionInProgress(uint256)"
+  },
+  {
+    "selector": "0x5f412d4f",
+    "text_sig": "releaseTokenTransfer()"
+  },
+  {
+    "selector": "0x5cb8dd09",
+    "text_sig": "isAllowed(address,bytes32)"
+  },
+  {
+    "selector": "0x5c142f2b",
+    "text_sig": "freezeAccountWithToken(address,uint256)"
+  },
+  {
+    "selector": "0x54e921cb",
+    "text_sig": "setFreezeMustCalculate(uint256,bool)"
+  },
+  {
+    "selector": "0x522c8401",
+    "text_sig": "bidOnSiring(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x50df8f71",
+    "text_sig": "isReady(uint256)"
+  },
+  {
+    "selector": "0x47e4ddf2",
+    "text_sig": "createFreeze(uint256,uint256)"
+  },
+  {
+    "selector": "0x3d125f03",
+    "text_sig": "buyTokens(address,address,address,uint256)"
+  },
+  {
+    "selector": "0x37d9d7fc",
+    "text_sig": "getBytes32(bytes32,bytes32)"
+  },
+  {
+    "selector": "0x3010f03c",
+    "text_sig": "offerBorrowingItem(uint64,uint256,uint256)"
+  },
+  {
+    "selector": "0x2ccb1b30",
+    "text_sig": "transferTo(address,uint256)"
+  },
+  {
+    "selector": "0x2ca15122",
+    "text_sig": "sign()"
+  },
+  {
+    "selector": "0x2b100a31",
+    "text_sig": "setStatsSumHours(uint256,uint256)"
+  },
+  {
+    "selector": "0x1d43b653",
+    "text_sig": "submitTransaction(address,uint256)"
+  },
+  {
+    "selector": "0x0d66343c",
+    "text_sig": "getPaintingOwner(uint256)"
+  },
+  {
+    "selector": "0x053992c5",
+    "text_sig": "setSalePrice(uint256,uint256)"
+  },
+  {
+    "selector": "0x049eb289",
+    "text_sig": "submitBuyOrder(bytes32,uint256,uint256)"
+  },
+  {
+    "selector": "0x02ca5994",
+    "text_sig": "registerToken(address,uint256)"
+  },
+  {
+    "selector": "0xff9913e8",
+    "text_sig": "allow(address)"
+  },
+  {
+    "selector": "0xff268125",
+    "text_sig": "repay(bytes32,uint256,address)"
+  },
+  {
+    "selector": "0xf89f4e77",
+    "text_sig": "approveAccount(address)"
+  },
+  {
+    "selector": "0xf7044bae",
+    "text_sig": "getShareHolderCount()"
+  },
+  {
+    "selector": "0xf6dfafe1",
+    "text_sig": "getShareHolder(uint256)"
+  },
+  {
+    "selector": "0xf64ccca6",
+    "text_sig": "payToken(address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0xf5a486f3",
+    "text_sig": "issueResolved(bytes32,string)"
+  },
+  {
+    "selector": "0xee22610b",
+    "text_sig": "executeTransaction(uint256)"
+  },
+  {
+    "selector": "0xeab9eb2d",
+    "text_sig": "sellGrapes()"
+  },
+  {
+    "selector": "0xe32d5cf8",
+    "text_sig": "setApprovals(address,address,uint256)"
+  },
+  {
+    "selector": "0xe2bbb158",
+    "text_sig": "deposit(uint256,uint256)"
+  },
+  {
+    "selector": "0xe282969e",
+    "text_sig": "getPerson(uint256,bool)"
+  },
+  {
+    "selector": "0xe1f8926b",
+    "text_sig": "depositEthPool(uint256)"
+  },
+  {
+    "selector": "0xdaa9604d",
+    "text_sig": "byPonzi(address)"
+  },
+  {
+    "selector": "0xd3a39686",
+    "text_sig": "getAddress(bytes32,bytes32)"
+  },
+  {
+    "selector": "0xd2f7265a",
+    "text_sig": "exchange()"
+  },
+  {
+    "selector": "0xcfc4d0ec",
+    "text_sig": "getOrderHash(address[5],uint256[6])"
+  },
+  {
+    "selector": "0xcd8d8da0",
+    "text_sig": "tokenFallbackExchange(address,uint256,uint256)"
+  },
+  {
+    "selector": "0xcc1d4c02",
+    "text_sig": "certified(address)"
+  },
+  {
+    "selector": "0xcb01cd02",
+    "text_sig": "masscreate(uint256,uint256)"
+  },
+  {
+    "selector": "0xc77828d0",
+    "text_sig": "dropToken(address[],uint256[])"
+  },
+  {
+    "selector": "0xc50c44cf",
+    "text_sig": "getAuctionSeller(uint256)"
+  },
+  {
+    "selector": "0xc1c8277f",
+    "text_sig": "reclaimOwnership()"
+  },
+  {
+    "selector": "0xb67d77c5",
+    "text_sig": "sub(uint256,uint256)"
+  },
+  {
+    "selector": "0xb639c9ec",
+    "text_sig": "burnWarrior(uint256,address)"
+  },
+  {
+    "selector": "0xaf7d6ca3",
+    "text_sig": "spend(address,uint256)"
+  },
+  {
+    "selector": "0xaa1d98af",
+    "text_sig": "personIndexToOwner(uint256)"
+  },
+  {
+    "selector": "0xa8c23cb9",
+    "text_sig": "isValid(bytes32,string,address,uint256,address)"
+  },
+  {
+    "selector": "0xa7f9df38",
+    "text_sig": "investWithBitcoin(address,uint256)"
+  },
+  {
+    "selector": "0x9963a8e0",
+    "text_sig": "fund(bytes32,string,address,uint256)"
+  },
+  {
+    "selector": "0x9758af1e",
+    "text_sig": "doesEntryExist(bytes32)"
+  },
+  {
+    "selector": "0x8d8f2adb",
+    "text_sig": "withdrawTokens()"
+  },
+  {
+    "selector": "0x8d70c0ce",
+    "text_sig": "transferToExchange(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x8952877b",
+    "text_sig": "storeProof(bytes32)"
+  },
+  {
+    "selector": "0x8264fe98",
+    "text_sig": "buyPunk(uint256)"
+  },
+  {
+    "selector": "0x7964ea87",
+    "text_sig": "claim(bytes32,uint256,bytes)"
+  },
+  {
+    "selector": "0x794b0e6b",
+    "text_sig": "addExperience(address,uint256[],int32[])"
+  },
+  {
+    "selector": "0x78bd7935",
+    "text_sig": "getAuction(uint256)"
+  },
+  {
+    "selector": "0x77d8ffc0",
+    "text_sig": "getTokensFromBuy(address)"
+  },
+  {
+    "selector": "0x740227d1",
+    "text_sig": "receiveFunds(address,uint256)"
+  },
+  {
+    "selector": "0x6e50eb3f",
+    "text_sig": "setEndsAt(uint256)"
+  },
+  {
+    "selector": "0x68c6b11a",
+    "text_sig": "subtract(address,uint256)"
+  },
+  {
+    "selector": "0x60fd0e91",
+    "text_sig": "mintlist(address[],uint256[])"
+  },
+  {
+    "selector": "0x5e6df25c",
+    "text_sig": "removeBorrowingOfferItem(uint64)"
+  },
+  {
+    "selector": "0x54d3f3e4",
+    "text_sig": "getTopInfoDetail(address)"
+  },
+  {
+    "selector": "0x53e7168b",
+    "text_sig": "setUInt(bytes32,bytes32,uint256)"
+  },
+  {
+    "selector": "0x53d9d910",
+    "text_sig": "create(address[],uint256,uint256)"
+  },
+  {
+    "selector": "0x53aa3f5e",
+    "text_sig": "getUInt(bytes32,bytes32)"
+  },
+  {
+    "selector": "0x4c77e5ba",
+    "text_sig": "getAddressValue(bytes32)"
+  },
+  {
+    "selector": "0x3f4b1401",
+    "text_sig": "releaseDragonTokens()"
+  },
+  {
+    "selector": "0x37bd1868",
+    "text_sig": "setHatchedEgg(uint64,uint64)"
+  },
+  {
+    "selector": "0x242b0a73",
+    "text_sig": "rewardPayedOf(address)"
+  },
+  {
+    "selector": "0x1ebedded",
+    "text_sig": "setAllRates(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x1b208786",
+    "text_sig": "delegatedTransfer(address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0x19216e8d",
+    "text_sig": "freezeForOwner(uint256,uint256)"
+  },
+  {
+    "selector": "0x17e7dd22",
+    "text_sig": "getBooleanValue(bytes32)"
+  },
+  {
+    "selector": "0x179fc99f",
+    "text_sig": "etherBalanceOf(address)"
+  },
+  {
+    "selector": "0x14fbc22b",
+    "text_sig": "createHero(uint256,address)"
+  },
+  {
+    "selector": "0x0c11dedd",
+    "text_sig": "pay(address)"
+  },
+  {
+    "selector": "0x0bf318a3",
+    "text_sig": "finalizeCrowdsale()"
+  },
+  {
+    "selector": "0x09fc3c53",
+    "text_sig": "burnWarrior(uint256)"
+  },
+  {
+    "selector": "0xfa4c4271",
+    "text_sig": "reClaimIFS(address)"
+  },
+  {
+    "selector": "0xf8f73808",
+    "text_sig": "create(address[],uint256)"
+  },
+  {
+    "selector": "0xf7e3c068",
+    "text_sig": "PrestigeUp()"
+  },
+  {
+    "selector": "0xed59313a",
+    "text_sig": "setUsername(string)"
+  },
+  {
+    "selector": "0xeabc8b8e",
+    "text_sig": "canBeBidden(uint256)"
+  },
+  {
+    "selector": "0xe9121b12",
+    "text_sig": "transferAndApply(address,uint256)"
+  },
+  {
+    "selector": "0xdcefa538",
+    "text_sig": "buyTokens(address,address,uint256)"
+  },
+  {
+    "selector": "0xda0bba90",
+    "text_sig": "sendPrize(address[],uint256[],uint64)"
+  },
+  {
+    "selector": "0xd54dd8f9",
+    "text_sig": "slice4(bytes,uint256)"
+  },
+  {
+    "selector": "0xd4778321",
+    "text_sig": "getUnitCoinProductionIncreases(address,uint256)"
+  },
+  {
+    "selector": "0xcaaa2045",
+    "text_sig": "addressToNumTowns(address)"
+  },
+  {
+    "selector": "0xc8d1c017",
+    "text_sig": "addUIntValue(bytes32,uint256)"
+  },
+  {
+    "selector": "0xbe45fd62",
+    "text_sig": "transfer(address,uint256,bytes)"
+  },
+  {
+    "selector": "0xbc657927",
+    "text_sig": "getContractAddressByType(bytes32)"
+  },
+  {
+    "selector": "0xb6d2a9b9",
+    "text_sig": "SetupToken(string,string,uint256)"
+  },
+  {
+    "selector": "0xb655e138",
+    "text_sig": "sliceAddress(bytes,uint256)"
+  },
+  {
+    "selector": "0xb597e784",
+    "text_sig": "setTokenPriceInWei(uint256)"
+  },
+  {
+    "selector": "0xb0756562",
+    "text_sig": "addLottery(string,uint32,uint32,uint32)"
+  },
+  {
+    "selector": "0xaeb669eb",
+    "text_sig": "getHatchingEggId(address)"
+  },
+  {
+    "selector": "0x9fc3587a",
+    "text_sig": "releaseSupply(uint256)"
+  },
+  {
+    "selector": "0x9f819b13",
+    "text_sig": "updateFunders(address,bytes32,string)"
+  },
+  {
+    "selector": "0x9bc6f0ec",
+    "text_sig": "createChildDeposits(uint256)"
+  },
+  {
+    "selector": "0x9859387b",
+    "text_sig": "createAccount(address)"
+  },
+  {
+    "selector": "0x9501799d",
+    "text_sig": "setUnitCoinProductionMultiplier(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x8ff6e971",
+    "text_sig": "isSecondary(uint256)"
+  },
+  {
+    "selector": "0x8d1d22d8",
+    "text_sig": "renameMonster(uint64,string)"
+  },
+  {
+    "selector": "0x8c65c81f",
+    "text_sig": "rounds(uint256)"
+  },
+  {
+    "selector": "0x89198fed",
+    "text_sig": "fulfilled(bytes32,address)"
+  },
+  {
+    "selector": "0x844c7d95",
+    "text_sig": "updateBalances(address,bytes32,string,address,uint256)"
+  },
+  {
+    "selector": "0x7df1f1b9",
+    "text_sig": "borrower()"
+  },
+  {
+    "selector": "0x7b5bd741",
+    "text_sig": "getIdentityWallet(address)"
+  },
+  {
+    "selector": "0x75cf77fb",
+    "text_sig": "buyPoohs()"
+  },
+  {
+    "selector": "0x74268ff2",
+    "text_sig": "deleteOffer(uint256)"
+  },
+  {
+    "selector": "0x6be39bda",
+    "text_sig": "getTerms(bytes32)"
+  },
+  {
+    "selector": "0x673a7e28",
+    "text_sig": "updatePrice()"
+  },
+  {
+    "selector": "0x63c78e87",
+    "text_sig": "withdrawEtherFromTrade(uint256)"
+  },
+  {
+    "selector": "0x60f61a4c",
+    "text_sig": "buyUnitRaffleTicket(uint256)"
+  },
+  {
+    "selector": "0x5fd8c710",
+    "text_sig": "withdrawBalance()"
+  },
+  {
+    "selector": "0x5ebe7c72",
+    "text_sig": "reply(string)"
+  },
+  {
+    "selector": "0x5e05e84d",
+    "text_sig": "buyCells()"
+  },
+  {
+    "selector": "0x4b56cd27",
+    "text_sig": "depositBoth(address,uint256)"
+  },
+  {
+    "selector": "0x482c18e3",
+    "text_sig": "setUnitJadeStealingMultiplier(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x481c6a75",
+    "text_sig": "manager()"
+  },
+  {
+    "selector": "0x46ee84b0",
+    "text_sig": "removeMembers(address[])"
+  },
+  {
+    "selector": "0x40b2d3af",
+    "text_sig": "Register(string)"
+  },
+  {
+    "selector": "0x39055172",
+    "text_sig": "UpgradeTokens()"
+  },
+  {
+    "selector": "0x36756a23",
+    "text_sig": "constructor(address[],uint256)"
+  },
+  {
+    "selector": "0x346ff6b3",
+    "text_sig": "getNumRounds()"
+  },
+  {
+    "selector": "0x3121db1c",
+    "text_sig": "setName(address,string)"
+  },
+  {
+    "selector": "0x2e1eb7fe",
+    "text_sig": "slice32(bytes,uint256)"
+  },
+  {
+    "selector": "0x2d0ff779",
+    "text_sig": "claimEOSclassic()"
+  },
+  {
+    "selector": "0x2c070d7d",
+    "text_sig": "getRefereeCount(address)"
+  },
+  {
+    "selector": "0x21a5dcfe",
+    "text_sig": "multivestBuy(address,uint256)"
+  },
+  {
+    "selector": "0x20987e64",
+    "text_sig": "addInvestment(address,uint256)"
+  },
+  {
+    "selector": "0x2009a059",
+    "text_sig": "setLandProductionMultiplier(address)"
+  },
+  {
+    "selector": "0x1e801c8c",
+    "text_sig": "sealForChanges(uint256)"
+  },
+  {
+    "selector": "0x16419aa7",
+    "text_sig": "slice16(bytes,uint256)"
+  },
+  {
+    "selector": "0x12d42835",
+    "text_sig": "hasMember(address)"
+  },
+  {
+    "selector": "0x0fd56202",
+    "text_sig": "addressToNumCities(address)"
+  },
+  {
+    "selector": "0x0bc954dc",
+    "text_sig": "addEgg(uint64,uint32,address,uint256)"
+  },
+  {
+    "selector": "0x0a4bb260",
+    "text_sig": "buyItemAndApply(string,uint256)"
+  },
+  {
+    "selector": "0x073b3bf9",
+    "text_sig": "addressToNumVillages(address)"
+  },
+  {
+    "selector": "0x02d05d3f",
+    "text_sig": "creator()"
+  },
+  {
+    "selector": "0x00f714ce",
+    "text_sig": "withdraw(uint256,address)"
+  },
+  {
+    "selector": "0xff01ffa8",
+    "text_sig": "refundCrowdsaleContributor()"
+  },
+  {
+    "selector": "0xfe35530c",
+    "text_sig": "setUserWithdrawalAccount(address)"
+  },
+  {
+    "selector": "0xfbe45b48",
+    "text_sig": "unitPLATCost(uint256)"
+  },
+  {
+    "selector": "0xfaff50a8",
+    "text_sig": "rootNode()"
+  },
+  {
+    "selector": "0xf61ca773",
+    "text_sig": "transferWithPurpose(address,uint256,bytes)"
+  },
+  {
+    "selector": "0xf2a751aa",
+    "text_sig": "preserve(address,uint256)"
+  },
+  {
+    "selector": "0xf27ac4d9",
+    "text_sig": "decrease(address,uint256)"
+  },
+  {
+    "selector": "0xf23b6fa2",
+    "text_sig": "emitApprovalEvent(address,address,uint256)"
+  },
+  {
+    "selector": "0xefaa55a0",
+    "text_sig": "joinGame(uint256)"
+  },
+  {
+    "selector": "0xeb9763ed",
+    "text_sig": "transferby(address,address,uint256)"
+  },
+  {
+    "selector": "0xea770a4c",
+    "text_sig": "getNewCoinsIssued(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xe7e9f385",
+    "text_sig": "notarise(bytes32)"
+  },
+  {
+    "selector": "0xdf8de3e7",
+    "text_sig": "claimTokens(address)"
+  },
+  {
+    "selector": "0xde41e1a1",
+    "text_sig": "assignOwner(address[],uint256,address)"
+  },
+  {
+    "selector": "0xde287359",
+    "text_sig": "acl()"
+  },
+  {
+    "selector": "0xdb068e0e",
+    "text_sig": "setExchangeRate(uint256)"
+  },
+  {
+    "selector": "0xdaea85c5",
+    "text_sig": "approve(address)"
+  },
+  {
+    "selector": "0xcdde5413",
+    "text_sig": "updateTileTimeStamp(uint16)"
+  },
+  {
+    "selector": "0xcbb9d385",
+    "text_sig": "createUri(string)"
+  },
+  {
+    "selector": "0xca8127d4",
+    "text_sig": "tradingFeeModifiers(address,address)"
+  },
+  {
+    "selector": "0xc69cd09d",
+    "text_sig": "breedingFee()"
+  },
+  {
+    "selector": "0xc2db5890",
+    "text_sig": "breedAxies(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0xbf89662d",
+    "text_sig": "refundable()"
+  },
+  {
+    "selector": "0xbe038478",
+    "text_sig": "createPermission(address,address,bytes32,address)"
+  },
+  {
+    "selector": "0xbcf7bd0b",
+    "text_sig": "requireEnoughExpForBreeding(uint256)"
+  },
+  {
+    "selector": "0xafd925df",
+    "text_sig": "setPermissionManager(address,address,bytes32)"
+  },
+  {
+    "selector": "0xaa61924a",
+    "text_sig": "CREATE_VERSION_ROLE()"
+  },
+  {
+    "selector": "0xa51ba542",
+    "text_sig": "deleteMonsterIndexToApproved(uint256)"
+  },
+  {
+    "selector": "0xa47001a8",
+    "text_sig": "receiveEthPrice(uint256)"
+  },
+  {
+    "selector": "0xa30b4db9",
+    "text_sig": "getCreatorAddress(uint256)"
+  },
+  {
+    "selector": "0x9d0effdb",
+    "text_sig": "revokePermission(address,address,bytes32)"
+  },
+  {
+    "selector": "0x967a08f7",
+    "text_sig": "raiseTransferEvent(address,address,uint256)"
+  },
+  {
+    "selector": "0x93e84cd9",
+    "text_sig": "play()"
+  },
+  {
+    "selector": "0x9281cd65",
+    "text_sig": "changeApproval(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x8e5653d4",
+    "text_sig": "createUriSet(uint256[])"
+  },
+  {
+    "selector": "0x8c590917",
+    "text_sig": "contribute(uint256,uint256)"
+  },
+  {
+    "selector": "0x8ba4cc3c",
+    "text_sig": "airdrop(address,uint256)"
+  },
+  {
+    "selector": "0x88e9abb6",
+    "text_sig": "getClassPropertySize(uint32,uint8)"
+  },
+  {
+    "selector": "0x7b6c0492",
+    "text_sig": "allowanceSubId(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x793e39cd",
+    "text_sig": "createAndSellAllAmountPayEth(address,address,address,uint256)"
+  },
+  {
+    "selector": "0x78984793",
+    "text_sig": "setLimit(address[],uint256)"
+  },
+  {
+    "selector": "0x788649ea",
+    "text_sig": "unfreezeAccount(address)"
+  },
+  {
+    "selector": "0x75892cf1",
+    "text_sig": "convert(address,address,uint256,uint256)"
+  },
+  {
+    "selector": "0x6ce7e739",
+    "text_sig": "getBonusRate(uint256,uint256)"
+  },
+  {
+    "selector": "0x65b70e45",
+    "text_sig": "UpMineLVL(uint256)"
+  },
+  {
+    "selector": "0x65b0bc85",
+    "text_sig": "createNameAndPoint(bytes32,address)"
+  },
+  {
+    "selector": "0x63586d6a",
+    "text_sig": "claimBondReward()"
+  },
+  {
+    "selector": "0x62c06767",
+    "text_sig": "sweep(address,address,uint256)"
+  },
+  {
+    "selector": "0x5e35359e",
+    "text_sig": "withdrawTokens(address,address,uint256)"
+  },
+  {
+    "selector": "0x5db3f963",
+    "text_sig": "registerSimple()"
+  },
+  {
+    "selector": "0x58e2cd76",
+    "text_sig": "watch(address)"
+  },
+  {
+    "selector": "0x58836e9f",
+    "text_sig": "getUintPrice()"
+  },
+  {
+    "selector": "0x5687f2b8",
+    "text_sig": "emitApproval(address,address,uint256)"
+  },
+  {
+    "selector": "0x54fa8044",
+    "text_sig": "sendKrs(address,uint256)"
+  },
+  {
+    "selector": "0x4e006d83",
+    "text_sig": "createChecksumPair(uint256,uint256)"
+  },
+  {
+    "selector": "0x4d9994e8",
+    "text_sig": "setAccountNickname(string)"
+  },
+  {
+    "selector": "0x4d399cb3",
+    "text_sig": "updateWhitelist(address,uint8)"
+  },
+  {
+    "selector": "0x4c6a3334",
+    "text_sig": "buyEthLootbox(address)"
+  },
+  {
+    "selector": "0x40732c89",
+    "text_sig": "makeDeposit()"
+  },
+  {
+    "selector": "0x3f5dc6e5",
+    "text_sig": "addressInWhitelist(address)"
+  },
+  {
+    "selector": "0x3eba9ed2",
+    "text_sig": "setBooleanValue(bytes32,bool)"
+  },
+  {
+    "selector": "0x3c3861b6",
+    "text_sig": "getRace(uint32)"
+  },
+  {
+    "selector": "0x32ab6af0",
+    "text_sig": "newRepoWithVersion(string,address,uint16[3],address,bytes)"
+  },
+  {
+    "selector": "0x2c69e64e",
+    "text_sig": "refundBet(address)"
+  },
+  {
+    "selector": "0x2b747a29",
+    "text_sig": "buy_tickey(address)"
+  },
+  {
+    "selector": "0x298c154e",
+    "text_sig": "addListing(string,string,uint256)"
+  },
+  {
+    "selector": "0x27782212",
+    "text_sig": "submitTransaction(address,address,uint256)"
+  },
+  {
+    "selector": "0x25cf512d",
+    "text_sig": "setBytes32Value(bytes32,bytes32)"
+  },
+  {
+    "selector": "0x231b48aa",
+    "text_sig": "settingsSetWeiPerMinToken(uint256)"
+  },
+  {
+    "selector": "0x15e839c1",
+    "text_sig": "setHeroGenes(uint256,uint256)"
+  },
+  {
+    "selector": "0x0c560c64",
+    "text_sig": "USD(uint256)"
+  },
+  {
+    "selector": "0x0af4187d",
+    "text_sig": "getAllowance(address,address)"
+  },
+  {
+    "selector": "0x0ace8c9a",
+    "text_sig": "addPackage(string)"
+  },
+  {
+    "selector": "0x0acaad4c",
+    "text_sig": "getWeiContributed(address)"
+  },
+  {
+    "selector": "0x0a8ed3db",
+    "text_sig": "grantPermission(address,address,bytes32)"
+  },
+  {
+    "selector": "0x02f652a3",
+    "text_sig": "setTransferAgent(address,bool)"
+  },
+  {
+    "selector": "0xfeff0506",
+    "text_sig": "addListing(string,string,uint256,address)"
+  },
+  {
+    "selector": "0xfafb76dd",
+    "text_sig": "getOffsetIndex()"
+  },
+  {
+    "selector": "0xfa6fc037",
+    "text_sig": "prepareToBreed(uint256,bool,uint256,bool,uint256)"
+  },
+  {
+    "selector": "0xf780d867",
+    "text_sig": "add_coin(string,string,address,uint8)"
+  },
+  {
+    "selector": "0xf77c4791",
+    "text_sig": "controller()"
+  },
+  {
+    "selector": "0xf6d956df",
+    "text_sig": "buy(uint8,uint256,uint256)"
+  },
+  {
+    "selector": "0xf4ce7c1c",
+    "text_sig": "purchaseWithEther(uint256)"
+  },
+  {
+    "selector": "0xf0b9e5ba",
+    "text_sig": "onERC721Received(address,uint256,bytes)"
+  },
+  {
+    "selector": "0xeede471e",
+    "text_sig": "goToSleep(uint256)"
+  },
+  {
+    "selector": "0xee0b04be",
+    "text_sig": "claimTokensFor(address)"
+  },
+  {
+    "selector": "0xec91b550",
+    "text_sig": "miningThree()"
+  },
+  {
+    "selector": "0xec0ba006",
+    "text_sig": "countEgg(uint64)"
+  },
+  {
+    "selector": "0xeb14367d",
+    "text_sig": "layEgg(uint64)"
+  },
+  {
+    "selector": "0xe9b6d671",
+    "text_sig": "borrowItem(uint64)"
+  },
+  {
+    "selector": "0xe8aca46a",
+    "text_sig": "addReferral(address)"
+  },
+  {
+    "selector": "0xe6b827a6",
+    "text_sig": "becomeSpermlord()"
+  },
+  {
+    "selector": "0xe46751e3",
+    "text_sig": "exp(int256)"
+  },
+  {
+    "selector": "0xe274fd24",
+    "text_sig": "eventContract()"
+  },
+  {
+    "selector": "0xdd01f781",
+    "text_sig": "goToWork(uint256)"
+  },
+  {
+    "selector": "0xdcbfe3d5",
+    "text_sig": "clearRequests(bytes32)"
+  },
+  {
+    "selector": "0xd86afbbb",
+    "text_sig": "giveItem(address,uint256)"
+  },
+  {
+    "selector": "0xd59f4e68",
+    "text_sig": "setPaintingArtist(uint256,string)"
+  },
+  {
+    "selector": "0xd4807fb2",
+    "text_sig": "initializeRound()"
+  },
+  {
+    "selector": "0xd35e29d7",
+    "text_sig": "mint(address,uint32)"
+  },
+  {
+    "selector": "0xcd0fdc24",
+    "text_sig": "getPaintingArtistId(uint256)"
+  },
+  {
+    "selector": "0xcd019cb1",
+    "text_sig": "getBonusTotal()"
+  },
+  {
+    "selector": "0xcb4c86b7",
+    "text_sig": "funding()"
+  },
+  {
+    "selector": "0xc44193c3",
+    "text_sig": "offerPunkForSale(uint256,uint256)"
+  },
+  {
+    "selector": "0xc3bf32e3",
+    "text_sig": "numberOfHeroClasses()"
+  },
+  {
+    "selector": "0xc0e91320",
+    "text_sig": "finishPVEBatch(uint256[])"
+  },
+  {
+    "selector": "0xbdd7908b",
+    "text_sig": "getFishParams(uint256,uint256,uint256,address)"
+  },
+  {
+    "selector": "0xbd8ff817",
+    "text_sig": "calcCost(address,uint8,uint256)"
+  },
+  {
+    "selector": "0xbbe93d91",
+    "text_sig": "mul(int256,int256)"
+  },
+  {
+    "selector": "0xb7dfc8a5",
+    "text_sig": "updateTokenPerEther(uint256)"
+  },
+  {
+    "selector": "0xb55fb574",
+    "text_sig": "cancelOrders(uint256[])"
+  },
+  {
+    "selector": "0xb2016bd4",
+    "text_sig": "collateralToken()"
+  },
+  {
+    "selector": "0xaff6b3e8",
+    "text_sig": "setupRace(uint256,uint256)"
+  },
+  {
+    "selector": "0xaf157c19",
+    "text_sig": "getContributors()"
+  },
+  {
+    "selector": "0xadefc37b",
+    "text_sig": "sub(int256,int256)"
+  },
+  {
+    "selector": "0xad25ce57",
+    "text_sig": "bidOnSaleAuction(uint256)"
+  },
+  {
+    "selector": "0xa7cebd4d",
+    "text_sig": "createActivity(uint16,uint16,uint128,uint64,uint64)"
+  },
+  {
+    "selector": "0xa5f3c23b",
+    "text_sig": "add(int256,int256)"
+  },
+  {
+    "selector": "0xa2550108",
+    "text_sig": "alt_buyCollectible(uint256,uint256)"
+  },
+  {
+    "selector": "0xa157979c",
+    "text_sig": "netOutcomeTokensSold(uint256)"
+  },
+  {
+    "selector": "0x9ed57360",
+    "text_sig": "getPaintingSpeed(uint256)"
+  },
+  {
+    "selector": "0x9e6afbda",
+    "text_sig": "decreaseSpeed(uint256)"
+  },
+  {
+    "selector": "0x92d267c1",
+    "text_sig": "setEthUsdRateInCent(uint256)"
+  },
+  {
+    "selector": "0x8e3073a6",
+    "text_sig": "getEth(uint256)"
+  },
+  {
+    "selector": "0x8df15e19",
+    "text_sig": "tokenLock(address,uint256)"
+  },
+  {
+    "selector": "0x8d3fd859",
+    "text_sig": "sellFucks()"
+  },
+  {
+    "selector": "0x8c2305fd",
+    "text_sig": "stakeBela(uint256)"
+  },
+  {
+    "selector": "0x8abe59ea",
+    "text_sig": "outcomeTokens(uint256)"
+  },
+  {
+    "selector": "0x7dc8f086",
+    "text_sig": "getOutcomeCount()"
+  },
+  {
+    "selector": "0x7d50bef3",
+    "text_sig": "account(address,address,uint256)"
+  },
+  {
+    "selector": "0x7c17dc02",
+    "text_sig": "AddFish()"
+  },
+  {
+    "selector": "0x74609899",
+    "text_sig": "voteOptions(uint256,uint256[],uint256[])"
+  },
+  {
+    "selector": "0x70d1383d",
+    "text_sig": "createEditionMeta(uint256)"
+  },
+  {
+    "selector": "0x6ea34ce4",
+    "text_sig": "getPartById(uint256)"
+  },
+  {
+    "selector": "0x6d1b229d",
+    "text_sig": "burnTokens(uint256)"
+  },
+  {
+    "selector": "0x6c79af10",
+    "text_sig": "bulkAddToWhitelist(address[])"
+  },
+  {
+    "selector": "0x6c197ff5",
+    "text_sig": "sell(address,uint256)"
+  },
+  {
+    "selector": "0x69843940",
+    "text_sig": "getValue(bytes32)"
+  },
+  {
+    "selector": "0x62564c48",
+    "text_sig": "getProposals()"
+  },
+  {
+    "selector": "0x60a11672",
+    "text_sig": "safeTransferFromWithData(address,address,uint256,bytes)"
+  },
+  {
+    "selector": "0x5d77d8d0",
+    "text_sig": "getBlacklist(address)"
+  },
+  {
+    "selector": "0x5b626339",
+    "text_sig": "getClassPropertyValue(uint32,uint8,uint256)"
+  },
+  {
+    "selector": "0x5333ee4d",
+    "text_sig": "buyEgg(uint256,uint256)"
+  },
+  {
+    "selector": "0x4dbf27cc",
+    "text_sig": "follow(address)"
+  },
+  {
+    "selector": "0x4b741395",
+    "text_sig": "requestNewMint(address,uint256)"
+  },
+  {
+    "selector": "0x49ec7c3f",
+    "text_sig": "giveBirth(uint256,uint256,uint256,bytes)"
+  },
+  {
+    "selector": "0x47d8167d",
+    "text_sig": "buyBack(uint256,uint256)"
+  },
+  {
+    "selector": "0x43dc3ab2",
+    "text_sig": "register(address[])"
+  },
+  {
+    "selector": "0x4254b155",
+    "text_sig": "register(bytes32,string,address,address,address)"
+  },
+  {
+    "selector": "0x3f6c0696",
+    "text_sig": "superMint(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x330cbc75",
+    "text_sig": "createEdition(uint256)"
+  },
+  {
+    "selector": "0x31f09265",
+    "text_sig": "withdraw(address,uint256,bytes)"
+  },
+  {
+    "selector": "0x2c2de40a",
+    "text_sig": "setMaximumSellableTokens(uint256)"
+  },
+  {
+    "selector": "0x298410e5",
+    "text_sig": "addAsset(address)"
+  },
+  {
+    "selector": "0x28da850b",
+    "text_sig": "buyAllOutcomes(uint256)"
+  },
+  {
+    "selector": "0x24d4e90a",
+    "text_sig": "ln(uint256)"
+  },
+  {
+    "selector": "0x1f7a72f7",
+    "text_sig": "bobClaimsDeposit(bytes32,uint256,bytes32,address,address)"
+  },
+  {
+    "selector": "0x1a88f306",
+    "text_sig": "transferFromContract(address,uint256)"
+  },
+  {
+    "selector": "0x1749bdf1",
+    "text_sig": "getClassRank(uint32)"
+  },
+  {
+    "selector": "0x13f44d10",
+    "text_sig": "isAddressWhitelisted(address)"
+  },
+  {
+    "selector": "0x12b97812",
+    "text_sig": "addOffering(address,bytes32,address,uint256)"
+  },
+  {
+    "selector": "0x128d7215",
+    "text_sig": "addRequest(string)"
+  },
+  {
+    "selector": "0x108a101b",
+    "text_sig": "hasEmptyEditionSlots(uint256)"
+  },
+  {
+    "selector": "0x0c424284",
+    "text_sig": "setWhitelistStatus(address,bool)"
+  },
+  {
+    "selector": "0x0af9d89c",
+    "text_sig": "getPaintingGeneration(uint256)"
+  },
+  {
+    "selector": "0x09c8367c",
+    "text_sig": "setUnitJadeStealingIncreases(address,uint256,uint256,bool)"
+  },
+  {
+    "selector": "0x04fc7c6d",
+    "text_sig": "updateJoinedCrowdsalesMultiple(address[])"
+  },
+  {
+    "selector": "0x00e1986d",
+    "text_sig": "grantVestedTokens(address,uint256,uint64,uint64,uint64)"
+  },
+  {
+    "selector": "0xfc688e87",
+    "text_sig": "logAccount(address,uint256)"
+  },
+  {
+    "selector": "0xfa89401a",
+    "text_sig": "refund(address)"
+  },
+  {
+    "selector": "0xf8cbd580",
+    "text_sig": "freezeIndex(uint256)"
+  },
+  {
+    "selector": "0xf8a34b26",
+    "text_sig": "presale(address,uint256)"
+  },
+  {
+    "selector": "0xf5c89f83",
+    "text_sig": "StartMiningByIdArray(uint256[])"
+  },
+  {
+    "selector": "0xf14ae17d",
+    "text_sig": "isPresalePurchase(address)"
+  },
+  {
+    "selector": "0xe8474230",
+    "text_sig": "getHybridizationFullPrice(uint256)"
+  },
+  {
+    "selector": "0xe58fc54c",
+    "text_sig": "withdrawForeignTokens(address)"
+  },
+  {
+    "selector": "0xe4725ba1",
+    "text_sig": "accept(bytes32)"
+  },
+  {
+    "selector": "0xe38da1a1",
+    "text_sig": "storeDoi(bytes32,bytes32)"
+  },
+  {
+    "selector": "0xe1cda468",
+    "text_sig": "createRequestFromBytes(bytes)"
+  },
+  {
+    "selector": "0xda9287d1",
+    "text_sig": "acceptHybridization(uint256,uint256)"
+  },
+  {
+    "selector": "0xd8b66ae1",
+    "text_sig": "sendTokens(address[],uint256[])"
+  },
+  {
+    "selector": "0xd7c7159c",
+    "text_sig": "buyWithKYCData(bytes,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xd4b83992",
+    "text_sig": "target()"
+  },
+  {
+    "selector": "0xcf16e955",
+    "text_sig": "buyOnBehalf(address)"
+  },
+  {
+    "selector": "0xcee73630",
+    "text_sig": "buyTPT(uint256,uint256,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xcc98ff20",
+    "text_sig": "purchaseVillage(uint256)"
+  },
+  {
+    "selector": "0xcaef5dec",
+    "text_sig": "getSubPayeesCount(bytes32)"
+  },
+  {
+    "selector": "0xc19d93fb",
+    "text_sig": "state()"
+  },
+  {
+    "selector": "0xc1918e90",
+    "text_sig": "accountAddressForSponsee()"
+  },
+  {
+    "selector": "0xc127c247",
+    "text_sig": "addMember(address,string)"
+  },
+  {
+    "selector": "0xb9209e33",
+    "text_sig": "isVerified(address)"
+  },
+  {
+    "selector": "0xb556a895",
+    "text_sig": "incFreezeHybridizationsCount(uint256)"
+  },
+  {
+    "selector": "0xb0f94b16",
+    "text_sig": "batchFishAquarium(uint256[],address)"
+  },
+  {
+    "selector": "0xb073f52b",
+    "text_sig": "updateBalance(bytes32,uint8,int256)"
+  },
+  {
+    "selector": "0xacfdfd1c",
+    "text_sig": "deploy(uint256,string,string,address)"
+  },
+  {
+    "selector": "0xa444502b",
+    "text_sig": "whitelistAccount(address,uint256)"
+  },
+  {
+    "selector": "0xa0b1b385",
+    "text_sig": "playerSetInput(address,uint256)"
+  },
+  {
+    "selector": "0xa05fccef",
+    "text_sig": "transferMultiple(address[],uint256[])"
+  },
+  {
+    "selector": "0x9fe802f1",
+    "text_sig": "transferEx(address,uint256)"
+  },
+  {
+    "selector": "0x97d88cd2",
+    "text_sig": "subAllowance(address,address,uint256)"
+  },
+  {
+    "selector": "0x8ed6910f",
+    "text_sig": "limitSell(uint256,uint256)"
+  },
+  {
+    "selector": "0x8e3af93f",
+    "text_sig": "finalizeMint(uint256)"
+  },
+  {
+    "selector": "0x8dff4abd",
+    "text_sig": "activateRevenueShareIdentifier(string)"
+  },
+  {
+    "selector": "0x8bdc5a5f",
+    "text_sig": "withdraw(address,address,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0x88af30c3",
+    "text_sig": "_mainAddress()"
+  },
+  {
+    "selector": "0x883a92e1",
+    "text_sig": "setFreezeEndTime(uint256,uint256)"
+  },
+  {
+    "selector": "0x86d1a69f",
+    "text_sig": "release()"
+  },
+  {
+    "selector": "0x7d64bcb4",
+    "text_sig": "finishMinting()"
+  },
+  {
+    "selector": "0x7b413985",
+    "text_sig": "tokenValueInEther(uint256)"
+  },
+  {
+    "selector": "0x7b039bb6",
+    "text_sig": "createVariation(uint256,uint256)"
+  },
+  {
+    "selector": "0x784f47ff",
+    "text_sig": "reduceCredits(string,uint256,uint8,address)"
+  },
+  {
+    "selector": "0x75fe2e33",
+    "text_sig": "getMonsterObjId(address,uint256)"
+  },
+  {
+    "selector": "0x6f3165d3",
+    "text_sig": "UpgradeRig(uint8,uint256)"
+  },
+  {
+    "selector": "0x6b2bb92a",
+    "text_sig": "finishTournament()"
+  },
+  {
+    "selector": "0x67243482",
+    "text_sig": "airdrop(address[],uint256[])"
+  },
+  {
+    "selector": "0x663ff5a9",
+    "text_sig": "create(bytes32,address)"
+  },
+  {
+    "selector": "0x6473b34a",
+    "text_sig": "batchAllocate(address[],uint256[])"
+  },
+  {
+    "selector": "0x62779e15",
+    "text_sig": "payFees()"
+  },
+  {
+    "selector": "0x61d027b3",
+    "text_sig": "treasury()"
+  },
+  {
+    "selector": "0x5c7b79f5",
+    "text_sig": "cashOut(uint256)"
+  },
+  {
+    "selector": "0x56de96db",
+    "text_sig": "setState(uint8)"
+  },
+  {
+    "selector": "0x55a373d6",
+    "text_sig": "tokenContract()"
+  },
+  {
+    "selector": "0x51c03b85",
+    "text_sig": "makeBid(uint16)"
+  },
+  {
+    "selector": "0x4eb4fe80",
+    "text_sig": "getBackLendingItem(uint64)"
+  },
+  {
+    "selector": "0x4c36c36e",
+    "text_sig": "resolveBet(uint256)"
+  },
+  {
+    "selector": "0x4c21eb07",
+    "text_sig": "put(string)"
+  },
+  {
+    "selector": "0x471efe66",
+    "text_sig": "set_addresses(address,address)"
+  },
+  {
+    "selector": "0x4637d827",
+    "text_sig": "trust(address)"
+  },
+  {
+    "selector": "0x3f4d2fc2",
+    "text_sig": "addConnector(address,uint32,bool)"
+  },
+  {
+    "selector": "0x358cc6f6",
+    "text_sig": "acceptKyc(address)"
+  },
+  {
+    "selector": "0x320cffcd",
+    "text_sig": "getCostForCards(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x32013ac3",
+    "text_sig": "preallocate(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x31a02bce",
+    "text_sig": "requestMint(address,uint256)"
+  },
+  {
+    "selector": "0x2f3d8035",
+    "text_sig": "grantVestedTokens(address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x2ef140ef",
+    "text_sig": "send(address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x2bdcd90d",
+    "text_sig": "claimChip(uint256,string)"
+  },
+  {
+    "selector": "0x242ed69f",
+    "text_sig": "setActiveTranscoders()"
+  },
+  {
+    "selector": "0x22f3e2d4",
+    "text_sig": "isActive()"
+  },
+  {
+    "selector": "0x1e5d2e41",
+    "text_sig": "geneCore(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x1d66105b",
+    "text_sig": "buyDrangon()"
+  },
+  {
+    "selector": "0x1a46ec82",
+    "text_sig": "allowanceOf(address,address)"
+  },
+  {
+    "selector": "0x195055f1",
+    "text_sig": "isTransferable(address)"
+  },
+  {
+    "selector": "0x1698755f",
+    "text_sig": "claimToken(address,uint256)"
+  },
+  {
+    "selector": "0x15c7ff34",
+    "text_sig": "isPaidUntil(address)"
+  },
+  {
+    "selector": "0x14c78333",
+    "text_sig": "batchResolveAquarium(uint256[])"
+  },
+  {
+    "selector": "0x12dadf25",
+    "text_sig": "withdrawToken(uint256,address,uint256,address)"
+  },
+  {
+    "selector": "0x0f24f5c8",
+    "text_sig": "doTransfer(address,uint256)"
+  },
+  {
+    "selector": "0x0d1118ce",
+    "text_sig": "burnTokens(address,uint256)"
+  },
+  {
+    "selector": "0x0c516283",
+    "text_sig": "freezeHybridizationsCount(uint256)"
+  },
+  {
+    "selector": "0x06444e91",
+    "text_sig": "register(address,uint32)"
+  },
+  {
+    "selector": "0x020f899a",
+    "text_sig": "hybridizationPrice(uint256)"
+  },
+  {
+    "selector": "0x01ffc9a7",
+    "text_sig": "supportsInterface(bytes4)"
+  },
+  {
+    "selector": "0x00cb527f",
+    "text_sig": "miningFive()"
+  },
+  {
+    "selector": "0xffbd26ce",
+    "text_sig": "addReinforcedWhitelist(address[])"
+  },
+  {
+    "selector": "0xff1fd974",
+    "text_sig": "getPayAmount(address,address,uint256)"
+  },
+  {
+    "selector": "0xfdbf1989",
+    "text_sig": "applyItem(uint256)"
+  },
+  {
+    "selector": "0xfd8acc42",
+    "text_sig": "buyAuction(uint256)"
+  },
+  {
+    "selector": "0xfa9d8713",
+    "text_sig": "sleep(uint256)"
+  },
+  {
+    "selector": "0xf6486cad",
+    "text_sig": "burnReserveFees(address)"
+  },
+  {
+    "selector": "0xf48c3054",
+    "text_sig": "proxyPayment(address)"
+  },
+  {
+    "selector": "0xf4869726",
+    "text_sig": "buyWithSignedAddress(uint128,uint8,bytes32,bytes32)"
+  },
+  {
+    "selector": "0xf3d3402a",
+    "text_sig": "changeBountyData(uint256,string)"
+  },
+  {
+    "selector": "0xf2f921e6",
+    "text_sig": "snapshotDailyGooDepositFunding()"
+  },
+  {
+    "selector": "0xf0af7e65",
+    "text_sig": "cancelAgon(uint64)"
+  },
+  {
+    "selector": "0xee8cdd4e",
+    "text_sig": "setNewPrice(uint256)"
+  },
+  {
+    "selector": "0xece2064c",
+    "text_sig": "setCurrentRewardTokens()"
+  },
+  {
+    "selector": "0xe751f271",
+    "text_sig": "execute(bytes32)"
+  },
+  {
+    "selector": "0xe601dd12",
+    "text_sig": "sign(string,string)"
+  },
+  {
+    "selector": "0xe555c1a3",
+    "text_sig": "sellMyTokens()"
+  },
+  {
+    "selector": "0xe4fc6b6d",
+    "text_sig": "distribute()"
+  },
+  {
+    "selector": "0xe20056e6",
+    "text_sig": "replaceOwner(address,address)"
+  },
+  {
+    "selector": "0xddb6e116",
+    "text_sig": "vote(uint16)"
+  },
+  {
+    "selector": "0xd997a153",
+    "text_sig": "transferBatchIdempotent(address[],uint256[],bool)"
+  },
+  {
+    "selector": "0xd45bcac1",
+    "text_sig": "listAddresses(address[],uint256[],uint256[])"
+  },
+  {
+    "selector": "0xd19853c7",
+    "text_sig": "exchangeBounty(address,uint256)"
+  },
+  {
+    "selector": "0xcea08621",
+    "text_sig": "changeDailyLimit(uint256)"
+  },
+  {
+    "selector": "0xce160edd",
+    "text_sig": "searchAndBid(uint256,uint256)"
+  },
+  {
+    "selector": "0xccb98ffc",
+    "text_sig": "setEndTime(uint256)"
+  },
+  {
+    "selector": "0xcb57e4a6",
+    "text_sig": "createCrypton(string,uint8,uint256,uint256,address)"
+  },
+  {
+    "selector": "0xc4e41b22",
+    "text_sig": "getTotalSupply()"
+  },
+  {
+    "selector": "0xc3c5a547",
+    "text_sig": "isRegistered(address)"
+  },
+  {
+    "selector": "0xc3143fe5",
+    "text_sig": "setUserCap(address,uint256)"
+  },
+  {
+    "selector": "0xc2b848e8",
+    "text_sig": "procPreSales()"
+  },
+  {
+    "selector": "0xbf5fc2ee",
+    "text_sig": "setStartsAt(uint256)"
+  },
+  {
+    "selector": "0xbe9a6555",
+    "text_sig": "start()"
+  },
+  {
+    "selector": "0xbcf0dd8e",
+    "text_sig": "marketTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0xba5d3078",
+    "text_sig": "principal()"
+  },
+  {
+    "selector": "0xb954dc57",
+    "text_sig": "poolCap()"
+  },
+  {
+    "selector": "0xb5c8f317",
+    "text_sig": "SimpleERC20Token()"
+  },
+  {
+    "selector": "0xb25fa92c",
+    "text_sig": "adminAddRole(address,string)"
+  },
+  {
+    "selector": "0xb237f7d4",
+    "text_sig": "burnTokens(address)"
+  },
+  {
+    "selector": "0xb187b6b1",
+    "text_sig": "getBlockValueBalance()"
+  },
+  {
+    "selector": "0xb033a6c3",
+    "text_sig": "lookup(address,uint256)"
+  },
+  {
+    "selector": "0xad2bb1b3",
+    "text_sig": "blockAddress(address)"
+  },
+  {
+    "selector": "0xac8a86f5",
+    "text_sig": "setDrawAddress(address)"
+  },
+  {
+    "selector": "0xab6ef0b1",
+    "text_sig": "purchaseLandWithCC(uint8,bytes32,uint256)"
+  },
+  {
+    "selector": "0xa9737595",
+    "text_sig": "numCoins()"
+  },
+  {
+    "selector": "0xa8d84fc3",
+    "text_sig": "activeEnd()"
+  },
+  {
+    "selector": "0xa6fb97d1",
+    "text_sig": "withdraw(bytes32,address,uint256)"
+  },
+  {
+    "selector": "0xa4e3374b",
+    "text_sig": "transferDelegated(address,address,uint256)"
+  },
+  {
+    "selector": "0xa3ab5045",
+    "text_sig": "isNewTile(uint16)"
+  },
+  {
+    "selector": "0xa32ce11e",
+    "text_sig": "approvals(address,address)"
+  },
+  {
+    "selector": "0xa25eb5d9",
+    "text_sig": "exchangeToken()"
+  },
+  {
+    "selector": "0x9dbf0087",
+    "text_sig": "TokenERC20(uint256,string,string)"
+  },
+  {
+    "selector": "0x9ac84414",
+    "text_sig": "sweepEth()"
+  },
+  {
+    "selector": "0x9a22dec5",
+    "text_sig": "buyAllAmountPayEth(address,address,uint256,address)"
+  },
+  {
+    "selector": "0x99aba8e3",
+    "text_sig": "distribute(address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x966588d4",
+    "text_sig": "cloneWithTwoPops(uint256,uint256)"
+  },
+  {
+    "selector": "0x94594625",
+    "text_sig": "distributeAirdrop(address[],uint256)"
+  },
+  {
+    "selector": "0x917fcc5d",
+    "text_sig": "addJobProposal(uint256,string,uint256)"
+  },
+  {
+    "selector": "0x8f580996",
+    "text_sig": "enablePurchasing()"
+  },
+  {
+    "selector": "0x8b44af0e",
+    "text_sig": "transferETHS(address[])"
+  },
+  {
+    "selector": "0x8aa6e6de",
+    "text_sig": "approveMint(uint256)"
+  },
+  {
+    "selector": "0x8301fb2e",
+    "text_sig": "cashOutTank(uint32)"
+  },
+  {
+    "selector": "0x7ff9b596",
+    "text_sig": "tokenPrice()"
+  },
+  {
+    "selector": "0x7fd39247",
+    "text_sig": "setOwner(uint256,address)"
+  },
+  {
+    "selector": "0x7e0358a6",
+    "text_sig": "getEnergy(uint256)"
+  },
+  {
+    "selector": "0x7adbf973",
+    "text_sig": "setOracle(address)"
+  },
+  {
+    "selector": "0x77f122bd",
+    "text_sig": "setBlockValueBalance(uint256)"
+  },
+  {
+    "selector": "0x7489ec23",
+    "text_sig": "cancelOrder(bytes32)"
+  },
+  {
+    "selector": "0x6cdb1b75",
+    "text_sig": "setCardsAddress(address)"
+  },
+  {
+    "selector": "0x6a28f000",
+    "text_sig": "unfreeze()"
+  },
+  {
+    "selector": "0x5c50c356",
+    "text_sig": "getTotalBonded()"
+  },
+  {
+    "selector": "0x5c36b186",
+    "text_sig": "ping()"
+  },
+  {
+    "selector": "0x5bc91b2f",
+    "text_sig": "createRound(uint256,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x5abaaa01",
+    "text_sig": "unicornTokenAddress()"
+  },
+  {
+    "selector": "0x5253baae",
+    "text_sig": "trade(address,address,uint256)"
+  },
+  {
+    "selector": "0x4fbe30d4",
+    "text_sig": "changeTokenRate(uint256)"
+  },
+  {
+    "selector": "0x4f76a077",
+    "text_sig": "addInvestorToWhiteList(address)"
+  },
+  {
+    "selector": "0x4ecb1390",
+    "text_sig": "saleTokens(address,uint256)"
+  },
+  {
+    "selector": "0x4bd09c2a",
+    "text_sig": "distributeTokens(address[],uint256[])"
+  },
+  {
+    "selector": "0x4b915a68",
+    "text_sig": "aliceClaimsDeposit(bytes32,uint256,address,address,bytes20)"
+  },
+  {
+    "selector": "0x49b9734d",
+    "text_sig": "changeMainEndTime(uint256)"
+  },
+  {
+    "selector": "0x46e04a2f",
+    "text_sig": "claimTokens(uint256)"
+  },
+  {
+    "selector": "0x45f0a44f",
+    "text_sig": "amounts(uint256)"
+  },
+  {
+    "selector": "0x4506e64d",
+    "text_sig": "putOn(uint256,uint256)"
+  },
+  {
+    "selector": "0x4377c1cf",
+    "text_sig": "removeCastleFromActive(uint32)"
+  },
+  {
+    "selector": "0x42fd7d4c",
+    "text_sig": "_buy(address)"
+  },
+  {
+    "selector": "0x366a4120",
+    "text_sig": "release(uint256,uint256)"
+  },
+  {
+    "selector": "0x3176d373",
+    "text_sig": "updatePriceFci(uint256,uint256)"
+  },
+  {
+    "selector": "0x2c4d4d18",
+    "text_sig": "changeMinter(address)"
+  },
+  {
+    "selector": "0x28f371aa",
+    "text_sig": "isApproved()"
+  },
+  {
+    "selector": "0x2620f61c",
+    "text_sig": "storeClaim(uint16,address,uint256)"
+  },
+  {
+    "selector": "0x2200cdec",
+    "text_sig": "finishPVE(uint256)"
+  },
+  {
+    "selector": "0x21670f22",
+    "text_sig": "reward(address,uint256)"
+  },
+  {
+    "selector": "0x204009d2",
+    "text_sig": "transferForMultiAddresses(address[],uint256[])"
+  },
+  {
+    "selector": "0x1ab681e8",
+    "text_sig": "withdrawEth(uint256,address,bytes32)"
+  },
+  {
+    "selector": "0x194fe9a4",
+    "text_sig": "transferWithBonuses(address,uint256,uint256)"
+  },
+  {
+    "selector": "0x182e7533",
+    "text_sig": "getBetResult(bytes32,bytes32,bytes32,uint256)"
+  },
+  {
+    "selector": "0x17fb6c6e",
+    "text_sig": "approveRequest(uint256,bool,string)"
+  },
+  {
+    "selector": "0x17d60c6a",
+    "text_sig": "getCancelled(bytes32)"
+  },
+  {
+    "selector": "0x15eaef6b",
+    "text_sig": "tokenTransfer(address,address,uint256)"
+  },
+  {
+    "selector": "0x15cff546",
+    "text_sig": "isOperationBlocked()"
+  },
+  {
+    "selector": "0x155bf4e2",
+    "text_sig": "getToken(bytes32)"
+  },
+  {
+    "selector": "0x15270ace",
+    "text_sig": "distribute(address,address[],uint256[])"
+  },
+  {
+    "selector": "0x144fa6d7",
+    "text_sig": "setToken(address)"
+  },
+  {
+    "selector": "0x13ac58bb",
+    "text_sig": "increaseCredits(string,uint256,uint8,address)"
+  },
+  {
+    "selector": "0x13a19e1b",
+    "text_sig": "initialCoach(uint256,uint256,uint8,uint256)"
+  },
+  {
+    "selector": "0x12f7cf74",
+    "text_sig": "approve(address,uint8,uint8)"
+  },
+  {
+    "selector": "0x124c32a1",
+    "text_sig": "enter(bytes32,bytes8)"
+  },
+  {
+    "selector": "0x0e8a47b5",
+    "text_sig": "trade(uint256,address,uint256,address,uint256)"
+  },
+  {
+    "selector": "0x0e0a0d74",
+    "text_sig": "getAmount(bytes32)"
+  },
+  {
+    "selector": "0x025ff12f",
+    "text_sig": "airdrop(address,address[],uint256[])"
+  },
+  {
+    "selector": "0x009f9262",
+    "text_sig": "setEthPrice(uint256)"
+  },
+  {
+    "selector": "0xff2156c5",
+    "text_sig": "buyLottery(uint256)"
+  },
+  {
+    "selector": "0xfc52b162",
+    "text_sig": "getGenesisTotal()"
+  },
+  {
+    "selector": "0xf8aabbd9",
+    "text_sig": "makeTJs(address)"
+  },
+  {
+    "selector": "0xf6f23058",
+    "text_sig": "goToNextRound()"
+  },
+  {
+    "selector": "0xf4f3b97c",
+    "text_sig": "updateSubjectMatter(uint256,string)"
+  },
+  {
+    "selector": "0xf34b95b3",
+    "text_sig": "register(string,address,bytes32)"
+  },
+  {
+    "selector": "0xf04182d8",
+    "text_sig": "insertProposal(address,uint256,address)"
+  },
+  {
+    "selector": "0xf03dd010",
+    "text_sig": "WithdrawalETH(uint256)"
+  },
+  {
+    "selector": "0xef4ba598",
+    "text_sig": "offerPriceEth(uint256)"
+  },
+  {
+    "selector": "0xeee392c8",
+    "text_sig": "initialTransfer(address,uint256)"
+  },
+  {
+    "selector": "0xee7e2039",
+    "text_sig": "createNewAuction(uint256,uint256)"
+  },
+  {
+    "selector": "0xed8f02d0",
+    "text_sig": "tokenValuePublish(uint256,string,uint256)"
+  },
+  {
+    "selector": "0xecbca55d",
+    "text_sig": "setConversionFee(uint32)"
+  },
+  {
+    "selector": "0xe47112bd",
+    "text_sig": "sendTokens()"
+  },
+  {
+    "selector": "0xe0a668b4",
+    "text_sig": "setVesting(address,uint256,uint256)"
+  },
+  {
+    "selector": "0xe09678fd",
+    "text_sig": "setIcoContract(address)"
+  },
+  {
+    "selector": "0xdfbed623",
+    "text_sig": "updateCaller(address,bool)"
+  },
+  {
+    "selector": "0xdfba3be1",
+    "text_sig": "pvpFinished(uint256[],uint256)"
+  },
+  {
+    "selector": "0xdd20a53e",
+    "text_sig": "createTournament(uint256)"
+  },
+  {
+    "selector": "0xdcf7bb5c",
+    "text_sig": "changeTarget(address)"
+  },
+  {
+    "selector": "0xdc566787",
+    "text_sig": "topdownAndCashout(address,uint256)"
+  },
+  {
+    "selector": "0xdc268db9",
+    "text_sig": "isOnCastle(uint32,uint64)"
+  },
+  {
+    "selector": "0xdb8b6ccf",
+    "text_sig": "addSubjectMatter(string)"
+  },
+  {
+    "selector": "0xdb32be98",
+    "text_sig": "refundICO()"
+  },
+  {
+    "selector": "0xda26d0b9",
+    "text_sig": "addAuction(uint256,address,uint128,uint128,uint64,uint64)"
+  },
+  {
+    "selector": "0xd86123e1",
+    "text_sig": "setMany(address[])"
+  },
+  {
+    "selector": "0xd73478f8",
+    "text_sig": "userToNumTowns(bytes32)"
+  },
+  {
+    "selector": "0xd6f327cc",
+    "text_sig": "swapCardForReward(address,uint8)"
+  },
+  {
+    "selector": "0xd6a9de51",
+    "text_sig": "getSeller(uint256)"
+  },
+  {
+    "selector": "0xd395ee0f",
+    "text_sig": "setQuickBuyPath(address[])"
+  },
+  {
+    "selector": "0xd3017193",
+    "text_sig": "addUser(address,uint256)"
+  },
+  {
+    "selector": "0xd2973f93",
+    "text_sig": "setUserType(address,uint256)"
+  },
+  {
+    "selector": "0xd25f82a0",
+    "text_sig": "getAirdrop()"
+  },
+  {
+    "selector": "0xd1cf113e",
+    "text_sig": "multiAccessSetRecipient(address)"
+  },
+  {
+    "selector": "0xcfe3b8fb",
+    "text_sig": "sTks(address,uint256)"
+  },
+  {
+    "selector": "0xcee6315a",
+    "text_sig": "manualSettleTrade(uint256,uint8)"
+  },
+  {
+    "selector": "0xce649b39",
+    "text_sig": "setEthereumRate(uint256)"
+  },
+  {
+    "selector": "0xccc11f11",
+    "text_sig": "hasAssetRights(address,bytes32)"
+  },
+  {
+    "selector": "0xcb4e75bb",
+    "text_sig": "smbl()"
+  },
+  {
+    "selector": "0xc9b4ddb2",
+    "text_sig": "receiveLockedAmount(address,uint256)"
+  },
+  {
+    "selector": "0xc9a6b2a8",
+    "text_sig": "addAuction(uint256,uint256,uint256,uint256,address)"
+  },
+  {
+    "selector": "0xc6afd98a",
+    "text_sig": "requestConversion(uint256)"
+  },
+  {
+    "selector": "0xc63755e1",
+    "text_sig": "transferPresale(address,uint256)"
+  },
+  {
+    "selector": "0xc47f0027",
+    "text_sig": "setName(string)"
+  },
+  {
+    "selector": "0xc38f0741",
+    "text_sig": "snapshotDailyGooResearchFunding()"
+  },
+  {
+    "selector": "0xc29721e0",
+    "text_sig": "sendArena(address[],uint256[],uint64)"
+  },
+  {
+    "selector": "0xc13fb08b",
+    "text_sig": "breedOnAuction(uint256,bool,uint256,bool,string,string)"
+  },
+  {
+    "selector": "0xc1075329",
+    "text_sig": "withdrawFunds(address,uint256)"
+  },
+  {
+    "selector": "0xbf8e0ea4",
+    "text_sig": "logGive(address,string)"
+  },
+  {
+    "selector": "0xbe18a08b",
+    "text_sig": "finishUpRound(int256,string)"
+  },
+  {
+    "selector": "0xbc019eed",
+    "text_sig": "getAffiliate(address)"
+  },
+  {
+    "selector": "0xbad1f08f",
+    "text_sig": "open(uint256,uint32,uint256)"
+  },
+  {
+    "selector": "0xba0179b5",
+    "text_sig": "confirm(uint256)"
+  },
+  {
+    "selector": "0xb9926d1d",
+    "text_sig": "limitBuy(uint256)"
+  },
+  {
+    "selector": "0xb8d641a3",
+    "text_sig": "tradingPairCutoffs(address,bytes20)"
+  },
+  {
+    "selector": "0xb7825cfc",
+    "text_sig": "addTask(bytes32,string)"
+  },
+  {
+    "selector": "0xb778d4b4",
+    "text_sig": "releaseToday()"
+  },
+  {
+    "selector": "0xb4f2e8b8",
+    "text_sig": "setFee(uint256,address)"
+  },
+  {
+    "selector": "0xb443a085",
+    "text_sig": "boom(uint256)"
+  },
+  {
+    "selector": "0xaf8c1946",
+    "text_sig": "refundAllEther()"
+  },
+  {
+    "selector": "0xaf640d0f",
+    "text_sig": "id()"
+  },
+  {
+    "selector": "0xaf468682",
+    "text_sig": "startsAt()"
+  },
+  {
+    "selector": "0xaf40ce20",
+    "text_sig": "revokeUnicorn(uint256)"
+  },
+  {
+    "selector": "0xaf259886",
+    "text_sig": "userToNumVillages(bytes32)"
+  },
+  {
+    "selector": "0xae530504",
+    "text_sig": "setSetting(string,uint256)"
+  },
+  {
+    "selector": "0xad9657f4",
+    "text_sig": "createCoin(uint16,string)"
+  },
+  {
+    "selector": "0xaad41a41",
+    "text_sig": "multisend(address[],uint256[])"
+  },
+  {
+    "selector": "0xaa6b631a",
+    "text_sig": "getSetting(string)"
+  },
+  {
+    "selector": "0xa4bef732",
+    "text_sig": "userCancelOrder(address,address,uint256,uint256,address)"
+  },
+  {
+    "selector": "0xa43d76e9",
+    "text_sig": "isValidPrice(uint256,uint256)"
+  },
+  {
+    "selector": "0xa2b038b3",
+    "text_sig": "addOffChainRaisedContribution(address,uint256,uint256)"
+  },
+  {
+    "selector": "0xa201ed8b",
+    "text_sig": "transferMultiple(address[],uint256[],uint256)"
+  },
+  {
+    "selector": "0x9fa0f763",
+    "text_sig": "buyDrugs()"
+  },
+  {
+    "selector": "0x9cf5c613",
+    "text_sig": "setVerified(address,bool)"
+  },
+  {
+    "selector": "0x9bd99195",
+    "text_sig": "multiAccessChangeOwner(address,address)"
+  },
+  {
+    "selector": "0x981b24d0",
+    "text_sig": "totalSupplyAt(uint256)"
+  },
+  {
+    "selector": "0x94b918de",
+    "text_sig": "swap(uint256)"
+  },
+  {
+    "selector": "0x93e91c1b",
+    "text_sig": "play(address,uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x91876e57",
+    "text_sig": "withdrawAuctionBalances()"
+  },
+  {
+    "selector": "0x91441589",
+    "text_sig": "run(bytes,uint8[4],uint8[2][4])"
+  },
+  {
+    "selector": "0x8fc6ad2d",
+    "text_sig": "getParameterValueByTitle(bytes32)"
+  },
+  {
+    "selector": "0x8b73c10e",
+    "text_sig": "buyChibiWithFcf(string,string,uint8,uint256)"
+  },
+  {
+    "selector": "0x8a59eb56",
+    "text_sig": "updateStatus(bytes32)"
+  },
+  {
+    "selector": "0x8865cbd6",
+    "text_sig": "cancelAllOrdersByTradingPair(address,address,uint256)"
+  },
+  {
+    "selector": "0x8700522a",
+    "text_sig": "setLandProductionMultiplierCCUser(bytes32,address)"
+  },
+  {
+    "selector": "0x8671b894",
+    "text_sig": "cancelOrder(uint256[3],bytes32,bytes32,uint8)"
+  },
+  {
+    "selector": "0x85aaff62",
+    "text_sig": "transcoder(uint256,uint256,uint256)"
+  },
+  {
+    "selector": "0x7d55aeea",
+    "text_sig": "monsterIndexToApproved(uint256)"
+  },
+  {
+    "selector": "0x7d1541ad",
+    "text_sig": "listDapp(string,string,string)"
+  },
+  {
+    "selector": "0x7970785d",
+    "text_sig": "withdraw(address[],uint256[],address[])"
+  },
+  {
+    "selector": "0x78a6c6d2",
+    "text_sig": "createBreedingAuction(uint40,uint128,uint128,uint40)"
+  },
+  {
+    "selector": "0x77372213",
+    "text_sig": "setName(bytes32,string)"
+  },
+  {
+    "selector": "0x77228659",
+    "text_sig": "query2(uint256,string,string,string)"
+  },
+  {
+    "selector": "0x73f310df",
+    "text_sig": "multiAccessRemoveOwner(address)"
+  },
+  {
+    "selector": "0x7311ad81",
+    "text_sig": "getImplAddress()"
+  },
+  {
+    "selector": "0x70480275",
+    "text_sig": "addAdmin(address)"
+  },
+  {
+    "selector": "0x6fbde40d",
+    "text_sig": "setSaleAuctionAddress(address)"
+  },
+  {
+    "selector": "0x6c3fb63c",
+    "text_sig": "setAutoAddress(address)"
+  },
+  {
+    "selector": "0x6c11bcd3",
+    "text_sig": "sellTokens(uint256)"
+  },
+  {
+    "selector": "0x6bcab76c",
+    "text_sig": "setDApp(address)"
+  },
+  {
+    "selector": "0x6b9f96ea",
+    "text_sig": "flush()"
+  },
+  {
+    "selector": "0x6841f253",
+    "text_sig": "currentRoundLocked()"
+  },
+  {
+    "selector": "0x65c4284b",
+    "text_sig": "numDIDRequiredToAddTaskParameterTitle()"
+  },
+  {
+    "selector": "0x628d5ef1",
+    "text_sig": "setWeiUsdRate(uint256)"
+  },
+  {
+    "selector": "0x61241c28",
+    "text_sig": "setTokenRate(uint256)"
+  },
+  {
+    "selector": "0x5dbe47e8",
+    "text_sig": "contains(address)"
+  },
+  {
+    "selector": "0x5c13d06f",
+    "text_sig": "checkLockedToken()"
+  },
+  {
+    "selector": "0x5abb37d6",
+    "text_sig": "cancelGame(address)"
+  },
+  {
+    "selector": "0x545e7c61",
+    "text_sig": "deploy(address,address)"
+  },
+  {
+    "selector": "0x54279bdd",
+    "text_sig": "createAuction(uint256,uint256,address)"
+  },
+  {
+    "selector": "0x522afaec",
+    "text_sig": "increase(address,uint256)"
+  },
+  {
+    "selector": "0x5103a5a3",
+    "text_sig": "certify(address,bytes32)"
+  },
+  {
+    "selector": "0x507eeff9",
+    "text_sig": "trade(address[2],address,bytes,bytes)"
+  },
+  {
+    "selector": "0x4edc689d",
+    "text_sig": "allowAddress(address,bool)"
+  },
+  {
+    "selector": "0x4bde38c8",
+    "text_sig": "platform()"
+  },
+  {
+    "selector": "0x4b99f0c5",
+    "text_sig": "setTradingPairCutoffs(bytes20,uint256)"
+  },
+  {
+    "selector": "0x4b0bddd2",
+    "text_sig": "setAdmin(address,bool)"
+  },
+  {
+    "selector": "0x476d7c13",
+    "text_sig": "userToNumCities(bytes32)"
+  },
+  {
+    "selector": "0x471f11ec",
+    "text_sig": "purchaseTown(uint256)"
+  },
+  {
+    "selector": "0x4574dea5",
+    "text_sig": "setBreedingFee(uint256)"
+  },
+  {
+    "selector": "0x44c9af28",
+    "text_sig": "getState(uint256)"
+  },
+  {
+    "selector": "0x4496f183",
+    "text_sig": "release(address[],uint256[])"
+  },
+  {
+    "selector": "0x40a92f0f",
+    "text_sig": "setMinSign(uint40)"
+  },
+  {
+    "selector": "0x3f28e9fb",
+    "text_sig": "createBounty(uint256)"
+  },
+  {
+    "selector": "0x3cebb823",
+    "text_sig": "changeController(address)"
+  },
+  {
+    "selector": "0x3c1a7eda",
+    "text_sig": "certificate(bytes32,bytes32)"
+  },
+  {
+    "selector": "0x3c13fc33",
+    "text_sig": "transferBase(uint256)"
+  },
+  {
+    "selector": "0x38a5e016",
+    "text_sig": "acceptTokenOwnership()"
+  },
+  {
+    "selector": "0x383a194c",
+    "text_sig": "buyUnicornWithEth(uint256)"
+  },
+  {
+    "selector": "0x35046722",
+    "text_sig": "getAddressBalance(address)"
+  },
+  {
+    "selector": "0x32b7214e",
+    "text_sig": "setNextSnapshotTime(uint256)"
+  },
+  {
+    "selector": "0x32708966",
+    "text_sig": "setMonsterIndexToApproved(uint256,address)"
+  },
+  {
+    "selector": "0x313f944f",
+    "text_sig": "externalPurchase(address,uint256)"
+  },
+  {
+    "selector": "0x2ee119cb",
+    "text_sig": "demint(address,uint256)"
+  },
+  {
+    "selector": "0x2d06177a",
+    "text_sig": "addManager(address)"
+  },
+  {
+    "selector": "0x2359116d",
+    "text_sig": "refill(address,uint256,string)"
+  },
+  {
+    "selector": "0x2004ffd9",
+    "text_sig": "mintToken()"
+  },
+  {
+    "selector": "0x1e89d545",
+    "text_sig": "multiTransfer(address[],uint256[])"
+  },
+  {
+    "selector": "0x1c2353e1",
+    "text_sig": "isCertifier(address)"
+  },
+  {
+    "selector": "0x1a15ab71",
+    "text_sig": "UpdatePrice(uint256)"
+  },
+  {
+    "selector": "0x183ff085",
+    "text_sig": "checkIn()"
+  },
+  {
+    "selector": "0x173825d9",
+    "text_sig": "removeOwner(address)"
+  },
+  {
+    "selector": "0x170741ca",
+    "text_sig": "send2()"
+  },
+  {
+    "selector": "0x16628014",
+    "text_sig": "setBitcoinRate(uint256)"
+  },
+  {
+    "selector": "0x16603758",
+    "text_sig": "setUserCategory(address,uint256)"
+  },
+  {
+    "selector": "0x1386a244",
+    "text_sig": "getSettingAddress(string)"
+  },
+  {
+    "selector": "0x1303a484",
+    "text_sig": "commitment()"
+  },
+  {
+    "selector": "0x11610c25",
+    "text_sig": "bet()"
+  },
+  {
+    "selector": "0x113ee583",
+    "text_sig": "aliceClaimsPayment(bytes32,uint256,bytes32,address,address)"
+  },
+  {
+    "selector": "0x0f4dfc17",
+    "text_sig": "ICOTokenDelivery(address,uint256)"
+  },
+  {
+    "selector": "0x0cac54ed",
+    "text_sig": "claimTransfer(address,address)"
+  },
+  {
+    "selector": "0x0a09284a",
+    "text_sig": "endsAt()"
+  },
+  {
+    "selector": "0x08e0d29d",
+    "text_sig": "authenticate(address)"
+  },
+  {
+    "selector": "0x086146d2",
+    "text_sig": "getCurrentPeriod()"
+  },
+  {
+    "selector": "0x0762c317",
+    "text_sig": "createNewPop(uint256,string)"
+  },
+  {
+    "selector": "0x03ef2a2c",
+    "text_sig": "tryExecuteProposal(uint256,bytes)"
+  },
+  {
+    "selector": "0x03d75937",
+    "text_sig": "setUIntValue(string,uint256)"
+  },
+  {
+    "selector": "0x03141fcd",
+    "text_sig": "listPairForReserve(address,address,address,bool)"
+  },
+  {
+    "selector": "0x03048a42",
+    "text_sig": "createRequest(address,uint256,string,bytes,bytes)"
+  },
+  {
+    "selector": "0x01637ff4",
+    "text_sig": "getAccessory(uint256)"
+  },
+  {
+    "selector": "0xfd902d1e",
+    "text_sig": "setCutoffs(uint256)"
+  },
+  {
+    "selector": "0xfd83915e",
+    "text_sig": "changeOwnership(bytes32,address)"
+  },
+  {
+    "selector": "0xf9a87d4f",
+    "text_sig": "buyAllAmountBuyEth(address,address,uint256,address,uint256)"
+  },
+  {
+    "selector": "0xf73b5541",
+    "text_sig": "bulkWhitelist(address[])"
+  },
+  {
+    "selector": "0xf6a03ebf",
+    "text_sig": "setStart(uint256)"
+  },
+  {
+    "selector": "0xf5012d4b",
+    "text_sig": "sendOtherTokens(address,uint256)"
+  },
+  {
+    "selector": "0xefc81a8c",
+    "text_sig": "create()"
+  },
+  {
+    "selector": "0xedc25f42",
+    "text_sig": "calcRefill(string,uint256)"
+  },
+  {
+    "selector": "0xebdfa455",
+    "text_sig": "joinedCrowdsalesLen()"
+  },
+  {
+    "selector": "0xeb71b7e4",
+    "text_sig": "prepayProposal(address)"
+  }
+]

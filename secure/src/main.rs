@@ -67,6 +67,7 @@ mod fuzz_props;
 mod db_roots;
 mod erc20;
 mod names;
+mod selectors;
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
 mod host_rng;
 #[cfg(all(any(feature = "pka-accel", feature = "stm32u585"), not(test)))]
