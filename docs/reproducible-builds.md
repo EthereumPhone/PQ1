@@ -151,7 +151,9 @@ tree the vendor claims it does. Do **not** load such a bundle on a device.
   by 40-char rev, so the build is bit-reproducible given `crates.io`
   reachability. For true air-gap audit support, `cargo vendor` (or
   crane-driven Nix vendoring) committed to the repo is the follow-up.
-- **Native Windows builds**: use WSL2. The Nix flake works inside WSL2
+- **Native Windows builds**: use WSL2. `measure.bat` at the repo root
+  dispatches into WSL automatically (after a one-time `wsl --install`
+  from an elevated PowerShell). The Nix flake works inside WSL2
   identically to native Linux; targeting native Windows would require a
   separate toolchain story with no benefit for measurement verification.
 
