@@ -14,17 +14,20 @@ claim.
 
 ## What the build guarantees
 
-Two independent clean builds of the same git commit on the same host
-architecture produce **byte-for-byte identical** `secure.elf` and
-`nonsecure.elf`. This means:
+Two independent clean builds of the same git commit, when run inside
+the pinned Nix flake, produce **byte-for-byte identical** `secure.elf`
+and `nonsecure.elf` on the same host architecture, and (per the CI
+matrix) byte-identical thumbv8m output across host architectures too.
+This means:
 
-- `make measure` prints the same 8 words on every machine for a given
+- `./measure.sh` (or `nix run .#measure`) prints the same 8 words on
+  every supported host for a given commit.
+- A vendor-signed release bundle (`.pqfw`) can be audited by anyone:
+  rebuild the commit the vendor points to, run `./measure.sh`, and
+  confirm the words match `measurement.txt` in the bundle.
+- The FSBL's check `sha256(active_slot) == manifest.secure_hash`
+  behaves identically on any hardware running any build of the same
   commit.
-- A vendor-signed release bundle (`.pqfw`) can be audited by anyone: rebuild
-  the commit the vendor points to, run `make measure`, and confirm the
-  words match `measurement.txt` in the bundle.
-- The FSBL's check `sha256(active_slot) == manifest.secure_hash` behaves
-  identically on any hardware running any build of the same commit.
 
 ## What it requires
 
@@ -51,6 +54,33 @@ architecture produce **byte-for-byte identical** `secure.elf` and
 - **`SOURCE_DATE_EPOCH`**: exported from `git log -1 --format=%ct` by
   the Makefile, for any future build script that embeds a timestamp.
   Currently unused but the knob is wired up.
+
+## Cross-platform reproducibility via Nix
+
+The pinned `flake.nix` at the repo root is the canonical way to get the
+same toolchain closure on every supported host: Linux x86_64, Linux
+aarch64, macOS Intel, macOS Apple Silicon, and WSL2. It pins:
+
+- `nixpkgs` to a specific commit (gives identical `gcc-arm-embedded` /
+  `gnumake` / `coreutils` everywhere).
+- `rust-overlay`, which reads `rust-toolchain.toml` directly so the
+  channel + target + components stay in lockstep with the rustup-driven
+  workflow.
+
+`flake.lock` is committed and contains SHA-256 hashes for every input;
+`nix run .#measure` against a given commit produces the same closure on
+any host that can run Nix. The wrapper script (`./measure.sh`) installs
+Nix via the Determinate Systems installer if it is missing.
+
+Within a single host architecture the resulting `secure.elf` is
+formally byte-identical (Cargo.lock-pinned deps + content-addressed
+toolchain). Across host architectures (e.g. macOS aarch64 vs Linux
+x86_64), byte-identity for thumbv8m output is empirically very likely
+because the cross-compile path through LLVM is mostly deterministic,
+but it rests on LLVM's cross-target codegen behaviour rather than a
+formal guarantee. The CI matrix (Linux x86_64, Linux aarch64, macOS
+Intel, macOS Apple Silicon) verifies this on every commit; a mismatch
+there is a release blocker.
 
 ## The reproducibility gate
 
@@ -86,52 +116,44 @@ payload committed inside the signed manifest.
 
 ## Independent verification workflow
 
-Auditors and security researchers verify a `.pqfw` bundle like this:
+A non-developer who wants to confirm the firmware on their device matches
+the published source needs exactly two commands:
 
-1. Install the pinned Rust toolchain:
-   ```
-   rustup default nightly-2026-04-06
-   rustup target add thumbv8m.main-none-eabi
-   rustup component add rust-src llvm-tools
-   apt install gcc-arm-none-eabi   # for arm-none-eabi-ld
-   ```
-2. Clone the repo at the exact commit referenced by the release:
-   ```
-   git clone https://github.com/<vendor>/sphincs_rust.git
-   cd sphincs_rust
-   git checkout <commit-from-bundle>
-   ```
-3. Build reproducibly:
-   ```
-   make release RELEASE_FEATURES=stm32u585,se050,optiga-trust-m,dual-se,ui-oled
-   ```
-4. Compare the printed measurement words against `measurement.txt` inside
-   the `.pqfw` bundle.
-5. Compare the ELFs against the `secure.bin` / `nonsecure.bin` in the
-   bundle after converting ELF → flat image (the `fwsign verify`
-   sub-command does this check automatically).
+```
+git clone https://github.com/<vendor>/sphincs_rust.git
+cd sphincs_rust && git checkout <commit-from-release>
+./measure.sh
+```
+
+`./measure.sh` installs Nix on first run (via the Determinate Systems
+installer — Linux, macOS, WSL2 all use the same one-line invocation),
+then runs `nix run .#measure` against the pinned flake. The 8 BIP-39
+words it prints must match what the device's OLED shows at boot. They
+must also match `measurement.txt` inside the released `.pqfw` bundle.
+
+For deeper auditing — comparing both `secure.elf` and `nonsecure.elf`
+byte-for-byte against the bundle, not just their measurement words —
+the same hermetic environment is available via:
+
+```
+./measure.sh --shell           # drops into nix develop
+make release RELEASE_FEATURES=stm32u585,se050,optiga-trust-m,dual-se,ui-oled
+fwsign verify-release path/to/release.pqfw target/release/
+```
 
 A mismatch at any step means the bundle does not correspond to the source
 tree the vendor claims it does. Do **not** load such a bundle on a device.
 
 ## Known non-goals
 
-- **Cross-architecture reproducibility** (Apple Silicon vs x86_64 host):
-  identical ELFs across different host CPUs are not currently guaranteed.
-  The Rust toolchain's codegen is deterministic per target triple but
-  LLVM itself has been known to produce slightly different output across
-  host architectures in edge cases. The vendor build farm pins one host
-  architecture (Linux x86_64) for official releases; auditors should use
-  the same to compare byte-exact. Cross-architecture repro is a tracked
-  follow-up.
-- **Vendored dependencies** (offline builds): not committed today.
-  Releases fetch from `crates.io` using `Cargo.lock` pins, which is
-  bit-reproducible given `crates.io` stability. For true air-gap audit
-  support, `cargo vendor` committed to the repo is the follow-up.
-- **Docker-pinned build environment**: nice-to-have for reproducibility
-  across Linux distributions; not currently part of the release
-  pipeline. A `Dockerfile` plus `hadolint`'d base image is the intended
-  follow-up.
+- **Vendored dependencies** (offline / air-gap builds): `Cargo.lock`
+  pins every crates.io dep by SHA-256 and the one git dep (`tropic01`)
+  by 40-char rev, so the build is bit-reproducible given `crates.io`
+  reachability. For true air-gap audit support, `cargo vendor` (or
+  crane-driven Nix vendoring) committed to the repo is the follow-up.
+- **Native Windows builds**: use WSL2. The Nix flake works inside WSL2
+  identically to native Linux; targeting native Windows would require a
+  separate toolchain story with no benefit for measurement verification.
 
 ## Troubleshooting a reproducibility failure
 

@@ -1,3 +1,7 @@
 **/target/
 /build
 __pycache__/
+
+# Nix build symlink (from `nix build` / `nix run`)
+/result
+/result-*

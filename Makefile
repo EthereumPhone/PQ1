@@ -1201,7 +1201,15 @@ test-solidity:
 
 # Compute firmware measurement words from the secure ELF.
 # Displays the same 8 BIP-39 words the device shows at boot.
-measure: secure
+#
+# Uses the same secure-world build as `flash-hw-dual-se-oled-standalone`
+# (features: dual-se,optiga-hw-counter,dev-testkey,gpio-buttons,ui-oled,
+# stm32u585,usb), so the words printed here match what the OLED shows
+# after that flash target runs. To measure a different feature matrix
+# (e.g. the production set without `dev-testkey`), use `make release`
+# instead — it runs `verify-repro` and prints both secure + nonsecure
+# measurements from the verified ELFs.
+measure: build-hw-dual-se-oled-standalone
 	cargo run --locked -p fwmeasure -- $(SECURE_ELF)
 
 # Build the first-stage bootloader for real STM32U585 hardware.
