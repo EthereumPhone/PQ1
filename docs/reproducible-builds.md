@@ -87,39 +87,65 @@ of variance either. The derivation's output is plain text
 This means:
 
 - **Linux x86_64** hosts build the derivation natively.
-- **macOS** (Intel or Apple Silicon) and **Linux aarch64** hosts
-  dispatch the build to a remote `x86_64-linux` builder. The
-  capability ships with Determinate Nix on Apple Silicon but is **not
-  enabled by default** — see the macOS setup section below. On Linux
-  aarch64 a remote `x86_64-linux` builder must be configured
-  separately (or `binfmt_misc` + `qemu-user` for transparent
-  emulation).
+- **macOS** (Intel or Apple Silicon) hosts have nothing to install
+  manually — `./measure.sh` auto-bootstraps a Lima-managed Linux VM +
+  Docker daemon on first run (see the macOS section below). The build
+  then dispatches into a `linux/amd64` container so `currentSystem
+  == x86_64-linux` and the closure matches the Linux-native build
+  byte-for-byte.
+- **Linux aarch64** hosts need a remote `x86_64-linux` builder
+  configured separately (or `binfmt_misc` + `qemu-user` for
+  transparent emulation). `./measure.sh` prints concrete setup steps
+  if it can't find either.
 
-### macOS setup: enable the linux-builder
+### macOS: how `./measure.sh` provisions x86_64-linux capability
 
-On Apple Silicon Macs running Determinate Nix, the linux-builder is a
-local VM (Apple Virtualization framework) that the Nix daemon can
-delegate `x86_64-linux` builds to. It needs a one-time enablement.
+`./measure.sh` on macOS is fully unattended — vanilla macOS users do
+not need to install Homebrew, Docker Desktop, OrbStack, Xcode CLT, or
+any other tooling first. On a fresh machine it:
 
-The recommended path is via Determinate's own documentation:
-**https://docs.determinate.systems/macos-linux-builder/**
+1. Installs Determinate Nix (single curl) if `nix` isn't on PATH.
+2. Detects that the host can't natively build `x86_64-linux`
+   derivations (no remote builder, no `extra-platforms`, no Docker).
+3. **Auto-installs a Lima-managed Docker daemon under `$HOME/.local`**:
+   - Rosetta 2, on Apple Silicon (`softwareupdate
+     --install-rosetta --agree-to-license`).
+   - `limactl` from the pinned Lima release tarball.
+   - Docker CLI from Docker's official static tarball.
+   - A Lima VM named `pqsigner-builder` running Ubuntu LTS with the
+     `template:docker` template, configured `--vm-type=vz
+     --rosetta --arch=x86_64` so the in-VM kernel is `x86_64-linux`
+     translated by Rosetta at near-native speed.
+4. Wires `DOCKER_HOST` to the VM's socket and dispatches the build via
+   `docker run --platform linux/amd64 nixos/nix:latest ... nix run
+   /work#measure`.
 
-If you use **nix-darwin**, add this to your configuration and run
-`darwin-rebuild switch`:
+The whole stack lives under `$HOME` (no writes to `/Applications`,
+`/usr/local`, or system paths) and cohabits cleanly with whatever
+container tooling the user installs later. The pinned versions are at
+the top of `measure.sh` (`LIMA_VERSION`, `DOCKER_CLI_VERSION`); bump
+them together when refreshing.
 
-```nix
-nix.linux-builder.enable = true;
-```
+The first `./measure.sh` run on a fresh Mac takes 5–8 minutes (Lima VM
+first-boot + Docker daemon install + Nix closure download); subsequent
+runs are sub-minute because the VM, Nix store, and `nixos/nix` Docker
+image are all cached.
 
-Either way, after enabling, `nix store ping --store
-ssh-ng://linux-builder` should succeed and `./measure.sh` can dispatch
-the build. The first run downloads + boots the VM and may take a few
-minutes; subsequent runs reuse the live VM.
+If the Lima auto-install fails (e.g., macOS pre-Ventura, no network),
+`./measure.sh` falls back to a clear remediation message rather than
+the underlying Nix `Required system: 'x86_64-linux'` wall of text.
 
-`./measure.sh` pre-flights this configuration and exits with a clear
-remediation message if no `x86_64-linux` builder is available, so
-users hitting this step do not need to parse the underlying Nix error
-output.
+#### Alternatives for users who already have a builder
+
+If the user has already configured one of the following, `./measure.sh`
+detects it and skips the Lima auto-install:
+
+- A working `docker info` (Docker Desktop, OrbStack, Colima, or any
+  other Docker-API-compatible daemon).
+- nix-darwin's `nix.linux-builder.enable = true;` (or Determinate's
+  managed linux-builder).
+- A remote `x86_64-linux` builder declared in `/etc/nix/machines` or
+  `nix.conf`'s `builders =`.
 
 Because the derivation closure is byte-identical on every host, the
 output (`words.txt`) is byte-identical on every host by construction —
@@ -180,11 +206,23 @@ cd sphincs_rust && git checkout <commit-from-release>
 ./measure.sh
 ```
 
-`./measure.sh` installs Nix on first run (via the Determinate Systems
-installer — Linux, macOS, WSL2 all use the same one-line invocation),
-then runs `nix run .#measure` against the pinned flake. The 8 BIP-39
-words it prints must match what the device's OLED shows at boot. They
-must also match `measurement.txt` inside the released `.pqfw` bundle.
+`./measure.sh` is unattended on a fresh machine:
+
+- **Linux x86_64**: installs Nix on first run (Determinate Systems
+  installer), then `nix run .#measure`.
+- **macOS** (Intel or Apple Silicon): installs Nix and a Lima-managed
+  Docker daemon (Lima + Rosetta + Docker CLI under `$HOME/.local`),
+  then dispatches the build into a `linux/amd64` container. No
+  Homebrew, Docker Desktop, or other tooling required up front. See
+  the "macOS: how `./measure.sh` provisions x86_64-linux capability"
+  section above for the full breakdown.
+- **WSL2**: identical to Linux x86_64 (run from the WSL shell, not
+  PowerShell). `measure.bat` at the repo root dispatches into WSL
+  automatically.
+
+The 8 BIP-39 words it prints must match what the device's OLED shows
+at boot. They must also match `measurement.txt` inside the released
+`.pqfw` bundle.
 
 For deeper auditing — comparing both `secure.elf` and `nonsecure.elf`
 byte-for-byte against the bundle, not just their measurement words —
