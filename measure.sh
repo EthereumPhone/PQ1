@@ -152,50 +152,87 @@ if [ "$host_system" != "x86_64-linux" ]; then
     fi
 
     if [ "$has_linux_builder" -eq 0 ]; then
+        # ---- Docker fallback --------------------------------------------
+        # No linux-builder, but if Docker is up we can run the entire Nix
+        # build inside a linux/amd64 container. Inside the container
+        # `currentSystem == x86_64-linux` so the flake builds natively
+        # against its own pinned closure — same bytes, same words, no
+        # Mac-side Nix involved. On Apple Silicon, Docker Desktop and
+        # OrbStack run linux/amd64 via Rosetta 2; works out of the box.
+        if command -v docker >/dev/null 2>&1 \
+            && docker info >/dev/null 2>&1; then
+            say "No linux-builder; falling back to Docker (linux/amd64)…"
+            say "First run downloads ~1 GB into Docker; subsequent runs cached."
+            # Mount $PWD as /work, set linux/amd64 platform, install git +
+            # CA bundle into the ephemeral nix env so the flake can read
+            # the local repo, then `nix run .#measure` inside the
+            # container. Pass through TTY for the progress bar.
+            # safe.directory: the host repo is owned by the host user
+            # (uid 501 on macOS) but the container runs as root.
+            # libgit2 (which Nix uses) refuses to open repos with a uid
+            # mismatch unless safe.directory is set, so write a global
+            # gitconfig before invoking nix.
+            exec docker run --rm --platform linux/amd64 \
+                -v "$PWD:/work" -w /work \
+                -e NIX_CONFIG=$'experimental-features = nix-command flakes' \
+                -e HOME=/root \
+                nixos/nix:latest \
+                sh -c '
+                    set -e
+                    mkdir -p /root
+                    printf "[safe]\n\tdirectory = *\n" > /root/.gitconfig
+                    nix shell nixpkgs#git nixpkgs#cacert --command \
+                        sh -c "nix run /work#measure"
+                '
+        fi
+
+        # ---- Neither linux-builder nor Docker available -----------------
         cat >&2 <<EOF
 
-$(printf '\033[1;31m==> No x86_64-linux builder is configured.\033[0m')
+$(printf '\033[1;31m==> Cannot build the reproducible measurement on this host.\033[0m')
 
-This host is '$host_system'. The reproducible measurement is built
-inside a pinned x86_64-linux sandbox so every host gets byte-identical
-output. To dispatch the build off-box you need either:
+This host is '$host_system'. The build is pinned to x86_64-linux so
+every host gets byte-identical output. ./measure.sh can satisfy that
+in two ways and neither is currently available:
+
+  1. A configured x86_64-linux Nix builder (linux-builder VM, remote
+     builder via /etc/nix/machines, or binfmt+qemu on Linux aarch64).
+
+  2. A working Docker daemon. ./measure.sh will auto-dispatch the
+     build into a linux/amd64 container if Docker is up.
 
 EOF
         case "$(uname -s)" in
             Darwin)
                 cat >&2 <<'EOF'
-  ► On Apple Silicon: enable Determinate Nix's built-in linux-builder.
-    Documentation:  https://docs.determinate.systems/macos-linux-builder/
+Easiest path on macOS: install Docker Desktop or OrbStack, then re-run.
 
-    If you use nix-darwin, add to your configuration:
-        nix.linux-builder.enable = true;
-    then run:  darwin-rebuild switch
+  brew install --cask docker      # then launch Docker Desktop once
+  # — or —
+  brew install --cask orbstack    # OrbStack auto-starts; lighter weight
 
-  ► Otherwise: follow Determinate's linux-builder setup, or configure a
-    remote x86_64-linux builder via /etc/nix/machines.
+After Docker is running, just re-run ./measure.sh.
 
-After enabling, re-run ./measure.sh.
+Alternative (heavier): enable nix-darwin's linux-builder by adding
+`nix.linux-builder.enable = true;` to your darwin config and running
+`darwin-rebuild switch`.
 EOF
                 ;;
             Linux)
                 cat >&2 <<'EOF'
-  ► binfmt_misc + qemu-user (transparent x86_64 emulation under Linux):
-        sudo apt install qemu-user-static binfmt-support  # Debian/Ubuntu
-    then add to /etc/nix/nix.conf:
-        extra-platforms = x86_64-linux
-    and restart nix-daemon.
+Install Docker, OR enable binfmt_misc + qemu-user:
 
-  ► Or configure a remote x86_64-linux builder via /etc/nix/machines.
+  sudo apt install qemu-user-static binfmt-support  # Debian/Ubuntu
+  echo "extra-platforms = x86_64-linux" | sudo tee -a /etc/nix/nix.conf
+  sudo systemctl restart nix-daemon
 
-After enabling, re-run ./measure.sh.
+Then re-run ./measure.sh.
 EOF
                 ;;
             *)
                 cat >&2 <<'EOF'
-  ► Configure a remote x86_64-linux builder via /etc/nix/machines or
-    your platform's equivalent. See the Nix manual on remote builds.
-
-After enabling, re-run ./measure.sh.
+Install Docker, or configure a remote x86_64-linux builder via
+/etc/nix/machines. Then re-run ./measure.sh.
 EOF
                 ;;
         esac
