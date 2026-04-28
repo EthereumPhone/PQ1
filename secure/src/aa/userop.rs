@@ -61,14 +61,15 @@ pub const SHA256_EMPTY: [u8; 32] = [
     0xb8, 0x55,
 ];
 
-/// Selector for `execute(address,uint256,bytes)` on
-/// {PQCoinbaseSmartWallet}. This matches the upstream Coinbase Smart
-/// Wallet exactly: it's the first four bytes of
-/// `keccak256("execute(address,uint256,bytes)")`. We hardcode it
-/// instead of computing it at runtime to keep the hot path
-/// allocation-free and to make it easy to grep for from a security
-/// review.
-pub const EXECUTE_SELECTOR: [u8; 4] = [0xb6, 0x1d, 0x27, 0xf6];
+/// Selector for `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`
+/// on `PQSmartWallet`. First four bytes of
+/// `keccak256("executeWithOffchainCount(uint256,uint256,address,uint256,bytes)")`.
+///
+/// The two leading uint256 args are `(ownerIndex, newOffchainCount)` —
+/// see `PQSmartWallet.executeWithOffchainCount` and
+/// `PQMultiOwnable._setOffchainSigCount` for the on-chain semantics.
+/// Hardcoded for greppability; verified against `cast sig`.
+pub const EXECUTE_SELECTOR: [u8; 4] = [0x14, 0x44, 0x3c, 0x57];
 
 /// Maximum supported reconstructed-callData length.
 ///
@@ -107,29 +108,34 @@ pub enum AaError {
 }
 
 /// Build the canonical
-/// `execute(address target, uint256 value, bytes data)` calldata for
-/// the parsed inner EIP-1559 envelope.
+/// `executeWithOffchainCount(uint256 ownerIndex, uint256 newOffchainCount,
+/// address target, uint256 value, bytes data)` calldata for the parsed
+/// inner EIP-1559 envelope plus the firmware-tracked off-chain count.
 ///
-/// The returned bytes match what `abi.encodeCall(execute, (target,
-/// value, data))` produces in Solidity, byte-for-byte:
+/// The returned bytes match what
+/// `abi.encodeCall(executeWithOffchainCount, (ownerIndex, newOffchainCount,
+/// target, value, data))` produces in Solidity, byte-for-byte:
 ///
 /// ```text
-///   [  0..  4) selector ("b61d27f6")
-///   [  4.. 36) target address, left-padded to 32 bytes
-///   [ 36.. 68) value (uint256, big-endian)
-///   [ 68..100) head offset of `bytes data`, always 0x60
-///   [100..132) length of `data` as uint256
-///   [132..   ) data, padded with zero bytes to a 32-byte boundary
+///   [  0..  4) selector ("14443c57")
+///   [  4.. 36) ownerIndex          (uint256, BE)
+///   [ 36.. 68) newOffchainCount    (uint256, BE)
+///   [ 68..100) target address, left-padded to 32 bytes
+///   [100..132) value               (uint256, BE)
+///   [132..164) head offset of `bytes data`, always 0xa0
+///   [164..196) length of `data` as uint256
+///   [196..   ) data, padded with zero bytes to a 32-byte boundary
 /// ```
 pub fn reconstruct_execute_calldata(
+    owner_index: u64,
+    new_offchain_count: u64,
     tx: &Eip1559Tx,
     data: &[u8],
 ) -> Result<ExecuteCallData, AaError> {
     let target = tx.to.ok_or(AaError::ContractCreation)?;
 
-    // Padded data length, rounded up to a 32-byte word.
     let padded_data_len = data.len().checked_add(31).ok_or(AaError::CallDataTooLong)? & !31usize;
-    let total = 4 + 32 + 32 + 32 + 32 + padded_data_len;
+    let total = 4 + 32 * 6 + padded_data_len; // 4 head selector + 5 head words + len word + tail
     if total > MAX_EXECUTE_CALLDATA_LEN {
         return Err(AaError::CallDataTooLong);
     }
@@ -141,18 +147,21 @@ pub fn reconstruct_execute_calldata(
 
     // selector
     out.buf[0..4].copy_from_slice(&EXECUTE_SELECTOR);
-    // target — left-padded to 32 bytes (12 zero bytes + 20 address bytes)
-    out.buf[4 + 12..4 + 32].copy_from_slice(&target);
-    // value — already big-endian inside U256
-    out.buf[4 + 32..4 + 64].copy_from_slice(&tx.value.0);
-    // bytes head offset (always 0x60 = 96)
-    out.buf[4 + 64 + 31] = 0x60;
-    // bytes length
+    // ownerIndex (uint256, BE) at [4..36)
+    out.buf[4 + 24..4 + 32].copy_from_slice(&owner_index.to_be_bytes());
+    // newOffchainCount (uint256, BE) at [36..68)
+    out.buf[4 + 32 + 24..4 + 32 + 32].copy_from_slice(&new_offchain_count.to_be_bytes());
+    // target (address, left-padded) at [68..100)
+    out.buf[4 + 64 + 12..4 + 64 + 32].copy_from_slice(&target);
+    // value (uint256) at [100..132)
+    out.buf[4 + 96..4 + 96 + 32].copy_from_slice(&tx.value.0);
+    // bytes-head offset = 0xa0 at [132..164)
+    out.buf[4 + 128 + 31] = 0xa0;
+    // bytes length at [164..196)
     let len_bytes = (data.len() as u64).to_be_bytes();
-    out.buf[4 + 96 + 24..4 + 96 + 32].copy_from_slice(&len_bytes);
-    // bytes payload, zero-padded to 32-byte boundary by virtue of the
-    // already-zeroed buffer.
-    out.buf[4 + 128..4 + 128 + data.len()].copy_from_slice(data);
+    out.buf[4 + 160 + 24..4 + 160 + 32].copy_from_slice(&len_bytes);
+    // bytes payload at [196..)
+    out.buf[4 + 192..4 + 192 + data.len()].copy_from_slice(data);
 
     Ok(out)
 }
@@ -526,21 +535,33 @@ mod tests {
     #[test]
     fn test_reconstruct_empty_data() {
         let tx = test_value_transfer_tx();
-        let result = reconstruct_execute_calldata(&tx, &[]).unwrap();
+        let result = reconstruct_execute_calldata(1, 7, &tx, &[]).unwrap();
         let out = result.as_slice();
-        // Total: selector(4) + target(32) + value(32) + offset(32) + len(32) = 132
-        assert_eq!(out.len(), 132);
-        // Selector
+        // Total: selector(4) + 5 head words(160) + len(32) = 196
+        assert_eq!(out.len(), 196);
         assert_eq!(&out[0..4], &EXECUTE_SELECTOR);
-        // Target left-padded
-        assert_eq!(&out[4..16], &[0u8; 12]);
-        assert_eq!(&out[16..36], &tx.to.unwrap());
-        // Value
-        assert_eq!(&out[36..68], &tx.value.0);
-        // Offset = 0x60
-        assert_eq!(out[99], 0x60);
-        // Length = 0
-        assert!(out[100..132].iter().all(|&b| b == 0));
+        // ownerIndex == 1, BE-padded
+        assert_eq!(&out[4..36], &{
+            let mut b = [0u8; 32];
+            b[31] = 1;
+            b
+        });
+        // newOffchainCount == 7
+        assert_eq!(&out[36..68], &{
+            let mut b = [0u8; 32];
+            b[31] = 7;
+            b
+        });
+        // target left-padded
+        assert_eq!(&out[68..80], &[0u8; 12]);
+        assert_eq!(&out[80..100], &tx.to.unwrap());
+        // value
+        assert_eq!(&out[100..132], &tx.value.0);
+        // offset = 0xa0 at [132..164], byte 163
+        assert_eq!(out[163], 0xa0);
+        assert!(out[132..163].iter().all(|&b| b == 0));
+        // data length zero
+        assert!(out[164..196].iter().all(|&b| b == 0));
     }
 
     #[test]
@@ -561,34 +582,31 @@ mod tests {
         tx.value = U256::zero();
         tx.data_len = 68;
 
-        let result = reconstruct_execute_calldata(&tx, &data).unwrap();
+        let result = reconstruct_execute_calldata(2, 0, &tx, &data).unwrap();
         let out = result.as_slice();
-        // 68 bytes padded to 96 → total = 4 + 32 + 32 + 32 + 32 + 96 = 228
-        assert_eq!(out.len(), 228);
-        // Data appears at offset 132
-        assert_eq!(&out[132..132 + 68], &data);
-        // Remaining padding bytes are zero
-        assert!(out[132 + 68..228].iter().all(|&b| b == 0));
+        // 68 bytes padded to 96 → total = 196 + 96 = 292
+        assert_eq!(out.len(), 292);
+        assert_eq!(&out[196..196 + 68], &data);
+        assert!(out[196 + 68..292].iter().all(|&b| b == 0));
     }
 
     #[test]
     fn test_reconstruct_32byte_boundary() {
         let tx = test_value_transfer_tx();
         let data = [0xAA; 32];
-        let result = reconstruct_execute_calldata(&tx, &data).unwrap();
-        // 32 bytes is already on a 32-byte boundary → total = 4 + 4*32 + 32 = 164
-        assert_eq!(result.len, 164);
+        let result = reconstruct_execute_calldata(1, 0, &tx, &data).unwrap();
+        // 32 bytes already on boundary → total = 196 + 32 = 228
+        assert_eq!(result.len, 228);
     }
 
     #[test]
     fn test_reconstruct_33bytes() {
         let tx = test_value_transfer_tx();
         let data = [0xBB; 33];
-        let result = reconstruct_execute_calldata(&tx, &data).unwrap();
-        // 33 bytes padded to 64 → total = 4 + 4*32 + 64 = 196
-        assert_eq!(result.len, 196);
-        // Padding bytes after 33 are zero
-        assert!(result.buf[132 + 33..132 + 64].iter().all(|&b| b == 0));
+        let result = reconstruct_execute_calldata(1, 0, &tx, &data).unwrap();
+        // 33 bytes padded to 64 → total = 196 + 64 = 260
+        assert_eq!(result.len, 260);
+        assert!(result.buf[196 + 33..196 + 64].iter().all(|&b| b == 0));
     }
 
     #[test]
@@ -596,7 +614,7 @@ mod tests {
         let mut tx = test_value_transfer_tx();
         tx.to = None;
         assert_eq!(
-            reconstruct_execute_calldata(&tx, &[]).unwrap_err(),
+            reconstruct_execute_calldata(1, 0, &tx, &[]).unwrap_err(),
             AaError::ContractCreation
         );
     }
@@ -606,27 +624,28 @@ mod tests {
         let tx = test_value_transfer_tx();
         let big = [0u8; MAX_EXECUTE_CALLDATA_LEN];
         assert_eq!(
-            reconstruct_execute_calldata(&tx, &big).unwrap_err(),
+            reconstruct_execute_calldata(1, 0, &tx, &big).unwrap_err(),
             AaError::CallDataTooLong
         );
     }
 
-    /// Cross-validate against `cast abi-encode "execute(address,uint256,bytes)"`.
-    /// The expected bytes were generated with Foundry's `cast`.
+    /// Cross-validate against `cast abi-encode
+    /// "executeWithOffchainCount(uint256,uint256,address,uint256,bytes)"`.
     #[test]
     fn test_reconstruct_cross_validate() {
         let tx = test_value_transfer_tx();
-        let result = reconstruct_execute_calldata(&tx, &[]).unwrap();
+        let result = reconstruct_execute_calldata(1, 0, &tx, &[]).unwrap();
         let out = result.as_slice();
 
-        // Expected from: cast abi-encode "execute(address,uint256,bytes)" \
-        //   0xabcdef1234567890abcdef1234567890abcdef12 1000000000000000000 0x
-        // with selector b61d27f6 prepended
+        // Expected: selector || ownerIndex(1) || newOffchainCount(0)
+        //         || target(0xabc...) || value(1e18) || offset(0xa0) || dataLen(0)
         let expected = hex::decode(
-            "b61d27f6\
+            "14443c57\
+             0000000000000000000000000000000000000000000000000000000000000001\
+             0000000000000000000000000000000000000000000000000000000000000000\
              000000000000000000000000abcdef1234567890abcdef1234567890abcdef12\
              0000000000000000000000000000000000000000000000000de0b6b3a7640000\
-             0000000000000000000000000000000000000000000000000000000000000060\
+             00000000000000000000000000000000000000000000000000000000000000a0\
              0000000000000000000000000000000000000000000000000000000000000000"
         ).unwrap();
         assert_eq!(out, expected.as_slice());

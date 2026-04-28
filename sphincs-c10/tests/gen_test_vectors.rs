@@ -74,19 +74,38 @@ fn sphincs_digest(
     sha256_of(&buf)
 }
 
-/// Build the calldata for `PQSmartWallet.execute(target, value, data)` with
-/// `data == ""`. Selector `0xb61d27f6` matches `execute(address,uint256,bytes)`
+/// Build the calldata for
+/// `PQSmartWallet.executeWithOffchainCount(ownerIndex, newOffchainCount, target, value, data)`
+/// with `data == ""`. Selector `0x14443c57` matches
+/// `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`
 /// — verified at runtime by the Foundry side via `abi.encodeCall`.
-fn build_execute_calldata(target: [u8; 20], value: [u8; 32]) -> Vec<u8> {
-    let mut cd = Vec::with_capacity(132);
-    cd.extend_from_slice(&[0xb6, 0x1d, 0x27, 0xf6]);
+fn build_execute_calldata(
+    owner_index: u64,
+    new_offchain_count: u64,
+    target: [u8; 20],
+    value: [u8; 32],
+) -> Vec<u8> {
+    let mut cd = Vec::with_capacity(196);
+    cd.extend_from_slice(&[0x14, 0x44, 0x3c, 0x57]);
+    // ownerIndex (uint256, BE)
+    let mut oi = [0u8; 32];
+    oi[24..].copy_from_slice(&owner_index.to_be_bytes());
+    cd.extend_from_slice(&oi);
+    // newOffchainCount (uint256, BE)
+    let mut oc = [0u8; 32];
+    oc[24..].copy_from_slice(&new_offchain_count.to_be_bytes());
+    cd.extend_from_slice(&oc);
+    // target (address)
     let mut a = [0u8; 32];
     a[12..].copy_from_slice(&target);
     cd.extend_from_slice(&a);
+    // value (uint256)
     cd.extend_from_slice(&value);
+    // data offset = 0xa0 (5 head words)
     let mut off = [0u8; 32];
-    off[31] = 0x60;
+    off[31] = 0xa0;
     cd.extend_from_slice(&off);
+    // data length = 0
     cd.extend_from_slice(&[0u8; 32]);
     cd
 }
@@ -147,7 +166,9 @@ fn generate_c10_test_vectors() {
     let mut target = [0u8; 20];
     target[18] = 0xca;
     target[19] = 0xfe;
-    let call_data = build_execute_calldata(target, [0u8; 32]);
+    // The bench signs as ownerIndex=1 with newOffchainCount=0 (no
+    // offchain sigs published yet on this slot).
+    let call_data = build_execute_calldata(1, 0, target, [0u8; 32]);
     let call_gas_limit = [0u8; 32];
     let verification_gas_limit = [0u8; 32];
     let pre_verification_gas = [0u8; 32];

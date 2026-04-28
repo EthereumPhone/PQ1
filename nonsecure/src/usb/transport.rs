@@ -10,31 +10,32 @@
 //! 3. Each response APDU is individually HID-framed (fragmented into
 //!    64-byte HID reports).
 
-use sphincs_tz_shared::{HID_REPORT_SIZE, HID_TAG_APDU, HID_TAG_PING};
+use sphincs_tz_shared::{HID_REPORT_SIZE, HID_TAG_APDU};
+use sphincs_tz_shared::apdu_framing::{
+    FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
+};
 use super::hid::PqSignerHid;
 use super::UsbBusType;
 
-/// Maximum single APDU size we can reassemble from HID frames.
-const MAX_APDU_RX: usize = 4096;
-
-/// Data bytes in the first HID fragment (64 - 7 header bytes).
-const FIRST_DATA: usize = HID_REPORT_SIZE - 7;
-
-/// Data bytes in continuation fragments (64 - 5 header bytes).
-const CONT_DATA: usize = HID_REPORT_SIZE - 5;
-
 /// APDU-over-HID transport state machine.
+///
+/// RX framing logic — `HidFrameAssembler` — lives in the `shared` crate
+/// so the production path here and the proptest harness in
+/// `shared/src/apdu_framing.rs::fuzz_props` exercise byte-identical
+/// state-machine code. Adding a new edge case there immediately covers
+/// this transport too.
 pub struct Transport {
     pub hid: PqSignerHid<'static, UsbBusType>,
 
-    // RX state: reassemble one APDU from multiple HID frames
-    channel_id: u16,
+    // RX state: bookkeeping (channel/seq/expected) lives in the
+    // assembler; the actual reassembly buffer is owned here.
+    rx: HidFrameAssembler,
     rx_buf: [u8; MAX_APDU_RX],
-    rx_expected: usize,
-    rx_pos: usize,
-    rx_seq: u16,
 
-    // TX state: fragment one response APDU into multiple HID frames
+    // TX state: fragment one response APDU into multiple HID frames.
+    // `channel_id` is captured from the most recent successfully
+    // reassembled RX so outgoing frames carry the matching id.
+    channel_id: u16,
     tx_buf: [u8; 256],   // response APDU (max 255 bytes, fits any single APDU)
     tx_len: usize,
     tx_pos: usize,
@@ -46,11 +47,9 @@ impl Transport {
     pub fn new(hid: PqSignerHid<'static, UsbBusType>) -> Self {
         Self {
             hid,
-            channel_id: 0,
+            rx: HidFrameAssembler::new(),
             rx_buf: [0u8; MAX_APDU_RX],
-            rx_expected: 0,
-            rx_pos: 0,
-            rx_seq: 0,
+            channel_id: 0,
             tx_buf: [0u8; 256],
             tx_len: 0,
             tx_pos: 0,
@@ -65,65 +64,17 @@ impl Transport {
     pub fn try_receive(&mut self) -> Option<&[u8]> {
         let mut report = [0u8; HID_REPORT_SIZE];
         let n = self.hid.read_report(&mut report)?;
-        if n < 3 {
-            return None;
-        }
 
-        let channel = u16::from_be_bytes([report[0], report[1]]);
-        let tag = report[2];
-
-        // PING echo
-        if tag == HID_TAG_PING {
-            self.hid.write_report(&report);
-            return None;
-        }
-
-        if tag != HID_TAG_APDU {
-            return None;
-        }
-
-        let seq = u16::from_be_bytes([report[3], report[4]]);
-
-        if seq == 0 {
-            // First HID frame — start new APDU
-            if n < 7 {
-                return None;
+        match self.rx.process_frame(&report, n, &mut self.rx_buf) {
+            FrameOutcome::ApduComplete(len) => {
+                self.channel_id = self.rx.channel_id();
+                Some(&self.rx_buf[..len])
             }
-            self.channel_id = channel;
-            self.rx_expected = u16::from_be_bytes([report[5], report[6]]) as usize;
-            if self.rx_expected > MAX_APDU_RX || self.rx_expected == 0 {
-                self.reset_rx();
-                return None;
+            FrameOutcome::PingEcho => {
+                self.hid.write_report(&report);
+                None
             }
-            self.rx_pos = 0;
-            self.rx_seq = 1;
-
-            let avail = core::cmp::min(FIRST_DATA, self.rx_expected);
-            self.rx_buf[..avail].copy_from_slice(&report[7..7 + avail]);
-            self.rx_pos = avail;
-        } else {
-            // Continuation HID frame
-            if channel != self.channel_id || seq != self.rx_seq {
-                self.reset_rx();
-                return None;
-            }
-            self.rx_seq += 1;
-
-            let remaining = self.rx_expected - self.rx_pos;
-            let avail = core::cmp::min(CONT_DATA, remaining);
-            self.rx_buf[self.rx_pos..self.rx_pos + avail]
-                .copy_from_slice(&report[5..5 + avail]);
-            self.rx_pos += avail;
-        }
-
-        if self.rx_pos >= self.rx_expected {
-            let len = self.rx_expected;
-            self.rx_expected = 0;
-            self.rx_pos = 0;
-            self.rx_seq = 0;
-            Some(&self.rx_buf[..len])
-        } else {
-            None
+            FrameOutcome::NeedMore | FrameOutcome::Dropped => None,
         }
     }
 
@@ -160,7 +111,7 @@ impl Transport {
             // First HID frame: includes data length
             frame[5..7].copy_from_slice(&(self.tx_len as u16).to_be_bytes());
             let remaining = self.tx_len - self.tx_pos;
-            let chunk = core::cmp::min(FIRST_DATA, remaining);
+            let chunk = core::cmp::min(HID_FIRST_DATA, remaining);
             frame[7..7 + chunk].copy_from_slice(&self.tx_buf[self.tx_pos..self.tx_pos + chunk]);
             if !self.hid.write_report(&frame) {
                 return false;
@@ -170,7 +121,7 @@ impl Transport {
         } else {
             // Continuation HID frame
             let remaining = self.tx_len - self.tx_pos;
-            let chunk = core::cmp::min(CONT_DATA, remaining);
+            let chunk = core::cmp::min(HID_CONT_DATA, remaining);
             frame[5..5 + chunk].copy_from_slice(&self.tx_buf[self.tx_pos..self.tx_pos + chunk]);
             if !self.hid.write_report(&frame) {
                 return false;
@@ -187,11 +138,5 @@ impl Transport {
 
     pub fn is_tx_active(&self) -> bool {
         self.tx_active
-    }
-
-    fn reset_rx(&mut self) {
-        self.rx_expected = 0;
-        self.rx_pos = 0;
-        self.rx_seq = 0;
     }
 }

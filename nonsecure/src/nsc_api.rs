@@ -31,6 +31,8 @@ mod transport {
     const CMD_LOCK: u32 = 12;
     const CMD_GET_WALLET_ADDRESS: u32 = 14;
     const CMD_GET_INIT_CODE: u32 = 15;
+    const CMD_SIGN_OFFCHAIN: u32 = 16;
+    const CMD_OFFCHAIN_STATUS: u32 = 17;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -88,6 +90,24 @@ mod transport {
         unsafe { gateway_call(CMD_GET_INIT_CODE, in_ptr as u32, out_ptr as u32, in_len) }
     }
 
+    #[inline]
+    pub(super) fn sign_offchain_call(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+        in_len: u32,
+    ) -> u32 {
+        unsafe { gateway_call(CMD_SIGN_OFFCHAIN, in_ptr as u32, out_ptr as u32, in_len) }
+    }
+
+    #[inline]
+    pub(super) fn offchain_status_call(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+        in_len: u32,
+    ) -> u32 {
+        unsafe { gateway_call(CMD_OFFCHAIN_STATUS, in_ptr as u32, out_ptr as u32, in_len) }
+    }
+
     #[cfg(feature = "e2e-test")]
     const CMD_TEST_PIN_LOCKOUT: u32 = 200;
 
@@ -112,6 +132,8 @@ mod transport {
         fn nsc_lock() -> u32;
         fn nsc_get_wallet_address(out_ptr: u32, account_index: u32) -> u32;
         fn nsc_get_init_code(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+        fn nsc_sign_offchain(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+        fn nsc_offchain_status(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
 
         // Firmware-update veneers.
         fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32;
@@ -165,6 +187,24 @@ mod transport {
         in_len: u32,
     ) -> u32 {
         unsafe { nsc_get_init_code(in_ptr as u32, out_ptr as u32, in_len) }
+    }
+
+    #[inline]
+    pub(super) fn sign_offchain_call(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+        in_len: u32,
+    ) -> u32 {
+        unsafe { nsc_sign_offchain(in_ptr as u32, out_ptr as u32, in_len) }
+    }
+
+    #[inline]
+    pub(super) fn offchain_status_call(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+        in_len: u32,
+    ) -> u32 {
+        unsafe { nsc_offchain_status(in_ptr as u32, out_ptr as u32, in_len) }
     }
 
     #[inline]
@@ -265,6 +305,25 @@ pub fn get_wallet_address(out: &mut [u8; 20], account_index: u32) -> u32 {
 /// calls reuse the SRAM slot cache.
 pub fn get_init_code(input: &[u8], out: &mut [u8]) -> u32 {
     transport::get_init_code(input.as_ptr(), out.as_mut_ptr(), input.len() as u32)
+}
+
+/// CMD_SIGN_OFFCHAIN — produce a SPHINCS+C10 sig over an EIP-1271
+/// hash. `input` is 45 bytes:
+///   `[account_index(1) || chain_id(u64 BE) || slot_index(u32 BE) || hash(32)]`.
+/// `out` is 4016 bytes:
+///   `[new_local_offchain_count(u64 BE) || c10_sig(4008)]`.
+/// Returns `NscStatus::Ok` on success or one of `OffchainSlot
+/// Unregistered`, `OffchainGapExceeded`, `OffchainCapExceeded`,
+/// `CryptoError`. Requires an unlocked device.
+pub fn sign_offchain(input: &[u8], out: &mut [u8]) -> u32 {
+    transport::sign_offchain_call(input.as_ptr(), out.as_mut_ptr(), input.len() as u32)
+}
+
+/// CMD_OFFCHAIN_STATUS — read per-slot off-chain state. `input` is 13
+/// bytes (`account_index(1) || chain_id(u64 BE) || slot_index(u32 BE)`),
+/// `out` is 24 bytes — see `shared::CMD_OFFCHAIN_STATUS` for the layout.
+pub fn offchain_status(input: &[u8], out: &mut [u8]) -> u32 {
+    transport::offchain_status_call(input.as_ptr(), out.as_mut_ptr(), input.len() as u32)
 }
 
 // ---------------------------------------------------------------------------

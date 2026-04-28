@@ -184,7 +184,9 @@ contract PQSmartWalletTest is Test {
     function test_slotSignValidate() public {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
-        bytes memory callData = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 0, address(0xbeef), 0, "")
+        );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(0xabc)), 0);
@@ -219,7 +221,9 @@ contract PQSmartWalletTest is Test {
     function test_bootstrapCannotCallExecute() public {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
-        bytes memory callData = abi.encodeCall(w.execute, (address(0xdead), 0, ""));
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 0, address(0xdead), 0, "")
+        );
         bytes memory sig = _wrapSig(0, _fakeC10Sig());
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(3)), 0);
@@ -230,7 +234,9 @@ contract PQSmartWalletTest is Test {
     function test_c10VerifierFailureReturnsFailed() public {
         PQSmartWallet w = _deployWallet();
         c10.setValid(false);
-        bytes memory callData = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 0, address(0xbeef), 0, "")
+        );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(0xabc)), 0);
@@ -241,7 +247,9 @@ contract PQSmartWalletTest is Test {
     function test_wrongInnerSigLengthFails() public {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
-        bytes memory callData = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 0, address(0xbeef), 0, "")
+        );
         bytes memory sig = _wrapSig(1, new bytes(4007));
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(0xabc)), 0);
@@ -251,7 +259,9 @@ contract PQSmartWalletTest is Test {
     function test_unknownOwnerIndexFails() public {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
-        bytes memory callData = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (99, 0, address(0xbeef), 0, "")
+        );
         bytes memory sig = _wrapSig(99, _fakeC10Sig());
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd = w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(0xabc)), 0);
@@ -277,7 +287,9 @@ contract PQSmartWalletTest is Test {
         w.addOwnerBytes(slot1Bytes);
         assertEq(w.nextOwnerIndex(), 3);
 
-        bytes memory execCall = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
+        bytes memory execCall = abi.encodeCall(
+            w.executeWithOffchainCount, (2, 0, address(0xbeef), 0, "")
+        );
         bytes memory slot1Sig = _wrapSig(2, _fakeC10Sig());
         vm.prank(ENTRY_POINT_ADDR);
         assertEq(
@@ -328,7 +340,9 @@ contract PQSmartWalletTest is Test {
         bytes32 entrySlot = keccak256(abi.encode(uint256(1), mapSlot));
         vm.store(address(w), entrySlot, bytes32(uint256(65_535)));
 
-        bytes memory callData = abi.encodeCall(w.execute, (address(0xbeef), 0, ""));
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 0, address(0xbeef), 0, "")
+        );
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
 
         vm.prank(ENTRY_POINT_ADDR);
@@ -343,5 +357,295 @@ contract PQSmartWalletTest is Test {
             w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(2)), 0),
             1
         );
+    }
+
+    // ── N-mask layout enforcement ──────────────────────────────────
+    //
+    // C10 is a 128-bit-security scheme: pkSeed and pkRoot are 16-byte
+    // values padded into the TOP half of a bytes32, with the bottom 16
+    // bytes required to be zero. The verifier feeds the full 32 bytes
+    // into its SHA-256 inputs, so a non-N-masked owner is unsignable.
+    // The contract refuses to install one upfront.
+
+    /// @dev A bytes32 with the N-mask convention violated (bottom 16
+    ///      bytes set to 0xDEADBEEF... and top 16 bytes also populated).
+    bytes32 internal constant DIRTY_SEED =
+        bytes32(uint256(0xaaaa) << 240) | bytes32(uint256(0xdeadbeef));
+
+    function test_factoryRejectsNonNMaskedMasterSeed() public {
+        c10.setValid(true);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PQMultiOwnable.InvalidNMaskLayout.selector,
+                abi.encodePacked(DIRTY_SEED, MASTER_PK_ROOT)
+            )
+        );
+        factory.createAccount(
+            DIRTY_SEED, MASTER_PK_ROOT,
+            SLOT0_PK_SEED, SLOT0_PK_ROOT,
+            uint64(block.chainid),
+            FACTORY_SIG
+        );
+    }
+
+    function test_factoryRejectsNonNMaskedMasterRoot() public {
+        c10.setValid(true);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PQMultiOwnable.InvalidNMaskLayout.selector,
+                abi.encodePacked(MASTER_PK_SEED, DIRTY_SEED)
+            )
+        );
+        factory.createAccount(
+            MASTER_PK_SEED, DIRTY_SEED,
+            SLOT0_PK_SEED, SLOT0_PK_ROOT,
+            uint64(block.chainid),
+            FACTORY_SIG
+        );
+    }
+
+    function test_factoryRejectsNonNMaskedSlot0Seed() public {
+        c10.setValid(true);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PQMultiOwnable.InvalidNMaskLayout.selector,
+                abi.encodePacked(DIRTY_SEED, SLOT0_PK_ROOT)
+            )
+        );
+        factory.createAccount(
+            MASTER_PK_SEED, MASTER_PK_ROOT,
+            DIRTY_SEED, SLOT0_PK_ROOT,
+            uint64(block.chainid),
+            FACTORY_SIG
+        );
+    }
+
+    function test_addOwnerBytesRejectsNonNMaskedOwner() public {
+        PQSmartWallet w = _deployWallet();
+        bytes memory dirty = abi.encodePacked(DIRTY_SEED, SLOT1_PK_ROOT);
+        vm.prank(address(w));
+        vm.expectRevert(
+            abi.encodeWithSelector(PQMultiOwnable.InvalidNMaskLayout.selector, dirty)
+        );
+        w.addOwnerBytes(dirty);
+    }
+
+    function test_addOwnerBytesRejectsNonNMaskedRoot() public {
+        PQSmartWallet w = _deployWallet();
+        bytes memory dirty = abi.encodePacked(SLOT1_PK_SEED, DIRTY_SEED);
+        vm.prank(address(w));
+        vm.expectRevert(
+            abi.encodeWithSelector(PQMultiOwnable.InvalidNMaskLayout.selector, dirty)
+        );
+        w.addOwnerBytes(dirty);
+    }
+
+    // ── Off-chain sig count tracking ────────────────────────────────
+    //
+    // The slot's signing budget is shared between on-chain Type 2 sigs
+    // (`slotUses[i]`) and off-chain (EIP-1271) sigs (`offchainSigCount[i]`).
+    // The combined invariant `slotUses + offchainSigCount <= MAX_SLOT_USES`
+    // is enforced both by `validateUserOp` (refusing the next Type 2
+    // before bumping) and by `executeWithOffchainCount` (refusing a
+    // monotonic count update past the cap).
+
+    function test_executeWithOffchainCount_updatesCounter() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        // Validate + execute a UserOp that publishes offchain count = 17.
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 17, address(0xbeef), 0, "")
+        );
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(
+            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(1)), 0),
+            0
+        );
+        // Then the EntryPoint runs the user's call against the wallet:
+        vm.prank(ENTRY_POINT_ADDR);
+        vm.expectEmit(true, true, true, true);
+        emit PQMultiOwnable.OffchainSigCountUpdated(1, 0, 17);
+        w.executeWithOffchainCount(1, 17, address(0xbeef), 0, "");
+        assertEq(w.offchainSigCount(1), 17);
+        assertEq(w.slotUses(1), 1);
+    }
+
+    function test_executeWithOffchainCount_idempotentSameValue() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        // First publish: 5.
+        vm.prank(ENTRY_POINT_ADDR);
+        w.executeWithOffchainCount(1, 5, address(0xbeef), 0, "");
+        assertEq(w.offchainSigCount(1), 5);
+
+        // Re-publish same value: must not revert, must not re-emit.
+        vm.prank(ENTRY_POINT_ADDR);
+        w.executeWithOffchainCount(1, 5, address(0xbeef), 0, "");
+        assertEq(w.offchainSigCount(1), 5);
+    }
+
+    function test_executeWithOffchainCount_rejectsNonMonotonic() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        vm.prank(ENTRY_POINT_ADDR);
+        w.executeWithOffchainCount(1, 10, address(0xbeef), 0, "");
+        assertEq(w.offchainSigCount(1), 10);
+
+        // Try to publish a lower value: must revert.
+        vm.prank(ENTRY_POINT_ADDR);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PQMultiOwnable.OffchainSigCountNotMonotonic.selector, uint256(1), uint256(10), uint256(9)
+            )
+        );
+        w.executeWithOffchainCount(1, 9, address(0xbeef), 0, "");
+    }
+
+    function test_executeWithOffchainCount_rejectsCombinedCapExceeded() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        // Publish offchain count 65,536 with slotUses=0 → exactly at cap.
+        vm.prank(ENTRY_POINT_ADDR);
+        w.executeWithOffchainCount(1, 65_536, address(0xbeef), 0, "");
+        assertEq(w.offchainSigCount(1), 65_536);
+
+        // Now try to publish 65,537 with slotUses=0 → over cap.
+        vm.prank(ENTRY_POINT_ADDR);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                PQMultiOwnable.CombinedSlotCapExceeded.selector,
+                uint256(1), uint256(0), uint256(65_537), uint256(65_536)
+            )
+        );
+        w.executeWithOffchainCount(1, 65_537, address(0xbeef), 0, "");
+    }
+
+    function test_validateUserOp_rejectsType2WhenCombinedCapHit() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        // Pre-load the offchain counter to 65,535 (one short of cap), with slotUses=0.
+        bytes32 base = 0x470749eea5ac4a541d6582e535445f94e7300bac9e0e4e5577fd3336b407d000;
+        bytes32 mapSlot = bytes32(uint256(base) + 6); // offchainSigCount is field #6
+        bytes32 entrySlot = keccak256(abi.encode(uint256(1), mapSlot));
+        vm.store(address(w), entrySlot, bytes32(uint256(65_535)));
+
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 65_535, address(0xbeef), 0, "")
+        );
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+
+        // First Type 2: slotUses=0, offchain=65_535, sum=65_535 < cap. PASS.
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(
+            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(1)), 0),
+            0
+        );
+        assertEq(w.slotUses(1), 1);
+
+        // Second Type 2: slotUses=1, offchain=65_535, sum=65_536 == cap. REFUSE.
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(
+            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(2)), 0),
+            1
+        );
+        assertEq(w.slotUses(1), 1, "second Type 2 must NOT bump");
+    }
+
+    // ── EIP-1271 ────────────────────────────────────────────────────
+
+    /// @dev Bytes4 EIP-1271 magic value: bytes4(keccak256("isValidSignature(bytes32,bytes)")).
+    bytes4 internal constant EIP1271_MAGIC = 0x1626ba7e;
+    bytes4 internal constant EIP1271_FAILURE = 0xffffffff;
+
+    function test_isValidSignature_happyPath() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        bytes32 hash = bytes32(uint256(0x1234));
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+        bytes4 result = w.isValidSignature(hash, sig);
+        assertEq(result, EIP1271_MAGIC, "valid slot sig must return 0x1626ba7e");
+    }
+
+    function test_isValidSignature_returnsFailureForBootstrap() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        // Solady's ERC1271 has an RPC-simulation path that burns gas when
+        // `tx.gasprice == 0` to discourage replay outside RPC simulation.
+        // Foundry's default gasprice is 0 — set it non-zero so the RPC path
+        // is skipped and we exercise the normal on-chain semantics.
+        vm.txGasPrice(1);
+
+        bytes32 hash = bytes32(uint256(0x1234));
+        bytes memory sig = _wrapSig(0, _fakeC10Sig());
+        bytes4 result = w.isValidSignature(hash, sig);
+        assertEq(result, EIP1271_FAILURE, "bootstrap sigs MUST NOT verify off-chain");
+    }
+
+    function test_isValidSignature_returnsFailureWhenC10Fails() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(false);
+        vm.txGasPrice(1); // see comment above.
+
+        bytes32 hash = bytes32(uint256(0x1234));
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+        bytes4 result = w.isValidSignature(hash, sig);
+        assertEq(result, EIP1271_FAILURE);
+    }
+
+    function test_isValidSignature_doesNotBumpCounters() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        bytes32 hash = bytes32(uint256(0x1234));
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+        w.isValidSignature(hash, sig);
+        w.isValidSignature(hash, sig);
+        w.isValidSignature(hash, sig);
+
+        assertEq(w.slotUses(1), 0, "EIP-1271 must NOT bump slotUses");
+        assertEq(w.offchainSigCount(1), 0, "EIP-1271 must NOT bump offchainSigCount");
+        assertEq(w.bootstrapUses(), 0, "EIP-1271 must NOT bump bootstrapUses");
+    }
+
+    function test_isValidSignature_replayAcrossWalletsBlocked() public {
+        // Two wallets with the SAME slot pubkey (same seed → same key in
+        // the recovery contract). The mock verifier accepts any sig
+        // unconditionally, so the only thing keeping a sig captured
+        // against wallet A from validating against wallet B is the
+        // EIP-712 nested wrapping that Solady applies — which embeds
+        // `verifyingContract = address(this)` into the inner hash.
+        //
+        // Here we don't call `isValidSignature` (the mock would accept
+        // any input hash). Instead we inspect the domain separator
+        // surfaced via `eip712Domain()` and confirm it differs across
+        // wallets — which is the property that prevents cross-wallet
+        // replay.
+
+        PQSmartWallet a = _deployWallet();
+
+        // Deploy a second wallet at a different address by varying the
+        // master pubkey (factory salt depends on master).
+        c10.setValid(true);
+        PQSmartWallet b = factory.createAccount(
+            bytes32(uint256(0x5555) << 240), bytes32(uint256(0x6666) << 240),
+            SLOT0_PK_SEED, SLOT0_PK_ROOT,
+            uint64(block.chainid),
+            FACTORY_SIG
+        );
+        assertTrue(address(a) != address(b));
+
+        (, , , , address verA, ,) = a.eip712Domain();
+        (, , , , address verB, ,) = b.eip712Domain();
+        assertEq(verA, address(a));
+        assertEq(verB, address(b));
+        assertTrue(verA != verB, "domain separator must differ per wallet");
     }
 }

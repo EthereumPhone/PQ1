@@ -82,57 +82,11 @@ const TAG_4: u8 = 0x44;
 const SW_OK: u16 = 0x9000;
 
 // ---------------------------------------------------------------------------
-// TLV encoding helpers
+// TLV encoding helpers — re-exported from the always-on `iso7816`
+// module so a single source of truth (and a single proptest harness)
+// covers both the production path here and any future SE driver.
 // ---------------------------------------------------------------------------
-
-/// Encode a TLV into `buf` at `offset`. Returns the new offset.
-fn tlv_put(buf: &mut [u8], offset: usize, tag: u8, value: &[u8]) -> usize {
-    let mut o = offset;
-    buf[o] = tag;
-    o += 1;
-    let len = value.len();
-    if len < 0x80 {
-        buf[o] = len as u8;
-        o += 1;
-    } else if len < 0x100 {
-        buf[o] = 0x81;
-        buf[o + 1] = len as u8;
-        o += 2;
-    } else {
-        buf[o] = 0x82;
-        buf[o + 1] = (len >> 8) as u8;
-        buf[o + 2] = (len & 0xFF) as u8;
-        o += 3;
-    }
-    buf[o..o + len].copy_from_slice(value);
-    o + len
-}
-
-/// Encode a 4-byte big-endian object ID as TLV.
-fn tlv_put_u32(buf: &mut [u8], offset: usize, tag: u8, val: u32) -> usize {
-    tlv_put(buf, offset, tag, &val.to_be_bytes())
-}
-
-/// Parse the first TLV from `data`. Returns `(tag, value, rest)`.
-fn tlv_parse(data: &[u8]) -> Option<(u8, &[u8], &[u8])> {
-    if data.len() < 2 {
-        return None;
-    }
-    let tag = data[0];
-    let (len, hdr) = if data[1] < 0x80 {
-        (data[1] as usize, 2)
-    } else if data[1] == 0x81 && data.len() >= 3 {
-        (data[2] as usize, 3)
-    } else if data[1] == 0x82 && data.len() >= 4 {
-        (((data[2] as usize) << 8) | data[3] as usize, 4)
-    } else {
-        return None;
-    };
-    if data.len() < hdr + len {
-        return None;
-    }
-    Some((tag, &data[hdr..hdr + len], &data[hdr + len..]))
-}
+use crate::iso7816::{tlv_parse, tlv_put, tlv_put_u32};
 
 // ---------------------------------------------------------------------------
 // APDU buffer builder

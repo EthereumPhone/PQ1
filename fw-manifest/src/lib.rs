@@ -748,6 +748,154 @@ mod tests {
         assert_ne!(d1, d2);
     }
 
+    // -----------------------------------------------------------------
+    // Property-based fuzz harness
+    //
+    // The manifest is the first thing a malicious USB host can drop
+    // on the firmware-update path (`CMD_FW_BEGIN` accumulates 8 KB,
+    // hands them straight to the secure world, which calls into the
+    // verifiers below). A panic on hostile input here is a direct
+    // path from "anyone with a USB cable" to a secure-world DoS, so
+    // every verifier must terminate in bounded time without panicking
+    // for arbitrary bytes.
+    //
+    // We do NOT exercise `verify_signature` because SPHINCS+C10 verify
+    // is expensive — proptest would never converge. The structural,
+    // CRC, digest, vendor-fpr, and rollback paths are all fast and
+    // collectively cover every line a manifest reaches before the
+    // signature step.
+    // -----------------------------------------------------------------
+    use proptest::prelude::*;
+
+    proptest! {
+        /// `ManifestRef::new` never panics regardless of the underlying
+        /// 8 KB blob.
+        #[test]
+        fn manifest_ref_construction_never_panics(
+            blob in proptest::collection::vec(any::<u8>(), MANIFEST_SIZE..=MANIFEST_SIZE)
+        ) {
+            let mut bytes = [0u8; MANIFEST_SIZE];
+            bytes.copy_from_slice(&blob);
+            let _ = ManifestRef::new(&bytes);
+        }
+
+        /// Every accessor + verifier on `ManifestRef` must terminate
+        /// without panic for arbitrary 8 KB blobs. This includes the
+        /// CRC and digest re-computations — both walk the blob bytes
+        /// linearly so any unchecked arithmetic would surface here.
+        #[test]
+        fn verifier_chain_never_panics(
+            blob in proptest::collection::vec(any::<u8>(), MANIFEST_SIZE..=MANIFEST_SIZE)
+        ) {
+            let mut bytes = [0u8; MANIFEST_SIZE];
+            bytes.copy_from_slice(&blob);
+            let m = ManifestRef::new(&bytes);
+
+            let _ = m.magic();
+            let _ = m.manifest_version();
+            let _ = m.slot();
+            let _ = m.fw_version();
+            let _ = m.secure_len();
+            let _ = m.nonsecure_len();
+            let _ = m.secure_hash();
+            let _ = m.nonsecure_hash();
+            let _ = m.vendor_pubkey_fpr();
+            let _ = m.build_id();
+            let _ = m.manifest_digest();
+            let _ = m.signature();
+            let _ = m.boot_counter_snap();
+            let _ = m.try_once_flag();
+            let _ = m.crc32();
+
+            let _ = m.verify_structural();
+            let _ = m.verify_crc();
+            let _ = m.verify_digest();
+            let _ = m.verify_rollback(0);
+            let _ = m.verify_rollback(u32::MAX);
+
+            // verify_vendor_fpr does its own SHA-256 over the
+            // caller-supplied (pk_seed, pk_root). Random bytes here
+            // must never wedge that path.
+            let pk_seed = [0u8; sphincs_c10::params::N];
+            let pk_root = [0u8; sphincs_c10::params::N];
+            let _ = m.verify_vendor_fpr(&pk_seed, &pk_root);
+        }
+
+        /// CRC-32 must accept arbitrary input lengths without panic
+        /// — used by the manifest verifier with `&bytes[..OFF_CRC32]`,
+        /// but we want to assert the more general property too.
+        #[test]
+        fn crc32_never_panics(
+            data in proptest::collection::vec(any::<u8>(), 0..=MANIFEST_SIZE)
+        ) {
+            let _ = crc32_ieee(&data);
+        }
+
+        /// `compute_signed_digest` must terminate for arbitrary inputs.
+        /// Trivially true (fixed 75-byte preimage), but the proptest
+        /// asserts no surprise on the pure-function boundary.
+        #[test]
+        fn signed_digest_never_panics(
+            version in any::<u32>(),
+            secure_hash in any::<[u8; 32]>(),
+            ns_hash in any::<[u8; 32]>(),
+        ) {
+            let _ = compute_signed_digest(version, &secure_hash, &ns_hash);
+        }
+
+        /// Single-bit flip anywhere in the signed region MUST flip
+        /// the CRC — i.e., a malicious host that tampers with any
+        /// field after vendor signing must trigger BadCrc on the
+        /// device. Validates we don't accidentally CRC over too small
+        /// a window.
+        #[test]
+        fn any_signed_field_flip_breaks_crc(
+            mut byte_idx in 0usize..OFF_CRC32,
+            bit in 0u8..8,
+        ) {
+            let mut b = ManifestBuilder::new();
+            b.init(SLOT_A)
+                .fw_version(1)
+                .secure_image(&[0xAB; 32], 0x100)
+                .nonsecure_image(&[0xCD; 32], 0x200);
+            b.finalize_preimage();
+            b.set_signature(&[0x55; SIGNATURE_LEN]);
+            let mut bytes = b.finalize();
+
+            // Pin byte_idx out of the trailing reserved region. The
+            // reserved range is intentionally 0xFF, and flipping a bit
+            // there changes the CRC just like anywhere else, but the
+            // test reads more deterministically when we focus on the
+            // structural region.
+            if byte_idx >= OFF_RESERVED_2 {
+                byte_idx %= OFF_RESERVED_2;
+            }
+
+            let m_before = ManifestRef::new(&bytes);
+            prop_assert!(m_before.verify_crc().is_ok());
+
+            bytes[byte_idx] ^= 1 << bit;
+
+            let m_after = ManifestRef::new(&bytes);
+            prop_assert!(m_after.verify_crc().is_err());
+        }
+
+        /// A blob whose first 4 bytes are not "PQSF" MUST be rejected
+        /// by `verify_structural` no matter what the rest looks like.
+        #[test]
+        fn bad_magic_always_rejected(
+            magic in any::<[u8; 4]>(),
+            tail in proptest::collection::vec(any::<u8>(), MANIFEST_SIZE - 4..=MANIFEST_SIZE - 4),
+        ) {
+            prop_assume!(magic != MAGIC);
+            let mut bytes = [0u8; MANIFEST_SIZE];
+            bytes[..4].copy_from_slice(&magic);
+            bytes[4..].copy_from_slice(&tail);
+            let m = ManifestRef::new(&bytes);
+            prop_assert_eq!(m.verify_structural(), Err(VerifyError::BadMagic));
+        }
+    }
+
     #[test]
     fn manifest_slot_change_does_not_invalidate_digest() {
         // Slot is UNSIGNED metadata. Flipping it produces a CRC

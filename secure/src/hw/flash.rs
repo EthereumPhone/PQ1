@@ -914,3 +914,371 @@ pub unsafe fn write_slot_quadword_verified(addr: u32, data: &[u8; 16]) -> Result
         Err(())
     }
 }
+
+// ===========================================================================
+// Off-chain (EIP-1271) per-slot counter — page 123
+// ===========================================================================
+//
+// One-page log-structured store for two per-slot u64 counters:
+//   * `offchain_count[slot]`  — bumped on every CMD_SIGN_OFFCHAIN.
+//   * `last_userop_count[slot]` — set when CMD_SIGN_USEROP commits
+//     `local_offchain_count` into the signed inner tx.
+//
+// Each entry is one 16-byte quad-word:
+//
+//     [ 0..  8) slot_key  — sha256(account_index‖chain_id‖slot_index)[..8]
+//     [ 8..  9) type      — 0x01 = offchain count, 0x02 = last_userop count
+//     [ 9.. 16) count     — u64 BE big-endian, top byte is `type`
+//
+// Read = scan the page; for each non-blank QW with matching `slot_key`
+// and `type`, take `max(current, count)`. Write = program the next
+// blank QW. When the page fills, compaction reads the latest
+// (slot_key, type) values into SRAM, erases the page, and replays them.
+//
+// "Slot is registered" is defined as "this firmware has at least one
+// entry for this slot_key in flash". `register_slot` writes a
+// last_userop_count = 0 entry the first time the firmware signs Type 1
+// for the slot — that single QW is enough to flip the
+// `is_registered` predicate to true for all subsequent calls. Without
+// it, `cmd_sign_offchain` refuses, which is the recovery-correctness
+// gate after a seed-restore.
+//
+// Page choice: 123 is the highest free secure page (124..127 are
+// already allocated; 122 is the last secure-firmware page in the A/B
+// slot layout). 8 KB / 16 = 512 QWs per cycle; we expect realistic
+// usage < 50 active slots × 65,536 sigs ≈ 3.3 M total bumps over the
+// device lifetime, ÷ 512 per cycle = ~6500 erase cycles — within the
+// 10,000-cycle minimum endurance the STM32U585 datasheet specifies.
+
+const OFFCHAIN_PAGE_ADDR: u32 = 0x0C0F_6000;
+const OFFCHAIN_PAGE_NUM: u32 = 123;
+const OFFCHAIN_QW_SIZE: u32 = 16;
+const OFFCHAIN_CAPACITY: u32 = 512; // 8 KB / 16
+
+const OFFCHAIN_TYPE_COUNT: u8 = 0x01;
+const OFFCHAIN_TYPE_USEROP: u8 = 0x02;
+
+/// Compute the 8-byte flash key for a `(account_index, chain_id, slot_index)`
+/// tuple. SHA-256-based, truncated to 8 bytes — collision rate ~1/2^64
+/// per slot pair, negligible for realistic usage (<256 active slots).
+pub fn slot_key_compute(account_index: u8, chain_id: u64, slot_index: u32) -> [u8; 8] {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update([account_index]);
+    h.update(chain_id.to_be_bytes());
+    h.update(slot_index.to_be_bytes());
+    let d = h.finalize();
+    let mut out = [0u8; 8];
+    out.copy_from_slice(&d[..8]);
+    out
+}
+
+/// Pack a journal entry into a 16-byte quad-word.
+fn entry_qw(slot_key: &[u8; 8], entry_type: u8, count: u64) -> [u8; 16] {
+    let mut qw = [0u8; 16];
+    qw[..8].copy_from_slice(slot_key);
+    qw[8] = entry_type;
+    let count_be = count.to_be_bytes();
+    qw[9..16].copy_from_slice(&count_be[1..8]); // 7-byte BE — supports up to 2^56
+    qw
+}
+
+/// Parse a journal entry. Returns `None` if blank (type byte == 0xFF).
+unsafe fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
+    let base = qw_addr as *const u8;
+    let type_byte = read_volatile(base.add(8));
+    if type_byte == 0xFF {
+        return None;
+    }
+    if type_byte != OFFCHAIN_TYPE_COUNT && type_byte != OFFCHAIN_TYPE_USEROP {
+        // Unknown type — treat as corrupt, skip but don't stop the scan.
+        return Some((0, [0u8; 8], 0));
+    }
+    let mut slot_key = [0u8; 8];
+    for i in 0..8 {
+        slot_key[i] = read_volatile(base.add(i));
+    }
+    let mut count_bytes = [0u8; 8];
+    for i in 0..7 {
+        count_bytes[1 + i] = read_volatile(base.add(9 + i));
+    }
+    let count = u64::from_be_bytes(count_bytes);
+    Some((type_byte, slot_key, count))
+}
+
+/// Find the first blank QW in the page. Returns the QW *index*, or
+/// `None` if the page is full and a compaction is required.
+unsafe fn find_next_blank_idx() -> Option<u32> {
+    let base = OFFCHAIN_PAGE_ADDR as *const u8;
+    for i in 0..OFFCHAIN_CAPACITY {
+        let type_byte = read_volatile(base.add((i * OFFCHAIN_QW_SIZE + 8) as usize));
+        if type_byte == 0xFF {
+            return Some(i);
+        }
+    }
+    None
+}
+
+/// Erase page 123 — wipes every off-chain counter back to "no record".
+/// On the next access, every slot will look unregistered. Use only as
+/// part of compaction (which immediately re-writes the latest values
+/// before any other code touches the page) or in a deliberate
+/// reset-to-factory flow.
+unsafe fn erase_offchain_page() -> Result<(), ()> {
+    cortex_m::interrupt::free(|_| {
+        wait_bsy();
+        clear_errors();
+        unlock();
+
+        let cr = PER | (OFFCHAIN_PAGE_NUM << PNB_SHIFT);
+        write_volatile(FLASH_SECCR, cr);
+        write_volatile(FLASH_SECCR, cr | STRT);
+
+        wait_bsy();
+
+        write_volatile(FLASH_SECCR, 0);
+        let sr = read_volatile(FLASH_SECSR);
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+        icache_invalidate();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
+}
+
+/// Maximum number of distinct active slots the SRAM compaction buffer
+/// supports. Realistic usage is far below this; well-behaved firmware
+/// rotates slots before they exhaust their 65,536-sig cap.
+const MAX_ACTIVE_SLOTS: usize = 256;
+
+/// SRAM scratch table for compaction.
+#[derive(Clone, Copy)]
+struct SlotEntry {
+    slot_key: [u8; 8],
+    offchain_count: u64,
+    last_userop_count: u64,
+    has_offchain: bool,
+    has_userop: bool,
+}
+
+/// Scan the page once and project the latest `(offchain, last_userop)`
+/// pair for every observed `slot_key`. Used by both compaction and the
+/// (rarely-needed) "show me all active slots" introspection path. The
+/// table is allocated on the caller's stack via the in/out reference.
+///
+/// Returns the number of distinct slot_keys observed.
+unsafe fn scan_page_into_table(table: &mut [SlotEntry; MAX_ACTIVE_SLOTS]) -> usize {
+    let mut n: usize = 0;
+    for i in 0..OFFCHAIN_CAPACITY {
+        let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
+        match parse_entry(addr) {
+            None => break, // first blank — done
+            Some((0, _, _)) => continue, // unknown type — skip
+            Some((t, sk, count)) => {
+                // Find existing entry for this slot_key, else allocate.
+                let mut found: Option<usize> = None;
+                for j in 0..n {
+                    if table[j].slot_key == sk {
+                        found = Some(j);
+                        break;
+                    }
+                }
+                let idx = match found {
+                    Some(j) => j,
+                    None => {
+                        if n >= MAX_ACTIVE_SLOTS {
+                            // Saturate; subsequent slots silently dropped.
+                            // In practice this never triggers (page only
+                            // holds 512 QWs, and N distinct slots <= 512).
+                            continue;
+                        }
+                        let j = n;
+                        n += 1;
+                        table[j] = SlotEntry {
+                            slot_key: sk,
+                            offchain_count: 0,
+                            last_userop_count: 0,
+                            has_offchain: false,
+                            has_userop: false,
+                        };
+                        j
+                    }
+                };
+                if t == OFFCHAIN_TYPE_COUNT {
+                    if count > table[idx].offchain_count || !table[idx].has_offchain {
+                        table[idx].offchain_count = count;
+                    }
+                    table[idx].has_offchain = true;
+                } else if t == OFFCHAIN_TYPE_USEROP {
+                    if count > table[idx].last_userop_count || !table[idx].has_userop {
+                        table[idx].last_userop_count = count;
+                    }
+                    table[idx].has_userop = true;
+                }
+            }
+        }
+    }
+    n
+}
+
+/// Compact the page: read the latest values per (slot_key, type) into
+/// SRAM, erase, then replay. Power-loss-tolerant: a torn compaction
+/// leaves the page (partially) erased, which loses counters for some
+/// slots — those slots then look unregistered, which forces a Type 1
+/// re-registration but does not break correctness.
+unsafe fn compact_page() -> Result<(), ()> {
+    let mut table = [SlotEntry {
+        slot_key: [0u8; 8],
+        offchain_count: 0,
+        last_userop_count: 0,
+        has_offchain: false,
+        has_userop: false,
+    }; MAX_ACTIVE_SLOTS];
+    let n = scan_page_into_table(&mut table);
+
+    erase_offchain_page()?;
+
+    // Replay: write surviving entries at the start of the page.
+    for j in 0..n {
+        let entry = table[j];
+        let mut idx: u32 = 0;
+        if entry.has_userop {
+            let qw = entry_qw(&entry.slot_key, OFFCHAIN_TYPE_USEROP, entry.last_userop_count);
+            // Find next blank inside the freshly-erased page.
+            let blank = find_next_blank_idx().ok_or(())?;
+            idx = blank;
+            write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, &qw)?;
+        }
+        if entry.has_offchain {
+            let qw = entry_qw(&entry.slot_key, OFFCHAIN_TYPE_COUNT, entry.offchain_count);
+            let blank = find_next_blank_idx().ok_or(())?;
+            // Defensive: ensure we did not somehow regress.
+            if blank < idx {
+                return Err(());
+            }
+            write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, &qw)?;
+        }
+    }
+    Ok(())
+}
+
+/// Append a journal entry, compacting first if the page is full.
+unsafe fn write_entry(qw: &[u8; 16]) -> Result<(), ()> {
+    if find_next_blank_idx().is_none() {
+        compact_page()?;
+    }
+    let blank = find_next_blank_idx().ok_or(())?;
+    write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw)
+}
+
+/// Read the latest off-chain sig count for `slot_key`. Returns 0 if no
+/// entry exists (caller distinguishes "0 sigs" from "unregistered" via
+/// `offchain_count_is_registered`).
+pub unsafe fn offchain_count_read(slot_key: &[u8; 8]) -> u64 {
+    let mut latest: u64 = 0;
+    let mut found = false;
+    for i in 0..OFFCHAIN_CAPACITY {
+        let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
+        match parse_entry(addr) {
+            None => break,
+            Some((t, sk, count)) if t == OFFCHAIN_TYPE_COUNT && sk == *slot_key => {
+                if count > latest || !found {
+                    latest = count;
+                    found = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    latest
+}
+
+/// Read the most recent UserOp-snapshot count (the value embedded in
+/// the inner tx of the last `CMD_SIGN_USEROP`).
+pub unsafe fn last_userop_count_read(slot_key: &[u8; 8]) -> u64 {
+    let mut latest: u64 = 0;
+    let mut found = false;
+    for i in 0..OFFCHAIN_CAPACITY {
+        let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
+        match parse_entry(addr) {
+            None => break,
+            Some((t, sk, count)) if t == OFFCHAIN_TYPE_USEROP && sk == *slot_key => {
+                if count > latest || !found {
+                    latest = count;
+                    found = true;
+                }
+            }
+            _ => {}
+        }
+    }
+    latest
+}
+
+/// True iff this firmware has at least one entry for `slot_key`.
+/// After a fresh-from-seed boot this is `false` for every slot, which
+/// is the recovery refusal gate.
+pub unsafe fn offchain_count_is_registered(slot_key: &[u8; 8]) -> bool {
+    for i in 0..OFFCHAIN_CAPACITY {
+        let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
+        match parse_entry(addr) {
+            None => return false,
+            Some((0, _, _)) => continue,
+            Some((_, sk, _)) if sk == *slot_key => return true,
+            _ => continue,
+        }
+    }
+    false
+}
+
+/// Write the "slot is registered" marker (a last_userop_count = 0
+/// entry). No-op if already registered. Called by `cmd_sign_userop`
+/// when it signs a Type 1 for a fresh slot.
+pub unsafe fn offchain_count_register_slot(slot_key: &[u8; 8]) -> Result<(), ()> {
+    if offchain_count_is_registered(slot_key) {
+        return Ok(());
+    }
+    let qw = entry_qw(slot_key, OFFCHAIN_TYPE_USEROP, 0);
+    write_entry(&qw)
+}
+
+/// Bump the off-chain sig counter to `new_count`. Reverts via `Err(())`
+/// if `new_count <= current`; the caller (cmd_sign_offchain) computes
+/// `new_count = current + 1` so this only fails on flash trouble.
+pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<(), ()> {
+    let pre = offchain_count_read(slot_key);
+    if new_count <= pre {
+        return Err(());
+    }
+    let qw = entry_qw(slot_key, OFFCHAIN_TYPE_COUNT, new_count);
+    write_entry(&qw)?;
+    // FI hardening: read-back the post-bump value, refuse if it didn't
+    // land. Mirrors `pin_attempts_bump`.
+    let post = offchain_count_read(slot_key);
+    if post != new_count {
+        return Err(());
+    }
+    if !crate::fi::check_true(|| offchain_count_read(slot_key) == new_count) {
+        return Err(());
+    }
+    Ok(())
+}
+
+/// Update the last_userop_count snapshot for `slot_key`. Idempotent if
+/// `count == current`. Refuses non-monotonic updates.
+pub unsafe fn last_userop_count_set(slot_key: &[u8; 8], count: u64) -> Result<(), ()> {
+    let pre = last_userop_count_read(slot_key);
+    if count < pre {
+        return Err(());
+    }
+    if count == pre && offchain_count_is_registered(slot_key) {
+        return Ok(());
+    }
+    let qw = entry_qw(slot_key, OFFCHAIN_TYPE_USEROP, count);
+    write_entry(&qw)
+}

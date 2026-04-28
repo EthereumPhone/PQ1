@@ -32,7 +32,9 @@ Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 
 7. **Per-chain usage capped by two monotonic counters.** `PQSmartWallet.bootstrapUses` is bumped on every accepted Type 1 and checked against `MAX_BOOTSTRAP_USES = 65_536`; `slotUses[ownerIndex]` is bumped on every accepted Type 2 and checked against `MAX_SLOT_USES = 65_536`. Both caps are well inside the C10 `h=18` tree's 2^18 = 262,144 signing positions, leaving a conservative birthday-style safety margin. A chain that hits the bootstrap cap can still sign Type 2 on already-registered slots (until each slot hits its own cap); once a slot's `slotUses` is at the cap, the companion rotates to `ownerIndex + 1` via a new Type 1. A chain whose bootstrap cap is exhausted AND whose last-registered slot is also exhausted is permanently frozen — the companion surfaces this as an irrecoverable per-chain freeze. There is no `resetBootstrapUses` / `resetSlotUses` path anywhere in the contract.
 
-8. **Firmware is stateless with respect to slot selection.** The companion app supplies `(chain_id, slot_index, flags)` on every `CMD_SIGN_USEROP`; the secure world keeps zero flash state about which chain has registered which slot. Slot keys are deterministically re-derived from `(master_entropy, slot_index)` on demand and cached in SRAM across the unlock session only. This replaces the pre-cutover FORS+C `next_q` persistence invariant — SPHINCS+C10 is stateless within its tree capacity, so per-signature flash writes are not required.
+8. **Firmware is stateless with respect to slot selection, with one exception (off-chain sig counter).** The companion app supplies `(chain_id, slot_index, flags)` on every `CMD_SIGN_USEROP`; the secure world keeps zero flash state about which chain has registered which slot. Slot keys are deterministically re-derived from `(master_entropy, slot_index)` on demand and cached in SRAM across the unlock session only. SPHINCS+C10 is stateless within its tree capacity, so the per-signature flash writes the pre-cutover FORS+C `next_q` invariant required are gone — *except* for a single durable counter the EIP-1271 path requires (see invariant #9). That exception is bounded: 16 bytes per increment, page 123 only, log-structured with compaction, no per-slot proliferation.
+
+9. **Per-slot off-chain sig counter, on-chain combined cap.** Off-chain (EIP-1271) sigs share the slot's hypertree budget with on-chain Type 2 sigs, so the wallet enforces the *combined* invariant `slotUses[i] + offchainSigCount[i] <= MAX_SLOT_USES`. Firmware tracks `local_offchain_count` and `last_userop_count` per slot in flash page 123, refuses to sign off-chain past `MAX_OFFCHAIN_GAP = 5` unbacked sigs (forces a UserOp to publish the count), and refuses any sig that would exceed the combined cap pre-emptively. After a seed restore on a fresh device, the firmware has no flash record of any slot — `CMD_SIGN_OFFCHAIN` for an unregistered slot is rejected, forcing a Type 1 slot rotation via `CMD_SIGN_USEROP` so the new firmware's view of the local count is grounded in its own signing history.
 
 ## Architecture at a Glance
 
@@ -80,6 +82,8 @@ Status: all-C10 cutover complete. Firmware boots on real B-U585I-IOT02A + QEMU m
 | 12 | LOCK | Zeroize cached secrets |
 | 14 | GET_WALLET_ADDRESS | Compute the CREATE2-predicted ERC-1967 proxy address from the cached bootstrap pubkey + the firmware-embedded factory + proxy-init-code-hash constants. First call after unlock costs ~6 s (master C10 keygen); subsequent calls are <1 ms. |
 | 15 | GET_INIT_CODE | Pre-compute the 4280-byte ERC-4337 `initCode` for `(account_index, chain_id)` — same bytes the deploy path of CMD 7 would emit — so the companion can run `eth_estimateUserOperationGas` against a not-yet-deployed account. Stateless C10 means the result is reusable across retries and the eventual real submission. |
+| 16 | SIGN_OFFCHAIN | Produce a SPHINCS+C10 sig over a 32-byte hash for EIP-1271 (off-chain) verification. Companion is responsible for computing the EIP-712-nested `replaySafeHash` before calling. Refuses if the slot is unregistered (post-restore), the gap from the last UserOp exceeds `MAX_OFFCHAIN_GAP = 5`, or the combined per-slot cap would exceed `MAX_SLOT_USES`. |
+| 17 | OFFCHAIN_STATUS | Read per-slot off-chain state: `(local_offchain_count, last_userop_count, registered)`. Companion uses it for "X off-chain sigs available" UI hints and to detect "this slot was inherited from a previous device" after a seed restore. |
 | 20–24 | FW_BEGIN/CHUNK/COMMIT/STATUS/ABORT | Streaming firmware-update state machine (see `secure/src/fw_update/`). PIN unlock required on every call. |
 | 200 | TEST_PIN_LOCKOUT | E2E-only — burns a wrong-PIN cycle to validate the three-way counter sync. Compiled out of production builds. |
 
@@ -139,20 +143,46 @@ offset  size  field
 ### Unified sign output
 
 ```
-[type1_len(4 BE)][type1_bytes...][type2_len(4 BE)][type2_bytes...]
+[new_offchain_count(8 BE)]
+[init_code_len(4 BE)][init_code...]
+[type1_len(4 BE)][type1_wrapper...]
+[type2_len(4 BE)][type2_wrapper...]
 ```
 
-- `type1_bytes` (exactly 4073 bytes when present):
-  `[0x01][r(32)][subPkSeed(16)][subPkRoot(16)][C10_sig(4008)]`
+- `new_offchain_count` is the firmware's per-slot `local_offchain_count`
+  *as of this UserOp* — it is also the value baked into the
+  `executeWithOffchainCount(...)` calldata that the Type 2 sig commits to.
+  The companion uses it to populate the inner-tx field without
+  ABI-decoding the calldata.
+- `init_code` (4280 bytes when present, 0 otherwise) is emitted only when
+  `FLAG_INCLUDE_INIT_CODE` is set on the request.
+- `type1_wrapper` / `type2_wrapper` are the `SignatureWrapper`-encoded
+  C10 sigs (4128 bytes each):
+  `abi.encode(uint256 ownerIndex, bytes c10Sig)`.
 
-- `type2_bytes` (fixed 4073 bytes):
-  `[0x02][H(r)(32)][subPkSeed(16)][subPkRoot(16)][C10_sig(4008)]`
+### Off-chain (EIP-1271) sign output
+
+`CMD_SIGN_OFFCHAIN` returns a fixed 4016-byte body:
+
+```
+[new_local_offchain_count(8 BE)][C10 sig (4008)]
+```
+
+Companion wraps the sig as `abi.encode(uint256 ownerIndex, bytes c10Sig)`
+before handing it to the dapp. The dapp calls
+`wallet.isValidSignature(rawHash, wrappedSig)`; the wallet recomputes
+`replaySafeHash(rawHash)` (Solady-nested EIP-712 with `(name="PQSmart
+Wallet", version="1", chainId, address(this))` as the domain) and verifies
+the C10 sig against the wrapped hash. The companion must apply the
+*same* wrapping when constructing the firmware's input hash, otherwise
+the sig will not verify.
 
 ### On-chain validation
 
 `PQSmartWallet.validateUserOp` ABI-decodes the signature wrapper (`SignatureWrapper(uint256 ownerIndex, bytes signatureData)`) and dispatches on `ownerIndex`:
 - `ownerIndex == 0` (bootstrap / Type 1) → check `bootstrapUses < MAX_BOOTSTRAP_USES` (= 65,536), verify bootstrap C10 sig over `userOpHash`, install slot pubkey at the `ownerIndex` carried in the wrapper, bump `bootstrapUses`, emit `BootstrapKeyUsed(newCount)`.
-- `ownerIndex >= 1` (slot / Type 2) → look up the slot pubkey, check `slotUses[ownerIndex] < MAX_SLOT_USES` (= 65,536), verify slot C10 sig via the same `c10Verifier`, bump `slotUses[ownerIndex]` and emit `SlotKeyUsed(slotKey, newCount)`. (Does NOT touch `bootstrapUses` — Type 2 keeps working after the bootstrap cap is hit, up to each slot's own `MAX_SLOT_USES`.)
+- `ownerIndex >= 1` (slot / Type 2) → look up the slot pubkey, check the *combined* cap `slotUses[ownerIndex] + offchainSigCount[ownerIndex] < MAX_SLOT_USES` (= 65,536), verify slot C10 sig via the same `c10Verifier`, bump `slotUses[ownerIndex]` and emit `SlotKeyUsed(slotKey, newCount)`. The slot's `executeWithOffchainCount(ownerIndex, newOffchainCount, target, value, data)` then runs in the EntryPoint's execution phase: it monotonically updates `offchainSigCount[ownerIndex]` (re-checking the combined cap belt-and-braces) and dispatches the user's call. (Does NOT touch `bootstrapUses` — Type 2 keeps working after the bootstrap cap is hit, up to each slot's own combined cap.)
+- `wallet.isValidSignature(hash, sig)` (EIP-1271) is `view`-only: it nests the input hash via Solady's EIP-712 wrapping, dispatches to the same C10 verifier, returns `0x1626ba7e` on pass / `0xffffffff` on fail. Bumps no counter; bootstrap key (`ownerIndex == 0`) is forbidden in this path.
 
 ## Subsystem Guides
 
@@ -268,19 +298,21 @@ End-to-end firmware-update pipeline: vendor signs a 75-byte preimage (`"PQFW_V1"
 
 Pure-PQ account-abstraction wallet on EntryPoint v0.6, deployed via ERC-1967 proxies for ~50 k-gas per-user deploys.
 
-**Deployment model.** `PQSmartWallet` is the shared *implementation* — deployed once per chain by the project deployer. Every user wallet is a ~55-byte ERC-1967 proxy that `DELEGATECALL`s into the impl. `entryPoint` and `c10Verifier` are impl-level immutables; per-proxy state lives in `PQMultiOwnable`'s ERC-7201 storage slot (`ownerAtIndex` mapping + `bootstrapUses` counter + `slotUses[i]` mapping).
+**Deployment model.** `PQSmartWallet` is the shared *implementation* — deployed once per chain by the project deployer. Every user wallet is a ~55-byte ERC-1967 proxy that `DELEGATECALL`s into the impl. `entryPoint` and `c10Verifier` are impl-level immutables; per-proxy state lives in `PQMultiOwnable`'s ERC-7201 storage slot (`ownerAtIndex` mapping + `bootstrapUses` counter + `slotUses[i]` mapping + `offchainSigCount[i]` mapping).
 
 **Key files:**
-- `src/PQSmartWallet.sol` — validates Type 1 + Type 2 signatures by dispatching on `ownerIndex` (0 = bootstrap, ≥1 = slot). Enforces `MAX_BOOTSTRAP_USES = 65_536` and `MAX_SLOT_USES = 65_536`. `C10_SIG_LEN = 4008`.
+- `src/PQSmartWallet.sol` — validates Type 1 + Type 2 signatures by dispatching on `ownerIndex` (0 = bootstrap, ≥1 = slot). Enforces `MAX_BOOTSTRAP_USES = 65_536` for Type 1 and the *combined* cap `slotUses + offchainSigCount <= MAX_SLOT_USES = 65_536` for Type 2 / off-chain. `C10_SIG_LEN = 4008`. Single execute entry-point — `executeWithOffchainCount(ownerIndex, newOffchainCount, target, value, data)` — that publishes the firmware's per-slot off-chain sig count durably on every UserOp, so a fresh-from-seed firmware on recovery can read on-chain `offchainSigCount[i]` and reason correctly about the slot's remaining budget. Implements EIP-1271 via Solady's `ERC1271` mixin (nested EIP-712 replay protection, ERC-6492 counterfactual unwrap); `_erc1271IsValidSignatureNowCalldata` runs the same C10 verifier. Bootstrap key (`ownerIndex == 0`) is forbidden in the EIP-1271 path so off-chain sigs cannot leak bootstrap budget.
 - `src/PQSmartWalletFactory.sol` — CREATE2 factory for the ERC-1967 proxy stub via Solady's `LibClone.createDeterministicERC1967`. Salt = `sha256(masterPkSeed || masterPkRoot)` (the CREATE2 opcode itself still keccak256-hashes `0xff || factory || salt || keccak256(proxyCode)`; we only control the salt preimage). `createAccount` requires a bootstrap C10 sig over `addSlot0Digest(chainId, slot0PkSeed, slot0PkRoot) = sha256(FACTORY_ADD_SLOT_DOMAIN || chainId || slot0PkSeed || slot0PkRoot)` so a hostile observer of the public bootstrap pubkey cannot squat the victim's address on a chain they have not yet deployed on. The pre-image and signed message are identical to what `CMD_GET_INIT_CODE` and the deploy path of `CMD_SIGN_USEROP` produce.
-- `src/PQMultiOwnable.sol` — ERC-7201-storage helper (`ownerAtIndex` mapping + `bootstrapUses` counter + `slotUses[i]` mapping) plus `_bumpBootstrapUses(cap)` and `_bumpSlotUses(ownerIndex, cap)`. Emits `BootstrapKeyUsed(newCount)` and `SlotKeyUsed(slotKey, newCount)`.
-- `src/verifiers/SPHINCsC10Asm.sol` — stateless Yul C10 verifier (SHA-256 precompile). Used for both Type 1 and Type 2 verification; the wallet holds a single `c10Verifier` immutable and calls it with different `(pk_seed, pk_root)` for each dispatch path.
+- `src/PQMultiOwnable.sol` — ERC-7201-storage helper (`ownerAtIndex` mapping + `bootstrapUses` counter + `slotUses[i]` mapping + `offchainSigCount[i]` mapping) plus `_bumpBootstrapUses(cap)`, `_bumpSlotUses(ownerIndex, cap)`, and `_setOffchainSigCount(ownerIndex, newCount, slotUsesNow, cap)` (monotonic + combined-cap enforced). Emits `BootstrapKeyUsed(newCount)`, `SlotKeyUsed(slotKey, newCount)`, and `OffchainSigCountUpdated(ownerIndex, prev, newCount)`.
+- `src/verifiers/SPHINCsC10Asm.sol` — stateless Yul C10 verifier (SHA-256 precompile). Used for Type 1, Type 2, and EIP-1271 verification; the wallet holds a single `c10Verifier` immutable and calls it with different `(pk_seed, pk_root)` for each dispatch path.
 - `src/verifiers/ISPHINCSVerifier.sol` — verifier interface (allows test/prod swap).
 
 **Cross-cutting invariants:**
 - No classical signer path anywhere in the contract.
 - Bootstrap C10 keys immutable after wallet initialisation; the salt depends only on them, so the address is stable across chains *for a given* `account_index`.
-- `bootstrapUses` and every `slotUses[ownerIndex]` monotonically increase; no reset path anywhere in the contract or factory.
+- `bootstrapUses`, every `slotUses[ownerIndex]`, and every `offchainSigCount[ownerIndex]` monotonically increase; no reset path anywhere in the contract or factory.
+- The combined cap `slotUses[i] + offchainSigCount[i] <= MAX_SLOT_USES` is enforced both on Type 2 `validateUserOp` (refusing the next on-chain sig) and inside `_setOffchainSigCount` (refusing a count update past the cap). Belt-and-braces — firmware is supposed to refuse the same way pre-emptively.
+- EIP-1271 (`isValidSignature`) is `view`-only: it never bumps a counter and never spends budget. The firmware's `local_offchain_count`, durably reflected on chain via `executeWithOffchainCount`, is the only path that consumes the slot's signing budget.
 - Factory squat-defence is non-negotiable — `createAccount` MUST verify the bootstrap C10 signature over `addSlot0Digest(...)` before deploying.
 - Wire formats consumed here MUST match the firmware's output byte-for-byte.
 
@@ -485,7 +517,7 @@ into the master entropy.
 - **Do not skip the verify-before-release check** on Type 1 or Type 2 signatures. Fault-injection guard, double-evaluated with a sentinel.
 - **Do not add a `rotateMasterKeys` function** to the wallet contract — that's the launch invariant for bootstrap-key immutability (see invariant #6).
 - **Do not add a `resetBootstrapUses` / `resetSlotUses` / `increaseMax*` path** to the wallet or factory. Both counters are immutable monotonic and capped at 65,536 each by design. Once a chain fully exhausts its bootstrap cap AND all currently-registered slots, the chain stays exhausted — that is the invariant. A companion-side notice of impending exhaustion is fine; anything that touches the counters in the contract is not.
-- **Do not reintroduce per-signature flash state.** The all-C10 slot cutover made the firmware stateless with respect to slot selection; any code that writes `next_q`-like counters to flash is a regression.
+- **Do not reintroduce per-signature flash state beyond the EIP-1271 off-chain counter.** The all-C10 slot cutover made the firmware stateless with respect to slot selection; the only sanctioned flash-resident counter is the per-slot off-chain sig counter on page 123 (see invariant #9). Any code that writes `next_q`-like counters to flash, or replicates the off-chain counter logic onto a different page or against a different per-slot key, is a regression.
 - **Do not let NS world control the inactivity timer.** Timer runs on Secure-only TIM. NS pings do not reset it. Only real button presses on S-world confirm dialogs count as activity.
 - **Do not add `debug-log` or `e2e-test` features to production builds.** CI must gate on this.
 - **Do not expand the signed firmware-update preimage.** It's intentionally the 75 bytes `"PQFW_V1" || fw_version_be || secure_hash || nonsecure_hash` so any auditor can reconstruct it from source. Adding slot/vendor-fpr/build_id into the preimage would break that property; if you think you need a new input in there, first question whether it can instead be derived or checked independently.

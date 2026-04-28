@@ -22,6 +22,14 @@ struct PQMultiOwnableStorage {
     ///      signatures, keyed by owner index. Capped at
     ///      `PQSmartWallet.MAX_SLOT_USES` each.
     mapping(uint256 ownerIndex => uint256) slotUses;
+    /// @dev Per-slot monotonic count of off-chain (EIP-1271) signatures
+    ///      the firmware reports it has produced on this chain. Updated
+    ///      via the signed `executeWithOffchainCount(...)` path. The
+    ///      *combined* invariant `slotUses[i] + offchainSigCount[i] <=
+    ///      PQSmartWallet.MAX_SLOT_USES` is what bounds total slot-key
+    ///      usage; on-chain UserOps and off-chain sigs share the same
+    ///      hypertree budget.
+    mapping(uint256 ownerIndex => uint256) offchainSigCount;
 }
 
 /// @title PQMultiOwnable
@@ -76,12 +84,30 @@ abstract contract PQMultiOwnable {
     /// @notice Attempt to remove the bootstrap key at index 0.
     error CannotRemoveBootstrap();
 
+    /// @notice Owner bytes do not follow the N-mask layout. SPHINCS+C10 is
+    ///         a 128-bit-security scheme; both `pkSeed` and `pkRoot` carry
+    ///         their 16-byte values in the TOP half of a `bytes32`, with
+    ///         the bottom 16 bytes required to be zero. The on-chain
+    ///         verifier feeds the full 32 bytes of each into its SHA-256
+    ///         inputs, and the firmware always emits the zero-padded
+    ///         shape, so any owner with a non-zero low half is unsignable
+    ///         and would just waste a slot index.
+    error InvalidNMaskLayout(bytes owner);
+
     // ── Events ────────────────────────────────────────────────────────
 
     event AddOwner(uint256 indexed index, bytes owner);
     event RemoveOwner(uint256 indexed index, bytes owner);
     event BootstrapUsed(uint256 indexed newCount);
     event SlotUsed(uint256 indexed ownerIndex, uint256 indexed newCount);
+    event OffchainSigCountUpdated(uint256 indexed ownerIndex, uint256 prev, uint256 newCount);
+
+    /// @notice Off-chain count update is non-monotonic (newCount < current).
+    error OffchainSigCountNotMonotonic(uint256 ownerIndex, uint256 current, uint256 newCount);
+
+    /// @notice Combined `slotUses + offchainSigCount` would exceed the
+    ///         per-slot SPHINCS+ usage cap.
+    error CombinedSlotCapExceeded(uint256 ownerIndex, uint256 slotUsesNow, uint256 newOffchainCount, uint256 cap);
 
     // ── External getters ──────────────────────────────────────────────
 
@@ -117,6 +143,12 @@ abstract contract PQMultiOwnable {
     /// @notice Monotonic per-slot use counter (ownerIndex >= 1).
     function slotUses(uint256 ownerIndex) public view virtual returns (uint256) {
         return _getStorage().slotUses[ownerIndex];
+    }
+
+    /// @notice Monotonic per-slot off-chain (EIP-1271) sig count last
+    ///         reported by the firmware via a signed UserOp.
+    function offchainSigCount(uint256 ownerIndex) public view virtual returns (uint256) {
+        return _getStorage().offchainSigCount[ownerIndex];
     }
 
     // ── Internal helpers ──────────────────────────────────────────────
@@ -177,10 +209,45 @@ abstract contract PQMultiOwnable {
         emit SlotUsed(ownerIndex, next);
     }
 
+    /// @dev Monotonically update `offchainSigCount[ownerIndex]` and enforce
+    ///      the *combined* per-slot cap `slotUses + offchainSigCount <= cap`.
+    ///      `slotUsesNow` is passed in so the caller does not have to load
+    ///      it twice. No-op if `newCount == prev` (idempotent re-publish).
+    function _setOffchainSigCount(
+        uint256 ownerIndex,
+        uint256 newCount,
+        uint256 slotUsesNow,
+        uint256 cap
+    ) internal returns (uint256 prev) {
+        PQMultiOwnableStorage storage $ = _getStorage();
+        prev = $.offchainSigCount[ownerIndex];
+        if (newCount < prev) {
+            revert OffchainSigCountNotMonotonic(ownerIndex, prev, newCount);
+        }
+        if (slotUsesNow + newCount > cap) {
+            revert CombinedSlotCapExceeded(ownerIndex, slotUsesNow, newCount, cap);
+        }
+        if (newCount != prev) {
+            $.offchainSigCount[ownerIndex] = newCount;
+            emit OffchainSigCountUpdated(ownerIndex, prev, newCount);
+        }
+    }
+
     // ── Private ───────────────────────────────────────────────────────
 
     function _addOwnerAtIndex(bytes memory owner, uint256 index) private {
         if (isOwnerBytes(owner)) revert AlreadyOwner(owner);
+        // N-mask enforcement: bottom 128 bits of both pkSeed and pkRoot
+        // must be zero. See `InvalidNMaskLayout` doc-comment.
+        bytes32 seed;
+        bytes32 root;
+        assembly ("memory-safe") {
+            seed := mload(add(owner, 32))
+            root := mload(add(owner, 64))
+        }
+        if (uint128(uint256(seed)) != 0 || uint128(uint256(root)) != 0) {
+            revert InvalidNMaskLayout(owner);
+        }
         PQMultiOwnableStorage storage $ = _getStorage();
         $.isOwner[owner] = true;
         $.ownerAtIndex[index] = owner;

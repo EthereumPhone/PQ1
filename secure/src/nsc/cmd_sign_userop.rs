@@ -677,8 +677,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
 
-    // ── 10. Build Type 2 callData: execute(to, value, data) ────────
-    let t2_exec = match reconstruct_execute_calldata(&tx_for_display, inner_data) {
+    // ── 10. Build Type 2 callData: executeWithOffchainCount(...) ───
+    //
+    // The on-chain wallet's slot-authorised execute path also publishes
+    // the firmware's per-slot off-chain sig counter, so the calldata
+    // here commits to `(ownerIndex, newOffchainCount, target, value,
+    // data)`. `newOffchainCount` is the firmware's local count *for
+    // this slot*, read from secure-flash page 123.
+    let t2_owner_index = (slot_index as u64) + 1;
+    let slot_flash_key =
+        crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);
+    let new_offchain_count = unsafe { crate::offchain_state::offchain_count_read(&slot_flash_key) };
+    let t2_exec = match reconstruct_execute_calldata(
+        t2_owner_index,
+        new_offchain_count,
+        &tx_for_display,
+        inner_data,
+    ) {
         Ok(c) => c,
         Err(_) => {
             entropy.zeroize();
@@ -992,18 +1007,46 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // Wrap the Type 2 sig: ownerIndex = slot_index + 1 (bootstrap is at 0).
-    let t2_owner_index = (slot_index as u64) + 1;
+    // `t2_owner_index` was bound at step 10 alongside the calldata.
     let mut type2_wrapper_out: Zeroizing<[u8; SIG_WRAPPER_LEN]> =
         Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
     encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
 
+    // ── 14b. Persist the new last_userop_count and (if Type 1) the
+    //         registered-slot flag. Done *after* sig verify so a verify
+    //         failure does not bake a phantom count into flash.
+    if register_slot {
+        if unsafe { crate::offchain_state::offchain_count_register_slot(&slot_flash_key) }
+            .is_err()
+        {
+            entropy.zeroize();
+            ui::show_status("Slot register", "FAIL");
+            return NscStatus::InternalError as u32;
+        }
+    }
+    if unsafe {
+        crate::offchain_state::last_userop_count_set(&slot_flash_key, new_offchain_count)
+    }
+    .is_err()
+    {
+        entropy.zeroize();
+        ui::show_status("Sig commit", "FAIL");
+        return NscStatus::InternalError as u32;
+    }
+
     // ── 15. Assemble output bundle ─────────────────────────────────
     //
     // Layout:
+    //   [new_offchain_count(8 BE)] -- the value just baked into the
+    //                                signed inner-tx calldata, surfaced
+    //                                here so the companion does not
+    //                                have to ABI-decode `executeWith
+    //                                OffchainCount(...)` to find it.
     //   [init_code_len(4 BE)][init_code(0 or 4280)]
     //   [type1_len(4 BE)][type1_wrapper(0 or 4128)]
     //   [type2_len(4 BE)][type2_wrapper(4128)]
     let mut write_pos: usize = 0;
+    write_be_u64(out_ptr, &mut write_pos, new_offchain_count);
     let init_code_len = if emit_init_code { PQ_INIT_CODE_LEN } else { 0 };
     write_be_u32(out_ptr, &mut write_pos, init_code_len as u32);
     if emit_init_code {
@@ -1029,7 +1072,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     write_pos += SIG_WRAPPER_LEN;
 
     debug_assert!(write_pos <= MAX_SIGN_RESPONSE_LEN);
-    debug_assert_eq!(write_pos - (4 + init_code_len + 4 + type1_len + 4), SIG_WRAPPER_LEN);
+    debug_assert_eq!(
+        write_pos - (8 + 4 + init_code_len + 4 + type1_len + 4),
+        SIG_WRAPPER_LEN
+    );
     let _ = write_pos;
 
     // ── 16. Zeroise transients ─────────────────────────────────────
@@ -1075,6 +1121,15 @@ unsafe fn write_be_u32(out_ptr: *mut u8, write_pos: &mut usize, v: u32) {
         core::ptr::write_volatile(out_ptr.add(*write_pos + i), be[i]);
     }
     *write_pos += 4;
+}
+
+/// Volatile write of a big-endian u64 to `out_ptr + *write_pos`, advancing the cursor.
+unsafe fn write_be_u64(out_ptr: *mut u8, write_pos: &mut usize, v: u64) {
+    let be = v.to_be_bytes();
+    for i in 0..8 {
+        core::ptr::write_volatile(out_ptr.add(*write_pos + i), be[i]);
+    }
+    *write_pos += 8;
 }
 
 /// Increment the 64-bit sequence portion of an EntryPoint v0.6 nonce

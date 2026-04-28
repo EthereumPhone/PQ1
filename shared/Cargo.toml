@@ -9,3 +9,13 @@ stm32u585 = []  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 
 [dependencies]
 # Zero dependencies — pure #![no_std] types only.
+
+[dev-dependencies]
+# Property-based fuzzing for the parsers in `apdu_framing.rs`. These are
+# the first thing every USB byte sees on its way into the firmware, so a
+# panic on hostile input is a direct path from "anyone with a USB cable"
+# to a secure-world DoS. Runs on host only via
+# `cargo test -p sphincs-tz-shared --tests`; no_std builds for ARM never
+# compile this dependency. See also `secure/src/fuzz_props.rs` for the
+# matching harness over the secure-side parsers.
+proptest = "1"

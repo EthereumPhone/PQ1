@@ -105,14 +105,14 @@ contract PQSmartWalletRealSigBench is Test {
     }
 
     /// @notice Sanity check: the calldata pre-encoded in the JSON matches
-    ///         what `abi.encodeCall(execute, …)` would produce on the fly.
+    ///         what `abi.encodeCall(executeWithOffchainCount, …)` produces.
     function test_callDataMatchesEncoder() public view {
         bytes memory expected =
-            abi.encodeCall(wallet.execute, (TARGET_ADDR, 0, ""));
+            abi.encodeCall(wallet.executeWithOffchainCount, (1, 0, TARGET_ADDR, 0, ""));
         assertEq(
             keccak256(callDataFromVec),
             keccak256(expected),
-            "Rust-built callData drifted from abi.encodeCall(execute,...)"
+            "Rust-built callData drifted from abi.encodeCall(executeWithOffchainCount,...)"
         );
     }
 

@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod apdu_framing;
 pub mod db_format;
 
 // ---------------------------------------------------------------------------
@@ -280,6 +281,63 @@ pub const CMD_GET_WALLET_ADDRESS: u32 = 14;
 ///   * `arg2` — input length, must equal 12.
 pub const CMD_GET_INIT_CODE: u32 = 15;
 
+/// CMD_SIGN_OFFCHAIN — produce a SPHINCS+C10 signature over an
+/// arbitrary 32-byte hash for EIP-1271 (off-chain) verification.
+///
+/// The companion is responsible for computing the
+/// EIP-712-nested-replay-safe hash before calling this command — see
+/// Solady's `ERC1271._erc1271IsValidSignatureViaNestedEIP712` for the
+/// wrapping the on-chain wallet expects. The firmware just signs the
+/// 32-byte hash it is given; it never interprets it.
+///
+/// Combined budget: the slot's total signing budget is shared between
+/// on-chain Type 2 sigs (`slotUses[i]`) and off-chain sigs
+/// (`offchainSigCount[i]`). Firmware refuses if pre-sign budget would
+/// exceed `MAX_SLOT_USES`. It also refuses if the per-slot
+/// "unpublished" gap (sigs since the last UserOp) would exceed
+/// `MAX_OFFCHAIN_GAP`, forcing the user to publish a UserOp first.
+///
+/// Recovery: a fresh-from-seed firmware has no flash record of slots
+/// signed by a previous device. Firmware refuses `CMD_SIGN_OFFCHAIN`
+/// for any slot it has no registered-flag for, and the companion
+/// resolves this by registering a new slot index (Type 1 via
+/// `CMD_SIGN_USEROP` with `FLAG_REGISTER_SLOT`) before retrying.
+///
+/// Wire layout:
+///   * `arg0` — NS read buffer (`SIGN_OFFCHAIN_INPUT_LEN` bytes):
+///       [ 0.. 1)  account_index  (u8)
+///       [ 1.. 9)  chain_id       (u64 BE)
+///       [ 9..13)  slot_index     (u32 BE)
+///       [13..45)  hash_to_sign   (32 bytes)
+///   * `arg1` — NS write buffer, `SIGN_OFFCHAIN_OUTPUT_LEN` bytes:
+///       [ 0.. 8)  new_local_offchain_count (u64 BE, post-bump)
+///       [ 8..4016) C10 sig (4008 bytes)
+///   * `arg2` — input length (must equal `SIGN_OFFCHAIN_INPUT_LEN`).
+pub const CMD_SIGN_OFFCHAIN: u32 = 16;
+
+/// CMD_OFFCHAIN_STATUS — read per-slot off-chain signing state.
+///
+/// The companion uses this for two things:
+///   1. UI hint: "X off-chain sigs remaining before forced UserOp"
+///      where X = `MAX_OFFCHAIN_GAP - (local - last_userop)`.
+///   2. Recovery probe: the `registered` byte flips to 0 after a
+///      seed-restore on a device that has never signed Type 1 for
+///      this slot, telling the companion to nudge the user toward
+///      registering a fresh slot.
+///
+/// Wire layout:
+///   * `arg0` — NS read buffer (`OFFCHAIN_STATUS_INPUT_LEN` bytes):
+///       [ 0.. 1)  account_index  (u8)
+///       [ 1.. 9)  chain_id       (u64 BE)
+///       [ 9..13)  slot_index     (u32 BE)
+///   * `arg1` — NS write buffer (`OFFCHAIN_STATUS_OUTPUT_LEN` bytes):
+///       [ 0.. 8)  local_offchain_count (u64 BE)
+///       [ 8..16)  last_userop_count    (u64 BE)
+///       [16..17)  registered           (u8)
+///       [17..24)  reserved
+///   * `arg2` — input length (must equal `OFFCHAIN_STATUS_INPUT_LEN`).
+pub const CMD_OFFCHAIN_STATUS: u32 = 17;
+
 // ---------------------------------------------------------------------------
 // Firmware-update gateway commands
 // ---------------------------------------------------------------------------
@@ -499,6 +557,8 @@ pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
 // -- Address & account helpers (0x60-0x6F) --
 pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
 pub const INS_V2_GET_INIT_CODE: u8 = 0x61;
+pub const INS_V2_SIGN_OFFCHAIN: u8 = 0x62;
+pub const INS_V2_OFFCHAIN_STATUS: u8 = 0x63;
 
 // ---------------------------------------------------------------------------
 // Firmware-update INS codes (companion → device)
@@ -602,6 +662,46 @@ pub const SIG_TYPE2_MARKER: u8 = 0x02;
 pub const SIG_TYPE2_HEADER_LEN: usize = 32 + 32 + 32;
 
 // ---------------------------------------------------------------------------
+// CMD_SIGN_OFFCHAIN / CMD_OFFCHAIN_STATUS wire-format and budget constants
+// ---------------------------------------------------------------------------
+
+/// Per-slot SPHINCS+C10 sig cap, mirroring the on-chain
+/// `PQSmartWallet.MAX_SLOT_USES`. The firmware enforces the same cap
+/// pre-emptively over `slotUses + offchainSigCount` so a fault would
+/// never produce a sig that exceeds the SPHINCS+ usage budget.
+pub const MAX_SLOT_USES: u64 = 65_536;
+
+/// Maximum number of off-chain (EIP-1271) signatures the firmware will
+/// produce on a slot before refusing further off-chain sigs and forcing
+/// the user to publish the count via a UserOp. Bounds the recovery
+/// window: on a fresh-from-seed restore, the new firmware can assume at
+/// most `MAX_OFFCHAIN_GAP` unbacked sigs were emitted by the previous
+/// device, so the cap-budget calculation stays correct.
+pub const MAX_OFFCHAIN_GAP: u64 = 5;
+
+/// CMD_SIGN_OFFCHAIN payload layout.
+pub const SIGN_OFFCHAIN_INPUT_LEN: usize = 1 + 8 + 4 + 32; // 45
+pub const SIGN_OFFCHAIN_INPUT_ACCOUNT_OFF: usize = 0;
+pub const SIGN_OFFCHAIN_INPUT_CHAIN_OFF: usize = 1;
+pub const SIGN_OFFCHAIN_INPUT_SLOT_OFF: usize = 9;
+pub const SIGN_OFFCHAIN_INPUT_HASH_OFF: usize = 13;
+
+/// CMD_SIGN_OFFCHAIN response: post-bump count then C10 sig.
+pub const SIGN_OFFCHAIN_OUTPUT_LEN: usize = 8 + C10_SIG_LEN; // 4016
+pub const SIGN_OFFCHAIN_OUTPUT_COUNT_OFF: usize = 0;
+pub const SIGN_OFFCHAIN_OUTPUT_SIG_OFF: usize = 8;
+
+/// CMD_OFFCHAIN_STATUS payload layout (same prefix as SIGN_OFFCHAIN's
+/// first 13 bytes).
+pub const OFFCHAIN_STATUS_INPUT_LEN: usize = 1 + 8 + 4; // 13
+
+/// CMD_OFFCHAIN_STATUS response layout.
+pub const OFFCHAIN_STATUS_OUTPUT_LEN: usize = 8 + 8 + 1 + 7; // 24
+pub const OFFCHAIN_STATUS_OUTPUT_LOCAL_OFF: usize = 0;
+pub const OFFCHAIN_STATUS_OUTPUT_LAST_USEROP_OFF: usize = 8;
+pub const OFFCHAIN_STATUS_OUTPUT_REGISTERED_OFF: usize = 16;
+
+// ---------------------------------------------------------------------------
 // PQSmartWalletFactory initCode (first-deploy UserOps)
 // ---------------------------------------------------------------------------
 
@@ -667,12 +767,25 @@ pub const PQ_INIT_CODE_LEN: usize = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 /// Maximum unified response from `CMD_SIGN_USEROP`:
 ///
 /// ```text
+///   [new_offchain_count(8 BE)]   -- firmware's post-bump local count
+///                                  (must match the value the companion
+///                                  is about to submit in the
+///                                  `executeWithOffchainCount` calldata)
 ///   [init_code_len(4 BE)][init_code(0 or PQ_INIT_CODE_LEN)]
 ///   [type1_len(4 BE)][type1_wrapper(0 or SIG_WRAPPER_LEN)]
 ///   [type2_len(4 BE)][type2_wrapper(SIG_WRAPPER_LEN)]
 /// ```
 pub const MAX_SIGN_RESPONSE_LEN: usize =
-    4 + PQ_INIT_CODE_LEN + 4 + SIG_TYPE1_LEN + 4 + SIG_TYPE2_LEN;
+    8 + 4 + PQ_INIT_CODE_LEN + 4 + SIG_TYPE1_LEN + 4 + SIG_TYPE2_LEN;
+
+/// Offset within a `CMD_SIGN_USEROP` response of the leading
+/// `new_offchain_count` field (8 bytes BE).
+pub const SIGN_USEROP_RESPONSE_COUNT_OFF: usize = 0;
+pub const SIGN_USEROP_RESPONSE_COUNT_LEN: usize = 8;
+/// Offset where the legacy framing (init_code_len ... type2_wrapper)
+/// begins. Past this offset the response layout is unchanged from the
+/// pre-EIP-1271 wire format.
+pub const SIGN_USEROP_RESPONSE_BUNDLE_OFF: usize = 8;
 
 /// Flags bit 31 — set by the companion when the wallet has not yet been
 /// deployed on this chain. Firmware synthesises `initCode` from its master
@@ -1101,6 +1214,22 @@ pub enum NscStatus {
     /// warning should have fired well before this.
     FwUpdateOtpExhausted = 16,
 
+    // ── CMD_SIGN_OFFCHAIN errors ───────────────────────────────────
+    /// Off-chain sign requested for a slot that this firmware has no
+    /// flash record of. After a seed-restore on a fresh device, the
+    /// companion must register the next slot via a Type 1 UserOp
+    /// before off-chain sigs against it are accepted. Recoverable.
+    OffchainSlotUnregistered = 17,
+    /// Off-chain sign would push `local_offchain - last_userop` past
+    /// `MAX_OFFCHAIN_GAP`. Recoverable: companion publishes a UserOp
+    /// (which advances `last_userop_count`) and the next off-chain
+    /// sign succeeds.
+    OffchainGapExceeded = 18,
+    /// Off-chain sign would push the per-slot combined cap
+    /// `slotUses + offchainSigCount` past `MAX_SLOT_USES`. Recoverable
+    /// only by rotating to a new slot.
+    OffchainCapExceeded = 19,
+
     InternalError = 0xFFFF_FFFF,
 }
 
@@ -1122,6 +1251,9 @@ impl From<u32> for NscStatus {
             14 => Self::FwUpdateBadImage,
             15 => Self::FwUpdateFlashError,
             16 => Self::FwUpdateOtpExhausted,
+            17 => Self::OffchainSlotUnregistered,
+            18 => Self::OffchainGapExceeded,
+            19 => Self::OffchainCapExceeded,
             _ => Self::InternalError,
         }
     }

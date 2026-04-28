@@ -5,7 +5,9 @@ import {IAccount06} from "account-abstraction/legacy/v06/IAccount06.sol";
 import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
 import {UserOperation06} from "account-abstraction/legacy/v06/UserOperation06.sol";
 
-import {PQMultiOwnable} from "./PQMultiOwnable.sol";
+import {ERC1271} from "solady/accounts/ERC1271.sol";
+
+import {PQMultiOwnable, PQMultiOwnableStorage} from "./PQMultiOwnable.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 
 /// @title PQSmartWallet
@@ -32,7 +34,7 @@ import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
 ///         them straight from the impl bytecode — no per-wallet storage.
 ///
 /// @author PQSigner OS
-contract PQSmartWallet is IAccount06, PQMultiOwnable {
+contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     // ── Structs ─────────────────────────────────────────────────────
 
     /// @notice ABI-encoded wrapper around a C10 sig: `(ownerIndex, sig)`.
@@ -142,8 +144,34 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable {
 
     // ── Execution (slot-authorised) ─────────────────────────────────
 
-    function execute(address target, uint256 value, bytes calldata data) external returns (bytes memory) {
+    /// @notice The single execute entry-point for slot-authorised UserOps.
+    ///         Carries the firmware's monotonic per-slot off-chain sig
+    ///         count `newOffchainCount`; the contract durably records it
+    ///         and enforces the *combined* per-slot cap
+    ///         `slotUses[i] + offchainSigCount[i] <= MAX_SLOT_USES`.
+    ///
+    ///         Note: `slotUses[ownerIndex]` was already bumped by
+    ///         `validateUserOp` *before* this call runs (within the same
+    ///         transaction), so the combined-cap check here uses the
+    ///         post-bump value. That is why the cap test in
+    ///         `_validateSignature` uses strict `>=` against
+    ///         `MAX_SLOT_USES` (refusing the next sig if combined is
+    ///         already at cap), and the test here uses `<=` against the
+    ///         cap (the post-bump combined must not have exceeded it).
+    function executeWithOffchainCount(
+        uint256 ownerIndex,
+        uint256 newOffchainCount,
+        address target,
+        uint256 value,
+        bytes calldata data
+    ) external returns (bytes memory) {
         if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+        _setOffchainSigCount(
+            ownerIndex,
+            newOffchainCount,
+            _getStorage().slotUses[ownerIndex],
+            MAX_SLOT_USES
+        );
         (bool ok, bytes memory ret) = target.call{value: value}(data);
         if (!ok) {
             assembly ("memory-safe") {
@@ -153,12 +181,20 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable {
         return ret;
     }
 
-    function executeBatch(
+    function executeBatchWithOffchainCount(
+        uint256 ownerIndex,
+        uint256 newOffchainCount,
         address[] calldata targets,
         uint256[] calldata values,
         bytes[] calldata datas
     ) external {
         if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+        _setOffchainSigCount(
+            ownerIndex,
+            newOffchainCount,
+            _getStorage().slotUses[ownerIndex],
+            MAX_SLOT_USES
+        );
         uint256 n = targets.length;
         require(values.length == n && datas.length == n, "length mismatch");
         for (uint256 i; i < n; ++i) {
@@ -270,7 +306,11 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable {
             if (!_isSlotAllowedSelector(selector)) {
                 return SIG_VALIDATION_FAILED;
             }
-            if (_getStorage().slotUses[ownerIndex] >= MAX_SLOT_USES) {
+            // Combined cap: this Type 2 sig will bump `slotUses[i]` by 1,
+            // so the post-bump combined total must still be `<= MAX_SLOT_USES`.
+            // Equivalently, the pre-bump combined must be `< MAX_SLOT_USES`.
+            PQMultiOwnableStorage storage $ = _getStorage();
+            if ($.slotUses[ownerIndex] + $.offchainSigCount[ownerIndex] >= MAX_SLOT_USES) {
                 return SIG_VALIDATION_FAILED;
             }
         }
@@ -303,9 +343,92 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable {
 
     function _isSlotAllowedSelector(bytes4 s) private pure returns (bool) {
         return
-            s == this.execute.selector ||
-            s == this.executeBatch.selector ||
+            s == this.executeWithOffchainCount.selector ||
+            s == this.executeBatchWithOffchainCount.selector ||
             s == this.removeOwnerAtIndex.selector;
+    }
+
+    // ── EIP-1271 (off-chain sig verification, stateless) ───────────
+    //
+    // Inherits Solady's ERC1271, which provides:
+    //   * `isValidSignature` (the EIP-1271 entry point) returning the
+    //     0x1626ba7e magic on success / 0xffffffff on failure.
+    //   * ERC-6492 unwrap so counterfactual sigs on un-deployed wallets
+    //     verify cleanly via static call replication.
+    //   * Nested EIP-712 wrapping (TypedDataSign + PersonalSign) so a
+    //     captured slot sig over hash H against this wallet on chain X
+    //     does NOT verify against a different wallet (same seed, different
+    //     `account_index`) or against this wallet on a different chain.
+    //
+    // We override two hooks:
+    //   * `_domainNameAndVersion()` — for the EIP-712 domain.
+    //   * `_erc1271IsValidSignatureNowCalldata` — does the SPHINCS+C10
+    //     verification against the slot pubkey indicated by ownerIndex.
+    //   * `_erc1271Signer()` — abstract on Solady's base; we have a
+    //     multi-owner model so the single-signer concept does not apply.
+    //     Returning `address(this)` makes the default impl a no-op (we
+    //     override the only consumer of it anyway).
+    //
+    // EIP-1271 is `view`-only. It NEVER bumps `slotUses` /
+    // `offchainSigCount`. The firmware-side `local_offchain_count`
+    // (durably reflected on chain via `executeWithOffchainCount`) is the
+    // only path that consumes the slot's signing budget.
+
+    function _domainNameAndVersion()
+        internal
+        pure
+        override
+        returns (string memory name, string memory version)
+    {
+        return ("PQSmartWallet", "1");
+    }
+
+    function _erc1271Signer() internal view override returns (address) {
+        return address(this);
+    }
+
+    function _erc1271IsValidSignatureNowCalldata(bytes32 hash, bytes calldata signature)
+        internal
+        view
+        override
+        returns (bool)
+    {
+        // Decode SignatureWrapper exactly like `_validateSignature`.
+        uint256 paddedInner = ((C10_SIG_LEN + 31) / 32) * 32;
+        if (signature.length != 96 + paddedInner) return false;
+
+        uint256 ownerIndex;
+        uint256 offsetField;
+        uint256 innerLen;
+        assembly ("memory-safe") {
+            ownerIndex := calldataload(signature.offset)
+            offsetField := calldataload(add(signature.offset, 32))
+            innerLen := calldataload(add(signature.offset, 64))
+        }
+        if (offsetField != 0x40) return false;
+        if (innerLen != C10_SIG_LEN) return false;
+
+        // Bootstrap key (ownerIndex == 0) is reserved for slot
+        // registration. Forbid it for off-chain so the bootstrap budget
+        // stays tight.
+        if (ownerIndex == 0) return false;
+
+        bytes calldata innerSig = signature[96:96 + C10_SIG_LEN];
+        bytes memory ownerBytes = ownerAtIndex(ownerIndex);
+        if (ownerBytes.length != OWNER_BYTES_LEN) return false;
+
+        bytes32 pkSeed;
+        bytes32 pkRoot;
+        assembly ("memory-safe") {
+            pkSeed := mload(add(ownerBytes, 32))
+            pkRoot := mload(add(ownerBytes, 64))
+        }
+
+        try c10Verifier.verify(pkSeed, pkRoot, hash, innerSig) returns (bool ok) {
+            return ok;
+        } catch {
+            return false;
+        }
     }
 
     receive() external payable {}

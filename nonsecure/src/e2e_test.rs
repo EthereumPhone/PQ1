@@ -282,13 +282,20 @@ fn append_selector_only_trailers(
     Some(off + 10 + n)
 }
 
-/// Parse a `[ic_len|ic][type1_len|t1][type2_len|t2]` bundle and assert
-/// basic shape.
+/// Parse a `[count(8)][ic_len|ic][type1_len|t1][type2_len|t2]` bundle and
+/// assert basic shape.
 ///
 /// Returns `(type1_present, type2_len)`.
 fn parse_response(resp: &[u8]) -> (bool, usize) {
-    let ic_len = u32::from_be_bytes([resp[0], resp[1], resp[2], resp[3]]) as usize;
-    let t1_len_off = 4 + ic_len;
+    // Skip the leading 8-byte new_offchain_count.
+    let header = 8;
+    let ic_len = u32::from_be_bytes([
+        resp[header],
+        resp[header + 1],
+        resp[header + 2],
+        resp[header + 3],
+    ]) as usize;
+    let t1_len_off = header + 4 + ic_len;
     let t1_len = u32::from_be_bytes([
         resp[t1_len_off],
         resp[t1_len_off + 1],

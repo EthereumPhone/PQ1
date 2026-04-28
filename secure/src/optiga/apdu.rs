@@ -1111,14 +1111,14 @@ pub fn encode_pin_ctr(current: u32, limit: u32) -> [u8; 8] {
 
 /// Parse an 8-byte UPCTR data object into `(current, limit)`. Returns
 /// `None` on wrong length. Remaining attempts = `limit.saturating_sub(current)`.
+///
+/// Delegates to the always-on `iso7816::parse_pin_ctr` so the secure
+/// crate carries a single panic-resistance proof (see
+/// `iso7816::tests::parse_pin_ctr_*` and the `pin_ctr_parse_*` blocks
+/// in `crate::fuzz_props`).
 #[cfg(feature = "optiga-hw-counter")]
 pub fn parse_pin_ctr(data: &[u8]) -> Option<(u32, u32)> {
-    if data.len() != 8 {
-        return None;
-    }
-    let current = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
-    let limit = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
-    Some((current, limit))
+    crate::iso7816::parse_pin_ctr(data)
 }
 
 /// Metadata that raises LcsO to Operational (irreversible).

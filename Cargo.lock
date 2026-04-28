@@ -859,6 +859,7 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 name = "fw-manifest"
 version = "0.1.0"
 dependencies = [
+ "proptest",
  "sha2 0.10.9",
  "sphincs-c10",
 ]
@@ -1915,6 +1916,9 @@ dependencies = [
 [[package]]
 name = "sphincs-tz-shared"
 version = "0.1.0"
+dependencies = [
+ "proptest",
+]
 
 [[package]]
 name = "ssd1306"

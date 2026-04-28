@@ -51,7 +51,9 @@ mod cmd_get_remaining;
 mod cmd_get_wallet_address;
 mod cmd_is_unlocked;
 mod cmd_lock;
+mod cmd_offchain_status;
 mod cmd_request_unlock;
+mod cmd_sign_offchain;
 mod cmd_sign_userop;
 #[cfg(feature = "e2e-test")]
 mod cmd_test_pin_lockout;
@@ -132,7 +134,8 @@ compile_error!(
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
     NscStatus, CMD_GET_INIT_CODE, CMD_GET_REMAINING, CMD_GET_WALLET_ADDRESS, CMD_IS_UNLOCKED,
-    CMD_LOCK, CMD_NONE, CMD_REQUEST_UNLOCK, CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
+    CMD_LOCK, CMD_NONE, CMD_OFFCHAIN_STATUS, CMD_REQUEST_UNLOCK, CMD_SIGN_OFFCHAIN,
+    CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -354,6 +357,8 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_SIGN_USEROP => cmd_sign_userop::run(args),
         CMD_GET_WALLET_ADDRESS => cmd_get_wallet_address::run(args),
         CMD_GET_INIT_CODE => cmd_get_init_code::run(args),
+        CMD_SIGN_OFFCHAIN => cmd_sign_offchain::run(args),
+        CMD_OFFCHAIN_STATUS => cmd_offchain_status::run(args),
         CMD_IS_UNLOCKED => cmd_is_unlocked::run(),
         CMD_LOCK => cmd_lock::run(),
         #[cfg(feature = "e2e-test")]
@@ -532,5 +537,32 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_init_code(
     let r = unsafe { cmd_get_init_code::run(&args) };
     secure_log!("[NSC] get_init_code -> {}", r);
     r
+}
+
+/// CMD_SIGN_OFFCHAIN — sign an EIP-1271 hash with the slot key.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_sign_offchain(
+    in_ptr: u32,
+    out_ptr: u32,
+    in_len: u32,
+) -> u32 {
+    secure_log!("[NSC] sign_offchain (len={})", in_len);
+    let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
+    let r = unsafe { cmd_sign_offchain::run(&args) };
+    secure_log!("[NSC] sign_offchain -> {}", r);
+    r
+}
+
+/// CMD_OFFCHAIN_STATUS — read the firmware's per-slot off-chain state.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_offchain_status(
+    in_ptr: u32,
+    out_ptr: u32,
+    in_len: u32,
+) -> u32 {
+    let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
+    unsafe { cmd_offchain_status::run(&args) }
 }
 

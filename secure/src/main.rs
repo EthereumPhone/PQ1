@@ -52,6 +52,11 @@ mod tx;
 // tests exercise the same function against the NIST SP 800-38B
 // AES-256 vectors. No hardware deps.
 mod cmac;
+// ISO 7816-4 BER-TLV decoder + UPCTR PIN-counter parser. Pure
+// functions, no hardware deps — always-on so the fuzz_props proptest
+// harness can hammer them on host. The hardware-gated `se050::apdu`
+// and `optiga::apdu` modules import these for the production path.
+mod iso7816;
 
 // Hardware-dependent modules: gated out in test builds so `cargo test`
 // compiles only the pure logic on x86_64.
@@ -80,6 +85,8 @@ mod reset_cause;
 /// transport doesn't expose the update commands either.
 #[cfg(all(feature = "stm32u585", not(test)))]
 mod fw_update;
+#[cfg(not(test))]
+mod offchain_state;
 #[cfg(not(test))]
 mod nsc;
 #[cfg(not(test))]

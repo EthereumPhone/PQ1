@@ -19,6 +19,9 @@
 //! | 0xC0 | GET_RESPONSE             |
 
 use sphincs_tz_shared::*;
+use sphincs_tz_shared::apdu_framing::{
+    parse_apdu_header, route_v2, ChainState, ChainStepOutcome,
+};
 
 use crate::nsc_api;
 
@@ -104,46 +107,42 @@ pub struct Response {
 // ---------------------------------------------------------------------------
 
 pub struct CommandRouter {
-    chain_ins: u8,
-    chain_pos: usize,
+    /// Chained-APDU state. The ISO 7816-4 framing — INS-mid-chain
+    /// detection, monotonic write cursor, overflow-safe length checks
+    /// — lives in `sphincs_tz_shared::apdu_framing` so the production
+    /// path here and the proptest harness in
+    /// `shared/src/apdu_framing.rs` exercise byte-identical logic.
+    chain: ChainState,
 }
 
 impl CommandRouter {
     pub fn new() -> Self {
         Self {
-            chain_ins: 0,
-            chain_pos: 0,
+            chain: ChainState::new(),
         }
     }
 
     pub unsafe fn dispatch(&mut self, apdu: &[u8]) -> Response {
-        if apdu.len() < 4 {
-            return self.sw_response(SW_WRONG_LENGTH);
-        }
-
-        let cla = apdu[0];
-        let ins = apdu[1];
-        let p1 = apdu[2];
+        // Pure header parser — host-fuzzed in
+        // `sphincs_tz_shared::apdu_framing::fuzz_props`.
+        let header = match parse_apdu_header(apdu) {
+            Ok(h) => h,
+            Err(e) => return self.sw_response(e.to_sw()),
+        };
 
         // GET_RESPONSE is CLA-agnostic so the companion can keep using
         // it without tracking which chain the pending bytes belong to.
-        if ins == INS_V2_GET_RESPONSE {
+        if header.ins == INS_V2_GET_RESPONSE {
             return self.get_response();
         }
-
-        if cla != APDU_CLA_V2 {
-            return self.sw_response(SW_CLA_NOT_SUPPORTED);
+        if let Err(e) = route_v2(&header) {
+            return self.sw_response(e.to_sw());
         }
 
-        let (lc, data) = if apdu.len() > 4 {
-            let lc = apdu[4] as usize;
-            if apdu.len() < 5 + lc {
-                return self.sw_response(SW_WRONG_LENGTH);
-            }
-            (lc, &apdu[5..5 + lc])
-        } else {
-            (0, &[] as &[u8])
-        };
+        let ins = header.ins;
+        let p1 = header.p1;
+        let lc = header.lc;
+        let data = header.data;
 
         // Non-chained commands (full payload fits in one APDU).
         match ins {
@@ -153,6 +152,8 @@ impl CommandRouter {
             INS_V2_LOCK => return self.cmd_lock(),
             INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(data),
             INS_V2_GET_INIT_CODE => return self.cmd_get_init_code(data),
+            INS_V2_SIGN_OFFCHAIN => return self.cmd_sign_offchain(data),
+            INS_V2_OFFCHAIN_STATUS => return self.cmd_offchain_status(data),
 
             // Firmware-update non-chained commands. CHUNK carries the
             // 8-byte header + up to 1024 bytes of data — well under
@@ -171,51 +172,34 @@ impl CommandRouter {
             _ => {}
         }
 
-        // Chained commands per ISO 7816-4:
-        //   P1 bit 7 = 0 → this is the LAST (or only) block
-        //   P1 bit 7 = 1 → MORE blocks follow
-        //
-        // The chain state machine:
-        //   - `chain_ins == 0` means no chain is active.
-        //   - On "more follows", append to the active chain (starting one
-        //     if none exists) and return SW_OK.
-        //   - On "last or only", append and execute.
-        let is_more = (p1 & 0x80) != 0;
-
-        // Append (or start) into the chain buffer.
-        if self.chain_ins == 0 {
-            self.chain_ins = ins;
-            self.chain_pos = 0;
-        } else if ins != self.chain_ins {
-            // New INS mid-chain is a protocol error.
-            self.chain_ins = 0;
-            self.chain_pos = 0;
-            return self.sw_response(SW_CONDITIONS_NOT_SATISFIED);
+        // Chained commands. The state machine, INS-mismatch detection,
+        // and overflow-safe length checks all live in
+        // `ChainState::step` — see `shared/src/apdu_framing.rs`. We
+        // only need to copy `lc` bytes into `CHAIN_BUF` at the cursor
+        // the helper hands us, then either ack or execute.
+        match self.chain.step(ins, p1, lc, CHAIN_BUF_LEN) {
+            ChainStepOutcome::Appended { write_at, lc } => {
+                if lc > 0 {
+                    CHAIN_BUF[write_at..write_at + lc].copy_from_slice(data);
+                }
+                self.sw_response(SW_OK)
+            }
+            ChainStepOutcome::Execute { ins, final_len, write_at, lc } => {
+                if lc > 0 {
+                    CHAIN_BUF[write_at..write_at + lc].copy_from_slice(data);
+                }
+                self.execute_chain(ins, final_len)
+            }
+            ChainStepOutcome::ProtocolError => {
+                self.sw_response(ChainStepOutcome::protocol_error_sw())
+            }
+            ChainStepOutcome::WrongLength => {
+                self.sw_response(ChainStepOutcome::wrong_length_sw())
+            }
         }
-        if self.chain_pos + lc > CHAIN_BUF_LEN {
-            self.chain_ins = 0;
-            self.chain_pos = 0;
-            return self.sw_response(SW_WRONG_LENGTH);
-        }
-        if lc > 0 {
-            CHAIN_BUF[self.chain_pos..self.chain_pos + lc].copy_from_slice(data);
-            self.chain_pos += lc;
-        }
-
-        if is_more {
-            // More chunks to come.
-            return self.sw_response(SW_OK);
-        }
-
-        // Last (or only) chunk — execute.
-        self.execute_chain(ins)
     }
 
-    unsafe fn execute_chain(&mut self, ins: u8) -> Response {
-        let len = self.chain_pos;
-        self.chain_ins = 0;
-        self.chain_pos = 0;
-
+    unsafe fn execute_chain(&mut self, ins: u8, len: usize) -> Response {
         match ins {
             INS_V2_SIGN_USEROP => self.cmd_sign_userop(len),
             #[cfg(feature = "stm32u585")]
@@ -410,12 +394,22 @@ impl CommandRouter {
             return self.nsc_status_to_response(status);
         }
 
-        // Parse the three-chunk bundle to compute the total length.
-        let ic_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]) as usize;
-        if 4 + ic_len + 4 > MAX_SIGN_RESPONSE_LEN {
+        // Response framing (post-EIP-1271 cutover):
+        //   [new_offchain_count(8 BE)]
+        //   [init_code_len(4 BE)] [init_code...]
+        //   [type1_len(4 BE)]    [type1...]
+        //   [type2_len(4 BE)]    [type2...]
+        let header_off: usize = 8; // skip the leading u64 count
+        let ic_len = u32::from_be_bytes([
+            SIG_BUF[header_off],
+            SIG_BUF[header_off + 1],
+            SIG_BUF[header_off + 2],
+            SIG_BUF[header_off + 3],
+        ]) as usize;
+        if header_off + 4 + ic_len + 4 > MAX_SIGN_RESPONSE_LEN {
             return self.sw_response(SW_INTERNAL_ERROR);
         }
-        let t1_len_off = 4 + ic_len;
+        let t1_len_off = header_off + 4 + ic_len;
         let t1_len = u32::from_be_bytes([
             SIG_BUF[t1_len_off],
             SIG_BUF[t1_len_off + 1],
@@ -438,6 +432,44 @@ impl CommandRouter {
         }
 
         self.setup_chunked_response(total)
+    }
+
+    /// 0x62 SIGN_OFFCHAIN — produce a SPHINCS+C10 sig over an
+    /// EIP-1271 hash. Body: 45 bytes (`account_index || chain_id ||
+    /// slot_index || hash`). Response: 4016 bytes.
+    unsafe fn cmd_sign_offchain(&self, data: &[u8]) -> Response {
+        if data.len() != sphincs_tz_shared::SIGN_OFFCHAIN_INPUT_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let status = nsc_api::sign_offchain(
+            data,
+            &mut SIG_BUF[..sphincs_tz_shared::SIGN_OFFCHAIN_OUTPUT_LEN],
+        );
+        if status != NscStatus::Ok as u32 {
+            return self.nsc_status_to_response(status);
+        }
+        self.setup_chunked_response(sphincs_tz_shared::SIGN_OFFCHAIN_OUTPUT_LEN)
+    }
+
+    /// 0x63 OFFCHAIN_STATUS — read per-slot off-chain state. Body: 13
+    /// bytes. Response: 24 bytes (fits in a single APDU).
+    unsafe fn cmd_offchain_status(&self, data: &[u8]) -> Response {
+        if data.len() != sphincs_tz_shared::OFFCHAIN_STATUS_INPUT_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let status = nsc_api::offchain_status(
+            data,
+            &mut RESP_BUF[..sphincs_tz_shared::OFFCHAIN_STATUS_OUTPUT_LEN],
+        );
+        if status != NscStatus::Ok as u32 {
+            return self.nsc_status_to_response(status);
+        }
+        let total = sphincs_tz_shared::OFFCHAIN_STATUS_OUTPUT_LEN;
+        RESP_BUF[total..total + 2].copy_from_slice(&SW_OK.to_be_bytes());
+        Response {
+            ptr: RESP_BUF.as_ptr(),
+            len: total + 2,
+        }
     }
 
     /// If the companion sent a bare `[header | data]` payload (no
@@ -987,6 +1019,11 @@ fn nsc_status_to_sw(status: u32) -> u16 {
         NscStatus::FwUpdateBadVersion => SW_WRONG_DATA,
         NscStatus::FwUpdateBadImage => SW_WRONG_DATA,
         NscStatus::FwUpdateOtpExhausted => SW_FEATURE_NOT_SUPPORTED,
+        // Off-chain (EIP-1271) sign refusals. All recoverable on the
+        // companion side: register a slot / publish a UserOp / rotate.
+        NscStatus::OffchainSlotUnregistered => SW_CONDITIONS_NOT_SATISFIED,
+        NscStatus::OffchainGapExceeded => SW_CONDITIONS_NOT_SATISFIED,
+        NscStatus::OffchainCapExceeded => SW_CONDITIONS_NOT_SATISFIED,
         NscStatus::InternalError => SW_INTERNAL_ERROR,
     }
 }

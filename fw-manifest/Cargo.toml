@@ -19,3 +19,11 @@ default = []
 # Enables `std::io`-based helpers (currently only used by the host
 # `fwsign` tool). FSBL and the secure firmware never turn this on.
 std = []
+
+[dev-dependencies]
+# Property-based fuzz harness in `src/lib.rs::fuzz_props`. The manifest
+# is the first thing a malicious USB host can drop on the firmware-
+# update path (CMD_FW_BEGIN), so every parser/verifier path must
+# terminate without panic for arbitrary 8 KB byte input. Host-only;
+# never compiled into FSBL or device firmware.
+proptest = "1"
