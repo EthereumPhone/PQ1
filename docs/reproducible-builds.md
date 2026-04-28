@@ -72,15 +72,44 @@ aarch64, macOS Intel, macOS Apple Silicon, and WSL2. It pins:
 any host that can run Nix. The wrapper script (`./measure.sh`) installs
 Nix via the Determinate Systems installer if it is missing.
 
-Within a single host architecture the resulting `secure.elf` is
-formally byte-identical (Cargo.lock-pinned deps + content-addressed
-toolchain). Across host architectures (e.g. macOS aarch64 vs Linux
-x86_64), byte-identity for thumbv8m output is empirically very likely
-because the cross-compile path through LLVM is mostly deterministic,
-but it rests on LLVM's cross-target codegen behaviour rather than a
-formal guarantee. The CI matrix (Linux x86_64, Linux aarch64, macOS
-Intel, macOS Apple Silicon) verifies this on every commit; a mismatch
-there is a release blocker.
+### How cross-host byte-identity is enforced
+
+`packages.measure` is **always evaluated as an `x86_64-linux`
+derivation**, regardless of the host running `nix build`. Every store
+path in the build closure (rustc, arm-none-eabi-ld, glibc, …) hashes
+identically on every host because the `system` argument is fixed —
+nothing is sourced from the host's nixpkgs view. The build runs offline
+inside the Nix sandbox with cargo dependencies vendored via
+`rustPlatform.importCargoLock`, so there is no network-mediated source
+of variance either. The derivation's output is plain text
+(`words.txt`), which any host can `cat` regardless of architecture.
+
+This means:
+
+- **Linux x86_64** hosts build the derivation natively.
+- **macOS** (Intel or Apple Silicon) and **Linux aarch64** hosts
+  dispatch the build to a remote `x86_64-linux` builder. On Apple
+  Silicon the Determinate Systems installer enables a `linux-builder`
+  VM by default, so the macOS path "just works" out of the box. On
+  Linux aarch64 a remote `x86_64-linux` builder must be configured
+  separately (or `binfmt_misc` + `qemu-user` for transparent
+  emulation).
+
+Because the derivation closure is byte-identical on every host, the
+output (`words.txt`) is byte-identical on every host by construction —
+not by empirical observation of LLVM's cross-target codegen. The CI
+matrix exists to catch regressions in the closure pinning, not to
+discover whether reproducibility happens to hold this week.
+
+### Caveat: the working tree must be committed
+
+The flake measures the **git-committed state** of the repo. If you
+have uncommitted modifications or untracked source files, they will
+not appear in the sandbox build — `nix run .#measure` will either fail
+with "file not found for module …" (if a tracked file references an
+untracked one) or silently measure the older committed state. To get
+a meaningful measurement you can compare with someone else, commit
+your changes first.
 
 ## The reproducibility gate
 
