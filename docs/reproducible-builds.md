@@ -100,16 +100,21 @@ This means:
 
 ### macOS: how `./measure.sh` provisions x86_64-linux capability
 
-`./measure.sh` on macOS is fully unattended — vanilla macOS users do
+`./measure.sh` on macOS is self-bootstrapping — vanilla macOS users do
 not need to install Homebrew, Docker Desktop, OrbStack, Xcode CLT, or
 any other tooling first. On a fresh machine it:
 
-1. Installs Determinate Nix (single curl) if `nix` isn't on PATH.
+1. Installs Determinate Nix (single curl, `--no-confirm`) if `nix`
+   isn't on PATH. **One sudo password prompt** for the system-extension
+   install of the multi-user Nix daemon.
 2. Detects that the host can't natively build `x86_64-linux`
    derivations (no remote builder, no `extra-platforms`, no Docker).
 3. **Auto-installs a Lima-managed Docker daemon under `$HOME/.local`**:
-   - Rosetta 2, on Apple Silicon (`softwareupdate
-     --install-rosetta --agree-to-license`).
+   - Rosetta 2, on Apple Silicon (`softwareupdate --install-rosetta
+     --agree-to-license`). One sudo password prompt only if the
+     unprivileged `softwareupdate` invocation fails (rare on recent
+     macOS); already-installed Rosetta is auto-detected via
+     `arch -x86_64 /usr/bin/true` and skipped.
    - `limactl` from the pinned Lima release tarball.
    - Docker CLI from Docker's official static tarball.
    - A Lima VM named `pqsigner-builder` running Ubuntu LTS with the
@@ -119,6 +124,10 @@ any other tooling first. On a fresh machine it:
 4. Wires `DOCKER_HOST` to the VM's socket and dispatches the build via
    `docker run --platform linux/amd64 nixos/nix:latest ... nix run
    /work#measure`.
+
+Total interactions on a vanilla Mac: at most two sudo password prompts
+(Nix daemon install, Rosetta install). After the first run, every
+subsequent invocation is fully silent.
 
 The whole stack lives under `$HOME` (no writes to `/Applications`,
 `/usr/local`, or system paths) and cohabits cleanly with whatever
