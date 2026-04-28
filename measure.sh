@@ -164,32 +164,49 @@ install_macos_lima_docker_stack() {
         rm -rf /tmp/docker /tmp/docker.tgz
     fi
 
-    # ---- Lima Docker VM (x86_64 with Rosetta on Apple Silicon) ----
-    # Apple's VZ framework + Rosetta 2 give us linux/amd64 at near-native
-    # speed on M-series chips. On Intel macOS we just run amd64 natively.
-    if ! limactl list -q 2>/dev/null | grep -qx "$LIMA_VM_NAME"; then
-        say "Creating Lima Docker VM '$LIMA_VM_NAME'..."
+    # ---- Lima Docker VM (linux/amd64 via VZ + Rosetta on Apple Silicon) ----
+    # CRITICAL: on Apple Silicon, the VM's *kernel* must stay aarch64
+    # (Apple's VZ framework can only host the host arch). Linux x86_64
+    # USERSPACE binaries — including everything inside an `nx run
+    # --platform linux/amd64` container — execute via Rosetta 2 binfmt
+    # translation inside the aarch64 VM. Passing `--arch=x86_64` to
+    # `limactl create --vm-type=vz` makes Lima reject the config with
+    # `unsupported arch: "x86_64"`. Default arch = host arch is correct.
+    #
+    # On Intel macOS the VM kernel is x86_64 natively and Rosetta is
+    # irrelevant.
+    create_lima_vm() {
         if [ "$arch" = "arm64" ]; then
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz --rosetta \
-                --arch=x86_64 \
                 --cpus=2 --memory=4 --disk=20 \
-                template://docker \
-                || die "Lima VM creation failed."
+                template:docker
         else
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz \
                 --cpus=2 --memory=4 --disk=20 \
-                template://docker \
-                || die "Lima VM creation failed."
+                template:docker
         fi
+    }
+
+    if ! limactl list -q 2>/dev/null | grep -qx "$LIMA_VM_NAME"; then
+        say "Creating Lima Docker VM '$LIMA_VM_NAME'..."
+        create_lima_vm || die "Lima VM creation failed."
     fi
 
     if ! limactl list 2>/dev/null \
         | awk -v name="$LIMA_VM_NAME" 'NR>1 && $1==name {print $2}' \
         | grep -qx 'Running'; then
         say "Starting Lima Docker VM (first boot takes ~2 minutes)..."
-        limactl start "$LIMA_VM_NAME" || die "Lima VM start failed."
+        if ! limactl start "$LIMA_VM_NAME" 2>&1; then
+            # The most common cause is a broken VM left over from a
+            # previous failed run (e.g., bad --arch flag in older
+            # ./measure.sh). Self-heal: nuke and recreate, then retry.
+            warn "VM '$LIMA_VM_NAME' won't start; recreating from clean state."
+            limactl delete --force "$LIMA_VM_NAME" 2>/dev/null || true
+            create_lima_vm || die "Lima VM re-creation failed."
+            limactl start "$LIMA_VM_NAME" || die "Lima VM start failed even after clean recreate."
+        fi
     fi
 
     # ---- Hand the docker CLI a path to Lima's daemon socket ----

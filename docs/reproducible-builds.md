@@ -118,9 +118,14 @@ any other tooling first. On a fresh machine it:
    - `limactl` from the pinned Lima release tarball.
    - Docker CLI from Docker's official static tarball.
    - A Lima VM named `pqsigner-builder` running Ubuntu LTS with the
-     `template:docker` template, configured `--vm-type=vz
-     --rosetta --arch=x86_64` so the in-VM kernel is `x86_64-linux`
-     translated by Rosetta at near-native speed.
+     `template:docker` template, configured `--vm-type=vz --rosetta`
+     on Apple Silicon (plain `--vm-type=vz` on Intel). On Apple
+     Silicon the VM kernel itself stays aarch64 (Apple's VZ framework
+     can only host the host arch); the `--rosetta` flag wires
+     `binfmt_misc` inside the VM to Rosetta 2 so x86_64 *userspace*
+     binaries — including everything `docker run --platform
+     linux/amd64` puts inside the container — execute under Rosetta
+     translation at near-native speed.
 4. Wires `DOCKER_HOST` to the VM's socket and dispatches the build via
    `docker run --platform linux/amd64 nixos/nix:latest ... nix run
    /work#measure`.
