@@ -23,7 +23,11 @@ endif
 #   1. --remap-path-prefix rewrites any absolute file paths that end up
 #      in panic messages / debug info / OUT_DIR references to a stable
 #      prefix. Without this, two laptops with different $HOME values
-#      produce different ELFs.
+#      produce different ELFs. The /nix/store rule covers the rustc
+#      sysroot path embedded by `core` panic messages: under the
+#      flake, rust-overlay downloads a per-host prebuilt rustc, so
+#      the store hash differs between Linux x86_64 and macOS aarch64
+#      and would otherwise leak into .rodata.
 #   2. -Wl,--build-id=none strips the GNU build-id note, which is a
 #      hash over the other note sections and shifts with any re-link.
 #   3. -Wl,--no-insert-timestamp prevents the linker from stamping
@@ -37,6 +41,7 @@ endif
 # POSIX epoch.
 REPRO_REMAP = --remap-path-prefix=$(HOME)/.cargo=/cargo \
               --remap-path-prefix=$(HOME)/.rustup=/rustup \
+              --remap-path-prefix=/nix/store=/nix-store \
               --remap-path-prefix=$(CURDIR)=/pqsigner
 # The Makefile invokes arm-none-eabi-ld directly (no gcc driver), so linker
 # flags are passed bare — not wrapped in -Wl,. arm-none-eabi-ld has
