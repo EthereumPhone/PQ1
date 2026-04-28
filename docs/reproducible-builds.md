@@ -88,12 +88,38 @@ This means:
 
 - **Linux x86_64** hosts build the derivation natively.
 - **macOS** (Intel or Apple Silicon) and **Linux aarch64** hosts
-  dispatch the build to a remote `x86_64-linux` builder. On Apple
-  Silicon the Determinate Systems installer enables a `linux-builder`
-  VM by default, so the macOS path "just works" out of the box. On
-  Linux aarch64 a remote `x86_64-linux` builder must be configured
+  dispatch the build to a remote `x86_64-linux` builder. The
+  capability ships with Determinate Nix on Apple Silicon but is **not
+  enabled by default** — see the macOS setup section below. On Linux
+  aarch64 a remote `x86_64-linux` builder must be configured
   separately (or `binfmt_misc` + `qemu-user` for transparent
   emulation).
+
+### macOS setup: enable the linux-builder
+
+On Apple Silicon Macs running Determinate Nix, the linux-builder is a
+local VM (Apple Virtualization framework) that the Nix daemon can
+delegate `x86_64-linux` builds to. It needs a one-time enablement.
+
+The recommended path is via Determinate's own documentation:
+**https://docs.determinate.systems/macos-linux-builder/**
+
+If you use **nix-darwin**, add this to your configuration and run
+`darwin-rebuild switch`:
+
+```nix
+nix.linux-builder.enable = true;
+```
+
+Either way, after enabling, `nix store ping --store
+ssh-ng://linux-builder` should succeed and `./measure.sh` can dispatch
+the build. The first run downloads + boots the VM and may take a few
+minutes; subsequent runs reuse the live VM.
+
+`./measure.sh` pre-flights this configuration and exits with a clear
+remediation message if no `x86_64-linux` builder is available, so
+users hitting this step do not need to parse the underlying Nix error
+output.
 
 Because the derivation closure is byte-identical on every host, the
 output (`words.txt`) is byte-identical on every host by construction —

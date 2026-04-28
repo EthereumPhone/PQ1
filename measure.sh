@@ -126,6 +126,85 @@ fi
 say "Nix: $(nix --version)"
 
 # ---------------------------------------------------------------------------
+# Pre-flight: the canonical measurement is built inside a pinned
+# x86_64-linux sandbox so every host (Linux, macOS, WSL2) gets the same
+# closure of inputs and therefore byte-identical 8-word output. Hosts
+# that are NOT x86_64-linux need a remote builder that can build for
+# x86_64-linux. On Apple Silicon Macs this is normally satisfied by a
+# local linux-builder VM; on Linux aarch64 by either a remote builder
+# or binfmt_misc + qemu-user.
+#
+# Detect this up front and print remediation instead of letting Nix bury
+# the user in a wall of "Required system: 'x86_64-linux'" errors.
+# ---------------------------------------------------------------------------
+host_system=$(nix --extra-experimental-features 'nix-command' eval \
+    --impure --raw --expr 'builtins.currentSystem' 2>/dev/null || echo "unknown")
+
+if [ "$host_system" != "x86_64-linux" ]; then
+    nix_config=$(nix --extra-experimental-features 'nix-command' \
+        show-config 2>/dev/null || true)
+    has_linux_builder=0
+    # `extra-platforms` covers binfmt-style native execution; `builders`
+    # covers SSH / VM remote builders. Either is enough.
+    if echo "$nix_config" | awk -F= '/^(extra-platforms|builders)\s*=/' \
+        | grep -q 'x86_64-linux'; then
+        has_linux_builder=1
+    fi
+
+    if [ "$has_linux_builder" -eq 0 ]; then
+        cat >&2 <<EOF
+
+$(printf '\033[1;31m==> No x86_64-linux builder is configured.\033[0m')
+
+This host is '$host_system'. The reproducible measurement is built
+inside a pinned x86_64-linux sandbox so every host gets byte-identical
+output. To dispatch the build off-box you need either:
+
+EOF
+        case "$(uname -s)" in
+            Darwin)
+                cat >&2 <<'EOF'
+  ► On Apple Silicon: enable Determinate Nix's built-in linux-builder.
+    Documentation:  https://docs.determinate.systems/macos-linux-builder/
+
+    If you use nix-darwin, add to your configuration:
+        nix.linux-builder.enable = true;
+    then run:  darwin-rebuild switch
+
+  ► Otherwise: follow Determinate's linux-builder setup, or configure a
+    remote x86_64-linux builder via /etc/nix/machines.
+
+After enabling, re-run ./measure.sh.
+EOF
+                ;;
+            Linux)
+                cat >&2 <<'EOF'
+  ► binfmt_misc + qemu-user (transparent x86_64 emulation under Linux):
+        sudo apt install qemu-user-static binfmt-support  # Debian/Ubuntu
+    then add to /etc/nix/nix.conf:
+        extra-platforms = x86_64-linux
+    and restart nix-daemon.
+
+  ► Or configure a remote x86_64-linux builder via /etc/nix/machines.
+
+After enabling, re-run ./measure.sh.
+EOF
+                ;;
+            *)
+                cat >&2 <<'EOF'
+  ► Configure a remote x86_64-linux builder via /etc/nix/machines or
+    your platform's equivalent. See the Nix manual on remote builds.
+
+After enabling, re-run ./measure.sh.
+EOF
+                ;;
+        esac
+        exit 1
+    fi
+    say "x86_64-linux build capability available — dispatching sandbox build."
+fi
+
+# ---------------------------------------------------------------------------
 # Nix flakes only see git-tracked (or staged) files when invoked from a
 # git repo. If flake.nix or flake.lock are untracked here, the upstream
 # error is cryptic ("Path 'flake.nix' is not tracked by Git"); pre-empt
