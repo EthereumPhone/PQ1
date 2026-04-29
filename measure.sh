@@ -102,7 +102,7 @@ run_docker_measure() {
 #   - Rosetta 2 (Apple Silicon only; macOS-supplied, runs unattended)
 #   - Lima (https://lima-vm.io)        -> $HOME/.local/bin/limactl
 #   - Docker CLI (Docker official static tarball) -> $HOME/.local/bin/docker
-#   - A Lima-managed Ubuntu+Docker VM named "pqsigner-builder"
+#   - A Lima-managed Ubuntu+Docker VM named "pqsigner-builder-rootful"
 #
 # Nothing requires Homebrew, Docker Desktop, OrbStack, Xcode CLT, or any
 # other pre-existing dev tooling beyond what stock macOS ships (curl, tar,
@@ -116,7 +116,10 @@ run_docker_measure() {
 # ---------------------------------------------------------------------------
 LIMA_VERSION="2.1.1"
 DOCKER_CLI_VERSION="29.4.1"
-LIMA_VM_NAME="pqsigner-builder"
+# Bump the suffix when changing the Lima template (rootless→rootful, etc.)
+# so legacy VMs from older measure.sh runs are migrated, not reused.
+LIMA_VM_NAME="pqsigner-builder-rootful"
+LIMA_LEGACY_VM_NAMES=("pqsigner-builder")
 
 install_macos_lima_docker_stack() {
     say "Setting up linux/amd64 build capability via Lima + Docker."
@@ -179,27 +182,51 @@ install_macos_lima_docker_stack() {
     # ---- Lima Docker VM (linux/amd64 via VZ + Rosetta on Apple Silicon) ----
     # CRITICAL: on Apple Silicon, the VM's *kernel* must stay aarch64
     # (Apple's VZ framework can only host the host arch). Linux x86_64
-    # USERSPACE binaries — including everything inside an `nx run
-    # --platform linux/amd64` container — execute via Rosetta 2 binfmt
-    # translation inside the aarch64 VM. Passing `--arch=x86_64` to
-    # `limactl create --vm-type=vz` makes Lima reject the config with
+    # USERSPACE binaries — including everything inside `docker run
+    # --platform linux/amd64` — execute via Rosetta 2 binfmt translation
+    # inside the aarch64 VM. Passing `--arch=x86_64` to `limactl create
+    # --vm-type=vz` makes Lima reject the config with
     # `unsupported arch: "x86_64"`. Default arch = host arch is correct.
     #
     # On Intel macOS the VM kernel is x86_64 natively and Rosetta is
     # irrelevant.
+    #
+    # We use template:docker-ROOTFUL, not template:docker. The rootless
+    # template stores its containerd metadata at ~/.local/share/docker
+    # — and Lima mounts ~ from the host READ-ONLY by default, so
+    # rootless dockerd dies with `Input/output error` the moment it
+    # tries to write its boltdb. Rootful dockerd writes to
+    # /var/lib/docker which lives on the VM's own writable disk.
+    #
+    # The 40 GiB disk gives Nix room to substitute its full closure
+    # (~5–8 GiB) plus the nixos/nix Docker layer (~600 MiB) and build
+    # scratch space without ENOSPC.
     create_lima_vm() {
         if [ "$arch" = "arm64" ]; then
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz --rosetta \
-                --cpus=2 --memory=4 --disk=20 \
-                template:docker
+                --cpus=2 --memory=4 --disk=40 \
+                template:docker-rootful
         else
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz \
-                --cpus=2 --memory=4 --disk=20 \
-                template:docker
+                --cpus=2 --memory=4 --disk=40 \
+                template:docker-rootful
         fi
     }
+
+    # ---- Migrate legacy VMs from older measure.sh runs ----
+    # Earlier ./measure.sh versions left behind rootless-Docker VMs
+    # named "pqsigner-builder" that hit EIO on the read-only home mount.
+    # Wipe them so a single `git pull && ./measure.sh` self-heals.
+    for legacy in "${LIMA_LEGACY_VM_NAMES[@]}"; do
+        if [ "$legacy" != "$LIMA_VM_NAME" ] \
+            && limactl list -q 2>/dev/null | grep -qx "$legacy"; then
+            warn "Removing legacy Lima VM '$legacy' (rootless-docker template, broken on Lima's read-only home mount)."
+            limactl stop --force "$legacy" 2>/dev/null || true
+            limactl delete --force "$legacy" 2>/dev/null || true
+        fi
+    done
 
     if ! limactl list -q 2>/dev/null | grep -qx "$LIMA_VM_NAME"; then
         say "Creating Lima Docker VM '$LIMA_VM_NAME'..."
@@ -394,7 +421,7 @@ did not come up. The most common reasons:
   - The Docker daemon inside the VM did not start.
 
 Try one of:
-  - limactl stop pqsigner-builder && limactl start pqsigner-builder
+  - limactl stop pqsigner-builder-rootful && limactl start pqsigner-builder-rootful
   - Install Docker Desktop or OrbStack manually, then re-run.
 EOF
                 ;;
