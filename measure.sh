@@ -136,12 +136,13 @@ run_docker_measure() {
 LIMA_VERSION="2.1.1"
 # Bump the suffix when changing the Lima template or in-VM provisioning
 # so legacy VMs from older measure.sh runs are migrated, not reused.
-LIMA_VM_NAME="pqsigner-builder-qemu"
+LIMA_VM_NAME="pqsigner-builder-q24"
 LIMA_LEGACY_VM_NAMES=(
     "pqsigner-builder"
     "pqsigner-builder-rootful"
     "pqsigner-builder-nix"
     "pqsigner-builder-nix2"
+    "pqsigner-builder-qemu"
 )
 
 install_macos_lima_nix_stack() {
@@ -209,11 +210,18 @@ install_macos_lima_nix_stack() {
     # EIO/EROFS even after the build that consumed the space exits.
     # 80 GiB headroom + max-jobs=1 (set in nix.custom.conf below) keeps
     # us well clear of that cliff. 6 GiB RAM: enough for rustc.
+    # Pin to Ubuntu 24.04 LTS (Noble Numbat, kernel 6.8). Lima's
+    # `template:default` chases the latest interim release and resolved
+    # to Ubuntu 25.10 (Questing, kernel 6.14+) at the time of writing,
+    # whose newer aarch64 kernel + x86_64-binfmt path SIGSEGVs the
+    # rust-overlay nightly-2026-04-06 rustc binary under both Rosetta
+    # AND qemu-user-static. 24.04 LTS is the current well-tested LTS
+    # and the kernel ABI is mature for cross-arch userspace emulation.
     create_lima_vm() {
         limactl create --name="$LIMA_VM_NAME" --tty=false \
             --vm-type=vz \
             --cpus=4 --memory=6 --disk=80 \
-            template:default
+            template:ubuntu-24.04
     }
 
     # ---- Migrate legacy VMs from older measure.sh runs ----
