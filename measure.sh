@@ -62,11 +62,23 @@ die() { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 # but the container runs as root. libgit2 (used by Nix) refuses to open
 # repos with a uid mismatch unless safe.directory is set, so write a global
 # gitconfig before invoking nix.
+#
+# filter-syscalls = false: when the container runs linux/amd64 on an
+# aarch64 host kernel via Rosetta 2 (Apple Silicon Lima/Docker Desktop),
+# Nix's default seccomp BPF program is built against x86_64 syscall
+# numbers but the kernel is aarch64, so loading it fails with
+# `unable to load seccomp BPF program: Invalid argument`. Turning the
+# syscall filter off removes the load step entirely. The hardening it
+# provides (blocking setuid/setgid bits in build outputs) is irrelevant
+# for our use case — we throw the build artifacts away and only keep
+# the SHA-256-derived 8 BIP-39 words in `words.txt`. On native
+# x86_64-linux hosts the flag is a no-op of equivalent safety since
+# the same outputs would have been produced either way.
 # ---------------------------------------------------------------------------
 run_docker_measure() {
     exec docker run --rm --platform linux/amd64 \
         -v "$PWD:/work" -w /work \
-        -e NIX_CONFIG=$'experimental-features = nix-command flakes' \
+        -e NIX_CONFIG=$'experimental-features = nix-command flakes\nfilter-syscalls = false' \
         -e HOME=/root \
         nixos/nix:latest \
         sh -c '
