@@ -161,7 +161,9 @@ impl CommandRouter {
             INS_V2_LOCK => return self.cmd_lock(),
             INS_V2_GET_WALLET_ADDRESS => return self.cmd_get_wallet_address(data),
             INS_V2_GET_INIT_CODE => return self.cmd_get_init_code(data),
-            INS_V2_SIGN_OFFCHAIN => return self.cmd_sign_offchain(data),
+            // INS_V2_SIGN_OFFCHAIN is chained — see `execute_chain`.
+            // PersonalSign payloads can run up to ~700 bytes, well past
+            // the single-APDU Lc=255 limit.
             INS_V2_OFFCHAIN_STATUS => return self.cmd_offchain_status(data),
 
             // Firmware-update non-chained commands. CHUNK carries the
@@ -212,6 +214,7 @@ impl CommandRouter {
         match ins {
             INS_V2_SIGN_USEROP => self.cmd_sign_userop(len),
             INS_V2_SIGN_USEROP_BATCH => self.cmd_sign_userop_batch(len),
+            INS_V2_SIGN_OFFCHAIN => self.cmd_sign_offchain(len),
             #[cfg(feature = "stm32u585")]
             INS_V2_FW_BEGIN => self.cmd_fw_begin(len),
             _ => self.sw_response(SW_INS_NOT_SUPPORTED),
@@ -506,15 +509,24 @@ impl CommandRouter {
         self.setup_chunked_response(total)
     }
 
-    /// 0x62 SIGN_OFFCHAIN — produce a SPHINCS+C10 sig over an
-    /// EIP-1271 hash. Body: 45 bytes (`account_index || chain_id ||
-    /// slot_index || hash`). Response: 4016 bytes.
-    unsafe fn cmd_sign_offchain(&self, data: &[u8]) -> Response {
-        if data.len() != sphincs_tz_shared::SIGN_OFFCHAIN_INPUT_LEN {
+    /// 0x62 SIGN_OFFCHAIN — produce a SPHINCS+C10 sig for an EIP-1271
+    /// request. Body is variable-length (`SIGN_OFFCHAIN_HEADER_LEN +
+    /// payload_len`); the secure world parses the `kind` byte and
+    /// validates `payload_len` against the per-kind constraints. The
+    /// hard upper bound (`SIGN_OFFCHAIN_INPUT_MAX_LEN`) is enforced
+    /// here so an oversize HID body is rejected before the gateway
+    /// call. PersonalSign payloads can run up to ~700 bytes — past the
+    /// single-APDU Lc=255 limit — so the request is APDU-chained;
+    /// `execute_chain` calls us with the assembled payload pulled out
+    /// of `CHAIN_BUF`. Response: 4016 bytes.
+    unsafe fn cmd_sign_offchain(&self, data_len: usize) -> Response {
+        if data_len < sphincs_tz_shared::SIGN_OFFCHAIN_HEADER_LEN
+            || data_len > sphincs_tz_shared::SIGN_OFFCHAIN_INPUT_MAX_LEN
+        {
             return self.sw_response(SW_WRONG_LENGTH);
         }
         let status = nsc_api::sign_offchain(
-            data,
+            &CHAIN_BUF[..data_len],
             &mut SIG_BUF[..sphincs_tz_shared::SIGN_OFFCHAIN_OUTPUT_LEN],
         );
         if status != NscStatus::Ok as u32 {

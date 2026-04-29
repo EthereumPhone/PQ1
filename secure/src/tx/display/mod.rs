@@ -36,7 +36,7 @@ mod value_transfer;
 
 pub use blind_sign::render_blind_sign_pages;
 pub use contract_creation::render_contract_creation_pages;
-pub use eip1271::render_eip1271_pages;
+pub use eip1271::{render_eip1271_personal_sign_pages, render_eip1271_raw32_pages};
 pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;
 #[cfg(not(test))]
@@ -63,10 +63,14 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 ///   * batch sign per-tx wrapper (see
 ///     `crate::tx::display::batch::wrap_pages_with_batch_banner`) →
 ///     same as the wrapped renderer + 1 banner page = up to 15
+///   * EIP-1271 PersonalSign render →
+///     5 fixed pages (banner / chain / account+slot / signer addr /
+///     final confirm) + `ceil(MAX_OFFCHAIN_PERSONAL_SIGN_LEN / 48)`
+///     message pages = up to 5 + ceil(700 / 48) = 5 + 15 = 20.
 ///
 /// Bumping this costs `4 × 16 = 64` extra stack bytes per page, so
 /// grow it deliberately and not speculatively.
-pub const MAX_PAGES: usize = 15;
+pub const MAX_PAGES: usize = 22;
 
 /// A buffer of up to [`MAX_PAGES`] pre-rendered confirmation pages.
 ///

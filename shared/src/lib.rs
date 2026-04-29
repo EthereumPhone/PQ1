@@ -282,13 +282,40 @@ pub const CMD_GET_WALLET_ADDRESS: u32 = 14;
 pub const CMD_GET_INIT_CODE: u32 = 15;
 
 /// CMD_SIGN_OFFCHAIN — produce a SPHINCS+C10 signature over an
-/// arbitrary 32-byte hash for EIP-1271 (off-chain) verification.
+/// EIP-1271 (off-chain) signing request.
 ///
-/// The companion is responsible for computing the
-/// EIP-712-nested-replay-safe hash before calling this command — see
-/// Solady's `ERC1271._erc1271IsValidSignatureViaNestedEIP712` for the
-/// wrapping the on-chain wallet expects. The firmware just signs the
-/// 32-byte hash it is given; it never interprets it.
+/// Two signing modes, selected by the `kind` byte:
+///
+///   * **`OFFCHAIN_KIND_PERSONAL_SIGN` (1)** — companion sends the raw
+///     message bytes that the dapp passed to `personal_sign` /
+///     `eth_sign`. The firmware:
+///       1. Computes `prefixed = keccak256("\x19Ethereum Signed
+///          Message:\n" || itoa(len) || msg)` — the hash the dapp
+///          would expose as `isValidSignature(hash, sig)`'s first arg.
+///       2. Wraps that into Solady's nested EIP-712 (PersonalSign
+///          workflow): `final = keccak256("\x19\x01" || domainSep ||
+///          keccak256(_PERSONAL_SIGN_TYPEHASH || prefixed))` where the
+///          domain separator is computed against this account's CREATE2
+///          wallet address, the supplied `chain_id`, and the firmware-
+///          baked `(name="PQSmartWallet", version="1")` constants.
+///       3. Renders the message as printable ASCII on the trusted
+///          display so the user can compare it against the dapp.
+///       4. Signs `final` with the slot C10 key.
+///     This is the mode that gives the user actual visibility into
+///     what they're approving.
+///
+///   * **`OFFCHAIN_KIND_RAW32` (0)** — companion sends a 32-byte hash
+///     directly (e.g. an EIP-712 typed-data digest the firmware can't
+///     break apart). The firmware signs it as-is and renders the hash
+///     in hex. Used as a fallback for cases where the message text is
+///     unavailable.
+///
+/// In both modes, on-chain verification works because Solady's
+/// `_erc1271IsValidSignatureViaNestedEIP712` first attempts the
+/// TypedDataSign branch and falls back to PersonalSign when no
+/// appended data is present in the signature — our companion-supplied
+/// signature wrapper carries no appended data, so the wallet always
+/// takes the PersonalSign path.
 ///
 /// Combined budget: the slot's total signing budget is shared between
 /// on-chain Type 2 sigs (`slotUses[i]`) and off-chain sigs
@@ -304,15 +331,20 @@ pub const CMD_GET_INIT_CODE: u32 = 15;
 /// `CMD_SIGN_USEROP` with `FLAG_REGISTER_SLOT`) before retrying.
 ///
 /// Wire layout:
-///   * `arg0` — NS read buffer (`SIGN_OFFCHAIN_INPUT_LEN` bytes):
+///   * `arg0` — NS read buffer (`SIGN_OFFCHAIN_HEADER_LEN +
+///     payload_len` bytes, capped at `SIGN_OFFCHAIN_INPUT_MAX_LEN`):
 ///       [ 0.. 1)  account_index  (u8)
 ///       [ 1.. 9)  chain_id       (u64 BE)
 ///       [ 9..13)  slot_index     (u32 BE)
-///       [13..45)  hash_to_sign   (32 bytes)
+///       [13..14)  kind           (u8: 0=raw32, 1=personal_sign)
+///       [14..16)  payload_len    (u16 BE)
+///       [16..)    payload (`payload_len` bytes — 32 for raw32, the
+///                 raw message for personal_sign)
 ///   * `arg1` — NS write buffer, `SIGN_OFFCHAIN_OUTPUT_LEN` bytes:
 ///       [ 0.. 8)  new_local_offchain_count (u64 BE, post-bump)
 ///       [ 8..4016) C10 sig (4008 bytes)
-///   * `arg2` — input length (must equal `SIGN_OFFCHAIN_INPUT_LEN`).
+///   * `arg2` — input length (must equal
+///     `SIGN_OFFCHAIN_HEADER_LEN + payload_len`).
 pub const CMD_SIGN_OFFCHAIN: u32 = 16;
 
 /// CMD_SIGN_USEROP_BATCH — atomic multi-call UserOp signing.
@@ -732,12 +764,35 @@ pub const MAX_SLOT_USES: u64 = 65_536;
 /// device, so the cap-budget calculation stays correct.
 pub const MAX_OFFCHAIN_GAP: u64 = 5;
 
-/// CMD_SIGN_OFFCHAIN payload layout.
-pub const SIGN_OFFCHAIN_INPUT_LEN: usize = 1 + 8 + 4 + 32; // 45
+/// CMD_SIGN_OFFCHAIN payload layout. The input is variable-length:
+/// fixed 16-byte header followed by `payload_len` bytes whose meaning
+/// depends on the `kind` byte at `[13]` — see the doc on
+/// [`CMD_SIGN_OFFCHAIN`] for the two supported modes.
+pub const SIGN_OFFCHAIN_HEADER_LEN: usize = 1 + 8 + 4 + 1 + 2; // 16
 pub const SIGN_OFFCHAIN_INPUT_ACCOUNT_OFF: usize = 0;
 pub const SIGN_OFFCHAIN_INPUT_CHAIN_OFF: usize = 1;
 pub const SIGN_OFFCHAIN_INPUT_SLOT_OFF: usize = 9;
-pub const SIGN_OFFCHAIN_INPUT_HASH_OFF: usize = 13;
+pub const SIGN_OFFCHAIN_INPUT_KIND_OFF: usize = 13;
+pub const SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF: usize = 14;
+pub const SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF: usize = 16;
+
+/// Maximum personal-sign message length the firmware is willing to
+/// surface on the trusted display. 700 bytes covers a comfortable SIWE
+/// (Sign-In With Ethereum) message; longer payloads are refused so the
+/// secure-side TOCTOU snapshot stays bounded and the user is not
+/// asked to scroll through page after page they cannot meaningfully
+/// audit.
+pub const MAX_OFFCHAIN_PERSONAL_SIGN_LEN: usize = 700;
+
+/// Maximum input length the gateway will accept for `CMD_SIGN_OFFCHAIN`.
+/// Sized for the largest valid `kind=PERSONAL_SIGN` request.
+pub const SIGN_OFFCHAIN_INPUT_MAX_LEN: usize =
+    SIGN_OFFCHAIN_HEADER_LEN + MAX_OFFCHAIN_PERSONAL_SIGN_LEN;
+
+/// Off-chain sign request kinds. See [`CMD_SIGN_OFFCHAIN`] for the
+/// hash-construction details of each.
+pub const OFFCHAIN_KIND_RAW32: u8 = 0;
+pub const OFFCHAIN_KIND_PERSONAL_SIGN: u8 = 1;
 
 /// CMD_SIGN_OFFCHAIN response: post-bump count then C10 sig.
 pub const SIGN_OFFCHAIN_OUTPUT_LEN: usize = 8 + C10_SIG_LEN; // 4016

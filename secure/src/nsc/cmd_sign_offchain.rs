@@ -1,14 +1,20 @@
-//! CMD_SIGN_OFFCHAIN — produce a SPHINCS+C10 signature over an
-//! arbitrary 32-byte hash for EIP-1271 (off-chain) verification.
+//! CMD_SIGN_OFFCHAIN — produce a SPHINCS+C10 signature for an EIP-1271
+//! (off-chain) signing request.
 //!
-//! The companion is responsible for computing the
-//! EIP-712-nested-replay-safe hash (see Solady's
-//! `ERC1271._erc1271IsValidSignatureViaNestedEIP712`) before calling
-//! this command. The firmware just signs the 32-byte hash; it never
-//! interprets it. Because of that, replay protection is enforced
-//! solely by the on-chain wallet's domain separator — a sig captured
-//! against wallet A on chain X cannot verify against wallet B (same
-//! seed, different `account_index`) or against wallet A on chain Y.
+//! Two modes selected by the `kind` byte at offset 13:
+//!
+//!   * **`OFFCHAIN_KIND_PERSONAL_SIGN` (1)** — the companion sends the
+//!     raw `personal_sign` message bytes. The firmware itself computes
+//!     the `personal_sign` prefix hash, wraps it via Solady's nested
+//!     EIP-712 (PersonalSign workflow), shows the message text on the
+//!     trusted display, and signs the resulting hash. This is the only
+//!     mode that gives the user real visibility into what they're
+//!     approving.
+//!
+//!   * **`OFFCHAIN_KIND_RAW32` (0)** — fallback for cases where the
+//!     companion only has the final 32-byte hash (e.g. a typed-data
+//!     digest from a dapp the firmware can't decode). The firmware
+//!     signs the supplied bytes as-is and renders them as hex.
 //!
 //! Slot-key safety:
 //!   * Enforces the bounded-recovery rule
@@ -35,9 +41,11 @@
 //!     path.
 
 use sphincs_tz_shared::{
-    NscStatus, MAX_ACCOUNT_INDEX, MAX_OFFCHAIN_GAP, MAX_SLOT_USES, SIGN_OFFCHAIN_INPUT_HASH_OFF,
-    SIGN_OFFCHAIN_INPUT_LEN, SIGN_OFFCHAIN_OUTPUT_COUNT_OFF, SIGN_OFFCHAIN_OUTPUT_LEN,
-    SIGN_OFFCHAIN_OUTPUT_SIG_OFF, SIGNATURE_LEN,
+    NscStatus, MAX_ACCOUNT_INDEX, MAX_OFFCHAIN_GAP, MAX_OFFCHAIN_PERSONAL_SIGN_LEN, MAX_SLOT_USES,
+    OFFCHAIN_KIND_PERSONAL_SIGN, OFFCHAIN_KIND_RAW32, SIGNATURE_LEN,
+    SIGN_OFFCHAIN_HEADER_LEN, SIGN_OFFCHAIN_INPUT_KIND_OFF, SIGN_OFFCHAIN_INPUT_MAX_LEN,
+    SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF, SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF,
+    SIGN_OFFCHAIN_OUTPUT_COUNT_OFF, SIGN_OFFCHAIN_OUTPUT_LEN, SIGN_OFFCHAIN_OUTPUT_SIG_OFF,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -62,11 +70,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let out_ptr = args.arg1 as *mut u8;
     let total_len = args.arg2 as usize;
 
-    if total_len != SIGN_OFFCHAIN_INPUT_LEN {
+    if total_len < SIGN_OFFCHAIN_HEADER_LEN || total_len > SIGN_OFFCHAIN_INPUT_MAX_LEN {
         crate::ui::show_status("EIP-1271", "bad length");
         return NscStatus::InvalidPointer as u32;
     }
-    if !validate_ns_read_ptr(args.arg0, SIGN_OFFCHAIN_INPUT_LEN) {
+    if !validate_ns_read_ptr(args.arg0, total_len) {
         return NscStatus::InvalidPointer as u32;
     }
     if !validate_ns_write_ptr(args.arg1, SIGN_OFFCHAIN_OUTPUT_LEN) {
@@ -74,28 +82,63 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 3. TOCTOU snapshot ──────────────────────────────────────────
-    let mut buf = [0u8; SIGN_OFFCHAIN_INPUT_LEN];
-    for i in 0..SIGN_OFFCHAIN_INPUT_LEN {
-        buf[i] = core::ptr::read_volatile(in_ptr.add(i));
+    static mut SNAP_BUF: [u8; SIGN_OFFCHAIN_INPUT_MAX_LEN] = [0u8; SIGN_OFFCHAIN_INPUT_MAX_LEN];
+    {
+        let buf = &mut *core::ptr::addr_of_mut!(SNAP_BUF);
+        for b in buf.iter_mut() {
+            *b = 0;
+        }
     }
-    let account_index = buf[0] as u32;
+    let snap_full = &mut *core::ptr::addr_of_mut!(SNAP_BUF);
+    let snap = &mut snap_full[..total_len];
+    for i in 0..total_len {
+        snap[i] = core::ptr::read_volatile(in_ptr.add(i));
+    }
+
+    // ── 4. Parse header ─────────────────────────────────────────────
+    let account_index = snap[0] as u32;
     let chain_id = u64::from_be_bytes([
-        buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
+        snap[1], snap[2], snap[3], snap[4], snap[5], snap[6], snap[7], snap[8],
     ]);
-    let slot_index = u32::from_be_bytes([buf[9], buf[10], buf[11], buf[12]]);
+    let slot_index = u32::from_be_bytes([snap[9], snap[10], snap[11], snap[12]]);
+    let kind = snap[SIGN_OFFCHAIN_INPUT_KIND_OFF];
+    let payload_len = u16::from_be_bytes([
+        snap[SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF],
+        snap[SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF + 1],
+    ]) as usize;
+
     if account_index > MAX_ACCOUNT_INDEX {
         return NscStatus::InvalidPointer as u32;
     }
-    let mut hash_to_sign = [0u8; 32];
-    hash_to_sign.copy_from_slice(&buf[SIGN_OFFCHAIN_INPUT_HASH_OFF..SIGN_OFFCHAIN_INPUT_HASH_OFF + 32]);
+    if SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF + payload_len != total_len {
+        crate::ui::show_status("EIP-1271", "bad payload_len");
+        return NscStatus::InvalidPointer as u32;
+    }
 
-    // ── 4. Slot key + registration probe ────────────────────────────
-    //
-    // After a seed-restore the new firmware has no flash record of
-    // any old slot, so the only slots it will sign for are ones
-    // registered (via CMD_SIGN_USEROP with FLAG_REGISTER_SLOT) since
-    // boot. This bounds `last_userop_count - 0` for those slots and
-    // gives the cap calculation a known floor.
+    // Per-kind payload constraints. Bound checks first so kind-specific
+    // hash construction never sees out-of-range data.
+    match kind {
+        OFFCHAIN_KIND_RAW32 => {
+            if payload_len != 32 {
+                crate::ui::show_status("EIP-1271", "raw32 needs 32 B");
+                return NscStatus::InvalidPointer as u32;
+            }
+        }
+        OFFCHAIN_KIND_PERSONAL_SIGN => {
+            if payload_len > MAX_OFFCHAIN_PERSONAL_SIGN_LEN {
+                crate::ui::show_status("EIP-1271", "msg too long");
+                return NscStatus::InvalidPointer as u32;
+            }
+        }
+        _ => {
+            crate::ui::show_status("EIP-1271", "bad kind");
+            return NscStatus::InvalidPointer as u32;
+        }
+    }
+
+    let payload = &snap[SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF..SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF + payload_len];
+
+    // ── 5. Slot key + registration probe ────────────────────────────
     let slot_flash_key =
         crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);
     if !crate::offchain_state::offchain_count_is_registered(&slot_flash_key) {
@@ -103,15 +146,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::OffchainSlotUnregistered as u32;
     }
 
-    // ── 5. Gap + cap checks (firmware-side defence in depth) ────────
-    //
-    // Re-assert the invariant `local_offchain >= last_userop` before
-    // consuming an off-chain budget slot. If a flash event has left
-    // local_offchain stale, bumping from the lower value would later
-    // starve the next Type 2's monotonicity check on-chain (and would
-    // wrongly under-count the gap here, allowing more unbacked
-    // off-chain sigs than the design permits). Promotion is
-    // idempotent if the invariant already holds.
+    // ── 6. Gap + cap checks (firmware-side defence in depth) ────────
     let last_userop = crate::offchain_state::last_userop_count_read(&slot_flash_key);
     let mut local_offchain = crate::offchain_state::offchain_count_read(&slot_flash_key);
     if last_userop > local_offchain {
@@ -137,42 +172,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::OffchainCapExceeded as u32;
     }
 
-    // ── 5b. Trusted-display confirmation ────────────────────────────
-    //
-    // EIP-1271 sigs are silent-but-binding from the dapp's view, so the
-    // user must approve them on the trusted display the same way they
-    // approve a UserOp. We surface (chain, account, slot), the full 32
-    // bytes of the hash that's about to be signed, and the slot's
-    // off-chain budget context. The companion is responsible for
-    // deriving the hash via Solady's nested EIP-712 wrap before calling
-    // this command — we cannot interpret what the dapp ultimately
-    // commits to, but the user can compare these 64 hex chars against
-    // whatever the dapp shows.
-    {
-        use crate::ui::confirm::{confirm, ConfirmResult};
-        let pages = crate::tx::display::render_eip1271_pages(
-            chain_id,
-            account_index,
-            slot_index,
-            &hash_to_sign,
-            new_count,
-            last_userop,
-            MAX_SLOT_USES,
-        );
-        match confirm(pages.as_slice()) {
-            ConfirmResult::Confirmed => {}
-            ConfirmResult::Cancelled => {
-                crate::ui::show_status("Cancelled", "");
-                return NscStatus::UserRejected as u32;
-            }
-            ConfirmResult::IdleWipe => {
-                super::zeroize_sensitive_state();
-                return NscStatus::IdleWipe as u32;
-            }
-        }
-    }
-
-    // ── 6. Reconstruct entropy + slot master per-account ────────────
+    // ── 7. Reconstruct entropy + slot master per-account ────────────
     let master_secret: Zeroizing<[u8; 32]> =
         Zeroizing::new(super::state::peek_state(|s| s.master_secret));
     let mut entropy_blob = Zeroizing::new([0u8; 64]);
@@ -197,7 +197,89 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
 
-    // ── 7. Slot C10 keygen (shared cache with cmd_sign_userop) ──────
+    // ── 8. PersonalSign hash construction (kind=1) ─────────────────
+    //
+    // The firmware computes the final replay-safe hash itself from the
+    // raw message — that's the whole point of the "show real text"
+    // trusted-display contract. It needs the wallet's CREATE2 proxy
+    // address, which depends on the bootstrap C10 pubkey for this
+    // account. We pull it from `bootstrap_cache` if warm and derive on
+    // demand otherwise (~6 s on first hit per session).
+    //
+    // For kind=0 (raw32) we just sign the 32 bytes verbatim.
+    let mut hash_to_sign = [0u8; 32];
+    let mut wallet_addr = [0u8; 20];
+    match kind {
+        OFFCHAIN_KIND_RAW32 => {
+            hash_to_sign.copy_from_slice(payload);
+        }
+        OFFCHAIN_KIND_PERSONAL_SIGN => {
+            // Look up bootstrap pubkey; derive on miss.
+            let cached =
+                super::state::with_state(|s| s.bootstrap_cache_lookup(account_index));
+            let (master_pk_seed_32, master_pk_root_32) = match cached {
+                Some(pair) => pair,
+                None => {
+                    crate::ui::show_progress("C10 keygen", 0);
+                    let (c10_sk, pk_seed_32, pk_root_32) =
+                        crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
+                            &*entropy,
+                            account_index,
+                            |p| crate::ui::show_progress("C10 keygen", p),
+                        );
+                    drop(c10_sk); // ZeroizeOnDrop wipes sk_seed.
+                    super::state::with_state(|s| {
+                        s.bootstrap_cache_insert(account_index, pk_seed_32, pk_root_32);
+                    });
+                    (pk_seed_32, pk_root_32)
+                }
+            };
+            wallet_addr = crate::aa::eip1271::proxy_address(&master_pk_seed_32, &master_pk_root_32);
+            hash_to_sign = crate::aa::eip1271::personal_sign_replay_safe_hash(
+                chain_id, &wallet_addr, payload,
+            );
+        }
+        _ => return NscStatus::InternalError as u32, // unreachable past §4
+    }
+
+    // ── 9. Trusted-display confirmation ─────────────────────────────
+    {
+        use crate::ui::confirm::{confirm, ConfirmResult};
+        let pages = match kind {
+            OFFCHAIN_KIND_PERSONAL_SIGN => crate::tx::display::render_eip1271_personal_sign_pages(
+                chain_id,
+                account_index,
+                slot_index,
+                &wallet_addr,
+                payload,
+                new_count,
+                last_userop,
+                MAX_SLOT_USES,
+            ),
+            _ => crate::tx::display::render_eip1271_raw32_pages(
+                chain_id,
+                account_index,
+                slot_index,
+                &hash_to_sign,
+                new_count,
+                last_userop,
+                MAX_SLOT_USES,
+            ),
+        };
+        match confirm(pages.as_slice()) {
+            ConfirmResult::Confirmed => {}
+            ConfirmResult::Cancelled => {
+                crate::ui::show_status("Cancelled", "");
+                return NscStatus::UserRejected as u32;
+            }
+            ConfirmResult::IdleWipe => {
+                super::zeroize_sensitive_state();
+                return NscStatus::IdleWipe as u32;
+            }
+        }
+    }
+
+    // ── 10. Slot C10 keygen (shared cache with cmd_sign_userop) ────
     let need_keygen = super::state::peek_state(|_| {
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
@@ -232,7 +314,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         });
     }
 
-    // ── 8. C10 sign (no re-hash — companion already wrapped) ────────
+    // ── 11. C10 sign ────────────────────────────────────────────────
     crate::ui::show_progress("EIP-1271 sign", 0);
     let sig = {
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
@@ -251,7 +333,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     debug_assert_eq!(sig.len(), SIGNATURE_LEN);
 
-    // ── 9. FI-hardened verify-before-release (mirrors cmd_sign_userop) ──
+    // ── 12. FI-hardened verify-before-release ──────────────────────
     let (v1, v2) = {
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
@@ -274,13 +356,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::CryptoError as u32;
     }
 
-    // ── 10. Bump the durable counter AFTER verify ──────────────────
+    // ── 13. Bump the durable counter AFTER verify ──────────────────
     if crate::offchain_state::offchain_count_bump(&slot_flash_key, new_count).is_err() {
         crate::ui::show_status("Counter bump", "FAIL");
         return NscStatus::InternalError as u32;
     }
 
-    // ── 11. Write response: [count_be8] [c10_sig] ───────────────────
+    // ── 14. Write response: [count_be8] [c10_sig] ───────────────────
     let count_be = new_count.to_be_bytes();
     for i in 0..8 {
         core::ptr::write_volatile(

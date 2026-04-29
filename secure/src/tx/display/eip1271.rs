@@ -1,44 +1,64 @@
 //! EIP-1271 off-chain signature confirmation pages.
 //!
-//! The firmware never sees the structured payload behind the 32-byte
-//! `replaySafeHash` — the companion has already wrapped the dapp's raw
-//! hash through Solady's nested EIP-712 by the time the bytes reach
-//! us. So the trusted display surfaces the four facts the user can
-//! actually verify against the dapp:
+//! Two flows:
 //!
-//!   * which `(account, slot)` is signing,
-//!   * which chain's wallet the sig is bound to (replay-safe wrap
-//!     baked the chain id into the hash already, but the user still
-//!     needs to recognise it),
-//!   * the full 32-byte hash (split across two pages so all 64 hex
-//!     chars are visible without truncation),
-//!   * the off-chain budget context (`local + 1 / cap`, gap to the
-//!     next required UserOp).
+//!   * `render_eip1271_personal_sign_pages` — surfaces the actual
+//!     `personal_sign` message text (paginated as printable ASCII)
+//!     plus the wallet address that will be doing the signing. The
+//!     firmware itself recomputes the replay-safe hash from this
+//!     message, so what the user reads here is byte-equivalent to
+//!     what gets signed.
+//!
+//!   * `render_eip1271_raw32_pages` — fallback for the raw-hash path
+//!     (e.g. an EIP-712 typed-data digest the firmware can't break
+//!     apart). Shows the 32 hex bytes split across two pages.
+//!
+//! Both render the same chain / account / slot context and the same
+//! per-slot off-chain budget summary (`local + 1 / cap`, gap to next
+//! UserOp).
 
-use super::primitives::{chain_name, hex_nibble, write_chain, write_line};
+use super::primitives::{
+    chain_name, hex_nibble, write_addr_full, write_chain, write_line,
+};
 use super::Pages;
 use crate::ui::DISPLAY_COLS;
 
-/// Render the EIP-1271 off-chain sign confirmation flow.
+/// Render the PersonalSign EIP-1271 confirmation flow.
 ///
-/// `local_offchain_after` is the per-slot off-chain count that this
-/// signature would publish (i.e. `local + 1`). `last_userop` is the
-/// last value durably committed on-chain; their delta is what
-/// `MAX_OFFCHAIN_GAP` bounds. `cap` is `MAX_SLOT_USES`.
-pub fn render_eip1271_pages(
+/// `wallet_addr` is the on-chain proxy address signing the message
+/// (the verifying contract bound into the EIP-712 domain separator).
+/// `msg` is the raw `personal_sign` message — printable ASCII bytes
+/// render as themselves; non-printable bytes render as `?`.
+pub fn render_eip1271_personal_sign_pages(
     chain_id: u64,
     account_index: u32,
     slot_index: u32,
-    hash: &[u8; 32],
+    wallet_addr: &[u8; 20],
+    msg: &[u8],
     local_offchain_after: u64,
     last_userop: u64,
     cap: u64,
 ) -> Pages {
-    let mut pages = Pages::with_len(6);
+    // 5 fixed pages (banner / chain / account / wallet addr / final
+    // confirm) + the message body. Each message page surfaces 3 rows
+    // × 16 cols = 48 chars; the 4th row is a "Msg N/M > next" footer.
+    const TEXT_ROWS_PER_PAGE: usize = 3;
+    const CHARS_PER_PAGE: usize = TEXT_ROWS_PER_PAGE * DISPLAY_COLS;
+
+    let msg_pages = if msg.is_empty() {
+        1
+    } else {
+        (msg.len() + CHARS_PER_PAGE - 1) / CHARS_PER_PAGE
+    };
+    let total = 5 + msg_pages;
+    // `Pages::with_len` will assert if MAX_PAGES is too small. The
+    // bound matches the static cap on `MAX_OFFCHAIN_PERSONAL_SIGN_LEN`
+    // / CHARS_PER_PAGE + 5 fixed pages.
+    let mut pages = Pages::with_len(total);
 
     // ── Page 0: banner ─────────────────────────────────────────────
     write_line(&mut pages.buf[0][0], "EIP-1271 Sign?");
-    write_line(&mut pages.buf[0][1], "! Off-chain sig");
+    write_line(&mut pages.buf[0][1], "personal_sign");
     write_line(&mut pages.buf[0][2], "Verify on dapp");
     write_line(&mut pages.buf[0][3], "> next");
 
@@ -54,25 +74,105 @@ pub fn render_eip1271_pages(
     write_line(&mut pages.buf[2][2], "");
     write_line(&mut pages.buf[2][3], "> next");
 
-    // ── Page 3: hash bytes 0..16 ───────────────────────────────────
+    // ── Page 3: wallet address (the EIP-712 verifyingContract) ─────
+    write_line(&mut pages.buf[3][0], "Signer:");
+    {
+        let [_lbl, a, b, c] = &mut pages.buf[3];
+        write_addr_full(a, b, c, wallet_addr);
+    }
+
+    // ── Pages 4..4+msg_pages: message text ─────────────────────────
+    for p in 0..msg_pages {
+        let page_idx = 4 + p;
+        let off = p * CHARS_PER_PAGE;
+        let end = core::cmp::min(off + CHARS_PER_PAGE, msg.len());
+        let chunk = &msg[off..end];
+        for r in 0..TEXT_ROWS_PER_PAGE {
+            let row_off = r * DISPLAY_COLS;
+            let row_end = core::cmp::min(row_off + DISPLAY_COLS, chunk.len());
+            let row = &mut pages.buf[page_idx][r];
+            *row = [b' '; DISPLAY_COLS];
+            if row_off < chunk.len() {
+                let slice = &chunk[row_off..row_end];
+                for (i, &b) in slice.iter().enumerate() {
+                    row[i] = sanitise_byte(b);
+                }
+            }
+        }
+        // Footer: "Msg N/M  > next" or "Msg N/M  > sign" on the last
+        // text page; the very last page (final confirm) has its own
+        // L=Cancel / R=Confirm prompts.
+        write_msg_footer(&mut pages.buf[page_idx][3], p + 1, msg_pages);
+    }
+
+    // ── Final page: budget + confirm ───────────────────────────────
+    let last_page = total - 1;
+    write_budget_row(&mut pages.buf[last_page][0], local_offchain_after, cap);
+    write_gap_row(&mut pages.buf[last_page][1], local_offchain_after, last_userop);
+    write_line(&mut pages.buf[last_page][2], "L=Cancel");
+    write_line(&mut pages.buf[last_page][3], "R=Confirm");
+
+    pages
+}
+
+/// Render the raw-hash EIP-1271 confirmation flow (fallback when the
+/// companion only has the final 32-byte hash, no message).
+pub fn render_eip1271_raw32_pages(
+    chain_id: u64,
+    account_index: u32,
+    slot_index: u32,
+    hash: &[u8; 32],
+    local_offchain_after: u64,
+    last_userop: u64,
+    cap: u64,
+) -> Pages {
+    let mut pages = Pages::with_len(6);
+
+    write_line(&mut pages.buf[0][0], "EIP-1271 Sign?");
+    write_line(&mut pages.buf[0][1], "! Raw 32-byte");
+    write_line(&mut pages.buf[0][2], "Verify on dapp");
+    write_line(&mut pages.buf[0][3], "> next");
+
+    write_line(&mut pages.buf[1][0], "Chain:");
+    write_chain(&mut pages.buf[1][1], chain_id);
+    write_line(&mut pages.buf[1][2], chain_name(chain_id));
+    write_line(&mut pages.buf[1][3], "> next");
+
+    write_acct_row(&mut pages.buf[2][0], account_index);
+    write_slot_row(&mut pages.buf[2][1], slot_index);
+    write_line(&mut pages.buf[2][2], "");
+    write_line(&mut pages.buf[2][3], "> next");
+
     write_line(&mut pages.buf[3][0], "Hash 1/2:");
     write_hex_row(&mut pages.buf[3][1], &hash[0..8]);
     write_hex_row(&mut pages.buf[3][2], &hash[8..16]);
     write_line(&mut pages.buf[3][3], "> next");
 
-    // ── Page 4: hash bytes 16..32 ──────────────────────────────────
     write_line(&mut pages.buf[4][0], "Hash 2/2:");
     write_hex_row(&mut pages.buf[4][1], &hash[16..24]);
     write_hex_row(&mut pages.buf[4][2], &hash[24..32]);
     write_line(&mut pages.buf[4][3], "> next");
 
-    // ── Page 5: budget summary + buttons ───────────────────────────
     write_budget_row(&mut pages.buf[5][0], local_offchain_after, cap);
     write_gap_row(&mut pages.buf[5][1], local_offchain_after, last_userop);
     write_line(&mut pages.buf[5][2], "L=Cancel");
     write_line(&mut pages.buf[5][3], "R=Confirm");
 
     pages
+}
+
+// ───────────────────────────── helpers ──────────────────────────────
+
+fn sanitise_byte(b: u8) -> u8 {
+    // Render printable ASCII as-is; everything else (control bytes, hi-
+    // bit / UTF-8 continuation bytes) becomes '?' so the trusted
+    // display can never paint a glyph the user couldn't read on a
+    // standard ASCII rendering of the dapp's message.
+    if (0x20..=0x7E).contains(&b) {
+        b
+    } else {
+        b'?'
+    }
 }
 
 fn write_hex_row(row: &mut [u8; DISPLAY_COLS], bytes: &[u8]) {
@@ -137,6 +237,29 @@ fn write_gap_row(row: &mut [u8; DISPLAY_COLS], local_after: u64, last_userop: u6
     let gap = local_after.saturating_sub(last_userop);
     pos = write_decimal(row, pos, gap);
     let _ = pos;
+}
+
+fn write_msg_footer(row: &mut [u8; DISPLAY_COLS], page: usize, total: usize) {
+    *row = [b' '; DISPLAY_COLS];
+    let mut pos = 0;
+    let prefix = b"Msg ";
+    for &b in prefix {
+        if pos < DISPLAY_COLS {
+            row[pos] = b;
+            pos += 1;
+        }
+    }
+    pos = write_decimal(row, pos, page as u64);
+    if pos < DISPLAY_COLS {
+        row[pos] = b'/';
+        pos += 1;
+    }
+    pos = write_decimal(row, pos, total as u64);
+    // Tail "> next" if there's room.
+    let nav = b"  > next";
+    if pos + nav.len() <= DISPLAY_COLS {
+        row[pos..pos + nav.len()].copy_from_slice(nav);
+    }
 }
 
 fn write_decimal(row: &mut [u8; DISPLAY_COLS], pos: usize, mut n: u64) -> usize {

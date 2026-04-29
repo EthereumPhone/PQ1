@@ -45,4 +45,5 @@
 //! signed `userOpHash` that the trusted UI has no way to display.
 //! All sign paths force `init_code_hash = KECCAK_EMPTY`.
 
+pub mod eip1271;
 pub mod userop;
