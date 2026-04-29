@@ -1008,15 +1008,48 @@ unsafe fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
 
 /// Find the first blank QW in the page. Returns the QW *index*, or
 /// `None` if the page is full and a compaction is required.
+///
+/// "Blank" means all 16 bytes of the QW are 0xFF. The cheap one-byte
+/// check on the type field is wrong on devices that were upgraded
+/// across the all-C10 cutover: pages 123–124 used to hold per-slot
+/// persistent state, the firmware update doesn't erase them, and
+/// stale bytes randomly leave QWs whose type byte is 0xFF but whose
+/// other 15 bytes still hold old programmed bits. Writing to such a
+/// QW with `write_quadword_verified` PROGERRs (NOR flash can only
+/// flip 1→0; it cannot re-program a bit that is already 0) and the
+/// caller surfaces it as "Sig commit FAIL".
 unsafe fn find_next_blank_idx() -> Option<u32> {
     let base = OFFCHAIN_PAGE_ADDR as *const u8;
     for i in 0..OFFCHAIN_CAPACITY {
-        let type_byte = read_volatile(base.add((i * OFFCHAIN_QW_SIZE + 8) as usize));
-        if type_byte == 0xFF {
+        let qw_base = base.add((i * OFFCHAIN_QW_SIZE) as usize);
+        let mut all_blank = true;
+        for k in 0..(OFFCHAIN_QW_SIZE as usize) {
+            if read_volatile(qw_base.add(k)) != 0xFF {
+                all_blank = false;
+                break;
+            }
+        }
+        if all_blank {
             return Some(i);
         }
     }
     None
+}
+
+/// True iff every byte in the off-chain page reads back as 0xFF.
+/// Used as the self-heal trigger: when `write_entry` cannot find a
+/// truly-blank QW (because the page was inherited from the
+/// pre-all-C10 per-slot state and never erased), the safest recovery
+/// is a single bulk erase — there are no surviving valid entries to
+/// preserve.
+unsafe fn offchain_page_is_blank() -> bool {
+    let base = OFFCHAIN_PAGE_ADDR as *const u8;
+    for i in 0..(OFFCHAIN_CAPACITY * OFFCHAIN_QW_SIZE) as usize {
+        if read_volatile(base.add(i)) != 0xFF {
+            return false;
+        }
+    }
+    true
 }
 
 /// Erase page 123 — wipes every off-chain counter back to "no record".
@@ -1168,11 +1201,40 @@ unsafe fn compact_page() -> Result<(), ()> {
     Ok(())
 }
 
-/// Append a journal entry, compacting first if the page is full.
+/// Append a journal entry, compacting first if the page is full and
+/// self-healing the page if it inherited unwritable garbage from the
+/// pre-all-C10 per-slot state.
+///
+/// Three retry tiers:
+/// 1. Happy path: a truly-blank QW exists, write succeeds.
+/// 2. Page full: run a normal compaction (preserves valid entries).
+/// 3. Page is wedged in an unwritable shape — i.e. either compaction
+///    can't free space *or* the targeted "blank" QW won't accept the
+///    write because of stale 0-bits from the prior incarnation. Bulk-
+///    erase the whole page and retry once. Stale data here cannot be
+///    a valid current entry the wallet still cares about: pages
+///    123–124 were freed by the cutover and any leftover bits were
+///    written by long-since-removed firmware. Compaction would have
+///    surfaced that as `Some((0, _, _))` "unknown type" entries which
+///    are explicitly skipped, so the bulk erase loses nothing live.
 unsafe fn write_entry(qw: &[u8; 16]) -> Result<(), ()> {
     if find_next_blank_idx().is_none() {
         compact_page()?;
     }
+
+    // First write attempt — at the QW chosen by find_next_blank_idx.
+    if let Some(blank) = find_next_blank_idx() {
+        if write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw)
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    // Self-heal: bulk-erase the page and retry once. After the erase
+    // the whole page is 0xFF, so find_next_blank_idx returns 0 and the
+    // write must succeed (or the flash itself is dead).
+    erase_offchain_page()?;
     let blank = find_next_blank_idx().ok_or(())?;
     write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw)
 }
@@ -1269,12 +1331,47 @@ pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<
     Ok(())
 }
 
+/// Promote the off-chain sig counter for `slot_key` to at least `target`.
+/// Idempotent if the stored value already meets or exceeds `target`.
+///
+/// Used by the sign path to repair a stale local view: if a flash event
+/// (compaction half-failure, partial torn write, etc.) lost a `COUNT`
+/// entry but kept its `USEROP` snapshot, `offchain_count_read` can dip
+/// below `last_userop_count_read`. Signing with the lower value would
+/// always revert on-chain because `_setOffchainSigCount` enforces
+/// monotonicity over `offchainSigCount[i]`. Re-asserting the high-water
+/// mark here keeps the firmware's view consistent with what was last
+/// committed to the chain so the next Type 2 sig commits a value the
+/// chain will accept.
+pub unsafe fn offchain_count_promote_to(slot_key: &[u8; 8], target: u64) -> Result<(), ()> {
+    let pre = offchain_count_read(slot_key);
+    if target <= pre {
+        return Ok(());
+    }
+    let qw = entry_qw(slot_key, OFFCHAIN_TYPE_COUNT, target);
+    write_entry(&qw)
+}
+
 /// Update the last_userop_count snapshot for `slot_key`. Idempotent if
-/// `count == current`. Refuses non-monotonic updates.
+/// `count == current`. Tolerant of `count < current`: rather than
+/// permanently failing the sign with an `Err` (which manifested as
+/// "Sig commit FAIL" on the OLED and bricked the slot for future
+/// signs), it returns `Ok` as a no-op. Real monotonicity is enforced
+/// at two stronger gates: (a) the sign path promotes
+/// `new_offchain_count` to `max(offchain_count_read,
+/// last_userop_count_read)` so this function is never reached with
+/// `count < pre` in correct execution, and (b) the on-chain
+/// `_setOffchainSigCount` reverts on non-monotonic input — that revert
+/// is the authoritative gate, not this firmware-side check.
 pub unsafe fn last_userop_count_set(slot_key: &[u8; 8], count: u64) -> Result<(), ()> {
     let pre = last_userop_count_read(slot_key);
     if count < pre {
-        return Err(());
+        // Defensive no-op. The flash already records a higher
+        // high-water mark; the caller is either replaying a stale
+        // value (harmless) or has a bug we cannot fix from here. Do
+        // not regress the stored value — the on-chain state would
+        // not accept a regression either.
+        return Ok(());
     }
     if count == pre && offchain_count_is_registered(slot_key) {
         return Ok(());

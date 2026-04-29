@@ -687,7 +687,50 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let t2_owner_index = (slot_index as u64) + 1;
     let slot_flash_key =
         crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);
-    let new_offchain_count = unsafe { crate::offchain_state::offchain_count_read(&slot_flash_key) };
+
+    // The on-chain wallet's `_setOffchainSigCount` reverts on
+    // non-monotonic input. The firmware's best estimate of the
+    // on-chain `offchainSigCount[i]` is `last_userop_count` — the
+    // value committed by the previous Type 2 sign for this slot. If
+    // the local `offchain_count` view has fallen below that mark
+    // (e.g. a partial compaction lost a `COUNT` entry, or this is the
+    // first sign after a fresh-from-seed restore that surfaced a
+    // stale `USEROP` snapshot from the prior incarnation), promote
+    // `new_offchain_count` to the high-water mark and repair the
+    // local off-chain counter so cmd_sign_offchain's gap arithmetic
+    // and the `slotUses + offchainSigCount <= MAX_SLOT_USES` cap
+    // continue to operate on a consistent base. Without this, the
+    // sign here would still produce a valid C10 sig but the on-chain
+    // verification would revert — wasting the slot's hypertree
+    // budget AND surfacing as "Sig commit FAIL" the next time
+    // `last_userop_count_set` enforced its old strict-monotonic
+    // check.
+    let local_offchain =
+        unsafe { crate::offchain_state::offchain_count_read(&slot_flash_key) };
+    let last_userop_snapshot =
+        unsafe { crate::offchain_state::last_userop_count_read(&slot_flash_key) };
+    secure_log!(
+        "[S][sign] slot_key={:02x?} local_offchain={} last_userop={}",
+        slot_flash_key, local_offchain, last_userop_snapshot
+    );
+    let new_offchain_count = local_offchain.max(last_userop_snapshot);
+    if new_offchain_count > local_offchain {
+        // Best-effort repair. Even if this write fails (e.g. flash
+        // exhausted), we continue: `last_userop_count_set` below is
+        // tolerant of an unmoved local counter, and the on-chain
+        // monotonicity gate is the authoritative check. Surface a
+        // diagnostic on the OLED so operators notice the repair.
+        if unsafe {
+            crate::offchain_state::offchain_count_promote_to(
+                &slot_flash_key,
+                new_offchain_count,
+            )
+        }
+        .is_err()
+        {
+            ui::show_status("Sign", "offchain repair");
+        }
+    }
     let t2_exec = match reconstruct_execute_calldata(
         t2_owner_index,
         new_offchain_count,
@@ -1020,6 +1063,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             .is_err()
         {
             entropy.zeroize();
+            secure_log!(
+                "[S][slot-register] offchain_count_register_slot FAIL key={:02x?}",
+                slot_flash_key
+            );
             ui::show_status("Slot register", "FAIL");
             return NscStatus::InternalError as u32;
         }
@@ -1030,6 +1077,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     .is_err()
     {
         entropy.zeroize();
+        secure_log!(
+            "[S][sig-commit] last_userop_count_set FAIL key={:02x?} count={}",
+            slot_flash_key, new_offchain_count
+        );
         ui::show_status("Sig commit", "FAIL");
         return NscStatus::InternalError as u32;
     }

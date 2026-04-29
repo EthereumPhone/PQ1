@@ -104,8 +104,25 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 5. Gap + cap checks (firmware-side defence in depth) ────────
-    let local_offchain = crate::offchain_state::offchain_count_read(&slot_flash_key);
+    //
+    // Re-assert the invariant `local_offchain >= last_userop` before
+    // consuming an off-chain budget slot. If a flash event has left
+    // local_offchain stale, bumping from the lower value would later
+    // starve the next Type 2's monotonicity check on-chain (and would
+    // wrongly under-count the gap here, allowing more unbacked
+    // off-chain sigs than the design permits). Promotion is
+    // idempotent if the invariant already holds.
     let last_userop = crate::offchain_state::last_userop_count_read(&slot_flash_key);
+    let mut local_offchain = crate::offchain_state::offchain_count_read(&slot_flash_key);
+    if last_userop > local_offchain {
+        if crate::offchain_state::offchain_count_promote_to(&slot_flash_key, last_userop)
+            .is_err()
+        {
+            crate::ui::show_status("EIP-1271", "repair fail");
+            return NscStatus::InternalError as u32;
+        }
+        local_offchain = last_userop;
+    }
     let gap = local_offchain.saturating_sub(last_userop);
     if gap >= MAX_OFFCHAIN_GAP {
         crate::ui::show_status("EIP-1271", "publish first");

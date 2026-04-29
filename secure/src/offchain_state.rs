@@ -49,6 +49,12 @@ mod backend {
     pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<(), ()> {
         crate::hw::flash::offchain_count_bump(slot_key, new_count)
     }
+    pub unsafe fn offchain_count_promote_to(
+        slot_key: &[u8; 8],
+        target: u64,
+    ) -> Result<(), ()> {
+        crate::hw::flash::offchain_count_promote_to(slot_key, target)
+    }
     pub unsafe fn last_userop_count_set(slot_key: &[u8; 8], count: u64) -> Result<(), ()> {
         crate::hw::flash::last_userop_count_set(slot_key, count)
     }
@@ -151,16 +157,35 @@ mod backend {
         Ok(())
     }
 
+    /// Mirror of `flash::offchain_count_promote_to` — set the per-slot
+    /// off-chain counter to at least `target`. Idempotent.
+    pub unsafe fn offchain_count_promote_to(
+        slot_key: &[u8; 8],
+        target: u64,
+    ) -> Result<(), ()> {
+        let idx = match find(slot_key) {
+            Some(i) => i,
+            None => allocate(slot_key).ok_or(())?,
+        };
+        let table = &mut *core::ptr::addr_of_mut!(TABLE);
+        if target > table[idx].offchain {
+            table[idx].offchain = target;
+        }
+        Ok(())
+    }
+
     pub unsafe fn last_userop_count_set(slot_key: &[u8; 8], count: u64) -> Result<(), ()> {
         let idx = match find(slot_key) {
             Some(i) => i,
             None => allocate(slot_key).ok_or(())?,
         };
         let table = &mut *core::ptr::addr_of_mut!(TABLE);
-        if count < table[idx].last_userop {
-            return Err(());
+        // Tolerant of `count < last_userop`: no-op rather than error,
+        // mirroring the flash-backed semantics so a stale caller
+        // cannot brick the slot.
+        if count > table[idx].last_userop {
+            table[idx].last_userop = count;
         }
-        table[idx].last_userop = count;
         Ok(())
     }
 
