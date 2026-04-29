@@ -104,35 +104,50 @@ This means:
 not need to install Homebrew, Docker Desktop, OrbStack, Xcode CLT, or
 any other tooling first. On a fresh machine it:
 
-1. Installs Determinate Nix (single curl, `--no-confirm`) if `nix`
-   isn't on PATH. **One sudo password prompt** for the system-extension
-   install of the multi-user Nix daemon.
+1. Installs Determinate Nix on the host (single curl, `--no-confirm`)
+   if `nix` isn't on PATH. **One sudo password prompt** for the
+   system-extension install of the multi-user Nix daemon.
 2. Detects that the host can't natively build `x86_64-linux`
-   derivations (no remote builder, no `extra-platforms`, no Docker).
-3. **Auto-installs a Lima-managed Docker daemon under `$HOME/.local`**:
+   derivations.
+3. **Auto-installs a Lima VM with Nix inside, under `$HOME/.local`**:
    - Rosetta 2, on Apple Silicon (`softwareupdate --install-rosetta
      --agree-to-license`). One sudo password prompt only if the
      unprivileged `softwareupdate` invocation fails (rare on recent
      macOS); already-installed Rosetta is auto-detected via
      `arch -x86_64 /usr/bin/true` and skipped.
    - `limactl` from the pinned Lima release tarball.
-   - Docker CLI from Docker's official static tarball.
-   - A Lima VM named `pqsigner-builder` running Ubuntu LTS with the
-     `template:docker` template, configured `--vm-type=vz --rosetta`
-     on Apple Silicon (plain `--vm-type=vz` on Intel). On Apple
-     Silicon the VM kernel itself stays aarch64 (Apple's VZ framework
-     can only host the host arch); the `--rosetta` flag wires
-     `binfmt_misc` inside the VM to Rosetta 2 so x86_64 *userspace*
-     binaries — including everything `docker run --platform
-     linux/amd64` puts inside the container — execute under Rosetta
-     translation at near-native speed.
-4. Wires `DOCKER_HOST` to the VM's socket and dispatches the build via
-   `docker run --platform linux/amd64 nixos/nix:latest ... nix run
-   /work#measure`.
+   - A Lima VM named `pqsigner-builder-nix` running Ubuntu LTS with
+     `--vm-type=vz --rosetta` on Apple Silicon (plain `--vm-type=vz`
+     on Intel). On Apple Silicon the VM kernel itself stays aarch64
+     (Apple's VZ framework can only host the host arch); the
+     `--rosetta` flag registers Rosetta 2 as the `binfmt_misc` handler
+     for x86_64 ELFs inside the VM, so x86_64 USERSPACE binaries
+     execute under Rosetta translation at near-native speed.
+   - Determinate Nix *inside* the VM, configured with
+     `extra-platforms = x86_64-linux` in `/etc/nix/nix.conf`.
+4. Dispatches the build via `limactl shell --workdir $PWD <vm>
+   nix run .#measure`. Inside the VM, Nix sees a
+   `system = aarch64-linux` host with `x86_64-linux` listed in
+   `extra-platforms`, accepts the x86_64-linux derivation, and
+   executes its build commands (rustc, ld, …) as x86_64 ELFs which
+   the kernel routes through Rosetta translation.
 
-Total interactions on a vanilla Mac: at most two sudo password prompts
-(Nix daemon install, Rosetta install). After the first run, every
-subsequent invocation is fully silent.
+This is the same architectural pattern that nix-darwin's
+`nix.linux-builder.enable = true;` uses internally, just without
+requiring a nix-darwin install on the host.
+
+**Why no Docker?** An earlier iteration of `./measure.sh` ran the
+build inside a `nixos/nix:latest` Docker container with `--platform
+linux/amd64`. On Apple Silicon hosts this hit reproducible
+`Input/output error` failures during overlay2 + containerd writes
+under Rosetta translation — a known Docker-on-VZ-on-Rosetta corner
+case. Removing the Docker layer eliminated the entire failure mode:
+the in-VM Nix daemon talks to its own `/nix/store` on a normal ext4
+partition, no overlay involved.
+
+Total interactions on a vanilla Mac: at most two sudo password
+prompts (host Nix daemon install, Rosetta install). After the first
+run, every subsequent invocation is fully silent.
 
 The whole stack lives under `$HOME` (no writes to `/Applications`,
 `/usr/local`, or system paths) and cohabits cleanly with whatever

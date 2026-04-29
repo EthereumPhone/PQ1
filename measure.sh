@@ -91,44 +91,62 @@ run_docker_measure() {
 }
 
 # ---------------------------------------------------------------------------
-# install_macos_lima_docker_stack
+# install_macos_lima_nix_stack  +  run_in_lima_vm
 #
-# Vanilla-macOS auto-install path: stand up a free, fully CLI-driven
-# Lima-managed Docker daemon so our existing Docker dispatch works.
-# Apple Silicon uses VZ + Rosetta for near-native linux/amd64 perf;
-# Intel macOS uses VZ directly (no emulation needed).
+# Vanilla-macOS auto-install path: stand up a Lima-managed Linux VM with
+# Nix installed *inside* the VM, configured to dispatch x86_64-linux
+# builds through Rosetta 2 binfmt. No Docker anywhere. This is the same
+# pattern nix-darwin's `nix.linux-builder.enable = true` uses
+# internally, just without requiring a nix-darwin install on the host.
+#
+# Why this and not Docker:
+#
+#   The earlier Docker-based path failed on Apple Silicon with
+#   `Input/output error` writing to overlay2 and containerd's boltdb
+#   when running linux/amd64 containers under Rosetta translation in
+#   Lima's VM. Even after switching to rootful Docker (writes go to
+#   /var/lib/docker on the VM's own disk, not the read-only home
+#   mount), the container's writable layer hit EIO on chmod and
+#   sqlite-fsync calls — a known Docker-on-Rosetta-on-VZ corner case.
+#   Eliminating Docker eliminates the problem entirely: there is only
+#   the VM, and Nix talks to its own /nix/store on a normal ext4
+#   filesystem, no overlay involved.
 #
 # What gets installed:
-#   - Rosetta 2 (Apple Silicon only; macOS-supplied, runs unattended)
-#   - Lima (https://lima-vm.io)        -> $HOME/.local/bin/limactl
-#   - Docker CLI (Docker official static tarball) -> $HOME/.local/bin/docker
-#   - A Lima-managed Ubuntu+Docker VM named "pqsigner-builder-rootful"
 #
-# Nothing requires Homebrew, Docker Desktop, OrbStack, Xcode CLT, or any
-# other pre-existing dev tooling beyond what stock macOS ships (curl, tar,
-# softwareupdate). The whole stack lives under $HOME (no /Applications, no
-# /usr/local writes) so it cleanly cohabits with whatever the user later
-# installs themselves.
+#   - Rosetta 2 (Apple Silicon only; macOS-supplied, unattended).
+#   - Lima (https://lima-vm.io) -> $HOME/.local/bin/limactl.
+#   - A plain Ubuntu LTS Lima VM "pqsigner-builder-nix" with --rosetta
+#     so the in-VM kernel registers Rosetta as the binfmt_misc handler
+#     for x86_64 ELFs.
+#   - Determinate Nix *inside* the VM, configured with
+#     `extra-platforms = x86_64-linux` so a derivation pinned to
+#     x86_64-linux builds locally on this aarch64 host and the build's
+#     x86_64 binaries (rustc, ld, …) execute via Rosetta translation.
 #
-# Versions are pinned for reproducibility of the ./measure.sh experience —
-# mismatched lima/docker pairings can produce confusing errors. Bump
-# together when refreshing.
+# Nothing requires Homebrew, Docker Desktop, OrbStack, Xcode CLT, or
+# any other pre-existing dev tooling beyond what stock macOS ships
+# (curl, tar, softwareupdate). The whole stack lives under $HOME (no
+# /Applications, no /usr/local writes) and cohabits cleanly with
+# whatever container tooling the user installs later.
+#
+# Versions are pinned for reproducibility of the ./measure.sh
+# experience. Bump LIMA_VERSION when refreshing.
 # ---------------------------------------------------------------------------
 LIMA_VERSION="2.1.1"
-DOCKER_CLI_VERSION="29.4.1"
-# Bump the suffix when changing the Lima template (rootless→rootful, etc.)
+# Bump the suffix when changing the Lima template or in-VM provisioning
 # so legacy VMs from older measure.sh runs are migrated, not reused.
-LIMA_VM_NAME="pqsigner-builder-rootful"
-LIMA_LEGACY_VM_NAMES=("pqsigner-builder")
+LIMA_VM_NAME="pqsigner-builder-nix"
+LIMA_LEGACY_VM_NAMES=("pqsigner-builder" "pqsigner-builder-rootful")
 
-install_macos_lima_docker_stack() {
-    say "Setting up linux/amd64 build capability via Lima + Docker."
-    say "(One-time setup — first VM boot takes ~2-4 minutes.)"
+install_macos_lima_nix_stack() {
+    say "Setting up x86_64-linux build capability via Lima + Nix-in-VM."
+    say "(One-time setup — first VM boot + Nix install takes ~3-5 minutes.)"
 
-    local arch lima_arch docker_arch
+    local arch lima_arch
     case "$(uname -m)" in
-        arm64)  arch=arm64;  lima_arch=Darwin-arm64;  docker_arch=aarch64 ;;
-        x86_64) arch=x86_64; lima_arch=Darwin-x86_64; docker_arch=x86_64 ;;
+        arm64)  arch=arm64;  lima_arch=Darwin-arm64 ;;
+        x86_64) arch=x86_64; lima_arch=Darwin-x86_64 ;;
         *) die "Unsupported macOS architecture: $(uname -m)" ;;
     esac
 
@@ -142,10 +160,6 @@ install_macos_lima_docker_stack() {
     if [ "$arch" = "arm64" ] \
         && ! /usr/bin/arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
         say "Installing Rosetta 2 (one-time; required for x86_64 emulation)."
-        # softwareupdate's --agree-to-license flag accepts Apple's EULA
-        # without an interactive dialog; some macOS versions still want
-        # sudo to actually drop the runtime into /Library/Apple, so we
-        # try unprivileged first and only escalate if that fails.
         if ! /usr/sbin/softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1; then
             say "  (re-trying with sudo — you may be prompted for your macOS password)"
             sudo /usr/sbin/softwareupdate --install-rosetta --agree-to-license \
@@ -154,7 +168,8 @@ install_macos_lima_docker_stack() {
     fi
 
     # ---- Lima ----
-    if ! command -v limactl >/dev/null 2>&1 || ! limactl --version 2>/dev/null | grep -q "$LIMA_VERSION"; then
+    if ! command -v limactl >/dev/null 2>&1 \
+        || ! limactl --version 2>/dev/null | grep -q "$LIMA_VERSION"; then
         local lima_url="https://github.com/lima-vm/lima/releases/download/v${LIMA_VERSION}/lima-${LIMA_VERSION}-${lima_arch}.tar.gz"
         say "Downloading Lima v${LIMA_VERSION}..."
         curl -fsSL "$lima_url" -o /tmp/lima.tgz \
@@ -165,82 +180,56 @@ install_macos_lima_docker_stack() {
     command -v limactl >/dev/null 2>&1 \
         || die "Lima install failed: limactl not on PATH ($HOME/.local/bin)."
 
-    # ---- Docker CLI ----
-    # Docker's static tarball ships only the docker binary (no daemon,
-    # no buildx) — exactly what we need. Lima provides the daemon.
-    if ! command -v docker >/dev/null 2>&1; then
-        local docker_url="https://download.docker.com/mac/static/stable/${docker_arch}/docker-${DOCKER_CLI_VERSION}.tgz"
-        say "Downloading Docker CLI v${DOCKER_CLI_VERSION}..."
-        curl -fsSL "$docker_url" -o /tmp/docker.tgz \
-            || die "Failed to download Docker CLI from $docker_url"
-        tar -xzf /tmp/docker.tgz -C /tmp/
-        cp /tmp/docker/docker "$HOME/.local/bin/docker"
-        chmod +x "$HOME/.local/bin/docker"
-        rm -rf /tmp/docker /tmp/docker.tgz
-    fi
-
-    # ---- Lima Docker VM (linux/amd64 via VZ + Rosetta on Apple Silicon) ----
-    # CRITICAL: on Apple Silicon, the VM's *kernel* must stay aarch64
-    # (Apple's VZ framework can only host the host arch). Linux x86_64
-    # USERSPACE binaries — including everything inside `docker run
-    # --platform linux/amd64` — execute via Rosetta 2 binfmt translation
-    # inside the aarch64 VM. Passing `--arch=x86_64` to `limactl create
-    # --vm-type=vz` makes Lima reject the config with
-    # `unsupported arch: "x86_64"`. Default arch = host arch is correct.
+    # ---- Lima VM (plain Ubuntu LTS + --rosetta on Apple Silicon) --------
+    # CRITICAL: on Apple Silicon, the VM kernel must stay aarch64 (Apple's
+    # VZ framework can only host the host arch). The --rosetta flag
+    # registers Rosetta as the binfmt_misc handler for x86_64 ELFs in the
+    # VM, so x86_64 USERSPACE — including the rustc/ld/cc that Nix
+    # invokes during the x86_64-linux build — runs at near-native speed.
+    # Passing --arch=x86_64 to vz makes Lima reject the config with
+    # `unsupported arch: "x86_64"`; default arch = host arch is correct.
     #
-    # On Intel macOS the VM kernel is x86_64 natively and Rosetta is
-    # irrelevant.
-    #
-    # We use template:docker-ROOTFUL, not template:docker. The rootless
-    # template stores its containerd metadata at ~/.local/share/docker
-    # — and Lima mounts ~ from the host READ-ONLY by default, so
-    # rootless dockerd dies with `Input/output error` the moment it
-    # tries to write its boltdb. Rootful dockerd writes to
-    # /var/lib/docker which lives on the VM's own writable disk.
-    #
-    # The 40 GiB disk gives Nix room to substitute its full closure
-    # (~5–8 GiB) plus the nixos/nix Docker layer (~600 MiB) and build
-    # scratch space without ENOSPC.
+    # 40 GiB disk: x86_64 Nix substitution closure (~5-8 GiB) + sandbox
+    # build scratch + headroom. 6 GiB RAM: enough for a parallel rustc
+    # invocation without thrashing.
     create_lima_vm() {
         if [ "$arch" = "arm64" ]; then
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz --rosetta \
-                --cpus=2 --memory=4 --disk=40 \
-                template:docker-rootful
+                --cpus=4 --memory=6 --disk=40 \
+                template:default
         else
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz \
-                --cpus=2 --memory=4 --disk=40 \
-                template:docker-rootful
+                --cpus=4 --memory=6 --disk=40 \
+                template:default
         fi
     }
 
     # ---- Migrate legacy VMs from older measure.sh runs ----
-    # Earlier ./measure.sh versions left behind rootless-Docker VMs
-    # named "pqsigner-builder" that hit EIO on the read-only home mount.
+    # Earlier ./measure.sh versions used rootless-Docker / rootful-Docker
+    # templates that hit different EIO modes under Rosetta+overlay2.
     # Wipe them so a single `git pull && ./measure.sh` self-heals.
     for legacy in "${LIMA_LEGACY_VM_NAMES[@]}"; do
         if [ "$legacy" != "$LIMA_VM_NAME" ] \
             && limactl list -q 2>/dev/null | grep -qx "$legacy"; then
-            warn "Removing legacy Lima VM '$legacy' (rootless-docker template, broken on Lima's read-only home mount)."
+            warn "Removing legacy Lima VM '$legacy' (Docker-based template, deprecated)."
             limactl stop --force "$legacy" 2>/dev/null || true
             limactl delete --force "$legacy" 2>/dev/null || true
         fi
     done
 
     if ! limactl list -q 2>/dev/null | grep -qx "$LIMA_VM_NAME"; then
-        say "Creating Lima Docker VM '$LIMA_VM_NAME'..."
+        say "Creating Lima VM '$LIMA_VM_NAME'..."
         create_lima_vm || die "Lima VM creation failed."
     fi
 
     if ! limactl list 2>/dev/null \
         | awk -v name="$LIMA_VM_NAME" 'NR>1 && $1==name {print $2}' \
         | grep -qx 'Running'; then
-        say "Starting Lima Docker VM (first boot takes ~2 minutes)..."
+        say "Starting Lima VM (first boot takes ~1-2 minutes)..."
         if ! limactl start "$LIMA_VM_NAME" 2>&1; then
-            # The most common cause is a broken VM left over from a
-            # previous failed run (e.g., bad --arch flag in older
-            # ./measure.sh). Self-heal: nuke and recreate, then retry.
+            # Self-heal: nuke and recreate if start fails.
             warn "VM '$LIMA_VM_NAME' won't start; recreating from clean state."
             limactl delete --force "$LIMA_VM_NAME" 2>/dev/null || true
             create_lima_vm || die "Lima VM re-creation failed."
@@ -248,23 +237,69 @@ install_macos_lima_docker_stack() {
         fi
     fi
 
-    # ---- Hand the docker CLI a path to Lima's daemon socket ----
-    export DOCKER_HOST="unix://${HOME}/.lima/${LIMA_VM_NAME}/sock/docker.sock"
-
-    # ---- Wait for daemon (the docker template installs+starts dockerd
-    # in a systemd unit on first boot, which takes a few seconds after
-    # the VM itself reports Running) ----
-    say "Waiting for Docker daemon inside the VM..."
-    local retries=120
-    while [ "$retries" -gt 0 ]; do
-        if docker info >/dev/null 2>&1; then
-            say "Docker daemon ready."
-            return 0
+    # ---- Provision Nix inside the VM ----------------------------------
+    # Idempotent: re-running ./measure.sh is cheap once Nix is installed.
+    # The Determinate installer's `install` subcommand auto-detects
+    # systemd on Ubuntu, sets up the multi-user nix-daemon, and adds a
+    # /etc/profile.d/ entry so subsequent `limactl shell` invocations
+    # find the `nix` binary.
+    #
+    # extra-platforms = x86_64-linux teaches the in-VM nix-daemon to
+    # treat the host as capable of building x86_64-linux derivations
+    # locally — relying on the kernel's binfmt_misc → Rosetta handler
+    # to actually execute the x86_64 ELFs. This is exactly how
+    # nix-darwin's linux-builder works under the hood.
+    say "Provisioning Nix inside the VM (skipped if already installed)..."
+    limactl shell "$LIMA_VM_NAME" bash -c '
+        set -e
+        if ! command -v nix >/dev/null 2>&1 && [ ! -d /nix ]; then
+            echo "[provision] Installing Determinate Nix..."
+            curl -fsSL https://install.determinate.systems/nix \
+                | sh -s -- install --no-confirm
         fi
-        sleep 1
-        retries=$((retries - 1))
-    done
-    die "Docker daemon never came up. Try: limactl stop $LIMA_VM_NAME && limactl start $LIMA_VM_NAME"
+        # Source the daemon profile script so this shell can see nix
+        # immediately for the config check below.
+        if [ -f /etc/profile.d/nix-daemon.sh ]; then
+            # shellcheck disable=SC1091
+            . /etc/profile.d/nix-daemon.sh
+        fi
+        if ! sudo grep -q "extra-platforms.*x86_64-linux" /etc/nix/nix.conf 2>/dev/null; then
+            echo "[provision] Enabling extra-platforms = x86_64-linux..."
+            echo "extra-platforms = x86_64-linux" | sudo tee -a /etc/nix/nix.conf >/dev/null
+            sudo systemctl restart nix-daemon || true
+            # systemd needs a moment to bring the daemon back up.
+            sleep 2
+        fi
+    ' || die "Nix provisioning inside the Lima VM failed."
+
+    say "Lima VM is up with Nix + Rosetta-x86_64-linux build capability."
+}
+
+# ---------------------------------------------------------------------------
+# run_in_lima_vm
+#
+# Dispatch the measurement build into the already-provisioned Lima VM.
+# --workdir cd's the VM-side shell to the same path the host is at;
+# Lima's default `~` mount makes the host repo accessible inside the VM
+# at the identical path (read-only, which is fine — Nix only *reads*
+# source from $PWD and writes its outputs into the VM's /nix/store).
+#
+# On the very first build the in-VM Nix substitutes ~5-8 GiB of x86_64
+# closure from cache.nixos.org. Subsequent runs are sub-minute.
+# ---------------------------------------------------------------------------
+run_in_lima_vm() {
+    exec limactl shell --workdir "$PWD" "$LIMA_VM_NAME" bash -c '
+        set -e
+        if [ -f /etc/profile.d/nix-daemon.sh ]; then
+            # shellcheck disable=SC1091
+            . /etc/profile.d/nix-daemon.sh
+        elif [ -f "$HOME/.nix-profile/etc/profile.d/nix.sh" ]; then
+            # shellcheck disable=SC1091
+            . "$HOME/.nix-profile/etc/profile.d/nix.sh"
+        fi
+        exec nix --extra-experimental-features "nix-command flakes" \
+            run .#measure
+    '
 }
 
 # ---------------------------------------------------------------------------
@@ -368,26 +403,22 @@ if [ "$host_system" != "x86_64-linux" ]; then
     fi
 
     if [ "$has_linux_builder" -eq 0 ]; then
-        # ---- macOS auto-install: Lima + Docker ---------------------------
-        # On vanilla macOS (no Docker, no linux-builder), auto-stand-up a
-        # Lima-managed Docker daemon. After this step Docker is on PATH
-        # via $HOME/.local/bin and DOCKER_HOST is wired to Lima's socket,
-        # so the existing Docker fallback below dispatches the build the
-        # same way as if the user had installed Docker themselves.
-        # ~/.local/bin gets prepended for the rest of this script as well
-        # as future invocations (assuming the user's shell rc adds it).
-        if [ "$(uname -s)" = "Darwin" ] \
-            && ! { command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; }; then
-            install_macos_lima_docker_stack
+        # ---- macOS auto-install: Lima VM + Nix-in-VM via Rosetta ---------
+        # On macOS (Intel or Apple Silicon), bring up a Lima VM, install
+        # Nix inside it, and dispatch the build into the VM via
+        # `limactl shell`. No Docker layer involved — this avoids the
+        # overlay2/containerd EIO failures that plagued the Docker-based
+        # path under Rosetta translation.
+        if [ "$(uname -s)" = "Darwin" ]; then
+            install_macos_lima_nix_stack
+            run_in_lima_vm
+            # run_in_lima_vm exec's; control never returns here.
         fi
 
-        # ---- Docker fallback --------------------------------------------
-        # No linux-builder, but if Docker is up we can run the entire Nix
-        # build inside a linux/amd64 container. Inside the container
-        # `currentSystem == x86_64-linux` so the flake builds natively
-        # against its own pinned closure — same bytes, same words, no
-        # Mac-side Nix involved. On Apple Silicon, Docker Desktop and
-        # OrbStack run linux/amd64 via Rosetta 2; works out of the box.
+        # ---- Docker fallback (Linux aarch64 / WSL2 / other) --------------
+        # If we got here, we're not on macOS. Try host Docker as a generic
+        # fallback for Linux aarch64 hosts that can't natively build
+        # x86_64-linux derivations.
         if command -v docker >/dev/null 2>&1 \
             && docker info >/dev/null 2>&1; then
             say "No linux-builder; dispatching build through Docker (linux/amd64)…"
@@ -402,29 +433,16 @@ $(printf '\033[1;31m==> Cannot build the reproducible measurement on this host.\
 
 This host is '$host_system'. The build is pinned to x86_64-linux so
 every host gets byte-identical output. ./measure.sh can satisfy that
-in two ways and neither is currently available:
+via:
 
-  1. A configured x86_64-linux Nix builder (linux-builder VM, remote
+  1. A native x86_64-linux Nix builder (linux-builder VM, remote
      builder via /etc/nix/machines, or binfmt+qemu on Linux aarch64).
-
-  2. A working Docker daemon. ./measure.sh will auto-dispatch the
-     build into a linux/amd64 container if Docker is up.
+  2. A working Docker daemon (auto-dispatches into linux/amd64).
+  3. (macOS only) A Lima VM with Nix-in-VM + Rosetta — auto-installed
+     by ./measure.sh.
 
 EOF
         case "$(uname -s)" in
-            Darwin)
-                cat >&2 <<'EOF'
-./measure.sh attempted to auto-install Lima + Docker but the daemon
-did not come up. The most common reasons:
-  - macOS < 13 (Apple Virtualization framework requires Ventura+).
-  - Lima failed to download (check network).
-  - The Docker daemon inside the VM did not start.
-
-Try one of:
-  - limactl stop pqsigner-builder-rootful && limactl start pqsigner-builder-rootful
-  - Install Docker Desktop or OrbStack manually, then re-run.
-EOF
-                ;;
             Linux)
                 cat >&2 <<'EOF'
 Install Docker, OR enable binfmt_misc + qemu-user:
