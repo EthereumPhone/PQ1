@@ -238,17 +238,32 @@ install_macos_lima_nix_stack() {
     fi
 
     # ---- Provision Nix inside the VM ----------------------------------
-    # Idempotent: re-running ./measure.sh is cheap once Nix is installed.
     # The Determinate installer's `install` subcommand auto-detects
     # systemd on Ubuntu, sets up the multi-user nix-daemon, and adds a
     # /etc/profile.d/ entry so subsequent `limactl shell` invocations
     # find the `nix` binary.
     #
-    # extra-platforms = x86_64-linux teaches the in-VM nix-daemon to
-    # treat the host as capable of building x86_64-linux derivations
-    # locally — relying on the kernel's binfmt_misc → Rosetta handler
-    # to actually execute the x86_64 ELFs. This is exactly how
-    # nix-darwin's linux-builder works under the hood.
+    # Three settings the daemon needs:
+    #   - extra-experimental-features = nix-command flakes  (so `nix run`
+    #     works without per-invocation flags inside the VM).
+    #   - extra-platforms = x86_64-linux  (so the daemon accepts x86_64
+    #     derivations on this aarch64 host; kernel's binfmt_misc →
+    #     Rosetta executes the x86_64 ELFs).
+    #   - trusted-users = root @sudo @wheel  (so the lima user can
+    #     override these via --option as a belt-and-braces fallback if
+    #     the file-based config isn't picked up for any reason).
+    #
+    # Three things have bitten us in earlier iterations:
+    #   1. Appending to /etc/nix/nix.conf without a leading newline
+    #      glues onto whatever's on the file's last line if the file
+    #      doesn't end with \n. We unconditionally `printf "\n..."` to
+    #      avoid that.
+    #   2. `systemctl restart nix-daemon` returns 0 even when the unit
+    #      doesn't exist (with `|| true`). We try multiple service
+    #      names and verify after.
+    #   3. After restart we explicitly verify via `nix show-config`
+    #      that the daemon actually picked up the new platform list,
+    #      and shout if it didn't.
     say "Provisioning Nix inside the VM (skipped if already installed)..."
     limactl shell "$LIMA_VM_NAME" bash -c '
         set -e
@@ -257,18 +272,62 @@ install_macos_lima_nix_stack() {
             curl -fsSL https://install.determinate.systems/nix \
                 | sh -s -- install --no-confirm
         fi
-        # Source the daemon profile script so this shell can see nix
-        # immediately for the config check below.
+        # Source the daemon profile script so this shell can see nix.
         if [ -f /etc/profile.d/nix-daemon.sh ]; then
             # shellcheck disable=SC1091
             . /etc/profile.d/nix-daemon.sh
         fi
-        if ! sudo grep -q "extra-platforms.*x86_64-linux" /etc/nix/nix.conf 2>/dev/null; then
-            echo "[provision] Enabling extra-platforms = x86_64-linux..."
-            echo "extra-platforms = x86_64-linux" | sudo tee -a /etc/nix/nix.conf >/dev/null
-            sudo systemctl restart nix-daemon || true
-            # systemd needs a moment to bring the daemon back up.
+
+        # Ensure /etc/nix/nix.conf has the settings we need. The
+        # leading "\n" guarantees we never glue our line onto the
+        # previous line if the file lacks a trailing newline.
+        ensure_setting() {
+            local key=$1 value=$2
+            if ! sudo grep -qE "^[[:space:]]*${key}[[:space:]]*=.*${value}" \
+                /etc/nix/nix.conf 2>/dev/null; then
+                printf "\n%s = %s\n" "$key" "$value" \
+                    | sudo tee -a /etc/nix/nix.conf >/dev/null
+                return 0   # changed
+            fi
+            return 1       # already set
+        }
+        changed=0
+        ensure_setting extra-experimental-features "nix-command flakes" && changed=1
+        ensure_setting extra-platforms             x86_64-linux           && changed=1
+        ensure_setting trusted-users               "root @sudo @wheel"    && changed=1
+
+        if [ "$changed" -eq 1 ]; then
+            echo "[provision] /etc/nix/nix.conf updated; restarting nix-daemon..."
+            restarted=0
+            for svc in nix-daemon.service determinate-nixd.service; do
+                if sudo systemctl restart "$svc" 2>/dev/null; then
+                    echo "[provision] Restarted $svc."
+                    restarted=1
+                    break
+                fi
+            done
+            if [ "$restarted" -eq 0 ]; then
+                # Fallback: kill the daemon and let systemd socket activation
+                # respawn it on the next nix invocation.
+                echo "[provision] systemctl restart didnt match a known service name; killing daemon to force reload."
+                sudo pkill -TERM -f "nix-daemon|determinate-nixd" 2>/dev/null || true
+            fi
+            # Wait for the daemon socket to be back.
+            for _i in $(seq 30); do
+                [ -S /nix/var/nix/daemon-socket/socket ] && break
+                sleep 1
+            done
             sleep 2
+        fi
+
+        # Verify the daemon actually serves x86_64-linux now.
+        if nix --extra-experimental-features nix-command show-config 2>/dev/null \
+            | grep -E "^extra-platforms" | grep -q "x86_64-linux"; then
+            echo "[provision] OK: extra-platforms = x86_64-linux is active."
+        else
+            echo "[provision] WARNING: extra-platforms not visible to client."
+            echo "[provision] /etc/nix/nix.conf tail:"
+            sudo tail -10 /etc/nix/nix.conf
         fi
     ' || die "Nix provisioning inside the Lima VM failed."
 
@@ -288,6 +347,10 @@ install_macos_lima_nix_stack() {
 # closure from cache.nixos.org. Subsequent runs are sub-minute.
 # ---------------------------------------------------------------------------
 run_in_lima_vm() {
+    # --option extra-platforms x86_64-linux is belt-and-braces: even if
+    # /etc/nix/nix.conf lost the setting somehow, the lima user is in
+    # trusted-users (set during provisioning) so this --option override
+    # will be honored by the daemon for this build.
     exec limactl shell --workdir "$PWD" "$LIMA_VM_NAME" bash -c '
         set -e
         if [ -f /etc/profile.d/nix-daemon.sh ]; then
@@ -298,6 +361,7 @@ run_in_lima_vm() {
             . "$HOME/.nix-profile/etc/profile.d/nix.sh"
         fi
         exec nix --extra-experimental-features "nix-command flakes" \
+            --option extra-platforms x86_64-linux \
             run .#measure
     '
 }
