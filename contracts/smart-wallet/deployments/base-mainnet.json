@@ -1,7 +1,7 @@
 {
-  "chainId": 84532,
-  "chainName": "base-sepolia",
-  "rpcUrl": "https://sepolia.base.org",
+  "chainId": 8453,
+  "chainName": "base-mainnet",
+  "rpcUrl": "https://mainnet.base.org",
   "deployer": "0x00137482d6b37eBb235A463D748191D925D92eB3",
   "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
   "salts": {
@@ -17,5 +17,5 @@
   },
   "proxyInitCodeHash": "0x81bf5ce06e60f71c41de86991b75639e32d967b8e9d412b706a1c24e25aadc4c",
   "verified": false,
-  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Verifier+impl+factory regenerated after the EIP-1271 / off-chain-counter on-chain rework. Source intentionally NOT published."
+  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; byte-identical to the Base Sepolia addresses under FOUNDRY_PROFILE=deploy. Source intentionally NOT published."
 }

@@ -1085,19 +1085,19 @@ issue.
 
 ### Selectors
 
-| Selector     | Function                                  |
-|--------------|-------------------------------------------|
-| `0xb61d27f6` | `execute(address,uint256,bytes)`          |
-| `0x101490cb` | `addOwnerBytes(bytes)`                    |
+| Selector     | Function                                                                  |
+|--------------|---------------------------------------------------------------------------|
+| `0x14443c57` | `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`         |
+| `0x101490cb` | `addOwnerBytes(bytes)`                                                    |
 
-### Addresses (Base Sepolia reference deployment)
+### Addresses (deterministic CREATE2 — same on Base Sepolia and Base Mainnet)
 
 | Contract                 | Address                                      |
 |--------------------------|----------------------------------------------|
 | EntryPoint v0.6          | `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789` |
-| SPHINCsC10Asm verifier   | `0x2f9DA5543957c5933aC326E109e775097f0079d9` |
-| PQSmartWallet impl       | `0x2f590E0a3FF41C706d25CD6BC8b496DD84a2f679` |
-| PQSmartWalletFactory     | `0x375eBb4E502B94F9e8b99Fdd0b0e882a9d9dD6fB` |
+| SPHINCsC10Asm verifier   | `0xb32e32a532d03a160ceb35af39b4a95ba4881fc7` |
+| PQSmartWallet impl       | `0x155d7da5feef1811214a1271335a19fb3fce8f1e` |
+| PQSmartWalletFactory     | `0x67943487e9e41a9ee5f5f7a10f18aa82fe19e03b` |
 
 Run-the-tool defaults (RPC: `https://sepolia.base.org`, beneficiary:
 `0x00137482d6b37eBb235A463D748191D925D92eB3`). Mainnet / other L2

@@ -714,8 +714,8 @@ pub const OFFCHAIN_STATUS_OUTPUT_REGISTERED_OFF: usize = 16;
 /// to a different `salt`, tweaking the compiler settings, or changing
 /// the constructor args will change this address everywhere.
 pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [
-    0x37, 0x5e, 0xBb, 0x4E, 0x50, 0x2B, 0x94, 0xF9, 0xe8, 0xb9,
-    0x9F, 0xdd, 0x0b, 0x0e, 0x88, 0x2a, 0x9d, 0x9d, 0xD6, 0xfB,
+    0x67, 0x94, 0x34, 0x87, 0xe9, 0xE4, 0x1a, 0x9E, 0xE5, 0xF5,
+    0xF7, 0xA1, 0x0f, 0x18, 0xaa, 0x82, 0xfE, 0x19, 0xE0, 0x3B,
 ];
 
 /// `keccak256(erc1967ProxyInitCode(impl))` where `impl` is the Coinbase-
@@ -729,10 +729,10 @@ pub const PQ_SMART_WALLET_FACTORY: [u8; 20] = [
 ///   `addr = keccak256(0xff || factory || salt || PROXY_INIT_CODE_HASH)[12..]`
 /// where `salt = sha256(masterPkSeed(32) || masterPkRoot(32))`.
 pub const PROXY_INIT_CODE_HASH: [u8; 32] = [
-    0xdb, 0xa8, 0xc2, 0x82, 0xfc, 0xb7, 0x9f, 0xd4,
-    0x81, 0x30, 0x8d, 0xbb, 0x76, 0xfe, 0x14, 0xa6,
-    0xe8, 0xb1, 0x19, 0x50, 0xc5, 0x4b, 0x10, 0x28,
-    0xeb, 0x36, 0xb5, 0x65, 0x5a, 0x69, 0xe8, 0x5b,
+    0x81, 0xbf, 0x5c, 0xe0, 0x6e, 0x60, 0xf7, 0x1c,
+    0x41, 0xde, 0x86, 0x99, 0x1b, 0x75, 0x63, 0x9e,
+    0x32, 0xd9, 0x67, 0xb8, 0xe9, 0xd4, 0x12, 0xb7,
+    0x06, 0xa1, 0xc2, 0x4e, 0x25, 0xaa, 0xdc, 0x4c,
 ];
 
 /// ABI selector for
@@ -1057,82 +1057,12 @@ pub const SAFE_OFF_NONCE: usize = 249;
 // Sanity assertion: the canonical layout adds up to SAFE_V1_CANONICAL_LEN.
 const _: () = assert!(SAFE_OFF_NONCE + 32 == SAFE_V1_CANONICAL_LEN);
 
-/// Bootstrap context tags for SIGN_BOOTSTRAP trusted-UI display.
-/// **DEPRECATED** along with CMD_SIGN_BOOTSTRAP.
-pub const CTX_DEPLOY: u8 = 0x00;
-pub const CTX_ROTATE: u8 = 0x01;
-pub const CTX_GENERIC: u8 = 0x02;
-
-// ---------------------------------------------------------------------------
-// initCode construction constants (first-deployment UserOps)
-// ---------------------------------------------------------------------------
-
-/// Placeholder factory address for initCode generation.
-///
-/// **MUST be replaced with the actual deployed PQCoinbaseSmartWalletFactory
-/// address before production use.** The null address will produce a valid
-/// initCode structure but the EntryPoint will revert because no factory
-/// exists at address(0).
-pub const FACTORY_ADDRESS: [u8; 20] = [0u8; 20];
-
-/// ABI selector for `createAccount(bytes32,bytes32,bytes32,bytes32,bytes)`.
-/// Equals `keccak256("createAccount(bytes32,bytes32,bytes32,bytes32,bytes)")[:4]`.
-/// Verified against `cast sig` from Foundry.
-pub const CREATE_ACCOUNT_SELECTOR: [u8; 4] = [0x19, 0x64, 0xc4, 0xdd];
-
-/// Fixed initCode length for SPHINCS+C7:
-///   factory(20) + selector(4) + 4 static bytes32(128) + offset(32)
-///   + length(32) + padded_signature(3712) = 3,928
-///
-/// ABI layout of `createAccount(bytes32,bytes32,bytes32,bytes32,bytes)`:
-/// ```text
-///   [   0..  20)  factory address (NOT part of ABI, prepended per ERC-4337)
-///   [  20..  24)  selector 0x1964c4dd
-///   [  24..  56)  bootstrapPkSeed   (bytes32)
-///   [  56..  88)  bootstrapPkRoot   (bytes32)
-///   [  88.. 120)  mainPkSeed        (bytes32)
-///   [ 120.. 152)  mainPkRoot        (bytes32)
-///   [ 152.. 184)  offset to bytes   (= 0xA0 = 160)
-///   [ 184.. 216)  length of bytes   (= 4008)
-///   [ 216..4248)  bootstrapSig      (4008 bytes + 24 bytes zero-padding to 32-byte boundary)
-/// ```
-///
-/// The signature is 4,008 bytes (not 32-byte aligned: 4008 % 32 = 8),
-/// so 24 bytes of ABI zero-padding are appended to reach the next
-/// 32-byte boundary (4,032 bytes padded).
-pub const INIT_CODE_LEN: usize =
-    20 + 4 + 4 * 32 + 32 + 32 + ((SIGNATURE_LEN + 31) / 32) * 32; // 4_248
-
-/// Maximum reconstructed `execute(target, value, data)` callData size:
-/// selector(4) + target(32) + value(32) + offset(32) + length(32)
-/// + data padded to 32-byte boundary ≈ 132 + MAX_TX_LEN rounded up.
+/// Maximum reconstructed `executeWithOffchainCount(uint256 ownerIndex,
+/// uint256 newOffchainCount, address target, uint256 value, bytes data)`
+/// callData size: selector(4) + 5 fixed head slots(160) + bytes-offset(32)
+/// + bytes-length(32) + data padded to 32-byte boundary. Bounded by
+/// `MAX_TX_LEN` (4096) for the inner data.
 pub const MAX_EXECUTE_CALLDATA_LEN: usize = 4 * 1024 + 256; // 4352
-
-/// Maximum full UserOp response size:
-///   init_code_len(4) + initCode(INIT_CODE_LEN) + call_data_len(4)
-///   + max callData(MAX_EXECUTE_CALLDATA_LEN) + signatureWrapper(WRAPPER_TOTAL_LEN)
-///
-/// For the not-deployed case. The deployed case is much smaller
-/// (init_code_len=0, no initCode body).
-pub const MAX_USEROP_RESPONSE_LEN: usize =
-    4 + INIT_CODE_LEN + 4 + MAX_EXECUTE_CALLDATA_LEN + WRAPPER_TOTAL_LEN;
-
-/// SIGN_USEROP v2 P2 values for deployment mode.
-pub const P2_DEPLOYED: u8 = 0x00;
-pub const P2_NOT_DEPLOYED: u8 = 0x01;
-
-/// v2 SIGN_USEROP fixed header length (before tx_len):
-///   key_index(4) + ots_index(4) + sender(20) + entry_point(20) +
-///   chain_id(8) + nonce(32) + call_gas(32) + ver_gas(32) +
-///   pre_gas(32) + max_fee(32) + max_prio(32) + init_code_hash(32) +
-///   paymaster_hash(32) = 312
-pub const USEROP_V2_HEADER_LEN: usize = 4 + 4 + 20 + 20 + 8 + 32 * 8;
-
-// v2 AA payload (after key_index+ots_index) must equal v1 header minus has_bundle byte.
-const _: () = assert!(
-    USEROP_V2_HEADER_LEN - 8 == USEROP_HEADER_LEN - 1,
-    "v2 AA header size must match v1 (minus has_bundle)"
-);
 
 /// v2 protocol version reported in GET_DEVICE_INFO.
 pub const PROTOCOL_VERSION: u16 = 0x0200;

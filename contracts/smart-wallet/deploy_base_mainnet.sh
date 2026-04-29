@@ -15,7 +15,6 @@ cd "$(dirname "$0")"
 RPC="${RPC_URL:-https://mainnet.base.org}"
 ACCOUNT="${ACCOUNT:-mhaas}"
 SCRIPT_SOL="script/DeployImplAndFactoryBaseMainnet.s.sol"
-VERIFIER="0x2f9DA5543957c5933aC326E109e775097f0079d9"
 ENTRYPOINT="0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
 ARACHNID="0x4e59b44847b379578588920cA78FbF26c0B4956C"
 
@@ -50,7 +49,6 @@ echo
 
 echo "EntryPoint v0.6  $ENTRYPOINT  code-len=$(cast code "$ENTRYPOINT"  --rpc-url "$RPC" | wc -c)"
 echo "Arachnid CREATE2 $ARACHNID   code-len=$(cast code "$ARACHNID"   --rpc-url "$RPC" | wc -c)"
-echo "Verifier         $VERIFIER    code-len=$(cast code "$VERIFIER"   --rpc-url "$RPC" | wc -c)"
 echo
 
 echo "=== Build (deploy profile) ==="
