@@ -33,6 +33,7 @@ mod transport {
     const CMD_GET_INIT_CODE: u32 = 15;
     const CMD_SIGN_OFFCHAIN: u32 = 16;
     const CMD_OFFCHAIN_STATUS: u32 = 17;
+    const CMD_SIGN_USEROP_BATCH: u32 = 30;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
         core::ptr::write_volatile(SHARED_DONE, 0);
@@ -64,6 +65,22 @@ mod transport {
         total_len: u32,
     ) -> u32 {
         unsafe { gateway_call(CMD_SIGN_USEROP, payload_ptr as u32, sig_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn sign_userop_batch_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe {
+            gateway_call(
+                CMD_SIGN_USEROP_BATCH,
+                payload_ptr as u32,
+                sig_ptr as u32,
+                total_len,
+            )
+        }
     }
 
     #[inline]
@@ -128,6 +145,7 @@ mod transport {
         fn nsc_get_remaining_attempts() -> u32;
         fn nsc_request_unlock() -> u32;
         fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        fn nsc_sign_userop_batch(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
         fn nsc_is_unlocked() -> u32;
         fn nsc_lock() -> u32;
         fn nsc_get_wallet_address(out_ptr: u32, account_index: u32) -> u32;
@@ -163,6 +181,15 @@ mod transport {
         total_len: u32,
     ) -> u32 {
         unsafe { nsc_sign_userop(payload_ptr as u32, sig_ptr as u32, total_len) }
+    }
+
+    #[inline]
+    pub(super) fn sign_userop_batch_call(
+        payload_ptr: *const u8,
+        sig_ptr: *mut u8,
+        total_len: u32,
+    ) -> u32 {
+        unsafe { nsc_sign_userop_batch(payload_ptr as u32, sig_ptr as u32, total_len) }
     }
 
     #[inline]
@@ -256,6 +283,20 @@ pub fn request_unlock() -> u32 {
 /// bundled response (`MAX_SIGN_RESPONSE_LEN` bytes).
 pub fn sign_userop(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
     transport::sign_userop_call(payload.as_ptr(), sig_buf.as_mut_ptr(), payload.len() as u32)
+}
+
+/// Atomic batch sign — see `sphincs_tz_shared::CMD_SIGN_USEROP_BATCH`.
+///
+/// `payload` is the `SIGN_USEROP_BATCH_HEADER_LEN`-byte header plus N
+/// repeated `(to(20) || value(32) || data_len(2 BE) || data)` inner-tx
+/// blocks. `sig_buf` must hold `MAX_SIGN_RESPONSE_LEN` bytes — the
+/// response framing is byte-identical to `sign_userop`.
+pub fn sign_userop_batch(payload: &[u8], sig_buf: &mut [u8]) -> u32 {
+    transport::sign_userop_batch_call(
+        payload.as_ptr(),
+        sig_buf.as_mut_ptr(),
+        payload.len() as u32,
+    )
 }
 
 /// Returns 1 if the device is PIN-unlocked this session, 0 otherwise.

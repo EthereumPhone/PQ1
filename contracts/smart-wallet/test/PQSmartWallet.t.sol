@@ -615,6 +615,177 @@ contract PQSmartWalletTest is Test {
         assertEq(w.bootstrapUses(), 0, "EIP-1271 must NOT bump bootstrapUses");
     }
 
+    // ── Batch-sign path ─────────────────────────────────────────────
+    //
+    // The firmware's `CMD_SIGN_USEROP_BATCH` builds Type 2 callData via
+    // `executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`
+    // (selector 0x7a389933). The on-chain `_isSlotAllowedSelector`
+    // already accepts that selector alongside `executeWithOffchainCount`,
+    // so the wallet validates batch signatures on the same code path
+    // that handles single-tx ones. These tests pin down:
+    //
+    //   * the selector matches what the firmware bakes in
+    //     (`shared::EXECUTE_BATCH_SELECTOR`),
+    //   * a slot sig over a batch UserOp validates and bumps slotUses,
+    //   * the bootstrap key cannot sign batch calldata,
+    //   * `executeBatchWithOffchainCount` runs every inner call,
+    //   * length-mismatched batch calldata reverts inside execute,
+    //   * the off-chain count update + combined-cap enforcement
+    //     applies to the batch path identically.
+    //
+    // Mirrors the per-test-case structure of `test_slotSignValidate`
+    // / `test_executeWithOffchainCount_*`.
+
+    /// @dev The firmware-side `EXECUTE_BATCH_SELECTOR` constant must
+    ///      match this contract's selector for
+    ///      `executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`.
+    function test_executeBatchSelector() public view {
+        bytes4 onChain = PQSmartWallet.executeBatchWithOffchainCount.selector;
+        bytes4 expected = bytes4(0x7a389933); // mirror sphincs_tz_shared::EXECUTE_BATCH_SELECTOR
+        assertEq(onChain, expected, "executeBatchWithOffchainCount selector drifted");
+    }
+
+    function test_batchSlotSignValidate() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        address[] memory tos = new address[](2);
+        tos[0] = address(0xbeef);
+        tos[1] = address(0xfeed);
+        uint256[] memory vals = new uint256[](2);
+        vals[0] = 0;
+        vals[1] = 0;
+        bytes[] memory ds = new bytes[](2);
+        ds[0] = "";
+        ds[1] = "";
+
+        bytes memory callData = abi.encodeCall(
+            w.executeBatchWithOffchainCount, (1, 0, tos, vals, ds)
+        );
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+        vm.prank(ENTRY_POINT_ADDR);
+        uint256 vd = w.validateUserOp(
+            _packedOp(address(w), callData, sig), bytes32(uint256(0xabc)), 0
+        );
+        assertEq(vd, 0, "slot sig over executeBatch must validate");
+        assertEq(w.slotUses(1), 1, "batch sig bumps slotUses by 1");
+        assertEq(w.bootstrapUses(), 0);
+    }
+
+    function test_batchBootstrapForbidden() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        address[] memory tos = new address[](1);
+        tos[0] = address(0xbeef);
+        uint256[] memory vals = new uint256[](1);
+        bytes[] memory ds = new bytes[](1);
+        ds[0] = "";
+
+        bytes memory callData = abi.encodeCall(
+            w.executeBatchWithOffchainCount, (1, 0, tos, vals, ds)
+        );
+        // ownerIndex = 0 → bootstrap. Bootstrap is only allowed to call
+        // `addOwnerBytes`. Batch (or any non-addOwner selector) under
+        // bootstrap MUST fail.
+        bytes memory sig = _wrapSig(0, _fakeC10Sig());
+        vm.prank(ENTRY_POINT_ADDR);
+        uint256 vd = w.validateUserOp(
+            _packedOp(address(w), callData, sig), bytes32(uint256(0xabc)), 0
+        );
+        assertEq(vd, 1, "bootstrap MUST NOT sign executeBatch");
+        assertEq(w.bootstrapUses(), 0);
+    }
+
+    /// Recipient stub used to verify executeBatch dispatched into each
+    /// inner target with the right call+value.
+    function test_executeBatchWithOffchainCount_runsInnerCalls() public {
+        PQSmartWallet w = _deployWallet();
+
+        // Three throw-away recipient contracts that record what they
+        // received. Use simple address-with-payable-receive contracts.
+        BatchRecorder r0 = new BatchRecorder();
+        BatchRecorder r1 = new BatchRecorder();
+        BatchRecorder r2 = new BatchRecorder();
+
+        address[] memory tos = new address[](3);
+        tos[0] = address(r0);
+        tos[1] = address(r1);
+        tos[2] = address(r2);
+        uint256[] memory vals = new uint256[](3);
+        vals[0] = 0;
+        vals[1] = 0;
+        vals[2] = 0;
+        bytes[] memory ds = new bytes[](3);
+        ds[0] = abi.encodeCall(BatchRecorder.bump, (uint256(11)));
+        ds[1] = abi.encodeCall(BatchRecorder.bump, (uint256(22)));
+        ds[2] = abi.encodeCall(BatchRecorder.bump, (uint256(33)));
+
+        // First publish offchainCount=5 via the batch.
+        vm.prank(ENTRY_POINT_ADDR);
+        w.executeBatchWithOffchainCount(1, 5, tos, vals, ds);
+
+        // Each recorder saw its respective bump.
+        assertEq(r0.value(), 11, "r0 saw call 0");
+        assertEq(r1.value(), 22, "r1 saw call 1");
+        assertEq(r2.value(), 33, "r2 saw call 2");
+        // Off-chain count published.
+        assertEq(w.offchainSigCount(1), 5);
+    }
+
+    function test_executeBatchWithOffchainCount_arrayLengthMismatchReverts() public {
+        PQSmartWallet w = _deployWallet();
+        address[] memory tos = new address[](2);
+        uint256[] memory vals = new uint256[](2);
+        bytes[] memory ds = new bytes[](1);
+        tos[0] = address(0x1); tos[1] = address(0x2);
+        vals[0] = 0; vals[1] = 0;
+        ds[0] = "";
+        vm.prank(ENTRY_POINT_ADDR);
+        vm.expectRevert(bytes("length mismatch"));
+        w.executeBatchWithOffchainCount(1, 0, tos, vals, ds);
+    }
+
+    function test_batch_combinedCapEnforcedByValidate() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        // Pre-load offchain counter to 65,535 (one short of cap) and
+        // slotUses=0 — exactly the same edge condition the single-tx
+        // path is checked against in `test_validateUserOp_rejectsType2WhenCombinedCapHit`,
+        // but exercised through the batch selector.
+        bytes32 base = 0x470749eea5ac4a541d6582e535445f94e7300bac9e0e4e5577fd3336b407d000;
+        bytes32 mapSlot = bytes32(uint256(base) + 6); // offchainSigCount
+        bytes32 entrySlot = keccak256(abi.encode(uint256(1), mapSlot));
+        vm.store(address(w), entrySlot, bytes32(uint256(65_535)));
+
+        address[] memory tos = new address[](1);
+        tos[0] = address(0xbeef);
+        uint256[] memory vals = new uint256[](1);
+        bytes[] memory ds = new bytes[](1);
+        ds[0] = "";
+        bytes memory callData = abi.encodeCall(
+            w.executeBatchWithOffchainCount, (1, 65_535, tos, vals, ds)
+        );
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+
+        // First batch: slotUses=0, offchain=65,535, sum=65,535 < cap → PASS
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(
+            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(1)), 0),
+            0
+        );
+        assertEq(w.slotUses(1), 1);
+
+        // Second batch: slotUses=1, offchain=65,535, sum=65,536 == cap → REFUSE
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(
+            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(2)), 0),
+            1
+        );
+        assertEq(w.slotUses(1), 1, "second batch must NOT bump");
+    }
+
     function test_isValidSignature_replayAcrossWalletsBlocked() public {
         // Two wallets with the SAME slot pubkey (same seed → same key in
         // the recovery contract). The mock verifier accepts any sig
@@ -648,4 +819,14 @@ contract PQSmartWalletTest is Test {
         assertEq(verB, address(b));
         assertTrue(verA != verB, "domain separator must differ per wallet");
     }
+}
+
+/// @notice Tiny stub used by `test_executeBatchWithOffchainCount_runsInnerCalls`
+///         to confirm each inner batch call landed.
+contract BatchRecorder {
+    uint256 public value;
+    function bump(uint256 v) external {
+        value = v;
+    }
+    receive() external payable {}
 }

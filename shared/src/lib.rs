@@ -315,6 +315,52 @@ pub const CMD_GET_INIT_CODE: u32 = 15;
 ///   * `arg2` — input length (must equal `SIGN_OFFCHAIN_INPUT_LEN`).
 pub const CMD_SIGN_OFFCHAIN: u32 = 16;
 
+/// CMD_SIGN_USEROP_BATCH — atomic multi-call UserOp signing.
+///
+/// Like [`CMD_SIGN_USEROP`] but the inner-tx block is replaced by a
+/// `batch_count u8` followed by N `(to, value, data)` blocks. The
+/// secure world:
+///   1. Renders + confirms each inner tx independently on the trusted
+///      UI (clear-signing preserved per-tx, plus a final "sign batch?"
+///      gate).
+///   2. Builds the canonical
+///      `executeBatchWithOffchainCount(ownerIndex, newOffchainCount,
+///      address[], uint256[], bytes[])` calldata.
+///   3. Hashes the resulting UserOp under SHA-256 and signs as today.
+///
+/// Output bundle layout is byte-identical to [`CMD_SIGN_USEROP`]'s,
+/// so the companion's transport / parser stays the same. Only the
+/// resulting `callData` it submits via the EntryPoint is different
+/// (`executeBatchWithOffchainCount` instead of
+/// `executeWithOffchainCount`).
+///
+/// ## Wire format (all integers big-endian unless noted)
+///
+/// ```text
+///   [  0..  8)  chain_id   u64 BE
+///   [  8.. 12)  flags      u32 BE   (same layout as CMD_SIGN_USEROP)
+///   [ 12.. 32)  sender              20 B
+///   [ 32.. 52)  entry_point         20 B
+///   [ 52.. 84)  nonce               u256 BE
+///   [ 84..116)  call_gas_limit      u256 BE
+///   [116..148)  verification_gas    u256 BE
+///   [148..180)  pre_verification    u256 BE
+///   [180..212)  max_fee_per_gas     u256 BE
+///   [212..244)  max_prio_per_gas    u256 BE
+///   [244..276)  paymaster_data_hash sha256 (SHA256_EMPTY when absent)
+///   [276..277)  batch_count u8 (1..=MAX_BATCH_TXS)
+///   [277..   )  repeat batch_count times:
+///                 [20]                to_address
+///                 [32]                value (u256 BE)
+///                 [ 2]                data_len (u16 BE, ≤ MAX_TX_LEN)
+///                 [data_len]          data
+/// ```
+///
+/// No trailers. Batch txs render through the basic value/erc20-shape/
+/// blind-sign ladder; ZK / Safe / ERC-20-metadata trailers are
+/// single-tx-only by construction.
+pub const CMD_SIGN_USEROP_BATCH: u32 = 30;
+
 /// CMD_OFFCHAIN_STATUS — read per-slot off-chain signing state.
 ///
 /// The companion uses this for two things:
@@ -544,6 +590,13 @@ pub const INS_V2_GET_MAIN_VK: u8 = 0x21;
 // -- UserOp signing (0x30-0x3F) --
 pub const INS_V2_SIGN_USEROP: u8 = 0x30;
 pub const INS_V2_SIGN_CLEAR_USEROP: u8 = 0x31;
+/// INS_V2_SIGN_USEROP_BATCH — multi-call batch sign. Same semantics as
+/// `INS_V2_SIGN_USEROP` but the payload is the
+/// `CMD_SIGN_USEROP_BATCH` wire format (header + N inner-tx blocks)
+/// and the resulting UserOp's callData is
+/// `executeBatchWithOffchainCount(...)` instead of
+/// `executeWithOffchainCount(...)`.
+pub const INS_V2_SIGN_USEROP_BATCH: u8 = 0x32;
 
 // -- Message / typed-data signing (0x40-0x4F) --
 pub const INS_V2_SIGN_MESSAGE: u8 = 0x40;
@@ -1063,6 +1116,61 @@ const _: () = assert!(SAFE_OFF_NONCE + 32 == SAFE_V1_CANONICAL_LEN);
 /// + bytes-length(32) + data padded to 32-byte boundary. Bounded by
 /// `MAX_TX_LEN` (4096) for the inner data.
 pub const MAX_EXECUTE_CALLDATA_LEN: usize = 4 * 1024 + 256; // 4352
+
+// ---------------------------------------------------------------------------
+// Batch-sign constants (CMD_SIGN_USEROP_BATCH)
+// ---------------------------------------------------------------------------
+
+/// Maximum number of inner transactions the firmware will batch into a
+/// single `executeBatchWithOffchainCount` UserOp. Bounded by the number
+/// of clear-signing flows a user can realistically review on the OLED
+/// in one session, AND by the SRAM snapshot buffer for the wire
+/// payload. Pick 4 — covers approve+swap+transfer+settle multi-step
+/// DeFi flows with headroom; the on-chain batch path itself imposes
+/// no hard cap.
+pub const MAX_BATCH_TXS: usize = 4;
+
+/// Fixed-prefix length of the `CMD_SIGN_USEROP_BATCH` payload (header
+/// up to and including `batch_count`). Inner-tx blocks follow.
+///
+/// Layout math: 8 (chain_id) + 4 (flags) + 20 (sender) + 20 (ep) + 32
+/// (nonce) + 5×32 (gas) + 32 (paym hash) + 1 (batch_count) = 277.
+pub const SIGN_USEROP_BATCH_HEADER_LEN: usize =
+    8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 1; // 277
+
+const _: () = assert!(SIGN_USEROP_BATCH_HEADER_LEN == 277);
+
+/// Per-tx fixed prefix inside the batch payload: `to(20) + value(32) +
+/// data_len(2) = 54`.
+pub const SIGN_USEROP_BATCH_TX_PREFIX_LEN: usize = 20 + 32 + 2; // 54
+
+/// Worst-case `CMD_SIGN_USEROP_BATCH` payload length: header + every
+/// inner tx running at `MAX_TX_LEN` data. The secure world's TOCTOU
+/// snapshot is sized to this bound.
+pub const SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN: usize = SIGN_USEROP_BATCH_HEADER_LEN
+    + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN);
+
+/// ABI selector for
+/// `PQSmartWallet.executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`.
+/// Equals
+/// `keccak256("executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])")[..4]`.
+/// Cross-checked by `contracts/smart-wallet/test/PQSmartWallet.t.sol::test_executeBatchSelector`.
+pub const EXECUTE_BATCH_SELECTOR: [u8; 4] = [0x7a, 0x38, 0x99, 0x33];
+
+/// Maximum reconstructed `executeBatchWithOffchainCount(...)` calldata
+/// size for `MAX_BATCH_TXS` inner txs each at `MAX_TX_LEN` bytes of
+/// data. Layout:
+///
+///   selector(4)
+/// + head(5 × 32 = 160)         — ownerIndex, newOffchainCount, three offsets
+/// + targets[](32 + N×32)
+/// + values[](32 + N×32)
+/// + datas[](32 + N×32 inner-offsets + N × (32 length + padded data))
+///
+/// For N = MAX_BATCH_TXS = 4 and per-tx data = MAX_TX_LEN = 4096 (already
+/// 32-aligned): 4 + 160 + (32 + 128) + (32 + 128) + (32 + 128) + 4 ×
+/// (32 + 4096) = 644 + 16,512 = 17,156. Round up to 18 KiB for safety.
+pub const MAX_EXECUTE_BATCH_CALLDATA_LEN: usize = 18 * 1024; // 18,432
 
 /// v2 protocol version reported in GET_DEVICE_INFO.
 pub const PROTOCOL_VERSION: u16 = 0x0200;

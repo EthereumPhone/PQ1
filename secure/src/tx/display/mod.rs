@@ -21,6 +21,8 @@
 //! formatting, `write_line`, …) so the renderers read as sequences of
 //! declarative "fill row N with X" calls rather than bit-twiddling.
 
+#[cfg(not(test))]
+pub mod batch;
 mod blind_sign;
 mod contract_creation;
 mod erc20_known;
@@ -56,10 +58,13 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 ///   * typed_call (Phase 2 calldata decode) → up to 14 pages
 ///     (banner + up to 6 typed args + To + Value + Chain + 2 fee
 ///     pages + Nonce; declines past `MAX_TYPED_ARGS_RENDERED = 6`)
+///   * batch sign per-tx wrapper (see
+///     `crate::tx::display::batch::wrap_pages_with_batch_banner`) →
+///     same as the wrapped renderer + 1 banner page = up to 15
 ///
 /// Bumping this costs `4 × 16 = 64` extra stack bytes per page, so
 /// grow it deliberately and not speculatively.
-pub const MAX_PAGES: usize = 14;
+pub const MAX_PAGES: usize = 15;
 
 /// A buffer of up to [`MAX_PAGES`] pre-rendered confirmation pages.
 ///

@@ -80,6 +80,17 @@ pub const EXECUTE_SELECTOR: [u8; 4] = [0x14, 0x44, 0x3c, 0x57];
 /// round up to a 4 KiB-friendly buffer.
 pub use sphincs_tz_shared::MAX_EXECUTE_CALLDATA_LEN;
 
+/// Selector for `executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`
+/// on `PQSmartWallet`. First four bytes of
+/// `keccak256("executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])")`.
+/// Cross-checked against `cast sig`; the on-chain wallet's
+/// `_isSlotAllowedSelector` accepts this alongside `EXECUTE_SELECTOR`.
+pub use sphincs_tz_shared::EXECUTE_BATCH_SELECTOR;
+
+/// Maximum reconstructed-batch-callData length. See the constant in
+/// `sphincs_tz_shared` for the layout math.
+pub use sphincs_tz_shared::MAX_EXECUTE_BATCH_CALLDATA_LEN;
+
 /// Stack-friendly buffer for a reconstructed `execute(...)` calldata.
 ///
 /// The buffer is fixed-size (`MAX_EXECUTE_CALLDATA_LEN` bytes) so
@@ -162,6 +173,193 @@ pub fn reconstruct_execute_calldata(
     out.buf[4 + 160 + 24..4 + 160 + 32].copy_from_slice(&len_bytes);
     // bytes payload at [196..)
     out.buf[4 + 192..4 + 192 + data.len()].copy_from_slice(data);
+
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Batch executeBatchWithOffchainCount calldata reconstruction
+// ---------------------------------------------------------------------------
+
+/// One inner transaction in a `executeBatchWithOffchainCount(...)` call.
+/// Borrowed view — the firmware never copies the bytes; the caller
+/// holds them in the TOCTOU snapshot for the lifetime of this struct.
+#[derive(Debug, Clone, Copy)]
+pub struct BatchInnerTx<'a> {
+    pub to: [u8; 20],
+    pub value: [u8; 32], // u256 BE
+    pub data: &'a [u8],
+}
+
+/// Stack-friendly buffer for a reconstructed
+/// `executeBatchWithOffchainCount(...)` calldata.
+#[cfg_attr(test, derive(Debug))]
+pub struct ExecuteBatchCallData {
+    pub buf: [u8; MAX_EXECUTE_BATCH_CALLDATA_LEN],
+    pub len: usize,
+}
+
+impl ExecuteBatchCallData {
+    pub fn as_slice(&self) -> &[u8] {
+        &self.buf[..self.len]
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BatchAaError {
+    /// Caller passed an empty inner-tx slice. The on-chain
+    /// `executeBatchWithOffchainCount` accepts N == 0 (and runs the
+    /// monotonic counter update with no inner calls), but wallet UX
+    /// requires every batch to do *something*; refuse here so a hostile
+    /// NS cannot trick the user into authorising a zero-tx update via
+    /// the batch path.
+    EmptyBatch,
+    /// Per-tx data field exceeded `MAX_TX_LEN`, or the resulting
+    /// reconstructed calldata wouldn't fit in the
+    /// `MAX_EXECUTE_BATCH_CALLDATA_LEN` buffer.
+    CallDataTooLong,
+}
+
+/// Build the canonical
+/// `executeBatchWithOffchainCount(uint256 ownerIndex, uint256 newOffchainCount,
+/// address[] targets, uint256[] values, bytes[] datas)` calldata from
+/// the supplied per-tx slice. Output matches `abi.encodeCall(
+/// executeBatchWithOffchainCount, (ownerIndex, newOffchainCount,
+/// targets, values, datas))` byte-for-byte.
+///
+/// ABI layout (after the 4-byte selector):
+///
+/// ```text
+///   head (5 × 32):
+///     [  4..  36)  ownerIndex                  uint256
+///     [ 36..  68)  newOffchainCount            uint256
+///     [ 68..100)   offset_targets              = 0xa0
+///     [100..132)   offset_values               = 0xa0 + (32 + N*32)
+///     [132..164)   offset_datas                = offset_values + (32 + N*32)
+///   targets tail at offset_targets:
+///     [+0..+32)         length = N
+///     [+32..+32+N*32)   addresses (left-padded to 32 each)
+///   values tail at offset_values:
+///     [+0..+32)         length = N
+///     [+32..+32+N*32)   uint256 values
+///   datas tail at offset_datas:
+///     [+0..+32)         length = N
+///     [+32..+32+N*32)   per-element offsets relative to start of
+///                       datas heads (i.e. relative to position 32
+///                       within the datas tail, which is the start of
+///                       the element-pointer block)
+///     For each i:
+///       data_i_len           uint256 (32 BE)
+///       data_i bytes         padded with zeros to a 32-byte boundary
+/// ```
+pub fn reconstruct_execute_batch_calldata(
+    owner_index: u64,
+    new_offchain_count: u64,
+    txs: &[BatchInnerTx<'_>],
+) -> Result<ExecuteBatchCallData, BatchAaError> {
+    if txs.is_empty() {
+        return Err(BatchAaError::EmptyBatch);
+    }
+    let n = txs.len();
+
+    // Per-tx padded data length and running tail size for `bytes[]`.
+    let mut padded_each: [usize; sphincs_tz_shared::MAX_BATCH_TXS] =
+        [0; sphincs_tz_shared::MAX_BATCH_TXS];
+    if n > sphincs_tz_shared::MAX_BATCH_TXS {
+        return Err(BatchAaError::CallDataTooLong);
+    }
+    let mut datas_tail_size: usize = 32 + n * 32; // length + N inner offsets
+    for (i, tx) in txs.iter().enumerate() {
+        if tx.data.len() > sphincs_tz_shared::MAX_TX_LEN {
+            return Err(BatchAaError::CallDataTooLong);
+        }
+        let padded = (tx.data.len().checked_add(31).ok_or(BatchAaError::CallDataTooLong)?) & !31usize;
+        padded_each[i] = padded;
+        // Each per-element block: 32 (length) + padded data bytes.
+        datas_tail_size = datas_tail_size
+            .checked_add(32 + padded)
+            .ok_or(BatchAaError::CallDataTooLong)?;
+    }
+
+    // Section sizes within args (after selector).
+    let head_len = 5 * 32; // 160
+    let targets_size = 32 + n * 32;
+    let values_size = 32 + n * 32;
+    let total_args = head_len + targets_size + values_size + datas_tail_size;
+    let total = 4usize.checked_add(total_args).ok_or(BatchAaError::CallDataTooLong)?;
+    if total > MAX_EXECUTE_BATCH_CALLDATA_LEN {
+        return Err(BatchAaError::CallDataTooLong);
+    }
+
+    let mut out = ExecuteBatchCallData {
+        buf: [0u8; MAX_EXECUTE_BATCH_CALLDATA_LEN],
+        len: total,
+    };
+
+    // ── Selector ───────────────────────────────────────────────────
+    out.buf[0..4].copy_from_slice(&EXECUTE_BATCH_SELECTOR);
+
+    // ── Head ───────────────────────────────────────────────────────
+    let head_start = 4;
+    // ownerIndex
+    out.buf[head_start + 24..head_start + 32].copy_from_slice(&owner_index.to_be_bytes());
+    // newOffchainCount
+    out.buf[head_start + 32 + 24..head_start + 64].copy_from_slice(&new_offchain_count.to_be_bytes());
+    // offset_targets = head_len = 160
+    let offset_targets: u64 = head_len as u64;
+    let offset_values: u64 = offset_targets + targets_size as u64;
+    let offset_datas: u64 = offset_values + values_size as u64;
+    out.buf[head_start + 64 + 24..head_start + 96].copy_from_slice(&offset_targets.to_be_bytes());
+    out.buf[head_start + 96 + 24..head_start + 128].copy_from_slice(&offset_values.to_be_bytes());
+    out.buf[head_start + 128 + 24..head_start + 160].copy_from_slice(&offset_datas.to_be_bytes());
+
+    // ── targets[] tail ─────────────────────────────────────────────
+    let targets_start = head_start + head_len;
+    out.buf[targets_start + 24..targets_start + 32].copy_from_slice(&(n as u64).to_be_bytes());
+    let targets_data = targets_start + 32;
+    for (i, tx) in txs.iter().enumerate() {
+        let off = targets_data + i * 32;
+        // Address left-padded into a 32-byte slot.
+        out.buf[off + 12..off + 32].copy_from_slice(&tx.to);
+    }
+
+    // ── values[] tail ──────────────────────────────────────────────
+    let values_start = targets_start + targets_size;
+    out.buf[values_start + 24..values_start + 32].copy_from_slice(&(n as u64).to_be_bytes());
+    let values_data = values_start + 32;
+    for (i, tx) in txs.iter().enumerate() {
+        let off = values_data + i * 32;
+        out.buf[off..off + 32].copy_from_slice(&tx.value);
+    }
+
+    // ── datas[] tail ───────────────────────────────────────────────
+    let datas_start = values_start + values_size;
+    // length
+    out.buf[datas_start + 24..datas_start + 32].copy_from_slice(&(n as u64).to_be_bytes());
+    let datas_offsets = datas_start + 32; // start of N pointers (== "heads" section)
+    let datas_payload_base = datas_offsets + n * 32;
+    let mut cursor_within_datas_heads: u64 = (n as u64) * 32; // first element starts after the N pointers
+    let mut payload_pos = datas_payload_base;
+    for (i, tx) in txs.iter().enumerate() {
+        // Write per-element offset (relative to start of heads = position 32
+        // within datas tail, i.e. `datas_offsets`).
+        let off_slot = datas_offsets + i * 32;
+        out.buf[off_slot + 24..off_slot + 32]
+            .copy_from_slice(&cursor_within_datas_heads.to_be_bytes());
+
+        // Write length word + padded data.
+        out.buf[payload_pos + 24..payload_pos + 32]
+            .copy_from_slice(&(tx.data.len() as u64).to_be_bytes());
+        payload_pos += 32;
+        out.buf[payload_pos..payload_pos + tx.data.len()].copy_from_slice(tx.data);
+        // padding bytes already zero from the buffer init.
+        payload_pos += padded_each[i];
+
+        cursor_within_datas_heads = cursor_within_datas_heads
+            .checked_add(32 + padded_each[i] as u64)
+            .ok_or(BatchAaError::CallDataTooLong)?;
+    }
+    debug_assert_eq!(payload_pos, total);
 
     Ok(out)
 }
@@ -816,5 +1014,230 @@ mod tests {
         let h1 = compute_sphincs_digest_v06(&make(1), &cd);
         let h8453 = compute_sphincs_digest_v06(&make(8453), &cd);
         assert_ne!(h1, h8453);
+    }
+
+    // -- batch executeBatchWithOffchainCount tests ------------------------
+
+    fn u256_from_u128_be(v: u128) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        out[16..32].copy_from_slice(&v.to_be_bytes());
+        out
+    }
+
+    fn batch_tx<'a>(to_byte: u8, value: u128, data: &'a [u8]) -> BatchInnerTx<'a> {
+        BatchInnerTx {
+            to: [to_byte; 20],
+            value: u256_from_u128_be(value),
+            data,
+        }
+    }
+
+    /// Empty batch is refused — see `BatchAaError::EmptyBatch`.
+    #[test]
+    fn test_batch_empty_refused() {
+        let r = reconstruct_execute_batch_calldata(1, 0, &[]);
+        assert_eq!(r.unwrap_err(), BatchAaError::EmptyBatch);
+    }
+
+    /// Single-tx batch produces well-formed calldata. Compare against a
+    /// hand-encoded reference: ABI of (1, 7, [0xAA*20], [0], [empty]).
+    #[test]
+    fn test_batch_n1_empty_data() {
+        let txs = [batch_tx(0xAA, 0, &[])];
+        let r = reconstruct_execute_batch_calldata(1, 7, &txs).unwrap();
+        let out = r.as_slice();
+
+        // Selector
+        assert_eq!(&out[0..4], &EXECUTE_BATCH_SELECTOR);
+        // ownerIndex = 1
+        assert_eq!(out[4 + 31], 1);
+        assert!(out[4..4 + 31].iter().all(|&b| b == 0));
+        // newOffchainCount = 7
+        assert_eq!(out[4 + 32 + 31], 7);
+        // offset_targets = 0xa0 (= 160 = 5*32)
+        assert_eq!(out[4 + 64 + 31], 0xa0);
+        // offset_values = 0xa0 + (32 + 32) = 0xe0
+        assert_eq!(out[4 + 96 + 31], 0xe0);
+        // offset_datas  = 0xe0 + (32 + 32) = 0x120
+        assert_eq!(out[4 + 128 + 30], 0x01);
+        assert_eq!(out[4 + 128 + 31], 0x20);
+
+        // targets length = 1
+        let targets_off = 4 + 160;
+        assert_eq!(out[targets_off + 31], 1);
+        // address at targets+32, left-padded
+        assert!(out[targets_off + 32..targets_off + 32 + 12].iter().all(|&b| b == 0));
+        assert_eq!(&out[targets_off + 32 + 12..targets_off + 32 + 32], &[0xAA; 20]);
+
+        // values length = 1, value = 0
+        let values_off = targets_off + 64;
+        assert_eq!(out[values_off + 31], 1);
+        assert!(out[values_off + 32..values_off + 64].iter().all(|&b| b == 0));
+
+        // datas length = 1, inner offset = 32 (1*32)
+        let datas_off = values_off + 64;
+        assert_eq!(out[datas_off + 31], 1);
+        assert_eq!(out[datas_off + 32 + 31], 32);
+        // length word = 0
+        assert!(out[datas_off + 64..datas_off + 96].iter().all(|&b| b == 0));
+
+        // Total length = selector + 5 head words + targets + values +
+        // datas (32 length + 32 inner offset + 32 inner length + 0 padded)
+        let expected = 4 + 5 * 32 + 64 + 64 + 32 + 32 + 32;
+        assert_eq!(out.len(), expected);
+    }
+
+    /// 2-tx batch with a non-empty body. Verifies the inner-offset
+    /// arithmetic in `bytes[]`.
+    #[test]
+    fn test_batch_n2_with_data() {
+        let data0: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
+        let data1: [u8; 36] = {
+            let mut d = [0u8; 36];
+            d[0] = 0xa9;
+            d[1] = 0x05;
+            d[2] = 0x9c;
+            d[3] = 0xbb;
+            d[15..36].fill(0xab);
+            d
+        };
+        let txs = [
+            batch_tx(0x11, 0xdead_beef, &data0),
+            batch_tx(0x22, 0, &data1),
+        ];
+        let r = reconstruct_execute_batch_calldata(3, 17, &txs).unwrap();
+        let out = r.as_slice();
+        let n = 2usize;
+
+        // ownerIndex = 3, newOffchainCount = 17
+        assert_eq!(out[4 + 31], 3);
+        assert_eq!(out[4 + 32 + 31], 17);
+
+        // offset_targets = 0xa0; offset_values = 0xa0 + 32 + N*32 = 0x100;
+        // offset_datas = 0x100 + 32 + N*32 = 0x160.
+        assert_eq!(out[4 + 64 + 31], 0xa0);
+        assert_eq!(out[4 + 96 + 30], 0x01);
+        assert_eq!(out[4 + 96 + 31], 0x00);
+        assert_eq!(out[4 + 128 + 30], 0x01);
+        assert_eq!(out[4 + 128 + 31], 0x60);
+
+        // targets length = 2
+        let targets_off = 4 + 160;
+        assert_eq!(out[targets_off + 31], 2);
+        // tx0 address (left-padded)
+        assert_eq!(&out[targets_off + 32 + 12..targets_off + 64], &[0x11; 20]);
+        // tx1 address
+        assert_eq!(&out[targets_off + 64 + 12..targets_off + 96], &[0x22; 20]);
+
+        // values length = 2, value0 = 0xdeadbeef
+        let values_off = targets_off + 32 + n * 32;
+        assert_eq!(out[values_off + 31], 2);
+        let v0_lo = &out[values_off + 32 + 28..values_off + 64];
+        assert_eq!(v0_lo, &[0xde, 0xad, 0xbe, 0xef]);
+        // value1 = 0
+        assert!(out[values_off + 64..values_off + 96].iter().all(|&b| b == 0));
+
+        // datas length = 2
+        let datas_off = values_off + 32 + n * 32;
+        assert_eq!(out[datas_off + 31], 2);
+        // Inner offset 0 = 64 (= N*32)
+        assert_eq!(out[datas_off + 32 + 31], 64);
+        // Inner offset 1 = 64 + 32 + padded(4) = 64 + 32 + 32 = 128 = 0x80
+        assert_eq!(out[datas_off + 64 + 31], 0x80);
+
+        // tx0 data: length 4 at [datas_off+96..datas_off+128); bytes
+        // 0x12345678... at [datas_off+128..); padded 28 zero bytes.
+        assert_eq!(out[datas_off + 96 + 31], 4);
+        assert_eq!(&out[datas_off + 128..datas_off + 128 + 4], &data0);
+        assert!(out[datas_off + 128 + 4..datas_off + 128 + 32]
+            .iter()
+            .all(|&b| b == 0));
+
+        // tx1 data: length 36, padded to 64 bytes.
+        let tx1_len_off = datas_off + 128 + 32;
+        assert_eq!(out[tx1_len_off + 31], 36);
+        assert_eq!(&out[tx1_len_off + 32..tx1_len_off + 32 + 36], &data1);
+        // Trailing 28 padding bytes zero.
+        assert!(out[tx1_len_off + 32 + 36..tx1_len_off + 32 + 64]
+            .iter()
+            .all(|&b| b == 0));
+
+        // Total length sanity check.
+        let expected = 4
+            + 5 * 32 // head
+            + 32 + n * 32 // targets
+            + 32 + n * 32 // values
+            + 32 + n * 32 + 32 + 32 + 32 + 64; // datas (length + 2 offsets + 2 (length + padded data))
+        assert_eq!(out.len(), expected);
+    }
+
+    /// Cross-check: encoder output for a 1-tx batch with empty data
+    /// matches what `cast abi-encode` produces (verified offline). The
+    /// hex below is `cast calldata "executeBatchWithOffchainCount(...)"`
+    /// output for ownerIndex=1, count=0, [0xAB*20], [0], [empty].
+    #[test]
+    fn test_batch_cross_validate_n1() {
+        let txs = [batch_tx(0xAB, 0, &[])];
+        let r = reconstruct_execute_batch_calldata(1, 0, &txs).unwrap();
+        let out = r.as_slice();
+
+        // Reference: built by hand following the ABI spec.
+        // [0..4)            7a 38 99 33                       — selector
+        // [4..36)           ownerIndex = 1
+        // [36..68)          newOffchainCount = 0
+        // [68..100)         offset_targets = 0xa0
+        // [100..132)        offset_values  = 0xe0
+        // [132..164)        offset_datas   = 0x120
+        // targets:
+        // [164..196)        length = 1
+        // [196..228)        addr = 00..00 || 0xAB*20
+        // values:
+        // [228..260)        length = 1
+        // [260..292)        value = 0
+        // datas:
+        // [292..324)        length = 1
+        // [324..356)        inner offset = 0x20
+        // [356..388)        data length = 0
+        let mut expected = [0u8; 388];
+        expected[..4].copy_from_slice(&EXECUTE_BATCH_SELECTOR);
+        expected[4 + 31] = 1; // ownerIndex
+        // offsets
+        expected[4 + 64 + 31] = 0xa0;
+        expected[4 + 96 + 31] = 0xe0;
+        expected[4 + 128 + 30] = 0x01;
+        expected[4 + 128 + 31] = 0x20;
+        // targets
+        expected[164 + 31] = 1;
+        expected[196 + 12..196 + 32].copy_from_slice(&[0xAB; 20]);
+        // values
+        expected[228 + 31] = 1;
+        // datas
+        expected[292 + 31] = 1;
+        expected[324 + 31] = 0x20;
+        // data length already zero.
+
+        assert_eq!(out, &expected[..]);
+    }
+
+    /// Per-tx data > MAX_TX_LEN is rejected.
+    #[test]
+    fn test_batch_per_tx_too_long() {
+        let huge = vec![0u8; sphincs_tz_shared::MAX_TX_LEN + 1];
+        let txs = [batch_tx(0x11, 0, &huge)];
+        let r = reconstruct_execute_batch_calldata(1, 0, &txs);
+        assert_eq!(r.unwrap_err(), BatchAaError::CallDataTooLong);
+    }
+
+    /// More than MAX_BATCH_TXS is rejected.
+    #[test]
+    fn test_batch_count_too_large() {
+        // Build a slice with MAX_BATCH_TXS + 1 entries, each empty.
+        let dummy: [u8; 0] = [];
+        let mut v: Vec<BatchInnerTx<'_>> = Vec::new();
+        for _ in 0..sphincs_tz_shared::MAX_BATCH_TXS + 1 {
+            v.push(batch_tx(0x11, 0, &dummy));
+        }
+        let r = reconstruct_execute_batch_calldata(1, 0, &v);
+        assert_eq!(r.unwrap_err(), BatchAaError::CallDataTooLong);
     }
 }

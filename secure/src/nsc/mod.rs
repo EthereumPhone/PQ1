@@ -55,6 +55,7 @@ mod cmd_offchain_status;
 mod cmd_request_unlock;
 mod cmd_sign_offchain;
 mod cmd_sign_userop;
+mod cmd_sign_userop_batch;
 #[cfg(feature = "e2e-test")]
 mod cmd_test_pin_lockout;
 
@@ -135,7 +136,7 @@ compile_error!(
 use sphincs_tz_shared::{
     NscStatus, CMD_GET_INIT_CODE, CMD_GET_REMAINING, CMD_GET_WALLET_ADDRESS, CMD_IS_UNLOCKED,
     CMD_LOCK, CMD_NONE, CMD_OFFCHAIN_STATUS, CMD_REQUEST_UNLOCK, CMD_SIGN_OFFCHAIN,
-    CMD_SIGN_USEROP, SHARED_MAILBOX_BASE,
+    CMD_SIGN_USEROP, CMD_SIGN_USEROP_BATCH, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -355,6 +356,7 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_GET_REMAINING => cmd_get_remaining::run(),
         CMD_REQUEST_UNLOCK => cmd_request_unlock::run(),
         CMD_SIGN_USEROP => cmd_sign_userop::run(args),
+        CMD_SIGN_USEROP_BATCH => cmd_sign_userop_batch::run(args),
         CMD_GET_WALLET_ADDRESS => cmd_get_wallet_address::run(args),
         CMD_GET_INIT_CODE => cmd_get_init_code::run(args),
         CMD_SIGN_OFFCHAIN => cmd_sign_offchain::run(args),
@@ -416,6 +418,24 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop(
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
     let r = unsafe { cmd_sign_userop::run(&args) };
     secure_log!("[NSC] sign_userop -> {}", r);
+    r
+}
+
+/// CMD_SIGN_USEROP_BATCH — atomic multi-call sign command. Same
+/// Type 1 / Type 2 wire output as `nsc_sign_userop`; payload differs
+/// (header + N inner-tx blocks). See `cmd_sign_userop_batch.rs` for
+/// the contract.
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_sign_userop_batch(
+    payload_ptr: u32,
+    sig_out_ptr: u32,
+    total_len: u32,
+) -> u32 {
+    secure_log!("[NSC] sign_userop_batch (len={})", total_len);
+    let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
+    let r = unsafe { cmd_sign_userop_batch::run(&args) };
+    secure_log!("[NSC] sign_userop_batch -> {}", r);
     r
 }
 

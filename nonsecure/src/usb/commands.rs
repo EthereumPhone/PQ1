@@ -58,8 +58,17 @@ const CHAIN_BUF_LEN_SIGN: usize = SIGN_USEROP_HEADER_LEN
     + 4 * (2 + 1200)
     + 64;
 const CHAIN_BUF_LEN_FW: usize = fw_manifest::MANIFEST_SIZE + 64;
-const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN > CHAIN_BUF_LEN_FW {
+/// Worst-case batch sign payload: header + N × (per-tx prefix +
+/// MAX_TX_LEN data). Defined in the shared crate as
+/// [`sphincs_tz_shared::SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN`].
+const CHAIN_BUF_LEN_BATCH: usize = SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN;
+const CHAIN_BUF_LEN_SIGN_OR_BATCH: usize = if CHAIN_BUF_LEN_SIGN > CHAIN_BUF_LEN_BATCH {
     CHAIN_BUF_LEN_SIGN
+} else {
+    CHAIN_BUF_LEN_BATCH
+};
+const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN_OR_BATCH > CHAIN_BUF_LEN_FW {
+    CHAIN_BUF_LEN_SIGN_OR_BATCH
 } else {
     CHAIN_BUF_LEN_FW
 };
@@ -202,6 +211,7 @@ impl CommandRouter {
     unsafe fn execute_chain(&mut self, ins: u8, len: usize) -> Response {
         match ins {
             INS_V2_SIGN_USEROP => self.cmd_sign_userop(len),
+            INS_V2_SIGN_USEROP_BATCH => self.cmd_sign_userop_batch(len),
             #[cfg(feature = "stm32u585")]
             INS_V2_FW_BEGIN => self.cmd_fw_begin(len),
             _ => self.sw_response(SW_INS_NOT_SUPPORTED),
@@ -400,6 +410,68 @@ impl CommandRouter {
         //   [type1_len(4 BE)]    [type1...]
         //   [type2_len(4 BE)]    [type2...]
         let header_off: usize = 8; // skip the leading u64 count
+        let ic_len = u32::from_be_bytes([
+            SIG_BUF[header_off],
+            SIG_BUF[header_off + 1],
+            SIG_BUF[header_off + 2],
+            SIG_BUF[header_off + 3],
+        ]) as usize;
+        if header_off + 4 + ic_len + 4 > MAX_SIGN_RESPONSE_LEN {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+        let t1_len_off = header_off + 4 + ic_len;
+        let t1_len = u32::from_be_bytes([
+            SIG_BUF[t1_len_off],
+            SIG_BUF[t1_len_off + 1],
+            SIG_BUF[t1_len_off + 2],
+            SIG_BUF[t1_len_off + 3],
+        ]) as usize;
+        if t1_len_off + 4 + t1_len + 4 > MAX_SIGN_RESPONSE_LEN {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+        let t2_len_off = t1_len_off + 4 + t1_len;
+        let t2_len = u32::from_be_bytes([
+            SIG_BUF[t2_len_off],
+            SIG_BUF[t2_len_off + 1],
+            SIG_BUF[t2_len_off + 2],
+            SIG_BUF[t2_len_off + 3],
+        ]) as usize;
+        let total = t2_len_off + 4 + t2_len;
+        if total > MAX_SIGN_RESPONSE_LEN {
+            return self.sw_response(SW_INTERNAL_ERROR);
+        }
+
+        self.setup_chunked_response(total)
+    }
+
+    /// 0x32 SIGN_USEROP_BATCH — atomic multi-call sign command. The
+    /// payload is the `CMD_SIGN_USEROP_BATCH` wire format
+    /// (`SIGN_USEROP_BATCH_HEADER_LEN` header + N inner-tx blocks);
+    /// the response framing is byte-identical to
+    /// [`Self::cmd_sign_userop`]'s (the only on-chain difference is
+    /// that the resulting UserOp's callData is
+    /// `executeBatchWithOffchainCount(...)` instead of the
+    /// single-call `executeWithOffchainCount(...)`).
+    ///
+    /// No NS-side trailer injection: batch-tx clear-signing renders
+    /// through the basic value/erc20-shape/blind-sign ladder. ZK,
+    /// Safe, and ERC-20 metadata trailers are single-tx-only by
+    /// construction.
+    unsafe fn cmd_sign_userop_batch(&self, data_len: usize) -> Response {
+        if data_len < SIGN_USEROP_BATCH_HEADER_LEN + SIGN_USEROP_BATCH_TX_PREFIX_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+
+        let status = nsc_api::sign_userop_batch(
+            &CHAIN_BUF[..data_len],
+            &mut SIG_BUF[..MAX_SIGN_RESPONSE_LEN],
+        );
+        if status != NscStatus::Ok as u32 {
+            return self.nsc_status_to_response(status);
+        }
+
+        // Same response framing as cmd_sign_userop.
+        let header_off: usize = 8;
         let ic_len = u32::from_be_bytes([
             SIG_BUF[header_off],
             SIG_BUF[header_off + 1],

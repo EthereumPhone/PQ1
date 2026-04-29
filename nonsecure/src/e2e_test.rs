@@ -17,10 +17,11 @@ use crate::nsc_api;
 use cortex_m_semihosting::{debug, hprintln};
 use sha3::{Digest, Keccak256};
 use sphincs_tz_shared::{
-    APPROVE_HASH_CALLDATA_LEN, APPROVE_HASH_SELECTOR, FLAG_REGISTER_SLOT, MAX_SIGN_RESPONSE_LEN,
-    NscStatus, SAFE_DOMAIN_TYPEHASH, SAFE_OFF_CHAIN_ID, SAFE_OFF_DATA_HASH, SAFE_OFF_NONCE,
-    SAFE_OFF_OPERATION, SAFE_OFF_SAFE_ADDRESS, SAFE_OFF_TO, SAFE_TX_TYPEHASH,
-    SAFE_V1_CANONICAL_LEN, SIGN_USEROP_HEADER_LEN, SIG_TYPE1_LEN, SIG_TYPE2_LEN,
+    APPROVE_HASH_CALLDATA_LEN, APPROVE_HASH_SELECTOR, FLAG_REGISTER_SLOT, MAX_BATCH_TXS,
+    MAX_SIGN_RESPONSE_LEN, NscStatus, SAFE_DOMAIN_TYPEHASH, SAFE_OFF_CHAIN_ID, SAFE_OFF_DATA_HASH,
+    SAFE_OFF_NONCE, SAFE_OFF_OPERATION, SAFE_OFF_SAFE_ADDRESS, SAFE_OFF_TO, SAFE_TX_TYPEHASH,
+    SAFE_V1_CANONICAL_LEN, SIGN_USEROP_BATCH_HEADER_LEN, SIGN_USEROP_BATCH_TX_PREFIX_LEN,
+    SIGN_USEROP_HEADER_LEN, SIG_TYPE1_LEN, SIG_TYPE2_LEN,
 };
 
 // === Scratch buffers =======================================================
@@ -280,6 +281,88 @@ fn append_selector_only_trailers(
     buf[off + 8..off + 10].copy_from_slice(&(n as u16).to_be_bytes());
     buf[off + 10..off + 10 + n].copy_from_slice(&scratch[..n]);
     Some(off + 10 + n)
+}
+
+/// One inner tx descriptor used by the batch e2e helper.
+struct E2eBatchTx<'a> {
+    to: [u8; 20],
+    value_wei: u128,
+    data: &'a [u8],
+}
+
+/// Build a `CMD_SIGN_USEROP_BATCH` wire payload from a slice of inner
+/// txs. Mirrors the firmware's parser in
+/// `secure/src/nsc/cmd_sign_userop_batch.rs` byte-for-byte.
+fn build_batch_payload(
+    buf: &mut [u8],
+    chain_id: u64,
+    slot_index: u32,
+    register_slot: bool,
+    nonce_seq: u64,
+    inner: &[E2eBatchTx<'_>],
+) -> usize {
+    assert!(inner.len() <= MAX_BATCH_TXS);
+    assert!(!inner.is_empty());
+
+    let sender: [u8; 20] = [0x42; 20];
+    let mut nonce = [0u8; 32];
+    nonce[24..32].copy_from_slice(&nonce_seq.to_be_bytes());
+
+    fn u128_be_slot(v: u128) -> [u8; 32] {
+        let mut out = [0u8; 32];
+        out[16..32].copy_from_slice(&v.to_be_bytes());
+        out
+    }
+
+    let call_gas = u128_be_slot(60_000);
+    let ver_gas = u128_be_slot(400_000);
+    let pre_gas = u128_be_slot(120_000);
+    let max_fee = u128_be_slot(10_000_000_000);
+    let max_prio = u128_be_slot(2_000_000_000);
+
+    let flags: u32 = slot_index | if register_slot { FLAG_REGISTER_SLOT } else { 0 };
+
+    let mut off = 0usize;
+    buf[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
+    off += 8;
+    buf[off..off + 4].copy_from_slice(&flags.to_be_bytes());
+    off += 4;
+    buf[off..off + 20].copy_from_slice(&sender);
+    off += 20;
+    buf[off..off + 20].copy_from_slice(&ENTRY_POINT_V06);
+    off += 20;
+    buf[off..off + 32].copy_from_slice(&nonce);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&call_gas);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&ver_gas);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&pre_gas);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&max_fee);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&max_prio);
+    off += 32;
+    buf[off..off + 32].copy_from_slice(&SHA256_EMPTY);
+    off += 32;
+    debug_assert_eq!(off, SIGN_USEROP_BATCH_HEADER_LEN - 1);
+    buf[off] = inner.len() as u8;
+    off += 1;
+    debug_assert_eq!(off, SIGN_USEROP_BATCH_HEADER_LEN);
+
+    for tx in inner.iter() {
+        let mut value = [0u8; 32];
+        value[16..32].copy_from_slice(&tx.value_wei.to_be_bytes());
+        buf[off..off + 20].copy_from_slice(&tx.to);
+        off += 20;
+        buf[off..off + 32].copy_from_slice(&value);
+        off += 32;
+        buf[off..off + 2].copy_from_slice(&(tx.data.len() as u16).to_be_bytes());
+        off += 2;
+        buf[off..off + tx.data.len()].copy_from_slice(tx.data);
+        off += tx.data.len();
+    }
+    off
 }
 
 /// Parse a `[count(8)][ic_len|ic][type1_len|t1][type2_len|t2]` bundle and
@@ -675,6 +758,238 @@ fn main() -> ! {
             "[NS][e2e]   → walker declined, blind-sign fallback rendered, t2_len={}",
             t2_len
         );
+    }
+
+    // Scenario 5e: atomic batch sign — three inner txs into one UserOp.
+    //
+    // Builds a 3-tx batch that calls three different recipients with
+    // different values + calldata, drives the firmware's
+    // `CMD_SIGN_USEROP_BATCH` handler, and asserts the response is the
+    // same wire shape as a single-tx sign (Type 2 only — slot 1 is
+    // already registered on Sepolia from Scenario 1).
+    //
+    // Validates end-to-end:
+    //   * batch payload parser inside the secure world,
+    //   * per-tx clear-signing render pipeline (all three inner txs
+    //     pass through `pick_sign_pages` with `e2e-test`'s auto-confirm
+    //     fast path),
+    //   * `executeBatchWithOffchainCount(...)` calldata reconstruction,
+    //   * SHA-256 sphincs digest covers the new batch calldata,
+    //   * Type 2 wrapper emits ownerIndex = slot_index + 1 = 2.
+    hprintln!("[NS][e2e] Scenario 5e: atomic batch sign (3 inner txs)");
+    unsafe {
+        let to0: [u8; 20] = [0xa0; 20];
+        let to1: [u8; 20] = [0xa1; 20];
+        let to2: [u8; 20] = [0xa2; 20];
+        // Inner tx 0: plain ETH transfer (empty data).
+        let data0: [u8; 0] = [];
+        // Inner tx 1: ERC-20 `transfer(0xab.., 250e6)`.
+        let mut data1 = [0u8; 4 + 32 + 32];
+        data1[..4].copy_from_slice(&[0xa9, 0x05, 0x9c, 0xbb]);
+        data1[16..36].copy_from_slice(&[0xab; 20]);
+        data1[60..68].copy_from_slice(&250_000_000u64.to_be_bytes());
+        // Inner tx 2: opaque blind-sign-style calldata.
+        let data2: [u8; 9] = [0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x42];
+
+        let inner = [
+            E2eBatchTx {
+                to: to0,
+                value_wei: 100_000_000_000_000_000u128, // 0.1 ETH
+                data: &data0,
+            },
+            E2eBatchTx {
+                to: to1,
+                value_wei: 0,
+                data: &data1,
+            },
+            E2eBatchTx {
+                to: to2,
+                value_wei: 0,
+                data: &data2,
+            },
+        ];
+
+        let len = build_batch_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111, // Sepolia (slot 1 already registered in Scenario 1)
+            1,          // slot_index
+            false,      // no rotation; slot already on-chain
+            8,          // base nonce — fresh
+            &inner,
+        );
+        let status = nsc_api::sign_userop_batch(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "batch sign must succeed (got {})",
+            status
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "batch on registered slot must NOT emit Type 1");
+        assert_eq!(t2_len, SIG_TYPE2_LEN);
+        hprintln!("[NS][e2e]   → batch sign OK, t2_len={}", t2_len);
+    }
+
+    // Scenario 5f: 1-tx batch — degenerate case the on-chain
+    // `executeBatchWithOffchainCount` accepts. Confirms the firmware
+    // path doesn't refuse `batch_count == 1`.
+    hprintln!("[NS][e2e] Scenario 5f: degenerate 1-tx batch");
+    unsafe {
+        let to0: [u8; 20] = [0xb0; 20];
+        let inner = [E2eBatchTx {
+            to: to0,
+            value_wei: 1u128,
+            data: &[],
+        }];
+        let len = build_batch_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111,
+            1,
+            false,
+            9,
+            &inner,
+        );
+        let status = nsc_api::sign_userop_batch(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "1-tx batch must succeed (got {})",
+            status
+        );
+        let (t1_present, _t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present);
+        hprintln!("[NS][e2e]   → 1-tx batch OK");
+    }
+
+    // Scenario 5g: max-size batch (MAX_BATCH_TXS inner txs).
+    hprintln!("[NS][e2e] Scenario 5g: max-size batch (N=MAX_BATCH_TXS)");
+    unsafe {
+        let mut tos: [[u8; 20]; MAX_BATCH_TXS] = [[0u8; 20]; MAX_BATCH_TXS];
+        for i in 0..MAX_BATCH_TXS {
+            tos[i] = [0xc0 + i as u8; 20];
+        }
+        let mut inner_buf: [E2eBatchTx<'_>; MAX_BATCH_TXS] = core::array::from_fn(|i| {
+            E2eBatchTx {
+                to: tos[i],
+                value_wei: (i as u128) * 1_000_000_000_000u128,
+                data: &[],
+            }
+        });
+        let _ = &mut inner_buf; // silence might-be-unused on no-op path
+        let len = build_batch_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111,
+            1,
+            false,
+            10,
+            &inner_buf,
+        );
+        let status = nsc_api::sign_userop_batch(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "max-batch sign must succeed (got {})",
+            status
+        );
+        hprintln!(
+            "[NS][e2e]   → max batch (N={}) OK",
+            MAX_BATCH_TXS
+        );
+    }
+
+    // Scenario 5h: empty batch (count=0) — refused.
+    hprintln!("[NS][e2e] Scenario 5h: empty batch is refused");
+    unsafe {
+        // Write a header by hand with batch_count=0 and no inner txs.
+        let chain_id: u64 = 11_155_111;
+        let mut off = 0usize;
+        PAYLOAD_BUF[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
+        off += 8;
+        PAYLOAD_BUF[off..off + 4].copy_from_slice(&0u32.to_be_bytes());
+        off += 4;
+        // sender
+        PAYLOAD_BUF[off..off + 20].fill(0x42);
+        off += 20;
+        PAYLOAD_BUF[off..off + 20].copy_from_slice(&ENTRY_POINT_V06);
+        off += 20;
+        // nonce + 5*gas + paymaster_hash
+        for _ in 0..(32 + 5 * 32 + 32) {
+            PAYLOAD_BUF[off] = 0;
+            off += 1;
+        }
+        // batch_count = 0
+        PAYLOAD_BUF[off] = 0;
+        off += 1;
+        debug_assert_eq!(off, SIGN_USEROP_BATCH_HEADER_LEN);
+        let status = nsc_api::sign_userop_batch(&PAYLOAD_BUF[..off], &mut SIG_BUF);
+        // Header alone is shorter than `header + at least one tx prefix`,
+        // so the firmware rejects it as too short with InvalidPointer.
+        assert_eq!(
+            status,
+            NscStatus::InvalidPointer as u32,
+            "empty batch must be refused (got {})",
+            status
+        );
+        hprintln!("[NS][e2e]   → empty batch refused as expected");
+    }
+
+    // Scenario 5i: `batch_count` inside the legal range but inner-tx
+    // bytes truncated past the declared count. Must reject.
+    hprintln!("[NS][e2e] Scenario 5i: truncated inner-tx block is refused");
+    unsafe {
+        let chain_id: u64 = 11_155_111;
+        let mut off = 0usize;
+        PAYLOAD_BUF[off..off + 8].copy_from_slice(&chain_id.to_be_bytes());
+        off += 8;
+        PAYLOAD_BUF[off..off + 4].copy_from_slice(&1u32.to_be_bytes()); // slot 1
+        off += 4;
+        PAYLOAD_BUF[off..off + 20].fill(0x42);
+        off += 20;
+        PAYLOAD_BUF[off..off + 20].copy_from_slice(&ENTRY_POINT_V06);
+        off += 20;
+        for _ in 0..(32 + 5 * 32 + 32) {
+            PAYLOAD_BUF[off] = 0;
+            off += 1;
+        }
+        // batch_count = 1, but we only emit the first 10 bytes of the
+        // 54-byte per-tx prefix.
+        PAYLOAD_BUF[off] = 1;
+        off += 1;
+        for _ in 0..10 {
+            PAYLOAD_BUF[off] = 0xff;
+            off += 1;
+        }
+        // Total length is at least HEADER + per-tx-prefix, so the
+        // length pre-check passes; the parser then notices the per-tx
+        // block is short.
+        // Pad to header + per-tx-prefix - 1 byte (still under threshold)
+        // OR we extend so length ≥ header+prefix and the parser hits
+        // the `data_len > MAX_TX_LEN || cursor + data_len > total_len`
+        // branch. Easier: declare data_len that overruns total_len.
+        let header_plus_partial = SIGN_USEROP_BATCH_HEADER_LEN + 10;
+        // Override: write a full prefix BUT with data_len that overshoots.
+        let mut off2 = SIGN_USEROP_BATCH_HEADER_LEN;
+        PAYLOAD_BUF[off2..off2 + 20].fill(0xaa);
+        off2 += 20;
+        // value
+        for _ in 0..32 {
+            PAYLOAD_BUF[off2] = 0;
+            off2 += 1;
+        }
+        // data_len = 1000 (>> trailing bytes)
+        PAYLOAD_BUF[off2] = 0x03;
+        PAYLOAD_BUF[off2 + 1] = 0xe8;
+        off2 += 2;
+        // Append zero data bytes — will be way short of declared 1000.
+        let total = off2;
+        let _ = header_plus_partial;
+        let status = nsc_api::sign_userop_batch(&PAYLOAD_BUF[..total], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::InvalidPointer as u32,
+            "truncated inner-tx must be refused"
+        );
+        hprintln!("[NS][e2e]   → truncated inner-tx refused as expected");
     }
 
     // Scenario 6: brute-force protection check. Drives the secure-
