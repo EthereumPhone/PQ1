@@ -136,8 +136,13 @@ run_docker_measure() {
 LIMA_VERSION="2.1.1"
 # Bump the suffix when changing the Lima template or in-VM provisioning
 # so legacy VMs from older measure.sh runs are migrated, not reused.
-LIMA_VM_NAME="pqsigner-builder-nix2"
-LIMA_LEGACY_VM_NAMES=("pqsigner-builder" "pqsigner-builder-rootful" "pqsigner-builder-nix")
+LIMA_VM_NAME="pqsigner-builder-qemu"
+LIMA_LEGACY_VM_NAMES=(
+    "pqsigner-builder"
+    "pqsigner-builder-rootful"
+    "pqsigner-builder-nix"
+    "pqsigner-builder-nix2"
+)
 
 install_macos_lima_nix_stack() {
     say "Setting up x86_64-linux build capability via Lima + Nix-in-VM."
@@ -180,14 +185,22 @@ install_macos_lima_nix_stack() {
     command -v limactl >/dev/null 2>&1 \
         || die "Lima install failed: limactl not on PATH ($HOME/.local/bin)."
 
-    # ---- Lima VM (plain Ubuntu LTS + --rosetta on Apple Silicon) --------
-    # CRITICAL: on Apple Silicon, the VM kernel must stay aarch64 (Apple's
-    # VZ framework can only host the host arch). The --rosetta flag
-    # registers Rosetta as the binfmt_misc handler for x86_64 ELFs in the
-    # VM, so x86_64 USERSPACE — including the rustc/ld/cc that Nix
-    # invokes during the x86_64-linux build — runs at near-native speed.
-    # Passing --arch=x86_64 to vz makes Lima reject the config with
-    # `unsupported arch: "x86_64"`; default arch = host arch is correct.
+    # ---- Lima VM (plain Ubuntu LTS, x86_64 emulation via QEMU) ----------
+    # CRITICAL: on Apple Silicon, the VM kernel stays aarch64 (Apple's
+    # VZ framework can only host the host arch). x86_64 USERSPACE is
+    # emulated via qemu-user-static binfmt_misc handlers, installed
+    # during provisioning below.
+    #
+    # We deliberately do NOT pass --rosetta. Rosetta is faster but
+    # SIGSEGVs on certain rustc nightlies (the friend hit this with
+    # rust-overlay nightly-2026-04-06: `rustc -vV` itself crashed
+    # before the build even started). QEMU is ~5-10x slower but
+    # bulletproof — rock-solid x86_64 instruction set support
+    # regardless of the host macOS / Rosetta version, and
+    # deterministic so the output is still byte-identical.
+    #
+    # On Intel macOS the VM kernel is x86_64 natively; no emulation
+    # involved either way.
     #
     # 80 GiB disk: an earlier 40 GiB VM filled up mid-build (Determinate
     # Nix's chroot mode duplicates parts of /nix/store into per-build
@@ -195,20 +208,12 @@ install_macos_lima_nix_stack() {
     # so once the kernel hits ENOSPC every subsequent write fails with
     # EIO/EROFS even after the build that consumed the space exits.
     # 80 GiB headroom + max-jobs=1 (set in nix.custom.conf below) keeps
-    # us well clear of that cliff. 6 GiB RAM: enough for a parallel
-    # rustc invocation without thrashing.
+    # us well clear of that cliff. 6 GiB RAM: enough for rustc.
     create_lima_vm() {
-        if [ "$arch" = "arm64" ]; then
-            limactl create --name="$LIMA_VM_NAME" --tty=false \
-                --vm-type=vz --rosetta \
-                --cpus=4 --memory=6 --disk=80 \
-                template:default
-        else
-            limactl create --name="$LIMA_VM_NAME" --tty=false \
-                --vm-type=vz \
-                --cpus=4 --memory=6 --disk=80 \
-                template:default
-        fi
+        limactl create --name="$LIMA_VM_NAME" --tty=false \
+            --vm-type=vz \
+            --cpus=4 --memory=6 --disk=80 \
+            template:default
     }
 
     # ---- Migrate legacy VMs from older measure.sh runs ----
@@ -267,6 +272,22 @@ install_macos_lima_nix_stack() {
     say "Provisioning Nix inside the VM (skipped if already installed)..."
     limactl shell "$LIMA_VM_NAME" bash -c '
         set -e
+
+        # Install qemu-user-static + binfmt-support on aarch64 hosts so
+        # the kernel can transparently execute x86_64 ELFs via QEMU.
+        # On x86_64 hosts this is a no-op. The binfmt-support package
+        # post-install registers the binfmt_misc handlers automatically.
+        if [ "$(uname -m)" != "x86_64" ] \
+            && [ ! -f /proc/sys/fs/binfmt_misc/qemu-x86_64 ]; then
+            echo "[provision] Installing qemu-user-static for x86_64 binfmt..."
+            sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+                qemu-user-static binfmt-support
+            # Some Ubuntu cloud images need an explicit nudge for the
+            # systemd binfmt unit to (re)register the handlers.
+            sudo systemctl restart systemd-binfmt 2>/dev/null || true
+        fi
+
         if ! command -v nix >/dev/null 2>&1 && [ ! -d /nix ]; then
             echo "[provision] Installing Determinate Nix..."
             curl -fsSL https://install.determinate.systems/nix \
