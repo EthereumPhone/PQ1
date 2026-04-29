@@ -983,12 +983,44 @@ fn entry_qw(slot_key: &[u8; 8], entry_type: u8, count: u64) -> [u8; 16] {
     qw
 }
 
-/// Parse a journal entry. Returns `None` if blank (type byte == 0xFF).
+/// Parse a journal entry. Three outcomes:
+///   * `None` — QW is truly blank (every byte is 0xFF). End of journal;
+///     readers can stop scanning here.
+///   * `Some((0, _, _))` — QW is non-blank but undecodable (stale bits
+///     inherited from pre-all-C10 cutover firmware where the type byte
+///     happens to be 0xFF but other bytes are not, OR an unknown type).
+///     Readers MUST treat this as "skip and keep scanning" — there may
+///     be valid entries past this hole.
+///   * `Some((COUNT|USEROP, slot_key, count))` — valid entry.
+///
+/// The all-16-byte blank check has to mirror `find_next_blank_idx` exactly.
+/// Without it, the writer's "skip stale QW, write to next truly-blank slot"
+/// path produces entries the reader cannot find: every read short-circuits
+/// at the first stale QW and `is_registered` returns false even though the
+/// write succeeded into a later QW. Symptom on a real device that
+/// upgraded across the cutover: `cmd_sign_offchain` refuses with
+/// `OffchainSlotUnregistered` after one or more successful UserOps that
+/// (silently) appended valid entries past a stale type-byte-0xFF QW.
 unsafe fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
     let base = qw_addr as *const u8;
     let type_byte = read_volatile(base.add(8));
     if type_byte == 0xFF {
-        return None;
+        // Type byte is 0xFF — could be a truly-blank QW (end of journal)
+        // or a stale QW where only the type byte happens to read 0xFF.
+        // Disambiguate via the same all-16-byte check `find_next_blank_idx`
+        // uses; only an all-blank QW signals end-of-journal.
+        let mut all_blank = true;
+        for k in 0..(OFFCHAIN_QW_SIZE as usize) {
+            if read_volatile(base.add(k)) != 0xFF {
+                all_blank = false;
+                break;
+            }
+        }
+        if all_blank {
+            return None;
+        }
+        // Stale, undecodable, but the page may have valid entries past it.
+        return Some((0, [0u8; 8], 0));
     }
     if type_byte != OFFCHAIN_TYPE_COUNT && type_byte != OFFCHAIN_TYPE_USEROP {
         // Unknown type — treat as corrupt, skip but don't stop the scan.
