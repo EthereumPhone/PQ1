@@ -238,32 +238,27 @@ install_macos_lima_nix_stack() {
     fi
 
     # ---- Provision Nix inside the VM ----------------------------------
-    # The Determinate installer's `install` subcommand auto-detects
-    # systemd on Ubuntu, sets up the multi-user nix-daemon, and adds a
-    # /etc/profile.d/ entry so subsequent `limactl shell` invocations
-    # find the `nix` binary.
+    # Determinate Nix MANAGES /etc/nix/nix.conf — that file gets
+    # regenerated from Determinate's template on every daemon restart,
+    # so anything we append directly there is wiped when the daemon
+    # picks up our changes. The supported user-customization channel
+    # is /etc/nix/nix.custom.conf, which the managed nix.conf
+    # `!include`s near its top. We write all our overrides there.
     #
     # Three settings the daemon needs:
-    #   - extra-experimental-features = nix-command flakes  (so `nix run`
-    #     works without per-invocation flags inside the VM).
-    #   - extra-platforms = x86_64-linux  (so the daemon accepts x86_64
-    #     derivations on this aarch64 host; kernel's binfmt_misc →
-    #     Rosetta executes the x86_64 ELFs).
+    #   - extra-platforms = x86_64-linux  (so the daemon accepts
+    #     x86_64-linux derivations on this aarch64 host; kernel's
+    #     binfmt_misc → Rosetta executes the x86_64 ELFs).
     #   - trusted-users = root @sudo @wheel  (so the lima user can
-    #     override these via --option as a belt-and-braces fallback if
-    #     the file-based config isn't picked up for any reason).
+    #     override these via --option as a belt-and-braces fallback;
+    #     extra-platforms is a "restricted" setting so unprivileged
+    #     clients can't set it without being trusted).
+    #   - extra-experimental-features = nix-command flakes  (already
+    #     in Determinate's managed config, but harmless to repeat).
     #
-    # Three things have bitten us in earlier iterations:
-    #   1. Appending to /etc/nix/nix.conf without a leading newline
-    #      glues onto whatever's on the file's last line if the file
-    #      doesn't end with \n. We unconditionally `printf "\n..."` to
-    #      avoid that.
-    #   2. `systemctl restart nix-daemon` returns 0 even when the unit
-    #      doesn't exist (with `|| true`). We try multiple service
-    #      names and verify after.
-    #   3. After restart we explicitly verify via `nix show-config`
-    #      that the daemon actually picked up the new platform list,
-    #      and shout if it didn't.
+    # After writing nix.custom.conf we restart the daemon (trying both
+    # standard and Determinate-named services) and verify via
+    # `nix show-config` that extra-platforms actually became visible.
     say "Provisioning Nix inside the VM (skipped if already installed)..."
     limactl shell "$LIMA_VM_NAME" bash -c '
         set -e
@@ -278,26 +273,42 @@ install_macos_lima_nix_stack() {
             . /etc/profile.d/nix-daemon.sh
         fi
 
-        # Ensure /etc/nix/nix.conf has the settings we need. The
-        # leading "\n" guarantees we never glue our line onto the
-        # previous line if the file lacks a trailing newline.
+        # Pick the right config target. Determinate uses
+        # /etc/nix/nix.custom.conf (referenced via "!include
+        # nix.custom.conf" near the top of /etc/nix/nix.conf).
+        # Vanilla Nix has no such convention; fall back to writing to
+        # /etc/nix/nix.conf in that case.
+        custom_conf=/etc/nix/nix.custom.conf
+        if sudo grep -q "^!include[[:space:]]\+nix.custom.conf" \
+            /etc/nix/nix.conf 2>/dev/null; then
+            target_conf=$custom_conf
+            sudo touch "$custom_conf"
+        else
+            target_conf=/etc/nix/nix.conf
+        fi
+        echo "[provision] Writing user overrides to $target_conf"
+
+        # Idempotent setting writer. Leading "\n" guarantees we never
+        # glue onto the previous line if the file lacks a trailing
+        # newline.
         ensure_setting() {
             local key=$1 value=$2
-            if ! sudo grep -qE "^[[:space:]]*${key}[[:space:]]*=.*${value}" \
-                /etc/nix/nix.conf 2>/dev/null; then
+            if ! sudo grep -qE "^[[:space:]]*${key}[[:space:]]*=" \
+                "$target_conf" 2>/dev/null; then
                 printf "\n%s = %s\n" "$key" "$value" \
-                    | sudo tee -a /etc/nix/nix.conf >/dev/null
+                    | sudo tee -a "$target_conf" >/dev/null
+                echo "[provision]   + $key = $value"
                 return 0   # changed
             fi
             return 1       # already set
         }
         changed=0
+        ensure_setting extra-platforms x86_64-linux         && changed=1
+        ensure_setting trusted-users   "root @sudo @wheel"  && changed=1
         ensure_setting extra-experimental-features "nix-command flakes" && changed=1
-        ensure_setting extra-platforms             x86_64-linux           && changed=1
-        ensure_setting trusted-users               "root @sudo @wheel"    && changed=1
 
         if [ "$changed" -eq 1 ]; then
-            echo "[provision] /etc/nix/nix.conf updated; restarting nix-daemon..."
+            echo "[provision] Restarting nix-daemon to pick up new config..."
             restarted=0
             for svc in nix-daemon.service determinate-nixd.service; do
                 if sudo systemctl restart "$svc" 2>/dev/null; then
@@ -307,12 +318,9 @@ install_macos_lima_nix_stack() {
                 fi
             done
             if [ "$restarted" -eq 0 ]; then
-                # Fallback: kill the daemon and let systemd socket activation
-                # respawn it on the next nix invocation.
                 echo "[provision] systemctl restart didnt match a known service name; killing daemon to force reload."
                 sudo pkill -TERM -f "nix-daemon|determinate-nixd" 2>/dev/null || true
             fi
-            # Wait for the daemon socket to be back.
             for _i in $(seq 30); do
                 [ -S /nix/var/nix/daemon-socket/socket ] && break
                 sleep 1
@@ -320,14 +328,20 @@ install_macos_lima_nix_stack() {
             sleep 2
         fi
 
-        # Verify the daemon actually serves x86_64-linux now.
+        # Verify the daemon actually serves x86_64-linux now. We
+        # query through the daemon (not just the parsed config file)
+        # so the check is honest about runtime state.
         if nix --extra-experimental-features nix-command show-config 2>/dev/null \
             | grep -E "^extra-platforms" | grep -q "x86_64-linux"; then
             echo "[provision] OK: extra-platforms = x86_64-linux is active."
         else
-            echo "[provision] WARNING: extra-platforms not visible to client."
-            echo "[provision] /etc/nix/nix.conf tail:"
-            sudo tail -10 /etc/nix/nix.conf
+            echo "[provision] ERROR: extra-platforms still not visible after restart." >&2
+            echo "[provision] $target_conf contents:" >&2
+            sudo cat "$target_conf" >&2
+            echo "[provision] nix show-config | grep platform:" >&2
+            nix --extra-experimental-features nix-command show-config 2>/dev/null \
+                | grep -i platform >&2 || true
+            exit 1
         fi
     ' || die "Nix provisioning inside the Lima VM failed."
 
