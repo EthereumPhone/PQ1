@@ -25,6 +25,7 @@
 pub mod batch;
 mod blind_sign;
 mod contract_creation;
+mod eip1271;
 mod erc20_known;
 mod erc20_unknown;
 pub(super) mod primitives;
@@ -35,6 +36,7 @@ mod value_transfer;
 
 pub use blind_sign::render_blind_sign_pages;
 pub use contract_creation::render_contract_creation_pages;
+pub use eip1271::render_eip1271_pages;
 pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;
 #[cfg(not(test))]

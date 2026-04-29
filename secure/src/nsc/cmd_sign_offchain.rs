@@ -137,6 +137,41 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::OffchainCapExceeded as u32;
     }
 
+    // ── 5b. Trusted-display confirmation ────────────────────────────
+    //
+    // EIP-1271 sigs are silent-but-binding from the dapp's view, so the
+    // user must approve them on the trusted display the same way they
+    // approve a UserOp. We surface (chain, account, slot), the full 32
+    // bytes of the hash that's about to be signed, and the slot's
+    // off-chain budget context. The companion is responsible for
+    // deriving the hash via Solady's nested EIP-712 wrap before calling
+    // this command — we cannot interpret what the dapp ultimately
+    // commits to, but the user can compare these 64 hex chars against
+    // whatever the dapp shows.
+    {
+        use crate::ui::confirm::{confirm, ConfirmResult};
+        let pages = crate::tx::display::render_eip1271_pages(
+            chain_id,
+            account_index,
+            slot_index,
+            &hash_to_sign,
+            new_count,
+            last_userop,
+            MAX_SLOT_USES,
+        );
+        match confirm(pages.as_slice()) {
+            ConfirmResult::Confirmed => {}
+            ConfirmResult::Cancelled => {
+                crate::ui::show_status("Cancelled", "");
+                return NscStatus::UserRejected as u32;
+            }
+            ConfirmResult::IdleWipe => {
+                super::zeroize_sensitive_state();
+                return NscStatus::IdleWipe as u32;
+            }
+        }
+    }
+
     // ── 6. Reconstruct entropy + slot master per-account ────────────
     let master_secret: Zeroizing<[u8; 32]> =
         Zeroizing::new(super::state::peek_state(|s| s.master_secret));
@@ -257,6 +292,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         core::ptr::write_volatile(out_ptr.add(SIGN_OFFCHAIN_OUTPUT_SIG_OFF + i), sig[i]);
     }
 
-    crate::ui::show_status("EIP-1271", "ok");
+    crate::timeout::reset_activity();
+    crate::ui::show_status("Signed", "");
+    for _ in 0..3_000_000u32 {
+        cortex_m::asm::nop();
+    }
+    crate::ui::show_status("PQSigner OS", "Ready");
     NscStatus::Ok as u32
 }
