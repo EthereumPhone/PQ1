@@ -136,8 +136,8 @@ run_docker_measure() {
 LIMA_VERSION="2.1.1"
 # Bump the suffix when changing the Lima template or in-VM provisioning
 # so legacy VMs from older measure.sh runs are migrated, not reused.
-LIMA_VM_NAME="pqsigner-builder-nix"
-LIMA_LEGACY_VM_NAMES=("pqsigner-builder" "pqsigner-builder-rootful")
+LIMA_VM_NAME="pqsigner-builder-nix2"
+LIMA_LEGACY_VM_NAMES=("pqsigner-builder" "pqsigner-builder-rootful" "pqsigner-builder-nix")
 
 install_macos_lima_nix_stack() {
     say "Setting up x86_64-linux build capability via Lima + Nix-in-VM."
@@ -189,19 +189,24 @@ install_macos_lima_nix_stack() {
     # Passing --arch=x86_64 to vz makes Lima reject the config with
     # `unsupported arch: "x86_64"`; default arch = host arch is correct.
     #
-    # 40 GiB disk: x86_64 Nix substitution closure (~5-8 GiB) + sandbox
-    # build scratch + headroom. 6 GiB RAM: enough for a parallel rustc
-    # invocation without thrashing.
+    # 80 GiB disk: an earlier 40 GiB VM filled up mid-build (Determinate
+    # Nix's chroot mode duplicates parts of /nix/store into per-build
+    # roots), and Ubuntu's default ext4 mount option is errors=remount-ro,
+    # so once the kernel hits ENOSPC every subsequent write fails with
+    # EIO/EROFS even after the build that consumed the space exits.
+    # 80 GiB headroom + max-jobs=1 (set in nix.custom.conf below) keeps
+    # us well clear of that cliff. 6 GiB RAM: enough for a parallel
+    # rustc invocation without thrashing.
     create_lima_vm() {
         if [ "$arch" = "arm64" ]; then
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz --rosetta \
-                --cpus=4 --memory=6 --disk=40 \
+                --cpus=4 --memory=6 --disk=80 \
                 template:default
         else
             limactl create --name="$LIMA_VM_NAME" --tty=false \
                 --vm-type=vz \
-                --cpus=4 --memory=6 --disk=40 \
+                --cpus=4 --memory=6 --disk=80 \
                 template:default
         fi
     }
@@ -304,7 +309,29 @@ install_macos_lima_nix_stack() {
         }
         changed=0
         ensure_setting extra-platforms x86_64-linux         && changed=1
-        ensure_setting trusted-users   "root @sudo @wheel"  && changed=1
+        # trusted-users: Lima grants sudo via /etc/sudoers.d (NOPASSWD),
+        # NOT by adding the user to the sudo/wheel group, so @sudo and
+        # @wheel never match the lima user. Use "*" to trust everyone
+        # — perfectly fine inside an ephemeral build VM, and required
+        # for the run-time `--option extra-platforms x86_64-linux`
+        # belt-and-braces fallback to be honored by the daemon.
+        ensure_setting trusted-users   "*"                  && changed=1
+        # sandbox = false: the build sandbox in Determinate Nix makes a lot
+        # of bind-mounts under /nix/var/nix/builds/ and /nix/store/
+        # *.drv.chroot/. Under Rosetta translation the cleanup
+        # sequence races with the Rosetta binfmt handler still
+        # holding the rosetta volume open, and the daemon ends up
+        # unwinding through dirs that look read-only because mount
+        # namespaces havent torn down yet. We control the source —
+        # the sandbox hardening is irrelevant for byte-identical
+        # measurement reproducibility.
+        ensure_setting sandbox false && changed=1
+        # max-jobs = 1: limit concurrent builds. Concurrent x86_64
+        # builds under Rosetta each spin up a chroot copy of /nix/store
+        # in /nix/store/<drv>.chroot/, easily exhausting disk on the
+        # VM. Serial builds keep peak disk usage bounded and side-step
+        # the EROFS-after-ENOSPC failure mode entirely.
+        ensure_setting max-jobs 1 && changed=1
         ensure_setting extra-experimental-features "nix-command flakes" && changed=1
 
         if [ "$changed" -eq 1 ]; then
