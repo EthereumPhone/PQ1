@@ -758,29 +758,27 @@ impl CommandRouter {
     /// A count of 0 is never emitted — if there are no hits the
     /// trailer is absent, which the secure world treats as "no
     /// names bundles".
-    /// Ensure the `[erc20][v1_zk][v3_zk]` u16-prefixed trailer skeleton
-    /// is fully present before `received_len`, padding any missing
-    /// prefix with `[0x00, 0x00]`.
+    /// Ensure the `[erc20][v1_zk][v3_zk][safe_v1][selector]` u16-prefixed
+    /// trailer skeleton is fully present before `received_len`, padding
+    /// any missing prefix with `[0x00, 0x00]`.
     ///
     /// Background: the secure-world sign_userop parser walks trailers
     /// positionally in that exact order and then reads the `names`
-    /// trailer at whatever cursor lands after the three. If the
-    /// companion sent a bare payload (no trailers) and the NS router
-    /// auto-injected only the erc20 bundle, positions where `v1_zk`
-    /// and `v3_zk` length headers should live are either past
-    /// `received_len` or contain stale CHAIN_BUF bytes from a prior
-    /// sign. Without the pad, the subsequent names-trailer injection
-    /// writes its `[count][bundle_len][bundle]` starting at a byte the
-    /// secure parser interprets as the v1_zk length header — AA13-style
-    /// misalignment, surfaces on the OLED as "Sign v3 len>cap" because
-    /// the u16 the parser eventually consumes as the v3 length is a
-    /// random byte pair from the middle of a names bundle.
+    /// trailer at whatever cursor lands after them. If a caller sent a
+    /// payload that stops earlier in the chain (e.g. a CoW v3 sign-userop
+    /// emits only `erc20+v1_zk+v3_zk` and stops there, since the v3 VK
+    /// injector requires `trailer_end == received_len`), the secure
+    /// parser will consume the `[count][bundle_len][...]` framing of the
+    /// names trailer as `safe_v1`'s u16 length and the next pair as
+    /// `selector`'s — bytes that are almost always > the per-trailer
+    /// caps and trip "bad safe bundle" or "bad selector bundle" on the
+    /// OLED. (Earlier symptom: "Sign v3 len>cap" when only 1 prefix was
+    /// padded.)
     ///
-    /// This helper walks the current trailer chain and appends empty
-    /// `[0,0]` u16 prefixes for any section not yet encoded, returning
-    /// the updated `received_len`. For a payload that already contains
-    /// a full skeleton (companion emitted all three prefixes, as it
-    /// does whenever any trailer is present) this is a no-op.
+    /// This helper walks the trailer chain and appends empty `[0, 0]`
+    /// u16 prefixes for any section not yet encoded, returning the
+    /// updated `received_len`. For a payload that already contains a
+    /// full skeleton this is a no-op.
     unsafe fn ensure_trailer_skeleton(received_len: usize) -> usize {
         if received_len < SIGN_USEROP_HEADER_LEN {
             return received_len;
@@ -793,8 +791,13 @@ impl CommandRouter {
         }
         let mut pos = after_data;
         let mut new_len = received_len;
-        // Three empty u16 prefixes to ensure: erc20, v1_zk, v3_zk.
-        for _ in 0..3 {
+        // Five empty u16 prefixes to ensure, in secure-parser order:
+        // erc20, v1_zk, v3_zk, safe_v1, selector. Must match the parse
+        // sequence in `secure/src/nsc/cmd_sign_userop.rs::run` exactly —
+        // any divergence causes the names trailer to misalign with the
+        // secure parser's cursor and surfaces on the OLED as a
+        // "bad <section> bundle" error.
+        for _ in 0..5 {
             if pos + 2 > new_len {
                 if pos + 2 > CHAIN_BUF_LEN {
                     return new_len;
