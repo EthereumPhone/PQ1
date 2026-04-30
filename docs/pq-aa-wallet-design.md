@@ -45,6 +45,18 @@ A hardware-wallet-backed, seed-phrase-recoverable, post-quantum ERC-4337 account
 
 ## Core architectural decisions
 
+### 0. EntryPoint v0.6 is a frozen target
+
+The wallet is built against **ERC-4337 EntryPoint v0.6** and stays there for the life of the deployment. **There is no migration path to v0.7 or v0.8**, by design:
+
+- The EntryPoint instance address and ABI are part of `initCode` (the proxy is initialized with a hard-coded EntryPoint reference) and part of the `userOpHash` preimage that the firmware re-computes on every sign.
+- CREATE2 address stability across chains (the wallet's headline UX property) requires byte-identical `initCode` everywhere. Switching EntryPoint version changes `keccak256(initCode)` and therefore the wallet address — the same 24 words would yield a different address on any chain redeployed under v0.7+.
+- Invariant: bootstrap C10 keys are immutable per wallet, so we cannot re-key into a new factory either. The on-chain wallet, the factory, and the firmware's `entry_point` field are co-frozen.
+
+EIP-4337 v0.6 bundlers are expected to remain available on every major L1/L2 indefinitely. In the unlikely event they are sunset everywhere, the contingency is **not** to migrate to a newer EntryPoint, but to fall back to direct EOA-bundled `handleOps` calls into the existing v0.6 EntryPoint (which is itself a permissionless contract that doesn't go away). The wallet contract, slot architecture, and signing flow remain untouched.
+
+Practical consequence for development: do not "modernize" the UserOp struct, the userOpHash, the validation phase, or the factory ABI to v0.7 packed-userop shape. The v0.6 layout in `cmd_sign_userop.rs`, `pqsigner-aa::userop`, and `PQSmartWallet.validateUserOp` is the contract.
+
 ### 1. Two-tier signer architecture
 
 The wallet has **two classes of signer**, both derived from the same BIP-39 seed:
