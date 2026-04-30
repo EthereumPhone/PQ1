@@ -628,6 +628,30 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // v1 so a CoW setPreSig that satisfied both circuits renders the
     // 8-page order, not the weaker string. The gate above made this
     // the only legal outcome for CoW setPreSig already.
+    //
+    // Slot rotation is its own affirmative-consent step: when
+    // `FLAG_REGISTER_SLOT` is set the firmware also emits a Type 1
+    // `addOwnerBytes` UserOp that consumes one of the wallet's
+    // `MAX_BOOTSTRAP_USES` budget items on chain. Without a separate
+    // confirm a hostile companion could silently set the flag on every
+    // routine UserOp and drain the bootstrap reserve at twice the rate
+    // the user thinks they're authorising. The Type 1 sig is gated by
+    // the on-chain monotonic cap regardless; this gate just makes the
+    // cost visible to the user.
+    if register_slot {
+        let rotate_pages = crate::tx::display::build_slot_rotation_pages(slot_index);
+        match confirm(rotate_pages.as_slice()) {
+            ConfirmResult::Confirmed => {}
+            ConfirmResult::Cancelled => {
+                ui::show_status("Cancelled", "");
+                return NscStatus::UserRejected as u32;
+            }
+            ConfirmResult::IdleWipe => {
+                super::zeroize_sensitive_state();
+                return NscStatus::IdleWipe as u32;
+            }
+        }
+    }
     let pages = pick_sign_pages(
         &tx_for_display,
         inner_data,

@@ -31,6 +31,7 @@ mod erc20_unknown;
 pub(super) mod primitives;
 #[cfg(not(test))]
 mod safe_display;
+mod slot_rotation;
 mod typed_call;
 mod value_transfer;
 
@@ -41,6 +42,7 @@ pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;
 #[cfg(not(test))]
 pub use safe_display::render_safe_v1_pages;
+pub use slot_rotation::build_slot_rotation_pages;
 pub use value_transfer::render_pages;
 
 use crate::ui::confirm::Page;

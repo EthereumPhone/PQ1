@@ -212,6 +212,27 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // ── 6. Per-tx clear-signing confirm ─────────────────────────────
     //
+    // Slot rotation is its own affirmative-consent step ahead of the
+    // per-tx loop: when `FLAG_REGISTER_SLOT` is set the firmware also
+    // emits a Type 1 `addOwnerBytes` UserOp that consumes one of the
+    // wallet's `MAX_BOOTSTRAP_USES` budget items on chain. The cap
+    // applies to the whole batch (one Type 1 per sign call), so we
+    // gate it once before any inner-tx render.
+    if register_slot {
+        let rotate_pages = crate::tx::display::build_slot_rotation_pages(slot_index);
+        match confirm(rotate_pages.as_slice()) {
+            ConfirmResult::Confirmed => {}
+            ConfirmResult::Cancelled => {
+                ui::show_status("Cancelled", "");
+                return NscStatus::UserRejected as u32;
+            }
+            ConfirmResult::IdleWipe => {
+                super::zeroize_sensitive_state();
+                return NscStatus::IdleWipe as u32;
+            }
+        }
+    }
+
     // For each member: render the same pages the single-tx path would
     // render (no trailers — basic value/erc20-shape/blind-sign ladder),
     // wrap with a "BATCH SIGN | Tx i of N" banner, and require an
