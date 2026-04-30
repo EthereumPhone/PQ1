@@ -80,8 +80,10 @@ mod trailer;
 // HIGH-2 fix: refuse to build hardware images that also enable any of
 // the dev-only features. `debug-log` and `ui-semihosting` leak secure-
 // world state via the semihosting channel; `ui-mirror` streams the OLED
-// over RTT; `mock-se` substitutes an in-SRAM fake SE. Any of these on a
-// `stm32u585` release build is a ship-blocker.
+// over RTT; `ui-capture` emits per-frame SHA-256 fingerprints over the
+// secure-log channel; `mock-se` substitutes an in-SRAM fake SE; the rest
+// each replace some part of the production trust model with a dev-only
+// shortcut. Any of these on a `stm32u585` release build is a ship-blocker.
 //
 // Hardware test images opt in by also enabling `e2e-test` (which exposes
 // `set_e2e_unlocked` so the automated harness never needs to drive the
@@ -89,14 +91,19 @@ mod trailer;
 // it's on we permit the other dev features needed to drive the tests
 // (`make e2e-hw`, `make test-key-speed`). CI must still gate shipped
 // firmware on `e2e-test` being OFF.
+//
+// Reference: `/home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md`
+// Phase 2.
 #[cfg(all(
     feature = "stm32u585",
     not(debug_assertions),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
     any(
+        feature = "debug-log",
         feature = "ui-semihosting",
         feature = "ui-mirror",
+        feature = "ui-capture",
         feature = "mock-se",
         feature = "otp-hardcoded-master-key",
         feature = "saes-self-test",
@@ -105,13 +112,14 @@ mod trailer;
 ))]
 compile_error!(
     "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
-     debug-log / ui-semihosting / ui-mirror / mock-se / otp-hardcoded-master-key / \
-     saes-self-test / uart-console. These features leak secure-world state, \
-     replace the SE with a mock, replace the per-device OTP master key with a \
-     shared compile-time constant, halt the boot flow after a diagnostic, or \
-     stream diagnostic bytes on PA9 UART. Hardware test images may opt in by also \
-     enabling `e2e-test` (auto-provisioning, non-interactive) or `dev-testkey` \
-     (interactive UI, OTP substituted with a compile-time constant)."
+     debug-log / ui-semihosting / ui-mirror / ui-capture / mock-se / \
+     otp-hardcoded-master-key / saes-self-test / uart-console. These features \
+     leak secure-world state, replace the SE with a mock, replace the per-device \
+     OTP master key with a shared compile-time constant, halt the boot flow \
+     after a diagnostic, or stream diagnostic bytes on PA9 UART. Hardware test \
+     images may opt in by also enabling `e2e-test` (auto-provisioning, \
+     non-interactive) or `dev-testkey` (interactive UI, OTP substituted with a \
+     compile-time constant)."
 );
 
 // Dedicated guard: `otp-hardcoded-master-key` + `optiga-lock-operational` is
@@ -130,6 +138,122 @@ compile_error!(
      exclusive. Enabling both would bump E140 LcsO=Operational (irreversible) \
      against a PBS derived from a shared compile-time constant, effectively \
      publishing the Shielded Connection pairing secret."
+);
+
+// ---------------------------------------------------------------------------
+// UI-axis mutual exclusivity (Phase 2)
+//
+// `ui-semihosting`, `ui-oled`, and `ui-noop` are mutually exclusive UI
+// *backends* — exactly one provides the `Display` and `Input` types that
+// `secure/src/ui/mod.rs` re-exports. The `ui-mirror` flag sits on top of
+// `ui-oled` (it implies it) and `ui-capture` sits on top of any backend
+// (it emits a SHA-256 hash of every flushed frame as a side effect), so
+// those two compose with the backend axis rather than competing with it.
+//
+// Combining two backends compiles today (the first cfg-match wins
+// silently), which is footgun-shaped. This fence makes "two backends"
+// a build error.
+// ---------------------------------------------------------------------------
+
+#[cfg(all(feature = "ui-semihosting", feature = "ui-oled"))]
+compile_error!(
+    "UI backends `ui-semihosting` and `ui-oled` are mutually exclusive. \
+     Pick exactly one. The Makefile recipes set the right combination; \
+     a manual `cargo build -p secure --features ...` must also pick one."
+);
+
+#[cfg(all(feature = "ui-semihosting", feature = "ui-noop"))]
+compile_error!(
+    "UI backends `ui-semihosting` and `ui-noop` are mutually exclusive. \
+     Pick exactly one."
+);
+
+#[cfg(all(feature = "ui-oled", feature = "ui-noop"))]
+compile_error!(
+    "UI backends `ui-oled` and `ui-noop` are mutually exclusive. \
+     Pick exactly one."
+);
+
+// At least one UI backend must be selected when targeting actual hardware
+// or QEMU. (Pure `cargo test -p sphincs-tz-secure --tests` builds run on
+// the host with neither stm32u585 nor any UI backend — those are exempt
+// because they exercise pure-logic modules only.)
+#[cfg(all(
+    not(test),
+    target_arch = "arm",
+    not(any(
+        feature = "ui-semihosting",
+        feature = "ui-oled",
+        feature = "ui-noop",
+    ))
+))]
+compile_error!(
+    "Exactly one UI backend must be selected: `ui-semihosting`, `ui-oled`, \
+     or `ui-noop`. (`ui-mirror` implies `ui-oled`; `ui-capture` composes with \
+     any backend.)"
+);
+
+// ---------------------------------------------------------------------------
+// Secure-element-axis mutual exclusivity (Phase 2)
+//
+// `dual-se` is the explicit "both production SEs simultaneously" build,
+// implemented as `dual-se = ["optiga-trust-m", "se050"]`. Outside of
+// `dual-se`, exactly one of {mock-se, tropic01-se, se050, optiga-trust-m}
+// must be selected.
+//
+// The selection is done in `secure/src/main.rs` today by a chain of
+// `#[cfg(all(feature = "mock-se", not(feature = "se050"), ...))]` blocks
+// (negative-condition voting) — i.e., simultaneous selection compiles
+// silently with a "first match wins" semantics. Make it loud here.
+// ---------------------------------------------------------------------------
+
+#[cfg(all(feature = "mock-se", feature = "tropic01-se"))]
+compile_error!(
+    "Secure-element backends `mock-se` and `tropic01-se` are mutually \
+     exclusive. Pick exactly one."
+);
+
+#[cfg(all(feature = "mock-se", feature = "se050"))]
+compile_error!(
+    "Secure-element backends `mock-se` and `se050` are mutually exclusive. \
+     Pick exactly one."
+);
+
+#[cfg(all(feature = "mock-se", feature = "optiga-trust-m"))]
+compile_error!(
+    "Secure-element backends `mock-se` and `optiga-trust-m` are mutually \
+     exclusive. Pick exactly one. (Note: `dual-se` implies both `optiga-trust-m` \
+     and `se050`, so combining `mock-se` with `dual-se` is also forbidden.)"
+);
+
+#[cfg(all(feature = "tropic01-se", feature = "se050"))]
+compile_error!(
+    "Secure-element backends `tropic01-se` and `se050` are mutually exclusive. \
+     `tropic01-se` is a standalone-only backend; for two-SE builds use `dual-se`."
+);
+
+#[cfg(all(feature = "tropic01-se", feature = "optiga-trust-m"))]
+compile_error!(
+    "Secure-element backends `tropic01-se` and `optiga-trust-m` are mutually \
+     exclusive. `tropic01-se` is a standalone-only backend; for two-SE builds \
+     use `dual-se`."
+);
+
+// At least one SE backend must be selected when targeting hardware or QEMU.
+#[cfg(all(
+    not(test),
+    target_arch = "arm",
+    not(any(
+        feature = "mock-se",
+        feature = "tropic01-se",
+        feature = "se050",
+        feature = "optiga-trust-m",
+        feature = "dual-se",
+    ))
+))]
+compile_error!(
+    "Exactly one secure-element backend must be selected: `mock-se`, \
+     `tropic01-se`, `se050`, `optiga-trust-m`, or `dual-se`."
 );
 
 #[cfg(not(feature = "stm32u585"))]

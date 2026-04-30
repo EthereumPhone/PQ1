@@ -53,7 +53,18 @@ cortex-m-rt          = { workspace = true }
 cortex-m-semihosting = { workspace = true }
 
 [features]
-default = ["mock-se", "debug-log", "ui-semihosting"]
+# No default features. Every consumer (Makefile recipe, Cargo invocation,
+# CI job) must declare its build profile explicitly via
+# `--no-default-features --features ...`. This is a deliberate inversion
+# of the previous "default to QEMU dev" stance: a manual `cargo build -p
+# sphincs-tz-secure` now fails with a clear "no SE backend selected /
+# no UI backend selected" error from the `compile_error!` fences in
+# `secure/src/nsc/mod.rs`, instead of silently producing a dev-mode
+# build that could be mistaken for production.
+#
+# Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md
+# Phase 2.
+default = []
 debug-log = []
 mock-se = []
 tropic01-se = ["dep:tropic01", "dep:x25519-dalek", "dep:embedded-hal"]

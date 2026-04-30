@@ -12,8 +12,10 @@ use std::time::Instant;
 
 // ── Include the same generated constant files used by the secure world ──
 
-// Poseidon constants (auto-generated from poseidon-bls12381 npm package)
-#[path = "../../secure/src/zk/poseidon_constants.rs"]
+// Poseidon constants (auto-generated from poseidon-bls12381 npm package).
+// Lives under `generated/` in the secure crate since the constants table
+// is machine-emitted, not hand-edited.
+#[path = "../../secure/src/zk/generated/poseidon_constants.rs"]
 mod poseidon_constants;
 
 // Test vectors (auto-generated from ZKlarity proof_supply.json)

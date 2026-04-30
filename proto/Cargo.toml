@@ -1,0 +1,45 @@
+# pqsigner-proto — single source of truth for every protocol-level
+# constant, byte layout, and enum that crosses one of these three
+# boundaries:
+#
+#   1. Secure ↔ Non-secure (TrustZone) — the NSC gateway uses every
+#      `CMD_*` constant + `NscStatus` enum + wire-format size declared
+#      here. Both worlds compile this crate verbatim.
+#
+#   2. Firmware ↔ On-chain (Solidity) — every constant duplicated on
+#      both sides today (`C10_SIG_LEN = 4008`, `MAX_BOOTSTRAP_USES =
+#      65_536`, `OWNER_BYTES_LEN`, `EXECUTE_SELECTOR`, the typehashes,
+#      etc.) lives here. Phase 4 of the modularity refactor adds a
+#      host-side codegen tool that emits a Solidity `library
+#      PqsignerProto` from this crate, removing the duplication.
+#
+#   3. Firmware ↔ Companion app — wire-format sizes consumed by the
+#      USB protocol v2 (HID report sizes, tag bytes, payload offsets)
+#      live here.
+#
+# Strict zero-dependency policy. Anything that needs deps belongs in
+# `pqsigner-aa`, `pqsigner-tx`, `pqsigner-domain`, or one of the HAL
+# crates — never here.
+#
+# Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md
+# Phase 3.
+
+[package]
+name = "pqsigner-proto"
+version = "0.1.0"
+edition.workspace = true
+
+[features]
+default = []
+# Selects the right NS_SRAM / NS_FLASH / SHARED_MAILBOX region constants
+# for the STM32U585 memory map (vs. the QEMU mps2-an505 default).
+stm32u585 = []
+
+[dependencies]
+# Zero dependencies — pure #![no_std] types only. Do not relax this
+# without re-evaluating whether the dep is actually a protocol concern.
+
+[dev-dependencies]
+# Property-based fuzzing for any future encode/decode helpers — runs
+# only on host via `cargo test -p pqsigner-proto`.
+proptest = "1"

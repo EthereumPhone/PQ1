@@ -5,6 +5,7 @@ import {LibClone} from "solady/utils/LibClone.sol";
 
 import {PQSmartWallet} from "./PQSmartWallet.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
+import {PqsignerProto} from "./generated/PqsignerProto.sol";
 
 /// @title PQSmartWalletFactory
 ///
@@ -39,7 +40,9 @@ contract PQSmartWalletFactory {
 
     /// @notice Domain tag prefixed to the `factorySig` message. Must match
     ///         the firmware's `factory_add_slot0_digest` helper.
-    bytes constant FACTORY_ADD_SLOT_DOMAIN = "pqwallet-factory-add-slot";
+    /// @dev Sourced from the auto-generated `PqsignerProto.FACTORY_ADD_SLOT_DOMAIN`
+    ///      which mirrors the canonical `pqsigner-proto` Rust constant.
+    bytes constant FACTORY_ADD_SLOT_DOMAIN = PqsignerProto.FACTORY_ADD_SLOT_DOMAIN;
 
     event AccountCreated(
         address indexed account,

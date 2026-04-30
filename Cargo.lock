@@ -1382,6 +1382,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqsigner-proto"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+]
+
+[[package]]
+name = "pqsigner-xtask"
+version = "0.1.0"
+dependencies = [
+ "pqsigner-proto",
+]
+
+[[package]]
 name = "prettyplease"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1917,6 +1931,7 @@ dependencies = [
 name = "sphincs-tz-shared"
 version = "0.1.0"
 dependencies = [
+ "pqsigner-proto",
  "proptest",
 ]
 

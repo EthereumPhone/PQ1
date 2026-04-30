@@ -19,6 +19,10 @@
 #   * tools/*.py / *.js / *.sh — host scripts; not Rust.
 [workspace]
 members = [
+    # Protocol IDL: single source of truth for every constant / enum /
+    # wire size that crosses a TrustZone, on-chain, or USB boundary.
+    # Zero-dependency by policy. Phase 3 of the modularity refactor.
+    "proto",
     "shared",
     "secure",
     "nonsecure",
@@ -34,6 +38,10 @@ members = [
     "bls12_381_pka",
     "dbgen",
     "zk-test",
+    # Host-side workspace tooling (codegen, doc-checks, release packaging).
+    # See `xtask/Cargo.toml` for the cargo-xtask convention. Phase 4 of the
+    # modularity refactor.
+    "xtask",
 ]
 resolver = "2"
 
@@ -45,6 +53,7 @@ edition = "2021"
 # cannot override the version or default-features.
 [workspace.dependencies]
 # Internal path deps
+pqsigner-proto    = { path = "proto" }
 sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
 sphincs-c10       = { path = "sphincs-c10" }

@@ -1195,9 +1195,17 @@ test: test-unit test-solidity e2e
 	@echo "==> ALL TEST LAYERS PASSED"
 
 # Host-side Rust unit tests for pure logic (aa, tx modules).
+#
+# Explicit `--no-default-features --features ...` because the secure crate
+# now defaults to no features (Phase-2 of the modularity refactor). Without
+# an explicit feature set, dead-code warnings on unreachable feature-gated
+# modules would either litter the output or, under `-D warnings`, fail the
+# build outright.
 test-unit:
 	@echo "==> Running Rust unit tests (host)"
-	@cargo test --locked -p sphincs-tz-secure
+	@cargo test --locked -p sphincs-tz-secure \
+	    --no-default-features \
+	    --features mock-se,debug-log,ui-semihosting
 
 # Foundry tests for the PQ smart-wallet contracts.
 test-solidity:

@@ -812,6 +812,86 @@ Three gaps deliberately not closed by the four validation runs on our last bench
 
 ---
 
+## Modularity refactor — baseline (2026-04-30)
+
+State snapshot taken at the start of the modularity refactor described in
+`/home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md`. Numbers
+recorded here so subsequent phases can detect regressions.
+
+### Per-crate Rust line counts
+
+| Crate | LOC | files |
+|---|---:|---:|
+| shared | 2 550 | 3 |
+| secure | 43 981 | 134 |
+| nonsecure | 4 607 | 14 |
+| bip39 | 2 453 | 2 |
+| fwmeasure | 171 | 1 |
+| sphincs-c10 | 1 616 | 8 |
+| fw-manifest | 921 | 1 |
+| fwsign | 1 507 | 11 |
+| fsbl | 534 | 8 |
+| bls12_381_pka | 14 314 | 19 |
+| dbgen | 2 745 | 8 |
+| zk-test | 308 | 1 |
+| **total** | **~75 700** | **210** |
+
+### Cross-cutting metrics
+
+| Metric | Value |
+|---|---:|
+| Feature flags declared in `secure/Cargo.toml` | **50** |
+| Total `#[cfg(feature = "...")]` blocks in `secure/src/` | **291** |
+| `cfg` density in `secure/src/se050/mod.rs` | 50 |
+| `cfg` density in `secure/src/main.rs` | 37 |
+| `cfg` density in `secure/src/optiga/mod.rs` | 36 |
+| `cfg` density in `secure/src/nsc/mod.rs` | 25 |
+| `cmd_sign_userop.rs` total lines | 1 241 |
+| `secure/src/hw/*.rs` driver count | 22 |
+| `shared/src/lib.rs` total lines | 1 484 |
+
+### Solidity
+
+| Contract | LOC |
+|---|---:|
+| `PQSmartWallet.sol` | 435 |
+| `PQSmartWalletFactory.sol` | 138 |
+| `PQMultiOwnable.sol` | 263 |
+| `verifiers/SPHINCsC10Asm.sol` | 202 |
+| **total** | **1 038** |
+
+### Boundaries-of-truth (constants duplicated across Rust ↔ Solidity)
+
+These identifiers exist on **both** sides today and are therefore drift-prone
+until Phase 4's codegen lands:
+
+- `C10_SIG_LEN = 4008`
+- `MAX_BOOTSTRAP_USES = 65_536`, `MAX_SLOT_USES = 65_536`
+- `MAX_OFFCHAIN_GAP = 5`
+- `OWNER_BYTES_LEN = 64`
+- `SIG_WRAPPER_LEN = 4128`
+- `FACTORY_ADD_SLOT_DOMAIN`
+- `EXECUTE_SELECTOR = 0x14443c57`, `EXECUTE_BATCH_SELECTOR = 0x7a389933`
+- `SAFE_DOMAIN_TYPEHASH`, `SAFE_TX_TYPEHASH`
+- `COWSWAP_EIP712_SENTINEL`, `GPV2_SETTLEMENT_ADDRESS`,
+  `SET_PRE_SIGNATURE_SELECTOR`
+
+### Targets after refactor
+
+After Phase 11 lands the same metrics should read:
+
+- Feature flags: **25–35** (5 axes + ~10 sub-features). Declared in axes,
+  not free-form names.
+- `#[cfg(feature = "...")]` outside `platform.rs` + `compile_error!` fences
+  + sub-feature gates: **0**.
+- `secure/src/hw/*.rs` count: **0** (moved to `hal-stm32u5/`).
+- `cmd_sign_userop.rs` total lines: ≤ 200 (the rest is split across 8
+  submodules under `secure/src/nsc/sign_userop/`).
+- Solidity ↔ Rust shared constants exist in **one** place (Rust) and
+  Solidity gets them via `cargo xtask gen-solidity-constants`.
+
+---
+
 ## Completion Log
 
 When a task above is completed, update it here with the date and a one-line summary.
@@ -858,3 +938,4 @@ When a task above is completed, update it here with the date and a one-line summ
 | 2026-04-24 | Trezor audit landed — `docs/trezor-comparison.md` + 5 dev-board-safe adoptions | New `docs/trezor-comparison.md` (298-line comparative audit of PQSigner vs Trezor T3W1/STM32U5A9 + Optiga Trust M, organised by adoption priority). Five dev-board-safe, reversible code deltas landed in parallel: (1) **FI helpers** (`secure/src/fi.rs`) — ported Trezor's `wait_random()` `i+j==wait` glitch sentinel (`core/embed/sec/random_delays/stm32/random_delays.c:186-202`) + a `check_true` double-eval helper with `OK_SENTINEL`/`FAIL_SENTINEL` hamming-distant constants. No-op under `e2e-test`. Wired into: `crypto::c10_sign_verified_with_progress` (single-verify + FI-gated boolean check, same cost as before), `cmd_sign_userop.rs` external slot-sign double-verify (`wait_random` between the two verifies, sentinel gate), `hw::flash::pin_attempts_bump` (post-bump delay + double-readback via `check_true`), `dual_se::unlock` master-secret cross-verify (two `ct_eq` compares gated through `check_true`). 4 new host tests. (2) **proptest fuzz harness** (`secure/src/fuzz_props.rs`) — 7 property tests asserting no panic on arbitrary `&[u8]` for `tx::eip1559::parse`, `tx::rlp::decode_item`, `erc20::bundle::verify_erc20_bundle`, `erc20::calldata::parse_erc20_calldata`, `names::verify_name_bundle`, `aa::userop::parse_header`, + a composed-pipeline test. PQSigner's narrower answer to Trezor's libFuzzer harnesses (`crypto/fuzzer/`); cargo-fuzz setup would need a `[lib]` target on `sphincs-tz-secure` and is deferred. 71/71 host tests PASS. (3) **TAMP driver** (`secure/src/hw/tamp.rs`) — feature-gated `tamp` flag. Register-level port of Trezor's `core/embed/sec/tamper/stm32u5/tamper.c:100-207` with two deliberate deltas: log-only IRQ handler (WFE halt, no `trigger_lockout_wipe` — prevents probe-rs false-trigger bench-chip brick), and LSI-only RTC clock init (no LSE dependency). Enables ITAMP1/2/3/5/6/7/8/9/11/12/13 + CR3=0 confirmed mode. Not wired into `main()` yet — `init()` + `on_tamp_irq()` are available for opt-in. (4) **UI screenshot-hash regression harness** (`secure/src/ui/capture.rs` + `tools/ui_fixture.py`) — `ui-capture` feature emits `[UI-FP] <frame-idx> <sha256>` per `Display::flush()` over `secure_log!`. Both semihosting and OLED backends hashed. Host tool has `--regenerate` + `--check` subcommands matching Trezor's `tests/ui_tests/common.py:131-132` fixture model. Smoke-tested end-to-end with fake input. (5) **consumption_mask PWM** (`secure/src/hw/consumption_mask.rs`) — simplified (no-DMA) port of Trezor's `core/embed/sec/consumption_mask/stm32u5/consumption_mask.c`. TIM2 CH1 PWM on PA5 at 10 kHz, duty randomised via `randomize()` called from caller's periodic path. Feature-gated `consumption-mask`; full GPDMA linked-list port deferred. All changes pure-additive — default feature set produces byte-identical firmware to pre-audit commit. Full matrix builds pass (`mock-se`, `stm32u585+dual-se+usb+ui-oled`, + all new features stacked). Host tests 71/71 PASS. QEMU e2e validation in flight at commit time — log-only tamp + feature-off consumption_mask + ui-capture guarantee no boot-path behavioural change without the respective feature flag. See `docs/trezor-comparison.md §§1.1, 2.3–2.6, 3.1`. |
 | 2026-04-26 | Safe-multisig `approveHash` clear-sign trailer (`safe_v1`) | Mirror of the CowSwap v3 clear-sign architecture, but without Groth16. The `approveHash(bytes32)` selector puts the EIP-712 digest *in the calldata*, so the firmware brings the canonical SafeTx (281 B) plus the raw inner-call data (≤ 4 KB) on-device in a new optional trailer and natively re-keccaks both chains: `keccak(raw_data) == canonical.data_hash` and `safeTxHash(canonical) == inner_data[4..36]`. Plus chain pinning (`canonical.chain_id == userop.chain_id`), Safe-address pinning (`canonical.safe_address == userop.to`), and a v1 DelegateCall refusal (`operation == 1` rejected outright). Symmetric downgrade gate to CoW: if `inner_data` looks like `approveHash`, the trailer is mandatory — without it the sign aborts with `"Safe needs trailer"` so a hostile NS cannot strip it and coerce blind-signing. The renderer (`secure/src/tx/display/safe_display.rs`) shows three Safe-level header pages (banner+chain / safe address / SafeTx nonce + Op + inner-kind hint) followed by inner-tx pages dispatched on `raw_data` shape — empty-call / plain-ETH / ERC-20 known / ERC-20 unknown / blind-sign — and a confirm prompt. Reuses every existing display primitive (`write_addr_full_or_name`, `write_token_amount_two_rows`, `write_calldata_hash_rows`, etc.). Inner ERC-20 metadata only applies when the bundle's contract address matches `canonical.to`, so a Safe call to USDC carries USDC metadata and not the Safe contract's. New files: `secure/src/tx/eip712/safe/{mod.rs,verify.rs,test_vectors.rs}`, `secure/src/tx/display/safe_display.rs`. Wire format: `shared/src/lib.rs` adds `APPROVE_HASH_SELECTOR` (0xd4d9bdcd), `APPROVE_HASH_CALLDATA_LEN` (36), `SAFE_DOMAIN_TYPEHASH` + `SAFE_TX_TYPEHASH` (Safe v1.3.0+), `SAFE_V1_CANONICAL_LEN` (281), `SAFE_V1_RAW_DATA_MAX` (= MAX_TX_LEN), `SAFE_V1_PAYLOAD_MAX`, and 12 `SAFE_OFF_*` field offsets. SNAP_LEN bumped by 4 380 B; total ~16 KB, well inside the U585's 256 KB SRAM. Tests: 14 new host unit tests cover both typehash preimage round-trips + happy path + 9 cross-check failure modes (wrong selector / wrong calldata len / chain mismatch / safe-address mismatch / DelegateCall reject / data_hash mismatch / safeTxHash mismatch / truncated bundle / oversized raw_data_len / empty raw_data with non-zero data_hash / decoder rejects op>1). Full host suite 100/100 PASS. New e2e Scenario 5 in `nonsecure/src/e2e_test.rs` builds a synthetic Safe `transfer(0xRECIPIENT, 250 USDC)` and signs it through QEMU end-to-end — OLED renders `"Approve Safe TX / SafeTx Nonce: 17 / Op: Call / Inner: ERC-20?"` and the firmware emits a 4128-byte Type 2 SLH-DSA wrapper. New `sha3` dep on the NS side for assembling the trailer (companion-side equivalent). Targets Safe v1.3.0+; older Safes self-police via cross-check failure (different domain separator → recomputed `safeTxHash` won't match calldata). Out of scope for v1: DelegateCall (refused), `multiSend` recursive decoding (renders via blind-sign fallback), companion-side trailer assembler in `~/Documents/pq1-companion`. Scenario 6 (PIN-lockout brute-force) shows a pre-existing FAIL on master, unrelated to this work — confirmed by stashed-baseline rerun. |
 | 2026-04-28 | EIP-1271 off-chain signing + on-chain combined-cap (CMD_SIGN_OFFCHAIN / CMD_OFFCHAIN_STATUS / `executeWithOffchainCount`) | Adds the wallet-side EIP-1271 surface (`isValidSignature`) via Solady `ERC1271` + `EIP712` mixins (nested EIP-712 replay protection, ERC-6492 counterfactual unwrap) and a per-slot durable off-chain sig counter that ensures the slot key never exceeds its SPHINCS+C10 hypertree usage budget across a seed-restore. **On-chain:** new `offchainSigCount[ownerIndex]` mapping in `PQMultiOwnable` ERC-7201 storage; `_setOffchainSigCount(ownerIndex, newCount, slotUsesNow, cap)` enforces monotonic + the *combined* invariant `slotUses + offchainSigCount <= MAX_SLOT_USES = 65_536`. `PQSmartWallet.execute` / `executeBatch` are replaced by `executeWithOffchainCount(ownerIndex, newOffchainCount, target, value, data)` (and the batch variant) — every Type 2 UserOp now publishes the firmware's local off-chain count durably, so a fresh-from-seed firmware reads on-chain `offchainSigCount[i]` and reasons correctly about remaining budget. Type 2 `validateUserOp` enforces the combined cap pre-bump. EIP-1271 path is `view`-only (never bumps a counter), wraps the input hash via `replaySafeHash` (so a sig captured against wallet A on chain X cannot replay against wallet B / chain Y), and forbids the bootstrap key (`ownerIndex == 0`). `_isSlotAllowedSelector` updated. **Firmware:** new flash-resident counter on bank-1 page 123 — log-structured journal with two entry types (`offchain_count`, `last_userop_count`) keyed on `slot_key = sha256(account_index ‖ chain_id ‖ slot_index)[..8]`, 16 B per QW, in-place compaction when the page fills. Wear estimate ~6 500 erases at 50 active slots × 65 536 sigs each — within STM32U5 datasheet 10 000-cycle floor. New `secure/src/offchain_state.rs` facade routes to flash on `stm32u585`/`pka-accel` and to a 128-slot SRAM mock on QEMU/host. New gateway commands `CMD_SIGN_OFFCHAIN = 16` (45 B in: account/chain/slot/hash; 4016 B out: count + 4008 B sig) and `CMD_OFFCHAIN_STATUS = 17` (read local + last_userop + registered). `cmd_sign_offchain` enforces three refusals: unregistered slot (post-restore), gap > `MAX_OFFCHAIN_GAP = 5`, combined cap. Verify-before-release FI guard mirrors `cmd_sign_userop`. `cmd_sign_userop` modified: builds calldata as `executeWithOffchainCount(ownerIndex, local_offchain_count, ...)`, writes the registered-flag on Type 1 (forces post-restore Type 1 + Type 2 retry instead of resuming an old slot), snapshots `last_userop_count` post-sign, prepends 8-byte `new_offchain_count` to the response. **Wire format:** new selector `0x14443c57` for `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`. Test vectors regenerated; `SIG_TYPE2_LEN = 4128` unchanged. Three new `NscStatus` variants (`OffchainSlotUnregistered = 17`, `OffchainGapExceeded = 18`, `OffchainCapExceeded = 19`) mapped to `SW_CONDITIONS_NOT_SATISFIED`. **Tests:** 6 new Foundry tests (combined cap, monotonic, idempotent, EIP-1271 happy path, bootstrap rejection, no counter bumps, cross-wallet domain separation); 43/43 forge PASS, 157/157 secure host tests PASS, 5 QEMU e2e sign scenarios PASS with the new wire framing (scenario 6 PIN-lockout pre-existing FAIL, unchanged). **CLAUDE.md** invariant #8 amended to permit the off-chain counter as a bounded exception, new invariant #9 codifies the combined-cap + recovery semantics, "Do not reintroduce per-signature flash state" rule narrowed accordingly. Companion-side dapp integration (`replaySafeHash` wrapping, response decode) is out of scope and tracked separately. |
+| 2026-04-30 | Modularity refactor — Phases 0 + 2 + 3 + 4 + Phase 10 PR E | Audit identified the codebase as having the right *boundaries* (S↔NS split, dual-SE entropy, `ISPHINCSVerifier`) but the wrong *interfaces between them* (`cfg`-only polymorphism, no Rust↔Solidity IDL, no Rust CI). Approved plan at `/home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md`. **Phase 0** — baseline snapshot (LOC per crate, 50 feature flags, 291 `cfg(feature)` blocks across `secure/src/`, file-level metrics) committed under "Modularity refactor — baseline" header in this doc. **Phase 1 (Rust CI matrix) NOT landed** — authored as `.github/workflows/rust.yml` and removed at user request before commit; shared CI infrastructure (third-party actions trust, runner-minute spend, root-level workflow surface) is a different category of change and needs its own deliberate decision. Re-author when ready. **Phase 2** — `secure/src/nsc/mod.rs` `compile_error!` fence expanded: added `debug-log` + `ui-capture` to forbidden-in-prod list (were missing), added pairwise UI-axis exclusivity (`ui-semihosting`/`ui-oled`/`ui-noop`), added pairwise SE-axis exclusivity (`mock-se`/`tropic01-se` × `se050`/`optiga-trust-m`), added "must select one" gates for hardware/QEMU builds. `secure/Cargo.toml` flipped `default = []` so manual `cargo build -p secure` now fails informatively at the fence instead of silently producing a dev-mode build. `make test-unit` updated to pass explicit `--no-default-features --features mock-se,debug-log,ui-semihosting`. Negative tests verify each fence fires on the wrong combo. **Phase 3** — new `proto/` workspace member as `pqsigner-proto` crate (zero-dep, `no_std`, single source of truth for every protocol-level constant + enum + wire size that crosses TrustZone, on-chain, or USB boundaries). `shared/src/lib.rs` rewritten as a thin `pub use pqsigner_proto::*;` re-export shim — 67 existing `sphincs_tz_shared::*` import sites compile unchanged. `shared/Cargo.toml` forwards `stm32u585` feature to `pqsigner-proto`. Added `MAX_BOOTSTRAP_USES`, `OWNER_BYTES_LEN`, `FACTORY_ADD_SLOT_DOMAIN`, and `EXECUTE_SELECTOR` constants to proto (these previously lived only on the Solidity side or in per-file consts). **Phase 4** — new `xtask/` workspace member (`pqsigner-xtask`) with `gen-solidity-constants` subcommand that renders `contracts/smart-wallet/src/generated/PqsignerProto.sol` from `pqsigner-proto`'s public constants. Solidity contracts updated to import from the generated library: `PQSmartWallet.sol` uses `PqsignerProto.{C10_SIG_LEN, MAX_BOOTSTRAP_USES, MAX_SLOT_USES}`; `PQMultiOwnable.sol` uses `PqsignerProto.OWNER_BYTES_LEN`; `PQSmartWalletFactory.sol` uses `PqsignerProto.FACTORY_ADD_SLOT_DOMAIN`. `--check` mode emits the rendered library to stdout — discipline gate for now (run locally before commit); CI automation deferred with Phase 1. **Phase 10 PR E** — `proto/src/lib.rs` now declares `CMD_BASE_*` range markers (CORE/WALLET/OFFCHAIN/FW/BATCH/TEST) and a `const _: () = { ... }` compile-time CMD-collision check that pairwise-asserts every `CMD_*` value is unique — verified to fire correctly on a synthetic duplicate. **Drive-by fix**: `zk-test/src/main.rs` had a stale path `../../secure/src/zk/poseidon_constants.rs` (file moved to `generated/` subdir on master) — now points at `../../secure/src/zk/generated/poseidon_constants.rs`. **All gates green**: 167/167 host tests, 49/49 Solidity tests, drift-check passes. Phases 1 (CI), 5 (extract `pqsigner-aa`/`-tx`/`-domain`), 6 (`pqsigner-hal` traits), 7 (`cfg → trait` migration), 8 (95→5 feature axes), 9 (decompose `cmd_sign_userop.rs`), Phase 10 PRs A/B/C/D, and Phase 11 (doc cleanup) tracked in the plan + `docs/handoff-modularity-refactor.md`; deferred to focused follow-up sessions. |

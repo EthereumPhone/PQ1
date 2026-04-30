@@ -9,6 +9,7 @@ import {ERC1271} from "solady/accounts/ERC1271.sol";
 
 import {PQMultiOwnable, PQMultiOwnableStorage} from "./PQMultiOwnable.sol";
 import {ISPHINCSVerifier} from "./verifiers/ISPHINCSVerifier.sol";
+import {PqsignerProto} from "./generated/PqsignerProto.sol";
 
 /// @title PQSmartWallet
 ///
@@ -49,15 +50,25 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     ISPHINCSVerifier public immutable c10Verifier;
 
     // ── Config constants ────────────────────────────────────────────
+    //
+    // Sourced from `pqsigner-proto` (Rust, the single source of truth)
+    // via the auto-generated `generated/PqsignerProto.sol` library.
+    // CI diffs `cargo run -p pqsigner-xtask -- gen-solidity-constants
+    // --check` against the checked-in library so any drift between the
+    // firmware and the contract is caught at PR review.
+    //
+    // The `public` re-export preserves the existing external ABI so
+    // off-chain integrations that read `wallet.C10_SIG_LEN()` etc.
+    // keep working unchanged.
 
     /// @notice Exact length (bytes) of a SPHINCS+C10 signature.
-    uint256 public constant C10_SIG_LEN = 4008;
+    uint256 public constant C10_SIG_LEN = PqsignerProto.C10_SIG_LEN;
 
     /// @notice Bootstrap (ownerIndex == 0) sig cap, per chain.
-    uint256 public constant MAX_BOOTSTRAP_USES = 65_536;
+    uint256 public constant MAX_BOOTSTRAP_USES = PqsignerProto.MAX_BOOTSTRAP_USES;
 
     /// @notice Per-slot (ownerIndex >= 1) sig cap.
-    uint256 public constant MAX_SLOT_USES = 65_536;
+    uint256 public constant MAX_SLOT_USES = PqsignerProto.MAX_SLOT_USES;
 
     /// @dev ERC-4337 v0.6 sentinel values for `validateUserOp`.
     uint256 private constant SIG_VALIDATION_FAILED = 1;

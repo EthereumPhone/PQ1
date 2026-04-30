@@ -1,0 +1,32 @@
+# xtask — host-side workspace tooling.
+#
+# Convention borrowed from the matklad/cargo-xtask pattern: a single
+# host-only binary that owns build-time tooling (codegen, doc-checks,
+# release packaging) so we never have to install global tools or
+# remember per-workflow shell scripts.
+#
+# Subcommands:
+#   gen-solidity-constants  — emit
+#                             `contracts/smart-wallet/src/generated/PqsignerProto.sol`
+#                             from `pqsigner-proto`'s public constants. Run
+#                             after editing any cross-language constant
+#                             (`MAX_BOOTSTRAP_USES`, `C10_SIG_LEN`, etc.)
+#                             and commit the diff. CI diffs the
+#                             generated file against fresh output to catch
+#                             drift.
+#
+# Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md
+# Phase 4.
+
+[package]
+name = "pqsigner-xtask"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "pqsigner-xtask"
+path = "src/main.rs"
+
+[dependencies]
+pqsigner-proto = { workspace = true }

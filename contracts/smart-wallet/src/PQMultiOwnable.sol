@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
+import {PqsignerProto} from "./generated/PqsignerProto.sol";
+
 /// @notice Storage layout used by `PQMultiOwnable`.
 ///
 /// @custom:storage-location erc7201:pqsigner.storage.PQMultiOwnable
@@ -62,7 +64,9 @@ abstract contract PQMultiOwnable {
         0x470749eea5ac4a541d6582e535445f94e7300bac9e0e4e5577fd3336b407d000;
 
     /// @notice Length (in bytes) of a C10 owner: `pkSeed (32) || pkRoot (32)`.
-    uint256 internal constant OWNER_BYTES_LEN = 64;
+    /// @dev Sourced from the auto-generated `PqsignerProto.OWNER_BYTES_LEN`
+    ///      which mirrors the canonical `pqsigner-proto` Rust constant.
+    uint256 internal constant OWNER_BYTES_LEN = PqsignerProto.OWNER_BYTES_LEN;
 
     // ── Errors ────────────────────────────────────────────────────────
 

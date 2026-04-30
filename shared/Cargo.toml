@@ -3,12 +3,25 @@ name = "sphincs-tz-shared"
 version = "0.1.0"
 edition.workspace = true
 
+# After Phase 3 of the modularity refactor, this crate is a thin
+# re-export shim plus the two implementation modules (`apdu_framing`,
+# `db_format`) that did not fit `pqsigner-proto`'s "constants only"
+# policy. Existing call sites that `use sphincs_tz_shared::CMD_FOO`
+# keep working unchanged via `pub use pqsigner_proto::*;`. New code
+# should import from `pqsigner-proto` directly.
+#
+# Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md
+# Phase 3.
+
 [features]
 default = []
-stm32u585 = []  # Real STM32U585 hardware target (vs QEMU mps2-an505)
+# Forwarded to pqsigner-proto so the secure/nonsecure crates can enable
+# `sphincs-tz-shared/stm32u585` (existing call site) and have it
+# propagate to the regions / NS_SRAM constants in pqsigner-proto.
+stm32u585 = ["pqsigner-proto/stm32u585"]
 
 [dependencies]
-# Zero dependencies — pure #![no_std] types only.
+pqsigner-proto = { workspace = true }
 
 [dev-dependencies]
 # Property-based fuzzing for the parsers in `apdu_framing.rs`. These are
