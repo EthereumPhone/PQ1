@@ -1,5 +1,35 @@
 # Post-Quantum ERC-4337 Wallet: Final Design Spec
 
+> **🟠 Design archive — superseded on parameter choice (2026-04-30 audit).**
+>
+> This is the original two-tier design spec from 2026-04-09. The two-tier
+> architecture itself (bootstrap key + per-slot keys, BIP-85 derivation, stable
+> cross-chain CREATE2 address, on-chain rotation budget) is still the shipping
+> design — the on-chain contracts, factory, slot registration, and recovery
+> flows all match what's deployed.
+>
+> What changed is **the signature primitive**:
+>
+> | Doc says (2026-04-09)             | Shipping (post 2026-04-17)        |
+> |-----------------------------------|------------------------------------|
+> | Bootstrap = ML-DSA-44             | Bootstrap = SPHINCS+C10            |
+> | Main = XMSS h=20 *or* SPHINCS+    | Slot = SPHINCS+C10 (same as boot)  |
+> | "~2^20 sigs per keypair" budget   | `MAX_SLOT_USES = 65,536` per chain |
+> | "Two PQ verifiers in the wallet"  | One `c10Verifier` shared by both   |
+>
+> The all-C10 cutover (commit `7b2a339`) collapsed the two signer classes onto
+> a single primitive: 4008-byte signatures, SHA-256, single Yul Solidity
+> verifier (`SPHINCsC10Asm.sol`) reused for Type 1 / Type 2 / EIP-1271. ML-DSA
+> verifier work and XMSS state-tracking infrastructure are no longer in scope;
+> the rationale below for *why* they were considered is preserved as historical
+> context for the parameter-set decision.
+>
+> Current authoritative spec:
+> - `CLAUDE.md` § "Recovery / Key derivation" — actual KDF tags, slot derivation
+> - `contracts/smart-wallet/src/PQSmartWallet.sol` — `validateUserOp` dispatch
+> - `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` — the verifier
+> - `docs/companion-app-integration.md` — wire format
+
 A hardware-wallet-backed, seed-phrase-recoverable, post-quantum ERC-4337 account abstraction wallet. Built as a fork of Coinbase Smart Wallet, modified for stateful hash-based PQ signers with unlimited rotations and stable cross-chain addresses.
 
 ## Design goals

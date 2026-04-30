@@ -47,7 +47,7 @@ If using separate I2C peripherals:
 |------|----------|--------|-------|
 | PB9 | I2C1_SDA | AF4, open-drain | Data line |
 | PB8 | I2C1_SCL | AF4, open-drain | Clock line |
-| TBD | RST | Push-pull output | Active LOW reset |
+| PE0 | RST      | Push-pull output | Active LOW reset (Arduino D6 on B-U585I-IOT02A) |
 
 ### Optional
 

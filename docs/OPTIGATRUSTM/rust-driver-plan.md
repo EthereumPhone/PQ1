@@ -140,6 +140,21 @@ Unlike SE050's UserID hardware PIN auth, OPTIGA Trust M uses a different approac
 
 This achieves hardware-backed PIN gating, but through crypto operations rather than a dedicated PIN-check command. The SE hardware still enforces the policy -- firmware cannot bypass the access conditions.
 
+> **🟡 What actually shipped (audit, 2026-04-30).** PQSigner did not adopt the
+> full 4-OID Trezor stretching scheme above. The shipping design is simpler:
+>
+> - **AuthRef secret** at `0xF1D0` (holds the user-PIN-derived 64-byte secret)
+> - **Lifetime Usage Counter** at `0xE120` provisioned as the attempt-counter
+>   ceiling, bound via `Auto(LUC(0xE120))` to the `0xF1D0` access condition
+> - HMAC-SHA-256 verify via the standard SetAuthScheme/Auth APDUs
+>
+> Together these give hardware-enforced attempt limiting that is immune to PBS
+> extraction (because the LUC is monotonic on-chip silicon state, not derivable
+> from any host secret). Provisioning is gated behind the `optiga-hw-counter`
+> Cargo feature and is **destructive on first run** (rewrites F1D0 metadata,
+> burns LUC ticks). See `secure/src/optiga/mod.rs` and
+> `docs/optiga-bringup-status.md` for the as-shipped flow.
+
 ### Estimated Effort
 
 | Phase | Effort | Dependencies |

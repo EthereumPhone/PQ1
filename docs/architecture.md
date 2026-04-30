@@ -1,5 +1,34 @@
 # SPHINCS+ Post-Quantum Hardware Wallet — TrustZone Architecture
 
+> **🟠 Pre-cutover architecture (2026-04-30 audit) — major sections out of date.**
+>
+> This document was last touched 2026-04-12 and predates a series of
+> architectural cutovers:
+>
+> - **Dual-SE is now OPTIGA Trust M V3 + SE050.** TROPIC01 is no longer in
+>   `secure/src/dual_se.rs` (verified). The `tropic01-se` feature still exists
+>   as a standalone-only option.
+> - **All-C10 cutover** (commit `7b2a339`, 2026-04-17): SPHINCS+ moved C7 → C11
+>   → C10. `sig_len = 4008 B`, single primitive for both bootstrap and slot
+>   keys (no FORS+C, no classical fallback). The `slh-dsa` crate has been
+>   removed; only `sphincs-c10/` exists.
+> - **Modularity refactor** (commits `96214ca`, `61bf1b0`, 2026-04-30) extracted
+>   pure-logic primitives into `pqsigner-{tx-core, aa, domain, tx, hal, proto}`
+>   workspace crates. Many file paths in this doc point to `secure/src/...`
+>   files that are now thin re-export shims.
+>
+> Treat the §"TROPIC01 Integration", §"Workspace Structure" path tables, and any
+> SLH-DSA / FORS+C / two-stage signing references as **historical**. The
+> high-level TrustZone gateway model and threat-model framing are still the
+> shipping design.
+>
+> Authoritative current state:
+> - `CLAUDE.md` (root) — the single source of truth on invariants, lifecycle,
+>   wire formats, and key-file map.
+> - `docs/HARDENING.md`, `docs/production-security.md` — current threat model
+>   and provisioning gates.
+> - `docs/handoff-modularity-refactor.md` — workspace-crate extraction map.
+
 ## Overview
 
 This project implements a post-quantum hardware wallet using **SLH-DSA (SPHINCS+)** signatures

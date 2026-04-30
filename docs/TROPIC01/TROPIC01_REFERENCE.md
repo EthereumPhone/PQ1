@@ -1,5 +1,28 @@
 # TROPIC01 Reference Guide for PQSigner Hardware Wallet
 
+> **🟠 Status (2026-04-30 audit) — historical / standalone-only.**
+>
+> When this doc was written (2026-04-15), TROPIC01 was being evaluated as a
+> secondary SE in a dual-SE configuration (alongside OPTIGA Trust M). That
+> path has since been retired:
+>
+> - The shipping dual-SE is **OPTIGA Trust M V3 + SE050**. `secure/src/dual_se.rs`
+>   does not import `tropic01_se` (verified 2026-04-30).
+> - TROPIC01 support remains only as a **standalone SE option** behind the
+>   `tropic01-se` Cargo feature; the driver lives at `secure/src/tropic01_se.rs`
+>   but is not part of the primary product.
+> - The cryptographic parameter references in this doc are pre-cutover.
+>   The codebase moved C7 → C11 → **C10** during April 2026; current sigs are
+>   4008 bytes (SHA-256), not the C11 sizes implied here.
+>
+> The chip-level reference material (pinout, L1/L2/L3 protocol stack, Noise_KK1
+> session, R-Memory layout, command set) is still accurate as TROPIC01
+> documentation. Treat this file as a TROPIC01 datasheet companion, not as
+> "this is how PQSigner uses two SEs."
+>
+> For current dual-SE architecture see `docs/OPTIGATRUSTM/`,
+> `docs/se050-userid-pin-auth.md`, `docs/se050-factory-reset.md`.
+
 ## What is TROPIC01?
 
 TROPIC01 is an **openly auditable secure element** by Tropic Square, built on a RISC-V core with a custom cryptographic coprocessor called **SPECT**. Used in the Trezor Safe 7. Open-source hardware RTL, firmware, and security architecture.

@@ -4,6 +4,22 @@ Reference documentation for the **OPTIGA Trust M V3** (SLS32AIA) secure element 
 
 **Status:** Driver implemented (`secure/src/optiga/`). Pure Rust IFX I2C protocol stack with AES-128-CCM shielded connection. Used as the primary SE in the dual-SE XOR entropy split (OPTIGA Trust M + SE050).
 
+> **Bring-up additions since this index was last touched (2026-04-30):**
+> - **E120 LUC PIN counter binding** — hardware-enforced PIN attempt counter
+>   bound to F1D0 AuthRef; immune to PBS extraction. Gated behind the
+>   `optiga-hw-counter` feature.
+> - **OTP-derived PBS** — Platform Binding Secret is now derived from STM32
+>   OTP via SAES-CMAC(DHUK, …), stable across reflashes.
+> - **`optiga-lock-operational` feature** — production-only opt-in for the
+>   `E140.LcsO=Operational` bump. Default keeps `E140` at `Creation` (the
+>   PRL handshake works in `Creation` per Infineon's own reference).
+> - **Three-way PIN sync + admin-wipe** — full lockstep with SE050 UserID and
+>   MCU page-124 attempt counter; 10-wrong-PIN brick + admin-wipe validated
+>   end-to-end.
+>
+> See `docs/optiga-bringup-status.md` and `docs/optiga-brick-postmortem.md`
+> for the full timeline.
+
 **Hardware:** TRUSTMV3SHIELDTOBO1 Arduino shield + B-U585I-IOT02A dev board.
 
 ## Document Index

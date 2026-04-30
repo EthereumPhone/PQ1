@@ -136,12 +136,26 @@ Pairing binds the host MCU to a specific OPTIGA Trust M chip. This is a **one-ti
    - For STM32U585: SAES-wrapped in secure flash
    - This is the Platform Binding Secret (PBS)
 
-5. **Lock lifecycle:** Update OID `0xE140` metadata lifecycle to Operational (`0x07`)
-   - **This is irreversible** -- the secret can never be changed again
-   - Use SetDataObject with param `0x01` (write metadata)
-   - Metadata: `[0x20] [0x03] [0xC0] [0x01] [0x07]`
+5. **Do NOT lock lifecycle by default.** Earlier revisions of this doc instructed bumping
+   `E140.LcsO` to Operational (`0x07`) here. That step is **wrong** for the PRL handshake
+   and should not be taken on bench boards.
+   - The Infineon reference example
+     (`example_pair_host_and_optiga_using_pre_shared_secret.c`) uses
+     `#define FINAL_LCSO_STATE (LCSO_STATE_CREATION)` — it leaves E140 at `Creation`.
+   - The SRM "Pairing Use Case Pre-conditions" requires `LcsO < operational`, not `=`.
+   - The PRL dispatcher (`ifx_i2c_presentation_layer.c:820-829`) has no LcsO check on
+     the handshake path; the channel works fine with E140 at `Creation`.
+   - The bump is irreversible (OPTIGA lifecycle states are one-way) and was
+     responsible for the brick incident documented in `optiga-brick-postmortem.md`.
+   - In `secure/src/optiga/mod.rs::ensure_shield`, the bump is now skipped by
+     default. It is only attempted under the `optiga-lock-operational` Cargo feature,
+     which production builds enable as a deliberate gate (see commit `fa06a4f`
+     and the comments at `secure/src/optiga/mod.rs:380-392, 502, 528-530`).
+   - For dev/bring-up: leave E140 at `Creation`. For production provisioning: enable
+     `optiga-lock-operational` only after every other gate (RDP, OTP burn, SCP03 rotation)
+     has been validated, and only on chips that have already paired successfully.
 
-6. **Verify:** Attempt a Shielded Connection handshake to confirm pairing works
+6. **Verify:** Attempt a Shielded Connection handshake to confirm pairing works.
 
 ### Security Considerations
 

@@ -329,4 +329,3 @@ After completing implementation tasks, check `docs/work-todo.md` and tick off ma
 - `docs/companion-app-integration.md`, `docs/companion-batch-sign-integration.md`, `docs/usb-protocol-v2.md`
 - `docs/handoff-modularity-refactor.md` — workspace-crate extraction phases
 - `docs/dev-board-setup.md`, `docs/hardware_requirements.md`, `docs/trezor-comparison.md`
-- `docs/rewrite_phases/` — phase-by-phase cutover notes

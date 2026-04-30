@@ -30,6 +30,13 @@ Entropy of the seed phrase is split across two independent secure elements to el
 
 Neither secure element alone is sufficient to reconstruct the seed. Both must be available and authenticated to derive keys.
 
+> **TROPIC01 note.** Earlier design iterations evaluated TROPIC01 as a
+> secondary SE in a dual-SE split. That path was retired in favour of the
+> OPTIGA + SE050 pairing above. TROPIC01 support remains in the codebase as a
+> standalone-SE option (Cargo feature `tropic01-se`, driver at
+> `secure/src/tropic01_se.rs`) for development and alternative-SE testing,
+> but it is not part of the primary product hardware.
+
 ## Display
 
 - **Longevity display**

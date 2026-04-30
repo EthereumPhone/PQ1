@@ -1,5 +1,33 @@
 # SE050 Factory Reset — Design and Production Checklist
 
+> **OID range note (2026-04-30 audit).** The OID values shown throughout this doc
+> (`0x7B06_xxxx`) are from the **v3 era** and have since been retired. The shipping
+> range is **v6 = `0x7B10_xxxx`**:
+>
+> | Symbol             | This doc (v3)   | Shipping (v6)   |
+> |--------------------|-----------------|-----------------|
+> | `USERID_OBJ`       | `0x7B06_0000`   | `0x7B10_0000`   |
+> | `ENTROPY_OBJ`      | `0x7B06_0001`   | `0x7B10_0001`   |
+> | `VK_OBJ`           | `0x7B06_0002`   | `0x7B10_0002`   |
+> | `BOOTSTRAP_VK_OBJ` | `0x7B06_0003`   | `0x7B10_0003`   |
+> | `ADMIN_WIPE_OBJ`   | `0x7B06_00A0`   | `0x7B10_00A0`   |
+> | Canary objs        | `0x7B06_00B0…`  | `0x7B10_00B0…`  |
+>
+> Authoritative constants: `secure/src/se050/mod.rs:53,56,59,62,83`. Range
+> history (v1 → v2 → v3 `0x7B06_xxxx` → v4 `0x7B0C_xxxx` → v5 → v6) is
+> documented at `secure/src/se050/mod.rs:23-30`.
+>
+> **Admin PIN derivation has also evolved.** §2 below describes a TRNG-generated
+> admin PIN persisted to flash page 125. Since commit `1bfb572` (2026-04-27),
+> the admin PIN is **OTP-derived** via `secure/src/hw/secret_keys.rs::se050_admin_pin()`
+> (production: `SAES-CMAC(DHUK, label‖counter)`; dev: `HKDF(OTP_master, label)`).
+> Page 125 still hosts the wipe flag, but the admin PIN no longer needs flash
+> persistence — it's deterministic per device and re-derives on every boot.
+> §2a's "future optimisation — HUK-SAES derivation" has effectively landed.
+>
+> The two-entry TAG_POLICY design, the wipe flow, and the round-trip selftest
+> are still the shipping mechanism.
+
 ## Why this document exists
 
 The PQSigner wallet uses a hardware-enforced PIN on the NXP SE050 secure

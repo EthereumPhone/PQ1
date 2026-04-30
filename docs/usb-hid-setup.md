@@ -1,5 +1,23 @@
 # USB HID Setup Guide
 
+> **🟠 Pre-cutover protocol details superseded (2026-04-30 audit).**
+>
+> The hardware setup, cabling, JP4 configuration, flashing, udev rules, and
+> Chrome WebHID flow described below are still correct. The **APDU command set
+> shown in §"USB Protocol"** is from the v1 era (CLA `0xE0`, SLH-DSA 17,088-byte
+> signatures, INS 0x02/0x04/0x06/0x08/0x0C). It does **not** describe the
+> shipping protocol.
+>
+> Current protocol after the all-C10 cutover is **CLA `0xF0`** with INS
+> `0x01..0x74` (see proto/src/lib.rs `INS_V2_*`). Authoritative spec:
+>
+> - `docs/usb-protocol-v2.md` — wire format, INS table, request/response layouts
+> - `docs/companion-app-integration.md` — full integration walkthrough
+> - `proto/src/lib.rs` — `INS_V2_*` constants are source of truth
+>
+> The hardware-setup half of this doc (CN1/CN8/JP4/cables/udev) is preserved
+> as-is for board bring-up.
+
 USB HID transport for PQSigner on the B-U585I-IOT02A discovery board.
 
 ## Hardware Setup

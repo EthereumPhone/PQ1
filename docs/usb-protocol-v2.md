@@ -66,8 +66,11 @@ Device → Host:  [remaining bytes] SW=0x9000
 
 ## Instruction Set
 
-After the all-C10 cutover, the v2 protocol exposes a small, focused set
-of commands:
+> **Source of truth.** Authoritative INS values live in `proto/src/lib.rs`
+> (search for `INS_V2_*`). This table is a convenience snapshot — when in
+> doubt, check the constants.
+
+After the all-C10 cutover, the v2 protocol exposes the following commands:
 
 | INS  | Name                   | Chained? | P1         |
 |------|------------------------|----------|------------|
@@ -76,6 +79,16 @@ of commands:
 | 0x10 | UNLOCK                 | No       | 0          |
 | 0x11 | LOCK                   | No       | 0          |
 | 0x30 | SIGN_USEROP (unified)  | Yes      | 0x00/0x80  |
+| 0x32 | SIGN_USEROP_BATCH      | Yes      | 0x00/0x80  |
+| 0x60 | GET_WALLET_ADDRESS     | No       | 0          |
+| 0x61 | GET_INIT_CODE          | No       | 0          |
+| 0x62 | SIGN_OFFCHAIN          | Yes      | 0x00/0x80  |
+| 0x63 | OFFCHAIN_STATUS        | No       | 0          |
+| 0x70 | FW_BEGIN               | Yes      | 0x00/0x80  |
+| 0x71 | FW_CHUNK               | Yes      | 0x00/0x80  |
+| 0x72 | FW_COMMIT              | No       | 0          |
+| 0x73 | FW_STATUS              | No       | 0          |
+| 0x74 | FW_ABORT               | No       | 0          |
 | 0xC0 | GET_RESPONSE           | No       | 0          |
 
 ### 0x30 SIGN_USEROP — unified sign
@@ -108,36 +121,47 @@ offset  size  field
 330     N    data
 ```
 
-**Response:**
+**Response (post-2026-04-29 layout):**
 
 ```
-[type1_len u32 BE] [type1_bytes ...] [type2_len u32 BE] [type2_bytes ...]
+[new_offchain_count   u64 BE]               (8 bytes — for Type 2 calldata)
+[init_code_len        u32 BE]
+[init_code            init_code_len bytes]  (4280 B when FLAG_INCLUDE_INIT_CODE, else 0)
+[type1_len            u32 BE]
+[type1_wrapper        type1_len bytes]      (4128 B when FLAG_REGISTER_SLOT, else 0)
+[type2_len            u32 BE]
+[type2_wrapper        type2_len bytes]      (always 4128 B)
 ```
 
 - `type1_len == 0` means the slot is already registered on this chain
   and the companion should submit only the Type 2 UserOp.
-- `type1_len == 4041` means a fresh slot must be registered on-chain
-  first. The companion submits the Type 1 UserOp at `nonce` and waits
-  for confirmation, then submits the Type 2 UserOp at `nonce + 1`.
+- `type1_len == 4128` means a fresh slot must be registered on-chain
+  first. Submit Type 1 at `nonce`, wait for confirmation, then submit
+  Type 2 at `nonce + 1`.
 
-**Type 1 bytes (exactly 4041):**
-```
-[0x01] [r(32)] [subPkSeed(16)] [subPkRoot(16)] [C11_sig(3976)]
-```
+**Type 1 / Type 2 wrapper (each exactly 4128 bytes):**
 
-**Type 2 bytes (2533..4037):**
-```
-[0x02] [H(r)(32)] [subPkSeed(16)] [subPkRoot(16)] [FORS+C_sig(2452 + q·16)]
-```
+Both are `abi.encode(uint256 ownerIndex, bytes c10Sig)` where
+`c10Sig` is a raw 4008-byte SPHINCS+C10 signature
+(`C10_SIG_LEN = 4008`, `OWNER_BYTES_LEN = 64`). The wallet contract
+ABI-decodes them as `SignatureWrapper(uint256 ownerIndex, bytes signatureData)`
+in `validateUserOp`:
 
-The companion wraps each of these in a `PackedUserOperation` with the
-appropriate `callData`:
+- `ownerIndex == 0` → Type 1 (bootstrap-key sig); installs the slot pubkey
+  at the wrapper's destination index.
+- `ownerIndex >= 1` → Type 2 (slot-key sig); executes the user's call
+  via `executeWithOffchainCount(...)` which atomically updates
+  `offchainSigCount[i]` to `new_offchain_count`.
+
+The companion wraps each in a `PackedUserOperation` with the appropriate
+`callData`:
 
 - **Type 1 UserOp**: `callData = execute(sender, 0, "")` (a no-op call
   to self; its only purpose is to attach the Type 1 sig whose validation
   side-effect registers the slot on chain).
-- **Type 2 UserOp**: `callData = execute(to, value, data)` (the user's
-  actual tx).
+- **Type 2 UserOp**: `callData = executeWithOffchainCount(ownerIndex,
+  new_offchain_count, to, value, data)` — the wallet bumps the EIP-1271
+  off-chain counter and dispatches the user's call atomically.
 
 ### 0x10 UNLOCK
 
@@ -157,22 +181,52 @@ Returns:
 ### 0x01 GET_DEVICE_INFO
 
 Returns a versioning + capability header. Reports `ep_version = 0x0006`
-(EntryPoint v0.6) and `sig_param_set = 2` (SPHINCS+C10).
+(EntryPoint v0.6) and `sig_param_set = 10` (SPHINCS+C10, `C10_SIG_LEN = 4008`).
 
-## Removed commands (pre-cutover)
+### 0x60 GET_WALLET_ADDRESS
 
-The following pre-cutover commands no longer exist:
+Input: `[chain_id u64 BE] [account_index u8]`.
+Output: 20-byte CREATE2-predicted ERC-1967 proxy address.
+First call after unlock takes ~6 s (master keygen); cached afterwards.
 
-- `0x20 GET_BOOTSTRAP_VK` — no bootstrap signer
-- `0x21 GET_MAIN_VK` — no per-chain main signer
-- `0x31 SIGN_CLEAR_USEROP` — no ZK clear-signing
-- `0x40 SIGN_MESSAGE` — EIP-191 removed with the rest
-- `0x41 SIGN_EIP712` — no EIP-712 path
-- `0x50 SIGN_BOOTSTRAP` — no bootstrap signer
-- `0x60 GET_WALLET_ADDRESS` — companion derives via factory CREATE2
-- `0x70 SIGN_SLOT` (split) — folded into 0x30
-- `0x71 REGISTER_SLOT` (split) — folded into 0x30
-- `0x72 GET_SLOT_INFO` — slot state is no longer persisted in firmware
+### 0x61 GET_INIT_CODE
+
+Pre-computed 4280-byte `initCode` for `(account_index, chain_id)` so the
+companion can run gas estimation against the EntryPoint without
+round-tripping through `0x30 SIGN_USEROP`.
+
+### 0x62 SIGN_OFFCHAIN
+
+EIP-1271 sig over a 32-B hash, returned as
+`[new_local_offchain_count u64 BE][C10 sig (4008 B)]` (4016 bytes total).
+Companion wraps as `abi.encode(uint256 ownerIndex, bytes c10Sig)` and the
+dapp calls `wallet.isValidSignature(rawHash, wrappedSig)`. Refuses if the
+slot is unregistered, the gap exceeds `MAX_OFFCHAIN_GAP = 5`, or the
+combined cap is exhausted. Bootstrap key (`ownerIndex == 0`) is
+**forbidden** for EIP-1271.
+
+### 0x63 OFFCHAIN_STATUS
+
+Per-slot `(local_offchain_count, last_userop_count, registered)` readback.
+
+### 0x70..0x74 FW_BEGIN/CHUNK/COMMIT/STATUS/ABORT
+
+Streaming firmware update. PIN unlock required on every call. See
+`docs/firmware-update.md`.
+
+## Reserved / unused INS values
+
+These INS values exist as constants in `proto/src/lib.rs` but are no
+longer dispatched (or are reserved for backwards-compat probing):
+
+- `0x20 GET_BOOTSTRAP_VK`, `0x21 GET_MAIN_VK` — superseded by
+  `GET_WALLET_ADDRESS` (slot keys are derived on demand and not exposed)
+- `0x31 SIGN_CLEAR_USEROP` — clear-sign is now an in-line side-effect of
+  `0x30 SIGN_USEROP` when calldata is recognised (ERC-20, Safe, CowSwap…)
+- `0x40 SIGN_MESSAGE`, `0x41 SIGN_EIP712` — EIP-191 / generic EIP-712 are
+  served via `0x62 SIGN_OFFCHAIN` (Solady-nested EIP-712 / EIP-1271)
+- `0x50 SIGN_BOOTSTRAP` — folded into `0x30 SIGN_USEROP` with
+  `FLAG_REGISTER_SLOT`
 
 ## Status words
 

@@ -1,5 +1,26 @@
 # SE050 Native UserID PIN Authentication
 
+> **OID range note (2026-04-30 audit).** The OID values shown throughout this doc
+> (`0x7B00_2000`, `0x7B04_xxxx`) are from the **v1/v2 era** and are no longer
+> the live constants. The shipping range is **v6 = `0x7B10_xxxx`**:
+>
+> | Symbol            | v1/v2 (this doc) | v6 (shipping)   |
+> |-------------------|------------------|-----------------|
+> | `USERID_OBJ`      | `0x7B00_2000`    | `0x7B10_0000`   |
+> | `ENTROPY_OBJ`     | `0x7B04_0000`    | `0x7B10_0001`   |
+> | `VK_OBJ`          | `0x7B04_0002`    | `0x7B10_0002`   |
+> | `BOOTSTRAP_VK_OBJ`| `0x7B04_0003`    | `0x7B10_0003`   |
+> | `ADMIN_WIPE_OBJ`  | (n/a)            | `0x7B10_00A0`   |
+>
+> Authoritative constants live in `secure/src/se050/mod.rs:53,56,59,62,83`. The
+> version history (v1 → v2 → v3 `0x7B06_xxxx` → v4 `0x7B0C_xxxx` → v5 → v6) is
+> documented at `secure/src/se050/mod.rs:23-30`. Ranges retire as bench chips
+> accumulate orphaned objects from earlier bring-up attempts (see Lesson 7
+> below — stale objects are permanent until factory reset).
+>
+> The architecture, APDU formats, and hardware-debugging lessons in the rest of
+> this document are still correct.
+
 ## Overview
 
 PQSigner stores the user's BIP-39 entropy (the 32-byte secret behind their

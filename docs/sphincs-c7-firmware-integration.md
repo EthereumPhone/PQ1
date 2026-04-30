@@ -1,5 +1,26 @@
 # SPHINCS+C7 Firmware Integration Guide
 
+> **🔴 OBSOLETE — historical only (2026-04-30 audit).**
+>
+> This document describes the SLH-DSA → SPHINCS+C7 migration. **C7 is no longer
+> the shipping parameter set.** The codebase moved C7 → C11 → **C10** during
+> April 2026, with the all-C10 cutover landing in commit `7b2a339` on 2026-04-17.
+> The `sphincs-c7/` crate has been deleted; only `sphincs-c10/` exists today.
+>
+> Current parameters: SHA-256 (not Keccak-256), `sig_len = 4008 bytes`,
+> `h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205`.
+>
+> Following this doc literally will produce firmware **incompatible with the
+> deployed on-chain verifier** and the rest of the wallet. It is preserved here
+> for historical context (rationale for hash-function and signature-size
+> trade-offs that informed the C10 decision).
+>
+> For current C10 integration:
+> - `CLAUDE.md` § "Status (2026-04, pre-production bring-up)" and § "Recovery / Key derivation"
+> - `docs/work-todo.md` (look for `2026-04-17 — C10 bootstrap cutover`)
+> - `docs/production-security.md` § 2.6 (device root-key architecture)
+> - `sphincs-c10/` crate sources
+
 Context: the `sphincs-c7` Rust crate is implemented and verified against the Python reference signer and Solidity verifier. This document covers everything needed to wire it into the firmware, replacing the `slh-dsa` crate (SLH-DSA-SHA2-128f, 17,088-byte signatures) with `sphincs-c7` (keccak256-based, 3,704-byte signatures).
 
 ## What changes and what doesn't

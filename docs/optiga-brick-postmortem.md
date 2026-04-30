@@ -2,7 +2,29 @@
 
 **Audience**: engineers on the PQSigner team who need to understand (a) what bricked our TRUSTMV3SHIELDTOBO1 test chip during bring-up, (b) why the current code would brick *any* device on *any* firmware update, and (c) what we're changing structurally to make sure it never happens again.
 
-**Last updated**: 2026-04-17.
+**Last updated**: 2026-04-17. **Audit overlay added 2026-04-30.**
+
+> **Implementation status (audit, 2026-04-30).** The structural fixes proposed
+> in §5 / §9 below are partially landed:
+>
+> - ✅ **OTP-derived device master key** (commit `b19fbf7`, 2026-04-20).
+>   `secure/src/hw/otp.rs` + `secure/src/hw/secret_keys.rs` provide per-purpose
+>   subkeys via `SAES-CMAC(DHUK, label‖counter)` (production) /
+>   `HKDF(OTP_master, label)` (dev).
+> - ✅ **Deterministic PBS** rooted in OTP, stable across rebuilds (`b19fbf7`).
+> - ✅ **Admin-wipe PIN OTP-derived** (commit `1bfb572`, 2026-04-27); SE050
+>   admin credential is now `hw::secret_keys::se050_admin_pin()` instead of
+>   first-boot TRNG.
+> - ✅ **HUK re-rooting** in `secure/src/hw/huk.rs::derive_device_key`.
+> - ⏳ **Flash page 126 deletion** still pending — `load_pbs` retained for
+>   migration; PBS now sourced from OTP but the page-126 footprint hasn't
+>   been freed yet.
+> - ✅ **`optiga-lock-operational` Cargo feature** added (commit `fa06a4f`,
+>   2026-04-20). LcsO=Operational bump is now opt-in; default builds keep
+>   `E140` at `Creation`.
+>
+> The "Cause 1 / Cause 2 / Cause 3" analysis below remains the canonical
+> explanation of why the original code was brick-prone.
 
 ---
 

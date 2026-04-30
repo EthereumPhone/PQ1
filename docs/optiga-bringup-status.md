@@ -4,6 +4,28 @@ Last updated: 2026-04-16. Tracks the state of the OPTIGA Trust M V3 driver again
 
 ---
 
+> **Update 2026-04-30 (audit overlay).** Several "Cleanup owed" / "Still suspect"
+> items from the 2026-04-16/04-20 snapshot have since landed:
+>
+> - **Shielded Connection in `Creation` LcsO is the correct config** (commit
+>   `fa06a4f`, 2026-04-20). The old "bump LcsO to Operational" step is gone
+>   from `ensure_shield`; it's now gated behind the `optiga-lock-operational`
+>   Cargo feature, off by default.
+> - **Hardware monotonic counter** (E120 LUC) validated on silicon
+>   (commits around `987408f` / `5620b06`, 2026-04-21). The PIN attempt
+>   counter is hardware-enforced, three-way synced (MCU page 124 + OPTIGA
+>   E120 LUC + SE050 silicon UserID).
+> - **Three-way PIN sync end-to-end** validated including 10-wrong-PIN brick
+>   and admin-wipe (commit `7574218` and follow-ups, 2026-04-23).
+> - **OTP-derived 64-byte PBS** (commit `b19fbf7`, 2026-04-20). Pairing secret
+>   is now stable across rebuilds; the page-126 PBS file is being phased out
+>   (`load_pbs` retained for migration; deletion still pending).
+>
+> See `optiga-brick-postmortem.md` for the longer "what we changed
+> structurally" story; this file is the contemporaneous status notebook.
+
+---
+
 ## ✅ Working end-to-end
 
 - **MCU boot + clocks + I²C1 + GTZC1_MPCBB**.

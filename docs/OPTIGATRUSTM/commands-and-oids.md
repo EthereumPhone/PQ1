@@ -331,10 +331,18 @@ Response:
 
 | OID | Description | Max Updates |
 |-----|-------------|-------------|
-| `0xE120` | Counter 1 | 600,000 |
+| `0xE120` | Counter 1 — **PQSigner: PIN-attempt LUC, bound to F1D0 AuthRef under `optiga-hw-counter`** | 600,000 |
 | `0xE121` | Counter 2 | 600,000 |
 | `0xE122` | Counter 3 | 600,000 |
 | `0xE123` | Counter 4 | 600,000 |
+
+> **PQSigner usage note.** When the `optiga-hw-counter` Cargo feature is on,
+> `0xE120` is provisioned as a Lifetime Usage Counter (LUC) with its access
+> condition bound to `0xF1D0` (the AuthRef holding the user PIN secret). Each
+> `Auto(LUC(0xE120))`-gated authenticate burns one LUC tick; once the LUC
+> reaches its limit, the chip refuses further AuthRef use — independent of the
+> MCU page-124 attempt counter. This is the immune-to-PBS-extraction layer of
+> the three-way PIN sync (MCU + OPTIGA E120 + SE050 UserID).
 
 ### Platform Binding Secret
 

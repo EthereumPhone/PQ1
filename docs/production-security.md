@@ -185,7 +185,8 @@ reports t-stat = 24.5 at 1000 traces — catastrophic leakage.
   privileged mode so non-secure world cannot DMA-snoop (BUSted!
   style attacks). Affects every NSC gateway entry.
 
-**Architectural decision pending — SHAKE vs SHA2-256 parameter set**:
+**Architectural decision pending — SHAKE vs SHA2-256 parameter set**
+(historical framing; see closing note below):
 
 | | SLH-DSA-SHA2 | SLH-DSA-SHAKE |
 |---|---|---|
@@ -208,6 +209,16 @@ performance + masking cost on Cortex-M33 is needed before this
 decision is production-ready. The qualitative argument (SHAKE is
 easier to mask than SHA-256) still holds; the specific 1.7× overhead
 number does not.
+
+> **Update 2026-04-30 (audit overlay).** The all-C10 cutover (commit
+> `7b2a339`, 2026-04-17) locked the parameter set to **SPHINCS+C10 over
+> SHA-256** (`sig_len = 4008 B`, `h=18, d=2, a=11, k=13, w=8, l=43,
+> target_sum=205`). The on-chain verifier (`SPHINCsC10Asm.sol`) is
+> SHA-256-only and reuses the EVM SHA-256 precompile. SHAKE migration is
+> therefore deferred indefinitely — it would require a fresh on-chain
+> verifier, fresh wallet addresses (CREATE2 salt depends on master keys),
+> and a factory redeploy. The qualitative SCA argument still motivates
+> independent masking work on the SHA-256 path, not a primitive swap.
 
 **HASH peripheral**: **provides zero DPA protection** per UM3370.
 Useful for performance (~66 cycles/block) and timing-channel elimination
