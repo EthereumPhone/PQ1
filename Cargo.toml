@@ -23,6 +23,25 @@ members = [
     # wire size that crosses a TrustZone, on-chain, or USB boundary.
     # Zero-dependency by policy. Phase 3 of the modularity refactor.
     "proto",
+    # Pure-logic Ethereum tx primitives (RLP, EIP-1559 envelope, U256,
+    # keccak256). Phase 5 PR 5.1 of the modularity refactor.
+    "tx-core",
+    # ERC-4337 v0.6 UserOperation hash + EIP-1271 PersonalSign hash.
+    # Phase 5 PR 5.2 of the modularity refactor.
+    "aa",
+    # Pure-logic key derivation, AES-GCM wrap/unwrap, BIP-39 ↔
+    # SPHINCS+C10 bridge, slot-key derivation, PIN-state encoding.
+    # Phase 5 PR 5.3 of the modularity refactor.
+    "domain",
+    # Pure-logic Solidity-ABI / ERC-20 / address-name / selector
+    # trust gates. Phase 5 PR 5.4 of the modularity refactor.
+    "tx",
+    # Trait-only HAL surface (Rng / Sha256 / Saes / Flash / Otp / Tamp
+    # / ConsumptionMask / I2cBus / SpiBus / Buttons / Uart + Platform
+    # aggregate + BootStage). Phase 6 PR 1 of the modularity refactor.
+    # PR 2 (hal-stm32u5/) and PR 3 (hal-mock/) are deferred — see
+    # `docs/handoff-modularity-refactor.md` §4.2.
+    "hal",
     "shared",
     "secure",
     "nonsecure",
@@ -54,6 +73,11 @@ edition = "2021"
 [workspace.dependencies]
 # Internal path deps
 pqsigner-proto    = { path = "proto" }
+pqsigner-tx-core  = { path = "tx-core" }
+pqsigner-aa       = { path = "aa" }
+pqsigner-domain   = { path = "domain" }
+pqsigner-tx       = { path = "tx" }
+pqsigner-hal      = { path = "hal" }
 sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
 sphincs-c10       = { path = "sphincs-c10" }

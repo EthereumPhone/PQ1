@@ -1206,6 +1206,14 @@ test-unit:
 	@cargo test --locked -p sphincs-tz-secure \
 	    --no-default-features \
 	    --features mock-se,debug-log,ui-semihosting
+	@echo "==> Running pqsigner-tx-core unit tests (host)"
+	@cargo test --locked -p pqsigner-tx-core --lib
+	@echo "==> Running pqsigner-aa unit tests (host)"
+	@cargo test --locked -p pqsigner-aa --lib
+	@echo "==> Running pqsigner-domain unit tests (host)"
+	@cargo test --locked -p pqsigner-domain --lib
+	@echo "==> Running pqsigner-tx unit tests (host)"
+	@cargo test --locked -p pqsigner-tx --lib
 
 # Foundry tests for the PQ smart-wallet contracts.
 test-solidity:

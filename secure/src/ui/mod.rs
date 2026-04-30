@@ -60,6 +60,63 @@ pub enum Press {
     Long,
 }
 
+/// Trusted-display capability. Phase 10 PR A of the modularity refactor
+/// codifies the surface every UI backend (`semihosting`, `oled`,
+/// `noop`, `mirror`, `capture`) exposes, so future code can take
+/// `&mut impl Ui` instead of being implicitly tied to whichever backend
+/// the active feature gate selects.
+///
+/// Each backend's `Display` already provides matching inherent methods;
+/// the per-backend `impl Ui for Display` blocks below delegate into
+/// those bodies. This keeps existing call sites
+/// (`display().clear()`, `display().draw_line(0, "…")`, etc.)
+/// working unchanged while letting future code (Phase 7 / Phase 9 PR
+/// 4) thread `&mut dyn Ui` through the display layer instead of
+/// reaching for the global singleton.
+///
+/// `secure/build.rs` and the `nsc/mod.rs` `compile_error!` fence
+/// already enforce *exactly one* backend at compile time, so this
+/// trait does not need its own per-axis enforcement.
+pub trait Ui {
+    /// Wipe every cell in the framebuffer to the empty state.
+    fn clear(&mut self);
+    /// Draw a 16-column ASCII-only line at `row` (0..=DISPLAY_ROWS-1).
+    /// Out-of-range rows are silently dropped; non-ASCII bytes are
+    /// replaced with `'?'` so a hostile DB row cannot smuggle Unicode
+    /// homoglyphs onto the trusted display.
+    fn draw_line(&mut self, row: usize, text: &str);
+    /// Render the framebuffer to the underlying transport (OLED I2C,
+    /// QEMU semihosting, or no-op).
+    fn flush(&mut self);
+    /// Show the boot animation. Default no-op so backends that don't
+    /// render one (`ui-noop`, `ui-mirror`) don't have to override it.
+    fn splash(&mut self) {}
+}
+
+#[cfg(feature = "ui-semihosting")]
+impl Ui for semihosting::Display {
+    #[inline] fn clear(&mut self) { self.clear() }
+    #[inline] fn draw_line(&mut self, row: usize, text: &str) { self.draw_line(row, text) }
+    #[inline] fn flush(&mut self) { self.flush() }
+    #[inline] fn splash(&mut self) { self.splash() }
+}
+
+#[cfg(feature = "ui-oled")]
+impl Ui for oled::Display {
+    #[inline] fn clear(&mut self) { self.clear() }
+    #[inline] fn draw_line(&mut self, row: usize, text: &str) { self.draw_line(row, text) }
+    #[inline] fn flush(&mut self) { self.flush() }
+    #[inline] fn splash(&mut self) { self.splash() }
+}
+
+#[cfg(feature = "ui-noop")]
+impl Ui for noop::Display {
+    #[inline] fn clear(&mut self) { self.clear() }
+    #[inline] fn draw_line(&mut self, row: usize, text: &str) { self.draw_line(row, text) }
+    #[inline] fn flush(&mut self) { self.flush() }
+    #[inline] fn splash(&mut self) { self.splash() }
+}
+
 // ---------------------------------------------------------------------------
 // Global UI singletons
 //

@@ -18,7 +18,7 @@
 
 use super::bundle::Erc20Metadata;
 use super::calldata::{parse_erc20_calldata, Erc20Call};
-use crate::tx::eip1559::ParsedTx;
+use pqsigner_tx_core::eip1559::ParsedTx;
 
 #[derive(Debug)]
 pub enum TxKind<'a> {

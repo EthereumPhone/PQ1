@@ -4,11 +4,10 @@
 //! render.
 //!
 //! The trust model is identical to [`crate::erc20::bundle`]: NS reads
-//! from a large embedded blob, the secure world holds only the 32-byte
-//! Merkle root in [`crate::db_roots::NAMES_DB_ROOT`], and the bundle
-//! crosses the gateway carrying canonical metadata + proof. The
-//! secure world re-derives the leaf hash and walks the proof before
-//! letting any `name` byte near the OLED.
+//! from a large embedded blob, the secure world holds only a 32-byte
+//! Merkle root, and the bundle crosses the gateway carrying canonical
+//! metadata + proof. The secure world re-derives the leaf hash and
+//! walks the proof before letting any `name` byte near the OLED.
 //!
 //! ## Wire layout
 //!
@@ -37,8 +36,7 @@
 //! `(chain_id, address)` and is called from the display layer with
 //! values derived from the parsed tx — never from the bundle.
 
-use super::super::db_roots::NAMES_DB_ROOT;
-use super::super::erc20::merkle::verify_proof;
+use crate::erc20::merkle::verify_proof;
 use sphincs_tz_shared::db_format::NAMES_MAX_LEN;
 
 /// Decoded + Merkle-verified address-name entry. Borrows from the
@@ -56,11 +54,11 @@ pub struct NameMeta<'a> {
 /// = ~1.1 KB upper bound. Capped well below MAX_TX_LEN.
 pub const MAX_NAME_BUNDLE_LEN: usize = 8 + 20 + 1 + NAMES_MAX_LEN + 4 + 4 + 32 * 32;
 
-/// Verify a single bundle. On success returns the decoded metadata;
-/// on any failure returns `None`. `bundle` must be the exact bytes NS
-/// wrote — no outer length prefix. The caller parses any length
-/// prefix at the gateway boundary.
-pub fn verify_name_bundle(bundle: &[u8]) -> Option<NameMeta<'_>> {
+/// Verify a single bundle against `root`. On success returns the
+/// decoded metadata; on any failure returns `None`. `bundle` must be
+/// the exact bytes NS wrote — no outer length prefix. The caller
+/// parses any length prefix at the gateway boundary.
+pub fn verify_name_bundle<'a>(bundle: &'a [u8], root: &[u8; 32]) -> Option<NameMeta<'a>> {
     let mut off = 0usize;
 
     // Header fixed fields.
@@ -123,7 +121,7 @@ pub fn verify_name_bundle(bundle: &[u8]) -> Option<NameMeta<'_>> {
         leaf_index,
         proof,
         proof_depth,
-        &NAMES_DB_ROOT,
+        root,
     ) {
         return None;
     }

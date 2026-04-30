@@ -7,9 +7,10 @@
 //! world reads from a much larger embedded blob, picks the entry that
 //! matches the recipient contract, and forwards the canonical
 //! metadata bytes plus a Merkle proof. The secure world re-derives
-//! the leaf hash and walks the proof up to the embedded
-//! `crate::db_roots::ERC20_DB_ROOT` before letting any of the
-//! supplied bytes anywhere near the trusted UI.
+//! the leaf hash and walks the proof up to the supplied
+//! `root: &[u8; 32]` (typically the embedded `db_roots::ERC20_DB_ROOT`)
+//! before letting any of the supplied bytes anywhere near the trusted
+//! UI.
 //!
 //! ## Wire layout
 //!
@@ -33,15 +34,14 @@
 //!
 //! ## Cross-checks before trusting the metadata
 //!
-//! After Merkle verification succeeds, the secure world MUST also
-//! check that the bundle's `chain_id` and `contract` fields match
-//! the parsed `tx.chain_id` and `tx.to` it's about to sign. Without
-//! this, NS could supply a perfectly valid `(USDC mainnet, 6)` bundle
-//! while signing a transaction targeting an attacker contract on a
-//! different chain. The cross-check lives in `cmd_sign`, not here,
-//! so the bundle stays a pure verifier.
+//! After Merkle verification succeeds, the caller MUST also check that
+//! the bundle's `chain_id` and `contract` fields match the parsed
+//! `tx.chain_id` and `tx.to` it's about to sign. Without this, NS
+//! could supply a perfectly valid `(USDC mainnet, 6)` bundle while
+//! signing a transaction targeting an attacker contract on a different
+//! chain. The cross-check lives at the call site, not here, so the
+//! bundle stays a pure verifier.
 
-use crate::db_roots::ERC20_DB_ROOT;
 use super::merkle::verify_proof;
 
 /// Decoded + Merkle-verified ERC20 metadata. Borrows from the gateway
@@ -65,15 +65,14 @@ pub const MAX_ERC20_BUNDLE_LEN: usize = 64 + 1024 + 32;
 /// the OLED can't render is pointless and a foothold for spoofing.
 const MAX_DISPLAY_FIELD: usize = 64;
 
-/// Verify a bundle copied from the NS gateway buffer. On success,
-/// returns the decoded metadata plus the canonical leaf bytes
-/// re-emitted from the supplied fields (so the caller can sanity-
-/// check or log if needed). On failure, returns `None`.
+/// Verify a bundle copied from the NS gateway buffer against `root`.
+/// On success, returns the decoded metadata. On failure, returns
+/// `None`.
 ///
 /// `bundle` MUST be the exact bytes the non-secure world wrote — no
 /// length prefix, no padding. The caller is responsible for handling
 /// the optional/length-prefix wrapping at the gateway boundary.
-pub fn verify_erc20_bundle(bundle: &[u8]) -> Option<Erc20Metadata<'_>> {
+pub fn verify_erc20_bundle<'a>(bundle: &'a [u8], root: &[u8; 32]) -> Option<Erc20Metadata<'a>> {
     let mut off = 0usize;
 
     // Header fields.
@@ -161,13 +160,13 @@ pub fn verify_erc20_bundle(bundle: &[u8]) -> Option<Erc20Metadata<'_>> {
     p += symbol_len;
     debug_assert_eq!(p, canonical_len);
 
-    // 2. Walk the Merkle proof up to the embedded root.
+    // 2. Walk the Merkle proof up to the supplied root.
     if !verify_proof(
         &canonical[..canonical_len],
         leaf_index,
         proof,
         proof_depth,
-        &ERC20_DB_ROOT,
+        root,
     ) {
         return None;
     }

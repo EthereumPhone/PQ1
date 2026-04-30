@@ -1,4 +1,4 @@
-//! Merkle proof verifier shared between the ERC20 metadata DB and the
+//! Merkle proof verifier shared between the ERC-20 metadata DB and the
 //! ZK clear-signing VK DB.
 //!
 //! Both DBs use the same scheme:
@@ -13,7 +13,6 @@
 //! an internal-node concatenation, which would otherwise break
 //! second-preimage resistance for the tree.
 //!
-//! The verifier here is the secure-world side of the trust gate.
 //! `dbgen::merkle::verify_proof` is the host-side mirror used by the
 //! round-trip tests; the two implementations MUST stay in lock-step
 //! (the `dbgen` round-trip test catches any drift the moment dbgen

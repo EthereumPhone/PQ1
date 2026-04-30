@@ -448,10 +448,47 @@ into the master entropy.
 
 ## Key File Map
 
+> **Modularity refactor (Phase 5 + 6 PR 1 + 8 PR 1 + 10 PR A/B/D):**
+> several pure-logic modules now live in standalone workspace crates so
+> host-side reference signers and future bench tooling can reuse the
+> same code without pulling in the secure-world hardware deps. The
+> secure-side files keep working unchanged because each is now a thin
+> re-export shim over the new crate. The new crates:
+>
+> - `proto/` (`pqsigner-proto`) — every protocol-level constant + enum
+>   + wire-format size; single source of truth shared with Solidity
+>   via `xtask gen-solidity-constants`.
+> - `tx-core/` (`pqsigner-tx-core`) — RLP, EIP-1559 envelope, U256,
+>   keccak256. Re-exported by `secure/src/tx/{eip1559,hash,rlp}` shims.
+> - `aa/` (`pqsigner-aa`) — UserOp hash + EIP-1271 PersonalSign.
+>   Re-exported by `secure/src/aa/mod.rs`.
+> - `domain/` (`pqsigner-domain`) — KDF, AES-GCM wrap, BIP-39 →
+>   SPHINCS+C10 derivation. Re-exported by `secure/src/crypto.rs`
+>   (which keeps the FI-bound `c10_sign_verified` + the
+>   `WalletStore`-bound `provision_from_mnemonic`).
+> - `tx/` (`pqsigner-tx`) — `verify_*_bundle` Merkle verifiers for
+>   ERC-20 / names / selectors. The verifiers take a `root: &[u8; 32]`
+>   parameter; the secure-side shims at `secure/src/{erc20,names,
+>   selectors}/mod.rs` pass `crate::db_roots::*`.
+> - `hal/` (`pqsigner-hal`) — trait surface for the eventual cfg →
+>   trait-dispatch migration (Phase 6 PRs 2-4 + Phase 7, deferred).
+>   Specifies `Rng` / `Sha256` / `Saes` / `Flash` / `Otp` / `Tamp` /
+>   `ConsumptionMask` / `I2cBus` / `SpiBus` / `Buttons` / `Uart`
+>   plus the aggregate `Platform` and a `BootStage` enum.
+
 | Path | Purpose |
 |------|---------|
 | `secure/src/main.rs` | Secure world entry: SAU → RCC → SAES self-test → provision → unlock → boot NS |
-| `secure/src/crypto.rs` | BIP-39, C10 bootstrap derivation, C10 slot derivation, slot master entropy, AES-GCM wrap, PIN state |
+| `secure/src/crypto.rs` | Re-export shim over `pqsigner-domain` (BIP-39, C10 bootstrap derivation, slot derivation, AES-GCM wrap) + the FI-hardened `c10_sign_verified*` and the `WalletStore`-bound `provision_from_mnemonic` / `store_macd_encrypted` |
+| `proto/src/lib.rs` | `pqsigner-proto` — every protocol-level constant + enum + wire size. Source of truth for Solidity `PqsignerProto` library |
+| `tx-core/src/{eip1559,hash,rlp}.rs` | `pqsigner-tx-core` — pure Ethereum tx primitives. Used by `pqsigner-aa` and the secure-side display layer |
+| `aa/src/userop.rs` | `pqsigner-aa::userop` — EntryPoint v0.6 hashing + sphincs digest |
+| `aa/src/eip1271.rs` | `pqsigner-aa::eip1271` — Solady nested-EIP-712 PersonalSign hash |
+| `domain/src/lib.rs` | `pqsigner-domain` — pure-logic key derivation + AES-GCM wrap |
+| `tx/src/{erc20,names,selectors}/` | `pqsigner-tx` — Merkle bundle verifiers + ERC-20 calldata decoder. `verify_*_bundle` takes `root: &[u8; 32]` |
+| `hal/src/lib.rs` | `pqsigner-hal` — trait crate (Phase 6 PR 1). Driver impls deferred |
+| `secure/src/nsc/ns_ptr.rs` | `NsPtr<T>` typestate (Phase 10 PR B) — `validate_read` / `validate_write` produce `ReadPtr<T>` / `WritePtr<T>` proofs |
+| `secure/src/ui/mod.rs` | `pub trait Ui` (Phase 10 PR A) implemented by every backend's `Display` |
 | `secure/src/nsc/mod.rs` | NSC gateway dispatcher + `gated_unlock` (MCU page-124 attempt counter + FI-hardened pre-commit) |
 | `secure/src/nsc/state.rs` | SecureState singleton (pin_verified, master_secret, slot C10 cache keyed on `slot_index`) |
 | `secure/src/nsc/cmd_sign_userop.rs` | **The unified Type 1 / Type 2 all-C10 sign handler (stateless, companion-driven)** |

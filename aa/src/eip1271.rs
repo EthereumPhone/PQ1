@@ -21,12 +21,11 @@
 //! `verifyingContract` is the proxy address derived from the bootstrap
 //! C10 pubkey for `account_index` via the same CREATE2 formula
 //! `cmd_get_wallet_address` uses; the bootstrap pubkey lives in
-//! [`crate::nsc::state::SecureState::bootstrap_cache`] across the
-//! unlock session.
+//! the secure-state cache across the unlock session.
 
+use pqsigner_proto::{PQ_SMART_WALLET_FACTORY, PROXY_INIT_CODE_HASH};
 use sha2::{Digest as _, Sha256};
-use sha3::{Digest, Keccak256};
-use sphincs_tz_shared::{PQ_SMART_WALLET_FACTORY, PROXY_INIT_CODE_HASH};
+use sha3::Keccak256;
 
 /// `keccak256("PersonalSign(bytes prefixed)")` — matches Solady's
 /// `_PERSONAL_SIGN_TYPEHASH` in `lib/solady/src/accounts/ERC1271.sol`.

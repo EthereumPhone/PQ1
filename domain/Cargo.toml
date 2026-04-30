@@ -1,0 +1,33 @@
+[package]
+name = "pqsigner-domain"
+version = "0.1.0"
+edition.workspace = true
+
+# Pure-logic key derivation, AES-GCM wrap/unwrap, KDFs, BIP-39 ↔
+# SPHINCS+C10 bridge, slot-key derivation, PIN-state encoding.
+# `no_std`, no allocator, no hardware deps.
+#
+# Phase 5 PR 5.3 of the modularity refactor — see
+# `docs/handoff-modularity-refactor.md` §4.1.
+#
+# The FI-hardened verify-before-release path and the
+# `WalletStore`-bound `provision_from_mnemonic` / `store_macd_encrypted`
+# helpers stay in `secure/src/crypto.rs` because they pull in
+# `crate::fi` (CPU-bound RDI / glitch sentinels) and the
+# `crate::secure_element::*` traits respectively. Phase 6 will define a
+# `SecretKdf` trait here so the dev HKDF path and the production
+# `SAES-CMAC(DHUK)` path can implement a common interface, but until
+# Phase 6 lands the secure crate's `hw::secret_keys` keeps hosting the
+# hw-bound implementation directly.
+
+[dependencies]
+pqsigner-proto      = { workspace = true }
+sphincs-tz-bip39    = { workspace = true }
+sphincs-c10         = { workspace = true }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+sha2    = { version = "0.10", default-features = false }
+zeroize = { workspace = true }
+hmac    = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }

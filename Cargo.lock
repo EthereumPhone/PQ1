@@ -1370,6 +1370,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqsigner-aa"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "pqsigner-proto",
+ "pqsigner-tx-core",
+ "sha2 0.10.9",
+ "sha3 0.10.8",
+]
+
+[[package]]
+name = "pqsigner-domain"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "hex",
+ "hmac",
+ "pqsigner-proto",
+ "sha2 0.10.9",
+ "sphincs-c10",
+ "sphincs-tz-bip39",
+ "zeroize",
+]
+
+[[package]]
 name = "pqsigner-fsbl"
 version = "0.1.0"
 dependencies = [
@@ -1382,10 +1407,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqsigner-hal"
+version = "0.1.0"
+
+[[package]]
 name = "pqsigner-proto"
 version = "0.1.0"
 dependencies = [
  "proptest",
+]
+
+[[package]]
+name = "pqsigner-tx"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "pqsigner-proto",
+ "pqsigner-tx-core",
+ "sha2 0.10.9",
+ "sphincs-tz-shared",
+]
+
+[[package]]
+name = "pqsigner-tx-core"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "pqsigner-proto",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -1911,6 +1960,10 @@ dependencies = [
  "fw-manifest",
  "hex",
  "hmac",
+ "pqsigner-aa",
+ "pqsigner-domain",
+ "pqsigner-tx",
+ "pqsigner-tx-core",
  "proptest",
  "qrcodegen",
  "rtt-target",

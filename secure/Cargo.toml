@@ -7,6 +7,31 @@ edition.workspace = true
 sphincs-tz-shared = { workspace = true }
 sphincs-tz-bip39  = { workspace = true }
 fw-manifest       = { workspace = true }
+# Pure-logic tx primitives (RLP, EIP-1559 envelope, U256, keccak256).
+# Extracted from `secure/src/tx/{rlp,eip1559,hash}.rs` in Phase 5 PR 5.1.
+# `secure/src/tx/mod.rs` re-exports through it so existing call sites
+# (`crate::tx::eip1559::...`) keep working unchanged.
+pqsigner-tx-core  = { workspace = true }
+# ERC-4337 v0.6 UserOperation hash + EIP-1271 PersonalSign hash.
+# Extracted from `secure/src/aa/` in Phase 5 PR 5.2.
+# `secure/src/aa/mod.rs` re-exports through it so existing call sites
+# (`crate::aa::userop::...`, `crate::aa::eip1271::...`) keep working
+# unchanged.
+pqsigner-aa       = { workspace = true }
+# Pure-logic key derivation + AES-GCM wrap + BIP-39 ↔ SPHINCS+C10
+# bridge + slot-key derivation. Extracted from `secure/src/crypto.rs`
+# in Phase 5 PR 5.3. `secure/src/crypto.rs` re-exports through it so
+# existing call sites (`crate::crypto::derive_c10_master_*`,
+# `crate::crypto::encrypt_entropy_blob`, ...) keep working unchanged.
+pqsigner-domain   = { workspace = true }
+# Pure-logic ERC-20 / address-name / function-selector trust gates.
+# Extracted from `secure/src/{erc20,names,selectors}/` in Phase 5 PR
+# 5.4. The secure-side modules (`secure/src/erc20/mod.rs` etc.) now
+# re-export from this crate and bake the `db_roots::*` constants into
+# thin wrapper functions, so existing call sites
+# (`crate::erc20::bundle::verify_erc20_bundle(...)`) keep working
+# unchanged.
+pqsigner-tx       = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }
@@ -65,6 +90,68 @@ cortex-m-semihosting = { workspace = true }
 # Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md
 # Phase 2.
 default = []
+
+# ---------------------------------------------------------------------------
+# Phase-8 PR 1 — axis aliases (additive, no behaviour change).
+#
+# Five orthogonal axes consolidate the 50 ad-hoc flags below into a
+# clearer surface. Each axis flag is a thin alias over the existing
+# legacy names so the Makefile recipes can keep working unchanged
+# while new code (and `docs/feature-flags.md` once written) speaks
+# the consolidated vocabulary. PR 2 of Phase 8 (deferred per the
+# handoff) flips every Makefile recipe to the new names and deletes
+# the legacy aliases — but the cross-axis `compile_error!` enforcement
+# only lands in PR 2, so today's builds stay backwards-compatible.
+#
+# Axes:
+#
+#   1. platform        — pick exactly one of the MCU targets.
+#   2. secure-element  — pick exactly one SE backend.
+#   3. ui-mode         — pick exactly one UI backend.
+#   4. mode            — pick exactly one of the development profiles.
+#   5. accelerators    — any subset of side-channel / hw accelerators.
+#
+# Reference: `docs/handoff-modularity-refactor.md` §4.4.
+# ---------------------------------------------------------------------------
+
+# 1. platform axis (mutually exclusive)
+platform-qemu      = []                # mps2-an505 / host targets
+platform-stm32u585 = ["stm32u585"]
+
+# 2. secure-element axis (mutually exclusive at top level; `dual`
+#    implies both component flags below).
+secure-element-mock     = ["mock-se"]
+secure-element-optiga   = ["optiga-trust-m"]
+secure-element-se050    = ["se050"]
+secure-element-tropic01 = ["tropic01-se"]
+secure-element-dual     = ["dual-se"]
+
+# 3. ui-mode axis (mutually exclusive — enforced by build.rs today,
+#    cross-axis compile_error! in Phase 8 PR 2).
+ui-mode-semihosting = ["ui-semihosting"]
+ui-mode-oled        = ["ui-oled"]
+ui-mode-noop        = ["ui-noop"]
+ui-mode-mirror      = ["ui-mirror"]
+ui-mode-capture     = ["ui-capture"]
+
+# 4. mode axis (development profile)
+mode-production = []                                    # no debug-log / no e2e-test / no mock-se
+mode-bringup    = ["debug-log"]                         # debug-log allowed; production-fence sub-features prohibited
+mode-e2e        = ["debug-log", "e2e-test"]             # full e2e suite including skip-* sub-flags
+mode-bench      = ["debug-log", "e2e-test"]             # bench harness — e2e minus the skip-* flags
+
+# 5. accelerators axis (composes — pick any subset)
+accel-pka              = ["pka-accel"]
+accel-tamp             = ["tamp"]
+accel-consumption-mask = ["consumption-mask"]
+accel-saes-dhuk        = ["saes-dhuk"]
+
+# ---------------------------------------------------------------------------
+# Legacy flag names (still load-bearing — Makefile recipes still use
+# these). PR 2 of Phase 8 will delete these aliases after every recipe
+# has been flipped.
+# ---------------------------------------------------------------------------
+
 debug-log = []
 mock-se = []
 tropic01-se = ["dep:tropic01", "dep:x25519-dalek", "dep:embedded-hal"]

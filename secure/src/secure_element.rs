@@ -115,6 +115,12 @@ pub struct MockSecureElement {
     rmem_data: [[u8; MAX_RMEM_DATA]; NUM_RMEM_SLOTS],
     macd_initialized: [bool; NUM_MACD_SLOTS],
     macd_state: [[u8; 32]; NUM_MACD_SLOTS],
+    /// Phase 10 PR D realism knob — when set, the next
+    /// `mac_and_destroy` call returns `SeError::InternalError` to
+    /// simulate a clock/voltage glitch mid-MACD. The flag clears
+    /// itself after one shot so a single `simulate_glitch(true)`
+    /// affects exactly one operation.
+    glitch_armed: bool,
 }
 
 impl MockSecureElement {
@@ -125,7 +131,27 @@ impl MockSecureElement {
             rmem_data: [[0u8; MAX_RMEM_DATA]; NUM_RMEM_SLOTS],
             macd_initialized: [false; NUM_MACD_SLOTS],
             macd_state: [[0u8; 32]; NUM_MACD_SLOTS],
+            glitch_armed: false,
         }
+    }
+
+    /// Arm a one-shot glitch — the next `mac_and_destroy` call returns
+    /// `SeError::InternalError`. Used by host tests of the
+    /// `nsc::gated_unlock` FI-hardening path: the MCU's page-124
+    /// pre-commit bumps the attempt counter BEFORE the SE round-trip,
+    /// so a glitch that drops the SE call still charges the attempt.
+    /// Verifying that contract on host requires deterministic glitch
+    /// injection, which is what this knob provides.
+    pub fn simulate_glitch(&mut self) {
+        self.glitch_armed = true;
+    }
+
+    /// Returns `true` iff every MACD slot has been programmed at least
+    /// once. The existing PIN-verify path resets all slots on a
+    /// successful unlock, so this is `true` after any `unlock()` in
+    /// the post-provision lifecycle.
+    pub fn macd_all_initialized(&self) -> bool {
+        self.macd_initialized.iter().all(|&b| b)
     }
 }
 
@@ -186,6 +212,11 @@ impl SecureElement for MockSecureElement {
         let s = slot as usize;
         if s >= NUM_MACD_SLOTS {
             return Err(SeError::SlotNotFound);
+        }
+        // Phase 10 PR D — one-shot glitch injection for FI tests.
+        if self.glitch_armed {
+            self.glitch_armed = false;
+            return Err(SeError::InternalError);
         }
         // Simplified mock: HMAC(data_in, slot_state_or_zeros).
         // Each call replaces slot_state with data_in (like TROPIC01's
@@ -269,5 +300,188 @@ impl WalletStore for MockSecureElement {
 
     fn zeroize_caches(&mut self) {
         // Mock stores everything in r-mem, no caching layer.
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Host tests — exercise the 10-wrong-PIN brick path on the mock SE so
+// the production-only behaviour previously covered solely by
+// `make pin-gate-wipe-e2e` (real hardware) gets a host regression
+// guard. Phase 10 PR D of the modularity refactor.
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::provision_from_mnemonic;
+    use sphincs_tz_bip39::Mnemonic;
+    use sphincs_tz_shared::{MAX_ATTEMPTS, NscStatus};
+
+    fn make_provisioned() -> MockSecureElement {
+        let mut se = MockSecureElement::new();
+        let mnemonic = Mnemonic::from_entropy(&[0u8; 32]);
+        let pin = [b'1', b'2', b'3', b'4', 0, 0, 0, 0];
+        provision_from_mnemonic(&mut se, &mnemonic, &pin);
+        se
+    }
+
+    /// Provisioning leaves the mock in a usable state — the entropy
+    /// blob and VK slots are populated.
+    ///
+    /// We probe slots directly instead of going through
+    /// `is_provisioned()` because that helper uses a 128-byte buffer
+    /// that can't fit the 481-byte PIN_STATE blob — a pre-existing
+    /// quirk on the mock-SE path. The PIN-correct unlock test below
+    /// is the real end-to-end check that provisioning landed
+    /// everywhere it was supposed to.
+    #[test]
+    fn provision_populates_slots() {
+        let mut se = make_provisioned();
+        let mut entropy_buf = [0u8; 64];
+        let mut vk_buf = [0u8; 32];
+        let mut bvk_buf = [0u8; 32];
+        assert!(
+            se.r_mem_read(0, &mut entropy_buf).is_ok(),
+            "encrypted-entropy slot must be populated"
+        );
+        assert!(
+            se.r_mem_read(2, &mut vk_buf).is_ok(),
+            "VK slot must be populated"
+        );
+        assert!(
+            se.r_mem_read(3, &mut bvk_buf).is_ok(),
+            "bootstrap-VK slot must be populated"
+        );
+    }
+
+    /// The correct PIN unlocks and the attempt counter resets to
+    /// `MAX_ATTEMPTS` afterwards.
+    #[test]
+    fn correct_pin_unlocks_and_resets_counter() {
+        let mut se = make_provisioned();
+        let pin = [b'1', b'2', b'3', b'4', 0, 0, 0, 0];
+        let secret = se.unlock(&pin).expect("correct PIN should unlock");
+        assert_ne!(secret, [0u8; 32], "master_secret must be non-zero");
+        assert_eq!(
+            se.remaining_attempts(),
+            MAX_ATTEMPTS,
+            "successful unlock must reset attempt counter"
+        );
+    }
+
+    /// Wrong PINs decrement the remaining-attempts counter monotonically.
+    #[test]
+    fn wrong_pin_decrements_remaining_attempts() {
+        let mut se = make_provisioned();
+        assert_eq!(se.remaining_attempts(), MAX_ATTEMPTS);
+
+        let bad_pin = [0u8, 0, 0, 0, 0, 0, 0, 0];
+        for tried in 0..3 {
+            assert!(
+                matches!(se.unlock(&bad_pin), Err(UnlockError::PinIncorrect)),
+                "iteration {} should report PinIncorrect",
+                tried,
+            );
+            let remaining = se.remaining_attempts();
+            assert_eq!(
+                remaining,
+                MAX_ATTEMPTS - (tried + 1),
+                "remaining must drop by 1 per wrong attempt",
+            );
+        }
+    }
+
+    /// 10 wrong PINs in a row must brick the entropy blob and surface
+    /// `PinLocked` on subsequent attempts. This is the post-mortem
+    /// guarantee of `make pin-gate-wipe-e2e` on real hardware; mocking
+    /// it on host means the regression catches drift earlier.
+    #[test]
+    fn ten_wrong_pins_brick_the_mock() {
+        let mut se = make_provisioned();
+        let bad_pin = [0u8, 0, 0, 0, 0, 0, 0, 0];
+
+        // First 9 attempts must report PinIncorrect (still some
+        // budget left).
+        for i in 0..9 {
+            let r = se.unlock(&bad_pin);
+            assert!(
+                matches!(r, Err(UnlockError::PinIncorrect)),
+                "attempt {} should report PinIncorrect, got {:?}",
+                i + 1,
+                r
+            );
+        }
+        assert_eq!(se.remaining_attempts(), 1, "1 attempt must remain");
+
+        // Attempt 10 trips the brick path inside `verify_pin` which
+        // erases the encrypted entropy and PIN state. The PIN is still
+        // wrong, so `unlock` reports PinLocked (the brick was issued
+        // *because* the attempt failed and the counter rolled).
+        let r10 = se.unlock(&bad_pin);
+        assert!(
+            matches!(r10, Err(UnlockError::PinLocked)),
+            "10th wrong attempt should report PinLocked, got {:?}",
+            r10
+        );
+        // After bricking, the encrypted-entropy slot has been erased.
+        // (We don't check `is_provisioned()` here because of the
+        // 128-byte-buffer quirk noted on `provision_populates_slots`
+        // above — instead probe the slot directly.)
+        let mut entropy_buf = [0u8; 64];
+        assert!(
+            matches!(se.r_mem_read(0, &mut entropy_buf), Err(SeError::SlotNotFound)),
+            "bricked mock must have its entropy slot erased"
+        );
+
+        // And subsequent unlocks (with even the correct PIN!) fail
+        // because the encrypted entropy blob is gone.
+        let correct_pin = [b'1', b'2', b'3', b'4', 0, 0, 0, 0];
+        let r11 = se.unlock(&correct_pin);
+        assert!(
+            matches!(r11, Err(UnlockError::InternalError | UnlockError::PinLocked)),
+            "post-brick unlock with correct PIN must still fail, got {:?}",
+            r11
+        );
+    }
+
+    /// `simulate_glitch` arms a one-shot fault on the next
+    /// `mac_and_destroy` call. The pin-verify path catches the
+    /// `SeError::InternalError` and surfaces `NscStatus::InternalError`.
+    /// The MCU page-124 pre-commit pattern in `nsc::gated_unlock`
+    /// uses this to charge the attempt regardless.
+    #[test]
+    fn simulate_glitch_one_shot_fires_then_clears() {
+        let mut se = make_provisioned();
+
+        // First call: glitched.
+        se.simulate_glitch();
+        let dummy = [0u8; 32];
+        let glitch_result = se.mac_and_destroy(0, &dummy);
+        assert!(
+            matches!(glitch_result, Err(SeError::InternalError)),
+            "armed glitch should error on first call"
+        );
+
+        // Second call: clean (the glitch is one-shot).
+        let clean_result = se.mac_and_destroy(0, &dummy);
+        assert!(
+            clean_result.is_ok(),
+            "second call must succeed — glitch flag must auto-clear"
+        );
+    }
+
+    /// `pin::verify_pin` propagates a glitch as `NscStatus::InternalError`.
+    #[test]
+    fn glitched_unlock_returns_internal_error() {
+        let mut se = make_provisioned();
+        let pin = [b'1', b'2', b'3', b'4', 0, 0, 0, 0];
+
+        se.simulate_glitch();
+        let r = crate::pin::verify_pin(&mut se, &pin);
+        assert_eq!(
+            r,
+            Err(NscStatus::InternalError),
+            "glitched MACD must surface as InternalError"
+        );
     }
 }

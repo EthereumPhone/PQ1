@@ -23,7 +23,7 @@
 //! the 21 000 intrinsic floor, max_priority > max_fee, and any envelope
 //! outside `1 < len ≤ MAX_TX_LEN`.
 
-use super::rlp::{self, Item, ListIter, RlpError};
+use crate::rlp::{self, Item, ListIter, RlpError};
 
 /// EIP-1559 intrinsic gas floor for a signed tx. Nothing below this can
 /// execute on an EVM chain, so accepting it would mean the user
@@ -299,7 +299,7 @@ pub struct ParsedTx<'a> {
 /// guarantees the transaction can be displayed to the user as-is
 /// without further validation.
 pub fn parse<'a>(envelope: &'a [u8]) -> Result<ParsedTx<'a>, TxError> {
-    if envelope.len() > sphincs_tz_shared::MAX_TX_LEN {
+    if envelope.len() > pqsigner_proto::MAX_TX_LEN {
         return Err(TxError::EnvelopeTooLong);
     }
     let first = *envelope.first().ok_or(TxError::EmptyEnvelope)?;
@@ -364,7 +364,7 @@ pub fn parse<'a>(envelope: &'a [u8]) -> Result<ParsedTx<'a>, TxError> {
         return Err(TxError::TrailingBytes);
     }
 
-    let signing_hash = super::hash::keccak256(envelope);
+    let signing_hash = crate::hash::keccak256(envelope);
 
     Ok(ParsedTx {
         tx: Eip1559Tx {
@@ -507,12 +507,8 @@ mod tests {
     #[test]
     fn format_1_5_eth() {
         // 1.5 * 10^18 wei
-        let v = u256_from_bigint_pow10(18);
-        let half = u256_from_bigint_pow10(17);
-        let mut sum = [0u16; 32];
-        for i in 0..32 {
-            sum[i] = v.0[i] as u16 + half.0[i] as u16 + (half.0[i] as u16 / 2); // quick hack
-        }
+        let _v = u256_from_bigint_pow10(18);
+        let _half = u256_from_bigint_pow10(17);
         // Easier: just compute 1_500_000_000_000_000_000 = 0x14D1_120D_7B16_0000
         let raw: u128 = 1_500_000_000_000_000_000u128;
         let mut buf = [0u8; 32];

@@ -1,35 +1,32 @@
 //! Secure-world trust gates for ERC20-aware sign confirmation.
 //!
-//! The full ERC20 metadata DB lives in **non-secure rodata**, signed
-//! by the same hybrid firmware-signing key as the rest of the firmware.
-//! The secure world embeds only a single 32-byte Merkle root
-//! (`crate::db_roots::ERC20_DB_ROOT`).
-//!
-//! At sign time the non-secure world looks up the contract in its
-//! local index, builds a `(canonical_metadata_bytes, merkle_proof,
-//! leaf_index)` bundle, and forwards it across the gateway. The
-//! secure world re-derives the leaf hash from the supplied metadata
-//! and walks the proof up to the embedded root before trusting any
-//! of it for trusted-UI display.
-//!
-//! Public surface:
-//!
-//! - [`merkle::verify_proof`] — Merkle proof verifier shared by both DBs
-//! - [`bundle::verify_erc20_bundle`] — full bundle parser + verifier
-//! - [`calldata::parse_erc20_calldata`] — strict ABI decoder for the
-//!   `transfer`, `transferFrom`, and `approve` ERC20 selectors
-//! - [`dispatch::dispatch_tx`] — picks the trust level for an
-//!   already-parsed EIP-1559 envelope, given an optional verified
-//!   metadata bundle from the gateway
+//! Phase 5 PR 5.4 of the modularity refactor moved the entire pure-
+//! logic body (calldata decoder, dispatch, Merkle verifier, bundle
+//! parser) into the standalone `pqsigner-tx` crate. This module is now
+//! a thin shim that re-exports those types and adds the `bundle`
+//! wrapper which threads the embedded `db_roots::ERC20_DB_ROOT` into
+//! the verifier — so existing call sites
+//! (`crate::erc20::bundle::verify_erc20_bundle(...)`,
+//! `crate::erc20::dispatch::dispatch_tx(...)`,
+//! `crate::erc20::calldata::*`,
+//! `crate::erc20::merkle::verify_proof`) keep working unchanged.
 
-pub mod bundle;
-pub mod calldata;
-pub mod dispatch;
-pub mod merkle;
+pub use pqsigner_tx::erc20::{calldata, dispatch, merkle};
+pub use pqsigner_tx::erc20::dispatch::{dispatch_tx, TxKind};
 
-// NOTE: no flat re-exports of `bundle::*` / `calldata::*`. Internal
-// callers (`nsc`, `tx::display`) import what they need via the
-// `bundle::`/`calldata::` sub-paths so the compiler flags any
-// accidentally-dead item. Only `dispatch::{dispatch_tx, TxKind}` is
-// re-exported, since it's the module's outward-facing entry point.
-pub use dispatch::{dispatch_tx, TxKind};
+/// Local wrapper module: re-exports the metadata struct and length cap
+/// from `pqsigner-tx`, but `verify_erc20_bundle` here is a wrapper that
+/// passes the firmware-embedded `db_roots::ERC20_DB_ROOT` into the
+/// pure-logic verifier so call sites don't need to thread the root.
+pub mod bundle {
+    pub use pqsigner_tx::erc20::bundle::{Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
+
+    use crate::db_roots::ERC20_DB_ROOT;
+
+    /// Verify a bundle against the firmware-embedded
+    /// `ERC20_DB_ROOT`. See [`pqsigner_tx::erc20::bundle::verify_erc20_bundle`]
+    /// for the full contract.
+    pub fn verify_erc20_bundle<'a>(bundle: &'a [u8]) -> Option<Erc20Metadata<'a>> {
+        pqsigner_tx::erc20::bundle::verify_erc20_bundle(bundle, &ERC20_DB_ROOT)
+    }
+}

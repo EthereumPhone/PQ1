@@ -1,0 +1,19 @@
+[package]
+name = "pqsigner-tx-core"
+version = "0.1.0"
+edition.workspace = true
+
+# Pure-logic Ethereum transaction primitives — RLP decoder, EIP-1559
+# envelope parser, U256 helpers, keccak256 wrapper. Used by the secure
+# crate's display + sign paths and by the shared `pqsigner-aa` UserOp
+# hasher. `no_std`, no allocator. Zero hardware deps.
+#
+# Phase 5 PR 5.1 of the modularity refactor — see
+# `docs/handoff-modularity-refactor.md` §4.1.
+
+[dependencies]
+pqsigner-proto = { workspace = true }
+sha3 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+hex = { workspace = true }

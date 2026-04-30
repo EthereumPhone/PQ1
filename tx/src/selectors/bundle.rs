@@ -3,12 +3,11 @@
 //! request when its local selectors DB has a hit on `calldata[0..4]`.
 //!
 //! The trust model is identical to [`crate::erc20::bundle`] and
-//! [`crate::names::bundle`]: only the 32-byte Merkle root rides in the
+//! [`crate::names::bundle`]: only a 32-byte Merkle root rides in the
 //! secure image, the host holds the full blob, and the bundle crosses
 //! the gateway carrying canonical bytes + proof. The secure world
-//! re-derives the leaf hash and walks the proof up to
-//! [`crate::db_roots::SELECTOR_DB_ROOT`] before letting any byte near
-//! the OLED.
+//! re-derives the leaf hash and walks the proof up to the supplied
+//! root before letting any byte near the OLED.
 //!
 //! ## Wire layout
 //!
@@ -40,10 +39,8 @@
 //! transaction whose calldata starts with a completely different
 //! selector.
 
-use crate::db_roots::SELECTOR_DB_ROOT;
+use crate::erc20::merkle::verify_proof;
 use sphincs_tz_shared::db_format::SELECTOR_TEXT_SIG_MAX_LEN;
-
-use super::super::erc20::merkle::verify_proof;
 
 /// Decoded + Merkle-verified function-selector entry. Borrows from the
 /// gateway buffer the bundle was copied into; the lifetime is tied to
@@ -60,11 +57,11 @@ pub struct SelectorMeta<'a> {
 pub const MAX_SELECTOR_BUNDLE_LEN: usize =
     4 + 1 + SELECTOR_TEXT_SIG_MAX_LEN + 4 + 4 + 32 * 32;
 
-/// Verify a single selector bundle. On success returns the decoded
-/// metadata; on any failure returns `None`. `bundle` must be the exact
-/// bytes the host wrote — no outer length prefix. The caller parses
-/// any length prefix at the gateway boundary.
-pub fn verify_selector_bundle(bundle: &[u8]) -> Option<SelectorMeta<'_>> {
+/// Verify a single selector bundle against `root`. On success returns
+/// the decoded metadata; on any failure returns `None`. `bundle` must
+/// be the exact bytes the host wrote — no outer length prefix. The
+/// caller parses any length prefix at the gateway boundary.
+pub fn verify_selector_bundle<'a>(bundle: &'a [u8], root: &[u8; 32]) -> Option<SelectorMeta<'a>> {
     let mut off = 0usize;
 
     // Header fixed fields.
@@ -123,7 +120,7 @@ pub fn verify_selector_bundle(bundle: &[u8]) -> Option<SelectorMeta<'_>> {
         leaf_index,
         proof,
         proof_depth,
-        &SELECTOR_DB_ROOT,
+        root,
     ) {
         return None;
     }
@@ -144,9 +141,9 @@ fn is_clean_ascii(s: &[u8]) -> bool {
 mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
+    use std::vec::Vec;
+    use std::vec;
 
-    /// Local Merkle helper — mirrors `dbgen/src/merkle.rs` so the test
-    /// can build a tree without pulling dbgen as a dev-dependency.
     fn leaf_hash(canonical: &[u8]) -> [u8; 32] {
         let mut h = Sha256::new();
         h.update([0x00u8]);
@@ -210,7 +207,7 @@ mod tests {
         v
     }
 
-    /// Build a full bundle and patch the embedded root to match.
+    /// Build a full bundle.
     fn build_bundle(
         selector: [u8; 4],
         text: &[u8],
@@ -230,60 +227,10 @@ mod tests {
         b
     }
 
-    /// Run the verify against a fixture-supplied root by patching
-    /// SELECTOR_DB_ROOT temporarily. We avoid runtime patching by
-    /// constructing test data such that its computed root matches the
-    /// real embedded root — but the embedded root is the production
-    /// curated one, so instead we rely on the test having access to a
-    /// stub. The simplest approach: bypass the real `verify_proof`
-    /// by inlining the same logic with an alternative root.
-    fn verify_with_root(bundle: &[u8], root: &[u8; 32]) -> Option<([u8; 4], Vec<u8>)> {
-        // Mirror of verify_selector_bundle, but verifying against an
-        // arbitrary root so unit tests don't depend on dbgen having
-        // run.
-        let mut off = 0usize;
-        if bundle.len() < off + 4 + 1 {
-            return None;
-        }
-        let selector: [u8; 4] = bundle[off..off + 4].try_into().ok()?;
-        off += 4;
-        let text_sig_len = *bundle.get(off)? as usize;
-        off += 1;
-        if text_sig_len == 0 || text_sig_len > SELECTOR_TEXT_SIG_MAX_LEN {
-            return None;
-        }
-        let text = bundle.get(off..off + text_sig_len)?;
-        off += text_sig_len;
-        if !is_clean_ascii(text) {
-            return None;
-        }
-        if bundle.len() < off + 4 + 4 {
-            return None;
-        }
-        let leaf_index = read_u32_le(bundle, off)? as usize;
-        off += 4;
-        let proof_depth = read_u32_le(bundle, off)? as usize;
-        off += 4;
-        if proof_depth > 32 {
-            return None;
-        }
-        let proof_size = proof_depth * 32;
-        if bundle.len() != off + proof_size {
-            return None;
-        }
-        let proof = &bundle[off..off + proof_size];
-        let canonical = canonical(&selector, text);
-        if !verify_proof(&canonical, leaf_index, proof, proof_depth, root) {
-            return None;
-        }
-        Some((selector, text.to_vec()))
-    }
-
     #[test]
     fn round_trip_happy_path() {
-        // Build a 4-leaf tree of (selector, text_sig) pairs.
         let entries = vec![
-            ([0xa9, 0x05, 0x9c, 0xbb], "transfer(address,uint256)"),
+            ([0xa9u8, 0x05, 0x9c, 0xbb], "transfer(address,uint256)"),
             ([0x09, 0x5e, 0xa7, 0xb3], "approve(address,uint256)"),
             ([0x23, 0xb8, 0x72, 0xdd], "transferFrom(address,address,uint256)"),
             ([0x70, 0xa0, 0x82, 0x31], "balanceOf(address)"),
@@ -296,17 +243,17 @@ mod tests {
 
         for (i, (sel, text)) in entries.iter().enumerate() {
             let b = build_bundle(*sel, text.as_bytes(), i, proofs[i].len(), &proofs[i]);
-            let verified = verify_with_root(&b, &root)
+            let verified = verify_selector_bundle(&b, &root)
                 .unwrap_or_else(|| panic!("bundle {} failed", i));
-            assert_eq!(&verified.0, sel);
-            assert_eq!(verified.1.as_slice(), text.as_bytes());
+            assert_eq!(&verified.selector, sel);
+            assert_eq!(verified.text_sig, text.as_bytes());
         }
     }
 
     #[test]
     fn corrupted_proof_rejected() {
         let entries = vec![
-            ([0xa9, 0x05, 0x9c, 0xbb], "transfer(address,uint256)"),
+            ([0xa9u8, 0x05, 0x9c, 0xbb], "transfer(address,uint256)"),
             ([0x09, 0x5e, 0xa7, 0xb3], "approve(address,uint256)"),
         ];
         let leaves: Vec<[u8; 32]> = entries
@@ -322,16 +269,15 @@ mod tests {
             proofs[0].len(),
             &proofs[0],
         );
-        // Flip a byte in the proof tail.
         let last = b.len() - 1;
         b[last] ^= 0x01;
-        assert!(verify_with_root(&b, &root).is_none());
+        assert!(verify_selector_bundle(&b, &root).is_none());
     }
 
     #[test]
     fn wrong_leaf_index_rejected() {
         let entries = vec![
-            ([0xa9, 0x05, 0x9c, 0xbb], "transfer(address,uint256)"),
+            ([0xa9u8, 0x05, 0x9c, 0xbb], "transfer(address,uint256)"),
             ([0x09, 0x5e, 0xa7, 0xb3], "approve(address,uint256)"),
         ];
         let leaves: Vec<[u8; 32]> = entries
@@ -348,30 +294,22 @@ mod tests {
             proofs[1].len(),
             &proofs[1],
         );
-        assert!(verify_with_root(&b, &root).is_none());
+        assert!(verify_selector_bundle(&b, &root).is_none());
     }
 
     #[test]
     fn non_ascii_text_sig_rejected() {
-        let entries = vec![([0xde, 0xad, 0xbe, 0xef], "ok(uint256)")];
-        let leaves: Vec<[u8; 32]> = entries
-            .iter()
-            .map(|(s, t)| leaf_hash(&canonical(s, t.as_bytes())))
-            .collect();
-        let (_root, _proofs) = build_tree(leaves);
-
         // Build a bundle whose text_sig contains a control byte. Even
         // before the Merkle check, the ASCII gate must reject it.
         let bad_text: Vec<u8> = vec![b't', 0x07, b's']; // BEL byte
         let mut b = Vec::new();
-        b.extend_from_slice(&entries[0].0);
+        b.extend_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
         b.push(bad_text.len() as u8);
         b.extend_from_slice(&bad_text);
         b.extend_from_slice(&0u32.to_le_bytes());
         b.extend_from_slice(&0u32.to_le_bytes());
-        // Use SELECTOR_DB_ROOT here (any root works; we expect rejection
-        // before the Merkle step).
-        assert!(verify_selector_bundle(&b).is_none());
+        let any_root = [0u8; 32];
+        assert!(verify_selector_bundle(&b, &any_root).is_none());
     }
 
     #[test]
@@ -384,7 +322,8 @@ mod tests {
         b.extend_from_slice(&text);
         b.extend_from_slice(&0u32.to_le_bytes());
         b.extend_from_slice(&0u32.to_le_bytes());
-        assert!(verify_selector_bundle(&b).is_none());
+        let any_root = [0u8; 32];
+        assert!(verify_selector_bundle(&b, &any_root).is_none());
     }
 
     #[test]
@@ -394,7 +333,8 @@ mod tests {
         b.push(0u8); // text_sig_len = 0
         b.extend_from_slice(&0u32.to_le_bytes());
         b.extend_from_slice(&0u32.to_le_bytes());
-        assert!(verify_selector_bundle(&b).is_none());
+        let any_root = [0u8; 32];
+        assert!(verify_selector_bundle(&b, &any_root).is_none());
     }
 
     #[test]
@@ -405,15 +345,13 @@ mod tests {
         b.push(b'x');
         b.extend_from_slice(&0u32.to_le_bytes());
         b.extend_from_slice(&33u32.to_le_bytes()); // > 32
-        // Don't bother appending proof bytes — depth check trips first.
-        assert!(verify_selector_bundle(&b).is_none());
+        let any_root = [0u8; 32];
+        assert!(verify_selector_bundle(&b, &any_root).is_none());
     }
 
     #[test]
     fn trailing_bytes_rejected() {
-        // Construct a complete bundle (depth 0, single-leaf tree) and
-        // append one extra byte; verifier must reject.
-        let entries = vec![([0xa9, 0x05, 0x9c, 0xbb], "transfer(address,uint256)")];
+        let entries = vec![([0xa9u8, 0x05, 0x9c, 0xbb], "transfer(address,uint256)")];
         let leaves: Vec<[u8; 32]> = entries
             .iter()
             .map(|(s, t)| leaf_hash(&canonical(s, t.as_bytes())))
@@ -428,6 +366,6 @@ mod tests {
             &proofs[0],
         );
         b.push(0xff);
-        assert!(verify_with_root(&b, &root).is_none());
+        assert!(verify_selector_bundle(&b, &root).is_none());
     }
 }

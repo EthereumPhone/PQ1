@@ -1,0 +1,27 @@
+[package]
+name = "pqsigner-tx"
+version = "0.1.0"
+edition.workspace = true
+
+# Pure-logic Solidity-ABI / ERC-20 / address-name / function-selector
+# trust gates. `verify_*_bundle` Merkle verifiers, calldata decoders,
+# stack-resident `NameResolver`. Everything that consumes a non-secure
+# bundle and produces a secure-world fact lives here, so any host-side
+# reference signer can re-run the same verification without pulling in
+# secure/.
+#
+# Phase 5 PR 5.4 of the modularity refactor.
+#
+# `tx/typed_call/` and `tx/eip712/` stay in `secure/` for the moment
+# because their fixture-roundtrip tests reference `secure/data/` paths
+# via `CARGO_MANIFEST_DIR`. They can move into `pqsigner-tx` later in
+# this phase or in a follow-up commit.
+
+[dependencies]
+pqsigner-proto    = { workspace = true }
+pqsigner-tx-core  = { workspace = true }
+sphincs-tz-shared = { workspace = true }
+sha2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+hex = { workspace = true }

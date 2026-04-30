@@ -4,6 +4,15 @@
 //! supported. The unsigned tx envelope is passed across the gateway by NS,
 //! copied into a secure stack buffer, parsed here, displayed for user
 //! confirmation, and only then hashed + signed.
+//!
+//! The pure parsing primitives (`rlp`, `eip1559`, `hash`) moved out into
+//! the `pqsigner-tx-core` crate as part of Phase 5 PR 5.1 of the
+//! modularity refactor. This module keeps thin re-export shims so
+//! existing call sites (`crate::tx::eip1559::Eip1559Tx`,
+//! `crate::tx::rlp::Item`, `crate::tx::hash::keccak256`) compile
+//! unchanged. `display`, `eip712`, and `typed_call` still depend on
+//! secure-world internals (`crate::ui`, `crate::erc20`,
+//! `crate::names`, `crate::selectors`) and stay here.
 
 // display depends on crate::ui (hardware), so it's gated out in host
 // test builds. eip1559, eip712 core, hash, rlp, and typed_call (Phase 2
@@ -14,11 +23,10 @@
 // here is the parser + ABI walker (always compiled, host-testable).
 #[cfg(not(test))]
 pub mod display;
-pub mod eip1559;
 pub mod eip712;
-pub mod hash;
-pub mod rlp;
 pub mod typed_call;
 
-// No flat re-exports of `eip1559::*` — call sites import through the
-// `eip1559::` sub-path so accidentally-dead items surface as warnings.
+// Pure-logic re-export shims: the bodies live in `pqsigner-tx-core`.
+pub use pqsigner_tx_core::eip1559;
+pub use pqsigner_tx_core::hash;
+pub use pqsigner_tx_core::rlp;

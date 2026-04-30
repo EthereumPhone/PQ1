@@ -45,13 +45,13 @@
 //!
 //! Both helpers are pure: no SE access, no UI, no signing. They are
 //! exercised directly from the e2e harness via the gateway command in
-//! `nsc::cmd_sign_userop`.
+//! the secure crate's `nsc::cmd_sign_userop`.
 
-use crate::tx::eip1559::{Eip1559Tx, U256};
-use crate::tx::hash::keccak256;
+use pqsigner_tx_core::eip1559::{Eip1559Tx, U256};
+use pqsigner_tx_core::hash::keccak256;
 
 use sha2::{Digest as Sha256Digest, Sha256};
-use sha3::{Digest, Keccak256};
+use sha3::Keccak256;
 
 /// SHA-256("") — the empty-bytes hash used for empty `initCode` and
 /// `paymasterAndData` inside the SHA-256 sphincs digest.
@@ -61,35 +61,18 @@ pub const SHA256_EMPTY: [u8; 32] = [
     0xb8, 0x55,
 ];
 
-/// Selector for `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`
-/// on `PQSmartWallet`. First four bytes of
-/// `keccak256("executeWithOffchainCount(uint256,uint256,address,uint256,bytes)")`.
-///
-/// The two leading uint256 args are `(ownerIndex, newOffchainCount)` —
-/// see `PQSmartWallet.executeWithOffchainCount` and
-/// `PQMultiOwnable._setOffchainSigCount` for the on-chain semantics.
-/// Hardcoded for greppability; verified against `cast sig`.
-pub const EXECUTE_SELECTOR: [u8; 4] = [0x14, 0x44, 0x3c, 0x57];
+// `EXECUTE_SELECTOR` and `EXECUTE_BATCH_SELECTOR` and the related
+// max-calldata constants used to live in this file as locally-defined
+// `pub const`s alongside `pub use` re-exports of `sphincs_tz_shared`'s
+// copies. Both definitions agreed but the duplication was a footgun
+// (gotcha §3.5 in `docs/handoff-modularity-refactor.md`). Phase 5
+// PR 5.2 deletes the local consts and re-exports straight from
+// `pqsigner-proto` — the single source of truth shared with Solidity.
 
-/// Maximum supported reconstructed-callData length.
-///
-/// EXECUTE selector (4) + abi.encode(address (32), uint256 (32),
-/// offset (32), len (32), data padded to next 32-byte boundary).
-/// `MAX_TX_LEN` (4096) bounds the inner data, plus rounding gives 4128
-/// for the data tail; the static prefix is 4+32+32+32+32 = 132. We
-/// round up to a 4 KiB-friendly buffer.
-pub use sphincs_tz_shared::MAX_EXECUTE_CALLDATA_LEN;
-
-/// Selector for `executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`
-/// on `PQSmartWallet`. First four bytes of
-/// `keccak256("executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])")`.
-/// Cross-checked against `cast sig`; the on-chain wallet's
-/// `_isSlotAllowedSelector` accepts this alongside `EXECUTE_SELECTOR`.
-pub use sphincs_tz_shared::EXECUTE_BATCH_SELECTOR;
-
-/// Maximum reconstructed-batch-callData length. See the constant in
-/// `sphincs_tz_shared` for the layout math.
-pub use sphincs_tz_shared::MAX_EXECUTE_BATCH_CALLDATA_LEN;
+pub use pqsigner_proto::EXECUTE_BATCH_SELECTOR;
+pub use pqsigner_proto::EXECUTE_SELECTOR;
+pub use pqsigner_proto::MAX_EXECUTE_BATCH_CALLDATA_LEN;
+pub use pqsigner_proto::MAX_EXECUTE_CALLDATA_LEN;
 
 /// Stack-friendly buffer for a reconstructed `execute(...)` calldata.
 ///
@@ -263,14 +246,14 @@ pub fn reconstruct_execute_batch_calldata(
     let n = txs.len();
 
     // Per-tx padded data length and running tail size for `bytes[]`.
-    let mut padded_each: [usize; sphincs_tz_shared::MAX_BATCH_TXS] =
-        [0; sphincs_tz_shared::MAX_BATCH_TXS];
-    if n > sphincs_tz_shared::MAX_BATCH_TXS {
+    let mut padded_each: [usize; pqsigner_proto::MAX_BATCH_TXS] =
+        [0; pqsigner_proto::MAX_BATCH_TXS];
+    if n > pqsigner_proto::MAX_BATCH_TXS {
         return Err(BatchAaError::CallDataTooLong);
     }
     let mut datas_tail_size: usize = 32 + n * 32; // length + N inner offsets
     for (i, tx) in txs.iter().enumerate() {
-        if tx.data.len() > sphincs_tz_shared::MAX_TX_LEN {
+        if tx.data.len() > pqsigner_proto::MAX_TX_LEN {
             return Err(BatchAaError::CallDataTooLong);
         }
         let padded = (tx.data.len().checked_add(31).ok_or(BatchAaError::CallDataTooLong)?) & !31usize;
@@ -443,10 +426,9 @@ pub enum WireParseError {
 /// Parse the fixed AA header out of the on-wire `cmd_sign_userop`
 /// payload (everything before `tx_len`).
 ///
-/// Mirrors the layout documented in
-/// [`sphincs_tz_shared::CMD_SIGN_USEROP`].
+/// Mirrors the layout documented on `pqsigner_proto::CMD_SIGN_USEROP`.
 pub fn parse_header(buf: &[u8]) -> Result<AaUserOpParams, WireParseError> {
-    if buf.len() < sphincs_tz_shared::USEROP_HEADER_LEN {
+    if buf.len() < pqsigner_proto::USEROP_HEADER_LEN {
         return Err(WireParseError::Truncated);
     }
     // Skip the leading `has_bundle` u8 — that's owned by the caller.
@@ -480,7 +462,7 @@ pub fn parse_header(buf: &[u8]) -> Result<AaUserOpParams, WireParseError> {
     paymaster_and_data_hash.copy_from_slice(&buf[p..p + 32]);
     p += 32;
 
-    debug_assert_eq!(p, sphincs_tz_shared::USEROP_HEADER_LEN);
+    debug_assert_eq!(p, pqsigner_proto::USEROP_HEADER_LEN);
 
     Ok(AaUserOpParams {
         sender,
@@ -623,12 +605,13 @@ pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
 }
 
 // ---------------------------------------------------------------------------
-// Unit tests — run on the host with `cargo test -p sphincs-tz-secure`
+// Unit tests — run on the host with `cargo test -p pqsigner-aa`.
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tx::eip1559::{Eip1559Tx, U256};
+    use std::vec::Vec;
+    use std::vec;
 
     // -- helpers ----------------------------------------------------------
 
@@ -647,8 +630,8 @@ mod tests {
             pre_verification_gas: u256_from_u64(21_000),
             max_fee_per_gas: u256_from_u64(50_000_000_000),
             max_priority_fee_per_gas: u256_from_u64(2_000_000_000),
-            init_code_hash: KECCAK_EMPTY,
-            paymaster_and_data_hash: KECCAK_EMPTY,
+            init_code_hash: TEST_KECCAK_EMPTY,
+            paymaster_and_data_hash: TEST_KECCAK_EMPTY,
         }
     }
 
@@ -689,7 +672,7 @@ mod tests {
     }
 
     /// keccak256("") — used for empty initCode and paymasterAndData.
-    const KECCAK_EMPTY: [u8; 32] = [
+    const TEST_KECCAK_EMPTY: [u8; 32] = [
         0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c, 0x92, 0x7e,
         0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0, 0xe5, 0x00, 0xb6, 0x53,
         0xca, 0x82, 0x27, 0x3b, 0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85,
@@ -699,7 +682,7 @@ mod tests {
     /// Encode an AaUserOpParams into the on-wire header format, suitable
     /// for `parse_header()` roundtrip tests.
     fn encode_header(p: &AaUserOpParams) -> Vec<u8> {
-        let mut buf = vec![0u8; sphincs_tz_shared::USEROP_HEADER_LEN];
+        let mut buf = vec![0u8; pqsigner_proto::USEROP_HEADER_LEN];
         // [0] has_bundle — 0 for these tests
         buf[0] = 0;
         let mut off = 1;
@@ -724,7 +707,7 @@ mod tests {
         off += 32;
         buf[off..off + 32].copy_from_slice(&p.paymaster_and_data_hash);
         off += 32;
-        assert_eq!(off, sphincs_tz_shared::USEROP_HEADER_LEN);
+        assert_eq!(off, pqsigner_proto::USEROP_HEADER_LEN);
         buf
     }
 
@@ -882,8 +865,8 @@ mod tests {
             pre_verification_gas: U256::zero(),
             max_fee_per_gas: U256::zero(),
             max_priority_fee_per_gas: U256::zero(),
-            init_code_hash: KECCAK_EMPTY,
-            paymaster_and_data_hash: KECCAK_EMPTY,
+            init_code_hash: TEST_KECCAK_EMPTY,
+            paymaster_and_data_hash: TEST_KECCAK_EMPTY,
         };
         let cdh = [0u8; 32];
         let hash = compute_user_op_hash(&params, &cdh);
@@ -938,14 +921,14 @@ mod tests {
 
     #[test]
     fn test_parse_truncated() {
-        let wire = vec![0u8; sphincs_tz_shared::USEROP_HEADER_LEN - 1];
+        let wire = vec![0u8; pqsigner_proto::USEROP_HEADER_LEN - 1];
         assert_eq!(parse_header(&wire), Err(WireParseError::Truncated));
     }
 
     #[test]
     fn test_parse_exact_length() {
         let wire = encode_header(&test_params());
-        assert_eq!(wire.len(), sphincs_tz_shared::USEROP_HEADER_LEN);
+        assert_eq!(wire.len(), pqsigner_proto::USEROP_HEADER_LEN);
         assert!(parse_header(&wire).is_ok());
     }
 
@@ -1222,7 +1205,7 @@ mod tests {
     /// Per-tx data > MAX_TX_LEN is rejected.
     #[test]
     fn test_batch_per_tx_too_long() {
-        let huge = vec![0u8; sphincs_tz_shared::MAX_TX_LEN + 1];
+        let huge = vec![0u8; pqsigner_proto::MAX_TX_LEN + 1];
         let txs = [batch_tx(0x11, 0, &huge)];
         let r = reconstruct_execute_batch_calldata(1, 0, &txs);
         assert_eq!(r.unwrap_err(), BatchAaError::CallDataTooLong);
@@ -1234,7 +1217,7 @@ mod tests {
         // Build a slice with MAX_BATCH_TXS + 1 entries, each empty.
         let dummy: [u8; 0] = [];
         let mut v: Vec<BatchInnerTx<'_>> = Vec::new();
-        for _ in 0..sphincs_tz_shared::MAX_BATCH_TXS + 1 {
+        for _ in 0..pqsigner_proto::MAX_BATCH_TXS + 1 {
             v.push(batch_tx(0x11, 0, &dummy));
         }
         let r = reconstruct_execute_batch_calldata(1, 0, &v);

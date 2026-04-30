@@ -23,7 +23,7 @@
 //! [`U256`] type so the renderer can format them with the matching
 //! token decimals from the metadata DB.
 
-use crate::tx::eip1559::U256;
+use pqsigner_tx_core::eip1559::U256;
 
 pub const SELECTOR_TRANSFER: [u8; 4] = [0xa9, 0x05, 0x9c, 0xbb];
 pub const SELECTOR_TRANSFER_FROM: [u8; 4] = [0x23, 0xb8, 0x72, 0xdd];
@@ -78,7 +78,7 @@ pub fn parse_erc20_calldata(data: &[u8]) -> Option<Erc20Call> {
 
 /// Decode a 32-byte ABI word as an Ethereum address. The address is
 /// right-justified in the word; the top 12 bytes MUST be zero.
-pub(crate) fn decode_address_word(word: &[u8]) -> Option<[u8; 20]> {
+pub fn decode_address_word(word: &[u8]) -> Option<[u8; 20]> {
     if word.len() != 32 {
         return None;
     }
@@ -91,7 +91,7 @@ pub(crate) fn decode_address_word(word: &[u8]) -> Option<[u8; 20]> {
 }
 
 /// Decode a 32-byte big-endian ABI word as a U256.
-pub(crate) fn decode_u256_word(word: &[u8]) -> U256 {
+pub fn decode_u256_word(word: &[u8]) -> U256 {
     let mut out = [0u8; 32];
     out.copy_from_slice(word);
     U256(out)

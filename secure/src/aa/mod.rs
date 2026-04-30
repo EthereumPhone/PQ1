@@ -1,11 +1,15 @@
 //! ERC-4337 Account Abstraction support for the secure world.
 //!
-//! This module owns everything needed to take a user-authorised inner
-//! Ethereum transaction (a plain EIP-1559 envelope) and turn it into
-//! the EntryPoint-v0.6 `userOpHash` that the trusted UI confirms and
-//! the SLH-DSA signing key signs.
+//! Phase 5 PR 5.2 of the modularity refactor moved the entire `aa/`
+//! body into the `pqsigner-aa` crate so host-side reference signers
+//! (and the future `fwsign verify-release --simulate-userop` tool) can
+//! depend on it without pulling in the rest of `secure/`. This module
+//! is now a thin re-export shim: every existing call site
+//! (`crate::aa::userop::compute_user_op_hash`,
+//! `crate::aa::eip1271::personal_sign_replay_safe_hash`, ...) keeps
+//! working unchanged.
 //!
-//! ## Trust model
+//! ## Trust model (unchanged)
 //!
 //! The non-secure world is *not* trusted to compute the userOpHash.
 //! It is only trusted to:
@@ -16,18 +20,8 @@
 //!     world parses and dispatches itself).
 //!
 //! Everything that the EntryPoint actually hashes is *recomputed* in
-//! the secure world from primitive inputs. Most importantly, the
-//! `callData` field of the UserOperation — which controls the actual
-//! money flow on chain — is reconstructed by this module from the
-//! displayed inner tx (`execute(target, value, data)`), so the bytes
-//! the EntryPoint executes are the same bytes the user saw on the
-//! trusted UI.
-//!
-//! ## Layering
-//!
-//! `userop` exposes the wire-format parsing for the
-//! [`crate::nsc::cmd_sign_userop`] handler and the helpers used by it
-//! and the e2e harness.
+//! the secure world from primitive inputs — see the `pqsigner-aa`
+//! crate docs for the full reasoning.
 //!
 //! ## No on-device initCode construction
 //!
@@ -45,5 +39,5 @@
 //! signed `userOpHash` that the trusted UI has no way to display.
 //! All sign paths force `init_code_hash = KECCAK_EMPTY`.
 
-pub mod eip1271;
-pub mod userop;
+pub use pqsigner_aa::eip1271;
+pub use pqsigner_aa::userop;
