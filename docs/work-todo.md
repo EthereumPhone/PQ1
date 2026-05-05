@@ -177,11 +177,23 @@ Quoted from Trezor `secret.c:593-595`:
 That way a compromise of one selector exposes at most one SE's channel. If BHK provisioning is deferred (dev boards), a "BHK absent → fall back to DHUK for those keys" gate keeps builds running, with a stern log line so production firmware can refuse to boot BHK-less.
 
 **What's needed — P0 (requires Tier 1 landed first):**
+
+**Phase 2A — host-testable cryptographic primitive (no chip burns).** Lands the BHK derivation API + dev-hardcoded BHK fallback so callers can be migrated independently. No silicon TRNG burn, no flash write, no TAMP register lock. Fully reversible — a feature-flag flip + flash erase reverts to pre-Tier-2 state. Specifically:
+
+- [ ] `hw::saes_cmac::cmac_bhk(msg, tag)` — parallel to `cmac_dhuk`, switches `KeySel::Dhuk` → `KeySel::Bhk`. Same `cmac_generic` core in `secure/src/cmac.rs` (no math duplication).
+- [ ] `hw::secret_keys::derive_into_bhk(label, output)` — second derivation path with the same three cfg branches as `derive_into`: `bhk-hardcoded-master-key` → HKDF over a compile-time test constant (distinctive ASCII e.g. `"PQSIGNER-TEST-BHK-DHUK-WRAP-v1!!"`); `saes-dhuk` alone (Tier-2 not yet landed) → fall back to DHUK so derivations still succeed with a stern log line; `bhk` (Tier-2 landed) → `kdf_cmac_counter_generic` over `KeySel::Bhk`.
+- [ ] Cargo features: `bhk-hardcoded-master-key` (dev) parallel to `otp-hardcoded-master-key`; `bhk` (production, requires `saes-dhuk`). Add both to the production-build `compile_error!` fence in `secure/src/nsc/mod.rs`.
+- [ ] Host tests: NIST SP 800-38B AES-256-CMAC KATs already cover `cmac_generic`; just verify the BHK selector path resolves through them on a `Aes256` software backend distinct from DHUK's. 4 + 9 + N tests pass on host.
+- [ ] **NO caller migration in this phase.** `se050_scp03_*`, `tropic01_pairing_key`, `se050_admin_pin` stay on DHUK-derive. Migrating them to BHK changes the derived bytes, which would force re-pairing of bench SEs (destructive on already-provisioned chips). Migration is staged as a Phase-2C task with its own rollout plan + re-pairing step.
+
+**Phase 2B — silicon-side BHK on real hardware (deferred until Phase 2A is committed).** Each step needs a known recovery path before being attempted:
+
 - [ ] `secure/src/hw/bhk.rs`: first-boot generation (`rng::fill` 32 bytes), DHUK-ECB wrap via `hw::saes`, flash write to a new dedicated secret-flash page (TBD — new region, distinct from current `ADMIN_PAGE_ADDR=0x0C0F_A000`). Subsequent-boot load + TAMP-write + SECCFGR lock.
 - [ ] `TAMP_S->SECCFGR` lock sequence: set `BHKLOCK` bit (STM32U5 has this per RM0456 §"TAMP" — verify exact bit). Once locked, register is read-0 from software; SAES peripheral still sees it.
-- [ ] Extend `hw::secret_keys` with a second derive path that uses `SAES-CMAC(BHK_selector, info)`. Split existing callers per the DHUK/BHK table above.
-- [ ] Dev gate: `otp-hardcoded-master-key` also hardcodes a BHK test constant (distinctive ASCII, e.g. `"PQSIGNER-TEST-BHK-DHUK-WRAP-v1!!"`) so bench boards without real SAES can exercise derivations.
+- [ ] Per-die BHK uniqueness validation on real hardware (similar to the Tier-1 DHUK two-board test).
 - [ ] Integration check: a reflash that preserves OTP also preserves the DHUK-wrapped-BHK on flash (same page across updates). If a firmware update would erase that page, restore-from-wrap fails and the chip falls into the same class of brick as the original OPTIGA bug. Treat the BHK page as **write-once-at-provisioning, read-only from firmware** — no firmware-update path may touch it.
+
+**Phase 2C — caller migration (deferred until Phase 2B is silicon-validated).** Per the DHUK/BHK split table above: SE050 SCP03 enc+mac, SE050 admin PIN, TROPIC01 pairing move from `derive_into` (DHUK) to `derive_into_bhk` (BHK). Each migration requires a coordinated re-pairing step on production chips; treat the bench-chip re-pair as a destructive test that needs the existing `dual-se-admin-wipe-e2e` + OPTIGA `factory_reset_admin` paths to be re-run after the cutover.
 
 #### Early-adopt: derive SE050 admin PIN from OTP master (pre-DHUK)
 

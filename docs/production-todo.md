@@ -158,17 +158,22 @@ escape hatch exists for user OIDs only.
       commits). Each accepted firmware-update CHUNK+COMMIT clears one
       bit; never reset. Exhausted parts are update-dead — treat that as
       the device's end-of-life.
-- [ ] **BHK page first-write** (work-todo #7 Tier 2). 32 TRNG bytes
-      DHUK-ECB-wrapped and written to the dedicated BHK secret-flash
-      page on first-boot provisioning. The wrapped bytes themselves are
-      not a silicon commit (flash can be re-erased), BUT once any SE is
-      paired with a `secret_keys::*_v1` derivation that consumed this
-      BHK, re-generating BHK invalidates that pairing — which is the
+- [ ] **BHK page first-write** (work-todo #7 Tier 2 Phase 2B). 32 TRNG
+      bytes DHUK-ECB-wrapped and written to the dedicated BHK secret-
+      flash page on first-boot provisioning. The wrapped bytes
+      themselves are not a silicon commit (flash can be re-erased), BUT
+      once any SE is paired with a `secret_keys::*_v1` derivation that
+      consumed this BHK, re-generating BHK invalidates that pairing —
       same class of brick as a lost PBS. Treat the first BHK write as
       a per-device one-way event even though the underlying storage is
       erasable. Firmware-update paths MUST NOT touch the BHK page; the
       linker script carves it out of the bank-2 update region and
-      `fw_update` rejects writes that overlap it.
+      `fw_update` rejects writes that overlap it. **Staged rollout:**
+      Phase 2A landed the cryptographic primitive (`cmac_bhk` +
+      `derive_into_bhk` + `bhk-hardcoded-master-key` dev fallback) with
+      no chip writes; Phase 2B (this checkbox) lands the silicon path;
+      Phase 2C migrates SE050 SCP03 + admin PIN + TROPIC01 pairing
+      callers from DHUK to BHK with a coordinated re-pair step.
 - [ ] **DHUK availability probe** (work-todo #7 Tier 1). Before any
       DHUK-based derivation, verify SAES returns stable output for a
       known test vector (`SAES-CMAC(DHUK, b"dhuk-probe-v1") == X_for_this_die`).

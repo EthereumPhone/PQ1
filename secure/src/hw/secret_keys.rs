@@ -178,6 +178,88 @@ fn derive_into_saes_kdf(label: &[u8], output: &mut [u8]) -> Result<(), OtpError>
     }
 }
 
+/// 32-byte BHK test constant used under `bhk-hardcoded-master-key`.
+/// Distinctive ASCII so it can never be mistaken for a real BHK and so
+/// HKDF outputs differ from the DHUK-path test constant (defense-in-
+/// depth shape preserved even in dev builds). NEVER ship.
+#[cfg(feature = "bhk-hardcoded-master-key")]
+const BHK_TEST_CONSTANT: [u8; 32] = *b"PQSIGNER-TEST-BHK-DHUK-WRAP-v1!!";
+
+/// Tier-2 BHK derivation entry point. Same shape as `derive_into` but
+/// resolves through the BHK SAES KEYSEL instead of DHUK, providing
+/// independent key material for the SE050/TROPIC01 split (see
+/// `docs/work-todo.md` §"Tier 2 — BHK").
+///
+/// Three cfg branches mirror `derive_into`:
+///
+/// 1. **`bhk-hardcoded-master-key` ON (dev/bench):** HKDF-Expand over
+///    the compile-time `BHK_TEST_CONSTANT`. Distinct constant from the
+///    OTP-master test constant so outputs differ between the two
+///    paths even under dev — this preserves the "two independent key
+///    sources" property for any host-side analysis.
+/// 2. **`bhk` ON (production phase 2B+):** SP 800-108-style CMAC-based
+///    counter KDF driven by `KeySel::Bhk` via `cmac_bhk`. Requires
+///    silicon-side BHK provisioning + boot-load + TAMP-lock to have
+///    run; otherwise output is stable-but-zero-keyed.
+/// 3. **Neither feature (pre-Tier-2 default):** Falls back to
+///    `derive_into` (DHUK path) so callers compile and produce stable
+///    output. The output is keyed on DHUK rather than BHK, so the
+///    defense-in-depth shape is degenerate until phase 2B lands —
+///    this is intentional: it lets us add BHK call sites
+///    incrementally without breaking pre-Tier-2 builds. Production
+///    builds enable `bhk` to flip to the real silicon path.
+#[allow(dead_code)] // Phase 2A: API present, no callers yet.
+pub(crate) fn derive_into_bhk(label: &[u8], output: &mut [u8]) -> Result<(), OtpError> {
+    #[cfg(feature = "bhk-hardcoded-master-key")]
+    {
+        let mut k = BHK_TEST_CONSTANT;
+        hkdf_expand(&k, label, output);
+        k.zeroize();
+        Ok(())
+    }
+    #[cfg(all(not(feature = "bhk-hardcoded-master-key"), feature = "bhk"))]
+    {
+        derive_into_saes_bhk_kdf(label, output)
+    }
+    #[cfg(all(not(feature = "bhk-hardcoded-master-key"), not(feature = "bhk")))]
+    {
+        // Pre-Tier-2 fallback: BHK callers route through the DHUK
+        // derivation. Output is keyed on DHUK, not BHK — the
+        // defense-in-depth split is degenerate until `bhk` (phase 2B)
+        // lands. Document this as a known regression in any caller's
+        // doc.
+        derive_into(label, output)
+    }
+}
+
+/// SAES-BHK adaptor — parallel to `derive_into_saes_kdf` but routes
+/// through `cmac_bhk` instead of `cmac_dhuk`. Only compiled when the
+/// production `bhk` feature is on (and `bhk-hardcoded-master-key` is
+/// off).
+#[cfg(all(not(feature = "bhk-hardcoded-master-key"), feature = "bhk"))]
+fn derive_into_saes_bhk_kdf(label: &[u8], output: &mut [u8]) -> Result<(), OtpError> {
+    use crate::cmac::{kdf_cmac_counter_generic, KdfError};
+    use crate::hw::saes::{self, KeySel};
+
+    const MAX_LABEL: usize = 64;
+    let mut info = [0u8; MAX_LABEL + 1];
+
+    let result = kdf_cmac_counter_generic(
+        label,
+        &mut info,
+        |block| saes::encrypt_ecb_block(KeySel::Bhk, None, block),
+        output,
+    );
+
+    info.zeroize();
+
+    match result {
+        Ok(()) => Ok(()),
+        Err(KdfError::LabelTooLong | KdfError::OutputTooLong) => Err(OtpError::ProgramError),
+        Err(KdfError::Backend(_)) => Err(OtpError::ProgramError),
+    }
+}
+
 /// 64-byte OPTIGA Trust M Platform Binding Secret.
 ///
 /// Consumed by `setup_pbs_no_handshake` to populate OID `E140` before

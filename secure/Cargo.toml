@@ -321,6 +321,28 @@ optiga-lock-operational = []  # Production: bump LcsO to Operational on BOTH E14
 # which would let a logic-analyzer snoop decrypt the Shielded Connection
 # across every unit.
 otp-hardcoded-master-key = []
+# Tier-2 phase 2A dev fallback: replace the silicon BHK with a compile-
+# time fixed 32-byte ASCII test constant ("PQSIGNER-TEST-BHK-DHUK-WRAP-
+# v1!!"). Lets us exercise the `secret_keys::derive_into_bhk` path +
+# any future BHK callers on bench boards before phase-2B silicon work
+# (TRNG burn → DHUK-ECB wrap → flash write → TAMP load + SECCFGR
+# lock) lands. Distinct constant from `otp-hardcoded-master-key` so a
+# device with both flags has independent (non-equal) DHUK-path and
+# BHK-path derivations — preserving the defense-in-depth shape even
+# under dev. Like `otp-hardcoded-master-key`: NEVER ship; registered
+# in the production-build `compile_error!` fence. Pure-additive (no
+# silicon side effects).
+bhk-hardcoded-master-key = []
+# Tier-2 phase 2B production gate: switch `secret_keys::derive_into_bhk`
+# from the dev hardcoded fallback (HKDF over a compile-time constant)
+# to the real silicon path — `kdf_cmac_counter_generic` driven by
+# `KeySel::Bhk`. Requires `saes-dhuk` (Tier 1) AND the silicon-side
+# BHK provisioning + boot-load + TAMP-lock infrastructure that phase
+# 2B will land. OFF until that infrastructure exists; turning it on
+# in a build that hasn't run phase-2B provisioning would produce
+# stable-but-zero-keyed derivations on most STM32U5 silicon (BHK
+# backup registers are zero at reset).
+bhk = ["saes-dhuk"]
 # Under `e2e-test`, halt the boot flow right after `provision_from_mnemonic`
 # returns, BEFORE `SE.unlock` would trigger the OPTIGA PRL handshake + the
 # irreversible E140 LcsO=op bump. Used for the Phase-A hardware-validation
