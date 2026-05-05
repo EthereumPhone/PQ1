@@ -295,6 +295,17 @@ saes-self-test = ["saes-dhuk"]
 # Use alongside `make saes-self-test-hw-rdp1` +
 # `make saes-self-test-hw-rdp0-regress`.
 uart-console = ["stm32u585"]
+# Early-boot GPIO bisection diagnostic. Compiles `secure/src/hw/boot_pulse.rs`
+# which toggles PE4 (Arduino D5 on the B-U585I-IOT02A — empirically
+# verified pin map, see project memory
+# `reference_b_u585i_iot02a_arduino_header_mapping.md`) at seven call
+# sites in `main()` — N short pulses for stage N. The only diagnostic
+# that survives the RDP ≥ 1 + TZEN=1 + no-OEM-keys combo where neither
+# SWD halt nor USART output works. Wire an LA1010 channel to D5 +
+# GND; a captured trace tells us exactly which boot stage hangs.
+# NEVER ship — registered in the production-build `compile_error!`
+# fence. Implies `stm32u585`.
+boot-pulse = ["stm32u585"]
 optiga-reset-oids = ["optiga-trust-m"]  # One-shot recovery: provision Trust Anchor at 0xE0E3 and send SetObjectProtected reset manifests for OIDs F1D0..F1DF. Dev-only; drop once the chip is recovered.
 optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Production: bump LcsO to Operational on BOTH E140 (PBS) AND every user OID (F1D0..F1D4 + F1E1) at end of provisioning. Irreversible per OPTIGA SRM §"Life Cycle Status" — LcsO is monotonic, no reverse path exists. Default OFF so dev chips stay at LcsO=Creation throughout all iteration (metadata still mutable, data rewriteable without AC constraints). ONLY enable when (a) STM32 OTP master is burned, (b) PBS is OTP-derived, (c) this specific chip is intended to become a production unit and you have validated the provisioning flow against sacrificial parts. See docs/production-todo.md for the full pre-ship checklist and docs/optiga-brick-postmortem.md §5 + §7 for the history.

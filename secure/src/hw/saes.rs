@@ -346,6 +346,24 @@ pub fn self_test() -> Result<(), SaesError> {
         crate::hw::uart::flush();
     }
 
+    // RDP1 boot diagnostic: write fingerprint to OLED so the user can
+    // read it visually even at RDP ≥ 1 where neither SWD nor (hopefully
+    // not) UART work. The caller is responsible for `ui::init()`.
+    #[cfg(feature = "ui-oled")]
+    {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut buf = [0u8; 16];
+        for (i, &b) in fp.iter().enumerate() {
+            buf[i * 2] = HEX[(b >> 4) as usize];
+            buf[i * 2 + 1] = HEX[(b & 0xF) as usize];
+        }
+        // SAFETY: hex chars are valid UTF-8.
+        let s = unsafe { core::str::from_utf8_unchecked(&buf) };
+        let d = crate::ui::display();
+        d.draw_line(3, s);
+        d.flush();
+    }
+
     Ok(())
 }
 

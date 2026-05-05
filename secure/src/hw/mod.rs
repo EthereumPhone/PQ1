@@ -76,6 +76,13 @@ pub mod saes;
 #[cfg(feature = "saes-dhuk")]
 pub mod saes_cmac;
 
+/// Early-boot GPIO pulse on PE4 (Arduino D5) for RDP1 boot
+/// bisection — the only diagnostic that survives both UART silence
+/// AND SWD-halt denial at TZEN=1+RDP=1+no-OEM-keys. See module
+/// docstring for pulse encoding.
+#[cfg(feature = "boot-pulse")]
+pub mod boot_pulse;
+
 /// Minimal USART1 driver routed to the B-U585I-IOT02A ST-LINK VCP
 /// (PA9 TX). Used under `uart-console` for diagnostic output from
 /// builds that can't rely on semihosting — specifically the RDP1

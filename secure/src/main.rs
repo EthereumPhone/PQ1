@@ -162,6 +162,20 @@ static mut SE: dual_se::DualSecureElement = dual_se::DualSecureElement::new();
 /// cleanly via `SYS_EXIT` so `probe-rs run` returns. Never returns.
 #[cfg(feature = "saes-self-test")]
 fn saes_self_test_and_halt() -> ! {
+    // Stage 6: entered self-test entry; uart::init has not run yet.
+    #[cfg(feature = "boot-pulse")]
+    unsafe { hw::boot_pulse::pulse(6); }
+    // RDP1 boot diagnostic — bring the OLED up the moment we enter the
+    // self-test so even at RDP ≥ 1 (UART silent, SWD halt denied) the
+    // screen retains a visible state of how far the firmware got.
+    #[cfg(feature = "ui-oled")]
+    {
+        ui::init();
+        let d = ui::display();
+        d.clear();
+        d.draw_line(0, "BOOT 6 saes-st");
+        d.flush();
+    }
     // Bring UART up first so anything that follows (PASS/FAIL line +
     // fingerprint) reaches the ST-LINK VCP even at RDP ≥ 1, where
     // semihosting is dead. No-op when `uart-console` isn't in the
@@ -171,10 +185,25 @@ fn saes_self_test_and_halt() -> ! {
         hw::uart::init();
         hw::uart::write_str("[S][saes] UART up, starting self-test\r\n");
     }
+    // Stage 7: uart::init returned (relevant only if uart-console is on).
+    #[cfg(feature = "boot-pulse")]
+    unsafe { hw::boot_pulse::pulse(7); }
+    #[cfg(feature = "ui-oled")]
+    {
+        let d = ui::display();
+        d.draw_line(1, "BOOT 7 uart up");
+        d.flush();
+    }
 
     match hw::saes::init() {
         Ok(()) => {
             secure_log!("[S][saes] init OK");
+            #[cfg(feature = "ui-oled")]
+            {
+                let d = ui::display();
+                d.draw_line(2, "saes init OK");
+                d.flush();
+            }
         }
         Err(e) => {
             secure_log!("[S][saes] init FAIL: {:?} — halting", e);
@@ -183,6 +212,12 @@ fn saes_self_test_and_halt() -> ! {
                 hw::uart::write_str("[S][saes] init FAIL\r\n");
                 hw::uart::flush();
             }
+            #[cfg(feature = "ui-oled")]
+            {
+                let d = ui::display();
+                d.draw_line(2, "saes init FAIL");
+                d.flush();
+            }
             loop {
                 cortex_m::asm::wfe();
             }
@@ -190,6 +225,8 @@ fn saes_self_test_and_halt() -> ! {
     }
     match hw::saes::self_test() {
         Ok(()) => {
+            // NOTE: do NOT overwrite line 3 here — saes::self_test()
+            // already wrote the DHUK fingerprint there.
             secure_log!("[S][saes] === self_test PASS ===");
         }
         Err(e) => {
@@ -199,12 +236,28 @@ fn saes_self_test_and_halt() -> ! {
                 hw::uart::write_str("[S][saes] === self_test FAIL ===\r\n");
                 hw::uart::flush();
             }
+            #[cfg(feature = "ui-oled")]
+            {
+                let d = ui::display();
+                d.draw_line(3, "self_test FAIL");
+                d.flush();
+            }
         }
     }
     secure_log!("[S][saes] self-test complete — halting");
-    // SYS_EXIT is a no-op at RDP ≥ 1 (debug port closed) but still
-    // does the right thing at RDP0 via probe-rs — keep it.
+    // Under `saes-self-test` alone (with probe-rs / debugger), SYS_EXIT
+    // cleanly returns so probe-rs sees the test PASS and exits.
+    #[cfg(not(feature = "boot-pulse"))]
     cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
+    // Under `boot-pulse`, fire a continuous pulse(8) "tail" pattern so
+    // the LA1010 trace can distinguish "firmware reached end of boot"
+    // (continuous 8-pulse groups forever) from "firmware hung at stage
+    // K" (one-shot 1..K train then silence).
+    #[cfg(feature = "boot-pulse")]
+    loop {
+        unsafe { hw::boot_pulse::pulse(8); }
+    }
+    #[cfg(not(feature = "boot-pulse"))]
     loop {
         cortex_m::asm::wfe();
     }
@@ -356,6 +409,12 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
 #[cfg(not(test))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
+    // RDP1 boot bisection: pulse PE13 (Arduino D13) before any other
+    // init so we see at least one pulse if the CPU made it into `main`
+    // at all. Stage encoding documented in `hw::boot_pulse`.
+    #[cfg(feature = "boot-pulse")]
+    unsafe { hw::boot_pulse::init(); hw::boot_pulse::pulse(1); }
+
     // Classify the reset cause FIRST — before any peripheral init,
     // before any RCC_CSR modification. The sticky flags tell us why the
     // chip just came up. Abnormal causes (watchdog / low-power /
@@ -371,17 +430,29 @@ fn main() -> ! {
     unsafe {
         let mhz = hw::rcc::init();
         SYSTICK_RELOAD = mhz * 1_000;
+        #[cfg(feature = "boot-pulse")]
+        hw::boot_pulse::pulse(2);
         // RNG init is deferred until AFTER sau::init() / GTZC config —
         // accessing RNG_S (0x520C_0800) before the TZSC has assigned the
         // peripheral's security attribute can stall the AHB2 fabric on
         // STM32U5.
         #[cfg(feature = "hw-sha256")]
         hw::hash::init_clock();
+        #[cfg(feature = "boot-pulse")]
+        hw::boot_pulse::pulse(3);
         // When SE050 is also active, its i2c_hw::init() configures I2C1 at
         // 400 kHz after SAU init — skip the OLED's 100 kHz init to avoid
         // a redundant peripheral reset.  SSD1306 supports 400 kHz.
         #[cfg(all(feature = "ui-oled", not(feature = "se050")))]
-        hw::i2c::init(mhz);
+        {
+            hw::i2c::init(mhz);
+            // RDP1 boot diagnostic — OLED visible from this point onward.
+            ui::init();
+            let d = ui::display();
+            d.clear();
+            d.draw_line(0, "BOOT 3 i2c+oled");
+            d.flush();
+        }
         secure_log!("[S] RCC: {} MHz + HSI48 + TRNG configured", mhz);
     }
 
@@ -423,6 +494,14 @@ fn main() -> ! {
     }
 
     sau::init();
+    #[cfg(feature = "boot-pulse")]
+    unsafe { hw::boot_pulse::pulse(4); }
+    #[cfg(all(feature = "ui-oled", not(feature = "se050")))]
+    {
+        let d = ui::display();
+        d.draw_line(1, "BOOT 4 sau OK");
+        d.flush();
+    }
     secure_log!("[S] SAU + MPC configured");
 
     // D6 pin identification diagnostic: pulse the candidate pins in a
@@ -448,7 +527,15 @@ fn main() -> ! {
     #[cfg(feature = "stm32u585")]
     unsafe {
         hw::rng::init();
+        #[cfg(feature = "boot-pulse")]
+        hw::boot_pulse::pulse(5);
         secure_log!("[S] TRNG initialised");
+    }
+    #[cfg(all(feature = "ui-oled", not(feature = "se050")))]
+    {
+        let d = ui::display();
+        d.draw_line(2, "BOOT 5 rng OK");
+        d.flush();
     }
 
     // SAES self-test (Tier 1 of work-todo #7). Runs once at boot,
