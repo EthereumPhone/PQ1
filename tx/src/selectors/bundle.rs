@@ -42,13 +42,34 @@
 use crate::erc20::merkle::verify_proof;
 use sphincs_tz_shared::db_format::SELECTOR_TEXT_SIG_MAX_LEN;
 
-/// Decoded + Merkle-verified function-selector entry. Borrows from the
+/// Where the `(selector, text_sig)` mapping originated. The display
+/// layer uses this to pick a banner — `Curated` keeps the Phase-1
+/// "! BLIND SIGN" copy (vendor-attested name, contract semantics
+/// unknown), `SelfAttest` switches to a louder banner because the
+/// name is companion-supplied and could be a crafted hash collision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectorProvenance {
+    /// Merkle-verified against `SELECTOR_DB_ROOT`. One canonical
+    /// `text_sig` per selector (curator drops adversarial collisions
+    /// at JSON time).
+    Curated,
+    /// `text_sig` was supplied by the (untrusted) companion. The
+    /// firmware verified `keccak256(text_sig)[..4] == calldata[..4]`
+    /// + ABI shape match, but did NOT cross-check against any vendor
+    /// curated set. A malicious companion can substitute any colliding
+    /// `text_sig`; the user must verify the function name against the
+    /// dapp.
+    SelfAttest,
+}
+
+/// Decoded + verified function-selector entry. Borrows from the
 /// gateway buffer the bundle was copied into; the lifetime is tied to
 /// that buffer's stack frame.
 #[derive(Clone, Copy, Debug)]
 pub struct SelectorMeta<'a> {
     pub selector: [u8; 4],
     pub text_sig: &'a [u8],
+    pub provenance: SelectorProvenance,
 }
 
 /// Maximum total bundle size, used to bound the secure-side stack
@@ -125,7 +146,79 @@ pub fn verify_selector_bundle<'a>(bundle: &'a [u8], root: &[u8; 32]) -> Option<S
         return None;
     }
 
-    Some(SelectorMeta { selector, text_sig })
+    Some(SelectorMeta {
+        selector,
+        text_sig,
+        provenance: SelectorProvenance::Curated,
+    })
+}
+
+/// Maximum total self-attest bundle size. 4 selector + 1 length byte +
+/// 63-byte text-sig cap = 68 bytes. No proof, no leaf index, no
+/// trailing bytes.
+pub const MAX_SELF_ATTEST_BUNDLE_LEN: usize = 4 + 1 + SELECTOR_TEXT_SIG_MAX_LEN;
+
+/// Parse a self-attest selector bundle and verify
+/// `keccak256(text_sig)[..4] == bundle.selector`. The caller is
+/// responsible for cross-checking `bundle.selector == calldata[..4]`
+/// just like with the curated path — this function only attests the
+/// internal consistency between `text_sig` and the supplied selector.
+///
+/// Returns `Some(SelectorMeta { provenance: SelfAttest, .. })` on
+/// success, `None` on any size / ASCII / length / keccak failure.
+///
+/// ## Wire layout
+///
+/// ```text
+///   selector       [u8; 4]
+///   text_sig_len   u8       (1..=63)
+///   text_sig       [u8; text_sig_len]   (printable ASCII)
+/// ```
+///
+/// Total exactly `5 + text_sig_len`. Trailing bytes are rejected — the
+/// caller's framing length already carries the size.
+///
+/// ## Trust property
+///
+/// This function attests that the supplied `text_sig` is a valid
+/// keccak-pre-image of the supplied selector AND that the bytes are
+/// printable ASCII within the bounded length. It does NOT prove the
+/// selector matches calldata (caller cross-check), and it does NOT
+/// prove the `text_sig` is the *canonical* name for the selector — a
+/// crafted ~2³² keccak brute-force can produce a same-shape colliding
+/// `text_sig`. The trusted UI MUST surface this in the banner copy
+/// (see `SelectorProvenance::SelfAttest`).
+pub fn parse_self_attest_bundle<'a>(bundle: &'a [u8]) -> Option<SelectorMeta<'a>> {
+    if bundle.len() < 5 {
+        return None;
+    }
+    let selector: [u8; 4] = bundle[0..4].try_into().ok()?;
+    let text_sig_len = bundle[4] as usize;
+    if text_sig_len == 0 || text_sig_len > SELECTOR_TEXT_SIG_MAX_LEN {
+        return None;
+    }
+    if bundle.len() != 5 + text_sig_len {
+        return None;
+    }
+    let text_sig = bundle.get(5..5 + text_sig_len)?;
+    if !is_clean_ascii(text_sig) {
+        return None;
+    }
+
+    // keccak256(text_sig)[..4] MUST match the supplied selector.
+    use sha3::{Digest as _, Keccak256};
+    let mut k = Keccak256::new();
+    k.update(text_sig);
+    let h = k.finalize();
+    if h[0..4] != selector {
+        return None;
+    }
+
+    Some(SelectorMeta {
+        selector,
+        text_sig,
+        provenance: SelectorProvenance::SelfAttest,
+    })
 }
 
 fn read_u32_le(buf: &[u8], off: usize) -> Option<u32> {
@@ -367,5 +460,134 @@ mod tests {
         );
         b.push(0xff);
         assert!(verify_selector_bundle(&b, &root).is_none());
+    }
+
+    // ── Self-attest parser tests ──────────────────────────────────────
+
+    fn keccak4(text: &[u8]) -> [u8; 4] {
+        use sha3::{Digest as _, Keccak256};
+        let mut k = Keccak256::new();
+        k.update(text);
+        let h = k.finalize();
+        let mut out = [0u8; 4];
+        out.copy_from_slice(&h[0..4]);
+        out
+    }
+
+    fn build_self_attest(selector: [u8; 4], text: &[u8]) -> Vec<u8> {
+        let mut v = Vec::with_capacity(5 + text.len());
+        v.extend_from_slice(&selector);
+        v.push(text.len() as u8);
+        v.extend_from_slice(text);
+        v
+    }
+
+    #[test]
+    fn self_attest_happy_path() {
+        let text = b"transfer(address,uint256)";
+        let sel = keccak4(text);
+        // Sanity-check the well-known canonical selector matches.
+        assert_eq!(sel, [0xa9, 0x05, 0x9c, 0xbb]);
+        let b = build_self_attest(sel, text);
+        let m = parse_self_attest_bundle(&b).expect("happy");
+        assert_eq!(m.selector, sel);
+        assert_eq!(m.text_sig, text);
+        assert_eq!(m.provenance, SelectorProvenance::SelfAttest);
+    }
+
+    #[test]
+    fn self_attest_uint256_only() {
+        // The end-to-end example from docs/companion-selector-decoding.md.
+        let text = b"transfer(uint256)";
+        let sel = keccak4(text);
+        assert_eq!(sel, [0x12, 0x51, 0x4b, 0xba]);
+        let b = build_self_attest(sel, text);
+        let m = parse_self_attest_bundle(&b).expect("happy");
+        assert_eq!(m.text_sig, text);
+        assert_eq!(m.provenance, SelectorProvenance::SelfAttest);
+    }
+
+    #[test]
+    fn self_attest_keccak_mismatch_rejected() {
+        let text = b"transfer(uint256)";
+        // Wrong selector — not the keccak prefix of `text`.
+        let b = build_self_attest([0xde, 0xad, 0xbe, 0xef], text);
+        assert!(parse_self_attest_bundle(&b).is_none());
+    }
+
+    #[test]
+    fn self_attest_bad_ascii_rejected() {
+        // BEL byte in the text — fails the printable-ASCII gate before
+        // keccak is even checked.
+        let bad: Vec<u8> = vec![b't', 0x07, b's'];
+        let mut b = Vec::new();
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+        b.push(bad.len() as u8);
+        b.extend_from_slice(&bad);
+        assert!(parse_self_attest_bundle(&b).is_none());
+    }
+
+    #[test]
+    fn self_attest_empty_text_rejected() {
+        let mut b = Vec::new();
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+        b.push(0u8);
+        assert!(parse_self_attest_bundle(&b).is_none());
+    }
+
+    #[test]
+    fn self_attest_oversize_text_rejected() {
+        let mut text = Vec::new();
+        text.resize(SELECTOR_TEXT_SIG_MAX_LEN + 1, b'A');
+        let mut b = Vec::new();
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+        b.push(text.len() as u8); // overflows u8 if MAX > 254 — hold for now
+        b.extend_from_slice(&text);
+        assert!(parse_self_attest_bundle(&b).is_none());
+    }
+
+    #[test]
+    fn self_attest_trailing_byte_rejected() {
+        let text = b"transfer(uint256)";
+        let sel = keccak4(text);
+        let mut b = build_self_attest(sel, text);
+        b.push(0xff);
+        assert!(parse_self_attest_bundle(&b).is_none());
+    }
+
+    #[test]
+    fn self_attest_short_truncated_rejected() {
+        let text = b"transfer(uint256)";
+        let sel = keccak4(text);
+        let mut b = build_self_attest(sel, text);
+        b.pop(); // chop one byte off
+        assert!(parse_self_attest_bundle(&b).is_none());
+    }
+
+    #[test]
+    fn self_attest_too_short_for_header_rejected() {
+        // 4 bytes — not even room for the length byte.
+        let b = vec![0u8; 4];
+        assert!(parse_self_attest_bundle(&b).is_none());
+    }
+
+    #[test]
+    fn curated_bundle_marks_provenance_curated() {
+        // Belt-and-braces: the Phase-1 path stamps Curated.
+        let entries = vec![([0xa9u8, 0x05, 0x9c, 0xbb], "transfer(address,uint256)")];
+        let leaves: Vec<[u8; 32]> = entries
+            .iter()
+            .map(|(s, t)| leaf_hash(&canonical(s, t.as_bytes())))
+            .collect();
+        let (root, proofs) = build_tree(leaves);
+        let b = build_bundle(
+            entries[0].0,
+            entries[0].1.as_bytes(),
+            0,
+            proofs[0].len(),
+            &proofs[0],
+        );
+        let m = verify_selector_bundle(&b, &root).expect("verifies");
+        assert_eq!(m.provenance, SelectorProvenance::Curated);
     }
 }

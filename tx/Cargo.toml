@@ -22,6 +22,7 @@ pqsigner-proto    = { workspace = true }
 pqsigner-tx-core  = { workspace = true }
 sphincs-tz-shared = { workspace = true }
 sha2 = { version = "0.10", default-features = false }
+sha3 = { version = "0.10", default-features = false }
 
 [dev-dependencies]
 hex = { workspace = true }

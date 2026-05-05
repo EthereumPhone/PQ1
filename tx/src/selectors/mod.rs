@@ -25,4 +25,7 @@
 
 pub mod bundle;
 
-pub use bundle::{verify_selector_bundle, SelectorMeta, MAX_SELECTOR_BUNDLE_LEN};
+pub use bundle::{
+    parse_self_attest_bundle, verify_selector_bundle, SelectorMeta, SelectorProvenance,
+    MAX_SELECTOR_BUNDLE_LEN, MAX_SELF_ATTEST_BUNDLE_LEN,
+};

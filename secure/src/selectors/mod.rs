@@ -10,7 +10,10 @@
 //! `crate::selectors::bundle::verify_selector_bundle(...)`) keep
 //! working unchanged.
 
-pub use pqsigner_tx::selectors::bundle::{SelectorMeta, MAX_SELECTOR_BUNDLE_LEN};
+pub use pqsigner_tx::selectors::bundle::{
+    parse_self_attest_bundle, SelectorMeta, SelectorProvenance, MAX_SELECTOR_BUNDLE_LEN,
+    MAX_SELF_ATTEST_BUNDLE_LEN,
+};
 
 use crate::db_roots::SELECTOR_DB_ROOT;
 
@@ -24,7 +27,10 @@ pub fn verify_selector_bundle<'a>(bundle: &'a [u8]) -> Option<SelectorMeta<'a>> 
 /// `crate::selectors::bundle::verify_selector_bundle(...)` resolve
 /// through this nested wrapper to the shim above.
 pub mod bundle {
-    pub use pqsigner_tx::selectors::bundle::{SelectorMeta, MAX_SELECTOR_BUNDLE_LEN};
+    pub use pqsigner_tx::selectors::bundle::{
+        parse_self_attest_bundle, SelectorMeta, SelectorProvenance, MAX_SELECTOR_BUNDLE_LEN,
+        MAX_SELF_ATTEST_BUNDLE_LEN,
+    };
     use crate::db_roots::SELECTOR_DB_ROOT;
 
     pub fn verify_selector_bundle<'a>(bundle: &'a [u8]) -> Option<SelectorMeta<'a>> {

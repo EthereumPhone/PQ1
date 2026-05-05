@@ -283,6 +283,98 @@ fn append_selector_only_trailers(
     Some(off + 10 + n)
 }
 
+/// Build a self-attest selector bundle: `selector(4) ||
+/// text_sig_len(1) || text_sig(<=63)`. The companion is responsible
+/// for ensuring `keccak256(text_sig)[..4] == selector`; this builder
+/// does NOT recompute keccak so callers can also exercise mismatch
+/// scenarios.
+fn build_self_attest_bundle(
+    out: &mut [u8],
+    selector: &[u8; 4],
+    text_sig: &[u8],
+) -> Option<usize> {
+    if text_sig.is_empty() || text_sig.len() > 63 {
+        return None;
+    }
+    let needed = 4 + 1 + text_sig.len();
+    if out.len() < needed {
+        return None;
+    }
+    out[..4].copy_from_slice(selector);
+    out[4] = text_sig.len() as u8;
+    out[5..5 + text_sig.len()].copy_from_slice(text_sig);
+    Some(needed)
+}
+
+/// Append five zero-length trailers (erc20=0, zk_v1=0, zk_v3=0,
+/// safe_v1=0, selector=0) followed by a self-attest trailer carrying
+/// `(selector, text_sig)`. Returns the new offset. Caller is
+/// responsible for keeping `buf` large enough.
+///
+/// Wire shape after this function:
+///   off..off+2   : erc20_len   = 0
+///   off+2..+4    : zk_v1_len   = 0
+///   off+4..+6    : zk_v3_len   = 0
+///   off+6..+8    : safe_v1_len = 0
+///   off+8..+10   : selector_len = 0
+///   off+10..+12  : self_attest_len (u16 BE)
+///   off+12..     : self-attest bundle bytes
+fn append_self_attest_only_trailers(
+    buf: &mut [u8],
+    off: usize,
+    selector: &[u8; 4],
+    text_sig: &[u8],
+) -> Option<usize> {
+    for i in 0..5 {
+        buf[off + i * 2..off + i * 2 + 2].copy_from_slice(&0u16.to_be_bytes());
+    }
+    let mut scratch = [0u8; 68];
+    let n = build_self_attest_bundle(&mut scratch, selector, text_sig)?;
+    if n > u16::MAX as usize {
+        return None;
+    }
+    buf[off + 10..off + 12].copy_from_slice(&(n as u16).to_be_bytes());
+    buf[off + 12..off + 12 + n].copy_from_slice(&scratch[..n]);
+    Some(off + 12 + n)
+}
+
+/// Append BOTH a curated selector trailer AND a self-attest trailer
+/// (the firmware must refuse this with InvalidPointer — they're
+/// declared mutually exclusive at the wire level).
+fn append_both_selector_trailers(
+    buf: &mut [u8],
+    off: usize,
+    curated_selector: &[u8; 4],
+    self_attest_selector: &[u8; 4],
+    self_attest_text: &[u8],
+) -> Option<usize> {
+    // erc20 / zk_v1 / zk_v3 / safe_v1 absent
+    for i in 0..4 {
+        buf[off + i * 2..off + i * 2 + 2].copy_from_slice(&0u16.to_be_bytes());
+    }
+    let mut o = off + 8;
+    // curated bundle
+    let mut scratch = [0u8; 1100];
+    let n_cur = crate::selectors_db::build_bundle(curated_selector, &mut scratch)?;
+    if n_cur > u16::MAX as usize {
+        return None;
+    }
+    buf[o..o + 2].copy_from_slice(&(n_cur as u16).to_be_bytes());
+    o += 2;
+    buf[o..o + n_cur].copy_from_slice(&scratch[..n_cur]);
+    o += n_cur;
+    // self-attest bundle
+    let mut sa = [0u8; 68];
+    let n_sa = build_self_attest_bundle(&mut sa, self_attest_selector, self_attest_text)?;
+    if n_sa > u16::MAX as usize {
+        return None;
+    }
+    buf[o..o + 2].copy_from_slice(&(n_sa as u16).to_be_bytes());
+    o += 2;
+    buf[o..o + n_sa].copy_from_slice(&sa[..n_sa]);
+    Some(o + n_sa)
+}
+
 /// One inner tx descriptor used by the batch e2e helper.
 struct E2eBatchTx<'a> {
     to: [u8; 20],
@@ -758,6 +850,180 @@ fn main() -> ! {
             "[NS][e2e]   → walker declined, blind-sign fallback rendered, t2_len={}",
             t2_len
         );
+    }
+
+    // Scenario 5j: Phase 2b self-attest happy path.
+    //
+    // Companion-supplied (selector, text_sig) pair for a function NOT
+    // in the curated DB. The firmware:
+    //   1. Parses the self-attest trailer.
+    //   2. Verifies `keccak256(text_sig)[..4] == bundle.selector`.
+    //   3. Cross-checks `bundle.selector == calldata[..4]`.
+    //   4. Parses the verified text_sig + ABI-walks the body.
+    //   5. Renders the typed-args flow with a `! UNVERIFIED` banner.
+    //
+    // We use `transfer(uint256)` (selector 0x12514bba) — a hypothetical
+    // single-arg transfer that's NOT in `secure/data/selectors-e2e.json`,
+    // so this exercises the self-attest fallback path specifically.
+    hprintln!("[NS][e2e] Scenario 5j: self-attest typed render");
+    unsafe {
+        // keccak256("transfer(uint256)")[..4] = 0x12514bba.
+        let text = b"transfer(uint256)" as &[u8];
+        let mut k = Keccak256::new();
+        k.update(text);
+        let sel_full = k.finalize();
+        let mut selector = [0u8; 4];
+        selector.copy_from_slice(&sel_full[0..4]);
+        assert_eq!(selector, [0x12, 0x51, 0x4b, 0xba]);
+
+        let mut calldata = [0u8; 4 + 32];
+        calldata[..4].copy_from_slice(&selector);
+        // Body = u256 1000 (big-endian).
+        calldata[4 + 32 - 2..4 + 32].copy_from_slice(&1000u16.to_be_bytes());
+
+        let unknown_contract: [u8; 20] = [0xfe; 20];
+        let chain_id: u64 = 11_155_111;
+
+        let mut len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            chain_id,
+            1,
+            false,
+            8,
+            &unknown_contract,
+            0u128,
+            &calldata,
+        );
+        let new_len = append_self_attest_only_trailers(
+            &mut PAYLOAD_BUF,
+            len,
+            &selector,
+            text,
+        )
+        .expect("self-attest bundle build failed");
+        len = new_len;
+
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "scenario 5j must succeed (got {})",
+            status
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 5j must NOT emit Type 1");
+        hprintln!(
+            "[NS][e2e]   → self-attest typed render verified, t2_len={}",
+            t2_len
+        );
+    }
+
+    // Scenario 5k: self-attest with mismatched keccak.
+    //
+    // Companion sends a self-attest trailer where `keccak256(text_sig)`
+    // does NOT start with the supplied selector. The firmware silently
+    // drops the bundle (parse_self_attest_bundle returns None) — the
+    // tx still signs, but the OLED falls back to BLIND SIGN with no
+    // FUNCTION/GUESS page. From NS we can only assert "Ok + Type 2";
+    // the OLED capture in the QEMU log shows the blind-sign view.
+    hprintln!("[NS][e2e] Scenario 5k: self-attest keccak mismatch dropped");
+    unsafe {
+        // Use 0x12514bba (real `transfer(uint256)` selector) but
+        // supply a deliberately wrong text_sig that hashes to something
+        // else.
+        let selector: [u8; 4] = [0x12, 0x51, 0x4b, 0xba];
+        let bad_text = b"drainAll(uint256)" as &[u8]; // hashes to a different prefix
+
+        let mut calldata = [0u8; 4 + 32];
+        calldata[..4].copy_from_slice(&selector);
+        let unknown_contract: [u8; 20] = [0xfe; 20];
+        let chain_id: u64 = 11_155_111;
+
+        let mut len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            chain_id,
+            1,
+            false,
+            9,
+            &unknown_contract,
+            0u128,
+            &calldata,
+        );
+        let new_len = append_self_attest_only_trailers(
+            &mut PAYLOAD_BUF,
+            len,
+            &selector,
+            bad_text,
+        )
+        .expect("self-attest bundle build failed");
+        len = new_len;
+
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "scenario 5k must still succeed (mismatched keccak silently dropped)"
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 5k must NOT emit Type 1");
+        hprintln!(
+            "[NS][e2e]   → keccak mismatch dropped, blind-sign fallback, t2_len={}",
+            t2_len
+        );
+    }
+
+    // Scenario 5l: both selector trailers present → InvalidPointer.
+    //
+    // The firmware refuses any payload that carries BOTH a curated
+    // bundle and a self-attest bundle for the same call. A confused
+    // companion sending both would otherwise leave the user
+    // wondering which banner the device chose.
+    hprintln!("[NS][e2e] Scenario 5l: both selector trailers refused");
+    unsafe {
+        // calldata = balanceOf(0xab..ab) — selector 0x70a08231 IS in
+        // the curated e2e DB. The self-attest payload duplicates the
+        // same selector with a hand-built text_sig that ALSO has
+        // matching keccak (i.e. both bundles are individually valid).
+        let curated_sel: [u8; 4] = [0x70, 0xa0, 0x82, 0x31];
+        let self_attest_text = b"balanceOf(address)" as &[u8]; // keccak matches
+        let self_attest_sel = curated_sel;
+
+        let query_addr: [u8; 20] = [0xab; 20];
+        let mut calldata = [0u8; 4 + 32];
+        calldata[..4].copy_from_slice(&curated_sel);
+        calldata[16..36].copy_from_slice(&query_addr);
+
+        let unknown_contract: [u8; 20] = [0xfe; 20];
+        let chain_id: u64 = 11_155_111;
+
+        let mut len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            chain_id,
+            1,
+            false,
+            10,
+            &unknown_contract,
+            0u128,
+            &calldata,
+        );
+        let new_len = append_both_selector_trailers(
+            &mut PAYLOAD_BUF,
+            len,
+            &curated_sel,
+            &self_attest_sel,
+            self_attest_text,
+        )
+        .expect("dual-bundle build failed");
+        len = new_len;
+
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::InvalidPointer as u32,
+            "scenario 5l must return InvalidPointer (got {})",
+            status
+        );
+        hprintln!("[NS][e2e]   → both-selector-trailers refused as expected");
     }
 
     // Scenario 5e: atomic batch sign — three inner txs into one UserOp.

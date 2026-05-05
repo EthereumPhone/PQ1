@@ -168,6 +168,34 @@
   </div>
 
   <div class="card">
+    <h2>Selector decoding (Phase 2 / 2b)</h2>
+    <div style="font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 12px;">
+      For the device to render decoded args (<code>arg 0 uint256: 1000</code>) instead of a raw hex word dump, the calldata's 4-byte selector needs a known <code>text_sig</code>. Two paths:
+      <ul style="margin-top: 6px; padding-left: 20px;">
+        <li><strong>Curated</strong>: load <code>selectors_db.bin</code> (companion-stub artifact). Vendor-attested name; device shows <code>! BLIND SIGN</code> banner.</li>
+        <li><strong>Self-attest</strong>: companion supplies <code>(selector, text_sig)</code> directly; firmware verifies <code>keccak256(text_sig)[..4] == selector</code> + ABI shape match. Device shows louder <code>! UNVERIFIED</code> banner.</li>
+      </ul>
+      Both are mutually exclusive per call. <code>selectors_db.bin</code> is ~775 KB — pick it via the file input below; the page reads + parses it locally and never sends the blob over the wire.
+    </div>
+    <div class="row">
+      <label>Selectors blob</label>
+      <input id="selectorsDbFile" type="file" accept=".bin,application/octet-stream" style="flex: 1; padding: 6px 0;" />
+      <button id="forgetSelectorsBtn" class="secondary" type="button" style="padding: 6px 14px; font-size: 12px;">Forget</button>
+    </div>
+    <div class="row">
+      <label>Status</label>
+      <span id="selectorsDbStatus" class="status-pill"><span class="dot"></span><span id="selectorsDbStatusText">Not loaded</span></span>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="useSelfAttest" checked /> Fall back to self-attest when curated DB misses</label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="use4byteHint" /> Use 4byte.directory for UI hints when neither path is available (network)</label>
+    </div>
+    <div id="selectorPreview" style="display:none; margin-top: 8px; padding: 12px; background: #0a0a0a; border: 1px solid #2a2a30; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.6; word-break: break-all;"></div>
+  </div>
+
+  <div class="card">
     <h2>Quick Tests</h2>
     <div style="font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 12px;">
       Pre-baked signing scenarios that exercise the token-aware ERC-20 display and the ZK clear-sign trailer. The firmware injects the Merkle-verified metadata bundle from its on-device DB; only the raw call bytes come from the companion.
@@ -175,6 +203,7 @@
     <div class="actions">
       <button id="testUsdcBtn" class="secondary" disabled>Test: USDC transfer (Base)</button>
       <button id="testZkAaveBtn" class="secondary" disabled>Test: ZK clear-sign (Aave V3 supply)</button>
+      <button id="testTypedCallBtn" class="secondary" disabled>Test: typed-call render (transfer(uint256))</button>
     </div>
   </div>
 
@@ -338,6 +367,7 @@ function setButtonState(connected, unlocked) {
   $('signBtn').disabled = !unlocked;
   $('testUsdcBtn').disabled = !unlocked;
   $('testZkAaveBtn').disabled = !unlocked;
+  $('testTypedCallBtn').disabled = !unlocked;
 }
 
 // ── Byte utilities ────────────────────────────────────────────────
@@ -378,6 +408,316 @@ function concatBytes(chunks) {
   let off = 0;
   for (const c of chunks) { out.set(c, off); off += c.length; }
   return out;
+}
+
+// ── Keccak-256 (Ethereum's hash) ──────────────────────────────────
+//
+// Inline minimal implementation (~80 lines of executable code) so the
+// single-file tool stays offline-capable. We need keccak256 for two
+// purposes:
+//   (1) Computing function-selector prefixes locally so a "Test
+//       transfer(uint256)" scenario can build self-attest bundles
+//       without round-tripping to a server.
+//   (2) Pre-flight verification — before we send a self-attest
+//       trailer, we rerun the same keccak the firmware will run, so
+//       a typo'd text_sig in the UI surfaces immediately as a JS
+//       assertion rather than a silent on-device fall-back.
+//
+// Uses Uint32Array for the 5×5 64-bit lane state (split high/low),
+// which avoids BigInt-induced GC pressure on the inner loop. This
+// implementation is for short inputs (≤ ~256 bytes); we never hash
+// large blobs in this tool.
+const KECCAK_RC_HI = [
+  0x00000000,0x00000000,0x80000000,0x80000000,0x00000000,0x00000000,0x80000000,0x80000000,
+  0x00000000,0x00000000,0x00000000,0x00000000,0x00000000,0x80000000,0x80000000,0x80000000,
+  0x80000000,0x80000000,0x00000000,0x80000000,0x80000000,0x80000000,0x00000000,0x80000000,
+];
+const KECCAK_RC_LO = [
+  0x00000001,0x00008082,0x0000808a,0x80008000,0x0000808b,0x80000001,0x80008081,0x00008009,
+  0x0000008a,0x00000088,0x80008009,0x8000000a,0x8000808b,0x0000008b,0x00008089,0x00008003,
+  0x00008002,0x00000080,0x0000800a,0x8000000a,0x80008081,0x00008080,0x80000001,0x80008008,
+];
+// Rho rotation offsets in BOUNCING-BALL iteration order (24 entries —
+// (0,0) is skipped). Each entry is the rotation applied when the
+// "ball" is moved into the lane at the matching index of KECCAK_PILN.
+const KECCAK_R = [ 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44 ];
+// Pi destinations (the lane we WRITE to at each iteration).
+const KECCAK_PILN = [10,7,11,17,18,3,5,16,8,21,24,4,15,23,19,13,12,2,20,14,22,9,6,1];
+
+function keccak256(input) {
+  // 1600-bit state: 25 lanes × 64 bits, split into hi/lo 32-bit halves.
+  const sHi = new Uint32Array(25), sLo = new Uint32Array(25);
+  const RATE = 136; // bytes (rate for keccak-256 = 1088 bits)
+  const buf = new Uint8Array(RATE);
+
+  // Absorb full blocks.
+  let off = 0;
+  while (input.length - off >= RATE) {
+    for (let i = 0; i < RATE; i++) buf[i] = input[off + i];
+    absorb(sHi, sLo, buf);
+    off += RATE;
+  }
+  // Final block — remainder + 0x01 domain pad + 0x80 final bit.
+  const rem = input.length - off;
+  for (let i = 0; i < RATE; i++) buf[i] = i < rem ? input[off + i] : 0;
+  buf[rem] = 0x01;
+  buf[RATE - 1] |= 0x80;
+  absorb(sHi, sLo, buf);
+
+  // Squeeze 32 bytes (= one rate-block prefix).
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 4; i++) {
+    const lo = sLo[i], hi = sHi[i];
+    out[i*8 + 0] = (lo >>> 0) & 0xff;
+    out[i*8 + 1] = (lo >>> 8) & 0xff;
+    out[i*8 + 2] = (lo >>> 16) & 0xff;
+    out[i*8 + 3] = (lo >>> 24) & 0xff;
+    out[i*8 + 4] = (hi >>> 0) & 0xff;
+    out[i*8 + 5] = (hi >>> 8) & 0xff;
+    out[i*8 + 6] = (hi >>> 16) & 0xff;
+    out[i*8 + 7] = (hi >>> 24) & 0xff;
+  }
+  return out;
+}
+
+function absorb(sHi, sLo, blk) {
+  // XOR block into state (little-endian per lane).
+  for (let i = 0; i < 17; i++) {
+    const o = i * 8;
+    sLo[i] ^= (blk[o]) | (blk[o+1]<<8) | (blk[o+2]<<16) | (blk[o+3]<<24);
+    sHi[i] ^= (blk[o+4]) | (blk[o+5]<<8) | (blk[o+6]<<16) | (blk[o+7]<<24);
+  }
+  // 24 rounds of permutation.
+  const cHi = new Uint32Array(5), cLo = new Uint32Array(5);
+  for (let r = 0; r < 24; r++) {
+    // Theta
+    for (let x = 0; x < 5; x++) {
+      cHi[x] = sHi[x] ^ sHi[x+5] ^ sHi[x+10] ^ sHi[x+15] ^ sHi[x+20];
+      cLo[x] = sLo[x] ^ sLo[x+5] ^ sLo[x+10] ^ sLo[x+15] ^ sLo[x+20];
+    }
+    for (let x = 0; x < 5; x++) {
+      const dHi = cHi[(x+4)%5] ^ rolHi(cHi[(x+1)%5], cLo[(x+1)%5], 1);
+      const dLo = cLo[(x+4)%5] ^ rolLo(cHi[(x+1)%5], cLo[(x+1)%5], 1);
+      for (let y = 0; y < 5; y++) {
+        sHi[x + 5*y] ^= dHi;
+        sLo[x + 5*y] ^= dLo;
+      }
+    }
+    // Rho + Pi (bouncing ball: KECCAK_R[i] = rotation applied when
+    // moving the ball at iteration i; KECCAK_PILN[i] = destination lane)
+    let bHi = sHi[1], bLo = sLo[1];
+    for (let i = 0; i < 24; i++) {
+      const j = KECCAK_PILN[i];
+      const kHi = sHi[j], kLo = sLo[j];
+      const rot = KECCAK_R[i];
+      sHi[j] = rolHi(bHi, bLo, rot);
+      sLo[j] = rolLo(bHi, bLo, rot);
+      bHi = kHi; bLo = kLo;
+    }
+    // Chi
+    for (let y = 0; y < 5; y++) {
+      const o = 5 * y;
+      const t0Hi = sHi[o], t0Lo = sLo[o];
+      const t1Hi = sHi[o+1], t1Lo = sLo[o+1];
+      const t2Hi = sHi[o+2], t2Lo = sLo[o+2];
+      const t3Hi = sHi[o+3], t3Lo = sLo[o+3];
+      const t4Hi = sHi[o+4], t4Lo = sLo[o+4];
+      sHi[o]   = t0Hi ^ ((~t1Hi) & t2Hi);
+      sLo[o]   = t0Lo ^ ((~t1Lo) & t2Lo);
+      sHi[o+1] = t1Hi ^ ((~t2Hi) & t3Hi);
+      sLo[o+1] = t1Lo ^ ((~t2Lo) & t3Lo);
+      sHi[o+2] = t2Hi ^ ((~t3Hi) & t4Hi);
+      sLo[o+2] = t2Lo ^ ((~t3Lo) & t4Lo);
+      sHi[o+3] = t3Hi ^ ((~t4Hi) & t0Hi);
+      sLo[o+3] = t3Lo ^ ((~t4Lo) & t0Lo);
+      sHi[o+4] = t4Hi ^ ((~t0Hi) & t1Hi);
+      sLo[o+4] = t4Lo ^ ((~t0Lo) & t1Lo);
+    }
+    // Iota
+    sHi[0] ^= KECCAK_RC_HI[r];
+    sLo[0] ^= KECCAK_RC_LO[r];
+  }
+}
+
+// 64-bit left-rotate split into 32-bit halves; n in 0..=63.
+function rolHi(hi, lo, n) {
+  if (n === 0) return hi >>> 0;
+  if (n < 32)  return ((hi << n) | (lo >>> (32 - n))) >>> 0;
+  if (n === 32) return lo >>> 0;
+  return ((lo << (n - 32)) | (hi >>> (64 - n))) >>> 0;
+}
+function rolLo(hi, lo, n) {
+  if (n === 0) return lo >>> 0;
+  if (n < 32)  return ((lo << n) | (hi >>> (32 - n))) >>> 0;
+  if (n === 32) return hi >>> 0;
+  return ((hi << (n - 32)) | (lo >>> (64 - n))) >>> 0;
+}
+
+/// Compute the 4-byte function selector for `text` (string) — i.e.
+/// the prefix used by EVM dispatch tables. `keccak256("transfer(uint256)")[..4]
+/// == 0x12514bba`.
+function selectorOf(textSig) {
+  const bytes = typeof textSig === 'string' ? new TextEncoder().encode(textSig) : textSig;
+  return keccak256(bytes).slice(0, 4);
+}
+
+// ── Selectors DB (curated, Merkle-rooted) ────────────────────────
+//
+// Mirrors `tools/companion-stub/selectors_db.bin` produced by `cargo
+// run -p dbgen`. The companion holds the full ~775 KB blob; only the
+// 32-byte SELECTOR_DB_ROOT is bound into the firmware image. The
+// firmware verifies bundles against its embedded root + cross-checks
+// `bundle.selector == calldata[0..4]` before any text-sig reaches
+// the trusted UI.
+//
+// This module:
+//   - parses the on-disk format (header, sorted entries, string pool, proofs)
+//   - binary-search-looks-up selectors
+//   - builds the wire-format `(selector, text_sig, leaf_index, proof)` bundle
+//
+// Wire format spec: docs/companion-selector-decoding.md § 5.
+const SELECTOR_DB_MAGIC = new TextEncoder().encode('SEL4');
+const SELECTOR_DB_VERSION = 1;
+const SELECTOR_DB_HEADER_LEN = 32;
+const SELECTOR_DB_ENTRY_LEN = 8;
+const SELECTOR_TEXT_SIG_MAX_LEN = 63;
+
+const selectorsDb = {
+  blob: null,
+  entryCnt: 0,
+  poolOff: 0,
+  poolSize: 0,
+  proofDepth: 0,
+  proofsOff: 0,
+
+  loaded() { return this.blob !== null; },
+
+  load(arrayBuffer) {
+    const u = new Uint8Array(arrayBuffer);
+    if (u.length < SELECTOR_DB_HEADER_LEN) throw new Error('blob too small');
+    for (let i = 0; i < 4; i++) {
+      if (u[i] !== SELECTOR_DB_MAGIC[i]) throw new Error('bad magic — expected b"SEL4"');
+    }
+    const ver = readU32Le(u, 4);
+    if (ver !== SELECTOR_DB_VERSION) throw new Error(`unsupported version ${ver}`);
+    this.entryCnt = readU32Le(u, 12);
+    this.poolOff = readU32Le(u, 16);
+    this.poolSize = readU32Le(u, 20);
+    this.proofDepth = readU32Le(u, 24);
+    this.proofsOff = readU32Le(u, 28);
+    if (this.proofDepth > 32) throw new Error('proof_depth > 32');
+    if (this.entryCnt === 0) throw new Error('empty DB');
+    this.blob = u;
+    return { entryCnt: this.entryCnt, proofDepth: this.proofDepth, blobLen: u.length };
+  },
+
+  /// Look up a 4-byte selector. Returns
+  ///   { textSig: Uint8Array, leafIndex, proofDepth, proof: Uint8Array }
+  /// or `null` if the selector isn't in the DB.
+  lookup(selector) {
+    if (!this.blob) return null;
+    if (selector.length !== 4) throw new Error('selector must be 4 bytes');
+    const idx = this._findIndex(selector);
+    if (idx === null) return null;
+    const entryOff = SELECTOR_DB_HEADER_LEN + idx * SELECTOR_DB_ENTRY_LEN;
+    const textOff = readU32Le(this.blob, entryOff + 4);
+    const poolAt = this.poolOff + textOff;
+    const textLen = this.blob[poolAt];
+    if (textLen === 0 || textLen > SELECTOR_TEXT_SIG_MAX_LEN) return null;
+    const textSig = this.blob.slice(poolAt + 1, poolAt + 1 + textLen);
+    const proofSize = this.proofDepth * 32;
+    const proofBase = this.proofsOff + idx * proofSize;
+    const proof = this.blob.slice(proofBase, proofBase + proofSize);
+    return { textSig, leafIndex: idx, proofDepth: this.proofDepth, proof };
+  },
+
+  /// Build a curated bundle ready for the SIGN_USEROP selector trailer:
+  ///   selector(4) || text_sig_len(1) || text_sig || leaf_index(4 LE)
+  ///                                  || proof_depth(4 LE) || proof
+  buildBundle(selector) {
+    const m = this.lookup(selector);
+    if (!m) return null;
+    const out = concatBytes([
+      selector,
+      new Uint8Array([m.textSig.length]),
+      m.textSig,
+      u32le(m.leafIndex),
+      u32le(m.proofDepth),
+      m.proof,
+    ]);
+    return out;
+  },
+
+  _findIndex(selector) {
+    let lo = 0, hi = this.entryCnt;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      const off = SELECTOR_DB_HEADER_LEN + mid * SELECTOR_DB_ENTRY_LEN;
+      const cmp = compareBytes4(this.blob, off, selector);
+      if (cmp < 0) lo = mid + 1;
+      else if (cmp > 0) hi = mid;
+      else return mid;
+    }
+    return null;
+  },
+};
+
+function readU32Le(u, off) {
+  return ((u[off]) | (u[off+1] << 8) | (u[off+2] << 16) | (u[off+3] << 24)) >>> 0;
+}
+function u32le(n) {
+  return new Uint8Array([n & 0xff, (n>>>8) & 0xff, (n>>>16) & 0xff, (n>>>24) & 0xff]);
+}
+function compareBytes4(blob, off, needle) {
+  for (let i = 0; i < 4; i++) {
+    const a = blob[off + i], b = needle[i];
+    if (a < b) return -1;
+    if (a > b) return 1;
+  }
+  return 0;
+}
+
+/// Build the self-attest bundle wire format:
+///   selector(4) || text_sig_len(1) || text_sig
+///
+/// The firmware verifies `keccak256(text_sig)[..4] == selector` — we
+/// pre-validate that here too so a typo'd UI input fails locally
+/// rather than silently degrading to blind-sign on the device. Returns
+/// `null` on any pre-flight failure with `lastError` set.
+function buildSelfAttestBundle(textSig) {
+  if (typeof textSig === 'string') textSig = new TextEncoder().encode(textSig);
+  if (textSig.length === 0 || textSig.length > SELECTOR_TEXT_SIG_MAX_LEN) {
+    throw new Error(`text_sig length ${textSig.length} out of [1, ${SELECTOR_TEXT_SIG_MAX_LEN}]`);
+  }
+  for (const b of textSig) {
+    if (b < 0x20 || b > 0x7e) throw new Error('text_sig must be printable ASCII');
+  }
+  const selector = selectorOf(textSig);
+  return concatBytes([
+    selector,
+    new Uint8Array([textSig.length]),
+    textSig,
+  ]);
+}
+
+/// Best-effort hint from https://www.4byte.directory — purely UI.
+/// Returns an array of `text_sig` strings (most-likely first per
+/// 4byte's heuristics), or `null` on any error / network failure.
+/// Multiple matches are common (selectors are 32-bit so collisions
+/// exist); the caller should display all of them and never pick
+/// blindly.
+async function fetch4byteHints(selector) {
+  const hex = '0x' + Array.from(selector).map(b => b.toString(16).padStart(2, '0')).join('');
+  const url = `https://www.4byte.directory/api/v1/signatures/?hex_signature=${hex}`;
+  try {
+    const r = await fetch(url, { method: 'GET' });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j || !Array.isArray(j.results)) return null;
+    return j.results.map(x => x.text_signature).filter(s => typeof s === 'string');
+  } catch (_e) {
+    return null;
+  }
 }
 
 // ── HID framing ───────────────────────────────────────────────────
@@ -577,13 +917,26 @@ const DeviceAPI = {
 
 // ── Payload + response helpers ─────────────────────────────────────
 //
-// Optional trailer sections (after inner-tx calldata):
-//   * `erc20Bundle`: Merkle-verified ERC-20 metadata. When present the
-//     device displays token symbol + decimals ("1 USDC" instead of
-//     "1,000,000 raw units").
-//   * `zkBundle`: Groth16 clear-sign attestation. When present the
-//     device displays the attested readable string instead of the raw
-//     calldata hex.
+// Optional trailer sections (after inner-tx calldata), in order:
+//   * `erc20Bundle`     — Merkle-verified ERC-20 metadata (token name /
+//                         symbol / decimals).
+//   * `zkBundle`        — Groth16 v1 clear-sign attestation.
+//   * (zk_v3 + safe_v1) — written as zero-length when not provided;
+//                         present here so the framing stays positional.
+//   * `selectorBundle`  — curated `(selector, text_sig)` Merkle bundle
+//                         from `selectors_db.bin`. When present, the
+//                         device displays typed args under the
+//                         "! BLIND SIGN" banner.
+//   * `selfAttest`      — companion-supplied `(selector, text_sig)`
+//                         pair. Firmware verifies keccak + ABI shape.
+//                         When used, the device shows the same typed
+//                         args under a "! UNVERIFIED" banner.
+//
+// `selectorBundle` and `selfAttest` are mutually exclusive — the
+// firmware refuses any payload that carries both. The companion picks
+// whichever path it has data for: prefer the curated bundle when
+// `selectorsDb.lookup(...)` hits, else fall back to self-attest if
+// the user opted in for that path.
 function buildSignPayload(p) {
   const sender = hexToBytes(p.sender || '0x0000000000000000000000000000000000000000');
   if (sender.length !== 20) throw new Error('sender must be 20 bytes');
@@ -596,6 +949,11 @@ function buildSignPayload(p) {
 
   const erc20Bundle = p.erc20Bundle || new Uint8Array(0);
   const zkBundle = p.zkBundle || new Uint8Array(0);
+  const selectorBundle = p.selectorBundle || new Uint8Array(0);
+  const selfAttestBundle = p.selfAttestBundle || new Uint8Array(0);
+  if (selectorBundle.length > 0 && selfAttestBundle.length > 0) {
+    throw new Error('selectorBundle and selfAttestBundle are mutually exclusive');
+  }
 
   // v0.6 wire format uses individual u256 BE slots for each gas field.
   // Flags u32 layout (mirrors shared/src/lib.rs):
@@ -638,19 +996,51 @@ function buildSignPayload(p) {
     data,
   ]);
 
-  // Omit both trailer sections entirely when neither is present. Older
-  // firmware that doesn't know about them silently accepts this shape.
-  if (erc20Bundle.length === 0 && zkBundle.length === 0) {
+  // Omit ALL trailer slots entirely when no trailer is present. The
+  // firmware's read-optional-u16 helper treats `cursor == total_len`
+  // as "trailer absent", so this stays bit-identical to the
+  // pre-Phase-2 wire shape.
+  const anyTrailer =
+    erc20Bundle.length > 0 ||
+    zkBundle.length > 0 ||
+    selectorBundle.length > 0 ||
+    selfAttestBundle.length > 0;
+  if (!anyTrailer) {
     return head;
   }
 
-  return concatBytes([
-    head,
-    u16be(erc20Bundle.length),
+  // Wire framing — six positional u16-prefixed slots, then the
+  // (omitted-here) `[u8 names_count][name_bundles...]` section. We
+  // never write a names byte; reaching `cursor == total_len` is
+  // treated by the firmware as "zero name bundles".
+  //
+  //   slot 0: erc20 bundle
+  //   slot 1: zk v1 (Groth16) clear-sign trailer
+  //   slot 2: zk v3 (CowSwap EIP-712) trailer
+  //   slot 3: safe_v1 multisig trailer
+  //   slot 4: curated selector bundle
+  //   slot 5: self-attest selector bundle
+  //
+  // We only write up to and including the highest-numbered non-empty
+  // slot — anything past it is implicit zero. Lower slots before the
+  // last non-empty one MUST be present (even when empty) so the
+  // firmware's positional parser stays aligned.
+  const slots = [
     erc20Bundle,
-    u16be(zkBundle.length),
     zkBundle,
-  ]);
+    p.zkV3Bundle || new Uint8Array(0),
+    p.safeV1Bundle || new Uint8Array(0),
+    selectorBundle,
+    selfAttestBundle,
+  ];
+  let lastNonEmpty = -1;
+  for (let i = 0; i < slots.length; i++) if (slots[i].length > 0) lastNonEmpty = i;
+  const chunks = [head];
+  for (let i = 0; i <= lastNonEmpty; i++) {
+    chunks.push(u16be(slots[i].length));
+    if (slots[i].length > 0) chunks.push(slots[i]);
+  }
+  return concatBytes(chunks);
 }
 
 function parseSignResponse(resp) {
@@ -1102,6 +1492,99 @@ $('lockBtn').addEventListener('click', async () => {
   } catch (e) { log(`Lock error: ${e.message}`, 'err'); }
 });
 
+/// Look at `dataHex` (inner-tx calldata, hex-encoded) and decide which
+/// selector trailer (curated or self-attest) the firmware will accept.
+/// Returns `{ curated, selfAttest, decision }` where exactly one of
+/// `curated` / `selfAttest` is a populated Uint8Array (or both are
+/// null when no path applies). `decision` is a UI-friendly summary
+/// the caller can log + stash on the preview pane.
+async function resolveSelectorBundles(dataHex) {
+  const out = { curated: null, selfAttest: null, decision: 'no calldata' };
+  if (!dataHex) return out;
+  const data = hexToBytes(dataHex);
+  if (data.length < 4) {
+    out.decision = `calldata too short (${data.length} B)`;
+    return out;
+  }
+  const selector = data.slice(0, 4);
+  const selHex = '0x' + bytesToHex(selector);
+
+  // Path 1: curated DB hit.
+  if (selectorsDb.loaded()) {
+    const bundle = selectorsDb.buildBundle(selector);
+    if (bundle) {
+      const m = selectorsDb.lookup(selector);
+      out.curated = bundle;
+      out.decision = `curated DB hit: ${selHex} → ${new TextDecoder().decode(m.textSig)} (bundle ${bundle.length} B)`;
+      return out;
+    }
+  }
+
+  // Path 2: self-attest, only if the user opted in.
+  if ($('useSelfAttest').checked) {
+    // We need a text_sig from somewhere. The Sign-Transaction card
+    // doesn't have a text_sig input, so for the manual flow we fall
+    // back to either:
+    //   (a) `p.selfAttestTextSig` if the caller supplied it (used by
+    //       quick-test buttons), or
+    //   (b) 4byte.directory if the user enabled the network hint AND
+    //       there's exactly one canonical match.
+    const textSigHint = window.__pqsignerSelfAttestTextSig;
+    if (textSigHint) {
+      try {
+        const bundle = buildSelfAttestBundle(textSigHint);
+        // Sanity-check against the calldata's actual selector before
+        // shipping — surfaces typos locally.
+        if (!arraysEqual(bundle.slice(0, 4), selector)) {
+          out.decision = `self-attest skipped: keccak("${textSigHint}") != ${selHex}`;
+          return out;
+        }
+        out.selfAttest = bundle;
+        out.decision = `self-attest: ${selHex} → ${textSigHint} (bundle ${bundle.length} B)`;
+        return out;
+      } catch (e) {
+        out.decision = `self-attest skipped: ${e.message}`;
+        return out;
+      }
+    }
+
+    if ($('use4byteHint').checked) {
+      const hints = await fetch4byteHints(selector);
+      if (hints && hints.length === 1) {
+        try {
+          const bundle = buildSelfAttestBundle(hints[0]);
+          if (!arraysEqual(bundle.slice(0, 4), selector)) {
+            out.decision = `4byte hint "${hints[0]}" failed local keccak check`;
+            return out;
+          }
+          out.selfAttest = bundle;
+          out.decision = `self-attest from 4byte: ${selHex} → ${hints[0]}`;
+          return out;
+        } catch (e) {
+          out.decision = `4byte hint skipped: ${e.message}`;
+          return out;
+        }
+      } else if (hints && hints.length > 1) {
+        out.decision = `4byte returned ${hints.length} candidates — refusing to pick blindly. Set window.__pqsignerSelfAttestTextSig to override.`;
+      } else if (hints && hints.length === 0) {
+        out.decision = `${selHex} unknown to 4byte.directory`;
+      } else {
+        out.decision = `${selHex} 4byte lookup failed (offline?)`;
+      }
+    } else {
+      out.decision = `${selHex} not in curated DB; self-attest enabled but no text_sig supplied`;
+    }
+  }
+
+  return out;
+}
+
+function arraysEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 $('signBtn').addEventListener('click', async () => {
   $('signBtn').disabled = true;
   try {
@@ -1109,6 +1592,11 @@ $('signBtn').addEventListener('click', async () => {
     const sender = senderInput && senderInput.length === 42
       ? senderInput
       : '0x' + '42'.repeat(20); // fallback if the user forgot to set it
+    const dataHex = $('data').value.trim() || undefined;
+    const sel = await resolveSelectorBundles(dataHex);
+    if (sel.decision !== 'no calldata') {
+      log(`Selector decoding: ${sel.decision}`, sel.curated || sel.selfAttest ? 'ok' : 'info');
+    }
     const params = {
       chainId: BigInt($('chainId').value),
       accountIndex: activeAccountIndex >>> 0,
@@ -1126,7 +1614,9 @@ $('signBtn').addEventListener('click', async () => {
       paymasterAndDataHash: SHA256_EMPTY,
       to: $('to').value,
       value: BigInt($('value').value || '0'),
-      data: $('data').value.trim() || undefined,
+      data: dataHex,
+      selectorBundle: sel.curated,
+      selfAttestBundle: sel.selfAttest,
     };
     log('Confirm the transaction on the device...', 'info');
     const { initCode, type1, type2 } = await DeviceAPI.signUserOp(params);
@@ -1297,6 +1787,161 @@ $('testZkAaveBtn').addEventListener('click', async () => {
   };
   await runSignWithParams(params, 'ZK clear-sign Aave V3 supply');
 });
+
+// Typed-call render (transfer(uint256), self-attest path).
+//
+// Hypothetical custom contract whose `transfer` takes only a
+// uint256. Selector keccak256("transfer(uint256)")[..4] = 0x12514bba.
+// This selector is NOT in the canonical curated DB (canonical
+// transfer is `transfer(address,uint256)` = 0xa9059cbb), so the path
+// exercises the self-attest fallback specifically — the device
+// renders typed args under the "! UNVERIFIED" banner.
+$('testTypedCallBtn').addEventListener('click', async () => {
+  const TEXT_SIG = 'transfer(uint256)';
+  const selector = selectorOf(TEXT_SIG);
+  // Inner calldata = selector + u256 1000 (BE).
+  const amount = u256be(1000n);
+  const calldata = concatBytes([selector, amount]);
+  const recipient = '0x000000000000000000000000000000000000beef';
+  // Mirror the form so a curious user can re-run via the manual Sign
+  // button and see the same flow.
+  $('chainId').value = '11155111'; // Sepolia
+  $('to').value = recipient;
+  $('value').value = '0';
+  $('data').value = '0x' + bytesToHex(calldata);
+
+  // Inject the text_sig hint so resolveSelectorBundles can build the
+  // self-attest bundle without round-tripping to 4byte. The unhandled-
+  // rejection path of the manual Sign button reads the same global.
+  const prev = window.__pqsignerSelfAttestTextSig;
+  window.__pqsignerSelfAttestTextSig = TEXT_SIG;
+  try {
+    const params = {
+      chainId: 11155111n,
+      accountIndex: activeAccountIndex >>> 0,
+      slotIndex: Number($('slotIndex').value) >>> 0,
+      registerSlot: $('registerSlot').checked,
+      includeInitCode: $('includeInitCode').checked,
+      sender: ($('senderAddr').value.trim() || ('0x' + '42'.repeat(20))),
+      entryPoint: ENTRY_POINT_V06,
+      nonce: BigInt($('nonce').value || '0'),
+      verGas: DEFAULT_GAS.verGas,
+      callGas: DEFAULT_GAS.callGas,
+      preVerificationGas: DEFAULT_GAS.preVerificationGas,
+      maxPriorityFeePerGas: DEFAULT_GAS.maxPriorityFeePerGas,
+      maxFeePerGas: DEFAULT_GAS.maxFeePerGas,
+      paymasterAndDataHash: SHA256_EMPTY,
+      to: recipient,
+      value: 0n,
+      data: '0x' + bytesToHex(calldata),
+      selfAttestBundle: buildSelfAttestBundle(TEXT_SIG),
+    };
+    await runSignWithParams(params, 'Typed-call self-attest (transfer(uint256))');
+  } finally {
+    window.__pqsignerSelfAttestTextSig = prev;
+  }
+});
+
+// ── Selectors-DB file picker + preview wiring ────────────────────
+$('selectorsDbFile').addEventListener('change', async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    const buf = await f.arrayBuffer();
+    const r = selectorsDb.load(buf);
+    setSelectorsDbStatus(`Loaded ${r.entryCnt} entries (depth ${r.proofDepth}, ${(r.blobLen/1024).toFixed(1)} KB)`, 'ok');
+    log(`Selectors DB loaded: ${f.name} — ${r.entryCnt} entries, proof_depth=${r.proofDepth}`, 'ok');
+    refreshSelectorPreview();
+  } catch (err) {
+    setSelectorsDbStatus(`Load failed: ${err.message}`, 'err');
+    log(`Selectors DB load failed: ${err.message}`, 'err');
+  }
+});
+$('forgetSelectorsBtn').addEventListener('click', () => {
+  selectorsDb.blob = null;
+  selectorsDb.entryCnt = 0;
+  $('selectorsDbFile').value = '';
+  setSelectorsDbStatus('Not loaded', '');
+  refreshSelectorPreview();
+});
+$('useSelfAttest').addEventListener('change', refreshSelectorPreview);
+$('use4byteHint').addEventListener('change', refreshSelectorPreview);
+$('data').addEventListener('input', refreshSelectorPreview);
+
+function setSelectorsDbStatus(text, cls) {
+  $('selectorsDbStatusText').textContent = text;
+  const pill = $('selectorsDbStatus');
+  pill.classList.remove('ok', 'err', 'warn');
+  if (cls) pill.classList.add(cls);
+}
+
+let previewToken = 0;
+async function refreshSelectorPreview() {
+  const my = ++previewToken;
+  const dataHex = $('data').value.trim();
+  const pane = $('selectorPreview');
+  if (!dataHex || dataHex.length < 10) {
+    pane.style.display = 'none';
+    return;
+  }
+  pane.style.display = 'block';
+  pane.innerHTML = '<span style="color:#9ca3af">resolving…</span>';
+  let data;
+  try {
+    data = hexToBytes(dataHex);
+  } catch {
+    pane.innerHTML = '<span style="color:#f87171">bad hex</span>';
+    return;
+  }
+  if (data.length < 4) {
+    pane.innerHTML = '<span style="color:#f87171">calldata &lt; 4 bytes — no selector</span>';
+    return;
+  }
+  const selector = data.slice(0, 4);
+  const selHex = '0x' + bytesToHex(selector);
+  const lines = [`<strong>selector:</strong> ${selHex}`];
+
+  if (selectorsDb.loaded()) {
+    const m = selectorsDb.lookup(selector);
+    if (m) {
+      lines.push(`<span style="color:#34d399">curated DB hit:</span> ${escapeHtml(new TextDecoder().decode(m.textSig))} (leaf ${m.leafIndex}, ${m.proofDepth*32}B proof)`);
+      lines.push(`<span style="color:#9ca3af">→ device shows <code>! BLIND SIGN</code> + decoded args</span>`);
+      pane.innerHTML = lines.join('<br>');
+      return;
+    }
+    lines.push(`<span style="color:#f59e0b">curated DB miss</span>`);
+  } else {
+    lines.push(`<span style="color:#9ca3af">no curated DB loaded</span>`);
+  }
+
+  if ($('useSelfAttest').checked && $('use4byteHint').checked) {
+    lines.push(`<span style="color:#9ca3af">querying 4byte.directory…</span>`);
+    pane.innerHTML = lines.join('<br>');
+    const hints = await fetch4byteHints(selector);
+    if (my !== previewToken) return; // raced — newer input typed
+    if (hints && hints.length > 0) {
+      lines.pop();
+      const list = hints.slice(0, 5).map(h => `<code>${escapeHtml(h)}</code>`).join(', ');
+      const verdict = hints.length === 1
+        ? `<span style="color:#34d399">→ 1 candidate; will self-attest as ${escapeHtml(hints[0])} (banner: <code>! UNVERIFIED</code>)</span>`
+        : `<span style="color:#f59e0b">→ ${hints.length} candidates: refusing to pick. Set <code>window.__pqsignerSelfAttestTextSig</code> to override</span>`;
+      lines.push(`<span>4byte hints: ${list}</span>`);
+      lines.push(verdict);
+    } else {
+      lines.pop();
+      lines.push(`<span style="color:#f87171">4byte returned no candidates / network error → device will blind-sign</span>`);
+    }
+  } else if ($('useSelfAttest').checked) {
+    lines.push(`<span style="color:#9ca3af">→ self-attest enabled but no text_sig source — device will blind-sign unless you set <code>window.__pqsignerSelfAttestTextSig</code></span>`);
+  } else {
+    lines.push(`<span style="color:#9ca3af">→ device will blind-sign (self-attest disabled)</span>`);
+  }
+  pane.innerHTML = lines.join('<br>');
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+}
 
 $('submitBtn').addEventListener('click', async () => {
   if (!lastResult) return;

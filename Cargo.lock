@@ -1425,6 +1425,7 @@ dependencies = [
  "pqsigner-proto",
  "pqsigner-tx-core",
  "sha2 0.10.9",
+ "sha3 0.10.8",
  "sphincs-tz-shared",
 ]
 

@@ -78,7 +78,10 @@ use crate::aa::userop::{
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
 use crate::names::{verify_name_bundle, NameResolver, MAX_NAME_BUNDLES, MAX_NAME_BUNDLE_LEN};
-use crate::selectors::{verify_selector_bundle, SelectorMeta, MAX_SELECTOR_BUNDLE_LEN};
+use crate::selectors::{
+    parse_self_attest_bundle, verify_selector_bundle, SelectorMeta, MAX_SELECTOR_BUNDLE_LEN,
+    MAX_SELF_ATTEST_BUNDLE_LEN,
+};
 use crate::tx::display::pick_sign_pages;
 use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::ui;
@@ -86,8 +89,9 @@ use crate::ui;
 /// Reserve enough room to TOCTOU-snapshot the largest valid input the
 /// gateway will accept. The trailing `1 + MAX_NAME_BUNDLES * (2 +
 /// MAX_NAME_BUNDLE_LEN)` block is the address-name bundle section.
-/// The selector-bundle trailer (host-resident DB) sits between
-/// `safe_v1` and the names section.
+/// Two selector trailers sit between `safe_v1` and the names section
+/// (mutually exclusive at parse time): the curated Merkle-bundle slot
+/// followed by the self-attest slot.
 const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + MAX_TX_LEN
     + 2 + MAX_ERC20_BUNDLE_LEN
@@ -95,6 +99,7 @@ const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + 2 + ZK_V3_FIXED_LEN + ZK_VK_BUNDLE_MAX_LEN
     + 2 + SAFE_V1_PAYLOAD_MAX
     + 2 + MAX_SELECTOR_BUNDLE_LEN
+    + 2 + MAX_SELF_ATTEST_BUNDLE_LEN
     + 1 + MAX_NAME_BUNDLES * (2 + MAX_NAME_BUNDLE_LEN);
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
@@ -377,14 +382,15 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     cursor = safe_v1.next_cursor;
 
-    // 5a-ter. Optional function-selector → text-signature trailer.
-    // Layout is the same `[u16 BE len][bundle]` framing every other
-    // trailer uses. The DB itself lives on the host (companion
-    // app/stub) — only its 32-byte Merkle root rides in the secure
-    // image. Absence is legal — when missing, the calldata renders
-    // as a raw selector via the existing blind-sign path. Sits
-    // BEFORE the names section so the names `[count:u8]` framing
-    // remains the very last thing in the payload.
+    // 5a-ter. Optional function-selector → text-signature trailer
+    // (curated path). Layout is the same `[u16 BE len][bundle]` framing
+    // every other trailer uses. The DB itself lives on the host
+    // (companion app/stub) — only its 32-byte Merkle root rides in the
+    // secure image. Absence is legal — when missing, the calldata may
+    // still render typed args via the self-attest trailer below, or
+    // fall back to blind-sign. Sits BEFORE the names section so the
+    // names `[count:u8]` framing remains the very last thing in the
+    // payload.
     let selector_trailer = match super::trailer::read_optional_u16_prefixed(
         snap,
         cursor,
@@ -396,6 +402,29 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Err(s) => return s,
     };
     cursor = selector_trailer.next_cursor;
+
+    // 5a-quater. Optional self-attest selector trailer. Wire layout:
+    // `selector(4) || text_sig_len(1) || text_sig(<=63)`. No Merkle
+    // proof — this path is for selectors that the curated DB doesn't
+    // cover. The firmware verifies internal consistency only:
+    //   (a) `keccak256(text_sig)[..4] == bundle.selector`
+    //   (b) `bundle.selector == calldata[..4]` (cross-check below)
+    //   (c) the existing strict ABI walker rejects shape mismatch.
+    // The trusted UI surfaces the weakened trust on its banner — see
+    // `SelectorProvenance::SelfAttest`. Mutual exclusion with the
+    // curated trailer is enforced below: companions must pick exactly
+    // one path per call.
+    let self_attest_trailer = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        MAX_SELF_ATTEST_BUNDLE_LEN,
+        "bad self-attest",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
+    };
+    cursor = self_attest_trailer.next_cursor;
 
     // ── 5b. Optional address-name bundles ─────────────────────────
     //
@@ -546,17 +575,50 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // 7c-ter. Selector → text-signature bundle.
     //
-    // The host-side DB lookup is a pure trust-anchor pull through the
-    // Merkle gate. We additionally cross-check the verified selector
-    // against `inner_data[0..4]` so a host that signs a valid
-    // `transfer` bundle while the actual calldata starts with a
-    // different selector cannot mislead the trusted UI. The verified
-    // result is only consulted on the blind-sign render path; it has
-    // no effect on the v3 / v1 / safe_v1 / erc20 priority rungs above.
+    // Two parallel paths, mutually exclusive at the wire level:
+    //
+    //   * Curated (Phase-1+2): Merkle-verified bundle pulled from the
+    //     host-side DB whose root is baked into the firmware image.
+    //     One canonical text_sig per selector — adversarial 4byte
+    //     collisions are dropped at curation time.
+    //   * Self-attest (Phase-2b): companion-supplied (selector, text_sig)
+    //     pair. Firmware verifies `keccak256(text_sig)[..4] == selector`
+    //     and the existing ABI walker checks shape match. A patient
+    //     attacker can find a same-shape colliding text_sig with ~2³²
+    //     keccak ops, so the trusted UI uses a louder banner for this
+    //     path (see SelectorProvenance::SelfAttest).
+    //
+    // Both paths run the cross-check `bundle.selector == calldata[..4]`
+    // after parsing, so a host that signs a perfectly-valid bundle for
+    // selector A while supplying calldata starting with selector B
+    // cannot mislead the trusted UI either way.
+    //
+    // If both trailers are present, we refuse the request. A confused
+    // companion sending both is a bug; the alternative ("silently
+    // prefer curated") would give an attacker plausible deniability if
+    // the user later complains the wrong banner showed.
+    if selector_trailer.len > 0 && self_attest_trailer.len > 0 {
+        ui::show_status("Sign", "both selector trailers");
+        return NscStatus::InvalidPointer as u32;
+    }
+
     let selector_verified: Option<SelectorMeta<'_>> = if selector_trailer.len > 0 {
         let bundle_slice =
             &snap[selector_trailer.start..selector_trailer.start + selector_trailer.len];
         match verify_selector_bundle(bundle_slice) {
+            Some(meta) => {
+                if inner_data.len() >= 4 && meta.selector == inner_data[..4] {
+                    Some(meta)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
+    } else if self_attest_trailer.len > 0 {
+        let bundle_slice = &snap
+            [self_attest_trailer.start..self_attest_trailer.start + self_attest_trailer.len];
+        match parse_self_attest_bundle(bundle_slice) {
             Some(meta) => {
                 if inner_data.len() >= 4 && meta.selector == inner_data[..4] {
                     Some(meta)

@@ -28,7 +28,7 @@ use super::primitives::{
 };
 use super::Pages;
 use crate::names::NameResolver;
-use crate::selectors::SelectorMeta;
+use crate::selectors::{SelectorMeta, SelectorProvenance};
 use crate::tx::eip1559::{Eip1559Tx, U256};
 use crate::ui::DISPLAY_COLS;
 
@@ -85,10 +85,26 @@ pub(super) fn try_render_typed_call(
     let mut pages = Pages::with_len(total);
     let mut page_idx = 0usize;
 
-    // ── Page 0: ! BLIND SIGN + text_sig wrapped ─────────────────────
+    // ── Page 0: banner + text_sig wrapped ───────────────────────────
+    //
+    // Banner copy is provenance-dependent:
+    //   * Curated     → "! BLIND SIGN"  (vendor-attested name; contract
+    //                    semantics still unknown)
+    //   * SelfAttest  → "! UNVERIFIED"  (companion-supplied name; could
+    //                    be a crafted ~2³² keccak-collision — the user
+    //                    must verify the function name against the dapp)
+    //
+    // Both paths keep the trusted-UI tail (To, Value, Chain, fees,
+    // nonce) identical because those values come from the EIP-1559
+    // envelope and are not affected by which selector source the
+    // companion picked.
     {
+        let banner = match meta.provenance {
+            SelectorProvenance::Curated => "! BLIND SIGN",
+            SelectorProvenance::SelfAttest => "! UNVERIFIED",
+        };
         let [r0, r1, r2, r3] = &mut pages.buf[page_idx];
-        write_line(r0, "! BLIND SIGN");
+        write_line(r0, banner);
         write_text_sig_rows(r1, r2, meta.text_sig);
         write_line(r3, "> next");
     }

@@ -18,7 +18,7 @@ use super::primitives::{
 };
 use super::Pages;
 use crate::names::NameResolver;
-use crate::selectors::SelectorMeta;
+use crate::selectors::{SelectorMeta, SelectorProvenance};
 use crate::tx::eip1559::Eip1559Tx;
 
 /// Render a blind-sign confirmation flow.
@@ -45,15 +45,22 @@ pub fn render_blind_sign_pages(
     write_line(&mut pages.buf[0][2], "Verify on dapp");
     write_line(&mut pages.buf[0][3], "> next");
 
-    // ── Optional Page 1: verified function name (FUNCTION:) ─────────
+    // ── Optional Page 1: verified function name (FUNCTION:/GUESS:) ──
     //
     // Only present when the host attached a selector bundle that
-    // crossed both the Merkle gate and the `selector == data[0..4]`
-    // cross-check. The banner above stays loud — Phase 1 attests only
-    // the NAME of the function, not its semantics on this contract.
+    // crossed the gateway checks. Label depends on provenance:
+    //   * Curated    → "FUNCTION:" (vendor-attested name)
+    //   * SelfAttest → "GUESS:"    (companion-supplied; the leading
+    //                   `! BLIND SIGN` banner above already warns)
+    // Both paths attest only the NAME of the function, not its
+    // semantics on this contract.
     let mut next_page = 1usize;
     if let Some(meta) = selector {
-        write_line(&mut pages.buf[next_page][0], "FUNCTION:");
+        let label = match meta.provenance {
+            SelectorProvenance::Curated => "FUNCTION:",
+            SelectorProvenance::SelfAttest => "GUESS:",
+        };
+        write_line(&mut pages.buf[next_page][0], label);
         // text_sig is ASCII-clean and ≤ 63 bytes (verified upstream).
         // Wrap across rows 1..=2 (16 cols each = 32 chars). Tail
         // beyond 32 chars is summarised on row 3.
