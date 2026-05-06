@@ -293,7 +293,7 @@ Zeroizes all cached secrets and returns to locked state.
 
 Return the 20-byte CREATE2-predicted wallet address for a given
 `account_index`. Requires unlock. First call for a given index triggers
-~6 s of SPHINCS+C10 hypertree keygen inside the secure world; subsequent
+<1 s of SPHINCS+C10 hypertree keygen inside the secure world; subsequent
 calls hit the firmware's SRAM LRU cache (capacity 16) and return in < 1 ms.
 
 **Request (0 or 4 bytes):**
@@ -759,7 +759,7 @@ attestation, etc.) must use the exact same tags, and must use the
 
 - Lazy-derive addresses one page at a time.
 - Page size: 10 accounts → 26 total pages for 256 accounts.
-- First derivation of any `account_index` costs ~6 s on real STM32U585
+- First derivation of any `account_index` costs <1 s on real STM32U585
   hardware (one master C10 hypertree keygen per address).
 - Subsequent hits on the same index are < 1 ms (firmware SRAM LRU,
   capacity 16).
@@ -778,7 +778,7 @@ GET_DEVICE_INFO                    → protocol, sig_size, EntryPoint version
 GET_STATUS                         → provisioned? locked?
 if locked:
     UNLOCK                         → user enters PIN on device
-GET_WALLET_ADDRESS(account_index=0) → ~6 s first time, then wallet address
+GET_WALLET_ADDRESS(account_index=0) → <1 s first time, then wallet address
 ```
 
 ### 11.2 First Deploy on a New Chain
@@ -1005,7 +1005,7 @@ UNLOCKED      --[LOCK or 120s inactivity]--> LOCKED (auto-zeroise)
 | GET_DEVICE_INFO      | 5 s     | Fast, no user interaction              |
 | GET_STATUS           | 5 s     | Same                                   |
 | UNLOCK               | 90 s    | User entering PIN on device            |
-| GET_WALLET_ADDRESS   | 30 s    | ~6 s keygen on cache miss              |
+| GET_WALLET_ADDRESS   | 30 s    | <1 s keygen on cache miss              |
 | SIGN_USEROP          | 120 s   | User reviewing tx + physical confirm   |
 | GET_RESPONSE         | 5 s     | Data already buffered on device        |
 

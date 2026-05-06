@@ -66,7 +66,7 @@ pub(super) struct SecureState {
     // -- Bootstrap C10 pubkey LRU cache --------------------------------
     // Multi-account variant: one seed produces up to 256 independent
     // bootstrap C10 keypairs (one per `account_index`). Each keypair
-    // takes ~6 s of hypertree keygen on real STM32U585, so we cache the
+    // takes <1 s of hypertree keygen on real STM32U585, so we cache the
     // derived pubkey halves keyed by `account_index`. Address-picker
     // pagination over fresh accounts is therefore one-shot per index;
     // repeated views (and the SIGN_USEROP fast path) hit SRAM.

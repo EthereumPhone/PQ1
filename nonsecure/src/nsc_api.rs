@@ -321,7 +321,7 @@ pub fn test_pin_lockout() -> u32 {
 /// Compute the CREATE2-predicted wallet address for `account_index`
 /// (0..=255) from the per-account bootstrap C10 pubkey + firmware-
 /// embedded factory / proxy-init-code-hash constants. Writes 20 bytes
-/// into `out`. First call for a given index takes ~6 s (bootstrap
+/// into `out`. First call for a given index takes <1 s (bootstrap
 /// keygen); subsequent calls hit the in-SRAM LRU cache and return in
 /// <1 ms.
 ///

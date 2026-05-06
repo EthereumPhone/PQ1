@@ -113,9 +113,9 @@ make test-key-speed     # DWT-timed signing bench on real hardware
 Expected real-hardware key-speed numbers under `hw-sha256` (auto-implied by `stm32u585`):
 
 ```
-first-sign           ≈ 13 s        # master C10 keygen + slot C10 keygen + 2× C10 sign
+first-sign           ≤ 3 s         # master C10 keygen + slot C10 keygen + 2× C10 sign
 type-2 cached slot   ≈ 1.1 s
-2nd-chain first-sign ≈ 7.5 s       # master keygen + 2× sign, slot cache hit
+2nd-chain first-sign ≈ 2.5 s       # master keygen + 2× sign, slot cache hit
 ```
 
 Any number substantially higher than these means the HASH peripheral isn't being used.

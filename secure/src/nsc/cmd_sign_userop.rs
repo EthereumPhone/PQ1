@@ -844,7 +844,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Post-Coinbase-port slot keys are chain-specific. With multi-
     // account derivation they're also account-specific (the master
     // entropy varies per `account_index`). A cache miss on any of the
-    // three fields triggers a fresh ~5-6 s keygen.
+    // three fields triggers a fresh <1 s keygen.
     let need_keygen = super::state::peek_state(|_| {
         // SAFETY: single-threaded gateway.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
@@ -913,7 +913,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // We need the bootstrap C10 key in three cases:
     //   * FLAG_INCLUDE_INIT_CODE — to sign the factorySig for slot-0.
     //   * FLAG_REGISTER_SLOT — to sign the addOwnerBytes UserOp.
-    // So regen the bootstrap key (~5-6 s) once and use as needed.
+    // So regen the bootstrap key (<1 s) once and use as needed.
     //
     // Non-secret outputs:
     //   * `init_code_out` / `emit_init_code` — 4280-byte factory call.

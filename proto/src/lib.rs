@@ -264,7 +264,7 @@ pub const CMD_SIGN_MESSAGE: u32 = 13;
 /// `PQ_SMART_WALLET_FACTORY` / `PROXY_INIT_CODE_HASH` constants.
 ///
 /// Requires an unlocked device (the bootstrap C10 keygen reads the
-/// dual-SE entropy); first call after unlock takes ~6 s, subsequent
+/// dual-SE entropy); first call after unlock takes <1 s, subsequent
 /// calls reuse the cached bootstrap pubkey and return in <1 ms.
 ///
 /// No input payload — everything the formula needs is either in

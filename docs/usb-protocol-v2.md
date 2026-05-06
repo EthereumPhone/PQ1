@@ -187,7 +187,7 @@ Returns a versioning + capability header. Reports `ep_version = 0x0006`
 
 Input: `[chain_id u64 BE] [account_index u8]`.
 Output: 20-byte CREATE2-predicted ERC-1967 proxy address.
-First call after unlock takes ~6 s (master keygen); cached afterwards.
+First call after unlock takes <1 s (master keygen); cached afterwards.
 
 ### 0x61 GET_INIT_CODE
 

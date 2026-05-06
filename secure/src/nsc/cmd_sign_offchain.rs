@@ -204,7 +204,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // trusted-display contract. It needs the wallet's CREATE2 proxy
     // address, which depends on the bootstrap C10 pubkey for this
     // account. We pull it from `bootstrap_cache` if warm and derive on
-    // demand otherwise (~6 s on first hit per session).
+    // demand otherwise (<1 s on first hit per session).
     //
     // For kind=0 (raw32) we just sign the 32 bytes verbatim.
     let mut hash_to_sign = [0u8; 32];

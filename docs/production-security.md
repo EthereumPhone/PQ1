@@ -22,7 +22,7 @@ factory-reset design see `docs/se050-factory-reset.md`.
    RFC 9814 and Genêt (TCHES 2023) a single fault during SLH-DSA
    signing produces a signature that often still verifies. Double-
    compute on disjoint SRAM regions + constant-time compare is the
-   only defence. Cost: ~6 s per signature at SHA2-128f — acceptable.
+   only defence. Cost: ~2 s per signature at C10 (double-compute) — acceptable.
    *Source: bundle A.*
 
 2. **We are currently signing deterministically (OptRand = 0)**. This
@@ -105,7 +105,7 @@ rely on silicon.
 - Random delays from TRNG before critical comparisons.
 - Redundant volatile reads (2-3×) with OR-based fail-in logic.
 
-**Cost**: ~6 s per signature (double-compute), +~5 instructions per
+**Cost**: ~2 s per signature (double-compute), +~5 instructions per
 protected boolean (FihInt). Acceptable for a wallet UX.
 
 ### 2.2 Production key management (bundle B → todo #20)

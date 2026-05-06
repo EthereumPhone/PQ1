@@ -14,7 +14,7 @@
 //!   address = keccak256(0xff || factory || salt || initHash)[12..]
 //!
 //! Requires an unlocked device. First call for a given `account_index`
-//! triggers bootstrap C10 keygen (~6 s on hardware) and caches the
+//! triggers bootstrap C10 keygen (<1 s on hardware) and caches the
 //! resulting pubkey halves in `SecureState::bootstrap_cache` (LRU,
 //! capacity `BOOTSTRAP_CACHE_LEN`); subsequent calls reuse the cache
 //! and return in <1 ms.

@@ -35,7 +35,7 @@
 //!     carries no value transfer.
 //!   * Per-slot keygen hits the same cache (`SLOT_CACHE`) as
 //!     `CMD_SIGN_USEROP`, so a later sign on the same
-//!     `(account_index, chain_id)` skips the ~5-6 s keygen.
+//!     `(account_index, chain_id)` skips the <1 s keygen.
 //!   * `c10_sk` is stack-local and dropped before return; ZeroizeOnDrop
 //!     wipes the secret key before the function exits.
 
@@ -149,7 +149,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // ── 5. Slot-0 C10 keygen (cached by (account_index, chain_id, 0)) ──
     //
     // Same cache as `cmd_sign_userop`: a subsequent sign on the same
-    // (account, chain, slot=0) skips this ~5-6 s keygen.
+    // (account, chain, slot=0) skips this <1 s keygen.
     const SLOT_INDEX: u32 = 0;
     let need_keygen = super::state::peek_state(|_| {
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
