@@ -458,6 +458,34 @@ the broader secure-world isolation that production will need.
       for the reversible dry-run on a sacrificial chip that must
       precede any production LcsO=Op flip.
 
+- [ ] **TAMP escalation: log-only → `trigger_lockout_wipe()`.** Today
+      the polled handler in `secure/src/hw/tamp.rs` (`tamp::poll()`
+      from SysTick) logs the reason via `secure_log!` and write-1-to-
+      clears the SR flag — by design, so a false ITAMP9 during a
+      probe-rs debug session can't wipe a bench chip. Production must
+      flip three things in lockstep:
+        1. Replace `secure_log!(...)` + clear in `tamp::poll()` /
+           `tamp::on_tamp_irq()` with `trigger_lockout_wipe()` (which
+           zeroizes seed material, erases page 124, and reboots).
+        2. Move from polled to IRQ — see work-todo.md TAMP IRQ-flip
+           item for the `DefaultHandler` dispatch path. IRQ latency
+           (~hundreds of cycles) beats SysTick polling (~1 ms) by an
+           order of magnitude, which matters when the wipe is racing
+           an attacker reading residual-power side channels off the
+           backup SRAM.
+        3. Audit `TAMP_IER` / NVIC enable bits across all peripherals
+           in the same commit — once `DefaultHandler` is dispatching,
+           any unmasked IRQ on any peripheral lands there too. Without
+           a firmware-wide audit of "which IERs are set right now,"
+           this is a footgun. The audit + wipe-flip + IRQ-mode flip
+           must all land in one diff so review can verify the trigger
+           surface end-to-end.
+      Reference: `docs/trezor-comparison.md §2.5`,
+      `core/embed/sec/tamper/stm32u5/tamper.c:100-207`. The Trezor
+      production handler is the model — `reboot_with_rsod()` after
+      backup-SRAM auto-erase via `TAMP_CR3=0`. PQSigner is one
+      `secure_log!` line away from that today.
+
 ## Where items come from
 
 When an item is moved out of `docs/work-todo.md` into here, the diff

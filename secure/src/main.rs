@@ -542,6 +542,18 @@ fn main() -> ! {
         hw::tamp::init();
         secure_log!("[S] TAMP initialised (polled, log-only)");
     }
+
+    // Power-consumption side-channel mask (feature `consumption-mask`).
+    // TIM2 CH1 PWM on PA5 with a randomised duty cycle. `init()` configures
+    // the TIM2/GPIO + writes a first random duty; `randomize()` runs from
+    // SysTick to keep the mask jittering across signing windows. Reversible:
+    // TIM2/GPIO/RCC clock-enable bits; revert by reflashing without the
+    // feature. See `hw::consumption_mask` module header.
+    #[cfg(all(feature = "stm32u585", feature = "consumption-mask"))]
+    {
+        hw::consumption_mask::init();
+        secure_log!("[S] Consumption mask initialised (TIM2 CH1 PWM on PA5)");
+    }
     #[cfg(all(feature = "ui-oled", not(feature = "se050")))]
     {
         let d = ui::display();
@@ -2285,6 +2297,13 @@ fn SysTick() {
     // no-op without the `tamp` feature.
     #[cfg(all(feature = "stm32u585", feature = "tamp"))]
     hw::tamp::poll();
+
+    // Re-randomise the consumption-mask PWM duty so the mask-pin power
+    // signature stays uncorrelated with crypto work happening elsewhere
+    // on the die. Cost: 2 RNG byte reads + 1 modulo + 1 MMIO write per
+    // tick. Compiles to a no-op without the `consumption-mask` feature.
+    #[cfg(all(feature = "stm32u585", feature = "consumption-mask"))]
+    hw::consumption_mask::randomize();
 
     // Background idle wipe: if PIN state is unlocked and the inactivity
     // timer has fired with no command in flight, wipe.

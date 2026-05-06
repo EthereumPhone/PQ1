@@ -830,6 +830,47 @@ Three gaps deliberately not closed by the four validation runs on our last bench
 
 ---
 
+### 26. TAMP polled → IRQ migration (Trezor-parity latency)
+
+**Status:** Polled-mode landed in commit `aecc1cc` (2026-05-05). IRQ-mode flip planned but deferred until firmware-wide IRQ audit lands.
+
+`secure/src/hw/tamp.rs` currently runs in polled mode: `tamp::init()` arms `TAMP_CR1` (detection) but leaves `TAMP_IER` masked, and `tamp::poll()` from the SysTick handler drains `TAMP_SR` ~1 kHz. Validated on real STM32U585 — no spurious triggers across `make test-key-speed`-shape runs.
+
+**Why polled today, not IRQ.** PQSigner has zero peripheral-IRQ infrastructure today (no PAC crate, no `#[interrupt]` handler scaffold). An unmasked TAMP IRQ would land in cortex-m-rt's WEAK `DefaultHandler` and HardFault. Polling is dev-board-safe; IRQ-mode is a production hardening item.
+
+**Migration path: `DefaultHandler` dispatch (~30 LOC, recommended).**
+
+```rust
+// secure/src/main.rs
+#[cortex_m_rt::exception]
+unsafe fn DefaultHandler(irqn: i16) {
+    match irqn {
+        #[cfg(all(feature = "stm32u585", feature = "tamp"))]
+        2 => hw::tamp::on_tamp_irq(),  // already in tree, gated `_unused`
+        _ => panic_unexpected_irq(irqn),
+    }
+}
+```
+
+Plus three lines added to `tamp::init()`: `write_volatile(TAMP_IER, ITAMP_FLAG_MASK); write_volatile(NVIC_ICPR0, 1 << TAMP_IRQN); write_volatile(NVIC_ISER0, 1 << TAMP_IRQN);`. The `tamp::on_tamp_irq()` function is preserved in tree (renamed to `_*_unused` + `#[allow(dead_code)]`) so re-introducing it is a single uncomment.
+
+**Why this matters.** IRQ latency (~hundreds of cycles) beats SysTick polling (~1 ms) by an order of magnitude. Doesn't matter in dev (log-only) but matters in production where the wipe is racing an attacker reading residual-power side-channels off the backup SRAM.
+
+**Why not yet.** Three reasons:
+1. **DefaultHandler picks up every IRQ source we accidentally unmask, not just TAMP.** Without a firmware-wide audit of "which peripherals have IER bits set right now," that's a footgun. The audit must land in the same diff as the IRQ flip.
+2. **Production should flip the wipe trigger in the same commit as the IRQ flip.** Migrating polled→IRQ while still log-only is half a change; we'd then have to re-validate the trigger surface again when production wipe lands. Bundle them.
+3. **Polled mode has been operationally clean for one session.** A few more sessions of `make e2e-hw` + `make dual-se-multi-unlock-e2e` without spurious `[TAMP] poll:` lines is the bar before flipping. If any ITAMP fires (especially ITAMP9 / CRYPTO_FAULT during SAES sign), an IRQ-mode handler that halts in WFE would brick those tests; we'd want to know first.
+
+**Alternative paths considered + rejected:**
+- **Adopt PAC crate (`stm32u5`).** Would let us use `#[cortex_m_rt::interrupt] fn TAMP() { ... }` directly. Rejected: PQSigner has historically refused PAC adoption (raw-register pattern everywhere — see `hw/rcc.rs`, `hw/usb_hw.rs`, `hw/saes.rs`). Architectural drift the codebase actively avoids.
+- **Hand-rolled `__INTERRUPTS` array with linker-script trick.** ~100 LOC of boilerplate. Fragile. Skip unless cortex-m-rt drops `DefaultHandler` support.
+
+**When to do this:** during the production-hardening branch, alongside the parallel `production-todo.md` item ("TAMP escalation: log-only → `trigger_lockout_wipe()`"). Both flips MUST land together so review can verify the trigger surface end-to-end.
+
+**Files to change (when):** `secure/src/main.rs` (`DefaultHandler` fn, ~10 lines), `secure/src/hw/tamp.rs` (un-rename `_enable_tamp_irq_unused` + `_on_tamp_irq_unused` back to canonical names; remove `tamp::poll()` call from SysTick or leave as belt-and-suspenders).
+
+---
+
 ## Modularity refactor — baseline (2026-04-30)
 
 State snapshot taken at the start of the modularity refactor described in

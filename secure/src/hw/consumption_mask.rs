@@ -63,27 +63,69 @@ pub fn init() {
         enable_clocks();
         configure_pa5_af1();
         configure_tim2_pwm();
-        // Initialise CCR1 to a random-ish value so the first output
-        // transition happens with non-zero duty.
+        // Seed the xorshift PRNG from the hardware TRNG. Single
+        // 4-byte TRNG read at boot — the only place this module
+        // touches `crate::rng`. Subsequent `randomize()` calls run
+        // off the seeded state with zero RNG / semihosting cost.
+        seed_prng_from_rng();
+        // First duty value so the PWM output isn't stuck at zero
+        // before the first SysTick tick lands.
         randomize();
         start_tim2();
     }
 }
 
-/// Write a fresh random duty cycle into TIM2 CCR1. Bounded reads from
-/// the hardware TRNG (`crate::rng`), single MMIO store — safe to call
-/// from an IRQ handler.
+/// Software xorshift32 PRNG state. Seeded once from the hardware TRNG
+/// in [`init`]; advanced by [`randomize`] on every SysTick tick.
+///
+/// Why not call `rng::byte()` here: SysTick runs at ~1 kHz, so every
+/// tick reading from the TRNG would mean 2000 calls/sec into the RNG
+/// path. That's tolerable on its own, but `secure/src/hw/rng.rs`
+/// emits a `secure_log!` line on entry under `debug-log`, which
+/// translates to a semihosting BKPT — at 2000 BKPTs/sec the firmware
+/// is choked by host-side roundtrips.
+///
+/// Cryptographic strength is not required for power masking — the
+/// goal is to keep the PWM duty non-static so the power signature
+/// uncorrelates from die-internal crypto work. Xorshift32 has period
+/// 2^32 - 1 and uniform output distribution; that's plenty.
+#[cfg(feature = "consumption-mask")]
+static mut PRNG_STATE: u32 = 0;
+
+/// Seed the PRNG from the hardware TRNG. Called once from [`init`].
+#[cfg(feature = "consumption-mask")]
+unsafe fn seed_prng_from_rng() {
+    let b0 = crate::rng::byte() as u32;
+    let b1 = crate::rng::byte() as u32;
+    let b2 = crate::rng::byte() as u32;
+    let b3 = crate::rng::byte() as u32;
+    // xorshift32 must not be seeded with 0 (state would stick).
+    let mut seed = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+    if seed == 0 {
+        seed = 0xDEADBEEF;
+    }
+    PRNG_STATE = seed;
+}
+
+/// Write a fresh PRNG-derived duty cycle into TIM2 CCR1. Cost: ~10
+/// cycles (xorshift step + modulo + MMIO write) — safe to call from
+/// any context including IRQ handlers.
 #[cfg(feature = "consumption-mask")]
 pub fn randomize() {
     use regs::*;
-    // Pull a u16 worth of randomness from the RNG and clamp modulo
-    // the TIM2 period. The period is 16 000 (u16-range), so two bytes
-    // of TRNG give a uniform-enough distribution without the hot-loop
-    // cost of a u32 read.
-    let b0 = crate::rng::byte() as u32;
-    let b1 = crate::rng::byte() as u32;
-    let raw = (b0 << 8) | b1;
-    let duty = raw % TIMER_PERIOD;
+    // SAFETY: PRNG_STATE is touched only here and from `init`. SysTick
+    // is the sole caller in normal operation; if a future user adds an
+    // additional caller they must ensure mutual exclusion. A torn
+    // read-modify-write would only produce a slightly-less-uniform
+    // duty cycle on that one tick — no correctness impact, no panic.
+    let mut x = unsafe { PRNG_STATE };
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    unsafe {
+        PRNG_STATE = x;
+    }
+    let duty = x % TIMER_PERIOD;
     // SAFETY: TIM2_CCR1 is a plain MMIO word; concurrent writes from
     // multiple contexts are tolerated — the peripheral re-reads on
     // the next counter-match event.
