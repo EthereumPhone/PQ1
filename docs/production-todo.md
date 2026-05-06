@@ -458,6 +458,21 @@ the broader secure-world isolation that production will need.
       for the reversible dry-run on a sacrificial chip that must
       precede any production LcsO=Op flip.
 
+- [ ] **`make test-key-speed` restored as release smoke gate.** The NS
+      bench is the primary "did anything regress signing perf?"
+      detector. As of 2026-05-06 it's broken in HEAD with two distinct
+      failure modes (see `docs/work-todo.md` #27): `CMD_SIGN_OFFCHAIN`
+      returns `NotInitialized` despite e2e-pre-unlock, OR the bench
+      hits a `u64_div_rem` exception in early init. Until the bench is
+      green again, every signing-path change ships blind to perf cost
+      on real silicon. **Pre-release CI gate (must hold before any
+      production firmware tag):** `make test-key-speed` exits 0 on
+      real STM32U585 silicon AND the reported A / B-avg / C timings
+      are within ±15% of a recorded baseline (commit it next to
+      `tests/ui_fixtures.json` once the bench is fixed). Drift outside
+      the band is a release-blocker until investigated. Today the
+      gate cannot enforce anything because the bench itself is broken.
+
 - [ ] **TAMP escalation: log-only → `trigger_lockout_wipe()`.** Today
       the polled handler in `secure/src/hw/tamp.rs` (`tamp::poll()`
       from SysTick) logs the reason via `secure_log!` and write-1-to-

@@ -830,6 +830,49 @@ Three gaps deliberately not closed by the four validation runs on our last bench
 
 ---
 
+### 27. `bench-key-speed` NS test regression in HEAD
+
+**Status:** Pre-existing breakage discovered 2026-05-06 during TAMP + consumption_mask HW validation. Two distinct failure modes observed depending on secure-side feature set; both happen on the NS-side bench, not the secure firmware.
+
+**Failure mode A** — secure built with `tamp,consumption-mask,e2e-test,mock-se,debug-log,ui-semihosting,stm32u585,hw-sha256`:
+
+```
+[S][e2e] gateway pre-unlocked, ready for tests
+[S] Gateway ready
+[S] Booting non-secure world...
+[NS][bench] === key-speed bench @ 160 MHz ===
+[NSC] sign_offchain (len=46)
+[NSC] sign_offchain -> 4
+[NS][bench] FAIL: gateway not pre-unlocked (needs e2e-test on secure)
+Firmware exited with: Unknown runtime error
+```
+
+The bench's first call is `CMD_SIGN_OFFCHAIN` (gateway command 16, added with invariant #9). The handler returns status 4 (`NotInitialized`) despite `[S][e2e] gateway pre-unlocked` having logged. The NS-side error message blames the secure side (`needs e2e-test on secure`) but the secure side IS in `e2e-test` and the gateway IS pre-unlocked — the failing precondition lives inside the SIGN_OFFCHAIN handler itself, not at the unlock gate.
+
+**Failure mode B** — secure without `tamp,consumption-mask`:
+
+```
+[NS][bench] === key-speed bench @ 160 MHz ===
+Firmware exited unexpectedly: Exception
+Frame 0: compiler_builtins::int::specialized_div_rem::u64_div_rem
+Frame 1: cortex_m_semihosting::export::HSTDOUT
+```
+
+Hits a u64-divide-rem fault inside an early NS-bench print (likely a divide-by-zero on a cycle/ms ratio that the bench computes before its first sign). Different fault from mode A, fires earlier — confirming the bench was reworked recently and the rework is the regressing change.
+
+**Diagnosis paths to try (none attempted yet):**
+
+1. `git log -p -- nonsecure/src/bench_key_speed.rs` since `aecc1cc` (when test-key-speed last passed cleanly with TAMP wiring on 2026-05-05 — see commit-message timing in `aecc1cc`) — find when the new SIGN_OFFCHAIN test was added and what NS state it expects.
+2. `secure/src/nsc/cmd_sign_offchain.rs` (handler for command 16) — what does it check before returning `NotInitialized`? Likely a per-slot precondition (slot already registered? off-chain counter initialised?) that `e2e-test` auto-provisioning doesn't satisfy.
+3. The `sign_offchain` wire format expects 32 B of message hash on input; `len=46` suggests 14 B of header + 32 B hash. Verify the bench's payload matches the handler's expected layout.
+4. Whatever fix lands needs to be regression-tested against `make dual-se-multi-unlock-e2e` and `make saes-self-test-hw` so the fix doesn't regress those.
+
+**Out of scope of #28 (TAMP IRQ migration) and unrelated to consumption_mask wiring.** Filed here so it doesn't block the rest of the bring-up branch. The bench is the primary HW perf regression detector; with it broken, every signing-path change ships blind to perf cost on real silicon.
+
+**Files to investigate:** `nonsecure/src/bench_key_speed.rs`, `secure/src/nsc/cmd_sign_offchain.rs`, `secure/src/nsc/state.rs` (off-chain counter init).
+
+---
+
 ### 26. TAMP polled → IRQ migration (Trezor-parity latency)
 
 **Status:** Polled-mode landed in commit `aecc1cc` (2026-05-05). IRQ-mode flip planned but deferred until firmware-wide IRQ audit lands.
