@@ -540,6 +540,9 @@ fn main() -> ! {
     #[cfg(all(feature = "stm32u585", feature = "tamp"))]
     {
         hw::tamp::init();
+        #[cfg(feature = "tamp-irq")]
+        secure_log!("[S] TAMP initialised (IRQ, log-only)");
+        #[cfg(not(feature = "tamp-irq"))]
         secure_log!("[S] TAMP initialised (polled, log-only)");
     }
 
@@ -2295,6 +2298,11 @@ fn SysTick() {
     // set); on a trigger, log the reason and clear. NEVER halts and
     // NEVER wipes — see `hw::tamp` module header §1. Compiles to a
     // no-op without the `tamp` feature.
+    //
+    // Under `tamp-irq` the IRQ handler does the same work directly,
+    // so polling is redundant — but harmless and idempotent. Leave
+    // it in as belt-and-suspenders so a future IER mis-mask doesn't
+    // silently lose tamper events.
     #[cfg(all(feature = "stm32u585", feature = "tamp"))]
     hw::tamp::poll();
 
@@ -2342,6 +2350,43 @@ fn SysTick() {
 /// returns the raw pointer LLVM expects; declaring it inside
 /// PendSV() gives a function-local binding whose address syntax is
 /// different.
+/// Catch-all device-IRQ handler.
+///
+/// `cortex-m-rt` routes every unmasked NVIC IRQ that doesn't have a
+/// named `#[interrupt]` handler to `DefaultHandler`, passing the IRQ
+/// number as `irqn`. PQSigner has no PAC crate, so this is the only
+/// peripheral-IRQ entry point — every `tamp-irq`-style feature that
+/// arms an NVIC line MUST land its dispatch arm here.
+///
+/// Today only TAMP (IRQn=2) is wired up, gated behind `tamp-irq`.
+/// Any other IRQ that fires lands in the unmatched arm — that's a
+/// bug because PQSigner does not currently `NVIC_EnableIRQ` anything
+/// other than TAMP. Logging the offender is more useful than silent
+/// drop or HardFault.
+///
+/// **Safety contract for future contributors:** before unmasking any
+/// new NVIC line (`NVIC.ISER0..3` writes), add a matching dispatch
+/// arm here. Otherwise the IRQ silently routes to "unexpected" and
+/// the handler stalls in WFE — easy to misdiagnose as a hang.
+#[cfg(all(not(test), feature = "stm32u585"))]
+#[cortex_m_rt::exception]
+unsafe fn DefaultHandler(irqn: i16) {
+    match irqn {
+        #[cfg(feature = "tamp-irq")]
+        2 => unsafe { hw::tamp::on_tamp_irq() }, // TAMP_IRQn
+
+        // Unmatched — log + halt in WFE. NOT a panic so the host
+        // semihosting backend gets a chance to flush the log line
+        // before the chip stops responding.
+        _ => {
+            secure_log!("[IRQ] unexpected irqn={} — halting", irqn);
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
+    }
+}
+
 #[cfg(all(not(test), feature = "stm32u585"))]
 static mut PENDSV_IN_FLIGHT: u32 = 0;
 

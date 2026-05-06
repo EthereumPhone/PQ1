@@ -183,6 +183,16 @@ se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 heade
 # Trezor's `core/embed/sec/tamper/stm32u5/tamper.c`; see
 # `docs/trezor-comparison.md §2.5` for the adoption rationale.
 tamp = ["stm32u585"]
+# Flip TAMP from polled-mode to IRQ-mode. Implies `tamp`. Arms TAMP_IER
+# + NVIC.ISER0 bit 2 in `tamp::init()`, and routes `IRQn=2` through a
+# `DefaultHandler` dispatcher in `secure/src/main.rs`. Reduces detection
+# latency from ~1 ms (SysTick poll) to ~hundreds of cycles. **Does not
+# change the trigger response** — the IRQ handler still logs + clears,
+# never halts and never wipes. Production hardening will flip the
+# trigger response separately (see `docs/production-todo.md` "TAMP
+# escalation"). Off by default while polled-mode soaks; see
+# `docs/work-todo.md` #26 for the flip-when criteria.
+tamp-irq = ["tamp"]
 # Power-consumption side-channel mask. Drives TIM2 CH1 PWM on PA5 with a
 # randomised duty cycle so the mask-pin power draw is uncorrelated with
 # the crypto work happening elsewhere on the die. Simpler than Trezor's

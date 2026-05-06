@@ -54,14 +54,21 @@ use core::ptr::{read_volatile, write_volatile};
 #[cfg(feature = "tamp")]
 pub fn init() {
     // SAFETY: single-threaded boot-time init.
-    // Polled mode: skip `enable_tamp_irq` — IER stays masked. PQSigner
-    // has no peripheral-IRQ infrastructure (no PAC + no `#[interrupt]`
-    // handler), so arming the IRQ would HardFault on first trigger.
-    // Detection logic in CR1 is armed; `poll()` drains TAMP_SR from
-    // SysTick.
+    //
+    // Two modes selected by the `tamp-irq` feature:
+    //
+    //   * polled  (`tamp` only): skip `enable_tamp_irq` — IER stays
+    //     masked. `poll()` drains TAMP_SR from SysTick (~1 ms latency).
+    //   * IRQ     (`tamp-irq`):  arm IER + NVIC ISER0 bit 2; the
+    //     `DefaultHandler` in `main.rs` dispatches IRQn=2 to
+    //     `on_tamp_irq()` (~hundreds-of-cycles latency). Caller MUST
+    //     have a `DefaultHandler` registered; otherwise the IRQ lands
+    //     in cortex-m-rt's WEAK fallback and HardFaults.
     unsafe {
         init_lsi_and_rtc_clock();
         init_tamp_registers();
+        #[cfg(feature = "tamp-irq")]
+        enable_tamp_irq();
     }
 }
 
@@ -288,12 +295,28 @@ unsafe fn init_tamp_registers() {
     );
 }
 
-// `enable_tamp_irq` removed in polled-mode refactor. Kept the symbol
-// names (NVIC_ISER0, TAMP_IRQN) in `regs::` so re-introducing IRQ-mode
-// later is a one-function add. See module header §2.
-#[cfg(feature = "tamp")]
-#[allow(dead_code)]
-unsafe fn _enable_tamp_irq_unused() {}
+/// Arm `TAMP_IER` for the same internal-tamper sources `TAMP_CR1`
+/// enables, then enable the TAMP IRQ in NVIC. Called from `init()`
+/// only when the `tamp-irq` feature is set.
+///
+/// SAFETY: caller must have registered a `DefaultHandler` exception
+/// fn in `main.rs` that dispatches `irqn == TAMP_IRQN` to
+/// `on_tamp_irq()`. Without that, an unmasked TAMP IRQ lands in
+/// cortex-m-rt's WEAK default fallback and HardFaults the chip.
+#[cfg(all(feature = "tamp", feature = "tamp-irq"))]
+unsafe fn enable_tamp_irq() {
+    use regs::*;
+
+    // Mirror the CR1 enable mask into IER — same bit positions on
+    // STM32U5 (RM0456 §45.8.8 confirms ITAMP*IE bits at positions
+    // 16..=28 matching CR1's ITAMP*E bits).
+    write_volatile(TAMP_IER, ITAMP_FLAG_MASK);
+
+    // Clear any latent pending in NVIC, then enable.
+    const NVIC_ICPR0: *mut u32 = 0xE000_E280 as *mut u32;
+    write_volatile(NVIC_ICPR0, 1 << TAMP_IRQN);
+    write_volatile(NVIC_ISER0, 1 << TAMP_IRQN);
+}
 
 /// Return a short human-readable label for whichever TAMP source
 /// raised the IRQ. Exposed so other log paths can reuse the mapping.
@@ -337,29 +360,29 @@ pub fn reason_from_sr(sr: u32) -> &'static str {
     }
 }
 
-/// TAMP IRQ handler. In log-only mode it prints the trigger reason
-/// and halts in a WFE loop. Production hardening should replace the
-/// WFE loop with a call to `trigger_lockout_wipe()` once bring-up
-/// is stable.
+/// TAMP IRQ handler. **Same log-only semantics as [`poll`]**:
+/// reads `TAMP_SR`, logs the trigger reason via `secure_log!`,
+/// write-1-to-clears the flags, and returns. Never halts and never
+/// wipes — production hardening will flip the trigger response in a
+/// later commit (see `docs/production-todo.md` "TAMP escalation").
 ///
-/// The symbol name `TAMP` is what `cortex-m-rt`'s `interrupt!` macro
-/// expects for interrupt number 2 on STM32U5; registered via the
-/// `#[interrupt]` attribute in `main.rs` at boot-feature gate time.
-#[cfg(feature = "tamp")]
+/// Called from `DefaultHandler` in `main.rs` when `irqn == 2`
+/// (TAMP_IRQn on STM32U5).
+#[cfg(all(feature = "tamp", feature = "tamp-irq"))]
 #[allow(non_snake_case)]
 pub unsafe fn on_tamp_irq() {
     use regs::*;
     let sr = read_volatile(TAMP_SR);
-    let _reason = reason_from_sr(sr);
-    // Clear every internal tamper flag so the IRQ doesn't re-enter
-    // on its own output. (In wipe mode we wouldn't bother — the
-    // reset will flush SR — but log-only mode needs this.)
-    write_volatile(TAMP_SCR, 0x0007_FFFF);
-    secure_log!("[TAMP] trigger: {} (SR={:#010x})", _reason, sr);
-    // Halt. Do NOT `trigger_lockout_wipe()` in log-only mode.
-    loop {
-        cortex_m::asm::wfe();
+    if sr & ITAMP_FLAG_MASK == 0 {
+        // Spurious — IRQ asserted but no flag we monitor. Clear the
+        // NVIC pending bit anyway so the IRQ doesn't re-enter.
+        return;
     }
+    let _reason = reason_from_sr(sr);
+    secure_log!("[TAMP] irq: {} (SR={:#010x})", _reason, sr);
+    // Write-1-to-clear the flags so the line de-asserts. Without this
+    // the IRQ would re-enter immediately on return.
+    write_volatile(TAMP_SCR, ITAMP_FLAG_MASK);
 }
 
 #[cfg(all(test, feature = "tamp"))]
