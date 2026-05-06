@@ -830,46 +830,38 @@ Three gaps deliberately not closed by the four validation runs on our last bench
 
 ---
 
-### 27. `bench-key-speed` NS test regression in HEAD
+### 27. ~~`bench-key-speed` NS test regression in HEAD~~ — RESOLVED
 
-**Status:** Pre-existing breakage discovered 2026-05-06 during TAMP + consumption_mask HW validation. Two distinct failure modes observed depending on secure-side feature set; both happen on the NS-side bench, not the secure firmware.
+**Resolved 2026-05-06.** Root cause was build-hygiene, not a code bug. The two observed failure modes (`[NSC] sign_offchain (len=46)` returning `NotInitialized`, and the `u64_div_rem` exception in NS bench init) were both **stale NS veneer addresses** in a manual build flow.
 
-**Failure mode A** — secure built with `tamp,consumption-mask,e2e-test,mock-se,debug-log,ui-semihosting,stm32u585,hw-sha256`:
+**Mechanism.** Each secure-side build with a different feature set produces a different `target/veneers.o` because the secure binary's veneer thunks are placed at addresses that depend on the surrounding code layout. The NS-side build links against `target/veneers.o` to resolve `extern "C" { fn nsc_sign_userop(...); ... }` declarations to specific veneer addresses.
 
-```
-[S][e2e] gateway pre-unlocked, ready for tests
-[S] Gateway ready
-[S] Booting non-secure world...
-[NS][bench] === key-speed bench @ 160 MHz ===
-[NSC] sign_offchain (len=46)
-[NSC] sign_offchain -> 4
-[NS][bench] FAIL: gateway not pre-unlocked (needs e2e-test on secure)
-Firmware exited with: Unknown runtime error
-```
+If the NS ELF is older than the current `veneers.o`, its thunks point to STALE addresses. Calling `nsc_sign_userop` from NS lands at the address that was the userop veneer **at NS build time** — but in the freshly-flashed secure binary, that same address might now be the offchain veneer or the middle of an unrelated function. Result: silent dispatch to the wrong handler.
 
-The bench's first call is `CMD_SIGN_OFFCHAIN` (gateway command 16, added with invariant #9). The handler returns status 4 (`NotInitialized`) despite `[S][e2e] gateway pre-unlocked` having logged. The NS-side error message blames the secure side (`needs e2e-test on secure`) but the secure side IS in `e2e-test` and the gateway IS pre-unlocked — the failing precondition lives inside the SIGN_OFFCHAIN handler itself, not at the unlock gate.
+**Concrete trace.** Verified by comparing `arm-none-eabi-nm target/veneers.o | grep nsc_sign_userop` (`0x0c0673b8`) against the NS ELF's veneer-thunk target (`.word 0x0c0675f9` — Thumb bit included → `0x0c0675f8`). 1088-byte mismatch → calls land 8 entries downstream in the veneer table.
 
-**Failure mode B** — secure without `tamp,consumption-mask`:
+**Fix.** Always rebuild NS with the same `veneers.o` it'll be running against. The Makefile `test-key-speed` target already does this:
 
-```
-[NS][bench] === key-speed bench @ 160 MHz ===
-Firmware exited unexpectedly: Exception
-Frame 0: compiler_builtins::int::specialized_div_rem::u64_div_rem
-Frame 1: cortex_m_semihosting::export::HSTDOUT
+```make
+rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" cargo build ... -p sphincs-tz-nonsecure ...
 ```
 
-Hits a u64-divide-rem fault inside an early NS-bench print (likely a divide-by-zero on a cycle/ms ratio that the bench computes before its first sign). Different fault from mode A, fires earlier — confirming the bench was reworked recently and the rework is the regressing change.
+The pre-build `rm` of the NS ELF + dep files forces cargo to relink against the current `veneers.o`. **As long as you use `make test-key-speed`, this works.** Manual builds (`cargo build -p sphincs-tz-secure ... && cargo build -p sphincs-tz-nonsecure ...`) need the same `rm`-then-rebuild discipline if the secure side's feature set changed since the last NS build.
 
-**Diagnosis paths to try (none attempted yet):**
+**Validation post-fix.** Bench passes cleanly with TAMP IRQ-mode + tamp + e2e-test (commit `f5e6a8a` + fresh NS link):
 
-1. `git log -p -- nonsecure/src/bench_key_speed.rs` since `aecc1cc` (when test-key-speed last passed cleanly with TAMP wiring on 2026-05-05 — see commit-message timing in `aecc1cc`) — find when the new SIGN_OFFCHAIN test was added and what NS state it expects.
-2. `secure/src/nsc/cmd_sign_offchain.rs` (handler for command 16) — what does it check before returning `NotInitialized`? Likely a per-slot precondition (slot already registered? off-chain counter initialised?) that `e2e-test` auto-provisioning doesn't satisfy.
-3. The `sign_offchain` wire format expects 32 B of message hash on input; `len=46` suggests 14 B of header + 32 B hash. Verify the bench's payload matches the handler's expected layout.
-4. Whatever fix lands needs to be regression-tested against `make dual-se-multi-unlock-e2e` and `make saes-self-test-hw` so the fix doesn't regress those.
+```
+[S] TAMP initialised (IRQ, log-only)
+[NS][bench] A) chain=1 first-sign:    9,159 ms
+[NS][bench] B-avg) type2-only:        4,001 ms
+[NS][bench] C) chain=2 first-sign:   10,282 ms
+[NS][bench] === PASS ===
+```
 
-**Out of scope of #28 (TAMP IRQ migration) and unrelated to consumption_mask wiring.** Filed here so it doesn't block the rest of the bring-up branch. The bench is the primary HW perf regression detector; with it broken, every signing-path change ships blind to perf cost on real silicon.
+Within ±2% of polled-mode baseline. No spurious `[TAMP] irq:` or `[IRQ] unexpected:` lines across the entire bench — IRQ-mode passes through thousands of SAES + RNG operations cleanly.
 
-**Files to investigate:** `nonsecure/src/bench_key_speed.rs`, `secure/src/nsc/cmd_sign_offchain.rs`, `secure/src/nsc/state.rs` (off-chain counter init).
+**Documentation tightening that fell out of this:** any future secure-side feature-flag matrix CI / dev-board run that builds secure separately from NS should treat them as a single build unit (rebuild both, in lockstep). A bare `cargo build -p sphincs-tz-secure` followed by `probe-rs run` on a previously-flashed-NS chip will silently invoke wrong veneers and look like an arbitrary firmware regression. Worth a sentence in `docs/dev-board-setup.md` once that file gets a refresh.
 
 ---
 

@@ -458,20 +458,24 @@ the broader secure-world isolation that production will need.
       for the reversible dry-run on a sacrificial chip that must
       precede any production LcsO=Op flip.
 
-- [ ] **`make test-key-speed` restored as release smoke gate.** The NS
-      bench is the primary "did anything regress signing perf?"
-      detector. As of 2026-05-06 it's broken in HEAD with two distinct
-      failure modes (see `docs/work-todo.md` #27): `CMD_SIGN_OFFCHAIN`
-      returns `NotInitialized` despite e2e-pre-unlock, OR the bench
-      hits a `u64_div_rem` exception in early init. Until the bench is
-      green again, every signing-path change ships blind to perf cost
-      on real silicon. **Pre-release CI gate (must hold before any
-      production firmware tag):** `make test-key-speed` exits 0 on
-      real STM32U585 silicon AND the reported A / B-avg / C timings
-      are within ±15% of a recorded baseline (commit it next to
-      `tests/ui_fixtures.json` once the bench is fixed). Drift outside
-      the band is a release-blocker until investigated. Today the
-      gate cannot enforce anything because the bench itself is broken.
+- [ ] **`make test-key-speed` as release smoke gate.** The NS bench
+      is the primary "did anything regress signing perf?" detector.
+      Confirmed working 2026-05-06 (see work-todo #27 for the
+      stale-NS-veneer false alarm and resolution). **Pre-release CI
+      gate (must hold before any production firmware tag):**
+      `make test-key-speed` exits 0 on real STM32U585 silicon AND
+      the reported A / B-avg / C timings are within ±15% of a recorded
+      baseline. Recorded reference timings on B-U585I-IOT02A as of
+      2026-05-06 (TAMP IRQ-mode, mock-se + e2e-test, fresh secure +
+      NS link):
+
+        A) chain=1 first-sign (Type1 + slot-keygen + Type2)  ~9,200 ms
+        B-avg) chain=1 type2-only (slot cached)              ~4,000 ms
+        C) chain=2 first-sign (slot keygen-cached)          ~10,300 ms
+
+      Commit a JSON record of the baseline alongside
+      `tests/ui_fixtures.json` once the CI gate is wired. Drift
+      outside the band is a release-blocker until investigated.
 
 - [ ] **TAMP escalation: log-only → `trigger_lockout_wipe()`.** Today
       the polled handler in `secure/src/hw/tamp.rs` (`tamp::poll()`
