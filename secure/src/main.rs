@@ -531,6 +531,17 @@ fn main() -> ! {
         hw::boot_pulse::pulse(5);
         secure_log!("[S] TRNG initialised");
     }
+
+    // Tamper monitoring (feature `tamp`). Polled — `init()` arms the
+    // detection registers (CR1) but leaves IER masked so no IRQ fires;
+    // `tamp::poll()` from SysTick drains TAMP_SR. Log-only; never halts
+    // and never wipes (see `hw::tamp` module header §1). Reversible:
+    // register-state only. Without the feature, this compiles to no-op.
+    #[cfg(all(feature = "stm32u585", feature = "tamp"))]
+    {
+        hw::tamp::init();
+        secure_log!("[S] TAMP initialised (polled, log-only)");
+    }
     #[cfg(all(feature = "ui-oled", not(feature = "se050")))]
     {
         let d = ui::display();
@@ -2267,6 +2278,13 @@ fn main() -> ! {
 #[cortex_m_rt::exception]
 fn SysTick() {
     timeout::tick();
+
+    // Drain TAMP_SR flags. Cheap fast path (1 MMIO read when no flag
+    // set); on a trigger, log the reason and clear. NEVER halts and
+    // NEVER wipes — see `hw::tamp` module header §1. Compiles to a
+    // no-op without the `tamp` feature.
+    #[cfg(all(feature = "stm32u585", feature = "tamp"))]
+    hw::tamp::poll();
 
     // Background idle wipe: if PIN state is unlocked and the inactivity
     // timer has fired with no command in flight, wipe.

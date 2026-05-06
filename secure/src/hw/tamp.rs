@@ -53,21 +53,44 @@ use core::ptr::{read_volatile, write_volatile};
 
 #[cfg(feature = "tamp")]
 pub fn init() {
-    // SAFETY: single-threaded boot-time init, register MMIO addresses
-    // are taken from RM0456 tables 44 (RTC) and 45 (TAMP).
+    // SAFETY: single-threaded boot-time init.
+    // Polled mode: skip `enable_tamp_irq` — IER stays masked. PQSigner
+    // has no peripheral-IRQ infrastructure (no PAC + no `#[interrupt]`
+    // handler), so arming the IRQ would HardFault on first trigger.
+    // Detection logic in CR1 is armed; `poll()` drains TAMP_SR from
+    // SysTick.
     unsafe {
         init_lsi_and_rtc_clock();
         init_tamp_registers();
-        enable_tamp_irq();
     }
 }
 
 #[cfg(not(feature = "tamp"))]
-pub fn init() {
-    // No-op in the default build — the TAMP IRQ handler below is
-    // compiled out and the STM32 ships with tamper detection masked
-    // at reset, so nothing fires.
+pub fn init() {}
+
+/// Drain TAMP_SR flags. Caller (typically `SysTick`) is expected to
+/// invoke this once per tick. Fast path: 1 MMIO read. Trigger path:
+/// read SR, log the reason, write-1-to-clear SCR. NEVER halts, NEVER
+/// wipes — log-only by design.
+#[cfg(feature = "tamp")]
+#[inline]
+pub fn poll() {
+    use regs::*;
+    // SAFETY: TAMP_SR is a plain MMIO read.
+    let sr = unsafe { read_volatile(TAMP_SR) };
+    if sr & ITAMP_FLAG_MASK == 0 {
+        return;
+    }
+    let _reason = reason_from_sr(sr);
+    secure_log!("[TAMP] poll: {} (SR={:#010x})", _reason, sr);
+    unsafe {
+        write_volatile(TAMP_SCR, ITAMP_FLAG_MASK);
+    }
 }
+
+#[cfg(not(feature = "tamp"))]
+#[inline]
+pub fn poll() {}
 
 #[cfg(feature = "tamp")]
 mod regs {
@@ -123,6 +146,19 @@ mod regs {
     pub const TAMP_FLTCR_TAMPPRCH_8CYC: u32 = 0b11 << 0;
     pub const TAMP_FLTCR_TAMPFLT_4SAMPLES: u32 = 0b10 << 2;
     pub const TAMP_FLTCR_TAMPFREQ_RTCCLK_DIV256: u32 = 0b111 << 4;
+
+    /// Combined ITAMP*F flag mask used by `poll()` for read/clear.
+    pub const ITAMP_FLAG_MASK: u32 = TAMP_CR1_ITAMP1E
+        | TAMP_CR1_ITAMP2E
+        | TAMP_CR1_ITAMP3E
+        | TAMP_CR1_ITAMP5E
+        | TAMP_CR1_ITAMP6E
+        | TAMP_CR1_ITAMP7E
+        | TAMP_CR1_ITAMP8E
+        | TAMP_CR1_ITAMP9E
+        | TAMP_CR1_ITAMP11E
+        | TAMP_CR1_ITAMP12E
+        | TAMP_CR1_ITAMP13E;
 }
 
 #[cfg(feature = "tamp")]
@@ -252,19 +288,12 @@ unsafe fn init_tamp_registers() {
     );
 }
 
+// `enable_tamp_irq` removed in polled-mode refactor. Kept the symbol
+// names (NVIC_ISER0, TAMP_IRQN) in `regs::` so re-introducing IRQ-mode
+// later is a one-function add. See module header §2.
 #[cfg(feature = "tamp")]
-unsafe fn enable_tamp_irq() {
-    use regs::*;
-
-    // Clear any pending TAMP IRQ in NVIC.
-    const NVIC_ICPR0: *mut u32 = 0xE000_E280 as *mut u32;
-    write_volatile(NVIC_ICPR0, 1 << TAMP_IRQN);
-
-    // Enable the TAMP interrupt. (Priority-set is omitted here; the
-    // default 0 is highest priority, which matches Trezor's
-    // `IRQ_PRI_HIGHEST`.)
-    write_volatile(NVIC_ISER0, 1 << TAMP_IRQN);
-}
+#[allow(dead_code)]
+unsafe fn _enable_tamp_irq_unused() {}
 
 /// Return a short human-readable label for whichever TAMP source
 /// raised the IRQ. Exposed so other log paths can reuse the mapping.
