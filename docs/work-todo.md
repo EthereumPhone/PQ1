@@ -863,11 +863,13 @@ Within ±2% of polled-mode baseline. No spurious `[TAMP] irq:` or `[IRQ] unexpec
 
 **Documentation tightening that fell out of this:** any future secure-side feature-flag matrix CI / dev-board run that builds secure separately from NS should treat them as a single build unit (rebuild both, in lockstep). A bare `cargo build -p sphincs-tz-secure` followed by `probe-rs run` on a previously-flashed-NS chip will silently invoke wrong veneers and look like an arbitrary firmware regression. Worth a sentence in `docs/dev-board-setup.md` once that file gets a refresh.
 
+**Second build-hygiene gotcha surfaced 2026-05-06 during tamp-irq soak.** `cargo build -p sphincs-tz-secure --features <new-set>` does NOT always rebuild the secure ELF — Cargo's incremental cache may keep the previous feature set's binary when the only change is a CLI feature flag. Symptom: `cargo build` reports "Finished in 0.06s", the secure ELF stays at the OLD timestamp, and `probe-rs download` flashes the OLD binary. Combined with a fresh NS rebuild (which links against the FRESH `veneers.o`), the chip runs an old secure with new NS thunks → arbitrary handler dispatch failures that look like new-feature regressions but are actually stale builds. Fix: `rm -f target/secure/<target>/release/sphincs-tz-secure target/secure/<target>/release/deps/sphincs_tz_secure-*` before `cargo build -p sphincs-tz-secure` whenever the feature set changes. The `make` targets do this implicitly via the `rm` of the NS ELF triggering a full rebuild graph; bare `cargo build` does not.
+
 ---
 
 ### 26. TAMP polled → IRQ migration (Trezor-parity latency)
 
-**Status:** Polled-mode landed in commit `aecc1cc` (2026-05-05). IRQ-mode flip planned but deferred until firmware-wide IRQ audit lands.
+**Status:** Polled-mode landed in commit `aecc1cc` (2026-05-05). IRQ-mode landed behind `tamp-irq` feature in `f5e6a8a` (2026-05-06) + soak-validated 2026-05-06. Default-on flip remains deferred until production-hardening branch (per "When to do this" below).
 
 `secure/src/hw/tamp.rs` currently runs in polled mode: `tamp::init()` arms `TAMP_CR1` (detection) but leaves `TAMP_IER` masked, and `tamp::poll()` from the SysTick handler drains `TAMP_SR` ~1 kHz. Validated on real STM32U585 — no spurious triggers across `make test-key-speed`-shape runs.
 
@@ -891,10 +893,23 @@ Plus three lines added to `tamp::init()`: `write_volatile(TAMP_IER, ITAMP_FLAG_M
 
 **Why this matters.** IRQ latency (~hundreds of cycles) beats SysTick polling (~1 ms) by an order of magnitude. Doesn't matter in dev (log-only) but matters in production where the wipe is racing an attacker reading residual-power side-channels off the backup SRAM.
 
-**Why not yet.** Three reasons:
-1. **DefaultHandler picks up every IRQ source we accidentally unmask, not just TAMP.** Without a firmware-wide audit of "which peripherals have IER bits set right now," that's a footgun. The audit must land in the same diff as the IRQ flip.
-2. **Production should flip the wipe trigger in the same commit as the IRQ flip.** Migrating polled→IRQ while still log-only is half a change; we'd then have to re-validate the trigger surface again when production wipe lands. Bundle them.
-3. **Polled mode has been operationally clean for one session.** A few more sessions of `make e2e-hw` + `make dual-se-multi-unlock-e2e` without spurious `[TAMP] poll:` lines is the bar before flipping. If any ITAMP fires (especially ITAMP9 / CRYPTO_FAULT during SAES sign), an IRQ-mode handler that halts in WFE would brick those tests; we'd want to know first.
+**Why not default-on yet.** Two reasons remaining (the "operational soak" one is satisfied; see below):
+
+1. **DefaultHandler picks up every IRQ source we accidentally unmask, not just TAMP.** Without a firmware-wide audit of "which peripherals have IER bits set right now," that's a footgun. The audit must land in the same diff as the default-on flip.
+2. **Production should flip the wipe trigger in the same commit as the default-on flip.** Migrating polled→IRQ while still log-only is half a change; we'd then have to re-validate the trigger surface again when production wipe lands. Bundle them.
+
+**Operational-soak criterion: SATISFIED 2026-05-06.** Test plan was "a few clean `make e2e-hw` + `dual-se-multi-unlock-e2e` runs with no spurious `[TAMP] irq:` or `[IRQ] unexpected:` lines." Results on B-U585I-IOT02A:
+
+| Test | Build features | Spurious IRQ events | Result |
+|---|---|---:|---|
+| dual-se-multi-unlock-e2e — boot 1/3 | `dual-se-multi-unlock-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key,tamp,tamp-irq` | 0 | 5/5 unlocks PASS |
+| dual-se-multi-unlock-e2e — boot 2/3 | (same) | 0 | 5/5 unlocks PASS |
+| dual-se-multi-unlock-e2e — boot 3/3 | (same) | 0 | 5/5 unlocks PASS |
+| e2e-hw (full unified-sign suite + PIN-lockout brute-force) | `mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,tamp,tamp-irq` | 0 | `=== All scenarios passed! ===` |
+
+Total: **15 unlocks, 1 multi-scenario sign suite, 1 PIN-lockout brute-force test, 0 spurious IRQ events.** TAMP-IRQ passes through thousands of SAES + RNG accesses + CMSE veneer crossings cleanly. `DefaultHandler` dispatch invariant holds (no `[IRQ] unexpected irqn=N` lines).
+
+**Build hygiene gotcha surfaced during validation.** Cargo's incremental build does NOT always rebuild the secure ELF when the secure-side feature set changes via CLI args alone. The symptom is identical to a "tamp-irq regression" — secure ELF is from an older feature set, NS is built fresh against current `veneers.o`, and the chip ends up running a secure binary whose veneer addresses don't match what NS expects. Fix: `rm` the secure ELF + deps directory before each rebuild, not just the NS one. Documented in #27.
 
 **Alternative paths considered + rejected:**
 - **Adopt PAC crate (`stm32u5`).** Would let us use `#[cortex_m_rt::interrupt] fn TAMP() { ... }` directly. Rejected: PQSigner has historically refused PAC adoption (raw-register pattern everywhere — see `hw/rcc.rs`, `hw/usb_hw.rs`, `hw/saes.rs`). Architectural drift the codebase actively avoids.
@@ -902,7 +917,7 @@ Plus three lines added to `tamp::init()`: `write_volatile(TAMP_IER, ITAMP_FLAG_M
 
 **When to do this:** during the production-hardening branch, alongside the parallel `production-todo.md` item ("TAMP escalation: log-only → `trigger_lockout_wipe()`"). Both flips MUST land together so review can verify the trigger surface end-to-end.
 
-**Files to change (when):** `secure/src/main.rs` (`DefaultHandler` fn, ~10 lines), `secure/src/hw/tamp.rs` (un-rename `_enable_tamp_irq_unused` + `_on_tamp_irq_unused` back to canonical names; remove `tamp::poll()` call from SysTick or leave as belt-and-suspenders).
+**Files to change for default-flip (when):** Remove `tamp-irq` feature gate and make IRQ-mode unconditional under `tamp`. The `DefaultHandler` fn in `secure/src/main.rs` and `enable_tamp_irq()` + `on_tamp_irq()` in `secure/src/hw/tamp.rs` are already in tree (commit `f5e6a8a`); the default-flip is a Cargo.toml + cfg-gate cleanup, not a behavioral change.
 
 ---
 
