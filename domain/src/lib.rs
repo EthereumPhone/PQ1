@@ -642,7 +642,7 @@ pub fn derive_c10_master_from_entropy(
 ///
 /// **Expensive**: runs the full C10 hypertree keygen (512 WOTS keys at
 /// the top layer + Merkle root). Only call when actually producing a
-/// Type 1 signature. On Cortex-M33 this takes ~5-6 s with the HASH
+/// Type 1 signature. On Cortex-M33 this takes <1 s with the HASH
 /// peripheral; on QEMU it takes much less.
 pub fn derive_c10_master_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
@@ -756,7 +756,7 @@ fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
 /// the N-masked 32-byte layout the on-chain `slots[slotKey]` commitment
 /// hashes over (`sha256(pk_seed[..16] || pk_root[..16])`).
 ///
-/// **Expensive**: ~5-6 s on Cortex-M33 with the HASH peripheral. Callers
+/// **Expensive**: <1 s on Cortex-M33 with the HASH peripheral. Callers
 /// should cache the resulting `SigningKey` across signs of the same slot.
 pub fn derive_c10_slot_keypair(
     master_entropy: &[u8; 32],

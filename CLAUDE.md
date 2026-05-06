@@ -41,7 +41,7 @@ parse {chain_id, flags{INCLUDE_INIT_CODE | REGISTER_SLOT | account_index | slot_
   if FLAG_INCLUDE_INIT_CODE: emit 4280-B initCode prefix
 ```
 
-`SLOT_CACHE` in SRAM is keyed only on `slot_index` (slot derivation is chain-agnostic) — cross-chain hops at the same slot skip re-keygen.
+`SLOT_CACHE` in SRAM is keyed on `(account_index, chain_id, slot_index)` — slot keys are chain-bound, so a cross-chain hop at the same slot triggers a fresh <1 s keygen.
 
 ## Gateway Commands
 
@@ -54,7 +54,7 @@ parse {chain_id, flags{INCLUDE_INIT_CODE | REGISTER_SLOT | account_index | slot_
 | 7 | SIGN_USEROP | unified Type 1/Type 2 sign; flags drive `INCLUDE_INIT_CODE` and `REGISTER_SLOT` |
 | 11 | IS_UNLOCKED | 1/0 |
 | 12 | LOCK | zeroize cached secrets |
-| 14 | GET_WALLET_ADDRESS | CREATE2-predicted ERC-1967 proxy address (≈ 6 s on first call after unlock for master keygen, < 1 ms cached) |
+| 14 | GET_WALLET_ADDRESS | CREATE2-predicted ERC-1967 proxy address (<1 s on first call after unlock for master keygen, < 1 ms cached) |
 | 15 | GET_INIT_CODE | pre-compute the 4280-B `initCode` for `(account_index, chain_id)` (companion gas-estimation) |
 | 16 | SIGN_OFFCHAIN | EIP-1271 sig over a 32-B hash; refuses if slot unregistered, gap > 5, or combined cap exceeded |
 | 17 | OFFCHAIN_STATUS | per-slot `(local_offchain_count, last_userop_count, registered)` |
@@ -129,9 +129,9 @@ masterPkSeed = sha256("pk_seed" || master[..32]) & N_MASK   // top 16 B kept, bo
 account_index == 0:  slot_master = sha256("pqwallet-slot-master" || bip39_seed)
 account_index  > 0:  slot_master = sha256("pqwallet-slot-master-acct" || bip39_seed || account_index_be4)
 
-# Per-slot derivation (chain-agnostic)
-slot_entropy   = sha256(slot_master || "slot_entropy" || slot_index_be)
-slot_r         = sha256(slot_master || "slot_r" || slot_index_be)
+# Per-slot derivation (chain-bound, post-Coinbase-port: slot keys differ per chain)
+slot_entropy   = sha256(slot_master || "slot_entropy" || chain_id_be8 || slot_index_be4)
+slot_r         = sha256(slot_master || "slot_r"        || chain_id_be8 || slot_index_be4)
 slot_sk_seed   = sha256("slot_c10_sk_seed" || slot_entropy)
 slot_pk_seed   = sha256("slot_c10_pk_seed" || slot_entropy) & N_MASK
 (slotSk, slotPkRoot) = c10::keygen(slot_sk_seed, slot_pk_seed[..16])
@@ -166,7 +166,7 @@ cargo test -p sphincs-tz-secure --tests --release
 
 **HW probe-rs gotcha.** `probe-rs` does not implement semihosting `0x07 SYS_READC`. Any `ui-semihosting` PIN prompt on real silicon hangs in the polling loop with a storm of `Target wanted to run semihosting operation 0x7 ...` warnings. This hits `make e2e-hw` because the NS test driver still calls `CMD_REQUEST_UNLOCK` even when `e2e-test` pre-unlocks the secure side. QEMU is unaffected. Workarounds: `make test-key-speed` (no reads, prints `=== PASS ===`) or `make play-hw-display` (arrow keys via probe-rs `print` handshake).
 
-**Expected timings on hardware** (with `hw-sha256`, auto under `stm32u585`): first-sign ≈ 13 s (master keygen + slot keygen + 2 signs); Type-2-only on cached slot ≈ 1.1 s; second-chain first-sign with cached slot ≈ 7.5 s. Substantially higher = HASH peripheral isn't being used.
+**Expected timings on hardware** (with `hw-sha256`, auto under `stm32u585`): first-sign ≤ 3 s (master keygen + slot keygen + 2 signs); Type-2-only on cached slot ≈ 1.1 s; second-chain first-sign with cached slot ≈ 2.5 s. Substantially higher = HASH peripheral isn't being used.
 
 **HW SHA-256 self-test.** `hw::hash::init_clock()` runs a `SHA-256("abc")` KAT. Look for `[S] hash: HW SHA-256 self-test PASS` early in boot — `FAIL — HALT` parks the CPU in `loop { wfe() }`.
 

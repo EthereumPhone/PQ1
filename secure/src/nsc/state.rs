@@ -295,7 +295,7 @@ pub(super) static mut FW_UPDATE: Option<crate::fw_update::FwUpdateCtx> = None;
 /// chain B with the same index, so the cache keys on chain too. With
 /// multi-account derivation, slot keys also vary per `account_index`
 /// (the `master_entropy` they descend from is account-scoped). A
-/// mismatch on any field triggers a fresh keygen (~5-6 s on hardware).
+/// mismatch on any field triggers a fresh keygen (<1 s on hardware).
 pub(super) struct CachedSlot {
     pub(super) account_index: u32,
     pub(super) chain_id: u64,
