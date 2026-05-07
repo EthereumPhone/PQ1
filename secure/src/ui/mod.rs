@@ -45,6 +45,18 @@ pub mod seed_wizard;
 pub const DISPLAY_COLS: usize = 16;
 pub const DISPLAY_ROWS: usize = 4;
 
+/// Convert an ASCII-by-construction byte buffer into a `&str` without `unsafe`.
+///
+/// All call sites build their buffers from printable ASCII (digits, hex,
+/// BIP-39 words, fixed labels). The `from_utf8` validator is O(n) over a
+/// ≤64-byte buffer — negligible vs. the OLED I2C flush that follows. The
+/// `"?"` fallback is structurally unreachable; it exists only so this
+/// helper is safe (no `unsafe { from_utf8_unchecked }`).
+#[inline]
+pub(crate) fn ascii_str(buf: &[u8]) -> &str {
+    core::str::from_utf8(buf).unwrap_or("?")
+}
+
 /// Two-button input event.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Button {
@@ -197,7 +209,6 @@ pub fn show_progress(title: &str, percent: u8) {
     let d = display();
     d.clear();
     d.draw_line(1, title);
-    let bar_str = unsafe { core::str::from_utf8_unchecked(&bar) };
-    d.draw_line(3, bar_str);
+    d.draw_line(3, ascii_str(&bar));
     d.flush();
 }

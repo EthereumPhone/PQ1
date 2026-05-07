@@ -331,9 +331,7 @@ pub unsafe fn run_probe() -> ! {
             }
         }
 
-        // SAFETY: all bytes are ASCII
-        let s = core::str::from_utf8_unchecked(&line);
-        cortex_m_semihosting::hprintln!("{}", s);
+        cortex_m_semihosting::hprintln!("{}", crate::ui::ascii_str(&line));
     }
 
     cortex_m_semihosting::hprintln!("");

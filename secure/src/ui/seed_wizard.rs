@@ -69,9 +69,7 @@ pub fn choose_setup_mode() -> WizardChoice {
             let lb = label.as_bytes();
             let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
             row[2..2 + max].copy_from_slice(&lb[..max]);
-            // SAFETY: only ASCII written.
-            let s = unsafe { core::str::from_utf8_unchecked(&row) };
-            d.draw_line(i + 1, s);
+            d.draw_line(i + 1, super::ascii_str(&row));
         }
         d.draw_line(3, "L=- R=+ LR=ok");
         d.flush();
@@ -177,8 +175,7 @@ fn render_mnemonic_page(m: &Mnemonic, page: usize) {
     title[8] = b'0' + p1;
     title[9] = b'/';
     title[10] = b'0' + TOTAL_PAGES as u8;
-    let title_s = unsafe { core::str::from_utf8_unchecked(&title) };
-    d.draw_line(0, title_s);
+    d.draw_line(0, super::ascii_str(&title));
 
     // Three word rows: "12 abandon"
     for slot in 0..WORDS_PER_PAGE {
@@ -198,8 +195,7 @@ fn render_mnemonic_page(m: &Mnemonic, page: usize) {
         let wb = word.as_bytes();
         let max = core::cmp::min(wb.len(), DISPLAY_COLS - 3);
         row[3..3 + max].copy_from_slice(&wb[..max]);
-        let s = unsafe { core::str::from_utf8_unchecked(&row) };
-        d.draw_line(slot + 1, s);
+        d.draw_line(slot + 1, super::ascii_str(&row));
     }
 
     d.flush();
@@ -225,7 +221,7 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
 
     for (step, &probe) in indices.iter().enumerate() {
         let title_buf = build_check_title(probe + 1);
-        let title_s = unsafe { core::str::from_utf8_unchecked(&title_buf) };
+        let title_s = super::ascii_str(&title_buf);
 
         #[cfg(feature = "debug-log")]
         secure_log!(
@@ -311,7 +307,7 @@ pub fn enter_mnemonic() -> Result<Mnemonic, WizardError> {
 
     while i < WORD_COUNT {
         let title = build_word_progress_title(i + 1);
-        let title_s = unsafe { core::str::from_utf8_unchecked(&title) };
+        let title_s = super::ascii_str(&title);
 
         match enter_single_word(title_s) {
             EnterWordResult::Word(idx) => {
@@ -417,7 +413,7 @@ fn enter_single_word(title: &str) -> EnterWordResult {
                 if len < MAX_LETTERS {
                     len += 1;
                 }
-                let prefix = unsafe { core::str::from_utf8_unchecked(&buf[..len]) };
+                let prefix = super::ascii_str(&buf[..len]);
                 match lookup_prefix(prefix) {
                     PrefixLookup::Unique(idx) => return EnterWordResult::Word(idx),
                     PrefixLookup::None => {
@@ -498,8 +494,7 @@ fn render_letter_screen(title: &str, buf: &[u8; MAX_LETTERS], len: usize) {
             row1[col] = b'_';
         }
     }
-    let s1 = unsafe { core::str::from_utf8_unchecked(&row1) };
-    d.draw_line(1, s1);
+    d.draw_line(1, super::ascii_str(&row1));
 
     // Row 2: cursor caret
     let mut row2 = [b' '; DISPLAY_COLS];
@@ -507,8 +502,7 @@ fn render_letter_screen(title: &str, buf: &[u8; MAX_LETTERS], len: usize) {
     if cursor_col < DISPLAY_COLS {
         row2[cursor_col] = b'^';
     }
-    let s2 = unsafe { core::str::from_utf8_unchecked(&row2) };
-    d.draw_line(2, s2);
+    d.draw_line(2, super::ascii_str(&row2));
 
     d.draw_line(3, "L/R=ltr LR=ok");
     d.flush();
@@ -572,8 +566,7 @@ fn render_candidate_screen(title: &str, start: usize, end: usize, cur: usize) {
         let wb = WORDLIST[idx].as_bytes();
         let max = core::cmp::min(wb.len(), DISPLAY_COLS - 2);
         row[2..2 + max].copy_from_slice(&wb[..max]);
-        let s = unsafe { core::str::from_utf8_unchecked(&row) };
-        d.draw_line(slot + 1, s);
+        d.draw_line(slot + 1, super::ascii_str(&row));
     }
     d.draw_line(3, "L/R=scrl LR=ok");
     d.flush();

@@ -2,6 +2,12 @@
 //!
 //! These modules are compiled when targeting real hardware.
 
+/// Typed MMIO register handles — encapsulates `unsafe` volatile
+/// accesses behind safe `.read()` / `.write()` / `.modify()` methods,
+/// so peripheral drivers don't have to repeat `unsafe` at every touch.
+#[cfg(feature = "stm32u585")]
+pub mod mmio;
+
 #[cfg(feature = "pka-accel")]
 pub mod pka;
 

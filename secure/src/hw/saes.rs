@@ -357,10 +357,8 @@ pub fn self_test() -> Result<(), SaesError> {
             buf[i * 2] = HEX[(b >> 4) as usize];
             buf[i * 2 + 1] = HEX[(b & 0xF) as usize];
         }
-        // SAFETY: hex chars are valid UTF-8.
-        let s = unsafe { core::str::from_utf8_unchecked(&buf) };
         let d = crate::ui::display();
-        d.draw_line(3, s);
+        d.draw_line(3, crate::ui::ascii_str(&buf));
         d.flush();
     }
 

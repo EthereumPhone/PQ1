@@ -60,9 +60,7 @@ pub fn emit(fb_bytes: &[u8]) {
         hex[i * 2] = nibble_to_hex(hi);
         hex[i * 2 + 1] = nibble_to_hex(lo);
     }
-    // SAFETY: hex table only ever writes ASCII 0..9/a..f.
-    let hex_str = unsafe { core::str::from_utf8_unchecked(&hex) };
-    secure_log!("[UI-FP] {:04x}  {}", idx, hex_str);
+    secure_log!("[UI-FP] {:04x}  {}", idx, super::ascii_str(&hex));
 }
 
 #[inline(always)]

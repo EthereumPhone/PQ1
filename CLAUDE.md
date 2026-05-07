@@ -191,6 +191,7 @@ CI must gate shipped firmware on `debug-log` / `e2e-test` / `mock-se` / `otp-har
 - `zeroize::ZeroizeOnDrop` on every secret type with compiler fences.
 - `subtle` for constant-time compares. No secret-dependent branches.
 - Every `unsafe` block has a `// SAFETY:` comment. `#![deny(unsafe_op_in_unsafe_fn)]`, `#![warn(clippy::pedantic)]`.
+- **`unsafe` taxonomy.** Five categories that are structurally required and one that is not. **Required:** (1) CMSE `unsafe extern "C"` veneers (TrustZone ABI); (2) NS pointer deref after `NsPtr<T>` validation in `secure/src/nsc/*`; (3) `unsafe extern "C"` SHA-256 hooks consumed by `sphincs-c10` under `hw-sha256`; (4) FI volatile read/write helpers in `secure/src/fi.rs` (must be `read_volatile`/`write_volatile` to defeat compiler folding); (5) `static mut` bookkeeping for the HASH peripheral's 4-byte merge buffer and similar single-threaded driver state. **Avoidable:** ad-hoc per-register MMIO `read_volatile`/`write_volatile` — funnel each peripheral's registers through `hw::mmio::{Reg32, RoReg32}`, which encapsulates the unsafe once at the address-binding step. UI/log code that materialises ASCII-by-construction buffers must use `crate::ui::ascii_str` rather than `core::str::from_utf8_unchecked`.
 - NS pointer validation on every gateway call before any deref. NS buffers copied to S-stack before parse.
 - Cross-world types in `shared/src/lib.rs` with `#[repr(C)]`.
 - Secret types are `!Copy + !Clone`.
@@ -261,7 +262,8 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 |------|---------|
 | `secure/src/ui/{mod,oled,semihosting,noop,mirror,capture,confirm,pin_entry,seed_wizard}.rs` | `pub trait Ui` + backends. `confirm`/`pin_entry`/`seed_wizard` are the trusted-path dialogs. |
 | `secure/src/zk/{groth16,poseidon,vk_bundle,vk_data}.rs` | BLS12-381 Groth16 verifier (clear-sign / typed-call paths). |
-| `secure/src/hw/hash.rs` | STM32U585 HASH peripheral; `pqsigner_sha256_*` extern fns consumed by `sphincs-c10` under `hw-sha256`. |
+| `secure/src/hw/mmio.rs` | Typed `Reg32`/`RoReg32` MMIO handles. Encapsulates `unsafe { read_volatile/write_volatile }` once per address so peripheral drivers expose safe `.read()`/`.write()`/`.modify()` APIs. |
+| `secure/src/hw/hash.rs` | STM32U585 HASH peripheral; `pqsigner_sha256_*` extern fns consumed by `sphincs-c10` under `hw-sha256`. Uses `mmio` for register access. |
 | `secure/src/hw/saes.rs` | SAES driver (AES-256-ECB) under `KEYSEL ∈ {Software, DHUK, BHK, DHUK^BHK}`. |
 | `secure/src/hw/saes_cmac.rs` | `cmac_dhuk(msg) -> tag` thin SAES adaptor. |
 | `secure/src/hw/secret_keys.rs` | Per-purpose subkey API: `optiga_pairing_secret() -> [u8;64]`, `se050_scp03_{enc,mac}_key() -> [u8;16]`, `se050_admin_pin() -> [u8;16]`, `tropic01_pairing_key() -> [u8;32]`. Production: `SAES-CMAC(DHUK, label‖counter)`. Dev: `HKDF(OTP_master, label)`. |
@@ -329,4 +331,5 @@ After completing implementation tasks, check `docs/work-todo.md` and tick off ma
 - `docs/se050-userid-pin-auth.md`, `docs/optiga-bringup-status.md`, `docs/optiga-brick-postmortem.md`
 - `docs/companion-app-integration.md`, `docs/companion-batch-sign-integration.md`, `docs/usb-protocol-v2.md`
 - `docs/handoff-modularity-refactor.md` — workspace-crate extraction phases
+- `docs/handoff-unsafe-reduction.md` — per-peripheral migration of MMIO `read_volatile`/`write_volatile` to `hw::mmio::{Reg32, RoReg32}`; queue + footguns + irreducible categories
 - `docs/dev-board-setup.md`, `docs/hardware_requirements.md`, `docs/trezor-comparison.md`

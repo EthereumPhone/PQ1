@@ -15,10 +15,9 @@ use usb_device::prelude::*;
 // ---------------------------------------------------------------------------
 
 /// USB OTG FS peripheral on STM32U585 (DWC2 IP, Full-Speed).
+///
+/// Zero-sized unit struct — `Send + Sync` are auto-derived.
 pub struct Stm32U5UsbOtgFs;
-
-unsafe impl Sync for Stm32U5UsbOtgFs {}
-unsafe impl Send for Stm32U5UsbOtgFs {}
 
 /// USB OTG FS register base (NS alias).
 const USB_OTG_BASE: u32 = 0x4204_0000;

@@ -99,9 +99,7 @@ fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
             b'_'
         };
     }
-    // SAFETY: only ASCII written.
-    let s = unsafe { core::str::from_utf8_unchecked(&row1) };
-    d.draw_line(1, s);
+    d.draw_line(1, super::ascii_str(&row1));
 
     // Position indicator under the active digit.
     let mut row2 = [b' '; DISPLAY_COLS];
@@ -109,8 +107,7 @@ fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
     if col < DISPLAY_COLS {
         row2[col] = b'^';
     }
-    let s2 = unsafe { core::str::from_utf8_unchecked(&row2) };
-    d.draw_line(2, s2);
+    d.draw_line(2, super::ascii_str(&row2));
 
     d.draw_line(3, "L=- R=+ LL=back");
     d.flush();

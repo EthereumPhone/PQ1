@@ -116,9 +116,7 @@ fn render_all_words(indices: &[u16; 8]) {
         let rmax = core::cmp::min(rw.len(), 6);
         buf[10..10 + rmax].copy_from_slice(&rw[..rmax]);
 
-        // SAFETY: only ASCII written.
-        let s = unsafe { core::str::from_utf8_unchecked(&buf) };
-        d.draw_line(row, s);
+        d.draw_line(row, crate::ui::ascii_str(&buf));
     }
 
     d.flush();

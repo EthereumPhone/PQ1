@@ -93,9 +93,7 @@ fn render_page(page: &Page, idx: usize, total: usize) {
     let d = display();
     d.clear();
     for (row_idx, row) in page.iter().enumerate() {
-        // SAFETY: pages are constructed from ASCII-only formatting.
-        let s = unsafe { core::str::from_utf8_unchecked(row) };
-        d.draw_line(row_idx, s);
+        d.draw_line(row_idx, super::ascii_str(row));
     }
     // Footer indicator: "1/5" right-aligned isn't space — instead overlay on row 3.
     // We assume the page renderer leaves room or that we can append.

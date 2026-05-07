@@ -72,9 +72,7 @@ impl Display {
         // Render a framebox so the user sees a "screen" in the QEMU console.
         hprintln!("    +----------------+");
         for row in &self.rows {
-            // SAFETY: draw_line restricts to printable ASCII so this is valid UTF-8.
-            let s = unsafe { core::str::from_utf8_unchecked(row) };
-            hprintln!("    |{}|", s);
+            hprintln!("    |{}|", super::ascii_str(row));
         }
         hprintln!("    +----------------+");
 

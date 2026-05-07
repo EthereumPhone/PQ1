@@ -194,8 +194,7 @@ impl Display {
         self.fb.clear();
         let style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
         for (i, row) in self.rows.iter().enumerate() {
-            // SAFETY: draw_line restricts to printable ASCII → valid UTF-8.
-            let s = unsafe { core::str::from_utf8_unchecked(row) };
+            let s = super::ascii_str(row);
             let _ = Text::with_baseline(s, Point::new(0, i as i32 * 8), style, Baseline::Top)
                 .draw(&mut self.fb);
         }
