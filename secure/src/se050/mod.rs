@@ -981,21 +981,23 @@ impl Se050 {
             #[cfg(feature = "debug-log")]
             secure_log!("[E2E-CRASH] 1b provision OK");
 
-            // ---- c. Persist admin PIN to flash (so phase 2 can read it) ----
+            // ---- c. Arm the wipe-in-progress flag (page 125) ----
+            // Phase 2 uses the same compile-time `*b"crashsafetypin00"`
+            // admin PIN literal, so there's nothing to persist across
+            // the simulated crash — we just erase page 125 (clean flag
+            // state) then arm the flag at WIPE_FLAG_OFFSET. (Production
+            // resume re-derives its admin PIN from the OTP master via
+            // `secret_keys::se050_admin_pin()`, not from flash — the
+            // page-125 PIN slot is dead storage on v6 chips.)
             #[cfg(feature = "stm32u585")]
             {
-                crate::hw::flash::write_admin_pin(&admin_pin)
+                crate::hw::flash::erase_admin_page()
                     .map_err(|_| Se050Error::Transport)?;
-
-                #[cfg(feature = "debug-log")]
-                secure_log!("[E2E-CRASH] 1c admin PIN persisted to flash page 125");
-
-                // ---- d. Arm the wipe flag ----
                 crate::hw::flash::arm_wipe_flag()
                     .map_err(|_| Se050Error::Transport)?;
 
                 #[cfg(feature = "debug-log")]
-                secure_log!("[E2E-CRASH] 1d wipe flag armed");
+                secure_log!("[E2E-CRASH] 1c page 125 erased + wipe flag armed");
             }
 
             // ---- e. Partial wipe: delete only the data object ----
@@ -1056,18 +1058,16 @@ impl Se050 {
                 return Err(Se050Error::Status(0x6A90));
             }
 
-            // ---- b. Read admin PIN from flash (same path real resume uses) ----
-            #[cfg(feature = "stm32u585")]
-            let mut admin_pin = {
-                let mut buf = [0u8; 16];
-                crate::hw::flash::read_admin_pin(&mut buf);
-                buf
-            };
-            #[cfg(not(feature = "stm32u585"))]
-            let mut admin_pin = [0u8; 16];
+            // ---- b. Admin PIN — the same compile-time literal phase 1
+            // provisioned the admin UserID with. Nothing to read back
+            // from flash: this is a self-contained test, the PIN never
+            // varies. (The real crash-resume path re-derives via
+            // `secret_keys::se050_admin_pin()` — that's exercised by
+            // `dual-se-admin-wipe-e2e`, not here.)
+            let mut admin_pin: [u8; 16] = *b"crashsafetypin00";
 
             #[cfg(feature = "debug-log")]
-            secure_log!("[E2E-CRASH] 2b admin PIN read from flash");
+            secure_log!("[E2E-CRASH] 2b admin PIN ready (compile-time literal)");
 
             // ---- c. Finish the wipe ----
             let sid = apdu::create_session(

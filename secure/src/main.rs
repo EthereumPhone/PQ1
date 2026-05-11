@@ -1141,9 +1141,8 @@ fn main() -> ! {
         // wrapper erases page 125 as part of cleanup, and calling it
         // followed by `pin_attempts_reset` (page 126) triggered a flash-
         // timing window on this bench chip where a subsequent program
-        // to page 125 QW0 inside `write_admin_pin` (during provision)
-        // returned PROGERR silently. The test just needs the MCU
-        // counter cleared; SE cleanup is the provision path's job.
+        // to page 125 QW0 returned PROGERR silently. The test just needs
+        // the MCU counter cleared; SE cleanup is the provision path's job.
         let _ = hw::flash::pin_attempts_reset();
         let count0 = hw::flash::pin_attempts_read();
         if count0 != 0 {

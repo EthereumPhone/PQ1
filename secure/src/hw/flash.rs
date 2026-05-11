@@ -388,18 +388,18 @@ pub unsafe fn is_admin_pin_blank() -> bool {
     true
 }
 
-/// Persist a 16-byte admin PIN into page 125.
-///
-/// Erases the whole page first (so any stale wipe flag is cleared too),
-/// then programs QW 0 with the PIN. After this call `is_admin_pin_blank()`
-/// is false and `is_wipe_armed()` is false.
-pub unsafe fn write_admin_pin(pin: &[u8; 16]) -> Result<(), ()> {
-    erase_admin_page()?;
-
-    let mut qw = [0u8; 16];
-    qw.copy_from_slice(pin);
-    write_quadword_verified(ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET, &qw)
-}
+// NOTE: `write_admin_pin` was removed (2026-05-11). The SE050 admin
+// PIN is no longer persisted to flash — it's re-derived on demand from
+// the OTP master via `hw::secret_keys::se050_admin_pin()` (the v6
+// OTP-derived admin scheme; see `Se050::store_objects` /
+// `Se050::factory_reset_admin`). `ADMIN_PIN_OFFSET` and
+// `read_admin_pin` / `is_admin_pin_blank` are kept only for the e2e
+// legacy-recovery cascades (`dual_se.rs`, `main.rs` pre-clean) that
+// attempt an admin wipe against bench chips provisioned by pre-v6
+// firmware — those branches are no-ops on v6-provisioned chips
+// (`is_admin_pin_blank()` is true) and can be deleted once no pre-v6
+// bench chip remains. The wipe-in-progress flag at `WIPE_FLAG_OFFSET`
+// is unrelated and stays.
 
 /// Arm the wipe-in-progress marker. Call immediately before initiating
 /// a factory reset so boot-time resume can pick up an interrupted wipe.
