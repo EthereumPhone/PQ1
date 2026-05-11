@@ -170,11 +170,12 @@ Trezor references: `core/embed/sec/secret/stm32u5/secret.c:426-442` (`secret_bhk
 Quoted from Trezor `secret.c:593-595`:
 > "The BHK is copied to the backup registers, which are accessible by the SAES peripheral. The BHK register is locked, so the BHK can't be accessed by the software."
 
-**Which SE goes under which key.** Recommended split:
+**Which SE goes under which key.** Current split (TROPIC01 deferred — see CLAUDE.md "Backend" notes; the shipping config is `dual-se` = OPTIGA Trust M + SE050 only):
 - DHUK → OPTIGA PBS (current derivation), user-PIN storage-wrap (if we ever add one)
-- BHK → SE050 SCP03 enc+mac, SE050 admin PIN, TROPIC01 pairing
+- BHK → SE050 SCP03 enc+mac, SE050 admin PIN
+- (TROPIC01 pairing key would join the BHK side if/when TROPIC01 is re-enabled — `secret_keys::tropic01_pairing_key()` exists but the TROPIC01 driver currently uses a hardcoded pairing key and the `tropic01-se` backend isn't built into the shipping target.)
 
-That way a compromise of one selector exposes at most one SE's channel. If BHK provisioning is deferred (dev boards), a "BHK absent → fall back to DHUK for those keys" gate keeps builds running, with a stern log line so production firmware can refuse to boot BHK-less.
+That way a compromise of one selector exposes at most one SE's channel. The Tier-2-A fallback (`derive_into_bhk` with neither `bhk` nor `bhk-hardcoded-master-key` → route through `derive_into` (DHUK)) keeps pre-2B builds running; production builds enable `bhk` to flip to the real BHK selector.
 
 **What's needed — P0 (requires Tier 1 landed first):**
 
@@ -195,7 +196,17 @@ That way a compromise of one selector exposes at most one SE's channel. If BHK p
 - [ ] Per-die BHK uniqueness at RDP ≥ 1: follows logically from the already-validated per-die DHUK (the BHK is DHUK-ECB-wrapped, so a flash dump of page 126 from board A can't be unwrapped on board B's per-die DHUK). A dedicated RDP1 BHK test would just confirm this — it would need the BHK provisioned *while at* RDP1 (the recovery-heavy flow: erase page 126, step to RDP1, boot → `provision()` wraps with the RDP1 DHUK). Low priority; the security property is established.
 - [ ] Integration check: a reflash that preserves OTP also preserves the DHUK-wrapped-BHK on flash (same page across updates). If a firmware update would erase that page, restore-from-wrap fails and the chip falls into the same class of brick as the original OPTIGA bug. Treat the BHK page as **write-once-at-provisioning, read-only from firmware** — no firmware-update path may touch it (page 126 is bank 1; the FW-update region is bank 2 only, so `fw_update` already can't reach it — but add an explicit assertion when the FW-update bank-2 page allowlist is next touched).
 
-**Phase 2C — caller migration (deferred until Phase 2B is silicon-validated).** Per the DHUK/BHK split table above: SE050 SCP03 enc+mac, SE050 admin PIN, TROPIC01 pairing move from `derive_into` (DHUK) to `derive_into_bhk` (BHK). Each migration requires a coordinated re-pairing step on production chips; treat the bench-chip re-pair as a destructive test that needs the existing `dual-se-admin-wipe-e2e` + OPTIGA `factory_reset_admin` paths to be re-run after the cutover.
+**Phase 2C — caller migration. CODE LANDED (2026-05-11).** `secret_keys::se050_scp03_enc_key` / `se050_scp03_mac_key` / `se050_admin_pin` now derive via `derive_into_bhk` (the BHK SAES axis). `optiga_pairing_secret` stays on `derive_into` (DHUK). `tropic01_pairing_key` stays on `derive_into` (DHUK) — TROPIC01 is deferred (the `tropic01-se` backend isn't built into the shipping target; the driver uses a hardcoded pairing key). The call-site flip is **behaviorally inert until `bhk` is enabled**: with `bhk` off (the current default), `derive_into_bhk` falls through to `derive_into`, so the SE050 secrets are identical to pre-2C. Verified clean across default-QEMU, `saes-dhuk`-shipping (bhk off), `bhk` on, and `bhk-hardcoded-master-key` builds; 105/105 host tests pass. Kept the `-v1` label suffix — the label-hygiene rule is about not silently changing the *label*; changing the derivation *root* (DHUK → BHK) is the whole point here, and it's documented. (A version bump was considered for log-unmistakability and rejected as churn.)
+
+Trezor-mirror reference: `core/embed/sec/secret_keys/stm32u5/secret_keys.c` — each per-purpose secret key gets a domain-tagged derivation off either the DHUK or BHK SAES selector; the choice of selector-per-purpose is the defense-in-depth axis. Our `secret_keys::*` functions are the direct parallel — Phase 2C just chose `derive_into_bhk` vs `derive_into` per function.
+
+Cost / sequencing: enabling `bhk` re-keys the SE050 channels — an already-provisioned chip has its SCP03 channel + admin UserID keyed to the *old* (DHUK-derived) secrets, so after `bhk` goes on the firmware computes *new* (BHK-derived) secrets that don't match → the SE050 won't authenticate → re-provision (wipe + re-pair). On bench chips that's the `dual-se-admin-wipe-e2e` / `wipe-for-wizard` flow. On production chips there's no migration — they ship with `bhk` on and BHK-derived secrets from first boot. **Caveat (already in `docs/production-todo.md`):** the BHK lives in mass-erasable flash (page 126), so an RDP regression loses it → SE050 must be re-paired afterward — same posture Trezor accepts for Optiga. At RDP0 the BHK isn't per-die anyway (it's DHUK-ECB-wrapped under the RDP0-constant DHUK), so the real two-axis benefit only materialises at RDP ≥ 1.
+
+Remaining (when ready to flip `bhk` on for a shipping config):
+- [ ] Pick the Makefile recipe(s) / build profile that enable `bhk` for shipping firmware (parallel to how `saes-dhuk` got enabled).
+- [ ] Re-provision both bench SE050s after enabling `bhk` so they're paired against the BHK-derived secrets (`dual-se-admin-wipe-e2e` or `wipe-for-wizard` + fresh provision).
+- [ ] Bench-validate the SE050 SCP03 channel + admin-wipe path under `bhk` (the SCP03 keys + admin PIN are now BHK-derived — confirm provisioning + unlock + `factory_reset_admin` all work).
+- [ ] Note in the refurbishment/RMA flow that an RDP regression on a `bhk`-enabled device requires an SE050 re-pair.
 
 #### Early-adopt: derive SE050 admin PIN from OTP master (pre-DHUK)
 

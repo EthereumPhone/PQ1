@@ -208,8 +208,7 @@ const BHK_TEST_CONSTANT: [u8; 32] = *b"PQSIGNER-TEST-BHK-DHUK-WRAP-v1!!";
 ///    this is intentional: it lets us add BHK call sites
 ///    incrementally without breaking pre-Tier-2 builds. Production
 ///    builds enable `bhk` to flip to the real silicon path.
-#[allow(dead_code)] // Phase 2A: API present, no callers yet.
-pub(crate) fn derive_into_bhk(label: &[u8], output: &mut [u8]) -> Result<(), OtpError> {
+fn derive_into_bhk(label: &[u8], output: &mut [u8]) -> Result<(), OtpError> {
     #[cfg(feature = "bhk-hardcoded-master-key")]
     {
         let mut k = BHK_TEST_CONSTANT;
@@ -279,23 +278,34 @@ pub fn optiga_pairing_secret() -> Result<[u8; 64], OtpError> {
 /// 16-byte SE050 SCP03 encryption key. Rotated per device (replaces
 /// the published AN12436 default) once we wire this into the SE050
 /// SCP03 channel — see work-todo #20.
+///
+/// **Tier-2 split:** SE050 secrets derive from `derive_into_bhk` (the
+/// BHK SAES axis), so a DHUK compromise alone doesn't expose the
+/// SE050 channel. With the `bhk` feature off (the current default)
+/// `derive_into_bhk` falls through to `derive_into` (DHUK) — same
+/// bytes as before Phase 2C; the split only takes effect once `bhk`
+/// is enabled and the BHK lifecycle (`hw::bhk`) has provisioned.
 pub fn se050_scp03_enc_key() -> Result<[u8; 16], OtpError> {
     let mut out = [0u8; 16];
-    derive_into(b"pqsigner/se050-scp03-enc-v1", &mut out)?;
+    derive_into_bhk(b"pqsigner/se050-scp03-enc-v1", &mut out)?;
     Ok(out)
 }
 
 /// 16-byte SE050 SCP03 MAC key. Paired with `se050_scp03_enc_key`.
+/// Same BHK-axis derivation (Tier-2 split — see `se050_scp03_enc_key`).
 pub fn se050_scp03_mac_key() -> Result<[u8; 16], OtpError> {
     let mut out = [0u8; 16];
-    derive_into(b"pqsigner/se050-scp03-mac-v1", &mut out)?;
+    derive_into_bhk(b"pqsigner/se050-scp03-mac-v1", &mut out)?;
     Ok(out)
 }
 
 /// 32-byte TROPIC01 pairing key. Consumed by the Tropic driver's
 /// Noise_KK handshake once we wire it through — today the Tropic
-/// driver uses a hardcoded pairing key; migrating to this derivation
-/// is tracked alongside work-todo #20.
+/// driver uses a hardcoded pairing key and the `tropic01-se` backend
+/// isn't built into the shipping target, so this derivation is
+/// currently unused. Stays on `derive_into` (DHUK) for now; would
+/// move to `derive_into_bhk` (BHK axis) alongside SE050 if/when
+/// TROPIC01 is re-enabled.
 pub fn tropic01_pairing_key() -> Result<[u8; 32], OtpError> {
     let mut out = [0u8; 32];
     derive_into(b"pqsigner/tropic01-pair-v1", &mut out)?;
@@ -304,28 +314,35 @@ pub fn tropic01_pairing_key() -> Result<[u8; 32], OtpError> {
 
 /// 16-byte SE050 admin-wipe PIN. Backs `ADMIN_WIPE_OBJ` (the admin
 /// UserID that holds `DELETE` authority on every user object via the
-/// two-entry TAG_POLICY). Being OTP-derived means:
+/// two-entry TAG_POLICY). Derived (never persisted to flash), so:
 ///
-/// - **Stable across power cycles.** No flash pairing — page 125's
-///   admin-PIN slot becomes redundant. Previous design stored a
-///   TRNG-generated PIN in page 125 and mirrored it against the
-///   on-chip admin UserID; any operation that erased the flash PIN
-///   while the on-chip admin survived desynchronised the two, which
-///   retired OID ranges v3 (0x7B06), v4 (0x7B0C), and v5 (0x7B0E).
-///   OTP is one-way and survives flash mass-erase, so the derivation
-///   is the one credential the chip can always reproduce.
-/// - **Deterministic under `dev-testkey`.** The `otp-hardcoded-master-
-///   key` feature (which `dev-testkey` pulls in) substitutes the
-///   32-byte ASCII test master for the real OTP read, so every dev
-///   board + fresh-flashed firmware combination yields the same
+/// - **Stable across power cycles + reflashes + flash mass-erase.**
+///   The derivation root is a silicon HUK (DHUK via SAES, or — Tier 2
+///   — the BHK; or the OTP master on the legacy fallback), none of
+///   which a system reset / reflash / bank mass-erase touches.
+///   (Exception: the BHK itself lives in mass-erasable flash page
+///   126, so a *RDP regression* loses it → SE050 needs re-pairing
+///   afterward. OPTIGA's PBS, on the DHUK directly, survives that.)
+///   Earlier designs stored a TRNG PIN in flash page 125 and mirrored
+///   it against the on-chip admin UserID; any op that erased the
+///   flash PIN while the on-chip admin survived desynchronised the
+///   two — that's gone now (no `write_admin_pin` / `read_admin_pin`).
+/// - **Deterministic under the dev hardcoded-key features** (`otp-
+///   hardcoded-master-key` / `bhk-hardcoded-master-key`): the
+///   compile-time constant substitutes for the silicon HUK, so every
+///   dev board + fresh-flashed firmware combination yields the same
 ///   admin PIN — swap chips, reflash, power-cycle, and the admin
 ///   UserID from the previous run is still delete-able.
-/// - **Per-device in production.** Without `otp-hardcoded-master-key`
-///   the OTP master is a per-board TRNG burn, so the admin PIN is
-///   unique per device. A flash dump of one device cannot admin-wipe
+/// - **Per-die in production.** The HUK is per-die (DHUK at RDP ≥ 1,
+///   or the per-board TRNG OTP master), so the admin PIN is unique
+///   per device — a flash dump of one device cannot admin-wipe
 ///   another.
+///
+/// **Tier-2 split:** routes through `derive_into_bhk` (BHK axis) — see
+/// `se050_scp03_enc_key`. Inert until `bhk` is enabled (falls through
+/// to the DHUK `derive_into` otherwise).
 pub fn se050_admin_pin() -> Result<[u8; 16], OtpError> {
     let mut out = [0u8; 16];
-    derive_into(b"pqsigner/se050-admin-pin-v1", &mut out)?;
+    derive_into_bhk(b"pqsigner/se050-admin-pin-v1", &mut out)?;
     Ok(out)
 }
