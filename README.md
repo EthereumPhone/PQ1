@@ -875,6 +875,8 @@ Nothing in this list is optional. Each item is something that has bricked, leake
 
 ### A. Hardware design & PCB
 
+> Full requirements spec + a feature → requirement → enforced-in → status traceability table: [`docs/hardware_requirements.md`](docs/hardware_requirements.md).
+
 - [ ] PCB review by an embedded-security specialist (not just the original layout engineer)
 - [ ] OPTIGA Trust M and SE050: today they share I2C1 (addresses 0x30 and 0x48); for production, evaluate moving SE050 to a second I²C peripheral so a fault on one cannot wedge the other (independent reset already required below)
 - [ ] No test pads, no debug headers, no probe points exposing either SE bus, the OLED bus, the button GPIOs, or any S-world peripheral
