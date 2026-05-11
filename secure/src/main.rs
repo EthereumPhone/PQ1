@@ -589,6 +589,37 @@ fn main() -> ! {
         }
     }
 
+    // Tier-2 BHK boot-time load + lock. Only when the `bhk` production
+    // feature is on (and the dev/self-test shortcuts are off). First
+    // boot of an unprovisioned device generates + wraps + stores the
+    // BHK; every subsequent boot unwraps it into the TAMP backup
+    // registers and sets `BHKLOCK` so only SAES can read it. Must run
+    // after `saes::init()` (the wrap/unwrap uses DHUK-ECB) and before
+    // any `KeySel::Bhk` derivation. Under `otp-hardcoded-master-key` /
+    // `bhk-hardcoded-master-key` / `saes-self-test` the BHK path stays
+    // on the software fallback and this is skipped.
+    #[cfg(all(feature = "bhk", not(feature = "otp-hardcoded-master-key"), not(feature = "bhk-hardcoded-master-key"), not(feature = "saes-self-test")))]
+    unsafe {
+        if !hw::bhk::is_provisioned() {
+            match hw::bhk::provision() {
+                Ok(()) => {
+                    secure_log!("[S] BHK provisioned (first boot)");
+                }
+                Err(e) => {
+                    secure_log!("[S] BHK provision FAIL: {:?}", e);
+                }
+            }
+        }
+        match hw::bhk::load_and_lock() {
+            Ok(()) => {
+                secure_log!("[S] BHK loaded + BHKLOCK set");
+            }
+            Err(e) => {
+                secure_log!("[S] BHK load FAIL: {:?} — BHK derivations will error", e);
+            }
+        }
+    }
+
     // Initialize I2C1 for SE050 and/or OPTIGA Trust M BEFORE any SE operations.
     // Both chips share I2C1 (SE050 at 0x48, OPTIGA at 0x30). No address conflict.
     // Must come after rcc::init() (clocks) and sau::init() (peripherals).

@@ -96,6 +96,13 @@ pub mod boot_pulse;
 #[cfg(feature = "uart-console")]
 pub mod uart;
 
+/// Tier-2 BHK (Boot Hardware Key) lifecycle — first-boot TRNG
+/// generation + DHUK-ECB wrap + flash write; subsequent-boot unwrap +
+/// TAMP backup-register load + `BHKLOCK`. Compiled only under the
+/// `bhk` feature (OFF by default — see module docs).
+#[cfg(feature = "bhk")]
+pub mod bhk;
+
 /// Domain-separated per-purpose subkeys derived from the OTP master
 /// (OPTIGA PBS, SE050 SCP03, TROPIC01 pairing, ...). Only compiled on
 /// real hardware — the underlying OTP master key lives in STM32U585-
