@@ -814,6 +814,31 @@ se050-admin-wipe-e2e:
 	@echo "==> Running admin-wipe e2e (watch semihosting output)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# SE050 admin-extract-attempt e2e — NEGATIVE security test.
+# Falsifies the load-bearing claim that the two-entry TAG_POLICY (user →
+# READ|WRITE|DELETE, admin → DELETE only) is silicon-enforced. Provisions
+# a 32-B sentinel on isolated OID range 0x7B0B_xxxx under user-PIN gating,
+# then:
+#   step 3: user-auth READ must return the sentinel (test setup valid)
+#   step 4: admin-auth READ must be REFUSED  ← the security property
+#   step 5: same admin session DELETEs all 3 objects (proves admin was real)
+# PASS = chip silicon enforced the read deny. FAIL = security regression
+# (admin extracted a user-PIN-gated secret — would mean a DHUK/BHK leak
+# could drain funds, contrary to the threat model in CLAUDE.md §"Hardware
+# PIN gating, three-way lockstep").
+# Watch semihosting for "[E2E-EXTRACT] ADMIN-EXTRACT ATTEMPT: PASS"/"FAIL".
+# Repeatable on the same chip (step 1 cleans up prior residue).
+se050-admin-extract-attempt-e2e:
+	@echo "==> Building SE050 admin-extract-attempt e2e firmware..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features se050-admin-extract-attempt-e2e,ui-noop,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key
+	@echo "==> Flashing admin-extract-attempt e2e firmware..."
+	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Running admin-extract-attempt e2e (watch semihosting output)..."
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # SE050 + OLED interactive build (real SE050, real OLED display, real buttons).
 # Full first-boot wizard: user enters PIN and creates/restores mnemonic.
 # Both the SSD1306 OLED and SE050 share I2C1 (PB8/PB9) at 400 kHz.

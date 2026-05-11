@@ -384,6 +384,13 @@ dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy acro
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
 se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated OID range. Use `make se050-admin-wipe-e2e`.
+# Negative security test: prove the admin PIN CANNOT read user-PIN-gated
+# secrets (only delete them). Provisions a sentinel under user-PIN gating
+# with admin-DELETE in the policy, then asserts admin-auth READ is refused
+# while admin-auth DELETE succeeds. PASS = chip enforced read deny.
+# Falsifies the load-bearing claim that the two-entry TAG_POLICY is
+# silicon-enforced rather than driver-enforced. Use `make se050-admin-extract-attempt-e2e`.
+se050-admin-extract-attempt-e2e = ["se050"]
 # OPTIGA Trust M admin-wipe e2e: provision → unlock → factory_reset →
 # verify sentinel + NotProvisioned. Exercises the `factory_reset` primitive
 # NOT the PIN-lockout→wipe integration (that's a separate deferred test).

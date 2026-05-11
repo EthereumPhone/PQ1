@@ -577,6 +577,55 @@ to forge" — a qualitative change in the attacker cost model.
 - `secure/src/measured_boot.rs` — unchanged (keeps driving OLED
   attestation + #22 manifest).
 
+### Empirically validated: SE PIN gate survives a DHUK/BHK leak
+
+The full threat-model claim — "a DHUK leak (or, post-Phase-2C, a BHK
+leak) does not drain funds because the user PIN gate is enforced in
+SE silicon, not by the encrypted channel" — is now backed by a
+falsifiable hardware test rather than just a code review.
+
+`run_admin_extract_attempt` (`secure/src/se050/mod.rs`) provisions an
+isolated test sentinel on OID range `0x7B0B_xxxx` under the same
+two-entry `TAG_POLICY` template the production code uses for half_E
+(`apdu::build_policy`, `se050/apdu.rs:339-365`):
+
+- user entry: `READ | WRITE | DELETE | REQUIRE_SM`
+- admin entry: `DELETE | REQUIRE_SM` (no `READ` bit)
+
+The test then opens an admin session (with the admin PIN that is, in
+the threat model, recoverable from a DHUK leak), authenticates
+successfully against the chip, and:
+
+1. attempts to READ the sentinel — the chip refuses with
+   `SW=0x6986` ("security status not satisfied"),
+2. immediately DELETEs all three objects in the same session — the
+   chip accepts, proving the refusal in step 1 was a genuine read-
+   deny and not bogus authentication.
+
+Validated 2026-05-11 on B-U585I-IOT02A board #1 (ST-LINK SN
+`0029…3838`) via `make se050-admin-extract-attempt-e2e`. Semihosting
+trace ends with:
+
+```
+[E2E-EXTRACT] step 4: admin-auth read REFUSED (Status(27014)) — security property holds
+[E2E-EXTRACT] step 5: admin-auth delete OK (admin session was genuinely admin → step 4 refusal was a real READ deny, not bogus-auth)
+[E2E-EXTRACT] PASS: admin can DELETE but NOT READ user-PIN-gated secrets
+```
+
+Operational implication of this finding: a DHUK leak (or future BHK
+leak) gives the attacker the SE050 admin PIN, which lets them
+**brick** a stolen wallet (delete the seed half — DoS only) but not
+**extract** funds. To extract, they still need 1-in-1,000,000 luck
+on the user-PIN gate before the SE auto-bricks at the 10-attempt
+cap. The test is repeatable and should run in CI on any commit
+touching `secure/src/se050/apdu.rs` so that an accidental
+`AR_ALLOW_READ` bit added to the admin policy entry fails the build
+loudly rather than silently regressing the threat model. The
+OPTIGA side (`half_O` gated by `Auto(F1D0)` AuthRef, where E140/PBS
+authenticates the channel but does not satisfy the read AC) is a
+different mechanism with the same property and is not yet covered
+by an analogous E2E.
+
 ## 3. Hallucination + verification log
 
 The research-round prompts told the AI to cite primary sources and

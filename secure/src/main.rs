@@ -1015,6 +1015,31 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- SE050 admin-extract-attempt e2e ----
+    // Negative security test: prove the admin PIN cannot extract user-PIN-
+    // gated secrets. Provisions a sentinel under user-PIN gating with
+    // admin-DELETE in the policy, then asserts admin-auth READ is refused
+    // while admin-auth DELETE succeeds. PASS = silicon enforced the two-
+    // entry TAG_POLICY (admin → DELETE only). FAIL = security regression.
+    // Uses test OID range 0x7B0B_xxxx; never touches production provisioning.
+    // Triggered by: make se050-admin-extract-attempt-e2e
+    #[cfg(feature = "se050-admin-extract-attempt-e2e")]
+    unsafe {
+        ui::show_status("Admin extract", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        match se.run_admin_extract_attempt() {
+            Ok(()) => {
+                secure_log!("[S] [E2E-EXTRACT] ADMIN-EXTRACT ATTEMPT: PASS (admin cannot read user-PIN-gated secrets)");
+                ui::show_status("Admin extract", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [E2E-EXTRACT] ADMIN-EXTRACT ATTEMPT: FAIL ({:?})", _e);
+                ui::show_status("Admin extract", "FAIL");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e ----
     // Exercises `DualSecureElement::provision` + `DualSecureElement::
     // unlock` end-to-end on real silicon: pre-clean → provision →

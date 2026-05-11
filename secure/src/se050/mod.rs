@@ -635,6 +635,244 @@ impl Se050 {
         Ok(())
     }
 
+    /// Negative security test: prove the admin PIN **cannot** read user-PIN-
+    /// gated secrets, only delete them. Falsifies the load-bearing claim
+    /// that the two-entry TAG_POLICY (user → READ|WRITE|DELETE, admin →
+    /// DELETE only — see `apdu::build_policy` at `se050/apdu.rs:339-365`)
+    /// is silicon-enforced, not driver-enforced.
+    ///
+    /// The relevant threat model: if `hw::secret_keys::se050_admin_pin()` is
+    /// derived from a key that leaks (DHUK today; BHK after Tier-2 phase 2C),
+    /// an attacker with physical access can authenticate as admin. This test
+    /// asserts that even with a fully authenticated admin session, the chip
+    /// refuses to release secret bytes — i.e. user PIN remains the read gate.
+    ///
+    /// Sequence on isolated OID range `0x7B0B_xxxx`:
+    ///   1. Cleanup prior residue.
+    ///   2. Provision admin UserID, user UserID, secret data object with
+    ///      the two-entry policy. Secret payload is a 32-B sentinel.
+    ///   3. Sanity: open user session, verify user PIN, READ secret → must
+    ///      return the sentinel byte-for-byte (else test setup is broken).
+    ///   4. ATTACK: open admin session, verify admin PIN, READ secret →
+    ///      **must** be refused. Success here is a security failure.
+    ///   5. Control: same admin session DELETEs all three objects → must
+    ///      succeed (proves the admin session is genuinely admin-authed,
+    ///      so step 4's refusal wasn't due to bogus auth).
+    ///   6. Verify nothing survives.
+    ///
+    /// PASS iff: step 3 read matches sentinel, step 4 read errors, step 5
+    /// deletes succeed, step 6 finds chip empty.
+    ///
+    /// Uses OIDs distinct from production (`0x7B10_xxxx`) and from the
+    /// admin-wipe (`0x7B09`) / crash-safety (`0x7B0A`) test ranges so it
+    /// runs safely on a chip with real provisioning. Repeatable.
+    #[cfg(feature = "se050-admin-extract-attempt-e2e")]
+    pub fn run_admin_extract_attempt(&mut self) -> Result<(), Se050Error> {
+        self.init()?;
+
+        const TEST_USER:  u32 = 0x7B0B_0000;
+        const TEST_DATA:  u32 = 0x7B0B_0001;
+        const TEST_ADMIN: u32 = 0x7B0B_00A0;
+        let user_pin:  [u8; 8]  = *b"testuser";
+        let admin_pin: [u8; 16] = *b"testadminpin1234";
+        // 32-B sentinel: distinct, non-zero, unmistakable in a hex dump.
+        let payload: [u8; 32] = [
+            0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED, 0xFA, 0xCE,
+            0xC0, 0xFF, 0xEE, 0x42, 0x13, 0x37, 0xB0, 0x0B,
+            0x53, 0x45, 0x43, 0x52, 0x45, 0x54, 0x21, 0x21,
+            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+        ];
+
+        unsafe {
+            // ---- 1. Cleanup prior residue via admin session ----
+            if apdu::check_exists(&mut self.t1, &mut self.scp03, TEST_ADMIN)
+                .unwrap_or(false)
+            {
+                if let Ok(sid) = apdu::create_session(
+                    &mut self.t1, &mut self.scp03, TEST_ADMIN,
+                ) {
+                    if apdu::verify_session(
+                        &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                    ).is_ok() {
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_USER,
+                        );
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, TEST_ADMIN,
+                        );
+                    }
+                    let _ = apdu::close_session(
+                        &mut self.t1, &mut self.scp03, &sid,
+                    );
+                }
+
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, TEST_ADMIN)
+                    .unwrap_or(true)
+                {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!("[E2E-EXTRACT] cleanup FAILED: test-admin stuck");
+                    return Err(Se050Error::Status(0x6986));
+                }
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!("[E2E-EXTRACT] step 1: cleanup OK");
+
+            // ---- 2. Provision admin + user UserIDs + secret data object ----
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN, &admin_pin, 0, None,
+            )?;
+            apdu::write_userid(
+                &mut self.t1, &mut self.scp03,
+                TEST_USER, &user_pin, 5, Some(TEST_ADMIN),
+            )?;
+            apdu::write_binary_gated(
+                &mut self.t1, &mut self.scp03,
+                TEST_DATA, &payload, TEST_USER, Some(TEST_ADMIN),
+            )?;
+
+            #[cfg(feature = "debug-log")]
+            secure_log!(
+                "[E2E-EXTRACT] step 2: provision OK \
+                 (policy: user=READ|WRITE|DELETE, admin=DELETE only)"
+            );
+
+            // ---- 3. Sanity: USER auth CAN read the sentinel ----
+            // If this fails, the test setup is wrong — the secret should
+            // be readable by whoever holds the user PIN. A failure here
+            // means we cannot draw any conclusion from step 4.
+            {
+                let sid = apdu::create_session(
+                    &mut self.t1, &mut self.scp03, TEST_USER,
+                )?;
+                if apdu::verify_session(
+                    &mut self.t1, &mut self.scp03, &sid, &user_pin,
+                ).is_err() {
+                    let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                    #[cfg(feature = "debug-log")]
+                    secure_log!("[E2E-EXTRACT] step 3: user PIN verify FAILED — test setup broken");
+                    return Err(Se050Error::Status(0xDEAD));
+                }
+
+                let mut buf = [0u8; 64];
+                let read_result = apdu::read_authed(
+                    &mut self.t1, &mut self.scp03, &sid, TEST_DATA, &mut buf,
+                );
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+
+                match read_result {
+                    Ok(n) => {
+                        if n != payload.len() || buf[..n] != payload {
+                            #[cfg(feature = "debug-log")]
+                            secure_log!(
+                                "[E2E-EXTRACT] step 3: user read returned {} bytes, sentinel mismatch — test broken",
+                                n
+                            );
+                            return Err(Se050Error::Status(0xDEAE));
+                        }
+                        #[cfg(feature = "debug-log")]
+                        secure_log!(
+                            "[E2E-EXTRACT] step 3: user-auth read OK ({} B match sentinel)",
+                            n
+                        );
+                    }
+                    Err(_e) => {
+                        #[cfg(feature = "debug-log")]
+                        secure_log!(
+                            "[E2E-EXTRACT] step 3: user-auth read FAILED ({:?}) — test broken",
+                            _e
+                        );
+                        return Err(Se050Error::Status(0xDEAF));
+                    }
+                }
+            }
+
+            // ---- 4. ATTACK: admin auth attempts to extract the secret ----
+            // The security claim under test. Per `apdu::build_policy` admin
+            // has ALLOW_DELETE only, no ALLOW_READ. The chip must refuse.
+            let admin_sid = apdu::create_session(
+                &mut self.t1, &mut self.scp03, TEST_ADMIN,
+            )?;
+            apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &admin_sid, &admin_pin,
+            ).map_err(|e| {
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &admin_sid);
+                e
+            })?;
+
+            let mut attack_buf = [0u8; 64];
+            let attack_result = apdu::read_authed(
+                &mut self.t1, &mut self.scp03, &admin_sid, TEST_DATA, &mut attack_buf,
+            );
+
+            if let Ok(n) = attack_result {
+                let leaked_sentinel = n >= payload.len() && attack_buf[..payload.len()] == payload;
+                #[cfg(feature = "debug-log")]
+                secure_log!(
+                    "[E2E-EXTRACT] step 4: SECURITY FAILURE — admin-auth read returned {} bytes (sentinel leaked: {})",
+                    n,
+                    leaked_sentinel
+                );
+                // Don't even try to clean up; we want this case loud.
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &admin_sid);
+                // 0xBAD0 = "admin extracted user-gated secret"
+                return Err(Se050Error::Status(0xBAD0));
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!(
+                "[E2E-EXTRACT] step 4: admin-auth read REFUSED ({:?}) — security property holds",
+                attack_result.err().unwrap()
+            );
+
+            // ---- 5. Control: admin CAN delete (proves admin session is real) ----
+            // If admin's auth were bogus, step 4's refusal could be a false
+            // positive. A successful delete here closes that loophole: the
+            // chip accepted the admin credentials for the DELETE operation
+            // but specifically denied them for READ.
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &admin_sid, TEST_DATA,
+            )?;
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &admin_sid, TEST_USER,
+            )?;
+            apdu::delete_object_authed(
+                &mut self.t1, &mut self.scp03, &admin_sid, TEST_ADMIN,
+            )?;
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &admin_sid);
+
+            #[cfg(feature = "debug-log")]
+            secure_log!(
+                "[E2E-EXTRACT] step 5: admin-auth delete OK \
+                 (admin session was genuinely admin → step 4 refusal was a real READ deny, \
+                 not bogus-auth)"
+            );
+
+            // ---- 6. Verify nothing survives ----
+            for obj in &[TEST_USER, TEST_DATA, TEST_ADMIN] {
+                if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj)
+                    .unwrap_or(true)
+                {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!(
+                        "[E2E-EXTRACT] step 6: 0x{:08x} survived wipe", obj
+                    );
+                    return Err(Se050Error::Status(0x6A83));
+                }
+            }
+
+            #[cfg(feature = "debug-log")]
+            secure_log!(
+                "[E2E-EXTRACT] PASS: admin can DELETE but NOT READ user-PIN-gated secrets"
+            );
+        }
+
+        Ok(())
+    }
+
     /// Two-phase crash-safety test: simulates power loss mid-wipe on test
     /// OID range `0x7B0A_xxxx`, then verifies the boot-time resume mechanism
     /// correctly finishes the wipe after reset.
