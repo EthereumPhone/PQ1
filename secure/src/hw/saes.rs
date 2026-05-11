@@ -446,6 +446,29 @@ fn run_ecb_block(
             write_volatile(SAES_KEYR0, k7);
         }
 
+        // For the BHK selectors (`Bhk` = "software key" loaded from the
+        // TAMP backup registers, `DhukXorBhk` = DHUK XOR that), the SAES
+        // only latches the BHK after the CPU reads TAMP_BKP0R..BKP7R —
+        // 8 dummy reads, a hardware side-effect even when `BHKLOCK` is
+        // set (the reads return 0 to the CPU but trigger the SAES to
+        // pull the real, hardware-visible BHK). This mirrors Trezor's
+        // `secure_aes_load_bhk()` in `core/embed/sec/secure_aes/stm32u5/
+        // secure_aes.c`, called between `HAL_CRYP_Init` (which programs
+        // KEYSEL) and the encrypt/decrypt op. Without it, `SR.KEYVALID`
+        // never asserts and the op times out with `KeyInvalid`.
+        //
+        // Only compiled under `bhk` — `KeySel::Bhk` is never used unless
+        // the BHK lifecycle (`hw::bhk`) is in the build, which `bhk`
+        // gates. TAMP secure-alias base 0x5600_7C00; BKP0R at +0x100.
+        #[cfg(feature = "bhk")]
+        if matches!(keysel, KeySel::Bhk | KeySel::DhukXorBhk) {
+            const TAMP_BKP0R: u32 = 0x5600_7C00 + 0x100;
+            for i in 0..8u32 {
+                let _ = read_volatile((TAMP_BKP0R + i * 4) as *const u32);
+            }
+            cortex_m::asm::dsb();
+        }
+
         // Wait for SR.KEYVALID — HAL polls this in CRYP_AES_Encrypt /
         // Decrypt for every SAES op, regardless of KEYSEL. For SW keys
         // it asserts after the KEYR writes settle; for DHUK/BHK it

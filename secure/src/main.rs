@@ -244,6 +244,82 @@ fn saes_self_test_and_halt() -> ! {
             }
         }
     }
+
+    // Tier-2 BHK lifecycle self-test (only when the `bhk` feature is
+    // also on). Provisions the BHK if blank (writes the DHUK-wrapped
+    // bytes to flash page 126 — erasable), loads it into the TAMP
+    // backup registers + sets BHKLOCK, then runs a KeySel::Bhk
+    // encrypt/decrypt round-trip and reports an 8-byte per-die BHK
+    // fingerprint. At RDP0 the fingerprint is NOT per-die (the DHUK
+    // that wrapped the BHK is the ST-substituted constant); at RDP ≥ 1
+    // it would be per-die — but per-die BHK validation needs the BHK
+    // provisioned WHILE at RDP1, which this RDP0-bench path does not do.
+    #[cfg(feature = "bhk")]
+    match hw::bhk::self_test() {
+        Ok(fp) => {
+            secure_log!(
+                "[S][bhk] self_test PASS  BHK(fp)={:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+                fp[0], fp[1], fp[2], fp[3], fp[4], fp[5], fp[6], fp[7]
+            );
+            #[cfg(feature = "uart-console")]
+            {
+                hw::uart::write_str("[S][bhk] self_test PASS  BHK(fp)=");
+                hw::uart::write_hex_8(&fp);
+                hw::uart::write_str("\r\n");
+                hw::uart::flush();
+            }
+            #[cfg(feature = "ui-oled")]
+            {
+                const HEX: &[u8; 16] = b"0123456789abcdef";
+                let mut buf = [0u8; 16];
+                for (i, &b) in fp.iter().enumerate() {
+                    buf[i * 2] = HEX[(b >> 4) as usize];
+                    buf[i * 2 + 1] = HEX[(b & 0xF) as usize];
+                }
+                // SAFETY: hex chars are valid UTF-8.
+                let s = unsafe { core::str::from_utf8_unchecked(&buf) };
+                let d = ui::display();
+                d.draw_line(0, s); // overwrite the "BOOT 6" marker — boot is done
+                d.flush();
+            }
+        }
+        Err(e) => {
+            secure_log!("[S][bhk] self_test FAIL: {:?}", e);
+            #[cfg(feature = "uart-console")]
+            {
+                hw::uart::write_str("[S][bhk] self_test FAIL: ");
+                // No core::fmt over UART (would pull in fmt machinery);
+                // hand-encode the BhkError variant as a short tag.
+                let tag: &str = match e {
+                    hw::bhk::BhkError::NotProvisioned => "NotProvisioned",
+                    hw::bhk::BhkError::AlreadyProvisioned => "AlreadyProvisioned",
+                    hw::bhk::BhkError::Flash => "Flash",
+                    hw::bhk::BhkError::Saes(se) => match se {
+                        hw::saes::SaesError::ShsiTimeout => "Saes(ShsiTimeout)",
+                        hw::saes::SaesError::RngSeedError => "Saes(RngSeedError)",
+                        hw::saes::SaesError::BusyTimeout => "Saes(BusyTimeout)",
+                        hw::saes::SaesError::CcfTimeout => "Saes(CcfTimeout)",
+                        hw::saes::SaesError::BusError => "Saes(BusError)",
+                        hw::saes::SaesError::KeyInvalid => "Saes(KeyInvalid)",
+                        hw::saes::SaesError::KeyConfigMismatch => "Saes(KeyConfigMismatch)",
+                        hw::saes::SaesError::SelfTestRoundTrip => "Saes(SelfTestRoundTrip)",
+                        hw::saes::SaesError::SelfTestDomainCollision => "Saes(SelfTestDomainCollision)",
+                    },
+                    hw::bhk::BhkError::Rng => "Rng",
+                };
+                hw::uart::write_str(tag);
+                hw::uart::write_str("\r\n");
+                hw::uart::flush();
+            }
+            #[cfg(feature = "ui-oled")]
+            {
+                let d = ui::display();
+                d.draw_line(0, "BHK self_test FAIL");
+                d.flush();
+            }
+        }
+    }
+
     secure_log!("[S][saes] self-test complete — halting");
     // Under `saes-self-test` alone (with probe-rs / debugger), SYS_EXIT
     // cleanly returns so probe-rs sees the test PASS and exits.

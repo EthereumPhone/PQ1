@@ -91,23 +91,27 @@ const TAMP_BKP0R: u32 = TAMP_S + 0x100; // BKP0R; BKPnR = +4n
 const TAMP_BHKLOCK: u32 = 1 << 30;
 
 // ---------------------------------------------------------------------------
-// RCC / PWR — enabling the RTC/backup domain so the TAMP BKPR are
-// writable. Backup-domain write protection (PWR_DBPCR.DBP) must be
-// cleared before any BKPR write. Both registers via the secure alias to
-// match `hw::rcc` / `hw::flash` convention on STM32U5 with TZEN=1.
+// RCC / PWR — enabling the RTC/TAMP APB clock so the TAMP BKPR are
+// reachable, and clearing backup-domain write protection (PWR_DBPR.DBP)
+// so they're writable. Both via the secure alias to match `hw::rcc` /
+// `hw::flash` convention on STM32U5 with TZEN=1. Offsets cross-checked
+// against the `stm32u5-0.16.0` PAC.
 // ---------------------------------------------------------------------------
 
-// RCC secure alias 0x5602_0C00. AHB3 bus.
+// RCC secure alias 0x5602_0C00.
 const RCC_S: u32 = 0x5602_0C00;
-// RCC_AHB3ENR (offset 0x94 on STM32U5) — bit 21 = RTCAPBEN (RTC/TAMP APB).
-const RCC_AHB3ENR: *mut u32 = (RCC_S + 0x94) as *mut u32;
-const RCC_AHB3ENR_RTCAPBEN: u32 = 1 << 21;
+// RCC_APB3ENR at offset 0xA8 (PAC `rcc.rs:249`); RTCAPBEN = bit 21
+// (PAC `rcc/apb3enr.rs:229`) — "RTC and TAMP APB clock enable".
+const RCC_APB3ENR: *mut u32 = (RCC_S + 0xA8) as *mut u32;
+const RCC_APB3ENR_RTCAPBEN: u32 = 1 << 21;
 
-// PWR secure alias 0x5602_0800. PWR_DBPCR (offset 0x10 on STM32U5) —
-// bit 0 = DBP (disable backup-domain write protection when set to 1).
+// PWR secure alias 0x5602_0800. PWR_DBPR at offset 0x28 (PAC
+// `pwr.rs:98-100` — "PWR disable Backup domain register"); DBP = bit 0
+// (PAC `pwr/dbpr.rs:65`) — "Disable Backup domain write protection ...
+// must be set to enable the write access to these registers".
 const PWR_S: u32 = 0x5602_0800;
-const PWR_DBPCR: *mut u32 = (PWR_S + 0x10) as *mut u32;
-const PWR_DBPCR_DBP: u32 = 1 << 0;
+const PWR_DBPR: *mut u32 = (PWR_S + 0x28) as *mut u32;
+const PWR_DBPR_DBP: u32 = 1 << 0;
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -284,15 +288,24 @@ pub unsafe fn load_and_lock() -> Result<(), BhkError> {
     wrapped.zeroize();
 
     // --- enable the RTC/TAMP APB clock + disable backup-domain WP ---
-    let ahb3 = read_volatile(RCC_AHB3ENR);
-    write_volatile(RCC_AHB3ENR, ahb3 | RCC_AHB3ENR_RTCAPBEN);
-    let _ = read_volatile(RCC_AHB3ENR); // propagation barrier
+    let apb3 = read_volatile(RCC_APB3ENR);
+    write_volatile(RCC_APB3ENR, apb3 | RCC_APB3ENR_RTCAPBEN);
+    let _ = read_volatile(RCC_APB3ENR); // propagation barrier
     cortex_m::asm::dsb();
 
-    let dbpcr = read_volatile(PWR_DBPCR);
-    write_volatile(PWR_DBPCR, dbpcr | PWR_DBPCR_DBP);
-    // Per RM0456 the DBP bit takes a few cycles to take effect; poll it.
-    while read_volatile(PWR_DBPCR) & PWR_DBPCR_DBP == 0 {}
+    let dbpr = read_volatile(PWR_DBPR);
+    write_volatile(PWR_DBPR, dbpr | PWR_DBPR_DBP);
+    // Bounded poll for DBP to settle — don't hang the boot if the
+    // register doesn't behave as expected.
+    {
+        let mut t: u32 = 1_000_000;
+        while read_volatile(PWR_DBPR) & PWR_DBPR_DBP == 0 {
+            t -= 1;
+            if t == 0 {
+                break;
+            }
+        }
+    }
 
     // --- write the 32 BHK bytes into BKP0R..BKP7R (8 × u32, LE) ---
     for i in 0..8usize {
