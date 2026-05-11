@@ -387,16 +387,13 @@ impl DualSecureElement {
         // stuck legacy objects don't affect the test.
         #[cfg(feature = "stm32u585")]
         unsafe {
-            // Stage (a): admin auth if page 125 has a PIN.
-            let admin_blank = crate::hw::flash::is_admin_pin_blank();
-            secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (a): admin_pin_blank={}", admin_blank);
-            if !admin_blank {
-                let mut admin_pin = [0u8; 16];
-                crate::hw::flash::read_admin_pin(&mut admin_pin);
-                let r = self.se050.admin_factory_reset(&admin_pin);
-                secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (a): admin_factory_reset → {:?}", r.as_ref().err());
-                admin_pin.zeroize();
-            }
+            // Stage (a): admin-auth wipe via the v6 OTP-derived admin
+            // PIN (`factory_reset_admin` → `secret_keys::se050_admin_pin`
+            // → `admin_factory_reset` → conditional page-125 erase).
+            // This is the only admin-PIN source on v6 chips; the
+            // pre-v6 page-125 PIN slot is gone (no `write_admin_pin`).
+            let r = self.se050.factory_reset_admin();
+            secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (a): factory_reset_admin → {:?}", r.as_ref().err());
 
             // Stage (b): user-PIN cascade if USERID_OBJ survived.
             let se_prov_before = self.se050.is_provisioned();
@@ -608,13 +605,8 @@ impl DualSecureElement {
 
             #[cfg(feature = "stm32u585")]
             unsafe {
-                let admin_blank = crate::hw::flash::is_admin_pin_blank();
-                if !admin_blank {
-                    let mut admin_pin = [0u8; 16];
-                    crate::hw::flash::read_admin_pin(&mut admin_pin);
-                    let _ = self.se050.admin_factory_reset(&admin_pin);
-                    admin_pin.zeroize();
-                }
+                // Admin-auth wipe via the v6 OTP-derived admin PIN.
+                let _ = self.se050.factory_reset_admin();
                 if self.se050.is_provisioned() {
                     const PIN_CANDIDATES: &[&[u8]] = &[
                         b"00000000", b"dualwipe", b"12345678", b"11111111",

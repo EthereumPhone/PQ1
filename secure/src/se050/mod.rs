@@ -1953,8 +1953,11 @@ impl WalletStore for Se050 {
         pin: &[u8; 8],
     ) -> Result<(), SeError> {
         // Admin-wipe flow (STM32 target only — QEMU has no flash):
-        //   1. Load or generate the per-device admin PIN via STM32 TRNG,
-        //      persist to secure flash page 125.
+        //   1. Derive the per-device admin PIN via
+        //      `secret_keys::se050_admin_pin()` — `SAES-CMAC(DHUK, ...)`
+        //      on a shipping build, `HKDF(OTP_master, ...)` on the
+        //      legacy fallback. Nothing is persisted to flash; the PIN
+        //      is re-derivable on every boot from silicon HUK state.
         //   2. Provision ADMIN_WIPE_OBJ UserID with that PIN.
         //   3. Run a canary round-trip selftest proving the admin-delete
         //      policy actually works (guardrail against TLV byte-order
@@ -2141,21 +2144,19 @@ impl WalletStore for Se050 {
 
     #[cfg(feature = "stm32u585")]
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
-        // Re-derive the admin PIN from OTP master — the same derivation
-        // the provisioning path uses (`store_objects` calls
-        // `crate::hw::secret_keys::se050_admin_pin()` to write the
-        // admin UserID). The flash-page-125 PIN slot is a legacy of
-        // pre-v6 provisionings and is deliberately blank on chips
-        // provisioned under the v6 OTP-derived admin scheme — reading
-        // it and branching on `is_admin_pin_blank()` would route
-        // every v6 wipe into `iterative_wipe(None, None)`, which
-        // can't touch admin-gated user objects and leaves the wallet
-        // seed on-chip.
+        // Re-derive the admin PIN via `secret_keys::se050_admin_pin()`
+        // — the same derivation `store_objects` uses to write the admin
+        // UserID. On a shipping build that's `SAES-CMAC(DHUK, ...)`; the
+        // legacy fallback is `HKDF(OTP_master, ...)`. Either way it's
+        // deterministic per device and survives flash mass-erase. The
+        // former page-125 PIN slot is gone entirely (no `write_admin_pin`
+        // / `read_admin_pin` anymore) — a v6 chip never persists the
+        // admin PIN to flash; deriving it on demand is what closes the
+        // "lose the flash, lose the pairing" brick class.
         //
-        // Page 125 still holds the wipe-in-progress flag (for crash-
-        // safe resume) which we arm below; the flag offset is
-        // separate from the legacy PIN slot so flag operations
-        // don't touch the PIN.
+        // Page 125 still holds the wipe-in-progress flag (for crash-safe
+        // resume) at `WIPE_FLAG_OFFSET`, which we arm below — a separate
+        // slot from the dead QW0, so flag operations don't touch it.
         use zeroize::Zeroize;
 
         let mut admin_pin = match crate::hw::secret_keys::se050_admin_pin() {

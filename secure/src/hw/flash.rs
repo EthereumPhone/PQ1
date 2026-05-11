@@ -335,7 +335,9 @@ pub unsafe fn write_key(key: &[u8; 32]) -> Result<(), ()> {
 pub const ADMIN_PAGE_ADDR: u32 = 0x0C0F_A000;
 const ADMIN_PAGE_NUM: u32 = 125;
 
-const ADMIN_PIN_OFFSET: u32 = 0;
+// Page-125 layout: QW0 (offset 0) is unused on v6 chips (the former
+// admin-PIN slot; dead since the OTP-derived scheme); QW1 (offset 16)
+// holds the wipe-in-progress flag.
 const WIPE_FLAG_OFFSET: u32 = 16;
 const WIPE_FLAG_ARMED: u8 = 0x00;
 
@@ -368,38 +370,15 @@ pub unsafe fn erase_admin_page() -> Result<(), ()> {
     })
 }
 
-/// Read the admin PIN from page 125 into `buf`. Caller checks
-/// `is_admin_pin_blank()` first to determine if the PIN is populated.
-pub unsafe fn read_admin_pin(buf: &mut [u8; 16]) {
-    let src = (ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET) as *const u8;
-    for i in 0..16 {
-        buf[i] = read_volatile(src.add(i));
-    }
-}
-
-/// Check whether the admin PIN slot is blank (first 16 bytes all 0xFF).
-pub unsafe fn is_admin_pin_blank() -> bool {
-    let src = (ADMIN_PAGE_ADDR + ADMIN_PIN_OFFSET) as *const u8;
-    for i in 0..16 {
-        if read_volatile(src.add(i)) != 0xFF {
-            return false;
-        }
-    }
-    true
-}
-
-// NOTE: `write_admin_pin` was removed (2026-05-11). The SE050 admin
-// PIN is no longer persisted to flash — it's re-derived on demand from
-// the OTP master via `hw::secret_keys::se050_admin_pin()` (the v6
-// OTP-derived admin scheme; see `Se050::store_objects` /
-// `Se050::factory_reset_admin`). `ADMIN_PIN_OFFSET` and
-// `read_admin_pin` / `is_admin_pin_blank` are kept only for the e2e
-// legacy-recovery cascades (`dual_se.rs`, `main.rs` pre-clean) that
-// attempt an admin wipe against bench chips provisioned by pre-v6
-// firmware — those branches are no-ops on v6-provisioned chips
-// (`is_admin_pin_blank()` is true) and can be deleted once no pre-v6
-// bench chip remains. The wipe-in-progress flag at `WIPE_FLAG_OFFSET`
-// is unrelated and stays.
+// NOTE: `write_admin_pin` / `read_admin_pin` / `is_admin_pin_blank`
+// and `ADMIN_PIN_OFFSET` were all removed (2026-05-11). The SE050
+// admin PIN is never persisted to flash — it's re-derived on demand
+// from the OTP master via `hw::secret_keys::se050_admin_pin()` (the
+// v6 OTP-derived admin scheme; see `Se050::store_objects` /
+// `Se050::factory_reset_admin`). The e2e pre-clean cascades that used
+// to read a pre-v6 flash PIN now call `Se050::factory_reset_admin()`
+// (the v6 path) directly. Page 125 still holds the wipe-in-progress
+// flag at `WIPE_FLAG_OFFSET`, which is unrelated.
 
 /// Arm the wipe-in-progress marker. Call immediately before initiating
 /// a factory reset so boot-time resume can pick up an interrupted wipe.

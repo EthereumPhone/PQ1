@@ -2132,14 +2132,11 @@ fn main() -> ! {
 
             let _ = se.optiga.factory_reset();
 
-            let admin_blank = crate::hw::flash::is_admin_pin_blank();
-            secure_log!("[S][e2e] dual-se pre-clean: admin_pin_blank={}", admin_blank);
-            if !admin_blank {
-                let mut admin_pin = [0u8; 16];
-                crate::hw::flash::read_admin_pin(&mut admin_pin);
-                let _ = se.se050.admin_factory_reset(&admin_pin);
-                admin_pin.zeroize();
-            }
+            // Admin-auth wipe via the v6 OTP-derived admin PIN
+            // (`factory_reset_admin` → `secret_keys::se050_admin_pin`).
+            // The pre-v6 page-125 PIN slot is gone (no `write_admin_pin`).
+            let r = se.se050.factory_reset_admin();
+            secure_log!("[S][e2e] dual-se pre-clean: factory_reset_admin → {:?}", r.as_ref().err());
 
             if se.se050.is_provisioned() {
                 const PIN_CANDIDATES: &[&[u8]] = &[
