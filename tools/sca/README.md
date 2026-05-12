@@ -143,18 +143,23 @@ would mean the F-1 collapse came back).
 ```
 tools/sca/
   README.md                  — this file
-  Makefile                   — `make fi` / `make c10` / `make pin` / `make sweeps` / `make build` / `make doctor` / `make clean`
+  Makefile                   — `make fi`/`c10`/`pin` (fast fault sweeps), `make kdf` (lascar leakage),
+                             —   `make sweeps`, `make build`/`build-kdf`/`doctor`/`clean`
   fault_sweep_fi.py          — FI-guard fault sweep (fi.rs: check_true / wait_random)
   fault_sweep_c10_verify.py  — C10 verify-before-release gate fault sweep
   fault_sweep_pin.py         — PIN-attempt pre-commit gate fault sweep (gated_unlock + pin_attempts_bump)
-  fi_target/                 — standalone thumbv8m crate: the test targets, in one ELF (sca-fi-target)
-    Cargo.toml               —   (its own [workspace] — detached from the PQSigner workspace)
-    build.rs                 —   places memory.x for cortex-m-rt's link.x
-    memory.x                 —   arbitrary conventional STM32-ish layout
+  leakage_kdf.py             — lascar leakage analysis: AES-256 / AES-GCM entropy wrap + a leaky-S-box positive control
+  fi_target/                 — standalone thumbv8m crate: the fault-sweep targets, in one ELF (sca-fi-target)
     src/main.rs              —   #[path]-includes ../../../../secure/src/fi.rs verbatim (sca_fi_*),
                              —   + structural mirrors of crypto.rs's verify-before-release gate (sca_c10_*)
                              —     and gated_unlock + pin_attempts_bump (sca_pin_*, with a fake page-124 counter),
                              —   + #[no_mangle] wrappers, an rng stub, and #[used] keep-statics
+    Cargo.toml / build.rs / memory.x  — own [workspace] (detached); places memory.x for cortex-m-rt's link.x
+  kdf_target/                — standalone thumbv8m crate (own [workspace]): the leakage targets, in ELF sca-kdf-target —
+    src/main.rs              —   sca_leaky_sbox (out[i]=SBOX[in[i]^KEY[i]], the positive control),
+                             —   sca_aes256_encrypt_block (the `aes` crate's AES-256, fixed key), and
+                             —   sca_aesgcm_wrap (a structural mirror of pqsigner_domain::encrypt_entropy_blob's
+                             —     AES-256-GCM wrap; uses the same crates.io deps — aes-gcm 0.10 / aes 0.8 / sha2 0.10)
 ```
 
 ## Roadmap — targets not yet wired
@@ -173,14 +178,24 @@ stable C symbols, then a `rainbow`/`lascar` harness.
   thousand SHA-256 blocks, slow but emulable if you restrict the sweep window to
   the post-`verify` gate region rather than the whole call. Win condition
   beyond the gate: no single skip makes a *bad* signature `verify()` as good.
-- **Tier-1 KDF leakage CPA** — emulate `hw::saes_cmac::cmac_dhuk` /
-  `pqsigner-domain`'s KDF over many label/counter inputs with
-  `TraceConfig(register=HammingWeight(), mem_address=HammingWeight())`, stub the
-  SAES (or test the software AES reference), and run `lascar` CPA over the
-  DHUK-derived subkey bytes. Tells you whether the *software* KDF wiring leaks;
-  the silicon SAES's own leakage still needs a scope. (At RDP0 the DHUK is the
-  ST-substituted constant anyway — see `docs/work-todo.md §7` / the per-die DHUK
-  notes — so this is a code-leakage test, not a key-recovery one.)
+- ~~**Tier-1 KDF leakage CPA**~~ — **DONE-ish** (`leakage_kdf.py` — see "### Leakage
+  analysis" below). It's a TVLA + CPA on the `mem_address` channel of the AES the
+  entropy-blob wrap uses (`pqsigner-domain`'s `encrypt_entropy_blob`, mirrored)
+  plus a leaky-S-box positive control: the toy leaks (TVLA spike, CPA recovers
+  16/16 key bytes — pipeline verified), the real AES / AES-GCM-wrap are *flat* on
+  `mem_address` (bitsliced "soft" AES → no T-table / cache mem-address channel).
+  *Not yet done*: a `lascar` CPA against the actual **Tier-1 KDF** primitive
+  (`hw::saes_cmac::cmac_dhuk`) — that's the *hardware* SAES (not emulated) on
+  device; a software-CMAC-AES reference could be emulated, but at RDP0 the DHUK is
+  the ST-substituted constant anyway (`docs/work-todo.md §7`), so it'd be a
+  code-leakage test, not a key recovery. Also not done: SPA/template/single-trace
+  analysis of the wrap key/keystream during the one-shot boot-time wrap (needs a
+  profiling setup, not fixed-vs-random TVLA), and register-HW-channel DPA of the
+  AES round keys (needs a scope on the running device — the emulated `register`
+  channel is unusable here: rainbow's per-instruction `reg_read` of every
+  capstone-named dest reg hits an invalid id inside the bitsliced AES on unicorn
+  2.1.x; `mem_address` works universally and is the meaningful "is it
+  constant-time" channel anyway).
 - ~~**PIN pre-commit skip sweep**~~ — **DONE** (`fault_sweep_pin.py` — a structural
   mirror of `nsc::gated_unlock`'s `stm32u585` branch + `hw::flash::pin_attempts_bump`,
   with the fake page-124 counter + `se.unlock` stubbed and the real `fi::*`
@@ -319,3 +334,38 @@ violation of the bump's internal invariant (none currently); stuck-at-FF on the
 bump's Ok/Err return slot produces an "Ok"-looking value, the same
 result-register-corruption class as the `fi::check_true` stuck-at-FF INFO above —
 reported, not a regression.
+
+## Leakage analysis — `leakage_kdf.py` (first lascar target)
+
+`make -C tools/sca kdf` builds the `sca-kdf-target` ELF and runs a `lascar` TVLA
+(Welch fixed-vs-random t-test) + CPA on the `mem_address` channel of three
+subjects. (The `register` channel is unusable here — rainbow's per-instruction
+`reg_read` of every capstone-named dest reg hits an invalid id inside the
+bitsliced AES on unicorn 2.1.x — and `mem_address` is the channel that matters
+for "is it constant-time?" anyway: a *data-dependent memory address* is a
+T-table / cache side channel; a data-dependent *value* in a register is
+unavoidable in any AES/GCM and needs a scope on the device, not an emulated
+fixed-vs-random test, to characterise.)
+
+| Subject | What | Result |
+|---|---|---|
+| `sca_leaky_sbox` | positive control: `out[i] = AES_SBOX[in[i] ^ KEY[i]]` (a deliberate table leak) | TVLA `max\|t\| ≈ 24` at the `SBOX[]` load address → **leakage detected**; CPA over `HW(&SBOX + (in[i] ^ guess))` recovers **16/16** key bytes (the FIPS-197 vector key) → **lascar pipeline verified, both ways** |
+| `sca_aes256_encrypt_block` | `AES-256-ENC(fixed_key, plaintext)` via the `aes` crate (the AES `pqsigner-domain`'s entropy wrap uses) | TVLA `max\|t\| = 0.00` over 600 traces → **flat**: the bitsliced "soft" backend on thumbv8m is constant-time w.r.t. its plaintext — no data-dependent memory accesses → no T-table / cache mem-address side channel |
+| `sca_aesgcm_wrap` | structural mirror of `pqsigner_domain::encrypt_entropy_blob`'s AES-256-GCM wrap of the 32-B entropy under a fixed key+nonce | TVLA `max\|t\| = 0.00` over 600 traces → **flat**: no entropy-dependent memory access (constant-time AES + constant-time GHASH) |
+
+No findings — the production AES / AES-GCM-wrap path is clean on the `mem_address`
+channel in emulation; `make kdf` exits 0. **Caveats:** (1) emulation only — the
+analog power/EM leakage of the running silicon, and register-HW DPA of the AES
+round keys, still need a scope (ChipWhisperer / PicoScope / Scaffold — see the
+`rainbow`/`lascar` skills and the earlier discussion); (2) the *deployed* entropy
+wrap is a *single* encryption with a *fixed* nonce, so there's no
+attacker-chosen-input DPA surface against it anyway — the residual is the
+single-trace leakage of the wrap key / keystream during that one boot-time
+operation (an SPA/template attack), which a profiling setup on the device would
+probe, not this fixed-vs-random TVLA; (3) `sca_aesgcm_wrap` is a *mirror* of
+`encrypt_entropy_blob` (not a `#[path]` include — `pqsigner-domain` uses
+`{ workspace = true }` deps and can't be path-dep'd from a detached workspace) —
+it uses the *same* crates.io deps (`aes-gcm` 0.10 / `aes` 0.8 / `sha2` 0.10), so
+the AES's leakage behaviour matches; KEEP IN SYNC if `encrypt_entropy_blob`'s
+shape changes (e.g. a different AEAD); (4) 600 traces is a first-pass "flat"
+claim — a real assurance argument would want more.

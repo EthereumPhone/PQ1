@@ -1,0 +1,34 @@
+# Standalone workspace — detached from the PQSigner workspace (its own profile;
+# not built by a root `cargo build`). Uses the same crates.io deps as
+# `pqsigner-domain`'s entropy-blob path (aes-gcm 0.10 / aes 0.8 / sha2 0.10),
+# so the leakage behaviour of the mirror matches the real code's.
+[workspace]
+
+[package]
+name = "sca-kdf-target"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "thumbv8m ELF for lascar leakage analysis: a structural mirror of pqsigner-domain's AES-GCM entropy-blob wrap + a deliberately-leaky S-box toy (positive control). Not shipped."
+
+[features]
+e2e-test = []
+
+[[bin]]
+name = "sca-kdf-target"
+path = "src/main.rs"
+
+[dependencies]
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+panic-halt  = "1"
+zeroize     = { version = "1", default-features = false }
+# Same as pqsigner-domain — the `aes` crate falls back to its constant-time
+# bitsliced "soft" backend on thumbv8m (no AES-NI / no ARMv8 crypto ext).
+aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+aes     = { version = "0.8", default-features = false }   # for the raw "is AES constant-time" target
+sha2    = { version = "0.10", default-features = false }
+hmac    = { version = "0.12", default-features = false }
+
+[profile.release]
+opt-level = 3            # keep emulation fast; do NOT strip (rainbow needs .symtab)
