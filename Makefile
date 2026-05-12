@@ -1687,6 +1687,54 @@ dual-se-admin-wipe-e2e:
 	@echo "==> Running dual-SE unlock e2e (watch semihosting for PASS/FAIL)..."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Tier-2 silicon-root variant of dual-se-admin-wipe-e2e: exercises the
+# SAME dual-SE unlock roundtrip + admin-wipe cascade, but with the real
+# hardware HUK roots — `saes-dhuk` (OPTIGA PBS over SAES-CMAC(DHUK)) and
+# `bhk` (SE050 SCP03 + admin PIN over SAES-CMAC(BHK)). No hardcoded test
+# keys: `otp-hardcoded-master-key` and `bhk-hardcoded-master-key` are
+# BOTH off, so this is the closest thing to the shipping derivation we
+# can run on the bench.
+#
+# What it does on first boot:
+#   - `[S] SAES initialised (Tier-1 DHUK path)`
+#   - if flash page 126 is blank: `[S] BHK provisioned (first boot)` —
+#     generates 32 TRNG bytes, DHUK-ECB-wraps them, writes page 126.
+#     REVERSIBLE: page 126 is mass-erasable (RDP regression / explicit
+#     `flash::erase_secure_page(126)`); an RDP regression on a bhk-active
+#     device just means the SE050 needs re-pairing afterward (OPTIGA's
+#     PBS is on DHUK directly and survives). No OTP is touched — with
+#     `saes-dhuk` on, `secret_keys::derive_into` routes to SAES-CMAC,
+#     never `otp::ensure_device_master` (pre-flight audit confirmed).
+#   - else: `[S] BHK loaded + BHKLOCK set` — unwraps page 126 into
+#     TAMP BKP0R..7R, sets BHKLOCK.
+#   - then the usual pre-clean cascade (`se050.factory_reset_admin()`
+#     re-derives the admin PIN via the real BHK), fresh provision, and
+#     the dual-SE unlock roundtrip.
+#
+# WIPES wallet state on BOTH chips (same as dual-se-admin-wipe-e2e).
+# Watch semihosting for the dual-SE PASS line.
+dual-se-bhk-e2e:
+	@echo "==> Building dual-SE Tier-2 (real DHUK+BHK) unlock roundtrip e2e firmware..."
+	@echo "    WARNING: this build will WIPE wallet state on BOTH chips,"
+	@echo "             and (on first boot) provision a DHUK-wrapped BHK to flash page 126."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features dual-se-admin-wipe-e2e,stm32u585,ui-oled,debug-log,e2e-test,saes-dhuk,bhk
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running dual-SE Tier-2 e2e (watch semihosting for SAES/BHK init lines + PASS/FAIL)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # PIN-gate roundtrip e2e. Direct non-interactive test of the MCU-side
 # PIN attempt counter at flash page 126 + the `nsc::gated_unlock`
 # pre-commit pattern. No buttons, no USB — hardcoded right/wrong PINs
