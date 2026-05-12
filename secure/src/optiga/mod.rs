@@ -298,11 +298,19 @@ impl OptigaTrustM {
     /// Load the Platform Binding Secret into the Shielded Connection
     /// state.
     ///
-    /// Post-work-todo-#24: the PBS is re-derived from the per-device
-    /// OTP master key every boot via
-    /// `hw::secret_keys::optiga_pairing_secret`. No flash seal, no
-    /// blank-page check, no AES-GCM unseal. First boot triggers the
-    /// one-time OTP master burn as a side-effect of the HKDF call.
+    /// Post-work-todo-#24: the PBS is re-derived from a per-device
+    /// hardware root every boot via
+    /// `hw::secret_keys::optiga_pairing_secret` — no flash seal, no
+    /// blank-page check, no AES-GCM unseal. Which root depends on the
+    /// build (see `hw::secret_keys` module docs):
+    /// - `saes-dhuk` on (Tier-1 / production): `SAES-CMAC(DHUK, …)` —
+    ///   the silicon DHUK, never CPU-visible. (This is the path
+    ///   exercised by `make dual-se-bhk-e2e`; the bench OPTIGA on board
+    ///   #1 was re-paired to its DHUK-derived PBS 2026-05-12.)
+    /// - `otp-hardcoded-master-key` on (dev/bench): HKDF over the
+    ///   compile-time ASCII OTP constant.
+    /// - neither (legacy): HKDF over the per-board TRNG OTP master,
+    ///   which `ensure_device_master` burns once on first boot.
     ///
     /// Under `optiga-no-shield` this is a no-op — we never attempt
     /// PRL on chips where E140 is unreachable. See
@@ -320,15 +328,19 @@ impl OptigaTrustM {
             match crate::hw::secret_keys::optiga_pairing_secret() {
                 Ok(mut pbs) => {
                     // Fingerprint log: first 8 bytes of the derived PBS.
-                    // Stable across rebuilds iff the OTP master + HKDF
+                    // Stable across rebuilds iff the derivation root +
                     // label haven't changed. If this line ever differs
                     // between two boots of the same chip, the PBS we're
                     // about to hand to the PRL handshake will not match
-                    // what the chip was paired with — STOP before writing
-                    // anything to E140, because LcsO=op makes rewrites
-                    // impossible. The hardcoded test constant is in
-                    // source; printing 8 bytes of its HKDF output leaks
-                    // nothing a code reader doesn't already have.
+                    // what the chip was paired with — and if E140 has
+                    // been promoted to LcsO=op the rewrite is impossible.
+                    // (At LcsO=Creation, `setup_pbs_no_handshake` will
+                    // happily re-pair to the new value — that's exactly
+                    // how board #1's bench OPTIGA got moved off the old
+                    // `otp-hardcoded` PBS onto its DHUK-derived one.)
+                    // The dev test constants live in source; printing 8
+                    // bytes of a KDF output over them leaks nothing a
+                    // code reader doesn't already have.
                     secure_log!(
                         "[OPTIGA] PBS fingerprint: {:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
                         pbs[0], pbs[1], pbs[2], pbs[3],
@@ -336,7 +348,7 @@ impl OptigaTrustM {
                     );
                     self.shield.load_pbs(&pbs);
                     pbs.zeroize();
-                    secure_log!("[OPTIGA] PBS derived from OTP master and loaded");
+                    secure_log!("[OPTIGA] PBS derived from hardware root and loaded");
                 }
                 Err(e) => {
                     // Only reachable if OTP itself failed (RNG failure on
@@ -426,47 +438,60 @@ impl OptigaTrustM {
     /// call `shield.establish`. Used during bring-up while the PRL
     /// handshake itself is being debugged against real silicon.
     ///
-    /// ## Source of the PBS (work-todo #24)
+    /// ## Source of the PBS (work-todo #24 + Tier-1)
     ///
-    /// The PBS is derived on demand from the per-device OTP master key
-    /// via `hw::secret_keys::optiga_pairing_secret` (HMAC-SHA256 with
-    /// label `"pqsigner/optiga-pbs-v1"`). Two properties matter:
+    /// The PBS is derived on demand via
+    /// `hw::secret_keys::optiga_pairing_secret` with label
+    /// `"pqsigner/optiga-pbs-v1"`. The derivation root depends on the
+    /// build (see `hw::secret_keys` module docs): `SAES-CMAC(DHUK, …)`
+    /// on the silicon DHUK when `saes-dhuk` is on (Tier-1 / production),
+    /// HKDF over the compile-time ASCII OTP constant under
+    /// `otp-hardcoded-master-key`, or HKDF over the per-board TRNG OTP
+    /// master otherwise (legacy — `ensure_device_master` burns it once
+    /// on first boot). Two properties matter:
     ///
     /// - **Deterministic across firmware rebuilds.** The PBS is a pure
-    ///   function of the OTP master (burned once per physical board)
-    ///   and the HKDF label — both stable for the device's lifetime.
-    ///   Any firmware reflash reproduces the same 32 bytes. The old
-    ///   `rng::fill`-generated PBS + flash-page-126 AES-GCM seal is
-    ///   gone (`hw::flash::write_pbs` deleted), along with its
-    ///   dependency on `measured_boot::firmware_hash` inside the wrap
-    ///   key — that coupling is what bricked bench units on every
-    ///   rebuild (see `docs/optiga-brick-postmortem.md`).
-    /// - **First boot self-provisions the master.** On a blank MCU the
-    ///   inner `ensure_device_master` call inside `optiga_pairing_
-    ///   secret` programs 32 TRNG bytes into OTP and locks the region.
-    ///   Every subsequent boot is a pure OTP read + one HMAC.
+    ///   function of the device's hardware root + the label — both
+    ///   stable for the device's lifetime. Any firmware reflash
+    ///   reproduces the same bytes. The old `rng::fill`-generated PBS +
+    ///   flash-page-126 AES-GCM seal is gone (`hw::flash::write_pbs`
+    ///   deleted), along with its dependency on
+    ///   `measured_boot::firmware_hash` inside the wrap key — that
+    ///   coupling is what bricked bench units on every rebuild (see
+    ///   `docs/optiga-brick-postmortem.md`). Switching roots between
+    ///   builds (e.g. `otp-hardcoded` → `saes-dhuk`) changes the PBS;
+    ///   that's a re-pair, only possible while `E140.LcsO=Creation` —
+    ///   which is exactly how board #1's bench OPTIGA was moved onto its
+    ///   DHUK-derived PBS on 2026-05-12 (a failed shielded handshake on
+    ///   the stale PBS now correctly drops `ready`/`shield.active` so
+    ///   the next `init()` re-establishes cleanly — see `factory_reset`).
+    /// - **Legacy path self-provisions the master.** On a blank MCU with
+    ///   neither `saes-dhuk` nor `otp-hardcoded-master-key`, the inner
+    ///   `ensure_device_master` call inside `optiga_pairing_secret`
+    ///   programs 32 TRNG bytes into OTP and locks the region. Under
+    ///   `saes-dhuk` there is no OTP burn — the DHUK is silicon-fused.
     ///
-    /// ## LcsO=Operational bump
+    /// ## LcsO=Operational bump (optional, gated, irreversible)
     ///
-    /// Per SRM §"Platform Binding Secret" the chip requires
-    /// `E140.LcsO=op` for the PRL state machine to emit SlaveHello, so
-    /// production builds must enable the `optiga-lock-operational`
-    /// Cargo feature. Dev builds leave it off so a firmware rebuild
-    /// does not produce an unrecoverable chip. See
-    /// `docs/optiga-brick-postmortem.md` §3 and §7.
-    ///
-    /// The bump additionally refuses to proceed unless the OTP master
-    /// has actually been burned (`is_device_master_burned`). On a
-    /// board where the master is still blank, committing LcsO=op would
-    /// lock E140 against a PBS the driver cannot reproduce after the
-    /// very next reset — that is the exact class of reliability bug
-    /// #24 was written to eliminate.
+    /// `setup_pbs_no_handshake` does NOT promote `E140` to Operational
+    /// unless the `optiga-lock-operational` Cargo feature is enabled
+    /// (and even then it refuses on a board whose legacy OTP master is
+    /// still blank — see `is_device_master_burned`). The PRL handshake
+    /// works fine at `LcsO=Creation` (validated repeatedly on real
+    /// silicon — see commit `fa06a4f` and `make dual-se-bhk-e2e`), so
+    /// dev builds stay at Creation throughout. Promoting to Operational
+    /// freezes the metadata (a hardening step) but makes the PBS
+    /// unrewriteable — only do it on a unit you intend to ship and have
+    /// validated against sacrificial parts. See
+    /// `docs/optiga-brick-postmortem.md` §3, §5, §7 and
+    /// `docs/production-todo.md`.
     fn setup_pbs_no_handshake(&mut self) -> Result<(), OptigaError> {
-        // Derive the PBS from the OTP master on real hardware; fall
-        // back to a TRNG-filled ephemeral value on pure-host/QEMU
-        // builds (which don't exercise real OPTIGA I/O anyway — the
-        // driver is `optiga-trust-m`-gated and `stm32u585`-gated
-        // peripherals are what deliver APDUs).
+        // Derive the PBS from the device hardware root on real
+        // hardware (DHUK-SAES / OTP-const / OTP-master per build — see
+        // `hw::secret_keys`); fall back to a TRNG-filled ephemeral
+        // value on pure-host/QEMU builds (which don't exercise real
+        // OPTIGA I/O anyway — the driver is `optiga-trust-m`-gated and
+        // `stm32u585`-gated peripherals are what deliver APDUs).
         //
         // 64-byte size per OPTIGA Trust M SRM §"Platform Binding Secret".
         #[cfg(feature = "stm32u585")]

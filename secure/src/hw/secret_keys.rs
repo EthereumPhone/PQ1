@@ -65,6 +65,26 @@ use zeroize::Zeroize;
 
 use crate::hw::otp::{self, OtpError};
 
+// `bhk` + `otp-hardcoded-master-key` is a broken feature combo: `bhk`
+// routes the SE050 derivations through `cmac_bhk` (`KeySel::Bhk`), which
+// requires the BHK lifecycle (`hw::bhk::load_and_lock`) to have run at
+// boot — but `main.rs`'s BHK boot wiring is gated `not(otp-hardcoded-
+// master-key)`, so under that combo the BHK is never loaded and the
+// first `se050_admin_pin()` call fails with `KeyInvalid`. There is no
+// legitimate use for it now that the bench OPTIGA is paired to its DHUK
+// PBS (`make dual-se-bhk-e2e` is the real-roots config). If you ever
+// need "real BHK / stable dev PBS for OPTIGA" again, the fix is to drop
+// `not(feature = "otp-hardcoded-master-key")` from that boot-wiring cfg
+// (the OTP-hardcoded axis governs `derive_into`/DHUK; the BHK axis is
+// orthogonal) — then remove this fence.
+#[cfg(all(feature = "bhk", feature = "otp-hardcoded-master-key"))]
+compile_error!(
+    "feature `bhk` is incompatible with `otp-hardcoded-master-key`: the BHK \
+     boot-load wiring in main.rs is `not(otp-hardcoded-master-key)`-gated, so \
+     BHK derivations would fail at runtime with KeyInvalid. Use `saes-dhuk` + \
+     `bhk` (no hardcoded keys) — see `make dual-se-bhk-e2e`."
+);
+
 type HmacSha256 = hmac::Hmac<Sha256>;
 
 /// RFC 5869 HKDF-Expand with SHA-256. Writes `output.len()` derived bytes
