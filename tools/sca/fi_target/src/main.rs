@@ -1,16 +1,22 @@
-//! Rainbow fault-injection target: re-exports the FI-guard primitives from
-//! `secure/src/fi.rs` under stable, no-mangle C symbols so a rainbow harness
-//! (`tools/sca/fault_sweep_fi.py`) can load this ELF and sweep instruction-skip
-//! faults over them.
+//! Rainbow fault-injection / side-channel target ELF for `tools/sca/`.
 //!
-//! `fi.rs` is **included** (not copied) via `#[path]` so the test always runs
-//! against the exact production source, byte for byte. Its one hardware
-//! dependency — the `crate::rng::byte()` call inside `wait_random()` on
-//! non-test builds — is satisfied by the `rng` stub below (a small fixed loop
-//! count keeps emulation fast; the loop's *invariant checks*, which are what
-//! we're testing, are unchanged). If `fi.rs` ever grows a new external
-//! dependency, this build breaks loudly — which is the point: the test target
-//! stays in lockstep with the thing it tests.
+//! Holds the bits of code the harnesses in `tools/sca/*.py` load and sweep:
+//!
+//!  * `sca_fi_check_true` / `sca_fi_wait_random` — thin C-symbol wrappers over
+//!    the FI-guard primitives in `secure/src/fi.rs`, which is **`#[path]`-included
+//!    verbatim** (so the test always runs against the exact production source; if
+//!    `fi.rs` grows a new dependency this build breaks loudly). Its one hardware
+//!    call, `crate::rng::byte()` inside `wait_random()`, is satisfied by the `rng`
+//!    stub below (a small fixed loop count keeps sweeps fast; the loop's invariant
+//!    checks, which are what we probe, are unchanged).
+//!  * `sca_c10_verify_release` — a *structural reproduction* (NOT a `#[path]`
+//!    include — `crypto.rs` drags in too much) of
+//!    `secure/src/crypto.rs::c10_sign_verified_with_progress`: the
+//!    verify-before-release glue `wait_random → verify → if !check_true(|| v) {
+//!    Err } → Ok(sig)`. `sign` and `verify` are stubbed (`sca_c10_sign_stub` /
+//!    `sca_c10_verify_stub`) — the SPHINCS+ math has its own targets; this one
+//!    probes the *gate*. **KEEP IN SYNC** with `crypto.rs` if that function's
+//!    control flow changes — see the comment on `sca_c10_verify_release`.
 //!
 //! Build:  cargo build --release --target thumbv8m.main-none-eabi
 //!         (or: make -C tools/sca build)
@@ -66,6 +72,57 @@ pub extern "C" fn sca_fi_wait_random() {
     fi::wait_random();
 }
 
+// ---------------------------------------------------------------------------
+// C10 verify-before-release glue (mirror of secure/src/crypto.rs).
+// ---------------------------------------------------------------------------
+
+/// SPHINCS+C10 signature length — `sphincs_c10::params::SIGNATURE_LEN`.
+const C10_SIG_LEN: usize = 4008;
+
+/// Stand-in for `sk.sign_with_progress(...)` — the harness probes the *gate*,
+/// not the SPHINCS+ math, so this just returns a fixed buffer (kept opaque so
+/// the call survives, mirroring the real, un-elidable `bl sign`).
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn sca_c10_sign_stub() -> *const u8 {
+    static SIG: [u8; C10_SIG_LEN] = [0xABu8; C10_SIG_LEN];
+    core::hint::black_box(SIG.as_ptr())
+}
+
+/// Stand-in for `sphincs_c10::verify(pk_seed, pk_root, msg_hash, &sig)` — the
+/// harness drives the verdict: `want_pass == 0` ⇒ "the signature did NOT
+/// verify" (the interesting case: the gate must then refuse to release it).
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn sca_c10_verify_stub(want_pass: u32) -> bool {
+    core::hint::black_box(want_pass) != 0
+}
+
+/// Structural mirror of `secure/src/crypto.rs::c10_sign_verified_with_progress`.
+///
+/// **KEEP IN SYNC** — if that function's control flow changes (the order of
+/// `sign` / `wait_random` / `verify`, the `if !check_true(|| v)` shape, the
+/// `Err`/`Ok` arms), update this body to match. Returns `1` if it would release
+/// the signature (`Ok(sig)`), `0` if it refused (`Err(())`). The harness calls
+/// it with `want_pass = 0` (verify "fails") and a non-`0` return is a bypass:
+/// a glitch released an unverified signature.
+///
+/// Note: this passes `check_true(|| v)` exactly as `crypto.rs` does — `v` a
+/// precomputed `bool` local — *not* the opaque-closure form used by
+/// `sca_fi_check_true`. That deliberately probes whether the optimizer's CSE of
+/// the trivial `|| v` closure weakens the gate in this real call site.
+#[no_mangle]
+pub extern "C" fn sca_c10_verify_release(want_pass: u32) -> u32 {
+    let sig = sca_c10_sign_stub(); // sk.sign_with_progress(msg_hash, None, progress);
+    fi::wait_random(); // crate::fi::wait_random();
+    let v = sca_c10_verify_stub(want_pass); // sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
+    if !fi::check_true(|| v) {
+        return 0; // return Err(());
+    }
+    core::hint::black_box(sig); // Ok(sig)
+    1
+}
+
 // Keep the exported entry points alive: `#[no_mangle]` gives them stable symbol
 // names but does NOT make them garbage-collection roots, and cortex-m-rt's
 // linker script runs `--gc-sections`. A `#[used]` static that points at each fn
@@ -77,6 +134,12 @@ static _KEEP_CHECK_TRUE: extern "C" fn(u32) -> u32 = sca_fi_check_true;
 static _KEEP_WAIT_RANDOM: extern "C" fn() = sca_fi_wait_random;
 #[used]
 static _KEEP_COND: extern "C" fn(u32) -> bool = sca_fi_cond;
+#[used]
+static _KEEP_C10_RELEASE: extern "C" fn(u32) -> u32 = sca_c10_verify_release;
+#[used]
+static _KEEP_C10_SIGN: extern "C" fn() -> *const u8 = sca_c10_sign_stub;
+#[used]
+static _KEEP_C10_VERIFY: extern "C" fn(u32) -> bool = sca_c10_verify_stub;
 
 #[entry]
 fn main() -> ! {
@@ -85,6 +148,9 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_CHECK_TRUE);
     core::hint::black_box(&_KEEP_WAIT_RANDOM);
     core::hint::black_box(&_KEEP_COND);
+    core::hint::black_box(&_KEEP_C10_RELEASE);
+    core::hint::black_box(&_KEEP_C10_SIGN);
+    core::hint::black_box(&_KEEP_C10_VERIFY);
     loop {
         cortex_m::asm::nop();
     }

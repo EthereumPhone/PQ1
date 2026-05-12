@@ -103,18 +103,50 @@ extend `fault_sweep_fi.py` — its structure makes that a small change. For each
 `donjon-sca python -c "..."` repro using a verbose emulator (`Print.Code |
 Print.Faults`).
 
+### C10 verify-before-release gate fault sweep — `fault_sweep_c10_verify.py`
+
+Sweeps a single instruction-skip over `sca_c10_verify_release` in the target ELF
+— a **structural mirror** of
+[`secure/src/crypto.rs::c10_sign_verified_with_progress`](../../secure/src/crypto.rs)
+(it is *not* a `#[path]` include — `crypto.rs` pulls in `pqsigner-domain`,
+`secure_element`, the BIP-39 bridge, … too much for a leaf test crate; the mirror
+carries a `KEEP IN SYNC` comment):
+
+```
+sig = sk.sign_with_progress(...)        # stubbed: sca_c10_sign_stub()
+fi::wait_random()
+v   = sphincs_c10::verify(...)           # stubbed: sca_c10_verify_stub(want_pass)
+if !fi::check_true(|| v) { return Err }  # ← the gate
+Ok(sig)
+```
+
+`sign` and `verify` are stubbed because this target probes the *release gate*,
+not the SPHINCS+ math (which gets its own target — see Roadmap). The harness
+calls the gate with `want_pass = 0` (the signature did **not** verify) and any
+run that returns non-zero ("would release the signature") is a bypass: a glitch
+made the firmware emit an *unverified* C10 signature. Skips that land in the
+sign/verify stubs are reported separately (out of scope here).
+
+> ⚠️ **`make c10` currently exits non-zero — on purpose.** It has found an open
+> issue (see **Findings** below); it is the regression test that will go green
+> once `crypto.rs` opaques its `check_true` closure. This is not in CI, so it
+> breaks no build.
+
 ## Layout
 
 ```
 tools/sca/
-  README.md              — this file
-  Makefile               — `make fi` / `make build` / `make doctor` / `make clean`
-  fault_sweep_fi.py      — the FI-guard fault sweep (a rainbow harness)
-  fi_target/             — standalone thumbv8m crate: re-exports secure/src/fi.rs under C symbols
-    Cargo.toml           —   (its own [workspace] — detached from the PQSigner workspace)
-    build.rs             —   places memory.x for cortex-m-rt's link.x
-    memory.x             —   arbitrary conventional STM32-ish layout
-    src/main.rs          —   #[path]-includes ../../../../secure/src/fi.rs + #[no_mangle] wrappers + rng stub
+  README.md                  — this file
+  Makefile                   — `make fi` / `make c10` / `make sweeps` / `make build` / `make doctor` / `make clean`
+  fault_sweep_fi.py          — FI-guard fault sweep (fi.rs: check_true / wait_random)
+  fault_sweep_c10_verify.py  — C10 verify-before-release gate fault sweep
+  fi_target/                 — standalone thumbv8m crate: the test targets, in one ELF (sca-fi-target)
+    Cargo.toml               —   (its own [workspace] — detached from the PQSigner workspace)
+    build.rs                 —   places memory.x for cortex-m-rt's link.x
+    memory.x                 —   arbitrary conventional STM32-ish layout
+    src/main.rs              —   #[path]-includes ../../../../secure/src/fi.rs verbatim (sca_fi_*),
+                             —   + a structural mirror of crypto.rs's verify-before-release gate (sca_c10_*),
+                             —   + #[no_mangle] wrappers, an rng stub, and #[used] keep-statics
 ```
 
 ## Roadmap — targets not yet wired
@@ -125,14 +157,14 @@ whatever hardware it touches. Pattern: a `<name>_target/` crate that
 crate** (`sphincs-c10`, `pqsigner-domain`, …) and re-exports the function under
 stable C symbols, then a `rainbow`/`lascar` harness.
 
-- **C10 verify-before-release fault sweep** — sweep skips over
-  `crypto::c10_sign_verified*`'s FI-gated guard (the `OK_SENTINEL` /
-  `FAIL_SENTINEL` double-checked verify result around `sphincs_c10::verify`).
-  Build the `sphincs-c10` crate (software SHA-256 path) into a thumb ELF; the
-  verify of one C10 signature is a few thousand SHA-256 blocks — slow but
-  tractable to emulate. Win condition: no single skip makes a *bad* signature
-  verify, and no single skip makes `c10_sign_verified` emit an *unverified*
-  signature.
+- **C10 verify-before-release — full version.** The *gate* is wired
+  (`fault_sweep_c10_verify.py`, with `sign`/`verify` stubbed). The remaining
+  work is the *real* one: build the `sphincs-c10` crate (software SHA-256 path)
+  into a thumb ELF and sweep faults over an actual `sk.sign(...)` →
+  `sphincs_c10::verify(...)` round-trip — verify of one C10 sig is a few
+  thousand SHA-256 blocks, slow but emulable if you restrict the sweep window to
+  the post-`verify` gate region rather than the whole call. Win condition
+  beyond the gate: no single skip makes a *bad* signature `verify()` as good.
 - **Tier-1 KDF leakage CPA** — emulate `hw::saes_cmac::cmac_dhuk` /
   `pqsigner-domain`'s KDF over many label/counter inputs with
   `TraceConfig(register=HammingWeight(), mem_address=HammingWeight())`, stub the
@@ -165,3 +197,53 @@ anything in this directory.
   the model `fault_sweep_fi.py` is built on).
 - `README.md` (repo root) "Security self-testing" angle; the threat model and
   shipping checklist there.
+
+## Findings
+
+### F-1 — `crypto.rs` verify-before-release gate: `check_true(|| v)` collapses under CSE (single instruction-skip releases an unverified C10 signature, *in emulation*)
+
+`secure/src/crypto.rs::c10_sign_verified_with_progress` does:
+
+```rust
+let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
+if !crate::fi::check_true(|| v) { return Err(()); }
+Ok(sig)
+```
+
+`fi::check_true`'s contract (per its own doc) is that a glitch must skip **all
+four** decision points (first `cond()`, second `cond()`, sentinel commit,
+sentinel re-check) to flip a `false` verdict into a `true` return. But here
+`cond` is the trivial closure `|| v` over a pre-computed `bool` local, so LLVM
+common-subexpression-eliminates the two `cond()` calls into one `ldrb`, proves
+`v1 == v2`, and collapses the `&& v1 && v2` re-check — the compiled
+`check_true::<|| v>` has **one** branch (`cbz` on the single loaded byte), not
+four. `fault_sweep_c10_verify.py` confirms it: with `verify` forced to fail,
+**5 distinct single instruction-skips** make the gate return "release the
+signature" — skipping the `ldrb`/`cbz` inside the collapsed `check_true`,
+skipping the `bl check_true` call, skipping the `cbz r0` post-check that branches
+to `Err`, or skipping the `movs r0, #0` so the `FAIL_SENTINEL` value (non-zero!)
+lingers in the return register. (Contrast: `fault_sweep_fi.py` shows the *same*
+`fi::check_true` is single-skip-robust when handed an optimizer-opaque closure —
+the shape `fi.rs`'s doc assumes. The bug is the call site, not `check_true`.)
+
+**Scope/strength caveat:** this is *emulated single-instruction-skip* against a
+*structural mirror* of `crypto.rs` (the real one can't be cheaply `#[path]`-
+included), with `sign`/`verify` stubbed. The mirror's control flow matches
+`crypto.rs` line-for-line, so the finding transfers — but confirm against the
+real binary before treating it as exhaustive.
+
+**Fixes** (the gate is one line; pick one):
+
+- *Cheap, preserves the single-`verify` design:* make the closure opaque so the
+  double-evaluation survives —
+  `if !crate::fi::check_true(|| core::hint::black_box(v)) { … }`.
+  Restores all four decision points; ~zero cost (one extra `ldrb` per check).
+- *Strongest, matches `fi.rs`'s documented canonical pattern:* re-verify inside
+  the closure —
+  `if !crate::fi::check_true(|| sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig)) { … }`
+  — and drop the pre-computed `let v`. Defends against a data fault on `v`'s
+  storage too, at the cost of a second full verify (~1–2 s) on the release path.
+
+Until one lands, `make c10` exits non-zero (that's the point). Same pattern
+should be audited at every other `check_true(|| <trivial local>)` call site in
+the tree.
