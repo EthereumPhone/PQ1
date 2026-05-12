@@ -8,19 +8,22 @@ every chain) and #7 (monotonic per-chain caps) — from "enforced by
 Solidity `require` + Foundry unit tests" to "machine-checked Lean
 theorem".
 
-**Status**: initial skeleton (2026-05-11). Theorems are stated, proofs
-are `sorry`-stubbed where they depend on Verity primitives the Step 0
-spike must validate. See §1 below.
+**Status (2026-05-11, second pass)**: Part B (SPHINCS+C10 verifier
+port) landed as buildable pure-Lean. Part A (smart-wallet contracts)
+is documented intent — it imports modules (`Verity.Prelude`,
+`Verity.Hash.Sha256`, `Verity.External.Call`, etc.) that **Verity
+v0.1.0 does not provide**. The Step-0 spike below remains the entry
+point for getting Part A to compile.
 
-**Scope**: this port covers `PQMultiOwnable` (storage + 5 writers),
-`PQSmartWalletFactory` (salt + digest), and `PQSmartWallet`
-(`validateUserOp` dispatch + `executeWithOffchainCount` +
-`isValidSignature`). It does **not** cover
-`verifiers/SPHINCsC10Asm.sol` — that gets a separate handoff at
-`docs/handoff-verity-c10-verifier.md`.
+| Part | What it covers | Build status |
+|------|----------------|--------------|
+| **A** | `PQMultiOwnable` storage + writers, `PQSmartWalletFactory` salt + digest, `PQSmartWallet` dispatch. Files at `PQSigner/{Common,PQMultiOwnable,PQSmartWalletFactory,PQSmartWallet,Theorems}.lean`. | **Does not build** — imports fictional Verity modules. Blocked on Verity Phase 0 (see `docs/verity-v0.1.0-primitive-map.md`). Kept in-tree as the spec for what Verity v0.2.x+ must support. Lakefile root entry removed from default target. |
+| **B** | SPHINCS+C10 verifier (pure-Lean reference impl of `sphincs-c10/`). Files at `PQSigner/Verifier/{Params,Address,Hash,Wots,Merkle,Fors,Hypertree,Top}.lean`. ~40 closed theorems on closeable invariants + 2 documented axioms + 1 documented sorry. | **Builds clean** under Lean 4.22.0. `make build` succeeds. |
 
-The plan that this skeleton implements:
-`/home/markus/.claude/plans/ok-implement-the-smart-cached-matsumoto.md`.
+See [docs/handoff-verity-c10-verifier.md](../../docs/handoff-verity-c10-verifier.md)
+for the original multi-quarter plan and
+[docs/verity-v0.1.0-primitive-map.md](../../docs/verity-v0.1.0-primitive-map.md)
+for the Phase-0 upstream reconnaissance landed alongside Part B.
 
 ---
 
@@ -68,21 +71,87 @@ contracts/verity/
 ├── lean-toolchain            Lean 4.22.0
 ├── Makefile                  lake build + differential helpers
 └── PQSigner/
-    ├── Common.lean           protocol constants + shared types
-    ├── PQMultiOwnable.lean   storage struct + 5 writers
-    ├── PQSmartWalletFactory.lean   salt + digest + createAccount
-    ├── PQSmartWallet.lean    dispatch + execute + EIP-1271
-    └── Theorems.lean         13 invariant theorems (proofs)
+    ├── Common.lean                       [Part A — does not build]
+    ├── PQMultiOwnable.lean               [Part A — does not build]
+    ├── PQSmartWalletFactory.lean         [Part A — does not build]
+    ├── PQSmartWallet.lean                [Part A — does not build]
+    ├── Theorems.lean                     [Part A — does not build]
+    └── Verifier/                         [Part B — builds clean]
+        ├── Params.lean        N, H, D, K, A, W, L, TARGET_SUM, SIG_LEN constants
+        │                       + sig_len_decomposes theorem
+        ├── Address.lean       ADRS bit layout + makeAdrs + setChainIndex/Pos
+        │                       + adrs_size_eq_32 theorem
+        ├── Hash.lean          opaque sha256 axiom + truncate / pad16 / th / thPair / thMulti
+        │                       + pad16_low_half_is_zero_block theorem
+        ├── Wots.lean          extract_digits / digitSum / pkFromSig
+        │                       + target_sum_enforced theorem
+        ├── Merkle.lean        verifyAuthPath with branchless swap encoding
+        │                       + branchless_swap_equivalent_to_branching_swap theorem
+        ├── Fors.lean          extract_fors_indices / forced-zero check / reconstruct
+        │                       + forced_zero_fors_enforced theorem
+        ├── Hypertree.lean     D=2 layer loop, SigReader for parsing
+        │                       + hypertree_d_eq_2_unrolls_into_two_layers theorem
+        │                       + hypertree_verify_equivalent_to_rust axiom (witnessed by KAT diff)
+        └── Top.lean           top-level verify entry + length check
+                                + verify_length_enforced / verify_deterministic theorems
+                                + verify_byte_equivalent_to_rust axiom (witnessed by KAT diff)
 ```
 
-The Lean source files are kept **flat and small** — each contract is
-one file, theorems are aggregated in `Theorems.lean`. This matches
-Verity's own convention (cf. the 11 verified contracts in
-`lfglabs-dev/verity`).
+Part B is **standalone pure-Lean** — no Verity dependency. Uses Lean
+stdlib types (`Array UInt8`, `Nat`, `UInt32`, `UInt64`) and an opaque
+`sha256` axiom. Mirrors the Rust verify path at
+`sphincs-c10/src/{lib, hypertree, fors, wots, merkle, address, hash, params}.rs`
+line-for-line.
 
 ---
 
-## 3. The 13 theorems
+## 3. Part B theorems (this session)
+
+Pure-Lean SPHINCS+C10 verifier reference. ~40 closed theorems + 2
+axioms (load-bearing, externally witnessed) + 1 documented sorry
+(non-essential helper).
+
+| # | Theorem | File | Status |
+|---|---------|------|--------|
+| B1 | `signature_len_eq_4008` | `Verifier/Params.lean` | proved (rfl) |
+| B2 | `sig_len_decomposes` (sig = N + K·N + (K-1)·A·N + D·(L·N+4+SUBTREE_H·N)) | `Verifier/Params.lean` | proved (rfl) |
+| B3 | `adrs_types_distinct` (5 ADRS types pairwise distinct) | `Verifier/Params.lean` | proved (decide) |
+| B4 | `subtree_h_eq_nine` (H/D = 9) | `Verifier/Params.lean` | proved (rfl) |
+| B5 | `fors_and_ht_bits_fit_in_digest` (K·A + H ≤ 256) | `Verifier/Params.lean` | proved (decide) |
+| B6 | `adrs_size_eq_32` (every ADRS is 32 bytes) | `Verifier/Address.lean` | proved (simp) |
+| B7 | `setChainPos_size_eq` / `setChainIndex_size_eq` | `Verifier/Address.lean` | proved (simp) |
+| B8 | `pad16_low_half_is_zero_block` (N-mask: bottom 16 bytes of pad16 are zero) | `Verifier/Hash.lean` | proved (Array.ext + omega) |
+| B9 | `truncate_sha256_size_eq_N` | `Verifier/Hash.lean` | proved |
+| B10 | `th_size_eq_N` / `thPair_size_eq_N` / `thMulti_size_eq_N` | `Verifier/Hash.lean` | proved |
+| B11 | `target_sum_enforced` (digit-sum ≠ 205 ⇒ pkFromSig returns zeros) | `Verifier/Wots.lean` | proved (if_pos) |
+| B12 | `chain_iterates_w_minus_1_minus_digit_steps` | `Verifier/Wots.lean` | proved (omega) |
+| B13 | `extractDigit_lt_W` (every digit < 8) | `Verifier/Wots.lean` | proved (Nat.and_le_right) |
+| B14 | `accepted_digit_sum_eq_205` (contrapositive of B11) | `Verifier/Wots.lean` | proved (by_cases) |
+| B15 | `branchless_swap_equivalent_to_branching_swap` (Yul `shl(5, and(idx,1))` ↔ Lean if-else) | `Verifier/Merkle.lean` | proved (rfl) |
+| B16 | `forced_zero_fors_enforced` (K-th FORS index extracted from bits [132..143)) | `Verifier/Fors.lean` | proved |
+| B17 | `forced_zero_iff_high_bits_clear` | `Verifier/Fors.lean` | proved |
+| B18 | `extractForsIndex_lt_FORS_LEAVES` (every FORS idx < 2048) | `Verifier/Fors.lean` | proved (omega) |
+| B19 | `extractHtIndex_lt_2_pow_H` | `Verifier/Fors.lean` | proved (omega) |
+| B20 | `fors_indices_total_bits_eq_143` (K·A = 143) | `Verifier/Fors.lean` | proved (decide) |
+| B21 | `pkFromSig_uses_K_roots` (FORS PK is computed from K roots) | `Verifier/Fors.lean` | proved |
+| B22 | `hypertree_d_eq_2_unrolls_into_two_layers` | `Verifier/Hypertree.lean` | proved (rfl) |
+| B23 | `signature_length_is_4008` | `Verifier/Hypertree.lean` | proved (via Params B1) |
+| B24 | `verify_length_enforced` (sig.size ≠ 4008 ⇒ verify = false) | `Verifier/Top.lean` | proved (if_pos) |
+| B25 | `verify_rejects_short_sig` / `verify_rejects_long_sig` | `Verifier/Top.lean` | proved |
+| B26 | `verify_deterministic` | `Verifier/Top.lean` | proved (rfl) |
+| B27 | `hmsg_domain_separator_matches_yul` (H_msg 0xFF...FF pad pinned) | `Verifier/Top.lean` | proved (simp) |
+| **AXIOM 1** | `hypertree_verify_equivalent_to_rust` | `Verifier/Hypertree.lean` | externally witnessed (KAT diff) |
+| **AXIOM 2** | `verify_byte_equivalent_to_rust` | `Verifier/Top.lean` | externally witnessed (KAT diff) |
+| sorry | `yul_swap_selector_in_known_set` (helper, non-essential) | `Verifier/Merkle.lean` | documented |
+
+The two axioms cannot be proved in Lean without an FFI bridge to
+Rust's `sphincs-c10::verify` or a verified Rust-to-Lean translator —
+neither exists in core Lean. They are **empirically witnessed** by
+the 10-vector KAT diff harness at
+`contracts/smart-wallet/test/c10_test_vectors.json` plus the Foundry
+test suite at `contracts/smart-wallet/test/SPHINCsC10Asm.t.sol`.
+
+## 3a. Part A theorems (frozen, stated only)
 
 Numbered to match the plan. Status reflects what's stated vs. proved
 in this initial skeleton (proofs will close incrementally as Step 0

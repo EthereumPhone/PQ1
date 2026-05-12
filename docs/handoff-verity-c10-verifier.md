@@ -1,11 +1,113 @@
 # Handoff — Verity formal-verification port of `SPHINCsC10Asm.sol`
 
-> **Read order:** §1 (what this is and isn't) → §2 (why it's deferred)
-> → §3 (reference ground truth) → §4 (phased plan) → §5 (theorems to
-> target) → §6 (trust assumptions) → §7 (pre-conditions) → §8 (footguns).
+> **Read order:** §0 (status as of 2026-05-11) → §1 (what this is
+> and isn't) → §2 (why it's deferred) → §3 (reference ground truth)
+> → §4 (phased plan) → §5 (theorems to target) → §6 (trust
+> assumptions) → §7 (pre-conditions) → §8 (footguns).
 >
-> Created 2026-05-11 as Part B of the Verity smart-wallet port (Part A
-> at `contracts/verity/`). Not started.
+> Created 2026-05-11. Status updated 2026-05-11 with Part B
+> pure-Lean reference landing.
+
+---
+
+## 0. Status as of 2026-05-11
+
+A **pure-Lean reference implementation** of the SPHINCS+C10 verifier
+landed at `contracts/verity/PQSigner/Verifier/{Params,Address,Hash,
+Wots,Merkle,Fors,Hypertree,Top}.lean`. It builds clean under Lean
+4.22.0 (`cd contracts/verity && lake build`).
+
+**What's landed:**
+
+- 8 Lean files mirroring `sphincs-c10/src/{params,address,hash,wots,
+  merkle,fors,hypertree,lib}.rs`.
+- ~40 closed theorems including the load-bearing closeable invariants:
+  - `signature_len_eq_4008` + `sig_len_decomposes`
+  - `verify_length_enforced` (sig.size ≠ 4008 ⇒ false)
+  - `pad16_low_half_is_zero_block` (the N-mask invariant)
+  - `target_sum_enforced` (WOTS digit-sum ≠ 205 ⇒ pkFromSig returns zeros)
+  - `forced_zero_fors_enforced` (K-th FORS index extracted from bits [132..143))
+  - `branchless_swap_equivalent_to_branching_swap` (Yul `shl(5,and(idx,1))` ↔ Lean if-else)
+  - `hmsg_domain_separator_matches_yul` (0xFF...FF pad)
+  - `verify_deterministic`
+  - `adrs_size_eq_32` + per-field offset theorems
+  - `extractForsIndex_lt_FORS_LEAVES` + `extractHtIndex_lt_2_pow_H`
+- 2 documented **axioms** for cross-validation against Rust:
+  `hypertree_verify_equivalent_to_rust` (in `Hypertree.lean`) and
+  `verify_byte_equivalent_to_rust` (in `Top.lean`). Both are
+  empirically witnessed by the multi-vector KAT diff harness.
+- 1 documented `sorry` on a non-essential helper
+  (`yul_swap_selector_in_known_set` in `Merkle.lean`) — the
+  load-bearing branchless-swap equivalence closes by `rfl`.
+
+**Yul-side defense-in-depth (also landed 2026-05-11):**
+
+- Multi-vector KAT diff harness at
+  `contracts/smart-wallet/test/c10_test_vectors.json`: 10 vectors
+  with explicit `expectValid` flags (4 valid + 6 mutations:
+  wrong-message, wrong-root, mutated-R, mutated-FORS-auth,
+  mutated-WOTS-sigma, mutated-WOTS-count-target-sum-fail).
+  Regenerate via `cargo test -p sphincs-c10 --test gen_test_vectors --release`.
+- Foundry test refactor at
+  `contracts/smart-wallet/test/SPHINCsC10Asm.t.sol`: 10 tests
+  including `test_verifyAllKatVectors` (multi-vector loop),
+  `testFuzz_verifyRandomSigsRejected` (256-run fuzz),
+  `testFuzz_verifyLengthBoundaries` (256-run fuzz),
+  `test_verifierBytecodeFrozen` (pins
+  `keccak256(runtimeCode) == 0xe905d5cd7173e02113a9f88a83a29ce881fb313dc7f6df48621d81f42c228988`),
+  and `test_verifyGasUnderBound` (≤ 4M gas ceiling; observed 181878
+  in isolation).
+
+**Phase-0 reconnaissance** landed at
+`docs/verity-v0.1.0-primitive-map.md`: complete inventory of Verity
+v0.1.0's actual API (which is much smaller than was assumed when
+this handoff was written), gap table of 7 missing primitives, and
+draft upstream-issue bodies.
+
+**What's NOT landed and why:**
+
+1. **Phase 0 upstream PRs to `lfglabs-dev/verity`.** Requires
+   coordination with upstream maintainers; estimated 8-12
+   person-weeks. Drafts are in the primitive-map doc; PRs deferred.
+
+2. **`verify_byte_equivalent_to_rust` closed as a theorem.** Cannot
+   be proved in Lean without either an FFI bridge to Rust or a
+   verified Rust-to-Lean translator. Stays as an axiom; KAT diff
+   harness is the empirical witness.
+
+3. **Replacement of the deployed Yul verifier with Verity-emitted
+   bytecode.** Gated on Phase 0. The Yul stays as the production
+   verifier; the bytecode-freeze test pins its hash so any silent
+   change is loud.
+
+4. **Bridging Part A (`PQSmartWallet*.lean`) to the real verifier
+   def.** Part A imports modules (`Verity.Prelude`, `Verity.Hash.Sha256`,
+   etc.) that Verity v0.1.0 does not provide — Part A was written
+   blind in the previous session and does not build. Re-pointing
+   Part A at the Part B `Verifier.Top.verify` is mechanically
+   possible but requires first rebuilding Part A's foundation on
+   real Verity primitives, which is also Phase-0 gated.
+
+**Net residual risk** (vs. pre-2026-05-11 baseline):
+
+- Verifier source change without `EXPECTED_RUNTIME_CODEHASH` update:
+  now caught by `test_verifierBytecodeFrozen`. Previously: silent.
+- Verifier parameter-set drift (N, H, D, K, A, W, L, TARGET_SUM,
+  SIGNATURE_LEN): now caught by Lean `signature_len_eq_4008` +
+  `sig_len_decomposes` at `lake build`. Previously: only Rust-side
+  `const _: () = assert!(...)`.
+- Branchless-swap regression (Yul → branching JUMPI): now caught
+  by `branchless_swap_equivalent_to_branching_swap`. Previously:
+  manual review only.
+- Forced-zero K-th FORS regression: now caught by
+  `forced_zero_fors_enforced`. Previously: KAT vectors only.
+- N-mask invariant (top 16 bytes are N-value, bottom 16 zero):
+  now caught by `pad16_low_half_is_zero_block`. Previously: Yul
+  `N_MASK` constant + visual inspection.
+- Fuzz coverage on random 4008-byte inputs: 256 runs/CI cycle (was 0).
+- Multi-vector edge-case coverage: 10 vectors (was 1).
+
+---
 
 ---
 
