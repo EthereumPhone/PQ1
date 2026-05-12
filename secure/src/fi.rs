@@ -133,9 +133,24 @@ pub fn wait_random() {
 }
 
 /// Evaluate `cond` twice with a `wait_random()` delay between evaluations,
-/// commit the verdict to a volatile sentinel, and compare the sentinel
-/// a third time before returning. A glitch must successfully skip ALL
-/// FOUR decision points to turn a `false` into a `true` return.
+/// commit the verdict to a volatile sentinel, and compare the sentinel a
+/// third time before returning.
+///
+/// **What this buys you (and what it doesn't).** It raises the cost of
+/// flipping a `false` verdict into a `true` return from *one* instruction
+/// skip to *several coordinated* faults — empirically (see
+/// `tools/sca/fault_sweep_fi.py`): no single instruction-skip flips it, and
+/// the `[skip,skip]` pair sweep (`--two-fault`) shows the only two-skip
+/// route that lives *inside* this function is corrupting the result/return
+/// path (the final `mov` of the verdict register / the fail-path zeroing) —
+/// so the caller should also guard the *call site* (e.g. compare a
+/// sentinel-encoded return rather than a bare `bool`, and double the
+/// `if !verdict { err }` branch). The other two-skip routes all corrupt
+/// **`cond` itself** (both evaluations) — this function does **not** protect
+/// the computation that produces the boolean; that's the caller's `cond`
+/// (in production a real `bl sphincs_c10::verify(...)` whose return is not
+/// trivially forceable). A `stuck-at` on the return register likewise
+/// defeats any `bool`-returning fn — the same residual.
 ///
 /// Typical use at a verify-before-release site:
 ///

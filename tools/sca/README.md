@@ -432,10 +432,32 @@ instruction indices + PCs + a verbose repro) the moment any single fault flips a
 reject into an accept.
 
 Caveats: emulated single-fault only (multi-fault / on-device clock-EM glitches
-out of scope); this is the `verify` direction — a fault inside C10 *signing*
-(leaking `sk_seed`, emitting a malformed sig) is a separate, not-yet-wired target
-(sign is slower to emulate but tractable); the `wrong-message` vector is one
-invalid shape — the other invalid vectors in the JSON (`wrong-root`, `mutated-R`,
-`mutated-FORS-auth`, `mutated-WOTS-sigma`, `mutated-WOTS-count-target-sum-fail`)
-exercise different early-exit paths and could be swept too if you want belt-and-
-braces (each is a one-line change — `vec("...")` in the harness).
+out of scope); this is the `verify` direction — a fault inside C10 *signing* is a
+separate, not-yet-wired target, and note the meaningful FI threat against C10
+*signing* is *differential* (two glitched signs reusing the same FORS/WOTS
+one-time keys → universal forgery), not a single-trace "did the output flip"
+check, so that target needs a 2-sign harness, not a re-run of this one.
+
+### F-5 — `fi::check_true` is ~2-coordinated-skip-defeatable, not 4-skip as its doc claimed — **doc updated**
+
+`fi::check_true`'s doc-comment said "a glitch must successfully skip ALL FOUR
+decision points to turn a `false` into a `true` return". The `[skip,skip]` pair
+sweep (`fault_sweep_fi.py --two-fault` / `make fi-twofault`, ~21k ordered pairs)
+shows that's optimistic: ~210 pairs flip `check_true(false)→true` — of which 205
+are scaffolding-only, 4 are a harness artifact (skipping the `mov r0, want` before
+the synthetic `bl sca_fi_cond` leaves a nonzero stack pointer in r0, which the
+trivial `sca_fi_cond(x)=black_box(x)!=0` reads as "true" → does **not** transfer
+to a real `bl sphincs_c10::verify(pk_seed,…)` closure where a skipped arg makes
+verify *fail*), and exactly **1** is a real candidate — `(199,201)`, both faults
+in `check_true`'s result/return path (the final `mov` of the verdict register /
+the fail-path zeroing → leaving `FAIL_SENTINEL`/garbage in `r0`). The same residual
+shows up under `[stuck-at-FF]` (a stuck-at on the return register defeats any
+`bool`-returning fn). So: `check_true` raises the bar from 1 skip to **~2
+coordinated faults**, and the only in-`check_true` two-skip route is the
+result/return path. **Action taken:** `secure/src/fi.rs`'s `check_true` doc-comment
+was updated to say this honestly (no behavioural change). **Not done (maintainer's
+call):** sentinel-encode `check_true`'s return (so the caller compares against
+`OK_SENTINEL` instead of a bare `bool` — a garbage return register is then
+overwhelmingly ≠ `OK_SENTINEL`), and/or double the caller's `if !verdict { err }`
+branch. `make fi-twofault` exits 0 — the single-fault `[skip]` sweep (the contract
+test) still passes; F-5 is the harder 2-coordinated-skip case.
