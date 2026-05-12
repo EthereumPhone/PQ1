@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Fault-injection sweep against PQSigner's FI countermeasures (secure/src/fi.rs).
+
+Emulates each guard under rainbow and injects a single instruction-skip at every
+instruction index in turn, then classifies the outcome:
+
+  * "exploitable" — the skip made `sca_fi_check_true(false)` return a non-zero
+    value (i.e. a caller would read the verdict register as "true"). A robust
+    guard should have ZERO of these; the script exits non-zero if any survive.
+  * "crash"       — the skip produced an invalid instruction.
+  * "hang"        — the run exhausted its instruction budget without returning
+    (typically because the glitch was *caught* and landed in `halt_on_glitch`'s
+    endless `wfe` loop, or it broke a loop's termination — either way, on real
+    hardware the watchdog would reset; not a verdict bypass).
+  * "no-effect"   — returned the correct (false → 0) value despite the skip.
+
+For each "exploitable" index it reports which function the skipped instruction
+was in — the `sca_fi_check_true` *wrapper* and the synthetic `|| want != 0`
+closure are this harness's own scaffolding, not part of `fi.rs`; a skip there
+means "you can glitch the boolean *fed into* check_true", which check_true does
+not claim to prevent (its job is hardening the double-check / sentinel-commit /
+return path). A skip inside `fi::check_true` / `fi::wait_random` that flips a
+clean false into a true return is the noteworthy case.
+
+Run:   donjon-sca run tools/sca/fault_sweep_fi.py
+       (or, building the target ELF first:  make -C tools/sca fi)
+
+Single-fault, instruction-skip only. For stuck-at / multi-fault, extend the
+sweep below (rainbow.fault_models.fault_stuck_at, nested loops). Side-channel
+leakage of these guards is a separate harness — see tools/sca/README.md.
+"""
+import os
+import sys
+import bisect
+
+from rainbow.generics import rainbow_cortexm
+from rainbow.fault_models import fault_skip
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ELF = os.path.join(HERE, "fi_target", "target", "thumbv8m.main-none-eabi", "release", "sca-fi-target")
+RET = 0xAAAA_AAAA          # sentinel return address — emulation stops cleanly when PC reaches it
+BUDGET = 8192              # max instructions per run (a normal check_true(0) is ~190; generous)
+MAX_I = 1000               # max instruction-skip index (the sweep stops early at function end)
+
+if not os.path.exists(ELF):
+    sys.exit(
+        f"target ELF not found: {ELF}\n"
+        f"build it first:   make -C {HERE} build\n"
+        f"           or:    cargo build --release --target thumbv8m.main-none-eabi "
+        f"--manifest-path {os.path.join(HERE, 'fi_target', 'Cargo.toml')}"
+    )
+
+
+def fresh_emu():
+    """A fresh emulator per call — eliminates any cross-iteration state leakage
+    (stack/RAM left dirty by a previous fault)."""
+    e = rainbow_cortexm()
+    e.load(ELF)
+    return e
+
+
+def fn_table(e):
+    """[(start_addr, name), ...] sorted by address, for attributing a fault PC to
+    a function. Symbol values may carry the Thumb bit; mask it off."""
+    t = sorted((v[0] & ~1, k) for k, v in e.functions.items())
+    return t
+
+
+def fn_at(table, pc):
+    starts = [a for a, _ in table]
+    i = bisect.bisect_right(starts, pc & ~1) - 1
+    return table[i][1] if i >= 0 else "<?>"
+
+
+def run_call(e, sym, args=(), fault=None):
+    """Set up `sym(args...)` returning at RET; optionally inject `fault` at index
+    `fault=(model, index)`. Returns ('ret', r0) | ('crash', pc) | ('hang', pc) | ('short', None)."""
+    e.reset()
+    e.reset_stack()
+    for i, a in enumerate(args):
+        e[f"r{i}"] = a & 0xFFFF_FFFF
+    e["lr"] = RET
+    begin = e.functions[sym][0]
+    try:
+        if fault is None:
+            e.start(begin, RET, count=BUDGET)
+        else:
+            model, idx = fault
+            e.start_and_fault(model, idx, begin, RET, count=BUDGET)
+    except RuntimeError:
+        return ("crash", e["pc"])
+    except IndexError:
+        return ("short", None)        # fault index past the executed-instruction count
+    if e["pc"] == RET:
+        return ("ret", e["r0"])
+    return ("hang", e["pc"])
+
+
+# --- baselines (no fault) -----------------------------------------------------
+def baseline():
+    e = fresh_emu()
+    assert run_call(e, "sca_fi_check_true", (0,)) == ("ret", 0), "check_true(false) baseline"
+    e = fresh_emu()
+    assert run_call(e, "sca_fi_check_true", (1,)) == ("ret", 1), "check_true(true) baseline"
+    e = fresh_emu()
+    st, _ = run_call(e, "sca_fi_wait_random", ())
+    assert st == "ret", "wait_random() baseline"
+    print("baselines OK  (check_true(0)->0, check_true(1)->1, wait_random returns)")
+
+
+# --- skip sweep ---------------------------------------------------------------
+def sweep_check_true():
+    """Skip-sweep over check_true(false). A 'ret' with r0 != 0 is exploitable."""
+    exploitable, crashes, hangs, noeffect = [], 0, 0, 0
+    fault_locs = {}                   # index -> (function_name, fault_pc)
+    for i in range(1, MAX_I):
+        e = fresh_emu()
+        table = fn_table(e)
+        # Re-run once to find where instruction `i` lands (the fault PC), purely
+        # for reporting: do a no-fault run that we stop after `i` instructions.
+        st, val = run_call(e, "sca_fi_check_true", (0,), fault=(fault_skip, i))
+        if st == "short":
+            break                     # i past the function's executed-instruction count → done
+        if st == "crash":
+            crashes += 1; continue
+        if st == "hang":
+            hangs += 1; continue
+        # st == "ret"
+        if val != 0:
+            exploitable.append(i)
+            # locate the faulted instruction: rerun to instruction i without faulting
+            e2 = fresh_emu()
+            e2.reset(); e2.reset_stack(); e2["r0"] = 0; e2["lr"] = RET
+            try:
+                e2.start(e2.functions["sca_fi_check_true"][0], RET, count=i)
+            except Exception:
+                pass
+            fault_locs[i] = (fn_at(table, e2["pc"]), e2["pc"])
+        else:
+            noeffect += 1
+    return exploitable, crashes, hangs, noeffect, fault_locs
+
+
+def sweep_wait_random():
+    """Skip-sweep over wait_random(). No observable output, so just tally outcomes."""
+    rets, crashes, hangs = 0, 0, 0
+    for i in range(1, MAX_I):
+        e = fresh_emu()
+        st, _ = run_call(e, "sca_fi_wait_random", (), fault=(fault_skip, i))
+        if st == "short":
+            break
+        if st == "crash":
+            crashes += 1
+        elif st == "hang":
+            hangs += 1
+        else:
+            rets += 1
+    return rets, crashes, hangs
+
+
+if __name__ == "__main__":
+    baseline()
+
+    print("\n== check_true: single-instruction-skip sweep over check_true(false) ==")
+    expl, cr, hg, ne, locs = sweep_check_true()
+    total = len(expl) + cr + hg + ne
+    print(f"  swept {total} skip positions:  exploitable={len(expl)}  crashes={cr}  hangs(≈caught)={hg}  no-effect={ne}")
+    if expl:
+        # bucket: harness scaffolding (wrapper / closure / __wfe) vs fi.rs proper
+        scaffolding, in_fi = [], []
+        for i in expl:
+            fn, pc = locs.get(i, ("<?>", 0))
+            (scaffolding if (fn.startswith("sca_fi_") or fn == "__wfe" or fn == "<?>") else in_fi).append((i, fn, pc))
+        if scaffolding:
+            print(f"  - {len(scaffolding)} in this harness's own scaffolding (wrapper / synthetic closure / __wfe) — "
+                  "EXPECTED: a skip there glitches the boolean *fed into* check_true, which check_true does not"
+                  " claim to protect. Indices: " + ", ".join(f"{i}@{fn}+{pc:#x}" for i, fn, pc in scaffolding))
+        if in_fi:
+            print(f"  - !!! {len(in_fi)} inside fi.rs code (fi::check_true / fi::wait_random) — INVESTIGATE: "
+                  "a single skip flipped a clean false verdict into a true return.")
+            for i, fn, pc in in_fi:
+                print(f"        skip@instr {i}: pc={pc:#010x} in {fn}")
+            print( "        Inspect with a verbose emulator, e.g.:")
+            print( "          donjon-sca python -c \"from rainbow.generics import rainbow_cortexm; from rainbow import Print;\\")
+            print(f"            e=rainbow_cortexm(print=Print.Code|Print.Functions|Print.Faults); e.load('{ELF}');\\")
+            print( "            from rainbow.fault_models import fault_skip; e.reset(); e.reset_stack(); e['r0']=0; e['lr']=0xaaaaaaaa;\\")
+            print(f"            e.start_and_fault(fault_skip, <I>, e.functions['sca_fi_check_true'][0], 0xaaaaaaaa, count=8192)\"")
+            sys.exit(1)
+        print("  → all in harness scaffolding; no single skip inside fi.rs flipped a false verdict to true.")
+    else:
+        print("  OK — no single instruction-skip turns a false verdict into a true return.")
+
+    print("\n== wait_random: single-instruction-skip sweep ==")
+    rt, cr, hg = sweep_wait_random()
+    print(f"  returned-normally={rt}  crashes={cr}  hangs(≈halt-loop / broken loop)={hg}")
+
+    print("\nDone. (single-fault, instruction-skip only — see the module docstring "
+          "and tools/sca/README.md for stuck-at / multi-fault / leakage extensions.)")

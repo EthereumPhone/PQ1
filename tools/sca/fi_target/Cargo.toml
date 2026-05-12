@@ -1,0 +1,31 @@
+# Standalone workspace — deliberately detached from the PQSigner workspace so a
+# host `cargo build` at the repo root never tries to build this ARM-only crate,
+# and `cargo` invoked inside this dir doesn't climb up to the parent workspace.
+[workspace]
+
+[package]
+name = "sca-fi-target"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Tiny thumbv8m ELF that re-exports secure/src/fi.rs's FI-guard fns under stable C symbols, for rainbow fault-injection sweeps. Not shipped."
+
+[[bin]]
+name = "sca-fi-target"
+path = "src/main.rs"
+
+[features]
+# Present only so `secure/src/fi.rs`'s `#[cfg(feature = "e2e-test")]` gate is a
+# recognised cfg here (silences `unexpected_cfgs`). We never enable it — the FI
+# guards must run with their real control flow under the fault sweep.
+e2e-test = []
+
+[dependencies]
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+panic-halt  = "1"
+zeroize     = { version = "1", default-features = false }
+
+[profile.release]
+opt-level = "s"
+# Do NOT strip — rainbow reads the ELF symbol table for `e.functions[...]`.
