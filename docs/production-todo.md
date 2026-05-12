@@ -358,30 +358,33 @@ The SE050 half of the dual-SE also has irreversible steps (per
       v5 `0x7B0E_00A0` / v4 `0x7B0C_00A0` / v3 `0x7B06_00A0` across
       bench-chip cross-contamination events) with two-entry
       TAG_POLICY provisioned. Admin PIN derivation status:
-      - **Today (since 2026-04-23):** derived on demand via
-        `hw::secret_keys::se050_admin_pin()` = `HKDF(OTP_master,
-        "pqsigner/se050-admin-pin-v1")`. Both `Se050::store_objects`
-        (provisioning) and `Se050::factory_reset_admin` (wipe) use
-        the derivation — page 125's PIN slot is no longer read on
-        the production path. The page still holds the wipe-in-progress
-        flag at offset 16 (unchanged). Same HKDF label will flip from
-        OTP-master-rooted to DHUK-rooted under #7 Tier 1 with a
-        one-shot on-chip rotation.
-      - **Cleanup still owed (reversible, tracked in work-todo #7
-        early-adopt item):** delete the remaining callers of
-        `hw::flash::read_admin_pin` / `write_admin_pin` in
-        `se050/mod.rs`, `dual_se.rs`, `main.rs` (five legacy / test
-        paths); retire `ADMIN_PIN_OFFSET` entirely. The slot is
-        dead storage today — already no code path on a clean
-        provisioning reads it — but still burns a flash quadword
-        per page.
-      - **Post-#7 Tier 2:** same API surface, primitive becomes
-        `SAES-CMAC(BHK, "se050-admin-pin-v1")` (work-todo #7).
-      Wipe flow validated today via `make dual-se-admin-wipe-e2e`
-      (full 8-step roundtrip including step 7 "both chips
-      unprovisioned post-wipe") + `make dual-se-multi-unlock-e2e`
-      (15 unlocks across 3 cold reboots) PASS on real silicon
-      (2026-04-23).
+      - **Today:** derived on demand via `hw::secret_keys::se050_admin_pin()`
+        → `derive_into_bhk("pqsigner/se050-admin-pin-v1")`. Per the
+        build: `SAES-CMAC(BHK, …)` in a `bhk` build (the shipping
+        target — the Phase-2C call-site flip landed in `aa23f05` and was
+        hardware-validated via `dual-se-bhk-e2e` 2026-05-12); falls
+        through to `SAES-CMAC(DHUK, …)` with `saes-dhuk` alone;
+        `HKDF(OTP-master/const, …)` on the legacy / `otp-hardcoded-
+        master-key` path. Both `Se050::store_objects` (provisioning)
+        and `Se050::factory_reset_admin` (wipe) use the derivation;
+        nothing is persisted — page 125's PIN slot is gone entirely
+        (`hw::flash::write_admin_pin` / `read_admin_pin` /
+        `ADMIN_PIN_OFFSET` deleted, commits `482969d` + `da18f29`); the
+        page still holds the wipe-in-progress flag at offset 16.
+      - **Provisioning-order constraint** (because the production root is
+        the BHK): the admin UserID must be created at the unit's final
+        per-die-DHUK RDP level (RDP ≥ 1) — the BHK's flash wrapping
+        (page 126) is DHUK-keyed and the DHUK changes at RDP0→RDP1, so
+        a chip provisioned at RDP0 then stepped to RDP1 has a silently-
+        wrong admin PIN. Same constraint the SCP03 rotation inherits
+        (see the SCP03 item above): step RDP→1 → provision BHK →
+        provision SE050 (admin UserID here) → … → burn RDP2.
+      Wipe flow validated via `make dual-se-admin-wipe-e2e` (full
+      8-step roundtrip) + `make dual-se-multi-unlock-e2e` (15 unlocks
+      across 3 cold reboots), and — with the BHK-rooted admin PIN —
+      via `make dual-se-bhk-e2e` (8/8, `factory_reset_admin → Ok`,
+      `store_objects OK`, `Admin factory reset complete`), all PASS on
+      real silicon.
 - [ ] **User UserID PIN storage.** Change the UserID's policy to
       whatever we ultimately ship (currently in `docs/se050-userid-
       pin-auth.md`); post-provision, policy is frozen.

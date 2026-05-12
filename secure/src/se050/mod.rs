@@ -42,12 +42,12 @@ use t1oi2c::{T1Error, T1State};
 ///                            PIN; no firmware-reachable credential
 ///                            can delete the stranded admin, so the
 ///                            range is permanently contaminated on
-///                            that chip. v6 ships with the OTP-
-///                            derived admin PIN (`se050_admin_pin()`),
-///                            so this failure class is structurally
-///                            eliminated — the admin PIN is always
-///                            firmware-reproducible, no flash pairing
-///                            to desync.
+///                            that chip. v6 ships with the hardware-
+///                            root-derived admin PIN (`se050_admin_pin()`,
+///                            see below), so this failure class is
+///                            structurally eliminated — the admin PIN
+///                            is always firmware-reproducible, no flash
+///                            pairing to desync.
 /// Bumping the range yields a chip as usable as a fresh one — the
 /// stuck OIDs occupy <150 bytes of ~130 KB persistent storage.
 pub const USERID_OBJ: u32 = 0x7B10_0000;
@@ -62,18 +62,28 @@ pub const VK_OBJ: u32 = 0x7B10_0002;
 pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B10_0003;
 
 /// Admin wipe UserID. Second auth object, created at provisioning
-/// with an OTP-derived PIN (`hw::secret_keys::se050_admin_pin()` —
-/// HKDF over OTP master, deterministic per device, stable across
-/// power cycles and flash mass-erase). Used by the PIN-lockout
+/// with a hardware-root-derived PIN (`hw::secret_keys::se050_admin_pin()`
+/// → `derive_into_bhk("pqsigner/se050-admin-pin-v1")`): in a `bhk`
+/// build (the shipping target since the Phase-2C call-site flip,
+/// `aa23f05`) that's `SAES-CMAC(silicon-BHK, …)`; with `saes-dhuk`
+/// alone it falls through to `SAES-CMAC(DHUK, …)`; on the legacy /
+/// `otp-hardcoded-master-key` path it's `HKDF(OTP-master/const, …)`.
+/// Every variant is deterministic per device and stable across power
+/// cycles, reflashes, and a flash mass-erase (the only exception: the
+/// BHK lives in flash page 126, so an RDP regression loses it → the
+/// SE050 needs re-pairing afterward — but losing the *admin* PIN that
+/// way is non-fatal, you don't need it during recovery, and an RDP2
+/// production unit can't be regressed). Used by the PIN-lockout
 /// factory-reset path: after 10 failed user PIN attempts, firmware
 /// authenticates against this object and deletes every user object
 /// (which all carry an admin-delete policy entry pointing here).
 ///
-/// **Invariant (post-v6)**: the admin PIN is reproducible from OTP,
-/// so there is no flash-side pairing to drift out of sync with the
-/// on-chip UserID. Previous ranges (v3–v5) paired admin with flash
-/// page 125 and retired whenever the two desynchronised; v6 removes
-/// the coupling entirely.
+/// **Invariant (post-v6)**: the admin PIN is reproducible from a
+/// silicon hardware root, never persisted, so there is no flash-side
+/// pairing to drift out of sync with the on-chip UserID. Previous
+/// ranges (v3–v5) paired admin with a flash page-125 PIN slot and
+/// retired whenever the two desynchronised; v6 removes the coupling
+/// entirely (`hw::flash::write_admin_pin`/`read_admin_pin` deleted).
 ///
 /// Page 125 still exists — it now holds only the wipe-in-progress
 /// flag (`arm_wipe_flag / is_wipe_armed`) and the legacy PIN slot
@@ -1035,9 +1045,10 @@ impl Se050 {
             // admin PIN literal, so there's nothing to persist across
             // the simulated crash — we just erase page 125 (clean flag
             // state) then arm the flag at WIPE_FLAG_OFFSET. (Production
-            // resume re-derives its admin PIN from the OTP master via
-            // `secret_keys::se050_admin_pin()`, not from flash — the
-            // page-125 PIN slot is dead storage on v6 chips.)
+            // resume re-derives its admin PIN from a silicon hardware
+            // root via `secret_keys::se050_admin_pin()` (BHK in a `bhk`
+            // build), not from flash — the page-125 PIN slot is dead
+            // storage on v6 chips.)
             #[cfg(feature = "stm32u585")]
             {
                 crate::hw::flash::erase_admin_page()
@@ -2003,10 +2014,12 @@ impl WalletStore for Se050 {
     ) -> Result<(), SeError> {
         // Admin-wipe flow (STM32 target only — QEMU has no flash):
         //   1. Derive the per-device admin PIN via
-        //      `secret_keys::se050_admin_pin()` — `SAES-CMAC(DHUK, ...)`
-        //      on a shipping build, `HKDF(OTP_master, ...)` on the
-        //      legacy fallback. Nothing is persisted to flash; the PIN
-        //      is re-derivable on every boot from silicon HUK state.
+        //      `secret_keys::se050_admin_pin()` → `derive_into_bhk(...)`:
+        //      `SAES-CMAC(BHK, ...)` in a `bhk` build (the shipping
+        //      target), `SAES-CMAC(DHUK, ...)` with `saes-dhuk` alone,
+        //      `HKDF(OTP-master/const, ...)` on the legacy / dev path.
+        //      Nothing is persisted to flash; the PIN is re-derivable
+        //      on every boot from silicon HUK state.
         //   2. Provision ADMIN_WIPE_OBJ UserID with that PIN.
         //   3. Run a canary round-trip selftest proving the admin-delete
         //      policy actually works (guardrail against TLV byte-order
@@ -2019,18 +2032,21 @@ impl WalletStore for Se050 {
         // no persistent chip state to wipe anyway.
         #[cfg(all(feature = "stm32u585", not(feature = "e2e-skip-admin-wipe")))]
         {
-            secure_log!("[SE050/prov] start (OTP-derived admin PIN)");
+            secure_log!("[SE050/prov] start (HUK-derived admin PIN)");
 
-            // Derive the admin PIN from OTP master (via HKDF-Expand).
-            // Deterministic per device, stable across power cycles and
-            // flash mass-erase. Under `dev-testkey` / `otp-hardcoded-
-            // master-key` it's deterministic across chip swaps too.
+            // Derive the admin PIN from a silicon hardware root via
+            // `se050_admin_pin()` → `derive_into_bhk(...)`: BHK in a `bhk`
+            // build, DHUK with `saes-dhuk`, OTP-master/const on the legacy
+            // / dev path. Deterministic per device, stable across power
+            // cycles and reflashes; under `dev-testkey` / `otp-hardcoded-
+            // master-key` / `bhk-hardcoded-master-key` it's deterministic
+            // across chip swaps too.
             let mut admin_pin = crate::hw::secret_keys::se050_admin_pin()
                 .map_err(|e| {
                     secure_log!("[SE050/prov] se050_admin_pin() FAILED: {:?}", e);
                     SeError::InternalError
                 })?;
-            secure_log!("[SE050/prov] derived admin PIN from OTP master");
+            secure_log!("[SE050/prov] derived admin PIN from HUK");
 
             secure_log!("[SE050/prov] -> provision_admin");
             self.provision_admin(&admin_pin).map_err(|e| {
@@ -2194,14 +2210,18 @@ impl WalletStore for Se050 {
     #[cfg(feature = "stm32u585")]
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
         // Re-derive the admin PIN via `secret_keys::se050_admin_pin()`
-        // — the same derivation `store_objects` uses to write the admin
-        // UserID. On a shipping build that's `SAES-CMAC(DHUK, ...)`; the
-        // legacy fallback is `HKDF(OTP_master, ...)`. Either way it's
-        // deterministic per device and survives flash mass-erase. The
-        // former page-125 PIN slot is gone entirely (no `write_admin_pin`
-        // / `read_admin_pin` anymore) — a v6 chip never persists the
-        // admin PIN to flash; deriving it on demand is what closes the
-        // "lose the flash, lose the pairing" brick class.
+        // → `derive_into_bhk("pqsigner/se050-admin-pin-v1")` — the same
+        // derivation `store_objects` uses to write the admin UserID. In a
+        // `bhk` build (the shipping target) that's `SAES-CMAC(BHK, ...)`;
+        // with `saes-dhuk` alone it falls through to `SAES-CMAC(DHUK, ...)`;
+        // the legacy / `otp-hardcoded-master-key` path is `HKDF(OTP-master/
+        // const, ...)`. Every variant is deterministic per device and
+        // survives reflashes + a flash mass-erase (the BHK is the one bit
+        // in flash — page 126 — but a lost admin PIN isn't fatal, you don't
+        // need it during recovery). The former page-125 PIN slot is gone
+        // entirely (no `write_admin_pin` / `read_admin_pin` anymore) — a v6
+        // chip never persists the admin PIN to flash; deriving it on demand
+        // is what closes the "lose the flash, lose the pairing" brick class.
         //
         // Page 125 still holds the wipe-in-progress flag (for crash-safe
         // resume) at `WIPE_FLAG_OFFSET`, which we arm below — a separate

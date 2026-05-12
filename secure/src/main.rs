@@ -2161,9 +2161,11 @@ fn main() -> ! {
 
             let _ = se.optiga.factory_reset();
 
-            // Admin-auth wipe via the v6 OTP-derived admin PIN
-            // (`factory_reset_admin` → `secret_keys::se050_admin_pin`).
-            // The pre-v6 page-125 PIN slot is gone (no `write_admin_pin`).
+            // Admin-auth wipe via the v6 HUK-derived admin PIN
+            // (`factory_reset_admin` → `secret_keys::se050_admin_pin`
+            // → `derive_into_bhk` — BHK in a `bhk` build / DHUK / OTP-
+            // legacy). The pre-v6 page-125 PIN slot is gone (no
+            // `write_admin_pin`).
             let r = se.se050.factory_reset_admin();
             secure_log!("[S][e2e] dual-se pre-clean: factory_reset_admin → {:?}", r.as_ref().err());
 

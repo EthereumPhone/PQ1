@@ -387,11 +387,14 @@ impl DualSecureElement {
         // stuck legacy objects don't affect the test.
         #[cfg(feature = "stm32u585")]
         unsafe {
-            // Stage (a): admin-auth wipe via the v6 OTP-derived admin
+            // Stage (a): admin-auth wipe via the v6 HUK-derived admin
             // PIN (`factory_reset_admin` → `secret_keys::se050_admin_pin`
-            // → `admin_factory_reset` → conditional page-125 erase).
-            // This is the only admin-PIN source on v6 chips; the
-            // pre-v6 page-125 PIN slot is gone (no `write_admin_pin`).
+            // → `derive_into_bhk(...)` — `SAES-CMAC(BHK, …)` in a `bhk`
+            // build, `SAES-CMAC(DHUK, …)` with `saes-dhuk`, `HKDF(OTP-
+            // master/const, …)` legacy — → `admin_factory_reset` →
+            // conditional page-125 erase). This is the only admin-PIN
+            // source on v6 chips; the pre-v6 page-125 PIN slot is gone
+            // (no `write_admin_pin`).
             let r = self.se050.factory_reset_admin();
             secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (a): factory_reset_admin → {:?}", r.as_ref().err());
 
@@ -605,7 +608,9 @@ impl DualSecureElement {
 
             #[cfg(feature = "stm32u585")]
             unsafe {
-                // Admin-auth wipe via the v6 OTP-derived admin PIN.
+                // Admin-auth wipe via the v6 HUK-derived admin PIN
+                // (`secret_keys::se050_admin_pin` → `derive_into_bhk`,
+                // i.e. BHK in a `bhk` build / DHUK / OTP-legacy).
                 let _ = self.se050.factory_reset_admin();
                 if self.se050.is_provisioned() {
                     const PIN_CANDIDATES: &[&[u8]] = &[
