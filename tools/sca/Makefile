@@ -9,7 +9,8 @@
 #   make build    build the thumbv8m target ELF (sca-fi-target)
 #   make fi        build + run the FI-guard fault sweep (fi.rs: check_true / wait_random)
 #   make c10       build + run the C10 verify-before-release gate fault sweep
-#   make sweeps    fi + c10
+#   make pin       build + run the PIN-attempt pre-commit gate fault sweep
+#   make sweeps    fi + c10 + pin
 #   make doctor    `donjon-sca doctor` — is the toolchain installed?
 #   make clean     cargo clean the target crate
 
@@ -18,7 +19,7 @@ FI_DIR := fi_target
 FI_ELF := $(FI_DIR)/target/$(TARGET)/release/sca-fi-target
 DONJON ?= donjon-sca
 
-.PHONY: build fi c10 sweeps doctor clean
+.PHONY: build fi c10 pin sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -31,7 +32,10 @@ fi: build
 c10: build
 	$(DONJON) run fault_sweep_c10_verify.py
 
-sweeps: fi c10
+pin: build
+	$(DONJON) run fault_sweep_pin.py
+
+sweeps: fi c10 pin
 
 doctor:
 	$(DONJON) doctor

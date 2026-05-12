@@ -143,15 +143,17 @@ would mean the F-1 collapse came back).
 ```
 tools/sca/
   README.md                  — this file
-  Makefile                   — `make fi` / `make c10` / `make sweeps` / `make build` / `make doctor` / `make clean`
+  Makefile                   — `make fi` / `make c10` / `make pin` / `make sweeps` / `make build` / `make doctor` / `make clean`
   fault_sweep_fi.py          — FI-guard fault sweep (fi.rs: check_true / wait_random)
   fault_sweep_c10_verify.py  — C10 verify-before-release gate fault sweep
+  fault_sweep_pin.py         — PIN-attempt pre-commit gate fault sweep (gated_unlock + pin_attempts_bump)
   fi_target/                 — standalone thumbv8m crate: the test targets, in one ELF (sca-fi-target)
     Cargo.toml               —   (its own [workspace] — detached from the PQSigner workspace)
     build.rs                 —   places memory.x for cortex-m-rt's link.x
     memory.x                 —   arbitrary conventional STM32-ish layout
     src/main.rs              —   #[path]-includes ../../../../secure/src/fi.rs verbatim (sca_fi_*),
-                             —   + a structural mirror of crypto.rs's verify-before-release gate (sca_c10_*),
+                             —   + structural mirrors of crypto.rs's verify-before-release gate (sca_c10_*)
+                             —     and gated_unlock + pin_attempts_bump (sca_pin_*, with a fake page-124 counter),
                              —   + #[no_mangle] wrappers, an rng stub, and #[used] keep-statics
 ```
 
@@ -179,7 +181,16 @@ stable C symbols, then a `rainbow`/`lascar` harness.
   the silicon SAES's own leakage still needs a scope. (At RDP0 the DHUK is the
   ST-substituted constant anyway — see `docs/work-todo.md §7` / the per-die DHUK
   notes — so this is a code-leakage test, not a key-recovery one.)
-- **PIN pre-commit skip sweep** — sweep skips over `nsc::gated_unlock`'s
+- ~~**PIN pre-commit skip sweep**~~ — **DONE** (`fault_sweep_pin.py` — a structural
+  mirror of `nsc::gated_unlock`'s `stm32u585` branch + `hw::flash::pin_attempts_bump`,
+  with the fake page-124 counter + `se.unlock` stubbed and the real `fi::*`
+  `#[path]`-included; 3 fault models). Surfaced **F-3** (the `se.unlock` Ok/Err
+  discrimination is a plain `match`, single-fault-defeatable — but the SE does the
+  PIN compare in silicon, so it's a robustness gap not a seed extraction) and **F-4**
+  (the page-124 attempt isn't always charged under a single fault — F-2-class
+  call-glue residual; impact ≤10 free guesses = a 1-in-10^6 lottery). Both
+  documented in §Findings; `make pin` exits 0 (they're residuals, not regressions).
+  *(historical, pre-implementation note follows:)* — sweep skips over `nsc::gated_unlock`'s
   page-124 attempt-counter pre-commit and `hw::flash::pin_attempts_bump`'s
   post-bump delay + double-readback (`fi::check_true`-gated). Win condition: no
   single skip lets a wrong-PIN attempt proceed without the counter advancing.
@@ -270,3 +281,41 @@ mitigated by the silicon's own FI countermeasures + the `wait_random` jitter".
 **Maintainer's call.** `make c10` exits 0 with this printed as a known residual;
 it only fails (loudly) if a bypass moves into `check_true`'s decision-point region
 (= an F-1 regression).
+
+### F-3 — `gated_unlock`'s SE-unlock Ok/Err discrimination is single-fault-defeatable (residual)
+
+`secure/src/nsc/mod.rs::gated_unlock` does `match se.unlock(pin) { Ok(master) => …, Err(e) => Err(e) }`
+— a plain `match`, not wrapped in `fi::check_true` / a sentinel. `fault_sweep_pin.py`
+shows a single instruction-skip (or stuck-at-FF) on that discriminant makes the
+gate return `Ok` on a wrong PIN — the wallet *thinks* it unlocked. **But** the real
+`se.unlock` does the PIN compare in *SE silicon* (CLAUDE.md invariant #2), so a
+wrong PIN genuinely returns `Err`; the "master" the wallet would then read is the
+`Err`-variant's union payload reinterpreted as the 32-byte `Ok` value — garbage,
+not the seed. So it's a **robustness gap** (the wallet proceeds as if unlocked,
+likely failing downstream with the garbage), not a seed extraction. Mitigation:
+wrap the SE-result discrimination in `fi::check_true` / have `se.unlock` return a
+sentinel the caller positively compares; or accept (the SE-silicon PIN gate + the
+10-attempt cap are the real defenses). `make pin` exits 0 (this is a residual).
+
+### F-4 — the page-124 attempt isn't always charged under a single fault (residual)
+
+`gated_unlock`'s pre-commit (`if pin_attempts_bump().is_err() { return InternalError }`,
+then `se.unlock`) is meant to make every wrong-PIN attempt cost a charged counter
+slot. `fault_sweep_pin.py` shows a single fault that skips the `bl pin_attempts_bump`
+call (from `gated_unlock`), or skips `pin_attempts_bump`'s `write_quadword_verified`
+call (its `post != pre+1` re-check then makes it return `Err`, so `gated_unlock`
+correctly *refuses* with `InternalError` — but the counter didn't advance), leaves
+the wrong attempt uncharged → a "free guess". This is the same `if !guard() { err }`
+/ call-glue residual as **F-2**: `pin_attempts_bump`'s internal re-checks
+(`post != pre+1`, `check_true(|| pin_attempts_read() == pre+1)`) harden the bump's
+*innards* — and that internal invariant (`Ok` ⇒ counter advanced) holds against
+single instruction-skips in the sweep — but can't stop the caller skipping the whole
+`bl bump`, or a glitched flash-write being correctly-refused-but-uncharged. Impact:
+≤10 free guesses = a 1-in-10⁶-per-try lottery, still capped at 10 (vs the intended
+10 *charged* attempts). Mitigation: a sentinel-encoded bump result the caller
+positively compares (and/or charge-on-refuse where flash permits); or accept. The
+`make pin` "pin_attempts_bump invariant check" only fails on a `[skip]`-model
+violation of the bump's internal invariant (none currently); stuck-at-FF on the
+bump's Ok/Err return slot produces an "Ok"-looking value, the same
+result-register-corruption class as the `fi::check_true` stuck-at-FF INFO above —
+reported, not a regression.

@@ -36,6 +36,7 @@ import bisect
 
 from rainbow.generics import rainbow_cortexm
 from rainbow.fault_models import fault_skip, fault_stuck_at
+from unicorn import UcError
 
 FAULT_MODELS = [
     ("skip", fault_skip),
@@ -94,7 +95,7 @@ def run_call(e, sym, args=(), fault=None):
         else:
             model, idx = fault
             e.start_and_fault(model, idx, begin, RET, count=BUDGET)
-    except RuntimeError:
+    except (RuntimeError, UcError):
         return ("crash", e["pc"])
     except IndexError:
         return ("short", None)        # fault index past the executed-instruction count

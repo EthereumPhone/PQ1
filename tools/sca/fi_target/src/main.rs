@@ -125,6 +125,92 @@ pub extern "C" fn sca_c10_verify_release(want_pass: u32) -> u32 {
     1
 }
 
+// ---------------------------------------------------------------------------
+// PIN pre-commit gate (mirror of nsc::gated_unlock + hw::flash::pin_attempts_bump).
+// ---------------------------------------------------------------------------
+
+/// Fake page-124 attempt counter (in `.bss` → zero on every `e.load()`, so each
+/// harness iteration starts fresh). `#[no_mangle]` so the harness can read it by
+/// symbol name after a run (the gate returns only `status`; the counter is read
+/// out-of-band so the read isn't itself in the fault window).
+#[no_mangle]
+pub static mut SCA_PIN_COUNTER: u32 = 0;
+const SCA_PIN_MAX: u32 = 10; // sphincs_tz_shared::MAX_ATTEMPTS
+const SCA_PIN_CAPACITY: u32 = 512; // page-124 quad-word slots
+
+/// Mirror of `hw::flash::pin_attempts_read`. `#[inline(never)]` + a volatile load
+/// so the compiler can't CSE two reads (a real flash readback is volatile too) —
+/// which is the property `pin_attempts_bump`'s `check_true(|| read() == pre+1)`
+/// re-check relies on.
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn sca_pin_attempts_read() -> u32 {
+    // SAFETY: single-threaded test harness; volatile to model a flash read.
+    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(SCA_PIN_COUNTER)) }
+}
+
+/// Mirror of the `write_quadword_verified(...)` that programs one more attempt
+/// marker. Returns `false` on a (modelled) write fault — a *fault* in this
+/// writeback is exactly what the gate's readback check is meant to catch.
+#[inline(never)]
+fn sca_pin_attempts_program_one() -> bool {
+    // SAFETY: as above.
+    unsafe {
+        let p = core::ptr::addr_of_mut!(SCA_PIN_COUNTER);
+        core::ptr::write_volatile(p, core::ptr::read_volatile(p).wrapping_add(1));
+    }
+    true
+}
+
+/// Mirror of `hw::flash::pin_attempts_bump`. Returns `0` = `Err(())`, else
+/// `post + 1` (so `0` is unambiguously the error case). **KEEP IN SYNC.**
+#[no_mangle]
+pub extern "C" fn sca_pin_attempts_bump() -> u32 {
+    let pre = sca_pin_attempts_read();
+    if pre >= SCA_PIN_CAPACITY {
+        return 0; // Err(())
+    }
+    if !sca_pin_attempts_program_one() {
+        return 0; // write_quadword_verified(...)? bailed
+    }
+    fi::wait_random();
+    let post = sca_pin_attempts_read();
+    if post != pre + 1 {
+        return 0; // Err(())
+    }
+    if !fi::check_true(|| sca_pin_attempts_read() == pre + 1) {
+        return 0; // Err(())
+    }
+    post + 1 // Ok(post)
+}
+
+/// Mirror of `nsc::gated_unlock`'s `stm32u585` branch. `se_unlock_ok != 0` ⇒ the
+/// SE says the PIN is correct. Returns `status`: `2` = unlocked (master returned),
+/// `1` = refused (PinLocked / InternalError / wrong PIN). The harness calls with
+/// `se_unlock_ok = 0` (wrong PIN) and afterwards reads `SCA_PIN_COUNTER` directly
+/// (so the measurement doesn't itself sit in the fault window). An un-faulted run
+/// gives `status == 1` and `SCA_PIN_COUNTER == 1`. A bypass is `status == 2`
+/// (spurious unlock — the wallet treats a wrong PIN as correct) or
+/// `SCA_PIN_COUNTER == 0` (the wrong attempt was NOT charged → a free guess).
+/// **KEEP IN SYNC.**
+#[no_mangle]
+pub extern "C" fn sca_pin_gated_unlock(se_unlock_ok: u32) -> u32 {
+    let pre_count = sca_pin_attempts_read();
+    if pre_count >= SCA_PIN_MAX {
+        return 1; // Err(PinLocked)
+    }
+    if sca_pin_attempts_bump() == 0 {
+        return 1; // Err(InternalError)
+    }
+    if core::hint::black_box(se_unlock_ok) != 0 {
+        // se.unlock(pin) -> Ok(master): erase the counter (fresh start)
+        // SAFETY: single-threaded test harness.
+        unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(SCA_PIN_COUNTER), 0) };
+        return 2; // Ok(master)
+    }
+    1 // Err(wrong pin) — the bump stays committed
+}
+
 // Keep the exported entry points alive: `#[no_mangle]` gives them stable symbol
 // names but does NOT make them garbage-collection roots, and cortex-m-rt's
 // linker script runs `--gc-sections`. A `#[used]` static that points at each fn
@@ -142,6 +228,12 @@ static _KEEP_C10_RELEASE: extern "C" fn(u32) -> u32 = sca_c10_verify_release;
 static _KEEP_C10_SIGN: extern "C" fn() -> *const u8 = sca_c10_sign_stub;
 #[used]
 static _KEEP_C10_VERIFY: extern "C" fn(u32) -> bool = sca_c10_verify_stub;
+#[used]
+static _KEEP_PIN_UNLOCK: extern "C" fn(u32) -> u32 = sca_pin_gated_unlock;
+#[used]
+static _KEEP_PIN_BUMP: extern "C" fn() -> u32 = sca_pin_attempts_bump;
+#[used]
+static _KEEP_PIN_READ: extern "C" fn() -> u32 = sca_pin_attempts_read;
 
 #[entry]
 fn main() -> ! {
@@ -153,6 +245,9 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_C10_RELEASE);
     core::hint::black_box(&_KEEP_C10_SIGN);
     core::hint::black_box(&_KEEP_C10_VERIFY);
+    core::hint::black_box(&_KEEP_PIN_UNLOCK);
+    core::hint::black_box(&_KEEP_PIN_BUMP);
+    core::hint::black_box(&_KEEP_PIN_READ);
     loop {
         cortex_m::asm::nop();
     }
