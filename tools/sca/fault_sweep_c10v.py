@@ -121,11 +121,18 @@ def instr_count(v):
     return len([ev for ev in e.trace if ev.get("type") == "code"]) or len(e.trace)
 
 
-def sweep_forge(v_bad, total):
+# Every invalid vector in the JSON — each fails verification at a *different*
+# point (H_msg / FORS index extraction / FORS auth path / WOTS chain / WOTS
+# digit-sum check / final root compare), so sweeping all of them exercises every
+# reject path, not just the "fails at the very end" one (`wrong-message`).
+INVALID_LABELS = ["wrong-message", "wrong-root", "mutated-R", "mutated-FORS-auth",
+                  "mutated-WOTS-sigma", "mutated-WOTS-count-target-sum-fail"]
+
+
+def sweep_forge_one(v_bad, total):
     """For each fault model, sweep every instruction of verify(invalid vector);
-    flag any fault that makes it return 1 (a forged signature accepted)."""
-    forged = {}              # label -> [(index, pc)]
-    stats = {}               # label -> (crashes, hangs, rejected)
+    return {model_label: ([(index, pc), ...], crashes, hangs, rejected)}."""
+    out = {}
     for label, model in FAULT_MODELS:
         hits, crashes, hangs, rejected = [], 0, 0, 0
         for i in range(1, total + 8):
@@ -138,7 +145,6 @@ def sweep_forge(v_bad, total):
             if st == "hang":
                 hangs += 1; continue
             if val == 1:
-                # locate the faulted instruction
                 e2 = fresh_emu()
                 setup(e2, v_bad)
                 try:
@@ -148,35 +154,35 @@ def sweep_forge(v_bad, total):
                 hits.append((i, e2["pc"]))
             else:
                 rejected += 1
-        forged[label] = hits
-        stats[label] = (crashes, hangs, rejected)
-    return forged, stats
+        out[label] = (hits, crashes, hangs, rejected)
+    return out
 
 
 if __name__ == "__main__":
-    v_ok, v_bad = vec("valid-1"), vec("wrong-message")
+    # baselines: valid → accept; every invalid vector → reject
+    e = fresh_emu(); assert run(e, vec("valid-1")) == ("ret", 1), "valid-1 baseline: verify should return 1 (accept)"
+    for lbl in INVALID_LABELS:
+        e = fresh_emu()
+        r = run(e, vec(lbl))
+        assert r == ("ret", 0), f"{lbl} baseline: verify should return 0 (reject), got {r}"
+    print(f"baselines OK  (valid-1 → accept ; {len(INVALID_LABELS)} invalid vectors → reject)")
 
-    # baselines
-    e = fresh_emu(); assert run(e, v_ok) == ("ret", 1), "valid-1 baseline: verify should return 1 (accept)"
-    e = fresh_emu(); assert run(e, v_bad) == ("ret", 0), "wrong-message baseline: verify should return 0 (reject)"
-    total = instr_count(v_bad)
-    print(f"baselines OK  (valid-1 → accept ; wrong-message → reject ; verify is {total} instructions in emulation)")
-
-    print(f"\n== C10 verify: single-fault sweep over all {total} instructions of verify(wrong-message vector) ==")
-    print("   (a fault that makes it return 1 = a FORGED signature accepted — the worst FI outcome)")
-    forged, stats = sweep_forge(v_bad, total)
+    print(f"\n== C10 verify: single-fault sweep over every instruction of verify(), for each of {len(INVALID_LABELS)} invalid vectors ==")
+    print("   (a fault that makes verify() return 1 = a FORGED signature accepted — the highest-severity FI outcome)")
     any_forge = False
-    for label, _ in FAULT_MODELS:
-        cr, hg, rej = stats[label]
-        hits = forged[label]
-        print(f"  [{label:11s}]  swept ≈{total}:  forged-accepted={len(hits)}  crashes={cr}  hangs={hg}  correctly-rejected={rej}")
-        if hits:
-            any_forge = True
-            print(f"    !!! {len(hits)} fault(s) made a FORGED signature verify as good:")
-            for i, pc in hits[:30]:
-                print(f"          [{label}] instr {i}: pc={pc:#010x}")
-            if len(hits) > 30:
-                print(f"          ... and {len(hits) - 30} more")
+    for lbl in INVALID_LABELS:
+        v_bad = vec(lbl)
+        total = instr_count(v_bad)
+        print(f"  -- {lbl}  ({total} instr) --")
+        for model_label, (hits, cr, hg, rej) in sweep_forge_one(v_bad, total).items():
+            print(f"     [{model_label:11s}]  swept ≈{total}:  forged-accepted={len(hits)}  crashes={cr}  hangs={hg}  correctly-rejected={rej}")
+            if hits:
+                any_forge = True
+                print(f"       !!! {len(hits)} fault(s) made a FORGED signature ({lbl}) verify as good:")
+                for i, pc in hits[:20]:
+                    print(f"             [{model_label}] instr {i}: pc={pc:#010x}")
+                if len(hits) > 20:
+                    print(f"             ... and {len(hits) - 20} more")
 
     print()
     if any_forge:

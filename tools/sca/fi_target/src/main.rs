@@ -184,15 +184,17 @@ pub extern "C" fn sca_pin_attempts_bump() -> u32 {
     post + 1 // Ok(post)
 }
 
-/// Mirror of `nsc::gated_unlock`'s `stm32u585` branch. `se_unlock_ok != 0` ⇒ the
-/// SE says the PIN is correct. Returns `status`: `2` = unlocked (master returned),
-/// `1` = refused (PinLocked / InternalError / wrong PIN). The harness calls with
-/// `se_unlock_ok = 0` (wrong PIN) and afterwards reads `SCA_PIN_COUNTER` directly
-/// (so the measurement doesn't itself sit in the fault window). An un-faulted run
-/// gives `status == 1` and `SCA_PIN_COUNTER == 1`. A bypass is `status == 2`
-/// (spurious unlock — the wallet treats a wrong PIN as correct) or
-/// `SCA_PIN_COUNTER == 0` (the wrong attempt was NOT charged → a free guess).
-/// **KEEP IN SYNC.**
+/// Mirror of `nsc::gated_unlock`'s `stm32u585` branch (as of commit `13c194e`,
+/// which added the post-`se.unlock` FI guard). `se_unlock_ok != 0` ⇒ the SE says
+/// the PIN is correct. Returns `status`: `2` = unlocked (master returned + the
+/// page-124 counter erased), `1` = refused (PinLocked / InternalError / wrong PIN
+/// / FI-inconsistency). The harness calls with `se_unlock_ok = 0` (wrong PIN) and
+/// afterwards reads `SCA_PIN_COUNTER` directly (so the measurement doesn't itself
+/// sit in the fault window). An un-faulted run gives `status == 1` and
+/// `SCA_PIN_COUNTER == 1`. A bypass is `status == 2` (spurious unlock — the wallet
+/// treats a wrong PIN as correct AND erases the counter) or `SCA_PIN_COUNTER == 0`
+/// (the wrong attempt was NOT charged → a free guess). **KEEP IN SYNC** with
+/// `secure/src/nsc/mod.rs::gated_unlock`.
 #[no_mangle]
 pub extern "C" fn sca_pin_gated_unlock(se_unlock_ok: u32) -> u32 {
     let pre_count = sca_pin_attempts_read();
@@ -200,15 +202,38 @@ pub extern "C" fn sca_pin_gated_unlock(se_unlock_ok: u32) -> u32 {
         return 1; // Err(PinLocked)
     }
     if sca_pin_attempts_bump() == 0 {
-        return 1; // Err(InternalError)
+        return 1; // Err(InternalError) — flash write fault
     }
-    if core::hint::black_box(se_unlock_ok) != 0 {
-        // se.unlock(pin) -> Ok(master): erase the counter (fresh start)
-        // SAFETY: single-threaded test harness.
-        unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(SCA_PIN_COUNTER), 0) };
-        return 2; // Ok(master)
+    // se.unlock(pin) — opaque call whose Ok/Err is a real branch (the real one
+    // does the PIN compare in SE silicon). Then the post-`se.unlock` FI guard
+    // that commit `13c194e` added to `gated_unlock`: capture the discriminant
+    // twice (separated by `wait_random()`), route the verdict through
+    // `fi::check_true`'s sentinel, and only take the `Ok(master)` arm if the
+    // guard agrees — otherwise `Ok(_) => Err(InternalError)`. (The `is_ok_1`/
+    // `is_ok_2` reads of `result` get CSE'd by LLVM, but `both_ok` is computed
+    // from them — = `false` for a genuine `Err` — *before* the `match`, so a
+    // single skip of the `match` discriminant lands in the `Ok(_)` →
+    // `InternalError` arm, not `Ok(master)`: the `[skip]` sweep confirms no
+    // single instruction-skip makes a wrong PIN unlock.)
+    let result: Result<(), ()> = if core::hint::black_box(se_unlock_ok) != 0 {
+        Ok(())
+    } else {
+        Err(())
+    };
+    let is_ok_1 = result.is_ok();
+    fi::wait_random();
+    let is_ok_2 = result.is_ok();
+    let both_ok = fi::check_true(|| is_ok_1 && is_ok_2);
+    match result {
+        Ok(()) if both_ok => {
+            // pin_attempts_reset(): erase the counter (fresh start)
+            // SAFETY: single-threaded test harness.
+            unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(SCA_PIN_COUNTER), 0) };
+            2 // Ok(master)
+        }
+        Ok(()) => 1,   // FI inconsistency → Err(InternalError); counter stays bumped
+        Err(()) => 1,  // wrong PIN → Err; counter stays bumped
     }
-    1 // Err(wrong pin) — the bump stays committed
 }
 
 // Keep the exported entry points alive: `#[no_mangle]` gives them stable symbol

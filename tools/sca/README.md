@@ -302,20 +302,31 @@ mitigated by the silicon's own FI countermeasures + the `wait_random` jitter".
 it only fails (loudly) if a bypass moves into `check_true`'s decision-point region
 (= an F-1 regression).
 
-### F-3 — `gated_unlock`'s SE-unlock Ok/Err discrimination is single-fault-defeatable (residual)
+### F-3 — `gated_unlock`'s SE-unlock Ok/Err discrimination — **ADDRESSED (upstream, commit `13c194e`)**
 
-`secure/src/nsc/mod.rs::gated_unlock` does `match se.unlock(pin) { Ok(master) => …, Err(e) => Err(e) }`
-— a plain `match`, not wrapped in `fi::check_true` / a sentinel. `fault_sweep_pin.py`
-shows a single instruction-skip (or stuck-at-FF) on that discriminant makes the
-gate return `Ok` on a wrong PIN — the wallet *thinks* it unlocked. **But** the real
-`se.unlock` does the PIN compare in *SE silicon* (CLAUDE.md invariant #2), so a
-wrong PIN genuinely returns `Err`; the "master" the wallet would then read is the
-`Err`-variant's union payload reinterpreted as the 32-byte `Ok` value — garbage,
-not the seed. So it's a **robustness gap** (the wallet proceeds as if unlocked,
-likely failing downstream with the garbage), not a seed extraction. Mitigation:
-wrap the SE-result discrimination in `fi::check_true` / have `se.unlock` return a
-sentinel the caller positively compares; or accept (the SE-silicon PIN gate + the
-10-attempt cap are the real defenses). `make pin` exits 0 (this is a residual).
+When this finding was first written, `secure/src/nsc/mod.rs::gated_unlock` did a
+plain `match se.unlock(pin) { Ok(master) => …, Err(e) => Err(e) }`, and an early
+version of `fault_sweep_pin.py` (mirroring that) showed a single skip on the
+discriminant making the gate return `Ok` on a wrong PIN. Commit `13c194e` then
+hardened it: `gated_unlock` now reads the discriminant **twice** (separated by
+`wait_random()`), routes the verdict through `fi::check_true`'s hamming-distant
+sentinel, and only takes the `Ok(master)` arm if the guard agrees — otherwise
+`match result { Ok(master) if both_ok => …, Ok(_) => Err(InternalError), Err(e)
+=> Err(e) }`. `fault_sweep_pin.py`'s mirror was updated to track that, and the
+`[skip]` sweep now confirms **no single instruction-skip makes a wrong PIN
+unlock**: even though LLVM CSEs the two `is_ok()` reads into one, `both_ok` is
+computed from them (= `false` for a genuine `Err`) *before* the `match`, so a
+single skip of the `match` discriminant lands in `Ok(_) => Err(InternalError)`,
+not `Ok(master)`. (Caveat: a `stuck-at-FF` on the status-return path still forces
+an "unlocked"-looking return — the inherent result-register-corruption class,
+same as the `fi::check_true` stuck-at INFO; not a `[skip]` bypass, not a
+regression. Belt-and-braces: `core::hint::black_box(&result).is_ok()` would
+defeat the `is_ok_1`/`is_ok_2` CSE if a future compiler ever hoists the `match`
+load to coincide with them — `fault_sweep_pin.py` would catch that regression.)
+And the original severity bound still holds anyway: even a successful flip would
+have the wallet read the `Err`-variant garbage as the "master", not the seed (the
+SE does the PIN compare in silicon), so it's a robustness gap, never a seed
+extraction. `make pin` exits 0.
 
 ### F-4 — the page-124 attempt isn't always charged under a single fault (residual)
 
@@ -391,9 +402,13 @@ then fails the final `computed_root == pk_root` check — the failure happens at
 the end, after everything else has run, so the sweep exercises the whole pipeline
 including the classic SPHINCS+ FI spot (the final root comparison).
 
-The whole `verify` is ~7521 instructions in emulation, so the sweep covers **all
-of it** (not just the tail), under all 3 fault models (skip / stuck-at-0 /
-stuck-at-FF).
+The whole `verify` is ~7521 instructions in emulation (fewer for vectors that
+fail earlier), so the sweep covers **all of it** (not just the tail), under all 3
+fault models (skip / stuck-at-0 / stuck-at-FF), and over **every invalid vector in
+the JSON** (`wrong-message`, `wrong-root`, `mutated-R`, `mutated-FORS-auth`,
+`mutated-WOTS-sigma`, `mutated-WOTS-count-target-sum-fail`) — each fails at a
+different point (H_msg / FORS index extraction / FORS auth path / WOTS chain /
+WOTS digit-sum check / final root compare), so every reject path is exercised.
 
 **Result: clean** — across all 3 models, sweeping every one of the ~7521
 instructions, **no single fault made a forged signature verify as good** (the
