@@ -72,7 +72,7 @@ pub fn c10_sign_verified_with_progress(
     // fault on `v`'s storage, at the cost of a second multi-second verify.)
     crate::fi::wait_random();
     let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
-    if !crate::fi::check_true(|| core::hint::black_box(v)) {
+    if crate::fi::check_true_into_sentinel(|| core::hint::black_box(v)) != crate::fi::OK_SENTINEL {
         return Err(());
     }
     Ok(sig)

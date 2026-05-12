@@ -443,18 +443,21 @@ pub unsafe fn gated_unlock(
     let is_ok_1 = result.is_ok();
     crate::fi::wait_random();
     let is_ok_2 = result.is_ok();
-    let both_ok = crate::fi::check_true(|| is_ok_1 && is_ok_2);
+    // Sentinel-encoded verdict (not a bare `bool`) — a glitch on this call or
+    // on the `match`'s guard then almost certainly yields a value `!= OK_SENTINEL`
+    // and so falls to the `Ok(_) => InternalError` arm rather than `Ok(master)`.
+    let verdict = crate::fi::check_true_into_sentinel(|| is_ok_1 && is_ok_2);
 
     match result {
-        Ok(master) if both_ok => {
+        Ok(master) if verdict == crate::fi::OK_SENTINEL => {
             #[cfg(feature = "stm32u585")]
             let _ = crate::hw::flash::pin_attempts_reset();
             Ok(master)
         }
         Ok(_) => {
-            // FI inconsistency between two reads of `result.is_ok()`
-            // — refuse without resetting the MCU counter. Counter
-            // stays bumped from the pre-commit above.
+            // FI inconsistency between the two reads of `result.is_ok()` (or a
+            // glitched `verdict`) — refuse without resetting the MCU counter.
+            // Counter stays bumped from the pre-commit above.
             Err(UnlockError::InternalError)
         }
         Err(e) => Err(e),

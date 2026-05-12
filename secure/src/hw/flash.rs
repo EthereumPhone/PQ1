@@ -520,7 +520,7 @@ pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
     }
     // Re-read under a sentinel-gated check — a glitch that skips the
     // `if post != pre + 1` bypass has to also defeat `fi::check_true`.
-    if !crate::fi::check_true(|| pin_attempts_read() == pre + 1) {
+    if crate::fi::check_true_into_sentinel(|| pin_attempts_read() == pre + 1) != crate::fi::OK_SENTINEL {
         return Err(());
     }
     Ok(post)
@@ -1336,7 +1336,7 @@ pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<
     if post != new_count {
         return Err(());
     }
-    if !crate::fi::check_true(|| offchain_count_read(slot_key) == new_count) {
+    if crate::fi::check_true_into_sentinel(|| offchain_count_read(slot_key) == new_count) != crate::fi::OK_SENTINEL {
         return Err(());
     }
     Ok(())

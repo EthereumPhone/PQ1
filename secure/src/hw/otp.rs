@@ -240,7 +240,7 @@ pub unsafe fn bump_to(target: u32) -> Result<(), OtpError> {
     let after1 = rollback_floor();
     crate::fi::wait_random();
     let after2 = rollback_floor();
-    if !crate::fi::check_true(|| after1 >= target && after2 >= target) {
+    if crate::fi::check_true_into_sentinel(|| after1 >= target && after2 >= target) != crate::fi::OK_SENTINEL {
         return Err(OtpError::ProgramError);
     }
     Ok(())

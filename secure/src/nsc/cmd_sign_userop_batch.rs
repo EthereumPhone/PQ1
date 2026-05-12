@@ -507,7 +507,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                     c10_sk.pk_seed(), c10_sk.pk_root(), &factory_digest, &factory_sig);
                 (v1, v2)
             };
-            if !crate::fi::check_true(|| fv1 && fv2) {
+            if crate::fi::check_true_into_sentinel(|| fv1 && fv2) != crate::fi::OK_SENTINEL {
                 entropy.zeroize();
                 ui::show_status("FactorySig", "verify FAIL");
                 return NscStatus::CryptoError as u32;
@@ -581,7 +581,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                     c10_sk.pk_seed(), c10_sk.pk_root(), &t1_digest, &bootstrap_sig);
                 (v1, v2)
             };
-            if !crate::fi::check_true(|| bv1 && bv2) {
+            if crate::fi::check_true_into_sentinel(|| bv1 && bv2) != crate::fi::OK_SENTINEL {
                 entropy.zeroize();
                 ui::show_status("Type1 sig", "verify FAIL");
                 return NscStatus::CryptoError as u32;
@@ -656,7 +656,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let v2 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_digest, &t2_sig);
         (v1, v2)
     };
-    if !crate::fi::check_true(|| v1 && v2) {
+    if crate::fi::check_true_into_sentinel(|| v1 && v2) != crate::fi::OK_SENTINEL {
         entropy.zeroize();
         ui::show_status("Sig verify", "FAIL");
         return NscStatus::CryptoError as u32;

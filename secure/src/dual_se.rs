@@ -202,7 +202,7 @@ impl WalletStore for DualSecureElement {
         let c1: bool = derived_master.ct_eq(&master_o).into();
         crate::fi::wait_random();
         let c2: bool = derived_master.ct_eq(&master_o).into();
-        if !crate::fi::check_true(|| c1 && c2) {
+        if crate::fi::check_true_into_sentinel(|| c1 && c2) != crate::fi::OK_SENTINEL {
             full_entropy.zeroize();
             let mut mo = master_o;
             mo.zeroize();

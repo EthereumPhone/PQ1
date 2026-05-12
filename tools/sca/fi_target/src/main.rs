@@ -118,7 +118,7 @@ pub extern "C" fn sca_c10_verify_release(want_pass: u32) -> u32 {
     let sig = sca_c10_sign_stub(); // sk.sign_with_progress(msg_hash, None, progress);
     fi::wait_random(); // crate::fi::wait_random();
     let v = sca_c10_verify_stub(want_pass); // sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
-    if !fi::check_true(|| core::hint::black_box(v)) {
+    if fi::check_true_into_sentinel(|| core::hint::black_box(v)) != fi::OK_SENTINEL {
         return 0; // return Err(());
     }
     core::hint::black_box(sig); // Ok(sig)
@@ -178,7 +178,7 @@ pub extern "C" fn sca_pin_attempts_bump() -> u32 {
     if post != pre + 1 {
         return 0; // Err(())
     }
-    if !fi::check_true(|| sca_pin_attempts_read() == pre + 1) {
+    if fi::check_true_into_sentinel(|| sca_pin_attempts_read() == pre + 1) != fi::OK_SENTINEL {
         return 0; // Err(())
     }
     post + 1 // Ok(post)
@@ -223,9 +223,9 @@ pub extern "C" fn sca_pin_gated_unlock(se_unlock_ok: u32) -> u32 {
     let is_ok_1 = result.is_ok();
     fi::wait_random();
     let is_ok_2 = result.is_ok();
-    let both_ok = fi::check_true(|| is_ok_1 && is_ok_2);
+    let verdict = fi::check_true_into_sentinel(|| is_ok_1 && is_ok_2);
     match result {
-        Ok(()) if both_ok => {
+        Ok(()) if verdict == fi::OK_SENTINEL => {
             // pin_attempts_reset(): erase the counter (fresh start)
             // SAFETY: single-threaded test harness.
             unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(SCA_PIN_COUNTER), 0) };

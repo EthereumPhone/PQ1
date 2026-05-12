@@ -294,27 +294,44 @@ mirror* of `crypto.rs` (it can't be cheaply `#[path]`-included), with
 `sign`/`verify` stubbed. The mirror tracks `crypto.rs` line-for-line — confirm
 against the real binary before treating it as exhaustive.
 
-### F-2 — verify-before-release *call-site glue* is single-fault-defeatable (residual; needs a design decision)
+### F-2 — verify-before-release *call-site glue* — **PARTIALLY MITIGATED** (`fi::check_true_into_sentinel`)
 
-Even with the F-1 fix, ~3 single instruction-skips (and a few more under
-stuck-at-`0xFFFFFFFF`) still make `sca_c10_verify_release` "release the
-signature": skip the `bl check_true` call (→ a stale stack pointer in `r0` looks
-truthy to the caller), skip the `cbz r0` post-check that branches to `Err`, skip
-the prologue load of `v` into `check_true`'s frame, or stuck-at-FF a result
-register. These aren't a `check_true` failure — they're the inherent weakness of
-the `if !guard() { return err }` idiom: `check_true` hardens *its own* internal
-check, but can't stop the caller from skipping the call to it, the branch on its
-result, or replacing its boolean return with a glitched register value. The
-textbook mitigation is a **sentinel-encoded return**: `c10_sign_verified` returns
-`OK_SENTINEL`/`FAIL_SENTINEL` (not a 0/1 `Result`) and the caller compares
-against `OK_SENTINEL` — then "skip the `bl`" yields garbage `≠ OK_SENTINEL`
-(error path), and stuck-at-FF likewise. Even that isn't single-fault-proof
-(it raises the cost, doesn't eliminate); the realistic decision is "add a
-sentinel-encoded return + caller re-check" vs "accept this as residual,
-mitigated by the silicon's own FI countermeasures + the `wait_random` jitter".
-**Maintainer's call.** `make c10` exits 0 with this printed as a known residual;
-it only fails (loudly) if a bypass moves into `check_true`'s decision-point region
-(= an F-1 regression).
+Even with the F-1 fix, a single fault still made `sca_c10_verify_release` "release
+the signature" via the *call-site glue*: skip the `bl check_true` call (→ a stale
+register looks truthy to the caller), stuck-at-FF the bool return register, skip
+the post-check branch, or skip the prologue load of `v` into `check_true`'s frame.
+These aren't a `check_true` *internal* failure — they're the inherent weakness of
+the `if !guard() { return err }` / bool-return idiom: `check_true` hardens its own
+check, but can't stop the caller skipping the call, the branch on the result, or a
+stuck-at on a `bool`-shaped return register.
+
+**Action taken.** Added `fi::check_true_into_sentinel<F>(cond) -> u32` (a sibling
+of `check_true` — same body, but returns `OK_SENTINEL`/`FAIL_SENTINEL` instead of
+a `bool`), and migrated **all ~13 `check_true` callsites in the `secure` crate**
+to `if crate::fi::check_true_into_sentinel(C) != crate::fi::OK_SENTINEL { err }`
+(and `gated_unlock`'s `match result { Ok(master) if verdict == OK_SENTINEL => …,
+Ok(_) => Err(InternalError), Err(e) => Err(e) }`). Files: `crypto.rs`,
+`nsc/mod.rs`, `nsc/cmd_sign_userop.rs` ×3, `nsc/cmd_sign_userop_batch.rs` ×3,
+`nsc/cmd_sign_offchain.rs`, `dual_se.rs`, `hw/otp.rs`, `hw/flash.rs` ×2 — built
+clean for `thumbv8m` (`mock-se+…+stm32u585` and `dual-se+…+stm32u585`), `cargo
+test -p sphincs-tz-secure` 105/105 (incl. `glitched_unlock_returns_internal_error`, the
+`gated_unlock`-path and `fi::tests` cases), and `make c10`/`make pin` exit 0 (their
+harness mirrors exercise `check_true_into_sentinel` + the `!= OK_SENTINEL` caller
+pattern). (`make e2e` — the QEMU unified-sign e2e — timed out at the 10-min budget,
+which is QEMU's software-SHA C10-sign×2 being slow, not a regression; `make run`
+smoke is the lighter confirmation.) This
+**kills "skip the `bl`" and "stuck-at the return register"** at every gated
+callsite (a garbage register is overwhelmingly `≠ OK_SENTINEL` → the caller takes
+the error path) and turns the harness mirror's residual from "skip the `bl
+check_true`" into just "skip the caller's `if … != OK_SENTINEL { err }` branch"
+(the irreducible one-skip-of-the-return-branch — could be doubled) plus the
+boolean-source routes (corrupting `cond`, out of `check_true`'s scope). `make c10`
+exits 0 with the remaining 4–6 hits printed as the F-2 residual; it fails (loudly)
+only if a bypass moves into `check_true_into_sentinel`'s *internal* logic
+(= an F-1-class regression). (We keep `check_true` as a standalone body — *not* a
+wrapper over `check_true_into_sentinel` — because the `== OK_SENTINEL → bool`
+reduction a wrapper adds is itself a one-skip-to-a-truthy-`FAIL_SENTINEL`; `make
+fi` caught that when tried.)
 
 ### F-3 — `gated_unlock`'s SE-unlock Ok/Err discrimination — **ADDRESSED (upstream, commit `13c194e`)**
 
@@ -342,28 +359,32 @@ have the wallet read the `Err`-variant garbage as the "master", not the seed (th
 SE does the PIN compare in silicon), so it's a robustness gap, never a seed
 extraction. `make pin` exits 0.
 
-### F-4 — the page-124 attempt isn't always charged under a single fault (residual)
+### F-4 — the page-124 attempt isn't always charged under a single fault — **minor (the SE-silicon counter is the real gate); accept**
 
 `gated_unlock`'s pre-commit (`if pin_attempts_bump().is_err() { return InternalError }`,
 then `se.unlock`) is meant to make every wrong-PIN attempt cost a charged counter
-slot. `fault_sweep_pin.py` shows a single fault that skips the `bl pin_attempts_bump`
-call (from `gated_unlock`), or skips `pin_attempts_bump`'s `write_quadword_verified`
-call (its `post != pre+1` re-check then makes it return `Err`, so `gated_unlock`
-correctly *refuses* with `InternalError` — but the counter didn't advance), leaves
-the wrong attempt uncharged → a "free guess". This is the same `if !guard() { err }`
-/ call-glue residual as **F-2**: `pin_attempts_bump`'s internal re-checks
-(`post != pre+1`, `check_true(|| pin_attempts_read() == pre+1)`) harden the bump's
-*innards* — and that internal invariant (`Ok` ⇒ counter advanced) holds against
-single instruction-skips in the sweep — but can't stop the caller skipping the whole
-`bl bump`, or a glitched flash-write being correctly-refused-but-uncharged. Impact:
-≤10 free guesses = a 1-in-10⁶-per-try lottery, still capped at 10 (vs the intended
-10 *charged* attempts). Mitigation: a sentinel-encoded bump result the caller
-positively compares (and/or charge-on-refuse where flash permits); or accept. The
-`make pin` "pin_attempts_bump invariant check" only fails on a `[skip]`-model
-violation of the bump's internal invariant (none currently); stuck-at-FF on the
-bump's Ok/Err return slot produces an "Ok"-looking value, the same
-result-register-corruption class as the `fi::check_true` stuck-at-FF INFO above —
-reported, not a regression.
+slot. `fault_sweep_pin.py` shows a single fault that skips the `bl pin_attempts_bump`,
+or skips `pin_attempts_bump`'s `write_quadword_verified` (its `post != pre+1`
+re-check then makes it return `Err`, so `gated_unlock` correctly *refuses* with
+`InternalError` — but the MCU's page-124 counter didn't advance), leaves the wrong
+attempt uncharged → a "free guess". **But that "free guess" only affects the MCU's
+*redundant* counter, not the authoritative one**: `gated_unlock` does the page-124
+bump *before* `se.unlock(pin)`, so even when the bump is glitched/skipped,
+`se.unlock(pin)` still runs and the SE counts the wrong PIN **in silicon**
+(invariant #2 — SE050 UserID `max_attempts`, OPTIGA F1D0/E120 LUC). Boot reconciles
+to the *strictest* of {MCU page-124, OPTIGA E120 LUC, SE050 UserID}, so if the
+MCU's lags, the SE's becomes the gate → 10 attempts → wipe. So the MCU-side
+redundancy degrades to no-redundancy under a precise repeated glitch, but the
+**primary (SE-silicon) rate-limit holds** — it's a robustness/redundancy gap, not
+an unlimited-guesses hole. A "fix" would be drastic (treat a `pin_attempts_bump`
+failure as tamper → `factory_reset_admin`); `pin_attempts_bump`'s *internal*
+re-check is now `fi::check_true_into_sentinel`-based (F-2 migration). **Recommend:
+accept** (and the README/threat-model could note "the MCU page-124 counter is a
+redundant belt over the SE-silicon braces; under FI, the braces are what hold").
+`make pin` exits 0; its "pin_attempts_bump invariant check" fails only on a
+`[skip]`-model violation of the bump's internal `Ok ⇒ counter advanced` invariant
+(none currently — stuck-at-FF on the bump's return slot is the inherent
+result-register class, not a regression).
 
 ## Leakage analysis — `leakage_kdf.py` (first lascar target)
 
@@ -465,7 +486,7 @@ surprised by "a malformed sig makes verify do a million hashes". **Not fixed**
 (it's `sphincs-c10` / the Yul verifier — out of scope of this tooling pass;
 flagged for the maintainer).
 
-### F-5 — `fi::check_true` is ~2-coordinated-skip-defeatable, not 4-skip as its doc claimed — **doc updated**
+### F-5 — `fi::check_true` is ~2-coordinated-skip-defeatable, not 4-skip as its doc claimed — **doc updated + the result-path route mitigated at call sites**
 
 `fi::check_true`'s doc-comment said "a glitch must successfully skip ALL FOUR
 decision points to turn a `false` into a `true` return". The `[skip,skip]` pair
@@ -481,10 +502,18 @@ the fail-path zeroing → leaving `FAIL_SENTINEL`/garbage in `r0`). The same res
 shows up under `[stuck-at-FF]` (a stuck-at on the return register defeats any
 `bool`-returning fn). So: `check_true` raises the bar from 1 skip to **~2
 coordinated faults**, and the only in-`check_true` two-skip route is the
-result/return path. **Action taken:** `secure/src/fi.rs`'s `check_true` doc-comment
-was updated to say this honestly (no behavioural change). **Not done (maintainer's
-call):** sentinel-encode `check_true`'s return (so the caller compares against
-`OK_SENTINEL` instead of a bare `bool` — a garbage return register is then
-overwhelmingly ≠ `OK_SENTINEL`), and/or double the caller's `if !verdict { err }`
-branch. `make fi-twofault` exits 0 — the single-fault `[skip]` sweep (the contract
-test) still passes; F-5 is the harder 2-coordinated-skip case.
+result/return path. **Action taken:** (a) `secure/src/fi.rs`'s `check_true`
+doc-comment rewritten to say this honestly; (b) added `fi::check_true_into_sentinel`
+and migrated all ~13 `check_true` callsites in the `secure` crate to compare a
+sentinel rather than a bare `bool` (see F-2) — so a garbage / `FAIL_SENTINEL`
+return is `≠ OK_SENTINEL` → the caller takes the error path: the *result/return-path*
+2-skip route and the stuck-at-on-return route are no longer call-site bypasses.
+**Still residual (maintainer's call):** the 2-coordinated-skip route *inside*
+`check_true_into_sentinel` itself (corrupting its sentinel commit) — and doubling
+each caller's `if … != OK_SENTINEL { err }` branch would harden the irreducible
+one-skip-of-the-return-branch a notch further; or accept (2 *coordinated* skips is
+a steep bar). `make fi`/`make fi-twofault` exit 0 — the single-fault `[skip]`
+sweep (the contract test) still passes; `make fi` caught and rejected the one
+attempt at making `check_true` a *wrapper* over `check_true_into_sentinel` (the
+`== OK_SENTINEL → bool` reduction it adds is itself a one-skip-to-truthy step), so
+both functions are kept as standalone bodies.

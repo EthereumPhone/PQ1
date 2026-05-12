@@ -345,7 +345,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let v2 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &hash_to_sign, &sig);
         (v1, v2)
     };
-    if !crate::fi::check_true(|| v1 && v2) {
+    if crate::fi::check_true_into_sentinel(|| v1 && v2) != crate::fi::OK_SENTINEL {
         crate::ui::show_status("Sig verify", "FAIL");
         return NscStatus::CryptoError as u32;
     }

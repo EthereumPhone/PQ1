@@ -152,17 +152,36 @@ pub fn wait_random() {
 /// trivially forceable). A `stuck-at` on the return register likewise
 /// defeats any `bool`-returning fn — the same residual.
 ///
+/// Prefer [`check_true_into_sentinel`] at call sites that gate something
+/// security-relevant: a `bool` return is one-skip / one-stuck-at away from
+/// truthy at the *caller's* `if !verdict { … }` (skip the `bl`, the branch,
+/// or stuck-at the return register); a `u32` sentinel return means a garbage
+/// register is overwhelmingly `!= OK_SENTINEL`, so the caller's
+/// `if verdict != OK_SENTINEL { … }` still takes the error path.
+///
 /// Typical use at a verify-before-release site:
 ///
 /// ```ignore
-/// if !fi::check_true(|| sphincs_c10::verify(pk, root, &msg, &sig)) {
+/// if fi::check_true_into_sentinel(|| sphincs_c10::verify(pk, root, &msg, &sig))
+///     != fi::OK_SENTINEL
+/// {
 ///     return NscStatus::CryptoError as u32;
 /// }
 /// ```
 ///
-/// Returns the final verdict. The caller is still responsible for the
-/// zeroize / error branch; this fn just makes the `true` path expensive
-/// for an attacker to reach.
+/// The caller is still responsible for the zeroize / error branch; these fns
+/// just make the `true` path expensive for an attacker to reach.
+///
+/// Returns the final verdict as a `bool`.
+///
+/// **Prefer [`check_true_into_sentinel`]** at sites that gate something
+/// security-relevant: a `bool` return at the *caller's* `if !verdict { … }` is
+/// only a stuck-at (or a skip of the `movne`/branch) away from truthy, whereas a
+/// `u32` sentinel return means a garbage register is overwhelmingly
+/// `!= OK_SENTINEL`, so the caller's `if verdict != OK_SENTINEL { … }` still
+/// takes the error path. (We keep `check_true` standalone — not a wrapper over
+/// `check_true_into_sentinel` — because the `== OK_SENTINEL → bool` reduction a
+/// wrapper would add is itself a one-skip-to-truthy step.)
 #[inline(never)]
 pub fn check_true<F: FnMut() -> bool>(mut cond: F) -> bool {
     let v1 = cond();
@@ -179,6 +198,34 @@ pub fn check_true<F: FnMut() -> bool>(mut cond: F) -> bool {
     sentinel_storage.zeroize();
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     result
+}
+
+/// Like [`check_true`] but returns the hamming-distant sentinel
+/// [`OK_SENTINEL`] (verdict held) / [`FAIL_SENTINEL`] (otherwise) instead of a
+/// `bool`. The caller compares `result != OK_SENTINEL` — a single fault on the
+/// call (`bl`), the caller's branch, or a stuck-at on the return register then
+/// almost certainly leaves a value `!= OK_SENTINEL` and so takes the error
+/// path, rather than a 50/50-truthy `bool`. (Faults *inside* this fn — and
+/// faults that corrupt `cond` itself, which this does not protect — still follow
+/// the analysis in `tools/sca/fault_sweep_fi.py`: ~2 coordinated faults; see
+/// Finding F-5 in `tools/sca/README.md`. Body is intentionally a near-copy of
+/// [`check_true`] rather than a wrapper either way round — see that fn's note.)
+#[inline(never)]
+pub fn check_true_into_sentinel<F: FnMut() -> bool>(mut cond: F) -> u32 {
+    let v1 = cond();
+    wait_random();
+    let v2 = cond();
+    let mut sentinel_storage: u32 = if v1 && v2 { OK_SENTINEL } else { FAIL_SENTINEL };
+    let sentinel_ptr = &mut sentinel_storage as *mut u32;
+    wait_random();
+    let s = vread(sentinel_ptr);
+    // Hamming-safe triple: sentinel is OK AND both booleans were true.
+    let verdict = if s == OK_SENTINEL && v1 && v2 { OK_SENTINEL } else { FAIL_SENTINEL };
+    // Destructor scrub — prevents a stale sentinel from leaking to the
+    // next stack frame.
+    sentinel_storage.zeroize();
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    verdict
 }
 
 /// Halt the CPU in a WFE loop. No return, no panic unwinding.
