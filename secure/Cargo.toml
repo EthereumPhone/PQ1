@@ -489,6 +489,20 @@ ui-mirror = ["dep:rtt-target", "ui-oled"]
 
 [build-dependencies]
 qrcodegen = "1.8"
+# Used by `generate_vendor_pubkey` to embed `VENDOR_PK_{SEED,ROOT,FPR}`
+# into the secure image at build time. Mirrors `fsbl/build.rs`; both
+# must produce identical bytes from the same `FSBL_VENDOR_PUBKEY`
+# env var so the secure firmware's BEGIN-time signature check and
+# FSBL's boot-time check agree on the trusted vendor.
+#
+# NOTE: build.rs does NOT pull in sphincs-c10 — cargo's feature
+# unification across target and host deps would propagate
+# `hw-sha256` (enabled on the target build) into the host build
+# script, which then fails to link against the secure-side
+# `pqsigner_sha256_*` externs. Instead build.rs requires the caller
+# to supply a precomputed 32-byte pubkey file via FSBL_VENDOR_PUBKEY;
+# `make dev-pubkey-fixture` generates one for dev builds.
+sha2        = "0.10"
 
 [dev-dependencies]
 hex = { workspace = true }

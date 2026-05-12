@@ -965,6 +965,26 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                     return NscStatus::CryptoError as u32;
                 }
             };
+            // Outer FI guard, symmetric with the Type 2 release. The sig
+            // is already FI-verified inside `c10_sign_verified_*`; this
+            // second pass guards the path between sign and the
+            // initCode-buffer copy below. A glitch that corrupts
+            // `factory_sig` or `factory_digest` post-sign would fail this
+            // gate; without it the firmware would happily embed the
+            // corrupted sig into the initCode blob.
+            let (fv1, fv2) = {
+                let v1 = sphincs_c10::verify(
+                    c10_sk.pk_seed(), c10_sk.pk_root(), &factory_digest, &factory_sig);
+                crate::fi::wait_random();
+                let v2 = sphincs_c10::verify(
+                    c10_sk.pk_seed(), c10_sk.pk_root(), &factory_digest, &factory_sig);
+                (v1, v2)
+            };
+            if !crate::fi::check_true(|| fv1 && fv2) {
+                entropy.zeroize();
+                ui::show_status("FactorySig", "verify FAIL");
+                return NscStatus::CryptoError as u32;
+            }
 
             // Build the initCode blob. Layout:
             //
@@ -1053,6 +1073,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                     return NscStatus::CryptoError as u32;
                 }
             };
+            // Outer FI guard, symmetric with Type 2.
+            let (bv1, bv2) = {
+                let v1 = sphincs_c10::verify(
+                    c10_sk.pk_seed(), c10_sk.pk_root(), &t1_digest, &bootstrap_sig);
+                crate::fi::wait_random();
+                let v2 = sphincs_c10::verify(
+                    c10_sk.pk_seed(), c10_sk.pk_root(), &t1_digest, &bootstrap_sig);
+                (v1, v2)
+            };
+            if !crate::fi::check_true(|| bv1 && bv2) {
+                entropy.zeroize();
+                ui::show_status("Type1 sig", "verify FAIL");
+                return NscStatus::CryptoError as u32;
+            }
 
             encode_signature_wrapper(&mut *type1_wrapper_out, 0, &bootstrap_sig);
             emit_type1 = true;
@@ -1110,9 +1144,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     };
 
-    // Verify-before-release, double-evaluated (HIGH-3) with FI hardening.
-    // A random-length volatile delay separates the two verifies so a
-    // glitch-burst that spans one verify cannot skip the second.
+    // Verify-before-release, double-evaluated with FI hardening. A
+    // random-length volatile delay separates the two verifies, and
+    // `fi::check_true` gates the AND through a hamming-distant
+    // sentinel that survives single-bit flips. Defence in depth: the
+    // sig was already FI-verified inside
+    // `c10_sign_verified_with_progress`; this second pass guards the
+    // path between sign and release-to-NS.
     let (v1, v2) = {
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
@@ -1127,9 +1165,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let v2 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &t2_digest, &t2_sig);
         (v1, v2)
     };
-    crate::fi::wait_random();
-    let ok_sentinel: u32 = if v1 && v2 { crate::fi::OK_SENTINEL } else { crate::fi::FAIL_SENTINEL };
-    if ok_sentinel != crate::fi::OK_SENTINEL || !v1 || !v2 {
+    if !crate::fi::check_true(|| v1 && v2) {
         entropy.zeroize();
         ui::show_status("Sig verify", "FAIL");
         return NscStatus::CryptoError as u32;
@@ -1220,6 +1256,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     type1_wrapper_out.zeroize();
     type2_wrapper_out.zeroize();
     init_code_out.zeroize();
+    // L-2: wipe the TOCTOU snapshot on exit too. The payload itself is
+    // not secret (the NS side sourced it) but it contains user metadata
+    // (names, EIP-712 readable text, recipients) that we don't want
+    // leaving in BSS until the next sign overwrites it.
+    {
+        let buf = &mut *core::ptr::addr_of_mut!(SNAP_BUF);
+        for b in buf.iter_mut() {
+            *b = 0;
+        }
+    }
 
     crate::timeout::reset_activity();
     ui::show_status("Signed", "");

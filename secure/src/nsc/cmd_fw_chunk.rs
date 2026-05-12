@@ -25,6 +25,12 @@ use super::GatewayArgs;
 use crate::fw_update::{self, ChunkError};
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
+    // Critical: hold the busy guard so SysTick's idle-wipe cannot drop
+    // FW_UPDATE while we hold a mutable reference into it via
+    // `.as_mut().unwrap()` below. Without this, an idle-wipe between the
+    // borrow and the chunk write is a use-after-drop on `FwUpdateCtx`.
+    let _busy = super::HandlerGuard::enter();
+
     if !peek_state(|s| s.pin_verified) {
         return NscStatus::NotInitialized as u32;
     }

@@ -345,13 +345,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let v2 = sphincs_c10::verify(slot_ref.pk_seed(), slot_ref.pk_root(), &hash_to_sign, &sig);
         (v1, v2)
     };
-    crate::fi::wait_random();
-    let ok_sentinel: u32 = if v1 && v2 {
-        crate::fi::OK_SENTINEL
-    } else {
-        crate::fi::FAIL_SENTINEL
-    };
-    if ok_sentinel != crate::fi::OK_SENTINEL || !v1 || !v2 {
+    if !crate::fi::check_true(|| v1 && v2) {
         crate::ui::show_status("Sig verify", "FAIL");
         return NscStatus::CryptoError as u32;
     }
@@ -372,6 +366,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
     for i in 0..SIGNATURE_LEN {
         core::ptr::write_volatile(out_ptr.add(SIGN_OFFCHAIN_OUTPUT_SIG_OFF + i), sig[i]);
+    }
+
+    // L-2: wipe the TOCTOU snapshot on exit.
+    {
+        let buf = &mut *core::ptr::addr_of_mut!(SNAP_BUF);
+        for b in buf.iter_mut() {
+            *b = 0;
+        }
     }
 
     crate::timeout::reset_activity();

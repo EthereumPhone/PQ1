@@ -317,12 +317,16 @@ pub fn is_unlocked() -> bool {
 /// (which would leave the stack copies disagreeing with the state
 /// the user just had wiped — a classic aliasing-under-ISR bug).
 ///
-/// Stored as a plain `static mut u32` with volatile access. We do
-/// not need atomicity because Cortex-M33 single-core execution is
-/// strictly linear outside ISRs, and SysTick reads the value with a
-/// `read_volatile` + comparison that is itself atomic on 32-bit
-/// aligned loads.
-static mut HANDLER_DEPTH: u32 = 0;
+/// Stored as `AtomicU32` so the entry-side `fetch_add(1)` is a
+/// single LDREX/STREX RMW. An earlier plain-`static mut` version had
+/// a tiny but real race window between the read of the old value
+/// and the write of `+1` where SysTick could observe `depth == 0`,
+/// run idle-wipe, then resume — leaving the handler operating on
+/// wiped state. The wipe is fail-safe (the handler bails out at the
+/// pin-verified check) but the race violates the docstring promise
+/// that "SysTick refuses to wipe when depth > 0".
+static HANDLER_DEPTH: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
 
 /// Guard type: increment on construction, decrement on drop.
 pub(crate) struct HandlerGuard;
@@ -331,30 +335,33 @@ impl HandlerGuard {
     /// RAII guard — call at the top of every long-running gateway
     /// handler (sign, request_unlock). Drop at function exit.
     pub(crate) fn enter() -> Self {
-        // SAFETY: single-threaded outside ISRs; we only need the
-        // write to be visible before SysTick can fire again.
-        unsafe {
-            let d = core::ptr::read_volatile(core::ptr::addr_of!(HANDLER_DEPTH));
-            core::ptr::write_volatile(core::ptr::addr_of_mut!(HANDLER_DEPTH), d + 1);
-        }
+        HANDLER_DEPTH.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         HandlerGuard
     }
 }
 
 impl Drop for HandlerGuard {
     fn drop(&mut self) {
-        unsafe {
-            let d = core::ptr::read_volatile(core::ptr::addr_of!(HANDLER_DEPTH));
-            let nd = d.saturating_sub(1);
-            core::ptr::write_volatile(core::ptr::addr_of_mut!(HANDLER_DEPTH), nd);
+        // Saturating decrement via CAS loop. `fetch_sub` would
+        // underflow if Drop ever runs more times than `enter`
+        // (cannot happen in safe Rust, but stays conservative).
+        use core::sync::atomic::Ordering;
+        let mut cur = HANDLER_DEPTH.load(Ordering::SeqCst);
+        loop {
+            let next = cur.saturating_sub(1);
+            match HANDLER_DEPTH.compare_exchange_weak(
+                cur, next, Ordering::SeqCst, Ordering::SeqCst,
+            ) {
+                Ok(_) => return,
+                Err(observed) => cur = observed,
+            }
         }
     }
 }
 
 /// Read the current handler-busy depth from a SysTick handler.
 pub fn handler_is_busy() -> bool {
-    // SAFETY: 32-bit aligned volatile load is atomic on Cortex-M33.
-    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(HANDLER_DEPTH)) > 0 }
+    HANDLER_DEPTH.load(core::sync::atomic::Ordering::SeqCst) > 0
 }
 
 /// Test-only helper: stamp the secure-side master secret and mark the
@@ -416,11 +423,39 @@ pub unsafe fn gated_unlock(
         }
     }
 
-    match se.unlock(pin) {
-        Ok(master) => {
+    let result = se.unlock(pin);
+
+    // FI guard: capture the discriminant twice, separated by
+    // `wait_random()`, and route the verdict through the
+    // hamming-distant sentinel in `fi::check_true`. A single
+    // glitch that turns an `Err` into an `Ok` selection would have
+    // to also defeat both `is_ok()` re-evaluations and the sentinel
+    // compare. This raises the cost of the "wrong PIN unlocks +
+    // resets the counter" attack from a single fault to a multi-
+    // fault sequence; the SE silicon counter still rate-limits at
+    // the cryptographic gate.
+    //
+    // Note: if `result` is `Ok(_)` with garbage master_secret
+    // (because the SE driver itself was glitched at the chip
+    // boundary), the downstream AES-GCM entropy_blob decrypt MAC
+    // check will reject it. This FI guard is defense in depth, not
+    // a primary gate.
+    let is_ok_1 = result.is_ok();
+    crate::fi::wait_random();
+    let is_ok_2 = result.is_ok();
+    let both_ok = crate::fi::check_true(|| is_ok_1 && is_ok_2);
+
+    match result {
+        Ok(master) if both_ok => {
             #[cfg(feature = "stm32u585")]
             let _ = crate::hw::flash::pin_attempts_reset();
             Ok(master)
+        }
+        Ok(_) => {
+            // FI inconsistency between two reads of `result.is_ok()`
+            // — refuse without resetting the MCU counter. Counter
+            // stays bumped from the pre-commit above.
+            Err(UnlockError::InternalError)
         }
         Err(e) => Err(e),
     }

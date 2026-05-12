@@ -38,6 +38,7 @@ use crate::hw::flash::{self, Slot};
 use sphincs_tz_shared::{FW_IMAGE_KIND_NONSECURE, FW_IMAGE_KIND_SECURE};
 
 pub mod staging;
+pub mod vendor_pubkey;
 pub mod verify;
 
 /// Render the new-firmware measurement on the OLED and wait for the
@@ -219,65 +220,31 @@ pub fn verify_manifest(
     m.verify_structural()?;
     m.verify_crc()?;
     m.verify_digest()?;
-    // The vendor pubkey the secure firmware knows is... the same one
-    // FSBL knows, because it's compiled in at FSBL build time. The
-    // secure firmware doesn't directly embed it — instead, on the
-    // first BEGIN of a session, we trust-but-verify: FSBL has already
-    // verified the CURRENTLY-RUNNING firmware via the same pubkey,
-    // so any manifest the secure firmware accepts must ALSO verify
-    // under whatever pubkey FSBL holds. We achieve this by having the
-    // secure firmware read the `vendor_pubkey_fpr` from its own
-    // active slot's manifest (which FSBL verified), and require the
-    // new manifest to carry the same fingerprint. The signature
-    // itself is then verified under the two fingerprint-matching
-    // fields (pk_seed, pk_root) — but we don't have those in the
-    // secure firmware...
+    // C-1 fix: the secure firmware now embeds the vendor SPHINCS+C10
+    // public key (mirrored from `fsbl/build.rs`). We verify the
+    // manifest's signature here, BEFORE the destructive ops in COMMIT
+    // (slot erase, OTP rollback-floor bump, boot-state write) can run.
     //
-    // Wait: the manifest has vendor_pubkey_fpr but not pk_seed/pk_root
-    // themselves. So the secure firmware can't verify the signature
-    // without the actual pubkey.
+    // Why the previous "defer to FSBL on next reboot" model was unsafe:
+    //   - The vendor-fpr-match-active-slot check is bypassable by any
+    //     attacker who can read the active manifest (it's flash, not
+    //     a secret) — they just copy the fpr bytes into a forged
+    //     manifest.
+    //   - The OTP rollback-floor bump in `cmd_fw_commit` is
+    //     irreversible. A user who confirms a malicious manifest
+    //     (social engineering or a half-finished OLED confirm) bumps
+    //     the OTP floor before FSBL ever gets a chance to reject the
+    //     bad signature. The wallet then refuses any legitimate
+    //     firmware whose version is below the attacker-chosen value
+    //     — permanent update-DoS.
     //
-    // Resolution: the running firmware slot's manifest has the pubkey
-    // fingerprint AND is itself signed by the vendor. We read the
-    // pubkey fingerprint from the active slot's manifest and require
-    // the new manifest's fpr to match (i.e., "same vendor"). We DO
-    // NOT verify the C10 signature in the secure firmware at BEGIN —
-    // we defer that to FSBL on the next reboot, which has the real
-    // pubkey compiled in.
-    //
-    // This is weaker than ideal. A more careful design would expose
-    // the vendor pubkey via a readable (but not writable) flash
-    // region that both FSBL and the secure firmware read. For now,
-    // we check fingerprint match here + rely on FSBL's full re-check
-    // post-reset as the definitive gate.
-    let active = read_active_slot();
-    let active_manifest_bytes = read_active_manifest_bytes(active);
-    let active_ref = ManifestRef::new(&active_manifest_bytes);
-    // Compare the new manifest's fpr against the active one's — if
-    // they differ, someone is trying to install firmware signed by a
-    // different vendor.
-    if m.vendor_pubkey_fpr() != active_ref.vendor_pubkey_fpr() {
-        return Err(VerifyError::WrongVendor);
-    }
+    // With the signature check here, COMMIT only runs on a real
+    // vendor-signed manifest, so the OTP bump only fires on
+    // legitimate updates.
+    m.verify_vendor_fpr(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)?;
+    m.verify_signature(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)?;
     m.verify_rollback(rollback_floor)?;
     Ok(())
-}
-
-/// Snapshot the active slot's manifest page into an owned 8 KB array.
-/// Allocated on the stack; fine within our 192 KB secure SRAM budget
-/// but we keep callers to one snapshot at a time.
-fn read_active_manifest_bytes(slot: Slot) -> [u8; MANIFEST_SIZE] {
-    let addr = flash::manifest_addr(slot);
-    let mut buf = [0u8; MANIFEST_SIZE];
-    // SAFETY: manifest_addr returns a memory-mapped flash pointer
-    // inside bank 1. Reading it is always safe.
-    unsafe {
-        let src = addr as *const u8;
-        for i in 0..MANIFEST_SIZE {
-            buf[i] = core::ptr::read_volatile(src.add(i));
-        }
-    }
-    buf
 }
 
 /// Sanity-check an incoming chunk against the streaming state. Returns

@@ -231,9 +231,16 @@ pub unsafe fn bump_to(target: u32) -> Result<(), OtpError> {
         word_idx += 1;
     }
 
-    // Sanity: recompute floor and confirm it reached the target.
-    let after = rollback_floor();
-    if after < target {
+    // Sanity: recompute floor and confirm it reached the target. The
+    // double-read + `fi::check_true` gate raises the cost of a glitch
+    // that silently skipped the inner `program_otp_qw` calls: the
+    // readback would then return `< target`, the open-coded `if` is
+    // glitchable, but the hamming-distant sentinel in `fi::check_true`
+    // requires multiple cooperating faults to bypass.
+    let after1 = rollback_floor();
+    crate::fi::wait_random();
+    let after2 = rollback_floor();
+    if !crate::fi::check_true(|| after1 >= target && after2 >= target) {
         return Err(OtpError::ProgramError);
     }
     Ok(())
