@@ -319,6 +319,23 @@ pub fn se050_scp03_mac_key() -> Result<[u8; 16], OtpError> {
     Ok(out)
 }
 
+/// 16-byte SE050 SCP03 Data Encryption Key (DEK).
+///
+/// SCP03 always installs all three static keys (S-ENC, S-MAC, DEK) — a
+/// `PUT KEY` that rotates ENC+MAC must rotate DEK too (GP 2.3 §11.8 /
+/// AN12436 §5.2.3). We never *use* the DEK after rotation (it only
+/// encrypts key values during a *future* `PUT KEY`), but it must still
+/// be derived rather than left as a known/zero value. Same BHK-axis
+/// derivation as the other two SCP03 keys + the admin PIN — see
+/// `se050_scp03_enc_key` and `docs/work-todo.md` #20 for why the SCP03
+/// keys are on the BHK axis (recoverable keyset + RDP2-stable BHK ⇒ no
+/// brick mode) while the OPTIGA PBS stays on DHUK (immutable E140).
+pub fn se050_scp03_dek_key() -> Result<[u8; 16], OtpError> {
+    let mut out = [0u8; 16];
+    derive_into_bhk(b"pqsigner/se050-scp03-dek-v1", &mut out)?;
+    Ok(out)
+}
+
 /// 32-byte TROPIC01 pairing key. Consumed by the Tropic driver's
 /// Noise_KK handshake once we wire it through — today the Tropic
 /// driver uses a hardcoded pairing key and the `tropic01-se` backend

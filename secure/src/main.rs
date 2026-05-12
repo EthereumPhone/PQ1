@@ -1015,6 +1015,35 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- SE050 SCP03 key-rotation ceremony (IRREVERSIBLE — production only) ----
+    // One-shot GP PUT KEY: replace SCP03 keyset 0x0B in place with this
+    // device's derived keys (secret_keys::se050_scp03_*_key, BHK-rooted in
+    // a `bhk` build), then halt. The published factory keys are gone after
+    // this — the chip only opens with firmware that re-derives the matching
+    // keys (establish() probes derived-first, falls back to factory).
+    // PRE-CONDITIONS (see work-todo #20 Stage B + docs/production-todo.md):
+    // RDP already stepped to ≥1 (so the BHK is its final per-die-DHUK value),
+    // BHK provisioned, chip is factory-fresh. NEVER run on a board that still
+    // moves RDP around. The PUT KEY framing is best-effort from GP 2.3 /
+    // AN12436 — validate on sacrificial parts before any real provisioning run.
+    // Triggered by: make flash-hw-se050-rotate-scp03
+    #[cfg(feature = "se050-rotate-scp03")]
+    unsafe {
+        ui::show_status("SCP03 rotate", "running...");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        match se.rotate_scp03_keys() {
+            Ok(()) => {
+                secure_log!("[S] [SCP03-ROTATE] PUT KEY OK — keyset 0x0B replaced with derived keys");
+                ui::show_status("SCP03 rotate", "PASS");
+            }
+            Err(_e) => {
+                secure_log!("[S] [SCP03-ROTATE] FAIL ({:?})", _e);
+                ui::show_status("SCP03 rotate", "FAIL");
+            }
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- SE050 admin-extract-attempt e2e ----
     // Negative security test: prove the admin PIN cannot extract user-PIN-
     // gated secrets. Provisions a sentinel under user-PIN gating with

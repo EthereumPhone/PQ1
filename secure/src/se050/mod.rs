@@ -233,6 +233,55 @@ impl Se050 {
         Ok(())
     }
 
+    /// **IRREVERSIBLE — production-provisioning only.** One-shot GP `PUT KEY`
+    /// ceremony: replace the SE050's SCP03 platform keyset `0x0B` in place
+    /// with this device's derived keys (`secret_keys::se050_scp03_*_key()`,
+    /// BHK-rooted in a `bhk` build). After this, the published factory
+    /// keys are gone and the chip only opens with firmware that re-derives
+    /// the matching keys (`establish()`'s probe-on-boot handles that).
+    ///
+    /// Pre-conditions the caller MUST have satisfied (see `work-todo #20`
+    /// Stage B + `docs/production-todo.md`): the unit is at its final
+    /// per-die-DHUK RDP level (RDP ≥ 1) so the BHK is stable; the BHK has
+    /// been provisioned; this is a factory-fresh chip still holding the
+    /// `PLATFORM_*` keys (we `init()` here, which establishes SCP03 —
+    /// falling back to the factory keys on a fresh chip — so the running
+    /// session is the factory-keyed one, which is what `PUT KEY` needs).
+    ///
+    /// Refuses (`Se050Error::Scp03`) if the "derived" keys would actually
+    /// be the published factory constants — that would mean the derived
+    /// path isn't selecting a real root and the ceremony would be a no-op
+    /// at best and a desync hazard at worst.
+    #[cfg(feature = "se050-rotate-scp03")]
+    pub fn rotate_scp03_keys(&mut self) -> Result<(), Se050Error> {
+        self.init()?;
+        if !self.scp03.active {
+            return Err(Se050Error::Scp03);
+        }
+        let (new_enc, new_mac, new_dek) = scp03::load_platform_keys()?;
+        // Guard: never PUT KEY the published constants over themselves.
+        if scp03::keys_are_factory_default(&new_enc, &new_mac, &new_dek) {
+            #[cfg(feature = "debug-log")]
+            secure_log!("[SE050/rotate] REFUSE: derived SCP03 keys == published factory keys — root not selecting?");
+            return Err(Se050Error::Scp03);
+        }
+        let (apdu, len) = scp03::build_put_key_apdu(&new_enc, &new_mac, &new_dek);
+        let mut resp = [0u8; 32];
+        let n = unsafe { apdu::send_apdu(&mut self.t1, &mut self.scp03, &apdu[..len], &mut resp)? };
+        if n < 2 {
+            return Err(Se050Error::Scp03);
+        }
+        let sw = ((resp[n - 2] as u16) << 8) | (resp[n - 1] as u16);
+        if sw != 0x9000 {
+            #[cfg(feature = "debug-log")]
+            secure_log!("[SE050/rotate] PUT KEY SW=0x{:04x}", sw);
+            return Err(Se050Error::Status(sw));
+        }
+        #[cfg(feature = "debug-log")]
+        secure_log!("[SE050/rotate] PUT KEY OK — keyset 0x0B replaced with derived keys");
+        Ok(())
+    }
+
     /// Iteratively delete every user-created object on the SE050 via
     /// `Se05x_API_DeleteAll_Iterative` semantics.
     ///

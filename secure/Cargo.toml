@@ -381,6 +381,21 @@ e2e-skip-provision = []
 # Only meaningful in combination with `e2e-test` + `se050` (or `dual-se`).
 e2e-skip-admin-wipe = []
 dual-se = ["optiga-trust-m", "se050"]  # Both SEs active: XOR-split entropy across OPTIGA Trust M + SE050
+# Use per-device DERIVED SCP03 static keys (secret_keys::se050_scp03_{enc,mac,dek}_key,
+# BHK-rooted in a `bhk` build) instead of the published AN12436 factory constants.
+# `establish()` probes the derived set first and falls back to the factory keys on a
+# card-cryptogram mismatch, so this build still works against a chip that hasn't been
+# `PUT KEY`-rotated. Reversible: just code + this flag, no chip writes. Production-safe
+# on its own (it's the chosen direction); the irreversible rotation is `se050-rotate-scp03`.
+# See work-todo #20 Stage A.
+se050-derived-scp03 = ["se050"]
+# IRREVERSIBLE per chip — one-shot GP PUT KEY ceremony that replaces SCP03 keyset 0x0B
+# in place with the device's derived keys, then halts. NEVER ship; production-provisioning
+# only; never flash to a board that still moves RDP around (the RDP1↔RDP0 dance mass-erases
+# the BHK page → dead SE050). The PUT KEY APDU framing is best-effort from GP 2.3 / AN12436
+# and MUST be validated on sacrificial parts before any real provisioning run. Listed in the
+# `compile_error!` fence in nsc/mod.rs. See work-todo #20 Stage B + docs/production-todo.md.
+se050-rotate-scp03 = ["se050-derived-scp03"]
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
 se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated OID range. Use `make se050-admin-wipe-e2e`.

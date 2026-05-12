@@ -18,6 +18,14 @@ use super::apdu::Se050Error;
 // SE050E platform keys (OEF 0xA921)
 // ---------------------------------------------------------------------------
 
+// Factory (NXP-provisioned) SCP03 platform keys for SE050E, OEF `0x0001A921`,
+// per AN12436 Rev 2.4 (mirrors `plug-and-trust/sss/ex/inc/ex_sss_tp_scp03_keys.h:217-224`).
+// These are *published* — an SCP03 channel that still uses them is
+// plaintext-equivalent to a bus sniffer with the datasheet. They are the
+// *initial* state of a fresh chip; `work-todo #20` rotates them to per-device
+// BHK-derived keys via GP `PUT KEY` (replacing keyset `0x0B` in place) at
+// production-provisioning time. Until that ceremony has run on a given chip,
+// these are the keys it holds — `establish()` falls back to them.
 const PLATFORM_ENC: [u8; 16] = [
     0xD2, 0xDB, 0x63, 0xE7, 0xA0, 0xA5, 0xAE, 0xD7,
     0x2A, 0x64, 0x60, 0xC4, 0xDF, 0xDC, 0xAF, 0x64,
@@ -26,8 +34,68 @@ const PLATFORM_MAC: [u8; 16] = [
     0x73, 0x8D, 0x5B, 0x79, 0x8E, 0xD2, 0x41, 0xB0,
     0xB2, 0x47, 0x68, 0x51, 0x4B, 0xFB, 0xA9, 0x5B,
 ];
+/// Factory Data Encryption Key (DEK) for the same OEF. Used only to *wrap*
+/// new key values during a `PUT KEY` ceremony (it never participates in
+/// session establishment), so it sits unused until `rotate_platform_keys`
+/// runs. Source: `plug-and-trust/sss/ex/inc/ex_sss_tp_scp03_keys.h:223`.
+#[cfg_attr(not(feature = "se050-rotate-scp03"), allow(dead_code))]
+const PLATFORM_DEK: [u8; 16] = [
+    0x67, 0x02, 0xDA, 0xC3, 0x09, 0x42, 0xB2, 0xC8,
+    0x5E, 0x7F, 0x47, 0xB4, 0x2C, 0xED, 0x4E, 0x7F,
+];
 
 const KEY_VERSION: u8 = 0x0B;
+
+/// Resolve the SCP03 static keys this build should *prefer* — `(S-ENC,
+/// S-MAC, DEK)`.
+///
+/// - Without `se050-derived-scp03` (the default): the published factory
+///   constants above.
+/// - With `se050-derived-scp03`: the per-device keys from
+///   `hw::secret_keys::se050_scp03_{enc,mac,dek}_key()` (BHK-rooted in a
+///   `bhk`-on build; DHUK / OTP per build otherwise). A device whose chip
+///   has been `PUT KEY`-rotated holds exactly these; one that hasn't still
+///   holds the factory keys — `establish()` probes the preferred set first
+///   and falls back to `PLATFORM_*` on a card-cryptogram mismatch, so one
+///   firmware copes with both. `KEY_VERSION` stays `0x0B` either way (the
+///   rotation replaces keyset `0x0B` in place, it does not add a new KVN).
+pub fn load_platform_keys() -> Result<([u8; 16], [u8; 16], [u8; 16]), Se050Error> {
+    #[cfg(not(feature = "se050-derived-scp03"))]
+    {
+        Ok((PLATFORM_ENC, PLATFORM_MAC, PLATFORM_DEK))
+    }
+    #[cfg(feature = "se050-derived-scp03")]
+    {
+        use crate::hw::secret_keys;
+        let enc = secret_keys::se050_scp03_enc_key().map_err(|_| Se050Error::Scp03)?;
+        let mac = secret_keys::se050_scp03_mac_key().map_err(|_| Se050Error::Scp03)?;
+        let dek = secret_keys::se050_scp03_dek_key().map_err(|_| Se050Error::Scp03)?;
+        Ok((enc, mac, dek))
+    }
+}
+
+/// True iff `(enc, mac, dek)` are exactly the published factory constants.
+/// Used by `Se050::rotate_scp03_keys` to refuse `PUT KEY`-ing the
+/// published keys over themselves (which would mean the derived-key path
+/// isn't actually selecting a per-device root).
+#[cfg_attr(not(feature = "se050-rotate-scp03"), allow(dead_code))]
+pub fn keys_are_factory_default(enc: &[u8; 16], mac: &[u8; 16], dek: &[u8; 16]) -> bool {
+    *enc == PLATFORM_ENC && *mac == PLATFORM_MAC && *dek == PLATFORM_DEK
+}
+
+/// GlobalPlatform / SCP03 Key Check Value for an AES key: the first 3
+/// bytes of `AES-ECB-Encrypt(key, {0x01}×16)`.
+///
+/// NOTE — confirm before the `PUT KEY` ceremony runs: GP Amendment D
+/// (SCP03) specifies the `0x01`-filled block; some older GP profiles
+/// (SCP02) used `0x00`. SE050 follows the SCP03 convention per AN12436
+/// §5.2, but this should be cross-checked against a live chip's accepted
+/// `PUT KEY` (the chip recomputes the KCV and rejects on mismatch).
+#[cfg_attr(not(any(test, feature = "se050-rotate-scp03")), allow(dead_code))]
+pub fn scp03_kcv(key: &[u8; 16]) -> [u8; 3] {
+    let ct = aes128_ecb_encrypt(key, &[0x01u8; 16]);
+    [ct[0], ct[1], ct[2]]
+}
 
 // SCP03 derivation data constants
 const DD_CARD_CRYPTOGRAM: u8 = 0x00;
@@ -165,12 +233,47 @@ fn kdf(static_key: &[u8; 16], dd: &[u8; 32]) -> [u8; 16] {
 
 /// Establish an SCP03 session with the SE050.
 ///
-/// Sends INITIALIZE UPDATE and EXTERNAL AUTHENTICATE, derives session
-/// keys, and verifies the card cryptogram. After this succeeds, all
-/// APDUs wrapped via `wrap_apdu` will be MAC'd and encrypted.
+/// Probe-on-boot: tries the keys this build *prefers* (the derived
+/// per-device keys when `se050-derived-scp03` is on; the published
+/// factory constants otherwise — see `load_platform_keys`). If that
+/// fails the card-cryptogram check (the signal that the chip holds a
+/// different key set), it retries once with the factory constants — so
+/// a `se050-derived-scp03` build also works against a chip that has not
+/// yet been `PUT KEY`-rotated. `KEY_VERSION` is `0x0B` either way.
 pub unsafe fn establish(
     session: &mut Scp03Session,
     t1: &mut super::t1oi2c::T1State,
+) -> Result<(), Se050Error> {
+    let (enc, mac, _dek) = load_platform_keys()?;
+
+    match establish_with_keys(session, t1, &enc, &mac) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            // Only the derived-keys build has a meaningful fallback (the
+            // default build's preferred set already *is* the factory
+            // constants). Retry on a key-related failure — card-cryptogram
+            // mismatch (`Scp03`) or a status word like `0x6A88`; don't
+            // retry a pure transport glitch.
+            #[cfg(feature = "se050-derived-scp03")]
+            if matches!(e, Se050Error::Scp03 | Se050Error::Status(_)) {
+                #[cfg(feature = "debug-log")]
+                secure_log!("[SCP03] derived-key establish failed ({:?}); falling back to factory keys", e);
+                return establish_with_keys(session, t1, &PLATFORM_ENC, &PLATFORM_MAC);
+            }
+            Err(e)
+        }
+    }
+}
+
+/// One INITIALIZE-UPDATE + EXTERNAL-AUTHENTICATE handshake using the
+/// given static `(S-ENC, S-MAC)` keys. Returns `Se050Error::Scp03` on a
+/// card-cryptogram mismatch (the "wrong keys" signal the caller uses to
+/// decide whether to retry with a different set).
+unsafe fn establish_with_keys(
+    session: &mut Scp03Session,
+    t1: &mut super::t1oi2c::T1State,
+    static_enc: &[u8; 16],
+    static_mac: &[u8; 16],
 ) -> Result<(), Se050Error> {
     // Generate 8-byte host challenge from hardware TRNG
     let mut host_challenge = [0u8; 8];
@@ -208,9 +311,9 @@ pub unsafe fn establish(
     let dd_mac = build_derivation_data(DD_S_MAC, 0x0080, &host_challenge, &card_challenge);
     let dd_rmac = build_derivation_data(DD_S_RMAC, 0x0080, &host_challenge, &card_challenge);
 
-    session.s_enc = kdf(&PLATFORM_ENC, &dd_enc);
-    session.s_mac = kdf(&PLATFORM_MAC, &dd_mac);
-    session.s_rmac = kdf(&PLATFORM_MAC, &dd_rmac);
+    session.s_enc = kdf(static_enc, &dd_enc);
+    session.s_mac = kdf(static_mac, &dd_mac);
+    session.s_rmac = kdf(static_mac, &dd_rmac);
 
     // --- Verify card cryptogram ---
     let dd_card = build_derivation_data(DD_CARD_CRYPTOGRAM, 0x0040, &host_challenge, &card_challenge);
@@ -363,4 +466,127 @@ pub fn wrap_apdu(
     session.mcv = mac_full;
 
     mac_offset + 8
+}
+
+// ---------------------------------------------------------------------------
+// GP PUT KEY — rotate the SCP03 platform key set (work-todo #20, Stage B)
+// ---------------------------------------------------------------------------
+
+/// Total bytes of a PUT-KEY APDU that installs three AES-128 keys, before
+/// the SCP03 wrap adds its own header growth + 8-byte C-MAC:
+/// 5 (CLA INS P1 P2 Lc) + 1 (new KVN) + 3 × (1+1+16+1+3) = 5 + 1 + 66 = 72.
+pub const PUT_KEY_APDU_LEN: usize = 72;
+const PUT_KEY_INS: u8 = 0xD8;
+
+/// Build the (un-wrapped) GP `PUT KEY` APDU that **replaces SCP03 keyset
+/// `0x0B` in place** with the three given AES-128 keys (S-ENC, S-MAC,
+/// DEK, in that order). The new key values are encrypted under the chip's
+/// *current* DEK — which, since the only time this ceremony runs is on a
+/// factory-fresh chip (`work-todo #20` Stage B: production-provisioning,
+/// once per chip), is the published factory `PLATFORM_DEK`.
+///
+/// The caller MUST transmit the result inside an *established* SCP03
+/// session (`apdu::send_apdu` will C-MAC + C-DEC it) — `PUT KEY` is only
+/// accepted authenticated.
+///
+/// Layout (GP 2.3.1 §11.8.2.3.1 "Format 1", SCP03 per GP Amendment D §7.1):
+/// ```text
+///   CLA = 0x80                   (the SCP03 wrap then ORs in 0x04 → 0x84)
+///   INS = 0xD8
+///   P1  = 0x0B                   KVN of the keyset to replace — in place
+///   P2  = 0x81                   bit8 = "multiple keys follow", id of 1st key = 1
+///   Lc  = 0x43                   = 67 = 1 + 3 × 22
+///   Data:
+///     [0x0B]                     new KVN (same value — replace in place)
+///     per key (× 3, S-ENC / S-MAC / DEK):
+///       [0x88]                   key type: AES
+///       [0x10]                   length of the encrypted key data (16, one ECB block)
+///       [enc_key   ; 16 bytes]   AES-ECB-Enc(current_DEK, new_key)
+///       [0x03]                   KCV length
+///       [kcv       ;  3 bytes]   scp03_kcv(new_key)
+/// ```
+///
+/// **CONFIRM BEFORE THE CEREMONY RUNS** — these are best-effort from the
+/// GP spec / AN12436; the chip recomputes the KCV and every field and
+/// rejects on any mismatch, so the real validation is a sacrificial-part
+/// rehearsal (see `docs/production-todo.md` §"SE050 — SCP03 + ADMIN
+/// provisioning"): the `P2` first-key-id / multiple-keys encoding; whether
+/// the encrypted-key-data length byte is `0x10` (key only — what we emit)
+/// or includes a 1-byte inner length prefix; the KCV filler block; the
+/// DEK-encryption mode (we use AES-ECB, no IV/pad, for the 16-byte key).
+#[cfg_attr(not(any(test, feature = "se050-rotate-scp03")), allow(dead_code))]
+pub fn build_put_key_apdu(
+    new_enc: &[u8; 16],
+    new_mac: &[u8; 16],
+    new_dek: &[u8; 16],
+) -> ([u8; PUT_KEY_APDU_LEN], usize) {
+    const DATA_LEN: usize = 1 + 3 * 22; // 67
+    let mut a = [0u8; PUT_KEY_APDU_LEN];
+    a[0] = 0x80; // CLA — wrap_apdu adds the secure-messaging bit
+    a[1] = PUT_KEY_INS; // INS = PUT KEY
+    a[2] = KEY_VERSION; // P1 = KVN to replace (0x0B) — in place
+    a[3] = 0x81; // P2 = multiple keys (0x80) | first key id (0x01)
+    a[4] = DATA_LEN as u8; // Lc = 67
+    a[5] = KEY_VERSION; // new KVN (same value)
+    let mut o = 6usize;
+    for k in [new_enc, new_mac, new_dek] {
+        a[o] = 0x88; // key type: AES
+        a[o + 1] = 0x10; // encrypted key data length = 16
+        let wrapped = aes128_ecb_encrypt(&PLATFORM_DEK, k);
+        a[o + 2..o + 18].copy_from_slice(&wrapped);
+        a[o + 18] = 0x03; // KCV length
+        let kcv = scp03_kcv(k);
+        a[o + 19..o + 22].copy_from_slice(&kcv);
+        o += 22;
+    }
+    debug_assert_eq!(o, PUT_KEY_APDU_LEN);
+    (a, PUT_KEY_APDU_LEN)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scp03_kcv_is_deterministic_3_bytes() {
+        let k = [0x11u8; 16];
+        let a = scp03_kcv(&k);
+        let b = scp03_kcv(&k);
+        assert_eq!(a, b);
+        // sanity: it's the first 3 bytes of AES-ECB-Enc(k, {0x01}×16)
+        let full = aes128_ecb_encrypt(&k, &[0x01u8; 16]);
+        assert_eq!(a, [full[0], full[1], full[2]]);
+    }
+
+    #[test]
+    fn load_platform_keys_default_is_factory_triple() {
+        // Without `se050-derived-scp03` this returns the published constants.
+        let (enc, mac, dek) = load_platform_keys().expect("no error on the const path");
+        assert_eq!(enc, PLATFORM_ENC);
+        assert_eq!(mac, PLATFORM_MAC);
+        assert_eq!(dek, PLATFORM_DEK);
+    }
+
+    #[test]
+    fn put_key_apdu_layout() {
+        let new_enc = [0xA0u8; 16];
+        let new_mac = [0xB1u8; 16];
+        let new_dek = [0xC2u8; 16];
+        let (a, n) = build_put_key_apdu(&new_enc, &new_mac, &new_dek);
+        assert_eq!(n, PUT_KEY_APDU_LEN);
+        assert_eq!(n, 72);
+        // header
+        assert_eq!(&a[..5], &[0x80, 0xD8, 0x0B, 0x81, 67]);
+        // new KVN
+        assert_eq!(a[5], 0x0B);
+        // each of the 3 key blocks
+        for (i, k) in [&new_enc, &new_mac, &new_dek].iter().enumerate() {
+            let base = 6 + i * 22;
+            assert_eq!(a[base], 0x88, "key type AES");
+            assert_eq!(a[base + 1], 0x10, "enc-key len");
+            assert_eq!(&a[base + 2..base + 18], &aes128_ecb_encrypt(&PLATFORM_DEK, k)[..]);
+            assert_eq!(a[base + 18], 0x03, "kcv len");
+            assert_eq!(&a[base + 19..base + 22], &scp03_kcv(k)[..]);
+        }
+    }
 }

@@ -111,20 +111,22 @@ mod trailer;
         feature = "uart-console",
         feature = "boot-pulse",
         feature = "bhk-hardcoded-master-key",
+        feature = "se050-rotate-scp03",
     )
 ))]
 compile_error!(
     "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
      debug-log / ui-semihosting / ui-mirror / ui-capture / mock-se / \
      otp-hardcoded-master-key / bhk-hardcoded-master-key / saes-self-test / \
-     uart-console / boot-pulse. These features leak secure-world state, \
-     replace the SE with a mock, replace the per-device OTP master key or \
-     BHK with a shared compile-time constant, halt the boot flow after a \
-     diagnostic, stream diagnostic bytes on PA9 UART, or pulse PE13 with \
-     boot-progress markers. Hardware test images may opt in by also \
-     enabling `e2e-test` (auto-provisioning, non-interactive) or \
-     `dev-testkey` (interactive UI, OTP substituted with a compile-time \
-     constant)."
+     uart-console / boot-pulse / se050-rotate-scp03. These features leak \
+     secure-world state, replace the SE with a mock, replace the per-device \
+     OTP master key or BHK with a shared compile-time constant, halt the \
+     boot flow after a diagnostic, stream diagnostic bytes on PA9 UART, \
+     pulse PE13 with boot-progress markers, or perform a one-shot \
+     irreversible SCP03 key-rotation ceremony then halt. Hardware test \
+     images may opt in by also enabling `e2e-test` (auto-provisioning, \
+     non-interactive) or `dev-testkey` (interactive UI, OTP substituted \
+     with a compile-time constant)."
 );
 
 // Dedicated guard: `otp-hardcoded-master-key` + `optiga-lock-operational` is

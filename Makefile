@@ -814,6 +814,45 @@ se050-admin-wipe-e2e:
 	@echo "==> Running admin-wipe e2e (watch semihosting output)..."
 	probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# SE050 SCP03 platform-key rotation ceremony (work-todo #20 Stage B).
+#
+# *** IRREVERSIBLE — DO NOT RUN ON A WORKING BENCH SE050 ***
+# One-shot GP PUT KEY: replaces SCP03 keyset 0x0B in place with this
+# device's derived keys (secret_keys::se050_scp03_*_key, BHK-rooted), then
+# halts. The published AN12436 factory keys are GONE after this — the chip
+# only opens with firmware that re-derives the matching keys, so:
+#  - on a board that ever gets RDP-regressed, the BHK is mass-erased => dead
+#    SE050 => half_E unrecoverable. PRODUCTION-PROVISIONING ONLY (RDP2 has no
+#    regression path); never flash this to a board you still RDP-bounce.
+#  - the PUT KEY APDU framing in scp03::build_put_key_apdu is best-effort
+#    from GP 2.3 / AN12436 -- VALIDATE ON SACRIFICIAL PARTS before any real
+#    provisioning run (the chip recomputes the KCV/fields and rejects on
+#    mismatch, so a rehearsal that returns SW=0x9000 is the real proof).
+# Pre-conditions: RDP already at >=1 (so the BHK is its final per-die-DHUK
+# value), BHK provisioned, chip factory-fresh. See docs/production-todo.md
+# §"SE050 - SCP03 + ADMIN provisioning" + docs/work-todo.md #20.
+# Watch the OLED / semihosting for "[SCP03-ROTATE] PUT KEY OK" / "FAIL".
+flash-hw-se050-rotate-scp03:
+	@echo "==> *** IRREVERSIBLE SCP03 KEY ROTATION -- Ctrl-C now if this is your working bench SE050 ***"
+	@echo "==> Building SE050 SCP03-rotation ceremony firmware..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features se050-rotate-scp03,bhk,stm32u585,ui-oled,debug-log,e2e-test
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running SCP03 rotation ceremony (watch for [SCP03-ROTATE] PUT KEY OK)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 # SE050 admin-extract-attempt e2e — NEGATIVE security test.
 # Falsifies the load-bearing claim that the two-entry TAG_POLICY (user →
 # READ|WRITE|DELETE, admin → DELETE only) is silicon-enforced. Provisions
