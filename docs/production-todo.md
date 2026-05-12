@@ -257,51 +257,103 @@ The SE050 half of the dual-SE also has irreversible steps (per
 `docs/se050-factory-reset.md` + work-todo #20). Summarising here:
 
 - [ ] **SCP03 keys rotated per device** (work-todo #11). Derivation
-      root migrates alongside work-todo #7 tiers:
+      root and chip-state changes:
       - Today: hardcoded AN12436 Rev 2.4 defaults for OEF `0xA921`
         at `secure/src/se050/scp03.rs:21-30`. `KEY_VERSION = 0x0B`.
         Every device of the same firmware build shares identical
-        keys.
-      - Post-#11 Stage A (derivation plumbing, reversible): firmware
-        pulls root from `secret_keys::se050_scp03_{enc,mac}_key()`
-        under the `se050-derived-scp03` Cargo feature. Chip state
-        unchanged at this stage — build just targets what it talks to.
-      - Post-#24 (OTP tier, **landed**): derivation is
-        `HKDF(OTP_master, "se050-scp03-{enc,mac}-v1")`.
-      - Post-#7 Tier 1 (DHUK): same API surface, underlying primitive
-        becomes `SAES-CMAC(DHUK, "se050-scp03-{enc,mac}-v1")`.
-      - Post-#7 Tier 2 (BHK, final recommended split): `SAES-CMAC(BHK,
-        "se050-scp03-{enc,mac}-v1")` per the per-SE selector split in
-        work-todo #7.
+        keys (the keys are *published* — SCP03 confidentiality vs. a
+        datasheet-armed bus sniffer is currently theatre).
+      - Post-#11 Stage A (derivation plumbing, **reversible**): firmware
+        pulls the root from `secret_keys::se050_scp03_{enc,mac,dek}_key()`
+        under the `se050-derived-scp03` Cargo feature, and `establish()`
+        gains a probe-on-boot fallback (try derived keys at `KVN=0x0B`
+        first; on MAC mismatch / `0x6A88` retry with the hardcoded
+        constants), so one firmware works against both rotated and
+        factory-default chips. No chip writes at this stage.
+      - **Root = BHK** (not DHUK, not DHUK⊕BHK). `se050_scp03_*_key`
+        route through `derive_into_bhk` ⇒ `SAES-CMAC(BHK,
+        "se050-scp03-{enc,mac,dek}-v1")` in a `bhk`-on build (which is
+        the production build); falls through to `derive_into` (DHUK /
+        OTP per build) when `bhk` is off. Same axis as the SE050 admin
+        PIN. Rationale for BHK here (vs. the OPTIGA PBS, which stays on
+        DHUK): the SE050's SCP03 keyset `0x0B` is *replaceable* (you can
+        PUT KEY it again) and on an RDP2 production unit the BHK can
+        never be lost (no regression path) ⇒ the "BHK gone → unrecoverable"
+        brick mode is structurally impossible, so the Tier-2 isolation
+        (a silicon-DHUK extraction doesn't reach `half_E`) comes for
+        free. The OPTIGA PBS is the opposite case — its E140 is bumped
+        to `LcsO=Operational` (immutable), so its root must be the
+        maximally-stable thing = the silicon DHUK. See
+        `docs/trezor-comparison.md §6.5` for the full reasoning.
 
-      **The irreversible part — GP PUT KEY ceremony (stage B)**:
+      **The irreversible part — GP PUT KEY ceremony (stage B)** — run
+      ONCE per chip, at production-provisioning time only (see ordering
+      constraint below):
 
-      1. Establish SCP03 against default keyset `KVN=0x0B` with the
-         hardcoded AN12436 constants.
-      2. Compute per-device keys via `secret_keys::se050_scp03_*_key()`.
-      3. Compute Key Check Value per key: `KCV = AES-ECB-Enc(key, zeros)[..3]`.
-      4. Wrap each new key: `wrapped = AES-ECB-Enc(current_key, new_key)`.
-      5. Send GP `PUT KEY` (`CLA=0x84 INS=0xD8 P1=0x81 P2=0x11`) with
-         body `[0x11] [0x88 0x10 wrapped_enc 0x03 kcv_enc]×3` for ENC /
-         MAC / DEK (SCP03 always installs all three — AN12436 §5.2.3).
+      1. Establish SCP03 against keyset `KVN=0x0B` with the hardcoded
+         AN12436 constants (the factory state of a fresh chip).
+      2. Compute the per-device keys via `secret_keys::se050_scp03_*_key()`
+         (BHK-rooted — so this MUST run on a unit whose BHK is already
+         provisioned at its final per-die-DHUK RDP level, see below).
+      3. Compute the Key Check Value per key (`KCV` = AES-ECB-Enc over a
+         fixed filler block, truncated to 3 bytes — exact filler per GP
+         2.3 §11.8 / AN12436 §5.2; pin against the `plug-and-trust`
+         reference when implementing).
+      4. Wrap each new key under the *current* DEK:
+         `wrapped = AES-ECB-Enc(current_DEK, new_key)`. The OEF-`0xA921`
+         factory DEK is `67 02 DA C3 09 42 B2 C8 5E 7F 47 B4 2C ED 4E 7F`
+         (`plug-and-trust/sss/ex/inc/ex_sss_tp_scp03_keys.h:223`).
+      5. Send GP `PUT KEY` to **replace keyset `0x0B` in place** — i.e.
+         the data-field KVN is `0x0B`, not a new `0x11`. (Adding a new
+         `0x11` would leave the published `0x0B` keys live and still
+         authenticatable → the rotation buys nothing; and there is no
+         command to *delete* a keyset, so replace-in-place is the only
+         real option. Exact `P1`/`P2` framing per GP 2.3 §11.8 — `P1` =
+         KVN-to-replace = `0x0B`, `P2` = first-key-id with the
+         multiple-keys bit; pin against the reference impl.) Body =
+         `[0x0B] ([key_type=0x88 AES][len=0x10][wrapped][kcv_len=0x03][kcv]) × 3`
+         for ENC / MAC / DEK — SCP03 always installs all three even
+         though we never *use* the DEK after rotation (AN12436 §5.2.3).
       6. Verify `SW=0x9000`.
-      7. Optional stage C (#11): mix SE050 UID into derivation label for
-         clone defense. One extra `ReadObject(0xA000_F00E)` on every
-         subsequent boot.
+      7. From here on every boot establishes against `KVN=0x0B` with the
+         BHK-derived keys; the probe-on-boot fallback (Stage A) lets the
+         same firmware still cope with a not-yet-rotated chip.
+      8. Optional stage C (#11): mix the SE050 UID into the derivation
+         label for clone defense. One extra `ReadObject(0xA000_F00E)` on
+         every subsequent boot.
+
+      **Provisioning-order constraint (because the root is BHK):** the
+      BHK is 32 random bytes generated at first boot and stored in flash
+      page 126 *DHUK-ECB-wrapped*. The DHUK changes once, at RDP0→RDP1
+      (ST-substituted constant → real per-die). So the BHK first-write
+      AND this PUT KEY ceremony MUST happen *after* the unit has been
+      stepped to its final per-die-DHUK RDP level (RDP ≥ 1) — provision
+      the BHK at RDP0 and then step to RDP1 and page 126 no longer
+      decrypts to the same bytes ⇒ every BHK-derived secret (admin PIN
+      *and* the SCP03 keyset) is silently wrong ⇒ dead SE050. Factory
+      sequence: **step RDP → 1 → provision (BHK first-write here) →
+      OPTIGA provision → SE050 provision → SCP03 PUT KEY → … → burn
+      RDP2.** (This ordering constraint already applies to the
+      Phase-2C admin PIN; the SCP03 rotation just inherits it.)
 
       **Failure modes after commit:**
-      - Lose derivation root → cannot re-establish → hard brick,
-        same class as OPTIGA PBS loss. Mitigated long-term by #7
-        Tier 1/2 (derivation moves off readable OTP master onto
-        DHUK/BHK).
-      - RDP2→RDP0 regression clears MCU flash but OTP survives →
-        derivation still reproduces → rotated keyset `0x11` still
-        authenticatable. Recoverable.
+      - Lose the BHK → cannot re-establish SCP03 → hard brick, same
+        class as OPTIGA PBS loss. On a production unit this is
+        structurally impossible: RDP2 has no regression path, so the
+        flash mass-erase that would clear page 126 cannot happen; WRP on
+        page 126 (separate item below) blocks a buggy firmware from
+        erasing it. On a *dev* board it is very possible (the
+        RDP1↔RDP0 dance mass-erases) — which is exactly why the PUT KEY
+        ceremony build (`se050-rotate-scp03`) is production-provisioning-
+        only and is NEVER flashed to a board that still moves RDP around.
       - Partial `PUT KEY` (brown-out mid-rotation): potentially leaves
-        the chip with one-of-three keys updated, breaking SCP03. Pre-
-        commit checklist rehearsal on sacrificial parts MUST verify
+        the chip with one-of-three keys updated, breaking SCP03. The
+        pre-commit checklist rehearsal on sacrificial parts MUST verify
         that `PUT KEY` is atomic at the chip level (NXP spec says it
-        is; confirm empirically).
+        is; confirm empirically) — and the firmware-side probe-on-boot
+        fallback gives a partial-rotation chip a fighting chance (it'll
+        still try `0x0B` with the hardcoded keys, which won't work if
+        any key changed — so really: rely on atomicity, confirm it).
 - [ ] **Admin UserID at 0x7B10_00A0** (range v6, bumped 2026-04-22 from
       v5 `0x7B0E_00A0` / v4 `0x7B0C_00A0` / v3 `0x7B06_00A0` across
       bench-chip cross-contamination events) with two-entry
