@@ -59,9 +59,20 @@ pub fn c10_sign_verified_with_progress(
     // AND the hamming-distant sentinel compare. `wait_random()` immediately
     // before the verify defeats clock-aligned fault bursts that time their
     // glitch to the verify's fixed-shape control flow.
+    //
+    // `core::hint::black_box(v)` is load-bearing: without it LLVM CSEs the
+    // two `cond()` evaluations inside `check_true` into a single load of `v`
+    // and collapses the `&& v1 && v2` re-check, leaving one skippable branch
+    // — `tools/sca/fault_sweep_c10_verify.py` (finding F-1) showed a single
+    // instruction-skip then releases an unverified signature. The black_box
+    // forces `v` to be re-materialised opaquely on each evaluation, so the
+    // double-check survives, at ~zero cost (one extra `ldrb` per check).
+    // (The even-stronger option — re-running `sphincs_c10::verify(...)` inside
+    // the closure, per `fi::check_true`'s doc example — also defends a data
+    // fault on `v`'s storage, at the cost of a second multi-second verify.)
     crate::fi::wait_random();
     let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
-    if !crate::fi::check_true(|| v) {
+    if !crate::fi::check_true(|| core::hint::black_box(v)) {
         return Err(());
     }
     Ok(sig)

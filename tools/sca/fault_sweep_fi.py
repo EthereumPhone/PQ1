@@ -25,16 +25,23 @@ clean false into a true return is the noteworthy case.
 Run:   donjon-sca run tools/sca/fault_sweep_fi.py
        (or, building the target ELF first:  make -C tools/sca fi)
 
-Single-fault, instruction-skip only. For stuck-at / multi-fault, extend the
-sweep below (rainbow.fault_models.fault_stuck_at, nested loops). Side-channel
-leakage of these guards is a separate harness — see tools/sca/README.md.
+Three single-fault models are swept: instruction-skip, dest-register-stuck-at-0,
+dest-register-stuck-at-0xFFFFFFFF. For multi-fault / two-fault, extend the sweep
+below (nested loops). Side-channel leakage of these guards is a separate harness
+— see tools/sca/README.md.
 """
 import os
 import sys
 import bisect
 
 from rainbow.generics import rainbow_cortexm
-from rainbow.fault_models import fault_skip
+from rainbow.fault_models import fault_skip, fault_stuck_at
+
+FAULT_MODELS = [
+    ("skip", fault_skip),
+    ("stuck-at-0", fault_stuck_at(0x0000_0000)),
+    ("stuck-at-FF", fault_stuck_at(0xFFFF_FFFF)),
+]
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ELF = os.path.join(HERE, "fi_target", "target", "thumbv8m.main-none-eabi", "release", "sca-fi-target")
@@ -108,17 +115,15 @@ def baseline():
     print("baselines OK  (check_true(0)->0, check_true(1)->1, wait_random returns)")
 
 
-# --- skip sweep ---------------------------------------------------------------
-def sweep_check_true():
-    """Skip-sweep over check_true(false). A 'ret' with r0 != 0 is exploitable."""
+# --- single-fault sweep -------------------------------------------------------
+def sweep_check_true(fault_model):
+    """Sweep `fault_model` over check_true(false). A 'ret' with r0 != 0 is exploitable."""
     exploitable, crashes, hangs, noeffect = [], 0, 0, 0
     fault_locs = {}                   # index -> (function_name, fault_pc)
     for i in range(1, MAX_I):
         e = fresh_emu()
         table = fn_table(e)
-        # Re-run once to find where instruction `i` lands (the fault PC), purely
-        # for reporting: do a no-fault run that we stop after `i` instructions.
-        st, val = run_call(e, "sca_fi_check_true", (0,), fault=(fault_skip, i))
+        st, val = run_call(e, "sca_fi_check_true", (0,), fault=(fault_model, i))
         if st == "short":
             break                     # i past the function's executed-instruction count → done
         if st == "crash":
@@ -128,7 +133,7 @@ def sweep_check_true():
         # st == "ret"
         if val != 0:
             exploitable.append(i)
-            # locate the faulted instruction: rerun to instruction i without faulting
+            # locate the faulted instruction (no-fault run, stop after i instr) — for reporting
             e2 = fresh_emu()
             e2.reset(); e2.reset_stack(); e2["r0"] = 0; e2["lr"] = RET
             try:
@@ -141,12 +146,12 @@ def sweep_check_true():
     return exploitable, crashes, hangs, noeffect, fault_locs
 
 
-def sweep_wait_random():
-    """Skip-sweep over wait_random(). No observable output, so just tally outcomes."""
+def sweep_wait_random(fault_model):
+    """Sweep `fault_model` over wait_random(). No observable output, so just tally outcomes."""
     rets, crashes, hangs = 0, 0, 0
     for i in range(1, MAX_I):
         e = fresh_emu()
-        st, _ = run_call(e, "sca_fi_wait_random", (), fault=(fault_skip, i))
+        st, _ = run_call(e, "sca_fi_wait_random", (), fault=(fault_model, i))
         if st == "short":
             break
         if st == "crash":
@@ -160,39 +165,47 @@ def sweep_wait_random():
 
 if __name__ == "__main__":
     baseline()
+    regression = False
 
-    print("\n== check_true: single-instruction-skip sweep over check_true(false) ==")
-    expl, cr, hg, ne, locs = sweep_check_true()
-    total = len(expl) + cr + hg + ne
-    print(f"  swept {total} skip positions:  exploitable={len(expl)}  crashes={cr}  hangs(≈caught)={hg}  no-effect={ne}")
-    if expl:
-        # bucket: harness scaffolding (wrapper / closure / __wfe) vs fi.rs proper
-        scaffolding, in_fi = [], []
-        for i in expl:
-            fn, pc = locs.get(i, ("<?>", 0))
-            (scaffolding if (fn.startswith("sca_fi_") or fn == "__wfe" or fn == "<?>") else in_fi).append((i, fn, pc))
-        if scaffolding:
-            print(f"  - {len(scaffolding)} in this harness's own scaffolding (wrapper / synthetic closure / __wfe) — "
-                  "EXPECTED: a skip there glitches the boolean *fed into* check_true, which check_true does not"
-                  " claim to protect. Indices: " + ", ".join(f"{i}@{fn}+{pc:#x}" for i, fn, pc in scaffolding))
-        if in_fi:
-            print(f"  - !!! {len(in_fi)} inside fi.rs code (fi::check_true / fi::wait_random) — INVESTIGATE: "
-                  "a single skip flipped a clean false verdict into a true return.")
-            for i, fn, pc in in_fi:
-                print(f"        skip@instr {i}: pc={pc:#010x} in {fn}")
-            print( "        Inspect with a verbose emulator, e.g.:")
-            print( "          donjon-sca python -c \"from rainbow.generics import rainbow_cortexm; from rainbow import Print;\\")
-            print(f"            e=rainbow_cortexm(print=Print.Code|Print.Functions|Print.Faults); e.load('{ELF}');\\")
-            print( "            from rainbow.fault_models import fault_skip; e.reset(); e.reset_stack(); e['r0']=0; e['lr']=0xaaaaaaaa;\\")
-            print(f"            e.start_and_fault(fault_skip, <I>, e.functions['sca_fi_check_true'][0], 0xaaaaaaaa, count=8192)\"")
-            sys.exit(1)
-        print("  → all in harness scaffolding; no single skip inside fi.rs flipped a false verdict to true.")
-    else:
-        print("  OK — no single instruction-skip turns a false verdict into a true return.")
+    for label, model in FAULT_MODELS:
+        print(f"\n== check_true: single-fault [{label}] sweep over check_true(false) ==")
+        expl, cr, hg, ne, locs = sweep_check_true(model)
+        total = len(expl) + cr + hg + ne
+        print(f"  swept {total} positions:  exploitable={len(expl)}  crashes={cr}  hangs(≈caught)={hg}  no-effect={ne}")
+        if expl:
+            scaffolding, in_fi = [], []
+            for i in expl:
+                fn, pc = locs.get(i, ("<?>", 0))
+                (scaffolding if (fn.startswith("sca_fi_") or fn == "__wfe" or fn == "<?>") else in_fi).append((i, fn, pc))
+            if scaffolding:
+                print(f"  - {len(scaffolding)} in this harness's own scaffolding (wrapper / synthetic closure / __wfe) — "
+                      "EXPECTED: glitches the boolean *fed into* check_true, which check_true does not claim to protect. "
+                      "Indices: " + ", ".join(f"{i}@{fn}+{pc:#x}" for i, fn, pc in scaffolding))
+            if in_fi:
+                if label == "skip":
+                    regression = True
+                    print(f"  - !!! {len(in_fi)} inside fi.rs code (fi::check_true / fi::wait_random) — REGRESSION: "
+                          "a single instruction-skip flipped a clean false verdict into a true return. "
+                          "(fi::check_true's documented contract is skip-resistance.)")
+                else:
+                    print(f"  - {len(in_fi)} inside fi.rs code under [{label}] — INFO, not a regression: a stuck-at "
+                          "on a result register defeats *any* bool-returning fn (inherent; fi::check_true's doc "
+                          "claims skip-resistance, not stuck-at-resistance). Mitigation = sentinel-encoded return "
+                          "(same as F-2 — see tools/sca/README.md).")
+                for i, fn, pc in in_fi:
+                    print(f"        [{label}] instr {i}: pc={pc:#010x} in {fn}")
+                if label == "skip":
+                    print( "        Inspect: donjon-sca python -c \"... rainbow_cortexm(print=Print.Code|Print.Functions|Print.Faults);")
+                    print(f"          e.load('{ELF}'); ... e.start_and_fault(fault_skip, <I>, e.functions['sca_fi_check_true'][0], 0xaaaaaaaa, count=8192)\"")
+            if not in_fi:
+                print("  → all in harness scaffolding; no fault inside fi.rs flipped a false verdict to true.")
+        else:
+            print(f"  OK — no single [{label}] fault turns a false verdict into a true return.")
 
-    print("\n== wait_random: single-instruction-skip sweep ==")
-    rt, cr, hg = sweep_wait_random()
-    print(f"  returned-normally={rt}  crashes={cr}  hangs(≈halt-loop / broken loop)={hg}")
+        print(f"== wait_random: single-fault [{label}] sweep ==")
+        rt, cr, hg = sweep_wait_random(model)
+        print(f"  returned-normally={rt}  crashes={cr}  hangs(≈halt-loop / broken loop)={hg}")
 
-    print("\nDone. (single-fault, instruction-skip only — see the module docstring "
-          "and tools/sca/README.md for stuck-at / multi-fault / leakage extensions.)")
+    print("\nDone. (3 single-fault models; multi-fault left as an extension — see "
+          "the module docstring and tools/sca/README.md.)")
+    sys.exit(1 if regression else 0)

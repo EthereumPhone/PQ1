@@ -96,27 +96,33 @@ to a CI gate, add a `rust-toolchain.toml` in `fi_target/` to pin the compiler.
 > survive — matching the production codegen where `cond` is a real `bl verify`.
 > If you add new fault targets, give them realistic, un-foldable inputs.
 
-This is **single-fault, instruction-skip only**. For stuck-at faults
-(`rainbow.fault_models.fault_stuck_at`) or multi-fault sweeps (nested loops),
-extend `fault_sweep_fi.py` — its structure makes that a small change. For each
-"exploitable" index the harness prints the faulted PC and a copy-paste
-`donjon-sca python -c "..."` repro using a verbose emulator (`Print.Code |
-Print.Faults`).
+Three **single-fault models** are swept: instruction-skip, dest-register-stuck-at-`0`,
+dest-register-stuck-at-`0xFFFFFFFF`. The `[skip]` sweep is the contract test —
+`fi::check_true`'s doc claims *skip*-resistance — so a `[skip]` hit inside `fi.rs`
+exits the script non-zero (a regression). `[stuck-at-FF]` hits inside `fi.rs` are
+printed as **INFO, not a regression**: a stuck-at on a result register defeats *any*
+bool-returning function (the final `mov r0, r4` / a `movs r0, #0`), which `check_true`
+can't claim to prevent — the mitigation for that class is a sentinel-encoded return
+(see F-2 below). Current result: `make fi` exits 0 (zero `[skip]` hits in `fi.rs`;
+the lone `[skip]` "exploitable" is at instr ~5 in the harness wrapper; `[stuck-at-FF]`
+flags 3 `fi.rs` result-register positions as INFO). For multi-fault / two-fault,
+extend the nested loops. Each hit prints its faulted PC + a verbose-emulator repro.
 
 ### C10 verify-before-release gate fault sweep — `fault_sweep_c10_verify.py`
 
-Sweeps a single instruction-skip over `sca_c10_verify_release` in the target ELF
-— a **structural mirror** of
+Sweeps the three single-fault models over `sca_c10_verify_release` in the target
+ELF — a **structural mirror** of
 [`secure/src/crypto.rs::c10_sign_verified_with_progress`](../../secure/src/crypto.rs)
 (it is *not* a `#[path]` include — `crypto.rs` pulls in `pqsigner-domain`,
 `secure_element`, the BIP-39 bridge, … too much for a leaf test crate; the mirror
-carries a `KEEP IN SYNC` comment):
+carries a `KEEP IN SYNC` comment and tracks the `crypto.rs` body line-for-line,
+including the F-1 fix — it now passes `|| core::hint::black_box(v)`):
 
 ```
-sig = sk.sign_with_progress(...)        # stubbed: sca_c10_sign_stub()
+sig = sk.sign_with_progress(...)                       # stubbed: sca_c10_sign_stub()
 fi::wait_random()
-v   = sphincs_c10::verify(...)           # stubbed: sca_c10_verify_stub(want_pass)
-if !fi::check_true(|| v) { return Err }  # ← the gate
+v   = sphincs_c10::verify(...)                          # stubbed: sca_c10_verify_stub(want_pass)
+if !fi::check_true(|| core::hint::black_box(v)) { Err } # ← the gate (F-1 fix applied)
 Ok(sig)
 ```
 
@@ -124,13 +130,13 @@ Ok(sig)
 not the SPHINCS+ math (which gets its own target — see Roadmap). The harness
 calls the gate with `want_pass = 0` (the signature did **not** verify) and any
 run that returns non-zero ("would release the signature") is a bypass: a glitch
-made the firmware emit an *unverified* C10 signature. Skips that land in the
-sign/verify stubs are reported separately (out of scope here).
-
-> ⚠️ **`make c10` currently exits non-zero — on purpose.** It has found an open
-> issue (see **Findings** below); it is the regression test that will go green
-> once `crypto.rs` opaques its `check_true` closure. This is not in CI, so it
-> breaks no build.
+made the firmware emit an *unverified* C10 signature. Faults in the sign/verify
+stubs are reported separately (out of scope here). `make c10` exits 0: the F-1
+fix is in (verified by disasm — `check_true` keeps its full four-decision-point
+shape here), and the remaining handful of gate bypasses are the **F-2** residual
+(the `if !guard() { err }` call-site glue), documented below; the harness shouts
+loudly if a bypass ever lands at a *decision point* inside `check_true` (which
+would mean the F-1 collapse came back).
 
 ## Layout
 
@@ -200,50 +206,67 @@ anything in this directory.
 
 ## Findings
 
-### F-1 — `crypto.rs` verify-before-release gate: `check_true(|| v)` collapses under CSE (single instruction-skip releases an unverified C10 signature, *in emulation*)
+### F-1 — `crypto.rs` verify-before-release gate: `check_true(|| v)` collapsed under CSE — **FIXED** (single instruction-skip released an unverified C10 signature, in emulation)
 
-`secure/src/crypto.rs::c10_sign_verified_with_progress` does:
+`secure/src/crypto.rs::c10_sign_verified_with_progress` did:
 
 ```rust
 let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
-if !crate::fi::check_true(|| v) { return Err(()); }
+if !crate::fi::check_true(|| v) { return Err(()); }   // ← the bug
 Ok(sig)
 ```
 
 `fi::check_true`'s contract (per its own doc) is that a glitch must skip **all
 four** decision points (first `cond()`, second `cond()`, sentinel commit,
-sentinel re-check) to flip a `false` verdict into a `true` return. But here
-`cond` is the trivial closure `|| v` over a pre-computed `bool` local, so LLVM
-common-subexpression-eliminates the two `cond()` calls into one `ldrb`, proves
-`v1 == v2`, and collapses the `&& v1 && v2` re-check — the compiled
-`check_true::<|| v>` has **one** branch (`cbz` on the single loaded byte), not
-four. `fault_sweep_c10_verify.py` confirms it: with `verify` forced to fail,
-**5 distinct single instruction-skips** make the gate return "release the
-signature" — skipping the `ldrb`/`cbz` inside the collapsed `check_true`,
-skipping the `bl check_true` call, skipping the `cbz r0` post-check that branches
-to `Err`, or skipping the `movs r0, #0` so the `FAIL_SENTINEL` value (non-zero!)
-lingers in the return register. (Contrast: `fault_sweep_fi.py` shows the *same*
-`fi::check_true` is single-skip-robust when handed an optimizer-opaque closure —
-the shape `fi.rs`'s doc assumes. The bug is the call site, not `check_true`.)
+sentinel re-check) to flip a `false` verdict into a `true` return. But `cond`
+here was the trivial closure `|| v` over a pre-computed `bool` local, so LLVM
+common-subexpression-eliminated the two `cond()` calls into one `ldrb`, proved
+`v1 == v2`, and collapsed the `&& v1 && v2` re-check — the compiled
+`check_true::<|| v>` had **one** branch (`cbz` on the single loaded byte), not
+four. `fault_sweep_c10_verify.py` showed **5 distinct single instruction-skips**
+making the gate "release the signature" with `verify` forced to fail: skip the
+`ldrb`/`cbz` inside the collapsed `check_true`, skip the `bl check_true` call,
+skip the `cbz r0` post-check, or skip the `movs r0, #0` so the non-zero
+`FAIL_SENTINEL` lingered in the return register.
 
-**Scope/strength caveat:** this is *emulated single-instruction-skip* against a
-*structural mirror* of `crypto.rs` (the real one can't be cheaply `#[path]`-
-included), with `sign`/`verify` stubbed. The mirror's control flow matches
-`crypto.rs` line-for-line, so the finding transfers — but confirm against the
-real binary before treating it as exhaustive.
+**Fix applied** (`crypto.rs` + the harness mirror): `if !crate::fi::check_true(|| core::hint::black_box(v))`.
+The `black_box` forces `v` to be re-materialised opaquely on each evaluation, so
+LLVM can't CSE the two `cond()` calls — `check_true` regains its full
+four-decision-point shape at this call site (verified by disassembling the built
+ELF: two distinct loads of `v`, `cbz` on v1 + `cmp #0` on v2 + `cmp #OK_SENTINEL`
+on the re-read sentinel). Cost: one extra `ldrb` per check. The
+even-stronger option — re-running `sphincs_c10::verify(...)` inside the closure,
+per `fi::check_true`'s doc example — also defends a data fault on `v`'s storage,
+at the cost of a second multi-second verify; not adopted (keeps the single-verify
+design). `fault_sweep_c10_verify.py` now reports the F-1 collapse gone (and is
+the regression test if it ever comes back). **Audit note:** the same
+`check_true(|| <trivial local>)` smell should be checked at every other
+`check_true` call site in the tree — pass `|| core::hint::black_box(x)` or a
+closure that's genuinely opaque (a real `bl`).
 
-**Fixes** (the gate is one line; pick one):
+**Scope caveat (still applies):** emulated single-fault against a *structural
+mirror* of `crypto.rs` (it can't be cheaply `#[path]`-included), with
+`sign`/`verify` stubbed. The mirror tracks `crypto.rs` line-for-line — confirm
+against the real binary before treating it as exhaustive.
 
-- *Cheap, preserves the single-`verify` design:* make the closure opaque so the
-  double-evaluation survives —
-  `if !crate::fi::check_true(|| core::hint::black_box(v)) { … }`.
-  Restores all four decision points; ~zero cost (one extra `ldrb` per check).
-- *Strongest, matches `fi.rs`'s documented canonical pattern:* re-verify inside
-  the closure —
-  `if !crate::fi::check_true(|| sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig)) { … }`
-  — and drop the pre-computed `let v`. Defends against a data fault on `v`'s
-  storage too, at the cost of a second full verify (~1–2 s) on the release path.
+### F-2 — verify-before-release *call-site glue* is single-fault-defeatable (residual; needs a design decision)
 
-Until one lands, `make c10` exits non-zero (that's the point). Same pattern
-should be audited at every other `check_true(|| <trivial local>)` call site in
-the tree.
+Even with the F-1 fix, ~3 single instruction-skips (and a few more under
+stuck-at-`0xFFFFFFFF`) still make `sca_c10_verify_release` "release the
+signature": skip the `bl check_true` call (→ a stale stack pointer in `r0` looks
+truthy to the caller), skip the `cbz r0` post-check that branches to `Err`, skip
+the prologue load of `v` into `check_true`'s frame, or stuck-at-FF a result
+register. These aren't a `check_true` failure — they're the inherent weakness of
+the `if !guard() { return err }` idiom: `check_true` hardens *its own* internal
+check, but can't stop the caller from skipping the call to it, the branch on its
+result, or replacing its boolean return with a glitched register value. The
+textbook mitigation is a **sentinel-encoded return**: `c10_sign_verified` returns
+`OK_SENTINEL`/`FAIL_SENTINEL` (not a 0/1 `Result`) and the caller compares
+against `OK_SENTINEL` — then "skip the `bl`" yields garbage `≠ OK_SENTINEL`
+(error path), and stuck-at-FF likewise. Even that isn't single-fault-proof
+(it raises the cost, doesn't eliminate); the realistic decision is "add a
+sentinel-encoded return + caller re-check" vs "accept this as residual,
+mitigated by the silicon's own FI countermeasures + the `wait_random` jitter".
+**Maintainer's call.** `make c10` exits 0 with this printed as a known residual;
+it only fails (loudly) if a bypass moves into `check_true`'s decision-point region
+(= an F-1 regression).

@@ -107,16 +107,18 @@ pub extern "C" fn sca_c10_verify_stub(want_pass: u32) -> bool {
 /// it with `want_pass = 0` (verify "fails") and a non-`0` return is a bypass:
 /// a glitch released an unverified signature.
 ///
-/// Note: this passes `check_true(|| v)` exactly as `crypto.rs` does — `v` a
-/// precomputed `bool` local — *not* the opaque-closure form used by
-/// `sca_fi_check_true`. That deliberately probes whether the optimizer's CSE of
-/// the trivial `|| v` closure weakens the gate in this real call site.
+/// Note: this passes `check_true(|| core::hint::black_box(v))` exactly as
+/// `crypto.rs` now does (the F-1 fix) — the `black_box` stops LLVM from CSEing
+/// the two `cond()` evaluations into one load of `v` and collapsing the
+/// `&& v1 && v2` re-check, so `check_true`'s full four-decision-point shape
+/// survives at this call site. Before the fix `crypto.rs` passed the bare
+/// `|| v`, and this sweep found 5 single-skip bypasses (see README §Findings).
 #[no_mangle]
 pub extern "C" fn sca_c10_verify_release(want_pass: u32) -> u32 {
     let sig = sca_c10_sign_stub(); // sk.sign_with_progress(msg_hash, None, progress);
     fi::wait_random(); // crate::fi::wait_random();
     let v = sca_c10_verify_stub(want_pass); // sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
-    if !fi::check_true(|| v) {
+    if !fi::check_true(|| core::hint::black_box(v)) {
         return 0; // return Err(());
     }
     core::hint::black_box(sig); // Ok(sig)
