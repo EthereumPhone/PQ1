@@ -168,7 +168,14 @@ escape hatch exists for user OIDs only.
       a per-device one-way event even though the underlying storage is
       erasable. Firmware-update paths MUST NOT touch the BHK page; the
       linker script carves it out of the bank-2 update region and
-      `fw_update` rejects writes that overlap it. **Staged rollout:**
+      `fw_update` rejects writes that overlap it. Factory-reset and
+      PIN-lockout-wipe also leave page 126 untouched — unlike Trezor,
+      we deliberately do **not** regenerate the BHK on wipe (Trezor's
+      `secret_bhk_regenerate()` is a crypto-erase of its encrypted flash
+      store; we have no plaintext secret in MCU flash, and regenerating
+      our BHK would brick the SE050's existing pairing — see
+      `docs/trezor-comparison.md` §5 and §6.5 for the full rationale).
+      **Staged rollout:**
       Phase 2A landed the cryptographic primitive (`cmac_bhk` +
       `derive_into_bhk` + `bhk-hardcoded-master-key` dev fallback) with
       no chip writes; Phase 2B (this checkbox) lands the silicon path;

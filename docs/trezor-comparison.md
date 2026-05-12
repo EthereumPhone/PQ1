@@ -150,9 +150,11 @@ FLASH_OTP_BLOCK_MANUFACTURING_LOCK   = 8  // irreversible "provisioning done"
 
 `core/embed/sec/consumption_mask/` drives TIM2 with DMA-fed random values onto a GPIO (typically a no-connect pin), creating a power-draw mask during crypto operations. Cheap: one timer + DMA + RNG. Recommended for signature operations (C10 keygen is 7 s — a long side-channel window).
 
-### 3.2 MPU region banking (APP vs PRIV modes)
+### 3.2 MPU region banking (APP vs PRIV modes) + SAES key-privilege split
 
 `core/embed/sys/mpu/stm32u5/mpu.c:43-134, 554-557` — 5 fixed regions + 3 banked. `MPU_MODE_APP_SAES` grants unprivileged SAES + TAMPER access during narrow crypto windows, then snaps back. Enforces W^X on every data region. PQSigner currently uses only SAU; MPU is unused. Adding MPU is the standard DEP defense and costs ~150 LOC.
+
+Related, and a genuine gap PQSigner does not have: Trezor's `secure_aes` exposes the hardware-key selectors at *two* privilege tiers — `SECURE_AES_KEY_XORK_SP` (secure-**privileged**) vs `SECURE_AES_KEY_XORK_SN` (secure-**non-privileged**), and `SECURE_AES_KEY_DHUK_SP` (`sec/secure_aes/inc/sec/secure_aes.h:30-33`). The MPU `MODE_APP_SAES` band is what enforces it: only privileged secure code can ask the SAES for the privileged-tier key. So a bug in less-trusted secure-world code can't reach the most-sensitive key selector even though it's "in the secure world". PQSigner has TrustZone S/NS but **one privilege level inside the S-world** — `secret_keys::derive_into{,_bhk}` (and therefore `SAES-CMAC(DHUK,…)` / `SAES-CMAC(BHK,…)`) is callable from any S-world code. Closing this needs the MPU split above *plus* gating the SAES key-selector behind privileged mode; until then, the mitigation is "the whole S-world image is small and audited." Track as a hardening-pass item, not a bring-up item.
 
 ### 3.3 Pre-commit PIN counter (MCU-authoritative)
 
@@ -196,6 +198,7 @@ These Trezor findings confirm directions PQSigner has already committed to — t
 | PIN keypad shuffle on touchscreen | PQSigner uses isolated hardware buttons, not touchscreen. Shuffle defeats smudge/replay on touch; irrelevant to two-button entry. If UI ever moves to touch, adopt |
 | Custom Trezor anti-glitch "handle_fault" paired-counter (`ctr` + `ctr_ck`) | Listed in `work-todo #4 Phase 2` as a stretch goal; current post-bump readback catches most fault classes |
 | Trezor's classical boardloader + bootloader Ed25519 signatures | PQSigner uses SPHINCS+C10 for firmware signing end-to-end. Trezor is *adding* PQ keys (see 6.1); PQSigner got there first |
+| `secret_bhk_regenerate()` on wipe / downgrade / RDP change (`sec/secret/stm32u5/secret.c:426`) — crypto-erases the encrypted norcow store | PQSigner has **no plaintext secret in MCU flash** to crypto-erase: secrets live on the SEs; flash pages 123–125 hold non-secret state (off-chain counter / PIN-attempt counter / wipe flag); page 126 holds the BHK *DHUK-ECB-wrapped*, not in the clear. Worse, regenerating *our* BHK would brick the SE050's existing pairing (the SE050 admin PIN — and, post-#20, the SCP03 keys — are `SAES-CMAC(BHK,…)`), so a wipe must **not** touch page 126. Inverse trade-off from Trezor: their regenerate is a feature because it erases otherwise-recoverable data; ours would be a self-inflicted brick. The only thing that loses our BHK is an RDP regression (mass-erases banks 1+2) — which already wipes everything else anyway, and after which the SE050 just needs re-pairing. See §6.5. |
 
 ---
 
@@ -218,6 +221,21 @@ T3W1 uses both Optiga Trust M *and* Tropic01 (`core/embed/sec/tropic/`) — same
 ### 6.4 IMAGE_CHUNK_SIZE = 256 KB (T3W1)
 
 `core/embed/models/T3W1/model_T3W1.h:63`. Trezor streams firmware in 256 KB chunks with a 16-entry pre-computed hash table in the firmware header, verifying each chunk on the fly and writing immediately. PQSigner uses smaller BEGIN/CHUNK/COMMIT with RAM buffering. For large firmware, Trezor's approach is faster. For safer power-loss semantics, PQSigner's is cleaner. *Not a switch worth doing; note the trade-off.*
+
+### 6.5 BHK role + key-hierarchy shape: same mechanism, different jobs
+
+We borrowed Trezor's **BHK *lifecycle mechanism*** verbatim (`sec/secret/stm32u5/secret.c`: generate 32 TRNG bytes → store in protected flash → every boot copy into TAMP `BKP0R..7R` → `secret_bhk_lock()` sets `TAMP_SECCFGR.BHKLOCK` so software can't read it but the SAES peripheral still can as a key selector). Our `hw/bhk.rs` is structurally the same, with one twist: we store the BHK *DHUK-ECB-wrapped* in flash page 126 (Trezor stores it in a separate RDP-locked + secmon-protected "secret" partition; we have a single MCU, no secmon, so the DHUK-wrap is what makes a flash dump useless without the silicon).
+
+But the **jobs differ**, and so does the rest of the key hierarchy:
+
+| | Trezor | PQSigner |
+|---|---|---|
+| Silicon **DHUK** | only ever used XORed with BHK — the `XORK` SAES selector (`KEYSEL=0b100`) | used **directly** as a `SAES-CMAC` KDF root → **OPTIGA Platform Binding Secret** (re-paired on bench board #1, 2026-05-12) |
+| Flash-stored **BHK** | the XOR component of `XORK`; **regenerated on wipe** (crypto-erase of the norcow store — see §5) | `SAES-CMAC` KDF root → **SE050 admin PIN** (+ SCP03 keys after #20); **never** touched by factory-reset / PIN-lockout-wipe, only by an RDP regression (which wipes everything anyway) |
+| `XORK` = DHUK ⊕ BHK | the storage-encryption KEK stretch — Trezor's *whole* use of BHK is binding the encrypted on-device storage to `DHUK⊕BHK` | **not used** — PQSigner keeps secrets on the SEs, not in an encrypted MCU-flash store, so there's no storage-KEK to stretch |
+| SE **pairing** secret root | a *separate* random "master-key slot" in the protected secret partition, HMAC-SHA256-keyed (`secret_keys/stm32u5/secret_keys.c` → `secret_key_derive_sym(SECRET_PRIVILEGED_MASTER_KEY_SLOT, KEY_INDEX_OPTIGA_PAIRING,…)`; older models store the Optiga pairing secret directly in `SECRET_OPTIGA_SLOT`) | the **silicon roots themselves** (DHUK / BHK), used directly via `SAES-CMAC`. We chose this over a flash master-key-slot: simpler, nothing-in-flash-to-steal, and the on-demand re-derivation is what closes the OPTIGA-brick class (`docs/optiga-brick-postmortem.md`). Cost vs. Trezor's choice: the silicon roots aren't *rotatable* (they're fused / first-boot-fixed), and `SAES-CMAC` is the only KDF possible over the DHUK (it's a key *selector*, not a readable value — you can't HMAC over it). Accepted trade-off — but write it down so a future reader doesn't read it as an oversight. |
+
+Net: nothing to fix here, but two things to keep in mind — (a) "regenerate BHK on wipe" is a Trezor pattern that is *correct to skip* for us (§5), and (b) if we ever do want rotatable SE-pairing roots, Trezor's "flash master-key slot" is the prior art, and it would mean adding one more flash-resident secret to protect.
 
 ---
 
