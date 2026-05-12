@@ -165,6 +165,7 @@ impl CommandRouter {
             // PersonalSign payloads can run up to ~700 bytes, well past
             // the single-APDU Lc=255 limit.
             INS_V2_OFFCHAIN_STATUS => return self.cmd_offchain_status(data),
+            INS_V2_OFFCHAIN_SYNC => return self.cmd_offchain_sync(data),
 
             // Firmware-update non-chained commands. CHUNK carries the
             // 8-byte header + up to 1024 bytes of data — well under
@@ -556,6 +557,17 @@ impl CommandRouter {
         }
     }
 
+    /// 0x64 OFFCHAIN_SYNC — bump per-slot `last_userop_count` to a
+    /// companion-supplied floor. Input is the 21-byte
+    /// `OFFCHAIN_SYNC_INPUT_LEN` payload. No response body, SW only.
+    unsafe fn cmd_offchain_sync(&self, data: &[u8]) -> Response {
+        if data.len() != sphincs_tz_shared::OFFCHAIN_SYNC_INPUT_LEN {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let status = nsc_api::offchain_sync(data);
+        self.nsc_status_to_response(status)
+    }
+
     /// If the companion sent a bare `[header | data]` payload (no
     /// trailer sections) and `(chain_id, tx.to)` hits the NS-side ERC-20
     /// database, append an `[u16 BE len | bundle]` trailer inside
@@ -791,13 +803,17 @@ impl CommandRouter {
         }
         let mut pos = after_data;
         let mut new_len = received_len;
-        // Five empty u16 prefixes to ensure, in secure-parser order:
-        // erc20, v1_zk, v3_zk, safe_v1, selector. Must match the parse
-        // sequence in `secure/src/nsc/cmd_sign_userop.rs::run` exactly —
-        // any divergence causes the names trailer to misalign with the
-        // secure parser's cursor and surfaces on the OLED as a
-        // "bad <section> bundle" error.
-        for _ in 0..5 {
+        // Six empty u16 prefixes to ensure, in secure-parser order:
+        // erc20, v1_zk, v3_zk, safe_v1, selector, self_attest. Must match
+        // the parse sequence in `secure/src/nsc/cmd_sign_userop.rs::run`
+        // exactly — any divergence causes the names trailer to misalign
+        // with the secure parser's cursor and surfaces on the OLED as a
+        // "bad <section> bundle" / "bad self-attest" error.
+        // (Bumped from 5 → 6 when commit 33cd0ed added the self_attest
+        // slot to the secure parser; without this the NS-injected names
+        // count byte got read as the self_attest u16 length and tripped
+        // "bad self-attest" on every ETH transfer to a named address.)
+        for _ in 0..6 {
             if pos + 2 > new_len {
                 if pos + 2 > CHAIN_BUF_LEN {
                     return new_len;

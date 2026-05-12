@@ -33,6 +33,7 @@ mod transport {
     const CMD_GET_INIT_CODE: u32 = 15;
     const CMD_SIGN_OFFCHAIN: u32 = 16;
     const CMD_OFFCHAIN_STATUS: u32 = 17;
+    const CMD_OFFCHAIN_SYNC: u32 = 18;
     const CMD_SIGN_USEROP_BATCH: u32 = 30;
 
     unsafe fn gateway_call(cmd: u32, arg0: u32, arg1: u32, arg2: u32) -> u32 {
@@ -125,6 +126,11 @@ mod transport {
         unsafe { gateway_call(CMD_OFFCHAIN_STATUS, in_ptr as u32, out_ptr as u32, in_len) }
     }
 
+    #[inline]
+    pub(super) fn offchain_sync_call(in_ptr: *const u8, in_len: u32) -> u32 {
+        unsafe { gateway_call(CMD_OFFCHAIN_SYNC, in_ptr as u32, 0, in_len) }
+    }
+
     #[cfg(feature = "e2e-test")]
     const CMD_TEST_PIN_LOCKOUT: u32 = 200;
 
@@ -152,6 +158,7 @@ mod transport {
         fn nsc_get_init_code(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
         fn nsc_sign_offchain(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
         fn nsc_offchain_status(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+        fn nsc_offchain_sync(in_ptr: u32, in_len: u32) -> u32;
 
         // Firmware-update veneers.
         fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32;
@@ -232,6 +239,11 @@ mod transport {
         in_len: u32,
     ) -> u32 {
         unsafe { nsc_offchain_status(in_ptr as u32, out_ptr as u32, in_len) }
+    }
+
+    #[inline]
+    pub(super) fn offchain_sync_call(in_ptr: *const u8, in_len: u32) -> u32 {
+        unsafe { nsc_offchain_sync(in_ptr as u32, in_len) }
     }
 
     #[inline]
@@ -365,6 +377,14 @@ pub fn sign_offchain(input: &[u8], out: &mut [u8]) -> u32 {
 /// `out` is 24 bytes — see `shared::CMD_OFFCHAIN_STATUS` for the layout.
 pub fn offchain_status(input: &[u8], out: &mut [u8]) -> u32 {
     transport::offchain_status_call(input.as_ptr(), out.as_mut_ptr(), input.len() as u32)
+}
+
+/// CMD_OFFCHAIN_SYNC — bump per-slot `last_userop_count` to a
+/// companion-supplied floor. `input` is 21 bytes:
+///   `[account_index(1) || chain_id(u64 BE) || slot_index(u32 BE) || target(u64 BE)]`.
+/// No response body; SW only. Idempotent and "set if greater".
+pub fn offchain_sync(input: &[u8]) -> u32 {
+    transport::offchain_sync_call(input.as_ptr(), input.len() as u32)
 }
 
 // ---------------------------------------------------------------------------

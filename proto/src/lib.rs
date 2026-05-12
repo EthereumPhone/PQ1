@@ -444,6 +444,19 @@ pub const CMD_SIGN_USEROP_BATCH: u32 = 30;
 ///   * `arg2` — input length (must equal `OFFCHAIN_STATUS_INPUT_LEN`).
 pub const CMD_OFFCHAIN_STATUS: u32 = 17;
 
+/// CMD_OFFCHAIN_SYNC — bump the firmware's `last_userop_count` for a
+/// (account_index, chain_id, slot_index) tuple to at least `target`.
+/// Idempotent and "set if greater" — never reduces. Used by the
+/// companion after a firmware reflash (which wipes secure-flash
+/// counters) so the next `CMD_SIGN_USEROP` emits a `newOffchainCount`
+/// that's monotonic w.r.t. the on-chain `offchainSigCount[ownerIndex]`.
+///
+/// Wire layout:
+///   * `arg0` — NS read buffer (`OFFCHAIN_SYNC_INPUT_LEN` bytes)
+///   * `arg2` — input length (must equal `OFFCHAIN_SYNC_INPUT_LEN`)
+///   * arg1 unused — response is SW only.
+pub const CMD_OFFCHAIN_SYNC: u32 = 18;
+
 // ---------------------------------------------------------------------------
 // Firmware-update gateway commands
 // ---------------------------------------------------------------------------
@@ -672,6 +685,7 @@ pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
 pub const INS_V2_GET_INIT_CODE: u8 = 0x61;
 pub const INS_V2_SIGN_OFFCHAIN: u8 = 0x62;
 pub const INS_V2_OFFCHAIN_STATUS: u8 = 0x63;
+pub const INS_V2_OFFCHAIN_SYNC: u8 = 0x64;
 
 // ---------------------------------------------------------------------------
 // Firmware-update INS codes (companion → device)
@@ -865,6 +879,15 @@ pub const OFFCHAIN_STATUS_OUTPUT_LEN: usize = 8 + 8 + 1 + 7; // 24
 pub const OFFCHAIN_STATUS_OUTPUT_LOCAL_OFF: usize = 0;
 pub const OFFCHAIN_STATUS_OUTPUT_LAST_USEROP_OFF: usize = 8;
 pub const OFFCHAIN_STATUS_OUTPUT_REGISTERED_OFF: usize = 16;
+
+/// CMD_OFFCHAIN_SYNC payload layout.
+///   [ 0.. 1)  account_index  (u8)
+///   [ 1.. 9)  chain_id       (u64 BE)
+///   [ 9..13)  slot_index     (u32 BE)
+///   [13..21)  target_count   (u64 BE) — bump `last_userop_count` to at
+///                                       least this value (idempotent).
+/// Response: no body, SW only.
+pub const OFFCHAIN_SYNC_INPUT_LEN: usize = 1 + 8 + 4 + 8; // 21
 
 // ---------------------------------------------------------------------------
 // PQSmartWalletFactory initCode (first-deploy UserOps)

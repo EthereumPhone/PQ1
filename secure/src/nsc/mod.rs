@@ -52,6 +52,7 @@ mod cmd_get_wallet_address;
 mod cmd_is_unlocked;
 mod cmd_lock;
 mod cmd_offchain_status;
+mod cmd_offchain_sync;
 mod cmd_request_unlock;
 mod cmd_sign_offchain;
 mod cmd_sign_userop;
@@ -266,8 +267,8 @@ compile_error!(
 #[cfg(not(feature = "stm32u585"))]
 use sphincs_tz_shared::{
     NscStatus, CMD_GET_INIT_CODE, CMD_GET_REMAINING, CMD_GET_WALLET_ADDRESS, CMD_IS_UNLOCKED,
-    CMD_LOCK, CMD_NONE, CMD_OFFCHAIN_STATUS, CMD_REQUEST_UNLOCK, CMD_SIGN_OFFCHAIN,
-    CMD_SIGN_USEROP, CMD_SIGN_USEROP_BATCH, SHARED_MAILBOX_BASE,
+    CMD_LOCK, CMD_NONE, CMD_OFFCHAIN_STATUS, CMD_OFFCHAIN_SYNC, CMD_REQUEST_UNLOCK,
+    CMD_SIGN_OFFCHAIN, CMD_SIGN_USEROP, CMD_SIGN_USEROP_BATCH, SHARED_MAILBOX_BASE,
 };
 
 // ---------------------------------------------------------------------------
@@ -530,6 +531,7 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_GET_INIT_CODE => cmd_get_init_code::run(args),
         CMD_SIGN_OFFCHAIN => cmd_sign_offchain::run(args),
         CMD_OFFCHAIN_STATUS => cmd_offchain_status::run(args),
+        CMD_OFFCHAIN_SYNC => cmd_offchain_sync::run(args),
         CMD_IS_UNLOCKED => cmd_is_unlocked::run(),
         CMD_LOCK => cmd_lock::run(),
         #[cfg(feature = "e2e-test")]
@@ -753,5 +755,15 @@ pub extern "cmse-nonsecure-entry" fn nsc_offchain_status(
 ) -> u32 {
     let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
     unsafe { cmd_offchain_status::run(&args) }
+}
+
+/// CMD_OFFCHAIN_SYNC — bump the firmware's per-slot `last_userop_count`
+/// to a companion-supplied floor. See `cmd_offchain_sync::run` for the
+/// full rationale (firmware-reflash recovery).
+#[cfg(feature = "stm32u585")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_offchain_sync(in_ptr: u32, in_len: u32) -> u32 {
+    let args = GatewayArgs { arg0: in_ptr, arg1: 0, arg2: in_len };
+    unsafe { cmd_offchain_sync::run(&args) }
 }
 
