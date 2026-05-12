@@ -214,10 +214,24 @@ stable C symbols, then a `rainbow`/`lascar` harness.
   page-124 attempt-counter pre-commit and `hw::flash::pin_attempts_bump`'s
   post-bump delay + double-readback (`fi::check_true`-gated). Win condition: no
   single skip lets a wrong-PIN attempt proceed without the counter advancing.
-- **`fault_sweep_fi.py` extensions** — stuck-at faults, two-fault sweeps, and a
-  *leakage* pass over the FI guards themselves (does `wait_random`'s loop count
-  leak via timing? — emulated traces are jitter-free, so this would be a
-  structural check, not a timing one).
+- **`fault_sweep_fi.py` extensions** — ~~stuck-at faults~~ **DONE** (all 3 single-fault
+  models swept) and ~~two-fault sweeps~~ **DONE** (`fault_sweep_fi.py --two-fault` /
+  `make fi-twofault`: a `UC_HOOK_CODE`-driven pair sweep over every ordered pair of
+  `check_true(false)`'s ~205 instructions). Finding **F-5**: `fi::check_true` is
+  **~2-coordinated-skip-defeatable**, not 4-skip as its doc-comment claims — but
+  almost all the 2-skip routes are *out of `check_true`'s claimed scope*: corrupting
+  *both* `cond()` evaluations (the boolean source — which `check_true` explicitly does
+  not promise to protect; and in the harness the trivial `sca_fi_cond(x)=black_box(x)!=0`
+  makes "skip the arg-load → r0 holds a truthy stack pointer" easy, which does **not**
+  transfer to a real `bl sphincs_c10::verify(pk_seed,…)` closure where a skipped arg
+  makes verify *fail*). The pairs that matter are the few with *both* faults in
+  `check_true`'s verdict/return code (e.g. skipping the result `mov r0, r4` /
+  fail-path result-zeroing) — for those, sentinel-encode the return; or just soften
+  the doc's "4" to "~2". Exploratory: `make fi-twofault` exits 0 (the single-fault
+  `[skip]` sweep is the hard gate, and it passes). *Still open*: a 3-fault sweep
+  (combinatorics get heavy; 3 coordinated skips is a much steeper bar), and a
+  *leakage* pass over the FI guards (does `wait_random`'s loop count leak via timing?
+  — emulated traces are jitter-free, so it'd be a structural check, not a timing one).
 
 Separately, for *on-silicon* work later (ChipWhisperer / Scaffold / a crowbar
 rig — not this emulation path): a `sca-trigger` firmware feature flag that
