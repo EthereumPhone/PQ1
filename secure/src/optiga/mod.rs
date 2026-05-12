@@ -1748,6 +1748,26 @@ impl OptigaTrustM {
     ///   `OptigaError::Shield` otherwise — correct failure, not a
     ///   regression.
     pub fn factory_reset(&mut self) -> Result<(), OptigaError> {
+        // Run the reset body; on ANY error, drop the cached "chip is
+        // ready" / "shield is up" state so the next `init()` does a real
+        // soft_reset + re-handshake instead of early-returning. A failed
+        // shielded handshake (e.g. the host computed a PBS the chip
+        // doesn't hold — exactly what happens the first time a board
+        // built with the old `otp-hardcoded-master-key`-derived PBS is
+        // reflashed with the DHUK-derived one) leaves the chip's
+        // presentation layer in an SCTR=0x40 alert state; without this,
+        // every subsequent plain APDU bounces with the same alert and a
+        // later `setup_pbs_no_handshake` (which would rewrite E140 with
+        // the new PBS at LcsO=Creation) fails with `Transport`.
+        let r = self.factory_reset_body();
+        if r.is_err() {
+            self.ready = false;
+            self.shield.active = false;
+        }
+        r
+    }
+
+    fn factory_reset_body(&mut self) -> Result<(), OptigaError> {
         self.init()?;
         // Bring the Shielded Connection up so every subsequent write
         // satisfies the `Conf(E140)` arm of the user OID's Change AC.
