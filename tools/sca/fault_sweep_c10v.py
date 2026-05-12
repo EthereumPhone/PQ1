@@ -46,7 +46,9 @@ ELF = os.path.join(HERE, "c10v_target", "target", "thumbv8m.main-none-eabi", "re
 VECTORS_JSON = os.path.normpath(os.path.join(HERE, "..", "..", "contracts", "smart-wallet", "test", "c10_test_vectors.json"))
 FN = "sca_c10_verify_real"
 RET = 0xAAAA_AAAA
-BUDGET = 3_000_000
+COUNT_BUDGET = 3_000_000   # for the (one-time) instruction-count / baseline runs
+SWEEP_BUDGET = 25_000      # per faulted emulation in the sweep — a normal verify returns in ~7.5k
+SWEEP_CAP    = 8_000       # max instructions to sweep per vector (covers the full ~7.5k of the normal ones)
 STACK_TOP = 0x9000_0000
 PKS, PKR, MSG, SIG = 0x6000_0000, 0x6000_0100, 0x6000_0200, 0x6000_1000  # scratch buffers
 MAX_DOS_SWEEP = 0  # set >0 to also sweep a valid vector for fault→reject (DoS); kept off by default for runtime
@@ -77,7 +79,28 @@ def vec(label):
     return ps, pr, msg, sig
 
 
+_EMU = None
+_STACK_LEN = 0x8000
+
+
+def _emu():
+    """One persistent emulator, reused across iterations (re-creating it — and so
+    re-parsing the `sphincs-c10`-linked ELF — per iteration is the bottleneck for
+    the 6-vector sweep). `setup()` does the per-iteration cleanup; `reset()` +
+    re-writing the inputs + zeroing `verify`'s stack region makes the reuse safe
+    even on the fault path (a fault that skips a stack write then reads a *zero*,
+    not a previous iteration's value)."""
+    global _EMU
+    if _EMU is None:
+        _EMU = rainbow_cortexm()
+        _EMU.load(ELF)
+        _EMU.map_space(STACK_TOP - _STACK_LEN, STACK_TOP + 0x20)
+    return _EMU
+
+
 def fresh_emu(trace_config=None):
+    """A genuinely-fresh emulator — only used by `instr_count` (which needs an
+    `instruction=True` trace config, set at construction time; called ≤6×)."""
     e = rainbow_cortexm(trace_config=trace_config) if trace_config else rainbow_cortexm()
     e.load(ELF)
     return e
@@ -85,7 +108,7 @@ def fresh_emu(trace_config=None):
 
 def setup(e, v):
     e.reset()
-    e.map_space(STACK_TOP - 0x8000, STACK_TOP + 0x20)
+    e[STACK_TOP - _STACK_LEN] = b"\x00" * _STACK_LEN  # clear verify's stack (mapped above)
     e["sp"] = STACK_TOP
     ps, pr, msg, sig = v
     e[PKS] = ps
@@ -96,15 +119,15 @@ def setup(e, v):
     e["lr"] = RET
 
 
-def run(e, v, fault=None):
+def run(e, v, fault=None, budget=COUNT_BUDGET):
     """Returns ('ret', r0) | ('crash', pc) | ('hang', pc) | ('short', None)."""
     setup(e, v)
     begin = e.functions[FN][0]
     try:
         if fault is None:
-            e.start(begin, RET, count=BUDGET)
+            e.start(begin, RET, count=budget)
         else:
-            e.start_and_fault(fault[0], fault[1], begin, RET, count=BUDGET)
+            e.start_and_fault(fault[0], fault[1], begin, RET, count=budget)
     except (RuntimeError, UcError):
         return ("crash", e["pc"])
     except IndexError:
@@ -133,11 +156,12 @@ def sweep_forge_one(v_bad, total):
     """For each fault model, sweep every instruction of verify(invalid vector);
     return {model_label: ([(index, pc), ...], crashes, hangs, rejected)}."""
     out = {}
+    sweep_to = min(total, SWEEP_CAP)
     for label, model in FAULT_MODELS:
         hits, crashes, hangs, rejected = [], 0, 0, 0
-        for i in range(1, total + 8):
-            e = fresh_emu()
-            st, val = run(e, v_bad, fault=(model, i))
+        for i in range(1, sweep_to + 8):
+            e = _emu()
+            st, val = run(e, v_bad, fault=(model, i), budget=SWEEP_BUDGET)
             if st == "short":
                 break
             if st == "crash":
@@ -145,10 +169,10 @@ def sweep_forge_one(v_bad, total):
             if st == "hang":
                 hangs += 1; continue
             if val == 1:
-                e2 = fresh_emu()
+                e2 = _emu()
                 setup(e2, v_bad)
                 try:
-                    e2.start(e2.functions[FN][0], RET, count=i)
+                    e2.start(e2.functions[FN][0], RET, count=min(i, SWEEP_BUDGET))
                 except Exception:
                     pass
                 hits.append((i, e2["pc"]))
@@ -160,9 +184,9 @@ def sweep_forge_one(v_bad, total):
 
 if __name__ == "__main__":
     # baselines: valid → accept; every invalid vector → reject
-    e = fresh_emu(); assert run(e, vec("valid-1")) == ("ret", 1), "valid-1 baseline: verify should return 1 (accept)"
+    e = _emu(); assert run(e, vec("valid-1")) == ("ret", 1), "valid-1 baseline: verify should return 1 (accept)"
     for lbl in INVALID_LABELS:
-        e = fresh_emu()
+        e = _emu()
         r = run(e, vec(lbl))
         assert r == ("ret", 0), f"{lbl} baseline: verify should return 0 (reject), got {r}"
     print(f"baselines OK  (valid-1 → accept ; {len(INVALID_LABELS)} invalid vectors → reject)")
@@ -173,9 +197,20 @@ if __name__ == "__main__":
     for lbl in INVALID_LABELS:
         v_bad = vec(lbl)
         total = instr_count(v_bad)
-        print(f"  -- {lbl}  ({total} instr) --")
+        sweep_to = min(total, SWEEP_CAP)
+        note = ""
+        if total > SWEEP_CAP:
+            # The only outlier: `mutated-WOTS-count-target-sum-fail`'s verify runs ~1.24M instructions —
+            # a malformed WOTS digit drives an unbounded chain (a separate observation: on-chain that's a
+            # gas-limit DoS *revert* = reject, so "safe", but `sphincs-c10::verify` could fail-fast on a
+            # digit ≥ W). We sweep only its first SWEEP_CAP instructions (the early checks, where a
+            # forge-relevant fault would live) and cap each emulation at SWEEP_BUDGET — so a fault during
+            # the 1.24M-instr chain shows up as "hung" (verify never returns within the cap → non-forge).
+            note = (f"  [verify runs {total} instr — unbounded WOTS chain on the malformed digit;"
+                    f" sweeping first {sweep_to}, each emulation capped at {SWEEP_BUDGET} instr]")
+        print(f"  -- {lbl}  ({total} instr){note} --")
         for model_label, (hits, cr, hg, rej) in sweep_forge_one(v_bad, total).items():
-            print(f"     [{model_label:11s}]  swept ≈{total}:  forged-accepted={len(hits)}  crashes={cr}  hangs={hg}  correctly-rejected={rej}")
+            print(f"     [{model_label:11s}]  swept ≈{sweep_to}:  forged-accepted={len(hits)}  crashes={cr}  hangs={hg}  correctly-rejected={rej}")
             if hits:
                 any_forge = True
                 print(f"       !!! {len(hits)} fault(s) made a FORGED signature ({lbl}) verify as good:")

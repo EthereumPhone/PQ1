@@ -416,20 +416,27 @@ then fails the final `computed_root == pk_root` check — the failure happens at
 the end, after everything else has run, so the sweep exercises the whole pipeline
 including the classic SPHINCS+ FI spot (the final root comparison).
 
-The whole `verify` is ~7521 instructions in emulation (fewer for vectors that
-fail earlier), so the sweep covers **all of it** (not just the tail), under all 3
-fault models (skip / stuck-at-0 / stuck-at-FF), and over **every invalid vector in
-the JSON** (`wrong-message`, `wrong-root`, `mutated-R`, `mutated-FORS-auth`,
-`mutated-WOTS-sigma`, `mutated-WOTS-count-target-sum-fail`) — each fails at a
-different point (H_msg / FORS index extraction / FORS auth path / WOTS chain /
-WOTS digit-sum check / final root compare), so every reject path is exercised.
+It sweeps **every invalid vector in the JSON** (`wrong-message`, `wrong-root`,
+`mutated-R`, `mutated-FORS-auth`, `mutated-WOTS-sigma`,
+`mutated-WOTS-count-target-sum-fail`), under all 3 fault models (skip /
+stuck-at-0 / stuck-at-FF). `wrong-message`/`wrong-root`/`mutated-R` run the full
+`verify` (~7521 instr — H_msg, FORS recompute, hypertree, final root compare —
+*all* of it), so the sweep covers every instruction; `mutated-FORS-auth` /
+`mutated-WOTS-sigma` / `mutated-WOTS-count-target-sum-fail` make `verify` do
+~1.2–1.8 **million** instructions (see "F-6" below) — for those the sweep covers
+the first 8 000 instructions (the early checks, where a forge-relevant fault
+would live) with each emulation capped at 25 000 instr (a fault during the
+multi-million-instr chain shows up as "hung" → verify never returns → non-forge).
+The harness reuses one persistent emulator (`reset()` + re-write the inputs +
+zero `verify`'s stack between iterations) so the whole 6-vector sweep finishes in
+~1–2 min instead of timing out on per-iteration ELF re-parsing.
 
-**Result: clean** — across all 3 models, sweeping every one of the ~7521
-instructions, **no single fault made a forged signature verify as good** (the
-faults that hit something either crash on an invalid instruction, hang, or are
-correctly rejected). `make c10v` exits 0; it exits 1 (with the offending
-instruction indices + PCs + a verbose repro) the moment any single fault flips a
-reject into an accept.
+**Result: clean** — across all 6 invalid vectors × all 3 fault models, **no
+single fault made a forged signature verify as good** (the faults that hit
+something either crash on an invalid instruction, hang, or are correctly
+rejected). `make c10v` exits 0; it exits 1 (with the offending instruction
+indices + PCs + a verbose repro) the moment any single fault flips a reject into
+an accept.
 
 Caveats: emulated single-fault only (multi-fault / on-device clock-EM glitches
 out of scope); this is the `verify` direction — a fault inside C10 *signing* is a
@@ -437,6 +444,26 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 *signing* is *differential* (two glitched signs reusing the same FORS/WOTS
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
+
+### F-6 — `sphincs_c10::verify` does ~1.2–1.8 M instructions on some malformed signatures (low-severity observation)
+
+`instr_count` (a clean `verify()` run, instrumented) reports: `wrong-message` /
+`wrong-root` / `mutated-R` → ~7 521 instructions; **`mutated-FORS-auth` →
+1 239 403**, **`mutated-WOTS-sigma` → 1 777 214**, **`mutated-WOTS-count-target-sum-fail`
+→ 1 239 403**. So a malformed FORS-auth-path / WOTS-sigma / WOTS-digit value drives
+`sphincs_c10::verify` (the Rust reference impl) into a ~1–2 M-instruction
+computation before it returns "reject" — i.e. its chain/loop lengths aren't
+bounded defensively against an out-of-range value. **Severity: low.** It's still
+a *reject* (correctness holds — a malformed sig never verifies). On-chain the
+matching `SPHINCsC10Asm.sol` would do ~1–2 M SHA-256 precompile `staticcall`s →
+blow past `verificationGasLimit` → OOG revert → the bundler's `eth_estimate…` /
+simulation catches it → the userOp is dropped before it ever lands, and nobody
+eats the gas. So it doesn't open a DoS in the ERC-4337 flow. But it's worth a
+fail-fast `digit < W` / bounded-loop assertion in `sphincs-c10::verify` (and a
+look at whether the Yul verifier has the same shape) so a future auditor isn't
+surprised by "a malformed sig makes verify do a million hashes". **Not fixed**
+(it's `sphincs-c10` / the Yul verifier — out of scope of this tooling pass;
+flagged for the maintainer).
 
 ### F-5 — `fi::check_true` is ~2-coordinated-skip-defeatable, not 4-skip as its doc claimed — **doc updated**
 
