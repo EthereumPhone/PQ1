@@ -1,0 +1,37 @@
+# Standalone workspace — detached from the PQSigner workspace (its own profile;
+# not built by a root `cargo build`). Path-deps `sphincs-c10` directly: its only
+# `{ workspace = true }` dep (`zeroize`) is resolved from `sphincs-c10`'s own
+# workspace (the repo root's `[workspace.dependencies]`), so the path-dep works
+# even though this crate is its own workspace.
+[workspace]
+
+[package]
+name = "sca-c10v-target"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "thumbv8m ELF wrapping sphincs_c10::verify, for the fault-sweep over the C10 signature-verification (the real verify, not stubbed). Not shipped."
+
+[features]
+e2e-test = []
+
+[[bin]]
+name = "sca-c10v-target"
+path = "src/main.rs"
+
+[dependencies]
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+panic-halt  = "1"
+# The real C10 verifier — software SHA-256 path (no `hw-sha256` feature), which
+# is exactly what runs under the bench/host tooling.
+sphincs-c10 = { path = "../../../sphincs-c10" }
+
+[profile.release]
+opt-level = 3            # keep emulation fast; do NOT strip (rainbow needs .symtab)
+
+[profile.release.package.sphincs-c10]
+opt-level = 3
+
+[profile.release.package.sha2]
+opt-level = 3

@@ -148,6 +148,7 @@ tools/sca/
   fault_sweep_fi.py          — FI-guard fault sweep (fi.rs: check_true / wait_random)
   fault_sweep_c10_verify.py  — C10 verify-before-release gate fault sweep
   fault_sweep_pin.py         — PIN-attempt pre-commit gate fault sweep (gated_unlock + pin_attempts_bump)
+  fault_sweep_c10v.py        — fault sweep over the *real* sphincs_c10::verify (forge-a-signature direction)
   leakage_kdf.py             — lascar leakage analysis: AES-256 / AES-GCM entropy wrap + a leaky-S-box positive control
   fi_target/                 — standalone thumbv8m crate: the fault-sweep targets, in one ELF (sca-fi-target)
     src/main.rs              —   #[path]-includes ../../../../secure/src/fi.rs verbatim (sca_fi_*),
@@ -170,14 +171,18 @@ whatever hardware it touches. Pattern: a `<name>_target/` crate that
 crate** (`sphincs-c10`, `pqsigner-domain`, …) and re-exports the function under
 stable C symbols, then a `rainbow`/`lascar` harness.
 
-- **C10 verify-before-release — full version.** The *gate* is wired
-  (`fault_sweep_c10_verify.py`, with `sign`/`verify` stubbed). The remaining
-  work is the *real* one: build the `sphincs-c10` crate (software SHA-256 path)
-  into a thumb ELF and sweep faults over an actual `sk.sign(...)` →
-  `sphincs_c10::verify(...)` round-trip — verify of one C10 sig is a few
-  thousand SHA-256 blocks, slow but emulable if you restrict the sweep window to
-  the post-`verify` gate region rather than the whole call. Win condition
-  beyond the gate: no single skip makes a *bad* signature `verify()` as good.
+- ~~**C10 verify-before-release — full version**~~ — **DONE** (`fault_sweep_c10v.py`
+  + `c10v_target/`, which path-deps the *real* `sphincs-c10`, software SHA — see
+  "### Full C10 verify fault sweep" below). It loads the `wrong-message` vector
+  from `contracts/smart-wallet/test/c10_test_vectors.json` (a structurally-valid
+  sig for a different message → `verify` runs the full FORS/WOTS/hypertree path,
+  then fails the final root check) and sweeps all 3 fault models over every one of
+  `verify`'s ~7521 instructions; **result: no single fault makes a forged
+  signature verify as good** — `make c10v` exits 0. *Not yet done*: the
+  `sk.sign(...)` side (a fault inside C10 *signing* that leaks `sk_seed` or emits
+  a malformed sig), and a sign-then-verify round-trip; sign is slower to emulate
+  but tractable. Also: only single-fault — multi-fault / on-device timing-EM
+  glitches are out of scope.
 - ~~**Tier-1 KDF leakage CPA**~~ — **DONE-ish** (`leakage_kdf.py` — see "### Leakage
   analysis" below). It's a TVLA + CPA on the `mem_address` channel of the AES the
   entropy-blob wrap uses (`pqsigner-domain`'s `encrypt_entropy_blob`, mirrored)
@@ -369,3 +374,39 @@ it uses the *same* crates.io deps (`aes-gcm` 0.10 / `aes` 0.8 / `sha2` 0.10), so
 the AES's leakage behaviour matches; KEEP IN SYNC if `encrypt_entropy_blob`'s
 shape changes (e.g. a different AEAD); (4) 600 traces is a first-pass "flat"
 claim — a real assurance argument would want more.
+
+## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
+
+`make -C tools/sca c10v` builds `sca-c10v-target` (a thin `#[no_mangle]` wrapper
+over the **real** `sphincs_c10::verify` — software SHA-256 path, path-dep'd
+straight from `../../sphincs-c10`) and sweeps a single fault at every instruction
+of `verify`'s execution on a known *invalid* vector, watching for a fault that
+flips the **reject into an accept** — i.e. a *forged* C10 signature verifying,
+which is the worst-severity FI outcome (an attacker could install their own slot
+key / userOp). The vector is the `wrong-message` entry from
+`contracts/smart-wallet/test/c10_test_vectors.json` (the same JSON the Solidity
+verifier's Foundry tests use): a *structurally valid* signature for a different
+message, so verification runs the full FORS + WOTS + hypertree recomputation and
+then fails the final `computed_root == pk_root` check — the failure happens at
+the end, after everything else has run, so the sweep exercises the whole pipeline
+including the classic SPHINCS+ FI spot (the final root comparison).
+
+The whole `verify` is ~7521 instructions in emulation, so the sweep covers **all
+of it** (not just the tail), under all 3 fault models (skip / stuck-at-0 /
+stuck-at-FF).
+
+**Result: clean** — across all 3 models, sweeping every one of the ~7521
+instructions, **no single fault made a forged signature verify as good** (the
+faults that hit something either crash on an invalid instruction, hang, or are
+correctly rejected). `make c10v` exits 0; it exits 1 (with the offending
+instruction indices + PCs + a verbose repro) the moment any single fault flips a
+reject into an accept.
+
+Caveats: emulated single-fault only (multi-fault / on-device clock-EM glitches
+out of scope); this is the `verify` direction — a fault inside C10 *signing*
+(leaking `sk_seed`, emitting a malformed sig) is a separate, not-yet-wired target
+(sign is slower to emulate but tractable); the `wrong-message` vector is one
+invalid shape — the other invalid vectors in the JSON (`wrong-root`, `mutated-R`,
+`mutated-FORS-auth`, `mutated-WOTS-sigma`, `mutated-WOTS-count-target-sum-fail`)
+exercise different early-exit paths and could be swept too if you want belt-and-
+braces (each is a one-line change — `vec("...")` in the harness).
