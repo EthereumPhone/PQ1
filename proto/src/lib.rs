@@ -866,7 +866,7 @@ pub const EXECUTE_SELECTOR: [u8; 4] = [0x14, 0x44, 0x3c, 0x57];
 /// window: on a fresh-from-seed restore, the new firmware can assume at
 /// most `MAX_OFFCHAIN_GAP` unbacked sigs were emitted by the previous
 /// device, so the cap-budget calculation stays correct.
-pub const MAX_OFFCHAIN_GAP: u64 = 5;
+pub const MAX_OFFCHAIN_GAP: u64 = 100;
 
 /// CMD_SIGN_OFFCHAIN payload layout. The input is variable-length:
 /// fixed 17-byte header followed by `payload_len` bytes whose meaning

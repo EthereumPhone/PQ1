@@ -201,7 +201,7 @@ EIP-1271 sig over a 32-B hash, returned as
 `[new_local_offchain_count u64 BE][C10 sig (4008 B)]` (4016 bytes total).
 Companion wraps as `abi.encode(uint256 ownerIndex, bytes c10Sig)` and the
 dapp calls `wallet.isValidSignature(rawHash, wrappedSig)`. Refuses if the
-slot is unregistered, the gap exceeds `MAX_OFFCHAIN_GAP = 5`, or the
+slot is unregistered, the gap exceeds `MAX_OFFCHAIN_GAP = 100`, or the
 combined cap is exhausted. Bootstrap key (`ownerIndex == 0`) is
 **forbidden** for EIP-1271.
 

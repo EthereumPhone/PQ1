@@ -28,7 +28,7 @@ library PqsignerProto {
     // ─────────────────────────────────────────────
     uint256 internal constant MAX_BOOTSTRAP_USES = 65536;
     uint256 internal constant MAX_SLOT_USES = 65536;
-    uint256 internal constant MAX_OFFCHAIN_GAP = 5;
+    uint256 internal constant MAX_OFFCHAIN_GAP = 100;
 
     // ─────────────────────────────────────────────
     // Wallet storage layout

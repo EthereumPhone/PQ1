@@ -36,7 +36,7 @@ def MAX_SLOT_USES : Nat := 65536
 /-- Max unbacked off-chain sig gap before the firmware refuses a new
     EIP-1271 sig. Firmware-side knob, exposed here for spec coverage of
     `CMD_SIGN_OFFCHAIN` (not currently a Lean theorem target). -/
-def MAX_OFFCHAIN_GAP : Nat := 5
+def MAX_OFFCHAIN_GAP : Nat := 100
 
 /-! ## Wallet storage layout -/
 
