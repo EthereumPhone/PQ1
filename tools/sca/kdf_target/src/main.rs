@@ -165,6 +165,79 @@ pub extern "C" fn sca_leaky_sbox_table_addr() -> u32 {
     SCA_AES_SBOX.as_ptr() as u32
 }
 
+// ---------------------------------------------------------------------------
+// Tier 2 leakage subjects — PQ crypto primitives whose constant-time behaviour
+// we want to verify with lascar TVLA (fix-vs-random on the secret input).
+// ---------------------------------------------------------------------------
+
+/// `HMAC-SHA512("sphincs-c6-v1", seed)` — bit-equivalent to
+/// `pqsigner_domain::derive_c10_master_from_bip39_seed`'s first step (account 0).
+/// Input: 64-byte `bip39_seed` (the secret). Output: 64-byte HMAC tag.
+/// TVLA varies the seed; the HMAC key is a fixed 13-byte domain tag.
+#[no_mangle]
+pub extern "C" fn sca_hmac_sha512_kdf(seed_ptr: *const u8, out_ptr: *mut u8) {
+    use hmac::{Hmac, Mac};
+    use sha2::Sha512;
+    // SAFETY: harness maps 64 B at seed_ptr and 64 B at out_ptr.
+    let seed: &[u8; 64] = unsafe { &*(seed_ptr as *const [u8; 64]) };
+    let mut mac = <Hmac<Sha512> as Mac>::new_from_slice(b"sphincs-c6-v1")
+        .expect("HMAC-SHA512 accepts any key length");
+    mac.update(seed);
+    let tag = mac.finalize().into_bytes();
+    unsafe {
+        for (i, &b) in tag.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+    }
+}
+
+/// SPHINCS+C10 keygen — `SigningKey::keygen(sk_seed, pk_seed)`. Input: a
+/// 32-byte `sk_seed` (the secret); `pk_seed` is fixed at compile time.
+/// Output: the 16-byte `pk_root` written to `out_ptr`. TVLA varies sk_seed.
+#[no_mangle]
+pub extern "C" fn sca_c10_keygen(sk_seed_ptr: *const u8, out_ptr: *mut u8) {
+    const FIXED_PK_SEED: [u8; sphincs_c10::params::N] = [0x77u8; sphincs_c10::params::N];
+    // SAFETY: harness maps 32 B at sk_seed_ptr and 16 B at out_ptr.
+    let sk_seed_arr: [u8; 32] = unsafe { *(sk_seed_ptr as *const [u8; 32]) };
+    let sk = sphincs_c10::SigningKey::keygen(sk_seed_arr, FIXED_PK_SEED);
+    let pk_root: &[u8; sphincs_c10::params::N] = sk.pk_root();
+    unsafe {
+        for (i, &b) in pk_root.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+    }
+}
+
+/// SPHINCS+C10 sign — `SigningKey::sign(msg, None)`. Input: a 32-byte
+/// `msg_hash` (the "plaintext"); the SigningKey is built from a fixed
+/// sk_seed/pk_seed/pk_root (the latter pre-computed in build.rs). Output:
+/// the 4008-byte signature written to `out_ptr`. TVLA varies msg_hash; the
+/// SK is fixed. Detects message-dependent leakage inside the FORS / WOTS+
+/// / hypertree subroutines.
+///
+/// Using `from_parts` (with build.rs-baked pk_root) instead of `keygen` is
+/// load-bearing for the leakage analysis: without it, the first ~2.5 B
+/// emulated instructions are the (msg-independent) keygen, and the TVLA's
+/// max_samples cap is exhausted before reaching the actual sign phase
+/// (giving max|t| = 0 as a degenerate "no msg-dependent variation seen"
+/// result because we never sampled where msg-dependent addresses live).
+#[no_mangle]
+pub extern "C" fn sca_c10_sign(msg_hash_ptr: *const u8, out_ptr: *mut u8) {
+    const FIXED_SK_SEED: [u8; 32] = [0x42u8; 32];
+    const FIXED_PK_SEED: [u8; sphincs_c10::params::N] = [0x77u8; sphincs_c10::params::N];
+    const FIXED_PK_ROOT: [u8; sphincs_c10::params::N] =
+        *include_bytes!(concat!(env!("OUT_DIR"), "/pk_root.bin"));
+    let sk = sphincs_c10::SigningKey::from_parts(FIXED_SK_SEED, FIXED_PK_SEED, FIXED_PK_ROOT);
+    // SAFETY: harness maps 32 B at msg_hash_ptr and SIGNATURE_LEN at out_ptr.
+    let msg: &[u8; 32] = unsafe { &*(msg_hash_ptr as *const [u8; 32]) };
+    let sig = sk.sign(msg, None);
+    unsafe {
+        for (i, &b) in sig.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+    }
+}
+
 #[used]
 static _KEEP_WRAP: extern "C" fn(*const u8, *mut u8) = sca_aesgcm_wrap;
 #[used]
@@ -173,6 +246,12 @@ static _KEEP_AES_BLOCK: extern "C" fn(*const u8, *mut u8) = sca_aes256_encrypt_b
 static _KEEP_LEAKY: extern "C" fn(*const u8, *mut u8) = sca_leaky_sbox;
 #[used]
 static _KEEP_LEAKY_ADDR: extern "C" fn() -> u32 = sca_leaky_sbox_table_addr;
+#[used]
+static _KEEP_HMAC: extern "C" fn(*const u8, *mut u8) = sca_hmac_sha512_kdf;
+#[used]
+static _KEEP_C10_KG: extern "C" fn(*const u8, *mut u8) = sca_c10_keygen;
+#[used]
+static _KEEP_C10_SIGN: extern "C" fn(*const u8, *mut u8) = sca_c10_sign;
 
 #[entry]
 fn main() -> ! {
@@ -180,6 +259,9 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_AES_BLOCK);
     core::hint::black_box(&_KEEP_LEAKY);
     core::hint::black_box(&_KEEP_LEAKY_ADDR);
+    core::hint::black_box(&_KEEP_HMAC);
+    core::hint::black_box(&_KEEP_C10_KG);
+    core::hint::black_box(&_KEEP_C10_SIGN);
     loop {
         cortex_m::asm::nop();
     }

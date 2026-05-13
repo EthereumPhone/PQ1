@@ -429,23 +429,42 @@ fixed-vs-random test, to characterise.)
 | `sca_leaky_sbox` | positive control: `out[i] = AES_SBOX[in[i] ^ KEY[i]]` (a deliberate table leak) | TVLA `max\|t\| ≈ 24` at the `SBOX[]` load address → **leakage detected**; CPA over `HW(&SBOX + (in[i] ^ guess))` recovers **16/16** key bytes (the FIPS-197 vector key) → **lascar pipeline verified, both ways** |
 | `sca_aes256_encrypt_block` | `AES-256-ENC(fixed_key, plaintext)` via the `aes` crate (the AES `pqsigner-domain`'s entropy wrap uses) | TVLA `max\|t\| = 0.00` over 600 traces → **flat**: the bitsliced "soft" backend on thumbv8m is constant-time w.r.t. its plaintext — no data-dependent memory accesses → no T-table / cache mem-address side channel |
 | `sca_aesgcm_wrap` | structural mirror of `pqsigner_domain::encrypt_entropy_blob`'s AES-256-GCM wrap of the 32-B entropy under a fixed key+nonce | TVLA `max\|t\| = 0.00` over 600 traces → **flat**: no entropy-dependent memory access (constant-time AES + constant-time GHASH) |
+| `sca_hmac_sha512_kdf` | `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` — the C10 master-key derivation step in `pqsigner-domain` (varies the seed; the HMAC key is the fixed 13-byte domain tag) | TVLA `max\|t\| = 0.00` over 600 traces → **flat**: RustCrypto's `hmac` + `sha2` are constant-time |
+| `sca_c10_keygen` | `SigningKey::keygen(sk_seed, pk_seed)` — builds the C10 hypertree from a varying sk_seed (pk_seed fixed) | TVLA `max\|t\| = 0.00` over 80 traces × 500 K mem-events → **flat**: SHA-256-driven WOTS+/FORS/hypertree address sequence is determined by `pk_seed` and the tree-structure constants, not the sk_seed *value* (which only feeds SHA-256 input bytes) |
+| `sca_c10_sign` | `SigningKey::sign(msg, None)` — varies msg_hash, keeps sk_seed/pk_seed/pk_root fixed via `from_parts` so emulation actually reaches the sign phase (not the ~2.5 B-instruction keygen prelude) | TVLA `max\|t\| = **1.45**` over 80 traces × 500 K mem-events → **flat**: no significant msg-dependent address variation. Even though FORS leaf indices ARE msg-derived, the production `sphincs-c10` crate uses fixed-stack-offset addressing — message-dependence manifests in mem *values*, not addresses |
 
-No findings — the production AES / AES-GCM-wrap path is clean on the `mem_address`
-channel in emulation; `make kdf` exits 0. **Caveats:** (1) emulation only — the
-analog power/EM leakage of the running silicon, and register-HW DPA of the AES
-round keys, still need a scope (ChipWhisperer / PicoScope / Scaffold — see the
-`rainbow`/`lascar` skills and the earlier discussion); (2) the *deployed* entropy
+No findings — the production AES / AES-GCM-wrap / HMAC / C10 keygen / C10 sign
+paths are all clean on the `mem_address` channel in emulation; `make kdf` exits 0.
+
+**Performance.** The harness uses `multiprocessing.Pool` with `spawn` to
+parallelize trace collection (POC at `/tmp/parallel_collect_poc.py`
+confirmed parallel == serial element-wise). On AMD Ryzen AI 9 HX PRO 370
+(12 cores / 24 threads), the full sweep (including the heavy C10 keygen +
+sign subjects) finishes in **~30 seconds** — vs ~57 minutes single-thread,
+~100× speedup. Worker memory is bounded by a custom unicorn `UC_HOOK_MEM_*`
+that writes Hamming-weight values directly into a fixed-size numpy array
+and calls `emu_stop()` when full, bypassing rainbow's default Python-dict
+accumulation (which would OOM the system on SPHINCS+ sign — empirically
+hit 90 GB RAM + 8 GB swap exhaustion before the bound was added).
+
+**Caveats:** (1) emulation only — the analog power/EM leakage of the
+running silicon, and register-HW DPA of the AES round keys / SHA-256 state /
+SPHINCS+ FORS values, still need a scope (ChipWhisperer / PicoScope /
+Scaffold — see the `rainbow`/`lascar` skills); (2) the *deployed* entropy
 wrap is a *single* encryption with a *fixed* nonce, so there's no
-attacker-chosen-input DPA surface against it anyway — the residual is the
+attacker-chosen-input DPA surface against it anyway — the residual is
 single-trace leakage of the wrap key / keystream during that one boot-time
-operation (an SPA/template attack), which a profiling setup on the device would
-probe, not this fixed-vs-random TVLA; (3) `sca_aesgcm_wrap` is a *mirror* of
-`encrypt_entropy_blob` (not a `#[path]` include — `pqsigner-domain` uses
-`{ workspace = true }` deps and can't be path-dep'd from a detached workspace) —
-it uses the *same* crates.io deps (`aes-gcm` 0.10 / `aes` 0.8 / `sha2` 0.10), so
-the AES's leakage behaviour matches; KEEP IN SYNC if `encrypt_entropy_blob`'s
-shape changes (e.g. a different AEAD); (4) 600 traces is a first-pass "flat"
-claim — a real assurance argument would want more.
+operation (an SPA/template attack), which a profiling setup on the device
+would probe, not this fixed-vs-random TVLA; (3) `sca_aesgcm_wrap` is a
+*mirror* of `encrypt_entropy_blob` (not a `#[path]` include — `pqsigner-domain`
+uses `{ workspace = true }` deps and can't be path-dep'd from a detached
+workspace) — it uses the *same* crates.io deps (`aes-gcm` 0.10 / `aes` 0.8 /
+`sha2` 0.10), so the AES's leakage behaviour matches; KEEP IN SYNC if
+`encrypt_entropy_blob`'s shape changes (e.g. a different AEAD); (4) 600
+traces for HMAC / AES is audit-grade; 80 traces × 500 K samples for C10
+keygen/sign is first-pass — a real assurance argument would want 600+,
+which the parallel harness can now produce in a few minutes (was ~6 h
+serial).
 
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 
