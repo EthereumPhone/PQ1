@@ -62,6 +62,11 @@ members = [
     # modularity refactor.
     "xtask",
 ]
+# Excluded from the workspace because cargo-fuzz needs nightly +
+# libFuzzer + sanitizers (separate toolchain from the firmware) and
+# its `[[bin]]` entries are only meaningful to the cargo-fuzz driver.
+# See `fuzz/README.md`.
+exclude = ["fuzz"]
 resolver = "2"
 
 [workspace.package]

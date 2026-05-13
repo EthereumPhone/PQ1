@@ -2161,5 +2161,48 @@ flash-hw-optiga-reset: optiga-reset-oids
 	@probe-rs reset --chip STM32U585AIIx
 	@probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
 
+# Coverage-guided libFuzzer harnesses (`fuzz/`, kept as a standalone
+# workspace since cargo-fuzz needs nightly + libFuzzer + sanitizers).
+# Pure-logic parsers only — the proptest sibling that always runs is
+# in `secure/src/fuzz_props.rs`. See `fuzz/README.md` for setup and
+# `docs/trezor-comparison.md §2.4` for the rationale.
+#
+# Usage:
+#   make fuzz-list                 -- list available targets
+#   make fuzz-aa-userop-parse [TIME=600]
+#   make fuzz-rlp-decode-item [TIME=600]
+#   make fuzz-eip1559-parse [TIME=600]
+#   make fuzz-erc20-calldata [TIME=600]
+#   make fuzz-erc20-bundle [TIME=600]
+#
+# TIME (seconds) bounds the libFuzzer run; omit for unbounded.
+FUZZ_TIME ?= $(TIME)
+FUZZ_LIBFUZZER_ARGS = $(if $(FUZZ_TIME),-- -max_total_time=$(FUZZ_TIME),)
+
+.PHONY: fuzz-list fuzz-aa-userop-parse fuzz-rlp-decode-item fuzz-eip1559-parse fuzz-erc20-calldata fuzz-erc20-bundle
+
+fuzz-list:
+	@echo "Available fuzz targets (see fuzz/README.md):"
+	@cd fuzz && cargo +nightly fuzz list 2>/dev/null || \
+		(echo "  cargo-fuzz not installed. Install with:"; \
+		 echo "    cargo install cargo-fuzz"; \
+		 echo "    rustup install nightly"; \
+		 echo "  Then re-run \`make fuzz-list\`."; exit 1)
+
+fuzz-aa-userop-parse:
+	cd fuzz && cargo +nightly fuzz run aa_userop_parse_header $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-rlp-decode-item:
+	cd fuzz && cargo +nightly fuzz run tx_core_rlp_decode_item $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-eip1559-parse:
+	cd fuzz && cargo +nightly fuzz run tx_core_eip1559_parse $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-erc20-calldata:
+	cd fuzz && cargo +nightly fuzz run tx_erc20_parse_calldata $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-erc20-bundle:
+	cd fuzz && cargo +nightly fuzz run tx_erc20_verify_bundle $(FUZZ_LIBFUZZER_ARGS)
+
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

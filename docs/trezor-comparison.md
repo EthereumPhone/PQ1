@@ -10,7 +10,7 @@ Trezor has shipped three hardware generations on ARMv8-M + Optiga Trust M. Their
 
 1. **PQSigner's current GTZC1_TZSC=0 "everything NS" regression has a direct, verified Trezor fix** — adopt their per-peripheral S-allowlist.
 2. **Counter-gated SE authorization**, **OTP-derived PBS**, **MCU pre-commit PIN counter**, and **domain-separated secret_keys via HKDF-Expand** are all Trezor patterns PQSigner already tracks or has landed. These findings validate existing `work-todo.md` items #4/#24 and `hw/secret_keys.rs`.
-3. **Genuine gaps not yet tracked:** prodtest factory firmware, screenshot-hash UI regression, libFuzzer corpus for APDU+NSC, vendor-header-hash OTP lock, multi-source TAMP enable list, glitch-sentinel `wait_random`, richer OTP layout (batch/SN/vendor-lock/manufacturing-lock).
+3. **Genuine gaps not yet tracked:** prodtest factory firmware, screenshot-hash UI regression, ~~libFuzzer corpus for APDU+NSC~~ (APDU side landed 2026-05-13 in `fuzz/` — 5 cargo-fuzz targets over the workspace pure-logic parsers; NSC ptr-validate side still pending), vendor-header-hash OTP lock, multi-source TAMP enable list, glitch-sentinel `wait_random`, richer OTP layout (batch/SN/vendor-lock/manufacturing-lock).
 4. **Morale/validation:** `MODEL_BOARDLOADER_PQ_KEYS` at `core/embed/models/T3W1/model_T3W1.h:48-51` shows Trezor is wiring PQ signature verification into their boardloader — PQSigner's PQ-only stance is not niche.
 
 Trezor is **classical-crypto-first with a PQ overlay coming**; PQSigner is PQ-only. Most value is in *patterns* (boot chain, storage shape, fault-injection countermeasures, test harnesses) and *concrete register/metadata values* — not primitives.
@@ -79,11 +79,22 @@ Trezor's prodtest is a separate, signed, UART-CRC-framed command shell with ~300
 
 ### 2.4 libFuzzer corpus for APDU parser + NSC validation
 
-**Gap:** PQSigner's NSC pointer validation (`nsc/ptr_validate.rs`) and APDU v2 parser (`nonsecure/src/usb/commands.rs`) are the primary attack surfaces from NS world. Neither has any fuzz coverage.
+**Status:** ✅ proptest sibling landed earlier (`secure/src/fuzz_props.rs` — 16 always-on `proptest!` targets for the workspace pure-logic parsers); ✅ coverage-guided libFuzzer harness landed 2026-05-13 (`fuzz/`, standalone workspace, 5 targets); 🟡 NSC pointer validation deferred (needs relocation out of the `not(test)`-gated `secure::nsc` first).
 
 **Trezor (`crypto/fuzzer/`):** libFuzzer harnesses for BIP32, base58, ECDSA, SHA256. Build: `FUZZER=1 make fuzzer`. No APDU/USB protocol fuzzer on their side either, but the C harness shape is the template.
 
-**Action:** Build a cargo-fuzz target against a feature-gated `parse_cmd_sign_userop_input(&[u8])` entrypoint. Seed corpus from `tests/` existing fixtures. Continuous fuzz on every PR. This is the cheapest delta-to-security on the whole list.
+**What landed in `fuzz/`:**
+- `aa_userop_parse_header` — `pqsigner_aa::userop::parse_header`, the parser for the unified SIGN_USEROP wire format (CLAUDE.md §"Wire formats"). This is the "`parse_cmd_sign_userop_input`" the §2.4 ask called out.
+- `tx_core_rlp_decode_item` — foundational RLP decoder.
+- `tx_core_eip1559_parse` — EIP-1559 envelope decoder.
+- `tx_erc20_parse_calldata` — Solidity-ABI ERC-20 method dispatch.
+- `tx_erc20_verify_bundle` — Merkle-bundle verifier (fixed all-zero root; exercises the bounds-checking + Merkle walk).
+
+Each fuzz target has a counterpart proptest in `fuzz_props.rs` enforcing the same "terminates + well-typed result for any input" invariant. The proptests run on every `cargo test`; cargo-fuzz is the coverage-guided cross-check (`make fuzz-{aa-userop-parse,rlp-decode-item,eip1559-parse,erc20-calldata,erc20-bundle} [TIME=600]`).
+
+**What's still owed (NSC pointer validation side):** `secure/src/nsc/ptr_validate.rs` lives inside `secure::nsc`, which `main.rs` gates `#[cfg(all(feature = "se050", not(test)))]` — so the module isn't reachable from a `[lib]`-style fuzz harness without a relocation to a host-buildable spot (similar refactor to `crate::scp03_logic`). Tracked as a follow-up; the proptest harness in `fuzz_props.rs` doesn't reach `ptr_validate` either, so the gap is symmetric and small.
+
+Seed corpora are not checked in yet — `fuzz/README.md` notes the convention if someone wants to warm libFuzzer up from a known-good 330 B UserOp blob.
 
 ### 2.5 Multi-source TAMP enable list (verified on U5)
 
@@ -251,7 +262,7 @@ Per `CLAUDE.md` Development Posture: PQSigner is pre-production bring-up. Items 
 3. `prodtest/` project — own entry point, own signing key slot, feature-gated (§2.1). Unblocks clean factory provisioning + prevents another bench-chip brick.
 4. `FLASH_OTP_BLOCK_VENDOR_HEADER_LOCK` + FSBL check (§1.2).
 5. `secure/src/hw/tamp.rs` with Trezor's U5 TAMP register map (§2.5).
-6. cargo-fuzz harness for `parse_cmd_sign_userop_input` + NSC pointer validation (§2.4) — *this one is safe to pick up opportunistically during bring-up, because fuzzing doesn't block hardware work.*
+6. ~~cargo-fuzz harness for `parse_cmd_sign_userop_input` + NSC pointer validation (§2.4)~~ — **partially landed (2026-05-13):** `fuzz/` with 5 libFuzzer targets covering `aa::userop::parse_header` (the `parse_cmd_sign_userop_input` analog) + RLP / EIP-1559 / ERC-20 calldata / ERC-20 bundle. NSC ptr-validate side still owed (needs relocation out of `secure::nsc`, similar refactor to `crate::scp03_logic`).
 7. Screenshot-hash UI fixtures in `make e2e` (§2.3) — *also bring-up-safe; regression coverage for UI iteration.*
 
 **Defer until UI/touchscreen/product decisions land:**

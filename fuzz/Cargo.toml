@@ -1,0 +1,69 @@
+[package]
+name = "pqsigner-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+description = "libFuzzer harnesses for PQSigner's pure-logic parsers."
+
+# Stand-alone workspace: kept *outside* the main PQSigner workspace
+# (`Cargo.toml` lists `fuzz/` under `workspace.exclude`). Reasons:
+#   (a) cargo-fuzz requires nightly + libFuzzer + sanitizers; the rest of
+#       the workspace builds on stable for `thumbv8m.main-none-eabi` and a
+#       host-side `cargo test`. Mixing toolchains in one workspace is
+#       painful and triggers spurious rebuilds.
+#   (b) `[package.metadata.cargo-fuzz] = true` and the `[[bin]]` entries
+#       below are only meaningful to the `cargo-fuzz` driver — they don't
+#       belong in the main workspace's build graph.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+# Workspace pure-logic crates — each is `no_std` + no-alloc-friendly and
+# builds cleanly for host (the workspace already exercises them in
+# `secure/src/fuzz_props.rs` proptests; this is the coverage-guided
+# variant the trezor-comparison §2.4 action list calls out).
+pqsigner-aa      = { path = "../aa" }
+pqsigner-tx-core = { path = "../tx-core" }
+pqsigner-tx      = { path = "../tx" }
+
+# Prevent libFuzzer / asan from being built with sanitizer flags that
+# leak into the workspace crates — cargo-fuzz handles this via its
+# wrapper. No further config needed here.
+
+[[bin]]
+name = "aa_userop_parse_header"
+path = "fuzz_targets/aa_userop_parse_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tx_core_rlp_decode_item"
+path = "fuzz_targets/tx_core_rlp_decode_item.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tx_core_eip1559_parse"
+path = "fuzz_targets/tx_core_eip1559_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tx_erc20_parse_calldata"
+path = "fuzz_targets/tx_erc20_parse_calldata.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tx_erc20_verify_bundle"
+path = "fuzz_targets/tx_erc20_verify_bundle.rs"
+test = false
+doc = false
+bench = false
