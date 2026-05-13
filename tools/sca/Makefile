@@ -6,16 +6,18 @@
 #   ~/repos/my-claude-skills/setup.sh
 #
 # Targets:
-#   make build       build the thumbv8m fault-sweep target ELF (sca-fi-target)
-#   make build-kdf   build the thumbv8m leakage target ELF (sca-kdf-target)
-#   make build-c10v  build the thumbv8m real-C10-verify target ELF (sca-c10v-target)
+#   make build              build the thumbv8m fault-sweep target ELF (sca-fi-target)
+#   make build-kdf          build the thumbv8m leakage target ELF (sca-kdf-target)
+#   make build-c10v         build the thumbv8m real-C10-verify target ELF (sca-c10v-target)
+#   make build-fw-verify    build the thumbv8m FW-manifest-verify target ELF (sca-fw-verify-target)
 #   make fi           build + run the FI-guard fault sweep (fi.rs: check_true / wait_random; 3 single-fault models)
 #   make fi-twofault  build + run the FI-guard sweep PLUS the [skip,skip] two-fault pair sweep over check_true (slower)
 #   make c10          build + run the C10 verify-before-release *gate* fault sweep (sign/verify stubbed)
 #   make pin          build + run the PIN-attempt pre-commit gate fault sweep
 #   make c10v         build + run the fault sweep over the *real* sphincs_c10::verify (forge-a-sig direction)
+#   make fw-verify    build + run the FI sweep over the *real* fw-manifest verify chain (FW-update bypass)
 #   make kdf          build + run the lascar leakage analysis (AES / AES-GCM entropy wrap + a positive control)
-#   make sweeps       fi + c10 + pin  (the fast fault sweeps; `c10v` and `kdf` are slower — run them on their own)
+#   make sweeps       fi + c10 + pin + fw-verify  (the FI fault sweeps; `c10v` and `kdf` are slower — run them on their own)
 #   make doctor       `donjon-sca doctor` — is the toolchain installed?
 #   make clean        cargo clean the target crates
 
@@ -26,9 +28,11 @@ KDF_DIR  := kdf_target
 KDF_ELF  := $(KDF_DIR)/target/$(TARGET)/release/sca-kdf-target
 C10V_DIR := c10v_target
 C10V_ELF := $(C10V_DIR)/target/$(TARGET)/release/sca-c10v-target
+FWV_DIR  := fw_verify_target
+FWV_ELF  := $(FWV_DIR)/target/$(TARGET)/release/sca-fw-verify-target
 DONJON   ?= donjon-sca
 
-.PHONY: build build-kdf build-c10v fi fi-twofault c10 pin c10v kdf sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify fi fi-twofault c10 pin c10v fw-verify kdf sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -45,6 +49,11 @@ build-c10v: $(C10V_ELF)
 $(C10V_ELF): $(C10V_DIR)/src/main.rs $(C10V_DIR)/memory.x $(C10V_DIR)/build.rs $(C10V_DIR)/Cargo.toml ../../sphincs-c10/src/lib.rs
 	cargo build --release --target $(TARGET) --manifest-path $(C10V_DIR)/Cargo.toml
 
+build-fw-verify: $(FWV_ELF)
+
+$(FWV_ELF): $(FWV_DIR)/src/main.rs $(FWV_DIR)/memory.x $(FWV_DIR)/build.rs $(FWV_DIR)/Cargo.toml ../../fw-manifest/src/lib.rs ../../sphincs-c10/src/lib.rs
+	cargo build --release --target $(TARGET) --manifest-path $(FWV_DIR)/Cargo.toml
+
 fi: build
 	$(DONJON) run fault_sweep_fi.py
 
@@ -60,10 +69,13 @@ pin: build
 c10v: build-c10v
 	$(DONJON) run fault_sweep_c10v.py
 
+fw-verify: build-fw-verify
+	$(DONJON) run fault_sweep_fw_verify.py
+
 kdf: build-kdf
 	$(DONJON) run leakage_kdf.py
 
-sweeps: fi c10 pin
+sweeps: fi c10 pin fw-verify
 
 doctor:
 	$(DONJON) doctor
@@ -72,3 +84,4 @@ clean:
 	cargo clean --manifest-path $(FI_DIR)/Cargo.toml
 	cargo clean --manifest-path $(KDF_DIR)/Cargo.toml
 	cargo clean --manifest-path $(C10V_DIR)/Cargo.toml
+	cargo clean --manifest-path $(FWV_DIR)/Cargo.toml

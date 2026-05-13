@@ -143,12 +143,13 @@ would mean the F-1 collapse came back).
 ```
 tools/sca/
   README.md                  — this file
-  Makefile                   — `make fi`/`c10`/`pin` (fast fault sweeps), `make kdf` (lascar leakage),
-                             —   `make sweeps`, `make build`/`build-kdf`/`doctor`/`clean`
+  Makefile                   — `make fi`/`c10`/`pin`/`fw-verify` (fast fault sweeps), `make kdf` (lascar leakage),
+                             —   `make sweeps`, `make build`/`build-kdf`/`build-fw-verify`/`doctor`/`clean`
   fault_sweep_fi.py          — FI-guard fault sweep (fi.rs: check_true / wait_random)
   fault_sweep_c10_verify.py  — C10 verify-before-release gate fault sweep
   fault_sweep_pin.py         — PIN-attempt pre-commit gate fault sweep (gated_unlock + pin_attempts_bump)
   fault_sweep_c10v.py        — fault sweep over the *real* sphincs_c10::verify (forge-a-signature direction)
+  fault_sweep_fw_verify.py   — fault sweep over the *real* fw-manifest verify chain (FW-update bypass direction)
   leakage_kdf.py             — lascar leakage analysis: AES-256 / AES-GCM entropy wrap + a leaky-S-box positive control
   fi_target/                 — standalone thumbv8m crate: the fault-sweep targets, in one ELF (sca-fi-target)
     src/main.rs              —   #[path]-includes ../../../../secure/src/fi.rs verbatim (sca_fi_*),
@@ -156,6 +157,13 @@ tools/sca/
                              —     and gated_unlock + pin_attempts_bump (sca_pin_*, with a fake page-124 counter),
                              —   + #[no_mangle] wrappers, an rng stub, and #[used] keep-statics
     Cargo.toml / build.rs / memory.x  — own [workspace] (detached); places memory.x for cortex-m-rt's link.x
+  c10v_target/               — standalone thumbv8m crate (own [workspace]): real sphincs_c10::verify
+                             —   wrapped as sca_c10_verify_real(pk_seed, pk_root, msg_hash, sig) → u32
+  fw_verify_target/          — standalone thumbv8m crate (own [workspace]): real fw_manifest verify chain
+                             —   build.rs bakes 3 deterministic fixtures (valid + bad_sig + bad_digest) from a
+                             —     fixed vendor keypair (sk_seed=[0x42;32], pk_seed=[0x77;16])
+                             —   src/main.rs exports `sca_fw_verify_{structural,crc,digest,vendor_fpr,signature,
+                             —     rollback,all}` — `all` chains them in FSBL order
   kdf_target/                — standalone thumbv8m crate (own [workspace]): the leakage targets, in ELF sca-kdf-target —
     src/main.rs              —   sca_leaky_sbox (out[i]=SBOX[in[i]^KEY[i]], the positive control),
                              —   sca_aes256_encrypt_block (the `aes` crate's AES-256, fixed key), and
@@ -517,3 +525,73 @@ sweep (the contract test) still passes; `make fi` caught and rejected the one
 attempt at making `check_true` a *wrapper* over `check_true_into_sentinel` (the
 `== OK_SENTINEL → bool` reduction it adds is itself a one-skip-to-truthy step), so
 both functions are kept as standalone bodies.
+
+## Full FW-manifest verify-chain fault sweep — `fault_sweep_fw_verify.py` + `fw_verify_target/`
+
+This is the **`make fw-verify`** target — a single-fault sweep over the *real*
+`fw_manifest::ManifestRef` verify chain. Mirror-free: the thumbv8m target ELF
+path-deps the production `fw-manifest` and `sphincs-c10` crates, so the code
+under test is bit-identical to what the FSBL (`fsbl/src/main.rs::filter_valid`)
+and the secure-world COMMIT handler (`secure/src/fw_update/mod.rs::verify_manifest`)
+actually run. **Attack model**: an adversary delivers a manifest over
+`CMD_FW_BEGIN/CHUNK/COMMIT` with every cheap field correct (magic, CRC,
+vendor-fingerprint, fw_version above the rollback floor) but a **bogus
+SPHINCS+C10 signature** they can't forge without the vendor private key — does
+any single instruction skip / register stuck-at flip the chain's `Err` return
+into `Ok` (= unsigned firmware accepted)? Three fault models: `fault_skip`,
+`fault_stuck_at(0)`, `fault_stuck_at(0xFFFFFFFF)`. Three fixtures built
+deterministically by `build.rs` from a fixed vendor keypair: `MANIFEST_VALID`
+(baseline), `MANIFEST_BAD_SIG` (sig zeroed; the attacker's actual vector),
+`MANIFEST_BAD_DIGEST` (manifest_digest flipped; cross-check on `verify_digest`).
+For each of the per-step `verify_*` entry points AND a chained `sca_fw_verify_all`
+mirroring FSBL's call order, sweep every instruction × every model × every
+bad fixture; print bypass count + crashes + hangs + correctly-rejected.
+
+### F-7 — `fw-manifest::verify_signature` is single-fault-bypassable, propagating end-to-end through both production callers — **FW-update bypass; needs hardening**
+
+The `make fw-verify` sweep finds **13 single-fault bypasses** of
+`verify_signature` in isolation on `MANIFEST_BAD_SIG` (7 `[skip]` + 1
+`[stuck-at-0]` + 5 `[stuck-at-FF]`), and the focused-suffix sweep on
+`sca_fw_verify_all × bad_sig` empirically confirms **at least 2 of these
+propagate end-to-end through the chained verify** (the `[skip]` faults at
+relative offsets 18 and 21 inside `verify_signature`; the late-tail offsets
+{7533, 7537-7545} would propagate by the same mechanism but live past the
+practical sweep range given persistent-emulator state pollution at high fault
+indices). The stuck-at chain bypasses are present per-step but the rainbow
+`start_and_fault` flow polluted state too quickly on the long chain runs to
+catch them empirically. By construction they propagate: `verify_signature` is
+the *last meaningful step* in the FSBL/COMMIT chain on `bad_sig` —
+`verify_rollback` runs after but unconditionally passes (the bad manifest's
+`fw_version=100` is above the `rollback_floor=0`), so any per-step Err→Ok flip
+of `verify_signature` lifts the chain's final return to `Ok(())` →
+`filter_valid` / `verify_manifest` returns `Some(&m)` / `Ok(())` →
+**unsigned firmware accepted**.
+
+The per-step bypasses on `verify_digest × bad_digest` (4 skip + 3 stuck-at-0 +
+3 stuck-at-FF) do **not** propagate — `verify_signature` runs after
+`verify_digest` in the chain and rejects on `bad_digest` (the sig was over the
+*original* digest). The chain's defence-in-depth catches this class; the
+`verify_signature` class is the residual.
+
+**Production callers affected:**
+- `fsbl/src/main.rs::filter_valid` — boot-time slot selection. A successful
+  fault here boots an unsigned firmware on next reset.
+- `secure/src/fw_update/mod.rs::verify_manifest` — re-verify before flipping
+  the active slot in `cmd_fw_commit`. A successful fault here commits the
+  unsigned firmware to flash + bumps the OTP rollback-floor.
+
+**Hardening direction (not yet applied — maintainer's call):** wrap the
+`verify_signature` call site in both callers with `fi::check_true_into_sentinel`
+(or equivalent — FSBL is a separate crate and would need to either depend on a
+new shared FI helper crate or inline minimal `OK_SENTINEL`/`FAIL_SENTINEL`
+double-check logic), and additionally call `verify_signature` *twice* with
+`fi::wait_random()` between, requiring both to succeed before flipping the
+active slot in flash. Two coordinated faults would then be required instead of
+one. The same single-fault residual that F-5 calls out (one stuck-at on the
+return register defeats any bool-returning fn) still applies; that's the
+irreducible bar — sentinel-encoded returns + double-check raises it to 2
+coordinated faults, which is the same bar the rest of the firmware now
+operates at after the F-2 / F-5 migration.
+
+`make fw-verify` currently exits 1 (FW-update bypass finding). Once the
+hardening lands, the sweep should exit 0.
