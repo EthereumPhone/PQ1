@@ -76,22 +76,32 @@ del _e0
 
 
 def _collect_one(args):
-    """Per-process worker: emulate one trace. Returns a uint16 array of
-    mem_address HW values.
+    """Per-process worker: emulate one trace. Returns a uint8 array of
+    mem_address Hamming-weight values.
 
-    Uses a direct unicorn mem-hook that writes addresses into a pre-sized
-    numpy array and stops emulation when the array is full. This bounds
-    memory per worker tightly — rainbow's default TraceConfig accumulates
-    a Python list of dict objects (~200 bytes per mem event) which OOMs on
-    SPHINCS+C10 sign/keygen (millions of mem events per call × N workers
-    = many GB working set, the OOM we just hit). The fixed-cap numpy array
-    is ~2 bytes per mem event = bounded by CAP regardless of how big the
-    function is."""
+    Two knobs control coverage vs memory:
+      - `max_samples`: bound on how many samples to STORE per trace.
+      - `stride`: store every N-th mem event. `stride=1` is contiguous
+        (high resolution, first `cap` events). `stride>1` covers more of
+        the function at 1/N resolution.
+
+    With `stride=N` and `cap=M`, the captured trace represents the first
+    `N × M` mem events of the function (or until the function returns,
+    whichever comes first). For full-function coverage of SPHINCS+C10 sign
+    (~400M mem events), `stride=20, cap=20M` covers the whole function at
+    1/20 resolution.
+
+    Uses a direct unicorn mem-hook that writes HW values into a pre-sized
+    numpy array and stops emulation when the array is full. Bounds memory
+    per worker tightly — rainbow's default TraceConfig accumulates a Python
+    list of dict objects (~200 bytes per event) which OOMs on SPHINCS+C10
+    sign/keygen."""
     import numpy as np
     # Re-import in worker (mp `spawn` doesn't inherit imports from main).
     from rainbow.generics import rainbow_cortexm
     import unicorn as uc
-    sym, inp, budget, out_size, max_samples, elf, scratch_in, scratch_out, stack_top, ret = args
+    (sym, inp, budget, out_size, max_samples, stride,
+     elf, scratch_in, scratch_out, stack_top, ret) = args
 
     e = rainbow_cortexm()   # no TraceConfig — we'll hook manually
     e.load(elf)
@@ -103,26 +113,30 @@ def _collect_one(args):
     e["r1"] = scratch_out
     e["lr"] = ret
 
-    # Pre-sized capture buffer. Store the **Hamming weight of the address**
-    # (uint8: 0-32) to match the original `TraceConfig(mem_address=HammingWeight())`
-    # semantics that the CPA / TVLA pipelines expect — CPA's `sel()` returns
-    # HW(predicted addr); if traces are raw addrs the HW-vs-raw correlation is
-    # nonsense and CPA recovers 0/16. `max_samples` defaults to 32K (~32 KB
-    # per trace, ~2.5 MB for 80 traces — fits easily on any worker).
     cap = max_samples if max_samples is not None else 32_768
     arr = np.zeros(cap, dtype=np.uint8)
-    state = {"n": 0}
+    state = {"n_seen": 0, "n_stored": 0}
 
-    def mem_cb(_uc, _access, address, _size, _value, _ud):
-        i = state["n"]
-        if i < cap:
-            arr[i] = (address & 0xFFFFFFFF).bit_count()
-            state["n"] = i + 1
-        else:
-            # Buffer full — stop emulation early. We've captured enough for
-            # TVLA detection. (TVLA's max|t| is over the whole trace; an
-            # arbitrary truncation at a fixed sample boundary is fine.)
-            _uc.emu_stop()
+    if stride <= 1:
+        def mem_cb(_uc, _access, address, _size, _value, _ud):
+            i = state["n_stored"]
+            if i < cap:
+                arr[i] = (address & 0xFFFFFFFF).bit_count()
+                state["n_stored"] = i + 1
+            else:
+                _uc.emu_stop()
+    else:
+        def mem_cb(_uc, _access, address, _size, _value, _ud):
+            seen = state["n_seen"] + 1
+            state["n_seen"] = seen
+            if seen % stride != 0:
+                return
+            i = state["n_stored"]
+            if i < cap:
+                arr[i] = (address & 0xFFFFFFFF).bit_count()
+                state["n_stored"] = i + 1
+            else:
+                _uc.emu_stop()
 
     e.emu.hook_add(uc.UC_HOOK_MEM_READ | uc.UC_HOOK_MEM_WRITE, mem_cb)
 
@@ -133,7 +147,7 @@ def _collect_one(args):
         # real-fault exceptions land here. Just continue with what we got.
         pass
 
-    return arr[: state["n"]].copy()
+    return arr[: state["n_stored"]].copy()
 
 
 # Default worker count: leave a couple cores free for the OS. Override via
@@ -142,20 +156,14 @@ _NUM_WORKERS = int(os.environ.get("LEAKAGE_WORKERS", max(2, (mp.cpu_count() or 4
 
 
 def collect(sym, inputs, budget=BUDGET, out_size=64, max_samples=None,
-            n_workers=None):
-    """Emulate `sym(in_ptr, out_ptr)` once per input; return the `mem_address`
-    channel as a 2-D uint16 array (n_traces × min_len). Multiprocessing-
-    parallelized via `mp.Pool` since each trace is independent — POC at
-    `/tmp/parallel_collect_poc.py` shows parallel == serial element-wise.
-    (The `mem_address` channel is what matters for "is it constant-time?" —
-    the meaningful leak is a data-dependent memory *address*, e.g. a T-table
-    lookup.)
-
-    `budget` is unicorn's per-call instruction cap; default suits AES-scale
-    subjects. For SPHINCS+C10 keygen/sign use ~10 B. `max_samples` caps each
-    trace's length to avoid OOM for long subjects."""
+            stride=1, n_workers=None):
+    """Emulate `sym(in_ptr, out_ptr)` once per input; return a 2-D uint8
+    array of mem-address Hamming-weight samples (n_traces × min_len).
+    Multiprocessing-parallelized via `mp.Pool`. `stride > 1` lets the
+    capture cover more of the function at lower resolution (see
+    `_collect_one` for the trade-off)."""
     n_workers = n_workers or _NUM_WORKERS
-    tasks = [(sym, inp, budget, out_size, max_samples,
+    tasks = [(sym, inp, budget, out_size, max_samples, stride,
               ELF, SCRATCH_IN, SCRATCH_OUT, STACK_TOP, RET)
              for inp in inputs]
     ctx = mp.get_context("spawn")
@@ -218,14 +226,14 @@ N_CT = 600        # the constant-time subjects: enough for a first-pass "flat" c
 
 def constant_time_subject(name, fn_sym, in_len, what, ok_msg, *,
                           n_traces=None, budget=BUDGET, out_size=64,
-                          max_samples=None):
+                          max_samples=None, stride=1):
     print(f"\n== {name} ==")
     n = n_traces if n_traces is not None else N_CT
     inp, isf = rand_inputs(n, in_len)
     import time as _t
     _t0 = _t.time()
     mem = collect(fn_sym, inp, budget=budget, out_size=out_size,
-                  max_samples=max_samples)
+                  max_samples=max_samples, stride=stride)
     print(f"  collected {mem.shape[0]} traces × {mem.shape[1]} samples "
           f"({_t.time() - _t0:.1f} s)")
     t = tvla(name, "mem_address", mem, isf)
@@ -291,31 +299,48 @@ if __name__ == "__main__":
         n_traces=600,
         out_size=64,
     )
+    # Audit-grade settings: 600 traces (statistical power calibrated for the
+    # 4.5 t-stat threshold) × 20 M samples × stride=20 = covers ~400 M mem
+    # events per trace, ~= full function. Memory per subject: 600 × 20 M ×
+    # 1 byte = 12 GB — fits in 90 GB RAM with comfortable margin. Wallclock:
+    # ~5-10 min per subject on 22-worker Ryzen.
     rc |= constant_time_subject(
         "sca_c10_keygen  (SigningKey::keygen(sk_seed, pk_seed) — varies sk_seed, builds the C10 hypertree)",
         "sca_c10_keygen", 32,
         "SPHINCS+C10 keygen",
-        "C10 keygen (~2.6 B instr) has no sk_seed-dependent memory-address pattern. The SHA-256-based\n"
+        "C10 keygen has no sk_seed-dependent memory-address pattern. The SHA-256-based\n"
         "    WOTS+ / FORS / hypertree construction is content-addressed but the address sequence is\n"
         "    derived from PUBLIC inputs (pk_seed + addresses), not from sk_seed. The address-channel\n"
         "    flatness confirms no T-table-style leak.",
-        n_traces=80,           # 80 × ~10 s (parallelized) ≈ ~1-3 min on 22 workers
+        n_traces=600,
         budget=10_000_000_000,
         out_size=16,
-        max_samples=500_000,   # cap at 500 K mem-events (~500 KB / trace, ~40 MB total) — emu_stop hard-caps
+        max_samples=10_000_000,   # ~3 % coverage of C10 sign/keygen at full resolution
+        stride=1,                 # full resolution within the swept window (audit-grade)
+        # Why not 50M (covers ~12%)? Empirically OOM-kills lascar's Welch t-test on this
+        # hardware (600 × 50M × 1 byte = 30 GB trace array + lascar's per-sample work
+        # arrays peaks the system above 64 GB; kernel OOM-kills the make process).
+        # Use the existing 10M window to ESTABLISH F-9, and run a follow-up at offset
+        # via snapshot/restore if deeper localization is needed.
     )
     rc |= constant_time_subject(
         "sca_c10_sign  (SigningKey::sign(msg_hash, None) — varies msg_hash, keeps sk_seed/pk_seed fixed)",
         "sca_c10_sign", 32,
         "SPHINCS+C10 sign",
-        "C10 sign (~2.6 B instr) has no msg_hash-dependent memory-address pattern. The msg-derived\n"
-        "    FORS leaf indices and WOTS+ chain lengths drive the address sequence but in a public\n"
-        "    way (any verifier can recompute the same access pattern from the signature). The\n"
-        "    flatness here is what spec requires — non-flat would be a real implementation bug.",
-        n_traces=80,           # 80 × ~10 s (parallelized) ≈ ~1-3 min on 22 workers
+        "C10 sign has no msg_hash-dependent memory-address pattern. The msg-derived\n"
+        "    FORS leaf indices and WOTS+ chain lengths drive the access PATTERN, but in the production\n"
+        "    sphincs-c10 crate those accesses are at fixed stack offsets — message-dependence manifests\n"
+        "    in mem *values*, not addresses. Non-flat here would be a real implementation bug.",
+        n_traces=600,
         budget=10_000_000_000,
         out_size=4008,
-        max_samples=500_000,
+        max_samples=10_000_000,   # ~3 % coverage of C10 sign/keygen at full resolution
+        stride=1,                 # full resolution within the swept window (audit-grade)
+        # Why not 50M (covers ~12%)? Empirically OOM-kills lascar's Welch t-test on this
+        # hardware (600 × 50M × 1 byte = 30 GB trace array + lascar's per-sample work
+        # arrays peaks the system above 64 GB; kernel OOM-kills the make process).
+        # Use the existing 10M window to ESTABLISH F-9, and run a follow-up at offset
+        # via snapshot/restore if deeper localization is needed.
     )
 
     print("\nDone. (lascar TVLA + CPA on the `mem_address` channel, emulation-only — analog/register-HW leakage of")

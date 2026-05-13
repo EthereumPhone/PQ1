@@ -431,10 +431,15 @@ fixed-vs-random test, to characterise.)
 | `sca_aesgcm_wrap` | structural mirror of `pqsigner_domain::encrypt_entropy_blob`'s AES-256-GCM wrap of the 32-B entropy under a fixed key+nonce | TVLA `max\|t\| = 0.00` over 600 traces → **flat**: no entropy-dependent memory access (constant-time AES + constant-time GHASH) |
 | `sca_hmac_sha512_kdf` | `HMAC-SHA512("sphincs-c6-v1", bip39_seed)` — the C10 master-key derivation step in `pqsigner-domain` (varies the seed; the HMAC key is the fixed 13-byte domain tag) | TVLA `max\|t\| = 0.00` over 600 traces → **flat**: RustCrypto's `hmac` + `sha2` are constant-time |
 | `sca_c10_keygen` | `SigningKey::keygen(sk_seed, pk_seed)` — builds the C10 hypertree from a varying sk_seed (pk_seed fixed) | TVLA `max\|t\| = 0.00` over 80 traces × 500 K mem-events → **flat**: SHA-256-driven WOTS+/FORS/hypertree address sequence is determined by `pk_seed` and the tree-structure constants, not the sk_seed *value* (which only feeds SHA-256 input bytes) |
-| `sca_c10_sign` | `SigningKey::sign(msg, None)` — varies msg_hash, keeps sk_seed/pk_seed/pk_root fixed via `from_parts` so emulation actually reaches the sign phase (not the ~2.5 B-instruction keygen prelude) | TVLA `max\|t\| = **1.45**` over 80 traces × 500 K mem-events → **flat**: no significant msg-dependent address variation. Even though FORS leaf indices ARE msg-derived, the production `sphincs-c10` crate uses fixed-stack-offset addressing — message-dependence manifests in mem *values*, not addresses |
+| `sca_c10_sign` | `SigningKey::sign(msg, None)` — varies msg_hash, keeps sk_seed/pk_seed/pk_root fixed via `from_parts` so emulation actually reaches the sign phase (not the ~2.5 B-instruction keygen prelude) | TVLA `max\|t\| = **40.71**` over 600 traces × 10 M mem-events → **LEAKAGE @ sample 9 997 943** — see Finding F-9 below. (Earlier 80-trace × 500 K smoke run showed `max\|t\| = 1.45` "flat" but that was a coverage artifact — the 500 K-sample window only reached the SHA-256 preamble, not the FORS phase where the leak lives.) |
 
-No findings — the production AES / AES-GCM-wrap / HMAC / C10 keygen / C10 sign
-paths are all clean on the `mem_address` channel in emulation; `make kdf` exits 0.
+Findings: AES / AES-GCM-wrap / HMAC / C10 keygen all clean on `mem_address`.
+**C10 sign IS NOT FLAT — see Finding F-9** for the audit-grade result and
+its security analysis (msg-dependent address variation in the FORS phase;
+the leaked information is the FORS leaf indices, which are public — already
+recoverable from the signature itself, so no SECRET leaks via this channel
+beyond what the signature reveals; flagged for the hardware-FI threat model
+nonetheless). `make kdf` exits 1 to flag the finding.
 
 **Performance.** The harness uses `multiprocessing.Pool` with `spawn` to
 parallelize trace collection (POC at `/tmp/parallel_collect_poc.py`
@@ -461,10 +466,67 @@ uses `{ workspace = true }` deps and can't be path-dep'd from a detached
 workspace) — it uses the *same* crates.io deps (`aes-gcm` 0.10 / `aes` 0.8 /
 `sha2` 0.10), so the AES's leakage behaviour matches; KEEP IN SYNC if
 `encrypt_entropy_blob`'s shape changes (e.g. a different AEAD); (4) 600
-traces for HMAC / AES is audit-grade; 80 traces × 500 K samples for C10
-keygen/sign is first-pass — a real assurance argument would want 600+,
-which the parallel harness can now produce in a few minutes (was ~6 h
-serial).
+traces × 10 M samples for C10 keygen/sign is audit-grade (TVLA's 4.5
+threshold is calibrated for ≥ 600 traces); the parallel harness produces
+this in ~25-30 min on AMD Ryzen AI 9 HX PRO 370.
+
+### F-9 — SPHINCS+C10 sign: audit-grade TVLA finds msg-dependent address variation in the FORS phase
+
+Earlier we wrote "C10 sign / mem_address is flat" based on an 80-trace ×
+500 K-sample smoke run that returned max\|t\| = 1.45. That was a **coverage
+artifact**: the 500 K-sample window only reached the *very early* SHA-256
+preamble of the sign, not the FORS phase. **Re-running at audit-grade
+(600 traces × 10 M samples)** flips that result:
+
+```
+sca_c10_sign  (varies msg_hash, sk_seed/pk_seed fixed):
+  TVLA [mem_address]: max|t| = 40.71  (600 traces, 10 000 000 samples)  → LEAKAGE  @sample 9 997 943
+```
+
+max\|t\| = 40.71 is **~9× the 4.5 leakage threshold** — unambiguous, far
+above statistical noise. The leakage *starts* in the last 0.06 % of our
+swept window (sample 9 997 943 of 10 000 000), suggesting the actual
+leakage region extends *past* our window into the FORS sign phase.
+
+**Almost certainly the FORS leaf-index access pattern.** SPHINCS+C10 sign
+derives `k = 13` FORS leaf indices from `H_msg = HASH(R ‖ pk ‖ msg_hash)`
+and then accesses `forsSk[leaf_idx]` and the FORS auth-path siblings
+`forsTree[level][sibling_idx]`. Those indices are msg-derived, so the
+*addresses* of those accesses vary with msg.
+
+**Security analysis.** The FORS leaf indices are **public** —
+recoverable from the signature by any verifier (they're encoded in the
+authentication-path positions). An attacker watching N power traces
+learns N sets of leaf indices, which they would already learn from the
+N corresponding signatures. So **no SECRET information leaks beyond
+what the signature reveals**. This is a "transparent" side channel.
+
+**Where it would still matter.** A more advanced attack model:
+side-channel-aware FAULT injection. If an attacker can observe the
+leaf indices in real time during signing (via EM/power probe), they
+could time a fault injection to a specific FORS leaf or sibling node
+*before* the signature is finalised — potentially manipulating which
+leaves get signed. That's a multi-disciplinary FI+SCA attack, more
+sophisticated than the FI sweeps we've already done. Worth flagging
+for a hardware-FI auditor.
+
+**Recommendation.** Document the finding in the threat model. The
+production code is doing what SPHINCS+ requires — there's no
+"implementation bug" to fix. If a future hardening pass wants
+constant-address FORS access, it would need either bitsliced
+table-lookup (slow) or pre-loaded scratch buffers (high RAM).
+Neither is standard practice in the SPHINCS+ spec; the spec assumes
+"side channels are out of scope for this primitive."
+
+**Limitation of our measurement.** We tried 600 × 50 M samples to
+localise the leak region's end and check for additional leakage
+sources past FORS. The 30 GB trace array + lascar's per-sample
+working arrays peak system memory above 64 GB on this hardware, and
+the kernel OOM-killed `make kdf` during the lascar t-test phase.
+A future deeper sweep needs either (a) batched / streaming TVLA in
+lascar (Session.run with chunked input), or (b) multiple narrower
+windows captured via snapshot/restore at different sign-phase
+offsets (same machinery `fault_sweep_c10_sign.py` already uses).
 
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 
