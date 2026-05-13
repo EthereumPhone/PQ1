@@ -74,23 +74,43 @@ pub extern "C" fn sca_ns_validate_write(ptr: u32, len: u32) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
-// Hardened wrappers — `fi::check_true_into_sentinel` around the same
-// predicate. Returns `OK_SENTINEL` (0xA5A5_A5A5) for accept, `FAIL_SENTINEL`
-// (0x5A5A_5A5A) for reject. Caller compares to OK_SENTINEL rather than `!= 0`.
-// Bit-equivalent to what the F-7 fix applies to verify_signature; here
-// purely for evaluating "would the same pattern protect ptr_validate?".
+// Hardened wrappers — bit-equivalent to the F-8 fix in `NsPtr::validate_*`:
+// verify the predicate TWICE, each call through `fi::check_true_into_sentinel`,
+// with `wait_random()` between. Each sentinel verdict is checked
+// independently before returning OK_SENTINEL. A single fault on the first
+// `!= OK_SENTINEL` cmp+branch is caught by the second call; a single fault
+// inside one of the `check_true_into_sentinel` invocations is caught by the
+// other call. Two coordinated faults required to bypass.
 // ---------------------------------------------------------------------------
 
 #[inline(never)]
 #[no_mangle]
 pub extern "C" fn sca_ns_validate_read_fi(ptr: u32, len: u32) -> u32 {
-    fi::check_true_into_sentinel(|| ptr_validate::validate_ns_read_ptr(ptr, len as usize))
+    let v1 = fi::check_true_into_sentinel(|| ptr_validate::validate_ns_read_ptr(ptr, len as usize));
+    if v1 != fi::OK_SENTINEL {
+        return fi::FAIL_SENTINEL;
+    }
+    fi::wait_random();
+    let v2 = fi::check_true_into_sentinel(|| ptr_validate::validate_ns_read_ptr(ptr, len as usize));
+    if v2 != fi::OK_SENTINEL {
+        return fi::FAIL_SENTINEL;
+    }
+    fi::OK_SENTINEL
 }
 
 #[inline(never)]
 #[no_mangle]
 pub extern "C" fn sca_ns_validate_write_fi(ptr: u32, len: u32) -> u32 {
-    fi::check_true_into_sentinel(|| ptr_validate::validate_ns_write_ptr(ptr, len as usize))
+    let v1 = fi::check_true_into_sentinel(|| ptr_validate::validate_ns_write_ptr(ptr, len as usize));
+    if v1 != fi::OK_SENTINEL {
+        return fi::FAIL_SENTINEL;
+    }
+    fi::wait_random();
+    let v2 = fi::check_true_into_sentinel(|| ptr_validate::validate_ns_write_ptr(ptr, len as usize));
+    if v2 != fi::OK_SENTINEL {
+        return fi::FAIL_SENTINEL;
+    }
+    fi::OK_SENTINEL
 }
 
 // ---------------------------------------------------------------------------

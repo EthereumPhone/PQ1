@@ -68,33 +68,56 @@ impl<T> NsPtr<T> {
     /// Verify that `addr..addr+len` is a fully-NS readable range and
     /// return a `ReadPtr<T>` proof. On failure, returns
     /// [`NscStatus::InvalidPointer`].
+    ///
+    /// F-8 hardening (TrustZone-boundary FI): the underlying predicate
+    /// `validate_ns_read_ptr` is called TWICE through
+    /// `fi::check_true_into_sentinel`, with `wait_random()` between, and
+    /// each sentinel verdict is checked independently before constructing
+    /// the `ReadPtr<T>`. A single fault that flips one verdict still leaves
+    /// the second to reject the bad pointer — two coordinated faults
+    /// required to bypass. See `tools/sca/README.md` §F-8 for the sweep
+    /// evidence this defends against.
     #[inline]
     pub fn validate_read(self, len: usize) -> Result<ReadPtr<T>, NscStatus> {
-        if validate_ns_read_ptr(self.addr, len) {
-            Ok(ReadPtr {
-                addr: self.addr,
-                len,
-                _phantom: PhantomData,
-            })
-        } else {
-            Err(NscStatus::InvalidPointer)
+        // First sentinel-encoded validation.
+        let v1 = crate::fi::check_true_into_sentinel(|| validate_ns_read_ptr(self.addr, len));
+        if v1 != crate::fi::OK_SENTINEL {
+            return Err(NscStatus::InvalidPointer);
         }
+        crate::fi::wait_random();
+        // Second, independent sentinel-encoded validation.
+        let v2 = crate::fi::check_true_into_sentinel(|| validate_ns_read_ptr(self.addr, len));
+        if v2 != crate::fi::OK_SENTINEL {
+            return Err(NscStatus::InvalidPointer);
+        }
+        Ok(ReadPtr {
+            addr: self.addr,
+            len,
+            _phantom: PhantomData,
+        })
     }
 
     /// Verify that `addr..addr+len` is a fully-NS writable range and
     /// return a `WritePtr<T>` proof. On failure, returns
     /// [`NscStatus::InvalidPointer`].
+    ///
+    /// F-8 hardening — identical pattern to `validate_read`.
     #[inline]
     pub fn validate_write(self, len: usize) -> Result<WritePtr<T>, NscStatus> {
-        if validate_ns_write_ptr(self.addr, len) {
-            Ok(WritePtr {
-                addr: self.addr,
-                len,
-                _phantom: PhantomData,
-            })
-        } else {
-            Err(NscStatus::InvalidPointer)
+        let v1 = crate::fi::check_true_into_sentinel(|| validate_ns_write_ptr(self.addr, len));
+        if v1 != crate::fi::OK_SENTINEL {
+            return Err(NscStatus::InvalidPointer);
         }
+        crate::fi::wait_random();
+        let v2 = crate::fi::check_true_into_sentinel(|| validate_ns_write_ptr(self.addr, len));
+        if v2 != crate::fi::OK_SENTINEL {
+            return Err(NscStatus::InvalidPointer);
+        }
+        Ok(WritePtr {
+            addr: self.addr,
+            len,
+            _phantom: PhantomData,
+        })
     }
 }
 

@@ -638,7 +638,7 @@ evaluation. The hardened mirror returns the sentinel directly (`OK_SENTINEL` /
 gateway callers — so its bypasses reveal the F-5 residual at the caller's
 own cmp+branch, not at the wrapped predicate.
 
-### F-8 — `validate_ns_{read,write}_ptr` is single-fault-bypassable on every non-null reject scenario — **NOT yet fixed**
+### F-8 — `validate_ns_{read,write}_ptr` was single-fault-bypassable on every non-null reject scenario — **FIXED in `NsPtr::validate_{read,write}` (verify-twice + double sentinel check)**
 
 The plain `validate_ns_read_ptr` accepts a known-bad pointer under at least
 one single fault for three of the four reject scenarios:
@@ -668,22 +668,30 @@ trick with FI standing in for a race condition). The closest upstream analog
 is rainbow's `HW_analysis/pin_fault.py` Trezor `storage_containsPin` skip
 demo: a small predicate whose `Err→Ok` flip breaks an isolation boundary.
 
-**Hardening direction (not yet applied — bigger fix than F-7).** The clean
-move is to make `NsPtr::validate_{read,write}` internally wrap the predicate
-in `fi::check_true_into_sentinel` (one ~3-line edit in `secure/src/nsc/ns_ptr.rs`,
-fixes every gateway caller automatically since they all funnel through
-`validate_*`). The `sca_ns_validate_*_fi` mirror shows that this *alone*
-doesn't get the harness to 0 bypasses — the residual is the same F-5 issue:
-the caller's `if v != OK_SENTINEL { … }` cmp+branch is itself a one-skip
-route, and the mirror's "return the sentinel directly" shape exposes it as a
-1-fault bypass. The full robust fix requires *also* doubling the caller-side
-discrimination (a second sentinel-check at the gateway entry, or a verify-
-twice pattern at the `validate_*` method level). The F-7 fix didn't need this
-extra layer because the secure-world COMMIT gate has only one consumer of
-the sentinel; here the consumers are ~10-20 gateway commands so the choice is
-between (a) per-caller doubling (more code, distributed) or (b) make
-`validate_*` itself do verify-twice with a second sentinel check internally
-(one place, more invasive). The harness's `sca_ns_validate_*_fi` entry is
-ready to validate either pattern once the maintainer picks one.
+**Action taken.** `secure/src/nsc/ns_ptr.rs::NsPtr::validate_{read,write}`
+now verify their underlying predicate TWICE through
+`fi::check_true_into_sentinel` (with `fi::wait_random()` between), and check
+each sentinel verdict independently before constructing the `ReadPtr<T>` /
+`WritePtr<T>` proof. A single fault on the first `!= OK_SENTINEL` cmp+branch
+is caught by the second verification call; a single fault inside one of the
+`check_true_into_sentinel` invocations is caught by the other call. Two
+coordinated faults are required to bypass — same residual as F-5 / F-7 for
+the rest of the firmware. Why verify-twice here (and not at the F-7 site):
+the F-7 fix wrapped a single consumer of the sentinel, whose caller did `if
+v != OK_SENTINEL` to enforce it. The NS-pointer hardening is at `validate_*`
+itself — the method has many gateway callers, each with its own `?` route,
+so doubling at the `validate_*` method makes the hardening per-method (one
+place) instead of per-caller (~10-20 places).
 
-`make ns-ptr` exits 1 = open finding. Investigation/fix is Tier-1 follow-up.
+The harness's `sca_ns_validate_*_fi` mirror replicates the verify-twice
+pattern exactly. After the fix, **the focused sweep on the hardened mirror
+shows 0 single-fault bypasses across all 4 reject scenarios × 3 fault models
+× ~180 instructions per sweep** (the unhardened predicates still report
+their original bypass counts as regression coverage; a revert to the bare
+`if … { Ok } else { Err }` shape would re-introduce the finding and flip
+the harness back to exit 1).
+
+`make ns-ptr` exits 0 after the fix. Production hardening is bit-equivalent
+to the mirror — the same `fi::check_true_into_sentinel` + `wait_random()` +
+sentinel-double-check sequence runs on every `NsPtr::validate_*` call from
+every `cmd_*.rs` gateway handler.

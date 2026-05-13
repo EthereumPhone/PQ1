@@ -224,39 +224,36 @@ def main():
                         print(f"             ... and {len(hits) - 20} more")
             print()
 
-    # Findings
+    # Findings — production gate cleanliness is gated on the FI mirror;
+    # the plain mirror is preserved as regression coverage (same pattern as
+    # F-7's `sca_fw_verify_all`).
     print("=" * 75)
-    if not any_bypass:
-        print("ALL SWEEPS CLEAN — every reject-scenario stays a reject under every fault")
-        print("model on both the plain and the FI-hardened predicates.")
+    if not bypasses_fi:
+        print("F-8 MITIGATION VALIDATED — no single fault bypasses the HARDENED predicate")
+        print()
+        print("  The production gate (`NsPtr::validate_{read,write}`, called by every")
+        print("  gateway command) verifies the underlying predicate TWICE through")
+        print("  `fi::check_true_into_sentinel`, with `wait_random()` between, and checks")
+        print("  each sentinel verdict independently. A single fault on one verdict is")
+        print("  caught by the second verification — two coordinated faults required to")
+        print("  bypass. Same residual as F-5 / F-7 for the rest of the firmware.")
+        print()
+        if bypasses_plain:
+            print("  Pre-mitigation reference (unhardened predicates, kept for regression coverage):")
+            for ep, scen, model, n in bypasses_plain:
+                print(f"    - {ep:<28} × {scen:<16} [{model:11}]  {n} fault(s)  [DOCUMENTED, NOT PRODUCTION]")
         sys.exit(0)
 
-    if bypasses_plain:
-        print("FINDING — NS-pointer validation bypass on the PLAIN (production) predicate:")
-        for ep, scen, model, n in bypasses_plain:
-            print(f"    - {ep:<28} × {scen:<16} [{model:11}]  {n} fault(s)")
-        print()
-        print("  Production exposure: every gateway command (`cmd_*` in secure/src/nsc/)")
-        print("  calls `NsPtr::validate_{read,write}` (which dispatches to these predicates)")
-        print("  before dereferencing. A single fault here lets an NS-supplied pointer")
-        print("  point into secure RAM / the shared mailbox → arbitrary S-world R/W,")
-        print("  potentially leaking the master seed cache, slot key cache, or PIN-attempt")
-        print("  flash address.")
-        print()
-        print("  Hardening: wrap `validate_ns_{read,write}_ptr` calls in")
-        print("  `fi::check_true_into_sentinel` (the `sca_ns_validate_*_fi` mirror shows")
-        print("  this pattern; raises the bar from 1 to ~2 coordinated faults). Migrate")
-        print("  `NsPtr::validate_{read,write}` callers (or the `NsPtr::validate_*` methods")
-        print("  themselves) to compare a sentinel rather than handle a `bool` Result.")
-
-    if bypasses_fi:
-        print()
-        print("FINDING — even the FI-hardened predicate was bypassed:")
-        for ep, scen, model, n in bypasses_fi:
-            print(f"    - {ep:<28} × {scen:<16} [{model:11}]  {n} fault(s)")
-        print("  Investigate fi::check_true_into_sentinel's behaviour with this caller shape.")
-
-    sys.exit(1 if bypasses_plain else 0)
+    # Below here: mitigation regressed.
+    print("REGRESSION — single-fault bypass survives on the HARDENED predicate")
+    print()
+    print("  `sca_ns_validate_*_fi` accepted a bad pointer under at least one single")
+    print("  fault. Investigate:")
+    print("    - has `NsPtr::validate_{read,write}` been reverted to a bare `?` chain?")
+    print("    - has the verify-twice / double sentinel-check pattern been weakened?")
+    for ep, scen, model, n in bypasses_fi:
+        print(f"    - {ep:<28} × {scen:<16} [{model:11}]  {n} fault(s)")
+    sys.exit(1)
 
 
 if __name__ == "__main__":
