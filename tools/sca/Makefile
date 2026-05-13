@@ -30,9 +30,11 @@ C10V_DIR := c10v_target
 C10V_ELF := $(C10V_DIR)/target/$(TARGET)/release/sca-c10v-target
 FWV_DIR  := fw_verify_target
 FWV_ELF  := $(FWV_DIR)/target/$(TARGET)/release/sca-fw-verify-target
+NSP_DIR  := ns_ptr_target
+NSP_ELF  := $(NSP_DIR)/target/$(TARGET)/release/sca-ns-ptr-target
 DONJON   ?= donjon-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify fi fi-twofault c10 pin c10v fw-verify kdf sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr fi fi-twofault c10 pin c10v fw-verify ns-ptr kdf sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -51,8 +53,13 @@ $(C10V_ELF): $(C10V_DIR)/src/main.rs $(C10V_DIR)/memory.x $(C10V_DIR)/build.rs $
 
 build-fw-verify: $(FWV_ELF)
 
-$(FWV_ELF): $(FWV_DIR)/src/main.rs $(FWV_DIR)/memory.x $(FWV_DIR)/build.rs $(FWV_DIR)/Cargo.toml ../../fw-manifest/src/lib.rs ../../sphincs-c10/src/lib.rs
+$(FWV_ELF): $(FWV_DIR)/src/main.rs $(FWV_DIR)/memory.x $(FWV_DIR)/build.rs $(FWV_DIR)/Cargo.toml ../../fw-manifest/src/lib.rs ../../sphincs-c10/src/lib.rs ../../secure/src/fi.rs ../../secure/src/fw_update/mod.rs
 	cargo build --release --target $(TARGET) --manifest-path $(FWV_DIR)/Cargo.toml
+
+build-ns-ptr: $(NSP_ELF)
+
+$(NSP_ELF): $(NSP_DIR)/src/main.rs $(NSP_DIR)/memory.x $(NSP_DIR)/build.rs $(NSP_DIR)/Cargo.toml ../../secure/src/nsc/ptr_validate.rs ../../secure/src/fi.rs
+	cargo build --release --target $(TARGET) --manifest-path $(NSP_DIR)/Cargo.toml
 
 fi: build
 	$(DONJON) run fault_sweep_fi.py
@@ -72,10 +79,13 @@ c10v: build-c10v
 fw-verify: build-fw-verify
 	$(DONJON) run fault_sweep_fw_verify.py
 
+ns-ptr: build-ns-ptr
+	$(DONJON) run fault_sweep_ns_ptr.py
+
 kdf: build-kdf
 	$(DONJON) run leakage_kdf.py
 
-sweeps: fi c10 pin fw-verify
+sweeps: fi c10 pin fw-verify ns-ptr
 
 doctor:
 	$(DONJON) doctor
@@ -85,3 +95,4 @@ clean:
 	cargo clean --manifest-path $(KDF_DIR)/Cargo.toml
 	cargo clean --manifest-path $(C10V_DIR)/Cargo.toml
 	cargo clean --manifest-path $(FWV_DIR)/Cargo.toml
+	cargo clean --manifest-path $(NSP_DIR)/Cargo.toml

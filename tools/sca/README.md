@@ -150,6 +150,8 @@ tools/sca/
   fault_sweep_pin.py         — PIN-attempt pre-commit gate fault sweep (gated_unlock + pin_attempts_bump)
   fault_sweep_c10v.py        — fault sweep over the *real* sphincs_c10::verify (forge-a-signature direction)
   fault_sweep_fw_verify.py   — fault sweep over the *real* fw-manifest verify chain (FW-update bypass direction)
+  fault_sweep_ns_ptr.py      — fault sweep over the *real* secure::nsc::ptr_validate::validate_ns_{read,write}_ptr
+                             —   predicates (TrustZone-boundary NS-pointer bypass direction)
   leakage_kdf.py             — lascar leakage analysis: AES-256 / AES-GCM entropy wrap + a leaky-S-box positive control
   fi_target/                 — standalone thumbv8m crate: the fault-sweep targets, in one ELF (sca-fi-target)
     src/main.rs              —   #[path]-includes ../../../../secure/src/fi.rs verbatim (sca_fi_*),
@@ -163,7 +165,13 @@ tools/sca/
                              —   build.rs bakes 3 deterministic fixtures (valid + bad_sig + bad_digest) from a
                              —     fixed vendor keypair (sk_seed=[0x42;32], pk_seed=[0x77;16])
                              —   src/main.rs exports `sca_fw_verify_{structural,crc,digest,vendor_fpr,signature,
-                             —     rollback,all}` — `all` chains them in FSBL order
+                             —     rollback,all,all_fi}` — `all` chains them in FSBL order; `all_fi` is the
+                             —     F-7-hardened mirror (verify_signature through fi::check_true_into_sentinel)
+  ns_ptr_target/             — standalone thumbv8m crate (own [workspace]): real NS-pointer validators
+                             —   src/main.rs `#[path]`-includes `secure/src/nsc/ptr_validate.rs` verbatim and
+                             —     exports `sca_ns_validate_{read,write}` (plain) +
+                             —     `sca_ns_validate_{read,write}_fi` (sentinel-wrapped); harness sweeps both
+                             —     to validate any hardening candidates side-by-side with the production gate
   kdf_target/                — standalone thumbv8m crate (own [workspace]): the leakage targets, in ELF sca-kdf-target —
     src/main.rs              —   sca_leaky_sbox (out[i]=SBOX[in[i]^KEY[i]], the positive control),
                              —   sca_aes256_encrypt_block (the `aes` crate's AES-256, fixed key), and
@@ -603,3 +611,79 @@ manifests. Hardening the COMMIT gate breaks the chain. FSBL hardening would
 require either a shared `pqsigner-fi` workspace crate (`fi.rs` and constants
 moved out of `secure/src/`) or inline FI helpers in FSBL — both are bigger
 structural changes deferred to a follow-up.
+
+## NS-pointer validation fault sweep — `fault_sweep_ns_ptr.py` + `ns_ptr_target/`
+
+`make ns-ptr` sweeps the *real* `secure::nsc::ptr_validate::validate_ns_{read,write}_ptr`
+predicates that gate every NSC gateway entry. The thumbv8m target ELF
+`#[path]`-includes the production validator verbatim (path-deps
+`sphincs-tz-shared` for the constants); the harness invokes them with five
+attacker-controlled `(ptr, len)` scenarios:
+
+| scenario          | description                              | expected |
+|-------------------|------------------------------------------|----------|
+| valid_ns_sram     | clearly inside NS SRAM                   | accept   |
+| s_world_ptr       | NOT in any NS region (S-RAM-like)        | reject   |
+| mailbox_overlap   | aliases the shared command mailbox       | reject   |
+| null_ptr          | ptr == 0                                 | reject   |
+| overflow          | ptr + len overflows u32                  | reject   |
+
+A single fault that flips a `reject` scenario into `accept` is a finding —
+the harness reports it as a TrustZone-boundary breach.
+
+The harness *also* sweeps a hardened pair (`sca_ns_validate_*_fi`) that wraps
+the predicate in `fi::check_true_into_sentinel`, for side-by-side mitigation
+evaluation. The hardened mirror returns the sentinel directly (`OK_SENTINEL` /
+`FAIL_SENTINEL`) — same shape the production code would expose to its
+gateway callers — so its bypasses reveal the F-5 residual at the caller's
+own cmp+branch, not at the wrapped predicate.
+
+### F-8 — `validate_ns_{read,write}_ptr` is single-fault-bypassable on every non-null reject scenario — **NOT yet fixed**
+
+The plain `validate_ns_read_ptr` accepts a known-bad pointer under at least
+one single fault for three of the four reject scenarios:
+
+| scenario          | [skip] | [stuck-at-0] | [stuck-at-FF] | total |
+|-------------------|--------|--------------|---------------|-------|
+| s_world_ptr       | 6      | 1            | 3             | 10    |
+| mailbox_overlap   | 8      | 5            | 1             | 14    |
+| overflow          | 1      | 0            | 0             | 1     |
+| null_ptr          | 0      | 0            | 0             | **0** (robust) |
+
+`validate_ns_write_ptr` has a similar profile (3 + 11 + 1 = 15 bypasses on
+the same scenarios). The null check is the *one* check that's structurally
+single-fault-robust (a `cmp r0, 0; beq fail` skip leaves r0 as the NS-supplied
+pointer value, and the subsequent bounds checks still reject anything outside
+NS SRAM / NS flash; but a `cmp+beq` *stuck-at* fault could in principle bypass
+it too — empirically it doesn't here because the stuck-at value gets compared
+against the bounds and rejected).
+
+**Production exposure.** Every gateway command in `secure/src/nsc/cmd_*.rs`
+calls `NsPtr::validate_{read,write}(len)?` before any dereference. A single
+fault on the predicate can let an NS-supplied pointer alias secure RAM (→
+arbitrary read of the master seed cache / slot key cache / PIN-attempt page),
+or alias the shared command mailbox (→ overwrite the in-flight `CMD_*` word
+that the secure world is still interpreting — classic time-of-check-time-of-use
+trick with FI standing in for a race condition). The closest upstream analog
+is rainbow's `HW_analysis/pin_fault.py` Trezor `storage_containsPin` skip
+demo: a small predicate whose `Err→Ok` flip breaks an isolation boundary.
+
+**Hardening direction (not yet applied — bigger fix than F-7).** The clean
+move is to make `NsPtr::validate_{read,write}` internally wrap the predicate
+in `fi::check_true_into_sentinel` (one ~3-line edit in `secure/src/nsc/ns_ptr.rs`,
+fixes every gateway caller automatically since they all funnel through
+`validate_*`). The `sca_ns_validate_*_fi` mirror shows that this *alone*
+doesn't get the harness to 0 bypasses — the residual is the same F-5 issue:
+the caller's `if v != OK_SENTINEL { … }` cmp+branch is itself a one-skip
+route, and the mirror's "return the sentinel directly" shape exposes it as a
+1-fault bypass. The full robust fix requires *also* doubling the caller-side
+discrimination (a second sentinel-check at the gateway entry, or a verify-
+twice pattern at the `validate_*` method level). The F-7 fix didn't need this
+extra layer because the secure-world COMMIT gate has only one consumer of
+the sentinel; here the consumers are ~10-20 gateway commands so the choice is
+between (a) per-caller doubling (more code, distributed) or (b) make
+`validate_*` itself do verify-twice with a second sentinel check internally
+(one place, more invasive). The harness's `sca_ns_validate_*_fi` entry is
+ready to validate either pattern once the maintainer picks one.
+
+`make ns-ptr` exits 1 = open finding. Investigation/fix is Tier-1 follow-up.
