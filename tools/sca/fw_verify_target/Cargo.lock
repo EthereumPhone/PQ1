@@ -185,6 +185,7 @@ dependencies = [
  "panic-halt",
  "sha2",
  "sphincs-c10",
+ "zeroize",
 ]
 
 [[package]]

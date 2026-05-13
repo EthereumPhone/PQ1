@@ -24,6 +24,8 @@ panic-halt  = "1"
 # unchanged on thumbv8m.
 fw-manifest = { path = "../../../fw-manifest" }
 sphincs-c10 = { path = "../../../sphincs-c10" }
+# Required by the `#[path]`-included `secure/src/fi.rs` (sentinel zeroize).
+zeroize     = { version = "1", default-features = false }
 
 [build-dependencies]
 # build.rs runs on the host but exercises the same no_std crates. Determinism:

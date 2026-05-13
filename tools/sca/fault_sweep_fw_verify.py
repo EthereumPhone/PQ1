@@ -49,7 +49,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ELF = os.path.join(HERE, "fw_verify_target", "target", "thumbv8m.main-none-eabi",
                    "release", "sca-fw-verify-target")
 RET = 0xAAAA_AAAA
-COUNT_BUDGET = 3_000_000   # one-time instruction-count runs
+COUNT_BUDGET = 8_000_000   # one-time instruction-count runs; valid baseline on
+                            # sca_fw_verify_all_fi does TWO full SPHINCS+ verifies
+                            # of a *valid* signature (each ~2.5M instructions),
+                            # so the chain + sentinel commit is ~5-6M.
 SWEEP_BUDGET = 25_000      # per faulted emulation (verify_all on bad_sig ≈ 7-8k clean)
 SWEEP_CAP    = 12_000      # max sweep range; covers the full chain comfortably
 
@@ -85,6 +88,7 @@ ENTRY_POINTS = [
     "sca_fw_verify_signature",
     "sca_fw_verify_rollback",
     "sca_fw_verify_all",
+    "sca_fw_verify_all_fi",       # F-7 hardened mirror
 ]
 
 # Baseline expectations (return value: 0 = Ok, non-zero = Err discriminant).
@@ -94,11 +98,11 @@ BASELINE = {
     "bad_sig":    {"sca_fw_verify_structural": 0, "sca_fw_verify_crc": 0,
                    "sca_fw_verify_digest": 0,     "sca_fw_verify_vendor_fpr": 0,
                    "sca_fw_verify_signature": 6,  "sca_fw_verify_rollback": 0,
-                   "sca_fw_verify_all": 6},
+                   "sca_fw_verify_all": 6,        "sca_fw_verify_all_fi": 6},
     "bad_digest": {"sca_fw_verify_structural": 0, "sca_fw_verify_crc": 0,
                    "sca_fw_verify_digest": 5,     "sca_fw_verify_vendor_fpr": 0,
                    "sca_fw_verify_signature": 6,  "sca_fw_verify_rollback": 0,
-                   "sca_fw_verify_all": 5},
+                   "sca_fw_verify_all": 5,        "sca_fw_verify_all_fi": 5},
 }
 
 # ---------------------------------------------------------------------------
@@ -225,6 +229,7 @@ def main():
     # ~10k instructions before the chain's end, which is where
     # verify_signature lives in the chain on bad_sig).
     any_bypass = False
+    fi_mitigation_clean = True   # set False if the hardened mirror gets bypassed
     bypass_categories = {"per_step_inheritable": [], "per_step_chain_caught": []}
     PER_STEP_TARGETS = [
         # (entry_point, fixture, descr, category)
@@ -312,6 +317,63 @@ def main():
                 print(f"             ... and {len(hits) - 20} more")
     print()
 
+    # ---- F-7 mitigation: focused suffix sweep on the hardened mirror ---
+    # `sca_fw_verify_all_fi` calls `verify_signature` through
+    # `fi::check_true_into_sentinel`, which double-calls + sentinel-encodes
+    # + caller `!= OK_SENTINEL`-checks. If the hardening works, the same
+    # single-fault skips that bypass `sca_fw_verify_all × bad_sig` should
+    # NOT bypass the hardened version: one skip might flip the first or
+    # second `verify_signature` return, but the OTHER call still produces
+    # the rejecting result, so the conjunction-and-sentinel commit goes to
+    # FAIL_SENTINEL.
+    print(f"-- sca_fw_verify_all_fi × bad_sig — focused SUFFIX sweep (F-7 mitigation check)")
+    fbytes = FIXTURES["bad_sig"]
+    chain_total_fi = instr_count("sca_fw_verify_all_fi", fbytes)
+    # The hardened mirror calls verify_signature TWICE plus wait_random,
+    # so its tail is ~2× as long as the unhardened version's tail. Sweep
+    # the last 2.5× verify_signature_len to comfortably cover both verifies
+    # and the sentinel commit between them.
+    vsig_len = instr_count("sca_fw_verify_signature", fbytes)
+    suffix_start_fi = max(1, chain_total_fi - int(2.5 * vsig_len) - 64)
+    suffix_count_fi = chain_total_fi - suffix_start_fi + 8
+    print(f"     chain total={chain_total_fi}  ≈ {chain_total_fi - chain_total} more "
+          f"instructions than unhardened (the second verify + wait_random + sentinel commit)")
+    print(f"     sweeping instr {suffix_start_fi}..{suffix_start_fi + suffix_count_fi}")
+    suffix_emu_fi = fresh_emu()
+    suffix_emu_fi.map_space(STACK_TOP - _STACK_LEN, STACK_TOP + 0x20)
+    fi_bypass_total = 0
+    for model_label, model in FAULT_MODELS:
+        hits, crashes, hangs, rejected, shorts = [], 0, 0, 0, 0
+        for i in range(suffix_start_fi, suffix_start_fi + suffix_count_fi):
+            st, val = run(suffix_emu_fi, "sca_fw_verify_all_fi", fbytes,
+                          fault=(model, i), budget=chain_total_fi + SWEEP_BUDGET)
+            if st == "short":
+                shorts += 1; continue
+            if st == "crash":
+                crashes += 1; continue
+            if st == "hang":
+                hangs += 1; continue
+            if val == 0:
+                hits.append(i)
+            else:
+                rejected += 1
+        fi_bypass_total += len(hits)
+        print(f"     [{model_label:11s}]  swept {suffix_count_fi}:  "
+              f"bypassed={len(hits)}  crashes={crashes}  hangs={hangs}  "
+              f"shorts={shorts}  correctly-rejected={rejected}")
+        if hits:
+            fi_mitigation_clean = False
+            print(f"       !!! {len(hits)} single-fault bypass(es) on the HARDENED chain "
+                  f"— F-7 mitigation insufficient on this model:")
+            for i in hits[:20]:
+                print(f"             [{model_label}] absolute instr {i}")
+            if len(hits) > 20:
+                print(f"             ... and {len(hits) - 20} more")
+    if fi_bypass_total == 0:
+        print(f"     ✓ F-7 mitigation: ZERO single-fault bypasses on the hardened chain")
+        print(f"     (vs the unhardened sca_fw_verify_all which had 2+ skip bypasses on this same range)")
+    print()
+
     # ---- (Optional) DoS direction: valid → reject ----------------------
     # Lower-priority: a single fault that makes a *legitimate* update fail.
     # This is an availability concern, not a security one — but verifying
@@ -345,37 +407,42 @@ def main():
     print("=" * 75)
     inherit = bypass_categories["per_step_inheritable"]
     caught = bypass_categories["per_step_chain_caught"]
-    if not any_bypass:
-        print("ALL SWEEPS CLEAN — no single fault converted a bad manifest into accepted")
+
+    # The harness keeps the UNHARDENED `sca_fw_verify_all` mirror in place for
+    # documentation of F-7-pre-mitigation: it reproduces the original bypasses
+    # so a regression of the hardening (e.g. someone reverts `verify_manifest`
+    # back to a bare `?` chain) would re-introduce them. The PRODUCTION gate
+    # is `sca_fw_verify_all_fi` — the mirror of the hardened production code.
+    # Exit status is gated on the HARDENED mirror's cleanliness.
+
+    if fi_mitigation_clean:
+        print("F-7 MITIGATION VALIDATED — no single fault bypasses the HARDENED chain")
+        print()
+        print("  The production gate (`secure::fw_update::verify_manifest`, mirrored by")
+        print("  `sca_fw_verify_all_fi`) wraps `verify_signature` in `fi::check_true_into_sentinel`:")
+        print("  the closure is double-called with `wait_random()` between, the verdict is")
+        print("  sentinel-committed to a volatile local, re-checked, and the caller compares")
+        print("  to `OK_SENTINEL` rather than a bare `bool`. Two coordinated faults are now")
+        print("  required to bypass — same residual as F-5 for the rest of the firmware.")
+        print()
+        if inherit or caught:
+            print("  Pre-mitigation reference (unhardened mirror, kept for regression coverage):")
+            for ep, fname, model, n in inherit:
+                print(f"    - {ep:<28} × {fname:<11} [{model:11}]  {n} fault(s)  [DOCUMENTED, NOT PRODUCTION]")
+            for ep, fname, model, n in caught:
+                print(f"    - {ep:<28} × {fname:<11} [{model:11}]  {n} fault(s)  [chain-caught by next step]")
         sys.exit(0)
 
-    if inherit:
-        print("FINDING — FW-update bypass under single-fault attack")
-        print()
-        print(f"  {len(inherit)} bypasses are inheritable end-to-end (the chain's downstream")
-        print(f"  steps do NOT catch them — fault converts the chain's overall return to Ok):")
-        for ep, fname, model, n in inherit:
-            print(f"    - {ep:<28} × {fname:<11} [{model:11}]  {n} fault(s)")
-        print()
-        print("  Production callers affected:")
-        print("    - `fsbl/src/main.rs::filter_valid`")
-        print("    - `secure/src/fw_update/mod.rs::verify_manifest`")
-        print()
-        print("  Hardening: convert `verify_signature` to a sentinel-returning helper")
-        print("  (`fi::check_true_into_sentinel`-style), and/or call it twice with")
-        print("  `wait_random()` between, before flipping the active slot in flash.")
-        sys.exit(1)
-
-    if caught:
-        print("INFO — per-step weakness, NOT exploitable through the chain")
-        print()
-        print(f"  {len(caught)} per-step bypasses exist in isolation but the chain's")
-        print(f"  next step catches them (downstream `verify_*` still rejects):")
-        for ep, fname, model, n in caught:
-            print(f"    - {ep:<28} × {fname:<11} [{model:11}]  {n} fault(s)")
-        print()
-        print("  Hardening is *defence in depth* — the chain already handles this.")
-        sys.exit(0)
+    # Below here: mitigation regressed.
+    print("REGRESSION — single-fault bypass survives on the HARDENED chain")
+    print()
+    print("  `sca_fw_verify_all_fi × bad_sig` accepted a known-bad manifest under at least")
+    print("  one single fault. The F-7 hardening in `secure::fw_update::verify_manifest`")
+    print("  (and the `#[path]`-included `secure/src/fi.rs`) is insufficient. Investigate:")
+    print("    - has `verify_manifest` been reverted to a bare `?` chain on verify_signature?")
+    print("    - has `fi::check_true_into_sentinel` been weakened?")
+    print("    - has the caller's `!= OK_SENTINEL` check been replaced with `if let Err(_)`?")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

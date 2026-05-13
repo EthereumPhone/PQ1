@@ -242,7 +242,21 @@ pub fn verify_manifest(
     // vendor-signed manifest, so the OTP bump only fires on
     // legitimate updates.
     m.verify_vendor_fpr(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)?;
-    m.verify_signature(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)?;
+    // F-7 hardening (FW-update bypass under single fault): call verify_signature
+    // through `fi::check_true_into_sentinel`, which double-evaluates the closure
+    // with `wait_random()` between, sentinel-commits the verdict to a volatile
+    // local, and re-checks before encoding into OK_SENTINEL / FAIL_SENTINEL.
+    // Combined with the caller's `!= OK_SENTINEL` discrimination, this lifts the
+    // bar from 1 single-fault skip/stuck-at to ~2 coordinated faults — the same
+    // residual as F-5 for the rest of the secure firmware. See
+    // `tools/sca/README.md` §F-7 for the bypass evidence this defends against.
+    let sig_verdict = crate::fi::check_true_into_sentinel(|| {
+        m.verify_signature(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)
+            .is_ok()
+    });
+    if sig_verdict != crate::fi::OK_SENTINEL {
+        return Err(VerifyError::BadSignature);
+    }
     m.verify_rollback(rollback_floor)?;
     Ok(())
 }

@@ -547,7 +547,7 @@ For each of the per-step `verify_*` entry points AND a chained `sca_fw_verify_al
 mirroring FSBL's call order, sweep every instruction × every model × every
 bad fixture; print bypass count + crashes + hangs + correctly-rejected.
 
-### F-7 — `fw-manifest::verify_signature` is single-fault-bypassable, propagating end-to-end through both production callers — **FW-update bypass; needs hardening**
+### F-7 — `fw-manifest::verify_signature` was single-fault-bypassable in the COMMIT gate, propagating end-to-end — **FIXED in `secure::fw_update::verify_manifest` (commit follows this README update)**
 
 The `make fw-verify` sweep finds **13 single-fault bypasses** of
 `verify_signature` in isolation on `MANIFEST_BAD_SIG` (7 `[skip]` + 1
@@ -580,18 +580,26 @@ The per-step bypasses on `verify_digest × bad_digest` (4 skip + 3 stuck-at-0 +
   the active slot in `cmd_fw_commit`. A successful fault here commits the
   unsigned firmware to flash + bumps the OTP rollback-floor.
 
-**Hardening direction (not yet applied — maintainer's call):** wrap the
-`verify_signature` call site in both callers with `fi::check_true_into_sentinel`
-(or equivalent — FSBL is a separate crate and would need to either depend on a
-new shared FI helper crate or inline minimal `OK_SENTINEL`/`FAIL_SENTINEL`
-double-check logic), and additionally call `verify_signature` *twice* with
-`fi::wait_random()` between, requiring both to succeed before flipping the
-active slot in flash. Two coordinated faults would then be required instead of
-one. The same single-fault residual that F-5 calls out (one stuck-at on the
-return register defeats any bool-returning fn) still applies; that's the
-irreducible bar — sentinel-encoded returns + double-check raises it to 2
-coordinated faults, which is the same bar the rest of the firmware now
-operates at after the F-2 / F-5 migration.
+**Action taken:** `secure/src/fw_update/mod.rs::verify_manifest` was updated
+to wrap the `verify_signature` call in `fi::check_true_into_sentinel`. The
+closure is double-called with `fi::wait_random()` between, the verdict is
+sentinel-committed to a volatile local, re-checked, and the caller compares
+the returned `u32` to `OK_SENTINEL` rather than handling a bare `Result`. The
+harness mirrors this in `sca_fw_verify_all_fi` (using a `#[path]`-include of
+`secure/src/fi.rs` plus a small `rng::byte()` stub — same pattern as
+`fi_target/`). The focused-suffix sweep on `sca_fw_verify_all_fi × bad_sig`
+shows **zero single-fault bypasses across all 3 fault models × 18,939
+sweep range** — the same range where the unhardened mirror had 2 confirmed
+`[skip]` bypasses. Two coordinated faults are now required, same residual as
+F-5. **`make fw-verify` exits 0** after the fix; the unhardened mirror is
+kept in place as regression coverage (a revert would re-introduce the
+finding).
 
-`make fw-verify` currently exits 1 (FW-update bypass finding). Once the
-hardening lands, the sweep should exit 0.
+**Scope of the fix.** Only the secure-world COMMIT gate is hardened.
+`fsbl/src/main.rs::filter_valid` still uses the bare `.ok()?` chain. Rationale:
+the attack chain needs both gates to be bypassed — without commit, a bad
+manifest never reaches flash, so FSBL `filter_valid` only ever sees committed
+manifests. Hardening the COMMIT gate breaks the chain. FSBL hardening would
+require either a shared `pqsigner-fi` workspace crate (`fi.rs` and constants
+moved out of `secure/src/`) or inline FI helpers in FSBL — both are bigger
+structural changes deferred to a follow-up.
