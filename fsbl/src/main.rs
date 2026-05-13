@@ -53,6 +53,7 @@ use fw_manifest::{ManifestRef, TRY_ONCE_COMMITTED, TRY_ONCE_TRIED};
 
 mod boot_state;
 mod branch;
+mod fi;
 mod manifest;
 mod otp;
 mod slot;
@@ -111,14 +112,28 @@ fn main() -> ! {
 /// Run the full manifest verify chain. Returns Some iff all steps
 /// pass. The `fpr` and `signature` checks dominate runtime — they
 /// take a few ms each at 16 MHz with software SHA-256.
+///
+/// F-7 defense-in-depth hardening (matches secure-world's `verify_manifest`):
+/// the `verify_signature` call is wrapped in `fi::check_true_into_sentinel`,
+/// which double-evaluates with a wait-random invariant loop between, sentinel-
+/// commits the verdict to a volatile local, and the caller compares the
+/// returned `u32` to `OK_SENTINEL` rather than handling a bare `Result`.
+/// Bypassing the gate now requires ~2 coordinated faults instead of 1.
+/// See `tools/sca/README.md` §F-7 for the bypass evidence this defends
+/// against.
 fn filter_valid<'a>(m: &'a ManifestRef<'a>, floor: u32) -> Option<&'a ManifestRef<'a>> {
     m.verify_structural().ok()?;
     m.verify_crc().ok()?;
     m.verify_digest().ok()?;
     m.verify_vendor_fpr(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)
         .ok()?;
-    m.verify_signature(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)
-        .ok()?;
+    let sig_verdict = fi::check_true_into_sentinel(|| {
+        m.verify_signature(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)
+            .is_ok()
+    });
+    if sig_verdict != fi::OK_SENTINEL {
+        return None;
+    }
     m.verify_rollback(floor).ok()?;
     Some(m)
 }

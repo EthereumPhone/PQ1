@@ -1395,6 +1395,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqsigner-fi"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "zeroize",
+]
+
+[[package]]
 name = "pqsigner-fsbl"
 version = "0.1.0"
 dependencies = [
@@ -1402,6 +1410,7 @@ dependencies = [
  "cortex-m-rt",
  "fw-manifest",
  "panic-halt",
+ "pqsigner-fi",
  "sha2 0.10.9",
  "sphincs-c10",
 ]
@@ -1963,6 +1972,7 @@ dependencies = [
  "hmac",
  "pqsigner-aa",
  "pqsigner-domain",
+ "pqsigner-fi",
  "pqsigner-tx",
  "pqsigner-tx-core",
  "proptest",

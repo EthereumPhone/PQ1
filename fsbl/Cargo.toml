@@ -25,6 +25,12 @@ sphincs-c10 = { workspace = true }
 # Manifest / boot-state layout. no_std, no alloc.
 fw-manifest = { workspace = true }
 
+# F-7 defense-in-depth: shared FI hardening primitives (sentinels,
+# check_true_into_sentinel, wait_random_loop). FSBL closes the
+# `verify_signature` call site the same way `secure::verify_manifest`
+# already does, so a single-fault bypass on either gate is impossible.
+pqsigner-fi = { workspace = true }
+
 # SHA-256 for the verify_digest path and the slot-image re-hash.
 # sha2 is gated behind fw-manifest's default-off std feature, but the
 # direct dep here ensures we can call it from verify.rs too.

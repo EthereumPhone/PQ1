@@ -7,6 +7,9 @@ edition.workspace = true
 sphincs-tz-shared = { workspace = true }
 sphincs-tz-bip39  = { workspace = true }
 fw-manifest       = { workspace = true }
+# FI hardening primitives shared with FSBL — `secure/src/fi.rs` is a thin
+# shim over this crate, supplying the secure-world's TRNG-backed RNG.
+pqsigner-fi       = { workspace = true }
 # Pure-logic tx primitives (RLP, EIP-1559 envelope, U256, keccak256).
 # Extracted from `secure/src/tx/{rlp,eip1559,hash}.rs` in Phase 5 PR 5.1.
 # `secure/src/tx/mod.rs` re-exports through it so existing call sites

@@ -1,0 +1,9 @@
+[package]
+name = "pqsigner-fi"
+version = "0.1.0"
+edition.workspace = true
+description = "PQSigner fault-injection (FI) hardening primitives — shared by `secure` (TrustZone secure-world) and `fsbl` (first-stage bootloader). Pure-logic, no_std, no_alloc. Caller supplies its own RNG via a `FnMut() -> u8` closure: secure-world plugs in the STM32 TRNG, FSBL plugs in a deterministic stub."
+
+[dependencies]
+zeroize = { workspace = true }
+cortex-m = { workspace = true }

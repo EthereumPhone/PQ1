@@ -613,14 +613,26 @@ F-5. **`make fw-verify` exits 0** after the fix; the unhardened mirror is
 kept in place as regression coverage (a revert would re-introduce the
 finding).
 
-**Scope of the fix.** Only the secure-world COMMIT gate is hardened.
-`fsbl/src/main.rs::filter_valid` still uses the bare `.ok()?` chain. Rationale:
-the attack chain needs both gates to be bypassed — without commit, a bad
-manifest never reaches flash, so FSBL `filter_valid` only ever sees committed
-manifests. Hardening the COMMIT gate breaks the chain. FSBL hardening would
-require either a shared `pqsigner-fi` workspace crate (`fi.rs` and constants
-moved out of `secure/src/`) or inline FI helpers in FSBL — both are bigger
-structural changes deferred to a follow-up.
+**Scope of the fix — initially secure-world only; later extended to FSBL.**
+The first version of the F-7 fix hardened only `secure::fw_update::verify_manifest`
+(the COMMIT gate). Rationale at the time: the attack chain needs both gates
+to be bypassed — without commit, a bad manifest never reaches flash, so FSBL
+`filter_valid` only ever sees committed manifests. Hardening the COMMIT gate
+breaks the chain.
+
+**Update (follow-up commit):** the deferred FSBL hardening is now also
+applied. The shared FI primitives have been extracted into a new
+`pqsigner-fi` workspace crate (`OK_SENTINEL`, `FAIL_SENTINEL`,
+`wait_random_loop`, `check_true`, `check_true_into_sentinel`); `secure/src/fi.rs`
+is now a thin shim that supplies the secure-world's TRNG. FSBL gets its own
+shim (`fsbl/src/fi.rs`) that supplies a deterministic stub for the RNG byte
+(FSBL doesn't initialise the TRNG; the *invariant check inside the loop*
+still catches mid-loop glitches the same way — only attacker retiming
+benefits from real randomness, and that's a much narrower surface on FSBL
+than on signing). `fsbl/src/main.rs::filter_valid` now wraps
+`verify_signature` with `fi::check_true_into_sentinel` exactly the same way
+`verify_manifest` does. Bypass bar at FSBL: ~2 coordinated faults, same as
+secure-world.
 
 ## NS-pointer validation fault sweep — `fault_sweep_ns_ptr.py` + `ns_ptr_target/`
 

@@ -21,6 +21,7 @@ path = "src/main.rs"
 e2e-test = []
 
 [dependencies]
+pqsigner-fi = { path = "../../../pqsigner-fi" }
 cortex-m    = "0.7"
 cortex-m-rt = "0.7"
 panic-halt  = "1"
