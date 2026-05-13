@@ -267,42 +267,53 @@ e2e:
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 			-p sphincs-tz-nonsecure --features e2e-test
 	@echo "==> Running e2e suite under QEMU"
-	@out=$$(qemu-system-arm \
+	@# Route semihosting output through a stdio chardev so we see live
+	@# progress AND can grep for assertions. `chardev null` (the previous
+	@# setting) silently discarded every `hprintln!` line, which masked
+	@# real test failures and made hangs invisible. The NS panic handler
+	@# uses panic-semihosting's `exit` feature (enabled via the
+	@# `e2e-test` cargo feature) so a failed assertion terminates QEMU
+	@# instead of looping forever — without that, this target would
+	@# never return on any test bug.
+	@log=$$(mktemp); \
+	qemu-system-arm \
 		-M mps2-an505 \
 		-monitor null \
 		-serial null \
-                -nographic \
-		-chardev null,id=hostio \
+		-nographic \
+		-chardev stdio,id=hostio \
 		-semihosting-config enable=on,target=native,chardev=hostio \
 		-kernel $(SECURE_ELF) \
-		-device loader,file=$(NONSECURE_ELF) 2>&1); \
-	echo "$$out"; \
+		-device loader,file=$(NONSECURE_ELF) </dev/null 2>&1 | tee $$log; \
 	echo "===================================="; \
 	fail=0; \
 	for line in \
-		"\\[S\\]\\[e2e\\] cmd_clear_sign dispatch = ZkClearSign" \
-		"\\[S\\]\\[e2e\\] cmd_clear_sign_msg dispatch = ZkClearSignMsg" \
-		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = ValueTransfer" \
-		"\\[S\\]\\[e2e\\] cmd_sign_userop dispatch = Erc20Known" \
-		"\\[E2E\\] zk_clear_sign = PASS" \
-		"\\[E2E\\] cowswap_pre_sign = PASS" \
-		"\\[E2E\\] cowswap_eip712_order = PASS" \
-		"\\[E2E\\] userop_value_transfer = PASS" \
-		"\\[E2E\\] userop_erc20 = PASS" \
-		"\\[E2E\\] neg_chain_id_mismatch = PASS" \
-		"\\[E2E\\] neg_tx_len_zero = PASS" \
-		"\\[E2E\\] neg_tx_len_overflow = PASS" \
-		"\\[E2E\\] neg_truncated_payload = PASS" \
-		"\\[E2E\\] neg_contract_creation = PASS" \
-		"\\[E2E\\] neg_bad_envelope = PASS" \
-		"\\[E2E\\] ALL TESTS PASSED"; do \
-		if echo "$$out" | grep -q "$$line"; then \
+		"\\[NS\\]\\[e2e\\] Scenario 1: register slot 1 on chain A" \
+		"\\[NS\\]\\[e2e\\] Scenario 2: repeat sign on chain A slot 1" \
+		"\\[NS\\]\\[e2e\\] Scenario 3: rotate to slot 2 on chain A" \
+		"\\[NS\\]\\[e2e\\] Scenario 4: register slot 1 on chain B" \
+		"\\[NS\\]\\[e2e\\] Scenario 5: Safe approveHash clear-sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5b: verified function-selector bundle" \
+		"\\[NS\\]\\[e2e\\] Scenario 5c: cross-check rejects mismatched selector" \
+		"\\[NS\\]\\[e2e\\] Scenario 5d: typed walker declines, blind-sign fallback" \
+		"\\[NS\\]\\[e2e\\] Scenario 5e: atomic batch sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5f: degenerate 1-tx batch" \
+		"\\[NS\\]\\[e2e\\] Scenario 5g: max-size batch" \
+		"\\[NS\\]\\[e2e\\] Scenario 5h: empty batch is refused" \
+		"\\[NS\\]\\[e2e\\] Scenario 5i: truncated inner-tx block is refused" \
+		"\\[NS\\]\\[e2e\\] Scenario 5j: self-attest typed render" \
+		"\\[NS\\]\\[e2e\\] Scenario 5k: self-attest keccak mismatch dropped" \
+		"\\[NS\\]\\[e2e\\] Scenario 5l: both selector trailers refused" \
+		"\\[NS\\]\\[e2e\\] Scenario 6: brute-force protection" \
+		"\\[NS\\]\\[e2e\\] === All scenarios passed! ==="; do \
+		if grep -q "$$line" $$log; then \
 			echo "  PASS  $$line"; \
 		else \
 			echo "  MISS  $$line"; \
 			fail=1; \
 		fi; \
 	done; \
+	rm -f $$log; \
 	if [ $$fail -eq 0 ]; then \
 		echo "==> e2e: ALL ASSERTIONS PASSED"; \
 		exit 0; \

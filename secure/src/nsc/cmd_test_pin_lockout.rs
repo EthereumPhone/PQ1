@@ -131,13 +131,20 @@ pub(super) unsafe fn run() -> u32 {
     super::zeroize_sensitive_state();
 
     // ── Pass B: MCU gate at MAX ──────────────────────────────────────
-    crate::ui::show_status("PIN lockout", "pass B...");
-
-    // Drive MCU counter to MAX without touching the SE pair. The MCU
-    // gate must still refuse a correct PIN — proves the gate alone
-    // blocks brute force, independent of the SE's own counter.
+    //
+    // The MCU page-124 attempt counter and the `gated_unlock` pre-commit
+    // exist only under `stm32u585` — on QEMU (`mock-se`) `gated_unlock`
+    // is a passthrough into the mock SE driver, so there is no gate to
+    // exercise here. Skip pass B entirely in that build. Pass A above
+    // already covers the SE-side wrong-PIN lockstep, which is the only
+    // brute-force guard the QEMU stack actually has.
     #[cfg(feature = "stm32u585")]
     {
+        crate::ui::show_status("PIN lockout", "pass B...");
+
+        // Drive MCU counter to MAX without touching the SE pair. The MCU
+        // gate must still refuse a correct PIN — proves the gate alone
+        // blocks brute force, independent of the SE's own counter.
         if crate::hw::flash::pin_attempts_reset().is_err() {
             secure_log!("[PIN-LOCKOUT] passB setup: pin_attempts_reset FAILED");
             return NscStatus::InternalError as u32;
@@ -157,31 +164,37 @@ pub(super) unsafe fn run() -> u32 {
             );
             return NscStatus::InternalError as u32;
         }
-    }
 
-    let gate_outcome = {
-        let se = &mut *core::ptr::addr_of_mut!(crate::SE);
-        super::gated_unlock(se, &CORRECT_PIN)
-    };
-    match gate_outcome {
-        Err(UnlockError::PinLocked) => {
-            secure_log!(
-                "[PIN-LOCKOUT] passB: MCU gate rejected correct PIN at MAX — PASS"
-            );
+        let gate_outcome = {
+            let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+            super::gated_unlock(se, &CORRECT_PIN)
+        };
+        match gate_outcome {
+            Err(UnlockError::PinLocked) => {
+                secure_log!(
+                    "[PIN-LOCKOUT] passB: MCU gate rejected correct PIN at MAX — PASS"
+                );
+            }
+            Ok(mut master) => {
+                use zeroize::Zeroize;
+                master.zeroize();
+                secure_log!(
+                    "[PIN-LOCKOUT] passB: MCU gate ACCEPTED correct PIN at MAX — FAIL"
+                );
+                crate::ui::show_status("PIN lockout", "gate bypass FAIL");
+                return NscStatus::CryptoError as u32;
+            }
+            Err(_e) => {
+                secure_log!("[PIN-LOCKOUT] passB: unexpected {:?}", _e);
+                return NscStatus::InternalError as u32;
+            }
         }
-        Ok(mut master) => {
-            use zeroize::Zeroize;
-            master.zeroize();
-            secure_log!(
-                "[PIN-LOCKOUT] passB: MCU gate ACCEPTED correct PIN at MAX — FAIL"
-            );
-            crate::ui::show_status("PIN lockout", "gate bypass FAIL");
-            return NscStatus::CryptoError as u32;
-        }
-        Err(_e) => {
-            secure_log!("[PIN-LOCKOUT] passB: unexpected {:?}", _e);
-            return NscStatus::InternalError as u32;
-        }
+    }
+    #[cfg(not(feature = "stm32u585"))]
+    {
+        secure_log!(
+            "[PIN-LOCKOUT] passB skipped — no MCU gate on QEMU (mock-se passthrough)"
+        );
     }
 
     // Cleanup: clear the MCU counter and re-unlock so pin_verified +

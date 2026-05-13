@@ -10,7 +10,12 @@ default = []
 # all four trust levels (value transfer, ERC20 known, BLIND SIGN,
 # ZK clear sign) in sequence and prints PASS/FAIL lines a host
 # harness can grep.
-e2e-test = []
+#
+# Enables panic-semihosting's `exit` feature so a failing assertion
+# inside the test runner terminates QEMU (via SYS_EXIT) instead of
+# spinning in `loop {}`. Without this, `make e2e` would hang forever
+# on any panic and the captured output buffer would never flush.
+e2e-test = ["panic-semihosting/exit"]
 # Replaces the interactive main() with a DWT-timed sign-userop bench.
 # Pairs with the secure crate's `e2e-test` feature (for auto-provision +
 # pre-unlock) and `stm32u585` (for the 160 MHz PLL path). Hardware only —
