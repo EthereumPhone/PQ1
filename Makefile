@@ -808,7 +808,7 @@ se050-admin-wipe-e2e:
 	@echo "==> Building SE050 admin-wipe e2e firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
-		-p sphincs-tz-secure --no-default-features --features se050-admin-wipe-e2e,ui-noop,stm32u585,debug-log
+		-p sphincs-tz-secure --no-default-features --features se050-admin-wipe-e2e,ui-noop,stm32u585,debug-log,e2e-test
 	@echo "==> Flashing admin-wipe e2e firmware..."
 	probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
 	@echo "==> Running admin-wipe e2e (watch semihosting output)..."
