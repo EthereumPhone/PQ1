@@ -152,6 +152,9 @@ tools/sca/
   fault_sweep_fw_verify.py   — fault sweep over the *real* fw-manifest verify chain (FW-update bypass direction)
   fault_sweep_ns_ptr.py      — fault sweep over the *real* secure::nsc::ptr_validate::validate_ns_{read,write}_ptr
                              —   predicates (TrustZone-boundary NS-pointer bypass direction)
+  fault_sweep_c10_sign.py    — end-to-end FI test of the *real* c10_sign_verified_with_progress
+                             —   (real sign + real verify + real F-1/F-2/F-5 gate); baseline + tiny tail sweep
+                             —   (full sweep deferred — unicorn ~14s per emulation for one C10 sign)
   leakage_kdf.py             — lascar leakage analysis: AES-256 / AES-GCM entropy wrap + a leaky-S-box positive control
   fi_target/                 — standalone thumbv8m crate: the fault-sweep targets, in one ELF (sca-fi-target)
     src/main.rs              —   #[path]-includes ../../../../secure/src/fi.rs verbatim (sca_fi_*),
@@ -172,6 +175,13 @@ tools/sca/
                              —     exports `sca_ns_validate_{read,write}` (plain) +
                              —     `sca_ns_validate_{read,write}_fi` (sentinel-wrapped); harness sweeps both
                              —     to validate any hardening candidates side-by-side with the production gate
+  c10_sign_target/           — standalone thumbv8m crate (own [workspace]): real `c10_sign_verified_with_progress`
+                             —   build.rs precomputes pk_root from a fixed sk_seed/pk_seed so the runtime path
+                             —     uses SigningKey::from_parts (cheap struct fill) instead of keygen — saves
+                             —     billions of unicorn-instructions per emulation
+                             —   src/main.rs exports `sca_c10_sign_plain` (raw sign, no gate),
+                             —     `sca_c10_sign_verified` (production gate, F-1/F-2/F-5 fixed), and
+                             —     `sca_c10_verify_real` (independent off-board verify for the harness)
   kdf_target/                — standalone thumbv8m crate (own [workspace]): the leakage targets, in ELF sca-kdf-target —
     src/main.rs              —   sca_leaky_sbox (out[i]=SBOX[in[i]^KEY[i]], the positive control),
                              —   sca_aes256_encrypt_block (the `aes` crate's AES-256, fixed key), and
@@ -695,3 +705,35 @@ the harness back to exit 1).
 to the mirror — the same `fi::check_true_into_sentinel` + `wait_random()` +
 sentinel-double-check sequence runs on every `NsPtr::validate_*` call from
 every `cmd_*.rs` gateway handler.
+
+## C10-sign end-to-end FI smoke — `fault_sweep_c10_sign.py` + `c10_sign_target/`
+
+`make c10-sign` runs the production `c10_sign_verified_with_progress`
+primitive — real `sphincs_c10::SigningKey::sign` + real `sphincs_c10::verify`
++ the real F-1/F-2/F-5 hardened gate — end-to-end inside one unicorn
+emulation, and independently verifies the produced signature via the
+mirror's `sca_c10_verify_real` entry point (loaded from the same ELF, fed
+the baked vendor pk_seed/pk_root). The gate's instruction-level FI
+robustness is comprehensively covered by `make c10` (gate logic, sign+verify
+stubbed) and `make fi` (sentinel-helper logic) — and `make c10v` covers the
+real `sphincs_c10::verify` for the forge-acceptance direction. What
+`make c10-sign` adds: empirical proof that the *combined* hardened
+primitive, with real internals end-to-end, produces a signature that
+validates under the intended message — exercising bit-for-bit the same code
+the secure firmware runs on every Type 1 / Type 2 sign.
+
+**Runtime note.** A full SPHINCS+C10 sign+verify in unicorn is ~5-10 B
+instructions, ~14 seconds wallclock per emulation on a modern desktop.
+A naive 500-position × 3-model fault sweep would therefore take ~2-3
+hours. So the harness runs:
+
+  1. **Baseline + off-board verify** — establishes the expected signature
+     and closes the loop independently. This alone is the meaningful test.
+  2. **A tiny tail-only fault sweep** (default `TAIL_DEPTH=20`, single
+     `skip` model) covering exactly the F-2/F-5 residual cmp+branch +
+     early Err-return + sig-write loop entry. The full sweep is the
+     follow-up; a QEMU TCG-JIT port (10-50× faster than unicorn) would
+     make a wider sweep tractable.
+
+`make c10-sign` exits 0 when the baseline validates and the tail sweep is
+clean.

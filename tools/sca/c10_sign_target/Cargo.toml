@@ -1,0 +1,39 @@
+# Standalone workspace — detached from the PQSigner workspace.
+# Mirrors `secure::crypto::c10_sign_verified_with_progress` (the production
+# FI-hardened signing primitive) and exposes the *real* `sphincs_c10::verify`
+# as a separate entry point for the harness to validate produced signatures.
+[workspace]
+
+[package]
+name = "sca-c10-sign-target"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "thumbv8m ELF wrapping the real `c10_sign_verified_with_progress` (the production FI-hardened signing primitive, post-F-1/F-2/F-5). Driven by tools/sca/fault_sweep_c10_sign.py. Sweeps the full sign+verify+gate path end-to-end for any single-fault that releases a corrupted signature."
+
+[[bin]]
+name = "sca-c10-sign-target"
+path = "src/main.rs"
+
+[dependencies]
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+panic-halt  = "1"
+# Required by the `#[path]`-included `secure/src/fi.rs` (sentinel zeroize).
+zeroize     = { version = "1", default-features = false }
+sphincs-c10 = { path = "../../../sphincs-c10" }
+
+[build-dependencies]
+# build.rs precomputes pk_root once so the runtime sign+verify+gate paths
+# can construct a SigningKey via `from_parts` (cheap — struct fill, no
+# hypertree work). Trims the per-emulation cost from ~7.5M → ~5M instructions.
+sphincs-c10 = { path = "../../../sphincs-c10" }
+
+[profile.release]
+opt-level = 3
+
+[profile.release.package.sphincs-c10]
+opt-level = 3
+
+[profile.release.package.sha2]
+opt-level = 3

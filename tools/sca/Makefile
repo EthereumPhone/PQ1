@@ -32,9 +32,11 @@ FWV_DIR  := fw_verify_target
 FWV_ELF  := $(FWV_DIR)/target/$(TARGET)/release/sca-fw-verify-target
 NSP_DIR  := ns_ptr_target
 NSP_ELF  := $(NSP_DIR)/target/$(TARGET)/release/sca-ns-ptr-target
+C10S_DIR := c10_sign_target
+C10S_ELF := $(C10S_DIR)/target/$(TARGET)/release/sca-c10-sign-target
 DONJON   ?= donjon-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr fi fi-twofault c10 pin c10v fw-verify ns-ptr kdf sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign kdf sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -61,6 +63,11 @@ build-ns-ptr: $(NSP_ELF)
 $(NSP_ELF): $(NSP_DIR)/src/main.rs $(NSP_DIR)/memory.x $(NSP_DIR)/build.rs $(NSP_DIR)/Cargo.toml ../../secure/src/nsc/ptr_validate.rs ../../secure/src/fi.rs
 	cargo build --release --target $(TARGET) --manifest-path $(NSP_DIR)/Cargo.toml
 
+build-c10-sign: $(C10S_ELF)
+
+$(C10S_ELF): $(C10S_DIR)/src/main.rs $(C10S_DIR)/memory.x $(C10S_DIR)/build.rs $(C10S_DIR)/Cargo.toml ../../sphincs-c10/src/lib.rs ../../secure/src/fi.rs
+	cargo build --release --target $(TARGET) --manifest-path $(C10S_DIR)/Cargo.toml
+
 fi: build
 	$(DONJON) run fault_sweep_fi.py
 
@@ -82,6 +89,9 @@ fw-verify: build-fw-verify
 ns-ptr: build-ns-ptr
 	$(DONJON) run fault_sweep_ns_ptr.py
 
+c10-sign: build-c10-sign
+	$(DONJON) run fault_sweep_c10_sign.py
+
 kdf: build-kdf
 	$(DONJON) run leakage_kdf.py
 
@@ -96,3 +106,4 @@ clean:
 	cargo clean --manifest-path $(C10V_DIR)/Cargo.toml
 	cargo clean --manifest-path $(FWV_DIR)/Cargo.toml
 	cargo clean --manifest-path $(NSP_DIR)/Cargo.toml
+	cargo clean --manifest-path $(C10S_DIR)/Cargo.toml
