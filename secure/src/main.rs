@@ -52,6 +52,12 @@ mod tx;
 // tests exercise the same function against the NIST SP 800-38B
 // AES-256 vectors. No hardware deps.
 mod cmac;
+// Pure-logic SE050 SCP03 primitives (AES-128 ECB/CBC, CMAC-AES-128, the
+// GP `PUT KEY` APDU builder, KCV, OEF-`0xA921` factory key constants).
+// Always compiled — `se050::scp03` (which is `feature="se050"` /
+// `not(test)`-gated) imports from here, and the host test build runs the
+// NIST FIPS 197 / SP 800-38B vectors + the GP layout assertions.
+mod scp03_logic;
 // ISO 7816-4 BER-TLV decoder + UPCTR PIN-counter parser. Pure
 // functions, no hardware deps — always-on so the fuzz_props proptest
 // harness can hammer them on host. The hardware-gated `se050::apdu`
