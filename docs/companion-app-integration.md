@@ -902,6 +902,91 @@ the device shows a human-friendly confirmation page when:
 Otherwise the device shows raw `(to, value, calldata hex)` so the user
 can still reason about the call. See [§12](#12-erc-20--zk-clear-sign-trailers).
 
+### 11.8 Off-chain Signing (EIP-1271 / ERC-6492)
+
+For signature requests that **don't** turn into a UserOp — dapp logins
+(SIWE), order signing (Cowswap, Permit2), gasless off-chain receipts —
+the companion calls `INS_V2_SIGN_OFFCHAIN` (0x62). Two output modes
+are selected by the input `flags` byte:
+
+```
+Header (17 bytes):
+  [ 0..  1)  account_index    (u8)
+  [ 1..  9)  chain_id         (u64 BE)
+  [ 9.. 13)  slot_index       (u32 BE)
+  [13.. 14)  kind             (u8: 0 = RAW32, 1 = PERSONAL_SIGN)
+  [14.. 16)  payload_len      (u16 BE)
+  [16.. 17)  flags            (u8 — bit 0 = OFFCHAIN_FLAG_ACCOUNT_DEPLOYED)
+  [17..   )  payload          (32 B for RAW32, raw message bytes ≤700 for PERSONAL_SIGN)
+```
+
+**Companion responsibility — set the `account_deployed` bit:** before
+each call, the companion checks `eth_getCode(predicted_address)` on
+the target chain. If the response is non-empty, set bit 0
+(`OFFCHAIN_FLAG_ACCOUNT_DEPLOYED = 0x01`); otherwise clear it.
+
+#### Deployed path (bit set) — 4016 B response
+
+```
+[new_local_offchain_count (8 B BE)]
+[C10 sig (4008 B)]
+```
+
+The companion wraps as `abi.encode(uint256 ownerIndex, bytes c10Sig)`
+with `ownerIndex = slot_index + 1`, and the dapp calls
+`wallet.isValidSignature(rawHash, wrappedSig)`. Byte-identical to the
+pre-EIP-6492 wire format.
+
+#### Counterfactual path (bit clear) — 8616 B response
+
+```
+[new_local_offchain_count (8 B BE)]
+[ERC-6492 wrapped sig (8608 B)]
+   = abi.encode(
+       address factory,           // PQ_SMART_WALLET_FACTORY
+       bytes   factoryCalldata,   // = initCode[20..]  (4260 B)
+       bytes   signatureWrapper)  // abi.encode(1, c10Sig) (4128 B)
+   || 0x6492649264926492649264926492649264926492649264926492649264926492
+```
+
+The companion passes the 8608-byte blob to the dapp as the signature.
+Any EIP-6492-aware verifier (viem `verifyMessage`, Solady
+`SignatureCheckerLib.isValidERC6492SignatureNow`, Ambire
+`UniversalSigValidator`) detects the magic suffix, ABI-decodes the
+tuple, deploys the wallet via the factory call inside a single
+`eth_call`, and then runs `isValidSignature` against the freshly-
+deployed account — all in one round trip, no on-chain state change.
+
+**Constraints on the counterfactual path:**
+
+- `slot_index` MUST be `0`. The factory's `createAccount(...)` only
+  seeds bootstrap (ownerIndex 0) + slot 0 (ownerIndex 1); a wrapped
+  sig on any other slot is unverifiable after the factory call runs.
+  The firmware rejects with `InvalidPointer` otherwise.
+- On a never-used wallet the firmware auto-registers slot 0 with
+  `local_offchain = last_userop = 0` before bumping. Subsequent calls
+  follow the normal gap (≤ `MAX_OFFCHAIN_GAP`) and combined-cap
+  (≤ `MAX_SLOT_USES`) logic.
+- The off-chain counter still bumps. Once the wallet is eventually
+  deployed by a Type 1 UserOp, the existing
+  `executeWithOffchainCount(...)` publish path overwrites the
+  on-chain `offchainSigCount[1]` to reflect any 6492-signed off-chain
+  history.
+
+**Workflow:**
+
+```
+1. accountDeployed ← (eth_getCode(predicted) != "0x")
+2. flags = accountDeployed ? 0x01 : 0x00
+3. SIGN_OFFCHAIN(account=N, chain=C, slot=accountDeployed ? K : 0,
+                 kind=PERSONAL_SIGN, msg, flags)
+   → response: 4016 B (deployed) | 8616 B (counterfactual)
+4. Strip the leading 8 B count; the remainder is the dapp-shaped sig.
+   - Deployed: wrap as abi.encode(slot+1, c10Sig) before passing to the dapp.
+   - Counterfactual: pass the 8608 B blob through unchanged — it is
+     already EIP-6492-compatible.
+```
+
 ---
 
 ## 12. ERC-20 & ZK Clear-Sign Trailers

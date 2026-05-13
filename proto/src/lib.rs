@@ -358,6 +358,28 @@ pub const CMD_GET_INIT_CODE: u32 = 15;
 /// resolves this by registering a new slot index (Type 1 via
 /// `CMD_SIGN_USEROP` with `FLAG_REGISTER_SLOT`) before retrying.
 ///
+/// EIP-6492 (Signature Validation for Predeploy Contracts):
+///
+/// The companion sets `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED` in the new
+/// `flags` byte (offset 16) when the smart-wallet contract has already
+/// been deployed at its CREATE2 address. When that flag is **clear**,
+/// the firmware emits an [ERC-6492][eip6492]-wrapped signature that
+/// carries the factory address + factory calldata in the sig itself, so
+/// any EIP-6492-aware verifier (Solady `SignatureCheckerLib`, Ambire
+/// `UniversalSigValidator`, viem `verifyMessage`, …) can deploy the
+/// wallet and verify the inner EIP-1271 sig in a single `eth_call` —
+/// before the user has ever paid for the deploy. Constraints:
+///   * `slot_index` MUST be `0` when the deployed flag is clear: the
+///     factory's `createAccount` only seeds bootstrap (ownerIndex 0) +
+///     slot 0 (ownerIndex 1), so 6492-wrapping any other slot is
+///     unverifiable.
+///   * On a never-used wallet, slot 0 is unregistered. The 6492 path
+///     auto-registers it (`local_offchain=0, last_userop=0`) before
+///     bumping. Subsequent calls find it registered and follow the
+///     normal gap/cap logic.
+///
+/// [eip6492]: https://eips.ethereum.org/EIPS/eip-6492
+///
 /// Wire layout:
 ///   * `arg0` — NS read buffer (`SIGN_OFFCHAIN_HEADER_LEN +
 ///     payload_len` bytes, capped at `SIGN_OFFCHAIN_INPUT_MAX_LEN`):
@@ -366,11 +388,22 @@ pub const CMD_GET_INIT_CODE: u32 = 15;
 ///       [ 9..13)  slot_index     (u32 BE)
 ///       [13..14)  kind           (u8: 0=raw32, 1=personal_sign)
 ///       [14..16)  payload_len    (u16 BE)
-///       [16..)    payload (`payload_len` bytes — 32 for raw32, the
+///       [16..17)  flags          (u8 — bit 0 = `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED`;
+///                                 other bits MUST be zero)
+///       [17..)    payload (`payload_len` bytes — 32 for raw32, the
 ///                 raw message for personal_sign)
-///   * `arg1` — NS write buffer, `SIGN_OFFCHAIN_OUTPUT_LEN` bytes:
-///       [ 0.. 8)  new_local_offchain_count (u64 BE, post-bump)
-///       [ 8..4016) C10 sig (4008 bytes)
+///   * `arg1` — NS write buffer. Length depends on the deployed flag:
+///       - flag set (deployed): `SIGN_OFFCHAIN_OUTPUT_LEN` = 4016 bytes:
+///           [ 0.. 8)  new_local_offchain_count (u64 BE, post-bump)
+///           [ 8..4016) C10 sig (4008 bytes)
+///       - flag clear (counterfactual): `SIGN_OFFCHAIN_OUTPUT_LEN_6492`
+///         = 8616 bytes:
+///           [ 0.. 8)            new_local_offchain_count (u64 BE)
+///           [ 8.. 8+EIP6492_BLOB_LEN) ERC-6492 wrapped sig:
+///             `abi.encode(address factory, bytes factoryCalldata,
+///              bytes signatureWrapper) || EIP6492_MAGIC` where
+///             `signatureWrapper = abi.encode(uint256 ownerIndex,
+///              bytes c10Sig)` with `ownerIndex = slot_index + 1 = 1`.
 ///   * `arg2` — input length (must equal
 ///     `SIGN_OFFCHAIN_HEADER_LEN + payload_len`).
 pub const CMD_SIGN_OFFCHAIN: u32 = 16;
@@ -836,16 +869,30 @@ pub const EXECUTE_SELECTOR: [u8; 4] = [0x14, 0x44, 0x3c, 0x57];
 pub const MAX_OFFCHAIN_GAP: u64 = 5;
 
 /// CMD_SIGN_OFFCHAIN payload layout. The input is variable-length:
-/// fixed 16-byte header followed by `payload_len` bytes whose meaning
+/// fixed 17-byte header followed by `payload_len` bytes whose meaning
 /// depends on the `kind` byte at `[13]` — see the doc on
-/// [`CMD_SIGN_OFFCHAIN`] for the two supported modes.
-pub const SIGN_OFFCHAIN_HEADER_LEN: usize = 1 + 8 + 4 + 1 + 2; // 16
+/// [`CMD_SIGN_OFFCHAIN`] for the two supported modes. The `flags` byte
+/// at `[16]` carries the EIP-6492 `account_deployed` bit.
+pub const SIGN_OFFCHAIN_HEADER_LEN: usize = 1 + 8 + 4 + 1 + 2 + 1; // 17
 pub const SIGN_OFFCHAIN_INPUT_ACCOUNT_OFF: usize = 0;
 pub const SIGN_OFFCHAIN_INPUT_CHAIN_OFF: usize = 1;
 pub const SIGN_OFFCHAIN_INPUT_SLOT_OFF: usize = 9;
 pub const SIGN_OFFCHAIN_INPUT_KIND_OFF: usize = 13;
 pub const SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF: usize = 14;
-pub const SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF: usize = 16;
+pub const SIGN_OFFCHAIN_INPUT_FLAGS_OFF: usize = 16;
+pub const SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF: usize = 17;
+
+/// Bit 0 of the `flags` byte at `SIGN_OFFCHAIN_INPUT_FLAGS_OFF`. When
+/// **set**, the wallet is already deployed at its CREATE2 address and
+/// firmware emits the legacy bare-sig wire (`SIGN_OFFCHAIN_OUTPUT_LEN`
+/// bytes, byte-identical to pre-EIP-6492 builds). When **clear**,
+/// firmware emits an ERC-6492 wrapped signature
+/// (`SIGN_OFFCHAIN_OUTPUT_LEN_6492` bytes) that any 6492-aware verifier
+/// can deploy-and-verify in one `eth_call`. The companion picks the
+/// flag via `eth_getCode(predicted_address)`.
+pub const OFFCHAIN_FLAG_ACCOUNT_DEPLOYED: u8 = 1 << 0;
+/// Mask of currently-defined flag bits. Reserved bits MUST be zero.
+pub const OFFCHAIN_FLAGS_MASK: u8 = OFFCHAIN_FLAG_ACCOUNT_DEPLOYED;
 
 /// Maximum personal-sign message length the firmware is willing to
 /// surface on the trusted display. 700 bytes covers a comfortable SIWE
@@ -865,10 +912,76 @@ pub const SIGN_OFFCHAIN_INPUT_MAX_LEN: usize =
 pub const OFFCHAIN_KIND_RAW32: u8 = 0;
 pub const OFFCHAIN_KIND_PERSONAL_SIGN: u8 = 1;
 
-/// CMD_SIGN_OFFCHAIN response: post-bump count then C10 sig.
+/// CMD_SIGN_OFFCHAIN response (deployed path): post-bump count then C10
+/// sig. Selected when `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED` is set in the
+/// input `flags` byte. Byte-identical to the pre-EIP-6492 wire format.
 pub const SIGN_OFFCHAIN_OUTPUT_LEN: usize = 8 + C10_SIG_LEN; // 4016
 pub const SIGN_OFFCHAIN_OUTPUT_COUNT_OFF: usize = 0;
 pub const SIGN_OFFCHAIN_OUTPUT_SIG_OFF: usize = 8;
+
+/// Length of the `factoryCalldata` field that the firmware writes into
+/// an ERC-6492 wrapped sig. Equal to the full `initCode` minus the
+/// 20-byte factory address prefix — i.e. `selector || 5 static args ||
+/// bytes(offset, len, padded sig)`.
+pub const EIP6492_FACTORY_CALLDATA_LEN: usize = PQ_INIT_CODE_LEN - 20; // 4260
+
+/// Padded length of `factoryCalldata` inside the ABI tuple (rounded up
+/// to the next 32-byte boundary). The padding bytes are zero.
+pub const EIP6492_FACTORY_CALLDATA_PADDED: usize =
+    (EIP6492_FACTORY_CALLDATA_LEN + 31) / 32 * 32; // 4288
+
+/// Length of the inner ERC-1271 signature carried inside an ERC-6492
+/// wrapper. The firmware places the on-chain `SignatureWrapper`
+/// `abi.encode(uint256 ownerIndex, bytes c10Sig)` here — already
+/// 32-byte aligned, so no padding is added by the outer tuple encoder.
+pub const EIP6492_INNER_WRAPPER_LEN: usize = SIG_WRAPPER_LEN; // 4128
+
+/// Length of the ERC-6492 wrapped signature blob written into the
+/// output buffer at offset 8 when `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED` is
+/// **clear**.
+///
+/// ABI encoding of `(address factory, bytes fc, bytes sig)`: `address`
+/// is static and lives inline as the first 32-byte slot of the head;
+/// the two `bytes` args contribute one 32-byte offset slot each. Total
+/// head = 96 bytes.
+///
+/// ```text
+///   tuple head:
+///     [ 0..32)   factory (right-aligned, static — counts as one head slot)
+///     [32..64)   offset to fc                  = 0x60
+///     [64..96)   offset to sig                 = 0x60 + 32 + fc_padded
+///   tuple tail:
+///     [96..128)              fc length
+///     [128..128+fc_padded)   fc bytes + zero pad
+///     [..+32)                sig length
+///     [..+inner)             sig bytes (already 32-aligned)
+///   suffix:
+///     [last 32)              EIP6492_MAGIC
+/// ```
+pub const EIP6492_BLOB_LEN: usize = 96
+    + 32
+    + EIP6492_FACTORY_CALLDATA_PADDED
+    + 32
+    + EIP6492_INNER_WRAPPER_LEN
+    + 32; // 8608
+
+/// CMD_SIGN_OFFCHAIN response (counterfactual / ERC-6492 path):
+/// post-bump count then the wrapped sig blob.
+pub const SIGN_OFFCHAIN_OUTPUT_LEN_6492: usize = 8 + EIP6492_BLOB_LEN; // 8616
+
+/// Largest possible CMD_SIGN_OFFCHAIN response across both wire modes.
+/// Used by the host-side USB transport to size its response buffer.
+pub const SIGN_OFFCHAIN_OUTPUT_LEN_MAX: usize = SIGN_OFFCHAIN_OUTPUT_LEN_6492;
+
+/// ERC-6492 magic suffix — the 32 bytes that mark a wrapped signature.
+/// Verifiers check `sig[sig.len()-32..] == EIP6492_MAGIC` to detect the
+/// wrapping. Value: `0x6492 ... 6492` (16 repetitions).
+pub const EIP6492_MAGIC: [u8; 32] = [
+    0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92,
+    0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92,
+    0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92,
+    0x64, 0x92, 0x64, 0x92, 0x64, 0x92, 0x64, 0x92,
+];
 
 /// CMD_OFFCHAIN_STATUS payload layout (same prefix as SIGN_OFFCHAIN's
 /// first 13 bytes).
@@ -944,7 +1057,7 @@ pub const PQ_ADD_OWNER_BYTES_SELECTOR: [u8; 4] = [0x10, 0x14, 0x90, 0xcb];
 ///     || slot0PkSeed(32)
 ///     || slot0PkRoot(32)
 ///     || chainId (padded to uint256) (32)
-///     || abi-encoded bytes offset = 0xE0 (32)
+///     || abi-encoded bytes offset = 0xC0 (32)   // = 6 × 32 (head size)
 ///     || bytes length = 4008 (32)
 ///     || bytes data padded to 32-byte boundary = 4032
 /// ```
@@ -1560,6 +1673,60 @@ mod tests {
         let fw_vk_len =
             u16::from_be_bytes([buf[tx_end], buf[tx_end + 1]]) as usize;
         assert_eq!(fw_vk_len, vk_len);
+    }
+
+    // ── CMD_SIGN_OFFCHAIN / EIP-6492 layout ───────────────────────────
+
+    #[test]
+    fn sign_offchain_header_includes_flags_byte() {
+        // 17 bytes: account(1) + chain(8) + slot(4) + kind(1) + payload_len(2) + flags(1)
+        assert_eq!(SIGN_OFFCHAIN_HEADER_LEN, 17);
+        assert_eq!(SIGN_OFFCHAIN_INPUT_FLAGS_OFF, 16);
+        assert_eq!(SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF, 17);
+    }
+
+    #[test]
+    fn sign_offchain_flags_mask_covers_defined_bits() {
+        assert_eq!(OFFCHAIN_FLAGS_MASK, OFFCHAIN_FLAG_ACCOUNT_DEPLOYED);
+        assert_eq!(OFFCHAIN_FLAG_ACCOUNT_DEPLOYED & 0b1111_1110, 0);
+    }
+
+    #[test]
+    fn sign_offchain_output_lens() {
+        assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN, 4016);
+        assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN_6492, 8 + EIP6492_BLOB_LEN);
+        assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN_MAX, SIGN_OFFCHAIN_OUTPUT_LEN_6492);
+    }
+
+    #[test]
+    fn eip6492_sizes() {
+        // initCode (4280) − factory(20) = 4260 bytes of calldata
+        assert_eq!(EIP6492_FACTORY_CALLDATA_LEN, 4260);
+        // 4260 → next multiple of 32 = 4288 (28 bytes zero pad)
+        assert_eq!(EIP6492_FACTORY_CALLDATA_PADDED, 4288);
+        // Inner wrapper already 32-aligned
+        assert_eq!(EIP6492_INNER_WRAPPER_LEN, 4128);
+        assert_eq!(EIP6492_INNER_WRAPPER_LEN % 32, 0);
+        // 96 head (incl. inline factory slot) + 32 fc_len + 4288 fc + 32 sig_len
+        // + 4128 sig + 32 magic
+        assert_eq!(EIP6492_BLOB_LEN, 96 + 32 + 4288 + 32 + 4128 + 32);
+        assert_eq!(EIP6492_BLOB_LEN, 8608);
+    }
+
+    #[test]
+    fn eip6492_magic_is_repeating_6492() {
+        for chunk in EIP6492_MAGIC.chunks(2) {
+            assert_eq!(chunk, &[0x64, 0x92]);
+        }
+        // Spec value: 0x6492649264926492649264926492649264926492649264926492649264926492
+        assert_eq!(EIP6492_MAGIC.len(), 32);
+    }
+
+    #[test]
+    fn max_sign_response_bounds_eip6492_output() {
+        // The USB SIG_BUF is sized to MAX_SIGN_RESPONSE_LEN; it must also
+        // accommodate the largest possible CMD_SIGN_OFFCHAIN response.
+        assert!(MAX_SIGN_RESPONSE_LEN >= SIGN_OFFCHAIN_OUTPUT_LEN_MAX);
     }
 }
 

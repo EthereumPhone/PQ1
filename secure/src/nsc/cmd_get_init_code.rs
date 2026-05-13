@@ -39,9 +39,8 @@
 //!   * `c10_sk` is stack-local and dropped before return; ZeroizeOnDrop
 //!     wipes the secret key before the function exits.
 
-use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
-    NscStatus, C10_SIG_LEN, MAX_ACCOUNT_INDEX, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
+    EIP6492_FACTORY_CALLDATA_LEN, MAX_ACCOUNT_INDEX, NscStatus, PQ_INIT_CODE_LEN,
     PQ_SMART_WALLET_FACTORY,
 };
 use zeroize::{Zeroize, Zeroizing};
@@ -50,19 +49,8 @@ use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
 
-/// Must match `cmd_sign_userop::FACTORY_ADD_SLOT_DOMAIN` and the
-/// on-chain `PQSmartWalletFactory.FACTORY_ADD_SLOT_DOMAIN`.
-const FACTORY_ADD_SLOT_DOMAIN: &[u8] = b"pqwallet-factory-add-slot";
-
 /// Wire layout of the 12-byte input body.
 const INPUT_LEN: usize = 12;
-
-#[inline]
-fn sha256(bytes: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(bytes);
-    h.finalize().into()
-}
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // HIGH-7 guard: the bootstrap + slot C10 keygens keep stack-local
@@ -224,53 +212,34 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         s.bootstrap_cache_insert(account_index, master_pk_seed_32, master_pk_root_32);
     });
 
-    // ── 7. Sign the factory-add-slot message ─────────────────────────
-    crate::ui::show_status("Factory", "signing slot-0");
-    let mut factory_msg = [0u8; 25 + 8 + 32 + 32];
-    factory_msg[..25].copy_from_slice(FACTORY_ADD_SLOT_DOMAIN);
-    factory_msg[25..33].copy_from_slice(&chain_id.to_be_bytes());
-    factory_msg[33..65].copy_from_slice(&slot_pk_seed_32);
-    factory_msg[65..97].copy_from_slice(&slot_pk_root_32);
-    let factory_digest = sha256(&factory_msg);
-
-    let factory_sig = match crate::crypto::c10_sign_verified_with_progress(
-        &c10_sk,
-        &factory_digest,
-        |p| crate::ui::show_progress("C10 sign", p),
-    ) {
-        Ok(s) => s,
-        Err(_) => {
-            crate::ui::show_status("InitCode", "C10 sign fail");
-            return NscStatus::CryptoError as u32;
-        }
-    };
-    // c10_sk drops here → ZeroizeOnDrop wipes sk_seed on the stack.
-    drop(c10_sk);
-
-    // ── 8. Assemble the 4280-byte initCode ───────────────────────────
+    // ── 7. Sign the factory-add-slot message + assemble initCode ────
     //
-    // Identical layout to `cmd_sign_userop.rs` §13a. Any divergence
-    // here would silently corrupt the submitted deploy; keep the two
-    // writers in lock-step.
+    // Both the factory-msg signature and the surrounding ABI layout
+    // are produced by `factory_calldata::build` — the single source of
+    // truth shared with `cmd_sign_offchain`'s ERC-6492 path. Any
+    // divergence between the two callers would silently corrupt either
+    // the first-deploy initCode or every ERC-6492 wrapped sig.
+    crate::ui::show_status("Factory", "signing slot-0");
     let mut ic = Zeroizing::new([0u8; PQ_INIT_CODE_LEN]);
     ic[..20].copy_from_slice(&PQ_SMART_WALLET_FACTORY);
-    ic[20..24].copy_from_slice(&PQ_CREATE_ACCOUNT_SELECTOR);
-    ic[24..56].copy_from_slice(&master_pk_seed_32);
-    ic[56..88].copy_from_slice(&master_pk_root_32);
-    ic[88..120].copy_from_slice(&slot_pk_seed_32);
-    ic[120..152].copy_from_slice(&slot_pk_root_32);
-    // chainId left-padded to uint256 at slot 4.
-    ic[152 + 24..184].copy_from_slice(&chain_id.to_be_bytes());
-    // Dynamic-bytes head: offset = 6 × 32 = 192 (0xC0); length = 4008.
-    let offset_field_start = 24 + 5 * 32;
-    ic[offset_field_start + 24..offset_field_start + 32]
-        .copy_from_slice(&(6 * 32u64).to_be_bytes());
-    let length_field_start = offset_field_start + 32;
-    ic[length_field_start + 24..length_field_start + 32]
-        .copy_from_slice(&(C10_SIG_LEN as u64).to_be_bytes());
-    let data_start = length_field_start + 32;
-    ic[data_start..data_start + C10_SIG_LEN].copy_from_slice(&factory_sig);
-    debug_assert_eq!(data_start + 4032, PQ_INIT_CODE_LEN);
+
+    let calldata_slice: &mut [u8; EIP6492_FACTORY_CALLDATA_LEN] =
+        (&mut ic[20..]).try_into().expect("init_code tail is 4260 B");
+    if let Err(status) = super::factory_calldata::build(
+        calldata_slice,
+        chain_id,
+        &c10_sk,
+        &master_pk_seed_32,
+        &master_pk_root_32,
+        &slot_pk_seed_32,
+        &slot_pk_root_32,
+        |p| crate::ui::show_progress("C10 sign", p),
+    ) {
+        crate::ui::show_status("InitCode", "C10 sign fail");
+        return status as u32;
+    }
+    // c10_sk drops here → ZeroizeOnDrop wipes sk_seed on the stack.
+    drop(c10_sk);
 
     // ── 9. Write output to NS via volatile stores ───────────────────
     for i in 0..PQ_INIT_CODE_LEN {

@@ -41,11 +41,14 @@
 //!     path.
 
 use sphincs_tz_shared::{
-    NscStatus, MAX_ACCOUNT_INDEX, MAX_OFFCHAIN_GAP, MAX_OFFCHAIN_PERSONAL_SIGN_LEN, MAX_SLOT_USES,
-    OFFCHAIN_KIND_PERSONAL_SIGN, OFFCHAIN_KIND_RAW32, SIGNATURE_LEN,
-    SIGN_OFFCHAIN_HEADER_LEN, SIGN_OFFCHAIN_INPUT_KIND_OFF, SIGN_OFFCHAIN_INPUT_MAX_LEN,
+    EIP6492_BLOB_LEN, EIP6492_FACTORY_CALLDATA_LEN, MAX_ACCOUNT_INDEX, MAX_OFFCHAIN_GAP,
+    MAX_OFFCHAIN_PERSONAL_SIGN_LEN, MAX_SLOT_USES, NscStatus, OFFCHAIN_FLAGS_MASK,
+    OFFCHAIN_FLAG_ACCOUNT_DEPLOYED, OFFCHAIN_KIND_PERSONAL_SIGN, OFFCHAIN_KIND_RAW32,
+    PQ_SMART_WALLET_FACTORY, SIGNATURE_LEN, SIGN_OFFCHAIN_HEADER_LEN,
+    SIGN_OFFCHAIN_INPUT_FLAGS_OFF, SIGN_OFFCHAIN_INPUT_KIND_OFF, SIGN_OFFCHAIN_INPUT_MAX_LEN,
     SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF, SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF,
-    SIGN_OFFCHAIN_OUTPUT_COUNT_OFF, SIGN_OFFCHAIN_OUTPUT_LEN, SIGN_OFFCHAIN_OUTPUT_SIG_OFF,
+    SIGN_OFFCHAIN_OUTPUT_COUNT_OFF, SIGN_OFFCHAIN_OUTPUT_LEN, SIGN_OFFCHAIN_OUTPUT_LEN_6492,
+    SIGN_OFFCHAIN_OUTPUT_SIG_OFF, SIG_WRAPPER_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -77,6 +80,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if !validate_ns_read_ptr(args.arg0, total_len) {
         return NscStatus::InvalidPointer as u32;
     }
+    // NS-write-buffer length depends on the flags byte (deployed → bare
+    // 4016 B; counterfactual → ERC-6492 wrapped 8616 B). Validate
+    // against the larger size after we've read the flag byte; for now,
+    // validate the smaller deployed size so any unmapped output buffer
+    // fails fast before we touch SE state. The 6492-path write below
+    // performs its own larger validation immediately after parsing the
+    // flag.
     if !validate_ns_write_ptr(args.arg1, SIGN_OFFCHAIN_OUTPUT_LEN) {
         return NscStatus::InvalidPointer as u32;
     }
@@ -106,12 +116,38 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         snap[SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF],
         snap[SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF + 1],
     ]) as usize;
+    let flags = snap[SIGN_OFFCHAIN_INPUT_FLAGS_OFF];
 
     if account_index > MAX_ACCOUNT_INDEX {
         return NscStatus::InvalidPointer as u32;
     }
     if SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF + payload_len != total_len {
         crate::ui::show_status("EIP-1271", "bad payload_len");
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // Flags: only `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED` (bit 0) is defined.
+    // Any other bit set is either a wire-format error or a bit-flip;
+    // reject so a stale companion can't accidentally request an
+    // unimplemented mode.
+    if flags & !OFFCHAIN_FLAGS_MASK != 0 {
+        crate::ui::show_status("EIP-1271", "bad flags");
+        return NscStatus::InvalidPointer as u32;
+    }
+    let account_deployed = flags & OFFCHAIN_FLAG_ACCOUNT_DEPLOYED != 0;
+
+    // ERC-6492 path constraint: the factory's `createAccount(...)`
+    // seeds only ownerIndex 0 (bootstrap) + ownerIndex 1 (slot 0). A
+    // wrapped sig on any other slot is unverifiable because that slot
+    // doesn't exist after the factory call runs. Refuse early.
+    if !account_deployed && slot_index != 0 {
+        crate::ui::show_status("EIP-1271", "6492 needs slot 0");
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // When ERC-6492 wrapping is requested, the output buffer is
+    // larger. Validate the full extent now that we know the mode.
+    if !account_deployed && !validate_ns_write_ptr(args.arg1, SIGN_OFFCHAIN_OUTPUT_LEN_6492) {
         return NscStatus::InvalidPointer as u32;
     }
 
@@ -142,8 +178,22 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let slot_flash_key =
         crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);
     if !crate::offchain_state::offchain_count_is_registered(&slot_flash_key) {
-        crate::ui::show_status("EIP-1271", "slot unregistered");
-        return NscStatus::OffchainSlotUnregistered as u32;
+        // ERC-6492 path on a never-used wallet: auto-register slot 0
+        // with `local_offchain = last_userop = 0`. This is bounded
+        // safe — the only way a caller can ride this branch on a slot
+        // with prior on-chain history is by lying about
+        // `account_deployed`, but a wallet that's actually deployed
+        // has its slot 0 registered already (by the matching Type 1
+        // UserOp), so this branch is a no-op there.
+        if !account_deployed && slot_index == 0 {
+            if crate::offchain_state::offchain_count_register_slot(&slot_flash_key).is_err() {
+                crate::ui::show_status("EIP-1271", "register fail");
+                return NscStatus::InternalError as u32;
+            }
+        } else {
+            crate::ui::show_status("EIP-1271", "slot unregistered");
+            return NscStatus::OffchainSlotUnregistered as u32;
+        }
     }
 
     // ── 6. Gap + cap checks (firmware-side defence in depth) ────────
@@ -255,6 +305,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 new_count,
                 last_userop,
                 MAX_SLOT_USES,
+                account_deployed,
             ),
             _ => crate::tx::display::render_eip1271_raw32_pages(
                 chain_id,
@@ -264,6 +315,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 new_count,
                 last_userop,
                 MAX_SLOT_USES,
+                account_deployed,
             ),
         };
         match confirm(pages.as_slice()) {
@@ -356,7 +408,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InternalError as u32;
     }
 
-    // ── 14. Write response: [count_be8] [c10_sig] ───────────────────
+    // ── 14. Write response ──────────────────────────────────────────
+    //
+    // Two wire modes:
+    //   * deployed: `[count(8)] [c10_sig(4008)]`              = 4016 B
+    //   * 6492:     `[count(8)] [eip6492 blob(8608)]`         = 8616 B
     let count_be = new_count.to_be_bytes();
     for i in 0..8 {
         core::ptr::write_volatile(
@@ -364,8 +420,102 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             count_be[i],
         );
     }
-    for i in 0..SIGNATURE_LEN {
-        core::ptr::write_volatile(out_ptr.add(SIGN_OFFCHAIN_OUTPUT_SIG_OFF + i), sig[i]);
+
+    if account_deployed {
+        // Existing path — byte-identical to pre-EIP-6492 builds.
+        for i in 0..SIGNATURE_LEN {
+            core::ptr::write_volatile(out_ptr.add(SIGN_OFFCHAIN_OUTPUT_SIG_OFF + i), sig[i]);
+        }
+    } else {
+        // ERC-6492 counterfactual path.
+        //
+        // 1. Build the inner SignatureWrapper `(uint256 ownerIndex,
+        //    bytes c10Sig)`. ownerIndex = slot_index + 1 = 1 (slot 0
+        //    is always at ownerIndex 1; ownerIndex 0 is bootstrap).
+        // 2. Derive the bootstrap C10 master keypair and slot-0 pubkey
+        //    halves; build the factory calldata that would deploy
+        //    this wallet, signed by the bootstrap key.
+        // 3. ABI-encode `(factory, fc, sigWrapper) || MAGIC_6492`.
+        let mut inner_wrapper: Zeroizing<[u8; SIG_WRAPPER_LEN]> =
+            Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
+        super::sig_wrapper::encode_signature_wrapper(
+            &mut *inner_wrapper,
+            (slot_index as u64) + 1,
+            &sig,
+        );
+
+        // Bootstrap C10 keypair + slot-0 pubkey halves. The bootstrap
+        // SK is needed to sign the factory-add-slot digest; we always
+        // re-derive it (the SK is not cached — only the public halves
+        // are, in `bootstrap_cache`).
+        crate::ui::show_progress("C10 keygen", 0);
+        let (master_c10_sk, master_pk_seed_32, master_pk_root_32) =
+            crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
+                &*entropy,
+                account_index,
+                |p| crate::ui::show_progress("C10 keygen", p),
+            );
+        // Refresh cache for subsequent CMD_GET_WALLET_ADDRESS / repeat
+        // calls.
+        super::state::with_state(|s| {
+            s.bootstrap_cache_insert(account_index, master_pk_seed_32, master_pk_root_32);
+        });
+
+        // Slot-0 pubkey halves from the SLOT_CACHE (slot keygen
+        // already ran above in step 10). The cached secret key
+        // exposes the pubkey halves via `pk_seed()` / `pk_root()`.
+        let (slot0_pk_seed_32, slot0_pk_root_32) = {
+            let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
+            match cached {
+                Some(c) => {
+                    let mut seed = [0u8; 32];
+                    let mut root = [0u8; 32];
+                    seed[..16].copy_from_slice(&c.key.pk_seed()[..16]);
+                    root[..16].copy_from_slice(&c.key.pk_root()[..16]);
+                    (seed, root)
+                }
+                None => {
+                    drop(master_c10_sk);
+                    crate::ui::show_status("EIP-1271", "slot cache MIA");
+                    return NscStatus::InternalError as u32;
+                }
+            }
+        };
+
+        // Build factoryCalldata into a Zeroizing stack buffer.
+        let mut fc: Zeroizing<[u8; EIP6492_FACTORY_CALLDATA_LEN]> =
+            Zeroizing::new([0u8; EIP6492_FACTORY_CALLDATA_LEN]);
+        if let Err(status) = super::factory_calldata::build(
+            &mut *fc,
+            chain_id,
+            &master_c10_sk,
+            &master_pk_seed_32,
+            &master_pk_root_32,
+            &slot0_pk_seed_32,
+            &slot0_pk_root_32,
+            |p| crate::ui::show_progress("C10 sign", p),
+        ) {
+            drop(master_c10_sk);
+            crate::ui::show_status("EIP-1271", "factory sign FAIL");
+            return status as u32;
+        }
+        drop(master_c10_sk); // ZeroizeOnDrop wipes sk_seed.
+
+        // Build the ERC-6492 blob.
+        let mut blob: Zeroizing<[u8; EIP6492_BLOB_LEN]> =
+            Zeroizing::new([0u8; EIP6492_BLOB_LEN]);
+        crate::aa::eip6492::wrap_signature(
+            &mut *blob,
+            &PQ_SMART_WALLET_FACTORY,
+            &*fc,
+            &*inner_wrapper,
+        );
+
+        // Volatile-copy into the NS output buffer (after the 8-byte
+        // count prefix).
+        for i in 0..EIP6492_BLOB_LEN {
+            core::ptr::write_volatile(out_ptr.add(8 + i), blob[i]);
+        }
     }
 
     // L-2: wipe the TOCTOU snapshot on exit.

@@ -519,21 +519,32 @@ impl CommandRouter {
     /// call. PersonalSign payloads can run up to ~700 bytes — past the
     /// single-APDU Lc=255 limit — so the request is APDU-chained;
     /// `execute_chain` calls us with the assembled payload pulled out
-    /// of `CHAIN_BUF`. Response: 4016 bytes.
+    /// of `CHAIN_BUF`.
+    ///
+    /// Response length depends on the `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED`
+    /// bit in the input flags byte:
+    ///   * set (deployed): 4016 B (8 count + 4008 C10 sig)
+    ///   * clear (counterfactual): 8616 B (8 count + 8608 ERC-6492
+    ///     wrapped sig)
     unsafe fn cmd_sign_offchain(&self, data_len: usize) -> Response {
         if data_len < sphincs_tz_shared::SIGN_OFFCHAIN_HEADER_LEN
             || data_len > sphincs_tz_shared::SIGN_OFFCHAIN_INPUT_MAX_LEN
         {
             return self.sw_response(SW_WRONG_LENGTH);
         }
-        let status = nsc_api::sign_offchain(
-            &CHAIN_BUF[..data_len],
-            &mut SIG_BUF[..sphincs_tz_shared::SIGN_OFFCHAIN_OUTPUT_LEN],
-        );
+        let flags = CHAIN_BUF[sphincs_tz_shared::SIGN_OFFCHAIN_INPUT_FLAGS_OFF];
+        let account_deployed =
+            flags & sphincs_tz_shared::OFFCHAIN_FLAG_ACCOUNT_DEPLOYED != 0;
+        let out_len = if account_deployed {
+            sphincs_tz_shared::SIGN_OFFCHAIN_OUTPUT_LEN
+        } else {
+            sphincs_tz_shared::SIGN_OFFCHAIN_OUTPUT_LEN_6492
+        };
+        let status = nsc_api::sign_offchain(&CHAIN_BUF[..data_len], &mut SIG_BUF[..out_len]);
         if status != NscStatus::Ok as u32 {
             return self.nsc_status_to_response(status);
         }
-        self.setup_chunked_response(sphincs_tz_shared::SIGN_OFFCHAIN_OUTPUT_LEN)
+        self.setup_chunked_response(out_len)
     }
 
     /// 0x63 OFFCHAIN_STATUS — read per-slot off-chain state. Body: 13

@@ -38,6 +38,7 @@ pub fn render_eip1271_personal_sign_pages(
     local_offchain_after: u64,
     last_userop: u64,
     cap: u64,
+    account_deployed: bool,
 ) -> Pages {
     // 5 fixed pages (banner / chain / account / wallet addr / final
     // confirm) + the message body. Each message page surfaces 3 rows
@@ -59,7 +60,13 @@ pub fn render_eip1271_personal_sign_pages(
     // ── Page 0: banner ─────────────────────────────────────────────
     write_line(&mut pages.buf[0][0], "EIP-1271 Sign?");
     write_line(&mut pages.buf[0][1], "personal_sign");
-    write_line(&mut pages.buf[0][2], "Verify on dapp");
+    if account_deployed {
+        write_line(&mut pages.buf[0][2], "Verify on dapp");
+    } else {
+        // ERC-6492: the dapp will receive a wrapped sig that
+        // counterfactually deploys this wallet on first use.
+        write_line(&mut pages.buf[0][2], "! Pre-deploy 6492");
+    }
     write_line(&mut pages.buf[0][3], "> next");
 
     // ── Page 1: chain ──────────────────────────────────────────────
@@ -125,12 +132,17 @@ pub fn render_eip1271_raw32_pages(
     local_offchain_after: u64,
     last_userop: u64,
     cap: u64,
+    account_deployed: bool,
 ) -> Pages {
     let mut pages = Pages::with_len(6);
 
     write_line(&mut pages.buf[0][0], "EIP-1271 Sign?");
     write_line(&mut pages.buf[0][1], "! Raw 32-byte");
-    write_line(&mut pages.buf[0][2], "Verify on dapp");
+    if account_deployed {
+        write_line(&mut pages.buf[0][2], "Verify on dapp");
+    } else {
+        write_line(&mut pages.buf[0][2], "! Pre-deploy 6492");
+    }
     write_line(&mut pages.buf[0][3], "> next");
 
     write_line(&mut pages.buf[1][0], "Chain:");

@@ -40,4 +40,5 @@
 //! All sign paths force `init_code_hash = KECCAK_EMPTY`.
 
 pub use pqsigner_aa::eip1271;
+pub use pqsigner_aa::eip6492;
 pub use pqsigner_aa::userop;

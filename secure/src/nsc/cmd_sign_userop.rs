@@ -1088,7 +1088,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::CryptoError as u32;
             }
 
-            encode_signature_wrapper(&mut *type1_wrapper_out, 0, &bootstrap_sig);
+            super::sig_wrapper::encode_signature_wrapper(&mut *type1_wrapper_out, 0, &bootstrap_sig);
             emit_type1 = true;
         }
 
@@ -1175,7 +1175,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // `t2_owner_index` was bound at step 10 alongside the calldata.
     let mut type2_wrapper_out: Zeroizing<[u8; SIG_WRAPPER_LEN]> =
         Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
-    encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
+    super::sig_wrapper::encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
 
     // ── 14b. Persist the new last_userop_count and (if Type 1) the
     //         registered-slot flag. Done *after* sig verify so a verify
@@ -1275,26 +1275,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_status("PQSigner OS", "Ready");
 
     NscStatus::Ok as u32
-}
-
-/// Encode a SignatureWrapper `(uint256 ownerIndex, bytes innerSig)` into
-/// `out` in place. Layout:
-///
-///   [0..32)      ownerIndex (uint256 BE)
-///   [32..64)     offset to bytes = 0x40 (uint256 BE)
-///   [64..96)     length = C10_SIG_LEN (uint256 BE)
-///   [96..4128)   inner C10 sig, right-padded with zeros to a 32-byte boundary
-fn encode_signature_wrapper(out: &mut [u8; SIG_WRAPPER_LEN], owner_index: u64, inner_sig: &[u8]) {
-    debug_assert_eq!(inner_sig.len(), C10_SIG_LEN);
-    // ownerIndex left-padded to 32 bytes
-    out[24..32].copy_from_slice(&owner_index.to_be_bytes());
-    // offset = 0x40
-    out[32 + 31] = 0x40;
-    // length = 4008 = 0x0fa8
-    out[64 + 24..64 + 32].copy_from_slice(&(C10_SIG_LEN as u64).to_be_bytes());
-    // inner sig
-    out[96..96 + C10_SIG_LEN].copy_from_slice(inner_sig);
-    // trailing padding is already zero from the Zeroizing init.
 }
 
 /// Volatile write of a big-endian u32 to `out_ptr + *write_pos`, advancing the cursor.

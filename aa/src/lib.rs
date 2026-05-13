@@ -42,4 +42,5 @@
 extern crate std;
 
 pub mod eip1271;
+pub mod eip6492;
 pub mod userop;
