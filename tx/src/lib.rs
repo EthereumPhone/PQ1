@@ -24,6 +24,8 @@
 #[cfg(test)]
 extern crate std;
 
+mod wire;
+
 pub mod erc20;
 pub mod names;
 pub mod selectors;

@@ -43,6 +43,7 @@
 //! bundle stays a pure verifier.
 
 use super::merkle::verify_proof;
+use crate::wire::{is_clean_ascii, read_u32_le, read_u64_le};
 
 /// Decoded + Merkle-verified ERC20 metadata. Borrows from the gateway
 /// buffer the bundle was copied into; the lifetime is tied to that
@@ -138,10 +139,9 @@ pub fn verify_erc20_bundle<'a>(bundle: &'a [u8], root: &[u8; 32]) -> Option<Erc2
 
     // 1. Re-derive the canonical leaf bytes from the supplied fields.
     //    MUST match dbgen::erc20::canonical_erc20_leaf byte-for-byte.
+    //    `name_len`/`symbol_len` are each bounded by `MAX_DISPLAY_FIELD`
+    //    above, so `canonical_len` cannot exceed the buffer size.
     let canonical_len = 8 + 20 + 1 + 1 + name_len + 1 + symbol_len;
-    if canonical_len > 8 + 20 + 1 + 1 + MAX_DISPLAY_FIELD + 1 + MAX_DISPLAY_FIELD {
-        return None;
-    }
     let mut canonical = [0u8; 8 + 20 + 1 + 1 + MAX_DISPLAY_FIELD + 1 + MAX_DISPLAY_FIELD];
     let mut p = 0usize;
     canonical[p..p + 8].copy_from_slice(&chain_id.to_le_bytes());
@@ -180,18 +180,3 @@ pub fn verify_erc20_bundle<'a>(bundle: &'a [u8], root: &[u8; 32]) -> Option<Erc2
     })
 }
 
-fn read_u32_le(buf: &[u8], off: usize) -> Option<u32> {
-    let bytes: [u8; 4] = buf.get(off..off + 4)?.try_into().ok()?;
-    Some(u32::from_le_bytes(bytes))
-}
-
-fn read_u64_le(buf: &[u8], off: usize) -> Option<u64> {
-    let bytes: [u8; 8] = buf.get(off..off + 8)?.try_into().ok()?;
-    Some(u64::from_le_bytes(bytes))
-}
-
-/// Reject control bytes and bytes outside printable ASCII. Tokens
-/// with names like "USD\u{200B}C" (a homoglyph attack) get filtered.
-fn is_clean_ascii(s: &[u8]) -> bool {
-    s.iter().all(|&b| (0x20..0x7f).contains(&b))
-}
