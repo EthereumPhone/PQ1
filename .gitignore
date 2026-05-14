@@ -5,3 +5,6 @@ __pycache__/
 # Nix build symlink (from `nix build` / `nix run`)
 /result
 /result-*
+
+# Local-only deploy scripts (contain RPC URLs / API keys — never commit)
+*.local.sh

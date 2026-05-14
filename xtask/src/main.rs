@@ -20,6 +20,7 @@ fn main() -> ExitCode {
 
     match subcmd {
         "gen-solidity-constants" => cmd_gen_solidity_constants(&args[1..]),
+        "gen-erc7730-descriptors" => cmd_gen_erc7730_descriptors(&args[1..]),
         "" | "help" | "--help" | "-h" => {
             print_help();
             ExitCode::SUCCESS
@@ -41,6 +42,23 @@ Subcommands:
       Render `{SOLIDITY_OUT_PATH}` from `pqsigner-proto`.
       With --check: print the rendered output to stdout instead of
       writing the file (used by CI to diff against the checked-in copy).
+
+  gen-erc7730-descriptors [--check]
+                          [--input-dir PATH] [--policy PATH]
+                          [--out-binary PATH] [--out-review PATH]
+                          [--e2e-input-dir PATH] [--e2e-out-binary PATH]
+                          [--out-root PATH]
+      Compile the ERC-7730 descriptor catalog from
+      `secure/data/erc7730/*.json` against `policy.toml`, build the
+      Merkle tree, and emit:
+        tools/companion-stub/erc7730_db.bin
+        tools/companion-stub/erc7730_db_e2e.bin
+        secure/data/erc7730.review.txt
+        secure/src/db_roots.rs   (ERC7730_DESCRIPTORS_ROOT)
+      With --check: rebuild in-memory and compare against the checked-in
+      artifacts; exit non-zero on drift. CI uses this gate, mirroring
+      the gen-solidity-constants pattern.
+
   help
       Print this message.
 "
@@ -196,6 +214,288 @@ fn is_solidity_string_safe(bytes: &[u8]) -> bool {
     bytes
         .iter()
         .all(|b| (0x20..=0x7E).contains(b) && *b != b'"' && *b != b'\\')
+}
+
+
+// ─────────────────────────────────────────────────────────────────────
+// gen-erc7730-descriptors
+// ─────────────────────────────────────────────────────────────────────
+
+const ERC7730_DEFAULT_INPUT: &str = "secure/data/erc7730";
+const ERC7730_DEFAULT_POLICY: &str = "secure/data/erc7730/policy.toml";
+const ERC7730_DEFAULT_E2E_INPUT: &str = "secure/data/erc7730-e2e";
+const ERC7730_DEFAULT_OUT: &str = "tools/companion-stub/erc7730_db.bin";
+const ERC7730_DEFAULT_E2E_OUT: &str = "tools/companion-stub/erc7730_db_e2e.bin";
+const ERC7730_DEFAULT_REVIEW: &str = "secure/data/erc7730.review.txt";
+
+#[derive(Default)]
+struct Erc7730Args {
+    check: bool,
+    input_dir: Option<PathBuf>,
+    policy: Option<PathBuf>,
+    out_binary: Option<PathBuf>,
+    out_review: Option<PathBuf>,
+    e2e_input_dir: Option<PathBuf>,
+    e2e_out_binary: Option<PathBuf>,
+}
+
+fn parse_erc7730_args(args: &[String]) -> Result<Erc7730Args, String> {
+    let mut out = Erc7730Args::default();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--check" => out.check = true,
+            "--input-dir" => {
+                i += 1;
+                out.input_dir = Some(PathBuf::from(
+                    args.get(i).ok_or("--input-dir requires a value")?,
+                ));
+            }
+            "--policy" => {
+                i += 1;
+                out.policy = Some(PathBuf::from(
+                    args.get(i).ok_or("--policy requires a value")?,
+                ));
+            }
+            "--out-binary" => {
+                i += 1;
+                out.out_binary = Some(PathBuf::from(
+                    args.get(i).ok_or("--out-binary requires a value")?,
+                ));
+            }
+            "--out-review" => {
+                i += 1;
+                out.out_review = Some(PathBuf::from(
+                    args.get(i).ok_or("--out-review requires a value")?,
+                ));
+            }
+            "--e2e-input-dir" => {
+                i += 1;
+                out.e2e_input_dir = Some(PathBuf::from(
+                    args.get(i).ok_or("--e2e-input-dir requires a value")?,
+                ));
+            }
+            "--e2e-out-binary" => {
+                i += 1;
+                out.e2e_out_binary = Some(PathBuf::from(
+                    args.get(i).ok_or("--e2e-out-binary requires a value")?,
+                ));
+            }
+            other => return Err(format!("unknown flag `{other}`")),
+        }
+        i += 1;
+    }
+    Ok(out)
+}
+
+fn cmd_gen_erc7730_descriptors(args: &[String]) -> ExitCode {
+    let parsed = match parse_erc7730_args(args) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+    let workspace_root = manifest_dir
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let input_dir = parsed
+        .input_dir
+        .unwrap_or_else(|| workspace_root.join(ERC7730_DEFAULT_INPUT));
+    let policy = parsed
+        .policy
+        .unwrap_or_else(|| workspace_root.join(ERC7730_DEFAULT_POLICY));
+    let out_binary = parsed
+        .out_binary
+        .unwrap_or_else(|| workspace_root.join(ERC7730_DEFAULT_OUT));
+    let out_review = parsed
+        .out_review
+        .unwrap_or_else(|| workspace_root.join(ERC7730_DEFAULT_REVIEW));
+    let e2e_input_dir = parsed
+        .e2e_input_dir
+        .unwrap_or_else(|| workspace_root.join(ERC7730_DEFAULT_E2E_INPUT));
+    let e2e_out_binary = parsed
+        .e2e_out_binary
+        .unwrap_or_else(|| workspace_root.join(ERC7730_DEFAULT_E2E_OUT));
+
+    // Build both prod + e2e catalogs.
+    let prod = match dbgen::erc7730::build_db(&input_dir, &policy) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: prod build failed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = dbgen::erc7730::round_trip_check(&prod) {
+        eprintln!("error: prod round-trip failed: {e}");
+        return ExitCode::FAILURE;
+    }
+    let e2e = match dbgen::erc7730::build_db(&e2e_input_dir, &policy) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: e2e build failed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = dbgen::erc7730::round_trip_check(&e2e) {
+        eprintln!("error: e2e round-trip failed: {e}");
+        return ExitCode::FAILURE;
+    }
+
+    if parsed.check {
+        // CI mode: diff against checked-in artifacts.
+        let mut drift = false;
+        if let Err(e) = diff_bytes("erc7730_db.bin", &out_binary, &prod.blob) {
+            eprintln!("DRIFT: {e}");
+            drift = true;
+        }
+        if let Err(e) = diff_bytes("erc7730_db_e2e.bin", &e2e_out_binary, &e2e.blob) {
+            eprintln!("DRIFT: {e}");
+            drift = true;
+        }
+        if let Err(e) = diff_text("erc7730.review.txt", &out_review, &prod.review_text) {
+            eprintln!("DRIFT: {e}");
+            drift = true;
+        }
+        // db_roots.rs is owned by `cargo run -p dbgen` (it bakes 5
+        // other roots besides ours); only assert that the ERC-7730
+        // root line in it matches.
+        let roots_path = workspace_root.join("secure/src/db_roots.rs");
+        if let Err(e) = diff_root_in_db_roots(&roots_path, &prod.root, &e2e.root) {
+            eprintln!("DRIFT: {e}");
+            drift = true;
+        }
+        if drift {
+            eprintln!(
+                "\nERC-7730 catalog has drifted from the checked-in artifacts.\n\
+                 Run `cargo run -p dbgen` (which writes ALL DBs in one pass) and\n\
+                 commit the resulting changes."
+            );
+            return ExitCode::FAILURE;
+        }
+        eprintln!("erc7730: in sync");
+        return ExitCode::SUCCESS;
+    }
+
+    // Write artifacts.
+    if let Some(parent) = out_binary.parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            eprintln!("error: cannot create {}: {e}", parent.display());
+            return ExitCode::FAILURE;
+        }
+    }
+    if let Err(e) = fs::write(&out_binary, &prod.blob) {
+        eprintln!("error: write {}: {e}", out_binary.display());
+        return ExitCode::FAILURE;
+    }
+    if let Err(e) = fs::write(&e2e_out_binary, &e2e.blob) {
+        eprintln!("error: write {}: {e}", e2e_out_binary.display());
+        return ExitCode::FAILURE;
+    }
+    if let Err(e) = fs::write(&out_review, &prod.review_text) {
+        eprintln!("error: write {}: {e}", out_review.display());
+        return ExitCode::FAILURE;
+    }
+    eprintln!(
+        "wrote {} ({} bytes, {} leaves, root = {})",
+        out_binary.display(),
+        prod.blob.len(),
+        prod.leaf_count,
+        hex::encode(prod.root),
+    );
+    eprintln!(
+        "wrote {} ({} bytes, {} leaves, e2e root = {})",
+        e2e_out_binary.display(),
+        e2e.blob.len(),
+        e2e.leaf_count,
+        hex::encode(e2e.root),
+    );
+    eprintln!("wrote {}", out_review.display());
+    eprintln!(
+        "note: secure/src/db_roots.rs is owned by `cargo run -p dbgen` — \
+         run that to refresh the ERC7730_DESCRIPTORS_ROOT constant."
+    );
+    ExitCode::SUCCESS
+}
+
+fn diff_bytes(label: &str, path: &PathBuf, fresh: &[u8]) -> Result<(), String> {
+    let existing = fs::read(path)
+        .map_err(|e| format!("read {label} at {}: {e}", path.display()))?;
+    if existing == fresh {
+        return Ok(());
+    }
+    Err(format!(
+        "{label} at {} differs from fresh build ({} vs {} bytes)",
+        path.display(),
+        existing.len(),
+        fresh.len()
+    ))
+}
+
+fn diff_text(label: &str, path: &PathBuf, fresh: &str) -> Result<(), String> {
+    let existing = fs::read_to_string(path)
+        .map_err(|e| format!("read {label} at {}: {e}", path.display()))?;
+    if existing == fresh {
+        return Ok(());
+    }
+    Err(format!("{label} at {} differs from fresh build", path.display()))
+}
+
+fn diff_root_in_db_roots(
+    path: &PathBuf,
+    prod_root: &[u8; 32],
+    e2e_root: &[u8; 32],
+) -> Result<(), String> {
+    let text = fs::read_to_string(path)
+        .map_err(|e| format!("read db_roots.rs at {}: {e}", path.display()))?;
+    let prod_hex = hex::encode(prod_root);
+    let e2e_hex = hex::encode(e2e_root);
+    let prod_present = root_const_matches(&text, "ERC7730_DESCRIPTORS_ROOT", &prod_hex);
+    let e2e_present = root_const_matches(&text, "ERC7730_DESCRIPTORS_ROOT", &e2e_hex);
+    if prod_present && e2e_present {
+        return Ok(());
+    }
+    Err(format!(
+        "ERC7730_DESCRIPTORS_ROOT in {} doesn't match fresh build (prod {prod_hex} present={prod_present}, e2e {e2e_hex} present={e2e_present})",
+        path.display()
+    ))
+}
+
+fn root_const_matches(text: &str, name: &str, expected_hex: &str) -> bool {
+    // Find every `pub static <name>: [u8; 32] = [...];` block and
+    // compare its bytes (hex-encoded) against `expected_hex`.
+    let mut search_from = 0;
+    while let Some(pos) = text[search_from..].find(&format!("pub static {name}")) {
+        let abs = search_from + pos;
+        // Skip past the `[u8; 32] =` type annotation: find `= [`.
+        let assign = match text[abs..].find("= [") {
+            Some(p) => abs + p,
+            None => break,
+        };
+        let bracket = assign + 2; // position of the array-literal `[`
+        let close = match text[bracket..].find("];") {
+            Some(p) => bracket + p,
+            None => break,
+        };
+        let body = &text[bracket + 1..close];
+        let mut hex_out = String::with_capacity(64);
+        for tok in body.split(',') {
+            let tok = tok.trim();
+            if tok.is_empty() {
+                continue;
+            }
+            let tok = tok.strip_prefix("0x").unwrap_or(tok);
+            hex_out.push_str(tok);
+        }
+        if hex_out.eq_ignore_ascii_case(expected_hex) {
+            return true;
+        }
+        search_from = close + 2;
+    }
+    false
 }
 
 #[cfg(test)]

@@ -4,6 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 publish = false
 
+[lib]
+name = "dbgen"
+path = "src/lib.rs"
+
 [[bin]]
 name = "dbgen"
 path = "src/main.rs"
@@ -11,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 sphincs-tz-shared = { workspace = true }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 hex = { workspace = true }
 # Host-side Poseidon over BLS12-381 for the parallel ERC20 Merkle tree
@@ -19,6 +23,21 @@ hex = { workspace = true }
 # crate runs on the host, not the STM32U585 — which is already the
 # workspace default.
 bls12_381 = { workspace = true }
+# Pure-logic keccak256 for ERC-7730 EIP-712 domain-separator
+# computation. Same wrapper the firmware uses.
+pqsigner-tx-core = { workspace = true }
+# On-device IR layout constants + bundle verifier. Reused both for the
+# host build (we share the BundleError / HEADER_LEN / MAX_IR_LEN
+# constants byte-for-byte) and for the dbgen round-trip test which
+# runs every host-emitted IR back through the on-device parser.
+pqsigner-erc7730 = { workspace = true }
+# Minimal TOML parser for ERC-8176 policy.toml.
+toml = { version = "0.8", default-features = false, features = ["parse"] }
 
 [dev-dependencies]
 tempfile = "3"
+# Re-import the on-device verifier so the round-trip integration test
+# can build synthetic bundles and feed them back through the secure-
+# world parser byte-for-byte. (Dev-only because the lib build does not
+# need this dep; only the test binary does.)
+pqsigner-erc7730 = { workspace = true }

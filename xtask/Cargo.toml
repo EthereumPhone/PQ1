@@ -27,3 +27,8 @@ path = "src/main.rs"
 
 [dependencies]
 pqsigner-proto = { workspace = true }
+# Host-side ERC-7730 descriptor compiler. Sharing the same library
+# the dbgen binary uses keeps xtask's `gen-erc7730-descriptors --check`
+# byte-for-byte aligned with what `cargo run -p dbgen` emits.
+dbgen = { path = "../dbgen" }
+hex = { workspace = true }

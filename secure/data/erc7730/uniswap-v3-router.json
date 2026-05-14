@@ -1,0 +1,77 @@
+{
+  "$schema": "../../specs/erc7730-v2.schema.json",
+  "context": {
+    "$id": "Uniswap v3 Router 2",
+    "contract": {
+      "deployments": [
+        {
+          "chainId": 1,
+          "address": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "owner": "Uniswap Labs",
+    "info": {
+      "deploymentDate": "2021-12-14T00:00:00Z",
+      "url": "https://uniswap.org/"
+    },
+    "contractName": "Uniswap v3 Router 2"
+  },
+  "display": {
+    "formats": {
+      "exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96) params)": {
+        "$id": "exactInputSingle",
+        "intent": "swap",
+        "fields": [
+          {
+            "path": "params.amountIn",
+            "label": "Send",
+            "format": "tokenAmount",
+            "params": {
+              "tokenPath": "params.tokenIn"
+            },
+            "visible": "always"
+          },
+          {
+            "path": "params.amountOutMinimum",
+            "label": "Minimum to Receive",
+            "format": "tokenAmount",
+            "params": {
+              "tokenPath": "params.tokenOut"
+            },
+            "visible": "always"
+          },
+          {
+            "path": "params.fee",
+            "label": "Uniswap fee",
+            "format": "unit",
+            "params": {
+              "decimals": 4,
+              "base": "%",
+              "prefix": false
+            },
+            "visible": "always"
+          },
+          {
+            "path": "params.recipient",
+            "label": "Beneficiary",
+            "format": "addressName",
+            "params": {
+              "types": [
+                "eoa",
+                "contract"
+              ],
+              "sources": [
+                "local",
+                "ens"
+              ]
+            },
+            "visible": "always"
+          }
+        ]
+      }
+    }
+  }
+}
