@@ -273,7 +273,7 @@ Then add a row to `docs/work-todo.md`'s Completion Log: `YYYY-MM-DD — Phase 2:
 
 ## Plan-file pointer
 
-The full plan (all 9 phases, ~7-week roadmap, verification recipes, risks) lives at:
+The full plan (5 phases — consolidated 2026-05-14 from the original 9; ~6.5-week total roadmap; verification recipes; risks) lives at:
 
 ```
 ~/.claude/plans/carefully-read-understand-this-transient-feigenbaum.md

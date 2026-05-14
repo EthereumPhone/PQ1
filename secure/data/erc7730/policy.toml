@@ -1,0 +1,52 @@
+# ERC-8176 attestation policy for the ERC-7730 descriptor pipeline.
+#
+# This file is the QUALITY GATE for `dbgen::erc7730`. Phase 1 deliberately
+# does NOT verify ERC-8176 attestations on-device — secp256k1 / ERC-1271
+# verification would violate the firmware-wide "no classical signer
+# anywhere" invariant (#5 in CLAUDE.md). Instead, every descriptor that
+# enters the firmware-pinned `ERC7730_DESCRIPTORS_ROOT` MUST satisfy the
+# policy below at *host build time*. The firmware then trusts the root.
+#
+# Production behaviour (`allow_unattested_dev_descriptors = false`):
+#   * Every descriptor needs ≥ `min_attesters` distinct attestations.
+#   * Every attestation MUST come from a CAIP-2 identity in
+#     `trusted_attesters` (case-insensitive comparison on the EVM
+#     address portion).
+#   * Attestation signatures themselves are still verified host-side
+#     by the upstream Cyfrin `clearsig` tooling before they reach this
+#     pipeline. The host pipeline trusts that pre-verification; future
+#     work can move that into `dbgen::erc7730` directly.
+#
+# Pre-production behaviour (`allow_unattested_dev_descriptors = true`):
+#   * `min_attesters` is effectively ignored.
+#   * `trusted_attesters` is also ignored.
+#   * Every descriptor still has to parse cleanly + fit `MAX_IR_LEN` +
+#     satisfy on-device strictness (printable-ASCII metadata, BE
+#     headers, etc.).
+#   * CI MUST reject shipping firmware with this flag on — same pattern
+#     as `e2e-test` / `otp-hardcoded-master-key`. The xtask `--check`
+#     mode + `make prod-check` enforce this.
+#
+# Today the seed corpus under `secure/data/erc7730/*.json` is hand-
+# authored from the ERC-7730 v2 spec, not pulled from the upstream
+# registry, so it carries no real Ledger / Fireblocks / Sourcify
+# attestations. We stay in dev mode until the host pipeline is wired
+# to the upstream `clear-signing-erc7730-registry` (the `--registry-
+# mirror` flag on `xtask gen-erc7730-descriptors` exists for exactly
+# that).
+
+min_attesters = 2
+
+# Placeholder CAIP-2 identities. Replace with real attester addresses
+# (Ledger, Fireblocks, Sourcify) when wiring to the upstream registry.
+# Each entry is a CAIP-2 string: `eip155:<chain_id>:<0x-address>`.
+trusted_attesters = [
+    "eip155:1:0x0000000000000000000000000000000000000001",  # placeholder for Ledger
+    "eip155:1:0x0000000000000000000000000000000000000002",  # placeholder for Fireblocks
+    "eip155:1:0x0000000000000000000000000000000000000003",  # placeholder for Sourcify
+]
+
+# Phase 2 ships with hand-authored seed descriptors; the upstream
+# attestation chain is not yet wired. Flip to `false` before
+# production. CI gates production builds on this being `false`.
+allow_unattested_dev_descriptors = true

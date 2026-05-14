@@ -1,10 +1,15 @@
-//! Build-time generator for the embedded ERC20 metadata DB and ZK
-//! verification key DB consumed by the secure-world firmware.
+//! Build-time generator (CLI entry point). See `lib.rs` for the
+//! reusable library API consumed by integration tests + xtask.
 //!
 //! Reads:
 //!   secure/data/erc20.json
 //!   secure/data/vks.json
 //!   secure/data/vks/<file>.bin
+//!   secure/data/names.json
+//!   secure/data/selectors.json
+//!   secure/data/selectors-e2e.json
+//!   secure/data/erc7730/*.json
+//!   secure/data/erc7730/policy.toml
 //!
 //! Writes (checked into the repo, like the existing
 //! tools/export_zk_constants.js outputs):
@@ -13,8 +18,11 @@
 //!   nonsecure/src/names_db.bin
 //!   tools/companion-stub/selectors_db.bin
 //!   tools/companion-stub/selectors_db_e2e.bin
+//!   tools/companion-stub/erc7730_db.bin
+//!   tools/companion-stub/erc7730_db_e2e.bin
 //!   secure/src/db_roots.rs
 //!   secure/data/vks.review.txt
+//!   secure/data/erc7730.review.txt
 //!   circuits/generated/erc20_poseidon_tree.json
 //!
 //! Run manually after editing the JSON sources:
@@ -30,24 +38,10 @@
 //! sphincs_tz_shared::db_format, so any field-layout change here is a
 //! single edit in shared/src/db_format.rs.
 
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-mod erc20;
-mod erc20_poseidon;
-mod merkle;
-mod names;
-// Generated constants table shared with the secure-world ZK verifier.
-// dbgen only consumes the arities required by the Poseidon-Merkle ERC-20
-// tree, so a handful of per-arity helpers stay unused here.
-#[allow(dead_code)]
-#[path = "../../secure/src/zk/generated/poseidon_constants.rs"]
-mod poseidon_constants;
-mod poseidon;
-mod selectors;
-mod vks;
+use dbgen::{erc20, erc7730, names, selectors, vks};
 
 const REPO_ROOT_CARGO: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -72,6 +66,9 @@ fn main() {
     let names_json = root.join("secure/data/names.json");
     let selectors_json = root.join("secure/data/selectors.json");
     let selectors_e2e_json = root.join("secure/data/selectors-e2e.json");
+    let erc7730_dir = root.join("secure/data/erc7730");
+    let erc7730_policy = erc7730_dir.join("policy.toml");
+    let erc7730_e2e_dir = root.join("secure/data/erc7730-e2e");
 
     // The full DB blobs ship in the NON-SECURE firmware image as
     // rodata. The secure firmware only embeds the Merkle root via
@@ -89,6 +86,9 @@ fn main() {
     // way to keep `make e2e` runnable without baking the full
     // host-side blob into NS rodata (which would overflow flash).
     let selectors_e2e_out = root.join("tools/companion-stub/selectors_db_e2e.bin");
+    let erc7730_out = root.join("tools/companion-stub/erc7730_db.bin");
+    let erc7730_e2e_out = root.join("tools/companion-stub/erc7730_db_e2e.bin");
+    let erc7730_review_out = root.join("secure/data/erc7730.review.txt");
     let roots_out = root.join("secure/src/db_roots.rs");
     let review_out = root.join("secure/data/vks.review.txt");
     // The Poseidon-Merkle tree export is consumed by the off-device
@@ -191,14 +191,63 @@ fn main() {
         hex::encode(selectors_e2e_res.root),
     );
 
+    // ----- ERC-7730 descriptor catalog (host-side blob) -----
+    //
+    // Same shape as the selectors DB: the blob lives on the host
+    // (companion app) under tools/companion-stub/; only the 32-byte
+    // Merkle root crosses into the firmware via db_roots.rs. The
+    // companion looks up descriptors by `(chain_id, contract)` and
+    // ships the matching IR + Merkle proof in the new sign-input
+    // trailer slot (Phase 3 wires that path).
+    let erc7730_res = erc7730::build_db(&erc7730_dir, &erc7730_policy)
+        .expect("erc7730 db build failed");
+    erc7730::round_trip_check(&erc7730_res).expect("erc7730 round-trip failed");
+    if let Some(parent) = erc7730_out.parent() {
+        fs::create_dir_all(parent).expect("create tools/companion-stub");
+    }
+    fs::write(&erc7730_out, &erc7730_res.blob).expect("write erc7730_db.bin");
+    fs::write(&erc7730_review_out, &erc7730_res.review_text)
+        .expect("write erc7730.review.txt");
+    println!(
+        "dbgen: wrote {} ({} bytes, {} leaves, root = {})",
+        erc7730_out.display(),
+        erc7730_res.blob.len(),
+        erc7730_res.leaf_count,
+        hex::encode(erc7730_res.root),
+    );
+    println!("dbgen: wrote {}", erc7730_review_out.display());
+
+    // ----- ERC-7730 descriptor catalog (e2e fixture) -----
+    //
+    // Same role as the selectors e2e variant: a tiny parallel catalog
+    // used when the secure crate is built with `--features e2e-test`,
+    // so QEMU CI runs don't need to bake the full host-side blob into
+    // any stub buffer. The matching ERC7730_DESCRIPTORS_ROOT_E2E in
+    // db_roots.rs is selected at compile time via the same feature
+    // gate.
+    let erc7730_e2e_res = erc7730::build_db(&erc7730_e2e_dir, &erc7730_policy)
+        .expect("erc7730 e2e db build failed");
+    erc7730::round_trip_check(&erc7730_e2e_res)
+        .expect("erc7730 e2e round-trip failed");
+    fs::write(&erc7730_e2e_out, &erc7730_e2e_res.blob)
+        .expect("write erc7730_db_e2e.bin");
+    println!(
+        "dbgen: wrote {} ({} bytes, {} leaves, e2e root = {})",
+        erc7730_e2e_out.display(),
+        erc7730_e2e_res.blob.len(),
+        erc7730_e2e_res.leaf_count,
+        hex::encode(erc7730_e2e_res.root),
+    );
+
     // ----- secure/src/db_roots.rs -----
     //
     // This is the only file the secure-world build sees from the DBs.
-    // Four 32-byte Merkle roots are baked into the secure image: the
+    // Five 32-byte Merkle roots are baked into the secure image: the
     // SHA-256 ERC-20 + VK + Names roots (for the transfer display /
-    // VK bundle verifier / address-name lookup paths) and the Poseidon
+    // VK bundle verifier / address-name lookup paths), the Poseidon
     // ERC-20 root (used as the third public input for the CowSwap
-    // EIP-712 v3 Groth16 proof).
+    // EIP-712 v3 Groth16 proof), and the ERC-7730 descriptor root
+    // (for the Phase-3 trailer parser).
     let roots_rs = render_db_roots(
         &erc20_res.root,
         &vk_res.root,
@@ -206,6 +255,8 @@ fn main() {
         &names_res.root,
         &selectors_res.root,
         &selectors_e2e_res.root,
+        &erc7730_res.root,
+        &erc7730_e2e_res.root,
     );
     fs::write(&roots_out, &roots_rs).expect("write db_roots.rs");
     println!("dbgen: wrote {}", roots_out.display());
@@ -214,15 +265,17 @@ fn main() {
 }
 
 const DB_ROOTS_HEADER: &str = "\
-//! Merkle roots of the embedded ERC20 + VK + Names + Selectors databases.
+//! Merkle roots of the embedded ERC20 + VK + Names + Selectors + ERC-7730 databases.
 //!
 //! Generated by `cargo run -p dbgen` from secure/data/erc20.json,
-//! secure/data/vks.json, secure/data/names.json, and
-//! secure/data/selectors.json. DO NOT EDIT BY HAND.
+//! secure/data/vks.json, secure/data/names.json,
+//! secure/data/selectors.json, and secure/data/erc7730/*.json.
+//! DO NOT EDIT BY HAND.
 //!
 //! The ERC20 / VK / Names blobs live in non-secure rodata.
-//! The Selectors blob lives on the host (companion app) at
-//! `tools/companion-stub/selectors_db.bin` and never ships in
+//! The Selectors + ERC-7730 blobs live on the host (companion app) at
+//! `tools/companion-stub/selectors_db.bin` and
+//! `tools/companion-stub/erc7730_db.bin` and never ship in
 //! the firmware image. The secure world only holds these
 //! roots; everything received from NS or the host is
 //! verified against them via `crate::erc20::merkle::verify_proof`.
@@ -247,6 +300,16 @@ const DB_ROOTS_HEADER: &str = "\
 //! the smaller `selectors-e2e.json` fixture root so the QEMU NS
 //! test driver can bake a tiny companion-stub blob without
 //! overflowing flash.
+//!
+//! `ERC7730_DESCRIPTORS_ROOT` anchors the ERC-7730 clear-signing
+//! descriptor catalogue. Same trust model as the Selectors DB —
+//! the blob lives host-side under `tools/companion-stub/`, and
+//! every bundle crossing the gateway is Merkle-verified against
+//! this root by `pqsigner_erc7730::bundle::verify_erc7730_bundle`.
+//! The catalog filters through the ERC-8176 policy at
+//! `secure/data/erc7730/policy.toml` so attestations are
+//! enforced at host build time (preserving invariant #5 — no
+//! classical signer on-device).
 
 ";
 
@@ -257,10 +320,12 @@ fn render_db_roots(
     names_root: &[u8; 32],
     selectors_root: &[u8; 32],
     selectors_e2e_root: &[u8; 32],
+    erc7730_root: &[u8; 32],
+    erc7730_e2e_root: &[u8; 32],
 ) -> String {
     use std::fmt::Write;
 
-    let mut s = String::with_capacity(DB_ROOTS_HEADER.len() + 6 * 256);
+    let mut s = String::with_capacity(DB_ROOTS_HEADER.len() + 8 * 256);
     s.push_str(DB_ROOTS_HEADER);
     emit_root(&mut s, "ERC20_DB_ROOT", erc20_root);
     emit_root(&mut s, "VK_DB_ROOT", vk_root);
@@ -270,6 +335,10 @@ fn render_db_roots(
     emit_root(&mut s, "SELECTOR_DB_ROOT", selectors_root);
     writeln!(s, "#[cfg(feature = \"e2e-test\")]").unwrap();
     emit_root(&mut s, "SELECTOR_DB_ROOT", selectors_e2e_root);
+    s.push_str("#[cfg(not(feature = \"e2e-test\"))]\n");
+    emit_root(&mut s, "ERC7730_DESCRIPTORS_ROOT", erc7730_root);
+    s.push_str("#[cfg(feature = \"e2e-test\")]\n");
+    emit_root(&mut s, "ERC7730_DESCRIPTORS_ROOT", erc7730_e2e_root);
     s
 }
 
@@ -283,104 +352,4 @@ fn emit_root(s: &mut String, name: &str, bytes: &[u8; 32]) {
         write!(s, "0x{b:02x}, ").unwrap();
     }
     s.push_str("\n];\n\n");
-}
-
-// === Helpers shared between erc20 and vks modules ============================
-
-fn parse_hex_address(s: &str) -> Result<[u8; 20], String> {
-    let s = s.strip_prefix("0x").unwrap_or(s);
-    if s.len() != 40 {
-        return Err(format!("address must be 40 hex chars, got {}", s.len()));
-    }
-    let bytes = hex::decode(s).map_err(|e| format!("hex decode: {e}"))?;
-    let mut out = [0u8; 20];
-    out.copy_from_slice(&bytes);
-    Ok(out)
-}
-
-fn write_u32_le(buf: &mut Vec<u8>, v: u32) {
-    buf.extend_from_slice(&v.to_le_bytes());
-}
-
-fn write_u64_le(buf: &mut Vec<u8>, v: u64) {
-    buf.extend_from_slice(&v.to_le_bytes());
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct Erc20Record {
-    pub chain_id: u64,
-    pub address: String,
-    pub name: String,
-    pub symbol: String,
-    pub decimals: u8,
-    #[serde(default)]
-    pub flags: u8,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct VkProtocol {
-    pub protocol: String,
-    pub vk_file: String,
-    pub deployments: Vec<VkDeployment>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct VkDeployment {
-    pub chain_id: u64,
-    pub address: String,
-    #[serde(default)]
-    pub label: String,
-}
-
-pub fn load_erc20_records(path: &Path) -> Result<Vec<Erc20Record>, String> {
-    let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct NamesRecord {
-    /// `chain_id = 0` (or a missing `chain_id` field) marks the entry
-    /// as chain-agnostic: the name applies to the address on every
-    /// chain. Use it for contracts deterministically deployed to the
-    /// same address across every EVM L1/L2 (CreateX, EntryPoint,
-    /// Universal Router, Seaport, etc.).
-    #[serde(default)]
-    pub chain_id: u64,
-    pub address: String,
-    pub name: String,
-}
-
-pub fn load_names_records(path: &Path) -> Result<Vec<NamesRecord>, String> {
-    let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct SelectorsRecord {
-    /// Hex-encoded 4-byte selector with optional `0x` prefix, e.g.
-    /// `"0xa9059cbb"`.
-    pub selector: String,
-    /// Canonical Solidity text signature, e.g. `"transfer(address,uint256)"`.
-    /// Must be printable ASCII (0x20..=0x7e), 1..=SELECTOR_TEXT_SIG_MAX_LEN
-    /// bytes long.
-    pub text_sig: String,
-}
-
-pub fn load_selectors_records(path: &Path) -> Result<Vec<SelectorsRecord>, String> {
-    let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))
-}
-
-pub fn load_vk_protocols(path: &Path) -> Result<Vec<VkProtocol>, String> {
-    let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    serde_json::from_slice(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))
-}
-
-pub fn sha256(bytes: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(bytes);
-    let result = h.finalize();
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&result);
-    out
 }

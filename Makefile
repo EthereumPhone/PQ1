@@ -1417,6 +1417,29 @@ test-unit:
 	@cargo test --locked -p pqsigner-domain --lib
 	@echo "==> Running pqsigner-tx unit tests (host)"
 	@cargo test --locked -p pqsigner-tx --lib
+	@echo "==> Running pqsigner-erc7730 unit tests (host)"
+	@cargo test --locked -p pqsigner-erc7730 --lib
+	@echo "==> Running dbgen ERC-7730 round-trip integration tests (host)"
+	@cargo test --locked -p dbgen --test erc7730_roundtrip
+
+# CI gate: every checked-in generated artifact must round-trip
+# byte-for-byte. New artifacts get a parallel diff target here so a
+# stale `dbgen` / `xtask` run can't slip past review.
+#
+# Mirrors the existing `gen-solidity-constants --check` pattern: each
+# subcommand rebuilds its outputs in-memory and exits non-zero on drift.
+#
+# Run manually:
+#   make check-codegen
+#
+# Or as part of `make prod-check` (Phase 2 onwards).
+.PHONY: check-codegen check-erc7730-descriptors
+check-codegen: check-erc7730-descriptors
+	@echo "==> codegen artifacts in sync"
+
+check-erc7730-descriptors:
+	@echo "==> Checking ERC-7730 descriptor catalog (xtask --check)"
+	@cargo run --locked -q -p pqsigner-xtask -- gen-erc7730-descriptors --check
 
 # Foundry tests for the PQ smart-wallet contracts.
 test-solidity:
