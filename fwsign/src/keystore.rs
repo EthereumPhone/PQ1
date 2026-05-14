@@ -43,7 +43,7 @@ use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{Key, XChaCha20Poly1305, XNonce};
 use rand_core::{OsRng, RngCore};
 use sphincs_c10::{params::N, SigningKey};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 const MAGIC: [u8; 4] = *b"PQSK";
 const VERSION: u16 = 0x0001;
@@ -54,6 +54,17 @@ const PLAIN_LEN: usize = 32 + N + N; // 64
 const CIPHER_LEN: usize = PLAIN_LEN; // XChaCha20 keeps ciphertext len == plaintext len
 const HEADER_LEN: usize = 4 + 2 + SALT_LEN + NONCE_LEN + TAG_LEN; // 62
 pub const BLOB_LEN: usize = HEADER_LEN + CIPHER_LEN; // 126
+
+// Named offsets into the 126-byte blob. Keeping these as constants — rather
+// than repeating `6 + SALT_LEN + NONCE_LEN + ...` arithmetic at every use —
+// makes the seal/open layout match the format-table in the module docs at a
+// glance and prevents an off-by-one if the header layout ever shifts.
+const MAGIC_OFFSET: usize = 0;
+const VERSION_OFFSET: usize = MAGIC_OFFSET + 4;
+const SALT_OFFSET: usize = VERSION_OFFSET + 2;
+const NONCE_OFFSET: usize = SALT_OFFSET + SALT_LEN;
+const TAG_OFFSET: usize = NONCE_OFFSET + NONCE_LEN;
+const CIPHER_OFFSET: usize = HEADER_LEN;
 
 // Argon2id parameters. OWASP 2024 recommendation for disk-encryption use
 // cases — 64 MiB memory, 3 iterations, parallelism 4. Strikes a balance
@@ -71,9 +82,10 @@ pub struct VendorKey {
 }
 
 impl VendorKey {
-    /// Assemble from raw components. Used by the test harness; in
-    /// normal use you always go through `generate` or `open`.
-    #[allow(dead_code)]
+    /// Assemble from raw components. Test-only — production paths always
+    /// go through `generate` or `open` so the `sk_seed`/`pk_seed` invariants
+    /// (`pk_seed` masked, `pk_root` derived from a real keygen) hold.
+    #[cfg(test)]
     pub fn from_parts(sk_seed: [u8; 32], pk_seed: [u8; N], pk_root: [u8; N]) -> Self {
         Self {
             sk_seed: Zeroizing::new(sk_seed),
@@ -158,19 +170,19 @@ impl VendorKey {
             );
         }
 
-        let mut blob = [0u8; BLOB_LEN];
-        blob[0..4].copy_from_slice(&MAGIC);
-        blob[4..6].copy_from_slice(&VERSION.to_be_bytes());
-        blob[6..6 + SALT_LEN].copy_from_slice(&salt);
-        blob[6 + SALT_LEN..6 + SALT_LEN + NONCE_LEN].copy_from_slice(&nonce);
+        // chacha20poly1305's `encrypt` returns ciphertext || tag. We split
+        // them back out so the on-disk layout is header || tag || ciphertext
+        // — keeping the tag adjacent to its metadata makes the blob easier
+        // to hand-parse and matches the format-table in the module docs.
+        let (ct, tag) = sealed.split_at(CIPHER_LEN);
 
-        // chacha20poly1305's `encrypt` returns ciphertext || tag.
-        // Layout our blob as header || tag || ciphertext for ease of
-        // hand-parsing and so the tag is adjacent to metadata.
-        let ct = &sealed[..CIPHER_LEN];
-        let tag = &sealed[CIPHER_LEN..];
-        blob[6 + SALT_LEN + NONCE_LEN..6 + SALT_LEN + NONCE_LEN + TAG_LEN].copy_from_slice(tag);
-        blob[HEADER_LEN..HEADER_LEN + CIPHER_LEN].copy_from_slice(ct);
+        let mut blob = [0u8; BLOB_LEN];
+        blob[MAGIC_OFFSET..MAGIC_OFFSET + 4].copy_from_slice(&MAGIC);
+        blob[VERSION_OFFSET..VERSION_OFFSET + 2].copy_from_slice(&VERSION.to_be_bytes());
+        blob[SALT_OFFSET..SALT_OFFSET + SALT_LEN].copy_from_slice(&salt);
+        blob[NONCE_OFFSET..NONCE_OFFSET + NONCE_LEN].copy_from_slice(&nonce);
+        blob[TAG_OFFSET..TAG_OFFSET + TAG_LEN].copy_from_slice(tag);
+        blob[CIPHER_OFFSET..CIPHER_OFFSET + CIPHER_LEN].copy_from_slice(ct);
 
         Ok(blob)
     }
@@ -179,25 +191,22 @@ impl VendorKey {
     pub fn open(blob: &[u8], passphrase: &str) -> Result<Self> {
         if blob.len() != BLOB_LEN {
             bail!(
-                "vendor-key blob wrong size: got {} bytes, want {}",
+                "vendor-key blob wrong size: got {} bytes, want {BLOB_LEN}",
                 blob.len(),
-                BLOB_LEN
             );
         }
-        if blob[0..4] != MAGIC {
+        if blob[MAGIC_OFFSET..MAGIC_OFFSET + 4] != MAGIC {
             bail!("vendor-key blob bad magic: not a PQSK blob");
         }
-        let version = u16::from_be_bytes([blob[4], blob[5]]);
+        let version = u16::from_be_bytes([blob[VERSION_OFFSET], blob[VERSION_OFFSET + 1]]);
         if version != VERSION {
-            bail!(
-                "vendor-key blob unsupported version: {version:#06x} (want {VERSION:#06x})"
-            );
+            bail!("vendor-key blob unsupported version: {version:#06x} (want {VERSION:#06x})");
         }
 
-        let salt = &blob[6..6 + SALT_LEN];
-        let nonce = &blob[6 + SALT_LEN..6 + SALT_LEN + NONCE_LEN];
-        let tag = &blob[6 + SALT_LEN + NONCE_LEN..6 + SALT_LEN + NONCE_LEN + TAG_LEN];
-        let ct = &blob[HEADER_LEN..HEADER_LEN + CIPHER_LEN];
+        let salt = &blob[SALT_OFFSET..SALT_OFFSET + SALT_LEN];
+        let nonce = &blob[NONCE_OFFSET..NONCE_OFFSET + NONCE_LEN];
+        let tag = &blob[TAG_OFFSET..TAG_OFFSET + TAG_LEN];
+        let ct = &blob[CIPHER_OFFSET..CIPHER_OFFSET + CIPHER_LEN];
 
         let mut key_bytes = Zeroizing::new([0u8; 32]);
         derive_key(passphrase, salt, &mut key_bytes)?;
@@ -208,29 +217,27 @@ impl VendorKey {
         sealed.extend_from_slice(ct);
         sealed.extend_from_slice(tag);
 
-        let aad = aad_bytes(salt, nonce);
-
-        let plain = cipher
-            .decrypt(
-                XNonce::from_slice(nonce),
-                Payload {
-                    msg: &sealed,
-                    aad: &aad,
-                },
-            )
-            .map_err(|_| anyhow!("AEAD decryption failed (wrong passphrase or tampered blob)"))?;
+        // Wrapping the plaintext in `Zeroizing` ensures it is wiped on
+        // every exit path (success, length mismatch, or panic unwind) —
+        // zeroize's `alloc` feature implements `Zeroize for Vec<u8>` which
+        // `Zeroizing`'s Drop calls.
+        let plain = Zeroizing::new(
+            cipher
+                .decrypt(
+                    XNonce::from_slice(nonce),
+                    Payload {
+                        msg: &sealed,
+                        aad: &aad_bytes(salt, nonce),
+                    },
+                )
+                .map_err(|_| {
+                    anyhow!("AEAD decryption failed (wrong passphrase or tampered blob)")
+                })?,
+        );
 
         if plain.len() != PLAIN_LEN {
-            // Zeroize the rogue plaintext before returning.
-            let mut p = plain;
-            p.zeroize();
             bail!("decrypted payload wrong length");
         }
-
-        // `plain` is a Vec<u8> which (with zeroize's `alloc` feature) has
-        // a Zeroize impl that wipes its storage on demand. We zeroize
-        // manually before it drops to keep the lifetime intentional.
-        let mut plain = plain;
 
         let mut sk_seed = Zeroizing::new([0u8; 32]);
         sk_seed.copy_from_slice(&plain[..32]);
@@ -238,8 +245,6 @@ impl VendorKey {
         pk_seed.copy_from_slice(&plain[32..32 + N]);
         let mut pk_root = [0u8; N];
         pk_root.copy_from_slice(&plain[32 + N..]);
-
-        plain.zeroize();
 
         Ok(Self {
             sk_seed,

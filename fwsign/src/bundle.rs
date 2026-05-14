@@ -38,31 +38,49 @@ pub fn pack(inputs: &BundleInputs, out_path: &Path) -> Result<()> {
     let file = std::fs::File::create(out_path)
         .with_context(|| format!("creating {}", out_path.display()))?;
     let mut builder = tar::Builder::new(file);
-    builder.mode(tar::HeaderMode::Deterministic);
 
-    append(&mut builder, "manifest.bin", &inputs.manifest_bytes)?;
-    append(&mut builder, "secure.bin", &inputs.secure_bytes)?;
-    append(&mut builder, "nonsecure.bin", &inputs.nonsecure_bytes)?;
-    append(&mut builder, "measurement.txt", inputs.measurement_txt.as_bytes())?;
-    append(&mut builder, "pubkey.bin", &inputs.pubkey_bytes)?;
-    append(&mut builder, "release.json", inputs.release_json.as_bytes())?;
+    let mtime = source_date_epoch();
+    append(&mut builder, "manifest.bin", &inputs.manifest_bytes, mtime)?;
+    append(&mut builder, "secure.bin", &inputs.secure_bytes, mtime)?;
+    append(&mut builder, "nonsecure.bin", &inputs.nonsecure_bytes, mtime)?;
+    append(
+        &mut builder,
+        "measurement.txt",
+        inputs.measurement_txt.as_bytes(),
+        mtime,
+    )?;
+    append(&mut builder, "pubkey.bin", &inputs.pubkey_bytes, mtime)?;
+    append(
+        &mut builder,
+        "release.json",
+        inputs.release_json.as_bytes(),
+        mtime,
+    )?;
 
     builder.finish().context("finalising tar")?;
     Ok(())
 }
 
-fn append<W: Write>(builder: &mut tar::Builder<W>, name: &str, data: &[u8]) -> Result<()> {
+/// Honour `SOURCE_DATE_EPOCH` for reproducible-build mtimes (falls back to 0).
+fn source_date_epoch() -> u64 {
+    std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+fn append<W: Write>(
+    builder: &mut tar::Builder<W>,
+    name: &str,
+    data: &[u8],
+    mtime: u64,
+) -> Result<()> {
     let mut header = tar::Header::new_gnu();
     header.set_path(name)?;
     header.set_size(data.len() as u64);
     header.set_mode(0o644);
     header.set_uid(0);
     header.set_gid(0);
-    // SOURCE_DATE_EPOCH ensures deterministic mtimes across rebuilds.
-    let mtime = std::env::var("SOURCE_DATE_EPOCH")
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(0);
     header.set_mtime(mtime);
     header.set_entry_type(tar::EntryType::Regular);
     header.set_cksum();
@@ -117,40 +135,34 @@ pub fn unpack(path: &Path) -> Result<UnpackedBundle> {
         }
     }
 
-    let manifest =
-        manifest.ok_or_else(|| anyhow!("bundle missing manifest.bin"))?;
-    let secure = secure.ok_or_else(|| anyhow!("bundle missing secure.bin"))?;
-    let nonsecure = nonsecure.ok_or_else(|| anyhow!("bundle missing nonsecure.bin"))?;
-    let pubkey = pubkey.ok_or_else(|| anyhow!("bundle missing pubkey.bin"))?;
-    let measurement = measurement.unwrap_or_default();
-    let release = release.unwrap_or_default();
+    let manifest = require(manifest, "manifest.bin")?;
+    let secure = require(secure, "secure.bin")?;
+    let nonsecure = require(nonsecure, "nonsecure.bin")?;
+    let pubkey = require(pubkey, "pubkey.bin")?;
 
-    if manifest.len() != fw_manifest::MANIFEST_SIZE {
-        bail!(
-            "manifest.bin wrong size: got {} bytes, want {}",
-            manifest.len(),
-            fw_manifest::MANIFEST_SIZE
-        );
-    }
-    if pubkey.len() != fw_manifest::VERIFYING_KEY_LEN {
-        bail!(
-            "pubkey.bin wrong size: got {} bytes, want {}",
-            pubkey.len(),
-            fw_manifest::VERIFYING_KEY_LEN
-        );
-    }
-
-    let mut manifest_bytes = [0u8; fw_manifest::MANIFEST_SIZE];
-    manifest_bytes.copy_from_slice(&manifest);
-    let mut pubkey_bytes = [0u8; fw_manifest::VERIFYING_KEY_LEN];
-    pubkey_bytes.copy_from_slice(&pubkey);
+    let manifest_bytes = into_fixed::<{ fw_manifest::MANIFEST_SIZE }>(&manifest, "manifest.bin")?;
+    let pubkey_bytes =
+        into_fixed::<{ fw_manifest::VERIFYING_KEY_LEN }>(&pubkey, "pubkey.bin")?;
 
     Ok(UnpackedBundle {
         manifest_bytes,
         secure_bytes: secure,
         nonsecure_bytes: nonsecure,
         pubkey_bytes,
-        measurement_txt: measurement,
-        release_json: release,
+        measurement_txt: measurement.unwrap_or_default(),
+        release_json: release.unwrap_or_default(),
     })
+}
+
+fn require<T>(entry: Option<T>, name: &str) -> Result<T> {
+    entry.ok_or_else(|| anyhow!("bundle missing {name}"))
+}
+
+fn into_fixed<const N: usize>(bytes: &[u8], name: &str) -> Result<[u8; N]> {
+    if bytes.len() != N {
+        bail!("{name} wrong size: got {} bytes, want {N}", bytes.len());
+    }
+    let mut out = [0u8; N];
+    out.copy_from_slice(bytes);
+    Ok(out)
 }

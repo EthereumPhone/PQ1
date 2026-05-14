@@ -73,29 +73,13 @@ pub fn run(
 ) -> Result<()> {
     // --- Load inputs -------------------------------------------------
 
-    let pk_bytes = std::fs::read(pubkey)
-        .with_context(|| format!("reading {}", pubkey.display()))?;
-    if pk_bytes.len() != VERIFYING_KEY_LEN {
-        return Err(anyhow!(
-            "pubkey file wrong size: got {} bytes, want {VERIFYING_KEY_LEN}",
-            pk_bytes.len()
-        ));
-    }
+    let pk_bytes = read_fixed::<VERIFYING_KEY_LEN>(pubkey, "pubkey")?;
     let mut pk_seed = [0u8; N];
     let mut pk_root = [0u8; N];
     pk_seed.copy_from_slice(&pk_bytes[..N]);
     pk_root.copy_from_slice(&pk_bytes[N..]);
 
-    let sig_bytes = std::fs::read(signature)
-        .with_context(|| format!("reading {}", signature.display()))?;
-    if sig_bytes.len() != SIGNATURE_LEN {
-        return Err(anyhow!(
-            "signature file wrong size: got {} bytes, want {SIGNATURE_LEN}",
-            sig_bytes.len()
-        ));
-    }
-    let mut sig = [0u8; SIGNATURE_LEN];
-    sig.copy_from_slice(&sig_bytes);
+    let sig = read_fixed::<SIGNATURE_LEN>(signature, "signature")?;
 
     // --- Rebuild the signed preimage from source ---------------------
 
@@ -137,4 +121,19 @@ pub fn run(
     eprintln!("    for pubkey {}.", hex::encode(pk_bytes));
     eprintln!("    The firmware you built matches the firmware the vendor signed.");
     Ok(())
+}
+
+/// Read a file expected to be exactly `N` bytes, with a labelled error.
+fn read_fixed<const LEN: usize>(path: &Path, label: &str) -> Result<[u8; LEN]> {
+    let bytes = std::fs::read(path)
+        .with_context(|| format!("reading {}", path.display()))?;
+    if bytes.len() != LEN {
+        return Err(anyhow!(
+            "{label} file wrong size: got {} bytes, want {LEN}",
+            bytes.len()
+        ));
+    }
+    let mut out = [0u8; LEN];
+    out.copy_from_slice(&bytes);
+    Ok(out)
 }
