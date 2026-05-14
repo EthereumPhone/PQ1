@@ -637,6 +637,42 @@ doesn't fire → return 0). To close those, additional layers needed:
 For first-pass production fix: scan-twice (forward + reverse) gets
 ~99.99 % closure cheaply. Tracked as F-12 fix in work-todo.
 
+**The bump path** (`offchain_count_bump`) ALSO has bypasses:
+
+```
+sca_flashctr_bump_plain  [skip]        2 SILENT WRITE FAILURES (instr 4, instr 6)
+sca_flashctr_bump_plain  [stuck-at-0]  2 SILENT WRITE FAILURES (instr 4, instr 6)
+sca_flashctr_bump_plain  [stuck-at-FF] 2 SILENT WRITE FAILURES (instr 4, instr 6)
+```
+
+In each, bump returns `Ok(())` but the page's actual max for the target
+slot DID NOT advance. All bypasses cluster at function prologue (instr
+4-6: argument-register load) — consistent with a **slot-key
+input-register aliasing** attack: a stuck-at on the slot_key register
+makes the bump operate on a DIFFERENT slot. It (a) reads the wrong slot's
+max (e.g., 0), (b) packs an entry for the wrong slot at count = new_count,
+(c) writes that entry, (d) reads it back (success! for the wrong slot),
+(e) passes the verify check + the FI triple-check (both also look at the
+faulted slot_key). Bump returns Ok. The CORRECT slot's history is
+unchanged. Caller emits a signature with offchainCount = new_count
+embedded; the firmware's flash records the wrong slot's history at
+new_count but OUR slot stays at the old value.
+
+On the next call, local_offchain for our slot reads as the old value;
+the firmware tries to bump again to new_count + 1. Same fault →
+another silent write. **Sustained attacks: each fault yields 1 extra
+signature past the cap.** The on-chain side does receive an
+`executeWithOffchainCount(ownerIndex, new_count)` which advances the
+on-chain `offchainSigCount[i]` and the firmware's `last_userop` after the
+commit — so the F-10 promote step DOES partially recover here, capping
+each attack to ~1 extra sig before re-anchoring. (Same residual as F-10.)
+
+**Fix direction (covers both read + write paths):**
+  - Input-register redundancy: load `slot_key` from memory TWICE with
+    `wait_random()` between, compare; halt on mismatch. Stops the
+    instr-4/6 prologue attack.
+  - Plus the scan-twice + reverse pattern for the read path itself.
+
 **Severity: HIGH.** Most severe finding in this audit. F-7 / F-8 closed,
 F-10 / F-11 bounded by re-validation/promote/on-chain, but F-12 has no
 existing defense — the production code is **single-fault rollback-

@@ -156,15 +156,155 @@ pub extern "C" fn sca_flashctr_read_fi(page_ptr: *const u8, slot_key_ptr: *const
     r1
 }
 
+// ---------------------------------------------------------------------------
+// WRITE PATH — mirror of offchain_count_bump (hw/flash.rs:1326). Tests
+// whether a single fault can:
+//   - Make bump return Ok WITHOUT actually writing the entry (silent write
+//     failure → firmware emits a signature without counting it).
+//   - Make bump skip the post-write verify-after-read check.
+//
+// Production has three layers of defense in bump:
+//   1. write_entry's own program-and-verify (mirrored here as a memcpy-and-cmp)
+//   2. read-after-write: post = read(); if post != new_count { return Err }
+//   3. FI-hardened triple-check: check_true_into_sentinel(|| read == new_count)
+//
+// A single fault would need to bypass enough layers to (a) skip the actual
+// write AND (b) make all three verify steps pass. The harness reports both:
+//   - the function's return code (encoded in r0)
+//   - whether the page actually got a new entry (the harness inspects the
+//     page bytes after the call)
+//
+// Mirror page MUST be writable RAM (not the read-only ELF rodata where
+// PAGE lives in read tests). Harness writes the populated entries to the
+// scratch RAM region before each call, then reads back the same region
+// to check the resulting state.
+// ---------------------------------------------------------------------------
+
+const ENTRY_OK: u32 = 0;
+const ENTRY_ERR_MONOTONICITY: u32 = 1;
+const ENTRY_ERR_NO_BLANK: u32 = 2;
+const ENTRY_ERR_WRITE_VERIFY: u32 = 3;
+const ENTRY_ERR_POST_CHECK: u32 = 4;
+const ENTRY_ERR_FI_TRIPLE_CHECK: u32 = 5;
+
+#[inline(never)]
+fn check_true_into_sentinel<F: FnMut() -> bool>(cond: F) -> u32 {
+    pqsigner_fi::check_true_into_sentinel(cond, wait_random)
+}
+
+/// Find the first all-0xFF (truly blank) QW in the page. Returns its index
+/// in 0..OFFCHAIN_CAPACITY, or None if the page is full.
+#[inline(never)]
+fn find_next_blank_idx(page_ptr: *mut u8) -> Option<usize> {
+    for i in 0..OFFCHAIN_CAPACITY {
+        let qw_base = unsafe { page_ptr.add(i * OFFCHAIN_QW_SIZE) };
+        let mut all_blank = true;
+        for k in 0..OFFCHAIN_QW_SIZE {
+            if unsafe { core::ptr::read_volatile(qw_base.add(k)) } != 0xFF {
+                all_blank = false;
+                break;
+            }
+        }
+        if all_blank {
+            return Some(i);
+        }
+    }
+    None
+}
+
+/// Mirror of write_quadword_verified — program 16 bytes and verify they
+/// read back identical. (Production uses STM32 flash controller's program
+/// instruction; here it's just a memcpy + cmp on the RAM-backed page.)
+#[inline(never)]
+fn write_quadword_verified(dst: *mut u8, qw: &[u8; OFFCHAIN_QW_SIZE]) -> Result<(), ()> {
+    for k in 0..OFFCHAIN_QW_SIZE {
+        unsafe { core::ptr::write_volatile(dst.add(k), qw[k]) };
+    }
+    // Verify each byte read-back matches.
+    for k in 0..OFFCHAIN_QW_SIZE {
+        if unsafe { core::ptr::read_volatile(dst.add(k)) } != qw[k] {
+            return Err(());
+        }
+    }
+    Ok(())
+}
+
+/// Pack an entry. Mirrors entry_qw in hw/flash.rs:956.
+#[inline(never)]
+fn pack_entry(slot_key: &[u8; 8], type_byte: u8, count: u64) -> [u8; OFFCHAIN_QW_SIZE] {
+    let mut qw = [0u8; OFFCHAIN_QW_SIZE];
+    qw[..8].copy_from_slice(slot_key);
+    qw[8] = type_byte;
+    let count_be = count.to_be_bytes();
+    qw[9..16].copy_from_slice(&count_be[1..8]); // 7-byte BE
+    qw
+}
+
+/// Mirror of offchain_count_bump (hw/flash.rs:1326) — verbatim production logic,
+/// but the page lives at page_ptr (RAM-backed). Returns the same status codes
+/// the production code returns (Ok via 0; Err via 1..=5 mapping the rejection
+/// reason).
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn sca_flashctr_bump_plain(
+    page_ptr: *mut u8,
+    slot_key_ptr: *const u8,
+    new_count_lo: u32,
+    new_count_hi: u32,
+) -> u32 {
+    let slot_key: [u8; 8] = unsafe { *(slot_key_ptr as *const [u8; 8]) };
+    let new_count: u64 = (new_count_lo as u64) | ((new_count_hi as u64) << 32);
+
+    // Step 1: pre-check monotonicity.
+    let pre = scan_once(page_ptr as *const u8, &slot_key);
+    if new_count <= pre {
+        return ENTRY_ERR_MONOTONICITY;
+    }
+
+    // Step 2: pack entry.
+    let qw = pack_entry(&slot_key, OFFCHAIN_TYPE_COUNT, new_count);
+
+    // Step 3: find blank QW. (Production compacts on full; mirror just fails.)
+    let blank = match find_next_blank_idx(page_ptr) {
+        Some(i) => i,
+        None => return ENTRY_ERR_NO_BLANK,
+    };
+
+    // Step 4: write the entry.
+    let dst = unsafe { page_ptr.add(blank * OFFCHAIN_QW_SIZE) };
+    if write_quadword_verified(dst, &qw).is_err() {
+        return ENTRY_ERR_WRITE_VERIFY;
+    }
+
+    // Step 5: read-after-write check (post == new_count).
+    let post = scan_once(page_ptr as *const u8, &slot_key);
+    if post != new_count {
+        return ENTRY_ERR_POST_CHECK;
+    }
+
+    // Step 6: FI-hardened triple-check via check_true_into_sentinel.
+    let verdict = check_true_into_sentinel(|| {
+        scan_once(page_ptr as *const u8, &slot_key) == new_count
+    });
+    if verdict != pqsigner_fi::OK_SENTINEL {
+        return ENTRY_ERR_FI_TRIPLE_CHECK;
+    }
+
+    ENTRY_OK
+}
+
 #[used]
 static _KEEP_PLAIN: extern "C" fn(*const u8, *const u8) -> u64 = sca_flashctr_read_plain;
 #[used]
 static _KEEP_FI: extern "C" fn(*const u8, *const u8) -> u64 = sca_flashctr_read_fi;
+#[used]
+static _KEEP_BUMP: extern "C" fn(*mut u8, *const u8, u32, u32) -> u32 = sca_flashctr_bump_plain;
 
 #[entry]
 fn main() -> ! {
     core::hint::black_box(&_KEEP_PLAIN);
     core::hint::black_box(&_KEEP_FI);
+    core::hint::black_box(&_KEEP_BUMP);
     loop {
         cortex_m::asm::nop();
     }
