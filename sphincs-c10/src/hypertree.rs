@@ -3,7 +3,7 @@
 //!
 //! Signing flow:
 //! 1. R-grind to find a randomizer that forces the last FORS index to 0
-//! 2. Sign FORS+C (K=8 trees)
+//! 2. Sign FORS+C (K=13 trees, last one forced-zero so only its root is emitted)
 //! 3. For each of D=2 hypertree layers: WOTS+C sign + Merkle auth path
 //!
 //! Verification:
@@ -55,6 +55,10 @@ pub fn sign_with_progress(
     sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, Some(progress))
 }
 
+// `_opt_rand` is reserved for a future hedged-signing extension and is
+// currently unused — the public-facing docs on `SigningKey::sign` say so.
+// R is derived deterministically by `fors::grind_r` from
+// `(pk_seed, pk_root, msg_hash)`.
 fn sign_inner(
     sk_seed: &[u8; 32],
     pk_seed: &[u8; N],
@@ -63,7 +67,11 @@ fn sign_inner(
     _opt_rand: Option<&[u8; N]>,
     progress: Option<fn(u8)>,
 ) -> [u8; SIGNATURE_LEN] {
-    let report = |pct: u8| { if let Some(f) = progress { f(pct); } };
+    let report = |pct: u8| {
+        if let Some(f) = progress {
+            f(pct);
+        }
+    };
 
     let seed = pad16(pk_seed);
     let mut sig = [0u8; SIGNATURE_LEN];
@@ -93,7 +101,7 @@ fn sign_inner(
     //   NOT interleaved (secret[i], auth[i]) pairs.
     let mut fors_roots = [[0u8; N]; K];
     let mut fors_secrets = [[0u8; N]; K];
-    let mut fors_auth_paths = [[[0u8; N]; A]; K]; // only first K-1 used
+    let mut fors_auth_paths = [[[0u8; N]; A]; K - 1];
 
     // Compute all FORS signatures
     for t in 0..(K - 1) {
@@ -249,7 +257,7 @@ pub fn verify(
     }
 
     // Read auth paths for first K-1 trees
-    let mut auth_paths = [[[0u8; N]; A]; K]; // only K-1 used
+    let mut auth_paths = [[[0u8; N]; A]; K - 1];
     for t in 0..(K - 1) {
         for h in 0..A {
             auth_paths[t][h].copy_from_slice(&sig[offset..offset + N]);

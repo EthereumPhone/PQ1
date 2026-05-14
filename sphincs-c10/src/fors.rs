@@ -10,6 +10,29 @@ use crate::address::make_adrs;
 use crate::hash::{fors_secret, h_msg, pad16, th, th_multi, th_pair, truncate, Digest, Sha256};
 use crate::params::*;
 
+/// Read `num_bits` (≤ 57) starting at logical bit `bit_offset` from a
+/// 256-bit big-endian digest. Bit 0 is the LSB of `digest[31]`.
+///
+/// Reads enough underlying bytes (`(num_bits + bit_offset%8 + 7) / 8`,
+/// at most 8) to cover the requested span, returning the extracted value
+/// right-aligned and masked to `num_bits`.
+fn read_bits_le(digest: &[u8; 32], bit_offset: usize, num_bits: usize) -> u64 {
+    debug_assert!(num_bits > 0 && num_bits <= 57);
+    let byte_start = 31 - (bit_offset / 8);
+    let bit_in_byte = bit_offset % 8;
+    let bytes_needed = (num_bits + bit_in_byte + 7) / 8;
+
+    let mut val: u64 = 0;
+    for b in 0..bytes_needed {
+        let idx = byte_start.wrapping_sub(b);
+        if idx < 32 {
+            val |= u64::from(digest[idx]) << (b * 8);
+        }
+    }
+    let mask = (1u64 << num_bits) - 1;
+    (val >> bit_in_byte) & mask
+}
+
 /// Extract K FORS indices from the H_msg digest.
 ///
 /// Each index is A bits wide, extracted from the least significant bits
@@ -17,25 +40,9 @@ use crate::params::*;
 ///
 /// Matches Python: `indices = [(digest >> (i * a)) & a_mask for i in range(k)]`
 pub fn extract_fors_indices(digest: &[u8; 32]) -> [u32; K] {
-    let a_mask: u32 = (1u32 << A) - 1;
     let mut indices = [0u32; K];
-
     for i in 0..K {
-        let bit_offset = i * A;
-        // Extract A bits starting at bit_offset from the LSB of the 256-bit BE value
-        let byte_start = 31 - (bit_offset / 8);
-        let bit_in_byte = bit_offset % 8;
-
-        // Read enough bytes to cover A=16 bits + possible bit offset
-        let mut val: u32 = 0;
-        for b in 0..3 {
-            // Read up to 3 bytes to cover 16 bits + alignment
-            let idx = byte_start.wrapping_sub(b);
-            if idx < 32 {
-                val |= (digest[idx] as u32) << (b * 8);
-            }
-        }
-        indices[i] = (val >> bit_in_byte) & a_mask;
+        indices[i] = read_bits_le(digest, i * A, A) as u32;
     }
     indices
 }
@@ -49,29 +56,13 @@ pub fn extract_fors_indices(digest: &[u8; 32]) -> [u32; K] {
 /// Matches Solidity `SPHINCsC10Asm.sol`:
 ///   `let htIdx := and(shr(143, digest), 0x3FFFF)`
 pub fn extract_ht_index(digest: &[u8; 32]) -> u32 {
-    // H bits starting at bit (K*A) of the 256-bit BE digest. Loaded
-    // into a u64 so the mask is safe up to H=56, which comfortably
-    // covers every defined C-family parameter set.
-    let bit_offset = K * A; // 143
-    let byte_start = 31usize - bit_offset / 8; // 14 (holds the low byte)
-    let bit_in_byte = bit_offset % 8; // 7
-    let bytes_needed = (H + bit_in_byte + 7) / 8; // 4 for C10 (18+7+7)/8
-
-    let mut val: u64 = 0;
-    for b in 0..bytes_needed {
-        let idx = byte_start.wrapping_sub(b);
-        if idx < 32 {
-            val |= (digest[idx] as u64) << (b * 8);
-        }
-    }
-    let mask: u64 = (1u64 << H) - 1;
-    ((val >> bit_in_byte) & mask) as u32
+    read_bits_le(digest, K * A, H) as u32
 }
 
 /// R-grinding: find a randomizer R such that the last FORS index is zero.
 ///
 /// The forced-zero constraint eliminates the need for an authentication
-/// path for the last FORS tree, saving A*N = 256 bytes.
+/// path for the last FORS tree, saving `A*N = 11*16 = 176` bytes.
 ///
 /// Matches Python: `grind_R_fors(seed, root, message, k, a)`
 pub fn grind_r(
@@ -81,7 +72,6 @@ pub fn grind_r(
 ) -> ([u8; N], [u8; 32]) {
     let seed_b32 = pad16(pk_seed);
     let root_b32 = pad16(pk_root);
-    let a_mask: u32 = (1u32 << A) - 1;
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
 
     for nonce in 0..10_000_000u32 {
@@ -97,19 +87,7 @@ pub fn grind_r(
         let r_b32 = pad16(&r);
         let digest = h_msg(&seed_b32, &root_b32, &r_b32, message);
 
-        // Check if the last FORS index is zero
-        let byte_start = 31 - (last_shift / 8);
-        let bit_in_byte = last_shift % 8;
-        let mut val: u32 = 0;
-        for b in 0..3 {
-            let idx = byte_start.wrapping_sub(b);
-            if idx < 32 {
-                val |= (digest[idx] as u32) << (b * 8);
-            }
-        }
-        let last_idx = (val >> bit_in_byte) & a_mask;
-
-        if last_idx == 0 {
+        if read_bits_le(&digest, last_shift, A) == 0 {
             return (r, digest);
         }
     }
@@ -249,46 +227,4 @@ pub fn sign_fors_tree(
 pub fn compute_fors_pk(seed: &[u8; 32], roots: &[[u8; N]; K]) -> [u8; N] {
     let roots_adrs = make_adrs(0, 0, ADRS_FORS_ROOTS, 0, 0, 0, 0);
     th_multi(seed, &roots_adrs, roots)
-}
-
-/// Verify a FORS signature: reconstruct the FORS public key from the
-/// signature components.
-///
-/// Used by the verifier to check that the FORS secrets + auth paths
-/// produce the expected FORS public key.
-pub fn pk_from_sig(
-    seed: &[u8; 32],
-    digest: &[u8; 32],
-    secrets: &[[u8; N]; K],
-    auth_paths: &[[[u8; N]; A]],
-) -> [u8; N] {
-    let indices = extract_fors_indices(digest);
-    let mut roots = [[0u8; N]; K];
-
-    // First K-1 trees: reconstruct root from secret + auth path
-    for t in 0..(K - 1) {
-        let leaf_adrs = make_adrs(0, 0, ADRS_FORS_TREE, t as u32, 0, 0, indices[t]);
-        let mut node = th(seed, &leaf_adrs, &pad16(&secrets[t]));
-        let mut path_idx = indices[t];
-
-        for h in 0..A {
-            let parent_idx = path_idx >> 1;
-            let adrs = make_adrs(0, 0, ADRS_FORS_TREE, t as u32, 0, (h + 1) as u32, parent_idx);
-            let sibling = &auth_paths[t][h];
-            if path_idx & 1 == 0 {
-                node = th_pair(seed, &adrs, &pad16(&node), &pad16(sibling));
-            } else {
-                node = th_pair(seed, &adrs, &pad16(sibling), &pad16(&node));
-            }
-            path_idx >>= 1;
-        }
-        roots[t] = node;
-    }
-
-    // Last tree (forced-zero): the secret IS the tree root
-    // We hash it as a leaf to get the "reconstructed root"
-    let last_adrs = make_adrs(0, 0, ADRS_FORS_TREE, (K - 1) as u32, 0, 0, 0);
-    roots[K - 1] = th(seed, &last_adrs, &pad16(&secrets[K - 1]));
-
-    compute_fors_pk(seed, &roots)
 }
