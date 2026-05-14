@@ -297,18 +297,29 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
 
-    // ── 7b. EIP-712 typed-data + ERC-7730 (kind=2): parse + verify ─
+    // ── 7b. EIP-712 typed-data + ERC-7730 (kind=2): parse + verify
+    //        + render + Solady-nested replay-safe wrap + confirm ──
     //
-    // Phase 3 contract: parse the wire layout, verify the descriptor
-    // bundle against the firmware-pinned root, cross-check the
-    // descriptor binding (chain_id + domain_separator), and log. The
-    // signing pipeline — EIP-712 nested-typed-data hash construction
-    // and the Solady-style replay-safe wrap — is Phase 4 work,
-    // because rendering the descriptor's clear-signing pages is a
-    // prerequisite for an honest trusted-display sign. Until that
-    // lands, kind=2 returns `InternalError` after the verification
-    // pass so the wire format is reserved + tested without producing
-    // a signature against a hash the user couldn't audit.
+    // Phase 4 (this commit) completes the path:
+    //   1. Parse + verify the trailer bundle against
+    //      `ERC7730_DESCRIPTORS_ROOT`, cross-check the binding
+    //      (chain_id + domain_separator) — same as Phase 3.
+    //   2. Compute the EIP-712 final hash from the companion-supplied
+    //      `(domain_separator, primary_type_hash, encoded_data)`.
+    //   3. Wrap the 32-byte EIP-712 hash through Solady's nested
+    //      PersonalSign envelope — the on-chain Solady dispatcher
+    //      accepts it because our `SignatureWrapper` carries no
+    //      appended data (see `aa/src/eip1271.rs:5-8` and
+    //      `contracts/smart-wallet/src/PQSmartWallet.sol:362-395`).
+    //      NO new typehash, NO on-chain change.
+    //   4. Render via `display::erc7730::render_erc7730_eip712_pages`
+    //      so the user sees field-level descriptor pages, append the
+    //      ERC-8213 `Eip712Final` fingerprint, and confirm. On render
+    //      failure, fall through to `render_eip1271_raw32_pages`.
+    let mut hash_to_sign = [0u8; 32];
+    let mut wallet_addr = [0u8; 20];
+    let mut already_confirmed = false;
+
     if kind == OFFCHAIN_KIND_EIP712_TYPED {
         let mut p = 0usize;
         let domain_sep_present =
@@ -321,11 +332,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let mut domain_separator = [0u8; 32];
         domain_separator.copy_from_slice(&payload[p..p + 32]);
         p += 32;
-        // primaryTypeHash is the full 32-byte EIP-712 typehash; the
-        // walker matches against the IR's format-table 4-byte
-        // selector prefix later (Phase 4).
-        let mut _primary_type_hash = [0u8; 32];
-        _primary_type_hash.copy_from_slice(&payload[p..p + 32]);
+        let mut primary_type_hash = [0u8; 32];
+        primary_type_hash.copy_from_slice(&payload[p..p + 32]);
         p += 32;
         let encoded_data_len =
             u16::from_be_bytes([payload[p], payload[p + 1]]) as usize;
@@ -336,7 +344,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             crate::ui::show_status("EIP-1271", "bad ed_len");
             return NscStatus::InvalidPointer as u32;
         }
-        let _encoded_data = &payload[p..p + encoded_data_len];
+        let encoded_data = &payload[p..p + encoded_data_len];
         p += encoded_data_len;
         // Trailer: `[u16 BE len][bundle]`.
         if p + 2 > payload.len() {
@@ -346,7 +354,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let trailer_len = u16::from_be_bytes([payload[p], payload[p + 1]]) as usize;
         p += 2;
         if trailer_len == 0 {
-            // Phase 3: kind=2 is meaningless without a descriptor.
             crate::ui::show_status("EIP-1271", "empty trailer");
             return NscStatus::InvalidPointer as u32;
         }
@@ -365,15 +372,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InvalidPointer as u32;
             }
         };
-        // Cross-check: the IR's chain_id matches the outer signing
-        // chain. (`domain.chainId` is baked into the supplied
-        // domainSeparator, which we equality-check next; combined,
-        // these bind the descriptor to this wallet/chain/contract
-        // combo.) We pass `&v.ir.contract` for the verifyingContract
-        // slot because the inbound payload carries only the
-        // pre-computed domainSeparator — host-side build hashed the
-        // verifyingContract into it, so an equality check on the
-        // separator transitively proves contract+chain agreement.
         if crate::tx::erc7730::cross_check_eip712(
             &v.ir,
             chain_id,
@@ -397,11 +395,100 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 encoded_data_len,
             );
         }
-        // Phase 4 lands the renderer + EIP-712 nested hash + signing.
-        // Until then, refuse to sign — better than signing a hash the
-        // trusted UI can't yet show clearly.
-        crate::ui::show_status("EIP-1271", "phase 4 needed");
-        return NscStatus::InternalError as u32;
+
+        // EIP-712 final hash:
+        //   structHash = keccak256(typehash || encoded_data)
+        //   final      = keccak256(0x1901 || ds || structHash)
+        let struct_hash = {
+            use sha3::{Digest, Keccak256};
+            let mut h = Keccak256::new();
+            h.update(primary_type_hash);
+            h.update(encoded_data);
+            let mut o = [0u8; 32];
+            o.copy_from_slice(&h.finalize());
+            o
+        };
+        let final_eip712 = pqsigner_tx_core::erc8213::eip712_final_hash(
+            &domain_separator,
+            &struct_hash,
+        );
+
+        // Bootstrap pubkey + wallet address (same lookup-or-derive as
+        // PERSONAL_SIGN below; entropy is already in scope from §7).
+        let cached =
+            super::state::with_state(|s| s.bootstrap_cache_lookup(account_index));
+        let (master_pk_seed_32, master_pk_root_32) = match cached {
+            Some(pair) => pair,
+            None => {
+                crate::ui::show_progress("C10 keygen", 0);
+                let (c10_sk, pk_seed_32, pk_root_32) =
+                    crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
+                        &*entropy,
+                        account_index,
+                        |p| crate::ui::show_progress("C10 keygen", p),
+                    );
+                drop(c10_sk);
+                super::state::with_state(|s| {
+                    s.bootstrap_cache_insert(account_index, pk_seed_32, pk_root_32);
+                });
+                (pk_seed_32, pk_root_32)
+            }
+        };
+        wallet_addr =
+            crate::aa::eip1271::proxy_address(&master_pk_seed_32, &master_pk_root_32);
+
+        // Solady-nested PersonalSign wrap of the 32-byte EIP-712 final
+        // hash. The on-chain dispatcher (`Solady.ERC1271`) wraps the
+        // dapp-supplied `H` through the exact same PersonalSign
+        // envelope when verifying, so this signature validates without
+        // any on-chain change (no new typehash, no TypedDataSign
+        // appended-data branch).
+        hash_to_sign = crate::aa::eip1271::personal_sign_replay_safe_hash(
+            chain_id,
+            &wallet_addr,
+            &final_eip712,
+        );
+
+        // Render via the ERC-7730 descriptor + append fingerprint.
+        use crate::ui::confirm::{confirm, ConfirmResult};
+        let resolver = crate::names::NameResolver::new();
+        let mut pages = match crate::tx::display::erc7730::render_erc7730_eip712_pages(
+            chain_id,
+            &v.ir.contract,
+            &primary_type_hash,
+            encoded_data,
+            &v,
+            None,
+            &resolver,
+        ) {
+            Ok(p) => p,
+            Err(_) => crate::tx::display::render_eip1271_raw32_pages(
+                chain_id,
+                account_index,
+                slot_index,
+                &final_eip712,
+                new_count,
+                last_userop,
+                MAX_SLOT_USES,
+                account_deployed,
+            ),
+        };
+        let _ = crate::tx::display::erc8213::append_fingerprint_page(
+            &mut pages,
+            crate::tx::display::erc8213::Kind::Eip712Final(final_eip712),
+        );
+        match confirm(pages.as_slice()) {
+            ConfirmResult::Confirmed => {}
+            ConfirmResult::Cancelled => {
+                crate::ui::show_status("Cancelled", "");
+                return NscStatus::UserRejected as u32;
+            }
+            ConfirmResult::IdleWipe => {
+                super::zeroize_sensitive_state();
+                return NscStatus::IdleWipe as u32;
+            }
+        }
+        already_confirmed = true;
     }
 
     // ── 8. PersonalSign hash construction (kind=1) ─────────────────
@@ -413,9 +500,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // account. We pull it from `bootstrap_cache` if warm and derive on
     // demand otherwise (<1 s on first hit per session).
     //
-    // For kind=0 (raw32) we just sign the 32 bytes verbatim.
-    let mut hash_to_sign = [0u8; 32];
-    let mut wallet_addr = [0u8; 20];
+    // For kind=0 (raw32) we just sign the 32 bytes verbatim. The
+    // kind=2 branch in §7b populates `hash_to_sign` already.
     match kind {
         OFFCHAIN_KIND_RAW32 => {
             hash_to_sign.copy_from_slice(payload);
@@ -446,13 +532,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 chain_id, &wallet_addr, payload,
             );
         }
+        OFFCHAIN_KIND_EIP712_TYPED => {
+            // hash_to_sign already populated in §7b.
+        }
         _ => return NscStatus::InternalError as u32, // unreachable past §4
     }
 
-    // ── 9. Trusted-display confirmation ─────────────────────────────
-    {
+    // ── 9. Trusted-display confirmation + ERC-8213 fingerprint ─────
+    //
+    // kind=2 already confirmed in §7b (it needed the descriptor +
+    // EIP-712 final hash to render meaningful pages). For kind=0/1
+    // we render the existing personal-sign / raw32 pages and append
+    // the ERC-8213 fingerprint here.
+    if !already_confirmed {
         use crate::ui::confirm::{confirm, ConfirmResult};
-        let pages = match kind {
+        let mut pages = match kind {
             OFFCHAIN_KIND_PERSONAL_SIGN => crate::tx::display::render_eip1271_personal_sign_pages(
                 chain_id,
                 account_index,
@@ -475,6 +569,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 account_deployed,
             ),
         };
+        let fingerprint_kind = match kind {
+            OFFCHAIN_KIND_PERSONAL_SIGN => {
+                // PersonalSign signs the message via Solady's nested
+                // EIP-712 wrap; the user-visible fingerprint is the
+                // calldata digest of the raw message so they can
+                // cross-check against `cast keccak ...` on the
+                // companion. The wrapped `hash_to_sign` is firmware-
+                // internal and would be confusing to display here.
+                let digest = pqsigner_tx_core::erc8213::calldata_digest(payload);
+                crate::tx::display::erc8213::Kind::CalldataDigest(digest)
+            }
+            _ => crate::tx::display::erc8213::Kind::Raw32(hash_to_sign),
+        };
+        let _ = crate::tx::display::erc8213::append_fingerprint_page(
+            &mut pages,
+            fingerprint_kind,
+        );
         match confirm(pages.as_slice()) {
             ConfirmResult::Confirmed => {}
             ConfirmResult::Cancelled => {

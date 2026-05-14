@@ -548,7 +548,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         } else {
             None
         };
-    let _ = &erc7730_verified; // Phase 4 consumes; Phase 3 logs only.
 
     // ── 5b. Optional address-name bundles ─────────────────────────
     //
@@ -838,15 +837,28 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
         }
     }
-    let pages = pick_sign_pages(
+    let mut pages = pick_sign_pages(
         &tx_for_display,
         inner_data,
         zk_v3_verified.as_ref(),
         zk_v1_verified.as_ref(),
         safe_v1_verified.as_ref(),
+        erc7730_verified.as_ref(),
         verified_meta.as_ref(),
         selector_verified.as_ref(),
         &resolver,
+    );
+    // ERC-8213 fingerprint — show the calldata digest as the last
+    // page so a user can cross-check against `cast` / `viem`. Always
+    // appended (cap is 22 pages; longest renderer ≤ 14 pages, well
+    // within budget). If the buffer is full (shouldn't happen with
+    // current renderers but the bound is enforced), the fingerprint
+    // is silently skipped — off-device verification still works.
+    let calldata_fingerprint =
+        pqsigner_tx_core::erc8213::calldata_digest(inner_data);
+    let _ = crate::tx::display::erc8213::append_fingerprint_page(
+        &mut pages,
+        crate::tx::display::erc8213::Kind::CalldataDigest(calldata_fingerprint),
     );
     match confirm(pages.as_slice()) {
         ConfirmResult::Confirmed => {}

@@ -354,6 +354,124 @@ fn seed_corpus_path_programs_parse() {
     }
 }
 
+/// Host-side wire-format check for the param TLV blob at every
+/// `FieldEntry.param_off`. Confirms the host emitter (`dbgen::erc7730::
+/// compile_params` + `push_tlv`) produces blobs that satisfy the
+/// on-device parser's invariants:
+///
+///   - `pool[param_off]` is the blob length byte (or `param_off == 0`).
+///   - The inner stream is `[tag][len][payload]*` with cursor staying
+///     within `blob_len` bytes.
+///   - Every tag is in the known 0x30..=0x3F space.
+///   - Fixed-width tags carry the documented payload size.
+///
+/// This complements the per-renderer unit tests in
+/// `sphincs-tz-secure::tx::erc7730_render::params` by validating the
+/// production emitter's output across every seed-corpus IR.
+#[test]
+fn seed_corpus_param_tlv_blobs_are_well_formed() {
+    let result = build_seed();
+    for entry in &result.entries {
+        let ir = Erc7730Ir::parse(&entry.ir_bytes).expect("ir parses");
+        for fmt in ir.format_iter() {
+            let fmt = fmt.expect("format header parses");
+            for field in fmt.fields() {
+                let field = field.expect("field entry parses");
+                if field.param_off == 0 {
+                    continue;
+                }
+                let off = field.param_off as usize;
+                let blob_len = *ir.pool.get(off).unwrap_or_else(|| {
+                    panic!(
+                        "param_off {} out of range for {:?} field {:?}",
+                        off, ir.contract, field.label
+                    )
+                }) as usize;
+                let body = ir.pool.get(off + 1..off + 1 + blob_len).unwrap_or_else(|| {
+                    panic!(
+                        "param blob_len {} overruns pool for {:?} field {:?}",
+                        blob_len, ir.contract, field.label
+                    )
+                });
+                let mut cursor = 0usize;
+                while cursor < body.len() {
+                    assert!(
+                        cursor + 2 <= body.len(),
+                        "truncated TLV header in {:?} field {:?}",
+                        ir.contract,
+                        field.label
+                    );
+                    let tag = body[cursor];
+                    let len = body[cursor + 1] as usize;
+                    cursor += 2;
+                    assert!(
+                        cursor + len <= body.len(),
+                        "TLV tag 0x{:02X} overruns blob in {:?} field {:?}",
+                        tag,
+                        ir.contract,
+                        field.label
+                    );
+                    // Tag must be in the documented space.
+                    assert!(
+                        (0x30u8..=0x3F).contains(&tag),
+                        "unknown TLV tag 0x{:02X} in {:?} field {:?}",
+                        tag,
+                        ir.contract,
+                        field.label
+                    );
+                    // Per-tag width invariants.
+                    match tag {
+                        0x31 => assert_eq!(
+                            len, 20,
+                            "PARAM_TOKEN must be 20 B in {:?}",
+                            field.label
+                        ),
+                        0x32 => assert_eq!(
+                            len, 32,
+                            "PARAM_THRESHOLD must be 32 B in {:?}",
+                            field.label
+                        ),
+                        0x34 | 0x35 | 0x36 | 0x38 | 0x3A => assert_eq!(
+                            len, 1,
+                            "fixed-1-byte tag 0x{:02X} in {:?}",
+                            tag, field.label
+                        ),
+                        0x37 => assert_eq!(
+                            len, 2,
+                            "PARAM_ENUM_REF must be 2 B in {:?}",
+                            field.label
+                        ),
+                        0x3C => assert_eq!(
+                            len, 4,
+                            "PARAM_NESTED_SELECTOR must be 4 B in {:?}",
+                            field.label
+                        ),
+                        0x3D => assert_eq!(
+                            len, 20,
+                            "PARAM_NESTED_CALLEE must be 20 B in {:?}",
+                            field.label
+                        ),
+                        0x3F => assert!(
+                            (1..=255).contains(&len),
+                            "PARAM_VISIBILITY must be ≥1 B in {:?}",
+                            field.label
+                        ),
+                        _ => {} // variable-width tags: 0x30, 0x33, 0x39, 0x3B, 0x3E
+                    }
+                    cursor += len;
+                }
+                assert_eq!(
+                    cursor,
+                    body.len(),
+                    "param blob has trailing bytes in {:?} field {:?}",
+                    ir.contract,
+                    field.label
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn wrong_root_is_rejected() {
     let res = build_seed();

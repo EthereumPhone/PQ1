@@ -23,9 +23,11 @@
 pub mod display;
 pub mod eip712;
 pub mod erc7730;
+pub mod erc7730_render;
 pub mod typed_call;
 
 // Pure-logic re-export shims: the bodies live in `pqsigner-tx-core`.
 pub use pqsigner_tx_core::eip1559;
+pub use pqsigner_tx_core::erc8213;
 pub use pqsigner_tx_core::hash;
 pub use pqsigner_tx_core::rlp;

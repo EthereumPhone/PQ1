@@ -26,6 +26,8 @@ mod blind_sign;
 mod eip1271;
 mod erc20_known;
 mod erc20_unknown;
+pub mod erc7730;
+pub mod erc8213;
 pub(super) mod primitives;
 #[cfg(not(test))]
 mod safe_display;
@@ -133,6 +135,25 @@ impl Pages {
     pub(super) fn with_len(len: usize) -> Self {
         Self::empty_with_len(len)
     }
+
+    /// Bump `len` by one and return the index of the newly-visible page.
+    /// Returns `Err(())` when the buffer is already full; renderers map
+    /// that to `RenderErr::PageBudget` and fall through to a less rich
+    /// rendering ladder rung. The returned page is pre-cleared to ASCII
+    /// space (matches every other allocation path).
+    pub(super) fn push_blank(&mut self) -> Result<usize, ()> {
+        if self.len >= MAX_PAGES {
+            return Err(());
+        }
+        // The full MAX_PAGES buffer was zero-cleared at construction;
+        // older renderers that overran past `len` via `Pages::empty()`
+        // and then bumped it leave stale bytes behind. Re-clear the slot
+        // here so dynamic-push renderers don't inherit prior content.
+        self.buf[self.len] = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+        let idx = self.len;
+        self.len += 1;
+        Ok(idx)
+    }
 }
 
 /// Pick the right renderer for a CMD_SIGN_USEROP trusted-UI confirm.
@@ -145,16 +166,25 @@ impl Pages {
 ///      circuit-bound canonical + readable).
 ///   2. v1 ZK clear-sign (circuit-attested readable string + EIP-1559
 ///      summary pages).
-///   3. Plain value transfer (empty inner calldata).
-///   4. ERC-20 with verified metadata (token name/symbol/decimals).
-///   5. ERC-20 shape-only (unverified token — bare hex decode).
-///   6. Blind-sign (calldata that doesn't decode as ERC-20).
+///   3. Safe v1 inner-tx render (verified canonical SafeTx).
+///   4. ERC-7730 descriptor (verified against the firmware-pinned
+///      `ERC7730_DESCRIPTORS_ROOT`; binding cross-checked against
+///      `(chain_id, to)`).
+///   5. Plain value transfer (empty inner calldata).
+///   6. ERC-20 with verified metadata (token name/symbol/decimals).
+///   7. ERC-20 shape-only (unverified token — bare hex decode).
+///   8. Typed-call selector + verified ABI walk.
+///   9. Blind-sign (calldata that doesn't decode as ERC-20 / typed).
 ///
 /// Ordering is load-bearing. In particular (1) beats (2) so a CoW
 /// setPreSignature UserOp that also happens to satisfy the v1 circuit
 /// renders the 8-page order, not the weaker "Pre-sign CowSwap order"
 /// string. The handler's downgrade-mitigation gate enforces this
-/// separately at refuse-to-sign level.
+/// separately at refuse-to-sign level. (3) is above (4) so a Safe
+/// `execTransaction` carrying an ERC-7730 descriptor for an inner
+/// call still renders the outer Safe banner first — the descriptor
+/// would be for the inner call, which the Safe renderer dispatches
+/// through its own inner-tx ladder.
 #[cfg(not(test))]
 pub fn pick_sign_pages(
     tx: &crate::tx::eip1559::Eip1559Tx,
@@ -162,6 +192,7 @@ pub fn pick_sign_pages(
     v3: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
     v1: Option<&crate::zk::VerifiedClearSignV1>,
     safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    erc7730: Option<&crate::tx::erc7730::VerifiedDescriptor<'_>>,
     erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
     selector: Option<&crate::selectors::SelectorMeta<'_>>,
     resolver: &crate::names::NameResolver<'_>,
@@ -194,6 +225,21 @@ pub fn pick_sign_pages(
             if m.contract == inner_to { Some(m) } else { None }
         });
         return render_safe_v1_pages(safe, inner_meta, resolver);
+    }
+    if let Some(d) = erc7730 {
+        match erc7730::render_erc7730_pages(tx, inner_data, d, erc20, resolver) {
+            Ok(pages) => return pages,
+            Err(crate::tx::erc7730_render::RenderErr::Reject(msg)) => {
+                crate::ui::show_status("Sign", msg);
+                // Fall through to the next ladder rung so the user
+                // still sees the transaction in a less-rich form
+                // (typed-call selector / blind-sign / ERC-20). The
+                // banner above gives them the reason.
+            }
+            Err(_) => {
+                // NoFormat / PageBudget — fall through silently.
+            }
+        }
     }
     if inner_data.is_empty() {
         return render_pages(tx, resolver);
