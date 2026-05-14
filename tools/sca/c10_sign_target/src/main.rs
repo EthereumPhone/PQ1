@@ -76,9 +76,14 @@ pub extern "C" fn sca_c10_sign_plain(
 }
 
 // ---------------------------------------------------------------------------
-// PRODUCTION-MIRROR sign+verify gate (F-1/F-2/F-5 fixed).
+// PRODUCTION-MIRROR sign+verify gate (F-1/F-2/F-5/F-13 fixed).
 // Bit-equivalent to `secure::crypto::c10_sign_verified_with_progress`.
 // Returns 1 on Ok (sig written), 0 on Err (nothing written, gate rejected).
+//
+// F-13 fix in place: double-compute + constant-time compare, then the
+// existing verify gate. RFC 9814 / Genêt TCHES 2023: a faulted sign can
+// produce a malformed-but-verifies sig that leaks sk_seed bits across
+// traces. Two signs over identical inputs must be byte-identical.
 // ---------------------------------------------------------------------------
 
 #[inline(never)]
@@ -87,16 +92,31 @@ pub extern "C" fn sca_c10_sign_verified(
     msg_hash_ptr: *const u8,
     out_sig_ptr: *mut u8,
 ) -> u32 {
+    use subtle::ConstantTimeEq;
     let sk = sphincs_c10::SigningKey::from_parts(SK_SEED, PK_SEED, PK_ROOT);
     let msg: &[u8; 32] = unsafe { &*(msg_hash_ptr as *const [u8; 32]) };
-    let sig = sk.sign(msg, None);
+    // Same opt_rand pattern as production — single local so future #18
+    // migration is a 2-line change.
+    let opt_rand: Option<&[u8; N]> = None;
+    let sig_a = sk.sign(msg, opt_rand);
     fi::wait_random();
-    let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg, &sig);
+    let sig_b = sk.sign(msg, opt_rand);
+
+    // Constant-time compare; halt on mismatch.
+    if !bool::from(sig_a[..].ct_eq(&sig_b[..])) {
+        return 0;
+    }
+
+    // Verify-before-release (existing F-1/F-2 gate). Compare + verify
+    // form a 2-gate chain — do not remove the verify on the assumption
+    // double-compute makes it redundant.
+    fi::wait_random();
+    let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg, &sig_a);
     if fi::check_true_into_sentinel(|| core::hint::black_box(v)) != fi::OK_SENTINEL {
         return 0;
     }
     unsafe {
-        for (i, &b) in sig.iter().enumerate() {
+        for (i, &b) in sig_a.iter().enumerate() {
             core::ptr::write_volatile(out_sig_ptr.add(i), b);
         }
     }

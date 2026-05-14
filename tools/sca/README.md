@@ -518,6 +518,16 @@ table-lookup (slow) or pre-loaded scratch buffers (high RAM).
 Neither is standard practice in the SPHINCS+ spec; the spec assumes
 "side channels are out of scope for this primitive."
 
+**Trace-budget interaction with F-13 (double-compute).** As of commit
+landing F-13 (`secure::crypto::c10_sign_verified_with_progress` now
+signs twice per `CMD_SIGN_USEROP`), every protected sign call emits
+**2× the FORS-phase trace material per slot**. The per-slot per-chain
+combined cap stays 65 536; the effective F-9 *observation* budget per
+slot becomes ~131 072 traces. The qualitative "transparent" analysis
+above is unchanged (FORS indices remain public and signature-derived),
+but the SCA budget number doubles. Worth flagging to a future on-silicon
+auditor.
+
 **Limitation of our measurement.** We tried 600 × 50 M samples to
 localise the leak region's end and check for additional leakage
 sources past FORS. The 30 GB trace array + lascar's per-sample
@@ -572,6 +582,74 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 *signing* is *differential* (two glitched signs reusing the same FORS/WOTS
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
+
+### F-13 — Verify-after-sign alone is insufficient against FI on the SLH-DSA sign path (RFC 9814 §A.2 / Genêt TCHES 2023) — **FIXED in `secure::crypto::c10_sign_verified_with_progress` (double-compute + ct-compare + verify)**
+
+RFC 9814 §A.2 (informational, August 2024) and Genêt's TCHES 2023 paper
+"A Faulty SLH-DSA …" both demonstrate the same class of attack: a fault
+injected during SLH-DSA / SPHINCS+ signing can produce a **malformed
+signature that nonetheless verifies cleanly under the honest pubkey**
+while leaking `sk_seed` bits across multiple traces. The mechanism is
+faulted hypertree node recomputation — a glitch at a low-layer WOTS
+chain causes the verifier to reconstruct a chain of corrupted parent
+roots all the way up to a `pk_root` that *happens* to match (because
+SPHINCS+ verify recomputes the path from the leaf upward and the
+faulted leaf's "valid" reconstruction is exactly what the corrupted
+sig encodes). Over multiple faulted-but-verifying sigs the attacker
+recovers FORS or WOTS one-time-key bits.
+
+**Pre-fix state.** `c10_sign_verified_with_progress` did a single
+sign followed by a verify-before-release gate. The verify defeats
+naïve sig-mangling (random bit-flips) but NOT the Genêt class — a
+faulted sig that recomputes to the same `pk_root` passes the gate.
+
+**Fix.** `secure/src/crypto.rs` now signs **twice** with identical
+inputs, constant-time compares the two 4008-byte signatures, halts on
+mismatch, then runs the existing verify. Two signs over identical
+`(sk_seed, msg_hash, opt_rand)` are byte-identical for deterministic
+SPHINCS+C10; a transient fault on one of the two signs produces
+divergent bytes that fail the ct-compare. Compare + verify form a
+**2-gate chain**: if a single instruction-skip bypasses the compare,
+the verify still catches a non-canonical sig; if a fault re-creates
+the Genêt-style same-pk_root malformed sig, it would have to do so
+**identically on both signs** for the compare to pass.
+
+```rust
+let opt_rand: Option<&[u8; sphincs_c10::params::N]> = None;
+let sig_a = sk.sign_with_progress(msg_hash, opt_rand, progress);
+crate::fi::wait_random();
+let sig_b = sk.sign_with_progress(msg_hash, opt_rand, |_| {});
+if !bool::from(sig_a[..].ct_eq(&sig_b[..])) {
+    return Err(());
+}
+crate::fi::wait_random();
+let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig_a);
+if crate::fi::check_true_into_sentinel(|| core::hint::black_box(v)) != crate::fi::OK_SENTINEL {
+    return Err(());
+}
+```
+
+**Notes:**
+
+  - `opt_rand` is held in a single local so the future #18 migration to
+    non-deterministic OptRand is a 2-line change. The randomiser MUST
+    feed both signs (re-drawing per sign would break the byte-equality
+    check while still being cryptographically sound — but then the FI
+    defence is gone).
+  - The `if !ct_eq { Err }` is itself a single-instruction-skip point;
+    the verify is the second independent gate (do NOT remove on the
+    assumption double-compute makes verify redundant).
+  - **Cost**: ~2× sign latency (~+1.5 s on HW SHA, ~+12 s on QEMU
+    software SHA). First-sign-after-unlock UX: progress bar 0..100
+    ramps on sign 1; existing post-sign "verifying" window stretches
+    to cover sign 2 + verify.
+  - **F-9 trace-budget impact**: per-slot SCA observation budget
+    doubles from 65 536 → ~131 072 traces (F-9 section discusses; the
+    transparent-leak analysis is unchanged).
+  - **Stack cost**: +8 KB (two 4008-byte sigs as locals). Within the
+    128 KB secure SRAM with the existing SPHINCS+ internal usage.
+  - **Mirror updated** in `tools/sca/c10_sign_target/src/main.rs` so
+    the existing `fault_sweep_c10_sign.py` exercises the fixed gate.
 
 ### F-12 — Flash-counter SCAN is single-fault rollback-bypassable; severity higher than F-10 because the flash-promote defense doesn't apply — **FIXED in `secure::hw::flash::offchain_count_read` / `last_userop_count_read` / `offchain_count_is_registered` + bump-path slot_key input-redundancy**
 

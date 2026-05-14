@@ -141,6 +141,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a513e167849a384b7f9b746e517604398518590a9142f4846a32e3c2a4de7b11"
 
 [[package]]
+name = "pqsigner-fi"
+version = "0.1.0"
+dependencies = [
+ "cortex-m",
+ "zeroize",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -174,7 +182,9 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "panic-halt",
+ "pqsigner-fi",
  "sphincs-c10",
+ "subtle",
  "zeroize",
 ]
 
@@ -211,6 +221,12 @@ dependencies = [
  "sha2",
  "zeroize",
 ]
+
+[[package]]
+name = "subtle"
+version = "2.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "syn"

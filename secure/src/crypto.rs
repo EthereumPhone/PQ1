@@ -51,31 +51,69 @@ pub fn c10_sign_verified_with_progress(
     msg_hash: &[u8; 32],
     progress: fn(u8),
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
-    let sig = sk.sign_with_progress(msg_hash, None, progress);
-    // Verify before release (fault-injection guard).
+    use subtle::ConstantTimeEq;
+
+    // FI-hardening, layer 1 of 2: double-compute (RFC 9814 §A.2 / Genêt
+    // TCHES 2023). Verify-after-sign alone is *insufficient*: a fault
+    // injected during signing can produce a malformed sig that
+    // nonetheless verifies cleanly under the honest pubkey while leaking
+    // sk_seed bits across multiple traces (faulted hypertree nodes
+    // re-derive bottom-up). Two signs over identical inputs MUST be
+    // byte-identical (deterministic SPHINCS+C10 today; when item #18's
+    // non-deterministic OptRand lands, the *same* randomiser will feed
+    // both signs — see `opt_rand` local below).
     //
-    // The boolean check is wrapped by `fi::check_true` so a glitch that
-    // skips the `if` requires cooperating skips of the double-evaluation
-    // AND the hamming-distant sentinel compare. `wait_random()` immediately
-    // before the verify defeats clock-aligned fault bursts that time their
-    // glitch to the verify's fixed-shape control flow.
+    // Cost: ~2× sign latency (~+1.5 s on HW SHA, ~+12 s on QEMU
+    // software SHA). The progress callback runs on the first sign so
+    // the user sees a 0..100 ramp; the second sign is silent and
+    // visually appears as a stretched "verifying..." window.
     //
-    // `core::hint::black_box(v)` is load-bearing: without it LLVM CSEs the
-    // two `cond()` evaluations inside `check_true` into a single load of `v`
-    // and collapses the `&& v1 && v2` re-check, leaving one skippable branch
-    // — `tools/sca/fault_sweep_c10_verify.py` (finding F-1) showed a single
-    // instruction-skip then releases an unverified signature. The black_box
-    // forces `v` to be re-materialised opaquely on each evaluation, so the
-    // double-check survives, at ~zero cost (one extra `ldrb` per check).
-    // (The even-stronger option — re-running `sphincs_c10::verify(...)` inside
-    // the closure, per `fi::check_true`'s doc example — also defends a data
-    // fault on `v`'s storage, at the cost of a second multi-second verify.)
+    // `opt_rand` is held in a single local so a future #18 migration
+    // is a 2-line change (one `rng::fill(&mut opt_rand_buf)` above,
+    // then `Some(&opt_rand_buf)` instead of `None`). Both signs MUST
+    // see the same value: re-drawing per sign would break the byte-
+    // equality check.
+    let opt_rand: Option<&[u8; sphincs_c10::params::N]> = None;
+    let sig_a = sk.sign_with_progress(msg_hash, opt_rand, progress);
     crate::fi::wait_random();
-    let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig);
+    let sig_b = sk.sign_with_progress(msg_hash, opt_rand, |_| {});
+
+    // Constant-time comparison of the 4008-byte signatures.
+    // `subtle::ConstantTimeEq` prevents an attacker from learning
+    // *where* the two diverge through a timing side-channel, which
+    // could leak FORS-leaf bits in conjunction with F-9.
+    //
+    // Note: this `if !ct_eq { Err }` is itself a single-instruction-
+    // skip point — falling through releases `sig_a` even on mismatch.
+    // The verify-before-release below is the second gate: a faulted
+    // pair that bypasses this compare still has to produce a sig that
+    // verifies under the honest pubkey. Compare + verify form a
+    // **2-gate chain**; do not remove the verify on the assumption
+    // double-compute makes it redundant.
+    if !bool::from(sig_a[..].ct_eq(&sig_b[..])) {
+        return Err(());
+    }
+
+    // FI-hardening, layer 2 of 2: verify-before-release.
+    //
+    // The boolean check is wrapped by `fi::check_true_into_sentinel`
+    // (F-2 fix): a glitch that skips the `if` requires cooperating
+    // skips of the double-evaluation AND the hamming-distant sentinel
+    // compare. `wait_random()` immediately before the verify defeats
+    // clock-aligned fault bursts that time their glitch to the
+    // verify's fixed-shape control flow.
+    //
+    // `core::hint::black_box(v)` is load-bearing — see F-1 in
+    // `tools/sca/README.md`: without it LLVM CSEs the two `cond()`
+    // evaluations inside `check_true` into a single load of `v` and
+    // collapses the `&& v1 && v2` re-check, leaving one skippable
+    // branch.
+    crate::fi::wait_random();
+    let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig_a);
     if crate::fi::check_true_into_sentinel(|| core::hint::black_box(v)) != crate::fi::OK_SENTINEL {
         return Err(());
     }
-    Ok(sig)
+    Ok(sig_a)
 }
 
 /// Provision a `WalletStore` backend from a user-supplied BIP-39 mnemonic.

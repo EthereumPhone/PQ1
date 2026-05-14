@@ -22,6 +22,8 @@ cortex-m-rt = "0.7"
 panic-halt  = "1"
 # Required by the `#[path]`-included `secure/src/fi.rs` (sentinel zeroize).
 zeroize     = { version = "1", default-features = false }
+# Constant-time compare for the F-13 double-compute path.
+subtle      = { version = "2.6", default-features = false }
 sphincs-c10 = { path = "../../../sphincs-c10" }
 
 [build-dependencies]
