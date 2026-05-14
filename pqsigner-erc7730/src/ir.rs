@@ -352,6 +352,227 @@ impl<'a> Erc7730Ir<'a> {
         }
         Ok(n)
     }
+
+    /// Iterate parsed format headers. Each yielded item carries the
+    /// 4-byte selector / typehash-prefix, the human-readable intent
+    /// string, and the bytes of the format's field-table (consumable
+    /// via [`FormatHeader::fields`]).
+    ///
+    /// Use [`find_format_by_selector`](Self::find_format_by_selector)
+    /// to pick the format that matches an inbound calldata 4-byte
+    /// selector or EIP-712 primary-type-hash prefix.
+    pub fn format_iter(&self) -> FormatIter<'a> {
+        // The format-count prefix is the very first byte; bail to an
+        // empty iterator if the section is malformed enough that we
+        // can't even read it. The walker / caller can re-derive the
+        // count via `format_count()` if it needs to distinguish the
+        // empty case from the malformed case.
+        let cursor = if self.formats.is_empty() { 0 } else { 1 };
+        let count = if self.formats.is_empty() {
+            0
+        } else {
+            self.formats[0]
+        };
+        FormatIter {
+            buf: self.formats,
+            cursor,
+            remaining: count,
+        }
+    }
+
+    /// Locate the format whose 4-byte selector / typehash-prefix
+    /// matches `selector`. Returns `Ok(None)` if no format matches —
+    /// the secure-side caller renders that as "no clear-signing
+    /// descriptor for this function".
+    ///
+    /// Returns an `IrError` only when the formats section itself is
+    /// malformed (truncated header, oversized field count, …); a
+    /// missing match is `Ok(None)`.
+    pub fn find_format_by_selector(
+        &self,
+        selector: &[u8; 4],
+    ) -> Result<Option<FormatHeader<'a>>, IrError> {
+        for entry in self.format_iter() {
+            let header = entry?;
+            if &header.selector == selector {
+                return Ok(Some(header));
+            }
+        }
+        Ok(None)
+    }
+}
+
+/// Parsed view of one format-table entry. Borrows from the IR's
+/// `formats` slice; cheap to copy.
+///
+/// Wire layout the host emitter writes
+/// (`dbgen::erc7730::compile_one_format`):
+///
+/// ```text
+///   selector       [u8; 4]
+///   field_count    u8       (≤ MAX_FIELDS_PER_FORMAT)
+///   intent_len     u8       (≤ 254, printable ASCII)
+///   intent         [u8; intent_len]
+///   field          [u8; ...]*  (field_count entries — see FieldEntry)
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FormatHeader<'a> {
+    pub selector: [u8; 4],
+    pub field_count: u8,
+    /// Trimmed printable ASCII intent string ("Sign", "Wrap", …).
+    pub intent: &'a [u8],
+    /// Raw bytes of the field-entry array. Parse via
+    /// [`FieldEntry::next_from`].
+    pub fields_buf: &'a [u8],
+}
+
+impl<'a> FormatHeader<'a> {
+    /// Iterate the format's field entries.
+    pub fn fields(&self) -> FieldIter<'a> {
+        FieldIter {
+            buf: self.fields_buf,
+            cursor: 0,
+            remaining: self.field_count,
+        }
+    }
+}
+
+/// One field of a format. The path / param offsets index into
+/// `Erc7730Ir::pool`; the walker reads the program bytes via
+/// `walker::path_bytes`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FieldEntry<'a> {
+    /// Formatter opcode — feed to `FormatOp::try_from`.
+    pub format_op: u8,
+    /// Trimmed printable ASCII label.
+    pub label: &'a [u8],
+    /// Offset of the path program inside `ir.pool` (length-prefixed
+    /// `[u8 len][opcodes]`). `0` means "no path".
+    pub path_off: u16,
+    /// Offset of the TLV parameter blob inside `ir.pool` (length-
+    /// prefixed). `0` means "no params".
+    pub param_off: u16,
+}
+
+impl<'a> FieldEntry<'a> {
+    /// Pop one entry from `buf` starting at `cursor`. Returns the
+    /// entry and the byte position immediately after it.
+    fn next_from(buf: &'a [u8], cursor: usize) -> Result<(Self, usize), IrError> {
+        let mut p = cursor;
+        if p + 2 > buf.len() {
+            return Err(IrError::BadFormat);
+        }
+        let format_op = buf[p];
+        let label_len = buf[p + 1] as usize;
+        p += 2;
+        if p + label_len > buf.len() {
+            return Err(IrError::BadFormat);
+        }
+        let label = &buf[p..p + label_len];
+        if !label.iter().all(|&b| (0x20..0x7f).contains(&b)) {
+            return Err(IrError::BadAscii);
+        }
+        p += label_len;
+        if p + 4 > buf.len() {
+            return Err(IrError::BadFormat);
+        }
+        let path_off = u16::from_be_bytes([buf[p], buf[p + 1]]);
+        let param_off = u16::from_be_bytes([buf[p + 2], buf[p + 3]]);
+        p += 4;
+        Ok((
+            FieldEntry {
+                format_op,
+                label,
+                path_off,
+                param_off,
+            },
+            p,
+        ))
+    }
+}
+
+/// Iterator over `Erc7730Ir::format_iter()`. Yields `Result` items so
+/// a malformed entry halts iteration with a typed error rather than
+/// dropping silently.
+pub struct FormatIter<'a> {
+    buf: &'a [u8],
+    cursor: usize,
+    remaining: u8,
+}
+
+impl<'a> Iterator for FormatIter<'a> {
+    type Item = Result<FormatHeader<'a>, IrError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+        let mut p = self.cursor;
+        // Header: 4 (selector) + 1 (field_count) + 1 (intent_len).
+        if p + 6 > self.buf.len() {
+            return Some(Err(IrError::BadFormat));
+        }
+        let mut selector = [0u8; 4];
+        selector.copy_from_slice(&self.buf[p..p + 4]);
+        let field_count = self.buf[p + 4];
+        if (field_count as usize) > MAX_FIELDS_PER_FORMAT {
+            return Some(Err(IrError::OverCap));
+        }
+        let intent_len = self.buf[p + 5] as usize;
+        p += 6;
+        if p + intent_len > self.buf.len() {
+            return Some(Err(IrError::BadFormat));
+        }
+        let intent = &self.buf[p..p + intent_len];
+        if !intent.iter().all(|&b| (0x20..0x7f).contains(&b)) {
+            return Some(Err(IrError::BadAscii));
+        }
+        p += intent_len;
+        // Advance past every field entry to compute the start of the
+        // next format. Each entry's length is variable (label_len),
+        // so we have to parse field-by-field.
+        let fields_start = p;
+        for _ in 0..field_count {
+            match FieldEntry::next_from(self.buf, p) {
+                Ok((_, next)) => p = next,
+                Err(e) => return Some(Err(e)),
+            }
+        }
+        let fields_buf = &self.buf[fields_start..p];
+        self.cursor = p;
+        Some(Ok(FormatHeader {
+            selector,
+            field_count,
+            intent,
+            fields_buf,
+        }))
+    }
+}
+
+/// Iterator yielded by `FormatHeader::fields`.
+pub struct FieldIter<'a> {
+    buf: &'a [u8],
+    cursor: usize,
+    remaining: u8,
+}
+
+impl<'a> Iterator for FieldIter<'a> {
+    type Item = Result<FieldEntry<'a>, IrError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+        self.remaining -= 1;
+        match FieldEntry::next_from(self.buf, self.cursor) {
+            Ok((entry, next)) => {
+                self.cursor = next;
+                Some(Ok(entry))
+            }
+            Err(e) => Some(Err(e)),
+        }
+    }
 }
 
 /// Trim trailing NUL padding and verify the surviving bytes are clean

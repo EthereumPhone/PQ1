@@ -28,6 +28,7 @@ libfuzzer-sys = "0.4"
 pqsigner-aa       = { path = "../aa" }
 pqsigner-tx-core  = { path = "../tx-core" }
 pqsigner-tx       = { path = "../tx" }
+pqsigner-erc7730  = { path = "../pqsigner-erc7730" }
 sphincs-tz-shared = { path = "../shared" }
 
 # Prevent libFuzzer / asan from being built with sanitizer flags that
@@ -89,6 +90,27 @@ bench = false
 [[bin]]
 name = "hid_frame_assembler"
 path = "fuzz_targets/hid_frame_assembler.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "erc7730_verify_bundle"
+path = "fuzz_targets/erc7730_verify_bundle.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "erc7730_ir_parse"
+path = "fuzz_targets/erc7730_ir_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "erc7730_walker"
+path = "fuzz_targets/erc7730_walker.rs"
 test = false
 doc = false
 bench = false

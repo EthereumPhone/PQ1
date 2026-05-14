@@ -19,7 +19,11 @@ pub use pqsigner_erc7730::bundle::{
     MAX_ERC7730_BUNDLE_LEN, MAX_PROOF_DEPTH,
 };
 pub use pqsigner_erc7730::ir::{
-    ContextKind, Erc7730Ir, FormatOp, IrError, PathOp, Visibility,
-    HEADER_LEN, MAX_FIELDS_PER_FORMAT, MAX_FORMATS, MAX_IR_LEN,
-    MAX_NESTING, MAX_POOL_ENTRY_LEN, SCHEMA_VER,
+    ContextKind, Erc7730Ir, FieldEntry, FieldIter, FormatHeader, FormatIter,
+    FormatOp, IrError, PathOp, Visibility, HEADER_LEN, MAX_FIELDS_PER_FORMAT,
+    MAX_FORMATS, MAX_IR_LEN, MAX_NESTING, MAX_POOL_ENTRY_LEN, SCHEMA_VER,
+};
+pub use pqsigner_erc7730::walker::{path_bytes, resolve_path, resolve_program, WalkerCtx};
+pub use pqsigner_erc7730::abi::{
+    container_field, AbiField, AbiNode, AbiValue, AbiView, ContainerView,
 };

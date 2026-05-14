@@ -28,8 +28,8 @@
 //! way it submits any other; only the inner `callData` differs.
 
 use sphincs_tz_shared::{
-    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE,
-    FLAG_REGISTER_SLOT, MAX_BATCH_TXS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN,
+    NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, ERC7730_MAX_TRAILER_LEN,
+    FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT, MAX_BATCH_TXS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN,
     PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
     PQ_SMART_WALLET_FACTORY, SIGN_USEROP_BATCH_HEADER_LEN, SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN,
     SIGN_USEROP_BATCH_TX_PREFIX_LEN, SIG_WRAPPER_LEN, SLOT_INDEX_MASK,
@@ -203,6 +203,82 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             data_len,
         });
     }
+    // ── 5b. Optional ERC-7730 clear-signing descriptor (batch) ─────
+    //
+    // Single trailer at the end of the payload (NOT per-inner-tx —
+    // that would explode the parse surface for marginal benefit; see
+    // module comment). The descriptor MUST bind to the batch's
+    // `chain_id` and to at least ONE inner tx's `to` address;
+    // otherwise the companion shipped an unrelated descriptor and we
+    // reject the whole batch.
+    //
+    // Phase 3: log only. Phase 4's renderer wires this into the
+    // per-tx pages (the matching inner tx gets clear-signed pages;
+    // others fall through the basic ladder).
+    let erc7730_trailer = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        ERC7730_MAX_TRAILER_LEN,
+        "bad erc7730",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
+    };
+    cursor = erc7730_trailer.next_cursor;
+
+    let erc7730_verified: Option<crate::tx::erc7730::VerifiedDescriptor<'_>> =
+        if erc7730_trailer.len > 0 {
+            let bytes = &snap[erc7730_trailer.start
+                ..erc7730_trailer.start + erc7730_trailer.len];
+            match crate::tx::erc7730::verify_erc7730_bundle(
+                bytes,
+                &crate::db_roots::ERC7730_DESCRIPTORS_ROOT,
+            ) {
+                Ok(v) => {
+                    // Find an inner tx whose (chain_id, to) matches.
+                    let mut bind_idx: Option<usize> = None;
+                    for i in 0..batch_count {
+                        let ptx = parsed[i].as_ref().unwrap();
+                        if crate::tx::erc7730::cross_check_contract(
+                            &v.ir,
+                            chain_id,
+                            &ptx.to,
+                        )
+                        .is_ok()
+                        {
+                            bind_idx = Some(i);
+                            break;
+                        }
+                    }
+                    if bind_idx.is_none() {
+                        ui::show_status("Batch sign", "7730 binding fail");
+                        return NscStatus::InvalidPointer as u32;
+                    }
+                    #[cfg(feature = "debug-log")]
+                    {
+                        let c = &v.ir.contract;
+                        secure_log!(
+                            "[ERC-7730] batch matched tx_idx={} chain={} contract=0x{:02x}{:02x}{:02x}{:02x}..{:02x}{:02x}{:02x}{:02x} ir_len={}",
+                            bind_idx.unwrap(),
+                            v.ir.chain_id,
+                            c[0], c[1], c[2], c[3],
+                            c[16], c[17], c[18], c[19],
+                            v.ir.raw.len(),
+                        );
+                    }
+                    Some(v)
+                }
+                Err(_e) => {
+                    ui::show_status("Batch sign", "7730 bundle fail");
+                    return NscStatus::InvalidPointer as u32;
+                }
+            }
+        } else {
+            None
+        };
+    let _ = &erc7730_verified;
+
     if cursor != total_len {
         ui::show_status("Batch sign", "trailing bytes");
         return NscStatus::InvalidPointer as u32;
