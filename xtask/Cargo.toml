@@ -14,9 +14,6 @@
 #                             and commit the diff. CI diffs the
 #                             generated file against fresh output to catch
 #                             drift.
-#
-# Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md
-# Phase 4.
 
 [package]
 name = "pqsigner-xtask"
