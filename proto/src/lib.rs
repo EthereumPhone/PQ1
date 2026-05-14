@@ -98,23 +98,16 @@ pub use mem_layout::*;
 // Numeric ranges have grown organically; the documented blocks below
 // are the convention going forward. New commands must claim a CMD ID
 // in the range matching their concern. The `const _: () = { ... }`
-// collision check at the bottom of this section catches accidental
+// collision check at the bottom of this file catches accidental
 // duplicates at compile time.
 //
 //   1..=13   core lifecycle (unlock, lock, status, deprecated v1 stubs)
 //  14..=15   wallet identity (address, init-code preview)
-//  16..=17   off-chain (EIP-1271) signing + status
+//  16..=18   off-chain (EIP-1271) signing + status + sync
 //  20..=24   firmware update state machine
-//  30        UserOp batch signing
-// 200..=     test/diagnostic (must be `mode != production`)
+//  30       UserOp batch signing
+// 200..=    test/diagnostic (must be `mode != production`)
 // ---------------------------------------------------------------------------
-
-pub const CMD_BASE_CORE: u32 = 1;
-pub const CMD_BASE_WALLET: u32 = 14;
-pub const CMD_BASE_OFFCHAIN: u32 = 16;
-pub const CMD_BASE_FW: u32 = 20;
-pub const CMD_BASE_BATCH: u32 = 30;
-pub const CMD_BASE_TEST: u32 = 200;
 
 pub const CMD_NONE: u32 = 0;
 pub const CMD_GET_REMAINING: u32 = 1;
@@ -761,7 +754,12 @@ pub const P1_V2_MORE: u8 = 0x80;
 pub const SIGNER_MAIN: u8 = 0x00;
 pub const SIGNER_BOOTSTRAP: u8 = 0x01;
 
-/// Fixed-size wrapper header written before the raw SPHINCS+C7 signature:
+/// Fixed-size wrapper header written before the raw SPHINCS+ signature
+/// in the legacy v2 PQSignatureWrapper format. New code uses the
+/// on-chain `SignatureWrapper(uint256 ownerIndex, bytes innerSig)` ABI
+/// layout (see `SIG_WRAPPER_LEN`).
+///
+/// Layout:
 ///   signer_type(1) + key_index(4) + ots_index(4) + pk_seed(32) + pk_root(32)
 pub const WRAPPER_HEADER_LEN: usize = 1 + 4 + 4 + 32 + 32; // 73
 
@@ -789,10 +787,7 @@ pub const C10_SIG_LEN: usize = SIGNATURE_LEN;
 ///     boundary → `ceil(4008/32)*32 = 4032` bytes
 ///
 /// So the wrapper is exactly 32 + 32 + 32 + 4032 = 4128 bytes.
-pub const SIG_WRAPPER_LEN: usize = {
-    let padded = ((C10_SIG_LEN + 31) / 32) * 32;
-    32 + 32 + 32 + padded
-}; // 4128
+pub const SIG_WRAPPER_LEN: usize = 32 + 32 + 32 + C10_SIG_LEN.next_multiple_of(32); // 4128
 
 /// Type 1 = bootstrap-signed `addOwnerBytes` UserOp signature wrapper.
 ///
@@ -928,7 +923,7 @@ pub const EIP6492_FACTORY_CALLDATA_LEN: usize = PQ_INIT_CODE_LEN - 20; // 4260
 /// Padded length of `factoryCalldata` inside the ABI tuple (rounded up
 /// to the next 32-byte boundary). The padding bytes are zero.
 pub const EIP6492_FACTORY_CALLDATA_PADDED: usize =
-    (EIP6492_FACTORY_CALLDATA_LEN + 31) / 32 * 32; // 4288
+    EIP6492_FACTORY_CALLDATA_LEN.next_multiple_of(32); // 4288
 
 /// Length of the inner ERC-1271 signature carried inside an ERC-6492
 /// wrapper. The firmware places the on-chain `SignatureWrapper`
@@ -1546,7 +1541,7 @@ impl From<u32> for NscStatus {
 }
 
 // ---------------------------------------------------------------------------
-// Wire-format layout tests (run with `cargo test -p sphincs-tz-shared`)
+// Wire-format layout tests (run with `cargo test -p pqsigner-proto`)
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -1554,24 +1549,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn userop_v2_header_is_312() {
-        // key_index(4) + ots_index(4) + sender(20) + entry_point(20) +
-        // chain_id(8) + 8 × u256(32) = 312
-        assert_eq!(USEROP_V2_HEADER_LEN, 312);
-    }
-
-    #[test]
-    fn userop_v1_header_is_305() {
-        // has_bundle(1) + sender(20) + entry_point(20) + chain_id(8) +
-        // 8 × u256(32) = 305
+    fn legacy_userop_header_is_305() {
+        // 1 (mode) + 20 (sender) + 20 (entry_point) + 8 (chain_id)
+        // + 8 × 32 (nonce + 5 gas + init_code_hash + paymaster_hash) = 305
         assert_eq!(USEROP_HEADER_LEN, 305);
+        assert_eq!(USEROP_PREFIX_LEN, USEROP_HEADER_LEN + 4);
     }
 
     #[test]
-    fn v2_aa_matches_v1_minus_has_bundle() {
-        // v2→v1 translation skips key_index(4)+ots_index(4), yielding
-        // the same 304-byte AA blob that v1 stores after has_bundle.
-        assert_eq!(USEROP_V2_HEADER_LEN - 8, USEROP_HEADER_LEN - 1);
+    fn unified_sign_userop_header_is_330() {
+        // 8 (chain_id) + 4 (flags) + 20 (sender) + 20 (entry_point)
+        // + 32 (nonce) + 5 × 32 (gas) + 32 (paymaster_hash)
+        // + 20 (to) + 32 (value) + 2 (data_len) = 330
+        assert_eq!(SIGN_USEROP_HEADER_LEN, 330);
     }
 
     #[test]
@@ -1583,96 +1573,44 @@ mod tests {
     }
 
     #[test]
-    fn init_code_len_is_4248() {
-        // factory(20) + selector(4) + 4*bytes32(128) + offset(32) + length(32) + padded_sig(4032)
-        assert_eq!(INIT_CODE_LEN, 4_248);
+    fn pq_init_code_len_is_4280() {
+        // factory(20) + selector(4) + 5 × bytes32(160) + offset(32)
+        // + length(32) + padded_sig(4032) = 4280
+        assert_eq!(PQ_INIT_CODE_LEN, 4_280);
     }
 
     #[test]
     fn signature_abi_padding_correct() {
         // 4008 % 32 = 8, so 24 bytes of zero-padding; padded = 4032
-        let padded = ((SIGNATURE_LEN + 31) / 32) * 32;
+        let padded = SIGNATURE_LEN.next_multiple_of(32);
         assert_eq!(padded, 4_032);
         assert_eq!(padded % 32, 0);
     }
 
-    /// Simulate the v2 sign_userop payload layout and verify the
-    /// firmware would read tx_len from the correct offset.
     #[test]
-    fn v2_sign_userop_offsets() {
-        const TX_LEN: usize = 50; // like the ETH transfer test vector
-        const TOTAL: usize = USEROP_V2_HEADER_LEN + 2 + TX_LEN + 2;
-
-        let mut buf = [0u8; TOTAL];
-        let mut p = 0usize;
-
-        p += 4; // key_index
-        p += 4; // ots_index
-        p += 20; // sender
-        p += 20; // entry_point
-        p += 8; // chain_id
-        p += 32 * 8; // 8 u256 fields
-        assert_eq!(p, USEROP_V2_HEADER_LEN, "header fields end at wrong offset");
-
-        // tx_len u16 BE
-        buf[p] = (TX_LEN >> 8) as u8;
-        buf[p + 1] = (TX_LEN & 0xFF) as u8;
-        p += 2;
-
-        // tx data
-        let mut i = 0;
-        while i < TX_LEN {
-            buf[p + i] = 0xAA;
-            i += 1;
-        }
-        p += TX_LEN;
-
-        // bundle_len = 0
-        p += 2;
-
-        assert_eq!(p, TOTAL);
-
-        // Verify: firmware reads tx_len at USEROP_V2_HEADER_LEN
-        let fw_tx_len = u16::from_be_bytes([
-            buf[USEROP_V2_HEADER_LEN],
-            buf[USEROP_V2_HEADER_LEN + 1],
-        ]) as usize;
-        assert_eq!(fw_tx_len, TX_LEN);
+    fn sig_wrapper_len_matches_solidity_encoding() {
+        // abi.encode(uint256 ownerIndex, bytes innerSig):
+        //   head: ownerIndex(32) + bytes_offset(32) = 64
+        //   tail: length(32) + data padded to 32-byte boundary = 32 + 4032
+        // total = 4128
+        assert_eq!(SIG_WRAPPER_LEN, 4_128);
+        assert_eq!(SIG_TYPE1_LEN, SIG_WRAPPER_LEN);
+        assert_eq!(SIG_TYPE2_LEN, SIG_WRAPPER_LEN);
     }
 
-    /// Simulate the v2 sign_clear_userop payload layout.
     #[test]
-    fn v2_sign_clear_userop_offsets() {
-        let zk_header_start = 8usize; // after key_index + ots_index
-        let zk_len = ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN; // 612
-        let aa_len = USEROP_V2_HEADER_LEN - 8; // 304
-        let tx_len_off = zk_header_start + zk_len + aa_len;
+    fn flag_bitfields_partition_u32_cleanly() {
+        // Every bit of u32 must belong to exactly one named region.
+        let regions = FLAG_INCLUDE_INIT_CODE
+            | FLAG_REGISTER_SLOT
+            | ACCOUNT_INDEX_MASK
+            | SLOT_INDEX_MASK;
+        assert_eq!(regions, u32::MAX);
 
-        assert_eq!(zk_len, 612);
-        assert_eq!(aa_len, 304);
-        assert_eq!(tx_len_off, 8 + 612 + 304); // = 924
-
-        const BUF_LEN: usize = 8 + 612 + 304 + 2 + 177 + 2 + 100;
-        let mut buf = [0u8; BUF_LEN];
-
-        let tx_len: usize = 177;
-        let vk_len: usize = 100;
-
-        // Write tx_len at expected offset
-        buf[tx_len_off] = (tx_len >> 8) as u8;
-        buf[tx_len_off + 1] = (tx_len & 0xFF) as u8;
-
-        // Verify firmware reads it correctly
-        let fw_tx_len = u16::from_be_bytes([buf[tx_len_off], buf[tx_len_off + 1]]) as usize;
-        assert_eq!(fw_tx_len, tx_len);
-
-        // Verify vk_bundle_len offset
-        let tx_end = tx_len_off + 2 + tx_len;
-        buf[tx_end] = (vk_len >> 8) as u8;
-        buf[tx_end + 1] = (vk_len & 0xFF) as u8;
-        let fw_vk_len =
-            u16::from_be_bytes([buf[tx_end], buf[tx_end + 1]]) as usize;
-        assert_eq!(fw_vk_len, vk_len);
+        // ACCOUNT_INDEX_MASK is 8 bits at the documented shift.
+        assert_eq!(ACCOUNT_INDEX_MASK, (MAX_ACCOUNT_INDEX) << ACCOUNT_INDEX_SHIFT);
+        // SLOT_INDEX_MASK is the 22 LSBs.
+        assert_eq!(SLOT_INDEX_MASK, (1u32 << 22) - 1);
     }
 
     // ── CMD_SIGN_OFFCHAIN / EIP-6492 layout ───────────────────────────
