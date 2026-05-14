@@ -277,7 +277,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         } else {
             None
         };
-    let _ = &erc7730_verified;
 
     if cursor != total_len {
         ui::show_status("Batch sign", "trailing bytes");
@@ -333,6 +332,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // as raw 40-hex, which is always safe.
     let resolver = NameResolver::new();
 
+    // Running Keccak256 over the concatenation of per-tx ERC-8213
+    // calldata digests. The batch-final fingerprint surfaces the
+    // resulting hash so a user can cross-check the *whole bundle*
+    // (not just an individual inner call) against an off-device
+    // reconstruction (e.g., `cast keccak (concat (per-tx digests))`).
+    let mut batch_digest = {
+        use sha3::Digest;
+        sha3::Keccak256::new()
+    };
+
     for i in 0..batch_count {
         let ptx = parsed[i].as_ref().unwrap();
         let inner_data: &[u8] = &snap[ptx.data_off..ptx.data_off + ptx.data_len];
@@ -350,18 +359,35 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             signing_hash: [0u8; 32],
         };
 
-        // No trailer-derived metadata for batch — pass `None` everywhere.
+        // Per-tx descriptor routing: pass `Some(&v)` only to the inner
+        // tx whose `to` matches the verified descriptor's contract.
+        // Other inner txs render via the legacy ladder (typed-call /
+        // ERC-20 / blind-sign).
+        let erc7730_for_this_tx: Option<&crate::tx::erc7730::VerifiedDescriptor<'_>> =
+            erc7730_verified.as_ref().filter(|v| ptx.to == v.ir.contract);
         let inner_pages = pick_sign_pages(
             &tx_for_display,
             inner_data,
             None,
             None,
             None,
+            erc7730_for_this_tx,
             None,
             None,
             &resolver,
         );
-        let pages = wrap_pages_with_batch_banner(inner_pages, i, batch_count);
+        let mut pages = wrap_pages_with_batch_banner(inner_pages, i, batch_count);
+
+        // Per-tx ERC-8213 fingerprint. The user sees one fingerprint
+        // per inner call; a separate batch-final fingerprint binds
+        // the whole bundle below.
+        let inner_digest =
+            pqsigner_tx_core::erc8213::calldata_digest(inner_data);
+        let _ = crate::tx::display::erc8213::append_fingerprint_page(
+            &mut pages,
+            crate::tx::display::erc8213::Kind::CalldataDigest(inner_digest),
+        );
+        batch_digest.update(&inner_digest);
 
         match confirm(pages.as_slice()) {
             ConfirmResult::Confirmed => {}
@@ -376,9 +402,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // ── 6b. Final summary confirm ───────────────────────────────────
+    // ── 6b. Final summary confirm + batch-final fingerprint ────────
+    //
+    // `batch_digest` is `keccak256(concat(per_tx_calldata_digests))`
+    // — a single 32-byte value the user can cross-check against
+    // a host-side reconstruction over the same bundle.
+    let batch_final: [u8; 32] = {
+        let mut out = [0u8; 32];
+        let h = batch_digest.finalize();
+        out.copy_from_slice(&h);
+        out
+    };
     {
-        let final_pages = build_final_summary_pages(batch_count);
+        let mut final_pages = build_final_summary_pages(batch_count);
+        let _ = crate::tx::display::erc8213::append_fingerprint_page(
+            &mut final_pages,
+            crate::tx::display::erc8213::Kind::Raw32(batch_final),
+        );
         match confirm(final_pages.as_slice()) {
             ConfirmResult::Confirmed => {}
             ConfirmResult::Cancelled => {
