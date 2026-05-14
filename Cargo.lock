@@ -1448,6 +1448,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqsigner-erc7730"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "pqsigner-tx",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "pqsigner-fi"
 version = "0.1.0"
 dependencies = [
@@ -2020,6 +2029,7 @@ dependencies = [
  "png",
  "pqsigner-aa",
  "pqsigner-domain",
+ "pqsigner-erc7730",
  "pqsigner-fi",
  "pqsigner-tx",
  "pqsigner-tx-core",
