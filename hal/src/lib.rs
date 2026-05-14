@@ -5,15 +5,10 @@
 //! `pqsigner-hal-mock`, backup-MCU ports) plug in without per-call-site
 //! `cfg(feature = "stm32u585")`s. The aggregate [`Platform`] trait
 //! collects every per-peripheral trait into a single bound that
-//! callers thread as `&mut impl Platform` — see Phase 6 / 7 of the
-//! modularity refactor for the call-site migration plan.
+//! callers thread as `&mut impl Platform`.
 //!
-//! This crate is the **specification**. The actual driver code lives
-//! in `secure/src/hw/*` today and will move into `hal-stm32u5/` in
-//! Phase 6 PR 2; until that move lands, anyone implementing a new
-//! peripheral or a new MCU port should match these signatures
-//! verbatim so the eventual cfg→trait migration is a name-change-only
-//! diff.
+//! This crate is the **specification**. Anyone implementing a new
+//! peripheral or a new MCU port must match these signatures verbatim.
 
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
@@ -28,6 +23,7 @@
 /// "something went wrong on hardware" so it can return a uniform
 /// `NscStatus::InternalError` or trigger a tamper response.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[non_exhaustive]
 pub enum HalError {
     /// I2C / SPI bus NAK, arbitration loss, parity error, …
     BusFault,
@@ -62,9 +58,7 @@ pub trait Rng {
 // ---------------------------------------------------------------------------
 
 /// SHA-256 streaming digest. The STM32U585 HASH peripheral is the
-/// canonical impl; mock and host impls wrap `sha2::Sha256`. The
-/// `pqsigner-c10` crate's `pqsigner_sha256_*` extern fns are shimmed
-/// onto this trait by `hal-stm32u5` once Phase 6 PR 2 lands.
+/// canonical impl; mock and host impls wrap `sha2::Sha256`.
 pub trait Sha256 {
     fn init(&mut self);
     fn update(&mut self, data: &[u8]);
@@ -79,6 +73,10 @@ pub trait Sha256 {
 /// `Software` is for development and host-side tests; `Dhuk` is the
 /// per-die hardware unique key; `Bhk` is the runtime-provisioned BHK;
 /// `DhukXorBhk` is the SAES `KEYSEL=11` mode (cross-keyed).
+//
+// Intentionally NOT `Debug`: the `Software` variant carries a key
+// reference and a derived `Debug` impl would print it.
+#[derive(Clone, Copy)]
 pub enum KeySelector<'a> {
     Software(&'a [u8; 32]),
     Dhuk,
@@ -147,12 +145,13 @@ pub trait Otp {
 /// boot results and by the runtime to surface the prior boot's exit
 /// code. Fields are an opaque blob from the trait's perspective; the
 /// concrete layout lives in the impl + `secure/src/hw/boot_state.rs`.
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BootStateData {
     pub raw: [u8; 32],
 }
 
 pub trait BootState {
+    #[must_use]
     fn read(&self) -> BootStateData;
     fn write(&mut self, data: BootStateData);
 }
@@ -172,6 +171,7 @@ pub enum TamperCause {
 
 pub trait Tamp {
     fn arm(&mut self);
+    #[must_use]
     fn check(&mut self) -> Option<TamperCause>;
 }
 
@@ -194,6 +194,8 @@ pub trait I2cBus {
 }
 
 pub trait SpiBus {
+    /// Full-duplex transfer. `w` is clocked out while `r` is clocked
+    /// in; impls require `w.len() == r.len()`.
     fn xfer(&mut self, w: &[u8], r: &mut [u8]) -> Result<(), HalError>;
 }
 
@@ -201,13 +203,14 @@ pub trait SpiBus {
 // Buttons (LEFT / RIGHT / etc.)
 // ---------------------------------------------------------------------------
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Buttonset {
     pub left: bool,
     pub right: bool,
 }
 
 pub trait Buttons {
+    #[must_use]
     fn poll(&mut self) -> Buttonset;
 }
 
@@ -243,7 +246,7 @@ pub trait Platform {
     type Uart: Uart;
 
     fn rng(&mut self) -> &mut Self::Rng;
-    fn sha256(&mut self) -> Self::Sha256;
+    fn sha256(&mut self) -> &mut Self::Sha256;
     fn saes(&mut self) -> &mut Self::Saes;
     fn flash(&mut self) -> &mut Self::Flash;
     fn otp(&mut self) -> &mut Self::Otp;
@@ -260,11 +263,10 @@ pub trait Platform {
 // Phased boot
 // ---------------------------------------------------------------------------
 
-/// Boot stages, executed in order. The aggregation matches Phase 10
-/// PR C's phased-boot rewrite of `secure/src/main.rs`. Drivers
-/// participate in the stages where their peripherals come online; the
-/// flat init list at `main.rs:356–605` is replaced by `for stage in
-/// BootStage::ALL { platform.run_stage(stage)?; }`.
+/// Boot stages, executed in order. Drivers participate in the stages
+/// where their peripherals come online; the secure-world entry can
+/// drive bring-up as `for stage in BootStage::ALL { … }` instead of a
+/// flat init list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootStage {
     /// RCC + clock tree + cache config.
@@ -282,12 +284,12 @@ pub enum BootStage {
 }
 
 impl BootStage {
-    pub const ALL: [BootStage; 6] = [
-        BootStage::Clocks,
-        BootStage::TrustZone,
-        BootStage::Crypto,
-        BootStage::Buses,
-        BootStage::Ui,
-        BootStage::Se,
+    pub const ALL: [Self; 6] = [
+        Self::Clocks,
+        Self::TrustZone,
+        Self::Crypto,
+        Self::Buses,
+        Self::Ui,
+        Self::Se,
     ];
 }

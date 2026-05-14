@@ -8,17 +8,8 @@ edition.workspace = true
 # (`pqsigner-hal-stm32u5`, `pqsigner-hal-mock`, future backup-MCU
 # ports) plug in without per-call-site `cfg`s.
 #
-# Phase 6 PR 1 of the modularity refactor — the trait definitions land
-# here first; PR 2 (`hal-stm32u5/` moves the existing `secure/src/hw/`
-# drivers into the impl crate), PR 3 (`hal-mock/` provides MockPlatform
-# for unit tests + QemuPlatform), and PR 4 (`secure/src/platform.rs`
-# selects between the two) are sequenced in `docs/handoff-modularity-
-# refactor.md` §4.2.
-#
-# Until the impl crates land, the trait surface here is the
-# specification — new drivers MUST implement these traits, even though
-# the existing code in `secure/src/hw/*` continues to be called via
-# direct paths during the migration.
+# The trait surface here is the specification. Driver implementations
+# in sibling crates MUST match these signatures verbatim.
 
 [dependencies]
 # `no_std`, no allocator, zero hardware deps. Trait crate only.
