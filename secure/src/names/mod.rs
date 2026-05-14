@@ -1,12 +1,9 @@
 //! Secure-world address-name lookup.
 //!
-//! Phase 5 PR 5.4 of the modularity refactor moved the pure-logic
-//! bundle verifier + `NameResolver` into `pqsigner-tx`. This module
-//! is now a thin shim that re-exports those types and adds the
-//! `verify_name_bundle` wrapper which threads the firmware-embedded
-//! `db_roots::NAMES_DB_ROOT` into the verifier so existing call sites
-//! (`crate::names::verify_name_bundle(...)`,
-//! `crate::names::NameResolver`) keep working unchanged.
+//! Thin shim over the pure-logic [`pqsigner_tx::names`] crate. The local
+//! [`verify_name_bundle`] wrapper threads the firmware-embedded
+//! [`crate::db_roots::NAMES_DB_ROOT`] into the verifier so callers don't
+//! have to.
 
 pub use pqsigner_tx::names::resolver;
 pub use pqsigner_tx::names::bundle::{NameMeta, MAX_NAME_BUNDLE_LEN};

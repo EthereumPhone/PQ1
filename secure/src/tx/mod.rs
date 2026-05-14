@@ -5,14 +5,12 @@
 //! copied into a secure stack buffer, parsed here, displayed for user
 //! confirmation, and only then hashed + signed.
 //!
-//! The pure parsing primitives (`rlp`, `eip1559`, `hash`) moved out into
-//! the `pqsigner-tx-core` crate as part of Phase 5 PR 5.1 of the
-//! modularity refactor. This module keeps thin re-export shims so
-//! existing call sites (`crate::tx::eip1559::Eip1559Tx`,
-//! `crate::tx::rlp::Item`, `crate::tx::hash::keccak256`) compile
-//! unchanged. `display`, `eip712`, and `typed_call` still depend on
-//! secure-world internals (`crate::ui`, `crate::erc20`,
-//! `crate::names`, `crate::selectors`) and stay here.
+//! The pure parsing primitives (`rlp`, `eip1559`, `hash`) live in the
+//! [`pqsigner_tx_core`] crate so host-side tooling can reuse them; this
+//! module exposes them via thin re-export shims. `display`, `eip712`,
+//! and `typed_call` still depend on secure-world internals
+//! (`crate::ui`, `crate::erc20`, `crate::names`, `crate::selectors`)
+//! and stay here.
 
 // display depends on crate::ui (hardware), so it's gated out in host
 // test builds. eip1559, eip712 core, hash, rlp, and typed_call (Phase 2

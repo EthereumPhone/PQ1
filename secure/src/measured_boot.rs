@@ -43,6 +43,9 @@ extern "C" {
 fn flash_end() -> usize {
     #[cfg(feature = "stm32u585")]
     {
+        // SAFETY: `addr_of!` on an `extern "C"` static yields the linker-defined
+        // address without dereferencing; converting to `usize` does not read
+        // memory.
         // Veneers are in FLASH on real hardware — include them.
         unsafe { core::ptr::addr_of!(__veneer_limit) as usize }
     }

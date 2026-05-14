@@ -1,5 +1,8 @@
-/// PIN verification via MAC-and-Destroy chain.
-/// Ported from desktop/src/main.rs lines 320-460.
+//! PIN verification via MAC-and-Destroy chain.
+//!
+//! Used by [`crate::secure_element::SecureElement::unlock`] (Mock backend)
+//! and by the Tropic01 batch-verify path. SE050 / OPTIGA backends do the
+//! PIN compare inside the chip instead of through this MACD pipeline.
 
 use crate::crypto::*;
 use crate::secure_element::SecureElement;
