@@ -1,0 +1,22 @@
+[workspace]
+
+[package]
+name = "sca-dispatch-target"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "thumbv8m ELF wrapping the Type 1 vs Type 2 dispatch logic from cmd_sign_userop.rs (FLAG_REGISTER_SLOT / FLAG_INCLUDE_INIT_CODE parse + the mutually-exclusive + slot-index sanity checks). Fault sweeps the dispatch for single-fault bypasses that would cause the firmware to emit a Type 1 the companion didn't request, or vice versa."
+
+[[bin]]
+name = "sca-dispatch-target"
+path = "src/main.rs"
+
+[dependencies]
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+panic-halt  = "1"
+zeroize     = { version = "1", default-features = false }
+pqsigner-fi = { path = "../../../pqsigner-fi" }
+
+[profile.release]
+opt-level = 3

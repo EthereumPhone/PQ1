@@ -573,25 +573,158 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
-### F-6 — `sphincs_c10::verify` does ~1.2–1.8 M instructions on some malformed signatures (low-severity observation)
+### F-11 — Type 1 / Type 2 dispatch sanity-check rejections are single-fault bypassable — **silent-T1-emission class is NOT reachable; reject-bypass class is, but on-chain re-validation bounds the blast radius**
+
+`make dispatch` sweeps the dispatch logic in `cmd_sign_userop.rs:160-236`.
+Two findings emerge:
+
+**Positive finding (the dangerous bypass class doesn't reproduce):** the
+`plain_t2` scenario (companion sends `flags=0`, expecting Type-2-only)
+shows ZERO "expected 0 → observed 1" deviations under all three fault
+models. **A single fault cannot flip `register_slot` from false to true
+to silently emit a Type 1** the companion did not request. This was
+the most concerning attack class in the threat model (silent attacker-
+controlled slot-key installation).
+
+**Negative finding (reject bypasses):** scenarios that SHOULD be rejected
+(incompatible flag combos, INCLUDE_INIT_CODE+nonzero-slot, REGISTER_SLOT+slot0)
+have single-fault bypasses on both plain and FI-hardened mirrors:
+
+```
+plain × both_flags     [skip 2 / s@0 1]  → 99→1, 99→0 deviations
+plain × init_with_slot [skip 5 / s@0 2]  → 99→0, 99→2 deviations
+plain × register_slot0 [skip 5 / s@FF 1] → 99→0, 99→1, 99→2 deviations
+fi    × {same scenarios} [similar counts] → same residual as F-10
+```
+
+Same root cause as F-10: input-register stuck-at fault makes the gate
+correctly compute "the corrupted input passes" → reject is skipped.
+
+**Severity: medium-low.** Even the worst-case bypass (a rejected combo
+proceeds as Type 1+Type 2) is bounded by **on-chain re-validation**:
+`PQSmartWallet.validateUserOp` independently re-checks the bootstrap C10
+sig and the slot pubkey installation — a Type 1 emitted from an
+inconsistent state still has to be paired with a valid bootstrap-key
+signature, which the unfaulted code path produces correctly. The
+on-chain validator catches malformed combos as `BootstrapKeyUsed` /
+`SlotKeyUsed` invariant violations.
+
+**Recommendation: same as F-10 (input redundancy).** Read `flags` and
+`slot_index` from the NS-pointer-validated input buffer TWICE, with
+`wait_random()` between, and compare. A stuck-at on one read survives;
+the second re-reads from memory; the cmp catches the discrepancy →
+halt. Tracked alongside F-10.
+
+### F-10 — Off-chain gap + cap enforcement is bypassable via input-register fault — **architectural; requires input-redundancy, not gate-sentinel-wrapping**
+
+`make cap` sweeps the gates in `cmd_sign_offchain.rs:202-223` that bound a
+single SPHINCS+C10 slot key to MAX_SLOT_USES = 65,536 signatures per chain.
+Both the plain (production) predicate AND a sentinel-wrapped variant
+(`pqsigner_fi::check_true_into_sentinel`, the F-7/F-8 hardening pattern)
+are single-fault-bypassable:
+
+```
+sca_cap_check_plain × gap_at_boundary  [skip 7 / s@0 4 / s@FF 1]   = 12 bypasses
+sca_cap_check_plain × cap_at_max       [skip 3 / s@0 3 / s@FF 0]   =  6
+sca_cap_check_plain × cap_overflow     [skip 3 / s@0 1 / s@FF 1]   =  5
+
+sca_cap_check_fi × gap_at_boundary     [skip 5 / s@0 4 / s@FF 2]   = 11
+sca_cap_check_fi × cap_at_max          [skip 1 / s@0 3 / s@FF 0]   =  4
+sca_cap_check_fi × cap_overflow        [skip 2 / s@0 1 / s@FF 1]   =  4
+```
+
+**Bypass mechanism: input-register fault.** Bypasses cluster around
+"instr 3" (function prologue / argument unpack) and at the gate input
+compute (~instr 3897 for the second gate). A stuck-at-0 on the register
+holding `local_offchain` clamps the input to 0; the gate correctly
+computes "0 < MAX_OFFCHAIN_GAP" and "0 + 1 <= MAX_SLOT_USES" → accept.
+The F-7/F-8 sentinel-wrap pattern doesn't defend against this:
+sentinel-wrapping protects the gate COMPUTATION (boolean true/false flip
+inside the predicate or its caller-side cmp), but if the INPUT to the
+predicate is corrupted, the predicate correctly accepts the corrupted
+input.
+
+**Production blast-radius — bounded by the flash-promote step.** The
+production code has a "promote" check before the gap check
+(`cmd_sign_offchain.rs:200-210`):
+
+```rust
+let last_userop = offchain_state::last_userop_count_read(&slot_flash_key);
+let mut local_offchain = offchain_state::offchain_count_read(&slot_flash_key);
+if last_userop > local_offchain {
+    offchain_state::offchain_count_promote_to(...)?;
+    local_offchain = last_userop;
+}
+```
+
+This means a SINGLE successful fault gets at most ~1 extra signature past
+the cap before the next call's flash read + promote step re-anchors
+local_offchain to the on-chain last_userop. Sustained attack would require
+faulting EVERY call (or also faulting the promote step).
+
+**Severity: medium.** Bounded blast-radius per fault, but each successful
+fault permanently erodes the structural 65 k invariant the SPHINCS+
+subset-resilience margin depends on. Worth fixing.
+
+**Fix direction (not yet applied — needs design choice).** Sentinel-wrapping
+alone isn't enough; the gate needs **input redundancy**:
+  - **Option A: read inputs twice from flash, compare.** Cheap (each flash
+    read is ~µs), simple. A stuck-at on the input register survives one
+    read but the second re-loads from flash; the cmp catches the
+    discrepancy → halt.
+  - **Option B: compute the gate via two independently-derived paths.**
+    E.g., `gap_pass = (local - last) < GAP_MAX` AND `gap_pass2 = local < (last + GAP_MAX)`.
+    Each formulation routes the values through different register paths
+    and arithmetic. Disagreement → halt.
+  - **Option C: pad with magic-cookie integrity values on the input
+    struct.** Read inputs into a struct with HMAC-tagged sentinel
+    bytes; verify the tag before using the fields. Most thorough but most
+    code.
+
+Recommend Option A for first-pass — it's the least invasive while still
+forcing an attacker to fault TWO independent flash reads (which happen
+microseconds apart with different bus timings). Track as F-10 fix in
+work-todo.
+
+### F-6 — `sphincs_c10::verify` does ~1.2–1.8 M instructions on some malformed signatures — **intrinsic to SPHINCS+ verify, NOT fixable as a code change**
 
 `instr_count` (a clean `verify()` run, instrumented) reports: `wrong-message` /
 `wrong-root` / `mutated-R` → ~7 521 instructions; **`mutated-FORS-auth` →
 1 239 403**, **`mutated-WOTS-sigma` → 1 777 214**, **`mutated-WOTS-count-target-sum-fail`
-→ 1 239 403**. So a malformed FORS-auth-path / WOTS-sigma / WOTS-digit value drives
-`sphincs_c10::verify` (the Rust reference impl) into a ~1–2 M-instruction
-computation before it returns "reject" — i.e. its chain/loop lengths aren't
-bounded defensively against an out-of-range value. **Severity: low.** It's still
-a *reject* (correctness holds — a malformed sig never verifies). On-chain the
-matching `SPHINCsC10Asm.sol` would do ~1–2 M SHA-256 precompile `staticcall`s →
-blow past `verificationGasLimit` → OOG revert → the bundler's `eth_estimate…` /
-simulation catches it → the userOp is dropped before it ever lands, and nobody
-eats the gas. So it doesn't open a DoS in the ERC-4337 flow. But it's worth a
-fail-fast `digit < W` / bounded-loop assertion in `sphincs-c10::verify` (and a
-look at whether the Yul verifier has the same shape) so a future auditor isn't
-surprised by "a malformed sig makes verify do a million hashes". **Not fixed**
-(it's `sphincs-c10` / the Yul verifier — out of scope of this tooling pass;
-flagged for the maintainer).
+→ 1 239 403**.
+
+**Why the gap.** `wrong-message` hits the forced-zero constraint check
+(`if fors_indices[K-1] != 0 { return false }`) — `H_msg` with a wrong msg
+produces random `fors_indices[K-1]`, which is non-zero with probability
+2047/2048 → early reject. The other three malformed vectors keep the
+correct `msg + pk + R`, so the forced-zero check passes, and full FORS
+reconstruction (~K-1 = 12 trees × A = 11 hashes each ≈ 1.2M unicorn-instr
+of SHA-256) runs to completion before the cascading-failure cascade hits
+the final root mismatch.
+
+**Originally-suggested "fail-fast `digit < W` / bounded-loop assertion" doesn't
+apply.** `extract_digits` already masks with `W_MASK = W-1 = 7`, so
+`digits[i] ∈ [0, 7]` by construction; chain lengths `(W-1) - digits[i]`
+are bounded by 7 — no unbounded loop exists. The expense is intrinsic:
+SPHINCS+ verify can only validate a signature by RECOMPUTING the full
+FORS+WOTS+hypertree, and any deeper-than-H_msg mutation can't be caught
+without running the recomputation through to where the corruption
+propagates to the final root compare. No signature-internal MAC or
+per-component integrity check exists in the SPHINCS+ spec.
+
+**Severity unchanged: low.** Correctness still holds (malformed sigs
+always reject); on-chain the matching `SPHINCsC10Asm.sol` has the same
+~1.2-1.8M staticcalls shape and blows past `verificationGasLimit` → OOG
+revert → the bundler's `eth_estimate…` simulation catches it → the
+userOp is dropped before submission, nobody eats the gas. So no
+ERC-4337 DoS. The observation is just "SPHINCS+ verify is intrinsically
+~1-2M-instruction work on signatures that pass the forced-zero check but
+fail deeper" — not a bug to fix.
+
+**Not fixed** — investigation determined the work is intrinsic; the
+production code already has the only fast-fail point that exists in the
+SPHINCS+ spec (the forced-zero check). Adding a separate signature-bytes
+integrity scheme would be a SPHINCS+ extension, not a fix.
 
 ### F-5 — `fi::check_true` is ~2-coordinated-skip-defeatable, not 4-skip as its doc claimed — **doc updated + the result-path route mitigated at call sites**
 

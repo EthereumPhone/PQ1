@@ -34,9 +34,13 @@ NSP_DIR  := ns_ptr_target
 NSP_ELF  := $(NSP_DIR)/target/$(TARGET)/release/sca-ns-ptr-target
 C10S_DIR := c10_sign_target
 C10S_ELF := $(C10S_DIR)/target/$(TARGET)/release/sca-c10-sign-target
+CAP_DIR  := cap_target
+CAP_ELF  := $(CAP_DIR)/target/$(TARGET)/release/sca-cap-target
+DISP_DIR := dispatch_target
+DISP_ELF := $(DISP_DIR)/target/$(TARGET)/release/sca-dispatch-target
 DONJON   ?= donjon-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign kdf sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch kdf sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -68,6 +72,16 @@ build-c10-sign: $(C10S_ELF)
 $(C10S_ELF): $(C10S_DIR)/src/main.rs $(C10S_DIR)/memory.x $(C10S_DIR)/build.rs $(C10S_DIR)/Cargo.toml ../../sphincs-c10/src/lib.rs ../../secure/src/fi.rs
 	cargo build --release --target $(TARGET) --manifest-path $(C10S_DIR)/Cargo.toml
 
+build-cap: $(CAP_ELF)
+
+$(CAP_ELF): $(CAP_DIR)/src/main.rs $(CAP_DIR)/memory.x $(CAP_DIR)/build.rs $(CAP_DIR)/Cargo.toml ../../pqsigner-fi/src/lib.rs
+	cargo build --release --target $(TARGET) --manifest-path $(CAP_DIR)/Cargo.toml
+
+build-dispatch: $(DISP_ELF)
+
+$(DISP_ELF): $(DISP_DIR)/src/main.rs $(DISP_DIR)/memory.x $(DISP_DIR)/build.rs $(DISP_DIR)/Cargo.toml ../../pqsigner-fi/src/lib.rs
+	cargo build --release --target $(TARGET) --manifest-path $(DISP_DIR)/Cargo.toml
+
 fi: build
 	$(DONJON) run fault_sweep_fi.py
 
@@ -91,6 +105,12 @@ ns-ptr: build-ns-ptr
 
 c10-sign: build-c10-sign
 	$(DONJON) run fault_sweep_c10_sign.py
+
+cap: build-cap
+	$(DONJON) run fault_sweep_cap.py
+
+dispatch: build-dispatch
+	$(DONJON) run fault_sweep_dispatch.py
 
 kdf: build-kdf
 	$(DONJON) run leakage_kdf.py
