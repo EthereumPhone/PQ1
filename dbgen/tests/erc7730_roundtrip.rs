@@ -28,9 +28,12 @@ use std::path::PathBuf;
 use dbgen::erc7730::{
     build_db, round_trip_check, Erc7730BuildResult,
 };
+use pqsigner_erc7730::abi::container_field;
 use pqsigner_erc7730::binding::{cross_check_contract, cross_check_eip712};
 use pqsigner_erc7730::bundle::{verify_erc7730_bundle, MAX_ERC7730_BUNDLE_LEN};
-use pqsigner_erc7730::ir::{ContextKind, CTX_CONTRACT, CTX_EIP712};
+use pqsigner_erc7730::ir::{ContextKind, Erc7730Ir, PathOp, CTX_CONTRACT, CTX_EIP712};
+use pqsigner_erc7730::walker::path_bytes;
+use pqsigner_tx_core::hash::keccak256;
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -202,6 +205,152 @@ fn tampered_proof_is_rejected() {
             matches!(err, pqsigner_erc7730::bundle::BundleError::Merkle),
             "expected Merkle, got {err:?}"
         );
+    }
+}
+
+/// Lock the container-field index constants in `pqsigner_erc7730::abi`
+/// to the host emitter's keccak-prefix convention. The on-device
+/// walker indexes `@.value` / `@.to` / etc. by exactly these `u16`
+/// values; any drift breaks every existing `erc7730_db.bin`.
+/// The Python companion stub at `tools/companion-stub/erc7730_trailer.py`
+/// must produce a byte-for-byte trailer that the on-device parser
+/// accepts. Phase 3 e2e relies on this — if the stub drifts from the
+/// catalog blob layout, every QEMU smoke test fails opaquely.
+#[test]
+fn companion_stub_trailer_verifies_against_on_device() {
+    let root_dir = workspace_root();
+    let db_path = root_dir.join("tools/companion-stub/erc7730_db.bin");
+    let stub_path = root_dir.join("tools/companion-stub/erc7730_trailer.py");
+    if !db_path.exists() || !stub_path.exists() {
+        eprintln!("(skipped) companion stub or db missing");
+        return;
+    }
+    // USDT mainnet — a Contract-context descriptor in the seed corpus.
+    let usdt = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+    let out = std::process::Command::new("python3")
+        .arg(&stub_path)
+        .arg("--db")
+        .arg(&db_path)
+        .arg("--chain")
+        .arg("1")
+        .arg("--contract")
+        .arg(usdt)
+        .output()
+        .expect("run companion stub");
+    if !out.status.success() {
+        panic!(
+            "companion stub failed: stdout={:?} stderr={:?}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+    }
+    let trailer = out.stdout;
+    assert!(!trailer.is_empty(), "stub produced empty trailer");
+    let result = build_seed();
+    let v = verify_erc7730_bundle(&trailer, &result.root)
+        .expect("trailer verifies against pinned root");
+    assert_eq!(v.ir.chain_id, 1, "chain_id from IR");
+    let want_addr =
+        hex::decode("dAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+    assert_eq!(&v.ir.contract, &want_addr[..], "contract from IR");
+    assert!(
+        matches!(v.ir.context_kind, ContextKind::Contract),
+        "Contract context"
+    );
+}
+
+#[test]
+fn container_field_constants_match_keccak_prefix() {
+    fn prefix(name: &str) -> u16 {
+        let h = keccak256(name.as_bytes());
+        u16::from_be_bytes([h[0], h[1]])
+    }
+    assert_eq!(container_field::VALUE, prefix("value"));
+    assert_eq!(container_field::TO, prefix("to"));
+    assert_eq!(container_field::FROM, prefix("from"));
+    assert_eq!(container_field::CHAIN_ID, prefix("chainId"));
+    assert_eq!(container_field::NONCE, prefix("nonce"));
+}
+
+/// Every path program the host emitter writes into the seed corpus
+/// must parse cleanly via the on-device walker's path-extraction
+/// helper (length prefix valid, opcodes recognised, args sized
+/// correctly). Catches "host emits a byte the walker rejects" drift
+/// without needing a populated ABI tree.
+#[test]
+fn seed_corpus_path_programs_parse() {
+    let result = build_seed();
+    for entry in &result.entries {
+        let ir = Erc7730Ir::parse(&entry.ir_bytes).expect("ir parses");
+        for fmt in ir.format_iter() {
+            let fmt = fmt.expect("format header parses");
+            for field in fmt.fields() {
+                let field = field.expect("field entry parses");
+                if field.path_off == 0 {
+                    continue;
+                }
+                let prog = path_bytes(&ir, field.path_off).unwrap_or_else(|e| {
+                    panic!(
+                        "path_bytes failed for {:?} field {:?}: {:?}",
+                        ir.contract, field.label, e
+                    )
+                });
+                assert!(
+                    !prog.is_empty(),
+                    "empty program at non-zero offset (chain {} contract {:?} field {:?})",
+                    ir.chain_id,
+                    ir.contract,
+                    field.label,
+                );
+                // First opcode must be a root.
+                let root = PathOp::try_from(prog[0]).unwrap_or_else(|_| {
+                    panic!(
+                        "unknown root opcode 0x{:02X} at field {:?}",
+                        prog[0], field.label
+                    )
+                });
+                assert!(
+                    matches!(
+                        root,
+                        PathOp::RootStructured
+                            | PathOp::RootContainer
+                            | PathOp::RootMetadata
+                    ),
+                    "first opcode must be a root, got {:?}",
+                    root,
+                );
+                // Every subsequent opcode + arg must fit; walk the
+                // stream to verify alignment.
+                let mut p = 1;
+                while p < prog.len() {
+                    let op = PathOp::try_from(prog[p]).unwrap_or_else(|_| {
+                        panic!(
+                            "unknown opcode 0x{:02X} mid-program (chain {} field {:?})",
+                            prog[p], ir.chain_id, field.label
+                        )
+                    });
+                    p += 1;
+                    p += match op {
+                        PathOp::RootStructured
+                        | PathOp::RootContainer
+                        | PathOp::RootMetadata => panic!(
+                            "Root opcode {:?} mid-descent in field {:?}",
+                            op, field.label,
+                        ),
+                        PathOp::FieldIdx => 2,
+                        PathOp::ArrayIdx => 4,
+                        PathOp::ArraySlice => 8,
+                        PathOp::ArrayLast | PathOp::ArrayAll => 0,
+                    };
+                    assert!(
+                        p <= prog.len(),
+                        "opcode {:?} overruns program in field {:?}",
+                        op,
+                        field.label
+                    );
+                }
+            }
+        }
     }
 }
 

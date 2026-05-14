@@ -59,6 +59,12 @@ const CHAIN_BUF_LEN_SIGN: usize = SIGN_USEROP_HEADER_LEN
     + 2
     + ZK_V3_FIXED_LEN
     + ZK_VK_BUNDLE_MAX_LEN
+    // ERC-7730 clear-signing descriptor trailer (Phase 3): 2-byte
+    // length + bundle (up to ERC7730_MAX_TRAILER_LEN = 5130 B). Sits
+    // between self-attest and names per the wire-format ordering in
+    // `docs/handoff-erc7730-phase3.md` §"Canonical wire formats".
+    + 2
+    + sphincs_tz_shared::ERC7730_MAX_TRAILER_LEN
     // Names trailer: 1-byte count + up to 4 × (2-byte length + bundle).
     // The 1200-byte-per-bundle figure is the MAX_NAME_BUNDLE_LEN upper
     // bound plus the 2-byte length prefix, rounded to the 32-bit

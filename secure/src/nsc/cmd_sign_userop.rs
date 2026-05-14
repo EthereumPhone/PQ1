@@ -49,11 +49,12 @@
 
 use sphincs_tz_shared::{
     NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, APPROVE_HASH_CALLDATA_LEN,
-    APPROVE_HASH_SELECTOR, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT,
-    GPV2_SETTLEMENT_ADDRESS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN, PQ_ADD_OWNER_BYTES_SELECTOR,
-    PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN, PQ_SMART_WALLET_FACTORY,
-    SAFE_V1_PAYLOAD_MAX, SET_PRE_SIGNATURE_SELECTOR, SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN,
-    SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN, ZK_V3_FIXED_LEN, ZK_VK_BUNDLE_MAX_LEN,
+    APPROVE_HASH_SELECTOR, C10_SIG_LEN, ERC7730_MAX_TRAILER_LEN, FLAG_INCLUDE_INIT_CODE,
+    FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN,
+    PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
+    PQ_SMART_WALLET_FACTORY, SAFE_V1_PAYLOAD_MAX, SET_PRE_SIGNATURE_SELECTOR,
+    SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN, SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN,
+    ZK_V3_FIXED_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -92,6 +93,7 @@ const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + 2 + SAFE_V1_PAYLOAD_MAX
     + 2 + MAX_SELECTOR_BUNDLE_LEN
     + 2 + MAX_SELF_ATTEST_BUNDLE_LEN
+    + 2 + ERC7730_MAX_TRAILER_LEN
     + 1 + MAX_NAME_BUNDLES * (2 + MAX_NAME_BUNDLE_LEN);
 
 /// # Safety
@@ -475,6 +477,78 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Err(s) => return s,
     };
     cursor = self_attest_trailer.next_cursor;
+
+    // ── 5a-quinquies. Optional ERC-7730 clear-signing descriptor ───
+    //
+    // Wire layout: `[u16 BE len][payload]`, payload is exactly the
+    // bundle format consumed by `pqsigner_erc7730::bundle::verify_erc7730_bundle`:
+    //   ir_len(2 BE) || ir || leaf_index(4 BE) || proof_depth(4 BE) || proof
+    //
+    // Verified inline against the firmware-pinned
+    // `ERC7730_DESCRIPTORS_ROOT` (Phase 2 emits this root from the
+    // host pipeline). Cross-checked against `(chain_id, to_address)`
+    // so a hostile companion cannot pair a USDC descriptor with a
+    // transfer to an attacker-controlled contract — see invariant
+    // discussion in `pqsigner_erc7730::binding::cross_check_contract`.
+    //
+    // Sits BEFORE the names section so the names `[count:u8]` framing
+    // remains the very last thing in the payload.
+    //
+    // NOT mutually exclusive with the selector / self-attest trailers
+    // — Phase 4's renderer picks the best one per priority ladder.
+    let erc7730_trailer = match super::trailer::read_optional_u16_prefixed(
+        snap,
+        cursor,
+        total_len,
+        ERC7730_MAX_TRAILER_LEN,
+        "bad erc7730",
+    ) {
+        Ok(t) => t,
+        Err(s) => return s,
+    };
+    cursor = erc7730_trailer.next_cursor;
+
+    let erc7730_verified: Option<crate::tx::erc7730::VerifiedDescriptor<'_>> =
+        if erc7730_trailer.len > 0 {
+            let bytes = &snap[erc7730_trailer.start
+                ..erc7730_trailer.start + erc7730_trailer.len];
+            match crate::tx::erc7730::verify_erc7730_bundle(
+                bytes,
+                &crate::db_roots::ERC7730_DESCRIPTORS_ROOT,
+            ) {
+                Ok(v) => {
+                    if crate::tx::erc7730::cross_check_contract(
+                        &v.ir,
+                        chain_id,
+                        &to_address,
+                    )
+                    .is_err()
+                    {
+                        ui::show_status("Sign", "7730 binding fail");
+                        return NscStatus::InvalidPointer as u32;
+                    }
+                    #[cfg(feature = "debug-log")]
+                    {
+                        let c = &v.ir.contract;
+                        secure_log!(
+                            "[ERC-7730] matched: chain={} contract=0x{:02x}{:02x}{:02x}{:02x}..{:02x}{:02x}{:02x}{:02x} ir_len={}",
+                            v.ir.chain_id,
+                            c[0], c[1], c[2], c[3],
+                            c[16], c[17], c[18], c[19],
+                            v.ir.raw.len(),
+                        );
+                    }
+                    Some(v)
+                }
+                Err(_e) => {
+                    ui::show_status("Sign", "7730 bundle fail");
+                    return NscStatus::InvalidPointer as u32;
+                }
+            }
+        } else {
+            None
+        };
+    let _ = &erc7730_verified; // Phase 4 consumes; Phase 3 logs only.
 
     // ── 5b. Optional address-name bundles ─────────────────────────
     //

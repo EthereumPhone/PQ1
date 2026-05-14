@@ -41,10 +41,11 @@
 //!     path.
 
 use sphincs_tz_shared::{
-    EIP6492_BLOB_LEN, EIP6492_FACTORY_CALLDATA_LEN, MAX_ACCOUNT_INDEX, MAX_OFFCHAIN_GAP,
+    EIP6492_BLOB_LEN, EIP6492_FACTORY_CALLDATA_LEN, MAX_ACCOUNT_INDEX,
+    MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN, MAX_OFFCHAIN_EIP712_TYPED_LEN, MAX_OFFCHAIN_GAP,
     MAX_OFFCHAIN_PERSONAL_SIGN_LEN, MAX_SLOT_USES, NscStatus, OFFCHAIN_FLAGS_MASK,
-    OFFCHAIN_FLAG_ACCOUNT_DEPLOYED, OFFCHAIN_KIND_PERSONAL_SIGN, OFFCHAIN_KIND_RAW32,
-    PQ_SMART_WALLET_FACTORY, SIGNATURE_LEN, SIGN_OFFCHAIN_HEADER_LEN,
+    OFFCHAIN_FLAG_ACCOUNT_DEPLOYED, OFFCHAIN_KIND_EIP712_TYPED, OFFCHAIN_KIND_PERSONAL_SIGN,
+    OFFCHAIN_KIND_RAW32, PQ_SMART_WALLET_FACTORY, SIGNATURE_LEN, SIGN_OFFCHAIN_HEADER_LEN,
     SIGN_OFFCHAIN_INPUT_FLAGS_OFF, SIGN_OFFCHAIN_INPUT_KIND_OFF, SIGN_OFFCHAIN_INPUT_MAX_LEN,
     SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF, SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF,
     SIGN_OFFCHAIN_OUTPUT_COUNT_OFF, SIGN_OFFCHAIN_OUTPUT_LEN, SIGN_OFFCHAIN_OUTPUT_LEN_6492,
@@ -172,6 +173,18 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InvalidPointer as u32;
             }
         }
+        OFFCHAIN_KIND_EIP712_TYPED => {
+            if payload_len > MAX_OFFCHAIN_EIP712_TYPED_LEN {
+                crate::ui::show_status("EIP-1271", "typed too long");
+                return NscStatus::InvalidPointer as u32;
+            }
+            // Minimum payload: dsep_present(2) + dsep(32) + pth(32) +
+            // edl(2) + edata(0) + trailer_len(2) + trailer(0) = 70 B.
+            if payload_len < 2 + 32 + 32 + 2 + 2 {
+                crate::ui::show_status("EIP-1271", "typed too short");
+                return NscStatus::InvalidPointer as u32;
+            }
+        }
         _ => {
             crate::ui::show_status("EIP-1271", "bad kind");
             return NscStatus::InvalidPointer as u32;
@@ -283,6 +296,113 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
         crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
+
+    // ── 7b. EIP-712 typed-data + ERC-7730 (kind=2): parse + verify ─
+    //
+    // Phase 3 contract: parse the wire layout, verify the descriptor
+    // bundle against the firmware-pinned root, cross-check the
+    // descriptor binding (chain_id + domain_separator), and log. The
+    // signing pipeline — EIP-712 nested-typed-data hash construction
+    // and the Solady-style replay-safe wrap — is Phase 4 work,
+    // because rendering the descriptor's clear-signing pages is a
+    // prerequisite for an honest trusted-display sign. Until that
+    // lands, kind=2 returns `InternalError` after the verification
+    // pass so the wire format is reserved + tested without producing
+    // a signature against a hash the user couldn't audit.
+    if kind == OFFCHAIN_KIND_EIP712_TYPED {
+        let mut p = 0usize;
+        let domain_sep_present =
+            u16::from_be_bytes([payload[p], payload[p + 1]]) != 0;
+        p += 2;
+        if !domain_sep_present {
+            crate::ui::show_status("EIP-1271", "7730 missing ds");
+            return NscStatus::InvalidPointer as u32;
+        }
+        let mut domain_separator = [0u8; 32];
+        domain_separator.copy_from_slice(&payload[p..p + 32]);
+        p += 32;
+        // primaryTypeHash is the full 32-byte EIP-712 typehash; the
+        // walker matches against the IR's format-table 4-byte
+        // selector prefix later (Phase 4).
+        let mut _primary_type_hash = [0u8; 32];
+        _primary_type_hash.copy_from_slice(&payload[p..p + 32]);
+        p += 32;
+        let encoded_data_len =
+            u16::from_be_bytes([payload[p], payload[p + 1]]) as usize;
+        p += 2;
+        if encoded_data_len > MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN
+            || p + encoded_data_len > payload.len()
+        {
+            crate::ui::show_status("EIP-1271", "bad ed_len");
+            return NscStatus::InvalidPointer as u32;
+        }
+        let _encoded_data = &payload[p..p + encoded_data_len];
+        p += encoded_data_len;
+        // Trailer: `[u16 BE len][bundle]`.
+        if p + 2 > payload.len() {
+            crate::ui::show_status("EIP-1271", "no trailer");
+            return NscStatus::InvalidPointer as u32;
+        }
+        let trailer_len = u16::from_be_bytes([payload[p], payload[p + 1]]) as usize;
+        p += 2;
+        if trailer_len == 0 {
+            // Phase 3: kind=2 is meaningless without a descriptor.
+            crate::ui::show_status("EIP-1271", "empty trailer");
+            return NscStatus::InvalidPointer as u32;
+        }
+        if p + trailer_len != payload.len() {
+            crate::ui::show_status("EIP-1271", "bad trailer_len");
+            return NscStatus::InvalidPointer as u32;
+        }
+        let trailer = &payload[p..p + trailer_len];
+        let v = match crate::tx::erc7730::verify_erc7730_bundle(
+            trailer,
+            &crate::db_roots::ERC7730_DESCRIPTORS_ROOT,
+        ) {
+            Ok(v) => v,
+            Err(_e) => {
+                crate::ui::show_status("EIP-1271", "7730 bundle fail");
+                return NscStatus::InvalidPointer as u32;
+            }
+        };
+        // Cross-check: the IR's chain_id matches the outer signing
+        // chain. (`domain.chainId` is baked into the supplied
+        // domainSeparator, which we equality-check next; combined,
+        // these bind the descriptor to this wallet/chain/contract
+        // combo.) We pass `&v.ir.contract` for the verifyingContract
+        // slot because the inbound payload carries only the
+        // pre-computed domainSeparator — host-side build hashed the
+        // verifyingContract into it, so an equality check on the
+        // separator transitively proves contract+chain agreement.
+        if crate::tx::erc7730::cross_check_eip712(
+            &v.ir,
+            chain_id,
+            &v.ir.contract,
+            &domain_separator,
+        )
+        .is_err()
+        {
+            crate::ui::show_status("EIP-1271", "7730 binding fail");
+            return NscStatus::InvalidPointer as u32;
+        }
+        #[cfg(feature = "debug-log")]
+        {
+            let c = &v.ir.contract;
+            secure_log!(
+                "[ERC-7730] offchain typed match chain={} contract=0x{:02x}{:02x}{:02x}{:02x}..{:02x}{:02x}{:02x}{:02x} ir_len={} ed_len={}",
+                v.ir.chain_id,
+                c[0], c[1], c[2], c[3],
+                c[16], c[17], c[18], c[19],
+                v.ir.raw.len(),
+                encoded_data_len,
+            );
+        }
+        // Phase 4 lands the renderer + EIP-712 nested hash + signing.
+        // Until then, refuse to sign — better than signing a hash the
+        // trusted UI can't yet show clearly.
+        crate::ui::show_status("EIP-1271", "phase 4 needed");
+        return NscStatus::InternalError as u32;
+    }
 
     // ── 8. PersonalSign hash construction (kind=1) ─────────────────
     //

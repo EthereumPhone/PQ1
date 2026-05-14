@@ -967,15 +967,68 @@ pub const OFFCHAIN_FLAGS_MASK: u8 = OFFCHAIN_FLAG_ACCOUNT_DEPLOYED;
 /// audit.
 pub const MAX_OFFCHAIN_PERSONAL_SIGN_LEN: usize = 700;
 
+/// Maximum `encoded_data` length carried inside a
+/// `OFFCHAIN_KIND_EIP712_TYPED` payload — bounded so the secure-side
+/// hash construction never sees an unreasonable struct body. 512 B
+/// covers every well-known typed-data envelope (Permit, OrderHash,
+/// CowSwap GPv2Order, Safe SignMessage) with headroom; Phase 5
+/// audits should revisit if a real use case needs more.
+pub const MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN: usize = 512;
+
+/// Maximum payload length for `OFFCHAIN_KIND_EIP712_TYPED`. Layout:
+/// `domainSep_present(2) + domainSeparator(32) + primaryTypeHash(32) +
+/// encoded_data_len(2) + encoded_data + erc7730_trailer(2 + payload)`.
+pub const MAX_OFFCHAIN_EIP712_TYPED_LEN: usize =
+    2 + 32 + 32 + 2 + MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN
+        + 2 + ERC7730_MAX_TRAILER_LEN;
+
 /// Maximum input length the gateway will accept for `CMD_SIGN_OFFCHAIN`.
-/// Sized for the largest valid `kind=PERSONAL_SIGN` request.
-pub const SIGN_OFFCHAIN_INPUT_MAX_LEN: usize =
-    SIGN_OFFCHAIN_HEADER_LEN + MAX_OFFCHAIN_PERSONAL_SIGN_LEN;
+/// Sized for the largest valid request across all kinds.
+pub const SIGN_OFFCHAIN_INPUT_MAX_LEN: usize = SIGN_OFFCHAIN_HEADER_LEN
+    + max_usize(MAX_OFFCHAIN_PERSONAL_SIGN_LEN, MAX_OFFCHAIN_EIP712_TYPED_LEN);
+
+/// `const`-evaluable `max` over `usize`. Not in core::cmp yet.
+const fn max_usize(a: usize, b: usize) -> usize {
+    if a >= b { a } else { b }
+}
 
 /// Off-chain sign request kinds. See [`CMD_SIGN_OFFCHAIN`] for the
 /// hash-construction details of each.
 pub const OFFCHAIN_KIND_RAW32: u8 = 0;
 pub const OFFCHAIN_KIND_PERSONAL_SIGN: u8 = 1;
+/// EIP-712 typed-data with an ERC-7730 clear-signing descriptor trailer.
+/// The companion supplies `domainSeparator || primaryTypeHash ||
+/// encoded_data || erc7730_trailer`; the secure world cross-checks the
+/// trailer's IR binding against the supplied domain and renders the
+/// descriptor's clear-signing pages instead of a raw hex hash.
+pub const OFFCHAIN_KIND_EIP712_TYPED: u8 = 2;
+
+// ─── ERC-7730 clear-signing descriptor trailer ───────────────────────
+//
+// The trailer is the same wire shape consumed by
+// `pqsigner_erc7730::bundle::verify_erc7730_bundle`:
+//   ir_len(2 BE) || ir || leaf_index(4 BE) || proof_depth(4 BE) || proof
+// Framed by the dispatcher as `[u16 BE len][payload]` between the
+// self-attest trailer and the names trailer on the sign-input wire.
+
+/// Current ERC-7730 trailer version. Wire-bumpable; the on-device
+/// parser keys off the IR `schema_ver` byte (1 today) rather than this
+/// constant, but the constant is exposed so a companion can refuse to
+/// emit a trailer the firmware will reject.
+pub const ERC7730_TRAILER_VERSION: u8 = 0x01;
+/// Cap on a single IR blob. Mirrors `pqsigner_erc7730::ir::MAX_IR_LEN`.
+pub const ERC7730_IR_MAX: usize = 4096;
+/// Cap on Merkle proof depth. Mirrors
+/// `pqsigner_erc7730::bundle::MAX_PROOF_DEPTH`.
+pub const ERC7730_PROOF_MAX_DEPTH: usize = 32;
+/// Maximum trailer payload length (the inner bytes inside the
+/// `[u16 BE len]` envelope on the wire). Identical to
+/// `pqsigner_erc7730::bundle::MAX_ERC7730_BUNDLE_LEN`.
+pub const ERC7730_MAX_TRAILER_LEN: usize =
+    2                                  // ir_len prefix
+    + ERC7730_IR_MAX
+    + 4 + 4                            // leaf_index + proof_depth
+    + ERC7730_PROOF_MAX_DEPTH * 32;
 
 /// CMD_SIGN_OFFCHAIN response (deployed path): post-bump count then C10
 /// sig. Selected when `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED` is set in the
@@ -1443,10 +1496,13 @@ const _: () = assert!(SIGN_USEROP_BATCH_HEADER_LEN == 277);
 pub const SIGN_USEROP_BATCH_TX_PREFIX_LEN: usize = 20 + 32 + 2; // 54
 
 /// Worst-case `CMD_SIGN_USEROP_BATCH` payload length: header + every
-/// inner tx running at `MAX_TX_LEN` data. The secure world's TOCTOU
-/// snapshot is sized to this bound.
+/// inner tx running at `MAX_TX_LEN` data + an optional ERC-7730
+/// trailer at the tail (`[u16 len][payload]`, applied to whichever
+/// inner tx the descriptor's `(chain_id, contract)` binding matches).
+/// The secure world's TOCTOU snapshot is sized to this bound.
 pub const SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN: usize = SIGN_USEROP_BATCH_HEADER_LEN
-    + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN);
+    + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
+    + 2 + ERC7730_MAX_TRAILER_LEN;
 
 /// ABI selector for
 /// `PQSmartWallet.executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`.

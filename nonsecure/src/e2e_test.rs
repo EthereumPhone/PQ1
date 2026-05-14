@@ -338,6 +338,39 @@ fn append_self_attest_only_trailers(
     Some(off + 12 + n)
 }
 
+/// Pre-built ERC-7730 trailer payload for WETH on Sepolia (chain
+/// 11155111). Generated at build time by `build.rs` from
+/// `tools/companion-stub/erc7730_db_e2e.bin` to keep this NS test
+/// firmware self-contained (no runtime catalog parsing). Phase 3
+/// smoke step uses this to drive `cmd_sign_userop` with a real
+/// ERC-7730 trailer attached.
+#[cfg(feature = "e2e-test")]
+const ERC7730_TRAILER_WETH_SEPOLIA: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/erc7730_e2e_weth_sepolia.bin"));
+
+/// Append zero-length placeholders for every prior trailer slot and
+/// then the supplied ERC-7730 bundle. Sign-input wire ordering is
+/// `erc20 → zk_v1 → zk_v3 → safe_v1 → selector → self_attest →
+/// erc7730 → names`; we want only the ERC-7730 slot populated so the
+/// six prior slots get `[u16 = 0]` empties.
+fn append_erc7730_only_trailers(
+    buf: &mut [u8],
+    off: usize,
+    bundle: &[u8],
+) -> Option<usize> {
+    // 6 prior trailers × 2 bytes of zero-length prefix.
+    for i in 0..6 {
+        buf[off + i * 2..off + i * 2 + 2].copy_from_slice(&0u16.to_be_bytes());
+    }
+    if bundle.len() > u16::MAX as usize {
+        return None;
+    }
+    let n = bundle.len();
+    buf[off + 12..off + 14].copy_from_slice(&(n as u16).to_be_bytes());
+    buf[off + 14..off + 14 + n].copy_from_slice(bundle);
+    Some(off + 14 + n)
+}
+
 /// Append BOTH a curated selector trailer AND a self-attest trailer
 /// (the firmware must refuse this with InvalidPointer — they're
 /// declared mutually exclusive at the wire level).
@@ -1249,6 +1282,89 @@ fn main() -> ! {
     // world `CMD_TEST_PIN_LOCKOUT` handler which burns MAX_ATTEMPTS
     // wrong PINs followed by one correct PIN and verifies the MCU
     // gate rejects the correct attempt. Destructive — leaves MCU
+    // Scenario 5m: ERC-7730 clear-signing trailer (Phase 3).
+    //
+    // Build a value-transfer to WETH on Sepolia + attach the
+    // pre-computed ERC-7730 trailer (`deposit()` descriptor). Phase 3
+    // contract: secure-world parses the trailer, verifies it against
+    // the e2e-feature-gated `ERC7730_DESCRIPTORS_ROOT`, cross-checks
+    // the binding against `(chain_id, to_address)`, logs the match,
+    // and signs as a normal value transfer (no renderer yet — Phase
+    // 4 swaps the log for descriptor pages). Success = the sign
+    // completes with both T1 absence (slot already registered) and a
+    // valid T2.
+    hprintln!("[NS][e2e] Scenario 5m: ERC-7730 trailer matches + signs");
+    #[cfg(feature = "e2e-test")]
+    unsafe {
+        let weth_sepolia: [u8; 20] = [
+            0xff, 0xf9, 0x97, 0x67, 0x82, 0xd4, 0x6c, 0xc0, 0x56, 0x30, 0xd1, 0xf6, 0xeb, 0xab,
+            0x18, 0xb2, 0x32, 0x4d, 0x6b, 0x14,
+        ];
+        let header_len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111,
+            1,
+            false,
+            42,
+            &weth_sepolia,
+            10_000_000_000_000_000u128, // 0.01 ETH
+            &[],
+        );
+        let new_len = append_erc7730_only_trailers(
+            &mut PAYLOAD_BUF,
+            header_len,
+            ERC7730_TRAILER_WETH_SEPOLIA,
+        )
+        .expect("erc7730 trailer fits PAYLOAD_BUF");
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..new_len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "scenario 5m: ERC-7730 trailer must verify + sign (status {})",
+            status
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(!t1_present, "scenario 5m: slot pre-registered, no Type 1");
+        hprintln!(
+            "[NS][e2e]   → ERC-7730 trailer accepted, t2_len={}",
+            t2_len
+        );
+    }
+
+    // Scenario 5n: ERC-7730 trailer with mismatched contract — firmware
+    // must reject before reaching the renderer (binding check).
+    hprintln!("[NS][e2e] Scenario 5n: ERC-7730 binding-mismatch rejected");
+    #[cfg(feature = "e2e-test")]
+    unsafe {
+        // Same trailer (WETH descriptor) but `to` points at a different
+        // contract → cross_check_contract must fail.
+        let other: [u8; 20] = [0xDE; 20];
+        let header_len = build_sign_payload(
+            &mut PAYLOAD_BUF,
+            11_155_111,
+            1,
+            false,
+            43,
+            &other,
+            10_000_000_000_000_000u128,
+            &[],
+        );
+        let new_len = append_erc7730_only_trailers(
+            &mut PAYLOAD_BUF,
+            header_len,
+            ERC7730_TRAILER_WETH_SEPOLIA,
+        )
+        .expect("erc7730 trailer fits PAYLOAD_BUF");
+        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..new_len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::InvalidPointer as u32,
+            "scenario 5n: binding mismatch must reject (got status {})",
+            status
+        );
+        hprintln!("[NS][e2e]   → ERC-7730 binding mismatch rejected");
+    }
+
     // counter at MAX and SE050 user UserID silicon-locked; next boot
     // recovers via `trigger_lockout_wipe` + fresh admin-wipe
     // re-provision.
