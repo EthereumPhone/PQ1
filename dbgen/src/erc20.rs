@@ -137,12 +137,17 @@ pub fn build_db(json_path: &Path) -> Result<Erc20BuildResult, String> {
     let leaf_hashes: Vec<[u8; 32]> = prepared
         .iter()
         .map(|r| {
-            let canonical =
-                canonical_erc20_leaf(r.chain_id, &r.contract, r.decimals, r.name.as_bytes(), r.symbol.as_bytes());
+            let canonical = canonical_erc20_leaf(
+                r.chain_id,
+                &r.contract,
+                r.decimals,
+                r.name.as_bytes(),
+                r.symbol.as_bytes(),
+            );
             leaf_hash(&canonical)
         })
         .collect();
-    let tree = MerkleTree::build(leaf_hashes.clone());
+    let tree = MerkleTree::build(leaf_hashes);
     let root = tree.root();
     let proof_depth = tree.depth();
 
@@ -272,11 +277,12 @@ fn build_poseidon_side(prepared: &[PreparedRow]) -> Result<([u8; 32], String), S
         return Err("Poseidon tree build: no eligible ERC20 entries".to_string());
     }
 
-    // Compute the 6-field leaf for every eligible row, then its
-    // Poseidon leaf hash.
+    // Compute the Poseidon leaf hash for every eligible row. The
+    // 6-field witness leaf itself is not serialised — the circuit
+    // rebuilds it from the exported `(chain_id, address, symbol,
+    // decimals)` fields — so we hash and discard the field array.
     let mut leaf_hashes: Vec<bls12_381::Scalar> = Vec::with_capacity(filtered.len());
-    let mut leaves_fields: Vec<[bls12_381::Scalar; 6]> = Vec::with_capacity(filtered.len());
-    for (_orig_idx, row) in filtered.iter() {
+    for (_, row) in &filtered {
         let fields = canonical_erc20_poseidon_leaf(
             row.chain_id,
             &row.contract,
@@ -284,7 +290,6 @@ fn build_poseidon_side(prepared: &[PreparedRow]) -> Result<([u8; 32], String), S
             row.symbol.as_bytes(),
         )?;
         leaf_hashes.push(leaf_hash(&fields));
-        leaves_fields.push(fields);
     }
 
     // Build the tree.
@@ -299,16 +304,14 @@ fn build_poseidon_side(prepared: &[PreparedRow]) -> Result<([u8; 32], String), S
         if !crate::erc20_poseidon::verify_proof(leaf, i, &proof, &root_scalar) {
             return Err(format!(
                 "Poseidon tree round-trip failed for leaf {} (row {}, symbol {:?})",
-                i,
-                filtered[i].0,
-                filtered[i].1.symbol,
+                i, filtered[i].0, filtered[i].1.symbol,
             ));
         }
     }
 
     // Export entries for the witness generator.
     let mut entries: Vec<ExportedEntry> = Vec::with_capacity(filtered.len());
-    for (leaf_idx, (_orig_idx, row)) in filtered.iter().enumerate() {
+    for (leaf_idx, (_, row)) in filtered.iter().enumerate() {
         let proof = tree.proof(leaf_idx);
         let proof_dec: Vec<String> = proof.iter().map(scalar_to_dec).collect();
         entries.push(ExportedEntry {
@@ -321,7 +324,6 @@ fn build_poseidon_side(prepared: &[PreparedRow]) -> Result<([u8; 32], String), S
             proof: proof_dec,
         });
     }
-    let _ = leaves_fields; // fields kept for symmetry; not serialized (circuit rebuilds them)
 
     let exported = ExportedTree {
         root: scalar_to_dec(&root_scalar),

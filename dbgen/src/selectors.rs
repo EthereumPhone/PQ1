@@ -18,7 +18,7 @@
 //!    substitute a different signature.
 
 use crate::merkle::{leaf_hash, verify_proof, MerkleTree};
-use crate::{write_u32_le, SelectorsRecord};
+use crate::write_u32_le;
 use sphincs_tz_shared::db_format::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -342,6 +342,3 @@ fn read_pool_string(blob: &[u8], at: usize) -> Option<&[u8]> {
     let len = *blob.get(at)? as usize;
     blob.get(at + 1..at + 1 + len)
 }
-
-#[allow(dead_code)]
-fn _assert_record_shape(_: SelectorsRecord) {}

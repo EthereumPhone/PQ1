@@ -17,7 +17,7 @@
 //!    interning happens to catch; we still run it to shave a few KB).
 
 use crate::merkle::{leaf_hash, verify_proof, MerkleTree};
-use crate::{parse_hex_address, write_u32_le, NamesRecord};
+use crate::{parse_hex_address, write_u32_le};
 use sha2::{Digest, Sha256};
 use sphincs_tz_shared::db_format::*;
 use std::collections::HashMap;
@@ -354,8 +354,3 @@ fn read_pool_string(blob: &[u8], at: usize) -> Option<&[u8]> {
     let len = *blob.get(at)? as usize;
     blob.get(at + 1..at + 1 + len)
 }
-
-// Silence the unused-import warning — `NamesRecord` is re-exported
-// by the module for the loader signature in main.rs.
-#[allow(dead_code)]
-fn _assert_record_shape(_: NamesRecord) {}
