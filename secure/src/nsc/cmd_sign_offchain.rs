@@ -197,8 +197,31 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // ── 6. Gap + cap checks (firmware-side defence in depth) ────────
-    let last_userop = crate::offchain_state::last_userop_count_read(&slot_flash_key);
-    let mut local_offchain = crate::offchain_state::offchain_count_read(&slot_flash_key);
+    // F-10 hardening: read each counter twice with a randomised gap
+    // between, then halt if the two reads disagree. This defeats a
+    // single-shot stuck-at fault on the value-holding register *after*
+    // a successful flash scan — the second scan refreshes the register
+    // from flash, so the second read won't carry a faulted value
+    // forward. `offchain_count_read` / `last_userop_count_read` already
+    // forward+reverse-scan internally (F-12), so a glitched scan
+    // returns `u64::MAX`, which the cap check below also rejects.
+    let last_userop_a = crate::offchain_state::last_userop_count_read(&slot_flash_key);
+    crate::fi::wait_random();
+    let last_userop_b = crate::offchain_state::last_userop_count_read(&slot_flash_key);
+    if last_userop_a != last_userop_b || last_userop_a == u64::MAX {
+        crate::ui::show_status("EIP-1271", "fi tampered");
+        return NscStatus::InternalError as u32;
+    }
+    let last_userop = last_userop_a;
+
+    let local_offchain_a = crate::offchain_state::offchain_count_read(&slot_flash_key);
+    crate::fi::wait_random();
+    let local_offchain_b = crate::offchain_state::offchain_count_read(&slot_flash_key);
+    if local_offchain_a != local_offchain_b || local_offchain_a == u64::MAX {
+        crate::ui::show_status("EIP-1271", "fi tampered");
+        return NscStatus::InternalError as u32;
+    }
+    let mut local_offchain = local_offchain_a;
     if last_userop > local_offchain {
         if crate::offchain_state::offchain_count_promote_to(&slot_flash_key, last_userop)
             .is_err()
@@ -220,6 +243,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if new_count > MAX_SLOT_USES {
         crate::ui::show_status("EIP-1271", "slot exhausted");
         return NscStatus::OffchainCapExceeded as u32;
+    }
+    // F-10 belt-and-braces: re-derive the gate inputs and re-check.
+    // A second pass forces a glitch to land in *both* windows.
+    crate::fi::wait_random();
+    let gap_recheck = local_offchain.saturating_sub(last_userop);
+    if gap_recheck >= MAX_OFFCHAIN_GAP || new_count > MAX_SLOT_USES {
+        crate::ui::show_status("EIP-1271", "fi tampered");
+        return NscStatus::InternalError as u32;
     }
 
     // ── 7. Reconstruct entropy + slot master per-account ────────────

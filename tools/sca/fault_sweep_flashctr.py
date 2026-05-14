@@ -240,7 +240,8 @@ def main():
     return 0 if not any_rollback_plain and not any_rollback_fi else 1
 
 
-def call_bump_fault(e, fault_model, fault_idx, new_count: int):
+def call_bump_fault(e, fault_model, fault_idx, new_count: int,
+                    fn: str = "sca_flashctr_bump_plain"):
     """Restore page, invoke bump under fault. Returns ((status, page_max_after))
     where page_max_after is what the page state WOULD report after the call
     (independent of what bump claims). Disagreement is the F-13 attack."""
@@ -253,7 +254,7 @@ def call_bump_fault(e, fault_model, fault_idx, new_count: int):
     e["r3"] = new_hi
     try:
         e.start_and_fault(fault_model, fault_idx,
-                          e.functions["sca_flashctr_bump_plain"][0], RET,
+                          e.functions[fn][0], RET,
                           count=SWEEP_BUDGET)
     except (RuntimeError, UcError):
         return ("crash", None, None)
@@ -282,7 +283,7 @@ def call_bump_fault(e, fault_model, fault_idx, new_count: int):
     return ("ret", status, actual_max)
 
 
-def bump_baseline(e, new_count: int):
+def bump_baseline(e, new_count: int, fn: str = "sca_flashctr_bump_plain"):
     """Run bump with no fault — should return ENTRY_OK (0) and page should
     advance to new_count."""
     setup(e)
@@ -293,7 +294,7 @@ def bump_baseline(e, new_count: int):
     e["r2"] = new_lo
     e["r3"] = new_hi
     try:
-        e.start(e.functions["sca_flashctr_bump_plain"][0], RET, count=SWEEP_BUDGET)
+        e.start(e.functions[fn][0], RET, count=SWEEP_BUDGET)
     except (RuntimeError, UcError):
         return ("crash", None, None)
     if e["pc"] != RET:
@@ -314,50 +315,39 @@ def bump_baseline(e, new_count: int):
     return ("ret", status, actual_max)
 
 
-def main_bump():
-    """Sweep the bump path. The critical attack: bump returns OK (status=0)
-    but the page's actual max for our slot did NOT advance to new_count
-    → SILENT WRITE FAILURE — firmware emitted a signature without
-    counting it."""
-    print()
-    print("=== Off-chain counter BUMP FI sweep (silent-write-failure attack) ===")
-    print()
-    new_count = EXPECTED_MAX + 1   # 101
+def sweep_one_bump(fn: str, new_count: int) -> int:
+    print(f"-- {fn}")
     e_base = fresh_emu()
-    # Re-pre-populate (the earlier read sweep didn't modify the page in the
-    # main process emulator; bump WILL modify it).
-    print(f"Baseline (no fault): bump({new_count})")
-    st, status, actual = bump_baseline(e_base, new_count)
+    print(f"   Baseline (no fault): bump({new_count})")
+    st, status, actual = bump_baseline(e_base, new_count, fn=fn)
     if st != "ret":
-        print(f"  baseline failed: {st}")
+        print(f"     baseline failed: {st}")
         return 1
-    print(f"  status={status} (0=OK)  actual_max_after={actual}  (expected {new_count})")
+    print(f"     status={status} (0=OK)  actual_max_after={actual}  (expected {new_count})")
     if status != 0 or actual != new_count:
-        print(f"  baseline fixture mismatch — abort"); return 1
+        print(f"     baseline fixture mismatch — abort"); return 1
 
-    # Sweep — re-emulate for each fault index.
     total_instr = None
     e_count = fresh_emu(TraceConfig(instruction=True))
-    st_, _, _ = bump_baseline(e_count, new_count)
+    st_, _, _ = bump_baseline(e_count, new_count, fn=fn)
     if st_ == "ret":
         total_instr = len([ev for ev in e_count.trace if ev.get("type") == "code"])
     if total_instr is None:
-        print("  could not measure instruction count")
+        print("     could not measure instruction count")
         return 1
-    print(f"  function size: {total_instr} instr")
-    print()
+    print(f"     function size: {total_instr} instr")
 
     findings = []
     for model_label, model in FAULT_MODELS:
         e = fresh_emu()
-        silent_failures = 0      # status=OK but actual < new_count → bypass
-        rollback_writes = 0      # status=OK but actual < EXPECTED_MAX → counter went BACKWARDS
+        silent_failures = 0
+        rollback_writes = 0
         correct_oks = 0
         correct_errs = 0
-        crashes = hangs = shorts = 0
+        crashes = hangs = 0
         examples = []
         for i in range(1, total_instr + 8):
-            st, status, actual = call_bump_fault(e, model, i, new_count)
+            st, status, actual = call_bump_fault(e, model, i, new_count, fn=fn)
             if st == "short":
                 break
             if st == "crash":
@@ -365,7 +355,6 @@ def main_bump():
             if st == "hang":
                 hangs += 1; continue
             if status == 0:
-                # bump returned OK
                 if actual == new_count:
                     correct_oks += 1
                 elif actual < new_count:
@@ -376,26 +365,41 @@ def main_bump():
                         examples.append((i, "OK-but-actual=" + str(actual)))
             else:
                 correct_errs += 1
-        print(f"  [{model_label:11s}]  swept {total_instr}:  "
+        print(f"     [{model_label:11s}]  swept {total_instr}:  "
               f"correct-OK={correct_oks}  correct-Err={correct_errs}  "
               f"SILENT-FAILURES={silent_failures}  rollback-writes={rollback_writes}  "
               f"crashes={crashes}  hangs={hangs}")
         if silent_failures > 0:
             findings.append((model_label, silent_failures, rollback_writes))
-            print(f"       !!! {silent_failures} SILENT WRITE FAILURE(s) "
+            print(f"          !!! {silent_failures} SILENT WRITE FAILURE(s) "
                   f"(bump returned OK but page didn't advance to {new_count}):")
             for idx, desc in examples:
-                print(f"             instr {idx}: {desc}")
+                print(f"                instr {idx}: {desc}")
+    return 1 if findings else 0
 
+
+def main_bump():
+    """Sweep the bump path. The critical attack: bump returns OK (status=0)
+    but the page's actual max for our slot did NOT advance to new_count
+    → SILENT WRITE FAILURE — firmware emitted a signature without
+    counting it."""
+    print()
+    print("=== Off-chain counter BUMP FI sweep (silent-write-failure attack) ===")
+    print()
+    new_count = EXPECTED_MAX + 1   # 101
+    rc_plain = sweep_one_bump("sca_flashctr_bump_plain", new_count)
+    print()
+    rc_fi = sweep_one_bump("sca_flashctr_bump_fi", new_count)
     print()
     print("=" * 75)
-    if not findings:
+    if rc_plain == 0 and rc_fi == 0:
         print("BUMP PATH CLEAN — no single fault produces a silent write failure.")
         return 0
-    print("FINDING — bump returns OK without persisting the new count under FI:")
-    for model, n, rb in findings:
-        print(f"    - [{model:11s}]  {n} silent-OK case(s), {rb} of which involved a write-rollback")
-    return 1
+    if rc_plain != 0:
+        print("FINDING — plain bump (no F-12 hardening) is single-fault bypassable.")
+    if rc_fi != 0:
+        print("REGRESSION — F-12-hardened bump is single-fault bypassable.")
+    return rc_plain | rc_fi
 
 
 if __name__ == "__main__":

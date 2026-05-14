@@ -68,8 +68,9 @@ SCENARIOS = [
 
 ENTRY_POINTS = [
     # (name, accept_value, is_fi_variant)
-    ("sca_cap_check_plain", 0, False),
-    ("sca_cap_check_fi",    0, True),
+    ("sca_cap_check_plain",        0, False),
+    ("sca_cap_check_fi",           0, True),
+    ("sca_cap_check_callsite_fi",  0, True),   # F-10 production fix shape
 ]
 
 if not os.path.exists(ELF):

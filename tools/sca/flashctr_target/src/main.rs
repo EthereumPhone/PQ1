@@ -115,7 +115,11 @@ pub extern "C" fn sca_flashctr_read_plain(page_ptr: *const u8, slot_key_ptr: *co
 }
 
 // ---------------------------------------------------------------------------
-// FI-hardened mirror — scan TWICE with wait_random between, halt-on-mismatch.
+// FI-hardened mirror — bit-equivalent to the production F-12 fix:
+// forward + reverse scan with wait_random between, halt-on-mismatch.
+// The reverse pass has asymmetric control flow (no early-break on blank;
+// iterates from end-of-page back to 0), so a control-flow corruption
+// at forward-scan entry doesn't symmetrically affect the reverse pass.
 // ---------------------------------------------------------------------------
 
 #[inline(never)]
@@ -139,18 +143,35 @@ fn scan_once(page_ptr: *const u8, slot_key: &[u8; 8]) -> u64 {
 }
 
 #[inline(never)]
+fn scan_reverse(page_ptr: *const u8, slot_key: &[u8; 8]) -> u64 {
+    let mut latest: u64 = 0;
+    let mut i = OFFCHAIN_CAPACITY;
+    while i > 0 {
+        i -= 1;
+        let addr = unsafe { page_ptr.add(i * OFFCHAIN_QW_SIZE) };
+        if let Some((t, sk, count)) = parse_entry(addr) {
+            if t == OFFCHAIN_TYPE_COUNT && sk == *slot_key && count > latest {
+                latest = count;
+            }
+        }
+    }
+    latest
+}
+
+#[inline(never)]
 #[no_mangle]
 pub extern "C" fn sca_flashctr_read_fi(page_ptr: *const u8, slot_key_ptr: *const u8) -> u64 {
-    let slot_key: [u8; 8] = unsafe { *(slot_key_ptr as *const [u8; 8]) };
-    let r1 = scan_once(page_ptr, &slot_key);
+    // F-12 hardening: input-register redundancy on slot_key.
+    let sk_a: [u8; 8] = unsafe { *(slot_key_ptr as *const [u8; 8]) };
     wait_random();
-    let r2 = scan_once(page_ptr, &slot_key);
-    // Halt on mismatch — better than silently returning the wrong value.
+    let sk_b: [u8; 8] = unsafe { *(slot_key_ptr as *const [u8; 8]) };
+    if sk_a != sk_b {
+        return u64::MAX;
+    }
+    let r1 = scan_once(page_ptr, &sk_a);
+    wait_random();
+    let r2 = scan_reverse(page_ptr, &sk_b);
     if r1 != r2 {
-        // FAIL_SENTINEL pattern: caller compares against the expected
-        // result; any halt-on-glitch value is "fail." We return u64::MAX
-        // here because it's clearly not a legitimate counter value (well
-        // past any realistic count and past MAX_SLOT_USES).
         return u64::MAX;
     }
     r1
@@ -293,18 +314,87 @@ pub extern "C" fn sca_flashctr_bump_plain(
     ENTRY_OK
 }
 
+/// FI-hardened bump mirror. Matches the production F-12 fix: read the
+/// slot_key into two stack-local copies separated by wait_random, halt
+/// on mismatch (catches stuck-at on the slot_key argument register), and
+/// uses the forward+reverse hardened scan for both pre and post checks.
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn sca_flashctr_bump_fi(
+    page_ptr: *mut u8,
+    slot_key_ptr: *const u8,
+    new_count_lo: u32,
+    new_count_hi: u32,
+) -> u32 {
+    // F-12: input-register redundancy — load slot_key twice with a
+    // random gap, halt if they diverge. A glitch that clamps the
+    // register to 0 only persists for one of the two loads.
+    let sk_a: [u8; 8] = unsafe { *(slot_key_ptr as *const [u8; 8]) };
+    wait_random();
+    let sk_b: [u8; 8] = unsafe { *(slot_key_ptr as *const [u8; 8]) };
+    if sk_a != sk_b {
+        return ENTRY_ERR_FI_TRIPLE_CHECK;
+    }
+    let slot_key = sk_a;
+    let new_count: u64 = (new_count_lo as u64) | ((new_count_hi as u64) << 32);
+
+    // Pre-check: forward+reverse, halt-on-mismatch.
+    let pre_fwd = scan_once(page_ptr as *const u8, &slot_key);
+    wait_random();
+    let pre_rev = scan_reverse(page_ptr as *const u8, &slot_key);
+    if pre_fwd != pre_rev {
+        return ENTRY_ERR_FI_TRIPLE_CHECK;
+    }
+    if new_count <= pre_fwd {
+        return ENTRY_ERR_MONOTONICITY;
+    }
+
+    let qw = pack_entry(&slot_key, OFFCHAIN_TYPE_COUNT, new_count);
+    let blank = match find_next_blank_idx(page_ptr) {
+        Some(i) => i,
+        None => return ENTRY_ERR_NO_BLANK,
+    };
+    let dst = unsafe { page_ptr.add(blank * OFFCHAIN_QW_SIZE) };
+    if write_quadword_verified(dst, &qw).is_err() {
+        return ENTRY_ERR_WRITE_VERIFY;
+    }
+
+    // Post-check: forward+reverse, halt-on-mismatch.
+    let post_fwd = scan_once(page_ptr as *const u8, &slot_key);
+    wait_random();
+    let post_rev = scan_reverse(page_ptr as *const u8, &slot_key);
+    if post_fwd != post_rev {
+        return ENTRY_ERR_FI_TRIPLE_CHECK;
+    }
+    if post_fwd != new_count {
+        return ENTRY_ERR_POST_CHECK;
+    }
+
+    let verdict = check_true_into_sentinel(|| {
+        scan_once(page_ptr as *const u8, &slot_key) == new_count
+    });
+    if verdict != pqsigner_fi::OK_SENTINEL {
+        return ENTRY_ERR_FI_TRIPLE_CHECK;
+    }
+
+    ENTRY_OK
+}
+
 #[used]
 static _KEEP_PLAIN: extern "C" fn(*const u8, *const u8) -> u64 = sca_flashctr_read_plain;
 #[used]
 static _KEEP_FI: extern "C" fn(*const u8, *const u8) -> u64 = sca_flashctr_read_fi;
 #[used]
 static _KEEP_BUMP: extern "C" fn(*mut u8, *const u8, u32, u32) -> u32 = sca_flashctr_bump_plain;
+#[used]
+static _KEEP_BUMP_FI: extern "C" fn(*mut u8, *const u8, u32, u32) -> u32 = sca_flashctr_bump_fi;
 
 #[entry]
 fn main() -> ! {
     core::hint::black_box(&_KEEP_PLAIN);
     core::hint::black_box(&_KEEP_FI);
     core::hint::black_box(&_KEEP_BUMP);
+    core::hint::black_box(&_KEEP_BUMP_FI);
     loop {
         cortex_m::asm::nop();
     }

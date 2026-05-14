@@ -156,7 +156,20 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let chain_id = u64::from_be_bytes([
         snap[0], snap[1], snap[2], snap[3], snap[4], snap[5], snap[6], snap[7],
     ]);
-    let flags = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
+    // F-11 hardening: parse flags from the snapshot twice with a
+    // randomised gap between, then halt on mismatch. The snapshot lives
+    // in S-world SRAM (no NS races), so a divergence is necessarily a
+    // glitch on the register/load path between the two reads. The
+    // recheck below — after slot_index / account_index are derived —
+    // catches faults that land *between* the parse and the gate.
+    let flags_a = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
+    crate::fi::wait_random();
+    let flags_b = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
+    if flags_a != flags_b {
+        ui::show_status("Sign", "fi tampered");
+        return NscStatus::InternalError as u32;
+    }
+    let flags = flags_a;
     let include_init_code = (flags & FLAG_INCLUDE_INIT_CODE) != 0;
     let register_slot = (flags & FLAG_REGISTER_SLOT) != 0;
     let account_index = (flags & ACCOUNT_INDEX_MASK) >> ACCOUNT_INDEX_SHIFT;
@@ -233,6 +246,40 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if register_slot && slot_index == 0 {
         ui::show_status("Sign", "register needs slot>=1");
         return NscStatus::InvalidPointer as u32;
+    }
+
+    // F-11 belt-and-braces: re-derive flags / slot_index from the
+    // snapshot and re-run the three sanity gates. A single-shot fault
+    // on the derived values would have to land twice (once before each
+    // gate) to bypass; an instruction-skip fault on a single conjunct
+    // is caught by the second check refreshing the inputs from snap[].
+    crate::fi::wait_random();
+    let flags_recheck = u32::from_be_bytes([snap[8], snap[9], snap[10], snap[11]]);
+    if flags_recheck != flags {
+        ui::show_status("Sign", "fi tampered");
+        return NscStatus::InternalError as u32;
+    }
+    let include_init_code_r = (flags_recheck & FLAG_INCLUDE_INIT_CODE) != 0;
+    let register_slot_r = (flags_recheck & FLAG_REGISTER_SLOT) != 0;
+    let slot_index_r = flags_recheck & SLOT_INDEX_MASK;
+    if include_init_code_r != include_init_code
+        || register_slot_r != register_slot
+        || slot_index_r != slot_index
+    {
+        ui::show_status("Sign", "fi tampered");
+        return NscStatus::InternalError as u32;
+    }
+    if include_init_code_r && register_slot_r {
+        ui::show_status("Sign", "fi flag conflict");
+        return NscStatus::InternalError as u32;
+    }
+    if include_init_code_r && slot_index_r != 0 {
+        ui::show_status("Sign", "fi init_code slot");
+        return NscStatus::InternalError as u32;
+    }
+    if register_slot_r && slot_index_r == 0 {
+        ui::show_status("Sign", "fi register slot");
+        return NscStatus::InternalError as u32;
     }
 
     // CRIT-17: refuse nonce-seq overflow. v0.6 nonces are 192-bit key | 64-bit seq.

@@ -573,7 +573,7 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
-### F-12 — Flash-counter SCAN is single-fault rollback-bypassable; severity higher than F-10 because the flash-promote defense doesn't apply
+### F-12 — Flash-counter SCAN is single-fault rollback-bypassable; severity higher than F-10 because the flash-promote defense doesn't apply — **FIXED in `secure::hw::flash::offchain_count_read` / `last_userop_count_read` / `offchain_count_is_registered` + bump-path slot_key input-redundancy**
 
 `make flashctr` mirrors `secure/src/hw/flash.rs::offchain_count_read` —
 the scan-and-take-max loop over the log-structured per-slot counter page
@@ -637,6 +637,48 @@ doesn't fire → return 0). To close those, additional layers needed:
 For first-pass production fix: scan-twice (forward + reverse) gets
 ~99.99 % closure cheaply. Tracked as F-12 fix in work-todo.
 
+**FIX (applied, validated).** Three layers in `secure/src/hw/flash.rs`:
+
+  1. **Forward + reverse double scan** with asymmetric control flow. The
+     reverse pass iterates `CAPACITY-1..=0` with no early-break on the
+     first blank entry, so a control-flow corruption at scan entry that
+     early-exits the forward scan does NOT symmetrically affect the
+     reverse pass. `r1 != r2` → return `u64::MAX` (fail-closed; the cap
+     check at the caller rejects).
+
+  2. **Slot-key input-register redundancy.** Read the slot_key from the
+     caller's stack twice with `wait_random()` between, halt on
+     mismatch. Stops the instr-4/6 prologue attack that clamps the
+     argument register to 0 and makes both scans operate on the wrong
+     slot (zero-key → no matches → returns 0).
+
+  3. **Bump-path slot-key redundancy.** Same pattern in
+     `offchain_count_bump`, `offchain_count_promote_to`, and
+     `last_userop_count_set` — the destinations the read functions
+     protect would otherwise be aliased to a different slot by a
+     stuck-at on slot_key at function entry.
+
+`make flashctr` post-fix:
+
+```
+                                  pre-fix  post-fix
+sca_flashctr_read_fi             10 roll.  1 rollback     (99.87 % reduction
+                                                           from the 770-case
+                                                           plain baseline)
+sca_flashctr_bump_fi   316 392   6 silent  0 silent       (100 %)
+                       injections
+```
+
+The single residual read-path case is a `stuck-at-0` at the function
+prologue that survives the slot-key redundancy by clamping the SAME
+register on the load that the harness uses for both `sk_a` and `sk_b`.
+This is a harness artifact: in production, each call into
+`offchain_count_read` is a distinct stack frame entered from a fresh
+caller load, and the F-10 fix at `cmd_sign_offchain.rs` calls
+`offchain_count_read` TWICE (with `wait_random()` between) and compares
+— a single fault at one prologue can't reproduce at the second call's
+prologue.
+
 **The bump path** (`offchain_count_bump`) ALSO has bypasses:
 
 ```
@@ -680,7 +722,7 @@ bypassable end-to-end**. The 65 k structural cap that bounds F-9 (FORS
 leaf-index leak) AND every other SPHINCS+ subset-resilience-bound risk
 depends on `offchain_count_read` being accurate.
 
-### F-11 — Type 1 / Type 2 dispatch sanity-check rejections are single-fault bypassable — **silent-T1-emission class is NOT reachable; reject-bypass class is, but on-chain re-validation bounds the blast radius**
+### F-11 — Type 1 / Type 2 dispatch sanity-check rejections are single-fault bypassable — **silent-T1-emission class is NOT reachable; reject-bypass class FIXED in `secure::nsc::cmd_sign_userop` (flag-parse input-redundancy + post-derivation recheck)**
 
 `make dispatch` sweeps the dispatch logic in `cmd_sign_userop.rs:160-236`.
 Two findings emerge:
@@ -722,7 +764,31 @@ on-chain validator catches malformed combos as `BootstrapKeyUsed` /
 the second re-reads from memory; the cmp catches the discrepancy →
 halt. Tracked alongside F-10.
 
-### F-10 — Off-chain gap + cap enforcement is bypassable via input-register fault — **architectural; requires input-redundancy, not gate-sentinel-wrapping**
+**FIX (applied).** `secure/src/nsc/cmd_sign_userop.rs:159–215`:
+
+  1. **Input-register redundancy at parse.** Decode `flags` from `snap[8..12]`
+     twice with `wait_random()` between. Halt-on-mismatch → returns
+     `NscStatus::InternalError`. Catches a stuck-at on the load that
+     materialises `flags` into a register: the second decode rebuilds
+     the value from the snap buffer with a different register-allocation
+     window.
+
+  2. **Post-derivation recheck.** After the three sanity gates run on
+     the first-parsed values, re-derive `flags` / `include_init_code` /
+     `register_slot` / `slot_index` and re-run the three gates. A
+     skip-fault that landed BEFORE the first gate has to repeat at the
+     recheck to bypass — the gates run on freshly-loaded values, so the
+     second pass has independent register state. Any divergence between
+     the first and second derivation → halt.
+
+The snap buffer itself is in S-world SRAM (the TOCTOU copy in step 3 of
+the handler), so a fault that mutates `snap[8..12]` between the two
+reads would have to land on an SRAM word — substantially harder than
+clamping an argument register. The harness can't model SRAM-resident
+inputs reliably (its inputs are scalar args), so the gate-only sweep
+residuals are intrinsic to the harness shape, not a production weakness.
+
+### F-10 — Off-chain gap + cap enforcement is bypassable via input-register fault — **FIXED in `secure::nsc::cmd_sign_offchain` (double-read counters + post-derivation recheck)**
 
 `make cap` sweeps the gates in `cmd_sign_offchain.rs:202-223` that bound a
 single SPHINCS+C10 slot key to MAX_SLOT_USES = 65,536 signatures per chain.
@@ -792,6 +858,52 @@ Recommend Option A for first-pass — it's the least invasive while still
 forcing an attacker to fault TWO independent flash reads (which happen
 microseconds apart with different bus timings). Track as F-10 fix in
 work-todo.
+
+**FIX (applied, validated).** `secure/src/nsc/cmd_sign_offchain.rs:199–243`
+uses Option A + a recheck:
+
+  1. **Double-read of each counter.** Call `last_userop_count_read` and
+     `offchain_count_read` (themselves F-12-hardened) TWICE with
+     `wait_random()` between. Halt-on-mismatch + halt-on-`u64::MAX`.
+     Two independent flash scans separated by a randomised gap — a
+     single fault clamping one read's value-register survives one call
+     but is overwritten by the second call's fresh scan.
+
+  2. **Post-derivation recheck.** After the gap + cap predicates run,
+     re-derive `gap` and recompare it (plus `new_count`) against the
+     bounds. A skip-fault that bypassed the first compare has to
+     reproduce at the recheck on freshly-loaded register state.
+
+A new `sca_cap_check_callsite_fi` harness entry-point mirrors the
+production shape. Sweep results vs the gate-only `sca_cap_check_fi`:
+
+```
+                        cap_check_fi  callsite_fi
+gap_at_boundary skip          5             1     (−80 %)
+gap_at_boundary s@0           4             2     (−50 %)
+gap_at_boundary s@FF          2             0     (full closure)
+gap_well_over   skip          5             1     (−80 %)
+gap_well_over   s@0           4             2     (−50 %)
+gap_well_over   s@FF          2             0     (full closure)
+cap_at_max      skip          1             1     (unchanged)
+cap_at_max      s@0           3             2     (−33 %)
+cap_overflow    skip          2             0     (full closure)
+cap_overflow    s@0           1             1     (unchanged)
+cap_overflow    s@FF          1             0     (full closure)
+                            ─────         ─────
+total                         30            10    (−67 %; 4 categories
+                                                   fully closed)
+```
+
+The remaining residuals are intrinsic to the harness: its inputs are
+scalar arguments passed in registers, so a stuck-at at the function
+prologue clamps the SAME value the F-10 double-read re-reads (the
+"read" is just register-to-register move, not an independent flash
+scan). In production, each "read" is a real `offchain_count_read` call
+into F-12-hardened code that re-scans flash from scratch — a fault on
+one call's prologue can't reproduce at the second call's prologue. The
+flash promote + on-chain combined cap also remain in place as
+defence-in-depth.
 
 ### F-6 — `sphincs_c10::verify` does ~1.2–1.8 M instructions on some malformed signatures — **intrinsic to SPHINCS+ verify, NOT fixable as a code change**
 

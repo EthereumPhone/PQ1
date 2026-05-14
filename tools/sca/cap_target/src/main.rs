@@ -127,15 +127,88 @@ pub extern "C" fn sca_cap_check_fi(local_offchain: u64, last_userop: u64) -> u32
     0
 }
 
+// ---------------------------------------------------------------------------
+// F-10 PRODUCTION call-site mirror. The actual F-10 fix lives in
+// `secure/src/nsc/cmd_sign_offchain.rs` and uses input-register
+// redundancy (double-read the inputs with wait_random between, halt on
+// mismatch) + a post-derivation recheck. This entry-point mirrors that
+// shape so the sweep can show that it closes the residuals the
+// gate-only `sca_cap_check_fi` leaves open.
+//
+// Status codes (matched to NscStatus):
+//   0  → accept (proceed to sign)
+//   1  → OffchainGapExceeded (correct reject)
+//   2  → OffchainCapExceeded (correct reject)
+//   3  → InternalError (glitch detected → fail-closed)
+// ---------------------------------------------------------------------------
+
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn sca_cap_check_callsite_fi(local_offchain: u64, last_userop: u64) -> u32 {
+    // Input-register redundancy: re-read each value with wait_random
+    // between, halt on mismatch. (In production, each "read" is a real
+    // `offchain_count_read` call that re-scans flash from scratch.)
+    let lu_a = core::hint::black_box(last_userop);
+    wait_random();
+    let lu_b = core::hint::black_box(last_userop);
+    if lu_a != lu_b {
+        return 3;
+    }
+    let lo_a = core::hint::black_box(local_offchain);
+    wait_random();
+    let lo_b = core::hint::black_box(local_offchain);
+    if lo_a != lo_b {
+        return 3;
+    }
+    let local = lo_a;
+    let last = lu_a;
+
+    let gap = local.saturating_sub(last);
+    if gap >= MAX_OFFCHAIN_GAP {
+        return 1;
+    }
+    let new_count = match local.checked_add(1) {
+        Some(v) => v,
+        None => return 2,
+    };
+    if new_count > MAX_SLOT_USES {
+        return 2;
+    }
+
+    // F-10 belt-and-braces: recheck the gates with re-read inputs.
+    wait_random();
+    let local_r = core::hint::black_box(local_offchain);
+    let last_r = core::hint::black_box(last_userop);
+    let gap_r = local_r.saturating_sub(last_r);
+    let new_r = match local_r.checked_add(1) {
+        Some(v) => v,
+        None => return 3,
+    };
+    if gap_r >= MAX_OFFCHAIN_GAP {
+        return 3;
+    }
+    if new_r > MAX_SLOT_USES {
+        return 3;
+    }
+    if gap_r != gap || new_r != new_count {
+        return 3;
+    }
+
+    0
+}
+
 #[used]
 static _KEEP_PLAIN: extern "C" fn(u64, u64) -> u32 = sca_cap_check_plain;
 #[used]
 static _KEEP_FI: extern "C" fn(u64, u64) -> u32 = sca_cap_check_fi;
+#[used]
+static _KEEP_CALLSITE: extern "C" fn(u64, u64) -> u32 = sca_cap_check_callsite_fi;
 
 #[entry]
 fn main() -> ! {
     core::hint::black_box(&_KEEP_PLAIN);
     core::hint::black_box(&_KEEP_FI);
+    core::hint::black_box(&_KEEP_CALLSITE);
     loop {
         cortex_m::asm::nop();
     }

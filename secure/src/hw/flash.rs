@@ -1250,17 +1250,18 @@ unsafe fn write_entry(qw: &[u8; 16]) -> Result<(), ()> {
     write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw)
 }
 
-/// Read the latest off-chain sig count for `slot_key`. Returns 0 if no
-/// entry exists (caller distinguishes "0 sigs" from "unregistered" via
-/// `offchain_count_is_registered`).
-pub unsafe fn offchain_count_read(slot_key: &[u8; 8]) -> u64 {
+/// Forward scan — the original log-structured implementation. Stops at the
+/// first all-blank QW (= end of journal). Used as the first leg of the
+/// F-12 fault-injection-hardened double-scan.
+#[inline(never)]
+unsafe fn scan_forward(slot_key: &[u8; 8], target_type: u8) -> u64 {
     let mut latest: u64 = 0;
     let mut found = false;
     for i in 0..OFFCHAIN_CAPACITY {
         let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
         match parse_entry(addr) {
             None => break,
-            Some((t, sk, count)) if t == OFFCHAIN_TYPE_COUNT && sk == *slot_key => {
+            Some((t, sk, count)) if t == target_type && sk == *slot_key => {
                 if count > latest || !found {
                     latest = count;
                     found = true;
@@ -1272,31 +1273,116 @@ pub unsafe fn offchain_count_read(slot_key: &[u8; 8]) -> u64 {
     latest
 }
 
-/// Read the most recent UserOp-snapshot count (the value embedded in
-/// the inner tx of the last `CMD_SIGN_USEROP`).
-pub unsafe fn last_userop_count_read(slot_key: &[u8; 8]) -> u64 {
+/// Reverse scan — iterates QWs from CAPACITY-1 down to 0, skipping ALL
+/// blanks and undecodable entries (no early-break on None). Asymmetric
+/// control flow vs `scan_forward`: a fault that early-exits the forward
+/// loop doesn't symmetrically early-exit this one. F-12 fix: comparing
+/// the two scans' results catches any FI-induced underreporting.
+#[inline(never)]
+unsafe fn scan_reverse(slot_key: &[u8; 8], target_type: u8) -> u64 {
     let mut latest: u64 = 0;
-    let mut found = false;
-    for i in 0..OFFCHAIN_CAPACITY {
+    let mut i = OFFCHAIN_CAPACITY;
+    while i > 0 {
+        i -= 1;
         let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
-        match parse_entry(addr) {
-            None => break,
-            Some((t, sk, count)) if t == OFFCHAIN_TYPE_USEROP && sk == *slot_key => {
-                if count > latest || !found {
-                    latest = count;
-                    found = true;
-                }
+        if let Some((t, sk, count)) = parse_entry(addr) {
+            if t == target_type && sk == *slot_key && count > latest {
+                latest = count;
             }
-            _ => {}
         }
+        // Note: no break-on-None — keep iterating across blank tail QWs.
     }
     latest
+}
+
+/// Read the latest off-chain sig count for `slot_key`. Returns 0 if no
+/// entry exists (caller distinguishes "0 sigs" from "unregistered" via
+/// `offchain_count_is_registered`).
+///
+/// **F-12 hardening (single-fault rollback resistance).** Scans the page
+/// forward AND reverse with `wait_random()` between, and halts the CPU on
+/// mismatch. A single fault that underreports one direction cannot affect
+/// both — the reverse pass iterates the page asymmetrically (no early-break
+/// on blank, walks from end), so a control-flow corruption at scan entry
+/// affects forward only. Pre-fix, `make flashctr` empirically found **770
+/// single-fault rollback cases** on this code (see tools/sca/README.md §F-12);
+/// post-fix the hardened mirror is down to ~10 (control-flow at scan entry
+/// that early-exits BOTH directions identically — the residual is bounded
+/// by additional layers a future hardening pass could add).
+pub unsafe fn offchain_count_read(slot_key: &[u8; 8]) -> u64 {
+    // F-12 hardening: slot_key input-register redundancy. Load the key
+    // twice via `read_volatile` with a randomised gap between, halt-on-
+    // mismatch. A stuck-at-0 fault on the slot_key argument register
+    // would otherwise survive into both forward and reverse scans
+    // (`make flashctr` empirically saw 10 such residuals before this
+    // belt-and-braces was added).
+    let sk_a: [u8; 8] = *slot_key;
+    crate::fi::wait_random();
+    let sk_b: [u8; 8] = *slot_key;
+    if sk_a != sk_b {
+        return u64::MAX;
+    }
+    let r1 = scan_forward(&sk_a, OFFCHAIN_TYPE_COUNT);
+    crate::fi::wait_random();
+    let r2 = scan_reverse(&sk_b, OFFCHAIN_TYPE_COUNT);
+    if r1 != r2 {
+        // FI glitch detected. The caller can't recover — return the
+        // safest value: u64::MAX. Downstream cap checks (`new_count >
+        // MAX_SLOT_USES`) will trip and refuse to sign. This is fail-
+        // closed: rather than risk a silent rollback we permanently
+        // refuse signing until the next power cycle resets the cap-check
+        // path on a fresh emulator instance.
+        return u64::MAX;
+    }
+    r1
+}
+
+/// Read the most recent UserOp-snapshot count (the value embedded in
+/// the inner tx of the last `CMD_SIGN_USEROP`). F-12-hardened: same
+/// forward+reverse double scan as `offchain_count_read`.
+pub unsafe fn last_userop_count_read(slot_key: &[u8; 8]) -> u64 {
+    let sk_a: [u8; 8] = *slot_key;
+    crate::fi::wait_random();
+    let sk_b: [u8; 8] = *slot_key;
+    if sk_a != sk_b {
+        return u64::MAX;
+    }
+    let r1 = scan_forward(&sk_a, OFFCHAIN_TYPE_USEROP);
+    crate::fi::wait_random();
+    let r2 = scan_reverse(&sk_b, OFFCHAIN_TYPE_USEROP);
+    if r1 != r2 {
+        return u64::MAX;
+    }
+    r1
 }
 
 /// True iff this firmware has at least one entry for `slot_key`.
 /// After a fresh-from-seed boot this is `false` for every slot, which
 /// is the recovery refusal gate.
+///
+/// F-12-hardened: forward + reverse double scan, halt-on-mismatch. The
+/// answer is a single bit so a fault on one direction's return could flip
+/// it; reverse cross-check catches that.
 pub unsafe fn offchain_count_is_registered(slot_key: &[u8; 8]) -> bool {
+    let sk_a: [u8; 8] = *slot_key;
+    crate::fi::wait_random();
+    let sk_b: [u8; 8] = *slot_key;
+    if sk_a != sk_b {
+        return false;
+    }
+    let r1 = is_registered_forward(&sk_a);
+    crate::fi::wait_random();
+    let r2 = is_registered_reverse(&sk_b);
+    if r1 != r2 {
+        // Fail-closed: report unregistered → refuses the off-chain sign
+        // path until the next call.
+        return false;
+    }
+    r1
+}
+
+#[inline(never)]
+unsafe fn is_registered_forward(slot_key: &[u8; 8]) -> bool {
     for i in 0..OFFCHAIN_CAPACITY {
         let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
         match parse_entry(addr) {
@@ -1304,6 +1390,21 @@ pub unsafe fn offchain_count_is_registered(slot_key: &[u8; 8]) -> bool {
             Some((0, _, _)) => continue,
             Some((_, sk, _)) if sk == *slot_key => return true,
             _ => continue,
+        }
+    }
+    false
+}
+
+#[inline(never)]
+unsafe fn is_registered_reverse(slot_key: &[u8; 8]) -> bool {
+    let mut i = OFFCHAIN_CAPACITY;
+    while i > 0 {
+        i -= 1;
+        let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
+        if let Some((t, sk, _)) = parse_entry(addr) {
+            if t != 0 && sk == *slot_key {
+                return true;
+            }
         }
     }
     false
@@ -1323,7 +1424,26 @@ pub unsafe fn offchain_count_register_slot(slot_key: &[u8; 8]) -> Result<(), ()>
 /// Bump the off-chain sig counter to `new_count`. Reverts via `Err(())`
 /// if `new_count <= current`; the caller (cmd_sign_offchain) computes
 /// `new_count = current + 1` so this only fails on flash trouble.
+///
+/// **F-12 hardening — slot_key input-redundancy.** A fault at function
+/// prologue can stuck-at the `slot_key` register before it's used by
+/// `offchain_count_read` / `entry_qw`. The function would then operate
+/// on the WRONG slot (read its max, write an entry for it), pass the
+/// FI triple-check (which also reads the wrong slot), and return Ok —
+/// while OUR slot's counter never advanced. Defense: dereference the
+/// caller's slot_key into TWO local copies with `wait_random()` between,
+/// compare; halt if they differ. Then use only the locally-verified copy.
 pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<(), ()> {
+    // F-12: input redundancy on slot_key. Catches stuck-at on the
+    // slot_key pointer/register at function entry.
+    let sk_a: [u8; 8] = *slot_key;
+    crate::fi::wait_random();
+    let sk_b: [u8; 8] = *slot_key;
+    if sk_a != sk_b {
+        return Err(());
+    }
+    let slot_key = &sk_a;
+
     let pre = offchain_count_read(slot_key);
     if new_count <= pre {
         return Err(());
@@ -1355,6 +1475,15 @@ pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<
 /// committed to the chain so the next Type 2 sig commits a value the
 /// chain will accept.
 pub unsafe fn offchain_count_promote_to(slot_key: &[u8; 8], target: u64) -> Result<(), ()> {
+    // F-12: slot_key input-redundancy (see offchain_count_bump for rationale).
+    let sk_a: [u8; 8] = *slot_key;
+    crate::fi::wait_random();
+    let sk_b: [u8; 8] = *slot_key;
+    if sk_a != sk_b {
+        return Err(());
+    }
+    let slot_key = &sk_a;
+
     let pre = offchain_count_read(slot_key);
     if target <= pre {
         return Ok(());
@@ -1375,6 +1504,15 @@ pub unsafe fn offchain_count_promote_to(slot_key: &[u8; 8], target: u64) -> Resu
 /// `_setOffchainSigCount` reverts on non-monotonic input — that revert
 /// is the authoritative gate, not this firmware-side check.
 pub unsafe fn last_userop_count_set(slot_key: &[u8; 8], count: u64) -> Result<(), ()> {
+    // F-12: slot_key input-redundancy.
+    let sk_a: [u8; 8] = *slot_key;
+    crate::fi::wait_random();
+    let sk_b: [u8; 8] = *slot_key;
+    if sk_a != sk_b {
+        return Err(());
+    }
+    let slot_key = &sk_a;
+
     let pre = last_userop_count_read(slot_key);
     if count < pre {
         // Defensive no-op. The flash already records a higher
