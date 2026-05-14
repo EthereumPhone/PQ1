@@ -37,9 +37,10 @@ use pqsigner_proto::{
 
 /// ABI-encode `(address, bytes, bytes) || MAGIC` into `out`.
 ///
-/// The output buffer is exactly [`EIP6492_BLOB_LEN`] (8640 bytes) for
-/// our fixed-size factoryCalldata (4260 bytes) + inner wrapper (4128
-/// bytes). All slots are filled — there is no need to pre-zero `out`.
+/// The output buffer is exactly [`EIP6492_BLOB_LEN`] bytes for our
+/// fixed-size factoryCalldata + inner wrapper. The factoryCalldata
+/// tail is padded out to a 32-byte boundary; those padding bytes are
+/// zeroed by an explicit `out.fill(0)` at the start of the function.
 ///
 /// Universal-verifier compatibility: the resulting blob validates
 /// against Ambire's `UniversalSigValidator`, Solady's
@@ -128,14 +129,13 @@ pub fn wrap_signature(
 /// top 24 bytes.
 fn write_be_u256_small(slot: &mut [u8], v: u64) {
     debug_assert_eq!(slot.len(), 32);
-    for b in &mut slot[..24] {
-        *b = 0;
-    }
+    slot[..24].fill(0);
     slot[24..32].copy_from_slice(&v.to_be_bytes());
 }
 
 /// Detection helper: returns `true` iff `sig` ends with [`EIP6492_MAGIC`].
 /// Mirrors the unwrap check in every reference verifier.
+#[must_use]
 pub fn has_magic_suffix(sig: &[u8]) -> bool {
     sig.len() >= 32 && sig[sig.len() - 32..] == EIP6492_MAGIC
 }
