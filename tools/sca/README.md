@@ -573,6 +573,77 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
+### F-12 — Flash-counter SCAN is single-fault rollback-bypassable; severity higher than F-10 because the flash-promote defense doesn't apply
+
+`make flashctr` mirrors `secure/src/hw/flash.rs::offchain_count_read` —
+the scan-and-take-max loop over the log-structured per-slot counter page
+(page 123, 512 QWs of 16 B each). The mirror page is populated with 100
+valid OFFCHAIN_TYPE_COUNT entries (counts 1..=100). The expected read
+result is 100. Any return value < 100 is a **rollback**: the firmware
+underreports `local_offchain_count` by the delta, letting the firmware
+believe the counter is lower than it actually is.
+
+**Plain mirror (production code) under FI:**
+
+```
+sca_flashctr_read_plain  [skip       ]  529 rollbacks  (delta range: 1..100)
+sca_flashctr_read_plain  [stuck-at-0 ]  122 rollbacks
+sca_flashctr_read_plain  [stuck-at-FF]  119 rollbacks
+                                       ─────
+                            TOTAL:     770 single-fault rollbacks
+```
+
+770 successful rollback cases across 7,184 instructions × 3 fault models.
+Rollback magnitudes span the full range — many reduce the count by 1-10
+(partial under-report), but the worst return 0 (full counter reset).
+
+**Production blast radius — worse than F-10.** A single successful fault
+on the scan can underreport by up to the number of entries in flash for
+that slot (capped at OFFCHAIN_CAPACITY = 512 per compaction cycle, with
+compaction extending the effective horizon to ~65 k sigs). The
+flash-promote step that bounds F-10 to ~1 extra sig per fault does NOT
+help here: `offchain_count_promote_to` uses the same scan internally, so
+a rollback at the read layer corrupts the promote target as well.
+
+A single well-timed fault can let an attacker get from ~1 up to ~512
+extra signatures past the cap; sustained attacks can chain into
+substantially more.
+
+**Hardened variant (scan-twice + halt-on-mismatch):** rollbacks drop from
+770 to 10 across the three models — ~98.7 % reduction:
+
+```
+sca_flashctr_read_fi  [skip       ]  4 rollbacks (all delta=+100, return 0)
+sca_flashctr_read_fi  [stuck-at-0 ]  4 rollbacks (all delta=+100)
+sca_flashctr_read_fi  [stuck-at-FF]  2 rollbacks (all delta=+100)
+```
+
+The remaining 10 cases all return 0 — likely faults at scan entry that
+cause both `scan_once` invocations to terminate identically early
+(control-flow corruption → both return 0 → r1 == r2 → halt-on-mismatch
+doesn't fire → return 0). To close those, additional layers needed:
+
+  - **Reverse-direction second scan.** First scan iterates 0..CAPACITY;
+    second scan iterates CAPACITY-1..=0. A control-flow fault that
+    early-exits scan 1 doesn't symmetrically affect scan 2.
+  - **CRC/checksum tail in the page.** A non-blank tail QW holds a
+    32-bit CRC over the previous QWs' contents; scan validates the CRC
+    before returning. A counter rollback that returns a value
+    inconsistent with the CRC fails.
+  - **Counter monotonicity invariant in SRAM.** Cache the last-read
+    counter value in a sentinel-protected SRAM struct; subsequent reads
+    must return ≥ cached. A rollback below cached → halt.
+
+For first-pass production fix: scan-twice (forward + reverse) gets
+~99.99 % closure cheaply. Tracked as F-12 fix in work-todo.
+
+**Severity: HIGH.** Most severe finding in this audit. F-7 / F-8 closed,
+F-10 / F-11 bounded by re-validation/promote/on-chain, but F-12 has no
+existing defense — the production code is **single-fault rollback-
+bypassable end-to-end**. The 65 k structural cap that bounds F-9 (FORS
+leaf-index leak) AND every other SPHINCS+ subset-resilience-bound risk
+depends on `offchain_count_read` being accurate.
+
 ### F-11 — Type 1 / Type 2 dispatch sanity-check rejections are single-fault bypassable — **silent-T1-emission class is NOT reachable; reject-bypass class is, but on-chain re-validation bounds the blast radius**
 
 `make dispatch` sweeps the dispatch logic in `cmd_sign_userop.rs:160-236`.

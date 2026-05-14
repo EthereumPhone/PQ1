@@ -38,9 +38,11 @@ CAP_DIR  := cap_target
 CAP_ELF  := $(CAP_DIR)/target/$(TARGET)/release/sca-cap-target
 DISP_DIR := dispatch_target
 DISP_ELF := $(DISP_DIR)/target/$(TARGET)/release/sca-dispatch-target
+FCT_DIR  := flashctr_target
+FCT_ELF  := $(FCT_DIR)/target/$(TARGET)/release/sca-flashctr-target
 DONJON   ?= donjon-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch kdf sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -82,6 +84,11 @@ build-dispatch: $(DISP_ELF)
 $(DISP_ELF): $(DISP_DIR)/src/main.rs $(DISP_DIR)/memory.x $(DISP_DIR)/build.rs $(DISP_DIR)/Cargo.toml ../../pqsigner-fi/src/lib.rs
 	cargo build --release --target $(TARGET) --manifest-path $(DISP_DIR)/Cargo.toml
 
+build-flashctr: $(FCT_ELF)
+
+$(FCT_ELF): $(FCT_DIR)/src/main.rs $(FCT_DIR)/memory.x $(FCT_DIR)/build.rs $(FCT_DIR)/Cargo.toml ../../pqsigner-fi/src/lib.rs ../../secure/src/hw/flash.rs
+	cargo build --release --target $(TARGET) --manifest-path $(FCT_DIR)/Cargo.toml
+
 fi: build
 	$(DONJON) run fault_sweep_fi.py
 
@@ -111,6 +118,9 @@ cap: build-cap
 
 dispatch: build-dispatch
 	$(DONJON) run fault_sweep_dispatch.py
+
+flashctr: build-flashctr
+	$(DONJON) run fault_sweep_flashctr.py
 
 kdf: build-kdf
 	$(DONJON) run leakage_kdf.py
