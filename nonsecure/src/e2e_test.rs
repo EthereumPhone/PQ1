@@ -20,8 +20,8 @@ use sphincs_tz_shared::{
     APPROVE_HASH_CALLDATA_LEN, APPROVE_HASH_SELECTOR, FLAG_REGISTER_SLOT, MAX_BATCH_TXS,
     MAX_SIGN_RESPONSE_LEN, NscStatus, SAFE_DOMAIN_TYPEHASH, SAFE_OFF_CHAIN_ID, SAFE_OFF_DATA_HASH,
     SAFE_OFF_NONCE, SAFE_OFF_OPERATION, SAFE_OFF_SAFE_ADDRESS, SAFE_OFF_TO, SAFE_TX_TYPEHASH,
-    SAFE_V1_CANONICAL_LEN, SIGN_USEROP_BATCH_HEADER_LEN, SIGN_USEROP_BATCH_TX_PREFIX_LEN,
-    SIGN_USEROP_HEADER_LEN, SIG_TYPE1_LEN, SIG_TYPE2_LEN,
+    SAFE_V1_CANONICAL_LEN, SIGN_USEROP_BATCH_HEADER_LEN, SIGN_USEROP_HEADER_LEN, SIG_TYPE1_LEN,
+    SIG_TYPE2_LEN,
 };
 
 // === Scratch buffers =======================================================
@@ -1134,14 +1134,13 @@ fn main() -> ! {
         for i in 0..MAX_BATCH_TXS {
             tos[i] = [0xc0 + i as u8; 20];
         }
-        let mut inner_buf: [E2eBatchTx<'_>; MAX_BATCH_TXS] = core::array::from_fn(|i| {
+        let inner_buf: [E2eBatchTx<'_>; MAX_BATCH_TXS] = core::array::from_fn(|i| {
             E2eBatchTx {
                 to: tos[i],
                 value_wei: (i as u128) * 1_000_000_000_000u128,
                 data: &[],
             }
         });
-        let _ = &mut inner_buf; // silence might-be-unused on no-op path
         let len = build_batch_payload(
             &mut PAYLOAD_BUF,
             11_155_111,

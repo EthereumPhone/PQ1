@@ -1,3 +1,12 @@
+// The router holds its response buffers as module-level `static mut`
+// because they outlive any single dispatch call (e.g. the GET_RESPONSE
+// chunker pages out of SIG_BUF across multiple HID polls). Every access
+// runs inside an `unsafe fn` on the single-threaded NS main loop with
+// no interrupts re-entering this module, so the rust-2024
+// `static_mut_refs` lint is suppressed per the same pattern as
+// `e2e_test.rs` / `bench_key_speed.rs` / `fwup_hw_test.rs`.
+#![allow(static_mut_refs)]
+
 //! APDU command router — PQSigner v2 native protocol only (post-cutover).
 //!
 //! One class byte: `APDU_CLA_V2 = 0xF0`. One signing command. Every
@@ -408,44 +417,10 @@ impl CommandRouter {
             return self.nsc_status_to_response(status);
         }
 
-        // Response framing (post-EIP-1271 cutover):
-        //   [new_offchain_count(8 BE)]
-        //   [init_code_len(4 BE)] [init_code...]
-        //   [type1_len(4 BE)]    [type1...]
-        //   [type2_len(4 BE)]    [type2...]
-        let header_off: usize = 8; // skip the leading u64 count
-        let ic_len = u32::from_be_bytes([
-            SIG_BUF[header_off],
-            SIG_BUF[header_off + 1],
-            SIG_BUF[header_off + 2],
-            SIG_BUF[header_off + 3],
-        ]) as usize;
-        if header_off + 4 + ic_len + 4 > MAX_SIGN_RESPONSE_LEN {
-            return self.sw_response(SW_INTERNAL_ERROR);
+        match Self::total_sign_response_len() {
+            Some(total) => self.setup_chunked_response(total),
+            None => self.sw_response(SW_INTERNAL_ERROR),
         }
-        let t1_len_off = header_off + 4 + ic_len;
-        let t1_len = u32::from_be_bytes([
-            SIG_BUF[t1_len_off],
-            SIG_BUF[t1_len_off + 1],
-            SIG_BUF[t1_len_off + 2],
-            SIG_BUF[t1_len_off + 3],
-        ]) as usize;
-        if t1_len_off + 4 + t1_len + 4 > MAX_SIGN_RESPONSE_LEN {
-            return self.sw_response(SW_INTERNAL_ERROR);
-        }
-        let t2_len_off = t1_len_off + 4 + t1_len;
-        let t2_len = u32::from_be_bytes([
-            SIG_BUF[t2_len_off],
-            SIG_BUF[t2_len_off + 1],
-            SIG_BUF[t2_len_off + 2],
-            SIG_BUF[t2_len_off + 3],
-        ]) as usize;
-        let total = t2_len_off + 4 + t2_len;
-        if total > MAX_SIGN_RESPONSE_LEN {
-            return self.sw_response(SW_INTERNAL_ERROR);
-        }
-
-        self.setup_chunked_response(total)
     }
 
     /// 0x32 SIGN_USEROP_BATCH — atomic multi-call sign command. The
@@ -474,40 +449,43 @@ impl CommandRouter {
             return self.nsc_status_to_response(status);
         }
 
-        // Same response framing as cmd_sign_userop.
-        let header_off: usize = 8;
-        let ic_len = u32::from_be_bytes([
-            SIG_BUF[header_off],
-            SIG_BUF[header_off + 1],
-            SIG_BUF[header_off + 2],
-            SIG_BUF[header_off + 3],
-        ]) as usize;
-        if header_off + 4 + ic_len + 4 > MAX_SIGN_RESPONSE_LEN {
-            return self.sw_response(SW_INTERNAL_ERROR);
+        match Self::total_sign_response_len() {
+            Some(total) => self.setup_chunked_response(total),
+            None => self.sw_response(SW_INTERNAL_ERROR),
         }
-        let t1_len_off = header_off + 4 + ic_len;
-        let t1_len = u32::from_be_bytes([
-            SIG_BUF[t1_len_off],
-            SIG_BUF[t1_len_off + 1],
-            SIG_BUF[t1_len_off + 2],
-            SIG_BUF[t1_len_off + 3],
-        ]) as usize;
-        if t1_len_off + 4 + t1_len + 4 > MAX_SIGN_RESPONSE_LEN {
-            return self.sw_response(SW_INTERNAL_ERROR);
-        }
+    }
+
+    /// Parse the bundled sign-userop response framing — same shape for
+    /// the single-call and batch sign paths — out of `SIG_BUF` and return
+    /// the total length to ship to the host, or `None` if any declared
+    /// length overflows the response buffer (which can only happen on a
+    /// firmware bug, hence the `SW_INTERNAL_ERROR` mapping at the call
+    /// site).
+    ///
+    /// Framing (after the firmware's gateway write):
+    /// ```text
+    ///   [new_offchain_count(8 BE)]
+    ///   [init_code_len(4 BE)] [init_code...]
+    ///   [type1_len(4 BE)]    [type1...]
+    ///   [type2_len(4 BE)]    [type2...]
+    /// ```
+    unsafe fn total_sign_response_len() -> Option<usize> {
+        const COUNT_LEN: usize = 8;
+
+        let ic_len_off = COUNT_LEN;
+        let ic_len = read_be_u32(&SIG_BUF, ic_len_off)? as usize;
+
+        let t1_len_off = ic_len_off + 4 + ic_len;
+        let t1_len = read_be_u32(&SIG_BUF, t1_len_off)? as usize;
+
         let t2_len_off = t1_len_off + 4 + t1_len;
-        let t2_len = u32::from_be_bytes([
-            SIG_BUF[t2_len_off],
-            SIG_BUF[t2_len_off + 1],
-            SIG_BUF[t2_len_off + 2],
-            SIG_BUF[t2_len_off + 3],
-        ]) as usize;
+        let t2_len = read_be_u32(&SIG_BUF, t2_len_off)? as usize;
+
         let total = t2_len_off + 4 + t2_len;
         if total > MAX_SIGN_RESPONSE_LEN {
-            return self.sw_response(SW_INTERNAL_ERROR);
+            return None;
         }
-
-        self.setup_chunked_response(total)
+        Some(total)
     }
 
     /// 0x62 SIGN_OFFCHAIN — produce a SPHINCS+C10 sig for an EIP-1271
@@ -873,12 +851,12 @@ impl CommandRouter {
         // Collect up to 4 distinct candidate addresses.
         let mut candidates: [[u8; 20]; 4] = [[0u8; 20]; 4];
         let mut cand_n = 0usize;
-        let mut push = |buf: &mut [[u8; 20]; 4], n: &mut usize, a: &[u8; 20]| {
+        let push = |buf: &mut [[u8; 20]; 4], n: &mut usize, a: &[u8; 20]| {
             if *a == [0u8; 20] {
                 return;
             }
-            for i in 0..*n {
-                if buf[i] == *a {
+            for slot in &buf[..*n] {
+                if slot == a {
                     return;
                 }
             }
@@ -1100,6 +1078,20 @@ impl CommandRouter {
     unsafe fn nsc_status_to_response(&self, status: u32) -> Response {
         self.sw_response(nsc_status_to_sw(status))
     }
+}
+
+/// Read a big-endian u32 starting at `off` in `buf`, returning `None`
+/// if reading 4 bytes (or the implicit follow-on length field at
+/// `off + 4 + len`) would walk past the buffer end. The reads are
+/// length-only — callers are responsible for keeping the response
+/// pointer inside `SIG_BUF` once the framing has been validated.
+#[inline]
+fn read_be_u32(buf: &[u8], off: usize) -> Option<u32> {
+    let end = off.checked_add(4)?;
+    if end > buf.len() {
+        return None;
+    }
+    Some(u32::from_be_bytes([buf[off], buf[off + 1], buf[off + 2], buf[off + 3]]))
 }
 
 /// Free function so new FW_* command handlers can reuse the mapping

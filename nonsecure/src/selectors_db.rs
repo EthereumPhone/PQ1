@@ -82,16 +82,6 @@ pub fn build_bundle(selector: &[u8; 4], out: &mut [u8]) -> Option<usize> {
     Some(p)
 }
 
-/// Returns `true` if the DB has an entry for `selector`. Used by
-/// callers that want to cheaply decide whether to spend buffer space
-/// building a full bundle.
-pub fn contains(selector: &[u8; 4]) -> bool {
-    let Some(view) = open(SELECTOR_DB) else {
-        return false;
-    };
-    view.find_index(selector).is_some()
-}
-
 struct DbView {
     blob: &'static [u8],
     entry_cnt: usize,

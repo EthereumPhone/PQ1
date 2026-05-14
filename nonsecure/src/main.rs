@@ -9,21 +9,37 @@
 #![cfg_attr(feature = "bench-key-speed", allow(dead_code, unused_imports))]
 #![cfg_attr(feature = "fwup-hw-test", allow(dead_code, unused_imports))]
 
-#[cfg(not(feature = "usb"))]
-use cortex_m_semihosting::{debug, hprintln};
+// Panic handler selection. The QEMU/test paths use semihosting so panics
+// surface via `make e2e` / `make play`; the USB hardware build halts
+// silently because semihosting without a debugger attached BKPTs and
+// HardFaults.
 #[cfg(not(feature = "usb"))]
 use panic_semihosting as _;
 #[cfg(feature = "usb")]
 use panic_halt as _;
-
-// Interactive demo (mainly for `make play`): uses the unified
-// Type 1 / Type 2 sign command to sign a single value-transfer tx.
-#[cfg(all(not(feature = "e2e-test"), feature = "usb"))]
+// `debug` / `hprintln` are imported by each entry point that actually
+// uses them — the alternates (e2e_test, bench_key_speed, fwup_hw_test,
+// usb-main) all re-import locally so the default-features build stays
+// warning-clean.
+#[cfg(all(
+    not(feature = "e2e-test"),
+    not(feature = "bench-key-speed"),
+    not(feature = "fwup-hw-test"),
+    not(feature = "usb"),
+))]
 use cortex_m_semihosting::{debug, hprintln};
-#[cfg(all(not(feature = "e2e-test"), not(feature = "fwup-hw-test")))]
-use sphincs_tz_shared::{
-    NscStatus, MAX_SIGN_RESPONSE_LEN, SIGN_USEROP_HEADER_LEN,
-};
+
+// Imports for the interactive QEMU demo (no USB, no test runner). The
+// other entry points pull what they need locally to keep the default-
+// features build (which exists only to satisfy `cargo check`) free of
+// dead-code warnings.
+#[cfg(all(
+    not(feature = "e2e-test"),
+    not(feature = "bench-key-speed"),
+    not(feature = "fwup-hw-test"),
+    not(feature = "usb"),
+))]
+use sphincs_tz_shared::{NscStatus, MAX_SIGN_RESPONSE_LEN, SIGN_USEROP_HEADER_LEN};
 
 #[cfg(feature = "e2e-test")]
 mod e2e_test;
@@ -31,8 +47,16 @@ mod e2e_test;
 mod bench_key_speed;
 #[cfg(feature = "fwup-hw-test")]
 mod fwup_hw_test;
+// The trailer-injection DBs are consumed only by the USB-side APDU
+// router (`usb::commands::maybe_inject_*`). Gating them on `usb`
+// keeps the QEMU smoke build and the test entry points from baking
+// in the ~MB of static rodata blobs.
+#[cfg(feature = "usb")]
 mod erc20_db;
+#[cfg(feature = "usb")]
 mod names_db;
+#[cfg(feature = "usb")]
+mod vk_db;
 mod nsc_api;
 // The selectors DB blob lives on the host; only the e2e-test build
 // stubs in a companion-side bundle builder so the QEMU NS test
@@ -41,17 +65,33 @@ mod nsc_api;
 mod selectors_db;
 #[cfg(feature = "usb")]
 mod usb;
-#[cfg(feature = "usb")]
-mod vk_db;
 
 /// Scratch buffer for the unified sign command response (Type 1 + Type 2).
-#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
+/// Only the no-USB interactive QEMU demo uses these — the USB router in
+/// `usb::commands` owns its own buffers, and the test entry points each
+/// declare their own.
+#[cfg(all(
+    not(feature = "e2e-test"),
+    not(feature = "bench-key-speed"),
+    not(feature = "fwup-hw-test"),
+    not(feature = "usb"),
+))]
 static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
 
 /// Scratch buffer for a sign payload (header + up to 256B inner calldata).
-#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
+#[cfg(all(
+    not(feature = "e2e-test"),
+    not(feature = "bench-key-speed"),
+    not(feature = "fwup-hw-test"),
+    not(feature = "usb"),
+))]
 const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 256;
-#[cfg(all(not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
+#[cfg(all(
+    not(feature = "e2e-test"),
+    not(feature = "bench-key-speed"),
+    not(feature = "fwup-hw-test"),
+    not(feature = "usb"),
+))]
 static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
 
 // ---------------------------------------------------------------------------
@@ -144,25 +184,30 @@ fn main() -> ! {
     assert_eq!(status, NscStatus::Ok as u32);
 
     hprintln!("[NS] Signing a value-transfer (1 ETH → 0xAB..12)...");
+    // SAFETY: this interactive demo is single-threaded and the only writer
+    // of PAYLOAD_BUF / SIG_BUF; we take exclusive raw refs for the duration
+    // of the call and drop them before the next iteration.
     unsafe {
-        let payload_len = build_value_transfer_payload(&mut PAYLOAD_BUF);
-        let status = nsc_api::sign_userop(&PAYLOAD_BUF[..payload_len], &mut SIG_BUF);
+        let payload = &mut *core::ptr::addr_of_mut!(PAYLOAD_BUF);
+        let sig = &mut *core::ptr::addr_of_mut!(SIG_BUF);
+        let payload_len = build_value_transfer_payload(payload);
+        let status = nsc_api::sign_userop(&payload[..payload_len], sig);
         hprintln!("[NS] sign_userop: {:?}", NscStatus::from(status));
         if status == NscStatus::Ok as u32 {
-            let ic_len = u32::from_be_bytes([SIG_BUF[0], SIG_BUF[1], SIG_BUF[2], SIG_BUF[3]]);
+            let ic_len = u32::from_be_bytes([sig[0], sig[1], sig[2], sig[3]]);
             let t1_off = 4 + ic_len as usize;
             let t1_len = u32::from_be_bytes([
-                SIG_BUF[t1_off],
-                SIG_BUF[t1_off + 1],
-                SIG_BUF[t1_off + 2],
-                SIG_BUF[t1_off + 3],
+                sig[t1_off],
+                sig[t1_off + 1],
+                sig[t1_off + 2],
+                sig[t1_off + 3],
             ]);
             let t2_off = t1_off + 4 + t1_len as usize;
             let t2_len = u32::from_be_bytes([
-                SIG_BUF[t2_off],
-                SIG_BUF[t2_off + 1],
-                SIG_BUF[t2_off + 2],
-                SIG_BUF[t2_off + 3],
+                sig[t2_off],
+                sig[t2_off + 1],
+                sig[t2_off + 2],
+                sig[t2_off + 3],
             ]);
             hprintln!(
                 "[NS] init_code_len: {}, type1_len: {}, type2_len: {}",
