@@ -6,4 +6,8 @@ description = "PQSigner fault-injection (FI) hardening primitives — shared by 
 
 [dependencies]
 zeroize = { workspace = true }
+
+# Only needed for the ARM-target `wfe()` halt loop in `halt_on_glitch`; host
+# test builds use a panic instead, so they don't drag in the cortex-m crate.
+[target.'cfg(target_arch = "arm")'.dependencies]
 cortex-m = { workspace = true }
