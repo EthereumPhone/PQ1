@@ -59,21 +59,37 @@ pub fn c10_sign_verified_with_progress(
     // nonetheless verifies cleanly under the honest pubkey while leaking
     // sk_seed bits across multiple traces (faulted hypertree nodes
     // re-derive bottom-up). Two signs over identical inputs MUST be
-    // byte-identical (deterministic SPHINCS+C10 today; when item #18's
-    // non-deterministic OptRand lands, the *same* randomiser will feed
-    // both signs — see `opt_rand` local below).
+    // byte-identical; a divergence is diagnostic of a fault on one of
+    // the two signs.
     //
     // Cost: ~2× sign latency (~+1.5 s on HW SHA, ~+12 s on QEMU
     // software SHA). The progress callback runs on the first sign so
     // the user sees a 0..100 ramp; the second sign is silent and
     // visually appears as a stretched "verifying..." window.
     //
-    // `opt_rand` is held in a single local so a future #18 migration
-    // is a 2-line change (one `rng::fill(&mut opt_rand_buf)` above,
-    // then `Some(&opt_rand_buf)` instead of `None`). Both signs MUST
-    // see the same value: re-drawing per sign would break the byte-
-    // equality check.
-    let opt_rand: Option<&[u8; sphincs_c10::params::N]> = None;
+    // **Non-deterministic OptRand (work-todo #18 / Trezor parity).**
+    // We draw a fresh 16-byte randomiser per signing call via
+    // `hw::rng_strong::fill` (STM32 TRNG ⊕ OPTIGA TRNG ⊕ SE050 TRNG,
+    // 3-source XOR mirroring Trezor's `rng_fill_buffer_strong`).
+    // Defends against:
+    //   - the deterministic-PRF-tree class (Genêt TCHES 2023): adding
+    //     a fresh randomiser breaks the chain of repeated SK re-use
+    //     across signatures.
+    //   - any single biased / compromised TRNG: the XOR of the
+    //     remaining unbroken sources preserves entropy.
+    // The randomiser is drawn ONCE and fed to both signs — re-drawing
+    // per sign would still be cryptographically sound but would
+    // produce divergent sigs, breaking the byte-equality FI gate.
+    //
+    // Under `mock-se` (no SE backend) the strong-RNG falls through to
+    // STM32 TRNG only. Under any real-SE feature flag the active
+    // backend's `random()` is XOR-mixed in.
+    let mut opt_rand_buf = [0u8; sphincs_c10::params::N];
+    #[cfg(not(test))]
+    if crate::rng_strong::fill(&mut opt_rand_buf).is_err() {
+        return Err(());
+    }
+    let opt_rand: Option<&[u8; sphincs_c10::params::N]> = Some(&opt_rand_buf);
     let sig_a = sk.sign_with_progress(msg_hash, opt_rand, progress);
     crate::fi::wait_random();
     let sig_b = sk.sign_with_progress(msg_hash, opt_rand, |_| {});
@@ -91,6 +107,7 @@ pub fn c10_sign_verified_with_progress(
     // **2-gate chain**; do not remove the verify on the assumption
     // double-compute makes it redundant.
     if !bool::from(sig_a[..].ct_eq(&sig_b[..])) {
+        opt_rand_buf.zeroize();
         return Err(());
     }
 
@@ -111,8 +128,10 @@ pub fn c10_sign_verified_with_progress(
     crate::fi::wait_random();
     let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig_a);
     if crate::fi::check_true_into_sentinel(|| core::hint::black_box(v)) != crate::fi::OK_SENTINEL {
+        opt_rand_buf.zeroize();
         return Err(());
     }
+    opt_rand_buf.zeroize();
     Ok(sig_a)
 }
 

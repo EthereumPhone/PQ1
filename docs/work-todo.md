@@ -326,18 +326,28 @@ Adds post-quantum confidentiality on top of the classical encrypted channels (No
 
 ---
 
-### 10. Multi-Source RNG (3-way XOR)
+### 10. Multi-Source RNG (3-way XOR) — **DONE for the signing path; remaining call-sites to migrate are non-secret**
 
-**Status:** NOT STARTED (building blocks exist but unused)
+**Status:** PHASE 1 LANDED (signing OptRand). Phase 2 (migrate other RNG call-sites — consumption-mask jitter, wait_random salt, dual_se entropy split) is opt-in defence-in-depth, not security-critical.
 
-`Tropic01SecureElement::get_trng_bytes()` exists but is never called. SE050 has TRNG capability but no APDU wrapper. Design: `STM32_TRNG XOR Tropic01_TRNG XOR SE050_TRNG`.
+Mirrors Trezor's `core/embed/sec/rng/rng_strong.c`: `secure/src/rng_strong.rs::fill` XOR-folds the platform TRNG (STM32 hardware RNG on real silicon; semihosting `/dev/urandom` on QEMU) with each available SE backend's `random()` method. For `dual-se` builds `DualSecureElement::random` internally XORs OPTIGA + SE050 contributions first, so the final fold is `STM32 ⊕ OPTIGA ⊕ SE050`. Defends against any single broken / biased source.
 
-**What's needed:**
-- [ ] SE050 TRNG APDU wrapper in `secure/src/se050/apdu.rs`
-- [ ] XOR combination function in `secure/src/rng.rs`
-- [ ] Use combined RNG for all entropy generation (seed, nonces, ephemeral keys)
+The signing path consumes it via `crypto::c10_sign_verified_with_progress`: a fresh 16-byte `opt_rand` is drawn per call, fed to BOTH double-compute signs (re-drawing per sign would break the F-13 byte-equality FI gate), and zeroized on exit.
 
-**Files to change:** `secure/src/rng.rs`, `secure/src/se050/apdu.rs`
+**What's needed for Phase 1:**
+- [x] SE050 TRNG APDU wrapper (`secure/src/se050/apdu.rs::get_random`, AN12413 §5.13.1 with `P2_RANDOM = 0x49`)
+- [x] OPTIGA `OptigaTrustM::random` high-level method (wraps existing shielded `apdu::get_random`)
+- [x] Trait method `WalletStore::random` (default `Err(SlotNotFound)`) implemented on every real backend
+- [x] `DualSecureElement::random` (XOR-fold OPTIGA + SE050)
+- [x] `secure/src/rng_strong.rs::fill` (Trezor-pattern XOR-mix with fail-closed non-zero gate)
+- [x] Wired into `c10_sign_verified_with_progress` for SPHINCS+ OptRand
+
+**What's needed for Phase 2 (deferred — not security-critical):**
+- [ ] Migrate `secure/src/dual_se.rs::provision`'s `crate::rng::fill` for the entropy XOR split → `rng_strong::fill` (the half_O / half_E split needs strong randomness, but it's one-shot at provisioning, and the per-half is later XOR'd anyway)
+- [ ] Migrate consumption-mask PWM duty randomization → `rng_strong::fill` (defense-in-depth: a faulted PWM doesn't leak the signing key, just weakens the EM mask)
+- [ ] Survey of remaining `crate::rng::fill` call-sites (`fi::wait_random` salt, FI consumption-mask, slot-key salt — all currently non-secret-bearing)
+
+**Files changed in Phase 1:** `secure/src/rng_strong.rs` (new), `secure/src/se050/apdu.rs`, `secure/src/se050/mod.rs`, `secure/src/optiga/mod.rs`, `secure/src/dual_se.rs`, `secure/src/secure_element.rs`, `secure/src/main.rs` (added `se_random` accessor + `mod rng_strong`), `secure/src/crypto.rs`.
 
 ---
 
@@ -550,8 +560,8 @@ Research-derived mitigations from the deep-research round of 2026-04-14. Critica
 - [ ] **SHAKE-vs-SHA2 architectural decision** (was P1 in original list, now a prerequisite). Benchmark SLH-DSA-SHAKE-128f masked implementation vs SLH-DSA-SHA2-128f with HASH peripheral + software countermeasures. Don't rely on Fluhrer's 1.7× figure — measure directly.
 
 **What's needed — P0 (must ship with these):**
-- [ ] **SLH-DSA double-compute**: sign twice on disjoint SRAM regions, constant-time compare, release only on match. Verify-after-sign alone is NOT sufficient — faulty sigs still verify per RFC 9814.
-- [ ] **Non-deterministic OptRand** on every signature: 16 B (128f) / 24 B (192f) freshly drawn from STM32 TRNG per sign call. Replace the current OptRand=0 deterministic path.
+- [x] **SLH-DSA double-compute** (commit `7f2f2e7`, F-13). `secure/src/crypto.rs::c10_sign_verified_with_progress` signs twice, constant-time compares, releases on match. RFC 9814 §A.2 / Genêt TCHES 2023 verify-after-sign-alone-is-insufficient class closed.
+- [x] **Non-deterministic OptRand** on every signature (commit follows F-13). 16 B drawn per sign-call via `rng_strong::fill` (STM32 ⊕ OPTIGA ⊕ SE050 XOR-fold; Trezor-parity multi-source RNG). The OptRand=None deterministic path is gone; both double-compute signs see the SAME freshly-drawn randomiser so the FI byte-equality gate still holds.
 - [ ] **Signing rate limiter**: global token-bucket caps at ~1 sig/sec, ~500/day, hard-rotate after 2^16 signatures per key. Extends attacker trace-collection window from minutes to months.
 - [ ] **WOTS chain + FORS tree shuffling** via Fisher-Yates, TRNG-seeded per sign. Desynchronises traces against profiled DPA.
 - [ ] **FihInt-style complement-storage** for all security-critical booleans (`blob_cached`, `pin_verified`, `match_ok`). Magic constants 0x1AAA_AAAA / 0x1555_5555, stored with XOR complement. Verify via `core::ptr::read_volatile` on every check (never `core::hint::black_box`).

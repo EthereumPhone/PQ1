@@ -95,9 +95,13 @@ pub extern "C" fn sca_c10_sign_verified(
     use subtle::ConstantTimeEq;
     let sk = sphincs_c10::SigningKey::from_parts(SK_SEED, PK_SEED, PK_ROOT);
     let msg: &[u8; 32] = unsafe { &*(msg_hash_ptr as *const [u8; 32]) };
-    // Same opt_rand pattern as production — single local so future #18
-    // migration is a 2-line change.
-    let opt_rand: Option<&[u8; N]> = None;
+    // Mirror of production: a fixed (in the harness) `opt_rand` buffer
+    // fed to both signs. In production the buffer is drawn fresh per
+    // call via `rng_strong::fill` (STM32 ⊕ OPTIGA ⊕ SE050 XOR-fold) —
+    // the harness uses a fixed value so the deterministic byte-equality
+    // check is stable. Both signs MUST see the same value.
+    let opt_rand_buf: [u8; N] = [0x55u8; N];
+    let opt_rand: Option<&[u8; N]> = Some(&opt_rand_buf);
     let sig_a = sk.sign(msg, opt_rand);
     fi::wait_random();
     let sig_b = sk.sign(msg, opt_rand);

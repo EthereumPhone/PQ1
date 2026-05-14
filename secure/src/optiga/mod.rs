@@ -224,6 +224,33 @@ impl OptigaTrustM {
     /// embedded reset-manifest bundle and sends each one. Logs per-OID
     /// outcome via `secure_log!`.
     ///
+    /// Draw `buf.len()` bytes from the OPTIGA Trust M hardware TRNG
+    /// over the Shielded Connection. The bytes are NOT intended to be
+    /// used in isolation — `hw::rng_strong` XOR-mixes this stream with
+    /// the STM32 TRNG (and the SE050 TRNG in dual-SE builds) so a
+    /// single broken or biased source cannot dictate the output.
+    ///
+    /// OPTIGA `GetRandom` accepts 8 ≤ size ≤ 256. For requests below 8
+    /// bytes we pull 8 and truncate.
+    pub fn random(&mut self, buf: &mut [u8]) -> Result<(), OptigaError> {
+        if buf.is_empty() {
+            return Ok(());
+        }
+        self.init()?;
+        // The Shielded Connection encrypts request + response, so an
+        // I2C MITM cannot substitute a fixed challenge here.
+        unsafe {
+            if buf.len() < 8 {
+                let mut tmp = [0u8; 8];
+                apdu::get_random(&mut self.ifx, &mut self.shield, &mut tmp)?;
+                buf.copy_from_slice(&tmp[..buf.len()]);
+            } else {
+                apdu::get_random(&mut self.ifx, &mut self.shield, buf)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Drops the `optiga-reset-oids` feature as soon as the chip is back
     /// in a writable state — the TA cert that authorises these manifests
     /// is a sample key from Infineon's example set, unsafe for production.
@@ -2177,6 +2204,10 @@ impl WalletStore for OptigaTrustM {
 
     fn zeroize_caches(&mut self) {
         self.zeroize_caches_internal();
+    }
+
+    fn random(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
+        OptigaTrustM::random(self, buf).map_err(|_| SeError::InternalError)
     }
 
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {

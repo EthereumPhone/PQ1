@@ -97,6 +97,8 @@ mod offchain_state;
 mod nsc;
 #[cfg(not(test))]
 mod rng;
+#[cfg(not(test))]
+mod rng_strong;
 mod pin;
 #[cfg(all(feature = "stm32u585", feature = "optiga-trust-m", not(test)))]
 mod pin_diag;
@@ -160,6 +162,27 @@ static mut SE: optiga::OptigaTrustM = optiga::OptigaTrustM::new();
 // Global dual-SE (OPTIGA Trust M + SE050 with XOR entropy split)
 #[cfg(all(feature = "dual-se", not(test)))]
 static mut SE: dual_se::DualSecureElement = dual_se::DualSecureElement::new();
+
+/// Strong-RNG accessor for `hw::rng_strong::fill`. Returns
+/// `Err(SeError)` when the active backend has no TRNG (`mock-se`),
+/// which the caller treats as "skip the SE-side XOR layer".
+///
+/// SAFETY: must be called only after the SE has been initialised —
+/// i.e. from a code path that runs after `init`/`unlock`. The sign
+/// path (the only consumer) is gated on `pin_verified`, which only
+/// becomes true after a successful unlock that has touched the SE.
+#[cfg(not(test))]
+pub unsafe fn se_random(
+    buf: &mut [u8],
+) -> Result<(), crate::secure_element::SeError> {
+    use crate::secure_element::WalletStore;
+    let se = &mut *core::ptr::addr_of_mut!(SE);
+    // Fully-qualified to dispatch through the WalletStore trait
+    // (the standalone Se050/OptigaTrustM types have inherent
+    // `random` methods returning their backend-specific error
+    // type; the trait method returns `Result<_, SeError>`).
+    <_ as WalletStore>::random(se, buf)
+}
 
 /// SAES Tier-1 bring-up self-test — runs under `saes-self-test` only.
 /// Initialises the SAES peripheral, executes the in-driver self-tests

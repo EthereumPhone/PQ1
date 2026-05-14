@@ -603,11 +603,18 @@ sign followed by a verify-before-release gate. The verify defeats
 naïve sig-mangling (random bit-flips) but NOT the Genêt class — a
 faulted sig that recomputes to the same `pk_root` passes the gate.
 
-**Fix.** `secure/src/crypto.rs` now signs **twice** with identical
-inputs, constant-time compares the two 4008-byte signatures, halts on
-mismatch, then runs the existing verify. Two signs over identical
-`(sk_seed, msg_hash, opt_rand)` are byte-identical for deterministic
-SPHINCS+C10; a transient fault on one of the two signs produces
+**Fix.** `secure/src/crypto.rs` now:
+
+  1. Draws a fresh 16-byte `opt_rand` via `rng_strong::fill` (multi-
+     source XOR: STM32 TRNG ⊕ OPTIGA TRNG ⊕ SE050 TRNG — matches
+     Trezor's `rng_fill_buffer_strong` design).
+  2. Signs **twice** with the SAME randomiser, then constant-time
+     compares the two 4008-byte signatures and halts on mismatch.
+  3. Runs the existing verify-before-release gate.
+
+Two signs over identical `(sk_seed, msg_hash, opt_rand)` are byte-
+identical because the rest of the SPHINCS+C10 sign path is
+deterministic; a transient fault on one of the two signs produces
 divergent bytes that fail the ct-compare. Compare + verify form a
 **2-gate chain**: if a single instruction-skip bypasses the compare,
 the verify still catches a non-canonical sig; if a fault re-creates
@@ -615,13 +622,13 @@ the Genêt-style same-pk_root malformed sig, it would have to do so
 **identically on both signs** for the compare to pass.
 
 ```rust
-let opt_rand: Option<&[u8; sphincs_c10::params::N]> = None;
+let mut opt_rand_buf = [0u8; sphincs_c10::params::N];
+if crate::rng_strong::fill(&mut opt_rand_buf).is_err() { return Err(()); }
+let opt_rand: Option<&[u8; sphincs_c10::params::N]> = Some(&opt_rand_buf);
 let sig_a = sk.sign_with_progress(msg_hash, opt_rand, progress);
 crate::fi::wait_random();
 let sig_b = sk.sign_with_progress(msg_hash, opt_rand, |_| {});
-if !bool::from(sig_a[..].ct_eq(&sig_b[..])) {
-    return Err(());
-}
+if !bool::from(sig_a[..].ct_eq(&sig_b[..])) { return Err(()); }
 crate::fi::wait_random();
 let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig_a);
 if crate::fi::check_true_into_sentinel(|| core::hint::black_box(v)) != crate::fi::OK_SENTINEL {
@@ -631,11 +638,22 @@ if crate::fi::check_true_into_sentinel(|| core::hint::black_box(v)) != crate::fi
 
 **Notes:**
 
-  - `opt_rand` is held in a single local so the future #18 migration to
-    non-deterministic OptRand is a 2-line change. The randomiser MUST
-    feed both signs (re-drawing per sign would break the byte-equality
-    check while still being cryptographically sound — but then the FI
-    defence is gone).
+  - The randomiser is drawn ONCE and fed to both signs. Re-drawing per
+    sign would still be cryptographically sound but would produce
+    divergent sigs, breaking the byte-equality FI gate.
+  - `rng_strong::fill` (work-todo §10) XOR-folds the platform TRNG
+    (STM32 hardware RNG on real silicon; semihosting `/dev/urandom` on
+    QEMU) with the active SE backend's `random()` method. For
+    `dual-se` builds the SE backend internally XORs OPTIGA + SE050.
+    Defends against any single broken / biased source.
+  - Mirrors Trezor's `core/embed/sec/rng/rng_strong.c` design. The new
+    SE050 GetRandom APDU (`P2_RANDOM = 0x49`, AN12413 §5.13.1) was
+    added in this commit alongside the high-level `Se050::random` /
+    `OptigaTrustM::random` / `DualSecureElement::random` methods on
+    the `WalletStore` trait.
+  - Defends additionally against the deterministic-PRF-tree class
+    (Genêt TCHES 2023): adding a fresh randomiser breaks the chain of
+    repeated SK re-use that the differential attack exploits.
   - The `if !ct_eq { Err }` is itself a single-instruction-skip point;
     the verify is the second independent gate (do NOT remove on the
     assumption double-compute makes verify redundant).

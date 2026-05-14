@@ -87,6 +87,23 @@ pub trait WalletStore {
     /// Tropic01 (queries the chip on every `remaining_attempts`).
     fn sync_remaining_with_mcu(&mut self, _mcu_used: u8) {}
 
+    /// Draw `buf.len()` bytes from the active SE backend's TRNG(s).
+    /// For multi-source backends (`DualSecureElement` = OPTIGA + SE050),
+    /// the implementation XOR-mixes per-source internally so the caller
+    /// sees a single combined stream. Returns `Err(SlotNotFound)` when
+    /// the backend has no TRNG to offer (the mock); callers must
+    /// tolerate this and treat it as "skip the SE-side XOR layer" —
+    /// see `hw::rng_strong::fill`.
+    ///
+    /// The bytes returned MUST NOT be used in isolation. They are one
+    /// of three contributing sources (STM32 TRNG + OPTIGA TRNG + SE050
+    /// TRNG) that `rng_strong::fill` XOR-folds together. The
+    /// security argument is: if *any* of the three sources is
+    /// unbroken, the XOR preserves entropy from the remaining sources.
+    fn random(&mut self, _buf: &mut [u8]) -> Result<(), SeError> {
+        Err(SeError::SlotNotFound)
+    }
+
     /// Zeroize any cached secrets (called on idle wipe / lock / panic).
     fn zeroize_caches(&mut self);
 

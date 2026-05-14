@@ -33,6 +33,9 @@ pub enum Se050Error {
     NotProvisioned,
     /// Response data exceeds caller buffer.
     BufferOverflow,
+    /// Caller supplied an out-of-range argument (e.g. `GetRandom`
+    /// length outside the SE050's accepted [1, 256] range).
+    InvalidParam,
 }
 
 impl From<T1Error> for Se050Error {
@@ -69,6 +72,10 @@ const P2_DEFAULT: u8 = 0x00;
 const P2_CREATE_SESSION: u8 = 0x1B;
 const P2_EXIST: u8 = 0x27;
 const P2_VERIFY_SESSION_USERID: u8 = 0x2C;
+/// NXP AN12413 §5.13.1 — `Se05x_API_GetRandom`. Header is
+/// `(CLA=0x80, INS=INS_MGMT, P1=P1_DEFAULT, P2=P2_RANDOM)`; body is
+/// `TLV(TAG_1, length:u16)`; response is `TLV(TAG_1, random_bytes)`.
+const P2_RANDOM: u8 = 0x49;
 
 // TLV tags
 const TAG_SESSION_ID: u8 = 0x10;
@@ -878,6 +885,40 @@ pub unsafe fn platform_factory_reset(
     let mut resp = [0u8; 64];
     send_apdu(t1, scp03, cmd, &mut resp)?;
     Ok(())
+}
+
+/// `Se05x_API_GetRandom` (NXP AN12413 §5.13.1) — pull `out.len()` bytes
+/// from the SE050 hardware TRNG over the established SCP03 channel.
+///
+/// `size` is the requested length, capped by `SE05X_MAX_BUF_SIZE_RSP -
+/// overhead` (NXP plug-and-trust); for our use (≤32 B per call) the
+/// limit is academic. The response is `TLV(TAG_1, random_bytes)`.
+///
+/// The XOR-mix layer (`hw::rng_strong`) is what makes this strong:
+/// even if the SE050 TRNG is biased / compromised, the XOR with the
+/// STM32 TRNG and OPTIGA TRNG preserves entropy from the remaining
+/// sources. We never trust a single SE-TRNG output blindly.
+pub unsafe fn get_random(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    out: &mut [u8],
+) -> Result<usize, Se050Error> {
+    if out.is_empty() || out.len() > 256 {
+        return Err(Se050Error::InvalidParam);
+    }
+    let mut apdu = ApduBuf::new(0x80, INS_MGMT, P1_DEFAULT, P2_RANDOM);
+    let size = out.len() as u16;
+    apdu.tlv(TAG_1, &size.to_be_bytes());
+    let cmd = apdu.finish(true);
+
+    let mut resp = [0u8; 320];
+    let n = send_apdu(t1, scp03, cmd, &mut resp)?;
+    if let Some((_, value, _)) = tlv_parse(&resp[..n]) {
+        let copy_len = value.len().min(out.len());
+        out[..copy_len].copy_from_slice(&value[..copy_len]);
+        return Ok(copy_len);
+    }
+    Err(Se050Error::Transport)
 }
 
 /// Close a session on the SE050.

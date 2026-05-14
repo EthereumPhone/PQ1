@@ -310,6 +310,24 @@ impl Se050 {
         }
     }
 
+    /// Draw `buf.len()` bytes from the SE050 hardware TRNG over the
+    /// established SCP03 channel. The bytes are NOT intended to be
+    /// used in isolation — `hw::rng_strong` XOR-mixes this stream with
+    /// the STM32 TRNG (and the OPTIGA TRNG in dual-SE builds) so a
+    /// single broken or biased source cannot dictate the output.
+    ///
+    /// `buf.len()` must be in `[1, 256]` (NXP AN12413 §5.13.1 limit).
+    pub fn random(&mut self, buf: &mut [u8]) -> Result<(), Se050Error> {
+        if buf.is_empty() {
+            return Ok(());
+        }
+        self.init()?;
+        unsafe {
+            apdu::get_random(&mut self.t1, &mut self.scp03, buf)?;
+        }
+        Ok(())
+    }
+
     /// Two-pass: first unauthenticated SCP03 sweep, then (if `auth_obj_id`
     /// + `pin` provided) an authenticated retry against that UserID. The
     /// UserID itself is self-deleted at the end if it was created with
@@ -2205,6 +2223,10 @@ impl WalletStore for Se050 {
         self.vk_cached = false;
         self.bootstrap_vk_cache.zeroize();
         self.bootstrap_vk_cached = false;
+    }
+
+    fn random(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
+        Se050::random(self, buf).map_err(|_| SeError::InternalError)
     }
 
     #[cfg(feature = "stm32u585")]

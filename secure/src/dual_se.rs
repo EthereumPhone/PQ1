@@ -257,6 +257,48 @@ impl WalletStore for DualSecureElement {
         self.se050.zeroize_caches();
     }
 
+    /// Pull random bytes from both SEs and XOR-mix them in-place. The
+    /// per-source bytes never leave this function — only the XOR is
+    /// returned to the caller. `hw::rng_strong::fill` further folds
+    /// this in with the STM32 TRNG before any cryptographic use, so
+    /// the final output is `STM32 ⊕ OPTIGA ⊕ SE050`.
+    ///
+    /// Best-effort across the two SEs: if OPTIGA fails we still return
+    /// SE050's contribution (and vice versa). Returns Err only if BOTH
+    /// SEs fail — caller (`rng_strong::fill`) handles by falling back
+    /// to STM32 TRNG alone.
+    fn random(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
+        let mut tmp = [0u8; 32];
+        let mut off = 0;
+        while off < buf.len() {
+            let len = (buf.len() - off).min(tmp.len());
+            let mut have_any = false;
+
+            // OPTIGA contribution.
+            if self.optiga.random(&mut tmp[..len]).is_ok() {
+                for i in 0..len {
+                    buf[off + i] ^= tmp[i];
+                }
+                have_any = true;
+            }
+            // SE050 contribution.
+            tmp.zeroize();
+            if self.se050.random(&mut tmp[..len]).is_ok() {
+                for i in 0..len {
+                    buf[off + i] ^= tmp[i];
+                }
+                have_any = true;
+            }
+            tmp.zeroize();
+
+            if !have_any {
+                return Err(SeError::InternalError);
+            }
+            off += len;
+        }
+        Ok(())
+    }
+
     /// Wipe both SEs via their admin recovery paths and clear SRAM caches.
     ///
     /// OPTIGA: `optiga.factory_reset()` overwrites every user OID through
