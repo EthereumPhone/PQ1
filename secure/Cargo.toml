@@ -35,6 +35,11 @@ pqsigner-domain   = { workspace = true }
 # (`crate::erc20::bundle::verify_erc20_bundle(...)`) keep working
 # unchanged.
 pqsigner-tx       = { workspace = true }
+# ERC-7730 clear-signing descriptor interpreter. Binary IR parser,
+# Merkle-bundle verifier, context-binding cross-check. Display
+# rendering layer lives in `secure/src/tx/display/erc7730/` and
+# depends on this crate.
+pqsigner-erc7730  = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }

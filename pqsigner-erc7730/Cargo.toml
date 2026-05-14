@@ -1,0 +1,27 @@
+[package]
+name = "pqsigner-erc7730"
+version = "0.1.0"
+edition.workspace = true
+
+# ERC-7730 clear-signing descriptor interpreter. Owns the on-device
+# binary IR (the host compiler in `dbgen` is the canonical writer; this
+# crate is the canonical reader), the Merkle-trailer verifier that
+# binds an IR blob to the firmware-pinned `ERC7730_DESCRIPTORS_ROOT`,
+# and the context cross-check that proves the descriptor applies to
+# the transaction (or EIP-712 payload) actually being signed.
+#
+# Pure-logic, no_std, no heap. Re-exported into the secure crate via
+# `secure/src/tx/erc7730.rs` and consumed by `cmd_sign_userop`,
+# `cmd_sign_userop_batch`, and `cmd_sign_offchain`.
+#
+# The actual display rendering (page formatting on the OLED grid) lives
+# in `secure/src/tx/display/erc7730/` and depends on this crate plus
+# UI primitives. Pull this out so a host-side reference signer can run
+# the verifier + walker without UI deps.
+
+[dependencies]
+pqsigner-tx       = { workspace = true }
+sha2 = { version = "0.10", default-features = false }
+
+[dev-dependencies]
+hex = { workspace = true }

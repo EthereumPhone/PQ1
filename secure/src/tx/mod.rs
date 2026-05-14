@@ -22,6 +22,7 @@
 #[cfg(not(test))]
 pub mod display;
 pub mod eip712;
+pub mod erc7730;
 pub mod typed_call;
 
 // Pure-logic re-export shims: the bodies live in `pqsigner-tx-core`.
