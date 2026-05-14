@@ -27,15 +27,13 @@ use crate::slot::{manifest_addr, Slot};
 /// pointer, but borrow-checker ergonomics are simpler with an owned
 /// buffer. 8 KB on the stack is well within the 16 KB FSBL RAM budget.
 pub fn read(slot: Slot) -> [u8; MANIFEST_SIZE] {
-    let addr = manifest_addr(slot);
+    let src = manifest_addr(slot) as *const u8;
     let mut buf = [0u8; MANIFEST_SIZE];
-    // SAFETY: `addr` is a fixed, known-valid flash address in the
-    // secure bank 1. Reading from it always succeeds on STM32U585.
-    unsafe {
-        let src = addr as *const u8;
-        for i in 0..MANIFEST_SIZE {
-            buf[i] = read_volatile(src.add(i));
-        }
+    for (i, byte) in buf.iter_mut().enumerate() {
+        // SAFETY: `manifest_addr(slot)` is a fixed, known-valid flash
+        // address in secure bank 1. `i < MANIFEST_SIZE` by the loop
+        // bound, so `src.add(i)` stays inside the manifest page.
+        *byte = unsafe { read_volatile(src.add(i)) };
     }
     buf
 }

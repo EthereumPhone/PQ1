@@ -82,25 +82,11 @@ fn main() -> ! {
 
     // Check image hashes. A manifest can pass signature verification
     // but still fail if the actual slot contents were torn.
-    let img_ok_a = valid_a.and_then(|m| {
-        if verify::verify_images(Slot::A, m) {
-            Some(m)
-        } else {
-            None
-        }
-    });
-    let img_ok_b = valid_b.and_then(|m| {
-        if verify::verify_images(Slot::B, m) {
-            Some(m)
-        } else {
-            None
-        }
-    });
+    let img_ok_a = valid_a.filter(|m| verify::verify_images(Slot::A, m));
+    let img_ok_b = valid_b.filter(|m| verify::verify_images(Slot::B, m));
 
-    let chosen = pick_slot(img_ok_a, img_ok_b);
-    let slot = match chosen {
-        Some(s) => s,
-        None => halt(),
+    let Some(slot) = pick_slot(img_ok_a, img_ok_b) else {
+        halt();
     };
 
     // SAFETY: we verified the slot's manifest signature and image
@@ -151,27 +137,26 @@ fn pick_slot(a: Option<&ManifestRef>, b: Option<&ManifestRef>) -> Option<Slot> {
     };
 
     // Both valid — highest fw_version wins.
-    let (winner, loser, winner_slot, loser_slot) = if a.fw_version() > b.fw_version() {
-        (a, b, Slot::A, Slot::B)
+    let (winner, winner_slot, loser_slot) = if a.fw_version() > b.fw_version() {
+        (a, Slot::A, Slot::B)
     } else {
-        (b, a, Slot::B, Slot::A)
+        (b, Slot::B, Slot::A)
     };
+
+    let winner_flag = winner.try_once_flag();
 
     // Try-once guard. If the winner is in TRIED state and the boot-
     // state page says we already attempted this slot, revert to the
-    // runner-up. This catches watchdog-reset loops after a committed
-    // update that doesn't successfully confirm alive.
+    // runner-up — this catches watchdog-reset loops after a committed
+    // update that doesn't confirm alive.
     //
     // Treat the TRIED + no-boot-state case as "go ahead and try" —
     // either it's the first attempt or the boot-state page is
-    // unreadable. The secure firmware will be responsible for
-    // writing the page before FSBL sees it on the next reboot.
-    if winner.try_once_flag() == TRY_ONCE_TRIED {
+    // unreadable. The secure firmware writes the page before FSBL
+    // sees it on the next reboot.
+    if winner_flag == TRY_ONCE_TRIED {
         if let Some(bs) = boot_state::read() {
             if bs.active_slot == winner_slot {
-                // Already attempted this exact slot and didn't confirm
-                // alive → revert to the loser which we know is valid.
-                let _ = loser; // retained for clarity
                 return Some(loser_slot);
             }
         }
@@ -180,10 +165,8 @@ fn pick_slot(a: Option<&ManifestRef>, b: Option<&ManifestRef>) -> Option<Slot> {
     // TRY_ONCE_COMMITTING is a torn-commit marker: the device was
     // interrupted mid-commit, and the signed bytes on flash don't
     // represent a finished state. Reject and fall back to the other
-    // slot if possible.
-    if winner.try_once_flag() != TRY_ONCE_COMMITTED
-        && winner.try_once_flag() != TRY_ONCE_TRIED
-    {
+    // slot.
+    if winner_flag != TRY_ONCE_COMMITTED && winner_flag != TRY_ONCE_TRIED {
         return Some(loser_slot);
     }
 
