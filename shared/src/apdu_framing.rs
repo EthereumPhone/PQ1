@@ -48,7 +48,8 @@ pub enum FramingError {
 
 impl FramingError {
     /// Map back to the on-wire status word the dispatcher would emit.
-    pub fn to_sw(self) -> u16 {
+    #[must_use]
+    pub const fn to_sw(self) -> u16 {
         match self {
             FramingError::HeaderTooShort | FramingError::LcOverrun => SW_WRONG_LENGTH,
         }
@@ -92,7 +93,8 @@ pub enum RoutingError {
 }
 
 impl RoutingError {
-    pub fn to_sw(self) -> u16 {
+    #[must_use]
+    pub const fn to_sw(self) -> u16 {
         match self {
             RoutingError::ClassUnsupported => SW_CLA_NOT_SUPPORTED,
         }
@@ -137,13 +139,17 @@ pub struct ChainState {
 }
 
 impl ChainState {
+    #[must_use]
     pub const fn new() -> Self {
         Self { ins: 0, pos: 0 }
     }
 
+    #[must_use]
     pub const fn active_ins(&self) -> u8 {
         self.ins
     }
+
+    #[must_use]
     pub const fn pos(&self) -> usize {
         self.pos
     }
@@ -220,9 +226,12 @@ pub enum ChainStepOutcome {
 }
 
 impl ChainStepOutcome {
+    #[must_use]
     pub const fn protocol_error_sw() -> u16 {
         SW_CONDITIONS_NOT_SATISFIED
     }
+
+    #[must_use]
     pub const fn wrong_length_sw() -> u16 {
         SW_WRONG_LENGTH
     }
@@ -259,6 +268,7 @@ impl Default for HidFrameAssembler {
 }
 
 impl HidFrameAssembler {
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             channel_id: 0,
@@ -268,9 +278,12 @@ impl HidFrameAssembler {
         }
     }
 
+    #[must_use]
     pub const fn channel_id(&self) -> u16 {
         self.channel_id
     }
+
+    #[must_use]
     pub const fn rx_expected(&self) -> usize {
         self.rx_expected
     }
@@ -338,7 +351,6 @@ impl HidFrameAssembler {
                 self.reset();
                 return FrameOutcome::Dropped;
             }
-            self.rx_pos = 0;
             self.rx_seq = 1;
 
             let avail_in_frame = n - 7;

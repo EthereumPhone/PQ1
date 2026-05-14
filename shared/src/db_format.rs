@@ -358,8 +358,16 @@ pub const SELECTOR_ENTRY_OFF_TEXT_OFF: usize = 4;
 pub const SELECTOR_TEXT_SIG_MAX_LEN: usize = 63;
 
 // === Little-endian readers (shared by writer + reader) =====================
+//
+// Both readers index `slice` directly and will panic on out-of-range
+// `offset`. That is the intended behaviour: every call site reads from
+// a firmware-signed DB blob whose layout is fixed at build time, so an
+// out-of-range read is structurally impossible without a header bug or
+// a tampered blob — neither of which is a runtime-recoverable input
+// case for the secure world.
 
 #[inline]
+#[must_use]
 pub fn read_u32_le(slice: &[u8], offset: usize) -> u32 {
     let bytes: [u8; 4] = [
         slice[offset],
@@ -371,6 +379,7 @@ pub fn read_u32_le(slice: &[u8], offset: usize) -> u32 {
 }
 
 #[inline]
+#[must_use]
 pub fn read_u64_le(slice: &[u8], offset: usize) -> u64 {
     let bytes: [u8; 8] = [
         slice[offset],
