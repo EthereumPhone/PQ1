@@ -183,18 +183,19 @@ const _: () = assert!(VERIFYING_KEY_LEN == 32);
 /// Assemble the signed preimage into a fixed-size buffer. Callers pass
 /// this to SHA-256 to obtain the 32-byte digest that SPHINCS+C10
 /// actually signs/verifies.
+#[must_use]
 pub fn signed_preimage(
     fw_version: u32,
     secure_hash: &[u8; 32],
     nonsecure_hash: &[u8; 32],
 ) -> [u8; SIGNED_PREIMAGE_LEN] {
     let mut out = [0u8; SIGNED_PREIMAGE_LEN];
-    out[..DOMAIN_TAG.len()].copy_from_slice(DOMAIN_TAG);
     let ver_off = DOMAIN_TAG.len();
-    out[ver_off..ver_off + 4].copy_from_slice(&fw_version.to_be_bytes());
     let sec_off = ver_off + 4;
-    out[sec_off..sec_off + 32].copy_from_slice(secure_hash);
     let ns_off = sec_off + 32;
+    out[..ver_off].copy_from_slice(DOMAIN_TAG);
+    out[ver_off..sec_off].copy_from_slice(&fw_version.to_be_bytes());
+    out[sec_off..ns_off].copy_from_slice(secure_hash);
     out[ns_off..ns_off + 32].copy_from_slice(nonsecure_hash);
     out
 }
@@ -203,13 +204,14 @@ pub fn signed_preimage(
 /// SPHINCS+C10 key actually signs. Separated out so callers that want
 /// to feed it to `SigningKey::sign` / `sphincs_c10::verify` can do so
 /// without re-doing the SHA-256.
+#[must_use]
 pub fn compute_signed_digest(
     fw_version: u32,
     secure_hash: &[u8; 32],
     nonsecure_hash: &[u8; 32],
 ) -> [u8; 32] {
     let preimage = signed_preimage(fw_version, secure_hash, nonsecure_hash);
-    Sha256::digest(&preimage).into()
+    Sha256::digest(preimage).into()
 }
 
 // ---------------------------------------------------------------------------
@@ -258,74 +260,89 @@ pub struct ManifestRef<'a> {
 
 impl<'a> ManifestRef<'a> {
     /// Wrap a `&[u8; 8192]` — cheap, no allocation, no validation.
+    #[must_use]
     pub fn new(bytes: &'a [u8; MANIFEST_SIZE]) -> Self {
         Self { bytes }
     }
 
     /// Raw backing bytes — used by the secure-world COMMIT handler to
     /// stream the manifest page into flash verbatim.
+    #[must_use]
     pub fn as_bytes(&self) -> &'a [u8; MANIFEST_SIZE] {
         self.bytes
     }
 
+    #[must_use]
     pub fn magic(&self) -> [u8; 4] {
-        let mut m = [0u8; 4];
-        m.copy_from_slice(&self.bytes[OFF_MAGIC..OFF_MAGIC + 4]);
-        m
+        *read_array::<4>(self.bytes, OFF_MAGIC)
     }
 
+    #[must_use]
     pub fn manifest_version(&self) -> u8 {
         self.bytes[OFF_MANIFEST_VERSION]
     }
 
+    #[must_use]
     pub fn slot(&self) -> u8 {
         self.bytes[OFF_SLOT]
     }
 
+    #[must_use]
     pub fn fw_version(&self) -> u32 {
         read_u32_be(self.bytes, OFF_FW_VERSION)
     }
 
+    #[must_use]
     pub fn secure_len(&self) -> u32 {
         read_u32_be(self.bytes, OFF_SECURE_LEN)
     }
 
+    #[must_use]
     pub fn nonsecure_len(&self) -> u32 {
         read_u32_be(self.bytes, OFF_NONSECURE_LEN)
     }
 
+    #[must_use]
     pub fn secure_hash(&self) -> &[u8; 32] {
-        slice_as_array_32(&self.bytes[OFF_SECURE_HASH..OFF_SECURE_HASH + 32])
+        read_array(self.bytes, OFF_SECURE_HASH)
     }
 
+    #[must_use]
     pub fn nonsecure_hash(&self) -> &[u8; 32] {
-        slice_as_array_32(&self.bytes[OFF_NONSECURE_HASH..OFF_NONSECURE_HASH + 32])
+        read_array(self.bytes, OFF_NONSECURE_HASH)
     }
 
+    #[must_use]
     pub fn vendor_pubkey_fpr(&self) -> &[u8; 32] {
-        slice_as_array_32(&self.bytes[OFF_VENDOR_FPR..OFF_VENDOR_FPR + 32])
+        read_array(self.bytes, OFF_VENDOR_FPR)
     }
 
+    #[must_use]
     pub fn build_id(&self) -> &[u8; 32] {
-        slice_as_array_32(&self.bytes[OFF_BUILD_ID..OFF_BUILD_ID + 32])
+        read_array(self.bytes, OFF_BUILD_ID)
     }
 
+    #[must_use]
     pub fn manifest_digest(&self) -> &[u8; 32] {
-        slice_as_array_32(&self.bytes[OFF_MANIFEST_DIGEST..OFF_MANIFEST_DIGEST + 32])
+        read_array(self.bytes, OFF_MANIFEST_DIGEST)
     }
 
+    #[must_use]
     pub fn signature(&self) -> &[u8; SIGNATURE_LEN] {
-        slice_as_array_sig(&self.bytes[OFF_SIGNATURE..OFF_SIGNATURE + SIGNATURE_LEN])
+        read_array(self.bytes, OFF_SIGNATURE)
     }
 
+    #[must_use]
     pub fn boot_counter_snap(&self) -> u32 {
         read_u32_be(self.bytes, OFF_BOOT_CTR_SNAP)
     }
 
+    #[must_use]
     pub fn try_once_flag(&self) -> u8 {
         self.bytes[OFF_TRY_ONCE]
     }
 
+    #[must_use]
     pub fn crc32(&self) -> u32 {
         read_u32_be(self.bytes, OFF_CRC32)
     }
@@ -447,6 +464,7 @@ impl ManifestBuilder {
     /// Start with an "erased flash" pattern (all 0xFF) so reserved
     /// regions match what `bytes.len() - written_len` empty flash
     /// would look like if we only programmed the meaningful fields.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             bytes: [0xFF; MANIFEST_SIZE],
@@ -527,6 +545,7 @@ impl ManifestBuilder {
 
     /// Finalize: compute CRC-32 over `[0..OFF_CRC32)`, write it in, and
     /// return the completed manifest page bytes. Consumes the builder.
+    #[must_use]
     pub fn finalize(mut self) -> [u8; MANIFEST_SIZE] {
         let crc = crc32_ieee(&self.bytes[..OFF_CRC32]);
         write_u32_be(&mut self.bytes, OFF_CRC32, crc);
@@ -540,6 +559,7 @@ impl ManifestBuilder {
 
 /// SHA-256(pk_seed || pk_root). Used as both the `vendor_pubkey_fpr` field
 /// in the manifest and as the FSBL-compiled vendor identity.
+#[must_use]
 pub fn vendor_pubkey_fingerprint(
     pk_seed: &[u8; sphincs_c10::params::N],
     pk_root: &[u8; sphincs_c10::params::N],
@@ -555,25 +575,23 @@ pub fn vendor_pubkey_fingerprint(
 // ---------------------------------------------------------------------------
 
 fn read_u32_be(bytes: &[u8], off: usize) -> u32 {
-    u32::from_be_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
+    u32::from_be_bytes(*read_array::<4>(bytes, off))
 }
 
 fn write_u32_be(bytes: &mut [u8], off: usize, v: u32) {
-    let b = v.to_be_bytes();
-    bytes[off..off + 4].copy_from_slice(&b);
+    bytes[off..off + 4].copy_from_slice(&v.to_be_bytes());
 }
 
-fn slice_as_array_32(s: &[u8]) -> &[u8; 32] {
-    debug_assert_eq!(s.len(), 32);
-    // SAFETY: caller (internal only) passes a &[u8] of exactly 32 bytes
-    // produced by slicing `[u8; MANIFEST_SIZE]` at fixed offsets.
-    unsafe { &*(s.as_ptr() as *const [u8; 32]) }
-}
-
-fn slice_as_array_sig(s: &[u8]) -> &[u8; SIGNATURE_LEN] {
-    debug_assert_eq!(s.len(), SIGNATURE_LEN);
-    // SAFETY: same invariant as slice_as_array_32.
-    unsafe { &*(s.as_ptr() as *const [u8; SIGNATURE_LEN]) }
+/// Borrow a fixed-size array out of a slice at a known offset. All
+/// callers pass compile-time-constant `OFF` and `N` derived from the
+/// manifest's frozen layout, so the bounds check folds away in release
+/// builds. Lets us avoid `unsafe` slice-to-array transmutes throughout
+/// the accessors.
+#[inline]
+fn read_array<const N: usize>(bytes: &[u8], off: usize) -> &[u8; N] {
+    bytes[off..off + N]
+        .try_into()
+        .expect("fw-manifest: read_array slice length")
 }
 
 // ---------------------------------------------------------------------------
@@ -587,6 +605,7 @@ fn slice_as_array_sig(s: &[u8]) -> &[u8; SIGNATURE_LEN] {
 /// properties are identical for our purposes (we only need torn-write
 /// detection; integrity against a motivated attacker is handled by the
 /// SPHINCS+C10 signature).
+#[must_use]
 pub fn crc32_ieee(data: &[u8]) -> u32 {
     let mut crc: u32 = 0xFFFF_FFFF;
     for &b in data {
