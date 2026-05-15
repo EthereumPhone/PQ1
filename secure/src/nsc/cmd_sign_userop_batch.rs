@@ -27,7 +27,6 @@
 //! companion submits the resulting UserOp to EntryPoint v0.6 the same
 //! way it submits any other; only the inner `callData` differs.
 
-use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
     NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE,
     FLAG_REGISTER_SLOT, MAX_BATCH_TXS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN,
@@ -36,13 +35,6 @@ use sphincs_tz_shared::{
     SIGN_USEROP_BATCH_TX_PREFIX_LEN, SIG_WRAPPER_LEN, SLOT_INDEX_MASK,
 };
 use zeroize::{Zeroize, Zeroizing};
-
-#[inline]
-fn sha256(bytes: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(bytes);
-    h.finalize().into()
-}
 
 /// Domain tag the firmware signs when authorising slot-0 on a new chain.
 /// MUST match `PQSmartWalletFactory.FACTORY_ADD_SLOT_DOMAIN`.
@@ -504,7 +496,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             factory_msg[25..33].copy_from_slice(&chain_id.to_be_bytes());
             factory_msg[33..65].copy_from_slice(&slot_pk_seed_32);
             factory_msg[65..97].copy_from_slice(&slot_pk_root_32);
-            let factory_digest = sha256(&factory_msg);
+            let factory_digest = sha256_bytes(&factory_msg);
 
             let factory_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
@@ -610,7 +602,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::CryptoError as u32;
             }
 
-            encode_signature_wrapper(&mut *type1_wrapper_out, 0, &bootstrap_sig);
+            super::sig_wrapper::encode_signature_wrapper(&mut *type1_wrapper_out, 0, &bootstrap_sig);
             emit_type1 = true;
         }
 
@@ -697,7 +689,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     let mut type2_wrapper_out: Zeroizing<[u8; SIG_WRAPPER_LEN]> =
         Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
-    encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
+    super::sig_wrapper::encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
 
     // ── 13. Persist the new offchain count + slot-registered flag ──
     if register_slot {
@@ -773,16 +765,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_status("PQSigner OS", "Ready");
 
     NscStatus::Ok as u32
-}
-
-/// Encode a `SignatureWrapper(uint256 ownerIndex, bytes innerSig)` into
-/// `out`. Same layout as the single-tx path's encoder.
-fn encode_signature_wrapper(out: &mut [u8; SIG_WRAPPER_LEN], owner_index: u64, inner_sig: &[u8]) {
-    debug_assert_eq!(inner_sig.len(), C10_SIG_LEN);
-    out[24..32].copy_from_slice(&owner_index.to_be_bytes());
-    out[32 + 31] = 0x40;
-    out[64 + 24..64 + 32].copy_from_slice(&(C10_SIG_LEN as u64).to_be_bytes());
-    out[96..96 + C10_SIG_LEN].copy_from_slice(inner_sig);
 }
 
 /// # Safety
