@@ -328,6 +328,75 @@ impl Se050 {
         Ok(())
     }
 
+    /// Peek the silicon-enforced **failed-attempts USED** count on the
+    /// USERID auth object — i.e. the `auth_attempts` field — WITHOUT
+    /// burning an attempt.
+    ///
+    /// (Semantics match OPTIGA's F1E1: both return "attempts USED"
+    /// starting at 0, so the boot-time reconcile against the MCU
+    /// page-124 used-counter is a straight `!=` compare.)
+    ///
+    /// Mechanism: `ReadObjectAttributes` (CLA=0x80 INS_READ
+    /// P2_ATTRIBUTES) returns the object's attribute structure over the
+    /// transport SCP03 channel. No user-session authentication is
+    /// required — attribute reads describe the object's own policy and
+    /// state and are policy-gate-independent in the SE050 design (would
+    /// be chicken-and-egg otherwise). NXP SDK parsing reference:
+    /// `sss_pkcs11_pal_helpers.c:603-613` (pkcs11_parse_atrribute).
+    ///
+    /// Wire format of the inner TAG_3 value bytes:
+    ///
+    /// ```text
+    ///   off  size  field
+    ///    0    4    obj_id (BE)
+    ///    4    1    obj_type
+    ///    5    1    auth_attr (0x01 = SET for auth objects)
+    ///    6    2    auth_attempts (BE)  ← failed-attempt counter
+    ///    8    4    auth_obj_id (BE)
+    ///   12    2    max_attempts (BE)
+    ///   14..       policy bytes
+    /// ```
+    ///
+    /// Returns `Some(used)` (saturating to `u8::MAX`) on success;
+    /// `None` if the object doesn't exist, the response is malformed,
+    /// the chip rejects the read, or `auth_attr != SET`. The caller —
+    /// [`SecureElement::pin_attempt_count`] via the trait impl — uses
+    /// `None` as "skip the SE050 leg of the boot-time reconcile."
+    ///
+    /// **This contradicts an earlier work-todo §4 claim** that said the
+    /// SE050 counter could only be read via SW=0x63Cx on VERIFY (which
+    /// would consume an attempt). The SDK header proves otherwise; this
+    /// method exists to use the real path.
+    pub fn pin_attempt_count_raw(&mut self) -> Option<u8> {
+        if self.init().is_err() {
+            return None;
+        }
+        let mut buf = [0u8; 64];
+        let n = unsafe {
+            match apdu::read_object_attributes(
+                &mut self.t1, &mut self.scp03, USERID_OBJ, &mut buf,
+            ) {
+                Ok(n) => n,
+                Err(_) => return None,
+            }
+        };
+        // Need at least bytes 0..14 (obj_id..max_attempts) parsed.
+        if n < 14 {
+            return None;
+        }
+        // auth_attr must be SET (0x01) for `auth_attempts` to be meaningful.
+        if buf[5] != 0x01 {
+            return None;
+        }
+        let auth_attempts = u16::from_be_bytes([buf[6], buf[7]]);
+        let max_attempts = u16::from_be_bytes([buf[12], buf[13]]);
+        if max_attempts == 0 {
+            // 0 = unlimited (admin UserID); reconcile is meaningless.
+            return None;
+        }
+        Some(u8::try_from(auth_attempts).unwrap_or(u8::MAX))
+    }
+
     /// Two-pass: first unauthenticated SCP03 sweep, then (if `auth_obj_id`
     /// + `pin` provided) an authenticated retry against that UserID. The
     /// UserID itself is self-deleted at the end if it was created with
@@ -2228,6 +2297,13 @@ impl WalletStore for Se050 {
 
     fn random(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
         Se050::random(self, buf).map_err(|_| SeError::InternalError)
+    }
+
+    fn pin_attempt_count(&mut self) -> Option<u8> {
+        // Saturate at MAX_ATTEMPTS — a chip-side `auth_attempts` ≥ MAX
+        // means "locked out, treat as fully consumed" for reconcile.
+        let cap = sphincs_tz_shared::MAX_ATTEMPTS;
+        self.pin_attempt_count_raw().map(|n| n.min(cap))
     }
 
     #[cfg(feature = "stm32u585")]

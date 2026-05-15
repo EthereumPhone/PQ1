@@ -306,11 +306,44 @@ impl WalletStore for DualSecureElement {
     }
 
     fn pin_attempt_count(&mut self) -> Option<u8> {
-        // OPTIGA's F1E1 is readable; SE050's silicon counter is not
-        // (peeking would burn an attempt). Cross-check is against
-        // OPTIGA only; SE050 is the silicon-hard final gate that we
-        // trust per work-todo §4.
-        self.optiga.pin_attempt_count()
+        // Both SEs expose the counter on a peek-safe path:
+        //   - OPTIGA: F1E1 counter object (`read_counter_raw`).
+        //   - SE050: `ReadObjectAttributes` on USERID_OBJ — returns
+        //     `max_attempts - auth_attempts` over the SCP03 channel
+        //     without authenticating against the UserID (no attempt
+        //     consumed). See `Se050::pin_attempt_count_raw` for the
+        //     parse + SDK reference. (This corrects an earlier work-
+        //     todo §4 claim that said SE050's counter couldn't be
+        //     peeked.)
+        //
+        // Combined value: MAX of whatever's available — counters
+        // are "attempts USED" (higher = closer to lockout), so the
+        // strict aggregate is `max`, not `min`. Used by reconcile to
+        // compare against MCU page-124's used-count for a `!=`
+        // tamper check. Intra-SE divergence is reported separately
+        // by `pin_attempt_counts_divergent`.
+        let o = self.optiga.pin_attempt_count();
+        let s = self.se050.pin_attempt_count();
+        match (o, s) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        }
+    }
+
+    fn pin_attempt_counts_divergent(&mut self) -> bool {
+        // Tamper signal: OPTIGA and SE050 disagree on remaining attempts
+        // even though both reported a value. Only flagged when both
+        // Some — None on either side means "no readable counter, no
+        // comparison possible," not divergence.
+        match (
+            self.optiga.pin_attempt_count(),
+            self.se050.pin_attempt_count(),
+        ) {
+            (Some(a), Some(b)) => a != b,
+            _ => false,
+        }
     }
 
     /// Pull random bytes from both SEs and XOR-mix them in-place. The

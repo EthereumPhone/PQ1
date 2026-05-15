@@ -504,30 +504,37 @@ pub unsafe fn gated_unlock(
     }
 }
 
-/// Boot-time PIN-counter reconciliation between MCU page-124 and the
-/// SE-side counter (§4 dual-chip PIN-lockout-sync hardening).
+/// Boot-time PIN-counter reconciliation across the three independent
+/// failed-attempts counters: MCU page-124, OPTIGA F1E1, SE050 USERID
+/// `auth_attempts` (§4 dual-chip PIN-lockout-sync hardening).
 ///
-/// **Attack defended.** An attacker who can reset the OPTIGA PBS
-/// (rewriting E140 via the Conf(E140) Auto path on a glitched chip)
-/// resets every PBS-protected OID — including the F1E1 PIN-attempt
-/// counter. Symmetrically, an attacker who breaches the MCU
-/// TrustZone watermark could erase page-124. Either case yields
-/// MCU_count ≠ OPTIGA_count, which is unambiguous tamper evidence.
-/// Boot-time detection lets us wipe immediately rather than waiting
-/// for the next unlock attempt to expose the disagreement.
+/// **Attack defended.** An attacker who can reset any ONE side
+/// — OPTIGA PBS reset (E140 Conf(E140) Auto on a glitched chip
+/// rewinds every PBS-protected OID including F1E1), SE050 USERID
+/// delete-and-recreate, or a TZ-bypass that erases MCU page-124 —
+/// leaves the other two counters in a different state. Boot-time
+/// disagreement is unambiguous tamper evidence; wipe immediately
+/// rather than waiting for the next unlock to expose it.
+///
+/// **Three checks, any failure = wipe.**
+///   1. MCU vs strictest-SE (the existing `pin_attempt_count()`
+///      aggregate, which returns `max(optiga, se050)` of the
+///      USED-attempts counts).
+///   2. Intra-SE divergence (`pin_attempt_counts_divergent()`):
+///      OPTIGA and SE050 agree with each other.
+///   3. Implicit: both above are `false`-by-default for backends
+///      without readable counters, so single-SE and mock paths
+///      simply skip.
 ///
 /// **Limitations.**
-///   - SE050's silicon counter can't be read without burning an
-///     attempt (see `docs/work-todo.md §4`); reconcile is OPTIGA-only.
-///   - If the attacker coordinates resets of BOTH MCU and OPTIGA
-///     counters in one campaign, they'd see MCU=0 + OPTIGA=0 →
-///     agree → no tamper detected. The defense bound depends on
-///     attacker only being able to reset ONE side at a time. A
-///     hardware-monotonic OPTIGA counter (work-todo #24 P1 →
-///     migrate to 0xE120) would close this gap entirely.
-///   - On fresh boot with un-provisioned SE, OPTIGA returns `None`
-///     (counter object not yet created); reconcile accepts as
-///     "no comparison possible."
+///   - If the attacker coordinates resets of ALL THREE counters in
+///     one campaign, all see 0 → agree → no tamper detected. The
+///     defense bound is that the attacker can reset at most TWO
+///     sides per campaign. A hardware-monotonic OPTIGA counter
+///     (work-todo #24 P1 → migrate to 0xE120) would close this gap
+///     against OPTIGA-side resets entirely.
+///   - On fresh boot with un-provisioned SE, both SE getters
+///     return `None`; reconcile accepts as "no comparison possible."
 ///
 /// **What it doesn't replace.** The original §4 "cryptographic FI
 /// checksum on the bump" item is effectively closed by F-12 +
@@ -536,6 +543,15 @@ pub unsafe fn gated_unlock(
 /// would catch only the multi-fault attack where ALL of those
 /// reads return the same wrong value — out of scope for the
 /// single-fault threat model.
+///
+/// **Correction note.** An earlier work-todo §4 entry (and this
+/// function's prior docstring) claimed SE050's counter could only
+/// be read via SW=0x63Cx on VERIFY, which would consume an
+/// attempt. That was incomplete: `ReadObjectAttributes` (INS_READ
+/// + P2_ATTRIBUTES) returns the USERID `auth_attempts` field over
+/// the transport SCP03 channel without authenticating, hence
+/// without consuming an attempt. The three-way reconcile relies
+/// on that path.
 ///
 /// Called once per boot from `main.rs` after SE init but before
 /// the gateway accepts any unlock command. On tamper detection it
@@ -547,23 +563,25 @@ where
     S: crate::secure_element::WalletStore,
 {
     let mcu = crate::hw::flash::pin_attempts_read();
-    let se_count = se.pin_attempt_count();
-    match se_count {
-        Some(s) if s != mcu => {
-            crate::ui::show_status("TAMPER DETECT", "wiping...");
-            #[cfg(feature = "debug-log")]
-            secure_log!(
-                "[reconcile] MCU={} SE={} — disagree, wiping",
-                mcu, s
-            );
-            let _ = se.factory_reset_admin();
-            let _ = crate::hw::flash::pin_attempts_reset();
-            crate::ui::show_status("WIPED", "tamper signal");
-        }
-        Some(_) | None => {
-            // Counters agree, or SE has no readable counter — proceed.
-        }
+    let se_used = se.pin_attempt_count();
+    let se_split = se.pin_attempt_counts_divergent();
+
+    let mcu_vs_se = matches!(se_used, Some(s) if s != mcu);
+    let tamper = mcu_vs_se || se_split;
+
+    if !tamper {
+        return;
     }
+
+    crate::ui::show_status("TAMPER DETECT", "wiping...");
+    #[cfg(feature = "debug-log")]
+    secure_log!(
+        "[reconcile] MCU={} SE_used={:?} SE_split={} → wipe",
+        mcu, se_used, se_split
+    );
+    let _ = se.factory_reset_admin();
+    let _ = crate::hw::flash::pin_attempts_reset();
+    crate::ui::show_status("WIPED", "tamper signal");
 }
 
 /// QEMU / non-stm32u585 stub. No flash, no real SE counter to read.

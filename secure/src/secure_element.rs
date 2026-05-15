@@ -104,22 +104,48 @@ pub trait WalletStore {
         Err(SeError::SlotNotFound)
     }
 
-    /// Returns the SE-side PIN attempt counter, or `None` if the
-    /// backend doesn't expose a readable counter (e.g. SE050's
-    /// silicon counter can't be peeked without burning an attempt
-    /// — see `docs/work-todo.md §4`).
+    /// Returns the SE-side **failed-attempts USED** count (starts at
+    /// 0, bumps on each wrong PIN, reaches `MAX_ATTEMPTS` at
+    /// lockout), or `None` if no SE-side counter is available.
+    /// Semantics match the MCU page-124 counter for a direct `!=`
+    /// reconcile.
+    ///
+    /// Both production backends expose this on a peek-safe path
+    /// (does NOT consume an attempt):
+    ///   - OPTIGA Trust M: raw read of F1E1 (`OID_COUNTER`).
+    ///   - SE050: `ReadObjectAttributes` on the USERID auth object —
+    ///     the attribute response carries `auth_attempts` /
+    ///     `max_attempts` as plain TLV fields. See
+    ///     `Se050::pin_attempt_count_raw` for parse + SDK reference.
+    ///
+    /// For multi-SE backends (`DualSecureElement`) the returned
+    /// value is the **max** across SEs — i.e. the most-locked-out
+    /// figure (conservative: prefer a false-positive wipe over
+    /// missing one). Intra-SE disagreement is surfaced separately
+    /// by [`Self::pin_attempt_counts_divergent`].
     ///
     /// Used by `nsc::reconcile_pin_attempts` at boot to cross-check
-    /// the MCU page-124 counter against the SE side. A mismatch
-    /// indicates one of: (a) attacker reset OPTIGA E140/PBS which
-    /// resets PBS-protected OIDs including F1E1, (b) attacker
-    /// glitched the MCU page-124 counter via a TZ-bypass, or (c) a
-    /// genuine flash fault. All three are tamper signals → wipe.
+    /// the MCU page-124 counter against each SE's silicon counter. A
+    /// disagreement on any pair indicates: (a) attacker reset OPTIGA
+    /// E140/PBS (which resets PBS-protected OIDs including F1E1) or
+    /// the SE050 USERID, (b) attacker glitched the MCU page-124
+    /// counter via a TZ-bypass, or (c) a genuine flash fault. All
+    /// three are tamper signals → wipe.
     ///
-    /// Default: `None` (most backends don't have a readable
-    /// counter).
+    /// Default: `None` (mock + tropic01 don't expose a counter).
     fn pin_attempt_count(&mut self) -> Option<u8> {
         None
+    }
+
+    /// Returns `true` iff this backend wraps multiple SEs AND those
+    /// SEs disagree on the remaining PIN-attempt count. For single-
+    /// SE backends this is structurally `false`. Used by
+    /// `nsc::reconcile_pin_attempts` to fire the tamper wipe even
+    /// when MCU↔min(SE) happens to match — an attacker who resets
+    /// JUST the OPTIGA counter would otherwise still leave a
+    /// detectable OPTIGA↔SE050 split.
+    fn pin_attempt_counts_divergent(&mut self) -> bool {
+        false
     }
 
     /// Zeroize any cached secrets (called on idle wipe / lock / panic).
