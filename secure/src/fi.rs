@@ -79,6 +79,59 @@ pub fn check_true_into_sentinel<F: FnMut() -> bool>(cond: F) -> u32 {
     pqsigner_fi::check_true_into_sentinel(cond, wait_random)
 }
 
+/// Read `*p` via three independent `read_volatile`s separated by
+/// `compiler_fence(SeqCst)` barriers, and require all three to agree.
+///
+/// **Threat model.** A single-fault glitch on the load instruction
+/// that brings `*p` into a register could clamp it to 0 / 0xFF /
+/// some other attacker-chosen pattern. Reading three times with
+/// fences between forces the attacker to glitch the same load
+/// identically three times in succession — single-fault primitive
+/// doesn't reach.
+///
+/// **Return semantics (fail-in).** `Ok(v)` iff all three reads
+/// returned the same value (no glitch detected). `Err(())` if any
+/// pair disagrees (glitch suspected; caller fail-closes).
+///
+/// **OR-based fail-in pattern.** When the caller uses the result to
+/// gate "permission to proceed," the natural compose is:
+///
+/// ```ignore
+/// match read_volatile_voted(p) {
+///     Ok(v) if v.is_safe_value() => proceed,
+///     _ => reject,  // disagreement OR unsafe value → fail closed
+/// }
+/// ```
+///
+/// **Why this is distinct from F-14's FihBool.** FihBool defends a
+/// stored boolean via complement-pair *at rest*. This helper defends
+/// any `Copy + Eq` value (u32, u64, address, …) via repeated *load*.
+/// They compose: e.g., `read_volatile_voted` on a FihBool's `val`
+/// field gives both the storage and load-register defenses.
+///
+/// `T: Copy + Eq` so the values can be compared after copy-by-value.
+/// The pointer is `*const T` (read-only) — no concurrent writer
+/// expected (the secure world is single-threaded and non-reentrant).
+#[inline(never)]
+pub fn read_volatile_voted<T: Copy + Eq>(p: *const T) -> Result<T, ()> {
+    // SAFETY: caller provides a valid `T`-aligned pointer to memory
+    // not being written by another context (the secure world is
+    // single-threaded and non-reentrant — even ISRs that touch state
+    // are gated by `HandlerGuard`).
+    unsafe {
+        let r1 = core::ptr::read_volatile(p);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        let r2 = core::ptr::read_volatile(p);
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        let r3 = core::ptr::read_volatile(p);
+        if r1 == r2 && r2 == r3 {
+            Ok(r1)
+        } else {
+            Err(())
+        }
+    }
+}
+
 /// Control-flow-integrity step counter (§18 P0).
 ///
 /// Each critical-path function bumps a running `u32` with a unique

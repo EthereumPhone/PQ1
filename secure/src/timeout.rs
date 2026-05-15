@@ -24,6 +24,17 @@ pub fn now() -> u32 {
     TICKS.load(Ordering::Relaxed)
 }
 
+/// Raw pointer to the underlying `TICKS` word. Used by callers that
+/// want to apply `fi::read_volatile_voted` against the same word —
+/// triple-read with fences to defend a single-fault glitch on the
+/// `ldr` instruction that would otherwise return an attacker-clamped
+/// value. The `AtomicU32` API doesn't expose the underlying address
+/// directly, so we surface it explicitly here.
+#[inline]
+pub fn ticks_ptr() -> *const u32 {
+    TICKS.as_ptr() as *const u32
+}
+
 #[inline]
 pub fn tick() {
     TICKS.fetch_add(1, Ordering::Relaxed);

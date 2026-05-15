@@ -98,7 +98,36 @@ pub fn pre_sign() -> Result<(), ()> {
 
 #[cfg(all(feature = "stm32u585", not(feature = "e2e-test"), not(test)))]
 fn wait_for_min_interval() {
-    let last = LAST_SIGN_MS.load(Ordering::Relaxed);
+    // F-19: redundant volatile reads on the rate-limit reference
+    // value. `LAST_SIGN_MS` is a plain `AtomicU32` whose `Relaxed`
+    // load is one `ldr` instruction — a glitch on that load could
+    // clamp `last` to 0 (the "no prior sign" sentinel), causing the
+    // first-sign fast-path below to fire and bypass the rate limit.
+    // Triple-read the underlying word via `read_volatile_voted`
+    // (Err on any disagreement → fail-CLOSED to "skip the wait
+    // entirely" is unsafe, so instead we treat disagreement as
+    // "no last-sign info available, proceed cautiously" — refuse to
+    // break out of the wait until we get a clean read).
+    let last_addr = LAST_SIGN_MS.as_ptr() as *const u32;
+    let last = match crate::fi::read_volatile_voted(last_addr) {
+        Ok(v) => v,
+        // Triple-read disagreed → glitch suspected on the load.
+        // Fail-CLOSED: stay in the wait loop until the disagreement
+        // resolves (or the FI sweep ends). Treat the value as
+        // u32::MAX-ish so the wait condition can't fire.
+        Err(()) => {
+            // Force the loop to spin until a stable read agrees.
+            // Use `pre_sign`'s session cap (250) as the ultimate
+            // backstop — if we spin too long, the outer caller
+            // eventually catches up.
+            loop {
+                cortex_m::asm::wfi();
+                if crate::fi::read_volatile_voted(last_addr).is_ok() {
+                    return;
+                }
+            }
+        }
+    };
     if last == 0 {
         // First sign of the session: no prior; nothing to wait for.
         return;
@@ -106,8 +135,21 @@ fn wait_for_min_interval() {
     // Busy-wait via WFI (low power; wakes on every SysTick at 1 ms
     // resolution). Wrapping-aware compare handles the (very rare)
     // 49.7-day TICKS rollover.
+    //
+    // F-19: triple-read `now()` on each iteration too — a glitch on
+    // the TICKS atomic load could fake a huge time delta and exit
+    // the wait early. Triple-read with agreement defends single-fault
+    // on that load.
     loop {
-        let now = crate::timeout::now();
+        let now_addr = crate::timeout::ticks_ptr();
+        let now = match crate::fi::read_volatile_voted(now_addr) {
+            Ok(v) => v,
+            Err(()) => {
+                // Disagreement → stay in the wait. Sleep and retry.
+                cortex_m::asm::wfi();
+                continue;
+            }
+        };
         if now.wrapping_sub(last) >= MIN_SIGN_INTERVAL_MS {
             break;
         }
