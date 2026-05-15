@@ -17,7 +17,6 @@
 //! Individual pairings avoid the need for alloc (no multi_miller_loop).
 
 use bls12_381::{miller_loop_4, G1Affine, G1Projective, G2Affine, Gt, Scalar};
-use sha2::{Digest, Sha256};
 
 use super::poseidon::poseidon_bytes;
 use super::{MAX_CALLDATA, STRING_LEN};
@@ -88,20 +87,6 @@ impl VerificationKey {
             delta_g2,
             ic: [ic0, ic1, ic2],
         })
-    }
-
-    /// Compute SHA-256 hash of the serialized VK. Used by the Merkle
-    /// verifier in `vk_bundle` to derive the canonical leaf hash for
-    /// proof walking, and by the host-side `zk-test` as a lightweight
-    /// integrity check that the committed `vk_data::VK_BYTES` blob
-    /// matches `vk_data::VK_HASH`.
-    pub fn hash(vk_bytes: &[u8; VK_LEN]) -> [u8; 32] {
-        let mut h = Sha256::new();
-        h.update(vk_bytes);
-        let result = h.finalize();
-        let mut out = [0u8; 32];
-        out.copy_from_slice(&result);
-        out
     }
 }
 
