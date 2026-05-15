@@ -76,12 +76,55 @@ impl WalletStore for DualSecureElement {
     ) -> Result<(), SeError> {
         secure_log!("[DUAL/prov] start");
 
+        // Multi-source TRNG for the XOR-split half. The security of
+        // dual-SE depends critically on `half_o` being unpredictable:
+        // if an attacker recovers `half_e` from the SE050 (or guesses
+        // `half_o`), they reconstruct the seed by XOR. Defense: mix
+        // platform TRNG + OPTIGA TRNG + SE050 TRNG so any single
+        // unbroken source preserves entropy.
+        //
+        // Open-coded (not via `rng_strong::fill`) to avoid the
+        // re-entrancy that would arise from calling
+        // `WalletStore::random` on the global SE while we're already
+        // holding `&mut self` here. We have direct field access to
+        // `self.optiga` and `self.se050`, which is the cleanest path:
+        // distinct mutable field borrows are sound.
         let mut half_o = [0u8; 32];
         if crate::rng::fill(&mut half_o).is_err() {
             secure_log!("[DUAL/prov] rng::fill FAILED");
             return Err(SeError::InternalError);
         }
-        secure_log!("[DUAL/prov] rng OK, calling optiga.provision");
+        // XOR OPTIGA contribution (best-effort — if the SE isn't
+        // responsive yet, half_o stays at the platform-TRNG baseline).
+        let mut se_buf = [0u8; 32];
+        if self.optiga.random(&mut se_buf).is_ok() {
+            for i in 0..32 {
+                half_o[i] ^= se_buf[i];
+            }
+        }
+        se_buf.zeroize();
+        crate::fi::wait_random();
+        // XOR SE050 contribution.
+        if self.se050.random(&mut se_buf).is_ok() {
+            for i in 0..32 {
+                half_o[i] ^= se_buf[i];
+            }
+        }
+        se_buf.zeroize();
+        crate::fi::zeroize_barrier();
+        // Fail-closed if the result is all-zero (defends a stuck-at-0
+        // fault that survives all three sources — same gate as
+        // `rng_strong::fill`).
+        let mut acc: u8 = 0;
+        for &b in half_o.iter() {
+            acc |= b;
+        }
+        if acc == 0 {
+            secure_log!("[DUAL/prov] half_o stuck at zero — FI suspected");
+            half_o.zeroize();
+            return Err(SeError::InternalError);
+        }
+        secure_log!("[DUAL/prov] rng OK (3-source XOR mix), calling optiga.provision");
         let half_e = xor_32(entropy, &half_o);
 
         // Both SEs get the same master_secret (derived from full entropy).

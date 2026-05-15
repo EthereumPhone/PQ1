@@ -92,15 +92,26 @@ pub fn init() {
 #[cfg(feature = "consumption-mask")]
 static mut PRNG_STATE: u32 = 0;
 
-/// Seed the PRNG from the hardware TRNG. Called once from [`init`].
+/// Seed the PRNG from the multi-source strong TRNG. Called once
+/// from [`init`].
+///
+/// Migrated from `crate::rng::byte()` × 4 to `rng_strong::fill` so
+/// the PWM-mask seed inherits the same 3-source XOR-mix defense as
+/// the signing path's OptRand / shuffle seeds. A predictable mask
+/// seed → predictable EM signature → easier for an SCA attacker to
+/// subtract the mask and recover the underlying secret. The mask
+/// quality matters more than the once-per-init cost (single SE
+/// round-trip at boot, no hot-path impact).
 #[cfg(feature = "consumption-mask")]
 unsafe fn seed_prng_from_rng() {
-    let b0 = crate::rng::byte() as u32;
-    let b1 = crate::rng::byte() as u32;
-    let b2 = crate::rng::byte() as u32;
-    let b3 = crate::rng::byte() as u32;
+    let mut seed_bytes = [0u8; 4];
+    // Strong fill, with fallback: on early-boot before SE channels
+    // are up, `rng_strong::fill` falls through to platform TRNG only
+    // (same as the old code). On normal operation it XOR-mixes
+    // OPTIGA + SE050.
+    let _ = crate::rng_strong::fill(&mut seed_bytes);
     // xorshift32 must not be seeded with 0 (state would stick).
-    let mut seed = (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+    let mut seed = u32::from_be_bytes(seed_bytes);
     if seed == 0 {
         seed = 0xDEADBEEF;
     }

@@ -444,12 +444,19 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
         let mnemonic = match choose_setup_mode() {
             WizardChoice::NewWallet => {
                 secure_log!("[S] wizard: NewWallet — generating entropy");
-                // Pull 32 bytes of entropy from the host CSPRNG (semihosting
-                // /dev/urandom on QEMU; will be the on-board hardware RNG on
-                // STM32U585 — see docs/architecture.md "Porting to STM32U585").
+                // Pull 32 bytes of entropy via the multi-source strong
+                // RNG (STM32 hardware TRNG ⊕ OPTIGA GetRandom ⊕ SE050
+                // GetRandom — Trezor-parity 3-source XOR). The wallet
+                // master seed is the single most critical RNG output
+                // in the firmware: if it's predictable, every key
+                // derived from it (bootstrap, all slots, all chains)
+                // is forgeable. rng_strong preserves entropy from any
+                // unbroken source — defends against any single biased
+                // / compromised TRNG (the STM32U5 silicon TRNG glitch
+                // class, an OPTIGA chip-RNG fault, etc.).
                 let mut entropy = [0u8; 32];
-                if rng::fill(&mut entropy).is_err() {
-                    secure_log!("[S] wizard: rng::fill FAILED");
+                if rng_strong::fill(&mut entropy).is_err() {
+                    secure_log!("[S] wizard: rng_strong::fill FAILED");
                     let mut p = pin;
                     p.zeroize();
                     ui::show_status("RNG failed", "retry...");

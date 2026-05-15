@@ -342,10 +342,19 @@ The signing path consumes it via `crypto::c10_sign_verified_with_progress`: a fr
 - [x] `secure/src/rng_strong.rs::fill` (Trezor-pattern XOR-mix with fail-closed non-zero gate)
 - [x] Wired into `c10_sign_verified_with_progress` for SPHINCS+ OptRand
 
-**What's needed for Phase 2 (deferred — not security-critical):**
-- [ ] Migrate `secure/src/dual_se.rs::provision`'s `crate::rng::fill` for the entropy XOR split → `rng_strong::fill` (the half_O / half_E split needs strong randomness, but it's one-shot at provisioning, and the per-half is later XOR'd anyway)
-- [ ] Migrate consumption-mask PWM duty randomization → `rng_strong::fill` (defense-in-depth: a faulted PWM doesn't leak the signing key, just weakens the EM mask)
-- [ ] Survey of remaining `crate::rng::fill` call-sites (`fi::wait_random` salt, FI consumption-mask, slot-key salt — all currently non-secret-bearing)
+**Phase 2 — DONE (commit follows).** Surveyed every `crate::rng::*` call-site and migrated the security-critical ones to `rng_strong::fill` (3-source XOR). Documentation of which sites moved and which didn't:
+
+  * **Migrated:**
+    - `secure/src/main.rs` first-boot wizard's master-entropy generation — the single most critical RNG output in the firmware. Predictable here = universal forgery.
+    - `secure/src/hw/otp.rs::burn_device_master` — irreversibly burned to OTP; no second chance. `rng_strong` gracefully falls through to platform-TRNG-only at first boot if SE channels aren't up yet (strict no-regression).
+    - `secure/src/dual_se.rs::provision` half_O — **open-coded** (not via `rng_strong::fill`) to avoid re-entrancy: the function is `&mut self` on the global SE while `rng_strong::fill → se_random` would re-borrow the same SE. Resolved by directly accessing `self.optiga.random()` + `self.se050.random()` and XOR-folding manually. Same 3-source defense, no UB.
+    - `secure/src/hw/consumption_mask.rs::seed_prng_from_rng` — EM-mask seed; predictable seed → predictable mask → easier SCA. Migration is once-per-boot, no hot-path impact.
+  * **NOT migrated (deliberate, documented in code):**
+    - `secure/src/fi.rs::rng_byte` (the `wait_random` salt): called thousands of times per sign. SE round-trips per call would inflate sign latency from ~1.5 s to multi-minute. The loop-count only sets a delay duration — a biased platform TRNG weakens timing-channel defense at the margins but leaks no secret. Cost/benefit clearly favours platform-only.
+    - `secure/src/ui/seed_wizard.rs::pick_three_distinct`: random word indices for backup-confirmation display. Not security-bearing.
+    - `secure/src/tropic01_se.rs::*`: Tropic01 not on the shipping target ([[tropic01-excluded]] memory).
+
+Migration validated: QEMU `make e2e` 18/18 (exercises wizard entropy + dual_se provision + sign path all routed through `rng_strong`).
 
 **Files changed in Phase 1:** `secure/src/rng_strong.rs` (new), `secure/src/se050/apdu.rs`, `secure/src/se050/mod.rs`, `secure/src/optiga/mod.rs`, `secure/src/dual_se.rs`, `secure/src/secure_element.rs`, `secure/src/main.rs` (added `se_random` accessor + `mod rng_strong`), `secure/src/crypto.rs`.
 
@@ -611,7 +620,7 @@ Research-derived mitigations from the deep-research round of 2026-04-14. Critica
 
 **Phase 2 of work-todo §10 (multi-source RNG migration):**
 
-- [ ] **Migrate non-signing RNG call-sites to `rng_strong::fill`.** `secure/src/dual_se.rs::provision` (one-shot entropy XOR split), consumption-mask PWM duty randomization, `fi::wait_random` salt, FI consumption-mask. None is security-critical (all are defence-in-depth around a non-secret), but Phase-1's strong-RNG infrastructure is in place and finishing the migration costs ~20 LoC. Cited inline in §10 "Phase 2"; capturing here for visibility.
+- [x] **Migrate non-signing RNG call-sites to `rng_strong::fill`** (commit follows). Initial framing ("none is security-critical") was wrong on closer review: the wizard master-entropy and OTP device-master burn are the MOST security-critical RNG outputs in the firmware. Full breakdown moved into §10 Phase 2 — 4 sites migrated (wizard entropy, OTP burn, dual_se half_O via open-coded multi-source, consumption_mask seed), 3 sites deliberately kept on platform-only (wait_random salt: cost too high per call; seed_wizard word picker: not security-bearing; tropic01_se: not shipping).
 
 **Long-tail audit items from `tools/sca/README.md` Roadmap (mentioned but never promoted to formal checklist):**
 

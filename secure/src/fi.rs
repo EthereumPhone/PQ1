@@ -24,6 +24,18 @@ pub use pqsigner_fi::{FAIL_SENTINEL, OK_SENTINEL};
 
 /// Returns one TRNG byte (production) or a fixed value (test / e2e-test).
 /// The `pqsigner_fi::wait_random_loop` calls this to set its loop length.
+///
+/// **Deliberately uses `crate::rng::byte()` (platform-only TRNG), NOT
+/// `rng_strong::byte()`.** `wait_random` is called thousands of times
+/// per signature — each call needs the RNG byte fast (microseconds).
+/// Routing every call through `rng_strong::fill` would mean ~1000+ SE
+/// GetRandom round-trips per sign (~50 ms each) = sign latency
+/// stretches from ~1.5 s to multi-minute territory. The loop count
+/// only sets the duration of a delay; even a biased / compromised
+/// platform TRNG just makes the delay slightly less random in length,
+/// which weakens timing-channel defense at the margins but does not
+/// leak any secret. Cost/benefit clearly favours platform-only here.
+/// See §10 Phase 2 in `docs/work-todo.md`.
 #[inline(always)]
 fn rng_byte() -> u8 {
     #[cfg(not(test))]
