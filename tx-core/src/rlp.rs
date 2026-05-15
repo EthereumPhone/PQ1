@@ -126,11 +126,6 @@ impl<'a> ListIter<'a> {
         Self { rest: payload }
     }
 
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.rest.is_empty()
-    }
-
     pub fn next_item(&mut self) -> Result<Option<Item<'a>>, RlpError> {
         if self.rest.is_empty() {
             return Ok(None);
