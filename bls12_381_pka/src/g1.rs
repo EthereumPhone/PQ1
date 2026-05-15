@@ -979,7 +979,6 @@ impl Group for G1Projective {
         self.is_identity()
     }
 
-    #[must_use]
     fn double(&self) -> Self {
         self.double()
     }

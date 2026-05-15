@@ -1124,7 +1124,6 @@ impl Group for G2Projective {
         self.is_identity()
     }
 
-    #[must_use]
     fn double(&self) -> Self {
         self.double()
     }

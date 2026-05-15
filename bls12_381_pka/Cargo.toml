@@ -88,3 +88,4 @@ groups = ["group"]
 nightly = ["subtle/nightly"]
 pairings = ["groups", "pairing"]
 pka = []  # STM32U585 PKA hardware acceleration for Fp arithmetic
+std = []  # Declared to silence upstream `#[cfg(feature = "std")]`-gated tests (never enabled on no_std targets)
