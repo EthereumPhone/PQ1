@@ -25,6 +25,11 @@ use sphincs_tz_shared::{
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::GatewayArgs;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. NS pointer
+/// derefs (read input, write output) happen only after
+/// `validate_ns_{read,write}_ptr` has proved each range is fully
+/// NS-classified.
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let _busy = super::HandlerGuard::enter();
 

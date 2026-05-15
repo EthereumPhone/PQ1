@@ -49,12 +49,7 @@
 #![allow(dead_code)]
 
 #[cfg(feature = "tamp")]
-use core::ptr::{read_volatile, write_volatile};
-
-#[cfg(feature = "tamp")]
 pub fn init() {
-    // SAFETY: single-threaded boot-time init.
-    //
     // Two modes selected by the `tamp-irq` feature:
     //
     //   * polled  (`tamp` only): skip `enable_tamp_irq` — IER stays
@@ -64,12 +59,10 @@ pub fn init() {
     //     `on_tamp_irq()` (~hundreds-of-cycles latency). Caller MUST
     //     have a `DefaultHandler` registered; otherwise the IRQ lands
     //     in cortex-m-rt's WEAK fallback and HardFaults.
-    unsafe {
-        init_lsi_and_rtc_clock();
-        init_tamp_registers();
-        #[cfg(feature = "tamp-irq")]
-        enable_tamp_irq();
-    }
+    init_lsi_and_rtc_clock();
+    init_tamp_registers();
+    #[cfg(feature = "tamp-irq")]
+    enable_tamp_irq();
 }
 
 #[cfg(not(feature = "tamp"))]
@@ -83,16 +76,13 @@ pub fn init() {}
 #[inline]
 pub fn poll() {
     use regs::*;
-    // SAFETY: TAMP_SR is a plain MMIO read.
-    let sr = unsafe { read_volatile(TAMP_SR) };
+    let sr = REG.tamp_sr.read();
     if sr & ITAMP_FLAG_MASK == 0 {
         return;
     }
     let _reason = reason_from_sr(sr);
     secure_log!("[TAMP] poll: {} (SR={:#010x})", _reason, sr);
-    unsafe {
-        write_volatile(TAMP_SCR, ITAMP_FLAG_MASK);
-    }
+    REG.tamp_scr.write(ITAMP_FLAG_MASK);
 }
 
 #[cfg(not(feature = "tamp"))]
@@ -101,31 +91,54 @@ pub fn poll() {}
 
 #[cfg(feature = "tamp")]
 mod regs {
+    use crate::hw::mmio::{Reg32, RoReg32};
+
     // RCC (secure alias — `rcc.rs` uses the NS alias for SYSCLK setup
     // but TAMP lives entirely in the secure backup domain).
     pub const RCC: u32 = 0x5602_0C00;
-    pub const RCC_AHB3ENR: *mut u32 = (RCC + 0x94) as *mut u32;
-    pub const RCC_BDCR: *mut u32 = (RCC + 0xF0) as *mut u32;
-
     // PWR (secure alias) — we need DBP (disable-backup-protection) +
     // MONEN (backup-domain voltage monitor).
     pub const PWR: u32 = 0x5602_0800;
-    pub const PWR_DBPR: *mut u32 = (PWR + 0x10) as *mut u32;
-    pub const PWR_BDCR1: *mut u32 = (PWR + 0x18) as *mut u32;
-
     // TAMP (secure alias, backup domain).
     pub const TAMP: u32 = 0x5600_4400;
-    pub const TAMP_CR1: *mut u32 = (TAMP + 0x00) as *mut u32;
-    pub const TAMP_CR2: *mut u32 = (TAMP + 0x04) as *mut u32;
-    pub const TAMP_CR3: *mut u32 = (TAMP + 0x08) as *mut u32;
-    pub const TAMP_FLTCR: *mut u32 = (TAMP + 0x0C) as *mut u32;
-    pub const TAMP_IER: *mut u32 = (TAMP + 0x2C) as *mut u32;
-    pub const TAMP_SR: *const u32 = (TAMP + 0x30) as *const u32;
-    pub const TAMP_SCR: *mut u32 = (TAMP + 0x3C) as *mut u32;
 
     // NVIC — TAMP_IRQn on STM32U585 is interrupt number 2.
-    pub const NVIC_ISER0: *mut u32 = 0xE000_E100 as *mut u32;
     pub const TAMP_IRQN: u32 = 2;
+
+    pub struct Regs {
+        pub rcc_ahb3enr: Reg32,
+        pub rcc_bdcr: Reg32,
+        pub pwr_dbpr: Reg32,
+        pub pwr_bdcr1: Reg32,
+        pub tamp_cr1: Reg32,
+        pub tamp_cr3: Reg32,
+        pub tamp_fltcr: Reg32,
+        pub tamp_ier: Reg32,
+        pub tamp_sr: RoReg32,
+        pub tamp_scr: Reg32,
+        pub nvic_iser0: Reg32,
+        pub nvic_icpr0: Reg32,
+    }
+
+    // SAFETY: each address is a real, 4-byte-aligned MMIO register owned
+    // by this driver in the single-threaded secure world. Shared RCC and
+    // PWR registers are touched via disjoint-bit RMW.
+    pub const REG: Regs = unsafe {
+        Regs {
+            rcc_ahb3enr: Reg32::new(RCC + 0x94),
+            rcc_bdcr: Reg32::new(RCC + 0xF0),
+            pwr_dbpr: Reg32::new(PWR + 0x10),
+            pwr_bdcr1: Reg32::new(PWR + 0x18),
+            tamp_cr1: Reg32::new(TAMP + 0x00),
+            tamp_cr3: Reg32::new(TAMP + 0x08),
+            tamp_fltcr: Reg32::new(TAMP + 0x0C),
+            tamp_ier: Reg32::new(TAMP + 0x2C),
+            tamp_sr: RoReg32::new(TAMP + 0x30),
+            tamp_scr: Reg32::new(TAMP + 0x3C),
+            nvic_iser0: Reg32::new(0xE000_E100),
+            nvic_icpr0: Reg32::new(0xE000_E280),
+        }
+    };
 
     // --- bit positions (RM0456) ---
     pub const RCC_BDCR_LSION: u32 = 1 << 0;
@@ -169,26 +182,23 @@ mod regs {
 }
 
 #[cfg(feature = "tamp")]
-unsafe fn init_lsi_and_rtc_clock() {
+fn init_lsi_and_rtc_clock() {
     use regs::*;
 
     // Enable PWR + RTCAPB clocks — needed before we can touch DBPR or
     // TAMP registers.
-    let ahb3enr = read_volatile(RCC_AHB3ENR);
-    write_volatile(RCC_AHB3ENR, ahb3enr | RCC_AHB3ENR_PWREN | RCC_AHB3ENR_RTCAPBEN);
+    REG.rcc_ahb3enr.set_bits(RCC_AHB3ENR_PWREN | RCC_AHB3ENR_RTCAPBEN);
 
     // Disable backup-domain write protection (one-shot cookie).
-    write_volatile(PWR_DBPR, PWR_DBPR_DBP);
+    REG.pwr_dbpr.write(PWR_DBPR_DBP);
 
     // Turn on LSI and wait for ready.
-    let mut bdcr = read_volatile(RCC_BDCR);
-    bdcr |= RCC_BDCR_LSION;
-    write_volatile(RCC_BDCR, bdcr);
+    REG.rcc_bdcr.set_bits(RCC_BDCR_LSION);
 
     // Bounded wait (LSI comes up in <200 µs on silicon; timeout after
     // ~1 ms of CPU cycles).
     for _ in 0..200_000 {
-        if read_volatile(RCC_BDCR) & RCC_BDCR_LSIRDY != 0 {
+        if REG.rcc_bdcr.read() & RCC_BDCR_LSIRDY != 0 {
             break;
         }
         cortex_m::asm::nop();
@@ -200,32 +210,30 @@ unsafe fn init_lsi_and_rtc_clock() {
     // power-up this is the clean state we're in. If RTCSEL is already
     // non-zero from a prior firmware, we skip — keeping the existing
     // choice preserves LSE if it was set by a future PQSigner build.
-    let mut bdcr = read_volatile(RCC_BDCR);
-    if (bdcr >> 8) & 0b11 == 0 {
-        bdcr |= RCC_BDCR_RTCSEL_LSI;
-    }
-    bdcr |= RCC_BDCR_RTCEN;
-    write_volatile(RCC_BDCR, bdcr);
+    REG.rcc_bdcr.modify(|mut bdcr| {
+        if (bdcr >> 8) & 0b11 == 0 {
+            bdcr |= RCC_BDCR_RTCSEL_LSI;
+        }
+        bdcr | RCC_BDCR_RTCEN
+    });
 
     // Enable backup-domain voltage monitor (feeds ITAMP1).
-    let bdcr1 = read_volatile(PWR_BDCR1);
-    write_volatile(PWR_BDCR1, bdcr1 | PWR_BDCR1_MONEN);
+    REG.pwr_bdcr1.set_bits(PWR_BDCR1_MONEN);
 }
 
 #[cfg(feature = "tamp")]
-unsafe fn init_tamp_registers() {
+fn init_tamp_registers() {
     use regs::*;
 
     // Clear any pending tamper flags from a prior power cycle (backup
     // domain survives reset, so we may see stale flags at first boot).
-    write_volatile(TAMP_SCR, 0x0007_FFFF);
+    REG.tamp_scr.write(0x0007_FFFF);
 
     // Filter config for external tamper pins — matches Trezor:
     // 8-cycle pre-charge, 4 identical samples to confirm, RTCCLK/256
     // (128 Hz) sampling period. We don't enable external pins here;
     // this is defensive in case a future revision wires them.
-    write_volatile(
-        TAMP_FLTCR,
+    REG.tamp_fltcr.write(
         TAMP_FLTCR_TAMPPRCH_8CYC
             | TAMP_FLTCR_TAMPFLT_4SAMPLES
             | TAMP_FLTCR_TAMPFREQ_RTCCLK_DIV256,
@@ -234,10 +242,8 @@ unsafe fn init_tamp_registers() {
     // Enable every internal tamper we care about — Trezor's set,
     // minus the two they skip (ITAMP4 and ITAMP10 are documented
     // to never fire on this MCU revision).
-    let cr1 = read_volatile(TAMP_CR1);
-    write_volatile(
-        TAMP_CR1,
-        cr1 | TAMP_CR1_ITAMP1E
+    REG.tamp_cr1.set_bits(
+        TAMP_CR1_ITAMP1E
             | TAMP_CR1_ITAMP2E
             | TAMP_CR1_ITAMP3E
             | TAMP_CR1_ITAMP5E
@@ -256,31 +262,12 @@ unsafe fn init_tamp_registers() {
     // trigger the backup SRAM erase hardware — which we don't *have*
     // data in yet (PQSigner doesn't use backup SRAM), but the invariant
     // stays correct for when we do.
-    write_volatile(TAMP_CR3, 0);
+    REG.tamp_cr3.write(0);
 
-    // Enable interrupts for every internal tamper we enabled above.
-    // Using the shifted ITAMP*E bits one position higher gives the IE
-    // bits per RM0456 table — this is how Trezor writes it.
-    let ier_value = (TAMP_CR1_ITAMP1E
-        | TAMP_CR1_ITAMP2E
-        | TAMP_CR1_ITAMP3E
-        | TAMP_CR1_ITAMP5E
-        | TAMP_CR1_ITAMP6E
-        | TAMP_CR1_ITAMP7E
-        | TAMP_CR1_ITAMP8E
-        | TAMP_CR1_ITAMP9E
-        | TAMP_CR1_ITAMP11E
-        | TAMP_CR1_ITAMP12E
-        | TAMP_CR1_ITAMP13E)
-        >> 16;
-    // `ier_value` now has the corresponding ITAMP*IE bits (bit 0..=13)
-    // — the IER layout is ITAMP*IE starting at bit 16 too, but several
-    // cheat-sheets get this wrong. Per RM0456 §45.8.8, the IER bits
-    // for internal tampers are at positions 16..=28 exactly matching
-    // CR1's ITAMP*E bits, so we just echo CR1's mask:
-    let _ = ier_value; // sanity check that the computation typechecks
-    write_volatile(
-        TAMP_IER,
+    // Per RM0456 §45.8.8 the IER bits for internal tampers are at
+    // positions 16..=28 exactly matching CR1's ITAMP*E bits, so we
+    // echo CR1's mask directly:
+    REG.tamp_ier.write(
         TAMP_CR1_ITAMP1E
             | TAMP_CR1_ITAMP2E
             | TAMP_CR1_ITAMP3E
@@ -304,18 +291,17 @@ unsafe fn init_tamp_registers() {
 /// `on_tamp_irq()`. Without that, an unmasked TAMP IRQ lands in
 /// cortex-m-rt's WEAK default fallback and HardFaults the chip.
 #[cfg(all(feature = "tamp", feature = "tamp-irq"))]
-unsafe fn enable_tamp_irq() {
+fn enable_tamp_irq() {
     use regs::*;
 
     // Mirror the CR1 enable mask into IER — same bit positions on
     // STM32U5 (RM0456 §45.8.8 confirms ITAMP*IE bits at positions
     // 16..=28 matching CR1's ITAMP*E bits).
-    write_volatile(TAMP_IER, ITAMP_FLAG_MASK);
+    REG.tamp_ier.write(ITAMP_FLAG_MASK);
 
     // Clear any latent pending in NVIC, then enable.
-    const NVIC_ICPR0: *mut u32 = 0xE000_E280 as *mut u32;
-    write_volatile(NVIC_ICPR0, 1 << TAMP_IRQN);
-    write_volatile(NVIC_ISER0, 1 << TAMP_IRQN);
+    REG.nvic_icpr0.write(1 << TAMP_IRQN);
+    REG.nvic_iser0.write(1 << TAMP_IRQN);
 }
 
 /// Return a short human-readable label for whichever TAMP source
@@ -370,9 +356,9 @@ pub fn reason_from_sr(sr: u32) -> &'static str {
 /// (TAMP_IRQn on STM32U5).
 #[cfg(all(feature = "tamp", feature = "tamp-irq"))]
 #[allow(non_snake_case)]
-pub unsafe fn on_tamp_irq() {
+pub fn on_tamp_irq() {
     use regs::*;
-    let sr = read_volatile(TAMP_SR);
+    let sr = REG.tamp_sr.read();
     if sr & ITAMP_FLAG_MASK == 0 {
         // Spurious — IRQ asserted but no flag we monitor. Clear the
         // NVIC pending bit anyway so the IRQ doesn't re-enter.
@@ -382,7 +368,7 @@ pub unsafe fn on_tamp_irq() {
     secure_log!("[TAMP] irq: {} (SR={:#010x})", _reason, sr);
     // Write-1-to-clear the flags so the line de-asserts. Without this
     // the IRQ would re-enter immediately on return.
-    write_volatile(TAMP_SCR, ITAMP_FLAG_MASK);
+    REG.tamp_scr.write(ITAMP_FLAG_MASK);
 }
 
 #[cfg(all(test, feature = "tamp"))]

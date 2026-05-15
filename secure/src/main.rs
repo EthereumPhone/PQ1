@@ -29,7 +29,7 @@ macro_rules! secure_log {
         // DHCSR, so always emit.
         #[cfg(feature = "stm32u585")]
         {
-            if unsafe { core::ptr::read_volatile(0xE000_EDF0 as *const u32) } & 1 != 0 {
+            if $crate::ARCH.dhcsr.read() & 1 != 0 {
                 cortex_m_semihosting::hprintln!($($arg)*);
             }
         }
@@ -83,7 +83,10 @@ mod names;
 mod selectors;
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
 mod host_rng;
-#[cfg(all(any(feature = "pka-accel", feature = "stm32u585"), not(test)))]
+// `hw` is compiled for any non-test build so `sau` (used on both QEMU and
+// STM32U585) can pull in `hw::mmio`. Each peripheral submodule inside
+// `hw` retains its own feature gate, so QEMU still only sees `mmio`.
+#[cfg(not(test))]
 mod hw;
 #[cfg(not(test))]
 mod reset_cause;
@@ -138,12 +141,42 @@ const NS_FLASH_BASE: u32 = 0x0020_0000; // QEMU mps2-an505: NS alias of SSRAM-0
 #[cfg(all(feature = "stm32u585", not(test)))]
 const NS_FLASH_BASE: u32 = 0x0810_0000; // STM32U585: flash bank 2 NS alias
 
+// ARMv8-M architectural registers used directly from `main.rs`:
+//   SysTick (SYST_*), DWT cycle counter, DEMCR, ICSR, DHCSR.
+// All bound once below via `hw::mmio::{Reg32, RoReg32}` so the rest of
+// the file only sees safe `.read()` / `.write()` calls.
 #[cfg(not(test))]
-const SYST_CSR: *mut u32 = 0xE000_E010 as *mut u32;
+struct ArchRegs {
+    syst_csr: hw::mmio::Reg32,
+    syst_rvr: hw::mmio::Reg32,
+    syst_cvr: hw::mmio::Reg32,
+    icsr: hw::mmio::Reg32,
+    demcr: hw::mmio::Reg32,
+    dwt_lar: hw::mmio::Reg32,
+    dwt_ctrl: hw::mmio::Reg32,
+    dwt_cyccnt: hw::mmio::Reg32,
+    /// DHCSR.C_DEBUGEN — read-only from our point of view; we never write
+    /// it (writes require an unlock key the firmware doesn't possess).
+    dhcsr: hw::mmio::RoReg32,
+}
+
+// SAFETY: each address is a real, 4-byte-aligned ARMv8-M architectural
+// register exclusively touched from the secure-world boot path / handlers
+// below. Non-preemptive single-threaded secure world — nothing races.
 #[cfg(not(test))]
-const SYST_RVR: *mut u32 = 0xE000_E014 as *mut u32;
-#[cfg(not(test))]
-const SYST_CVR: *mut u32 = 0xE000_E018 as *mut u32;
+const ARCH: ArchRegs = unsafe {
+    ArchRegs {
+        syst_csr: hw::mmio::Reg32::new(0xE000_E010),
+        syst_rvr: hw::mmio::Reg32::new(0xE000_E014),
+        syst_cvr: hw::mmio::Reg32::new(0xE000_E018),
+        icsr: hw::mmio::Reg32::new(0xE000_ED04),
+        demcr: hw::mmio::Reg32::new(0xE000_EDFC),
+        dwt_lar: hw::mmio::Reg32::new(0xE000_1FB0),
+        dwt_ctrl: hw::mmio::Reg32::new(0xE000_1000),
+        dwt_cyccnt: hw::mmio::Reg32::new(0xE000_1004),
+        dhcsr: hw::mmio::RoReg32::new(0xE000_EDF0),
+    }
+};
 
 // Global mock SE (used when mock-se feature is active, no real SE)
 #[cfg(all(feature = "mock-se", not(feature = "se050"), not(feature = "tropic01-se"), not(feature = "optiga-trust-m"), not(test)))]
@@ -379,11 +412,18 @@ static mut SYSTICK_RELOAD: u32 = 16_000; // overwritten by rcc::init() result
 
 #[cfg(not(test))]
 fn setup_systick() {
-    unsafe {
-        core::ptr::write_volatile(SYST_RVR, SYSTICK_RELOAD);
-        core::ptr::write_volatile(SYST_CVR, 0);
-        core::ptr::write_volatile(SYST_CSR, 0x07);
-    }
+    // SAFETY: `SYSTICK_RELOAD` is a `static mut` on `stm32u585` (written
+    // once at boot from `rcc::init()` before SysTick is enabled). The
+    // `const` non-stm32u585 path doesn't need unsafe — `read` is wrapping
+    // an immutable global.
+    #[cfg(feature = "stm32u585")]
+    // SAFETY: single-writer at boot before this read; no races.
+    let reload = unsafe { SYSTICK_RELOAD };
+    #[cfg(not(feature = "stm32u585"))]
+    let reload = SYSTICK_RELOAD;
+    ARCH.syst_rvr.write(reload);
+    ARCH.syst_cvr.write(0);
+    ARCH.syst_csr.write(0x07);
 }
 
 /// Returns true if the SE backend has been provisioned.
@@ -2485,21 +2525,16 @@ fn main() -> ! {
     // DEMCR.TRCENA enables the DWT unit; DWT_CTRL.CYCCNTENA starts the
     // free-running 32-bit cycle counter; DWT_LAR unlocks write access.
     // DSCSR.CDS=1 is needed for NS to read DWT on TrustZone parts.
-    unsafe {
-        const DEMCR: *mut u32 = 0xE000_EDFC as *mut u32;
-        const DWT_LAR: *mut u32 = 0xE000_1FB0 as *mut u32;
-        const DWT_CTRL: *mut u32 = 0xE000_1000 as *mut u32;
-        const DWT_CYCCNT: *mut u32 = 0xE000_1004 as *mut u32;
-        // Enable trace unit
-        core::ptr::write_volatile(DEMCR, core::ptr::read_volatile(DEMCR) | (1 << 24));
-        // Unlock DWT for writes
-        core::ptr::write_volatile(DWT_LAR, 0xC5AC_CE55);
-        // Reset and start cycle counter
-        core::ptr::write_volatile(DWT_CYCCNT, 0);
-        core::ptr::write_volatile(DWT_CTRL, core::ptr::read_volatile(DWT_CTRL) | 1);
-    }
+    ARCH.demcr.set_bits(1 << 24);       // TRCENA — enable trace unit
+    ARCH.dwt_lar.write(0xC5AC_CE55);    // unlock DWT for writes
+    ARCH.dwt_cyccnt.write(0);           // reset cycle counter
+    ARCH.dwt_ctrl.set_bits(1);          // CYCCNTENA — start counter
 
     secure_log!("[S] Booting non-secure world...");
+    // SAFETY: `boot_ns::boot` performs the irreducibly-unsafe TrustZone
+    // branch to the NS reset vector (BLXNS via the linker-provided NS
+    // image at `NS_FLASH_BASE`). This is the documented hand-off into
+    // the non-secure world; no S-world state survives past it.
     unsafe { boot_ns::boot(NS_FLASH_BASE) }
 }
 
@@ -2547,10 +2582,7 @@ fn SysTick() {
         // "(idle wipe)" status page, which could otherwise get stuck
         // visible if PendSV is delayed.
         #[cfg(feature = "stm32u585")]
-        unsafe {
-            const ICSR: *mut u32 = 0xE000_ED04 as *mut u32;
-            core::ptr::write_volatile(ICSR, 1 << 28); // PENDSVSET
-        }
+        ARCH.icsr.write(1 << 28); // PENDSVSET
     }
 
     // QEMU-only: drain the shared-memory mailbox. On STM32U585 the
@@ -2697,7 +2729,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     #[cfg(feature = "debug-log")]
     {
         // Best-effort debug output — only if a debugger is actually attached.
-        if unsafe { core::ptr::read_volatile(0xE000_EDF0 as *const u32) } & 1 != 0 {
+        if ARCH.dhcsr.read() & 1 != 0 {
             cortex_m_semihosting::hprintln!("[S] PANIC: {}", _info);
         }
     }

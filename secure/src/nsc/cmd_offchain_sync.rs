@@ -32,6 +32,11 @@ use sphincs_tz_shared::{NscStatus, MAX_ACCOUNT_INDEX, OFFCHAIN_SYNC_INPUT_LEN};
 use super::ptr_validate::validate_ns_read_ptr;
 use super::GatewayArgs;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. NS pointer
+/// derefs happen only after `validate_ns_read_ptr` has proved the
+/// input range is fully NS-classified. No output buffer in this
+/// command (status word only).
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let _busy = super::HandlerGuard::enter();
 

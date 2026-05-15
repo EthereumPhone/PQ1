@@ -4,10 +4,12 @@
 //! slave address instead of SE050. Both chips share the same I2C1 bus
 //! (PB8 SCL, PB9 SDA) — no address conflict.
 //!
-//! Register definitions imported from `hw::i2c_hw`.
+//! Register base imported from `hw::i2c_hw`; the offsets are bound once
+//! into typed [`Reg32`] / [`RoReg32`] handles so individual touches in
+//! the transfer loops are safe.
 
-use core::ptr::{read_volatile, write_volatile};
-use crate::hw::i2c_hw::*;
+use crate::hw::i2c_hw::I2C1;
+use crate::hw::mmio::{Reg32, RoReg32};
 
 /// OPTIGA Trust M I2C slave address (7-bit).
 pub const OPTIGA_ADDR: u8 = 0x30;
@@ -22,6 +24,35 @@ pub enum I2cError {
 }
 
 const TIMEOUT_LOOPS: u32 = 1_000_000;
+
+// ---------------------------------------------------------------------------
+// I2C1 register block — typed handles so the unsafe register-address
+// construction happens exactly once at module scope.
+// ---------------------------------------------------------------------------
+
+struct I2cRegs {
+    cr2: Reg32,
+    isr: RoReg32,
+    icr: Reg32,
+    rxdr: RoReg32,
+    txdr: Reg32,
+}
+
+// SAFETY: each address below is a real, 4-byte-aligned MMIO register on
+// I2C1 (base 0x5000_5400, secure alias) exclusively owned by the SE
+// drivers. The secure world is single-threaded and non-preemptive —
+// the OPTIGA and SE050 drivers share I2C1 sequentially, never racing.
+// After this one-time construction every register touch below is via
+// safe `.read()` / `.write()` methods.
+const REG: I2cRegs = unsafe {
+    I2cRegs {
+        cr2: Reg32::new(I2C1 + 0x04),
+        isr: RoReg32::new(I2C1 + 0x18),
+        icr: Reg32::new(I2C1 + 0x1C),
+        rxdr: RoReg32::new(I2C1 + 0x24),
+        txdr: Reg32::new(I2C1 + 0x28),
+    }
+};
 
 // ---------------------------------------------------------------------------
 // ISR / ICR / CR2 bit positions (same register layout as se050/i2c.rs)
@@ -47,19 +78,19 @@ const CR2_RELOAD: u32 = 1 << 24;
 const CR2_RD_WRN: u32 = 1 << 10;
 
 /// Wait for a flag in ISR, with timeout.
-unsafe fn wait_flag(mask: u32) -> Result<u32, I2cError> {
+fn wait_flag(mask: u32) -> Result<u32, I2cError> {
     for _ in 0..TIMEOUT_LOOPS {
-        let isr = read_volatile(I2C1_ISR);
+        let isr = REG.isr.read();
         if isr & ISR_NACKF != 0 {
-            write_volatile(I2C1_ICR, ICR_NACKCF);
+            REG.icr.write(ICR_NACKCF);
             return Err(I2cError::Nack);
         }
         if isr & ISR_BERR != 0 {
-            write_volatile(I2C1_ICR, ICR_BERRCF);
+            REG.icr.write(ICR_BERRCF);
             return Err(I2cError::Bus);
         }
         if isr & ISR_ARLO != 0 {
-            write_volatile(I2C1_ICR, ICR_ARLOCF);
+            REG.icr.write(ICR_ARLOCF);
             return Err(I2cError::Arbitration);
         }
         if isr & mask != 0 {
@@ -70,43 +101,41 @@ unsafe fn wait_flag(mask: u32) -> Result<u32, I2cError> {
 }
 
 /// Configure CR2 for a transfer.
-unsafe fn configure_transfer(addr: u8, nbytes: u8, direction: u32, flags: u32) {
+fn configure_transfer(addr: u8, nbytes: u8, direction: u32, flags: u32) {
     let cr2 = ((addr as u32) << 1)
         | direction
         | ((nbytes as u32) << 16)
         | flags
         | CR2_START;
-    write_volatile(I2C1_CR2, cr2);
+    REG.cr2.write(cr2);
 }
 
 /// Probe a single 7-bit I2C address with a 0-byte write. Returns `Ok(())`
 /// iff the slave ACKs.
-pub unsafe fn probe_addr(addr: u8) -> Result<(), I2cError> {
-    use crate::hw::i2c_hw::*;
-
-    write_volatile(I2C1_ICR, ICR_NACKCF | ICR_STOPCF | ICR_BERRCF | ICR_ARLOCF);
+pub fn probe_addr(addr: u8) -> Result<(), I2cError> {
+    REG.icr.write(ICR_NACKCF | ICR_STOPCF | ICR_BERRCF | ICR_ARLOCF);
 
     let cr2: u32 = ((addr as u32) << 1)
         | (0u32 << 16)
         | CR2_START
         | CR2_AUTOEND;
-    write_volatile(I2C1_CR2, cr2);
+    REG.cr2.write(cr2);
 
     let mut t = TIMEOUT_LOOPS;
     loop {
-        let isr = read_volatile(I2C1_ISR);
+        let isr = REG.isr.read();
         if isr & ISR_NACKF != 0 {
-            write_volatile(I2C1_ICR, ICR_NACKCF);
+            REG.icr.write(ICR_NACKCF);
             let mut s = TIMEOUT_LOOPS;
-            while read_volatile(I2C1_ISR) & ISR_STOPF == 0 {
+            while REG.isr.read() & ISR_STOPF == 0 {
                 s -= 1;
                 if s == 0 { break; }
             }
-            write_volatile(I2C1_ICR, ICR_STOPCF);
+            REG.icr.write(ICR_STOPCF);
             return Err(I2cError::Nack);
         }
         if isr & ISR_STOPF != 0 {
-            write_volatile(I2C1_ICR, ICR_STOPCF);
+            REG.icr.write(ICR_STOPCF);
             return Ok(());
         }
         t -= 1;
@@ -118,7 +147,7 @@ pub unsafe fn probe_addr(addr: u8) -> Result<(), I2cError> {
 
 /// One-shot 0-byte write probe — returns Ok(()) iff the OPTIGA at
 /// `OPTIGA_ADDR` ACKs the address byte.
-pub unsafe fn probe() -> Result<(), I2cError> {
+pub fn probe() -> Result<(), I2cError> {
     probe_addr(OPTIGA_ADDR)
 }
 
@@ -126,13 +155,13 @@ pub unsafe fn probe() -> Result<(), I2cError> {
 /// = 0x82). Some chip firmware revisions NACK bare address-only writes but
 /// ACK when any data byte follows. This is the minimal transaction the
 /// OPTIGA's register-access layer guarantees to accept.
-pub unsafe fn probe_with_reg() -> Result<(), I2cError> {
+pub fn probe_with_reg() -> Result<(), I2cError> {
     write(&[0x82])
 }
 
 /// Scan every 7-bit address on I2C1 and log each responder. Used during
 /// bring-up when we don't know what address the OPTIGA ended up at.
-pub unsafe fn scan() {
+pub fn scan() {
     secure_log!("[OPTIGA/i2c] Scanning I2C1 0x08..0x77 for responders");
     for addr in 0x08u8..=0x77u8 {
         if probe_addr(addr).is_ok() {
@@ -143,7 +172,7 @@ pub unsafe fn scan() {
 }
 
 /// Write `data` to the OPTIGA Trust M (blocking).
-pub unsafe fn write(data: &[u8]) -> Result<(), I2cError> {
+pub fn write(data: &[u8]) -> Result<(), I2cError> {
     let total = data.len();
     if total == 0 {
         return Ok(());
@@ -162,12 +191,12 @@ pub unsafe fn write(data: &[u8]) -> Result<(), I2cError> {
             let cr2 = ((OPTIGA_ADDR as u32) << 1)
                 | ((chunk as u32) << 16)
                 | flags;
-            write_volatile(I2C1_CR2, cr2);
+            REG.cr2.write(cr2);
         }
 
         for i in 0..chunk {
             wait_flag(ISR_TXIS)?;
-            write_volatile(I2C1_TXDR, data[offset + i] as u32);
+            REG.txdr.write(data[offset + i] as u32);
         }
 
         if !is_last {
@@ -178,12 +207,12 @@ pub unsafe fn write(data: &[u8]) -> Result<(), I2cError> {
     }
 
     wait_flag(ISR_STOPF)?;
-    write_volatile(I2C1_ICR, ICR_STOPCF);
+    REG.icr.write(ICR_STOPCF);
     Ok(())
 }
 
 /// Read `buf.len()` bytes from the OPTIGA Trust M (blocking).
-pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
+pub fn read(buf: &mut [u8]) -> Result<(), I2cError> {
     let total = buf.len();
     if total == 0 {
         return Ok(());
@@ -203,12 +232,12 @@ pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
                 | CR2_RD_WRN
                 | ((chunk as u32) << 16)
                 | flags;
-            write_volatile(I2C1_CR2, cr2);
+            REG.cr2.write(cr2);
         }
 
         for i in 0..chunk {
             wait_flag(ISR_RXNE)?;
-            buf[offset + i] = read_volatile(I2C1_RXDR) as u8;
+            buf[offset + i] = REG.rxdr.read() as u8;
         }
 
         if !is_last {
@@ -219,7 +248,7 @@ pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
     }
 
     wait_flag(ISR_STOPF)?;
-    write_volatile(I2C1_ICR, ICR_STOPCF);
+    REG.icr.write(ICR_STOPCF);
     Ok(())
 }
 
@@ -234,7 +263,7 @@ pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
 ///
 /// Repeated-START is not used: the Trust M silicon NACKs the restart
 /// address byte when it transitions directly from write to read phase.
-pub unsafe fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
+pub fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
     if tx.is_empty() {
         return read(rx);
     }
@@ -245,7 +274,9 @@ pub unsafe fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
 
     // 50 µs guard time at 160 MHz ≈ 8000 NOPs.
     for _ in 0..8_000u32 {
-        core::arch::asm!("nop");
+        // SAFETY: `nop` is an unprivileged hint instruction with no
+        // memory effects; safe in every CPU mode.
+        unsafe { core::arch::asm!("nop") };
     }
 
     read(rx)

@@ -74,6 +74,12 @@ struct ParsedTx {
     data_len: usize,
 }
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. Same
+/// invariants as `cmd_sign_userop::run`: NS pointer derefs only
+/// after `validate_ns_{read,write}_ptr`, `static mut` driver state
+/// (`SE`, `SLOT_CACHE`, `SNAP_BUF`) accessed under the non-reentrant
+/// dispatcher + `HandlerGuard`.
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     use crate::ui::confirm::{confirm, ConfirmResult};
 
@@ -402,6 +408,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // ── 10. Slot C10 keygen (cached) ────────────────────────────────
     let need_keygen = super::state::peek_state(|_| {
+        // SAFETY: category 5 — read-only borrow of `static mut
+        // SLOT_CACHE` under the single-threaded gateway. Mirrors
+        // `cmd_sign_userop`.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
             Some(c) => {
@@ -421,6 +430,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 slot_index,
                 |p| ui::show_progress("Slot keygen", p),
             );
+        // SAFETY: category 5 — exclusive write to `static mut
+        // SLOT_CACHE` under the non-reentrant dispatcher +
+        // `HandlerGuard`. Displaced prior `CachedSlot` drops here
+        // (ZeroizeOnDrop wipes the previous SK).
         unsafe {
             *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
                 account_index,
@@ -437,6 +450,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         });
     }
 
+    // SAFETY: category 5 — read-only borrow of `static mut
+    // SLOT_CACHE`. Cache populated above; single-threaded dispatcher
+    // means no concurrent mutator.
     let (slot_pk_seed_32, slot_pk_root_32) = unsafe {
         match &*core::ptr::addr_of!(super::state::SLOT_CACHE) {
             Some(c) => {
@@ -625,6 +641,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     ui::show_progress("Slot C10 sign", 0);
     let t2_sig = {
+        // SAFETY: category 5 — read-only borrow of `static mut
+        // SLOT_CACHE`. Single-threaded dispatcher; cache populated
+        // above.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
             Some(c) => &c.key,
@@ -652,6 +671,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // pattern as the single-tx path. `fi::check_true` gates the AND
     // through a hamming-distant sentinel.
     let (v1, v2) = {
+        // SAFETY: category 5 — read-only borrow of `static mut
+        // SLOT_CACHE` for the FI-hardened verify-before-release.
+        // Same rationale as the sign block above.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
             Some(c) => &c.key,
@@ -763,6 +785,12 @@ fn encode_signature_wrapper(out: &mut [u8; SIG_WRAPPER_LEN], owner_index: u64, i
     out[96..96 + C10_SIG_LEN].copy_from_slice(inner_sig);
 }
 
+/// # Safety
+/// Category 2 — NS pointer deref. Caller must have validated
+/// `[out_ptr, out_ptr + MAX_SIGN_RESPONSE_LEN)` via
+/// `validate_ns_write_ptr` AND ensured `*write_pos + 4 <=
+/// MAX_SIGN_RESPONSE_LEN`. Volatile keeps NS observers from
+/// seeing a torn word.
 unsafe fn write_be_u32(out_ptr: *mut u8, write_pos: &mut usize, v: u32) {
     let be = v.to_be_bytes();
     for i in 0..4 {
@@ -771,6 +799,11 @@ unsafe fn write_be_u32(out_ptr: *mut u8, write_pos: &mut usize, v: u32) {
     *write_pos += 4;
 }
 
+/// # Safety
+/// Category 2 — NS pointer deref. Caller must have validated
+/// `[out_ptr, out_ptr + MAX_SIGN_RESPONSE_LEN)` via
+/// `validate_ns_write_ptr` AND ensured `*write_pos + 8 <=
+/// MAX_SIGN_RESPONSE_LEN`.
 unsafe fn write_be_u64(out_ptr: *mut u8, write_pos: &mut usize, v: u64) {
     let be = v.to_be_bytes();
     for i in 0..8 {

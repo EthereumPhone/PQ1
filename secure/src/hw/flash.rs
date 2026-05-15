@@ -6,18 +6,29 @@
 //!
 //! The linker script (`memory-stm32u585.x`) must shrink FLASH LENGTH
 //! by 16 KB to prevent firmware code from being placed in these pages.
+//!
+//! ## Unsafe surface
+//!
+//! All MMIO register access is funnelled through `hw::mmio::{Reg32, RoReg32}`,
+//! which encapsulates `read_volatile` / `write_volatile` once per address.
+//! The remaining `unsafe fn` markers sit on the public flash-*mutating*
+//! APIs (erase / program / bump) for commit-visibility — callers must
+//! reason about *which* flash bytes they are about to change. Read-only
+//! helpers (`read_key`, `pin_attempts_read`, `offchain_count_read`,
+//! `last_userop_count_read`, `offchain_count_is_registered`,
+//! `is_key_blank`, `is_wipe_armed`) are safe `fn` because they cannot
+//! commit anything; raw pointer derefs of flash memory inside them stay
+//! in tight `unsafe { ... }` blocks with `// SAFETY:` comments.
 
 use core::ptr::{read_volatile, write_volatile};
+
+use crate::hw::mmio::{Reg32, RoReg32};
 
 // ---------------------------------------------------------------------------
 // Flash controller registers (secure alias)
 // ---------------------------------------------------------------------------
 
 const FLASH: u32 = 0x5002_2000;
-
-const FLASH_SECKEYR: *mut u32 = (FLASH + 0x0C) as *mut u32;
-const FLASH_SECSR: *mut u32 = (FLASH + 0x24) as *mut u32;
-const FLASH_SECCR: *mut u32 = (FLASH + 0x2C) as *mut u32;
 
 // Non-secure-controller registers (accessible from secure world via the
 // secure peripheral bus — the NS/S distinction here selects which side's
@@ -27,9 +38,6 @@ const FLASH_SECCR: *mut u32 = (FLASH + 0x2C) as *mut u32;
 // programming of NS flash, so NSCR is the only controller that can
 // write them. The secure world owns the update mechanism end-to-end, so
 // NS-world code never touches NSCR directly.
-const FLASH_NSKEYR: *mut u32 = (FLASH + 0x08) as *mut u32;
-const FLASH_NSSR: *mut u32 = (FLASH + 0x20) as *mut u32;
-const FLASH_NSCR: *mut u32 = (FLASH + 0x28) as *mut u32;
 
 /// Selects which bank the flash controller targets. Only meaningful for
 /// dual-bank operations; bank 1 is S-flash, bank 2 is NS-flash in our
@@ -82,10 +90,39 @@ const ERR_MASK: u32 = 0xFA; // PROGERR | WRPERR | PGAERR | SIZERR | PGSERR
 // in a reserved region on AHB1 and provokes unpredictable behaviour
 // (previously: u64_div_rem HardFault shortly after the first write).
 const ICACHE_BASE: u32 = 0x5003_0400;
-const ICACHE_CR: *mut u32 = ICACHE_BASE as *mut u32;
-const ICACHE_SR: *const u32 = (ICACHE_BASE + 0x04) as *const u32;
 const ICACHE_CR_CACHEINV: u32 = 1 << 1;
 const ICACHE_SR_BUSYF: u32 = 1 << 0;
+
+/// All MMIO registers this driver owns, bundled so the one-time
+/// `unsafe { ... }` for `Reg32::new` happens once at module scope.
+struct FlashRegs {
+    seckeyr: Reg32,
+    secsr: Reg32,
+    seccr: Reg32,
+    nskeyr: Reg32,
+    nssr: Reg32,
+    nscr: Reg32,
+    icache_cr: Reg32,
+    icache_sr: RoReg32,
+}
+
+// SAFETY: each address below is a real, 4-byte-aligned MMIO register
+// exclusively owned by this driver (the FLASH and ICACHE controllers).
+// The secure world is single-threaded and non-preemptive — nothing else
+// races us. After this one-time construction every register touch is via
+// safe `.read()` / `.write()` / `.modify()`.
+const REG: FlashRegs = unsafe {
+    FlashRegs {
+        seckeyr: Reg32::new(FLASH + 0x0C),
+        secsr: Reg32::new(FLASH + 0x24),
+        seccr: Reg32::new(FLASH + 0x2C),
+        nskeyr: Reg32::new(FLASH + 0x08),
+        nssr: Reg32::new(FLASH + 0x20),
+        nscr: Reg32::new(FLASH + 0x28),
+        icache_cr: Reg32::new(ICACHE_BASE),
+        icache_sr: RoReg32::new(ICACHE_BASE + 0x04),
+    }
+};
 
 /// Invalidate the entire ICACHE so subsequent flash reads see fresh
 /// post-erase / post-program bytes rather than stale cached lines.
@@ -93,10 +130,9 @@ const ICACHE_SR_BUSYF: u32 = 1 << 0;
 /// mutation that triggered it — interleaving isn't a correctness bug
 /// (invalidation is idempotent) but keeps the cache-coherency window
 /// tight.
-unsafe fn icache_invalidate() {
-    let cr = read_volatile(ICACHE_CR);
-    write_volatile(ICACHE_CR, cr | ICACHE_CR_CACHEINV);
-    while read_volatile(ICACHE_SR) & ICACHE_SR_BUSYF != 0 {
+fn icache_invalidate() {
+    REG.icache_cr.set_bits(ICACHE_CR_CACHEINV);
+    while REG.icache_sr.read() & ICACHE_SR_BUSYF != 0 {
         cortex_m::asm::nop();
     }
     cortex_m::asm::dsb();
@@ -122,32 +158,31 @@ const KEY_PAGE_NUM: u32 = 127;
 // Low-level helpers
 // ---------------------------------------------------------------------------
 
-/// Wait until the flash controller is not busy.
-unsafe fn wait_bsy() {
-    while read_volatile(FLASH_SECSR) & BSY != 0 {
+/// Wait until the secure flash controller is not busy.
+fn wait_bsy() {
+    while REG.secsr.read() & BSY != 0 {
         cortex_m::asm::nop();
     }
 }
 
 /// Clear any pending error flags in SECSR (write-1-to-clear).
-unsafe fn clear_errors() {
-    let sr = read_volatile(FLASH_SECSR);
+fn clear_errors() {
+    let sr = REG.secsr.read();
     if sr & ERR_MASK != 0 {
-        write_volatile(FLASH_SECSR, sr & ERR_MASK);
+        REG.secsr.write(sr & ERR_MASK);
     }
 }
 
 /// Unlock the secure flash controller for programming/erase.
-unsafe fn unlock() {
+fn unlock() {
     // If already unlocked, the key writes are ignored.
-    write_volatile(FLASH_SECKEYR, KEY1);
-    write_volatile(FLASH_SECKEYR, KEY2);
+    REG.seckeyr.write(KEY1);
+    REG.seckeyr.write(KEY2);
 }
 
 /// Lock the secure flash controller.
-unsafe fn lock() {
-    let cr = read_volatile(FLASH_SECCR);
-    write_volatile(FLASH_SECCR, cr | LOCK);
+fn lock() {
+    REG.seccr.set_bits(LOCK);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +192,10 @@ unsafe fn lock() {
 /// Erase the key storage page (page 127, 8 KB).
 ///
 /// After erase, all bytes in the page read as 0xFF.
+///
+/// # Safety
+/// Erases persistent flash. Caller must ensure no other code is relying
+/// on the current contents of page 127.
 pub unsafe fn erase_key_page() -> Result<(), ()> {
     // HIGH-12 fix: interrupt-free around the erase sequence.
     cortex_m::interrupt::free(|_| {
@@ -165,13 +204,13 @@ pub unsafe fn erase_key_page() -> Result<(), ()> {
         unlock();
 
         let cr = PER | (KEY_PAGE_NUM << PNB_SHIFT);
-        write_volatile(FLASH_SECCR, cr);
-        write_volatile(FLASH_SECCR, cr | STRT);
+        REG.seccr.write(cr);
+        REG.seccr.write(cr | STRT);
 
         wait_bsy();
 
-        write_volatile(FLASH_SECCR, 0);
-        let sr = read_volatile(FLASH_SECSR);
+        REG.seccr.write(0);
+        let sr = REG.secsr.read();
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -204,6 +243,10 @@ pub unsafe fn erase_key_page() -> Result<(), ()> {
 /// in an inconsistent state. On STM32U5 an interrupted program
 /// sequence can latch PGSERR; the `free` block keeps the sequence
 /// atomic.
+///
+/// # Safety
+/// Commits bytes to flash. Caller must guarantee `addr` is quad-word
+/// aligned, inside a writable secure-bank page, and currently erased.
 unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
     cortex_m::interrupt::free(|_| {
         wait_bsy();
@@ -211,7 +254,7 @@ unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
         unlock();
 
         // Set PG bit
-        write_volatile(FLASH_SECCR, PG);
+        REG.seccr.write(PG);
 
         // Write 4 × 32-bit words to the target address.
         let dst = addr as *mut u32;
@@ -222,14 +265,18 @@ unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
                 data[i * 4 + 2],
                 data[i * 4 + 3],
             ]);
-            write_volatile(dst.add(i), word);
+            // SAFETY: caller asserts `addr..addr+16` is a valid, erased,
+            // quad-word-aligned flash region. Volatile prevents the
+            // compiler from reordering or coalescing the four word writes
+            // that the flash controller expects in sequence.
+            unsafe { write_volatile(dst.add(i), word) };
         }
 
         wait_bsy();
 
         // Clear PG
-        write_volatile(FLASH_SECCR, 0);
-        let sr = read_volatile(FLASH_SECSR);
+        REG.seccr.write(0);
+        let sr = REG.secsr.read();
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -255,12 +302,18 @@ unsafe fn write_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
 /// Use this for anything that matters (admin PIN, PBS, pairing key,
 /// wipe flag). Internal helpers that don't care about durability can
 /// keep using `write_quadword`.
+///
+/// # Safety
+/// Same contract as [`write_quadword`].
 pub unsafe fn write_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
-    write_quadword(addr, data)?;
+    // SAFETY: forwarded contract from caller.
+    unsafe { write_quadword(addr, data)? };
 
     let src = addr as *const u8;
     for i in 0..16 {
-        if read_volatile(src.add(i)) != data[i] {
+        // SAFETY: caller's contract guarantees `addr..addr+16` is a
+        // valid 16-byte flash region; we only read.
+        if unsafe { read_volatile(src.add(i)) } != data[i] {
             return Err(());
         }
     }
@@ -268,18 +321,22 @@ pub unsafe fn write_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), 
 }
 
 /// Read 32 bytes from the start of the key storage page.
-pub unsafe fn read_key(buf: &mut [u8; 32]) {
+pub fn read_key(buf: &mut [u8; 32]) {
     let src = KEY_PAGE_ADDR as *const u8;
     for i in 0..32 {
-        buf[i] = read_volatile(src.add(i));
+        // SAFETY: `KEY_PAGE_ADDR` is a fixed in-flash region of at least
+        // 8 KB; `src.add(0..32)` stays inside that page. Reads from
+        // memory-mapped flash are side-effect-free.
+        buf[i] = unsafe { read_volatile(src.add(i)) };
     }
 }
 
 /// Check whether the key storage page is blank (first 32 bytes = 0xFF).
-pub unsafe fn is_key_blank() -> bool {
+pub fn is_key_blank() -> bool {
     let src = KEY_PAGE_ADDR as *const u8;
     for i in 0..32 {
-        if read_volatile(src.add(i)) != 0xFF {
+        // SAFETY: same as `read_key`.
+        if unsafe { read_volatile(src.add(i)) } != 0xFF {
             return false;
         }
     }
@@ -289,18 +346,25 @@ pub unsafe fn is_key_blank() -> bool {
 /// Write a 32-byte key to the key storage page.
 ///
 /// Erases the page first, then programs two quad-words (2 × 16 bytes).
+///
+/// # Safety
+/// Overwrites persistent flash at `KEY_PAGE_ADDR`. Caller is responsible
+/// for any prior contents.
 pub unsafe fn write_key(key: &[u8; 32]) -> Result<(), ()> {
-    erase_key_page()?;
+    // SAFETY: caller's contract.
+    unsafe { erase_key_page()? };
 
     // First quad-word: bytes 0-15
     let mut qw0 = [0u8; 16];
     qw0.copy_from_slice(&key[..16]);
-    write_quadword_verified(KEY_PAGE_ADDR, &qw0)?;
+    // SAFETY: page was just erased to 0xFF; address is aligned and in-page.
+    unsafe { write_quadword_verified(KEY_PAGE_ADDR, &qw0)? };
 
     // Second quad-word: bytes 16-31
     let mut qw1 = [0u8; 16];
     qw1.copy_from_slice(&key[16..]);
-    write_quadword_verified(KEY_PAGE_ADDR + 16, &qw1)?;
+    // SAFETY: see above.
+    unsafe { write_quadword_verified(KEY_PAGE_ADDR + 16, &qw1)? };
 
     Ok(())
 }
@@ -342,6 +406,9 @@ const WIPE_FLAG_OFFSET: u32 = 16;
 const WIPE_FLAG_ARMED: u8 = 0x00;
 
 /// Erase page 125. Clears both the admin PIN and the wipe flag.
+///
+/// # Safety
+/// Erases persistent flash at `ADMIN_PAGE_ADDR`.
 pub unsafe fn erase_admin_page() -> Result<(), ()> {
     cortex_m::interrupt::free(|_| {
         wait_bsy();
@@ -349,13 +416,13 @@ pub unsafe fn erase_admin_page() -> Result<(), ()> {
         unlock();
 
         let cr = PER | (ADMIN_PAGE_NUM << PNB_SHIFT);
-        write_volatile(FLASH_SECCR, cr);
-        write_volatile(FLASH_SECCR, cr | STRT);
+        REG.seccr.write(cr);
+        REG.seccr.write(cr | STRT);
 
         wait_bsy();
 
-        write_volatile(FLASH_SECCR, 0);
-        let sr = read_volatile(FLASH_SECSR);
+        REG.seccr.write(0);
+        let sr = REG.secsr.read();
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -387,16 +454,21 @@ pub unsafe fn erase_admin_page() -> Result<(), ()> {
 /// NOR flash supports without pre-erase. The admin PIN at QW 0 is
 /// preserved so the wipe routine can still authenticate against
 /// ADMIN_WIPE_OBJ during resume.
+///
+/// # Safety
+/// Programs a flash quad-word at `ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET`.
 pub unsafe fn arm_wipe_flag() -> Result<(), ()> {
     let mut qw = [0xFFu8; 16];
     qw[0] = WIPE_FLAG_ARMED;
-    write_quadword_verified(ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET, &qw)
+    // SAFETY: forwarded contract; target QW is the dedicated wipe-flag slot.
+    unsafe { write_quadword_verified(ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET, &qw) }
 }
 
 /// Read the wipe-in-progress flag. Returns true iff armed.
-pub unsafe fn is_wipe_armed() -> bool {
+pub fn is_wipe_armed() -> bool {
     let src = (ADMIN_PAGE_ADDR + WIPE_FLAG_OFFSET) as *const u8;
-    read_volatile(src) == WIPE_FLAG_ARMED
+    // SAFETY: fixed in-flash address inside page 125; memory-mapped read.
+    unsafe { read_volatile(src) == WIPE_FLAG_ARMED }
 }
 
 // ---------------------------------------------------------------------------
@@ -478,9 +550,9 @@ const PIN_ATTEMPTS_QW_SIZE: u32 = 16;
 /// `pin_attempts_bump`'s `pre >= PIN_ATTEMPTS_CAPACITY`) treats this
 /// as "lockout reached."
 pub unsafe fn pin_attempts_read() -> u8 {
-    let fwd = pin_attempts_scan_forward();
+    let fwd = unsafe { pin_attempts_scan_forward() };
     crate::fi::wait_random();
-    let rev = pin_attempts_scan_reverse();
+    let rev = unsafe { pin_attempts_scan_reverse() };
     if fwd != rev {
         // Fail-closed sentinel. `PIN_ATTEMPTS_CAPACITY` = 32 >
         // `MAX_ATTEMPTS` = 10, so every gate treats this as locked.
@@ -494,11 +566,13 @@ unsafe fn pin_attempts_scan_forward() -> u8 {
     let base = PIN_ATTEMPTS_PAGE_ADDR as *const u8;
     let mut count: u8 = 0;
     for qw_idx in 0..PIN_ATTEMPTS_CAPACITY {
-        let qw_base = base.add((qw_idx * PIN_ATTEMPTS_QW_SIZE) as usize);
+        // SAFETY: `qw_idx * 16 < 512` stays inside the 8 KB page.
+        let qw_base = unsafe { base.add((qw_idx * PIN_ATTEMPTS_QW_SIZE) as usize) };
         // Any non-0xFF byte inside this QW marks it "programmed".
         let mut programmed = false;
         for byte_idx in 0..PIN_ATTEMPTS_QW_SIZE {
-            if read_volatile(qw_base.add(byte_idx as usize)) != 0xFF {
+            // SAFETY: `byte_idx < 16` keeps the offset inside the QW.
+            if unsafe { read_volatile(qw_base.add(byte_idx as usize)) } != 0xFF {
                 programmed = true;
                 break;
             }
@@ -557,6 +631,9 @@ unsafe fn pin_attempts_scan_reverse() -> u8 {
 /// (blank QWs between programmed ones); `pin_attempts_read` counts
 /// strictly in-order and stops at the first blank, so such a write
 /// is detected as "count unchanged" and similarly rejected.
+///
+/// # Safety
+/// Same contract as [`pin_attempts_read`].
 pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
     let pre = pin_attempts_read();
     if (pre as u32) >= PIN_ATTEMPTS_CAPACITY {
@@ -566,7 +643,8 @@ pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
     let target_addr =
         PIN_ATTEMPTS_PAGE_ADDR + (pre as u32) * PIN_ATTEMPTS_QW_SIZE;
     let sentinel = [0u8; 16];
-    write_quadword_verified(target_addr, &sentinel)?;
+    // SAFETY: target QW is inside page 124 and was confirmed blank above.
+    unsafe { write_quadword_verified(target_addr, &sentinel)? };
 
     // FI hardening: volatile-delay between write and readback so a
     // clock-aligned glitch that skipped the write cannot also suppress
@@ -579,7 +657,9 @@ pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
     }
     // Re-read under a sentinel-gated check — a glitch that skips the
     // `if post != pre + 1` bypass has to also defeat `fi::check_true`.
-    if crate::fi::check_true_into_sentinel(|| pin_attempts_read() == pre + 1) != crate::fi::OK_SENTINEL {
+    if crate::fi::check_true_into_sentinel(|| pin_attempts_read() == pre + 1)
+        != crate::fi::OK_SENTINEL
+    {
         return Err(());
     }
     Ok(post)
@@ -588,6 +668,11 @@ pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
 /// Erase page 124 — clears every attempt marker back to blank.
 /// Called only after a successful PIN verify completes end-to-end
 /// on both SEs. After this, `pin_attempts_read()` returns 0.
+///
+/// # Safety
+/// Erases the PIN-attempt counter page. Must only be called after a
+/// successful PIN verify on both SEs; an out-of-order call would
+/// silently reset the lockout state.
 pub unsafe fn pin_attempts_reset() -> Result<(), ()> {
     cortex_m::interrupt::free(|_| {
         wait_bsy();
@@ -595,13 +680,13 @@ pub unsafe fn pin_attempts_reset() -> Result<(), ()> {
         unlock();
 
         let cr = PER | (PIN_ATTEMPTS_PAGE_NUM << PNB_SHIFT);
-        write_volatile(FLASH_SECCR, cr);
-        write_volatile(FLASH_SECCR, cr | STRT);
+        REG.seccr.write(cr);
+        REG.seccr.write(cr | STRT);
 
         wait_bsy();
 
-        write_volatile(FLASH_SECCR, 0);
-        let sr = read_volatile(FLASH_SECSR);
+        REG.seccr.write(0);
+        let sr = REG.secsr.read();
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -749,31 +834,26 @@ pub fn slot_ns_pages(slot: Slot) -> (u32, u32) {
 /// NSKEYR register, enabling programming of pages covered by the NS
 /// watermark (bank 2 in our layout). A failed unlock latches OPTLOCK;
 /// recovery requires a system reset.
-unsafe fn unlock_ns() {
-    unsafe {
-        write_volatile(FLASH_NSKEYR, KEY1);
-        write_volatile(FLASH_NSKEYR, KEY2);
-    }
+fn unlock_ns() {
+    REG.nskeyr.write(KEY1);
+    REG.nskeyr.write(KEY2);
 }
 
 /// Lock the NS flash controller after a program/erase sequence.
-unsafe fn lock_ns() {
-    unsafe {
-        let cr = read_volatile(FLASH_NSCR);
-        write_volatile(FLASH_NSCR, cr | LOCK);
-    }
+fn lock_ns() {
+    REG.nscr.set_bits(LOCK);
 }
 
-unsafe fn wait_bsy_ns() {
-    while unsafe { read_volatile(FLASH_NSSR) } & BSY != 0 {
+fn wait_bsy_ns() {
+    while REG.nssr.read() & BSY != 0 {
         cortex_m::asm::nop();
     }
 }
 
-unsafe fn clear_errors_ns() {
-    let sr = unsafe { read_volatile(FLASH_NSSR) };
+fn clear_errors_ns() {
+    let sr = REG.nssr.read();
     if sr & ERR_MASK != 0 {
-        unsafe { write_volatile(FLASH_NSSR, sr & ERR_MASK) };
+        REG.nssr.write(sr & ERR_MASK);
     }
 }
 
@@ -785,24 +865,28 @@ unsafe fn clear_errors_ns() {
 /// attempt to erase a slot that the FSBL has marked locked — though
 /// WRP in our design only covers the FSBL pages themselves, not the
 /// slots).
+///
+/// # Safety
+/// Erases a non-secure-bank page. Caller must ensure the page is part
+/// of the inactive A/B slot.
 pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
     assert!(page <= 127, "ns-bank page out of range");
     let page = page as u32;
 
-    cortex_m::interrupt::free(|_| unsafe {
+    cortex_m::interrupt::free(|_| {
         wait_bsy_ns();
         clear_errors_ns();
         unlock_ns();
 
         // BKER=1 selects bank 2.
         let cr = PER | BKER | (page << PNB_SHIFT);
-        write_volatile(FLASH_NSCR, cr);
-        write_volatile(FLASH_NSCR, cr | STRT);
+        REG.nscr.write(cr);
+        REG.nscr.write(cr | STRT);
 
         wait_bsy_ns();
 
-        write_volatile(FLASH_NSCR, 0);
-        let sr = read_volatile(FLASH_NSSR);
+        REG.nscr.write(0);
+        let sr = REG.nssr.read();
         lock_ns();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -825,16 +909,19 @@ pub unsafe fn erase_ns_page(page: u8) -> Result<(), ()> {
 /// Same semantics as `write_quadword`: returns `Err(())` only on a
 /// flagged error. **Not** read-back verified — for persistence use
 /// [`write_ns_quadword_verified`] which adds the brown-out guard.
+///
+/// # Safety
+/// Same shape as [`write_quadword`] but targets bank 2.
 unsafe fn write_ns_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
     debug_assert!(addr >= 0x0810_0000 && addr < 0x0820_0000);
     debug_assert_eq!(addr & 0xF, 0);
 
-    cortex_m::interrupt::free(|_| unsafe {
+    cortex_m::interrupt::free(|_| {
         wait_bsy_ns();
         clear_errors_ns();
         unlock_ns();
 
-        write_volatile(FLASH_NSCR, PG);
+        REG.nscr.write(PG);
 
         let dst = addr as *mut u32;
         for i in 0..4 {
@@ -844,13 +931,17 @@ unsafe fn write_ns_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
                 data[i * 4 + 2],
                 data[i * 4 + 3],
             ]);
-            write_volatile(dst.add(i), word);
+            // SAFETY: caller asserts `addr..addr+16` is a valid, erased,
+            // quad-word-aligned bank-2 flash region. Volatile guarantees the
+            // four word writes happen in order, as the flash controller
+            // expects.
+            unsafe { write_volatile(dst.add(i), word) };
         }
 
         wait_bsy_ns();
 
-        write_volatile(FLASH_NSCR, 0);
-        let sr = read_volatile(FLASH_NSSR);
+        REG.nscr.write(0);
+        let sr = REG.nssr.read();
         lock_ns();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -867,39 +958,46 @@ unsafe fn write_ns_quadword(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
 /// Program one bank-2 quad-word and verify the bytes landed. Defends
 /// against silent torn writes (brown-out mid-program leaving some bits
 /// committed) — same invariant as [`write_quadword_verified`] on bank 1.
+///
+/// # Safety
+/// Same contract as [`write_ns_quadword`].
 pub unsafe fn write_ns_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
-    unsafe {
-        write_ns_quadword(addr, data)?;
+    // SAFETY: forwarded contract.
+    unsafe { write_ns_quadword(addr, data)? };
 
-        let src = addr as *const u8;
-        for i in 0..16 {
-            if read_volatile(src.add(i)) != data[i] {
-                return Err(());
-            }
+    let src = addr as *const u8;
+    for i in 0..16 {
+        // SAFETY: `addr..addr+16` was just written; read-back stays in-region.
+        if unsafe { read_volatile(src.add(i)) } != data[i] {
+            return Err(());
         }
-        Ok(())
     }
+    Ok(())
 }
 
 /// Erase a page that's part of a slot (dispatches to SECCR for secure
 /// bank-1 pages and NSCR for NS bank-2 pages based on the absolute
 /// page index). Used by `CMD_FW_BEGIN` to prepare the inactive slot
 /// before streaming starts.
+///
+/// # Safety
+/// Erases a secure-bank page. Caller must ensure the page is part of
+/// the inactive A/B slot or is otherwise safe to clear.
 pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {
     assert!(page <= 127, "bank-1 page out of range");
-    cortex_m::interrupt::free(|_| unsafe {
+    cortex_m::interrupt::free(|_| {
         wait_bsy();
         clear_errors();
         unlock();
 
         let cr = PER | (page << PNB_SHIFT);
-        write_volatile(FLASH_SECCR, cr);
-        write_volatile(FLASH_SECCR, cr | STRT);
+        REG.seccr.write(cr);
+        REG.seccr.write(cr | STRT);
 
         wait_bsy();
 
-        write_volatile(FLASH_SECCR, 0);
-        let sr = read_volatile(FLASH_SECSR);
+        REG.seccr.write(0);
+        let sr = REG.secsr.read();
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -920,20 +1018,27 @@ pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {
 /// manifest still intact (and the now-partially-erased slot unusable,
 /// which matches the previous state exactly — the old manifest
 /// pointed at the *other* slot).
+///
+/// # Safety
+/// Erases all pages of `slot`. Caller must ensure `slot` is the
+/// inactive A/B slot.
 pub unsafe fn erase_slot(slot: Slot) -> Result<(), ()> {
     let (first_s, last_s) = slot_secure_pages(slot);
     let (first_ns, last_ns) = slot_ns_pages(slot);
 
     for p in first_ns..=last_ns {
+        // SAFETY: forwarded contract.
         unsafe { erase_ns_page(p as u8)? };
     }
     for p in first_s..=last_s {
+        // SAFETY: forwarded contract.
         unsafe { erase_secure_page(p)? };
     }
     // Erase the target manifest last: this is what FSBL keys off to
     // decide whether the slot is active. While the manifest is erased
     // (all-0xFF), FSBL will reject it as BadMagic, so it cannot be
     // booted — and the other slot's manifest is still whole.
+    // SAFETY: forwarded contract.
     unsafe { erase_secure_page(manifest_page_num(slot))? };
 
     Ok(())
@@ -943,10 +1048,16 @@ pub unsafe fn erase_slot(slot: Slot) -> Result<(), ()> {
 /// correct controller (SECCR for bank 1, NSCR for bank 2) based on
 /// the address. Returns `Err(())` on any flagged error or torn-write
 /// detection.
+///
+/// # Safety
+/// Commits 16 bytes to flash at `addr`. Caller must ensure the address
+/// is inside the inactive A/B slot and currently erased.
 pub unsafe fn write_slot_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), ()> {
     if (0x0810_0000..0x0820_0000).contains(&addr) {
+        // SAFETY: forwarded contract; bank-2 dispatch.
         unsafe { write_ns_quadword_verified(addr, data) }
     } else if (0x0C00_0000..0x0C10_0000).contains(&addr) {
+        // SAFETY: forwarded contract; bank-1 dispatch.
         unsafe { write_quadword_verified(addr, data) }
     } else {
         Err(())
@@ -1039,9 +1150,11 @@ fn entry_qw(slot_key: &[u8; 8], entry_type: u8, count: u64) -> [u8; 16] {
 /// upgraded across the cutover: `cmd_sign_offchain` refuses with
 /// `OffchainSlotUnregistered` after one or more successful UserOps that
 /// (silently) appended valid entries past a stale type-byte-0xFF QW.
-unsafe fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
+///
+fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
     let base = qw_addr as *const u8;
-    let type_byte = read_volatile(base.add(8));
+    // SAFETY: `base.add(8)` stays inside the QW.
+    let type_byte = unsafe { read_volatile(base.add(8)) };
     if type_byte == 0xFF {
         // Type byte is 0xFF — could be a truly-blank QW (end of journal)
         // or a stale QW where only the type byte happens to read 0xFF.
@@ -1049,7 +1162,8 @@ unsafe fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
         // uses; only an all-blank QW signals end-of-journal.
         let mut all_blank = true;
         for k in 0..(OFFCHAIN_QW_SIZE as usize) {
-            if read_volatile(base.add(k)) != 0xFF {
+            // SAFETY: `k < 16` stays inside the QW.
+            if unsafe { read_volatile(base.add(k)) } != 0xFF {
                 all_blank = false;
                 break;
             }
@@ -1066,11 +1180,13 @@ unsafe fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
     }
     let mut slot_key = [0u8; 8];
     for i in 0..8 {
-        slot_key[i] = read_volatile(base.add(i));
+        // SAFETY: `i < 8` stays inside the QW.
+        slot_key[i] = unsafe { read_volatile(base.add(i)) };
     }
     let mut count_bytes = [0u8; 8];
     for i in 0..7 {
-        count_bytes[1 + i] = read_volatile(base.add(9 + i));
+        // SAFETY: `9 + i < 16` stays inside the QW.
+        count_bytes[1 + i] = unsafe { read_volatile(base.add(9 + i)) };
     }
     let count = u64::from_be_bytes(count_bytes);
     Some((type_byte, slot_key, count))
@@ -1088,13 +1204,16 @@ unsafe fn parse_entry(qw_addr: u32) -> Option<(u8, [u8; 8], u64)> {
 /// QW with `write_quadword_verified` PROGERRs (NOR flash can only
 /// flip 1→0; it cannot re-program a bit that is already 0) and the
 /// caller surfaces it as "Sig commit FAIL".
-unsafe fn find_next_blank_idx() -> Option<u32> {
+///
+fn find_next_blank_idx() -> Option<u32> {
     let base = OFFCHAIN_PAGE_ADDR as *const u8;
     for i in 0..OFFCHAIN_CAPACITY {
-        let qw_base = base.add((i * OFFCHAIN_QW_SIZE) as usize);
+        // SAFETY: `i * 16 < 8192` stays inside the page.
+        let qw_base = unsafe { base.add((i * OFFCHAIN_QW_SIZE) as usize) };
         let mut all_blank = true;
         for k in 0..(OFFCHAIN_QW_SIZE as usize) {
-            if read_volatile(qw_base.add(k)) != 0xFF {
+            // SAFETY: `k < 16` stays inside the QW.
+            if unsafe { read_volatile(qw_base.add(k)) } != 0xFF {
                 all_blank = false;
                 break;
             }
@@ -1112,10 +1231,13 @@ unsafe fn find_next_blank_idx() -> Option<u32> {
 /// pre-all-C10 per-slot state and never erased), the safest recovery
 /// is a single bulk erase — there are no surviving valid entries to
 /// preserve.
-unsafe fn offchain_page_is_blank() -> bool {
+///
+#[allow(dead_code)]
+fn offchain_page_is_blank() -> bool {
     let base = OFFCHAIN_PAGE_ADDR as *const u8;
     for i in 0..(OFFCHAIN_CAPACITY * OFFCHAIN_QW_SIZE) as usize {
-        if read_volatile(base.add(i)) != 0xFF {
+        // SAFETY: `i < 8192` stays inside the page.
+        if unsafe { read_volatile(base.add(i)) } != 0xFF {
             return false;
         }
     }
@@ -1127,6 +1249,9 @@ unsafe fn offchain_page_is_blank() -> bool {
 /// part of compaction (which immediately re-writes the latest values
 /// before any other code touches the page) or in a deliberate
 /// reset-to-factory flow.
+///
+/// # Safety
+/// Erases persistent flash at `OFFCHAIN_PAGE_ADDR`.
 unsafe fn erase_offchain_page() -> Result<(), ()> {
     cortex_m::interrupt::free(|_| {
         wait_bsy();
@@ -1134,13 +1259,13 @@ unsafe fn erase_offchain_page() -> Result<(), ()> {
         unlock();
 
         let cr = PER | (OFFCHAIN_PAGE_NUM << PNB_SHIFT);
-        write_volatile(FLASH_SECCR, cr);
-        write_volatile(FLASH_SECCR, cr | STRT);
+        REG.seccr.write(cr);
+        REG.seccr.write(cr | STRT);
 
         wait_bsy();
 
-        write_volatile(FLASH_SECCR, 0);
-        let sr = read_volatile(FLASH_SECSR);
+        REG.seccr.write(0);
+        let sr = REG.secsr.read();
         lock();
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
@@ -1176,7 +1301,7 @@ struct SlotEntry {
 /// table is allocated on the caller's stack via the in/out reference.
 ///
 /// Returns the number of distinct slot_keys observed.
-unsafe fn scan_page_into_table(table: &mut [SlotEntry; MAX_ACTIVE_SLOTS]) -> usize {
+fn scan_page_into_table(table: &mut [SlotEntry; MAX_ACTIVE_SLOTS]) -> usize {
     let mut n: usize = 0;
     for i in 0..OFFCHAIN_CAPACITY {
         let addr = OFFCHAIN_PAGE_ADDR + i * OFFCHAIN_QW_SIZE;
@@ -1235,6 +1360,9 @@ unsafe fn scan_page_into_table(table: &mut [SlotEntry; MAX_ACTIVE_SLOTS]) -> usi
 /// leaves the page (partially) erased, which loses counters for some
 /// slots — those slots then look unregistered, which forces a Type 1
 /// re-registration but does not break correctness.
+///
+/// # Safety
+/// Erases and rewrites page 123.
 unsafe fn compact_page() -> Result<(), ()> {
     let mut table = [SlotEntry {
         slot_key: [0u8; 8],
@@ -1245,7 +1373,8 @@ unsafe fn compact_page() -> Result<(), ()> {
     }; MAX_ACTIVE_SLOTS];
     let n = scan_page_into_table(&mut table);
 
-    erase_offchain_page()?;
+    // SAFETY: about to replay from SRAM.
+    unsafe { erase_offchain_page()? };
 
     // Replay: write surviving entries at the start of the page.
     for j in 0..n {
@@ -1256,7 +1385,10 @@ unsafe fn compact_page() -> Result<(), ()> {
             // Find next blank inside the freshly-erased page.
             let blank = find_next_blank_idx().ok_or(())?;
             idx = blank;
-            write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, &qw)?;
+            // SAFETY: target QW is inside page 123 and was just erased.
+            unsafe {
+                write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, &qw)?
+            };
         }
         if entry.has_offchain {
             let qw = entry_qw(&entry.slot_key, OFFCHAIN_TYPE_COUNT, entry.offchain_count);
@@ -1265,7 +1397,10 @@ unsafe fn compact_page() -> Result<(), ()> {
             if blank < idx {
                 return Err(());
             }
-            write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, &qw)?;
+            // SAFETY: target QW is inside page 123 and was just erased.
+            unsafe {
+                write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, &qw)?
+            };
         }
     }
     Ok(())
@@ -1287,15 +1422,23 @@ unsafe fn compact_page() -> Result<(), ()> {
 ///    written by long-since-removed firmware. Compaction would have
 ///    surfaced that as `Some((0, _, _))` "unknown type" entries which
 ///    are explicitly skipped, so the bulk erase loses nothing live.
+///
+/// # Safety
+/// Programs page 123.
 unsafe fn write_entry(qw: &[u8; 16]) -> Result<(), ()> {
     if find_next_blank_idx().is_none() {
-        compact_page()?;
+        // SAFETY: caller asserts page 123 is writable; compaction is
+        // power-loss-tolerant per its doc comment.
+        unsafe { compact_page()? };
     }
 
     // First write attempt — at the QW chosen by find_next_blank_idx.
     if let Some(blank) = find_next_blank_idx() {
-        if write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw)
-            .is_ok()
+        // SAFETY: target QW is inside page 123 and was just observed blank.
+        if unsafe {
+            write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw)
+        }
+        .is_ok()
         {
             return Ok(());
         }
@@ -1304,9 +1447,11 @@ unsafe fn write_entry(qw: &[u8; 16]) -> Result<(), ()> {
     // Self-heal: bulk-erase the page and retry once. After the erase
     // the whole page is 0xFF, so find_next_blank_idx returns 0 and the
     // write must succeed (or the flash itself is dead).
-    erase_offchain_page()?;
+    // SAFETY: see write_entry's # Safety contract.
+    unsafe { erase_offchain_page()? };
     let blank = find_next_blank_idx().ok_or(())?;
-    write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw)
+    // SAFETY: target QW is inside page 123 and was just erased.
+    unsafe { write_quadword_verified(OFFCHAIN_PAGE_ADDR + blank * OFFCHAIN_QW_SIZE, qw) }
 }
 
 /// Forward scan — the original log-structured implementation. Stops at the
@@ -1422,6 +1567,10 @@ pub unsafe fn last_userop_count_read(slot_key: &[u8; 8]) -> u64 {
 /// F-12-hardened: forward + reverse double scan, halt-on-mismatch. The
 /// answer is a single bit so a fault on one direction's return could flip
 /// it; reverse cross-check catches that.
+///
+/// # Safety
+/// Same contract as the other `offchain_count_*` readers — reads from
+/// the page-123 journal.
 pub unsafe fn offchain_count_is_registered(slot_key: &[u8; 8]) -> bool {
     let sk_a: [u8; 8] = *slot_key;
     crate::fi::wait_random();
@@ -1429,9 +1578,9 @@ pub unsafe fn offchain_count_is_registered(slot_key: &[u8; 8]) -> bool {
     if sk_a != sk_b {
         return false;
     }
-    let r1 = is_registered_forward(&sk_a);
+    let r1 = unsafe { is_registered_forward(&sk_a) };
     crate::fi::wait_random();
-    let r2 = is_registered_reverse(&sk_b);
+    let r2 = unsafe { is_registered_reverse(&sk_b) };
     if r1 != r2 {
         // Fail-closed: report unregistered → refuses the off-chain sign
         // path until the next call.
@@ -1472,12 +1621,16 @@ unsafe fn is_registered_reverse(slot_key: &[u8; 8]) -> bool {
 /// Write the "slot is registered" marker (a last_userop_count = 0
 /// entry). No-op if already registered. Called by `cmd_sign_userop`
 /// when it signs a Type 1 for a fresh slot.
+///
+/// # Safety
+/// Programs page 123.
 pub unsafe fn offchain_count_register_slot(slot_key: &[u8; 8]) -> Result<(), ()> {
     if offchain_count_is_registered(slot_key) {
         return Ok(());
     }
     let qw = entry_qw(slot_key, OFFCHAIN_TYPE_USEROP, 0);
-    write_entry(&qw)
+    // SAFETY: forwarded contract.
+    unsafe { write_entry(&qw) }
 }
 
 /// Bump the off-chain sig counter to `new_count`. Reverts via `Err(())`
@@ -1492,6 +1645,9 @@ pub unsafe fn offchain_count_register_slot(slot_key: &[u8; 8]) -> Result<(), ()>
 /// while OUR slot's counter never advanced. Defense: dereference the
 /// caller's slot_key into TWO local copies with `wait_random()` between,
 /// compare; halt if they differ. Then use only the locally-verified copy.
+///
+/// # Safety
+/// Programs page 123.
 pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<(), ()> {
     // F-12: input redundancy on slot_key. Catches stuck-at on the
     // slot_key pointer/register at function entry.
@@ -1508,14 +1664,17 @@ pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<
         return Err(());
     }
     let qw = entry_qw(slot_key, OFFCHAIN_TYPE_COUNT, new_count);
-    write_entry(&qw)?;
+    // SAFETY: forwarded contract.
+    unsafe { write_entry(&qw)? };
     // FI hardening: read-back the post-bump value, refuse if it didn't
     // land. Mirrors `pin_attempts_bump`.
     let post = offchain_count_read(slot_key);
     if post != new_count {
         return Err(());
     }
-    if crate::fi::check_true_into_sentinel(|| offchain_count_read(slot_key) == new_count) != crate::fi::OK_SENTINEL {
+    if crate::fi::check_true_into_sentinel(|| offchain_count_read(slot_key) == new_count)
+        != crate::fi::OK_SENTINEL
+    {
         return Err(());
     }
     Ok(())
@@ -1533,6 +1692,9 @@ pub unsafe fn offchain_count_bump(slot_key: &[u8; 8], new_count: u64) -> Result<
 /// mark here keeps the firmware's view consistent with what was last
 /// committed to the chain so the next Type 2 sig commits a value the
 /// chain will accept.
+///
+/// # Safety
+/// Programs page 123.
 pub unsafe fn offchain_count_promote_to(slot_key: &[u8; 8], target: u64) -> Result<(), ()> {
     // F-12: slot_key input-redundancy (see offchain_count_bump for rationale).
     let sk_a: [u8; 8] = *slot_key;
@@ -1548,7 +1710,8 @@ pub unsafe fn offchain_count_promote_to(slot_key: &[u8; 8], target: u64) -> Resu
         return Ok(());
     }
     let qw = entry_qw(slot_key, OFFCHAIN_TYPE_COUNT, target);
-    write_entry(&qw)
+    // SAFETY: forwarded contract.
+    unsafe { write_entry(&qw) }
 }
 
 /// Update the last_userop_count snapshot for `slot_key`. Idempotent if
@@ -1562,6 +1725,9 @@ pub unsafe fn offchain_count_promote_to(slot_key: &[u8; 8], target: u64) -> Resu
 /// `count < pre` in correct execution, and (b) the on-chain
 /// `_setOffchainSigCount` reverts on non-monotonic input — that revert
 /// is the authoritative gate, not this firmware-side check.
+///
+/// # Safety
+/// Programs page 123.
 pub unsafe fn last_userop_count_set(slot_key: &[u8; 8], count: u64) -> Result<(), ()> {
     // F-12: slot_key input-redundancy.
     let sk_a: [u8; 8] = *slot_key;
@@ -1585,5 +1751,6 @@ pub unsafe fn last_userop_count_set(slot_key: &[u8; 8], count: u64) -> Result<()
         return Ok(());
     }
     let qw = entry_qw(slot_key, OFFCHAIN_TYPE_USEROP, count);
-    write_entry(&qw)
+    // SAFETY: forwarded contract.
+    unsafe { write_entry(&qw) }
 }

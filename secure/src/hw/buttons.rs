@@ -28,31 +28,52 @@
 //! The on-board blue USER button (PC13) is also monitored in test mode
 //! as a reference to confirm the firmware is running.
 
-use core::ptr::{read_volatile, write_volatile};
+use crate::hw::mmio::{Reg32, RoReg32};
 
 // ---------------------------------------------------------------------------
-// RCC
+// RCC (secure alias)
 // ---------------------------------------------------------------------------
 const RCC_S: u32 = 0x5602_0C00;
-const RCC_AHB2ENR1: *mut u32 = (RCC_S + 0x8C) as *mut u32;
-const RCC_CFGR1: *const u32 = (RCC_S + 0x1C) as *const u32;
 
 // ---------------------------------------------------------------------------
 // GPIOA (secure alias) — PA8 = RIGHT button (CN13 pin 2 / Arduino D9)
 // ---------------------------------------------------------------------------
 const GPIOA_S: u32 = 0x5202_0000;
-const GPIOA_MODER: *mut u32 = GPIOA_S as *mut u32;
-const GPIOA_PUPDR: *mut u32 = (GPIOA_S + 0x0C) as *mut u32;
-const GPIOA_IDR: *const u32 = (GPIOA_S + 0x10) as *const u32;
 
 // ---------------------------------------------------------------------------
 // GPIOC (secure alias) — PC1 = LEFT button  (CN13 pin 1 / Arduino D8)
 //                         PC13 = on-board USER button (test reference)
 // ---------------------------------------------------------------------------
 const GPIOC_S: u32 = 0x5202_0800;
-const GPIOC_MODER: *mut u32 = GPIOC_S as *mut u32;
-const GPIOC_PUPDR: *mut u32 = (GPIOC_S + 0x0C) as *mut u32;
-const GPIOC_IDR: *const u32 = (GPIOC_S + 0x10) as *const u32;
+
+struct ButtonsRegs {
+    rcc_ahb2enr1: Reg32,
+    rcc_cfgr1: RoReg32,
+    gpioa_moder: Reg32,
+    gpioa_pupdr: Reg32,
+    gpioa_idr: RoReg32,
+    gpioc_moder: Reg32,
+    gpioc_pupdr: Reg32,
+    gpioc_idr: RoReg32,
+}
+
+// SAFETY: each address is a real, 4-byte-aligned MMIO register. The
+// GPIO MODER/PUPDR registers are shared with other drivers but all
+// access is read-modify-write on disjoint bits in the single-threaded
+// secure world. RCC_AHB2ENR1 is touched by `rcc`/`uart`/`i2c_hw` but
+// only via set/clear-bit RMW, so this is safe.
+const REG: ButtonsRegs = unsafe {
+    ButtonsRegs {
+        rcc_ahb2enr1: Reg32::new(RCC_S + 0x8C),
+        rcc_cfgr1: RoReg32::new(RCC_S + 0x1C),
+        gpioa_moder: Reg32::new(GPIOA_S),
+        gpioa_pupdr: Reg32::new(GPIOA_S + 0x0C),
+        gpioa_idr: RoReg32::new(GPIOA_S + 0x10),
+        gpioc_moder: Reg32::new(GPIOC_S),
+        gpioc_pupdr: Reg32::new(GPIOC_S + 0x0C),
+        gpioc_idr: RoReg32::new(GPIOC_S + 0x10),
+    }
+};
 
 // ---------------------------------------------------------------------------
 // Pin assignments (from UM2839 Table 23)
@@ -87,7 +108,7 @@ fn delay_ms(ms: u32) {
 
 /// Detect SYSCLK from RCC_CFGR1 SWS bits.
 fn detect_sysclk_mhz() -> u32 {
-    let cfgr1 = unsafe { read_volatile(RCC_CFGR1) };
+    let cfgr1 = REG.rcc_cfgr1.read();
     match (cfgr1 >> 2) & 0x3 {
         0b11 => 160, // PLL1
         0b01 => 16,  // HSI16
@@ -100,11 +121,11 @@ fn detect_sysclk_mhz() -> u32 {
 // ---------------------------------------------------------------------------
 
 fn left_pressed() -> bool {
-    unsafe { read_volatile(GPIOC_IDR) & LEFT_BIT == 0 }  // PC1
+    REG.gpioc_idr.read() & LEFT_BIT == 0  // PC1
 }
 
 fn right_pressed() -> bool {
-    unsafe { read_volatile(GPIOA_IDR) & RIGHT_BIT == 0 }  // PA8
+    REG.gpioa_idr.read() & RIGHT_BIT == 0  // PA8
 }
 
 // ---------------------------------------------------------------------------
@@ -118,34 +139,28 @@ fn right_pressed() -> bool {
 /// # Safety
 /// Direct register access. Call after `rcc::init()`.
 pub unsafe fn init() {
-    // Calibrate delay to actual clock speed
+    // Calibrate delay to actual clock speed.
+    // SAFETY: single-threaded secure-world write to the calibration constant.
     let mhz = detect_sysclk_mhz();
-    LOOPS_PER_MS = mhz * 200;
+    unsafe { LOOPS_PER_MS = mhz * 200; }
 
     // Enable GPIO clocks: GPIOA (bit 0), GPIOC (bit 2)
-    let ahb2 = read_volatile(RCC_AHB2ENR1);
-    write_volatile(RCC_AHB2ENR1, ahb2 | (1 << 0) | (1 << 2));
+    REG.rcc_ahb2enr1.set_bits((1 << 0) | (1 << 2));
     cortex_m::asm::dsb();
 
     // --- PC1 (LEFT, D8): clear MODER[3:2] → 00 (input), PUPDR → 01 (pull-up) ---
-    let m = read_volatile(GPIOC_MODER);
-    write_volatile(GPIOC_MODER, m & !(0b11 << 2));
-    let p = read_volatile(GPIOC_PUPDR);
-    write_volatile(GPIOC_PUPDR, (p & !(0b11 << 2)) | (0b01 << 2));
+    REG.gpioc_moder.modify(|v| v & !(0b11 << 2));
+    REG.gpioc_pupdr.modify(|v| (v & !(0b11 << 2)) | (0b01 << 2));
 
     // --- PA8 (RIGHT, D9): clear MODER[17:16] → 00 (input), PUPDR → 01 (pull-up) ---
-    // SAFETY: only touching bits 17:16. PA13 (SWDIO) and PA14 (SWCLK) are
-    // untouched — they stay in AF mode for the SWD debug connection.
-    let m = read_volatile(GPIOA_MODER);
-    write_volatile(GPIOA_MODER, m & !(0b11 << 16));
-    let p = read_volatile(GPIOA_PUPDR);
-    write_volatile(GPIOA_PUPDR, (p & !(0b11 << 16)) | (0b01 << 16));
+    // Only touching bits 17:16. PA13 (SWDIO) and PA14 (SWCLK) are untouched —
+    // they stay in AF mode for the SWD debug connection.
+    REG.gpioa_moder.modify(|v| v & !(0b11 << 16));
+    REG.gpioa_pupdr.modify(|v| (v & !(0b11 << 16)) | (0b01 << 16));
 
     // --- PC13 (USER button, test reference): MODER[27:26] → 00 (input), pull-up ---
-    let m = read_volatile(GPIOC_MODER);
-    write_volatile(GPIOC_MODER, m & !(0b11 << 26));
-    let p = read_volatile(GPIOC_PUPDR);
-    write_volatile(GPIOC_PUPDR, (p & !(0b11 << 26)) | (0b01 << 26));
+    REG.gpioc_moder.modify(|v| v & !(0b11 << 26));
+    REG.gpioc_pupdr.modify(|v| (v & !(0b11 << 26)) | (0b01 << 26));
 
     cortex_m::asm::dsb();
 }
@@ -318,7 +333,7 @@ pub unsafe fn run_test() -> ! {
 
     let mut prev_left = left_pressed();
     let mut prev_right = right_pressed();
-    let mut prev_user = read_volatile(GPIOC_IDR) & (1 << 13) == 0;
+    let mut prev_user = REG.gpioc_idr.read() & (1 << 13) == 0;
 
     hprintln!("[BTN] Baseline: PC1(D8)={} PA8(D9)={} PC13(USER)={}",
         prev_left as u8, prev_right as u8, prev_user as u8);
@@ -329,7 +344,7 @@ pub unsafe fn run_test() -> ! {
 
         let l = left_pressed();
         let r = right_pressed();
-        let u = read_volatile(GPIOC_IDR) & (1 << 13) == 0;
+        let u = REG.gpioc_idr.read() & (1 << 13) == 0;
 
         if l != prev_left {
             hprintln!("[BTN]   PC1  (LEFT/D8)  {}", if l { "PRESSED" } else { "released" });

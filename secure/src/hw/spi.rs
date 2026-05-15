@@ -5,12 +5,47 @@
 //! feature). Used by the `tropic01` crate driver for communication with
 //! the TROPIC01 secure element.
 //!
-//! All register addresses are imported from `hw::spi_hw`.
+//! Register base address comes from `hw::spi_hw::SPI_BASE`; this file owns
+//! the per-register `Reg32` / `RoReg32` handles. All MMIO is funnelled
+//! through `hw::mmio::{Reg32, RoReg32}` — the one `unsafe { ... }` for
+//! address binding lives at module scope below.
 
-use core::ptr::{read_volatile, write_volatile};
 use embedded_hal::spi::{self, ErrorKind, Operation};
 
-use crate::hw::spi_hw::*;
+use crate::hw::mmio::{Reg32, RoReg32};
+use crate::hw::spi_hw::{cs_assert, cs_deassert, SPI_BASE};
+
+// ---------------------------------------------------------------------------
+// SPI register handles — STM32U5 SPI v2 layout, offsets from SPI_BASE:
+//   0x00 CR1, 0x04 CR2, 0x14 SR, 0x18 IFCR, 0x20 TXDR, 0x30 RXDR
+// ---------------------------------------------------------------------------
+
+struct SpiRegs {
+    cr1: Reg32,
+    cr2: Reg32,
+    sr: RoReg32,
+    ifcr: Reg32,
+    /// 32-bit-aligned TXDR. The peripheral also exposes 8-bit access at the
+    /// same address (used by `transfer_inplace` for single-byte FIFO writes
+    /// matching DSIZE=8). The 8-bit access stays a tight `unsafe` block in
+    /// the inner loop — `Reg32` is u32-only.
+    txdr_addr: u32,
+    rxdr_addr: u32,
+}
+
+// SAFETY: each address below is a real, 4-byte-aligned MMIO register on the
+// STM32U585 SPI peripheral, exclusively owned by this driver. The secure
+// world is single-threaded and non-preemptive — nothing else races us.
+const REG: SpiRegs = unsafe {
+    SpiRegs {
+        cr1: Reg32::new(SPI_BASE + 0x00),
+        cr2: Reg32::new(SPI_BASE + 0x04),
+        sr: RoReg32::new(SPI_BASE + 0x14),
+        ifcr: Reg32::new(SPI_BASE + 0x18),
+        txdr_addr: SPI_BASE + 0x20,
+        rxdr_addr: SPI_BASE + 0x30,
+    }
+};
 
 // ---------------------------------------------------------------------------
 // SPI SR (Status Register) bit positions — STM32U5 SPI (v2)
@@ -74,59 +109,46 @@ impl Stm32Spi {
     }
 
     /// Enable SPI peripheral and start a master transfer.
-    ///
-    /// # Safety
-    /// Direct register access.
-    unsafe fn enable_and_start(&self, nbytes: u16) {
+    fn enable_and_start(&self, nbytes: u16) {
         // Clear any pending flags
-        write_volatile(SPI_IFCR, IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
+        REG.ifcr.write(IFCR_EOTC | IFCR_TXTFC | IFCR_OVRC);
 
         // Set transfer size in CR2 (TSIZE[15:0])
-        write_volatile(SPI_CR2, nbytes as u32);
+        REG.cr2.write(nbytes as u32);
 
         // Enable SPI (SPE = 1)
-        let cr1 = read_volatile(SPI_CR1);
-        write_volatile(SPI_CR1, cr1 | CR1_SPE);
+        REG.cr1.set_bits(CR1_SPE);
 
         // Start master transfer (CSTART = 1)
-        let cr1 = read_volatile(SPI_CR1);
-        write_volatile(SPI_CR1, cr1 | CR1_CSTART);
+        REG.cr1.set_bits(CR1_CSTART);
     }
 
     /// Wait for end-of-transfer, then disable SPI.
-    ///
-    /// # Safety
-    /// Direct register access.
-    unsafe fn wait_eot_and_disable(&self) -> Result<(), SpiError> {
+    fn wait_eot_and_disable(&self) -> Result<(), SpiError> {
         // Wait for EOT
         for _ in 0..TIMEOUT_LOOPS {
-            let sr = read_volatile(SPI_SR);
+            let sr = REG.sr.read();
             if sr & SR_OVR != 0 {
-                write_volatile(SPI_IFCR, IFCR_OVRC);
+                REG.ifcr.write(IFCR_OVRC);
                 // Don't fail on overrun during EOT wait — data is already transferred
             }
             if sr & SR_EOT != 0 {
                 // Clear EOT and TXTF flags
-                write_volatile(SPI_IFCR, IFCR_EOTC | IFCR_TXTFC);
+                REG.ifcr.write(IFCR_EOTC | IFCR_TXTFC);
 
                 // Disable SPI (SPE = 0)
-                let cr1 = read_volatile(SPI_CR1);
-                write_volatile(SPI_CR1, cr1 & !CR1_SPE);
+                REG.cr1.clear_bits(CR1_SPE);
                 return Ok(());
             }
         }
         // Timeout — force disable
-        let cr1 = read_volatile(SPI_CR1);
-        write_volatile(SPI_CR1, cr1 & !CR1_SPE);
+        REG.cr1.clear_bits(CR1_SPE);
         Err(SpiError::Timeout)
     }
 
     /// Full-duplex transfer of `data` (in-place): sends each byte and
     /// overwrites it with the received byte.
-    ///
-    /// # Safety
-    /// Direct register access.
-    unsafe fn transfer_inplace(&self, data: &mut [u8]) -> Result<(), SpiError> {
+    fn transfer_inplace(&self, data: &mut [u8]) -> Result<(), SpiError> {
         if data.is_empty() {
             return Ok(());
         }
@@ -137,29 +159,37 @@ impl Stm32Spi {
         let mut rx_idx: usize = 0;
 
         while rx_idx < data.len() {
-            let sr = read_volatile(SPI_SR);
+            let sr = REG.sr.read();
 
             // Check overrun
             if sr & SR_OVR != 0 {
-                write_volatile(SPI_IFCR, IFCR_OVRC);
-                let cr1 = read_volatile(SPI_CR1);
-                write_volatile(SPI_CR1, cr1 & !CR1_SPE);
+                REG.ifcr.write(IFCR_OVRC);
+                REG.cr1.clear_bits(CR1_SPE);
                 return Err(SpiError::Overrun);
             }
 
             // Feed TX FIFO if space available and we have bytes left
             if tx_idx < data.len() && sr & SR_TXP != 0 {
-                // Write single byte to TXDR (8-bit access)
-                let txdr_u8 = SPI_TXDR as *mut u8;
-                write_volatile(txdr_u8, data[tx_idx]);
+                // Write single byte to TXDR (8-bit access).
+                // SAFETY: TXDR supports 8-bit writes per RM (DSIZE=8). The
+                // address is owned by this driver; volatile write prevents
+                // reordering across the surrounding register touches.
+                unsafe {
+                    core::ptr::write_volatile(REG.txdr_addr as *mut u8, data[tx_idx]);
+                }
                 tx_idx += 1;
             }
 
             // Drain RX FIFO if data available
             if sr & SR_RXP != 0 {
-                // Read single byte from RXDR (8-bit access)
-                let rxdr_u8 = SPI_RXDR as *const u8;
-                data[rx_idx] = read_volatile(rxdr_u8);
+                // Read single byte from RXDR (8-bit access).
+                // SAFETY: RXDR supports 8-bit reads per RM (DSIZE=8). The
+                // address is owned by this driver; volatile read prevents
+                // reordering across the surrounding register touches.
+                let b = unsafe {
+                    core::ptr::read_volatile(REG.rxdr_addr as *const u8)
+                };
+                data[rx_idx] = b;
                 rx_idx += 1;
             }
         }
@@ -174,8 +204,8 @@ impl spi::ErrorType for Stm32Spi {
 
 impl spi::SpiDevice for Stm32Spi {
     fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
-        // Assert CS at the start of the transaction
-        // SAFETY: GPIO register access, single-threaded secure world
+        // Assert CS at the start of the transaction.
+        // SAFETY: `cs_assert` is a thin GPIO-BSRR write; single-threaded secure world.
         unsafe {
             cs_assert();
         }
@@ -184,29 +214,25 @@ impl spi::SpiDevice for Stm32Spi {
         for op in operations {
             match op {
                 Operation::TransferInPlace(data) => {
-                    // SAFETY: SPI register access
-                    result = unsafe { self.transfer_inplace(data) };
+                    result = self.transfer_inplace(data);
                 }
                 Operation::Read(buf) => {
                     // Send zeros, receive into buf
                     buf.fill(0x00);
-                    // SAFETY: SPI register access
-                    result = unsafe { self.transfer_inplace(buf) };
+                    result = self.transfer_inplace(buf);
                 }
                 Operation::Write(data) => {
                     // Send data, discard received bytes
                     let mut tmp = [0u8; 300]; // MAX_FRAME from semihosting_spi
                     let len = data.len().min(tmp.len());
                     tmp[..len].copy_from_slice(&data[..len]);
-                    // SAFETY: SPI register access
-                    result = unsafe { self.transfer_inplace(&mut tmp[..len]) };
+                    result = self.transfer_inplace(&mut tmp[..len]);
                 }
                 Operation::Transfer(read, write) => {
                     // Copy write data into read buffer, then transfer in-place
                     let len = read.len().min(write.len());
                     read[..len].copy_from_slice(&write[..len]);
-                    // SAFETY: SPI register access
-                    result = unsafe { self.transfer_inplace(&mut read[..len]) };
+                    result = self.transfer_inplace(&mut read[..len]);
                 }
                 Operation::DelayNs(ns) => {
                     // Busy-wait delay. At 160 MHz, ~6.25 ns per cycle.
@@ -222,8 +248,8 @@ impl spi::SpiDevice for Stm32Spi {
             }
         }
 
-        // Deassert CS at the end of the transaction (always, even on error)
-        // SAFETY: GPIO register access
+        // Deassert CS at the end of the transaction (always, even on error).
+        // SAFETY: `cs_deassert` is a thin GPIO-BSRR write; single-threaded secure world.
         unsafe {
             cs_deassert();
         }

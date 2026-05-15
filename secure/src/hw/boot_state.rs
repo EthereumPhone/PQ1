@@ -66,19 +66,22 @@ pub enum BootStateError {
 /// (typical on a freshly-provisioned device where the page is still
 /// all-0xFF).
 pub fn read() -> Result<BootState, BootStateError> {
-    // SAFETY: flash is memory-mapped and readable.
-    if let Some(b) = unsafe { parse_copy(BSTATE_COPY_A_ADDR) } {
+    if let Some(b) = parse_copy(BSTATE_COPY_A_ADDR) {
         return Ok(b);
     }
-    if let Some(b) = unsafe { parse_copy(BSTATE_COPY_B_ADDR) } {
+    if let Some(b) = parse_copy(BSTATE_COPY_B_ADDR) {
         return Ok(b);
     }
     Err(BootStateError::Unavailable)
 }
 
-unsafe fn parse_copy(addr: u32) -> Option<BootState> {
+fn parse_copy(addr: u32) -> Option<BootState> {
     let src = addr as *const u8;
     let mut buf = [0u8; BSTATE_SIZE];
+    // SAFETY: `addr` is one of BSTATE_COPY_{A,B}_ADDR — both are 16-byte
+    // regions inside the memory-mapped flash boot-state page, which is
+    // always readable from the secure world. Volatile prevents the
+    // compiler from caching across flash-write commits.
     for i in 0..BSTATE_SIZE {
         buf[i] = unsafe { read_volatile(src.add(i)) };
     }

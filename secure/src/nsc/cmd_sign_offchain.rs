@@ -56,6 +56,12 @@ use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. The body
+/// snapshots the NS input under `validate_ns_read_ptr`, writes the
+/// signed response under `validate_ns_write_ptr`, and touches
+/// `static mut` driver state (`SE`, `SLOT_CACHE`, `SNAP_BUF`) under
+/// the single-threaded dispatcher invariant + `HandlerGuard`.
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // HIGH-7: keep secrets resident across the slot-keygen window.
     let _busy = super::HandlerGuard::enter();
@@ -364,6 +370,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // ── 10. Slot C10 keygen (shared cache with cmd_sign_userop) ────
     let need_keygen = super::state::peek_state(|_| {
+        // SAFETY: category 5 — read-only borrow of `static mut
+        // SLOT_CACHE`. Single-threaded gateway: the closure runs
+        // synchronously inside the `peek_state` scope, and no other
+        // handler can be active concurrently.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
             Some(c) => {
@@ -383,7 +393,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 slot_index,
                 |p| crate::ui::show_progress("Slot keygen", p),
             );
-        // SAFETY: single-threaded gateway.
+        // SAFETY: category 5 — exclusive write to `static mut
+        // SLOT_CACHE`. Single-threaded non-reentrant dispatcher +
+        // `HandlerGuard` prevent any concurrent reader or SysTick
+        // wipe from observing a torn cache entry. Any displaced
+        // prior `CachedSlot` drops here; its `ZeroizeOnDrop` wipes
+        // the previous SK.
         *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
             account_index,
             chain_id,
@@ -401,6 +416,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // ── 11. C10 sign ────────────────────────────────────────────────
     crate::ui::show_progress("EIP-1271 sign", 0);
     let sig = {
+        // SAFETY: category 5 — read-only borrow of `static mut
+        // SLOT_CACHE`. The cache was populated above (or already
+        // valid) under the same non-reentrant dispatcher; no
+        // concurrent mutator can swap it out from under this read.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
             Some(c) => &c.key,
@@ -419,6 +438,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // ── 12. FI-hardened verify-before-release ──────────────────────
     let (v1, v2) = {
+        // SAFETY: category 5 — read-only borrow of `static mut
+        // SLOT_CACHE` for the verify-before-release FI guard. Same
+        // single-threaded-dispatcher rationale as the sign block above.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot_ref = match cached {
             Some(c) => &c.key,
@@ -497,6 +519,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // already ran above in step 10). The cached secret key
         // exposes the pubkey halves via `pk_seed()` / `pk_root()`.
         let (slot0_pk_seed_32, slot0_pk_root_32) = {
+            // SAFETY: category 5 — read-only borrow of `static mut
+            // SLOT_CACHE`. Single-threaded dispatcher; the slot
+            // keygen above populated the cache for this exact
+            // (account, chain, slot=0).
             let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
             match cached {
                 Some(c) => {

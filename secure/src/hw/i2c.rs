@@ -8,37 +8,64 @@
 //!
 //! The AZDelivery SSD1306 module has on-board 4.7 kΩ pull-ups on SDA/SCL.
 
-use core::ptr::{read_volatile, write_volatile};
+use crate::hw::mmio::{Reg32, RoReg32};
 
 // ---------------------------------------------------------------------------
 // RCC registers (secure alias — writes via NS alias are silently ignored
 // when TZEN=1).
 // ---------------------------------------------------------------------------
 const RCC_S: u32 = 0x5602_0C00;
-const RCC_AHB2ENR1: *mut u32 = (RCC_S + 0x8C) as *mut u32;
-const RCC_APB1ENR1: *mut u32 = (RCC_S + 0x9C) as *mut u32;
-const RCC_APB1RSTR1: *mut u32 = (RCC_S + 0x74) as *mut u32;
 
 // ---------------------------------------------------------------------------
 // GPIOB registers (secure alias)
 // ---------------------------------------------------------------------------
 const GPIOB_S: u32 = 0x5202_0400;
-const GPIOB_MODER: *mut u32 = (GPIOB_S + 0x00) as *mut u32;
-const GPIOB_OTYPER: *mut u32 = (GPIOB_S + 0x04) as *mut u32;
-const GPIOB_OSPEEDR: *mut u32 = (GPIOB_S + 0x08) as *mut u32;
-const GPIOB_PUPDR: *mut u32 = (GPIOB_S + 0x0C) as *mut u32;
-const GPIOB_AFRH: *mut u32 = (GPIOB_S + 0x24) as *mut u32;
+
 // ---------------------------------------------------------------------------
 // I2C1 registers (secure alias — APB1 peripherals are secure with TZEN=1)
 // Base: 0x4000_5400 (NS) / 0x5000_5400 (S)  — from stm32u585xx.h
 // ---------------------------------------------------------------------------
 const I2C1: u32 = 0x5000_5400;
-const I2C1_CR1: *mut u32 = (I2C1 + 0x00) as *mut u32;
-const I2C1_CR2: *mut u32 = (I2C1 + 0x04) as *mut u32;
-const I2C1_TIMINGR: *mut u32 = (I2C1 + 0x10) as *mut u32;
-const I2C1_ISR: *mut u32 = (I2C1 + 0x18) as *mut u32;
-const I2C1_ICR: *mut u32 = (I2C1 + 0x1C) as *mut u32;
-const I2C1_TXDR: *mut u32 = (I2C1 + 0x28) as *mut u32;
+
+struct I2cRegs {
+    rcc_ahb2enr1: Reg32,
+    rcc_apb1enr1: Reg32,
+    rcc_apb1rstr1: Reg32,
+    gpiob_moder: Reg32,
+    gpiob_otyper: Reg32,
+    gpiob_ospeedr: Reg32,
+    gpiob_pupdr: Reg32,
+    gpiob_afrh: Reg32,
+    cr1: Reg32,
+    cr2: Reg32,
+    timingr: Reg32,
+    isr: RoReg32,
+    icr: Reg32,
+    txdr: Reg32,
+}
+
+// SAFETY: each address is a real, 4-byte-aligned MMIO register owned by
+// this I2C1 driver in the single-threaded secure world. Shared RCC and
+// GPIOB registers are accessed via disjoint-bit RMW (PB8/PB9 here;
+// other drivers touch other pins).
+const REG: I2cRegs = unsafe {
+    I2cRegs {
+        rcc_ahb2enr1: Reg32::new(RCC_S + 0x8C),
+        rcc_apb1enr1: Reg32::new(RCC_S + 0x9C),
+        rcc_apb1rstr1: Reg32::new(RCC_S + 0x74),
+        gpiob_moder: Reg32::new(GPIOB_S + 0x00),
+        gpiob_otyper: Reg32::new(GPIOB_S + 0x04),
+        gpiob_ospeedr: Reg32::new(GPIOB_S + 0x08),
+        gpiob_pupdr: Reg32::new(GPIOB_S + 0x0C),
+        gpiob_afrh: Reg32::new(GPIOB_S + 0x24),
+        cr1: Reg32::new(I2C1 + 0x00),
+        cr2: Reg32::new(I2C1 + 0x04),
+        timingr: Reg32::new(I2C1 + 0x10),
+        isr: RoReg32::new(I2C1 + 0x18),
+        icr: Reg32::new(I2C1 + 0x1C),
+        txdr: Reg32::new(I2C1 + 0x28),
+    }
+};
 
 // ISR bit masks
 const TXIS: u32 = 1 << 1;
@@ -54,54 +81,46 @@ const BUSY: u32 = 1 << 15;
 const TIMEOUT: u32 = 10_000_000;
 
 /// Initialize I2C1: GPIO (PB8/PB9 AF4 open-drain), clock, timing (~100 kHz).
-///
-/// # Safety
-/// Direct register access. Call once after `rcc::init()`.
-pub unsafe fn init(sysclk_mhz: u32) {
+pub fn init(sysclk_mhz: u32) {
     // ---- 1. Enable GPIOB clock (AHB2ENR1 bit 1) ----
-    let ahb2 = read_volatile(RCC_AHB2ENR1);
-    write_volatile(RCC_AHB2ENR1, ahb2 | (1 << 1));
+    REG.rcc_ahb2enr1.set_bits(1 << 1);
     cortex_m::asm::dsb();
 
     // ---- 2. Enable I2C1 clock (APB1ENR1 bit 21) ----
-    let apb1 = read_volatile(RCC_APB1ENR1);
-    write_volatile(RCC_APB1ENR1, apb1 | (1 << 21));
+    REG.rcc_apb1enr1.set_bits(1 << 21);
     cortex_m::asm::dsb();
 
     // ---- 3. Reset I2C1 peripheral ----
-    let rstr = read_volatile(RCC_APB1RSTR1);
-    write_volatile(RCC_APB1RSTR1, rstr | (1 << 21));
+    REG.rcc_apb1rstr1.set_bits(1 << 21);
     cortex_m::asm::dsb();
-    write_volatile(RCC_APB1RSTR1, rstr & !(1 << 21));
+    REG.rcc_apb1rstr1.clear_bits(1 << 21);
     cortex_m::asm::dsb();
 
     // ---- 4. Configure PB8 (SCL) and PB9 (SDA) ----
     // MODER: AF mode (0b10) for pins 8 and 9
-    let moder = read_volatile(GPIOB_MODER);
-    let moder = (moder & !(0b11 << 16) & !(0b11 << 18)) | (0b10 << 16) | (0b10 << 18);
-    write_volatile(GPIOB_MODER, moder);
+    REG.gpiob_moder.modify(|v| {
+        (v & !(0b11 << 16) & !(0b11 << 18)) | (0b10 << 16) | (0b10 << 18)
+    });
 
     // OTYPER: open-drain (1) for pins 8 and 9
-    let otyper = read_volatile(GPIOB_OTYPER);
-    write_volatile(GPIOB_OTYPER, otyper | (1 << 8) | (1 << 9));
+    REG.gpiob_otyper.set_bits((1 << 8) | (1 << 9));
 
     // OSPEEDR: very-high speed for pins 8 and 9
-    let ospeedr = read_volatile(GPIOB_OSPEEDR);
-    write_volatile(GPIOB_OSPEEDR, ospeedr | (0b11 << 16) | (0b11 << 18));
+    REG.gpiob_ospeedr.set_bits((0b11 << 16) | (0b11 << 18));
 
     // PUPDR: pull-up (0b01) — safety net alongside the module's 4.7 kΩ
-    let pupdr = read_volatile(GPIOB_PUPDR);
-    let pupdr = (pupdr & !(0b11 << 16) & !(0b11 << 18)) | (0b01 << 16) | (0b01 << 18);
-    write_volatile(GPIOB_PUPDR, pupdr);
+    REG.gpiob_pupdr.modify(|v| {
+        (v & !(0b11 << 16) & !(0b11 << 18)) | (0b01 << 16) | (0b01 << 18)
+    });
 
     // AFRH: AF4 for PB8 (bits [3:0]) and PB9 (bits [7:4])
-    let afrh = read_volatile(GPIOB_AFRH);
-    let afrh = (afrh & !(0xF << 0) & !(0xF << 4)) | (4 << 0) | (4 << 4);
-    write_volatile(GPIOB_AFRH, afrh);
+    REG.gpiob_afrh.modify(|v| {
+        (v & !(0xF << 0) & !(0xF << 4)) | (4 << 0) | (4 << 4)
+    });
 
     // ---- 5. Configure I2C1 timing ----
     // Disable I2C before writing TIMINGR.
-    write_volatile(I2C1_CR1, 0);
+    REG.cr1.write(0);
     cortex_m::asm::dsb();
 
     // Both presets prescale to 16 MHz, then use identical SCLH/SCLL for
@@ -112,17 +131,17 @@ pub unsafe fn init(sysclk_mhz: u32) {
     } else {
         0x0042_3F4F // PRESC=0: 16/(0+1)=16 MHz
     };
-    write_volatile(I2C1_TIMINGR, timing);
+    REG.timingr.write(timing);
 
     // ---- 6. Enable I2C1 (PE=1, analog filter on by default) ----
-    write_volatile(I2C1_CR1, 1);
+    REG.cr1.write(1);
     cortex_m::asm::dsb();
 
     #[cfg(feature = "debug-log")]
     secure_log!(
         "[S][I2C] I2C1 ready (CR1=0x{:08x} ISR=0x{:08x})",
-        read_volatile(I2C1_CR1),
-        read_volatile(I2C1_ISR),
+        REG.cr1.read(),
+        REG.isr.read(),
     );
 }
 
@@ -130,10 +149,7 @@ pub unsafe fn init(sysclk_mhz: u32) {
 ///
 /// Handles transfers >255 bytes via the hardware RELOAD mechanism.
 /// Returns `true` on success, `false` on NACK/timeout/bus error.
-///
-/// # Safety
-/// Direct register access.
-pub unsafe fn write(addr: u8, data: &[u8]) -> bool {
+pub fn write(addr: u8, data: &[u8]) -> bool {
     let total = data.len();
     if total == 0 {
         return true;
@@ -141,14 +157,14 @@ pub unsafe fn write(addr: u8, data: &[u8]) -> bool {
 
     // Wait for bus idle (with timeout).
     let mut t = TIMEOUT;
-    while read_volatile(I2C1_ISR) & BUSY != 0 {
+    while REG.isr.read() & BUSY != 0 {
         t -= 1;
         if t == 0 {
             // Bus stuck busy — attempt recovery by disabling/re-enabling PE.
-            let cr1 = read_volatile(I2C1_CR1);
-            write_volatile(I2C1_CR1, cr1 & !1);
+            let cr1 = REG.cr1.read();
+            REG.cr1.write(cr1 & !1);
             cortex_m::asm::dsb();
-            write_volatile(I2C1_CR1, cr1 | 1);
+            REG.cr1.write(cr1 | 1);
             cortex_m::asm::dsb();
             return false;
         }
@@ -171,16 +187,16 @@ pub unsafe fn write(addr: u8, data: &[u8]) -> bool {
         } else {
             cr2 |= 1 << 24; // RELOAD
         }
-        write_volatile(I2C1_CR2, cr2);
+        REG.cr2.write(cr2);
 
         for _ in 0..chunk {
             // Wait for TXIS (transmit register empty) with timeout.
             t = TIMEOUT;
             loop {
-                let isr = read_volatile(I2C1_ISR);
+                let isr = REG.isr.read();
                 if isr & (NACKF | BERR | ARLO) != 0 {
                     // Clear all error flags.
-                    write_volatile(I2C1_ICR, NACKF | BERR | ARLO | STOPF);
+                    REG.icr.write(NACKF | BERR | ARLO | STOPF);
                     return false;
                 }
                 if isr & TXIS != 0 {
@@ -191,18 +207,18 @@ pub unsafe fn write(addr: u8, data: &[u8]) -> bool {
                     #[cfg(feature = "debug-log")]
                     secure_log!(
                         "[S][I2C] TXIS timeout! ISR=0x{:08x} CR2=0x{:08x}",
-                        read_volatile(I2C1_ISR),
-                        read_volatile(I2C1_CR2),
+                        REG.isr.read(),
+                        REG.cr2.read(),
                     );
                     // Abort: disable PE, clear, re-enable.
-                    let cr1 = read_volatile(I2C1_CR1);
-                    write_volatile(I2C1_CR1, cr1 & !1);
+                    let cr1 = REG.cr1.read();
+                    REG.cr1.write(cr1 & !1);
                     cortex_m::asm::dsb();
-                    write_volatile(I2C1_CR1, cr1 | 1);
+                    REG.cr1.write(cr1 | 1);
                     return false;
                 }
             }
-            write_volatile(I2C1_TXDR, data[offset] as u32);
+            REG.txdr.write(data[offset] as u32);
             offset += 1;
         }
 
@@ -211,7 +227,7 @@ pub unsafe fn write(addr: u8, data: &[u8]) -> bool {
         if !last_chunk {
             // Wait for TCR (transfer complete reload) before next chunk.
             t = TIMEOUT;
-            while read_volatile(I2C1_ISR) & TCR == 0 {
+            while REG.isr.read() & TCR == 0 {
                 t -= 1;
                 if t == 0 {
                     return false;
@@ -222,12 +238,12 @@ pub unsafe fn write(addr: u8, data: &[u8]) -> bool {
 
     // AUTOEND generates the STOP condition; wait for it.
     t = TIMEOUT;
-    while read_volatile(I2C1_ISR) & STOPF == 0 {
+    while REG.isr.read() & STOPF == 0 {
         t -= 1;
         if t == 0 {
             return false;
         }
     }
-    write_volatile(I2C1_ICR, STOPF);
+    REG.icr.write(STOPF);
     true
 }

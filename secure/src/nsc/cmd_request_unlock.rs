@@ -10,6 +10,11 @@ use crate::secure_element::UnlockError;
 use crate::timeout;
 use crate::ui;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. The body drives
+/// the trusted-UI PIN dialog and the SE pair; no NS pointer derefs.
+/// `static mut SE` access is serialised by the non-reentrant
+/// dispatcher.
 pub(super) unsafe fn run() -> u32 {
     use crate::ui::pin_entry::{enter_pin, PinEntryResult};
 
@@ -41,6 +46,9 @@ pub(super) unsafe fn run() -> u32 {
     result
 }
 
+/// # Safety
+/// Called only from `run` above; relies on the dispatcher's single-
+/// threaded invariant to access `static mut crate::SE`.
 unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
     use sphincs_tz_shared::MAX_ATTEMPTS;
 
@@ -129,6 +137,12 @@ unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
 /// so further PIN attempts would be pointless. The wipe flag is armed
 /// inside `factory_reset_admin` before any destructive work, so a power
 /// loss mid-wipe is recoverable on the next boot.
+///
+/// # Safety
+/// Called only from `verify_pin_with_chip` above; accesses
+/// `static mut crate::SE` under the single-threaded dispatcher
+/// invariant, then mutates secure-flash (page 124) via the `flash`
+/// driver and zeroizes the in-RAM secrets.
 unsafe fn trigger_lockout_wipe() -> u32 {
     use crate::secure_element::WalletStore;
 

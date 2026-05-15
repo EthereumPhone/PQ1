@@ -16,6 +16,10 @@
 
 use super::state;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. Body touches
+/// the `static mut crate::SE` driver under the single-threaded
+/// dispatcher invariant; no NS pointer derefs.
 pub(super) unsafe fn run() -> u32 {
     use crate::secure_element::WalletStore;
 
