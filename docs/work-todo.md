@@ -579,6 +579,37 @@ Research-derived mitigations from the deep-research round of 2026-04-14. Critica
 
 ---
 
+### 18b. FI/SCA audit-derived follow-ups (catalogued from the F-* sweep + post-mortems)
+
+**Status:** discrete items spawned during the F-* fault-injection / side-channel audit (`tools/sca/README.md` §Findings). Each is small enough that it didn't deserve its own §-numbered work-todo entry, but tracking them as a list here so future "let's continue" picks can't lose any improvement. Most are "raise residual cost" follow-ups on findings already MITIGATED or FIXED; one or two are genuinely new.
+
+**Cheap residual-knockouts on already-mitigated findings:**
+
+- [ ] **F-15.r1 — register-scrub between back-to-back sentinel gates.** A stale `OK_SENTINEL` in r0 from one `check_true_into_sentinel` call is inheritable by the next gate's skip-the-`bl` glitch. Mitigation: `wait_random()` + explicit scrub (e.g. `core::hint::black_box(0u32)` or an `MSR`-equivalent write) between back-to-back sentinel callsites. Audit the gateway commands for paired gates and insert. ~10 LoC.
+- [ ] **F-15.r5 — `pin_attempts_read` F-12-hardening.** The page-124 PIN-attempt scan is not internally forward+reverse-double-scanned like `offchain_count_read` is post-F-12. A consistent underreport-by-1 fault slips past F-15's double-read because both reads land the same way. Apply the same `scan_forward` + `scan_reverse` + halt-on-mismatch pattern from `hw/flash.rs::offchain_count_read`. Closes the same attack class on the lockout gate. ~30 LoC.
+- [ ] **F-15.r4 — post-scan value-fault on derived integers.** `pre_count` / `remaining_after` are read once into a u8 and then passed to the sentinel closure; a fault between the assignment and the capture clamps the value. Mitigation: pass an inline closure that re-reads the flash counter inside `check_true_into_sentinel` (forces it onto the slow path; cost is a second scan per gate). Optional; the F-15.r5 hardening covers most of this.
+- [ ] **F-13/F-14 sentinel constant Hamming-weight upgrade.** `OK_SENTINEL = 0xA5A5_A5A5` and `SEC_TRUE = 0x1AAA_AAAA` both have Hamming weight 16 — moderate. EM specific-value injection literature (Riscure, NewAE) shows weight 1 or 31 constants are substantially harder to hit. Choose `OK_SENTINEL = 0x8000_0000` (weight 1) or `0x7FFF_FFFF` (weight 31), and pair the `SEC_TRUE`/`SEC_FALSE` similarly. Bench impact on the entire `pqsigner-fi` + `fih.rs` surface; ensure the `FAIL_SENTINEL` complement still has good Hamming distance from `OK_SENTINEL`. Touches `pqsigner-fi/src/lib.rs` + `secure/src/fih.rs`.
+- [ ] **F-14 follow-up — migrate the remaining gateway booleans to `FihBool`.** `has_signed`, `slot_master_derived` (currently write-only in this branch but read-paths might be added in follow-ups), and `blob_cached` in each SE backend's struct. None is on the critical path *today* (the first two have no read site; the third gates a read whose downstream decryption fails on all-zero), but the same single-fault flip primitive that F-14 closed for `pin_verified` applies. Bench cost is identical to F-14. Touches `nsc::state` + `optiga/mod` + `se050/mod` + `dual_se` + `tropic01_se`.
+
+**Multi-fault sweep (cost increase, not closure):**
+
+- [ ] **F-5 follow-up — run two-fault sweeps against post-F-7..F-15 production.** `make fi-twofault` exists but has only been run against the pre-F-7 codebase. Re-run against the current tree to confirm the 2-coordinated-skip residual hasn't moved in a damaging direction (e.g., a new gate is now 1-skip-defeatable while we weren't looking). Also extend to the F-14 / F-15 gates which use `check_true_into_sentinel` in new shapes. Audit-only (no fix expected).
+- [ ] **C10 sign FI sweep on real `sphincs-c10::sign`.** `tools/sca/c10_sign_target/` exists but the full sweep is deferred (~14s/emulation × thousands of injections = days). Worth running on a CI-grade machine once. Looks for: faults during sign that leak sk_seed or emit malformed-but-valid sigs (the Genêt class F-13's double-compute defends against — verify it actually closes the harness-observable residual).
+
+**SCA re-baseline after F-13 randomization:**
+
+- [ ] **F-9 re-test with randomized OptRand (post-F-13).** The audit-grade lascar TVLA that produced `max|t| = 40.71` (FORS leaf-index leak) ran *before* `c10_sign_verified_with_progress` started drawing fresh OptRand per call. With OptRand session-randomized, the FORS leaf indices vary per sign even for repeat-msg signs, breaking the "varies msg only" TVLA premise. Re-run `make kdf` (or its `c10-sign` variant) with the new randomized path. Outcome could move F-9 from "audit-grade leakage, transparent" to "leakage masked by randomization, no measurable signal."
+
+**Production-blocker not formally on §18 P0:**
+
+- [ ] **TZSC/GTZC peripheral isolation fix.** `secure/src/sau.rs` clears `GTZC1_TZSC_SECCFGR{1,2,3}` to 0 (every peripheral reachable from NS) because USB OTG FS lives on GTZC2, and the GTZC2 base address (our first guess `0x5203_4400` bus-faulted) is unconfirmed. This regresses CLAUDE.md invariant #4 (NS never sees secure-world peripherals). NS currently reaches I2C1 / AES / HASH / PKA / SAES / RNG from non-secure code. Documented in CLAUDE.md "Pre-Production Caveats" and the `2026-04-17` completion-log entry but never formally promoted to a checked item. Action: find GTZC2 base in RM0456 → wire `SECCFGR` allowlist that keeps USB OTG FS NS-accessible while restoring everything else to secure. Validation: `make e2e` + `make e2e-hw` still pass.
+
+**Phase 2 of work-todo §10 (multi-source RNG migration):**
+
+- [ ] **Migrate non-signing RNG call-sites to `rng_strong::fill`.** `secure/src/dual_se.rs::provision` (one-shot entropy XOR split), consumption-mask PWM duty randomization, `fi::wait_random` salt, FI consumption-mask. None is security-critical (all are defence-in-depth around a non-secret), but Phase-1's strong-RNG infrastructure is in place and finishing the migration costs ~20 LoC. Cited inline in §10 "Phase 2"; capturing here for visibility.
+
+---
+
 ### 19. USB stack hardening (USB-C only attack surface)
 
 **Status:** NOT STARTED (research complete — see `docs/production-security.md`)
