@@ -63,10 +63,14 @@ struct HashRegs {
     dhcsr: RoReg32,
 }
 
-// SAFETY: each address below is a real, 4-byte-aligned MMIO register
-// exclusively owned by this driver. The secure world is single-threaded
-// and non-preemptive — nothing else races us. After this one-time
-// construction every register touch is via safe `.read()` / `.write()`.
+// SAFETY: one-time module-scope MMIO register binding. Each address
+// below is a real, 4-byte-aligned MMIO register inside the HASH
+// peripheral block (or the HASH-clock bit in RCC, or DHCSR for the
+// debugger-present probe). All addresses are taken from CMSIS headers
+// + datasheet, exclusively owned by this driver, and the secure world
+// is single-threaded + non-preemptive — nothing else races us. After
+// this one-time construction every register touch is via safe
+// `.read()` / `.write()` methods on the `Reg32` / `RoReg32` wrappers.
 const REG: HashRegs = unsafe {
     HashRegs {
         cr: Reg32::new(HASH_BASE + 0x00),
@@ -131,7 +135,9 @@ pub unsafe fn init_clock() {
 }
 
 /// # Safety
-/// Touches `static mut STATE` via the FFI hashers below.
+/// Category 5 — touches `static mut STATE` (the 4-byte streaming
+/// merge buffer) by calling the FFI hashers below. Must run during
+/// boot only (single-threaded; no `sphincs-c10` hash in flight).
 unsafe fn self_test() {
     pqsigner_sha256_init();
     pqsigner_sha256_update(b"abc".as_ptr(), 3);
@@ -196,10 +202,21 @@ fn write_word(w: u32) {
 // ---------------------------------------------------------------------------
 
 /// Start a new SHA-256 computation.
+///
+/// # Safety
+/// Category 3 — FFI symbol consumed by `sphincs-c10` via
+/// `extern "C"`. The `unsafe extern "C"` signature is the ABI
+/// requirement. Caller (sphincs-c10's hash dispatcher) must
+/// serialise calls to `init` / `update` / `final` — only one
+/// SHA-256 streaming computation may be in flight at a time
+/// because category-5 `static mut STATE` is shared across them.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_init() {
     wait_ready();
-    // SAFETY: see module preamble — single-threaded, single hasher in flight.
+    // SAFETY: category 5 — exclusive write to `static mut STATE` (the
+    // 4-byte streaming merge buffer). The secure world is single-
+    // threaded and non-preemptive, and the FFI contract above forbids
+    // two hashes in flight; therefore no concurrent reader/writer.
     unsafe {
         STATE.buf = [0; 4];
         STATE.pending = 0;
@@ -218,13 +235,25 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
 }
 
 /// Feed `len` bytes from `ptr` into the current SHA-256 computation.
+///
+/// # Safety
+/// Category 3 — FFI symbol. Caller (sphincs-c10) must pass a
+/// `(ptr, len)` pair describing a single valid slice (`ptr` non-null
+/// and properly aligned for `u8` reads, `ptr..ptr+len` all live
+/// readable memory). `pqsigner_sha256_init` must have been called
+/// first; no other SHA-256 stream may be interleaved.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
-    // SAFETY: caller (sphincs-c10) guarantees `ptr..ptr+len` is a valid slice.
+    // SAFETY: category 3 — materialising the FFI `(ptr, len)` pair as
+    // a Rust slice. Caller's FFI contract guarantees `ptr..ptr+len`
+    // is a valid, live, properly-aligned `[u8]` for the duration of
+    // this call.
     let data = unsafe { core::slice::from_raw_parts(ptr, len) };
     let mut i = 0;
 
-    // SAFETY: see module preamble — single-threaded, single hasher in flight.
+    // SAFETY: category 5 — exclusive mutable borrow of `static mut
+    // STATE`. Same single-threaded + no-concurrent-hash justification
+    // as in `pqsigner_sha256_init`.
     let state: &mut State = unsafe { &mut *core::ptr::addr_of_mut!(STATE) };
 
     // Fill the pending merge buffer first.
@@ -255,9 +284,18 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
 }
 
 /// Finalize the current SHA-256 computation and write 32 bytes to `out`.
+///
+/// # Safety
+/// Category 3 — FFI symbol. Caller (sphincs-c10) must pass an `out`
+/// pointer that names 32 bytes of valid, live, writable, properly-
+/// aligned memory. `pqsigner_sha256_init` (and zero or more
+/// `_update` calls) must precede this call; no other SHA-256 stream
+/// may be interleaved.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
-    // SAFETY: see module preamble — single-threaded, single hasher in flight.
+    // SAFETY: category 5 — exclusive mutable borrow of `static mut
+    // STATE`. Same single-threaded + no-concurrent-hash justification
+    // as in `pqsigner_sha256_init`.
     let state: &mut State = unsafe { &mut *core::ptr::addr_of_mut!(STATE) };
 
     let remaining_bits = (state.pending as u32) * 8;
@@ -298,10 +336,20 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     // registers hold each 4-byte digest chunk in natural byte order when
     // interpreted via to_be_bytes on the little-endian CPU.
     for i in 0..8 {
-        // SAFETY: HR0..HR7 is a contiguous 8-word digest bank.
+        // SAFETY: `RoReg32::read_at(i)` is `unsafe fn` because it
+        // computes `addr + i * 4` and reads at that offset without
+        // bounds-checking against a typed array length. Precondition:
+        // `[hr0, hr0 + 32)` (8 contiguous words = the HR0..HR7 digest
+        // bank) is real MMIO inside the HASH peripheral block; the
+        // datasheet pins HR0..HR7 at offsets 0x310..0x32C. The loop
+        // index `i` is statically bounded to 0..8 by the for-range.
         let w = unsafe { REG.hr0.read_at(i) };
         let bytes = w.to_be_bytes();
-        // SAFETY: caller (sphincs-c10) guarantees `out..out+32` is valid.
+        // SAFETY: category 3 — FFI output pointer. Caller's contract
+        // (documented on `pqsigner_sha256_final`) guarantees
+        // `[out, out+32)` is valid + writable; this 4-byte slice
+        // write lands at `out + i*4` with `i < 8`, so it stays in
+        // range.
         unsafe {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i * 4), 4);
         }

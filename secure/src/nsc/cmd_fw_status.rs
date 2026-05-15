@@ -13,6 +13,10 @@ use super::ptr_validate::validate_ns_write_ptr;
 use super::state::FW_UPDATE;
 use super::GatewayArgs;
 
+/// # Safety
+/// CMSE non-secure-entry handler. The body validates the NS output
+/// pointer before deref and reads the `static mut FW_UPDATE` snapshot
+/// under the single-threaded dispatcher invariant.
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let out_ptr = args.arg1;
     if !validate_ns_write_ptr(out_ptr, FW_STATUS_RESPONSE_LEN) {
@@ -20,7 +24,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     let mut buf = [0u8; FW_STATUS_RESPONSE_LEN];
-    // SAFETY: single-threaded, exclusive access.
+    // SAFETY: category 5 — read-only borrow of `static mut FW_UPDATE`.
+    // The non-reentrant gateway dispatcher means no other handler is
+    // concurrently mutating this slot.
     let ctx_ref = unsafe { (*core::ptr::addr_of!(FW_UPDATE)).as_ref() };
     let (state, recv_s, recv_ns, slot) = match ctx_ref {
         None => (FW_STATE_IDLE, 0, 0, 0),
@@ -42,6 +48,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         .copy_from_slice(&recv_ns.to_be_bytes());
     buf[FW_STATUS_SLOT_OFFSET] = slot;
 
+    // SAFETY: category 2 — NS pointer deref after `validate_ns_write_ptr`
+    // proved `[out_ptr, out_ptr + FW_STATUS_RESPONSE_LEN)` is fully
+    // NS-classified and not aliasing the shared mailbox. `write_volatile`
+    // forces the compiler to emit one store per byte so the NS observer
+    // cannot see a half-written response word.
     unsafe {
         let dst = out_ptr as *mut u8;
         for i in 0..FW_STATUS_RESPONSE_LEN {

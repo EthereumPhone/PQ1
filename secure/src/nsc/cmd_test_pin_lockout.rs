@@ -43,6 +43,11 @@ const CORRECT_PIN: [u8; 8] = *b"00000000";
 /// Arbitrary wrong PIN — just needs to differ from `CORRECT_PIN`.
 const WRONG_PIN: [u8; 8] = *b"99999999";
 
+/// # Safety
+/// CMSE non-secure-entry handler (compiled only under `e2e-test`).
+/// Drives `gated_unlock` repeatedly against `static mut crate::SE`;
+/// no NS pointer derefs. Destructive to silicon counters; gated out
+/// of production by feature flag.
 pub(super) unsafe fn run() -> u32 {
     let _busy = super::HandlerGuard::enter();
 

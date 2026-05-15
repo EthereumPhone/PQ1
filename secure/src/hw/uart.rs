@@ -30,7 +30,7 @@
 //! No interrupts, no critical-section, polling writes. Blocking.
 //! Caller is responsible for calling `init()` before any `write_*`.
 
-use core::ptr::{read_volatile, write_volatile};
+use crate::hw::mmio::{Reg32, RoReg32};
 
 // USART1 register map — SECURE alias.
 //
@@ -41,16 +41,6 @@ use core::ptr::{read_volatile, write_volatile};
 // alias for consistency with `hw/i2c_hw.rs` which also uses S aliases
 // (RCC 0x5602_0C00, GPIOB 0x5202_0400, I2C1 0x5000_5400).
 const USART1: u32 = 0x5001_3800;
-const USART1_CR1: *mut u32 = USART1 as *mut u32;
-const USART1_BRR: *mut u32 = (USART1 + 0x0C) as *mut u32;
-const USART1_ISR: *const u32 = (USART1 + 0x1C) as *const u32;
-const USART1_TDR: *mut u32 = (USART1 + 0x28) as *mut u32;
-
-const CR1_UE: u32 = 1 << 0;
-const CR1_TE: u32 = 1 << 3;
-const ISR_TXE_FNF: u32 = 1 << 7; // TX data register empty (legacy) / FIFO-not-full
-const ISR_TC: u32 = 1 << 6;
-const ISR_TEACK: u32 = 1 << 21; // Transmit enable acknowledge
 
 // RCC registers — SECURE alias.
 //
@@ -62,75 +52,97 @@ const ISR_TEACK: u32 = 1 << 21; // Transmit enable acknowledge
 // that writing GPIOAEN via NS-alias AHB2ENR1 leaves the bit clear →
 // GPIOA stays unclocked → all GPIOA reads return 0xABFFFFFF (bus junk)
 // and all writes silently drop. Secure-alias writes land correctly.
-const RCC_APB2ENR: *mut u32 = (0x5602_0C00 + 0xA4) as *mut u32;
-const RCC_APB2ENR_USART1EN: u32 = 1 << 14;
-
-const RCC_AHB2ENR1: *mut u32 = (0x5602_0C00 + 0x8C) as *mut u32;
-const RCC_AHB2ENR1_GPIOAEN: u32 = 1 << 0;
+const RCC_S: u32 = 0x5602_0C00;
 
 // GPIOA register map — Secure alias (0x5202_0000).
 // Matches `pin_diag.rs` and `i2c_hw.rs` which both use S-alias GPIO.
 const GPIOA: u32 = 0x5202_0000;
-const GPIOA_MODER: *mut u32 = GPIOA as *mut u32;
-const GPIOA_OTYPER: *mut u32 = (GPIOA + 0x04) as *mut u32;
-const GPIOA_OSPEEDR: *mut u32 = (GPIOA + 0x08) as *mut u32;
-const GPIOA_PUPDR: *mut u32 = (GPIOA + 0x0C) as *mut u32;
-const GPIOA_AFRH: *mut u32 = (GPIOA + 0x24) as *mut u32;
+
+struct UartRegs {
+    cr1: Reg32,
+    brr: Reg32,
+    isr: RoReg32,
+    tdr: Reg32,
+    rcc_apb2enr: Reg32,
+    rcc_ahb2enr1: Reg32,
+    gpioa_moder: Reg32,
+    gpioa_otyper: Reg32,
+    gpioa_ospeedr: Reg32,
+    gpioa_pupdr: Reg32,
+    gpioa_afrh: Reg32,
+}
+
+// SAFETY: each address is a real, 4-byte-aligned MMIO register owned by
+// this UART driver in the single-threaded secure world. RCC + GPIOA bits
+// modified here are coordinated with `hw::rcc` and `hw::i2c_hw` via
+// read-modify-write so the shared registers are safe to share.
+const REG: UartRegs = unsafe {
+    UartRegs {
+        cr1: Reg32::new(USART1),
+        brr: Reg32::new(USART1 + 0x0C),
+        isr: RoReg32::new(USART1 + 0x1C),
+        tdr: Reg32::new(USART1 + 0x28),
+        rcc_apb2enr: Reg32::new(RCC_S + 0xA4),
+        rcc_ahb2enr1: Reg32::new(RCC_S + 0x8C),
+        gpioa_moder: Reg32::new(GPIOA),
+        gpioa_otyper: Reg32::new(GPIOA + 0x04),
+        gpioa_ospeedr: Reg32::new(GPIOA + 0x08),
+        gpioa_pupdr: Reg32::new(GPIOA + 0x0C),
+        gpioa_afrh: Reg32::new(GPIOA + 0x24),
+    }
+};
+
+const RCC_APB2ENR_USART1EN: u32 = 1 << 14;
+const RCC_AHB2ENR1_GPIOAEN: u32 = 1 << 0;
+
+const CR1_UE: u32 = 1 << 0;
+const CR1_TE: u32 = 1 << 3;
+const ISR_TXE_FNF: u32 = 1 << 7; // TX data register empty (legacy) / FIFO-not-full
+const ISR_TC: u32 = 1 << 6;
+const ISR_TEACK: u32 = 1 << 21; // Transmit enable acknowledge
 
 /// Initialize USART1 for 115200 8N1 on PA9 TX. Safe to call multiple
 /// times; every call re-programs the registers.
 pub fn init() {
-    // SAFETY: RCC / GPIOA / USART1 are memory-mapped; writes are bounded
-    // bit-mask operations on well-defined register offsets taken from
-    // the stm32u5 PAC + CMSIS header.
-    unsafe {
-        // --- 1. Enable GPIOA + USART1 clocks ---
-        let ahb = read_volatile(RCC_AHB2ENR1);
-        write_volatile(RCC_AHB2ENR1, ahb | RCC_AHB2ENR1_GPIOAEN);
-        let apb = read_volatile(RCC_APB2ENR);
-        write_volatile(RCC_APB2ENR, apb | RCC_APB2ENR_USART1EN);
-        let _ = read_volatile(RCC_APB2ENR); // propagation barrier
-        cortex_m::asm::dsb();
+    // --- 1. Enable GPIOA + USART1 clocks ---
+    REG.rcc_ahb2enr1.set_bits(RCC_AHB2ENR1_GPIOAEN);
+    REG.rcc_apb2enr.set_bits(RCC_APB2ENR_USART1EN);
+    let _ = REG.rcc_apb2enr.read(); // propagation barrier
+    cortex_m::asm::dsb();
 
-        // --- 2. Configure PA9 as AF7 (USART1_TX), push-pull, high speed ---
-        // MODER[19:18] = 10 (AF mode)
-        let moder = read_volatile(GPIOA_MODER);
-        write_volatile(GPIOA_MODER, (moder & !(0b11 << 18)) | (0b10 << 18));
-        // OTYPER bit 9 = 0 (push-pull)
-        let otyper = read_volatile(GPIOA_OTYPER);
-        write_volatile(GPIOA_OTYPER, otyper & !(1 << 9));
-        // OSPEEDR[19:18] = 11 (very-high speed)
-        let ospeedr = read_volatile(GPIOA_OSPEEDR);
-        write_volatile(GPIOA_OSPEEDR, (ospeedr & !(0b11 << 18)) | (0b11 << 18));
-        // PUPDR[19:18] = 00 (no pull)
-        let pupdr = read_volatile(GPIOA_PUPDR);
-        write_volatile(GPIOA_PUPDR, pupdr & !(0b11 << 18));
-        // AFRH for pin 9 lives in AFRH[7:4] = AF7 (0b0111)
-        let afrh = read_volatile(GPIOA_AFRH);
-        write_volatile(GPIOA_AFRH, (afrh & !(0xF << 4)) | (0x7 << 4));
+    // --- 2. Configure PA9 as AF7 (USART1_TX), push-pull, high speed ---
+    // MODER[19:18] = 10 (AF mode)
+    REG.gpioa_moder.modify(|v| (v & !(0b11 << 18)) | (0b10 << 18));
+    // OTYPER bit 9 = 0 (push-pull)
+    REG.gpioa_otyper.clear_bits(1 << 9);
+    // OSPEEDR[19:18] = 11 (very-high speed)
+    REG.gpioa_ospeedr.modify(|v| (v & !(0b11 << 18)) | (0b11 << 18));
+    // PUPDR[19:18] = 00 (no pull)
+    REG.gpioa_pupdr.clear_bits(0b11 << 18);
+    // AFRH for pin 9 lives in AFRH[7:4] = AF7 (0b0111)
+    REG.gpioa_afrh.modify(|v| (v & !(0xF << 4)) | (0x7 << 4));
 
-        // --- 3. Program USART1 ---
-        // RM0456 init sequence: configure CR1 word length / parity while
-        // UE=0, program BRR, set UE=1, THEN toggle TE 0→1 (the TE
-        // enable edge must happen AFTER UE is high — setting both in a
-        // single atomic write is ambiguous hardware behaviour).
-        // Defaults after reset: M=00 (8-bit), OVER8=0 (16× oversampling),
-        // STOP=00 (1 stop bit), parity off. We don't touch CR2/CR3.
-        write_volatile(USART1_CR1, 0);
-        // PCLK2 = 160 MHz, OVER8 = 0, BRR = 160_000_000 / 115_200 ≈ 1389 (0x56D).
-        write_volatile(USART1_BRR, 1389);
-        write_volatile(USART1_CR1, CR1_UE);
-        write_volatile(USART1_CR1, CR1_UE | CR1_TE);
-        // Wait for the transmitter to acknowledge — empirically the
-        // first byte is silently dropped on STM32U5 if we write TDR
-        // before TEACK asserts. Bounded so we don't hang if the
-        // peripheral is in a wedged state.
-        let mut t: u32 = 10_000_000;
-        while read_volatile(USART1_ISR) & ISR_TEACK == 0 {
-            t -= 1;
-            if t == 0 {
-                return;
-            }
+    // --- 3. Program USART1 ---
+    // RM0456 init sequence: configure CR1 word length / parity while
+    // UE=0, program BRR, set UE=1, THEN toggle TE 0→1 (the TE
+    // enable edge must happen AFTER UE is high — setting both in a
+    // single atomic write is ambiguous hardware behaviour).
+    // Defaults after reset: M=00 (8-bit), OVER8=0 (16× oversampling),
+    // STOP=00 (1 stop bit), parity off. We don't touch CR2/CR3.
+    REG.cr1.write(0);
+    // PCLK2 = 160 MHz, OVER8 = 0, BRR = 160_000_000 / 115_200 ≈ 1389 (0x56D).
+    REG.brr.write(1389);
+    REG.cr1.write(CR1_UE);
+    REG.cr1.write(CR1_UE | CR1_TE);
+    // Wait for the transmitter to acknowledge — empirically the
+    // first byte is silently dropped on STM32U5 if we write TDR
+    // before TEACK asserts. Bounded so we don't hang if the
+    // peripheral is in a wedged state.
+    let mut t: u32 = 10_000_000;
+    while REG.isr.read() & ISR_TEACK == 0 {
+        t -= 1;
+        if t == 0 {
+            return;
         }
     }
 }
@@ -139,10 +151,8 @@ pub fn init() {
 /// accepts it (TXE / TXFNF) — the PC side of the ST-LINK VCP pulls
 /// bytes fast enough that this typically returns in one loop iteration.
 pub fn write_byte(b: u8) {
-    unsafe {
-        while read_volatile(USART1_ISR) & ISR_TXE_FNF == 0 {}
-        write_volatile(USART1_TDR, u32::from(b));
-    }
+    while REG.isr.read() & ISR_TXE_FNF == 0 {}
+    REG.tdr.write(u32::from(b));
 }
 
 /// Blocking write of an arbitrary byte slice.
@@ -172,7 +182,5 @@ pub fn write_hex_8(bytes: &[u8; 8]) {
 /// Drain the transmit FIFO so pending bytes hit the wire before the
 /// caller halts / resets. Spin-waits for `ISR.TC`.
 pub fn flush() {
-    unsafe {
-        while read_volatile(USART1_ISR) & ISR_TC == 0 {}
-    }
+    while REG.isr.read() & ISR_TC == 0 {}
 }

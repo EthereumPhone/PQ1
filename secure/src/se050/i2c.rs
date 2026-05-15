@@ -3,10 +3,12 @@
 //! Provides blocking `write`, `read`, and `write_read` operations
 //! to communicate with the SE050 at I2C slave address 0x48.
 //!
-//! All register addresses are imported from `hw::i2c_hw`.
+//! Register base imported from `hw::i2c_hw`; the offsets are bound once
+//! into typed [`Reg32`] / [`RoReg32`] handles so individual touches in
+//! the transfer loops are safe.
 
-use core::ptr::{read_volatile, write_volatile};
-use crate::hw::i2c_hw::*;
+use crate::hw::i2c_hw::I2C1;
+use crate::hw::mmio::{Reg32, RoReg32};
 
 /// SE050 I2C slave address (7-bit, matching OM-SE050ARD default).
 pub const SE050_ADDR: u8 = 0x48;
@@ -26,6 +28,35 @@ pub enum I2cError {
 
 /// Maximum iterations to spin waiting for a flag before declaring timeout.
 const TIMEOUT_LOOPS: u32 = 1_000_000;
+
+// ---------------------------------------------------------------------------
+// I2C1 register block — typed handles so the unsafe register-address
+// construction happens exactly once at module scope.
+// ---------------------------------------------------------------------------
+
+struct I2cRegs {
+    cr2: Reg32,
+    isr: RoReg32,
+    icr: Reg32,
+    rxdr: RoReg32,
+    txdr: Reg32,
+}
+
+// SAFETY: each address below is a real, 4-byte-aligned MMIO register on
+// I2C1 (base 0x5000_5400, secure alias) exclusively owned by the SE
+// drivers. The secure world is single-threaded and non-preemptive —
+// the OPTIGA and SE050 drivers share I2C1 sequentially, never racing.
+// After this one-time construction every register touch below is via
+// safe `.read()` / `.write()` methods.
+const REG: I2cRegs = unsafe {
+    I2cRegs {
+        cr2: Reg32::new(I2C1 + 0x04),
+        isr: RoReg32::new(I2C1 + 0x18),
+        icr: Reg32::new(I2C1 + 0x1C),
+        rxdr: RoReg32::new(I2C1 + 0x24),
+        txdr: Reg32::new(I2C1 + 0x28),
+    }
+};
 
 // ---------------------------------------------------------------------------
 // I2C ISR (Interrupt and Status Register) bit positions
@@ -55,19 +86,19 @@ const CR2_RELOAD: u32 = 1 << 24;
 const CR2_RD_WRN: u32 = 1 << 10; // 1 = read, 0 = write
 
 /// Wait for a flag in ISR, with timeout. Returns the ISR value.
-unsafe fn wait_flag(mask: u32) -> Result<u32, I2cError> {
+fn wait_flag(mask: u32) -> Result<u32, I2cError> {
     for _ in 0..TIMEOUT_LOOPS {
-        let isr = read_volatile(I2C1_ISR);
+        let isr = REG.isr.read();
         if isr & ISR_NACKF != 0 {
-            write_volatile(I2C1_ICR, ICR_NACKCF);
+            REG.icr.write(ICR_NACKCF);
             return Err(I2cError::Nack);
         }
         if isr & ISR_BERR != 0 {
-            write_volatile(I2C1_ICR, ICR_BERRCF);
+            REG.icr.write(ICR_BERRCF);
             return Err(I2cError::Bus);
         }
         if isr & ISR_ARLO != 0 {
-            write_volatile(I2C1_ICR, ICR_ARLOCF);
+            REG.icr.write(ICR_ARLOCF);
             return Err(I2cError::Arbitration);
         }
         if isr & mask != 0 {
@@ -79,18 +110,18 @@ unsafe fn wait_flag(mask: u32) -> Result<u32, I2cError> {
 
 /// Configure CR2 for a transfer: slave address, direction, byte count,
 /// and START/AUTOEND/RELOAD flags.
-unsafe fn configure_transfer(addr: u8, nbytes: u8, direction: u32, flags: u32) {
+fn configure_transfer(addr: u8, nbytes: u8, direction: u32, flags: u32) {
     let cr2 = ((addr as u32) << 1) // SADD[7:1] (7-bit addressing)
         | direction                 // RD_WRN
         | ((nbytes as u32) << 16)  // NBYTES
         | flags                     // START, AUTOEND, RELOAD
         | CR2_START;
-    write_volatile(I2C1_CR2, cr2);
+    REG.cr2.write(cr2);
 }
 
 /// Write `data` to the SE050 (blocking).
 /// Handles transfers > 255 bytes using RELOAD mode.
-pub unsafe fn write(data: &[u8]) -> Result<(), I2cError> {
+pub fn write(data: &[u8]) -> Result<(), I2cError> {
     let total = data.len();
     if total == 0 {
         return Ok(());
@@ -110,12 +141,12 @@ pub unsafe fn write(data: &[u8]) -> Result<(), I2cError> {
             let cr2 = ((SE050_ADDR as u32) << 1)
                 | ((chunk as u32) << 16)
                 | flags;
-            write_volatile(I2C1_CR2, cr2);
+            REG.cr2.write(cr2);
         }
 
         for i in 0..chunk {
             wait_flag(ISR_TXIS)?;
-            write_volatile(I2C1_TXDR, data[offset + i] as u32);
+            REG.txdr.write(data[offset + i] as u32);
         }
 
         if !is_last {
@@ -126,14 +157,14 @@ pub unsafe fn write(data: &[u8]) -> Result<(), I2cError> {
     }
 
     wait_flag(ISR_STOPF)?;
-    write_volatile(I2C1_ICR, ICR_STOPCF);
+    REG.icr.write(ICR_STOPCF);
 
     Ok(())
 }
 
 /// Read `buf.len()` bytes from the SE050 (blocking).
 /// Handles transfers > 255 bytes using RELOAD mode.
-pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
+pub fn read(buf: &mut [u8]) -> Result<(), I2cError> {
     let total = buf.len();
     if total == 0 {
         return Ok(());
@@ -159,12 +190,12 @@ pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
                 | CR2_RD_WRN
                 | ((chunk as u32) << 16)
                 | flags;
-            write_volatile(I2C1_CR2, cr2);
+            REG.cr2.write(cr2);
         }
 
         for i in 0..chunk {
             wait_flag(ISR_RXNE)?;
-            buf[offset + i] = read_volatile(I2C1_RXDR) as u8;
+            buf[offset + i] = REG.rxdr.read() as u8;
         }
 
         if !is_last {
@@ -177,13 +208,13 @@ pub unsafe fn read(buf: &mut [u8]) -> Result<(), I2cError> {
 
     // Wait for STOP (generated by AUTOEND on last chunk)
     wait_flag(ISR_STOPF)?;
-    write_volatile(I2C1_ICR, ICR_STOPCF);
+    REG.icr.write(ICR_STOPCF);
 
     Ok(())
 }
 
 /// Write `tx` then read `rx` in a single I2C transaction (repeated START).
-pub unsafe fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
+pub fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
     if tx.is_empty() {
         return read(rx);
     }
@@ -196,7 +227,7 @@ pub unsafe fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
 
     for &byte in tx {
         wait_flag(ISR_TXIS)?;
-        write_volatile(I2C1_TXDR, byte as u32);
+        REG.txdr.write(byte as u32);
     }
 
     // Wait for transfer complete (not STOP — we disabled AUTOEND)
@@ -207,11 +238,11 @@ pub unsafe fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
 
     for byte in rx.iter_mut() {
         wait_flag(ISR_RXNE)?;
-        *byte = read_volatile(I2C1_RXDR) as u8;
+        *byte = REG.rxdr.read() as u8;
     }
 
     wait_flag(ISR_STOPF)?;
-    write_volatile(I2C1_ICR, ICR_STOPCF);
+    REG.icr.write(ICR_STOPCF);
 
     Ok(())
 }

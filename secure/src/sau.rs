@@ -4,12 +4,39 @@
 /// On real STM32U585:   configures the GTZC MPCBB (block-based SRAM protection)
 ///
 /// SAU region layout is the same structure but with different addresses.
+///
+/// All MMIO is funnelled through `hw::mmio::{Reg32, RoReg32}` so the only
+/// `unsafe` blocks in this file are the one-shot register-address bindings
+/// and the `extern "C"` veneer-symbol address-of taken from the linker.
 
-// SAU register addresses (ARMv8-M standard, same on both targets)
-const SAU_CTRL: *mut u32 = 0xE000_EDD0 as *mut u32;
-const SAU_RNR: *mut u32 = 0xE000_EDD8 as *mut u32;
-const SAU_RBAR: *mut u32 = 0xE000_EDDC as *mut u32;
-const SAU_RLAR: *mut u32 = 0xE000_EDE0 as *mut u32;
+use crate::hw::mmio::Reg32;
+
+// SAU register addresses (ARMv8-M standard, same on both targets).
+const SAU_CTRL_ADDR: u32 = 0xE000_EDD0;
+const SAU_RNR_ADDR: u32 = 0xE000_EDD8;
+const SAU_RBAR_ADDR: u32 = 0xE000_EDDC;
+const SAU_RLAR_ADDR: u32 = 0xE000_EDE0;
+
+/// SAU registers used during boot. Single-threaded boot path owns them
+/// exclusively.
+struct SauRegs {
+    ctrl: Reg32,
+    rnr: Reg32,
+    rbar: Reg32,
+    rlar: Reg32,
+}
+
+// SAFETY: each address is a real, 4-byte-aligned ARMv8-M SAU register
+// exclusively owned by the boot path (single-threaded). After this
+// construction every touch is via safe `.read()` / `.write()`.
+const SAU: SauRegs = unsafe {
+    SauRegs {
+        ctrl: Reg32::new(SAU_CTRL_ADDR),
+        rnr: Reg32::new(SAU_RNR_ADDR),
+        rbar: Reg32::new(SAU_RBAR_ADDR),
+        rlar: Reg32::new(SAU_RLAR_ADDR),
+    }
+};
 
 extern "C" {
     static __veneer_base: u32;
@@ -17,19 +44,11 @@ extern "C" {
 }
 
 /// Program one SAU region.
-///
-/// # Safety
-///
-/// Performs raw MMIO writes to `SAU_RNR`/`SAU_RBAR`/`SAU_RLAR`. Caller
-/// must hold exclusive access to the SAU (single-threaded boot only),
-/// and `base`/`limit` must form a valid 32-byte-aligned secure-attribute
-/// window that does not overlap an already-active region with a
-/// conflicting attribute.
-unsafe fn configure_sau_region(region: u32, base: u32, limit: u32, nsc: bool) {
-    core::ptr::write_volatile(SAU_RNR, region);
-    core::ptr::write_volatile(SAU_RBAR, base & 0xFFFF_FFE0);
+fn configure_sau_region(region: u32, base: u32, limit: u32, nsc: bool) {
+    SAU.rnr.write(region);
+    SAU.rbar.write(base & 0xFFFF_FFE0);
     let nsc_bit = if nsc { 1 << 1 } else { 0 };
-    core::ptr::write_volatile(SAU_RLAR, (limit & 0xFFFF_FFE0) | nsc_bit | 1);
+    SAU.rlar.write((limit & 0xFFFF_FFE0) | nsc_bit | 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +56,8 @@ unsafe fn configure_sau_region(region: u32, base: u32, limit: u32, nsc: bool) {
 // ---------------------------------------------------------------------------
 #[cfg(not(feature = "stm32u585"))]
 mod qemu {
+    use crate::hw::mmio::{Reg32, RoReg32};
+
     const MPC0_BASE: u32 = 0x5800_7000; // SSRAM-0 (code, 4MB)
     const MPC1_BASE: u32 = 0x5800_8000; // SSRAM-1 (data, 2MB)
 
@@ -44,22 +65,43 @@ mod qemu {
     const MPC_BLK_IDX: u32 = 0x18;
     const MPC_BLK_LUT: u32 = 0x1C;
 
-    pub unsafe fn configure_mpc() {
-        // MPC0: SSRAM-0 — first 2MB secure (code), rest NS (NS code + NSC veneers)
-        configure_mpc_partial_ns(MPC0_BASE, 64);
-        // MPC1: SSRAM-1 — first 128KB secure (stack), rest NS
-        configure_mpc_partial_ns(MPC1_BASE, 4);
+    /// Per-MPC instance register handles.
+    struct MpcRegs {
+        blk_max: RoReg32,
+        blk_idx: Reg32,
+        blk_lut: Reg32,
     }
 
-    unsafe fn configure_mpc_partial_ns(mpc_base: u32, ns_start_lut_idx: u32) {
-        let blk_max = core::ptr::read_volatile((mpc_base + MPC_BLK_MAX) as *const u32);
-        let blk_idx_reg = (mpc_base + MPC_BLK_IDX) as *mut u32;
-        let blk_lut_reg = (mpc_base + MPC_BLK_LUT) as *mut u32;
+    // SAFETY: each MPC block is a real, 4-byte-aligned MMIO peripheral on
+    // the QEMU mps2-an505 SSE-200 platform. Boot path owns them exclusively.
+    const MPC0: MpcRegs = unsafe {
+        MpcRegs {
+            blk_max: RoReg32::new(MPC0_BASE + MPC_BLK_MAX),
+            blk_idx: Reg32::new(MPC0_BASE + MPC_BLK_IDX),
+            blk_lut: Reg32::new(MPC0_BASE + MPC_BLK_LUT),
+        }
+    };
+    const MPC1: MpcRegs = unsafe {
+        MpcRegs {
+            blk_max: RoReg32::new(MPC1_BASE + MPC_BLK_MAX),
+            blk_idx: Reg32::new(MPC1_BASE + MPC_BLK_IDX),
+            blk_lut: Reg32::new(MPC1_BASE + MPC_BLK_LUT),
+        }
+    };
 
+    pub fn configure_mpc() {
+        // MPC0: SSRAM-0 — first 2MB secure (code), rest NS (NS code + NSC veneers)
+        configure_mpc_partial_ns(&MPC0, 64);
+        // MPC1: SSRAM-1 — first 128KB secure (stack), rest NS
+        configure_mpc_partial_ns(&MPC1, 4);
+    }
+
+    fn configure_mpc_partial_ns(mpc: &MpcRegs, ns_start_lut_idx: u32) {
+        let blk_max = mpc.blk_max.read();
         for idx in 0..=blk_max {
-            core::ptr::write_volatile(blk_idx_reg, idx);
+            mpc.blk_idx.write(idx);
             let val = if idx >= ns_start_lut_idx { 0xFFFF_FFFF } else { 0 };
-            core::ptr::write_volatile(blk_lut_reg, val);
+            mpc.blk_lut.write(val);
         }
     }
 }
@@ -84,8 +126,10 @@ mod stm32 {
     //! to NS. The exact bit positions come from STM32U585 RM0456 §54
     //! (per-peripheral TZSC mapping tables).
 
+    use crate::hw::mmio::Reg32;
+
     // RCC AHB1ENR — enable GTZC1 clock (RCC is on AHB3 at 0x56020C00)
-    const RCC_AHB1ENR: *mut u32 = (0x5602_0C00 + 0x88) as *mut u32;
+    const RCC_AHB1ENR_ADDR: u32 = 0x5602_0C00 + 0x88;
 
     // GTZC1 MPCBB base addresses (S alias, AHB2)
     const MPCBB1_BASE: u32 = 0x5003_2C00; // SRAM1 (192 KB)
@@ -110,9 +154,41 @@ mod stm32 {
     // GTZC1, which is why the all-NS baseline below is required for
     // bring-up.
     const TZSC_BASE: u32 = 0x5003_2400;
-    const TZSC_SECCFGR1: *mut u32 = (TZSC_BASE + 0x10) as *mut u32;
-    const TZSC_SECCFGR2: *mut u32 = (TZSC_BASE + 0x14) as *mut u32;
-    const TZSC_SECCFGR3: *mut u32 = (TZSC_BASE + 0x18) as *mut u32;
+
+    /// Bundled GTZC handles. One-time bound below.
+    struct GtzcRegs {
+        rcc_ahb1enr: Reg32,
+        mpcbb1_cr: Reg32,
+        mpcbb2_cr: Reg32,
+        tzsc_seccfgr1: Reg32,
+        tzsc_seccfgr2: Reg32,
+        tzsc_seccfgr3: Reg32,
+    }
+
+    // SAFETY: each address is a 4-byte-aligned STM32U585 MMIO register
+    // owned exclusively by the boot path. The MPCBB1/MPCBB2 SECCFGR banks
+    // are accessed by per-index computed addresses below — see
+    // `mpcbb_seccfgr` helper for the one-shot `Reg32::new` covering those.
+    const GTZC: GtzcRegs = unsafe {
+        GtzcRegs {
+            rcc_ahb1enr: Reg32::new(RCC_AHB1ENR_ADDR),
+            mpcbb1_cr: Reg32::new(MPCBB1_BASE + MPCBB_CR),
+            mpcbb2_cr: Reg32::new(MPCBB2_BASE + MPCBB_CR),
+            tzsc_seccfgr1: Reg32::new(TZSC_BASE + 0x10),
+            tzsc_seccfgr2: Reg32::new(TZSC_BASE + 0x14),
+            tzsc_seccfgr3: Reg32::new(TZSC_BASE + 0x18),
+        }
+    };
+
+    /// Build an MPCBB SECCFGR-bank handle on the fly. The SECCFGR0..N
+    /// registers form a contiguous bank at `base + MPCBB_SECCFGR0 + i*4`;
+    /// constructing one Reg32 per index keeps the unsafe surface narrow.
+    fn mpcbb_seccfgr(base: u32, i: u32) -> Reg32 {
+        // SAFETY: `base` is one of MPCBB1_BASE / MPCBB2_BASE — both real
+        // MMIO peripherals. `i` is bounded by the caller (24 / 8) so the
+        // computed address stays within the 32-register SECCFGR bank.
+        unsafe { Reg32::new(base + MPCBB_SECCFGR0 + i * 4) }
+    }
 
 
     // ---- USB allowlist for TZSC ----
@@ -138,31 +214,24 @@ mod stm32 {
     #[cfg(feature = "usb")]
     const SECCFGR2_OTG_FS_BIT: u32 = 1 << 14;
 
-    pub unsafe fn configure_gtzc() {
+    pub fn configure_gtzc() {
         // Enable GTZC1 clock
-        let ahb1enr = core::ptr::read_volatile(RCC_AHB1ENR);
-        core::ptr::write_volatile(RCC_AHB1ENR, ahb1enr | (1 << 24));
+        GTZC.rcc_ahb1enr.set_bits(1 << 24);
         cortex_m::asm::dsb();
 
         // MPCBB1 (SRAM1, 192 KB): all secure (default after reset with TZEN=1,
         // but set explicitly for clarity).
         // 192 KB / 256 bytes = 768 blocks, 768 / 32 = 24 config registers.
-        core::ptr::write_volatile((MPCBB1_BASE + MPCBB_CR) as *mut u32, 0);
+        GTZC.mpcbb1_cr.write(0);
         for i in 0..24u32 {
-            core::ptr::write_volatile(
-                (MPCBB1_BASE + MPCBB_SECCFGR0 + i * 4) as *mut u32,
-                0xFFFF_FFFF, // all blocks secure
-            );
+            mpcbb_seccfgr(MPCBB1_BASE, i).write(0xFFFF_FFFF); // all blocks secure
         }
 
         // MPCBB2 (SRAM2, 64 KB): all non-secure.
         // 64 KB / 256 bytes = 256 blocks, 256 / 32 = 8 config registers.
-        core::ptr::write_volatile((MPCBB2_BASE + MPCBB_CR) as *mut u32, 0);
+        GTZC.mpcbb2_cr.write(0);
         for i in 0..8u32 {
-            core::ptr::write_volatile(
-                (MPCBB2_BASE + MPCBB_SECCFGR0 + i * 4) as *mut u32,
-                0x0000_0000, // all blocks non-secure
-            );
+            mpcbb_seccfgr(MPCBB2_BASE, i).write(0x0000_0000); // all blocks non-secure
         }
 
         // ---- GTZC1 TZSC: pre-production all-NS baseline ----
@@ -179,14 +248,14 @@ mod stm32 {
         // of secure-only peripherals (AES / HASH / PKA / SAES / I2C1 /
         // RNG) until the correct AHB2 controller base (GTZC2_TZSC) is
         // confirmed against RM0456 and hardware.
-        core::ptr::write_volatile(TZSC_SECCFGR1, 0);
-        core::ptr::write_volatile(TZSC_SECCFGR2, 0);
-        core::ptr::write_volatile(TZSC_SECCFGR3, 0);
+        GTZC.tzsc_seccfgr1.write(0);
+        GTZC.tzsc_seccfgr2.write(0);
+        GTZC.tzsc_seccfgr3.write(0);
         cortex_m::asm::dsb();
         let _ = (
-            core::ptr::read_volatile(TZSC_SECCFGR1),
-            core::ptr::read_volatile(TZSC_SECCFGR2),
-            core::ptr::read_volatile(TZSC_SECCFGR3),
+            GTZC.tzsc_seccfgr1.read(),
+            GTZC.tzsc_seccfgr2.read(),
+            GTZC.tzsc_seccfgr3.read(),
         );
 
         // AHB2 peripheral TZSC (USB OTG FS + RNG + AES/HASH/PKA + SDMMC
@@ -205,44 +274,49 @@ mod stm32 {
 }
 
 pub fn init() {
-    unsafe {
-        #[cfg(not(feature = "stm32u585"))]
-        qemu::configure_mpc();
+    #[cfg(not(feature = "stm32u585"))]
+    qemu::configure_mpc();
 
-        #[cfg(feature = "stm32u585")]
-        stm32::configure_gtzc();
+    #[cfg(feature = "stm32u585")]
+    stm32::configure_gtzc();
 
-        // Disable SAU while configuring
-        core::ptr::write_volatile(SAU_CTRL, 0);
+    // Disable SAU while configuring.
+    SAU.ctrl.write(0);
 
-        // Region 0: NS code flash
-        #[cfg(not(feature = "stm32u585"))]
-        configure_sau_region(0, 0x0020_0000, 0x003F_FFFF, false);
-        #[cfg(feature = "stm32u585")]
-        configure_sau_region(0, 0x0810_0000, 0x081F_FFFF, false); // bank 2 NS
+    // Region 0: NS code flash
+    #[cfg(not(feature = "stm32u585"))]
+    configure_sau_region(0, 0x0020_0000, 0x003F_FFFF, false);
+    #[cfg(feature = "stm32u585")]
+    configure_sau_region(0, 0x0810_0000, 0x081F_FFFF, false); // bank 2 NS
 
-        // Region 1: NSC veneers (placed in secure flash by linker)
-        let veneer_base = &__veneer_base as *const u32 as u32;
-        let veneer_limit = &__veneer_limit as *const u32 as u32;
-        let nsc_end = if veneer_limit > veneer_base {
-            ((veneer_limit + 0xFF) & 0xFFFF_FF00) - 1
-        } else {
-            veneer_base + 0xFF
-        };
-        configure_sau_region(1, veneer_base, nsc_end, true);
+    // Region 1: NSC veneers (placed in secure flash by linker).
+    // SAFETY: `__veneer_base` / `__veneer_limit` are linker-defined symbols;
+    // taking their addresses is safe but the `static` deref reads them
+    // through `extern "C"` linkage.
+    let (veneer_base, veneer_limit) = unsafe {
+        (
+            &__veneer_base as *const u32 as u32,
+            &__veneer_limit as *const u32 as u32,
+        )
+    };
+    let nsc_end = if veneer_limit > veneer_base {
+        ((veneer_limit + 0xFF) & 0xFFFF_FF00) - 1
+    } else {
+        veneer_base + 0xFF
+    };
+    configure_sau_region(1, veneer_base, nsc_end, true);
 
-        // Region 2: NS data SRAM
-        #[cfg(not(feature = "stm32u585"))]
-        configure_sau_region(2, 0x2802_0000, 0x29FF_FFFF, false);
-        #[cfg(feature = "stm32u585")]
-        configure_sau_region(2, 0x2003_0000, 0x2003_FFFF, false); // SRAM2 NS
+    // Region 2: NS data SRAM
+    #[cfg(not(feature = "stm32u585"))]
+    configure_sau_region(2, 0x2802_0000, 0x29FF_FFFF, false);
+    #[cfg(feature = "stm32u585")]
+    configure_sau_region(2, 0x2003_0000, 0x2003_FFFF, false); // SRAM2 NS
 
-        // Region 3: NS peripherals
-        configure_sau_region(3, 0x4000_0000, 0x4FFF_FFFF, false);
+    // Region 3: NS peripherals
+    configure_sau_region(3, 0x4000_0000, 0x4FFF_FFFF, false);
 
-        // Enable SAU + barriers
-        core::ptr::write_volatile(SAU_CTRL, 1);
-        cortex_m::asm::dsb();
-        cortex_m::asm::isb();
-    }
+    // Enable SAU + barriers
+    SAU.ctrl.write(1);
+    cortex_m::asm::dsb();
+    cortex_m::asm::isb();
 }

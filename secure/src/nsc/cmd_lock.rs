@@ -5,6 +5,9 @@
 
 use sphincs_tz_shared::NscStatus;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. Zeroizes the
+/// secure-world `SecureState` and SE caches; no NS pointer derefs.
 pub(super) unsafe fn run() -> u32 {
     super::zeroize_sensitive_state();
     crate::ui::show_status("Locked", "");

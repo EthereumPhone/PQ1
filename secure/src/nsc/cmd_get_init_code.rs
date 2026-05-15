@@ -52,6 +52,11 @@ use super::GatewayArgs;
 /// Wire layout of the 12-byte input body.
 const INPUT_LEN: usize = 12;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. NS pointer
+/// derefs only after `validate_ns_{read,write}_ptr`; `static mut`
+/// touches (`SE`, `SLOT_CACHE`) rely on the non-reentrant dispatcher
+/// + `HandlerGuard` for exclusive access.
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // HIGH-7 guard: the bootstrap + slot C10 keygens keep stack-local
     // copies of the secret keys alive for ~10 s each. Block SysTick's
@@ -140,6 +145,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // (account, chain, slot=0) skips this <1 s keygen.
     const SLOT_INDEX: u32 = 0;
     let need_keygen = super::state::peek_state(|_| {
+        // SAFETY: category 5 — read-only borrow of `static mut
+        // SLOT_CACHE`. Single-threaded non-reentrant dispatcher
+        // (closure runs synchronously inside `peek_state`'s scope) —
+        // no concurrent mutator.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
             Some(c) => {
@@ -160,6 +169,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 SLOT_INDEX,
                 |p| crate::ui::show_progress("Slot keygen", p),
             );
+        // SAFETY: category 5 — exclusive write to `static mut
+        // SLOT_CACHE`. The non-reentrant dispatcher + `HandlerGuard`
+        // mean no SysTick wipe or other handler can race this update.
+        // Any prior `CachedSlot` drops here; its `ZeroizeOnDrop`
+        // wipes the dropped secret key.
         unsafe {
             *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
                 account_index,
@@ -178,6 +192,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Extract 32-byte slot-0 pubkey halves from the cache. Mirrors the
     // extraction in `cmd_sign_userop.rs` (N-byte pkSeed/pkRoot copied
     // into the low 16 bytes of a 32-byte zero-init buffer).
+    // SAFETY: category 5 — read-only borrow of `static mut SLOT_CACHE`.
+    // The cache was just populated above (or already valid) under the
+    // non-reentrant dispatcher; no concurrent mutator can replace it
+    // while we copy the pubkey halves out.
     let (slot_pk_seed_32, slot_pk_root_32) = unsafe {
         match &*core::ptr::addr_of!(super::state::SLOT_CACHE) {
             Some(c) => {

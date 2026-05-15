@@ -79,6 +79,28 @@ impl Reg32 {
     pub fn clear_bits(self, mask: u32) {
         self.modify(|v| v & !mask);
     }
+
+    /// Read register at `self.addr + offset` words. Useful for contiguous
+    /// register banks (PKA RAM operand slots, e.g.).
+    ///
+    /// # Safety
+    /// `offset` must point inside the same MMIO bank as `self`.
+    #[inline(always)]
+    pub unsafe fn read_at(self, offset: usize) -> u32 {
+        // SAFETY: caller asserts offset is in-bank; volatile prevents the
+        // compiler from speculating across the bank boundary.
+        unsafe { read_volatile(self.addr.add(offset)) }
+    }
+
+    /// Write register at `self.addr + offset` words.
+    ///
+    /// # Safety
+    /// `offset` must point inside the same MMIO bank as `self`.
+    #[inline(always)]
+    pub unsafe fn write_at(self, offset: usize, v: u32) {
+        // SAFETY: caller asserts offset is in-bank.
+        unsafe { write_volatile(self.addr.add(offset), v) }
+    }
 }
 
 /// Read-only 32-bit MMIO register (status, digest output, etc.).

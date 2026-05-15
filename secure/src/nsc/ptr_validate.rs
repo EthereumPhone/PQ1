@@ -40,10 +40,15 @@ use sphincs_tz_shared::{
 #[inline(always)]
 fn tt(addr: u32) -> u32 {
     let r: u32;
-    // SAFETY: `tt` is a pure query instruction with no side effects on
-    // architectural state; it reads the SAU/IDAU classification of
-    // the target address. The `nomem` / `nostack` hints let LLVM reorder
-    // around it freely.
+    // SAFETY: ARMv8-M `TT` is a pure register-to-register query that
+    // reads the SAU/IDAU classification of `addr` from secure state
+    // and returns the 32-bit result word. It performs no memory
+    // access (`nomem`), does not touch the stack (`nostack`), and
+    // leaves architectural flags unchanged (`preserves_flags`). The
+    // operand register holding `addr` is read-only from the
+    // instruction's perspective, so this `asm!` cannot affect
+    // surrounding code. Inline asm is the only way to emit a `TT`
+    // — Rust has no intrinsic for it.
     unsafe {
         core::arch::asm!(
             "tt {out}, {addr}",

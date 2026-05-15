@@ -77,7 +77,7 @@
 //!   to the caller; the staged manifest is discarded and the active
 //!   slot stays unchanged.
 
-use core::ptr::{read_volatile, write_volatile};
+use crate::hw::mmio::{Reg32, RoReg32};
 
 // STM32U585 user OTP base address (same on secure and non-secure
 // aliases; OTP has no watermark).
@@ -88,9 +88,37 @@ pub const OTP_BASE: u32 = 0x0BFA_0000;
 // truth in flash.rs would require exporting these privates, which
 // would widen the unsafe surface of the flash module unnecessarily.
 const FLASH: u32 = 0x5002_2000;
-const FLASH_SECKEYR: *mut u32 = (FLASH + 0x0C) as *mut u32;
-const FLASH_SECSR: *mut u32 = (FLASH + 0x24) as *mut u32;
-const FLASH_SECCR: *mut u32 = (FLASH + 0x2C) as *mut u32;
+const FLASH_SECKEYR_ADDR: u32 = FLASH + 0x0C;
+const FLASH_SECSR_ADDR: u32 = FLASH + 0x24;
+const FLASH_SECCR_ADDR: u32 = FLASH + 0x2C;
+
+/// Flash-controller registers funnelled through typed MMIO handles.
+struct FlashRegs {
+    seckeyr: Reg32,
+    secsr: Reg32,
+    seccr: Reg32,
+}
+
+// SAFETY: each address is a real, 4-byte-aligned MMIO register in the
+// flash controller's secure alias. The secure world is single-threaded
+// and non-preemptive; `program_otp_qw` further fences its FLASH access
+// inside `cortex_m::interrupt::free`. We duplicate these handles here
+// (rather than reusing `hw::flash`'s) so the OTP driver is independent.
+const FLASH_REG: FlashRegs = unsafe {
+    FlashRegs {
+        seckeyr: Reg32::new(FLASH_SECKEYR_ADDR),
+        secsr: Reg32::new(FLASH_SECSR_ADDR),
+        seccr: Reg32::new(FLASH_SECCR_ADDR),
+    }
+};
+
+/// Read-only handle pointing at OTP word 0. The OTP region is memory-
+/// mapped and read with normal load instructions; we use `RoReg32::read_at`
+/// for contiguous-bank reads of the rollback tally.
+///
+// SAFETY: OTP_BASE is the 4-byte-aligned start of the OTP region, readable
+// from the secure world. Reads are pure loads with no side effects.
+const OTP_W0: RoReg32 = unsafe { RoReg32::new(OTP_BASE) };
 
 const KEY1: u32 = 0x4567_0123;
 const KEY2: u32 = 0xCDEF_89AB;
@@ -113,9 +141,17 @@ pub const MASTER_KEY_OFFSET: u32 = ROLLBACK_WORDS * 4;
 pub const MASTER_KEY_SIZE: usize = 32;
 /// Absolute address of the device master key.
 const MASTER_KEY_ADDR: u32 = OTP_BASE + MASTER_KEY_OFFSET;
+/// Number of 32-bit words in the device-master-key region (32 B = 8 words).
+const MASTER_KEY_WORDS: usize = MASTER_KEY_SIZE / 4;
 /// Upper bound for `program_otp_qw` bounds checks — one past the last
 /// currently-used OTP byte.
 const OTP_RESERVED_BYTES: u32 = MASTER_KEY_OFFSET + MASTER_KEY_SIZE as u32;
+
+/// Read-only handle at the master-key region word 0.
+///
+// SAFETY: 4-byte aligned (OTP_BASE is 4 KB aligned, MASTER_KEY_OFFSET is
+// 128). Readable from secure world; reads are pure loads.
+const MASTER_KEY_W0: RoReg32 = unsafe { RoReg32::new(MASTER_KEY_ADDR) };
 
 /// Error types returned by OTP operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,12 +190,11 @@ pub enum OtpError {
 /// tally region). Pure read, no programming.
 pub fn rollback_floor() -> u32 {
     let mut count: u32 = 0;
-    let base = OTP_BASE as *const u32;
     for i in 0..ROLLBACK_WORDS {
-        // SAFETY: OTP is memory-mapped and readable from secure world.
-        // The word count is bounded by ROLLBACK_WORDS, fitting inside
-        // the 128-byte reserved region.
-        let w: u32 = unsafe { read_volatile(base.offset(i as isize)) };
+        // SAFETY: `i < ROLLBACK_WORDS = 32`, so `OTP_W0 + i words` stays
+        // inside the 128-byte rollback-tally region — the same contiguous
+        // OTP bank `OTP_W0` was constructed for.
+        let w: u32 = unsafe { OTP_W0.read_at(i as usize) };
         count += w.count_zeros();
     }
     count
@@ -193,8 +228,8 @@ pub unsafe fn bump_to(target: u32) -> Result<(), OtpError> {
     let mut remaining = to_clear;
     let mut word_idx = current / 32;
     while remaining > 0 && word_idx < ROLLBACK_WORDS {
-        let base = OTP_BASE as *const u32;
-        let cur_word: u32 = unsafe { read_volatile(base.offset(word_idx as isize)) };
+        // SAFETY: `word_idx < ROLLBACK_WORDS = 32` — inside the tally bank.
+        let cur_word: u32 = unsafe { OTP_W0.read_at(word_idx as usize) };
 
         // Find still-set bits (LSB-first).
         let mut new_word = cur_word;
@@ -218,13 +253,19 @@ pub unsafe fn bump_to(target: u32) -> Result<(), OtpError> {
 
             let mut qw_bytes = [0u8; 16];
             for i in 0..4u32 {
-                let w: u32 =
-                    unsafe { read_volatile(base.offset(((word_idx & !0x03) + i) as isize)) };
+                let wi = (word_idx & !0x03) + i;
+                // SAFETY: `wi < ROLLBACK_WORDS = 32` (word_idx itself is
+                // bounded by the loop guard above, and we mask its low
+                // bits before adding `i ∈ 0..4`). All four reads remain
+                // inside the tally bank `OTP_W0` was constructed for.
+                let w: u32 = unsafe { OTP_W0.read_at(wi as usize) };
                 qw_bytes[i as usize * 4..i as usize * 4 + 4]
                     .copy_from_slice(&w.to_le_bytes());
             }
             qw_bytes[in_qw * 4..in_qw * 4 + 4].copy_from_slice(&new_word.to_le_bytes());
 
+            // SAFETY: `program_otp_qw` is `unsafe` to keep one-way OTP
+            // commits visible at every call site — see fn docs.
             unsafe { program_otp_qw(qw_base, &qw_bytes)? };
         }
 
@@ -250,31 +291,45 @@ pub unsafe fn bump_to(target: u32) -> Result<(), OtpError> {
 /// within the reserved OTP region (rollback tally + master key). The 16
 /// bytes at `addr` must have been AND-compatible with `data` (each bit in
 /// `data` must be 0 or match the current bit — never upgrade 0 → 1).
+///
+/// # Safety
+/// Commits one quad-word to OTP. The flips are **one-way**: once a bit
+/// transitions 1 → 0 there is no recovery path (not even RDP regression).
+/// Every call site MUST have a `// SAFETY:` comment naming the irreversible
+/// effect. Callers must also ensure no other flash op is in flight on this
+/// core; the secure world is single-threaded, but DMA / pre-fetch must be
+/// quiesced. We additionally fence with `cortex_m::interrupt::free`.
 unsafe fn program_otp_qw(addr: u32, data: &[u8; 16]) -> Result<(), OtpError> {
     debug_assert!(addr >= OTP_BASE);
     debug_assert!(addr + 16 <= OTP_BASE + OTP_RESERVED_BYTES);
     debug_assert_eq!(addr & 0xF, 0);
 
-    cortex_m::interrupt::free(|_| unsafe {
+    cortex_m::interrupt::free(|_| {
         // Wait for controller idle.
-        while read_volatile(FLASH_SECSR) & BSY != 0 {
+        while FLASH_REG.secsr.read() & BSY != 0 {
             cortex_m::asm::nop();
         }
         // Clear stale error flags.
-        let sr_pre = read_volatile(FLASH_SECSR);
+        let sr_pre = FLASH_REG.secsr.read();
         if sr_pre & ERR_MASK != 0 {
-            write_volatile(FLASH_SECSR, sr_pre & ERR_MASK);
+            FLASH_REG.secsr.write(sr_pre & ERR_MASK);
         }
-        let cr_pre = read_volatile(FLASH_SECCR);
+        let cr_pre = FLASH_REG.seccr.read();
         // Unlock SECCR.
-        write_volatile(FLASH_SECKEYR, KEY1);
-        write_volatile(FLASH_SECKEYR, KEY2);
-        let cr_after_unlock = read_volatile(FLASH_SECCR);
+        FLASH_REG.seckeyr.write(KEY1);
+        FLASH_REG.seckeyr.write(KEY2);
+        let cr_after_unlock = FLASH_REG.seccr.read();
 
-        write_volatile(FLASH_SECCR, PG);
-        let cr_after_pg = read_volatile(FLASH_SECCR);
+        FLASH_REG.seccr.write(PG);
+        let cr_after_pg = FLASH_REG.seccr.read();
 
-        let dst = addr as *mut u32;
+        // Construct a single `Reg32` aimed at the QW base; step the four
+        // word commits via `write_at`. The per-word `unsafe` markers below
+        // preserve the OTP recipe's call-site-visibility property: every
+        // irreversible bit flip is named.
+        // SAFETY: `addr` is 16-byte aligned and inside the OTP reserved
+        // region (asserted above); offsets `0..=3` stay inside the QW.
+        let qw = unsafe { Reg32::new(addr) };
         for i in 0..4 {
             let word = u32::from_le_bytes([
                 data[i * 4],
@@ -282,18 +337,20 @@ unsafe fn program_otp_qw(addr: u32, data: &[u8; 16]) -> Result<(), OtpError> {
                 data[i * 4 + 2],
                 data[i * 4 + 3],
             ]);
-            write_volatile(dst.add(i), word);
+            // SAFETY: offset `i ∈ 0..4` stays inside the 4-word QW the
+            // handle above was constructed for. This write irreversibly
+            // commits bits to silicon — the OTP one-way property.
+            unsafe { qw.write_at(i, word) };
         }
 
-        while read_volatile(FLASH_SECSR) & BSY != 0 {
+        while FLASH_REG.secsr.read() & BSY != 0 {
             cortex_m::asm::nop();
         }
-        write_volatile(FLASH_SECCR, 0);
+        FLASH_REG.seccr.write(0);
 
-        let sr = read_volatile(FLASH_SECSR);
+        let sr = FLASH_REG.secsr.read();
         // Re-lock.
-        let cr = read_volatile(FLASH_SECCR);
-        write_volatile(FLASH_SECCR, cr | LOCK);
+        FLASH_REG.seccr.set_bits(LOCK);
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
 
@@ -302,7 +359,7 @@ unsafe fn program_otp_qw(addr: u32, data: &[u8; 16]) -> Result<(), OtpError> {
                 "[OTP/prog] FAIL addr=0x{:08x} SR_pre=0x{:08x} CR_pre=0x{:08x} CR_after_unlock=0x{:08x} CR_after_pg=0x{:08x} SR_final=0x{:08x}",
                 addr, sr_pre, cr_pre, cr_after_unlock, cr_after_pg, sr
             );
-            write_volatile(FLASH_SECSR, sr & ERR_MASK);
+            FLASH_REG.secsr.write(sr & ERR_MASK);
             Err(OtpError::ProgramError)
         } else {
             secure_log!(
@@ -355,13 +412,13 @@ pub fn is_device_master_burned() -> bool {
     }
     #[cfg(not(feature = "otp-hardcoded-master-key"))]
     {
-        let base = MASTER_KEY_ADDR as *const u8;
-        for i in 0..MASTER_KEY_SIZE {
-            // SAFETY: OTP is memory-mapped and readable from secure world;
-            // the loop is bounded by MASTER_KEY_SIZE = 32 bytes, all of
-            // which fall inside the reserved master-key region.
-            let b = unsafe { read_volatile(base.add(i)) };
-            if b != 0xFF {
+        // Word-scan equivalent of the byte scan: blank OTP reads all-1s,
+        // so any word != 0xFFFF_FFFF means at least one bit has flipped.
+        for i in 0..MASTER_KEY_WORDS {
+            // SAFETY: `i < MASTER_KEY_WORDS = 8` — inside the master-key
+            // bank `MASTER_KEY_W0` was constructed for.
+            let w = unsafe { MASTER_KEY_W0.read_at(i) };
+            if w != 0xFFFF_FFFF {
                 return true;
             }
         }
@@ -386,12 +443,14 @@ pub fn read_device_master() -> Result<[u8; MASTER_KEY_SIZE], OtpError> {
         if !is_device_master_burned() {
             return Err(OtpError::NotBurned);
         }
-        let base = MASTER_KEY_ADDR as *const u8;
         let mut out = [0u8; MASTER_KEY_SIZE];
-        for i in 0..MASTER_KEY_SIZE {
-            // SAFETY: same as is_device_master_burned — bounded read
-            // inside the reserved master-key region.
-            out[i] = unsafe { read_volatile(base.add(i)) };
+        for i in 0..MASTER_KEY_WORDS {
+            // SAFETY: `i < MASTER_KEY_WORDS = 8` — inside the master-key
+            // bank `MASTER_KEY_W0` was constructed for. Reading as 32-bit
+            // words and reassembling little-endian preserves the original
+            // byte order of the per-byte volatile reads.
+            let w = unsafe { MASTER_KEY_W0.read_at(i) };
+            out[i * 4..i * 4 + 4].copy_from_slice(&w.to_le_bytes());
         }
         Ok(out)
     }

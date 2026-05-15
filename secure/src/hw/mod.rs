@@ -5,7 +5,11 @@
 /// Typed MMIO register handles — encapsulates `unsafe` volatile
 /// accesses behind safe `.read()` / `.write()` / `.modify()` methods,
 /// so peripheral drivers don't have to repeat `unsafe` at every touch.
-#[cfg(feature = "stm32u585")]
+///
+/// Always available (no hardware feature gate) so non-`stm32u585` builds
+/// — notably the QEMU mps2-an505 boot path in `sau::init` — can also use
+/// it for the ARMv8-M architectural peripherals (SAU, SysTick, DWT, ICSR,
+/// DHCSR) and the QEMU SSE-200 MPC blocks.
 pub mod mmio;
 
 #[cfg(feature = "pka-accel")]

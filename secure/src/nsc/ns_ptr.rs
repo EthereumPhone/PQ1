@@ -153,11 +153,19 @@ impl<T> ReadPtr<T> {
     /// pattern in `cmd_sign_userop` depends on this guarantee.
     pub fn read_into_slice(&self, dst: &mut [u8]) {
         assert_eq!(dst.len(), self.len);
-        // SAFETY: `validate_read` proved `self.addr..self.addr+self.len`
-        // is fully NS-classified at the time of validation. Volatile
-        // reads must come from a non-secure region — the SAU
-        // classification holds across this call because the secure
-        // world holds the gateway lock.
+        // SAFETY: category 2 — NS pointer deref. `ReadPtr<T>` was
+        // constructed by `NsPtr::validate_read`, whose F-8-hardened
+        // two-pass `validate_ns_read_ptr` proved the entire
+        // `[self.addr, self.addr + self.len)` range is fully
+        // NS-classified (constant window + ARMv8-M `tt`) and does
+        // not overlap the shared mailbox. The SAU classification
+        // cannot change underfoot for the duration of this call
+        // because the secure world holds the gateway lock (non-
+        // reentrant dispatcher) and NS cannot reprogram the SAU.
+        // `read_volatile` byte-by-byte realises the TOCTOU snapshot
+        // — the compiler is forbidden from eliding or batching the
+        // reads, so a hostile NS cannot present different bytes to
+        // the validator vs. the consumer.
         unsafe {
             let src = self.addr as *const u8;
             for i in 0..self.len {
@@ -177,7 +185,18 @@ impl<T> ReadPtr<T> {
     /// caller is responsible for the no-concurrent-mutation invariant.
     #[inline]
     pub unsafe fn as_slice<'a>(&self) -> &'a [u8] {
-        // SAFETY: validated range, see contract above.
+        // SAFETY: category 2 — NS pointer deref backed by the typestate
+        // proof. `ReadPtr<T>` can only be obtained via `NsPtr::validate_read`
+        // (private constructor), which calls
+        // `validate_ns_read_ptr(addr, len)` TWICE with `wait_random()`
+        // between, gated by hamming-distant sentinels. That predicate
+        // proved the entire `[addr, addr+len)` range is fully
+        // NS-classified by the SAU (constant-window check + ARMv8-M
+        // `tt` per-block) and doesn't overlap the shared mailbox.
+        // The caller of `as_slice` carries the additional contract,
+        // documented in `# Safety` above, that NS will not mutate the
+        // range for the returned lifetime — single-threaded gateway
+        // makes this trivially true for the duration of one handler.
         unsafe { core::slice::from_raw_parts(self.addr as *const u8, self.len) }
     }
 }
@@ -210,8 +229,14 @@ impl<T> WritePtr<T> {
     /// `src.len()` MUST equal `self.len()`.
     pub fn write_from_slice(&self, src: &[u8]) {
         assert_eq!(src.len(), self.len);
-        // SAFETY: `validate_write` proved `self.addr..self.addr+self.len`
-        // is fully NS-classified and not aliasing the shared mailbox.
+        // SAFETY: category 2 — NS pointer deref. `WritePtr<T>` was
+        // constructed by `NsPtr::validate_write`, whose F-8-hardened
+        // two-pass `validate_ns_write_ptr` proved the entire
+        // `[self.addr, self.addr + self.len)` range is fully
+        // NS-classified, NS-writable (NS-SRAM, not NS-flash), and
+        // does not overlap the shared mailbox. `write_volatile` per
+        // byte forces the compiler to emit one store per source byte
+        // — NS observers cannot see torn / partial words mid-copy.
         unsafe {
             let dst = self.addr as *mut u8;
             for (i, &b) in src.iter().enumerate() {

@@ -24,6 +24,10 @@ use super::state::{peek_state, FW_UPDATE};
 use super::GatewayArgs;
 use crate::fw_update::{self, ChunkError};
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. Validates the
+/// NS payload pointer before any deref; the static-mut `FW_UPDATE`
+/// access is guarded by `HandlerGuard` (no SysTick wipe under us).
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Critical: hold the busy guard so SysTick's idle-wipe cannot drop
     // FW_UPDATE while we hold a mutable reference into it via
@@ -49,6 +53,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let mut header = [0u8; FW_CHUNK_HEADER_LEN];
     let mut data = [0u8; FW_MAX_CHUNK];
     let data_len = total_len - FW_CHUNK_HEADER_LEN;
+    // SAFETY: category 2 — NS pointer deref after `validate_ns_read_ptr`
+    // proved `[payload_ptr, payload_ptr + total_len)` is fully NS
+    // (constant-window + per-block ARMv8-M `tt`). Volatile byte-by-byte
+    // reads materialise the TOCTOU snapshot into secure-stack `header`
+    // / `data`; the NS bytes are never re-read after this point.
     unsafe {
         let src = payload_ptr as *const u8;
         for i in 0..FW_CHUNK_HEADER_LEN {
@@ -68,6 +77,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // Must have an active session.
+    // SAFETY: category 5 — `FW_UPDATE: static mut Option<FwUpdateCtx>`
+    // is single-threaded driver state. Non-reentrant dispatcher +
+    // `HandlerGuard` block any concurrent mutation; this is a read-
+    // only borrow to discriminate `None`/`Some` before we take a
+    // mutable reference below.
     let ctx_present = unsafe { (*core::ptr::addr_of!(FW_UPDATE)).is_some() };
     if !ctx_present {
         return NscStatus::FwUpdateBadState as u32;
@@ -76,7 +90,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Borrow the context mutably to do the bounds check + write. We
     // go through the raw static-mut address because `with_state`
     // only scopes SecureState, not FW_UPDATE.
-    // SAFETY: single-threaded non-reentrant dispatcher.
+    // SAFETY: category 5 — exclusive mutable borrow of the `FW_UPDATE`
+    // static mut. The non-reentrant dispatcher guarantees no other
+    // handler is active; `_busy = HandlerGuard::enter()` above
+    // prevents SysTick's idle-wipe from dropping the `Option` while
+    // we hold `ctx`. `unwrap()` is sound: we just observed
+    // `ctx_present == true`, and nothing on the path between
+    // `ctx_present` and this line mutates `FW_UPDATE`.
     let ctx = unsafe { (*core::ptr::addr_of_mut!(FW_UPDATE)).as_mut().unwrap() };
 
     match fw_update::check_chunk(ctx, image_kind, chunk_offset, chunk_len as u16) {
@@ -88,6 +108,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Err(ChunkError::FlashError) => return NscStatus::FwUpdateFlashError as u32,
     }
 
+    // SAFETY: `staging::write_chunk` is `unsafe fn` because it
+    // programs bank-2 flash. Preconditions: bounds-checked
+    // `(image_kind, chunk_offset, chunk_len)` against `ctx` by the
+    // `check_chunk` call above, and the destination addresses live in
+    // the inactive slot established by BEGIN (the currently-running
+    // image is therefore untouched).
     unsafe {
         match fw_update::staging::write_chunk(ctx, image_kind, chunk_offset, &data[..data_len]) {
             Ok(()) => NscStatus::Ok as u32,

@@ -36,6 +36,10 @@ use super::GatewayArgs;
 /// Output length: a 20-byte Ethereum address.
 const ADDR_LEN: usize = 20;
 
+/// # Safety
+/// CMSE non-secure-entry handler — dispatcher-invoked. NS pointer
+/// deref happens only after `validate_ns_write_ptr`; `static mut SE`
+/// access uses the single-threaded dispatcher invariant.
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if !super::state::peek_state(|s| s.pin_verified) {
         return NscStatus::NotInitialized as u32;

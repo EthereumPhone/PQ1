@@ -15,9 +15,14 @@
 //!
 //! # Safety
 //!
-//! The PKA peripheral is memory-mapped and accessed via raw pointer writes.
-//! It must be configured as a TrustZone secure peripheral via GTZC before use.
-//! Only one operation may be in flight at a time (no concurrent access).
+//! The PKA peripheral is memory-mapped. All MMIO is funnelled through
+//! `hw::mmio::{Reg32, RoReg32}`, which encapsulates `read_volatile` /
+//! `write_volatile` once per address. The peripheral must be configured as
+//! a TrustZone secure peripheral via GTZC before use, and only one
+//! operation may be in flight at a time (no concurrent access — the secure
+//! world is single-threaded and non-preemptive).
+
+use crate::hw::mmio::{Reg32, RoReg32};
 
 // ── PKA peripheral registers ────────────────────────────────────────────
 
@@ -26,12 +31,9 @@
 /// secure code must use 0x520C_2000.
 const PKA_BASE: u32 = 0x520C_2000;
 
-/// PKA control register
-const PKA_CR: *mut u32 = PKA_BASE as *mut u32;
-/// PKA status register
-const PKA_SR: *const u32 = (PKA_BASE + 0x04) as *const u32;
-/// PKA clear flag register
-const PKA_CLRFR: *mut u32 = (PKA_BASE + 0x08) as *mut u32;
+/// RCC AHB2ENR1 (NS alias used at boot before TZ flips this to secure-only).
+const RCC_AHB2ENR1_ADDR: u32 = 0x4002_084C;
+const RCC_AHB2ENR1_PKAEN: u32 = 1 << 15;
 
 // CR bit fields
 const CR_EN: u32 = 1 << 0;
@@ -41,6 +43,7 @@ const CR_MODE_MASK: u32 = 0x3F << CR_MODE_SHIFT;
 
 // SR bit fields
 const SR_INITOK: u32 = 1 << 0;
+#[allow(dead_code)]
 const SR_BUSY: u32 = 1 << 16;
 const SR_PROCENDF: u32 = 1 << 17;
 
@@ -49,19 +52,20 @@ const CLRFR_PROCENDFC: u32 = 1 << 17;
 
 // ── PKA operation modes ─────────────────────────────────────────────────
 
+#[allow(dead_code)]
 const MODE_MONTGOMERY_PARAM: u32 = 0x01;
 const MODE_MODULAR_INV: u32 = 0x08;
 const MODE_MODULAR_ADD: u32 = 0x0E;
 const MODE_MODULAR_SUB: u32 = 0x0F;
 const MODE_MONTGOMERY_MUL: u32 = 0x10;
 
-// ── PKA RAM offsets (word addresses from PKA_BASE + 0x400) ──────────────
+// ── PKA RAM offsets (byte addresses from PKA_BASE) ──────────────────────
 
 /// PKA RAM base (operand storage area)
 const PKA_RAM_BASE: u32 = PKA_BASE + 0x400;
 
 /// Operand size in bits — word offset 2 → byte offset 0x0008 from RAM base
-const RAM_NB_BITS: u32 = PKA_RAM_BASE + 0x0008;
+const RAM_NB_BITS_ADDR: u32 = PKA_RAM_BASE + 0x0008;
 /// First operand — word offset 0x294 → byte offset 0x0A50 from PKA_BASE
 const RAM_OP1: u32 = PKA_BASE + 0x0A50;
 /// Second operand
@@ -87,6 +91,53 @@ const BLS12_381_BITS: u32 = 384;
 /// Number of 32-bit limbs for a 384-bit operand
 const N_LIMBS: usize = 12;
 
+// ── Register handles ────────────────────────────────────────────────────
+
+/// All MMIO registers this driver owns, bundled so the one-time
+/// `unsafe { ... }` for `Reg32::new` happens once at module scope.
+struct PkaRegs {
+    /// PKA control register
+    cr: Reg32,
+    /// PKA status register (read-only flags)
+    sr: RoReg32,
+    /// PKA clear-flag register
+    clrfr: Reg32,
+    /// RCC AHB2ENR1 — owns the PKAEN bit
+    rcc_ahb2enr1: Reg32,
+    /// PKA RAM cell holding the operand-size-in-bits parameter
+    ram_nb_bits: Reg32,
+    /// Base of operand slot OP1 (used with `write_at` / `read_at`).
+    op1: Reg32,
+    /// Base of operand slot OP2.
+    op2: Reg32,
+    /// Base of operand slot OP3 (modulus).
+    modulus: Reg32,
+    /// Base of operand slot RESULT (read-only after `execute`).
+    result: RoReg32,
+}
+
+// SAFETY: each address below is a real, 4-byte-aligned MMIO register or
+// PKA-RAM operand slot exclusively owned by this driver. The secure world
+// is single-threaded and non-preemptive — nothing else races us. Operand
+// slots are stepped via the safe-looking `unsafe fn read_at` / `write_at`
+// helpers; the safety obligation there is "offset stays in-bank", which
+// is enforced at every use site by an explicit `0..=N_LIMBS` bound.
+// `RCC_AHB2ENR1` is shared with other peripherals; we only ever flip the
+// PKAEN bit (bit 15) via `set_bits`, so no aliased state is mutated.
+const REG: PkaRegs = unsafe {
+    PkaRegs {
+        cr: Reg32::new(PKA_BASE),
+        sr: RoReg32::new(PKA_BASE + 0x04),
+        clrfr: Reg32::new(PKA_BASE + 0x08),
+        rcc_ahb2enr1: Reg32::new(RCC_AHB2ENR1_ADDR),
+        ram_nb_bits: Reg32::new(RAM_NB_BITS_ADDR),
+        op1: Reg32::new(RAM_OP1),
+        op2: Reg32::new(RAM_OP2),
+        modulus: Reg32::new(RAM_MODULUS),
+        result: RoReg32::new(RAM_RESULT),
+    }
+};
+
 // ── PKA driver interface ────────────────────────────────────────────────
 
 /// Initialize the PKA peripheral. Must be called once at boot before any
@@ -97,68 +148,80 @@ const N_LIMBS: usize = 12;
 /// - RCC and GTZC must be configured to allow secure access to PKA
 /// - Must be called from the secure world
 pub unsafe fn init() {
-    // Enable PKA clock: RCC_AHB2ENR1, bit 15 = PKAEN
-    const RCC_AHB2ENR1: *mut u32 = 0x4002_084C as *mut u32;
-    let val = core::ptr::read_volatile(RCC_AHB2ENR1);
-    core::ptr::write_volatile(RCC_AHB2ENR1, val | (1 << 15));
+    // Enable PKA clock: RCC_AHB2ENR1.PKAEN.
+    REG.rcc_ahb2enr1.set_bits(RCC_AHB2ENR1_PKAEN);
 
-    // Small delay for clock stabilization
+    // Small delay for clock stabilization.
     cortex_m::asm::dsb();
 
-    // Enable PKA
-    core::ptr::write_volatile(PKA_CR, CR_EN);
+    // Enable PKA.
+    REG.cr.write(CR_EN);
 
-    // Wait for INITOK
-    while core::ptr::read_volatile(PKA_SR) & SR_INITOK == 0 {
+    // Wait for INITOK.
+    while REG.sr.read() & SR_INITOK == 0 {
         cortex_m::asm::nop();
     }
 
-    // Preload the BLS12-381 modulus into PKA RAM (stays for all operations)
-    write_operand(RAM_MODULUS, &BLS12_381_P);
+    // Preload the BLS12-381 modulus into PKA RAM (stays for all operations).
+    write_operand(REG.modulus, &BLS12_381_P);
 
-    // Preload NB_BITS (stays constant for all BLS12-381 Fp operations)
-    core::ptr::write_volatile(RAM_NB_BITS as *mut u32, BLS12_381_BITS);
+    // Preload NB_BITS (stays constant for all BLS12-381 Fp operations).
+    REG.ram_nb_bits.write(BLS12_381_BITS);
 }
 
-/// Write a 12-word operand to PKA RAM at the given address.
+/// Write a 12-word operand into a PKA RAM operand slot.
+///
+/// `slot` must be one of the module-level operand-slot handles (OP1, OP2,
+/// modulus). Stepping word-by-word with the in-bank `write_at` helper keeps
+/// the unsafety pinned to a single call site whose bounds are obvious.
 #[inline]
-unsafe fn write_operand(base: u32, limbs: &[u32; N_LIMBS]) {
-    let ptr = base as *mut u32;
-    for i in 0..N_LIMBS {
-        core::ptr::write_volatile(ptr.add(i), limbs[i]);
+fn write_operand(slot: Reg32, limbs: &[u32; N_LIMBS]) {
+    // SAFETY: each PKA operand slot is sized for 384-bit operands plus
+    // headroom; offsets `0..=N_LIMBS = 12` stay inside the slot's bank
+    // (operand slots are 0x218 bytes apart in PKA RAM — 134 words — well
+    // beyond the 13 words we touch). PKA RAM is owned exclusively by
+    // this driver.
+    unsafe {
+        for i in 0..N_LIMBS {
+            slot.write_at(i, limbs[i]);
+        }
+        // Clear the terminator word past our operand (PKA RAM may have
+        // stale data from a previous op).
+        slot.write_at(N_LIMBS, 0);
     }
-    // Clear any words beyond our operand (PKA RAM may have stale data)
-    core::ptr::write_volatile(ptr.add(N_LIMBS), 0);
 }
 
-/// Read a 12-word result from PKA RAM.
+/// Read a 12-word result from a PKA RAM operand slot.
 #[inline]
-unsafe fn read_result(base: u32) -> [u32; N_LIMBS] {
-    let ptr = base as *const u32;
+fn read_result(slot: RoReg32) -> [u32; N_LIMBS] {
     let mut out = [0u32; N_LIMBS];
-    for i in 0..N_LIMBS {
-        out[i] = core::ptr::read_volatile(ptr.add(i));
+    // SAFETY: same precondition as `write_operand` — offsets `0..N_LIMBS`
+    // stay inside the result-operand slot.
+    unsafe {
+        for i in 0..N_LIMBS {
+            out[i] = slot.read_at(i);
+        }
     }
     out
 }
 
 /// Execute a PKA operation: set mode, start, poll until done.
 #[inline]
-unsafe fn execute(mode: u32) {
-    // Set mode and start (keep EN set)
+fn execute(mode: u32) {
+    // Set mode and start (keep EN set).
     let cr = CR_EN | ((mode << CR_MODE_SHIFT) & CR_MODE_MASK) | CR_START;
-    core::ptr::write_volatile(PKA_CR, cr);
+    REG.cr.write(cr);
 
-    // Poll for completion
-    while core::ptr::read_volatile(PKA_SR) & SR_PROCENDF == 0 {
+    // Poll for completion.
+    while REG.sr.read() & SR_PROCENDF == 0 {
         cortex_m::asm::nop();
     }
 
-    // Clear the completion flag
-    core::ptr::write_volatile(PKA_CLRFR, CLRFR_PROCENDFC);
+    // Clear the completion flag.
+    REG.clrfr.write(CLRFR_PROCENDFC);
 
-    // Reset mode (keep EN, clear START and MODE)
-    core::ptr::write_volatile(PKA_CR, CR_EN);
+    // Reset mode (keep EN, clear START and MODE).
+    REG.cr.write(CR_EN);
 }
 
 /// Montgomery multiplication: result = a * b * R^{-1} mod p
@@ -169,10 +232,10 @@ unsafe fn execute(mode: u32) {
 /// # Safety
 /// PKA must be initialized via `init()`.
 pub unsafe fn mont_mul(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    write_operand(RAM_OP1, a);
-    write_operand(RAM_OP2, b);
+    write_operand(REG.op1, a);
+    write_operand(REG.op2, b);
     execute(MODE_MONTGOMERY_MUL);
-    read_result(RAM_RESULT)
+    read_result(REG.result)
 }
 
 /// Modular inverse: result = a^{-1} mod p
@@ -185,10 +248,10 @@ pub unsafe fn mont_mul(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS]
 /// # Safety
 /// PKA must be initialized via `init()`.
 pub unsafe fn mod_inv(a: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    write_operand(RAM_OP1, a);
-    // Modulus is already loaded at RAM_MODULUS from init()
+    write_operand(REG.op1, a);
+    // Modulus is already loaded at REG.modulus from init()
     execute(MODE_MODULAR_INV);
-    read_result(RAM_RESULT)
+    read_result(REG.result)
 }
 
 /// Modular addition: result = (a + b) mod p
@@ -196,10 +259,10 @@ pub unsafe fn mod_inv(a: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
 /// # Safety
 /// PKA must be initialized via `init()`.
 pub unsafe fn mod_add(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    write_operand(RAM_OP1, a);
-    write_operand(RAM_OP2, b);
+    write_operand(REG.op1, a);
+    write_operand(REG.op2, b);
     execute(MODE_MODULAR_ADD);
-    read_result(RAM_RESULT)
+    read_result(REG.result)
 }
 
 /// Modular subtraction: result = (a - b) mod p
@@ -207,10 +270,10 @@ pub unsafe fn mod_add(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] 
 /// # Safety
 /// PKA must be initialized via `init()`.
 pub unsafe fn mod_sub(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    write_operand(RAM_OP1, a);
-    write_operand(RAM_OP2, b);
+    write_operand(REG.op1, a);
+    write_operand(REG.op2, b);
     execute(MODE_MODULAR_SUB);
-    read_result(RAM_RESULT)
+    read_result(REG.result)
 }
 
 // ── Extern hook for bls12_381_pka fork ──────────────────────────────────
@@ -219,7 +282,9 @@ pub unsafe fn mod_sub(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] 
 /// The `#[no_mangle]` + `link_name` convention avoids a direct crate dependency.
 #[no_mangle]
 pub unsafe extern "Rust" fn bls12_381_pka_mont_mul(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    mont_mul(a, b)
+    // SAFETY: forwarded from our own `unsafe` contract — caller must have
+    // initialised PKA via `init()`.
+    unsafe { mont_mul(a, b) }
 }
 
 // ── Conversion helpers ──────────────────────────────────────────────────
