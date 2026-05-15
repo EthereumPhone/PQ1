@@ -14,9 +14,8 @@
 // would never compile). Re-export the surface so existing call sites
 // (and `Se050::rotate_scp03_keys`) keep working unchanged.
 pub use crate::scp03_logic::{
-    aes128_cbc_decrypt, aes128_cbc_encrypt, aes128_ecb_encrypt, build_put_key_apdu, cmac_aes128,
-    keys_are_factory_default, scp03_kcv, KEY_VERSION, PLATFORM_DEK, PLATFORM_ENC, PLATFORM_MAC,
-    PUT_KEY_APDU_LEN, PUT_KEY_INS,
+    aes128_cbc_encrypt, aes128_ecb_encrypt, build_put_key_apdu, cmac_aes128,
+    keys_are_factory_default, KEY_VERSION, PLATFORM_DEK, PLATFORM_ENC, PLATFORM_MAC,
 };
 use crate::scp03_logic::{
     build_derivation_data, kdf, DD_CARD_CRYPTOGRAM, DD_HOST_CRYPTOGRAM, DD_S_ENC, DD_S_MAC,
@@ -347,9 +346,8 @@ pub fn wrap_apdu(
     mac_offset + 8
 }
 
-// `PUT_KEY_APDU_LEN`, `PUT_KEY_INS`, and `build_put_key_apdu` live in
-// `crate::scp03_logic` now (re-exported via `pub use` at the top of this
-// file). Tests for the APDU layout + KCV + AES/CMAC primitives also live
-// there — and unlike the `#[cfg(test)]` block that used to be here, they
-// actually run under `cargo test -p sphincs-tz-secure` because
-// `scp03_logic` is un-gated.
+// `build_put_key_apdu` lives in `crate::scp03_logic` now (re-exported via
+// `pub use` at the top of this file). Tests for the APDU layout + KCV +
+// AES/CMAC primitives also live there — and unlike the `#[cfg(test)]`
+// block that used to be here, they actually run under
+// `cargo test -p sphincs-tz-secure` because `scp03_logic` is un-gated.
