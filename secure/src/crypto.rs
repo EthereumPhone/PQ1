@@ -53,6 +53,20 @@ pub fn c10_sign_verified_with_progress(
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
     use subtle::ConstantTimeEq;
 
+    // F-17 (SCA defense): signing rate limiter. Enforces
+    //   - ≥ 1 second between consecutive signs (busy-wait), and
+    //   - ≤ 250 signs per unlock session (refuses past the cap).
+    // The double-compute below counts as ONE rate-limit charge —
+    // one output sig per call, one budget unit. See `sign_rate.rs`
+    // for the full threat-model and cost analysis.
+    //
+    // On refusal (session cap), the function returns Err(()) which
+    // the gateway callers translate to `NscStatus::CryptoError`.
+    // The companion can prompt the user to re-unlock; a fresh PIN
+    // entry re-arms the session budget via `mark_unlocked`.
+    #[cfg(not(test))]
+    crate::sign_rate::pre_sign()?;
+
     // FI-hardening, layer 1 of 2: double-compute (RFC 9814 §A.2 / Genêt
     // TCHES 2023). Verify-after-sign alone is *insufficient*: a fault
     // injected during signing can produce a malformed sig that

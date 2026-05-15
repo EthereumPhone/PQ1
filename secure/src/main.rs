@@ -71,6 +71,7 @@ mod boot_ns;
 mod crypto;
 mod fi;
 mod fih;
+mod sign_rate;
 #[cfg(test)]
 mod fuzz_props;
 // Pure-logic modules: no hardware deps. Available under `cargo test`

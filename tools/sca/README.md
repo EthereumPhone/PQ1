@@ -583,6 +583,93 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
+### F-17 — Unbounded signing rate gives an SCA attacker thousands of traces in minutes — **MITIGATED in `secure::sign_rate` (1-sec interval + 250-sigs-per-session cap)**
+
+**Threat — trace collection rate.** Without rate limiting, a wallet
+that has been unlocked once can be made to emit signatures at
+~1 sig/sec (sign latency on STM32U585) for as long as the unlock
+session lasts. That gives an attacker who has obtained the PIN
+(returns fraud, captured device with shoulder-surfed PIN, evil-maid)
+a clean way to collect the thousands of traces needed for profiled
+DPA against the SHA-256 path:
+
+  - Naive baseline: 3600 sigs/hour → 86,400/day → ~864,000 over 10
+    days. Well above the ~thousands-of-traces threshold for a
+    successful profiled-DPA attack.
+  - With F-16 shuffling already in place, the per-trace cost rises
+    by ~10^52 (permutation space), but a determined adversary
+    can amortise that across more traces. Rate-limiting the trace
+    *collection* compounds the F-16 defence.
+
+**Fix — `secure/src/sign_rate.rs`.** Two SRAM-resident counters
+checked at the top of `crypto::c10_sign_verified_with_progress`:
+
+  1. **Minimum 1-second interval** (`MIN_SIGN_INTERVAL_MS = 1000`)
+     between consecutive signs. The firmware busy-waits via
+     `cortex_m::asm::wfi()` (low-power; SysTick wakes every 1 ms)
+     until the interval elapses. Sub-second burst signing (e.g. USB
+     pumping 100 sigs/sec) is throttled to 1 sig/sec.
+
+  2. **Per-unlock-session burst cap** (`MAX_SIGNS_PER_SESSION = 250`).
+     After 250 sigs in one unlock session, further signs return
+     `Err(())` → `NscStatus::CryptoError` at the gateway. The user
+     must re-unlock (PIN entry, SE-rate-limited at 10 attempts max
+     before SE-side wipe) to reset the counter.
+
+State is reset by:
+  - `SecureState::mark_unlocked` — fresh unlock = full 250 burst
+    budget.
+  - `SecureState::zeroize_sensitive` — lock / idle-wipe / panic
+    handler all clear the counters.
+
+**Composition with F-16.** The F-13 double-compute does TWO inner
+signs per `c10_sign_verified_with_progress` call, but the rate
+limit counts it as ONE charge — same output sig, same SK budget
+cost. The F-16 shuffle is unchanged; the rate limit is an
+independent layer.
+
+**Sustained-rate ceiling.** With the 1-sec interval AND 250-cap,
+the long-term effective sign rate is bounded by the PIN re-unlock
+cycle:
+
+  - 250 sigs/session × 1 sec/sig + ~5 sec re-unlock = ~255 sec per
+    session
+  - Sustained rate ≈ 250 / 255 ≈ **1 sig/sec average**, NOT
+    250 sigs/sec or anything bursty.
+
+For an attacker collecting 10,000 traces: ~10,000 seconds = ~3 hours
+of continuous PIN-entry + signing. Detectable, slow, and bounded by
+SE-side PIN attempt limits.
+
+**Cost.** Microseconds of overhead per sign (the atomic load + cap
+check). The 1-sec wait is "cost" only in the sense that a fast
+legitimate workflow (rare for a HW wallet) loses some throughput.
+For human-driven usage (one sig per several seconds) it's invisible.
+
+**On `e2e-test` builds the time-based wait is skipped** so the QEMU
+e2e runner's ~30 back-to-back signs don't pad the test runtime to a
+minute+. The session cap is still enforced so the cap-tripping path
+remains testable. The wait is also skipped under `not(stm32u585)`
+because there's no SysTick to wait against on QEMU.
+
+**Residual attack surface (still open):**
+
+  - **Power-cycle bypass of the session cap.** Counters live in
+    SRAM; a reset wipes them. An attacker with the PIN can
+    `power-cycle → boot → unlock → 250 sigs → repeat`. The bottleneck
+    becomes boot + PIN-entry overhead (~5–10 sec per cycle), capping
+    sustained rate to ~25–50 sigs/sec, much worse than the
+    in-session 1 sig/sec but still useful at scale.
+
+    **Mitigation owed:** flash-persistent daily quota (500/day)
+    backed by the page-124 + RTC infrastructure. Tracked in
+    `docs/work-todo.md §18` as the still-open part of the
+    rate-limiter P0 — the 500/day half. ~80 LoC follow-up.
+
+  - **Pre-PIN trace collection.** An attacker who has the device
+    but NOT the PIN can't trigger signs at all (gated commands
+    refuse without `pin_verified`). Not a residual; out of scope.
+
 ### F-16 — Profiled-DPA trace alignment on WOTS chains + FORS trees — **DEFENDED in `sphincs-c10::shuffle::fisher_yates` (Fisher-Yates re-ordering, byte-identical output)**
 
 **Threat — profiled DPA on the SK-revealing hash inputs.**

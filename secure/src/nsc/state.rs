@@ -141,6 +141,11 @@ impl SecureState {
     pub(super) fn zeroize_sensitive(&mut self) {
         self.master_secret.zeroize();
         crate::fi::zeroize_barrier();
+        // F-17: clear the rate-limit counters on lock / idle-wipe.
+        // Counters are SRAM-only and were already going to vanish on
+        // a power cycle; this is for the in-session zeroize path
+        // (idle-wipe, panic handler).
+        crate::sign_rate::reset_counters();
         self.pin_verified.set_false();
         self.last_chain_id = 0;
         self.last_key_index = 0;
@@ -273,6 +278,10 @@ impl SecureState {
         master.zeroize();
         self.pin_verified.set_true();
         self.remaining_attempts = MAX_ATTEMPTS;
+        // F-17: fresh unlock = full burst budget. The session sign
+        // counter resets so the user gets `MAX_SIGNS_PER_SESSION`
+        // signatures before being forced to re-unlock.
+        crate::sign_rate::reset_counters();
     }
 }
 
