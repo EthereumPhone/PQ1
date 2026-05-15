@@ -286,16 +286,6 @@ pub fn derive_signing_key(seed: &[u8; SEED_LEN]) -> SigningKey {
     SigningKey::keygen(sk_seed, pk_seed)
 }
 
-/// Build a `SigningKey` from a 48-byte seed + cached pk_root, skipping the
-/// hypertree rebuild. Used by every `_fast` derivation path.
-fn signing_key_from_parts_with_seed(
-    seed: &[u8; SEED_LEN],
-    cached_pk_root: &[u8; 16],
-) -> SigningKey {
-    let (sk_seed, pk_seed) = split_seed_48(seed);
-    SigningKey::from_parts(sk_seed, pk_seed, *cached_pk_root)
-}
-
 /// Derive the 48-byte SPHINCS+C10 seed material deterministically from the
 /// 64-byte BIP-39 seed (PBKDF2-HMAC-SHA512 output of the user's mnemonic).
 ///
@@ -338,42 +328,6 @@ pub fn derive_signing_key_from_entropy(entropy: &[u8; ENTROPY_LEN]) -> SigningKe
     })
 }
 
-/// Fast-path signing key derivation: re-derive `(sk_seed, pk_seed)` from
-/// entropy via the BIP-39 chain, then reconstruct the `SigningKey` using
-/// `from_parts` with a pre-computed `pk_root` (read from r-mem at call
-/// site). Skips the expensive hypertree rebuild (~10-15s on Cortex-M33).
-///
-/// The caller MUST supply a `pk_root` that was computed by the same
-/// `(sk_seed, pk_seed)` -- i.e., the VK cached at provisioning time.
-#[must_use]
-pub fn derive_signing_key_from_entropy_fast(
-    entropy: &[u8; ENTROPY_LEN],
-    cached_pk_root: &[u8; 16],
-) -> SigningKey {
-    with_bip39_seed(entropy, |bip39_seed| {
-        let mut slh_seed = slhdsa_seed_from_bip39(bip39_seed);
-        let sk = signing_key_from_parts_with_seed(&slh_seed, cached_pk_root);
-        slh_seed.zeroize();
-        sk
-    })
-}
-
-/// Fast-path bootstrap signing key derivation: same as
-/// `derive_bootstrap_key_from_entropy` but uses a cached `pk_root`
-/// instead of rebuilding the hypertree.
-#[must_use]
-pub fn derive_bootstrap_key_from_entropy_fast(
-    entropy: &[u8; ENTROPY_LEN],
-    cached_pk_root: &[u8; 16],
-) -> SigningKey {
-    with_bip39_seed(entropy, |bip39_seed| {
-        let mut seed = bootstrap_seed_from_bip39(bip39_seed);
-        let sk = signing_key_from_parts_with_seed(&seed, cached_pk_root);
-        seed.zeroize();
-        sk
-    })
-}
-
 /// Same as `derive_signing_key_from_entropy` but also returns the 32-byte
 /// verifying key bytes. Used by provisioning to cache the VK in r-mem
 /// slot 2 without keeping the full SigningKey alive longer than necessary.
@@ -385,17 +339,13 @@ pub fn derive_keypair_from_entropy(entropy: &[u8; ENTROPY_LEN]) -> (SigningKey, 
 }
 
 // ---------------------------------------------------------------------------
-// Two-tier key derivation: bootstrap + per-chain main signers
+// Bootstrap key derivation (legacy "pqwallet-c7-bootstrap" tags)
 // ---------------------------------------------------------------------------
 //
-// Both key classes derive from the same BIP-39 entropy via domain-separated
-// KDFs that mirror the BIP-85 path structure:
-//
-//   bootstrap         = derive(seed, "pqwallet-c7-bootstrap", 0)
-//   chain-main-key_i  = derive(seed, "pqwallet-c7-main", chainId, keyIndex)
-//
-// Using SPHINCS+C10 for both. The domain separation ensures the bootstrap
-// key and all per-chain main keys are cryptographically independent.
+// Domain-separated KDF over the BIP-39 seed that produces an independent
+// SPHINCS+C10 bootstrap keypair. The on-chain identity uses the
+// `derive_c10_master_*` chain below; this surface only feeds the cached
+// `RMEM_BOOTSTRAP_VK` slot consumed by `store_macd_encrypted`.
 
 /// Derive the bootstrap signer's SPHINCS+C10 seed (48 bytes) from the
 /// BIP-39 seed. The bootstrap signer is global (not per-chain), stateless,
@@ -405,32 +355,6 @@ pub fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
     let mut out = [0u8; SEED_LEN];
     let chunk0 = kdf_sha256(b"pqwallet-c7-bootstrap-sk-seed", bip39_seed, 0);
     let chunk1 = kdf_sha256(b"pqwallet-c7-bootstrap-pk-seed", bip39_seed, 0);
-    out[0..32].copy_from_slice(&chunk0);
-    out[32..48].copy_from_slice(&chunk1[..16]);
-    out
-}
-
-/// Derive a per-chain main signer's SPHINCS+C10 seed (48 bytes) from the
-/// BIP-39 seed, chain ID, and key epoch index.
-///
-/// Each (chain_id, key_index) pair produces a cryptographically
-/// independent keypair. Keys on different chains cannot collide even if
-/// the key indices match, because the chain ID is part of the KDF input.
-#[must_use]
-pub fn main_signer_seed_from_bip39(
-    bip39_seed: &[u8; 64],
-    chain_id: u64,
-    key_index: u32,
-) -> [u8; SEED_LEN] {
-    // Build a domain-specific input: bip39_seed ‖ chain_id BE ‖ key_index BE
-    let mut input = [0u8; 64 + 8 + 4];
-    input[..64].copy_from_slice(bip39_seed);
-    input[64..72].copy_from_slice(&chain_id.to_be_bytes());
-    input[72..76].copy_from_slice(&key_index.to_be_bytes());
-
-    let mut out = [0u8; SEED_LEN];
-    let chunk0 = kdf_sha256(b"pqwallet-c7-main-sk-seed", &input, 0);
-    let chunk1 = kdf_sha256(b"pqwallet-c7-main-pk-seed", &input, 0);
     out[0..32].copy_from_slice(&chunk0);
     out[32..48].copy_from_slice(&chunk1[..16]);
     out
@@ -457,47 +381,10 @@ pub fn derive_bootstrap_keypair_from_entropy(
     (sk, vk_bytes)
 }
 
-/// Derive a per-chain main signing key from BIP-39 entropy.
-#[must_use]
-pub fn derive_main_key_from_entropy(
-    entropy: &[u8; ENTROPY_LEN],
-    chain_id: u64,
-    key_index: u32,
-) -> SigningKey {
-    with_bip39_seed(entropy, |bip39_seed| {
-        let mut seed = main_signer_seed_from_bip39(bip39_seed, chain_id, key_index);
-        let sk = derive_signing_key(&seed);
-        seed.zeroize();
-        sk
-    })
-}
-
-/// Derive a per-chain main keypair (signing key + 32-byte verifying key).
-#[must_use]
-pub fn derive_main_keypair_from_entropy(
-    entropy: &[u8; ENTROPY_LEN],
-    chain_id: u64,
-    key_index: u32,
-) -> (SigningKey, [u8; 32]) {
-    let sk = derive_main_key_from_entropy(entropy, chain_id, key_index);
-    let vk_bytes = sk.verifying_key().to_bytes();
-    (sk, vk_bytes)
-}
-
 /// Derive the bootstrap verifying key bytes only (no signing key retained).
 #[must_use]
 pub fn derive_bootstrap_vk_from_entropy(entropy: &[u8; ENTROPY_LEN]) -> [u8; 32] {
     derive_bootstrap_keypair_from_entropy(entropy).1
-}
-
-/// Derive a per-chain main verifying key bytes only.
-#[must_use]
-pub fn derive_main_vk_from_entropy(
-    entropy: &[u8; ENTROPY_LEN],
-    chain_id: u64,
-    key_index: u32,
-) -> [u8; 32] {
-    derive_main_keypair_from_entropy(entropy, chain_id, key_index).1
 }
 
 // ---------------------------------------------------------------------------
@@ -724,7 +611,6 @@ fn c10_keygen_from_n_masked_seeds(
 //
 //   slot_master_entropy = sha256("pqwallet-slot-master" || bip39_seed)
 //   slot_entropy        = sha256(master || "slot_entropy" || slot_index_be)
-//   r                   = sha256(master || "slot_r"        || slot_index_be)
 //   slot_sk_seed        = sha256("slot_c10_sk_seed" || slot_entropy)
 //   slot_pk_seed_16     = sha256("slot_c10_pk_seed" || slot_entropy)[0..16]
 
@@ -737,27 +623,9 @@ fn c10_keygen_from_n_masked_seeds(
 /// on chain B.
 #[must_use]
 pub fn slot_entropy(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) -> [u8; 32] {
-    slot_field(master_entropy, b"slot_entropy", chain_id, slot_index)
-}
-
-/// Compute the per-slot randomiser `r`. Same chain-binding rule as
-/// [`slot_entropy`].
-#[must_use]
-pub fn slot_r(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) -> [u8; 32] {
-    slot_field(master_entropy, b"slot_r", chain_id, slot_index)
-}
-
-/// `sha256(master_entropy ‖ tag ‖ chain_id_be8 ‖ slot_index_be4)` —
-/// shared shape between [`slot_entropy`] and [`slot_r`].
-fn slot_field(
-    master_entropy: &[u8; 32],
-    tag: &[u8],
-    chain_id: u64,
-    slot_index: u32,
-) -> [u8; 32] {
     Sha256::new()
         .chain_update(master_entropy)
-        .chain_update(tag)
+        .chain_update(b"slot_entropy")
         .chain_update(chain_id.to_be_bytes())
         .chain_update(slot_index.to_be_bytes())
         .finalize()
