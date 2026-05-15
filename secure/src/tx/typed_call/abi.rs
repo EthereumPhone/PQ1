@@ -307,19 +307,6 @@ mod tests {
     use super::super::parser::parse_text_sig;
     use super::*;
 
-    fn build(args: &[(&[u8], &[u8])]) -> Vec<u8> {
-        // Trivial concatenator: caller hands us pre-encoded (head, tail)
-        // chunks. For the simple negative tests below it's enough.
-        let mut head = Vec::new();
-        let mut tail = Vec::new();
-        for (h, t) in args {
-            head.extend_from_slice(h);
-            tail.extend_from_slice(t);
-        }
-        head.extend_from_slice(&tail);
-        head
-    }
-
     fn word_be32(v: u32) -> [u8; 32] {
         let mut w = [0u8; 32];
         w[28..32].copy_from_slice(&v.to_be_bytes());
