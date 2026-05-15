@@ -17,12 +17,12 @@ use fw_manifest::{ManifestRef, MANIFEST_SIZE};
 use sphincs_tz_shared::NscStatus;
 
 use super::ptr_validate::validate_ns_read_ptr;
-use super::state::{peek_state, with_state, FW_UPDATE};
+use super::state::{peek_state, FW_UPDATE};
 use super::GatewayArgs;
 use crate::fw_update::{
     self, FwUpdateCtx, IncrementalSha256, SlotTag,
 };
-use crate::hw::{boot_state, flash, otp};
+use crate::hw::{flash, otp};
 use crate::timeout;
 
 /// # Safety
@@ -87,7 +87,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // (version, secure_hash, nonsecure_hash), so a single signed
     // release works for either A or B. The secure world picks the
     // inactive slot; the companion doesn't need separate bundles.
-    let _ = m.slot();
 
     // Erase the inactive slot (both secure + NS halves + the target
     // manifest page). This is the only flash-destructive operation
