@@ -78,6 +78,7 @@ pub fn grind_r(
     pk_seed: &[u8; N],
     pk_root: &[u8; N],
     message: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
 ) -> ([u8; N], [u8; 32]) {
     let seed_b32 = pad16(pk_seed);
     let root_b32 = pad16(pk_root);
@@ -85,9 +86,21 @@ pub fn grind_r(
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
 
     for nonce in 0..10_000_000u32 {
-        // R = sha256("R_grind" || nonce_b32)[0..N]
+        // R = sha256("R_grind" || [opt_rand] || nonce_b32)[0..N].
+        //
+        // `opt_rand` (when Some) is mixed into the hash so the resulting
+        // R series — and therefore the iteration count at which the
+        // forced-zero constraint hits — depends on per-call randomness
+        // instead of just (msg, pk). Closes the F-9 transparent leak
+        // channel (the msg-dependent iteration count that's
+        // TVLA-detectable post-F-16). When None, the function preserves
+        // the pre-F-9-fix deterministic behaviour byte-for-byte
+        // (load-bearing for `c10_test_vectors.json` byte-stability).
         let mut h = Sha256::new();
         h.update(b"R_grind");
+        if let Some(rand) = opt_rand {
+            h.update(rand);
+        }
         let mut nonce_b32 = [0u8; 32];
         nonce_b32[28..32].copy_from_slice(&nonce.to_be_bytes());
         h.update(&nonce_b32);

@@ -130,6 +130,12 @@ kdf: build-kdf
 f9-retest: build-kdf
 	$(DONJON) run f9_retest.py
 
+# F-9 deeper sweep: tests F-16 on the SECRET-bearing region (FORS + WOTS sign)
+# past grind_r. Uses stride=10 + 30 M samples to cover ~300 M mem events
+# without OOM. Drops to 200 traces (vs F-9's 600) to stay in 64 GB RAM.
+f9-deeper: build-kdf
+	$(DONJON) run f9_deeper.py
+
 sweeps: fi c10 pin fw-verify ns-ptr
 
 doctor:

@@ -77,7 +77,7 @@ fn sign_inner(
     pk_seed: &[u8; N],
     pk_root: &[u8; N],
     msg_hash: &[u8; 32],
-    _opt_rand: Option<&[u8; N]>,
+    opt_rand: Option<&[u8; N]>,
     progress: Option<fn(u8)>,
     shuffle: &ShuffleSeed,
 ) -> [u8; SIGNATURE_LEN] {
@@ -87,9 +87,16 @@ fn sign_inner(
     let mut sig = [0u8; SIGNATURE_LEN];
     let mut offset = 0;
 
-    // 1. R-grind: find R such that the last FORS index is 0
+    // 1. R-grind: find R such that the last FORS index is 0.
+    //
+    // `opt_rand` (when Some) is mixed into the nonce-derived R hash —
+    // see `fors::grind_r` for the rationale. Closes the F-9
+    // transparent-leak channel (msg-dependent iteration count) by
+    // making the iteration count depend on per-call randomness too.
+    // When None, byte-equality with the pre-F-9-fix deterministic
+    // path is preserved (load-bearing for `c10_test_vectors.json`).
     report(0);
-    let (r, digest) = fors::grind_r(pk_seed, pk_root, msg_hash);
+    let (r, digest) = fors::grind_r(pk_seed, pk_root, msg_hash, opt_rand);
 
     // Write R (16 bytes)
     sig[offset..offset + N].copy_from_slice(&r);

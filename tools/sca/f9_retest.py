@@ -70,8 +70,8 @@ T_THRESHOLD = lk.T_THRESHOLD
 # F-9 baseline. Used for the verdict line at the end.
 F9_BASELINE_MAX_T = 40.71
 
-# Per-trace input layout: 32 B msg ‖ 32 B shuffle_seed = 64 B.
-IN_LEN = 64
+# Per-trace input layout: 32 B msg ‖ 16 B opt_rand ‖ 32 B shuffle_seed = 80 B.
+IN_LEN = 80
 
 # Match `leakage_kdf.py`'s c10-sign settings so the comparison with
 # F-9's baseline is apples-to-apples.
@@ -83,13 +83,17 @@ OUT_SIZE = 4008  # SIGNATURE_LEN
 
 
 def make_inputs(n: int):
-    """600 inputs of 64 B each. Group A (isf=1): msg=zeros, shuffle=random.
-    Group B (isf=0): msg=random, shuffle=random. Shuffle is independently
-    random in BOTH groups."""
+    """600 inputs of 80 B each: [msg(32) || opt_rand(16) || shuffle_seed(32)].
+    Group A (isf=1): msg=zeros, opt_rand=random, shuffle=random.
+    Group B (isf=0): msg=random, opt_rand=random, shuffle=random.
+    BOTH opt_rand and shuffle_seed are independently random in BOTH groups —
+    so the within-group means average over many randomisation positions and
+    the TVLA only detects residual msg-dependent leakage."""
     rng = np.random.default_rng(0xF9_C0FFEE)
     fixed_msg = bytes(32)
     out, is_fixed = [], []
     for k in range(n):
+        opt_rand_bytes = bytes(rng.integers(0, 256, 16, dtype=np.uint8))
         shuffle_bytes = bytes(rng.integers(0, 256, 32, dtype=np.uint8))
         if k % 2 == 0:
             msg = fixed_msg
@@ -97,7 +101,7 @@ def make_inputs(n: int):
         else:
             msg = bytes(rng.integers(0, 256, 32, dtype=np.uint8))
             is_fixed.append(0)
-        out.append(msg + shuffle_bytes)
+        out.append(msg + opt_rand_bytes + shuffle_bytes)
     return out, is_fixed
 
 
@@ -105,7 +109,7 @@ def main():
     print("== F-9 re-test: sca_c10_sign_shuffled with F-16 shuffle active ==")
     print(f"   ELF: {ELF}")
     print(f"   Baseline (F-9): max|t| = {F9_BASELINE_MAX_T} (pre-shuffle, recorded)")
-    print(f"   Per-trace input: 32 B msg ‖ 32 B shuffle_seed (random per trace)")
+    print(f"   Per-trace input: 32 B msg ‖ 16 B opt_rand ‖ 32 B shuffle_seed (opt_rand + shuffle independently random per trace)")
     print(f"   {N_TRACES} traces × {MAX_SAMPLES:,} samples × stride={STRIDE}")
     print()
 

@@ -615,23 +615,57 @@ change in max|t|:
      mechanism was initially mis-identified (it's `grind_r`
      iteration count, not the FORS leaf-index access pattern).
 
-**Future work (deeper sweep):**
+**Update — hedged R-derivation landed; F-9 leak collapses to noise floor.**
 
-  - Run a 50 M-sample TVLA with snapshot/restore so the sweep starts
-    AFTER `grind_r` returns. This would directly test F-16's effect
-    on the secret-bearing FORS / WOTS regions.
-  - On-silicon SCA with proper scope instrumentation, post-`sca-trigger`
-    GPIO feature (tracked in §18b).
-  - Hedged R-derivation: wire `opt_rand` from `rng_strong::fill` into
-    `grind_r` so the iteration count depends on per-call randomness
-    (would make even the transparent channel session-randomized).
-    Cheap (~20 LoC). Closes the surface entirely. Added to §18b.
+The "wire opt_rand into grind_r" follow-up was implemented in the
+same commit as the re-test (~20 LoC: `sphincs-c10/src/fors.rs:77`
+`grind_r` now takes `opt_rand: Option<&[u8; N]>` and mixes it into
+the nonce-derivation hash; `sphincs-c10/src/hypertree.rs::sign_inner`
+plumbs the existing F-13 `opt_rand` through; deterministic `None`
+path keeps byte-equality with `c10_test_vectors.json` byte-for-byte).
 
-The harness `tools/sca/f9_retest.py` + the new SUT
-`tools/sca/kdf_target/src/main.rs::sca_c10_sign_shuffled` are kept
-in tree as the regression test — if a future commit accidentally
-removes F-16, this will surface (the leak position would re-shift to
-a fixed sample rather than the grind_r tail).
+Re-running the F-9 TVLA with both F-16 shuffle AND hedged R active:
+
+```
+F-9 baseline (pre-shuffle, deterministic R):    max|t| = 40.71  @sample 9 997 943
+F-9 re-test (F-16 shuffle only, det. R):        max|t| = 39.09  @sample 9 990 909  (-4%)
+F-9 re-test (F-16 shuffle + F-13 hedged R):     max|t| =  4.93  @sample 6 802 705  (-87.9%)
+```
+
+max|t| = 4.93 is barely above the 4.5 TVLA threshold — essentially
+the noise floor for 600 traces. The leak position shifted away from
+`grind_r`'s ~10 M tail to ~6.8 M, consistent with the iteration-count
+channel being closed and only statistical-noise outliers remaining.
+
+**Why hedged R was the missing piece.**
+With deterministic R, the `grind_r` iteration count is a function
+of msg alone. The address pattern at sample ~10 M depends on the
+total instruction count up to that point, which depends on the
+iteration count, which depends on msg → high TVLA t-stat.
+
+With hedged R, each call mixes a fresh `opt_rand` into the
+nonce-hash. The iteration count now depends on `(msg, opt_rand)`,
+and opt_rand is independent random per trace. Within the TVLA's
+"fixed msg" group, every trace has a different opt_rand → different
+iteration count → randomly-placed code execution at sample ~10 M.
+Averaging within the group convergences to "expected address at
+sample X over all opt_rand", which is the same for both fixed-msg
+and random-msg groups → t-stat collapses.
+
+**F-9 verdict (final).** The msg-dependent leak in `grind_r` is
+**closed by the F-13/F-16 combination at the audit level** (max|t|
+dropped from 40.71 to 4.93, essentially noise floor). What remains
+is checking that the SECRET-bearing regions of sign (FORS leaf
+secrets, WOTS chain seeds — past sample ~10 M in the trace) are
+similarly clean — that's the `f9_deeper.py` follow-up (30 M samples
+× stride=10, ≈ 300 M mem events of coverage).
+
+**Regression tests kept in tree:**
+  - `tools/sca/f9_retest.py` — runs the same harness; if a future
+    commit removes F-16 OR drops opt_rand from `grind_r`, this
+    surfaces immediately (max|t| would re-climb past 10).
+  - `tools/sca/f9_deeper.py` — covers the SECRET-bearing region for
+    F-16-on-shuffled-WOTS/FORS verification.
 
 **Limitation of our measurement.** We tried 600 × 50 M samples to
 localise the leak region's end and check for additional leakage

@@ -238,33 +238,38 @@ pub extern "C" fn sca_c10_sign(msg_hash_ptr: *const u8, out_ptr: *mut u8) {
     }
 }
 
-/// SPHINCS+C10 sign WITH F-16 shuffle (post-F-13/F-16 production
-/// re-test target for F-9). Input is 64 bytes: `[msg(32) ||
-/// shuffle_seed(32)]`. The shuffle randomises the WOTS/FORS
-/// processing order per trace, independent of msg.
+/// SPHINCS+C10 sign WITH F-16 shuffle + F-13 hedged R (post-F-13/F-16
+/// production re-test target for F-9). Input layout is 80 bytes:
+/// `[msg(32) || opt_rand(16) || shuffle_seed(32)]`.
 ///
-/// **Why this is the F-9 re-test.** F-9's `sca_c10_sign` (above)
-/// found `max|t| = 40.71` on `mem_address`. That ran on the
-/// pre-shuffle code, where varying msg → fixed temporal access
-/// pattern at sample X → high t-stat. With F-16 active, the
-/// shuffle randomises the temporal pattern per trace, so the
-/// per-sample address mean (averaged over many traces) should
-/// converge to the "expected over all shuffles" value
-/// independently of the msg group → t-stat should drop. This
-/// harness measures that drop.
+///   - `msg`: the message hash (varied between TVLA groups).
+///   - `opt_rand`: the per-call randomiser mixed into `grind_r`'s
+///     R-derivation. Closes the F-9 transparent leak channel by
+///     making the grind iteration count depend on opt_rand instead of
+///     just msg.
+///   - `shuffle_seed`: per-call WOTS/FORS shuffle. F-16's defense.
+///
+/// In the TVLA harness, both `opt_rand` and `shuffle_seed` are
+/// INDEPENDENTLY random per trace (regardless of which msg group the
+/// trace is in), so the within-group means average over many
+/// randomisation positions and the only thing the test detects is
+/// residual msg-dependent leakage AFTER F-13 hedging and F-16
+/// shuffling.
 #[no_mangle]
 pub extern "C" fn sca_c10_sign_shuffled(in_ptr: *const u8, out_ptr: *mut u8) {
     const FIXED_SK_SEED: [u8; 32] = [0x42u8; 32];
     const FIXED_PK_SEED: [u8; sphincs_c10::params::N] = [0x77u8; sphincs_c10::params::N];
     const FIXED_PK_ROOT: [u8; sphincs_c10::params::N] =
         *include_bytes!(concat!(env!("OUT_DIR"), "/pk_root.bin"));
-    // SAFETY: harness maps 64 B at in_ptr (msg ‖ shuffle_seed) and
-    // SIGNATURE_LEN B at out_ptr.
+    // SAFETY: harness maps 80 B at in_ptr (msg ‖ opt_rand ‖ shuffle_seed)
+    // and SIGNATURE_LEN B at out_ptr.
     let msg: &[u8; 32] = unsafe { &*(in_ptr as *const [u8; 32]) };
-    let shuffle_seed: [u8; 32] = unsafe { *(in_ptr.add(32) as *const [u8; 32]) };
+    let opt_rand: [u8; sphincs_c10::params::N] =
+        unsafe { *(in_ptr.add(32) as *const [u8; sphincs_c10::params::N]) };
+    let shuffle_seed: [u8; 32] = unsafe { *(in_ptr.add(48) as *const [u8; 32]) };
     let sk = sphincs_c10::SigningKey::from_parts(FIXED_SK_SEED, FIXED_PK_SEED, FIXED_PK_ROOT);
     let shuffle = sphincs_c10::shuffle::ShuffleSeed(shuffle_seed);
-    let sig = sk.sign_with_shuffle(msg, None, &shuffle, |_| {});
+    let sig = sk.sign_with_shuffle(msg, Some(&opt_rand), &shuffle, |_| {});
     unsafe {
         for (i, &b) in sig.iter().enumerate() {
             core::ptr::write_volatile(out_ptr.add(i), b);
