@@ -13,7 +13,7 @@ use core::ptr::read_volatile;
 use fw_manifest::ManifestRef;
 use sha2::{Digest, Sha256};
 
-use crate::fw_update::{FwUpdateCtx, SlotTag};
+use crate::fw_update::FwUpdateCtx;
 use crate::hw::flash::{self, Slot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

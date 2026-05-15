@@ -130,12 +130,6 @@ pub enum SlotTag {
     SlotB = 1,
 }
 
-impl Default for SlotTag {
-    fn default() -> Self {
-        SlotTag::SlotA
-    }
-}
-
 impl From<Slot> for SlotTag {
     fn from(s: Slot) -> Self {
         match s {
@@ -172,17 +166,8 @@ impl IncrementalSha256 {
     pub fn update(&mut self, data: &[u8]) {
         self.inner.update(data);
     }
-    pub fn finalize(self) -> [u8; 32] {
-        self.inner.finalize().into()
-    }
     pub fn clone_finalize(&self) -> [u8; 32] {
         self.inner.clone().finalize().into()
-    }
-}
-
-impl Default for IncrementalSha256 {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

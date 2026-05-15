@@ -105,8 +105,3 @@ impl FwUpdateCtx {
     }
 }
 
-// `ChunkError::FlashError` is the added variant in staging.rs.
-// Re-declared here via a trait-less extension: we enrich the existing
-// fw_update::ChunkError enum in a separate spot to keep the
-// module-boundary explicit. See mod.rs for the enum definition.
-// (If new error values are needed, edit mod.rs directly.)
