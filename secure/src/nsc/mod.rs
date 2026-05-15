@@ -504,6 +504,76 @@ pub unsafe fn gated_unlock(
     }
 }
 
+/// Boot-time PIN-counter reconciliation between MCU page-124 and the
+/// SE-side counter (§4 dual-chip PIN-lockout-sync hardening).
+///
+/// **Attack defended.** An attacker who can reset the OPTIGA PBS
+/// (rewriting E140 via the Conf(E140) Auto path on a glitched chip)
+/// resets every PBS-protected OID — including the F1E1 PIN-attempt
+/// counter. Symmetrically, an attacker who breaches the MCU
+/// TrustZone watermark could erase page-124. Either case yields
+/// MCU_count ≠ OPTIGA_count, which is unambiguous tamper evidence.
+/// Boot-time detection lets us wipe immediately rather than waiting
+/// for the next unlock attempt to expose the disagreement.
+///
+/// **Limitations.**
+///   - SE050's silicon counter can't be read without burning an
+///     attempt (see `docs/work-todo.md §4`); reconcile is OPTIGA-only.
+///   - If the attacker coordinates resets of BOTH MCU and OPTIGA
+///     counters in one campaign, they'd see MCU=0 + OPTIGA=0 →
+///     agree → no tamper detected. The defense bound depends on
+///     attacker only being able to reset ONE side at a time. A
+///     hardware-monotonic OPTIGA counter (work-todo #24 P1 →
+///     migrate to 0xE120) would close this gap entirely.
+///   - On fresh boot with un-provisioned SE, OPTIGA returns `None`
+///     (counter object not yet created); reconcile accepts as
+///     "no comparison possible."
+///
+/// **What it doesn't replace.** The original §4 "cryptographic FI
+/// checksum on the bump" item is effectively closed by F-12 +
+/// F-15.r5 + F-19 (forward+reverse scan + double-read agreement +
+/// triple-read of the result). A separate paired-counter checksum
+/// would catch only the multi-fault attack where ALL of those
+/// reads return the same wrong value — out of scope for the
+/// single-fault threat model.
+///
+/// Called once per boot from `main.rs` after SE init but before
+/// the gateway accepts any unlock command. On tamper detection it
+/// triggers `factory_reset_admin` + zeroizes SRAM secrets — same
+/// path as `trigger_lockout_wipe`.
+#[cfg(feature = "stm32u585")]
+pub unsafe fn reconcile_pin_attempts<S>(se: &mut S)
+where
+    S: crate::secure_element::WalletStore,
+{
+    let mcu = crate::hw::flash::pin_attempts_read();
+    let se_count = se.pin_attempt_count();
+    match se_count {
+        Some(s) if s != mcu => {
+            crate::ui::show_status("TAMPER DETECT", "wiping...");
+            #[cfg(feature = "debug-log")]
+            secure_log!(
+                "[reconcile] MCU={} SE={} — disagree, wiping",
+                mcu, s
+            );
+            let _ = se.factory_reset_admin();
+            let _ = crate::hw::flash::pin_attempts_reset();
+            crate::ui::show_status("WIPED", "tamper signal");
+        }
+        Some(_) | None => {
+            // Counters agree, or SE has no readable counter — proceed.
+        }
+    }
+}
+
+/// QEMU / non-stm32u585 stub. No flash, no real SE counter to read.
+#[cfg(not(feature = "stm32u585"))]
+pub unsafe fn reconcile_pin_attempts<S>(_se: &mut S)
+where
+    S: crate::secure_element::WalletStore,
+{
+}
+
 /// Zeroize all sensitive global state. Called from the panic handler,
 /// the inactivity wipe, and the cancel/idle-wipe branches of every
 /// interactive dialog.

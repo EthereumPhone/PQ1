@@ -806,6 +806,20 @@ fn main() -> ! {
         (&mut *core::ptr::addr_of_mut!(SE)).load_pbs();
     }
 
+    // §4 PIN-counter reconciliation. Cross-checks the MCU page-124
+    // attempt counter against the OPTIGA-side counter; mismatch =
+    // unambiguous tamper signal (one side was reset without the
+    // other) → wipe immediately rather than waiting for the next
+    // unlock attempt to expose the disagreement. SE050's silicon
+    // counter isn't readable without burning an attempt, so this
+    // reconcile is OPTIGA-side only. See
+    // `nsc::reconcile_pin_attempts` for the full design + limitation
+    // notes.
+    #[cfg(all(feature = "stm32u585", any(feature = "optiga-trust-m", feature = "dual-se"), not(test)))]
+    unsafe {
+        nsc::reconcile_pin_attempts(&mut *core::ptr::addr_of_mut!(SE));
+    }
+
     // ---- One-shot OPTIGA OID recovery (optiga-reset-oids) ----
     // Runs before any wallet provisioning. Provisions a Trust Anchor cert
     // at 0xE0E3 and sends SetObjectProtected reset manifests to the burned

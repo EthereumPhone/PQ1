@@ -305,6 +305,14 @@ impl WalletStore for DualSecureElement {
         self.se050.zeroize_caches();
     }
 
+    fn pin_attempt_count(&mut self) -> Option<u8> {
+        // OPTIGA's F1E1 is readable; SE050's silicon counter is not
+        // (peeking would burn an attempt). Cross-check is against
+        // OPTIGA only; SE050 is the silicon-hard final gate that we
+        // trust per work-todo §4.
+        self.optiga.pin_attempt_count()
+    }
+
     /// Pull random bytes from both SEs and XOR-mix them in-place. The
     /// per-source bytes never leave this function — only the XOR is
     /// returned to the caller. `hw::rng_strong::fill` further folds

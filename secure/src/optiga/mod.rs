@@ -2211,6 +2211,13 @@ impl WalletStore for OptigaTrustM {
         OptigaTrustM::random(self, buf).map_err(|_| SeError::InternalError)
     }
 
+    fn pin_attempt_count(&mut self) -> Option<u8> {
+        // SAFETY: `read_counter_raw` is `unsafe` because it touches
+        // the OPTIGA APDU stack; we hold `&mut self` so exclusive
+        // access is established.
+        unsafe { self.read_counter_raw() }
+    }
+
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
         self.factory_reset().map_err(|_| SeError::InternalError)
     }

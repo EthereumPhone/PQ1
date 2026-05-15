@@ -104,6 +104,24 @@ pub trait WalletStore {
         Err(SeError::SlotNotFound)
     }
 
+    /// Returns the SE-side PIN attempt counter, or `None` if the
+    /// backend doesn't expose a readable counter (e.g. SE050's
+    /// silicon counter can't be peeked without burning an attempt
+    /// — see `docs/work-todo.md §4`).
+    ///
+    /// Used by `nsc::reconcile_pin_attempts` at boot to cross-check
+    /// the MCU page-124 counter against the SE side. A mismatch
+    /// indicates one of: (a) attacker reset OPTIGA E140/PBS which
+    /// resets PBS-protected OIDs including F1E1, (b) attacker
+    /// glitched the MCU page-124 counter via a TZ-bypass, or (c) a
+    /// genuine flash fault. All three are tamper signals → wipe.
+    ///
+    /// Default: `None` (most backends don't have a readable
+    /// counter).
+    fn pin_attempt_count(&mut self) -> Option<u8> {
+        None
+    }
+
     /// Zeroize any cached secrets (called on idle wipe / lock / panic).
     fn zeroize_caches(&mut self);
 
