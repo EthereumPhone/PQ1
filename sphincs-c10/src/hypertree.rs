@@ -15,6 +15,7 @@ use crate::fors;
 use crate::hash::pad16;
 use crate::merkle;
 use crate::params::*;
+use crate::shuffle::{self, ShuffleSeed};
 use crate::wots;
 
 /// Compute `pk_root` by building the top-layer subtree.
@@ -39,7 +40,7 @@ pub fn sign(
     msg_hash: &[u8; 32],
     opt_rand: Option<&[u8; N]>,
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, None)
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, None, &ShuffleSeed::zero())
 }
 
 /// Like [`sign`] but calls `progress(percent)` at each major phase
@@ -52,7 +53,23 @@ pub fn sign_with_progress(
     opt_rand: Option<&[u8; N]>,
     progress: fn(u8),
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, Some(progress))
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, Some(progress), &ShuffleSeed::zero())
+}
+
+/// Like [`sign_with_progress`] but the per-signature shuffle seed
+/// randomises the COMPUTATION order of WOTS chains and FORS trees.
+/// Output is byte-identical to the un-shuffled path; the shuffle is
+/// purely a DPA-trace-misalignment defence (see `shuffle.rs`).
+pub fn sign_with_shuffle(
+    sk_seed: &[u8; 32],
+    pk_seed: &[u8; N],
+    pk_root: &[u8; N],
+    msg_hash: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    shuffle: &ShuffleSeed,
+    progress: fn(u8),
+) -> [u8; SIGNATURE_LEN] {
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, Some(progress), shuffle)
 }
 
 fn sign_inner(
@@ -62,6 +79,7 @@ fn sign_inner(
     msg_hash: &[u8; 32],
     _opt_rand: Option<&[u8; N]>,
     progress: Option<fn(u8)>,
+    shuffle: &ShuffleSeed,
 ) -> [u8; SIGNATURE_LEN] {
     let report = |pct: u8| { if let Some(f) = progress { f(pct); } };
 
@@ -95,8 +113,19 @@ fn sign_inner(
     let mut fors_secrets = [[0u8; N]; K];
     let mut fors_auth_paths = [[[0u8; N]; A]; K]; // only first K-1 used
 
-    // Compute all FORS signatures
-    for t in 0..(K - 1) {
+    // **F-16 (DPA-defence) shuffle.** Derive a per-call permutation
+    // of `[0..K-1]` from the shuffle seed and process the trees in
+    // that order. Each iteration WRITES to `fors_secrets[t]` etc.
+    // using the natural tree index `t`, so the output byte layout
+    // is unchanged — only the computation order shifts. The last
+    // (forced-zero) tree at index K-1 is special and stays outside
+    // the shuffle.
+    let fors_shuffle_seed = shuffle.derive(b"fors");
+    let mut fors_order = [0u8; K - 1];
+    shuffle::fisher_yates(&fors_shuffle_seed, K - 1, &mut fors_order);
+
+    for step in 0..(K - 1) {
+        let t = fors_order[step] as usize;
         let (secret, auth_path) =
             fors::sign_fors_tree(&seed, sk_seed, t as u32, fors_indices[t]);
         fors_secrets[t] = secret;
@@ -108,8 +137,10 @@ fn sign_inner(
             &secret,
             &auth_path,
         );
-        // FORS trees span 5%-30%, each tree ~2%
-        report((5 + ((t as u32 + 1) * 25) / (K as u32 - 1)) as u8);
+        // FORS trees span 5%-30%, each tree ~2%. Report by step
+        // (monotone) rather than by tree index (shuffled), so the
+        // progress bar stays smooth regardless of shuffle.
+        report((5 + ((step as u32 + 1) * 25) / (K as u32 - 1)) as u8);
     }
 
     // Last tree (forced-zero): the "secret" is the tree root
@@ -155,9 +186,21 @@ fn sign_inner(
         // HT layers: layer 0 = 32%-65%, layer 1 = 65%-98%
         report((32 + (layer + 1) * 33) as u8);
 
+        // **F-16 (DPA-defence) shuffle.** Per-layer WOTS chain
+        // permutation. Each layer gets its own sub-derivation so a
+        // glitch leaking the layer-0 order doesn't help an attacker
+        // predict layer-1.
+        let wots_label: [u8; 7] = match layer {
+            0 => *b"wots-0\0",
+            _ => *b"wots-1\0",
+        };
+        let wots_shuffle_seed = shuffle.derive(&wots_label);
+
         // WOTS+C sign the current node
-        let (wots_sigma, count) =
-            wots::sign(&seed, sk_seed, layer, idx_tree as u64, idx_leaf, &current_node);
+        let (wots_sigma, count) = wots::sign_with_shuffle(
+            &seed, sk_seed, layer, idx_tree as u64, idx_leaf, &current_node,
+            &wots_shuffle_seed,
+        );
 
         // Write WOTS chain values (L * N bytes)
         for i in 0..L {

@@ -583,6 +583,104 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
+### F-16 — Profiled-DPA trace alignment on WOTS chains + FORS trees — **DEFENDED in `sphincs-c10::shuffle::fisher_yates` (Fisher-Yates re-ordering, byte-identical output)**
+
+**Threat — profiled DPA on the SK-revealing hash inputs.**
+SPHINCS+C10 sign computes ~1000–2000 SHA-256 hashes per signature.
+Two phases process secret-bearing inputs:
+
+  - **WOTS+** (l=43 chains × d=2 layers): each chain starts from a
+    secret seed and hashes 0..7 times. The chain seed is
+    sk-revealing; recovering one seed per layer enables universal
+    forgery.
+  - **FORS** (k=13 trees): each tree reveals a leaf secret + an
+    11-deep auth path. Recovering one leaf secret per tree is
+    enough to forge for that message.
+
+The STM32U585 HASH peripheral has **no DPA resistance** per ST
+UM3370 — it's a high-performance accelerator, not a side-channel-
+hardened one. Profiled DPA / template attacks against SHA-256 are
+documented in the literature (CHES, TCHES); a few hundred to a few
+thousand traces is enough to recover the secret with reasonable
+profile quality.
+
+DPA averaging works because the SAME SK chain is at the SAME
+relative sample index across every trace — naive sign processes
+chain 0, 1, …, 42 in fixed order, so chain 7's hash is always at
+sample ~7·(per-chain-cycles) of every trace.
+
+**Fix — Fisher-Yates re-ordering, per-signature.**
+`sphincs-c10/src/shuffle.rs` derives a fresh permutation of
+`[0..43]` (WOTS chains) and `[0..13]` (FORS trees) from a 32-byte
+seed pulled via `rng_strong::fill` (3-source XOR — STM32 ⊕ OPTIGA ⊕
+SE050) per signing call. The hypertree sign loop and `wots::sign`
+iterate in shuffled order; the WRITE offsets into `sig[]` stay
+keyed on the natural index, so the OUTPUT BYTES are byte-identical
+to the un-shuffled path.
+
+**Permutation space:**
+
+  - WOTS: 43! per layer × 2 layers ≈ **10^104 orderings**.
+  - FORS: 13! ≈ **6.2 × 10^9 orderings**.
+
+After shuffling, chain-i's hash lands at a random sample in each
+trace. DPA averaging fails because the attacker doesn't know which
+sample to average. They'd have to first recover the shuffle
+permutation — which means breaking the per-call TRNG seed, which
+itself is the 3-source XOR (F-13 follow-up).
+
+**Correctness invariant (regression-tested).**
+
+`sign_with_shuffle(sk, msg, opt_rand, seed_A) == sign_with_shuffle(sk, msg, opt_rand, seed_B)`
+
+for any `seed_A`, `seed_B` — byte-for-byte. The shuffle is a pure
+computation re-ordering; it can never change a hash's INPUTS, only
+WHEN that hash runs. Tested in
+`sphincs-c10/tests/shuffle_byte_equality.rs` with 4 oracles:
+identity-vs-random, shuffled-sig-verifies, multi-random-seed-all-
+equal, and `sign()` wrapper matches `ShuffleSeed::zero()`. All
+pass.
+
+**No on-chain change. No external API break.**
+`contracts/smart-wallet/test/c10_test_vectors.json` is byte-
+identical pre- and post-commit (verified via `git diff --stat`).
+The on-chain `SPHINCsC10Asm.sol` verifier consumes sig bytes; it
+never sees the firmware's internal computation order. Every
+Foundry test that passed before passes after by construction.
+
+**Composition with F-13 (double-compute).**
+The same shuffle seed feeds BOTH double-compute signs. If the seed
+re-drew per sign, the F-13 byte-equality check would still hold (the
+output is byte-equal regardless of shuffle), but the FI gate would
+be testing for "same output under different internal trace patterns"
+which is a much weaker invariant. Drawing once per call keeps the
+F-13 invariant tight: identical inputs → identical bytes, mismatch
+diagnoses a transient fault on one sign.
+
+**Cost.**
+Fisher-Yates: ~2 × N bytes of SHA-256-extended randomness per
+permutation (~100 bytes per sign across both layers + FORS). One
+SHA-256 block per ~32 bytes consumed. Microseconds. Stack: 43 + 13
+= 56 bytes of permutation arrays.
+
+**What F-16 does NOT close.**
+
+  1. **Power signatures of intermediate Merkle nodes.** Shuffling
+     within WOTS / FORS but the tree-build for the auth-path
+     subtrees still runs in natural order. Lower SK-revealing
+     value (these hashes are over public intermediate values, not
+     the chain seeds themselves) but a future hardening pass
+     could extend shuffle to the auth-path subtree leaves.
+  2. **Higher-order DPA**. With enough traces (~10^6) and the
+     right templates, higher-order DPA can recover bits even
+     under shuffling. The cost is exponentially higher than
+     first-order DPA, and combined with the F-9 trace budget
+     (now ~131k per slot post-F-13), the attack is well above the
+     practical threshold for a non-state-actor adversary.
+
+Tracked in `docs/work-todo.md §18 P0` as the now-checked WOTS/FORS
+shuffling item.
+
 ### F-15 — PIN-lockout gates were FAIL-OUT — a single branch-skip on the lockout `if` bypassed the wipe and let brute-forcing past `MAX_ATTEMPTS = 10` continue — **MITIGATED (not provably fixed) in `nsc::gated_unlock` + `cmd_request_unlock::verify_pin_with_chip` (FAIL-IN pattern + sentinel gate + double-read; residual attack surface documented below)**
 
 **Threat — the most common single-fault outcome.** Per the

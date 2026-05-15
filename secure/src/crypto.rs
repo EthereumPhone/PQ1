@@ -90,9 +90,41 @@ pub fn c10_sign_verified_with_progress(
         return Err(());
     }
     let opt_rand: Option<&[u8; sphincs_c10::params::N]> = Some(&opt_rand_buf);
-    let sig_a = sk.sign_with_progress(msg_hash, opt_rand, progress);
+
+    // **F-16 (DPA-defence) shuffle seed.** Drawn once per signing
+    // call via `rng_strong::fill` (STM32 ⊕ OPTIGA ⊕ SE050 XOR-fold)
+    // and fed UNCHANGED to both double-compute signs — re-drawing
+    // per sign would still be cryptographically sound but would
+    // produce different shuffle orders → divergent internal hash
+    // streams → divergent register-level state during the
+    // double-compute (sig outputs would still be byte-equal per
+    // F-16's byte-equality oracle, but the F-13 ct_eq still holds).
+    //
+    // The shuffle seed randomises the COMPUTATION order of WOTS
+    // chains (43! ≈ 10^52 per layer) and FORS trees (13! ≈ 6×10^9).
+    // Profiled-DPA averaging relies on the same secret hash landing
+    // at the same sample index across traces; the shuffle moves
+    // chain-i's hashes to a random sample per signature, breaking
+    // alignment. See `sphincs-c10/src/shuffle.rs` for the
+    // correctness invariant (byte-identical output across any
+    // shuffle seed).
+    let mut shuffle_seed_buf = [0u8; 32];
+    #[cfg(not(test))]
+    if crate::rng_strong::fill(&mut shuffle_seed_buf).is_err() {
+        opt_rand_buf.zeroize();
+        crate::fi::zeroize_barrier();
+        return Err(());
+    }
+    let shuffle = sphincs_c10::shuffle::ShuffleSeed(shuffle_seed_buf);
+    // `[u8; 32]` is `Copy`, so the constructor above copied — wipe
+    // the stack local now that the secret lives inside the
+    // `ZeroizeOnDrop` wrapper.
+    shuffle_seed_buf.zeroize();
+    crate::fi::zeroize_barrier();
+
+    let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle, progress);
     crate::fi::wait_random();
-    let sig_b = sk.sign_with_progress(msg_hash, opt_rand, |_| {});
+    let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle, |_| {});
 
     // Constant-time comparison of the 4008-byte signatures.
     // `subtle::ConstantTimeEq` prevents an attacker from learning

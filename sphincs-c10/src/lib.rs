@@ -24,6 +24,7 @@ pub mod wots;
 pub mod fors;
 pub mod merkle;
 pub mod hypertree;
+pub mod shuffle;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -98,8 +99,35 @@ impl SigningKey {
         opt_rand: Option<&[u8; N]>,
         progress: fn(u8),
     ) -> [u8; SIGNATURE_LEN] {
-        hypertree::sign_with_progress(
-            &self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand, progress,
+        // Backwards-compatible: identity shuffle. Produces byte-
+        // identical output to the pre-shuffle implementation.
+        self.sign_with_shuffle(msg_hash, opt_rand, &shuffle::ShuffleSeed::zero(), progress)
+    }
+
+    /// Sign with a fresh per-call shuffle seed that randomises the
+    /// per-signature COMPUTATION order of WOTS chains and FORS
+    /// trees. The produced signature bytes are byte-identical to
+    /// the un-shuffled path; the shuffle is purely a side-channel
+    /// defence against profiled DPA's trace-alignment premise.
+    ///
+    /// Pass `ShuffleSeed::zero()` to get the un-shuffled
+    /// (deterministic-order) behaviour — useful for regression
+    /// testing the byte-equality oracle.
+    pub fn sign_with_shuffle(
+        &self,
+        msg_hash: &[u8; 32],
+        opt_rand: Option<&[u8; N]>,
+        shuffle: &shuffle::ShuffleSeed,
+        progress: fn(u8),
+    ) -> [u8; SIGNATURE_LEN] {
+        hypertree::sign_with_shuffle(
+            &self.sk_seed,
+            &self.pk_seed,
+            &self.pk_root,
+            msg_hash,
+            opt_rand,
+            shuffle,
+            progress,
         )
     }
 

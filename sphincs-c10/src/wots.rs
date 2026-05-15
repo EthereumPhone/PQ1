@@ -107,12 +107,35 @@ pub fn sign(
     kp: u32,
     msg_hash: &[u8; N],
 ) -> ([[u8; N]; L], u32) {
+    // Backwards-compatible: identity shuffle.
+    sign_with_shuffle(seed, sk_seed, layer, tree, kp, msg_hash, &[0u8; 32])
+}
+
+/// Like [`sign`] but the per-call shuffle seed randomises the
+/// COMPUTATION order of the L=43 WOTS chains. Output sigma
+/// (indexed by chain number, not processing step) is byte-identical
+/// to the un-shuffled path — see `crate::shuffle` for the
+/// correctness rationale.
+pub fn sign_with_shuffle(
+    seed: &[u8; 32],
+    sk_seed: &[u8; 32],
+    layer: u32,
+    tree: u64,
+    kp: u32,
+    msg_hash: &[u8; N],
+    shuffle_seed: &[u8; 32],
+) -> ([[u8; N]; L], u32) {
     let padded = pad16(msg_hash);
     let (count, _digest, digits) = find_count(seed, layer, tree, kp, &padded);
 
     let base_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
     let mut sigma = [[0u8; N]; L];
-    for i in 0..L {
+
+    let mut chain_order = [0u8; L];
+    crate::shuffle::fisher_yates(shuffle_seed, L, &mut chain_order);
+
+    for step in 0..L {
+        let i = chain_order[step] as usize;
         let sk_i = wots_secret(sk_seed, layer, tree, kp, i as u32);
         let chain_adrs = set_chain_index(&base_adrs, i as u32);
         sigma[i] = chain_hash(seed, &chain_adrs, &sk_i, 0, digits[i] as u32);
