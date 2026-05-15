@@ -328,15 +328,6 @@ pub unsafe fn load_and_lock() -> Result<(), BhkError> {
     Ok(())
 }
 
-/// Returns `true` if `TAMP_SECCFGR.BHKLOCK` is currently set — i.e.
-/// `load_and_lock` has run this boot and the BHK is sealed away from
-/// software. Diagnostic only.
-#[must_use]
-pub fn is_locked() -> bool {
-    // SAFETY: pure read of a memory-mapped register.
-    unsafe { read_volatile(TAMP_SECCFGR) & TAMP_BHKLOCK != 0 }
-}
-
 // ---------------------------------------------------------------------------
 // Self-test (bench bring-up only — gated behind `saes-self-test`)
 // ---------------------------------------------------------------------------
