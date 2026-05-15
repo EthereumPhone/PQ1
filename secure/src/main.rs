@@ -629,7 +629,7 @@ fn main() -> ! {
     // reloads are triggered by the external provisioner, not the user.
     if reset_cause.is_abnormal() {
         secure_log!("[S] Abnormal reset — zeroizing sensitive SRAM");
-        unsafe { nsc::zeroize_sensitive_state(); }
+        nsc::zeroize_sensitive_state();
     }
 
     // ---- STSAFE-A110 I2C2 bus probe ----
@@ -2592,10 +2592,6 @@ fn SysTick() {
     nsc::poll_gateway();
 }
 
-/// PendSV re-entry guard. Lives at module scope so `addr_of_mut!`
-/// returns the raw pointer LLVM expects; declaring it inside
-/// PendSV() gives a function-local binding whose address syntax is
-/// different.
 /// Catch-all device-IRQ handler.
 ///
 /// `cortex-m-rt` routes every unmasked NVIC IRQ that doesn't have a
