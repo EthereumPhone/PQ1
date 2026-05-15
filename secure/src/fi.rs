@@ -210,12 +210,6 @@ impl CfiCounter {
     }
 }
 
-impl Default for CfiCounter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Compile-time helper: sum the step magics with `wrapping_add` so
 /// the result matches what [`CfiCounter::bump`]s will produce.
 ///
