@@ -141,7 +141,7 @@ play-hw-display:
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-oled,stm32u585
+			--features mock-se,debug-log,ui-oled,stm32u585,dev-testkey
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
