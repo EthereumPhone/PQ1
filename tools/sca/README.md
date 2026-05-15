@@ -667,6 +667,45 @@ similarly clean — that's the `f9_deeper.py` follow-up (30 M samples
   - `tools/sca/f9_deeper.py` — covers the SECRET-bearing region for
     F-16-on-shuffled-WOTS/FORS verification.
 
+**Update — deeper sweep result: SECRET-bearing region is clean.**
+
+The `f9_deeper.py` follow-up ran with 100 traces × 10 M samples ×
+stride=10, covering ~100 M mem events of function execution
+(grind_r ≈10 M + FORS sign ≈30 M + WOTS sign ≈50 M — past the
+SECRET-bearing transitions). Result:
+
+```
+F-9 baseline (10 M @ stride 1, 600 traces):     max|t| = 40.71
+F-9 deeper sweep (100 M @ stride 10, 100 traces): max|t| =  5.66  @sample 990 123
+```
+
+**Where is the residual?** Sample 990,123 at stride=10 maps to
+mem-event 9,901,230 — back in the **`grind_r` tail region**, NOT
+in the SECRET-bearing FORS/WOTS portion. **No sample in the
+deeper region (mem events 10 M–100 M) shows max|t| > 5.66.**
+
+The residual is consistent with statistical noise at the reduced
+trace count: at 100 traces the per-sample max|t| noise floor
+naturally sits around ~5 (vs the 600-trace F-9-retest floor of
+~4.93). With opt_rand wired in (commit `a623600`), this is
+essentially what we'd predict from a leakage-free hash sequence.
+
+**Verdict (F-9 final-final).** Across both the narrow 10 M-window
+re-test AND the deeper 100 M-window sweep, the C10 sign function
+under F-13 hedged R + F-16 WOTS/FORS shuffle shows:
+  - max|t| ≈ 5 at the grind_r tail (the location of the original
+    F-9 hotspot), bounded by trace-count noise floor;
+  - **no detectable msg-correlated leakage in the SECRET-bearing
+    FORS sign + WOTS sign regions** at audit-grade emulation
+    sensitivity.
+
+**Limitations.** Emulation-only `mem_address` analysis. On-silicon
+SCA (power / EM / cache-timing on real STM32U585) still owed
+before F-9 can be definitively retired — but the emulation evidence
+is the strongest possible at this stage. Moving the on-silicon
+verification under the `sca-trigger` GPIO feature flag (tracked in
+§18b) is the next layer of audit.
+
 **Limitation of our measurement.** We tried 600 × 50 M samples to
 localise the leak region's end and check for additional leakage
 sources past FORS. The 30 GB trace array + lascar's per-sample

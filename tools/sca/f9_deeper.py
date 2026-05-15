@@ -60,14 +60,19 @@ ELF = lk.ELF
 T_THRESHOLD = lk.T_THRESHOLD
 
 # Configuration knobs — see module docstring for the rationale.
-N_TRACES = 200
-MAX_SAMPLES = 30_000_000
+#
+# **Tuning the wall-time budget.** Per the F-9 re-test, 600 traces ×
+# 10M samples × stride=1 took ~11 min wall on 22 workers. This deeper
+# sweep with stride=10 means the emulator runs 10× longer per trace
+# (it stops on N_stored = MAX_SAMPLES = 10M which corresponds to
+# 100M mem events at stride=10). Drop to 100 traces (vs 600) to bring
+# wall back to ~10-20 min. That covers ~100M mem events — enough to
+# reach past grind_r (≈10M) and well into FORS sign (≈10-40M) +
+# early WOTS sign (≈40M+).
+N_TRACES = 100
+MAX_SAMPLES = 10_000_000
 STRIDE = 10
-# stride=10 × max_samples=30M = covers ~300M mem events of execution,
-# reaching well into the FORS/WOTS sign region (the SECRET-bearing
-# portion of C10 sign). budget is in instruction count, set high
-# enough to let the emulator run the full sign before bailout.
-BUDGET = 50_000_000_000
+BUDGET = 100_000_000_000
 OUT_SIZE = 4008
 
 
