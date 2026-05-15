@@ -32,13 +32,7 @@ const FIXED_PK_SEED: [u8; 16] = [
 ];
 
 fn fixed_keypair() -> SigningKey {
-    // Use from_parts with a precomputed pk_root so the test doesn't
-    // run a 2-3 s hypertree build on every invocation. We pin
-    // pk_root once at test-authoring time; if the sphincs-c10 crate's
-    // keygen ever changes output (it shouldn't), the assertion below
-    // catches it.
-    let k = SigningKey::keygen(FIXED_SK_SEED, FIXED_PK_SEED);
-    k
+    SigningKey::keygen(FIXED_SK_SEED, FIXED_PK_SEED)
 }
 
 #[test]
