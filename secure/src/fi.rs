@@ -79,6 +79,47 @@ pub fn check_true_into_sentinel<F: FnMut() -> bool>(cond: F) -> u32 {
     pqsigner_fi::check_true_into_sentinel(cond, wait_random)
 }
 
+/// **F-15.r1 defence.** Scrub the AAPCS return register (`r0` on
+/// Cortex-M) to a known non-sentinel value, with a `wait_random()` to
+/// frustrate clock-aligned glitch placement.
+///
+/// **The attack.** When two `check_true_into_sentinel` calls happen
+/// in close succession with no intervening function call that returns
+/// a value (e.g. when the closure body is fully inlined), `r0`
+/// retains the `OK_SENTINEL` from the first call across to the
+/// second. If the attacker skips the second `bl
+/// check_true_into_sentinel` with a branch-skip glitch, the caller's
+/// `cmp r0, #OK_SENTINEL` sees the *stale* `OK_SENTINEL` and the
+/// gate is bypassed without any glitch on the sentinel function
+/// itself.
+///
+/// **The fix.** Place this between paired sentinel callsites in the
+/// same function:
+///
+/// ```ignore
+/// if check_true_into_sentinel(|| cond_a()) != OK_SENTINEL { ... }
+/// crate::fi::scrub_sentinel_register();
+/// if check_true_into_sentinel(|| cond_b()) != OK_SENTINEL { ... }
+/// ```
+///
+/// After this call, `r0` holds `0` (not `OK_SENTINEL`). A skip of
+/// the next `bl` then sees `r0 == 0`, the `cmp` fails, the gate
+/// rejects.
+///
+/// On host tests / non-ARM builds the call is a no-op (the stale-r0
+/// attack is meaningless without ARM AAPCS register conventions).
+#[inline(never)]
+pub fn scrub_sentinel_register() {
+    wait_random();
+    #[cfg(all(target_arch = "arm", not(test)))]
+    unsafe {
+        // SAFETY: zero-clobber on the ARM AAPCS return register.
+        // `out("r0") _` tells the compiler we're scribbling r0;
+        // `nomem`/`nostack` are sound because we touch neither.
+        core::arch::asm!("mov r0, #0", out("r0") _, options(nomem, nostack));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

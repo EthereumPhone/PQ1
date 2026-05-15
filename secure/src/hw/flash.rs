@@ -463,7 +463,34 @@ const PIN_ATTEMPTS_QW_SIZE: u32 = 16;
 /// QW (brown-out mid-write) counts as programmed — conservative:
 /// the user gets at most one fewer attempt than the silicon actually
 /// recorded, never one more.
+///
+/// **F-15.r5 hardening (forward + reverse double scan).** Mirrors
+/// the F-12 fix to `offchain_count_read`: walk the page forward
+/// (early-exit on the first blank QW) and again from the end
+/// backward (early-exit on the first programmed QW), and require
+/// both passes to agree. A single fault that lands on one
+/// direction's early-exit cannot symmetrically affect the other —
+/// the two scans have asymmetric control flow by construction. On
+/// mismatch we fail-closed by returning `PIN_ATTEMPTS_CAPACITY`,
+/// which is strictly greater than `MAX_ATTEMPTS = 10`, so every
+/// downstream gate (`gated_unlock`'s `pre_count < MAX_ATTEMPTS`,
+/// `verify_pin_with_chip`'s `remaining_after != 0`, and
+/// `pin_attempts_bump`'s `pre >= PIN_ATTEMPTS_CAPACITY`) treats this
+/// as "lockout reached."
 pub unsafe fn pin_attempts_read() -> u8 {
+    let fwd = pin_attempts_scan_forward();
+    crate::fi::wait_random();
+    let rev = pin_attempts_scan_reverse();
+    if fwd != rev {
+        // Fail-closed sentinel. `PIN_ATTEMPTS_CAPACITY` = 32 >
+        // `MAX_ATTEMPTS` = 10, so every gate treats this as locked.
+        return PIN_ATTEMPTS_CAPACITY as u8;
+    }
+    fwd
+}
+
+#[inline(never)]
+unsafe fn pin_attempts_scan_forward() -> u8 {
     let base = PIN_ATTEMPTS_PAGE_ADDR as *const u8;
     let mut count: u8 = 0;
     for qw_idx in 0..PIN_ATTEMPTS_CAPACITY {
@@ -479,12 +506,44 @@ pub unsafe fn pin_attempts_read() -> u8 {
         if programmed {
             count = count.saturating_add(1);
         } else {
-            // Once we hit a blank QW, all subsequent QWs are also blank
-            // (we program them in order). Early-exit.
+            // Once we hit a blank QW, all subsequent QWs are also
+            // blank (we program them in order). Early-exit.
             break;
         }
     }
     count
+}
+
+#[inline(never)]
+unsafe fn pin_attempts_scan_reverse() -> u8 {
+    // Asymmetric control flow vs `pin_attempts_scan_forward`: walk
+    // from CAPACITY-1 backward, early-return on the first programmed
+    // QW. Under the invariant "QWs are programmed in order from 0,
+    // contiguously," the first-programmed-from-end QW is at index
+    // `count - 1`, so we return `i + 1`. A fault that early-exits
+    // the forward scan (e.g. flipping the `programmed` flag false
+    // mid-scan) cannot identically affect the reverse pass, which
+    // starts from the opposite boundary and walks in the opposite
+    // direction with a different loop shape.
+    let base = PIN_ATTEMPTS_PAGE_ADDR as *const u8;
+    let mut i = PIN_ATTEMPTS_CAPACITY;
+    while i > 0 {
+        i -= 1;
+        let qw_base = base.add((i as usize) * (PIN_ATTEMPTS_QW_SIZE as usize));
+        let mut programmed = false;
+        for byte_idx in 0..PIN_ATTEMPTS_QW_SIZE {
+            if read_volatile(qw_base.add(byte_idx as usize)) != 0xFF {
+                programmed = true;
+                break;
+            }
+        }
+        if programmed {
+            // u8 holds 0..=PIN_ATTEMPTS_CAPACITY (32) — well below
+            // the u8 ceiling, so saturating_add is defensive only.
+            return (i as u8).saturating_add(1);
+        }
+    }
+    0
 }
 
 /// Bump the attempt counter by one. Programs the next blank QW

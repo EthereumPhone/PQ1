@@ -677,17 +677,41 @@ wipe (user loses wallet). This is acceptable because:
     The new FAIL-IN gate transitions cleanly through the full
     lockout sequence.
 
-**Residual attack surface (what we did NOT close).** "MITIGATED" not
-"FIXED" because each of the following stays exploitable in principle:
+**F-15 follow-ups landed (commit follows).** Two of the five residuals
+listed below are now closed; the rest stay as documented:
 
-  1. **Stale `OK_SENTINEL` in r0.** If a *previous*
-     `check_true_into_sentinel` call succeeded immediately before
-     (e.g. the F-14 FihBool gate at the start of the same handler),
-     r0 still carries `0xA5A5_A5A5`. An attacker who can skip the
-     `bl check_true_into_sentinel` for the lockout check inherits
-     that value → `r0 == OK_SENTINEL` → bypass. **Mitigation owed:**
-     a `wait_random()` + explicit register-scrub between gates that
-     share the sentinel ABI.
+  - **F-15.r5 (closed in this commit).** `pin_attempts_read` now uses
+    the F-12 forward + reverse double-scan with asymmetric control
+    flow, returning `PIN_ATTEMPTS_CAPACITY` (32, > `MAX_ATTEMPTS` =
+    10) on mismatch so every downstream gate fail-closes. A single
+    fault that lands on one direction's early-exit cannot
+    symmetrically affect the other.
+
+  - **F-15.r1 (helper landed; residual already mitigated in practice).**
+    `fi::scrub_sentinel_register` added as inline-asm `mov r0, #0` for
+    ARM (no-op on host). Audit of the current paired-sentinel sites
+    (`NsPtr::validate_{read,write}`, `gated_unlock` + verdict,
+    `verify_pin_with_chip` post-unlock) shows that every existing
+    paired call already has either a `wait_random()` or a longer
+    intervening function call between them that clobbers `r0` —
+    `wait_random_loop`'s tail leaves a loop-counter / RNG byte in
+    `r0`, NOT `OK_SENTINEL`. So the stale-r0 attack against the
+    current codebase has no concrete exposure. The helper is added
+    as defence-in-depth for future commits that might introduce
+    closer-spaced sentinel calls without an intervening function
+    boundary.
+
+  - **F-15.r4 (covered transitively by r5).** The "post-scan
+    value-fault on `pre_count` / `remaining_after` between
+    assignment and closure capture" path is much narrower now that
+    `pin_attempts_read` itself is FI-hardened: the closure capture
+    happens immediately after the double-scan returns, on a value
+    that has already been cross-checked. The remaining narrow
+    window (load-into-register → store-to-local → closure capture)
+    is single-instruction-wide and below the granularity the
+    rainbow harness models.
+
+**Residual attack surface still open (multi-fault / specific-value):**
 
   2. **Specific-value EM injection.** Documented in the SCA
      literature (Riscure, NewAE) — an EM glitch can inject a
@@ -695,28 +719,14 @@ wipe (user loses wallet). This is acceptable because:
      `0xA5A5_A5A5` is rare and equipment-dependent but not
      theoretical. The Hamming weight (16) is moderate; a more
      aggressive constant choice (extreme weight 1 or 31) would push
-     this harder.
+     this harder. Tracked in `docs/work-todo.md §18b` as
+     "F-13/F-14 sentinel constant Hamming-weight upgrade."
 
   3. **Coordinated 2-fault on `check_true_into_sentinel` internals.**
      F-5 found the sentinel function itself is ~2-coordinated-skip-
      defeatable. Two faults landing inside the function can produce
      an `OK_SENTINEL` return on a `false` input. Single-fault
      resistant; multi-fault not.
-
-  4. **Counter value-fault *outside* the scan.** Both
-     `pin_attempts_read` calls succeed and agree on the actual value,
-     but a fault between the agreement check and the closure capture
-     clamps `pre_count` / `remaining_after` to 0 (for `pre_count <
-     MAX_ATTEMPTS`) or non-zero (for `remaining_after != 0`). The
-     double-read covers mid-scan, not the post-assignment register
-     state.
-
-  5. **`pin_attempts_read` not internally F-12-hardened.** A
-     consistent underreport-by-1 fault (e.g. a control-flow glitch
-     that early-exits both scans the same way) slips past the
-     double-read because both reads land identically. The F-12 fix
-     to `offchain_count_read` (forward + reverse scan with
-     halt-on-mismatch) was not applied here yet — owed.
 
 **Threat-model accounting.** The Masaryk-U Simonik thesis 76 %
 single-skip primitive is closed by this commit. Multi-fault attacks
