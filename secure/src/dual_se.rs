@@ -103,6 +103,7 @@ impl WalletStore for DualSecureElement {
         }
 
         half_o.zeroize();
+        crate::fi::zeroize_barrier();
 
         secure_log!("[DUAL] Provisioned: entropy XOR-split across OPTIGA Trust M + SE050");
         Ok(())
@@ -190,7 +191,9 @@ impl WalletStore for DualSecureElement {
         // Reconstruct the full entropy
         let mut full_entropy = xor_32(&half_o, &half_e);
         half_o.zeroize();
+        crate::fi::zeroize_barrier();
         half_e.zeroize();
+        crate::fi::zeroize_barrier();
 
         // Verify consistency: kdf("sphincs-master", full_entropy, 0) must
         // equal the master_secret we already got from both SEs.
@@ -204,6 +207,7 @@ impl WalletStore for DualSecureElement {
         let c2: bool = derived_master.ct_eq(&master_o).into();
         if crate::fi::check_true_into_sentinel(|| c1 && c2) != crate::fi::OK_SENTINEL {
             full_entropy.zeroize();
+            crate::fi::zeroize_barrier();
             let mut mo = master_o;
             mo.zeroize();
             secure_log!("[DUAL] CRITICAL: reconstructed entropy doesn't match master!");
@@ -216,6 +220,7 @@ impl WalletStore for DualSecureElement {
         self.blob_cached = true;
 
         full_entropy.zeroize();
+        crate::fi::zeroize_barrier();
 
         secure_log!("[DUAL] Unlocked: entropy reconstructed from XOR split");
         Ok(master_o)

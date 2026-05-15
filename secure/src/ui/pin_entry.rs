@@ -115,6 +115,7 @@ fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
 
 fn wipe_pin(pin: &mut [u8; PIN_LEN]) {
     pin.zeroize();
+    crate::fi::zeroize_barrier();
 }
 
 /// First-boot PIN selection: prompt twice and verify the entries match,

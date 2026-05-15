@@ -457,6 +457,7 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
                 secure_log!("[S] wizard: entropy ok, showing mnemonic");
                 let m = sphincs_tz_bip39::Mnemonic::from_entropy(&entropy);
                 entropy.zeroize();
+                crate::fi::zeroize_barrier();
 
                 // Show the 24 words paginated; require the user to walk to
                 // the last page before they can confirm.
@@ -2370,6 +2371,7 @@ fn main() -> ! {
             // mnemonic drops here → indices zeroed.
             use zeroize::Zeroize;
             pin.zeroize();
+            crate::fi::zeroize_barrier();
             ui::show_status("PQSigner OS", "Ready");
             secure_log!("[S] Provisioned + unlocked");
         } else {
@@ -2403,6 +2405,7 @@ fn main() -> ! {
                 let result = nsc::gated_unlock(se_ref, &pin);
 
                 pin.zeroize();
+                crate::fi::zeroize_barrier();
 
                 match result {
                     Ok(master) => {
@@ -2635,6 +2638,7 @@ fn PendSV() {
             let result = nsc::gated_unlock(se, &pin);
 
             pin.zeroize();
+            crate::fi::zeroize_barrier();
 
             match result {
                 Ok(master) => {

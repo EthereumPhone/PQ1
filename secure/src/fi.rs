@@ -79,6 +79,48 @@ pub fn check_true_into_sentinel<F: FnMut() -> bool>(cond: F) -> u32 {
     pqsigner_fi::check_true_into_sentinel(cond, wait_random)
 }
 
+/// Belt-and-braces memory barrier after a `zeroize()` of a secret
+/// buffer. Issue a `compiler_fence(SeqCst)` (forbids LLVM from
+/// reordering loads/stores across the boundary) and an `asm::dsb()`
+/// (forces the CPU to commit pending stores from the store buffer
+/// to memory before subsequent operations).
+///
+/// **Why both.** The `zeroize` crate's `Zeroize::zeroize()` already
+/// uses `write_volatile` (prevents dead-store elimination) and
+/// `compiler_fence(SeqCst)` internally — so on a single-core
+/// in-order CPU with no other bus masters, that's already
+/// sufficient. The extra `dsb()` matters for two specific cases on
+/// STM32U585:
+///
+///   1. **Subsequent peripheral access.** If the wiped buffer was
+///      just consumed by the SHA / SAES / PKA accelerator (separate
+///      AHB master), the next peripheral write needs to be ordered
+///      after the zeroize commits. Without dsb, the store buffer
+///      could hold the wiped bytes in flight while a peripheral
+///      reads the still-non-zero memory.
+///
+///   2. **Asynchronous wipe interruption.** Idle-wipe runs from a
+///      timer ISR; a panic handler runs after a fault. Either can
+///      observe the secret state mid-function. dsb ensures every
+///      preceding wipe is committed before the ISR / panic handler
+///      runs.
+///
+/// **Cost.** `compiler_fence` emits zero instructions (it's a
+/// compile-time barrier only). `dsb` is a single-cycle instruction
+/// on Cortex-M33. Total: ~1 cycle per call site, ~53 sites in the
+/// secret-path → ~53 cycles total per signing pass.
+///
+/// Use after every `zeroize()` of `master_secret`, `entropy`,
+/// `half_o` / `half_e` / `full_entropy`, `pin`, `opt_rand_buf`,
+/// `slot_master_entropy`, or any other 32-byte cryptographic
+/// secret.
+#[inline(always)]
+pub fn zeroize_barrier() {
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    #[cfg(all(target_arch = "arm", not(test)))]
+    cortex_m::asm::dsb();
+}
+
 /// **F-15.r1 defence.** Scrub the AAPCS return register (`r0` on
 /// Cortex-M) to a known non-sentinel value, with a `wait_random()` to
 /// frustrate clock-aligned glitch placement.

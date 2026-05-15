@@ -2175,6 +2175,7 @@ impl WalletStore for Se050 {
         }
 
         entropy.zeroize();
+        crate::fi::zeroize_barrier();
 
         Ok(master_secret)
     }

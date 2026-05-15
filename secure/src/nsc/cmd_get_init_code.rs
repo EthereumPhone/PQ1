@@ -170,6 +170,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
         super::state::with_state(|s| {
             s.slot_master_entropy.zeroize();
+            crate::fi::zeroize_barrier();
             s.slot_master_entropy = *slot_master_entropy;
             s.slot_master_derived = true;
         });

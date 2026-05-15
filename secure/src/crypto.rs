@@ -108,6 +108,7 @@ pub fn c10_sign_verified_with_progress(
     // double-compute makes it redundant.
     if !bool::from(sig_a[..].ct_eq(&sig_b[..])) {
         opt_rand_buf.zeroize();
+        crate::fi::zeroize_barrier();
         return Err(());
     }
 
@@ -129,9 +130,11 @@ pub fn c10_sign_verified_with_progress(
     let v = sphincs_c10::verify(sk.pk_seed(), sk.pk_root(), msg_hash, &sig_a);
     if crate::fi::check_true_into_sentinel(|| core::hint::black_box(v)) != crate::fi::OK_SENTINEL {
         opt_rand_buf.zeroize();
+        crate::fi::zeroize_barrier();
         return Err(());
     }
     opt_rand_buf.zeroize();
+    crate::fi::zeroize_barrier();
     Ok(sig_a)
 }
 
@@ -163,7 +166,9 @@ pub fn provision_from_mnemonic(
         .expect("provisioning failed");
 
     entropy.zeroize();
+    crate::fi::zeroize_barrier();
     master_secret.zeroize();
+    crate::fi::zeroize_barrier();
 }
 
 /// Store pre-derived entropy, VK, and PIN state via the MACD chain on an

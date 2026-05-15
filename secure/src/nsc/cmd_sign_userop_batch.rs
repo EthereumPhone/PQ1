@@ -388,6 +388,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Ok(c) => c,
         Err(_) => {
             entropy.zeroize();
+            crate::fi::zeroize_barrier();
             ui::show_status("Batch sign", "calldata too long");
             return NscStatus::CryptoError as u32;
         }
@@ -430,6 +431,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
         super::state::with_state(|s| {
             s.slot_master_entropy.zeroize();
+            crate::fi::zeroize_barrier();
             s.slot_master_entropy = *slot_master_entropy;
             s.slot_master_derived = true;
         });
@@ -446,6 +448,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
             None => {
                 entropy.zeroize();
+                crate::fi::zeroize_barrier();
                 return NscStatus::InternalError as u32;
             }
         }
@@ -495,6 +498,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 Ok(s) => s,
                 Err(_) => {
                     entropy.zeroize();
+                    crate::fi::zeroize_barrier();
                     return NscStatus::CryptoError as u32;
                 }
             };
@@ -509,6 +513,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             };
             if crate::fi::check_true_into_sentinel(|| fv1 && fv2) != crate::fi::OK_SENTINEL {
                 entropy.zeroize();
+                crate::fi::zeroize_barrier();
                 ui::show_status("FactorySig", "verify FAIL");
                 return NscStatus::CryptoError as u32;
             }
@@ -569,6 +574,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 Ok(s) => s,
                 Err(_) => {
                     entropy.zeroize();
+                    crate::fi::zeroize_barrier();
                     return NscStatus::CryptoError as u32;
                 }
             };
@@ -583,6 +589,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             };
             if crate::fi::check_true_into_sentinel(|| bv1 && bv2) != crate::fi::OK_SENTINEL {
                 entropy.zeroize();
+                crate::fi::zeroize_barrier();
                 ui::show_status("Type1 sig", "verify FAIL");
                 return NscStatus::CryptoError as u32;
             }
@@ -623,6 +630,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Some(c) => &c.key,
             None => {
                 entropy.zeroize();
+                crate::fi::zeroize_barrier();
                 return NscStatus::InternalError as u32;
             }
         };
@@ -634,6 +642,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Ok(s) => s,
             Err(_) => {
                 entropy.zeroize();
+                crate::fi::zeroize_barrier();
                 return NscStatus::CryptoError as u32;
             }
         }
@@ -648,6 +657,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Some(c) => &c.key,
             None => {
                 entropy.zeroize();
+                crate::fi::zeroize_barrier();
                 return NscStatus::InternalError as u32;
             }
         };
@@ -658,6 +668,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     if crate::fi::check_true_into_sentinel(|| v1 && v2) != crate::fi::OK_SENTINEL {
         entropy.zeroize();
+        crate::fi::zeroize_barrier();
         ui::show_status("Sig verify", "FAIL");
         return NscStatus::CryptoError as u32;
     }
@@ -671,6 +682,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         if unsafe { crate::offchain_state::offchain_count_register_slot(&slot_flash_key) }.is_err()
         {
             entropy.zeroize();
+            crate::fi::zeroize_barrier();
             ui::show_status("Slot register", "FAIL");
             return NscStatus::InternalError as u32;
         }
@@ -679,6 +691,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         .is_err()
     {
         entropy.zeroize();
+        crate::fi::zeroize_barrier();
         ui::show_status("Sig commit", "FAIL");
         return NscStatus::InternalError as u32;
     }
@@ -718,6 +731,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // ── 15. Zeroise transients ──────────────────────────────────────
     entropy.zeroize();
+    crate::fi::zeroize_barrier();
     type1_wrapper_out.zeroize();
     type2_wrapper_out.zeroize();
     init_code_out.zeroize();

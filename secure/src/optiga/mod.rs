@@ -1763,6 +1763,7 @@ impl OptigaTrustM {
             self.remaining = MAX_ATTEMPTS;
 
             entropy.zeroize();
+            crate::fi::zeroize_barrier();
             vk.zeroize();
             bootstrap_vk.zeroize();
 

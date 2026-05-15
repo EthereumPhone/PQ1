@@ -140,12 +140,14 @@ impl SecureState {
     /// a fresh PIN.
     pub(super) fn zeroize_sensitive(&mut self) {
         self.master_secret.zeroize();
+        crate::fi::zeroize_barrier();
         self.pin_verified.set_false();
         self.last_chain_id = 0;
         self.last_key_index = 0;
         self.last_ots_index = 0;
         self.has_signed = false;
         self.slot_master_entropy.zeroize();
+        crate::fi::zeroize_barrier();
         self.slot_master_derived = false;
         // Bootstrap pubkey halves are technically non-secret, but wipe
         // them anyway so a stale entry can't influence post-lock UI
@@ -266,6 +268,7 @@ impl SecureState {
     /// prior session's secret on the stack or in BSS.
     pub(super) fn mark_unlocked(&mut self, mut master: [u8; 32]) {
         self.master_secret.zeroize();
+        crate::fi::zeroize_barrier();
         self.master_secret = master;
         master.zeroize();
         self.pin_verified.set_true();
