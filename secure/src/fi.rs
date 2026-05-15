@@ -79,6 +79,94 @@ pub fn check_true_into_sentinel<F: FnMut() -> bool>(cond: F) -> u32 {
     pqsigner_fi::check_true_into_sentinel(cond, wait_random)
 }
 
+/// Control-flow-integrity step counter (§18 P0).
+///
+/// Each critical-path function bumps a running `u32` with a unique
+/// per-step magic constant. At the end the function compares the
+/// running total against the expected final value (computed at
+/// compile time via [`cfi_expected!`] from the step magics).
+///
+/// **What it defends.** A glitch that skips one critical step (the
+/// function call OR the `bump` that follows it) leaves the counter
+/// short by exactly that magic. The final check fails. This catches
+/// the "skip an entire function call" attack class — which the
+/// existing F-2 sentinel pattern doesn't reach (F-2 hardens the
+/// `if-branch` AFTER a function returns; CFI hardens the function
+/// call itself being skipped).
+///
+/// **What it doesn't defend.** A multi-fault attack that writes the
+/// expected value directly to the stack-resident counter (knowing
+/// the stack layout and the compile-time expected constant) would
+/// bypass — but that's a 2-fault primitive minimum.
+///
+/// **Composition.** [`check_into_sentinel`] returns a Hamming-distant
+/// `OK_SENTINEL` or `FAIL_SENTINEL` so callers can use the same
+/// `if cfi.check_into_sentinel(...) != OK_SENTINEL { reject }`
+/// pattern as the rest of the F-2 sentinel-encoded gates. Volatile
+/// reads/writes on the running accumulator prevent the compiler from
+/// constant-folding the sum (which would defeat the check at the
+/// IR level).
+pub struct CfiCounter {
+    accum: u32,
+}
+
+impl CfiCounter {
+    /// Non-zero non-sentinel start value. Defends a stuck-at-zero
+    /// fault on the counter initialisation — if `accum` reads back
+    /// as 0 right after `new()`, the final check fails.
+    pub const INIT_VALUE: u32 = 0x1357_2468;
+
+    pub const fn new() -> Self {
+        Self {
+            accum: Self::INIT_VALUE,
+        }
+    }
+
+    /// Add a per-step magic to the running counter. Volatile so LLVM
+    /// can't constant-fold the sum at the IR level.
+    #[inline(never)]
+    pub fn bump(&mut self, magic: u32) {
+        // SAFETY: `self` is a unique mutable borrow.
+        unsafe {
+            let cur = core::ptr::read_volatile(&self.accum);
+            core::ptr::write_volatile(&mut self.accum, cur.wrapping_add(magic));
+        }
+    }
+
+    /// Compare the running counter against the expected final value
+    /// (compile-time sum of `INIT_VALUE` + every step magic). Returns
+    /// `OK_SENTINEL` iff equal, `FAIL_SENTINEL` otherwise. Composes
+    /// with the F-2 sentinel-comparison idiom at the caller.
+    #[inline(never)]
+    pub fn check_into_sentinel(&self, expected: u32) -> u32 {
+        // SAFETY: `self` is a valid borrow.
+        let cur = unsafe { core::ptr::read_volatile(&self.accum) };
+        check_true_into_sentinel(|| cur == expected)
+    }
+}
+
+impl Default for CfiCounter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Compile-time helper: sum the step magics with `wrapping_add` so
+/// the result matches what [`CfiCounter::bump`]s will produce.
+///
+/// ```ignore
+/// const STEP_A: u32 = 0xAA00_0001;
+/// const STEP_B: u32 = 0xBB00_0002;
+/// const EXPECTED: u32 = cfi_expected!(STEP_A, STEP_B);
+/// ```
+#[macro_export]
+macro_rules! cfi_expected {
+    ($($step:expr),+ $(,)?) => {
+        $crate::fi::CfiCounter::INIT_VALUE
+            $(.wrapping_add($step))+
+    };
+}
+
 /// Belt-and-braces memory barrier after a `zeroize()` of a secret
 /// buffer. Issue a `compiler_fence(SeqCst)` (forbids LLVM from
 /// reordering loads/stores across the boundary) and an `asm::dsb()`

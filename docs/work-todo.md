@@ -570,7 +570,7 @@ Research-derived mitigations from the deep-research round of 2026-04-14. Critica
 
 **What's needed — P1 (strongly recommended):**
 - [ ] Architectural decision: **SHAKE vs SHA2 parameter set**. SHAKE enables Fluhrer PRF-tree (~1.7× overhead) with cleaner SCA story than SHA2 (masking ~3-5×, HASH peripheral has no DPA resistance per UM3370). Backward-compatible with on-chain verifier per the research.
-- [ ] Control-flow-integrity step counters: increment before critical call, decrement after, fail on mismatch. Detects function-skip glitches.
+- [x] **Control-flow-integrity step counters** (F-18, commit follows). `secure/src/fi.rs::CfiCounter` + `cfi_expected!` macro. Each critical-path function bumps a running u32 with a unique per-step magic; final check compares against compile-time-summed expected via the F-2 sentinel idiom (`check_into_sentinel(EXPECTED) != OK_SENTINEL → reject`). Volatile reads/writes prevent constant-folding. Applied to `c10_sign_verified_with_progress` (7 steps: rate-limit, opt_rand, shuffle, sign-A, sign-B, ct_eq, verify-gate). Defends the "skip an entire function call" attack class that the F-2 sentinel pattern doesn't reach (F-2 hardens the `if`-branch AFTER a function returns; CFI hardens the function call itself being skipped). Multi-fault attack that writes the expected value directly to the stack-resident counter would still bypass (out of scope per the single-fault threat model). Future: extend to `gated_unlock` + the gateway command dispatchers (similar 3-5 step shape each).
 - [ ] Random delays before security-critical ops (DWT or TRNG-seeded NOP sled).
 - [ ] Redundant volatile reads (2-3×) on critical state with OR-based fail-in.
 

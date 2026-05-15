@@ -46,12 +46,42 @@ pub fn c10_sign_verified(
 /// Like [`c10_sign_verified`] but reports 0..100 signing progress via the
 /// supplied callback so the trusted-UI progress bar stays responsive
 /// during the multi-second C10 signature.
+// F-18 (CFI): per-step magic constants for `c10_sign_verified_with_progress`.
+//
+// Distinct, non-trivial 32-bit values so no subset of skipped steps
+// can sum to the same gap as another subset. Hex prefixes are
+// mnemonic (0xA1 = "rate-limit", 0xB2 = "opt_rand", etc.) — the
+// actual numeric value is what matters for FI defense.
+const CFI_STEP_RATE_LIMIT:  u32 = 0xA1_5A_1357;
+const CFI_STEP_OPT_RAND:    u32 = 0xB2_5B_2468;
+const CFI_STEP_SHUFFLE:     u32 = 0xC3_5C_3579;
+const CFI_STEP_SIGN_A:      u32 = 0xD4_5D_468A;
+const CFI_STEP_SIGN_B:      u32 = 0xE5_5E_579B;
+const CFI_STEP_CT_EQ:       u32 = 0xF6_5F_68AC;
+const CFI_STEP_VERIFY_GATE: u32 = 0x17_60_79BD;
+
 pub fn c10_sign_verified_with_progress(
     sk: &sphincs_c10::SigningKey,
     msg_hash: &[u8; 32],
     progress: fn(u8),
 ) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
     use subtle::ConstantTimeEq;
+
+    // F-18 (CFI): track that every critical step ran. Final check
+    // (`cfi.check_into_sentinel(EXPECTED) != OK_SENTINEL`) fails
+    // closed if any one of the 7 steps below was skipped by a glitch.
+    // Defends the "skip an entire function call" attack class that
+    // F-2's sentinel-encoding doesn't reach.
+    const CFI_EXPECTED: u32 = crate::cfi_expected!(
+        CFI_STEP_RATE_LIMIT,
+        CFI_STEP_OPT_RAND,
+        CFI_STEP_SHUFFLE,
+        CFI_STEP_SIGN_A,
+        CFI_STEP_SIGN_B,
+        CFI_STEP_CT_EQ,
+        CFI_STEP_VERIFY_GATE,
+    );
+    let mut cfi = crate::fi::CfiCounter::new();
 
     // F-17 (SCA defense): signing rate limiter. Enforces
     //   - ≥ 1 second between consecutive signs (busy-wait), and
@@ -66,6 +96,7 @@ pub fn c10_sign_verified_with_progress(
     // entry re-arms the session budget via `mark_unlocked`.
     #[cfg(not(test))]
     crate::sign_rate::pre_sign()?;
+    cfi.bump(CFI_STEP_RATE_LIMIT);
 
     // FI-hardening, layer 1 of 2: double-compute (RFC 9814 §A.2 / Genêt
     // TCHES 2023). Verify-after-sign alone is *insufficient*: a fault
@@ -104,6 +135,7 @@ pub fn c10_sign_verified_with_progress(
         return Err(());
     }
     let opt_rand: Option<&[u8; sphincs_c10::params::N]> = Some(&opt_rand_buf);
+    cfi.bump(CFI_STEP_OPT_RAND);
 
     // **F-16 (DPA-defence) shuffle seed.** Drawn once per signing
     // call via `rng_strong::fill` (STM32 ⊕ OPTIGA ⊕ SE050 XOR-fold)
@@ -135,10 +167,13 @@ pub fn c10_sign_verified_with_progress(
     // `ZeroizeOnDrop` wrapper.
     shuffle_seed_buf.zeroize();
     crate::fi::zeroize_barrier();
+    cfi.bump(CFI_STEP_SHUFFLE);
 
     let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle, progress);
+    cfi.bump(CFI_STEP_SIGN_A);
     crate::fi::wait_random();
     let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle, |_| {});
+    cfi.bump(CFI_STEP_SIGN_B);
 
     // Constant-time comparison of the 4008-byte signatures.
     // `subtle::ConstantTimeEq` prevents an attacker from learning
@@ -157,6 +192,7 @@ pub fn c10_sign_verified_with_progress(
         crate::fi::zeroize_barrier();
         return Err(());
     }
+    cfi.bump(CFI_STEP_CT_EQ);
 
     // FI-hardening, layer 2 of 2: verify-before-release.
     //
@@ -179,6 +215,22 @@ pub fn c10_sign_verified_with_progress(
         crate::fi::zeroize_barrier();
         return Err(());
     }
+    cfi.bump(CFI_STEP_VERIFY_GATE);
+
+    // F-18 final CFI check: every critical step bumped the counter
+    // with its unique magic; the running total must match the
+    // compile-time `CFI_EXPECTED`. A glitch that skipped any one
+    // step's `bump` (or skipped the step itself, since the bump
+    // follows it directly) leaves the counter short by exactly that
+    // step's magic → fail closed. Routed through the F-2 Hamming-
+    // distant sentinel idiom so a skip of the verify call itself
+    // doesn't bypass.
+    if cfi.check_into_sentinel(CFI_EXPECTED) != crate::fi::OK_SENTINEL {
+        opt_rand_buf.zeroize();
+        crate::fi::zeroize_barrier();
+        return Err(());
+    }
+
     opt_rand_buf.zeroize();
     crate::fi::zeroize_barrier();
     Ok(sig_a)
