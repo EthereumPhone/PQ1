@@ -608,6 +608,12 @@ Research-derived mitigations from the deep-research round of 2026-04-14. Critica
 
 - [ ] **Migrate non-signing RNG call-sites to `rng_strong::fill`.** `secure/src/dual_se.rs::provision` (one-shot entropy XOR split), consumption-mask PWM duty randomization, `fi::wait_random` salt, FI consumption-mask. None is security-critical (all are defence-in-depth around a non-secret), but Phase-1's strong-RNG infrastructure is in place and finishing the migration costs ~20 LoC. Cited inline in §10 "Phase 2"; capturing here for visibility.
 
+**Long-tail audit items from `tools/sca/README.md` Roadmap (mentioned but never promoted to formal checklist):**
+
+- [ ] **3-fault sweep against `fi::check_true*` + production gates.** `make fi-twofault` already covers 2-coordinated-skip; 3-fault is a much steeper bar combinatorically (`n³` pair-product) but a known F-5 follow-up. Useful as a regression test rather than a daily run — once-per-release CI gate. Hardware-grade EMFI attackers in the literature have demonstrated 3-fault primitives on Cortex-M, so this isn't theoretical.
+- [ ] **Leakage pass over the FI guards themselves.** Does `fi::wait_random`'s loop count leak via timing? Emulated traces are jitter-free so this would be a structural check (count instructions per loop iteration as a function of the RNG byte) rather than a real timing-side-channel test. Cheap and adds confidence the FI guards aren't themselves a side channel.
+- [ ] **`sca-trigger` firmware feature flag for on-silicon SCA work.** Compile-time-gated GPIO toggle around `c10_sign_verified*` / `hw::saes_cmac::cmac_dhuk` / `nsc::gated_unlock` so a ChipWhisperer / NewAE Scaffold / crowbar rig can sync trace captures. Production CI must gate this OFF alongside `debug-log` / `e2e-test` / `mock-se` (already in the existing gate set). Required before *any* on-silicon SCA / FI campaign (currently we're emulation-only via rainbow/lascar). One-line change per target site + a `compile_error!` fence in the production gate.
+
 ---
 
 ### 19. USB stack hardening (USB-C only attack surface)
