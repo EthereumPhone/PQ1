@@ -737,15 +737,6 @@ pub enum Slot {
     B,
 }
 
-impl Slot {
-    pub fn other(self) -> Self {
-        match self {
-            Slot::A => Slot::B,
-            Slot::B => Slot::A,
-        }
-    }
-}
-
 // --- Manifest page addresses --------------------------------------------------
 
 pub const MANIFEST_A_ADDR: u32 = 0x0C00_8000;
@@ -1107,21 +1098,6 @@ const OFFCHAIN_CAPACITY: u32 = 512; // 8 KB / 16
 const OFFCHAIN_TYPE_COUNT: u8 = 0x01;
 const OFFCHAIN_TYPE_USEROP: u8 = 0x02;
 
-/// Compute the 8-byte flash key for a `(account_index, chain_id, slot_index)`
-/// tuple. SHA-256-based, truncated to 8 bytes — collision rate ~1/2^64
-/// per slot pair, negligible for realistic usage (<256 active slots).
-pub fn slot_key_compute(account_index: u8, chain_id: u64, slot_index: u32) -> [u8; 8] {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update([account_index]);
-    h.update(chain_id.to_be_bytes());
-    h.update(slot_index.to_be_bytes());
-    let d = h.finalize();
-    let mut out = [0u8; 8];
-    out.copy_from_slice(&d[..8]);
-    out
-}
-
 /// Pack a journal entry into a 16-byte quad-word.
 fn entry_qw(slot_key: &[u8; 8], entry_type: u8, count: u64) -> [u8; 16] {
     let mut qw = [0u8; 16];
@@ -1223,25 +1199,6 @@ fn find_next_blank_idx() -> Option<u32> {
         }
     }
     None
-}
-
-/// True iff every byte in the off-chain page reads back as 0xFF.
-/// Used as the self-heal trigger: when `write_entry` cannot find a
-/// truly-blank QW (because the page was inherited from the
-/// pre-all-C10 per-slot state and never erased), the safest recovery
-/// is a single bulk erase — there are no surviving valid entries to
-/// preserve.
-///
-#[allow(dead_code)]
-fn offchain_page_is_blank() -> bool {
-    let base = OFFCHAIN_PAGE_ADDR as *const u8;
-    for i in 0..(OFFCHAIN_CAPACITY * OFFCHAIN_QW_SIZE) as usize {
-        // SAFETY: `i < 8192` stays inside the page.
-        if unsafe { read_volatile(base.add(i)) } != 0xFF {
-            return false;
-        }
-    }
-    true
 }
 
 /// Erase page 123 — wipes every off-chain counter back to "no record".
