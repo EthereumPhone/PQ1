@@ -97,18 +97,21 @@ Originally scoped for Tropic01 + SE050 before the OPTIGA + SE050 dual-SE cutover
 
 ### 6. PIN Entry Digit Scrambling
 
-**Status:** NOT STARTED
+**Status:** F-20 LANDED (commit follows). Adapted from the original Trezor-grid-shuffle framing because our 2-button hardware is a fundamentally different attack surface — see below.
 
-PIN entry UI (`secure/src/ui/pin_entry.rs`) currently presents digits in fixed 0-9 order. An attacker observing button presses (shoulder-surfing, overhead camera, compromising EMI) can reconstruct the PIN from the press pattern alone. Scrambling the digit layout per-entry decouples button positions from digit values.
+**The original framing** (Trezor 3×3 grid model): "scramble the digit-button mapping per session so button-position presses don't reveal digit values." That assumes a grid keypad where buttons correspond to positions and digits are randomly placed. **PQSigner has 2 buttons** (Left = digit−1, Right = digit+1, long-press = commit / back), so the equivalent attack surface is different: an attacker counts Left/Right presses per position and derives the digit directly from the press count.
 
-**What's needed:**
-- [ ] Generate a fresh random permutation of 0-9 on every PIN entry session, using the hardware TRNG (never software PRNG)
-- [ ] Render the scrambled layout on the OLED; confirm/cancel buttons keep fixed positions
-- [ ] Ensure the permutation lives only in secure-world SRAM and is zeroized after PIN entry completes (success, cancel, or timeout)
-- [ ] Constant-time digit selection -- no secret-dependent branches or lookup-table timing leaks
-- [ ] Re-scramble after each digit (optional, defeats memorization of the layout between digits)
+**Adapted defense (F-20):** randomise each PIN position's *starting digit* via `rng_strong::fill` at session entry. The user's per-position press count is `(target − random_start) mod 10` instead of `target`, so an attacker who can count presses but not see the OLED gets only that difference — `random_start` is hidden.
 
-**Files to change:** `secure/src/ui/pin_entry.rs`, `secure/src/ui/oled.rs`
+- [x] **Per-position random start via `rng_strong::fill`** in `pin_entry::enter_pin()`. Random buffer is `[u8; 8]` filled from the 3-source XOR; bytes are reduced mod 10. Zeroized at session exit on success/cancel/idle. ~10 LoC change.
+- [x] **Constant-time digit selection** — the existing Left/Right increment/decrement is constant-time per press; mod-10 wrap doesn't change.
+- [x] **Permutation lives only in S-SRAM and zeroized** — `rand_bytes` is a stack local, zeroized after use; `pin[]` follows the existing zeroize-on-exit path.
+- [n/a] **Render scrambled layout on OLED** — our 2-button model doesn't have a "layout" to scramble; the screen just shows the current digit at the active position. The scrambling is in the starting value, not in any visible permutation.
+- [deferred] **Re-scramble after each digit** — for our model, this would mean re-randomising future positions' starts after each commit. Marginal additional value over the once-per-session randomisation; the attacker model is "observes one PIN entry session" anyway. Skipped.
+
+**What this does NOT defend:** an attacker with screen visibility (camera-on-OLED OR overhead-camera-with-screen-in-view) sees the live digit directly. For that class, the Trezor-grid model is strictly better — but it requires a multi-button or touch interface we don't have. The cost is ~10 LoC for the narrower button-pattern shoulder-surf class.
+
+**Files changed:** `secure/src/ui/pin_entry.rs` (only).
 
 ---
 

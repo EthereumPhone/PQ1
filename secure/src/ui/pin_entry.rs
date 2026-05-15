@@ -6,6 +6,29 @@
 //!   * tap left     → digit - 1
 //!   * long right   → next position (or submit on the last position)
 //!   * long left    → previous position (or cancel on position 0)
+//!
+//! ## F-20 — Per-position random starting digit (digit scrambling)
+//!
+//! At session start, each of the 8 PIN positions is initialised to a
+//! fresh `rng_strong`-derived digit (mod-10 reduced) instead of 0.
+//! The user sees that random start when they arrive at the position
+//! and scrolls Left/Right by `(target - start) mod 10` presses to
+//! reach their chosen digit.
+//!
+//! **Attack defended:** A shoulder-surf or hand-camera attacker who
+//! can count Left/Right button presses but cannot see the OLED
+//! (overhead-camera-on-hands, EM monitoring of the button signal,
+//! motion tracking of finger movements) cannot derive the absolute
+//! digit from the press count alone — they get
+//! `(target - random_start) mod 10`, but `random_start` is hidden.
+//!
+//! **What this does NOT defend:** Attacker with screen visibility
+//! (camera on the OLED + hands together) sees the live digit
+//! directly. Trezor mitigates this with a 3×3 grid where the digit
+//! permutation is on the screen and the user picks by POSITION; our
+//! 2-button hardware can't replicate that. Our defense is the
+//! narrower button-pattern shoulder-surf class, which is real but
+//! less than full grid-scramble protection.
 
 use super::{display, input, show_status, Button, Press, DISPLAY_COLS};
 use crate::timeout;
@@ -22,7 +45,39 @@ pub enum PinEntryResult {
 }
 
 pub fn enter_pin() -> PinEntryResult {
+    // F-20: initialise each PIN position to a fresh random digit so
+    // an attacker counting Left/Right presses cannot derive the
+    // absolute digit value from the press count alone (the
+    // user's per-position press count is `(target - random_start) mod
+    // 10`, with random_start unknown to the attacker). Defends the
+    // button-pattern shoulder-surf class.
+    //
+    // Source: `rng_strong::fill` (STM32 ⊕ OPTIGA ⊕ SE050 XOR-fold).
+    // Cost: a one-shot ~few-ms RNG draw at session entry, negligible
+    // compared to PIN-entry wall time.
+    //
+    // **Modulo-10 bias:** with 256 byte values mapped to 10 digits,
+    // values 0..=5 each get 26 mappings vs 25 for 6..=9 — a per-
+    // digit probability bias of ±0.4 %. Acceptable for a shoulder-
+    // surf defense where the goal is "attacker doesn't know the
+    // start," not "uniform start distribution."
+    //
+    // **Fallback on RNG failure:** if `rng_strong::fill` returns
+    // `Err` (extremely unlikely), the buffer stays at zero and the
+    // PIN positions effectively start at 0 (legacy behaviour). We
+    // do NOT refuse PIN entry — bricking the wallet on transient
+    // RNG flake would be worse than degrading scrambling to the
+    // pre-F-20 baseline.
     let mut pin = [0u8; PIN_LEN];
+    #[cfg(not(test))]
+    {
+        let mut rand_bytes = [0u8; PIN_LEN];
+        let _ = crate::rng_strong::fill(&mut rand_bytes);
+        for i in 0..PIN_LEN {
+            pin[i] = rand_bytes[i] % 10;
+        }
+        rand_bytes.zeroize();
+    }
     let mut pos: usize = 0;
 
     timeout::reset_activity();
