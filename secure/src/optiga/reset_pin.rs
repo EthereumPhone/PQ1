@@ -103,23 +103,3 @@ pub unsafe fn init() {
     cortex_m::asm::delay(160_000 * 50);
 }
 
-/// Pulse the RST pin low for ~10 ms, then high, then wait ~50 ms for
-/// the chip to finish its internal boot. The 50 ms matches the same
-/// settle delay we use in `OptigaTrustM::init` before probing I²C.
-pub unsafe fn hard_pulse() {
-    let bsrr = (GPIOE_BASE + 0x18) as *mut u32;
-
-    // Re-apply output config defensively in case some later peripheral
-    // init reconfigured the RST pin between our last `init()` and now.
-    config_rst_output_high();
-
-    // Pulse low for 10 ms.
-    write_volatile(bsrr, 1u32 << (16 + RST_PIN));
-    cortex_m::asm::delay(1_600_000);
-
-    // Release high.
-    write_volatile(bsrr, 1u32 << RST_PIN);
-
-    // Settle 50 ms before the caller probes the chip over I²C.
-    cortex_m::asm::delay(8_000_000);
-}

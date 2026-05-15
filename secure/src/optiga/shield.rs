@@ -37,7 +37,6 @@ const SC_OVERHEAD: usize = SC_HEADER_LEN + CCM_TAG_LEN;
 const SCTR_HANDSHAKE_HELLO: u8 = 0x00;
 const SCTR_HANDSHAKE_FINISHED: u8 = 0x08;
 const SCTR_RECORD_FULL: u8 = 0x23; // Record type + full protection
-const SCTR_ALERT: u8 = 0x40;
 
 /// Protocol version for pre-shared-secret mode.
 const PROTOCOL_VERSION: u8 = 0x01;

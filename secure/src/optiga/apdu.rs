@@ -63,7 +63,6 @@ impl From<super::ifx_i2c::IfxError> for OptigaError {
 const CMD_CLEAR_LAST_ERROR: u8 = 0x80;
 
 const CMD_OPEN_APPLICATION:      u8 = 0x70 | CMD_CLEAR_LAST_ERROR;  // 0xF0
-const CMD_CLOSE_APPLICATION:     u8 = 0x71 | CMD_CLEAR_LAST_ERROR;  // 0xF1
 const CMD_GET_DATA_OBJECT:       u8 = 0x01 | CMD_CLEAR_LAST_ERROR;  // 0x81
 const CMD_SET_DATA_OBJECT:       u8 = 0x02 | CMD_CLEAR_LAST_ERROR;  // 0x82
 const CMD_SET_OBJECT_PROTECTED:  u8 = 0x03 | CMD_CLEAR_LAST_ERROR;  // 0x83
@@ -209,12 +208,6 @@ const AC_OP_LUC:      u8 = 0x40;
 const LCS_OPERATIONAL: u8 = 0x07;
 
 /// Data types (tag 0xE8).
-const DTYPE_BSTR:    u8 = 0x00;
-/// Monotonic Up-Counter (UPCTR). Object data is always 8 bytes:
-/// `[current_u32_be | limit_u32_be]`. Primary source:
-/// `trezor-firmware/core/embed/sec/optiga/inc/sec/optiga_commands.h:87`
-/// (`OPTIGA_DATA_TYPE_UPCTR = 0x01`).
-const DTYPE_UPCTR:   u8 = 0x01;
 const DTYPE_PBS:     u8 = 0x22;
 const DTYPE_AUTHREF: u8 = 0x31;
 
@@ -467,28 +460,11 @@ pub unsafe fn send_protected_manifest(
     Ok(())
 }
 
-/// `CloseApplication` — frees the chip-side session state / work buffer.
-/// Used between provisioning steps when the chip starts returning
-/// Status=0xff after N consecutive data writes (suspected buffer exhaustion).
-/// Pair with a subsequent `open_application` to reopen the session.
-pub unsafe fn close_application(ifx: &mut IfxState) -> Result<(), OptigaError> {
-    let mut ab = ApduBuf::new(CMD_CLOSE_APPLICATION, 0x00);
-    let apdu = ab.finish();
-
-    let mut resp = [0u8; 64];
-    let n = ifx.transceive(apdu, &mut resp)?;
-    let _ = parse_response(&resp, n)?;
-    Ok(())
-}
-
 /// `GetRandom` — generate `length` random bytes from the chip's TRNG.
 ///
 /// CRIT-8 fix: when the shielded connection is active, the request AND
 /// the response travel over the encrypted channel, so an I2C MITM
-/// cannot substitute a fixed challenge. The caller is additionally
-/// expected to XOR the returned bytes with host-side TRNG (see
-/// `get_random_mixed`) so that even a compromised chip-side TRNG
-/// cannot feed the firmware predictable randomness.
+/// cannot substitute a fixed challenge.
 ///
 /// InData: `Length(2 BE)` (positional, no tag).
 pub unsafe fn get_random(
@@ -658,38 +634,6 @@ pub unsafe fn hmac_verify_auto_state(
     Ok(())
 }
 
-/// `GetRandom` with host-side XOR mixing.
-///
-/// Even when the shielded connection encrypts the chip's reply, a
-/// compromised-at-manufacture chip could return deterministic
-/// "random" bytes. XOR-mixing with host TRNG output guarantees that
-/// at least one independent entropy source contributes to every byte.
-///
-/// Requires an active shielded connection — the caller must ensure
-/// `shield.active == true`.
-pub unsafe fn get_random_mixed(
-    ifx: &mut IfxState,
-    shield: &mut ShieldedConnection,
-    out: &mut [u8],
-) -> Result<usize, OptigaError> {
-    let n = get_random(ifx, shield, out)?;
-    if n == 0 {
-        return Ok(0);
-    }
-    let mut host = [0u8; 64];
-    let want = n.min(host.len());
-    crate::rng::fill(&mut host[..want]).map_err(|_| OptigaError::Transport)?;
-    for i in 0..want {
-        out[i] ^= host[i];
-    }
-    // Zeroise the host TRNG buffer — the XOR output already carries its
-    // contribution, no need to leave it on the stack.
-    for b in host.iter_mut() {
-        *b = 0;
-    }
-    Ok(n)
-}
-
 /// `GetDataObject` — read `length` bytes from `oid` starting at `offset`.
 ///
 /// InData: `OID(2) | Offset(2) | Length(2)` (all positional, no TLV).
@@ -752,25 +696,6 @@ pub unsafe fn set_data_object(
     data: &[u8],
 ) -> Result<(), OptigaError> {
     let mut ab = ApduBuf::new(CMD_SET_DATA_OBJECT, PARAM_ERASE_WRITE);
-    ab.write_u16(oid);
-    ab.write_u16(0x0000);
-    ab.write(data);
-    let apdu = ab.finish();
-
-    let mut resp = [0u8; 64];
-    let n = send_command(ifx, shield, apdu, &mut resp)?;
-    let _ = parse_response(&resp, n)?;
-    Ok(())
-}
-
-/// `SetDataObject` write-only — update `oid` in place without erasing first.
-pub unsafe fn write_data_object(
-    ifx: &mut IfxState,
-    shield: &mut ShieldedConnection,
-    oid: u16,
-    data: &[u8],
-) -> Result<(), OptigaError> {
-    let mut ab = ApduBuf::new(CMD_SET_DATA_OBJECT, PARAM_DATA);
     ab.write_u16(oid);
     ab.write_u16(0x0000);
     ab.write(data);
