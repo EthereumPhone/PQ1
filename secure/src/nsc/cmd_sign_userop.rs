@@ -47,7 +47,6 @@
 //! Every signature is verified locally before being written to NS
 //! (fault-injection guard, double-evaluated).
 
-use sha2::{Digest, Sha256};
 use sphincs_tz_shared::{
     NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, APPROVE_HASH_CALLDATA_LEN,
     APPROVE_HASH_SELECTOR, C10_SIG_LEN, FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT,
@@ -57,13 +56,6 @@ use sphincs_tz_shared::{
     SLOT_INDEX_MASK, ZK_CLEAR_SIGN_FIXED_LEN, ZK_V3_FIXED_LEN, ZK_VK_BUNDLE_MAX_LEN,
 };
 use zeroize::{Zeroize, Zeroizing};
-
-#[inline]
-fn sha256(bytes: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(bytes);
-    h.finalize().into()
-}
 
 /// Domain tag the firmware signs when authorising slot-0 on a new chain.
 /// MUST match `PQSmartWalletFactory.FACTORY_ADD_SLOT_DOMAIN`.
@@ -1024,7 +1016,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             factory_msg[25..33].copy_from_slice(&chain_id.to_be_bytes());
             factory_msg[33..65].copy_from_slice(&slot_pk_seed_32);
             factory_msg[65..97].copy_from_slice(&slot_pk_root_32);
-            let factory_digest = sha256(&factory_msg);
+            let factory_digest = sha256_bytes(&factory_msg);
 
             let factory_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
