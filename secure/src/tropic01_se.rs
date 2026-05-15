@@ -576,24 +576,6 @@ impl Tropic01SecureElement {
         })
     }
 
-    /// Get random bytes from the TROPIC01's hardware TRNG.
-    pub fn get_trng_bytes(&mut self, buf: &mut [u8]) -> Result<(), SeError> {
-        with_session!(self, session, {
-            // get_random_value takes a u8 count, so we chunk if needed
-            let mut offset = 0;
-            while offset < buf.len() {
-                let remaining = buf.len() - offset;
-                let chunk = if remaining > 255 { 255 } else { remaining as u8 };
-                let random = session
-                    .get_random_value(chunk)
-                    .map_err(|_| SeError::InternalError)?;
-                let got = random.len().min(chunk as usize);
-                buf[offset..offset + got].copy_from_slice(&random[..got]);
-                offset += got;
-            }
-            Ok(())
-        })
-    }
 }
 
 // ---------------------------------------------------------------------------

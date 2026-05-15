@@ -91,24 +91,6 @@ pub fn aes128_cbc_encrypt(key: &[u8; 16], iv: &[u8; 16], data: &mut [u8]) {
     }
 }
 
-/// AES-128-CBC decrypt in-place.
-pub fn aes128_cbc_decrypt(key: &[u8; 16], iv: &[u8; 16], data: &mut [u8]) {
-    use aes::cipher::BlockDecrypt;
-    let cipher = Aes128::new(GenericArray::from_slice(key));
-    let mut prev = *iv;
-    for chunk in data.chunks_mut(16) {
-        let mut ct = [0u8; 16];
-        ct.copy_from_slice(chunk);
-        let mut block = GenericArray::clone_from_slice(chunk);
-        cipher.decrypt_block(&mut block);
-        chunk.copy_from_slice(&block);
-        for (b, p) in chunk.iter_mut().zip(prev.iter()) {
-            *b ^= p;
-        }
-        prev = ct;
-    }
-}
-
 /// CMAC-AES-128 over the concatenation of all input slices.
 pub fn cmac_aes128(key: &[u8; 16], inputs: &[&[u8]]) -> [u8; 16] {
     let mut mac = <Cmac<Aes128> as CmacMac>::new_from_slice(key).unwrap();

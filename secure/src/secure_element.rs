@@ -207,14 +207,6 @@ impl MockSecureElement {
     pub fn simulate_glitch(&mut self) {
         self.glitch_armed = true;
     }
-
-    /// Returns `true` iff every MACD slot has been programmed at least
-    /// once. The existing PIN-verify path resets all slots on a
-    /// successful unlock, so this is `true` after any `unlock()` in
-    /// the post-provision lifecycle.
-    pub fn macd_all_initialized(&self) -> bool {
-        self.macd_initialized.iter().all(|&b| b)
-    }
 }
 
 /// Simple HMAC-SHA256 for MACD simulation.
