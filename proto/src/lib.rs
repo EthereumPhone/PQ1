@@ -41,25 +41,6 @@ pub const ZK_STRING_LEN: usize = 64;
 /// Groth16 proof size: π.A (96) + π.B (192) + π.C (96) = 384 bytes.
 pub const ZK_PROOF_LEN: usize = 384;
 
-/// Groth16 verification key size: alpha(96) + beta(192) + gamma(192) +
-/// delta(192) + 3×IC(288) = 960 bytes.
-/// The VK is protocol-specific — one VK per circuit under `circuits/`,
-/// produced by the in-tree `tools/build_vks.sh` pipeline and folded
-/// into the firmware DB by `dbgen`.
-pub const ZK_VK_LEN: usize = 960;
-
-/// Total size of the fixed portion of a clear-sign request payload.
-///
-/// Layout (v2 — includes AA header for UserOp signing):
-///   [0..384)                               : Groth16 proof (π.A || π.B || π.C)
-///   [384..548)                             : calldata (164 bytes, right-zero-padded)
-///   [548..612)                             : readable string (64 bytes, null-padded)
-///   [612..612+USEROP_HEADER_LEN)           : AA header (same as CMD_SIGN_USEROP)
-///   [612+USEROP_HEADER_LEN..+4)            : tx_len (u32 little-endian)
-///   [612+USEROP_HEADER_LEN+4..+tx_len)     : unsigned EIP-1559 transaction envelope
-pub const ZK_HEADER_LEN: usize =
-    ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + USEROP_HEADER_LEN + 4;
-
 // ---------------------------------------------------------------------------
 // Non-secure memory boundaries — used by secure world to validate NS pointers.
 // ---------------------------------------------------------------------------
@@ -594,13 +575,6 @@ pub const FW_STATE_RECEIVING: u8 = 1;
 pub const FW_STATE_STAGED: u8 = 2;
 
 // ---------------------------------------------------------------------------
-// CMD_GET_MAIN_PUBKEY wire format
-// ---------------------------------------------------------------------------
-
-/// Length of the CMD_GET_MAIN_PUBKEY payload: chain_id (8) + key_index (4).
-pub const MAIN_PUBKEY_PAYLOAD_LEN: usize = 12;
-
-// ---------------------------------------------------------------------------
 // CMD_SIGN_USEROP fixed-header layout offsets
 // ---------------------------------------------------------------------------
 
@@ -643,31 +617,7 @@ pub const EIP712_STRING_LEN: usize = 128;
 pub const EIP712_PROOF_LEN: usize = 384;
 
 // ---------------------------------------------------------------------------
-// USB APDU protocol constants (Keycard Shell compatible)
-// ---------------------------------------------------------------------------
-
-/// APDU class byte — matches Keycard Shell / Ledger convention.
-pub const APDU_CLA: u8 = 0xE0;
-
-/// APDU instruction codes — Keycard Shell compatible command set.
-pub const INS_GET_PUBLIC: u8 = 0x02;
-pub const INS_SIGN_ETH_TX: u8 = 0x04;
-pub const INS_GET_APP_CONF: u8 = 0x06;
-pub const INS_SIGN_ETH_MSG: u8 = 0x08;
-pub const INS_SIGN_EIP712: u8 = 0x0C;
-pub const INS_GET_RESPONSE: u8 = 0xC0;
-
-/// PQSigner extensions (not in Keycard Shell)
-pub const INS_GET_PIN_REMAINING: u8 = 0x10;
-pub const INS_UNLOCK: u8 = 0x12;
-
-/// APDU P1 values for command chaining (Keycard Shell convention).
-/// Chain terminates when Lc < APDU_MAX_DATA (short last chunk).
-pub const P1_FIRST: u8 = 0x00;
-pub const P1_MORE: u8 = 0x01;
-
-// ---------------------------------------------------------------------------
-// USB APDU protocol v2 — PQSigner native (replaces Keycard Shell compat)
+// USB APDU protocol v2 — PQSigner native
 // ---------------------------------------------------------------------------
 
 /// v2 class byte. Companion tries 0xF0 first; SW_CLA_NOT_SUPPORTED means
@@ -682,13 +632,8 @@ pub const INS_V2_GET_STATUS: u8 = 0x02;
 pub const INS_V2_UNLOCK: u8 = 0x10;
 pub const INS_V2_LOCK: u8 = 0x11;
 
-// -- Key queries (0x20-0x2F) --
-pub const INS_V2_GET_BOOTSTRAP_VK: u8 = 0x20;
-pub const INS_V2_GET_MAIN_VK: u8 = 0x21;
-
 // -- UserOp signing (0x30-0x3F) --
 pub const INS_V2_SIGN_USEROP: u8 = 0x30;
-pub const INS_V2_SIGN_CLEAR_USEROP: u8 = 0x31;
 /// INS_V2_SIGN_USEROP_BATCH — multi-call batch sign. Same semantics as
 /// `INS_V2_SIGN_USEROP` but the payload is the
 /// `CMD_SIGN_USEROP_BATCH` wire format (header + N inner-tx blocks)
@@ -696,15 +641,6 @@ pub const INS_V2_SIGN_CLEAR_USEROP: u8 = 0x31;
 /// `executeBatchWithOffchainCount(...)` instead of
 /// `executeWithOffchainCount(...)`.
 pub const INS_V2_SIGN_USEROP_BATCH: u8 = 0x32;
-
-// -- Message / typed-data signing (0x40-0x4F) --
-pub const INS_V2_SIGN_MESSAGE: u8 = 0x40;
-pub const INS_V2_SIGN_EIP712: u8 = 0x41;
-
-// -- Bootstrap operations (0x50-0x5F) --
-/// **DEPRECATED**: bootstrap signing is now handled automatically by
-/// INS_V2_SIGN_USEROP when P2=0x01 (not-deployed). Kept for backward compat.
-pub const INS_V2_SIGN_BOOTSTRAP: u8 = 0x50;
 
 // -- Address & account helpers (0x60-0x6F) --
 pub const INS_V2_GET_WALLET_ADDRESS: u8 = 0x60;
@@ -735,36 +671,8 @@ pub const INS_V2_FW_STATUS: u8 = 0x73;
 /// INS_V2_FW_ABORT — discard partial update. No payload.
 pub const INS_V2_FW_ABORT: u8 = 0x74;
 
-// INS range 0x70-0x7F (formerly compact-signing instructions — retired
-// with the C10 slot cutover).
-
-// -- Continuation (shared with v1) --
+// -- Continuation --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
-
-/// v2 P1: bit 7 = chaining flag (ISO 7816-4 standard).
-/// 0x00 = last or only block, 0x80 = more blocks follow.
-pub const P1_V2_LAST: u8 = 0x00;
-pub const P1_V2_MORE: u8 = 0x80;
-
-// ---------------------------------------------------------------------------
-// PQSignatureWrapper — structured signing response (v2)
-// ---------------------------------------------------------------------------
-
-/// Signer type discriminator in the (legacy v2) PQSignatureWrapper.
-pub const SIGNER_MAIN: u8 = 0x00;
-pub const SIGNER_BOOTSTRAP: u8 = 0x01;
-
-/// Fixed-size wrapper header written before the raw SPHINCS+ signature
-/// in the legacy v2 PQSignatureWrapper format. New code uses the
-/// on-chain `SignatureWrapper(uint256 ownerIndex, bytes innerSig)` ABI
-/// layout (see `SIG_WRAPPER_LEN`).
-///
-/// Layout:
-///   signer_type(1) + key_index(4) + ots_index(4) + pk_seed(32) + pk_root(32)
-pub const WRAPPER_HEADER_LEN: usize = 1 + 4 + 4 + 32 + 32; // 73
-
-/// Total PQSignatureWrapper size = header + raw signature.
-pub const WRAPPER_TOTAL_LEN: usize = WRAPPER_HEADER_LEN + SIGNATURE_LEN; // 3777
 
 // ---------------------------------------------------------------------------
 // Unified Type 1 / Type 2 wire format (CMD_SIGN_USEROP)
@@ -802,13 +710,6 @@ pub const SIG_TYPE1_LEN: usize = SIG_WRAPPER_LEN;
 /// Emitted on every sign request. `ownerIndex = slot_index + 1` (slot 0 is
 /// at on-chain ownerIndex 1 since ownerIndex 0 is the bootstrap key).
 pub const SIG_TYPE2_LEN: usize = SIG_WRAPPER_LEN;
-
-/// Type 1 / 2 markers are deprecated — dispatch now happens on-chain via
-/// `SignatureWrapper.ownerIndex`, not a leading byte. Kept only as a
-/// historic `0x01 = bootstrap` / `0x02 = slot` mnemonic for the companion
-/// UI.
-pub const SIG_TYPE1_MARKER: u8 = 0x01;
-pub const SIG_TYPE2_MARKER: u8 = 0x02;
 
 /// Back-compat constant: the abi.encode header that precedes the raw 4008-
 /// byte C10 sig inside a SignatureWrapper (32 ownerIndex + 32 offset +
@@ -964,10 +865,6 @@ pub const EIP6492_BLOB_LEN: usize = 96
 /// post-bump count then the wrapped sig blob.
 pub const SIGN_OFFCHAIN_OUTPUT_LEN_6492: usize = 8 + EIP6492_BLOB_LEN; // 8616
 
-/// Largest possible CMD_SIGN_OFFCHAIN response across both wire modes.
-/// Used by the host-side USB transport to size its response buffer.
-pub const SIGN_OFFCHAIN_OUTPUT_LEN_MAX: usize = SIGN_OFFCHAIN_OUTPUT_LEN_6492;
-
 /// ERC-6492 magic suffix — the 32 bytes that mark a wrapped signature.
 /// Verifiers check `sig[sig.len()-32..] == EIP6492_MAGIC` to detect the
 /// wrapping. Value: `0x6492 ... 6492` (16 repetitions).
@@ -1073,15 +970,6 @@ pub const PQ_INIT_CODE_LEN: usize = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 /// ```
 pub const MAX_SIGN_RESPONSE_LEN: usize =
     8 + 4 + PQ_INIT_CODE_LEN + 4 + SIG_TYPE1_LEN + 4 + SIG_TYPE2_LEN;
-
-/// Offset within a `CMD_SIGN_USEROP` response of the leading
-/// `new_offchain_count` field (8 bytes BE).
-pub const SIGN_USEROP_RESPONSE_COUNT_OFF: usize = 0;
-pub const SIGN_USEROP_RESPONSE_COUNT_LEN: usize = 8;
-/// Offset where the legacy framing (init_code_len ... type2_wrapper)
-/// begins. Past this offset the response layout is unchanged from the
-/// pre-EIP-1271 wire format.
-pub const SIGN_USEROP_RESPONSE_BUNDLE_OFF: usize = 8;
 
 /// Flags bit 31 — set by the companion when the wallet has not yet been
 /// deployed on this chain. Firmware synthesises `initCode` from its master
@@ -1226,10 +1114,8 @@ pub const ZK_V3_FIXED_LEN: usize = EIP712_PROOF_LEN + EIP712_CANONICAL_LEN + EIP
 
 // ─── 2. Trailer field offsets ──────────────────────────────────────────────
 
-/// Offset of the 384-byte Groth16 proof within the fixed prefix.
-pub const ZK_V3_OFF_PROOF: usize = 0;
 /// Offset of the 204-byte canonical GPv2Order within the fixed prefix.
-pub const ZK_V3_OFF_CANONICAL: usize = ZK_V3_OFF_PROOF + EIP712_PROOF_LEN;
+pub const ZK_V3_OFF_CANONICAL: usize = EIP712_PROOF_LEN;
 /// Offset of the 128-byte readable ASCII string within the fixed prefix.
 pub const ZK_V3_OFF_READABLE: usize = ZK_V3_OFF_CANONICAL + EIP712_CANONICAL_LEN;
 
@@ -1432,9 +1318,6 @@ pub const SW_INTERNAL_ERROR: u16 = 0x6F00;
 /// Referenced data invalidated — idle timeout wipe occurred mid-operation.
 pub const SW_REFERENCED_DATA_INVALIDATED: u16 = 0x6984;
 
-/// Maximum data bytes per APDU (short form Lc, 1 byte).
-pub const APDU_MAX_DATA: usize = 255;
-
 /// Maximum response data per APDU (before SW bytes).
 pub const APDU_MAX_RESP: usize = 253;
 
@@ -1565,14 +1448,6 @@ mod tests {
     }
 
     #[test]
-    fn zk_header_len_matches_components() {
-        assert_eq!(
-            ZK_HEADER_LEN,
-            ZK_PROOF_LEN + ZK_MAX_CALLDATA + ZK_STRING_LEN + USEROP_HEADER_LEN + 4
-        );
-    }
-
-    #[test]
     fn pq_init_code_len_is_4280() {
         // factory(20) + selector(4) + 5 × bytes32(160) + offset(32)
         // + length(32) + padded_sig(4032) = 4280
@@ -1633,7 +1508,6 @@ mod tests {
     fn sign_offchain_output_lens() {
         assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN, 4016);
         assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN_6492, 8 + EIP6492_BLOB_LEN);
-        assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN_MAX, SIGN_OFFCHAIN_OUTPUT_LEN_6492);
     }
 
     #[test]
@@ -1664,7 +1538,7 @@ mod tests {
     fn max_sign_response_bounds_eip6492_output() {
         // The USB SIG_BUF is sized to MAX_SIGN_RESPONSE_LEN; it must also
         // accommodate the largest possible CMD_SIGN_OFFCHAIN response.
-        assert!(MAX_SIGN_RESPONSE_LEN >= SIGN_OFFCHAIN_OUTPUT_LEN_MAX);
+        assert!(MAX_SIGN_RESPONSE_LEN >= SIGN_OFFCHAIN_OUTPUT_LEN_6492);
     }
 }
 
