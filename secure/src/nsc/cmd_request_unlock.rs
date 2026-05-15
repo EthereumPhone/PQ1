@@ -61,18 +61,42 @@ unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
             NscStatus::Ok as u32
         }
         Err(UnlockError::PinIncorrect) => {
-            // MCU counter advanced inside gated_unlock. Read the fresh
-            // count to compute remaining — authoritative regardless of
-            // what the SE-side counters report.
+            // F-15 hardening: double-read the post-bump counter to
+            // defend a value-fault on the load register; halt-to-wipe
+            // (fail-closed) on mismatch.
             #[cfg(feature = "stm32u585")]
-            let count = crate::hw::flash::pin_attempts_read();
+            let count = {
+                let a = crate::hw::flash::pin_attempts_read();
+                crate::fi::wait_random();
+                let b = crate::hw::flash::pin_attempts_read();
+                if a != b {
+                    return trigger_lockout_wipe();
+                }
+                a
+            };
             #[cfg(not(feature = "stm32u585"))]
             let count: u8 = 0; // QEMU: no counter, UI-only display
 
             let remaining_after = MAX_ATTEMPTS.saturating_sub(count);
             state::with_state(|s| s.remaining_attempts = remaining_after);
 
-            if remaining_after == 0 {
+            // FAIL-IN pattern (F-15): the *secure default* (trigger
+            // wipe) is the fall-through. The *attacker-bypass-target*
+            // (continue without wiping) is the explicit conditional.
+            // A single-fault that skips the conditional triggers wipe
+            // instead of bypassing it — exactly opposite to the
+            // previous FAIL-OUT shape `if remaining_after == 0 { wipe }`
+            // where skipping the `cbz` falls through to "Wrong PIN"
+            // and the attacker keeps brute-forcing past the cap.
+            //
+            // The Hamming-distant sentinel (`check_true_into_sentinel`)
+            // additionally defends a value-fault on the comparison
+            // register: a glitched return value is overwhelmingly
+            // unlikely to coincide with OK_SENTINEL.
+            let safe_to_continue = crate::fi::check_true_into_sentinel(
+                || remaining_after != 0,
+            );
+            if safe_to_continue != crate::fi::OK_SENTINEL {
                 return trigger_lockout_wipe();
             }
             if remaining_after == 1 {

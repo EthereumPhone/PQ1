@@ -583,6 +583,100 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
+### F-15 — PIN-lockout gates were FAIL-OUT — a single branch-skip on the lockout `if` bypassed the wipe and let brute-forcing past `MAX_ATTEMPTS = 10` continue — **FIXED in `nsc::gated_unlock` + `cmd_request_unlock::verify_pin_with_chip` (FAIL-IN pattern + sentinel gate + double-read)**
+
+**Threat — the most common single-fault outcome.** Per the
+Masaryk-U Simonik thesis (76 % PIN-glitch bypass on STM32U5 silicon,
+same family as our STM32U585), the *most common* effect of a
+well-timed voltage / EM glitch is a **branch-skip** — the
+microarchitecture executes a conditional-branch instruction without
+taking the branch. That single-fault primitive applied to the
+pre-existing PIN-lockout gates was end-to-end exploitable:
+
+```rust
+// gated_unlock — pre-fix
+if pre_count >= MAX_ATTEMPTS {
+    return Err(UnlockError::PinLocked);   // ← skip this
+}
+// fall through to bump + verify
+```
+
+```rust
+// cmd_request_unlock — pre-fix
+if remaining_after == 0 {
+    return trigger_lockout_wipe();         // ← skip this
+}
+// fall through to "Wrong PIN" return
+```
+
+Both are **FAIL-OUT**: the secure action (refuse / wipe) lives in the
+conditional branch. A branch-skip bypasses it; the firmware falls
+through into the attacker-favourable path (continue brute-forcing).
+With the `MAX_ATTEMPTS = 10` budget already small for a brute-force
+adversary, even one bypassed cycle per power-glitch session opens a
+practical attack — the Masaryk thesis reproduces this exact pattern.
+
+**Fix — FAIL-IN pattern.** Invert so the secure action is the
+fall-through:
+
+```rust
+// cmd_request_unlock — post-fix (FAIL-IN)
+let safe_to_continue = crate::fi::check_true_into_sentinel(
+    || remaining_after != 0,
+);
+if safe_to_continue != crate::fi::OK_SENTINEL {
+    return trigger_lockout_wipe();           // explicit branch
+}
+// fall through to "Wrong PIN" return            ← safe-by-default path
+```
+
+Now a single-fault that skips the conditional triggers wipe (the
+attacker WANTED to bypass wipe but the skip causes it). For the
+attacker to bypass wipe they'd have to produce a register value
+matching the Hamming-distant `OK_SENTINEL = 0xA5A5_A5A5` — a much
+harder primitive than skipping a `cbz`.
+
+```rust
+// gated_unlock — post-fix
+let allowed = crate::fi::check_true_into_sentinel(
+    || pre_count < MAX_ATTEMPTS,
+);
+if allowed != crate::fi::OK_SENTINEL {
+    return Err(UnlockError::PinLocked);
+}
+// fall through to bump + verify
+```
+
+Same shape: the affirmative "allowed to proceed" check uses the
+sentinel; skip → garbage register value ≠ OK_SENTINEL → PinLocked.
+
+**Additional value-fault defence.** Both sites double-read the
+page-124 attempt counter through `pin_attempts_read` with
+`wait_random()` between, then halt-to-wipe (or
+`Err(PinLocked)`) on mismatch. `pin_attempts_read` itself is not
+F-12-hardened — a single fault on its scan could underreport the
+count, faking "plenty of attempts left." The double-read forces the
+attacker to produce identical mid-scan faults across two passes.
+
+**Trade-off.** FAIL-IN accepts a small *false-positive* risk: a
+glitch on a legitimate wrong-PIN entry could trigger an unintended
+wipe (user loses wallet). This is acceptable because:
+  - Glitches require physical access — attacker, not legit user.
+  - The user holds a BIP-39 seed-phrase backup ([[invariant 1]]).
+  - The alternative (FAIL-OUT) leaves the brute-force door open to
+    the *most common* glitch primitive in the threat model.
+
+**Validation.**
+  - 2 feature combos build clean: mock-se / dual-se+stm32. 118/118
+    host tests pass (including
+    `secure_element::tests::wrong_pin_decrements_remaining_attempts`
+    and `ten_wrong_pins_brick_the_mock` which exercise the
+    SecureElement-level path).
+  - `make e2e` Scenario 6 (brute-force protection) passes: 10
+    wrong-PIN attempts → wipe → correct PIN rejected after exhaustion.
+    The new FAIL-IN gate transitions cleanly through the full
+    lockout sequence.
+
 ### F-14 — `SecureState::pin_verified` was a plain `bool` — a single-fault bit-flip in SRAM (or stuck-at on the load register) bypassed every gated command — **FIXED in `secure::fih::FihBool` + 11 call-site migrations**
 
 **Threat.** Every gated gateway command (CMD_SIGN_USEROP, CMD_SIGN_OFFCHAIN,

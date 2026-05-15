@@ -565,7 +565,7 @@ Research-derived mitigations from the deep-research round of 2026-04-14. Critica
 - [ ] **Signing rate limiter**: global token-bucket caps at ~1 sig/sec, ~500/day, hard-rotate after 2^16 signatures per key. Extends attacker trace-collection window from minutes to months.
 - [ ] **WOTS chain + FORS tree shuffling** via Fisher-Yates, TRNG-seeded per sign. Desynchronises traces against profiled DPA.
 - [x] **FihInt-style complement-storage** for `pin_verified` (F-14, commit follows). `secure/src/fih.rs::FihBool` stores `(val, complement)` with `SEC_TRUE=0x1AAA_AAAA` / `SEC_FALSE=0x1555_5555`, double-read via `read_volatile` with `wait_random` between, composed with the existing F-2 `check_true_into_sentinel` for caller-side branch-skip resistance. `has_signed`, `slot_master_derived`, `blob_cached` deferred — first two are write-only as of this pass; third gates a read whose downstream decryption fails on all-zero, not a security bypass.
-- [ ] **PIN-lockout fail-in pattern**: invert comparison to `if remaining != 0, continue` instead of `if remaining == 0, wipe`. A single-glitch branch-skip then misses wipe rather than triggering it.
+- [x] **PIN-lockout fail-in pattern** (F-15, commit follows). Both `nsc::gated_unlock` and `cmd_request_unlock::verify_pin_with_chip` now structure the lockout gate as FAIL-IN: the secure action (wipe / refuse) is the fall-through; the affirmative "safe to continue" check uses `check_true_into_sentinel` so a branch-skip evaluates a Hamming-distant sentinel rather than a bool. Counter reads double-checked with `wait_random` between; mismatch halts to wipe.
 - [ ] **Compiler fence + DSB barrier after every zeroize** of master_secret, entropy, PIN buffers.
 
 **What's needed — P1 (strongly recommended):**

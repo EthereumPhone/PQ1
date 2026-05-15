@@ -415,10 +415,35 @@ pub unsafe fn gated_unlock(
 
     #[cfg(feature = "stm32u585")]
     {
-        let pre_count = crate::hw::flash::pin_attempts_read();
-        if pre_count >= sphincs_tz_shared::MAX_ATTEMPTS {
+        // F-15 hardening: double-read the page-124 counter to defend
+        // against a value-fault that clamps the load register, then
+        // route the "below lockout" predicate through the F-2
+        // sentinel-encoding pattern. The conditional below becomes
+        // FAIL-IN: a single-fault that skips the gate evaluates the
+        // sentinel comparison against a garbage register value (which
+        // is overwhelmingly unlikely to coincide with OK_SENTINEL),
+        // so the firmware falls through to `Err(PinLocked)` instead
+        // of into the bump+verify branch. A flash-side glitch that
+        // underreports the counter on one read is caught by the
+        // mismatch check.
+        let pre_count_a = crate::hw::flash::pin_attempts_read();
+        crate::fi::wait_random();
+        let pre_count_b = crate::hw::flash::pin_attempts_read();
+        if pre_count_a != pre_count_b {
             return Err(UnlockError::PinLocked);
         }
+        let pre_count = pre_count_a;
+
+        // Affirmative "allowed to proceed" — Hamming-distant sentinel
+        // returned only on a clean `pre_count < MAX_ATTEMPTS`. The
+        // caller compares the value rather than branching on a bool.
+        let allowed = crate::fi::check_true_into_sentinel(
+            || pre_count < sphincs_tz_shared::MAX_ATTEMPTS,
+        );
+        if allowed != crate::fi::OK_SENTINEL {
+            return Err(UnlockError::PinLocked);
+        }
+
         if crate::hw::flash::pin_attempts_bump().is_err() {
             // Flash write fault (PROGERR or readback mismatch).
             // Refuse without ever calling the SE driver.
