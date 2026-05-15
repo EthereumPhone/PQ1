@@ -37,7 +37,7 @@ use super::GatewayArgs;
 const ADDR_LEN: usize = 20;
 
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
-    if !super::state::peek_state(|s| s.pin_verified) {
+    if super::state::peek_state(|s| s.pin_verified.check_sentinel()) != crate::fi::OK_SENTINEL {
         return NscStatus::NotInitialized as u32;
     }
 

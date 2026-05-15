@@ -31,7 +31,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // borrow and the chunk write is a use-after-drop on `FwUpdateCtx`.
     let _busy = super::HandlerGuard::enter();
 
-    if !peek_state(|s| s.pin_verified) {
+    if peek_state(|s| s.pin_verified.check_sentinel()) != crate::fi::OK_SENTINEL {
         return NscStatus::NotInitialized as u32;
     }
 

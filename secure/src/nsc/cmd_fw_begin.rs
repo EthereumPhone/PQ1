@@ -28,7 +28,7 @@ use crate::timeout;
 pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Gate: PIN must be verified — updates aren't available on a
     // locked device.
-    if !peek_state(|s| s.pin_verified) {
+    if peek_state(|s| s.pin_verified.check_sentinel()) != crate::fi::OK_SENTINEL {
         return NscStatus::NotInitialized as u32;
     }
 

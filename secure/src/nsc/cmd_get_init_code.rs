@@ -61,7 +61,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     crate::ui::show_status("InitCode", "validating...");
 
     // ── 1. Unlock check ──────────────────────────────────────────────
-    if !super::state::peek_state(|s| s.pin_verified) {
+    if super::state::peek_state(|s| s.pin_verified.check_sentinel()) != crate::fi::OK_SENTINEL {
         crate::ui::show_status("InitCode", "not unlocked");
         return NscStatus::NotInitialized as u32;
     }

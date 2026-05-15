@@ -583,6 +583,103 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
+### F-14 — `SecureState::pin_verified` was a plain `bool` — a single-fault bit-flip in SRAM (or stuck-at on the load register) bypassed every gated command — **FIXED in `secure::fih::FihBool` + 11 call-site migrations**
+
+**Threat.** Every gated gateway command (CMD_SIGN_USEROP, CMD_SIGN_OFFCHAIN,
+CMD_FW_BEGIN/CHUNK/COMMIT, CMD_GET_WALLET_ADDRESS, CMD_GET_INIT_CODE,
+CMD_OFFCHAIN_STATUS, CMD_SIGN_USEROP_BATCH, CMD_OFFCHAIN_SYNC) starts
+with:
+
+```rust
+if !peek_state(|s| s.pin_verified) {
+    return NscStatus::NotInitialized as u32;
+}
+```
+
+`pin_verified` was a `bool` in BSS at a fixed address. Three single-fault
+classes flipped it FALSE → TRUE end-to-end without an unlock:
+
+  1. **SRAM bit-flip** (a Masaryk-thesis-style EMFI / voltage glitch on
+     the storage word).
+  2. **Stuck-at on the load register** that fed the `cbz` (volatile-
+     hostile compiler folding made the load nominal-skippable).
+  3. **Branch-skip of the caller's `cbz`** that gated the early-return.
+
+(1) and (2) were the most concerning: the verifier had no way to detect
+that the read had been faulted — the storage was a single bit, so a
+flip looks indistinguishable from a legitimate `set_true`.
+
+**Fix — `secure::fih::FihBool`.** Trezor-style `FihInt`/`secbool`:
+the boolean is stored as a pair `(val: u32, complement: u32)` with the
+invariant `val ^ complement == 0xFFFF_FFFF`. The TRUE / FALSE patterns
+are Hamming-distant magic constants:
+
+```rust
+const SEC_TRUE:  u32 = 0x1AAA_AAAA;  // Hamming weight 16
+const SEC_FALSE: u32 = 0x1555_5555;  // Hamming weight 17
+// Differ in 29 of 32 bit positions — no single bit-flip turns one
+// into the other.
+```
+
+`FihBool::is_true_fi` reads the pair *twice* via `read_volatile` with
+a `wait_random()` between, requiring both passes to agree AND the
+storage invariant to hold AND `val == SEC_TRUE`. Any of those checks
+fails → return `false` (fail-closed).
+
+`FihBool::check_sentinel` composes with the existing F-2 sentinel
+pattern (`fi::check_true_into_sentinel`): it returns `OK_SENTINEL`
+(Hamming-distant from `FAIL_SENTINEL`) iff the FihBool reads cleanly
+as `true`. Callers compare the returned value rather than branching
+on a bool — defeats single-instruction-skip on the caller's `if`.
+
+**Call-site migration.** Every gated command now does:
+
+```rust
+if super::state::peek_state(|s| s.pin_verified.check_sentinel())
+    != crate::fi::OK_SENTINEL
+{
+    return NscStatus::NotInitialized as u32;
+}
+```
+
+This is a 3-layer chain:
+  - **Storage** (FihBool complement-storage): single-fault in BSS →
+    invariant breaks → fail-closed.
+  - **Read** (`is_true_fi` double-read): single-fault inside one read
+    → other read disagrees → fail-closed.
+  - **Branch** (`check_sentinel` + sentinel cmp): single-fault on the
+    caller's `cbz` → comparison still uses a Hamming-distant constant,
+    a glitched register value is unlikely to coincide with OK_SENTINEL.
+
+**Mutation.** `SecureState::mark_unlocked` calls `pin_verified.set_true()`;
+`zeroize_sensitive` calls `pin_verified.set_false()`. Both go through
+`write_volatile` so the compiler can't reorder them across a nearby
+`master_secret.zeroize()` (which would otherwise be a real reorder
+hazard — the zeroize would happen after a subsequent gate-check's
+`set_false` was supposed to fail-close).
+
+**Cost.** Per gate check: 2 × (2 volatile loads + invariant check) +
+1 wait_random + 1 sentinel compare. Single-digit microseconds — well
+inside the noise of the surrounding sign/verify path.
+
+**Validation.**
+  - 4 feature combos build clean: mock-se / dual-se+stm32 /
+    se050+stm32 / optiga+stm32.
+  - 118/118 host tests pass.
+  - `make e2e` (QEMU 18-scenario non-interactive): all pass —
+    register slot, repeat-sign, rotate, second chain, Safe approveHash
+    clear-sign, selector bundle, blind-sign fallback, batch
+    (degenerate / max / empty / truncated), self-attest, brute-force
+    protection. The new gate predicates resolve cleanly under real
+    unlock/lock cycles.
+
+**Follow-up (deferred):** `has_signed`, `slot_master_derived`, and
+`blob_cached` are also plain `bool`s in BSS / SE driver state. None is
+on the critical path (the first two are write-only as of this commit;
+`blob_cached` gates a read whose downstream decryption fails on an
+all-zero cache — not a security bypass), but they get the same
+treatment in a follow-up for consistency.
+
 ### F-13 — Verify-after-sign alone is insufficient against FI on the SLH-DSA sign path (RFC 9814 §A.2 / Genêt TCHES 2023) — **FIXED in `secure::crypto::c10_sign_verified_with_progress` (double-compute + ct-compare + verify)**
 
 RFC 9814 §A.2 (informational, August 2024) and Genêt's TCHES 2023 paper

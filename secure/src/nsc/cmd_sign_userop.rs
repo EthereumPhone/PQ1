@@ -113,7 +113,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     ui::show_status("Sign", "validating...");
 
     // ── 1. Unlock check ─────────────────────────────────────────────
-    if !super::state::peek_state(|s| s.pin_verified) {
+    if super::state::peek_state(|s| s.pin_verified.check_sentinel()) != crate::fi::OK_SENTINEL {
         ui::show_status("Sign", "not unlocked");
         return NscStatus::NotInitialized as u32;
     }

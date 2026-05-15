@@ -19,6 +19,8 @@
 use sphincs_tz_shared::MAX_ATTEMPTS;
 use zeroize::Zeroize;
 
+use crate::fih::FihBool;
+
 /// Mutable state the gateway owns across command dispatches.
 pub(super) struct SecureState {
     /// How many PIN attempts the current lockout window still permits.
@@ -28,7 +30,18 @@ pub(super) struct SecureState {
     pub(super) remaining_attempts: u8,
     /// Whether the current session has passed PIN verification. Reset
     /// by [`zeroize_sensitive`] on cancel / idle wipe / panic.
-    pub(super) pin_verified: bool,
+    ///
+    /// FI hardening (F-14): stored as `FihBool`, a Trezor-style
+    /// `(val, complement)` pair with Hamming-distant magic
+    /// constants. A single-fault flip of either word breaks the
+    /// storage invariant; the reader detects it and fail-closes to
+    /// `false`. Every gated command reads via
+    /// `s.pin_verified.check_sentinel()` (composed with the
+    /// `fi::check_true_into_sentinel` Hamming-distant sentinel
+    /// pattern) so the caller compares a value rather than branching
+    /// on a bool — defeats both storage glitch AND caller branch-
+    /// skip together.
+    pub(super) pin_verified: FihBool,
     /// The 32-byte master secret unwrapped by
     /// `crate::pin::verify_pin` (or the TROPIC01 MAC-and-Destroy flow).
     /// Used both as the AES-GCM key for the encrypted-entropy blob and
@@ -108,7 +121,7 @@ impl SecureState {
         const NONE_ENTRY: Option<CachedAccount> = None;
         Self {
             remaining_attempts: MAX_ATTEMPTS,
-            pin_verified: false,
+            pin_verified: FihBool::new_false(),
             master_secret: [0u8; 32],
             last_chain_id: 0,
             last_key_index: 0,
@@ -127,7 +140,7 @@ impl SecureState {
     /// a fresh PIN.
     pub(super) fn zeroize_sensitive(&mut self) {
         self.master_secret.zeroize();
-        self.pin_verified = false;
+        self.pin_verified.set_false();
         self.last_chain_id = 0;
         self.last_key_index = 0;
         self.last_ots_index = 0;
@@ -255,7 +268,7 @@ impl SecureState {
         self.master_secret.zeroize();
         self.master_secret = master;
         master.zeroize();
-        self.pin_verified = true;
+        self.pin_verified.set_true();
         self.remaining_attempts = MAX_ATTEMPTS;
     }
 }

@@ -4,7 +4,7 @@
 //! attempting a signing operation.
 
 pub(super) unsafe fn run() -> u32 {
-    if super::state::peek_state(|s| s.pin_verified) {
+    if super::state::peek_state(|s| s.pin_verified.is_true_fi()) {
         1
     } else {
         0

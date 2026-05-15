@@ -310,7 +310,7 @@ pub(super) struct GatewayArgs {
 
 /// Whether the device is currently unlocked (PIN verified this session).
 pub fn is_unlocked() -> bool {
-    state::peek_state(|s| s.pin_verified)
+    state::peek_state(|s| s.pin_verified.is_true_fi())
 }
 
 /// HIGH-7 guard: depth counter incremented on handler entry,
