@@ -238,6 +238,40 @@ pub extern "C" fn sca_c10_sign(msg_hash_ptr: *const u8, out_ptr: *mut u8) {
     }
 }
 
+/// SPHINCS+C10 sign WITH F-16 shuffle (post-F-13/F-16 production
+/// re-test target for F-9). Input is 64 bytes: `[msg(32) ||
+/// shuffle_seed(32)]`. The shuffle randomises the WOTS/FORS
+/// processing order per trace, independent of msg.
+///
+/// **Why this is the F-9 re-test.** F-9's `sca_c10_sign` (above)
+/// found `max|t| = 40.71` on `mem_address`. That ran on the
+/// pre-shuffle code, where varying msg → fixed temporal access
+/// pattern at sample X → high t-stat. With F-16 active, the
+/// shuffle randomises the temporal pattern per trace, so the
+/// per-sample address mean (averaged over many traces) should
+/// converge to the "expected over all shuffles" value
+/// independently of the msg group → t-stat should drop. This
+/// harness measures that drop.
+#[no_mangle]
+pub extern "C" fn sca_c10_sign_shuffled(in_ptr: *const u8, out_ptr: *mut u8) {
+    const FIXED_SK_SEED: [u8; 32] = [0x42u8; 32];
+    const FIXED_PK_SEED: [u8; sphincs_c10::params::N] = [0x77u8; sphincs_c10::params::N];
+    const FIXED_PK_ROOT: [u8; sphincs_c10::params::N] =
+        *include_bytes!(concat!(env!("OUT_DIR"), "/pk_root.bin"));
+    // SAFETY: harness maps 64 B at in_ptr (msg ‖ shuffle_seed) and
+    // SIGNATURE_LEN B at out_ptr.
+    let msg: &[u8; 32] = unsafe { &*(in_ptr as *const [u8; 32]) };
+    let shuffle_seed: [u8; 32] = unsafe { *(in_ptr.add(32) as *const [u8; 32]) };
+    let sk = sphincs_c10::SigningKey::from_parts(FIXED_SK_SEED, FIXED_PK_SEED, FIXED_PK_ROOT);
+    let shuffle = sphincs_c10::shuffle::ShuffleSeed(shuffle_seed);
+    let sig = sk.sign_with_shuffle(msg, None, &shuffle, |_| {});
+    unsafe {
+        for (i, &b) in sig.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+    }
+}
+
 #[used]
 static _KEEP_WRAP: extern "C" fn(*const u8, *mut u8) = sca_aesgcm_wrap;
 #[used]
@@ -252,6 +286,8 @@ static _KEEP_HMAC: extern "C" fn(*const u8, *mut u8) = sca_hmac_sha512_kdf;
 static _KEEP_C10_KG: extern "C" fn(*const u8, *mut u8) = sca_c10_keygen;
 #[used]
 static _KEEP_C10_SIGN: extern "C" fn(*const u8, *mut u8) = sca_c10_sign;
+#[used]
+static _KEEP_C10_SIGN_SHUF: extern "C" fn(*const u8, *mut u8) = sca_c10_sign_shuffled;
 
 #[entry]
 fn main() -> ! {
@@ -262,6 +298,7 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_HMAC);
     core::hint::black_box(&_KEEP_C10_KG);
     core::hint::black_box(&_KEEP_C10_SIGN);
+    core::hint::black_box(&_KEEP_C10_SIGN_SHUF);
     loop {
         cortex_m::asm::nop();
     }

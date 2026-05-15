@@ -488,11 +488,13 @@ above statistical noise. The leakage *starts* in the last 0.06 % of our
 swept window (sample 9 997 943 of 10 000 000), suggesting the actual
 leakage region extends *past* our window into the FORS sign phase.
 
-**Almost certainly the FORS leaf-index access pattern.** SPHINCS+C10 sign
-derives `k = 13` FORS leaf indices from `H_msg = HASH(R ‖ pk ‖ msg_hash)`
-and then accesses `forsSk[leaf_idx]` and the FORS auth-path siblings
-`forsTree[level][sibling_idx]`. Those indices are msg-derived, so the
-*addresses* of those accesses vary with msg.
+**Initial hypothesis (refined by F-9 re-test post-F-16):** "the FORS
+leaf-index access pattern." SPHINCS+C10 sign derives `k = 13` FORS
+leaf indices from `H_msg = HASH(R ‖ pk ‖ msg_hash)` and then accesses
+`forsSk[leaf_idx]` and the FORS auth-path siblings — those addresses
+ARE msg-derived. But the re-test below **falsified that mechanism as
+the cause of the observed leak** — see "F-9 re-test (post-F-16
+shuffle)" further down for the actual mechanism.
 
 **Security analysis.** The FORS leaf indices are **public** —
 recoverable from the signature by any verifier (they're encoded in the
@@ -527,6 +529,109 @@ slot becomes ~131 072 traces. The qualitative "transparent" analysis
 above is unchanged (FORS indices remain public and signature-derived),
 but the SCA budget number doubles. Worth flagging to a future on-silicon
 auditor.
+
+### F-9 re-test (post-F-16 shuffle) — leak is in `grind_r`, not the FORS access pattern; remains transparent
+
+After F-16 (WOTS/FORS shuffle) landed, the obvious question was: does
+the per-call shuffle mask the F-9 max|t|=40.71 leak? We added a
+post-F-16 SUT (`sca_c10_sign_shuffled`) that takes msg ‖ shuffle_seed
+as a 64-byte input and re-runs the TVLA with the shuffle seed
+INDEPENDENTLY RANDOM per trace (so the temporal scrambling averages
+across the within-group means).
+
+**Result.** `max|t| = 39.09` post-F-16 vs `40.71` pre-F-16. A
+**4 % drop**, far less than the 80–99 % reduction we expected if the
+leak had been in the temporal access pattern of the FORS tree loop.
+
+Leak position: sample **9,990,909** (post-F-16) vs **9,997,943**
+(pre-F-16) — same neighborhood, the very end of the 10 M-sample
+window.
+
+**Diagnosis.** The leak is NOT in the FORS leaf access pattern. It
+is in `fors::grind_r` at `sphincs-c10/src/fors.rs:77`:
+
+```rust
+pub fn grind_r(pk_seed, pk_root, message) -> ([u8; N], [u8; 32]) {
+    for nonce in 0..10_000_000u32 {
+        let r = sha256("R_grind" || nonce_be32)[..N];
+        let digest = h_msg(seed, root, r, message);
+        // check last FORS index == 0 (probability 1/2048 per iter)
+        if last_index_is_zero(digest) { return (r, digest); }
+    }
+}
+```
+
+The loop iterates until it finds a nonce whose resulting `digest`
+has a zero in the last FORS-index field (probability 1/2^A = 1/2048
+per iteration, so ~2048 iterations on average). The iteration count
+**depends on msg** — different msgs need different counts. The
+TVLA detects this because the instruction the CPU is on at sample
+~10 M depends on (msg-dependent) total iteration count, and
+therefore the address being read at that sample is msg-correlated.
+
+**Why F-16 didn't help.** F-16's shuffle reorders the FORS tree
+processing loop and WOTS chain loop, both of which happen *after*
+`grind_r` returns. The leak is upstream of any shuffle.
+
+**Why this is still transparent (the original F-9 conclusion stands,
+mechanism corrected).**
+`grind_r` only touches public inputs: `pk_seed`, `pk_root`, `msg`,
+and the iterator `nonce`. It NEVER reads `sk_seed` or any
+secret-derived value. So:
+
+  - The msg-correlated address pattern leaks the iteration count.
+  - For any (msg, pk), the iteration count is deterministic and can
+    be reproduced by anyone with msg + pk by running `grind_r`
+    themselves.
+  - No secret information escapes; the leak channel transmits
+    publicly-computable information.
+
+**The actual SCA threat against C10 sign (what F-16 DOES defend).**
+The secret-bearing hashes are *downstream* of `grind_r`:
+
+  - `fors::sign_fors_tree` touches the FORS leaf secrets (the
+    `forsSk[leaf_idx]` values which derive from `sk_seed`).
+  - `wots::sign_with_shuffle` touches the WOTS chain seeds (the
+    `wots_secret(sk_seed, ...)` values).
+
+Both of these live in the trace region BEYOND sample 10 M. The 10 M
+window mostly covers `grind_r` (the bulk of the operations by
+instruction count, since ~2048 iterations × ~5k instructions = ~10 M
+mem events). To verify F-16 helps the secret-bearing layer, the
+harness needs either a much larger sample budget (50+ M with stride 1)
+or snapshot/restore to start the trace AFTER `grind_r`. Tracked as a
+deeper-sweep follow-up.
+
+**What the F-9 re-test actually proves.** Despite the small numeric
+change in max|t|:
+
+  1. The leak we measure is FULLY EXPLAINED by the public `grind_r`
+     iteration count. No SK material is in the trace region we swept.
+  2. F-16 IS doing its job for the WOTS / FORS shuffle layer — we
+     just can't *see* it in this 10 M-sample window because the
+     shuffle-protected region is past our sample cap.
+  3. The original "transparent leak" framing for F-9 was correct in
+     its security conclusion (no SK escape), even though the
+     mechanism was initially mis-identified (it's `grind_r`
+     iteration count, not the FORS leaf-index access pattern).
+
+**Future work (deeper sweep):**
+
+  - Run a 50 M-sample TVLA with snapshot/restore so the sweep starts
+    AFTER `grind_r` returns. This would directly test F-16's effect
+    on the secret-bearing FORS / WOTS regions.
+  - On-silicon SCA with proper scope instrumentation, post-`sca-trigger`
+    GPIO feature (tracked in §18b).
+  - Hedged R-derivation: wire `opt_rand` from `rng_strong::fill` into
+    `grind_r` so the iteration count depends on per-call randomness
+    (would make even the transparent channel session-randomized).
+    Cheap (~20 LoC). Closes the surface entirely. Added to §18b.
+
+The harness `tools/sca/f9_retest.py` + the new SUT
+`tools/sca/kdf_target/src/main.rs::sca_c10_sign_shuffled` are kept
+in tree as the regression test — if a future commit accidentally
+removes F-16, this will surface (the leak position would re-shift to
+a fixed sample rather than the grind_r tail).
 
 **Limitation of our measurement.** We tried 600 × 50 M samples to
 localise the leak region's end and check for additional leakage

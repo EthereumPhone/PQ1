@@ -125,6 +125,11 @@ flashctr: build-flashctr
 kdf: build-kdf
 	$(DONJON) run leakage_kdf.py
 
+# F-9 re-test: did F-16's shuffle mask the FORS-leaf-index mem_address leak?
+# Compares post-F-16 max|t| against F-9's recorded baseline of 40.71.
+f9-retest: build-kdf
+	$(DONJON) run f9_retest.py
+
 sweeps: fi c10 pin fw-verify ns-ptr
 
 doctor:
