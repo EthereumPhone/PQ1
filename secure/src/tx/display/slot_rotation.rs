@@ -14,7 +14,7 @@
 //! the inner-tx render runs.
 
 use super::Pages;
-use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
+use crate::ui::DISPLAY_COLS;
 
 /// Build the one-page "ROTATE SLOT?" confirm shown before the inner-tx
 /// confirm whenever `FLAG_REGISTER_SLOT` is set.
