@@ -16,6 +16,15 @@ extern "C" {
     static __veneer_limit: u32;
 }
 
+/// Program one SAU region.
+///
+/// # Safety
+///
+/// Performs raw MMIO writes to `SAU_RNR`/`SAU_RBAR`/`SAU_RLAR`. Caller
+/// must hold exclusive access to the SAU (single-threaded boot only),
+/// and `base`/`limit` must form a valid 32-byte-aligned secure-attribute
+/// window that does not overlap an already-active region with a
+/// conflicting attribute.
 unsafe fn configure_sau_region(region: u32, base: u32, limit: u32, nsc: bool) {
     core::ptr::write_volatile(SAU_RNR, region);
     core::ptr::write_volatile(SAU_RBAR, base & 0xFFFF_FFE0);

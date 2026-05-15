@@ -37,6 +37,7 @@
 //! values derived from the parsed tx — never from the bundle.
 
 use crate::erc20::merkle::verify_proof;
+use crate::wire::{is_clean_ascii, read_u32_le, read_u64_le};
 use sphincs_tz_shared::db_format::NAMES_MAX_LEN;
 
 /// Decoded + Merkle-verified address-name entry. Borrows from the
@@ -133,16 +134,3 @@ pub fn verify_name_bundle<'a>(bundle: &'a [u8], root: &[u8; 32]) -> Option<NameM
     })
 }
 
-fn read_u32_le(buf: &[u8], off: usize) -> Option<u32> {
-    let bytes: [u8; 4] = buf.get(off..off + 4)?.try_into().ok()?;
-    Some(u32::from_le_bytes(bytes))
-}
-
-fn read_u64_le(buf: &[u8], off: usize) -> Option<u64> {
-    let bytes: [u8; 8] = buf.get(off..off + 8)?.try_into().ok()?;
-    Some(u64::from_le_bytes(bytes))
-}
-
-fn is_clean_ascii(s: &[u8]) -> bool {
-    s.iter().all(|&b| (0x20..0x7f).contains(&b))
-}

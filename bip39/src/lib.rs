@@ -3,8 +3,8 @@
 //! Supports 24-word English mnemonics only — that is the entire surface the
 //! SPHINCS+ wallet needs. The wordlist is statically compiled into flash, no
 //! heap allocation is used anywhere on the encode/decode/seed paths, and the
-//! `Mnemonic` type zeroes its word indices on drop so an accidental `mem::forget`
-//! is the only way to leak the phrase.
+//! [`Mnemonic`] type wipes its word indices on drop. The type is deliberately
+//! `!Copy + !Clone`, so a `mem::forget` is the only way to leak the phrase.
 //!
 //! This crate intentionally does **not** depend on the upstream `bip39` crate.
 //! Avoiding `bitcoin_hashes` and the surrounding dependency tree keeps the
@@ -40,7 +40,7 @@ pub const WORD_COUNT: usize = 24;
 /// Raw entropy length: 256 bits.
 pub const ENTROPY_BYTES: usize = 32;
 
-/// Length of the BIP-39 seed produced by `to_seed`.
+/// Length of the BIP-39 seed produced by [`Mnemonic::to_seed`].
 pub const SEED_BYTES: usize = 64;
 
 /// Number of bits per BIP-39 word index.
@@ -51,9 +51,9 @@ const PBKDF2_ITERS: u32 = 2048;
 
 /// 24 BIP-39 word indices into the English wordlist.
 ///
-/// Wrapper rather than a public field so the only way to construct one is via
-/// `from_entropy` or `from_words`, both of which validate.
-#[derive(Clone)]
+/// Wrapped so the only way to construct one is via [`Mnemonic::from_entropy`],
+/// [`Mnemonic::from_words`], or [`Mnemonic::from_indices`] — all of which
+/// validate the BIP-39 checksum.
 pub struct Mnemonic {
     indices: [u16; WORD_COUNT],
 }
@@ -64,27 +64,35 @@ pub enum BipError {
     UnknownWord,
     /// BIP-39 checksum byte did not verify (one or more wrong words).
     BadChecksum,
-    /// Wrong number of words supplied to `from_words`.
+    /// Wrong number of words supplied to [`Mnemonic::from_words`].
     WrongLength,
+}
+
+impl fmt::Display for BipError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownWord => f.write_str("word not in BIP-39 English wordlist"),
+            Self::BadChecksum => f.write_str("BIP-39 checksum mismatch"),
+            Self::WrongLength => f.write_str("expected 24 BIP-39 words"),
+        }
+    }
 }
 
 impl Mnemonic {
     /// Build a mnemonic from 32 bytes of entropy. Computes the SHA-256
     /// checksum and bit-packs entropy ‖ checksum into 24 × 11-bit indices.
+    #[must_use]
     pub fn from_entropy(entropy: &[u8; ENTROPY_BYTES]) -> Self {
         // 24 words × 11 bits = 264 bits = 256 entropy + 8 checksum bits.
         let cs = Sha256::digest(entropy)[0];
 
-        // Pack entropy ‖ checksum into a 33-byte buffer, then chunk into
-        // 11-bit indices, MSB first.
         let mut packed = [0u8; ENTROPY_BYTES + 1];
         packed[..ENTROPY_BYTES].copy_from_slice(entropy);
         packed[ENTROPY_BYTES] = cs;
 
         let mut indices = [0u16; WORD_COUNT];
         for (w, slot) in indices.iter_mut().enumerate() {
-            let bit = w * BITS_PER_WORD;
-            *slot = read_11_bits(&packed, bit);
+            *slot = read_11_bits(&packed, w * BITS_PER_WORD);
         }
         Self { indices }
     }
@@ -102,33 +110,29 @@ impl Mnemonic {
             indices[i] = lookup_word_exact(w.as_ref()).ok_or(BipError::UnknownWord)?;
         }
         let m = Self { indices };
-        // Round-trip through to_entropy to verify checksum.
         m.to_entropy()?;
         Ok(m)
     }
 
-    /// Build a mnemonic from already-validated wordlist indices. Verifies
-    /// the BIP-39 checksum so a recovery wizard cannot accidentally accept
-    /// a phrase whose last word's checksum bits are wrong.
+    /// Build a mnemonic from already-validated wordlist indices. Verifies the
+    /// BIP-39 checksum so a recovery wizard cannot accidentally accept a
+    /// phrase whose last word's checksum bits are wrong.
     pub fn from_indices(indices: [u16; WORD_COUNT]) -> Result<Self, BipError> {
-        for &i in &indices {
-            if (i as usize) >= WORDLIST.len() {
-                return Err(BipError::UnknownWord);
-            }
+        if indices.iter().any(|&i| (i as usize) >= WORDLIST.len()) {
+            return Err(BipError::UnknownWord);
         }
         let m = Self { indices };
         m.to_entropy()?;
         Ok(m)
     }
 
-    /// Recover the original 32-byte entropy. Returns `BadChecksum` if the
-    /// 8-bit BIP-39 checksum does not match.
+    /// Recover the original 32-byte entropy. Returns [`BipError::BadChecksum`]
+    /// if the 8-bit BIP-39 checksum does not match.
     pub fn to_entropy(&self) -> Result<[u8; ENTROPY_BYTES], BipError> {
         // Reverse the bit-packing: 24 × 11 bits → 33 bytes (entropy ‖ cs).
         let mut packed = [0u8; ENTROPY_BYTES + 1];
         for (w, &idx) in self.indices.iter().enumerate() {
-            let bit = w * BITS_PER_WORD;
-            write_11_bits(&mut packed, bit, idx);
+            write_11_bits(&mut packed, w * BITS_PER_WORD, idx);
         }
         let mut entropy = [0u8; ENTROPY_BYTES];
         entropy.copy_from_slice(&packed[..ENTROPY_BYTES]);
@@ -142,6 +146,7 @@ impl Mnemonic {
     }
 
     /// Look up the i-th word as a `&'static str` from the wordlist.
+    #[must_use]
     pub fn word(&self, i: usize) -> &'static str {
         WORDLIST[self.indices[i] as usize]
     }
@@ -151,50 +156,61 @@ impl Mnemonic {
         self.indices.iter().map(|&i| WORDLIST[i as usize])
     }
 
-    /// Equality on word indices, useful for verify-backup spot checks.
+    /// Wordlist index of the i-th word. Useful for verify-backup spot checks
+    /// (compare indices rather than `&str` to keep callers branchless).
+    #[must_use]
     pub fn word_index(&self, i: usize) -> u16 {
         self.indices[i]
     }
 
     /// Derive the 64-byte BIP-39 seed via PBKDF2-HMAC-SHA512.
     ///
-    /// `password = "<word1> <word2> ... <word24>"` (NFKD, ASCII for English)
-    /// `salt     = "mnemonic" || passphrase`
-    /// `iters    = 2048`
-    /// `dk_len   = 64`
+    /// - `password = "<word1> <word2> ... <word24>"` (NFKD, ASCII for English)
+    /// - `salt     = "mnemonic" || passphrase`
+    /// - `iters    = 2048`
+    /// - `dk_len   = 64`
     ///
     /// We pass an empty passphrase from the wallet today; the parameter exists
     /// so a future "25th word" feature is non-breaking.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `passphrase` is longer than 248 bytes (the salt buffer is
+    /// 256 bytes and the `"mnemonic"` prefix takes 8). Refusing to silently
+    /// truncate is intentional: a silently shortened salt would produce a
+    /// different seed and brick recovery.
+    #[must_use]
     pub fn to_seed(&self, passphrase: &str) -> [u8; SEED_BYTES] {
-        // Build "<word> <word> ..." into a stack buffer. Worst case is
-        // 24 * 8 (longest BIP-39 word) + 23 spaces = 215 bytes, well under
-        // a fixed 256-byte budget.
+        // Worst case password is 24 × 8 (longest BIP-39 word) + 23 spaces
+        // = 215 bytes, well under 256.
         let mut password = [0u8; 256];
-        let mut len = 0usize;
+        let mut password_len = 0usize;
         for (i, w) in self.words().enumerate() {
             if i > 0 {
-                password[len] = b' ';
-                len += 1;
+                password[password_len] = b' ';
+                password_len += 1;
             }
             let wb = w.as_bytes();
-            password[len..len + wb.len()].copy_from_slice(wb);
-            len += wb.len();
+            password[password_len..password_len + wb.len()].copy_from_slice(wb);
+            password_len += wb.len();
         }
 
-        // Build salt = "mnemonic" || passphrase into a stack buffer.
+        // salt = "mnemonic" || passphrase
+        const SALT_PREFIX: &[u8] = b"mnemonic";
         let mut salt = [0u8; 256];
-        let prefix = b"mnemonic";
-        salt[..prefix.len()].copy_from_slice(prefix);
+        salt[..SALT_PREFIX.len()].copy_from_slice(SALT_PREFIX);
         let pp = passphrase.as_bytes();
-        // Refuse to silently truncate exotic passphrases.
-        assert!(pp.len() + prefix.len() <= salt.len(), "passphrase too long");
-        salt[prefix.len()..prefix.len() + pp.len()].copy_from_slice(pp);
-        let salt_len = prefix.len() + pp.len();
+        assert!(
+            SALT_PREFIX.len() + pp.len() <= salt.len(),
+            "passphrase too long",
+        );
+        salt[SALT_PREFIX.len()..SALT_PREFIX.len() + pp.len()].copy_from_slice(pp);
+        let salt_len = SALT_PREFIX.len() + pp.len();
 
         let mut out = [0u8; SEED_BYTES];
-        pbkdf2_hmac_sha512(&password[..len], &salt[..salt_len], PBKDF2_ITERS, &mut out);
+        pbkdf2_hmac_sha512(&password[..password_len], &salt[..salt_len], PBKDF2_ITERS, &mut out);
 
-        // Wipe transient buffers (password contains the mnemonic).
+        // password reveals the mnemonic; salt may carry a user passphrase.
         password.zeroize();
         salt.zeroize();
         out
@@ -203,9 +219,8 @@ impl Mnemonic {
 
 impl Drop for Mnemonic {
     fn drop(&mut self) {
-        for w in self.indices.iter_mut() {
-            *w = 0;
-        }
+        // `Zeroize` adds a compiler fence so the wipe cannot be optimised away.
+        self.indices.zeroize();
     }
 }
 
@@ -213,7 +228,7 @@ impl fmt::Debug for Mnemonic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Never print the actual words: this struct holds a wallet recovery
         // secret. Use `mnemonic.words()` explicitly when you really need them.
-        write!(f, "Mnemonic(<24 words redacted>)")
+        f.write_str("Mnemonic(<24 words redacted>)")
     }
 }
 
@@ -222,28 +237,28 @@ impl fmt::Debug for Mnemonic {
 // ---------------------------------------------------------------------------
 
 /// Read 11 bits MSB-first from `buf` starting at bit offset `bit`.
+#[inline]
 fn read_11_bits(buf: &[u8], bit: usize) -> u16 {
     let byte = bit / 8;
     let shift = bit % 8;
-    // Read up to three bytes, big-endian, then shift the desired window down.
-    let b0 = buf[byte] as u32;
-    let b1 = buf[byte + 1] as u32;
-    let b2 = if byte + 2 < buf.len() { buf[byte + 2] as u32 } else { 0 };
+    // Load up to three bytes big-endian; the desired 11-bit window lives
+    // `shift` bits down from the top of the resulting 24-bit value.
+    let b0 = u32::from(buf[byte]);
+    let b1 = u32::from(buf[byte + 1]);
+    let b2 = if byte + 2 < buf.len() { u32::from(buf[byte + 2]) } else { 0 };
     let combined = (b0 << 16) | (b1 << 8) | b2;
-    // We want bits [shift .. shift+11] of combined, where bit 0 is the
-    // most-significant bit of byte `byte`. combined is 24 bits wide, so the
-    // top is bit 0; the desired window starts shift bits from the top.
     let top = 24 - shift - BITS_PER_WORD;
     ((combined >> top) & 0x7FF) as u16
 }
 
 /// Write 11 bits MSB-first into `buf` starting at bit offset `bit`.
+#[inline]
 fn write_11_bits(buf: &mut [u8], bit: usize, value: u16) {
     debug_assert!(value < 0x800);
     let byte = bit / 8;
     let shift = bit % 8;
     let top = 24 - shift - BITS_PER_WORD;
-    let v = (value as u32) << top;
+    let v = u32::from(value) << top;
     buf[byte] |= ((v >> 16) & 0xFF) as u8;
     buf[byte + 1] |= ((v >> 8) & 0xFF) as u8;
     if byte + 2 < buf.len() {
@@ -256,12 +271,13 @@ fn write_11_bits(buf: &mut [u8], bit: usize, value: u16) {
 // ---------------------------------------------------------------------------
 
 /// Extract 8 × 11-bit BIP-39 word indices from the first 88 bits of a
-/// SHA-256 hash. Used for firmware measurement display — NOT for mnemonic
-/// generation.
+/// SHA-256 hash. Used for firmware measurement display — **not** for
+/// mnemonic generation.
+#[must_use]
 pub fn hash_to_word_indices(hash: &[u8; 32]) -> [u16; 8] {
     let mut indices = [0u16; 8];
-    for i in 0..8 {
-        indices[i] = read_11_bits(hash, i * BITS_PER_WORD);
+    for (i, slot) in indices.iter_mut().enumerate() {
+        *slot = read_11_bits(hash, i * BITS_PER_WORD);
     }
     indices
 }
@@ -270,11 +286,14 @@ pub fn hash_to_word_indices(hash: &[u8; 32]) -> [u16; 8] {
 // Wordlist lookup helpers
 // ---------------------------------------------------------------------------
 
-/// Exact-match lookup. Case-insensitive in the ASCII range.
-pub fn lookup_word_exact(input: &str) -> Option<u16> {
-    // Compare bytewise after lowercasing both sides. The wordlist is already
-    // all lowercase, so we just lowercase the input.
-    let mut buf = [0u8; 16];
+/// Maximum length of any BIP-39 English word ("mountain" / "mushroom" /
+/// "mystery" / ... — all ≤ 8 chars). The recovery UX never has to deal with
+/// a longer input.
+const MAX_WORD_LEN: usize = 16;
+
+/// Lowercase `input` into a fixed buffer, returning the populated prefix or
+/// `None` if it exceeds [`MAX_WORD_LEN`].
+fn lowercase_ascii(input: &str, buf: &mut [u8; MAX_WORD_LEN]) -> Option<usize> {
     let bytes = input.as_bytes();
     if bytes.len() > buf.len() {
         return None;
@@ -282,20 +301,19 @@ pub fn lookup_word_exact(input: &str) -> Option<u16> {
     for (i, &b) in bytes.iter().enumerate() {
         buf[i] = b.to_ascii_lowercase();
     }
-    let lower = &buf[..bytes.len()];
+    Some(bytes.len())
+}
 
-    // Wordlist is sorted, so use binary search.
-    let mut lo = 0usize;
-    let mut hi = WORDLIST.len();
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        match WORDLIST[mid].as_bytes().cmp(lower) {
-            core::cmp::Ordering::Less => lo = mid + 1,
-            core::cmp::Ordering::Greater => hi = mid,
-            core::cmp::Ordering::Equal => return Some(mid as u16),
-        }
-    }
-    None
+/// Exact-match lookup. Case-insensitive in the ASCII range.
+#[must_use]
+pub fn lookup_word_exact(input: &str) -> Option<u16> {
+    let mut buf = [0u8; MAX_WORD_LEN];
+    let len = lowercase_ascii(input, &mut buf)?;
+    let needle = &buf[..len];
+    WORDLIST
+        .binary_search_by(|w| w.as_bytes().cmp(needle))
+        .ok()
+        .map(|i| i as u16)
 }
 
 /// Result of a prefix-narrowing lookup, used by the recovery UX.
@@ -303,9 +321,8 @@ pub fn lookup_word_exact(input: &str) -> Option<u16> {
 pub enum PrefixLookup {
     /// Exactly one word matches the prefix; recovery UX can auto-select.
     Unique(u16),
-    /// Multiple words match; the UX should let the user disambiguate.
-    /// Returns the (start, end) range of indices into WORDLIST so the caller
-    /// can iterate without allocation.
+    /// Multiple words match. `start..end` is the half-open range of indices
+    /// into [`WORDLIST`] so the caller can iterate without allocation.
     Multiple { start: usize, end: usize },
     /// No matches. The UX should reject the input.
     None,
@@ -314,37 +331,24 @@ pub enum PrefixLookup {
 /// Find all wordlist entries with the given (case-insensitive) prefix.
 /// Because BIP-39 English words have a unique 4-letter prefix, the user
 /// usually only needs to type 3 or 4 letters before the result becomes
-/// `Unique`.
+/// [`PrefixLookup::Unique`].
+#[must_use]
 pub fn lookup_prefix(prefix: &str) -> PrefixLookup {
     if prefix.is_empty() {
         return PrefixLookup::Multiple { start: 0, end: WORDLIST.len() };
     }
-    let mut lower = [0u8; 16];
-    let bytes = prefix.as_bytes();
-    if bytes.len() > lower.len() {
+    let mut buf = [0u8; MAX_WORD_LEN];
+    let Some(len) = lowercase_ascii(prefix, &mut buf) else {
         return PrefixLookup::None;
-    }
-    for (i, &b) in bytes.iter().enumerate() {
-        lower[i] = b.to_ascii_lowercase();
-    }
-    let needle = &lower[..bytes.len()];
+    };
+    let needle = &buf[..len];
 
-    // Find first index whose word starts with needle (lower bound).
-    let mut lo = 0usize;
-    let mut hi = WORDLIST.len();
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        if WORDLIST[mid].as_bytes() < needle {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    let start = lo;
+    // First index whose word is >= needle (lexicographic lower bound).
+    let start = WORDLIST.partition_point(|w| w.as_bytes() < needle);
 
     // Walk forward while words still start with needle.
     let mut end = start;
-    while end < WORDLIST.len() && starts_with(WORDLIST[end].as_bytes(), needle) {
+    while end < WORDLIST.len() && WORDLIST[end].as_bytes().starts_with(needle) {
         end += 1;
     }
 
@@ -355,41 +359,33 @@ pub fn lookup_prefix(prefix: &str) -> PrefixLookup {
     }
 }
 
-fn starts_with(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack.len() >= needle.len() && &haystack[..needle.len()] == needle
-}
-
 // ---------------------------------------------------------------------------
 // PBKDF2-HMAC-SHA512 (no_alloc)
 // ---------------------------------------------------------------------------
 
 type HmacSha512 = Hmac<Sha512>;
 
-/// PBKDF2 with HMAC-SHA512 PRF, RFC 2898. `out` may be any length up to
-/// 64 bytes (one block) — that covers our 64-byte BIP-39 seed.
+/// PBKDF2 with HMAC-SHA512 PRF, RFC 2898. `out` is exactly one HMAC-SHA512
+/// output block, so a single iteration of the outer block loop suffices.
 fn pbkdf2_hmac_sha512(password: &[u8], salt: &[u8], iters: u32, out: &mut [u8; SEED_BYTES]) {
-    // dk_len == 64 == one HMAC-SHA512 output block, so a single iteration
-    // of the outer "block" loop is sufficient.
-    let mut block = [0u8; 64];
+    // HMAC accepts any key length, so new_from_slice never returns Err here;
+    // it is the only path to a typed Hmac instance.
+    let new_mac = || HmacSha512::new_from_slice(password).expect("HMAC accepts any key length");
 
     // U_1 = HMAC(password, salt || INT(1))
-    let mut mac = HmacSha512::new_from_slice(password).expect("hmac key");
+    let mut mac = new_mac();
     mac.update(salt);
     mac.update(&1u32.to_be_bytes());
-    let u1 = mac.finalize().into_bytes();
-    block.copy_from_slice(&u1);
+    let mut u_prev = mac.finalize().into_bytes();
+    out.copy_from_slice(&u_prev);
 
-    // U_n = HMAC(password, U_{n-1}); T = U_1 ^ U_2 ^ ... ^ U_iters
-    let mut u_prev = u1;
+    // T = U_1 ^ U_2 ^ ... ^ U_iters, where U_n = HMAC(password, U_{n-1}).
     for _ in 1..iters {
-        let mut mac = HmacSha512::new_from_slice(password).expect("hmac key");
+        let mut mac = new_mac();
         mac.update(&u_prev);
-        let u_n = mac.finalize().into_bytes();
-        for (b, x) in block.iter_mut().zip(u_n.iter()) {
+        u_prev = mac.finalize().into_bytes();
+        for (b, x) in out.iter_mut().zip(u_prev.iter()) {
             *b ^= *x;
         }
-        u_prev = u_n;
     }
-
-    out.copy_from_slice(&block);
 }

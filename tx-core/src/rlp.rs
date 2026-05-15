@@ -24,7 +24,7 @@ pub enum RlpError {
 
 /// A decoded RLP item: either a byte string or a list of items (referenced
 /// as a slice into the input buffer that the caller can re-iterate over).
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Item<'a> {
     Bytes(&'a [u8]),
     List(&'a [u8]),
@@ -122,11 +122,12 @@ pub struct ListIter<'a> {
 }
 
 impl<'a> ListIter<'a> {
-    pub fn new(payload: &'a [u8]) -> Self {
+    pub const fn new(payload: &'a [u8]) -> Self {
         Self { rest: payload }
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.rest.is_empty()
     }
 

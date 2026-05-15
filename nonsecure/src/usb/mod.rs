@@ -98,10 +98,16 @@ pub unsafe fn configure_vbus_u5() {
 /// # Safety
 /// Must be called exactly once.  Uses static mut for EP memory and bus allocator.
 pub unsafe fn init() -> UsbStack {
-    // Create the bus allocator (must live in a static)
-    let alloc = UsbBus::new(Stm32U5UsbOtgFs, &mut EP_MEMORY);
-    USB_BUS_ALLOC = Some(alloc);
-    let bus_ref = USB_BUS_ALLOC.as_ref().unwrap();
+    // SAFETY: `init` is called exactly once before the USB main loop
+    // starts polling, and the NS world is single-threaded with no
+    // interrupt handlers touching EP_MEMORY / USB_BUS_ALLOC. Both `&mut`
+    // / `&` references are released before any second call could
+    // reasonably exist.
+    let alloc = UsbBus::new(Stm32U5UsbOtgFs, &mut *core::ptr::addr_of_mut!(EP_MEMORY));
+    *core::ptr::addr_of_mut!(USB_BUS_ALLOC) = Some(alloc);
+    let bus_ref = (*core::ptr::addr_of!(USB_BUS_ALLOC))
+        .as_ref()
+        .expect("USB_BUS_ALLOC was just set");
 
     // Create the HID class (allocates endpoints from the bus)
     let hid_class = hid::PqSignerHid::new(bus_ref);

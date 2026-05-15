@@ -40,6 +40,7 @@
 //! selector.
 
 use crate::erc20::merkle::verify_proof;
+use crate::wire::{is_clean_ascii, read_u32_le};
 use sphincs_tz_shared::db_format::SELECTOR_TEXT_SIG_MAX_LEN;
 
 /// Where the `(selector, text_sig)` mapping originated. The display
@@ -219,15 +220,6 @@ pub fn parse_self_attest_bundle<'a>(bundle: &'a [u8]) -> Option<SelectorMeta<'a>
         text_sig,
         provenance: SelectorProvenance::SelfAttest,
     })
-}
-
-fn read_u32_le(buf: &[u8], off: usize) -> Option<u32> {
-    let bytes: [u8; 4] = buf.get(off..off + 4)?.try_into().ok()?;
-    Some(u32::from_le_bytes(bytes))
-}
-
-fn is_clean_ascii(s: &[u8]) -> bool {
-    s.iter().all(|&b| (0x20..0x7f).contains(&b))
 }
 
 #[cfg(test)]

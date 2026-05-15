@@ -1,14 +1,9 @@
 //! Secure-world function-selector → text-signature lookup.
 //!
-//! Phase 5 PR 5.4 of the modularity refactor moved the pure-logic
-//! bundle verifier into `pqsigner-tx`. This module is now a thin shim
-//! that re-exports `SelectorMeta` and adds the `verify_selector_bundle`
-//! / `crate::selectors::bundle::verify_selector_bundle` wrappers which
-//! thread the firmware-embedded `db_roots::SELECTOR_DB_ROOT` into the
-//! verifier so existing call sites
-//! (`crate::selectors::verify_selector_bundle(...)`,
-//! `crate::selectors::bundle::verify_selector_bundle(...)`) keep
-//! working unchanged.
+//! Thin shim over the pure-logic [`pqsigner_tx::selectors`] crate. Both
+//! [`verify_selector_bundle`] and the nested
+//! [`bundle::verify_selector_bundle`] thread the firmware-embedded
+//! [`crate::db_roots::SELECTOR_DB_ROOT`] into the underlying verifier.
 
 pub use pqsigner_tx::selectors::bundle::{
     parse_self_attest_bundle, SelectorMeta, SelectorProvenance, MAX_SELECTOR_BUNDLE_LEN,

@@ -61,18 +61,44 @@ pub const SHA256_EMPTY: [u8; 32] = [
     0xb8, 0x55,
 ];
 
-// `EXECUTE_SELECTOR` and `EXECUTE_BATCH_SELECTOR` and the related
-// max-calldata constants used to live in this file as locally-defined
-// `pub const`s alongside `pub use` re-exports of `sphincs_tz_shared`'s
-// copies. Both definitions agreed but the duplication was a footgun
-// (gotcha §3.5 in `docs/handoff-modularity-refactor.md`). Phase 5
-// PR 5.2 deletes the local consts and re-exports straight from
-// `pqsigner-proto` — the single source of truth shared with Solidity.
-
 pub use pqsigner_proto::EXECUTE_BATCH_SELECTOR;
 pub use pqsigner_proto::EXECUTE_SELECTOR;
 pub use pqsigner_proto::MAX_EXECUTE_BATCH_CALLDATA_LEN;
 pub use pqsigner_proto::MAX_EXECUTE_CALLDATA_LEN;
+
+/// Solidity ABI word size (one static slot).
+const WORD: usize = 32;
+/// Function-selector size in bytes (Solidity `bytes4`).
+const SELECTOR_LEN: usize = 4;
+
+/// Write `v` into the low 8 bytes of a 32-byte word slot, big-endian,
+/// leaving the top 24 bytes untouched (caller must have zeroed them, or
+/// must not care). Convenience for the ABI pattern where a `uint`
+/// smaller than 256 bits is right-aligned in a word.
+#[inline]
+fn write_u64_in_word_be(word: &mut [u8], v: u64) {
+    debug_assert_eq!(word.len(), WORD);
+    word[WORD - 8..WORD].copy_from_slice(&v.to_be_bytes());
+}
+
+/// Encode `v` as a 32-byte big-endian uint256 (top 24 bytes zero).
+#[inline]
+fn u64_to_word_be(v: u64) -> [u8; WORD] {
+    let mut buf = [0u8; WORD];
+    buf[WORD - 8..].copy_from_slice(&v.to_be_bytes());
+    buf
+}
+
+/// Read a fixed-size byte array out of `buf` starting at `*p`, advancing
+/// `p` past it. Panics on out-of-bounds — callers must have verified the
+/// length up front.
+#[inline]
+fn read_array<const N: usize>(buf: &[u8], p: &mut usize) -> [u8; N] {
+    let mut out = [0u8; N];
+    out.copy_from_slice(&buf[*p..*p + N]);
+    *p += N;
+    out
+}
 
 /// Stack-friendly buffer for a reconstructed `execute(...)` calldata.
 ///
@@ -86,6 +112,7 @@ pub struct ExecuteCallData {
 }
 
 impl ExecuteCallData {
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         &self.buf[..self.len]
     }
@@ -129,7 +156,8 @@ pub fn reconstruct_execute_calldata(
     let target = tx.to.ok_or(AaError::ContractCreation)?;
 
     let padded_data_len = data.len().checked_add(31).ok_or(AaError::CallDataTooLong)? & !31usize;
-    let total = 4 + 32 * 6 + padded_data_len; // 4 head selector + 5 head words + len word + tail
+    // 4 head selector + 5 head words + len word + tail.
+    let total = SELECTOR_LEN + 6 * WORD + padded_data_len;
     if total > MAX_EXECUTE_CALLDATA_LEN {
         return Err(AaError::CallDataTooLong);
     }
@@ -139,23 +167,30 @@ pub fn reconstruct_execute_calldata(
         len: total,
     };
 
-    // selector
-    out.buf[0..4].copy_from_slice(&EXECUTE_SELECTOR);
-    // ownerIndex (uint256, BE) at [4..36)
-    out.buf[4 + 24..4 + 32].copy_from_slice(&owner_index.to_be_bytes());
-    // newOffchainCount (uint256, BE) at [36..68)
-    out.buf[4 + 32 + 24..4 + 32 + 32].copy_from_slice(&new_offchain_count.to_be_bytes());
-    // target (address, left-padded) at [68..100)
-    out.buf[4 + 64 + 12..4 + 64 + 32].copy_from_slice(&target);
-    // value (uint256) at [100..132)
-    out.buf[4 + 96..4 + 96 + 32].copy_from_slice(&tx.value.0);
-    // bytes-head offset = 0xa0 at [132..164)
-    out.buf[4 + 128 + 31] = 0xa0;
-    // bytes length at [164..196)
-    let len_bytes = (data.len() as u64).to_be_bytes();
-    out.buf[4 + 160 + 24..4 + 160 + 32].copy_from_slice(&len_bytes);
-    // bytes payload at [196..)
-    out.buf[4 + 192..4 + 192 + data.len()].copy_from_slice(data);
+    // Selector + 5 head words then `bytes` length + data (tail).
+    let mut p = 0;
+    out.buf[p..p + SELECTOR_LEN].copy_from_slice(&EXECUTE_SELECTOR);
+    p += SELECTOR_LEN;
+    // ownerIndex (uint256, BE)
+    write_u64_in_word_be(&mut out.buf[p..p + WORD], owner_index);
+    p += WORD;
+    // newOffchainCount (uint256, BE)
+    write_u64_in_word_be(&mut out.buf[p..p + WORD], new_offchain_count);
+    p += WORD;
+    // target (address, left-padded into a 32-byte slot)
+    out.buf[p + (WORD - 20)..p + WORD].copy_from_slice(&target);
+    p += WORD;
+    // value (uint256)
+    out.buf[p..p + WORD].copy_from_slice(&tx.value.0);
+    p += WORD;
+    // Head offset to the `bytes` tail = 5 * 32 = 0xa0.
+    out.buf[p + WORD - 1] = 0xa0;
+    p += WORD;
+    // Tail — bytes length word, then the data padded with zeros (the
+    // buffer is already zero-initialised, so no explicit pad write).
+    write_u64_in_word_be(&mut out.buf[p..p + WORD], data.len() as u64);
+    p += WORD;
+    out.buf[p..p + data.len()].copy_from_slice(data);
 
     Ok(out)
 }
@@ -183,6 +218,7 @@ pub struct ExecuteBatchCallData {
 }
 
 impl ExecuteBatchCallData {
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         &self.buf[..self.len]
     }
@@ -244,32 +280,34 @@ pub fn reconstruct_execute_batch_calldata(
         return Err(BatchAaError::EmptyBatch);
     }
     let n = txs.len();
+    if n > pqsigner_proto::MAX_BATCH_TXS {
+        return Err(BatchAaError::CallDataTooLong);
+    }
 
     // Per-tx padded data length and running tail size for `bytes[]`.
     let mut padded_each: [usize; pqsigner_proto::MAX_BATCH_TXS] =
         [0; pqsigner_proto::MAX_BATCH_TXS];
-    if n > pqsigner_proto::MAX_BATCH_TXS {
-        return Err(BatchAaError::CallDataTooLong);
-    }
-    let mut datas_tail_size: usize = 32 + n * 32; // length + N inner offsets
+    let mut datas_tail_size: usize = WORD + n * WORD; // length + N inner offsets
     for (i, tx) in txs.iter().enumerate() {
         if tx.data.len() > pqsigner_proto::MAX_TX_LEN {
             return Err(BatchAaError::CallDataTooLong);
         }
-        let padded = (tx.data.len().checked_add(31).ok_or(BatchAaError::CallDataTooLong)?) & !31usize;
+        let padded = tx.data.len().checked_add(31).ok_or(BatchAaError::CallDataTooLong)? & !31usize;
         padded_each[i] = padded;
         // Each per-element block: 32 (length) + padded data bytes.
         datas_tail_size = datas_tail_size
-            .checked_add(32 + padded)
+            .checked_add(WORD + padded)
             .ok_or(BatchAaError::CallDataTooLong)?;
     }
 
     // Section sizes within args (after selector).
-    let head_len = 5 * 32; // 160
-    let targets_size = 32 + n * 32;
-    let values_size = 32 + n * 32;
+    let head_len = 5 * WORD; // 160
+    let targets_size = WORD + n * WORD;
+    let values_size = WORD + n * WORD;
     let total_args = head_len + targets_size + values_size + datas_tail_size;
-    let total = 4usize.checked_add(total_args).ok_or(BatchAaError::CallDataTooLong)?;
+    let total = SELECTOR_LEN
+        .checked_add(total_args)
+        .ok_or(BatchAaError::CallDataTooLong)?;
     if total > MAX_EXECUTE_BATCH_CALLDATA_LEN {
         return Err(BatchAaError::CallDataTooLong);
     }
@@ -280,66 +318,77 @@ pub fn reconstruct_execute_batch_calldata(
     };
 
     // ── Selector ───────────────────────────────────────────────────
-    out.buf[0..4].copy_from_slice(&EXECUTE_BATCH_SELECTOR);
+    out.buf[0..SELECTOR_LEN].copy_from_slice(&EXECUTE_BATCH_SELECTOR);
 
-    // ── Head ───────────────────────────────────────────────────────
-    let head_start = 4;
-    // ownerIndex
-    out.buf[head_start + 24..head_start + 32].copy_from_slice(&owner_index.to_be_bytes());
-    // newOffchainCount
-    out.buf[head_start + 32 + 24..head_start + 64].copy_from_slice(&new_offchain_count.to_be_bytes());
-    // offset_targets = head_len = 160
+    // ── Head: 5 × 32-byte words ────────────────────────────────────
+    //
+    //   [0] ownerIndex
+    //   [1] newOffchainCount
+    //   [2] offset of targets[] tail = head_len
+    //   [3] offset of values[]  tail = [2] + targets_size
+    //   [4] offset of datas[]   tail = [3] + values_size
     let offset_targets: u64 = head_len as u64;
     let offset_values: u64 = offset_targets + targets_size as u64;
     let offset_datas: u64 = offset_values + values_size as u64;
-    out.buf[head_start + 64 + 24..head_start + 96].copy_from_slice(&offset_targets.to_be_bytes());
-    out.buf[head_start + 96 + 24..head_start + 128].copy_from_slice(&offset_values.to_be_bytes());
-    out.buf[head_start + 128 + 24..head_start + 160].copy_from_slice(&offset_datas.to_be_bytes());
+    let head_words: [u64; 5] = [
+        owner_index,
+        new_offchain_count,
+        offset_targets,
+        offset_values,
+        offset_datas,
+    ];
+    for (i, w) in head_words.iter().enumerate() {
+        let slot = SELECTOR_LEN + i * WORD;
+        write_u64_in_word_be(&mut out.buf[slot..slot + WORD], *w);
+    }
 
     // ── targets[] tail ─────────────────────────────────────────────
-    let targets_start = head_start + head_len;
-    out.buf[targets_start + 24..targets_start + 32].copy_from_slice(&(n as u64).to_be_bytes());
-    let targets_data = targets_start + 32;
+    let targets_start = SELECTOR_LEN + head_len;
+    write_u64_in_word_be(&mut out.buf[targets_start..targets_start + WORD], n as u64);
+    let targets_data = targets_start + WORD;
     for (i, tx) in txs.iter().enumerate() {
-        let off = targets_data + i * 32;
+        let off = targets_data + i * WORD;
         // Address left-padded into a 32-byte slot.
-        out.buf[off + 12..off + 32].copy_from_slice(&tx.to);
+        out.buf[off + (WORD - 20)..off + WORD].copy_from_slice(&tx.to);
     }
 
     // ── values[] tail ──────────────────────────────────────────────
     let values_start = targets_start + targets_size;
-    out.buf[values_start + 24..values_start + 32].copy_from_slice(&(n as u64).to_be_bytes());
-    let values_data = values_start + 32;
+    write_u64_in_word_be(&mut out.buf[values_start..values_start + WORD], n as u64);
+    let values_data = values_start + WORD;
     for (i, tx) in txs.iter().enumerate() {
-        let off = values_data + i * 32;
-        out.buf[off..off + 32].copy_from_slice(&tx.value);
+        let off = values_data + i * WORD;
+        out.buf[off..off + WORD].copy_from_slice(&tx.value);
     }
 
     // ── datas[] tail ───────────────────────────────────────────────
     let datas_start = values_start + values_size;
-    // length
-    out.buf[datas_start + 24..datas_start + 32].copy_from_slice(&(n as u64).to_be_bytes());
-    let datas_offsets = datas_start + 32; // start of N pointers (== "heads" section)
-    let datas_payload_base = datas_offsets + n * 32;
-    let mut cursor_within_datas_heads: u64 = (n as u64) * 32; // first element starts after the N pointers
+    write_u64_in_word_be(&mut out.buf[datas_start..datas_start + WORD], n as u64);
+    let datas_offsets = datas_start + WORD; // start of N pointers (== "heads" section)
+    let datas_payload_base = datas_offsets + n * WORD;
+    // Per-element offsets are measured from the start of the heads
+    // section (`datas_offsets`), so the first element points just past
+    // the N pointer words themselves.
+    let mut cursor_within_datas_heads: u64 = (n as u64) * WORD as u64;
     let mut payload_pos = datas_payload_base;
     for (i, tx) in txs.iter().enumerate() {
-        // Write per-element offset (relative to start of heads = position 32
-        // within datas tail, i.e. `datas_offsets`).
-        let off_slot = datas_offsets + i * 32;
-        out.buf[off_slot + 24..off_slot + 32]
-            .copy_from_slice(&cursor_within_datas_heads.to_be_bytes());
+        let off_slot = datas_offsets + i * WORD;
+        write_u64_in_word_be(
+            &mut out.buf[off_slot..off_slot + WORD],
+            cursor_within_datas_heads,
+        );
 
-        // Write length word + padded data.
-        out.buf[payload_pos + 24..payload_pos + 32]
-            .copy_from_slice(&(tx.data.len() as u64).to_be_bytes());
-        payload_pos += 32;
+        // length word + payload bytes (padding stays zero from init).
+        write_u64_in_word_be(
+            &mut out.buf[payload_pos..payload_pos + WORD],
+            tx.data.len() as u64,
+        );
+        payload_pos += WORD;
         out.buf[payload_pos..payload_pos + tx.data.len()].copy_from_slice(tx.data);
-        // padding bytes already zero from the buffer init.
         payload_pos += padded_each[i];
 
         cursor_within_datas_heads = cursor_within_datas_heads
-            .checked_add(32 + padded_each[i] as u64)
+            .checked_add(WORD as u64 + padded_each[i] as u64)
             .ok_or(BatchAaError::CallDataTooLong)?;
     }
     debug_assert_eq!(payload_pos, total);
@@ -377,45 +426,40 @@ pub struct AaUserOpParams {
 /// ignores this value (we sign a SHA-256 sphincs digest instead, for
 /// hardware speed), but it is kept here for tooling/tests that need
 /// to reproduce what a v0.6 bundler will see on the wire.
+#[must_use]
 pub fn compute_user_op_hash(params: &AaUserOpParams, call_data_hash: &[u8; 32]) -> [u8; 32] {
-    // hashStruct(userOp) — 10 × 32 = 320 bytes total.
-    let mut buf = [0u8; 320];
-
-    // sender, left-padded to 32 bytes
-    buf[12..32].copy_from_slice(&params.sender);
-    // nonce
-    buf[32..64].copy_from_slice(&params.nonce.0);
-    // keccak256(initCode)
-    buf[64..96].copy_from_slice(&params.init_code_hash);
-    // keccak256(callData)
-    buf[96..128].copy_from_slice(call_data_hash);
-    // callGasLimit
-    buf[128..160].copy_from_slice(&params.call_gas_limit.0);
-    // verificationGasLimit
-    buf[160..192].copy_from_slice(&params.verification_gas_limit.0);
-    // preVerificationGas
-    buf[192..224].copy_from_slice(&params.pre_verification_gas.0);
-    // maxFeePerGas
-    buf[224..256].copy_from_slice(&params.max_fee_per_gas.0);
-    // maxPriorityFeePerGas
-    buf[256..288].copy_from_slice(&params.max_priority_fee_per_gas.0);
-    // keccak256(paymasterAndData)
-    buf[288..320].copy_from_slice(&params.paymaster_and_data_hash);
+    // hashStruct(userOp) — 10 × 32 = 320 bytes total. Each row is one
+    // right-aligned ABI word; field order matches `UserOp.hash()` in
+    // EntryPoint v0.6.
+    let mut buf = [0u8; 10 * WORD];
+    let rows: [&[u8]; 10] = [
+        &params.sender,
+        &params.nonce.0,
+        &params.init_code_hash,
+        call_data_hash,
+        &params.call_gas_limit.0,
+        &params.verification_gas_limit.0,
+        &params.pre_verification_gas.0,
+        &params.max_fee_per_gas.0,
+        &params.max_priority_fee_per_gas.0,
+        &params.paymaster_and_data_hash,
+    ];
+    for (i, row) in rows.iter().enumerate() {
+        debug_assert!(row.len() <= WORD);
+        let slot_end = (i + 1) * WORD;
+        buf[slot_end - row.len()..slot_end].copy_from_slice(row);
+    }
 
     let inner = keccak256(&buf);
 
     // userOpHash = keccak256(abi.encode(inner, entryPoint, chainId))
-    let mut outer = [0u8; 96];
-    outer[0..32].copy_from_slice(&inner);
-    outer[32 + 12..32 + 32].copy_from_slice(&params.entry_point);
-    // chainId, left-padded
-    outer[64 + 24..64 + 32].copy_from_slice(&params.chain_id.to_be_bytes());
+    //   3 × 32-byte words.
+    let mut outer = [0u8; 3 * WORD];
+    outer[0..WORD].copy_from_slice(&inner);
+    outer[WORD + (WORD - 20)..2 * WORD].copy_from_slice(&params.entry_point);
+    write_u64_in_word_be(&mut outer[2 * WORD..3 * WORD], params.chain_id);
 
-    let mut h = Keccak256::new();
-    h.update(&outer);
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&h.finalize());
-    out
+    Keccak256::digest(outer).into()
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -434,33 +478,19 @@ pub fn parse_header(buf: &[u8]) -> Result<AaUserOpParams, WireParseError> {
     // Skip the leading `has_bundle` u8 — that's owned by the caller.
     let mut p = 1usize;
 
-    let mut sender = [0u8; 20];
-    sender.copy_from_slice(&buf[p..p + 20]);
-    p += 20;
+    let sender: [u8; 20] = read_array(buf, &mut p);
+    let entry_point: [u8; 20] = read_array(buf, &mut p);
+    let chain_id = u64::from_be_bytes(read_array::<8>(buf, &mut p));
 
-    let mut entry_point = [0u8; 20];
-    entry_point.copy_from_slice(&buf[p..p + 20]);
-    p += 20;
+    let nonce = U256(read_array(buf, &mut p));
+    let call_gas_limit = U256(read_array(buf, &mut p));
+    let verification_gas_limit = U256(read_array(buf, &mut p));
+    let pre_verification_gas = U256(read_array(buf, &mut p));
+    let max_fee_per_gas = U256(read_array(buf, &mut p));
+    let max_priority_fee_per_gas = U256(read_array(buf, &mut p));
 
-    let mut chain_be = [0u8; 8];
-    chain_be.copy_from_slice(&buf[p..p + 8]);
-    p += 8;
-    let chain_id = u64::from_be_bytes(chain_be);
-
-    let nonce = read_u256(&buf, &mut p);
-    let call_gas_limit = read_u256(&buf, &mut p);
-    let verification_gas_limit = read_u256(&buf, &mut p);
-    let pre_verification_gas = read_u256(&buf, &mut p);
-    let max_fee_per_gas = read_u256(&buf, &mut p);
-    let max_priority_fee_per_gas = read_u256(&buf, &mut p);
-
-    let mut init_code_hash = [0u8; 32];
-    init_code_hash.copy_from_slice(&buf[p..p + 32]);
-    p += 32;
-
-    let mut paymaster_and_data_hash = [0u8; 32];
-    paymaster_and_data_hash.copy_from_slice(&buf[p..p + 32]);
-    p += 32;
+    let init_code_hash: [u8; 32] = read_array(buf, &mut p);
+    let paymaster_and_data_hash: [u8; 32] = read_array(buf, &mut p);
 
     debug_assert_eq!(p, pqsigner_proto::USEROP_HEADER_LEN);
 
@@ -477,14 +507,6 @@ pub fn parse_header(buf: &[u8]) -> Result<AaUserOpParams, WireParseError> {
         init_code_hash,
         paymaster_and_data_hash,
     })
-}
-
-#[inline]
-fn read_u256(buf: &[u8], p: &mut usize) -> U256 {
-    let mut v = [0u8; 32];
-    v.copy_from_slice(&buf[*p..*p + 32]);
-    *p += 32;
-    U256(v)
 }
 
 // ---------------------------------------------------------------------------
@@ -569,39 +591,34 @@ pub struct AaUserOpParamsV06Sha256 {
 ///   absent.
 /// * `call_data_digest` is the SHA-256 of the reconstructed
 ///   `execute(...)` / `addOwnerBytes(...)` calldata.
+#[must_use]
 pub fn compute_sphincs_digest_v06(
     params: &AaUserOpParamsV06Sha256,
     call_data_digest: &[u8; 32],
 ) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(params.sender);
-    h.update(params.nonce.0);
-    h.update(params.init_code_digest);
-    h.update(call_data_digest);
-    h.update(params.call_gas_limit.0);
-    h.update(params.verification_gas_limit.0);
-    h.update(params.pre_verification_gas.0);
-    h.update(params.max_fee_per_gas.0);
-    h.update(params.max_priority_fee_per_gas.0);
-    h.update(params.paymaster_and_data_digest);
-    h.update(params.entry_point);
-    // chainId is a Solidity uint256 → 32-byte BE.
-    let mut chain_be = [0u8; 32];
-    chain_be[24..32].copy_from_slice(&params.chain_id.to_be_bytes());
-    h.update(chain_be);
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&h.finalize());
-    out
+    Sha256::new()
+        .chain_update(params.sender)
+        .chain_update(params.nonce.0)
+        .chain_update(params.init_code_digest)
+        .chain_update(call_data_digest)
+        .chain_update(params.call_gas_limit.0)
+        .chain_update(params.verification_gas_limit.0)
+        .chain_update(params.pre_verification_gas.0)
+        .chain_update(params.max_fee_per_gas.0)
+        .chain_update(params.max_priority_fee_per_gas.0)
+        .chain_update(params.paymaster_and_data_digest)
+        .chain_update(params.entry_point)
+        // chainId is a Solidity uint256 → 32-byte BE.
+        .chain_update(u64_to_word_be(params.chain_id))
+        .finalize()
+        .into()
 }
 
 /// SHA-256 of a byte slice as a convenience wrapper.
 #[inline]
+#[must_use]
 pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(data);
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&h.finalize());
-    out
+    Sha256::digest(data).into()
 }
 
 // ---------------------------------------------------------------------------

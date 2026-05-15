@@ -217,20 +217,7 @@ fn main() -> anyhow::Result<()> {
             signature,
             pubkey,
         } => subcommands::verify_release::run(version, &secure, &nonsecure, &signature, &pubkey),
-        Cmd::ExtractSig { bundle, out } => extract_sig(&bundle, &out),
+        Cmd::ExtractSig { bundle, out } => subcommands::extract_sig::run(&bundle, &out),
         Cmd::Inspect { bundle } => subcommands::inspect::run(&bundle),
     }
-}
-
-fn extract_sig(bundle: &std::path::Path, out: &std::path::Path) -> anyhow::Result<()> {
-    use fw_manifest::ManifestRef;
-    let unpacked = bundle::unpack(bundle)?;
-    let m = ManifestRef::new(&unpacked.manifest_bytes);
-    std::fs::write(out, m.signature())?;
-    eprintln!(
-        "==> Extracted {} bytes of SPHINCS+C10 signature to {}",
-        sphincs_c10::params::SIGNATURE_LEN,
-        out.display()
-    );
-    Ok(())
 }

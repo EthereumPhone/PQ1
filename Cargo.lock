@@ -1442,7 +1442,6 @@ dependencies = [
 name = "pqsigner-tx-core"
 version = "0.1.0"
 dependencies = [
- "hex",
  "pqsigner-proto",
  "sha3 0.10.8",
 ]

@@ -21,9 +21,7 @@
 //! depends on RCC + the peripheral being clocked, which FSBL doesn't yet
 //! do.
 
-#![allow(dead_code)]
-
-pub use pqsigner_fi::{FAIL_SENTINEL, OK_SENTINEL};
+pub use pqsigner_fi::OK_SENTINEL;
 
 /// FSBL has no TRNG online; return a non-zero fixed byte. The invariant
 /// loop's per-iteration sanity check (`i + j == wait`) still defends
@@ -35,7 +33,7 @@ fn rng_byte() -> u8 {
 }
 
 #[inline(never)]
-pub fn wait_random() {
+fn wait_random() {
     pqsigner_fi::wait_random_loop(rng_byte);
 }
 

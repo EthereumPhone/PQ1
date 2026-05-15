@@ -67,29 +67,13 @@ pub fn run(bundle_path: &Path, pubkey_path: &Path) -> Result<()> {
     m.verify_signature(&pk_seed, &pk_root).map_err(stage_err)?;
 
     eprintln!("==> Image hashes");
-    if unpacked.secure_bytes.len() != m.secure_len() as usize {
-        bail!(
-            "secure.bin length mismatch: bundle {} bytes, manifest {}",
-            unpacked.secure_bytes.len(),
-            m.secure_len()
-        );
-    }
-    let secure_hash: [u8; 32] = Sha256::digest(&unpacked.secure_bytes).into();
-    if &secure_hash != m.secure_hash() {
-        bail!("secure.bin SHA-256 does not match manifest.secure_hash");
-    }
-
-    if unpacked.nonsecure_bytes.len() != m.nonsecure_len() as usize {
-        bail!(
-            "nonsecure.bin length mismatch: bundle {} bytes, manifest {}",
-            unpacked.nonsecure_bytes.len(),
-            m.nonsecure_len()
-        );
-    }
-    let nonsecure_hash: [u8; 32] = Sha256::digest(&unpacked.nonsecure_bytes).into();
-    if &nonsecure_hash != m.nonsecure_hash() {
-        bail!("nonsecure.bin SHA-256 does not match manifest.nonsecure_hash");
-    }
+    check_image("secure", &unpacked.secure_bytes, m.secure_len(), m.secure_hash())?;
+    check_image(
+        "nonsecure",
+        &unpacked.nonsecure_bytes,
+        m.nonsecure_len(),
+        m.nonsecure_hash(),
+    )?;
 
     eprintln!();
     eprintln!("==> verify: PASS");
@@ -106,4 +90,18 @@ pub fn run(bundle_path: &Path, pubkey_path: &Path) -> Result<()> {
 
 fn stage_err(e: VerifyError) -> anyhow::Error {
     anyhow!("verification failed: {e:?}")
+}
+
+fn check_image(label: &str, bytes: &[u8], manifest_len: u32, manifest_hash: &[u8; 32]) -> Result<()> {
+    if bytes.len() != manifest_len as usize {
+        bail!(
+            "{label}.bin length mismatch: bundle {} bytes, manifest {manifest_len}",
+            bytes.len(),
+        );
+    }
+    let hash: [u8; 32] = Sha256::digest(bytes).into();
+    if &hash != manifest_hash {
+        bail!("{label}.bin SHA-256 does not match manifest.{label}_hash");
+    }
+    Ok(())
 }

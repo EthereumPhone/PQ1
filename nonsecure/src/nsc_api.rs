@@ -1,3 +1,11 @@
+// This module declares every gateway command surfaced by the secure
+// world; individual entry points only consume a subset (the interactive
+// QEMU demo just calls unlock + sign, the USB router uses the full
+// surface). The default-features smoke build flags the unused helpers
+// as dead, which is expected — keep the full API compiled so callers
+// don't have to chase cfg gates.
+#![allow(dead_code)]
+
 //! NS-side gateway API — thin shim over two transports.
 //!
 //! * **QEMU mps2-an505**: shared-memory mailbox in NS SRAM. NS writes

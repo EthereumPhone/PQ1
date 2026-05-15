@@ -81,13 +81,14 @@ mod sig_wrapper;
 mod state;
 mod trailer;
 
-// HIGH-2 fix: refuse to build hardware images that also enable any of
-// the dev-only features. `debug-log` and `ui-semihosting` leak secure-
-// world state via the semihosting channel; `ui-mirror` streams the OLED
-// over RTT; `ui-capture` emits per-frame SHA-256 fingerprints over the
-// secure-log channel; `mock-se` substitutes an in-SRAM fake SE; the rest
-// each replace some part of the production trust model with a dev-only
-// shortcut. Any of these on a `stm32u585` release build is a ship-blocker.
+// Refuse to build hardware images that also enable any of the dev-only
+// features. `debug-log` and `ui-semihosting` leak secure-world state via
+// the semihosting channel; `ui-mirror` streams the OLED over RTT;
+// `ui-capture` emits per-frame SHA-256 fingerprints over the secure-log
+// channel; `mock-se` substitutes an in-SRAM fake SE; the rest each
+// replace some part of the production trust model with a dev-only
+// shortcut. Any of these on a `stm32u585` release build is a
+// ship-blocker.
 //
 // Hardware test images opt in by also enabling `e2e-test` (which exposes
 // `set_e2e_unlocked` so the automated harness never needs to drive the
@@ -95,9 +96,6 @@ mod trailer;
 // it's on we permit the other dev features needed to drive the tests
 // (`make e2e-hw`, `make test-key-speed`). CI must still gate shipped
 // firmware on `e2e-test` being OFF.
-//
-// Reference: `/home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md`
-// Phase 2.
 #[cfg(all(
     feature = "stm32u585",
     not(debug_assertions),

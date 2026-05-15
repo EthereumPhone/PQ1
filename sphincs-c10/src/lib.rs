@@ -18,12 +18,19 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod params;
-pub mod address;
-pub mod hash;
-pub mod wots;
-pub mod fors;
-pub mod merkle;
-pub mod hypertree;
+
+// Internal building blocks. Not part of the public API — external callers
+// should use [`SigningKey`], [`VerifyingKey`], and [`verify`] only.
+pub(crate) mod address;
+pub(crate) mod fors;
+pub(crate) mod hash;
+pub(crate) mod hypertree;
+pub(crate) mod merkle;
+pub(crate) mod wots;
+
+// Public: F-16 shuffle seed type is part of the SCA-defence API —
+// `crate::crypto::c10_sign_verified_with_progress` and the SCA target
+// crates construct `ShuffleSeed` values to drive `sign_with_shuffle`.
 pub mod shuffle;
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -48,7 +55,8 @@ impl SigningKey {
     /// Construct a signing key from raw components.
     ///
     /// `pk_root` must have been computed by building the full hypertree
-    /// from `(sk_seed, pk_seed)`. Use [`keygen`] for the normal path.
+    /// from `(sk_seed, pk_seed)`. Use [`Self::keygen`] for the normal path.
+    #[must_use]
     pub fn from_parts(sk_seed: [u8; 32], pk_seed: [u8; N], pk_root: [u8; N]) -> Self {
         Self {
             sk_seed,
@@ -59,9 +67,10 @@ impl SigningKey {
 
     /// Derive the signing key by building the full hypertree.
     ///
-    /// Computes 2^SUBTREE_H = 512 WOTS public keys + Merkle tree at the
+    /// Computes `2^SUBTREE_H = 512` WOTS public keys + Merkle tree at the
     /// top layer. On Cortex-M33 this takes ~2-3 seconds. Call once at
     /// provisioning time, not on every sign.
+    #[must_use]
     pub fn keygen(sk_seed: [u8; 32], pk_seed: [u8; N]) -> Self {
         let pk_root = hypertree::compute_pk_root(&sk_seed, &pk_seed);
         Self {
@@ -72,6 +81,7 @@ impl SigningKey {
     }
 
     /// Return the corresponding verifying key.
+    #[must_use]
     pub fn verifying_key(&self) -> VerifyingKey {
         VerifyingKey {
             pk_seed: self.pk_seed,
@@ -81,18 +91,23 @@ impl SigningKey {
 
     /// Sign a 32-byte message hash.
     ///
-    /// `opt_rand` is an optional 16-byte randomizer mixed into the R
-    /// derivation for hedged signing. If `None`, the R is derived purely
-    /// from `(sk_seed, message)`.
+    /// `opt_rand` is reserved for a future hedged-signing extension and is
+    /// **currently ignored** — `R` is derived deterministically from
+    /// `(sk_seed, pk_seed, pk_root, message)` via R-grinding. The
+    /// parameter is kept in the public API to leave room for the hedged
+    /// path without an ABI break.
     ///
-    /// Returns a 4,008-byte signature that verifies under [`SPHINCsC10Asm.sol`]
-    /// and the Rust [`verify`] function.
+    /// Returns a 4,008-byte signature that verifies under the Solidity
+    /// `SPHINCsC10Asm` verifier and the Rust [`verify`] function.
+    #[must_use]
     pub fn sign(&self, msg_hash: &[u8; 32], opt_rand: Option<&[u8; N]>) -> [u8; SIGNATURE_LEN] {
         hypertree::sign(&self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand)
     }
 
-    /// Like [`sign`] but reports progress (0-100%) via a callback so the
-    /// caller can update a UI indicator during the multi-second operation.
+    /// Like [`Self::sign`] but invokes `progress(percent)` (`0..=100`) at
+    /// each major signing phase so the caller can update a UI indicator
+    /// during the multi-second operation.
+    #[must_use]
     pub fn sign_with_progress(
         &self,
         msg_hash: &[u8; 32],
@@ -113,6 +128,7 @@ impl SigningKey {
     /// Pass `ShuffleSeed::zero()` to get the un-shuffled
     /// (deterministic-order) behaviour — useful for regression
     /// testing the byte-equality oracle.
+    #[must_use]
     pub fn sign_with_shuffle(
         &self,
         msg_hash: &[u8; 32],
@@ -133,14 +149,19 @@ impl SigningKey {
 
     /// Read-only access to the secret seed (for KDF purposes within
     /// the secure world only).
+    #[must_use]
     pub fn sk_seed(&self) -> &[u8; 32] {
         &self.sk_seed
     }
 
+    /// Read-only access to the public seed (16 bytes).
+    #[must_use]
     pub fn pk_seed(&self) -> &[u8; N] {
         &self.pk_seed
     }
 
+    /// Read-only access to the hypertree root commitment (16 bytes).
+    #[must_use]
     pub fn pk_root(&self) -> &[u8; N] {
         &self.pk_root
     }
@@ -157,6 +178,7 @@ pub struct VerifyingKey {
 
 impl VerifyingKey {
     /// Deserialize from 32 bytes: `pk_seed[16] || pk_root[16]`.
+    #[must_use]
     pub fn from_bytes(bytes: &[u8; VERIFYING_KEY_LEN]) -> Self {
         let mut pk_seed = [0u8; N];
         let mut pk_root = [0u8; N];
@@ -166,6 +188,7 @@ impl VerifyingKey {
     }
 
     /// Serialize to 32 bytes: `pk_seed[16] || pk_root[16]`.
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; VERIFYING_KEY_LEN] {
         let mut out = [0u8; VERIFYING_KEY_LEN];
         out[..N].copy_from_slice(&self.pk_seed);
@@ -174,12 +197,14 @@ impl VerifyingKey {
     }
 
     /// Verify a signature over a 32-byte message hash.
+    #[must_use]
     pub fn verify(&self, msg_hash: &[u8; 32], sig: &[u8; SIGNATURE_LEN]) -> bool {
         hypertree::verify(&self.pk_seed, &self.pk_root, msg_hash, sig)
     }
 }
 
 /// Standalone verify function for SPHINCS+C10.
+#[must_use]
 pub fn verify(
     pk_seed: &[u8; N],
     pk_root: &[u8; N],

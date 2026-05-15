@@ -80,10 +80,20 @@ pub const ENTROPY_LEN: usize = ENTROPY_BYTES;
 /// Total stored blob: 12-byte nonce ‖ encrypted_entropy (32) ‖ AES-GCM tag (16).
 pub const ENTROPY_BLOB_LEN: usize = 12 + ENTROPY_LEN + 16;
 
+const _: () = assert!(ENTROPY_BLOB_LEN == 60, "entropy blob layout must stay 60 B");
+
 // ---------------------------------------------------------------------------
 // KDF helpers
 // ---------------------------------------------------------------------------
 
+/// Three-input SHA-256 KDF: `SHA-256(domain ‖ input ‖ index)`.
+///
+/// The hash primitive is fixed to SHA-256 so the firmware can route the
+/// inner block through the STM32U585 HASH peripheral (~1 cycle/byte
+/// single-block, vs ~12 cycles/byte for software Keccak). The `kdf_sha256`
+/// alias predates the cutover from Keccak-256 and is retained so callers
+/// that want to be explicit about the primitive can keep doing so.
+#[must_use]
 pub fn kdf(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(domain);
@@ -92,43 +102,41 @@ pub fn kdf(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
     h.finalize().into()
 }
 
-/// SHA-256 based KDF for SPHINCS+C10 / slot seed derivation.
-///
-/// Historically this was Keccak-256 but we switched to SHA-256 across the
-/// entire signing stack so the firmware can call the STM32U585 HASH
-/// peripheral (1 cycle/byte single-block, vs ~12 cycles/byte for software
-/// Keccak). Domain tags stay the same; only the hash primitive changed.
+/// Explicit alias for [`kdf`]; see that function for the contract.
+#[inline]
+#[must_use]
 pub fn kdf_sha256(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(domain);
-    h.update(input);
-    h.update([index]);
-    h.finalize().into()
+    kdf(domain, input, index)
 }
 
+#[must_use]
 pub fn macd_init_input(master_secret: &[u8; 32], j: u8) -> [u8; 32] {
     kdf(b"sphincs-macd-init", master_secret, j)
 }
 
+#[must_use]
 pub fn macd_pin_input(pin: &[u8; 8], j: u8) -> [u8; 32] {
     kdf(b"sphincs-macd-pin", pin, j)
 }
 
+#[must_use]
 pub fn derive_wrap_key(master_secret: &[u8; 32]) -> [u8; 32] {
     kdf(b"sphincs-wrap-key", master_secret, 0)
 }
 
+#[must_use]
 pub fn derive_entropy_nonce(master_secret: &[u8; 32]) -> [u8; 12] {
-    let h = kdf(b"sphincs-entropy-nonce", master_secret, 0);
-    let mut n = [0u8; 12];
-    n.copy_from_slice(&h[..12]);
-    n
+    truncate_to_nonce(&kdf(b"sphincs-entropy-nonce", master_secret, 0))
 }
 
 fn nonce_for(index: u8) -> [u8; 12] {
-    let h: [u8; 32] = kdf(b"sphincs-nonce", &[index], 0);
+    truncate_to_nonce(&kdf(b"sphincs-nonce", &[index], 0))
+}
+
+/// First 12 bytes of a 32-byte digest, formatted as a 96-bit AES-GCM nonce.
+fn truncate_to_nonce(digest: &[u8; 32]) -> [u8; 12] {
     let mut n = [0u8; 12];
-    n.copy_from_slice(&h[..12]);
+    n.copy_from_slice(&digest[..12]);
     n
 }
 
@@ -136,19 +144,30 @@ fn nonce_for(index: u8) -> [u8; 12] {
 // AES-GCM helpers (in-place, no_std)
 // ---------------------------------------------------------------------------
 
+/// AES-256-GCM tag length in bytes (RFC 5116 §3.2 "AES_256_GCM").
+pub const AES_GCM_TAG_LEN: usize = 16;
+
+/// Construct the AES-256-GCM cipher. Infallible: `AES-256` accepts any
+/// 32-byte key, and that is the only key length we expose.
+fn aes256_gcm(key: &[u8; 32]) -> Aes256Gcm {
+    Aes256Gcm::new_from_slice(key).expect("AES-256-GCM accepts a 32-byte key")
+}
+
 pub fn aes_encrypt_inplace(
     key: &[u8; 32],
     buf: &mut [u8],
     plaintext_len: usize,
     nonce_idx: u8,
 ) -> usize {
-    let cipher = Aes256Gcm::new_from_slice(key).unwrap();
     let nonce = nonce_for(nonce_idx);
-    let tag = cipher
+    let tag = aes256_gcm(key)
         .encrypt_in_place_detached(Nonce::from_slice(&nonce), &[], &mut buf[..plaintext_len])
-        .expect("AES-GCM encrypt failed");
-    buf[plaintext_len..plaintext_len + 16].copy_from_slice(&tag);
-    plaintext_len + 16
+        // AEAD encryption is infallible for short inputs (well under the
+        // 2^39-bit GCM limit); the only documented failure is exceeding
+        // that length, which the secure world's stack-only buffers cannot.
+        .expect("AES-GCM encrypt cannot fail for these input lengths");
+    buf[plaintext_len..plaintext_len + AES_GCM_TAG_LEN].copy_from_slice(&tag);
+    plaintext_len + AES_GCM_TAG_LEN
 }
 
 pub fn aes_decrypt_inplace(
@@ -157,15 +176,14 @@ pub fn aes_decrypt_inplace(
     ct_len: usize,
     nonce_idx: u8,
 ) -> Result<usize, ()> {
-    if ct_len < 16 {
+    if ct_len < AES_GCM_TAG_LEN {
         return Err(());
     }
-    let plaintext_len = ct_len - 16;
-    let cipher = Aes256Gcm::new_from_slice(key).unwrap();
+    let plaintext_len = ct_len - AES_GCM_TAG_LEN;
     let nonce = nonce_for(nonce_idx);
     let (ct, tag_bytes) = buf[..ct_len].split_at_mut(plaintext_len);
     let tag = aes_gcm::Tag::from_slice(tag_bytes);
-    cipher
+    aes256_gcm(key)
         .decrypt_in_place_detached(Nonce::from_slice(&nonce), &[], ct, tag)
         .map_err(|_| ())?;
     Ok(plaintext_len)
@@ -177,26 +195,24 @@ pub fn aes_decrypt_inplace(
 
 /// Encrypt the 32-byte BIP-39 entropy under the wrap key derived from
 /// `master_secret`. Output layout: `nonce(12) ‖ ciphertext(32) ‖ tag(16)`.
+#[must_use]
 pub fn encrypt_entropy_blob(
     entropy: &[u8; ENTROPY_LEN],
     master_secret: &[u8; 32],
 ) -> [u8; ENTROPY_BLOB_LEN] {
+    const CT_END: usize = 12 + ENTROPY_LEN;
+
     let mut wrap = derive_wrap_key(master_secret);
     let nonce = derive_entropy_nonce(master_secret);
 
     let mut blob = [0u8; ENTROPY_BLOB_LEN];
     blob[..12].copy_from_slice(&nonce);
-    blob[12..12 + ENTROPY_LEN].copy_from_slice(entropy);
+    blob[12..CT_END].copy_from_slice(entropy);
 
-    let cipher = Aes256Gcm::new_from_slice(&wrap).unwrap();
-    let tag = cipher
-        .encrypt_in_place_detached(
-            Nonce::from_slice(&nonce),
-            &[],
-            &mut blob[12..12 + ENTROPY_LEN],
-        )
-        .expect("entropy encryption");
-    blob[12 + ENTROPY_LEN..].copy_from_slice(&tag);
+    let tag = aes256_gcm(&wrap)
+        .encrypt_in_place_detached(Nonce::from_slice(&nonce), &[], &mut blob[12..CT_END])
+        .expect("AES-GCM encrypt cannot fail for a 32-byte plaintext");
+    blob[CT_END..].copy_from_slice(&tag);
 
     wrap.zeroize();
     blob
@@ -208,25 +224,53 @@ pub fn decrypt_entropy_blob(
     blob: &[u8],
     master_secret: &[u8; 32],
 ) -> Result<[u8; ENTROPY_LEN], ()> {
+    const CT_END: usize = 12 + ENTROPY_LEN;
+
     if blob.len() != ENTROPY_BLOB_LEN {
         return Err(());
     }
     let mut wrap = derive_wrap_key(master_secret);
-    // The nonce stored at the head of the blob; we trust it because the
-    // wrap_key is master-bound.
-    let nonce: [u8; 12] = blob[..12].try_into().unwrap();
+    // The blob's leading 12 bytes are the nonce. We trust it because the
+    // wrap key is master-bound — an attacker who mutates the nonce only
+    // affects this wallet's own decryption.
+    let mut nonce = [0u8; 12];
+    nonce.copy_from_slice(&blob[..12]);
     let mut entropy_buf = [0u8; ENTROPY_LEN];
-    entropy_buf.copy_from_slice(&blob[12..12 + ENTROPY_LEN]);
-    let tag = aes_gcm::Tag::from_slice(&blob[12 + ENTROPY_LEN..]);
+    entropy_buf.copy_from_slice(&blob[12..CT_END]);
+    let tag = aes_gcm::Tag::from_slice(&blob[CT_END..]);
 
-    let cipher = Aes256Gcm::new_from_slice(&wrap).unwrap();
-    let r = cipher
+    let r = aes256_gcm(&wrap)
         .decrypt_in_place_detached(Nonce::from_slice(&nonce), &[], &mut entropy_buf, tag)
         .map_err(|_| ());
 
     wrap.zeroize();
     r?;
     Ok(entropy_buf)
+}
+
+/// Split a 48-byte SPHINCS+C10 seed into its `(sk_seed_32, pk_seed_16)`
+/// halves. The bytes are copied, so the caller is free to zeroize the
+/// source buffer immediately after.
+fn split_seed_48(seed: &[u8; SEED_LEN]) -> ([u8; 32], [u8; 16]) {
+    let mut sk_seed = [0u8; 32];
+    let mut pk_seed = [0u8; 16];
+    sk_seed.copy_from_slice(&seed[0..32]);
+    pk_seed.copy_from_slice(&seed[32..48]);
+    (sk_seed, pk_seed)
+}
+
+/// Run PBKDF2-HMAC-SHA512 on the BIP-39 mnemonic for `entropy`, hand the
+/// resulting 64-byte seed to `f`, then zeroize the seed.
+///
+/// Centralises the "mnemonic → bip39_seed → use → wipe" pattern so every
+/// derivation that consumes raw entropy has the same wipe discipline.
+fn with_bip39_seed<T>(entropy: &[u8; ENTROPY_LEN], f: impl FnOnce(&[u8; 64]) -> T) -> T {
+    let mnemonic = Mnemonic::from_entropy(entropy);
+    let mut bip39_seed = mnemonic.to_seed("");
+    let result = f(&bip39_seed);
+    bip39_seed.zeroize();
+    // mnemonic Drop zeros its 24 word indices.
+    result
 }
 
 /// Derive a fully-formed SPHINCS+C10 signing key from a 48-byte seed.
@@ -236,12 +280,20 @@ pub fn decrypt_entropy_blob(
 /// **Expensive** (~10s on Cortex-M33). At provisioning time, compute once
 /// and cache the VK. At signing time, use `SigningKey::from_parts` with
 /// the cached `pk_root` to skip the hypertree rebuild.
+#[must_use]
 pub fn derive_signing_key(seed: &[u8; SEED_LEN]) -> SigningKey {
-    let mut sk_seed = [0u8; 32];
-    let mut pk_seed = [0u8; 16];
-    sk_seed.copy_from_slice(&seed[0..32]);
-    pk_seed.copy_from_slice(&seed[32..48]);
+    let (sk_seed, pk_seed) = split_seed_48(seed);
     SigningKey::keygen(sk_seed, pk_seed)
+}
+
+/// Build a `SigningKey` from a 48-byte seed + cached pk_root, skipping the
+/// hypertree rebuild. Used by every `_fast` derivation path.
+fn signing_key_from_parts_with_seed(
+    seed: &[u8; SEED_LEN],
+    cached_pk_root: &[u8; 16],
+) -> SigningKey {
+    let (sk_seed, pk_seed) = split_seed_48(seed);
+    SigningKey::from_parts(sk_seed, pk_seed, *cached_pk_root)
 }
 
 /// Derive the 48-byte SPHINCS+C10 seed material deterministically from the
@@ -259,11 +311,12 @@ pub fn derive_signing_key(seed: &[u8; SEED_LEN]) -> SigningKey {
 /// the same 24-word phrase always produces the same SPHINCS+C10 keypair, so a
 /// user who loses or bricks their device can restore from their written-down
 /// phrase on any device that runs this firmware.
+#[must_use]
 pub fn slhdsa_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
     let mut out = [0u8; SEED_LEN];
     let chunk0 = kdf_sha256(b"sphincsc7-sk-seed", bip39_seed, 0);
     let chunk1 = kdf_sha256(b"sphincsc7-pk-seed", bip39_seed, 0);
-    out[0..32].copy_from_slice(&chunk0);       // sk_seed: full 32 bytes
+    out[0..32].copy_from_slice(&chunk0); // sk_seed: full 32 bytes
     out[32..48].copy_from_slice(&chunk1[..16]); // pk_seed: first 16 bytes
     out
 }
@@ -275,26 +328,14 @@ pub fn slhdsa_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
 ///
 /// PBKDF2-HMAC-SHA512 (2048 iters) is the dominant cost (~tens of ms on a
 /// Cortex-M33; dwarfed by SPHINCS+ signing's seconds).
-pub fn derive_signing_key_from_entropy(
-    entropy: &[u8; ENTROPY_LEN],
-) -> SigningKey {
-    // 1. Reconstruct the mnemonic from the stored entropy (recomputes
-    //    checksum; never produces words out loud).
-    let mnemonic = Mnemonic::from_entropy(entropy);
-
-    // 2. PBKDF2-HMAC-SHA512 with the empty passphrase.
-    let mut bip39_seed = mnemonic.to_seed("");
-
-    // 3. Domain-separate to the 48-byte SPHINCS+C10 seed.
-    let mut slh_seed = slhdsa_seed_from_bip39(&bip39_seed);
-    bip39_seed.zeroize();
-
-    // 4. SPHINCS+C10 KeyGen (builds hypertree).
-    let sk = derive_signing_key(&slh_seed);
-    slh_seed.zeroize();
-
-    // mnemonic Drop zeros its 24 word indices.
-    sk
+#[must_use]
+pub fn derive_signing_key_from_entropy(entropy: &[u8; ENTROPY_LEN]) -> SigningKey {
+    with_bip39_seed(entropy, |bip39_seed| {
+        let mut slh_seed = slhdsa_seed_from_bip39(bip39_seed);
+        let sk = derive_signing_key(&slh_seed);
+        slh_seed.zeroize();
+        sk
+    })
 }
 
 /// Fast-path signing key derivation: re-derive `(sk_seed, pk_seed)` from
@@ -304,57 +345,40 @@ pub fn derive_signing_key_from_entropy(
 ///
 /// The caller MUST supply a `pk_root` that was computed by the same
 /// `(sk_seed, pk_seed)` -- i.e., the VK cached at provisioning time.
+#[must_use]
 pub fn derive_signing_key_from_entropy_fast(
     entropy: &[u8; ENTROPY_LEN],
     cached_pk_root: &[u8; 16],
 ) -> SigningKey {
-    let mnemonic = Mnemonic::from_entropy(entropy);
-    let mut bip39_seed = mnemonic.to_seed("");
-    let mut slh_seed = slhdsa_seed_from_bip39(&bip39_seed);
-    bip39_seed.zeroize();
-
-    let mut sk_seed = [0u8; 32];
-    let mut pk_seed = [0u8; 16];
-    sk_seed.copy_from_slice(&slh_seed[0..32]);
-    pk_seed.copy_from_slice(&slh_seed[32..48]);
-    slh_seed.zeroize();
-
-    let mut pk_root = [0u8; 16];
-    pk_root.copy_from_slice(cached_pk_root);
-
-    SigningKey::from_parts(sk_seed, pk_seed, pk_root)
+    with_bip39_seed(entropy, |bip39_seed| {
+        let mut slh_seed = slhdsa_seed_from_bip39(bip39_seed);
+        let sk = signing_key_from_parts_with_seed(&slh_seed, cached_pk_root);
+        slh_seed.zeroize();
+        sk
+    })
 }
 
 /// Fast-path bootstrap signing key derivation: same as
 /// `derive_bootstrap_key_from_entropy` but uses a cached `pk_root`
 /// instead of rebuilding the hypertree.
+#[must_use]
 pub fn derive_bootstrap_key_from_entropy_fast(
     entropy: &[u8; ENTROPY_LEN],
     cached_pk_root: &[u8; 16],
 ) -> SigningKey {
-    let mnemonic = Mnemonic::from_entropy(entropy);
-    let mut bip39_seed = mnemonic.to_seed("");
-    let mut seed = bootstrap_seed_from_bip39(&bip39_seed);
-    bip39_seed.zeroize();
-
-    let mut sk_seed = [0u8; 32];
-    let mut pk_seed = [0u8; 16];
-    sk_seed.copy_from_slice(&seed[0..32]);
-    pk_seed.copy_from_slice(&seed[32..48]);
-    seed.zeroize();
-
-    let mut pk_root = [0u8; 16];
-    pk_root.copy_from_slice(cached_pk_root);
-
-    SigningKey::from_parts(sk_seed, pk_seed, pk_root)
+    with_bip39_seed(entropy, |bip39_seed| {
+        let mut seed = bootstrap_seed_from_bip39(bip39_seed);
+        let sk = signing_key_from_parts_with_seed(&seed, cached_pk_root);
+        seed.zeroize();
+        sk
+    })
 }
 
 /// Same as `derive_signing_key_from_entropy` but also returns the 32-byte
 /// verifying key bytes. Used by provisioning to cache the VK in r-mem
 /// slot 2 without keeping the full SigningKey alive longer than necessary.
-pub fn derive_keypair_from_entropy(
-    entropy: &[u8; ENTROPY_LEN],
-) -> (SigningKey, [u8; 32]) {
+#[must_use]
+pub fn derive_keypair_from_entropy(entropy: &[u8; ENTROPY_LEN]) -> (SigningKey, [u8; 32]) {
     let sk = derive_signing_key_from_entropy(entropy);
     let vk_bytes = sk.verifying_key().to_bytes();
     (sk, vk_bytes)
@@ -376,6 +400,7 @@ pub fn derive_keypair_from_entropy(
 /// Derive the bootstrap signer's SPHINCS+C10 seed (48 bytes) from the
 /// BIP-39 seed. The bootstrap signer is global (not per-chain), stateless,
 /// and never rotates.
+#[must_use]
 pub fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
     let mut out = [0u8; SEED_LEN];
     let chunk0 = kdf_sha256(b"pqwallet-c7-bootstrap-sk-seed", bip39_seed, 0);
@@ -391,6 +416,7 @@ pub fn bootstrap_seed_from_bip39(bip39_seed: &[u8; 64]) -> [u8; SEED_LEN] {
 /// Each (chain_id, key_index) pair produces a cryptographically
 /// independent keypair. Keys on different chains cannot collide even if
 /// the key indices match, because the chain ID is part of the KDF input.
+#[must_use]
 pub fn main_signer_seed_from_bip39(
     bip39_seed: &[u8; 64],
     chain_id: u64,
@@ -411,19 +437,18 @@ pub fn main_signer_seed_from_bip39(
 }
 
 /// Derive the bootstrap signing key from BIP-39 entropy.
-pub fn derive_bootstrap_key_from_entropy(
-    entropy: &[u8; ENTROPY_LEN],
-) -> SigningKey {
-    let mnemonic = Mnemonic::from_entropy(entropy);
-    let mut bip39_seed = mnemonic.to_seed("");
-    let mut seed = bootstrap_seed_from_bip39(&bip39_seed);
-    bip39_seed.zeroize();
-    let sk = derive_signing_key(&seed);
-    seed.zeroize();
-    sk
+#[must_use]
+pub fn derive_bootstrap_key_from_entropy(entropy: &[u8; ENTROPY_LEN]) -> SigningKey {
+    with_bip39_seed(entropy, |bip39_seed| {
+        let mut seed = bootstrap_seed_from_bip39(bip39_seed);
+        let sk = derive_signing_key(&seed);
+        seed.zeroize();
+        sk
+    })
 }
 
 /// Derive the bootstrap keypair (signing key + 32-byte verifying key).
+#[must_use]
 pub fn derive_bootstrap_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
 ) -> (SigningKey, [u8; 32]) {
@@ -433,21 +458,22 @@ pub fn derive_bootstrap_keypair_from_entropy(
 }
 
 /// Derive a per-chain main signing key from BIP-39 entropy.
+#[must_use]
 pub fn derive_main_key_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     chain_id: u64,
     key_index: u32,
 ) -> SigningKey {
-    let mnemonic = Mnemonic::from_entropy(entropy);
-    let mut bip39_seed = mnemonic.to_seed("");
-    let mut seed = main_signer_seed_from_bip39(&bip39_seed, chain_id, key_index);
-    bip39_seed.zeroize();
-    let sk = derive_signing_key(&seed);
-    seed.zeroize();
-    sk
+    with_bip39_seed(entropy, |bip39_seed| {
+        let mut seed = main_signer_seed_from_bip39(bip39_seed, chain_id, key_index);
+        let sk = derive_signing_key(&seed);
+        seed.zeroize();
+        sk
+    })
 }
 
 /// Derive a per-chain main keypair (signing key + 32-byte verifying key).
+#[must_use]
 pub fn derive_main_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     chain_id: u64,
@@ -459,23 +485,19 @@ pub fn derive_main_keypair_from_entropy(
 }
 
 /// Derive the bootstrap verifying key bytes only (no signing key retained).
-pub fn derive_bootstrap_vk_from_entropy(
-    entropy: &[u8; ENTROPY_LEN],
-) -> [u8; 32] {
-    let (sk, vk) = derive_bootstrap_keypair_from_entropy(entropy);
-    drop(sk);
-    vk
+#[must_use]
+pub fn derive_bootstrap_vk_from_entropy(entropy: &[u8; ENTROPY_LEN]) -> [u8; 32] {
+    derive_bootstrap_keypair_from_entropy(entropy).1
 }
 
 /// Derive a per-chain main verifying key bytes only.
+#[must_use]
 pub fn derive_main_vk_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     chain_id: u64,
     key_index: u32,
 ) -> [u8; 32] {
-    let (sk, vk) = derive_main_keypair_from_entropy(entropy, chain_id, key_index);
-    drop(sk);
-    vk
+    derive_main_keypair_from_entropy(entropy, chain_id, key_index).1
 }
 
 // ---------------------------------------------------------------------------
@@ -492,6 +514,7 @@ pub fn derive_main_vk_from_entropy(
 /// (`kdf_sha256("pqwallet-slot-master", bip39_seed, 0)`).
 /// Indices 1..=255 fold the index into a separate domain tag —
 /// different account, different slot identity.
+#[must_use]
 pub fn slot_master_entropy_from_bip39(
     bip39_seed: &[u8; 64],
     account_index: u32,
@@ -510,15 +533,14 @@ pub fn slot_master_entropy_from_bip39(
 /// Derive slot master entropy from raw BIP-39 entropy (runs the full
 /// BIP-39 chain: mnemonic → PBKDF2 → domain KDF). See
 /// [`slot_master_entropy_from_bip39`] for the `account_index` contract.
+#[must_use]
 pub fn slot_master_entropy_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     account_index: u32,
 ) -> [u8; 32] {
-    let mnemonic = Mnemonic::from_entropy(entropy);
-    let mut bip39_seed = mnemonic.to_seed("");
-    let master = slot_master_entropy_from_bip39(&bip39_seed, account_index);
-    bip39_seed.zeroize();
-    master
+    with_bip39_seed(entropy, |bip39_seed| {
+        slot_master_entropy_from_bip39(bip39_seed, account_index)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -561,6 +583,7 @@ pub fn slot_master_entropy_from_entropy(
 /// `HMAC-SHA512("sphincs-c6-v1-acct", bip39_seed || account_index_be4)`,
 /// then the same `pk_seed`/`sk_seed` SHA-256 splits run on top — a fresh
 /// SPHINCS+ identity per account, but reusing the same downstream layout.
+#[must_use]
 pub fn derive_c10_master_from_bip39_seed(
     bip39_seed: &[u8; 64],
     account_index: u32,
@@ -591,26 +614,26 @@ pub fn derive_c10_master_from_bip39_seed(
     if account_index != 0 {
         mac.update(&account_index.to_be_bytes());
     }
-    let master_ga = mac.finalize().into_bytes();
     let mut master = [0u8; 64];
-    master.copy_from_slice(&master_ga);
+    master.copy_from_slice(&mac.finalize().into_bytes());
+    let master_lo = &master[..32];
 
     // Step 2: pk_seed = mask_n(sha256("pk_seed" || master[0..32]))
     //   mask_n keeps bytes [0..16] and zeros bytes [16..32].
-    let mut pk_hasher = Sha256::new();
-    pk_hasher.update(b"pk_seed");
-    pk_hasher.update(&master[..32]);
-    let pk_digest: [u8; 32] = pk_hasher.finalize().into();
+    let pk_digest: [u8; 32] = Sha256::new()
+        .chain_update(b"pk_seed")
+        .chain_update(master_lo)
+        .finalize()
+        .into();
     let mut pk_seed = [0u8; 32];
     pk_seed[..16].copy_from_slice(&pk_digest[..16]);
 
     // Step 3: sk_seed = sha256("sk_seed" || master[0..32])  (full 32 bytes, no mask).
-    let mut sk_hasher = Sha256::new();
-    sk_hasher.update(b"sk_seed");
-    sk_hasher.update(&master[..32]);
-    let sk_digest: [u8; 32] = sk_hasher.finalize().into();
-    let mut sk_seed = [0u8; 32];
-    sk_seed.copy_from_slice(&sk_digest);
+    let sk_seed: [u8; 32] = Sha256::new()
+        .chain_update(b"sk_seed")
+        .chain_update(master_lo)
+        .finalize()
+        .into();
 
     master.zeroize();
 
@@ -620,15 +643,14 @@ pub fn derive_c10_master_from_bip39_seed(
 /// Convenience wrapper: run the BIP-39 chain from 32-byte entropy, then
 /// derive the C10 bootstrap keys for `account_index`. Wipes the
 /// intermediate `bip39_seed`.
+#[must_use]
 pub fn derive_c10_master_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     account_index: u32,
 ) -> ([u8; 32], [u8; 32]) {
-    let mnemonic = Mnemonic::from_entropy(entropy);
-    let mut bip39_seed = mnemonic.to_seed("");
-    let result = derive_c10_master_from_bip39_seed(&bip39_seed, account_index);
-    bip39_seed.zeroize();
-    result
+    with_bip39_seed(entropy, |bip39_seed| {
+        derive_c10_master_from_bip39_seed(bip39_seed, account_index)
+    })
 }
 
 /// Full C10 bootstrap-keypair derivation including hypertree-root keygen.
@@ -644,10 +666,11 @@ pub fn derive_c10_master_from_entropy(
 /// the top layer + Merkle root). Only call when actually producing a
 /// Type 1 signature. On Cortex-M33 this takes <1 s with the HASH
 /// peripheral; on QEMU it takes much less.
+#[must_use]
 pub fn derive_c10_master_keypair_from_entropy(
     entropy: &[u8; ENTROPY_LEN],
     account_index: u32,
-) -> (sphincs_c10::SigningKey, [u8; 32], [u8; 32]) {
+) -> (SigningKey, [u8; 32], [u8; 32]) {
     derive_c10_master_keypair_from_entropy_with_progress(entropy, account_index, |_| {})
 }
 
@@ -658,28 +681,33 @@ pub fn derive_c10_master_keypair_from_entropy_with_progress(
     entropy: &[u8; ENTROPY_LEN],
     account_index: u32,
     progress: impl Fn(u8),
-) -> (sphincs_c10::SigningKey, [u8; 32], [u8; 32]) {
+) -> (SigningKey, [u8; 32], [u8; 32]) {
     progress(0);
     let (pk_seed_32, sk_seed_32) = derive_c10_master_from_entropy(entropy, account_index);
+    progress(10);
+    let (sk, pk_root_32) = c10_keygen_from_n_masked_seeds(&sk_seed_32, &pk_seed_32);
+    progress(100);
+    (sk, pk_seed_32, pk_root_32)
+}
 
-    // Pack pk_seed into the 16-byte N-slot shape the sphincs-c10 crate expects.
+/// Run `SigningKey::keygen` over the N-masked 32-byte seed layout used
+/// across this crate, returning the signing key alongside the N-masked
+/// 32-byte `pk_root` suitable for on-chain storage.
+///
+/// `sphincs-c10` itself takes a 16-byte `pk_seed`; we accept the 32-byte
+/// layout (top 16 populated, bottom 16 zero) here to keep callers honest
+/// about the on-chain `bytes32` shape.
+fn c10_keygen_from_n_masked_seeds(
+    sk_seed_32: &[u8; 32],
+    pk_seed_32: &[u8; 32],
+) -> (SigningKey, [u8; 32]) {
     let mut pk_seed_16 = [0u8; 16];
     pk_seed_16.copy_from_slice(&pk_seed_32[..16]);
-    let mut sk_seed_arr = [0u8; 32];
-    sk_seed_arr.copy_from_slice(&sk_seed_32);
+    let sk = SigningKey::keygen(*sk_seed_32, pk_seed_16);
 
-    // SigningKey::keygen builds the full hypertree. The report() closure
-    // inside progress() remains the caller's responsibility — the keygen
-    // itself is a single expensive call with no sub-progress hook.
-    progress(10);
-    let sk = sphincs_c10::SigningKey::keygen(sk_seed_arr, pk_seed_16);
-    progress(100);
-
-    // Build the N-masked 32-byte pk_root for on-chain storage.
     let mut pk_root_32 = [0u8; 32];
     pk_root_32[..16].copy_from_slice(sk.pk_root());
-
-    (sk, pk_seed_32, pk_root_32)
+    (sk, pk_root_32)
 }
 
 // ---------------------------------------------------------------------------
@@ -707,43 +735,50 @@ pub fn derive_c10_master_keypair_from_entropy_with_progress(
 /// cryptographic underpinning of the role-split design: an attacker
 /// who learned a slot key on chain A still cannot impersonate the user
 /// on chain B.
-pub fn slot_entropy(
-    master_entropy: &[u8; 32],
-    chain_id: u64,
-    slot_index: u32,
-) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(master_entropy);
-    h.update(b"slot_entropy");
-    h.update(chain_id.to_be_bytes());
-    h.update(slot_index.to_be_bytes());
-    h.finalize().into()
+#[must_use]
+pub fn slot_entropy(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) -> [u8; 32] {
+    slot_field(master_entropy, b"slot_entropy", chain_id, slot_index)
 }
 
 /// Compute the per-slot randomiser `r`. Same chain-binding rule as
 /// [`slot_entropy`].
+#[must_use]
 pub fn slot_r(master_entropy: &[u8; 32], chain_id: u64, slot_index: u32) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(master_entropy);
-    h.update(b"slot_r");
-    h.update(chain_id.to_be_bytes());
-    h.update(slot_index.to_be_bytes());
-    h.finalize().into()
+    slot_field(master_entropy, b"slot_r", chain_id, slot_index)
+}
+
+/// `sha256(master_entropy ‖ tag ‖ chain_id_be8 ‖ slot_index_be4)` —
+/// shared shape between [`slot_entropy`] and [`slot_r`].
+fn slot_field(
+    master_entropy: &[u8; 32],
+    tag: &[u8],
+    chain_id: u64,
+    slot_index: u32,
+) -> [u8; 32] {
+    Sha256::new()
+        .chain_update(master_entropy)
+        .chain_update(tag)
+        .chain_update(chain_id.to_be_bytes())
+        .chain_update(slot_index.to_be_bytes())
+        .finalize()
+        .into()
 }
 
 /// Derive the slot C10 `(sk_seed_32, pk_seed_32)` pair from slot entropy.
 /// `pk_seed_32` uses the N-mask layout (top 16 bytes populated, bottom 16
 /// zero) to match the on-chain `bytes32` shape expected by the C10 verifier.
 fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-    let mut sk_h = Sha256::new();
-    sk_h.update(b"slot_c10_sk_seed");
-    sk_h.update(slot_entropy);
-    let sk_seed: [u8; 32] = sk_h.finalize().into();
+    let sk_seed: [u8; 32] = Sha256::new()
+        .chain_update(b"slot_c10_sk_seed")
+        .chain_update(slot_entropy)
+        .finalize()
+        .into();
 
-    let mut pk_h = Sha256::new();
-    pk_h.update(b"slot_c10_pk_seed");
-    pk_h.update(slot_entropy);
-    let pk_digest: [u8; 32] = pk_h.finalize().into();
+    let pk_digest: [u8; 32] = Sha256::new()
+        .chain_update(b"slot_c10_pk_seed")
+        .chain_update(slot_entropy)
+        .finalize()
+        .into();
     let mut pk_seed = [0u8; 32];
     pk_seed[..16].copy_from_slice(&pk_digest[..16]);
 
@@ -758,6 +793,7 @@ fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
 ///
 /// **Expensive**: <1 s on Cortex-M33 with the HASH peripheral. Callers
 /// should cache the resulting `SigningKey` across signs of the same slot.
+#[must_use]
 pub fn derive_c10_slot_keypair(
     master_entropy: &[u8; 32],
     chain_id: u64,
@@ -778,17 +814,9 @@ pub fn derive_c10_slot_keypair_with_progress(
     let (sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&entropy);
     entropy.zeroize();
 
-    let mut pk_seed_16 = [0u8; 16];
-    pk_seed_16.copy_from_slice(&pk_seed_32[..16]);
-    let mut sk_seed_arr = [0u8; 32];
-    sk_seed_arr.copy_from_slice(&sk_seed_32);
-
     progress(10);
-    let sk = SigningKey::keygen(sk_seed_arr, pk_seed_16);
+    let (sk, pk_root_32) = c10_keygen_from_n_masked_seeds(&sk_seed_32, &pk_seed_32);
     progress(100);
-
-    let mut pk_root_32 = [0u8; 32];
-    pk_root_32[..16].copy_from_slice(sk.pk_root());
 
     (sk, pk_seed_32, pk_root_32)
 }
@@ -797,8 +825,12 @@ pub fn derive_c10_slot_keypair_with_progress(
 // PIN state serialization (used by the mock-SE MACD path)
 // ---------------------------------------------------------------------------
 
-pub const PER_SLOT_CT_LEN: usize = 32 + 16; // master_secret (32) + AES-GCM tag (16)
-pub const PIN_STATE_MAX_LEN: usize = 1 + MAX_ATTEMPTS as usize * PER_SLOT_CT_LEN; // 481
+/// Encrypted master-secret slot: AES-GCM ciphertext (32 B) ‖ tag (16 B).
+pub const PER_SLOT_CT_LEN: usize = 32 + AES_GCM_TAG_LEN;
+
+/// Max serialised PIN-state blob: 1-byte `next_index` + one slot per
+/// attempt. 481 B at `MAX_ATTEMPTS = 10`.
+pub const PIN_STATE_MAX_LEN: usize = 1 + MAX_ATTEMPTS as usize * PER_SLOT_CT_LEN;
 
 pub fn serialize_pin_state(
     next_index: u8,
@@ -816,20 +848,28 @@ pub fn serialize_pin_state(
 
 pub struct PinState {
     pub next_index: u8,
+    /// Number of populated entries in `encrypted_secrets`
+    /// (entries `num_slots..MAX_ATTEMPTS` are zeroed).
     pub num_slots: usize,
     pub encrypted_secrets: [[u8; PER_SLOT_CT_LEN]; MAX_ATTEMPTS as usize],
 }
 
 pub fn deserialize_pin_state(blob: &[u8], blob_len: usize) -> Result<PinState, ()> {
-    if blob_len == 0 {
+    if blob_len == 0 || blob_len > PIN_STATE_MAX_LEN {
         return Err(());
     }
     let next_index = blob[0];
     let rest = &blob[1..blob_len];
-    if rest.len() % PER_SLOT_CT_LEN != 0 {
+    if !rest.len().is_multiple_of(PER_SLOT_CT_LEN) {
         return Err(());
     }
     let num_slots = rest.len() / PER_SLOT_CT_LEN;
+    // `blob_len <= PIN_STATE_MAX_LEN` already bounds `num_slots <= MAX_ATTEMPTS`,
+    // but we check explicitly so a future MAX_ATTEMPTS bump cannot silently
+    // panic.
+    if num_slots > MAX_ATTEMPTS as usize {
+        return Err(());
+    }
     let mut encrypted_secrets = [[0u8; PER_SLOT_CT_LEN]; MAX_ATTEMPTS as usize];
     for (i, chunk) in rest.chunks(PER_SLOT_CT_LEN).enumerate() {
         encrypted_secrets[i].copy_from_slice(chunk);
@@ -992,5 +1032,141 @@ mod c10_derivation_tests {
             b'A'..=b'F' => c - b'A' + 10,
             _ => panic!("bad hex nibble"),
         }
+    }
+}
+
+#[cfg(test)]
+mod aes_gcm_tests {
+    use super::*;
+
+    #[test]
+    fn encrypt_decrypt_roundtrip() {
+        let key = [0x55u8; 32];
+        let plaintext = [0xA5u8; 64];
+        let mut buf = [0u8; 64 + AES_GCM_TAG_LEN];
+        buf[..64].copy_from_slice(&plaintext);
+
+        let ct_len = aes_encrypt_inplace(&key, &mut buf, 64, 7);
+        assert_eq!(ct_len, 64 + AES_GCM_TAG_LEN);
+        assert_ne!(&buf[..64], &plaintext, "ciphertext must differ from plaintext");
+
+        let pt_len = aes_decrypt_inplace(&key, &mut buf, ct_len, 7).expect("decrypt");
+        assert_eq!(pt_len, 64);
+        assert_eq!(&buf[..64], &plaintext, "decrypted plaintext mismatch");
+    }
+
+    #[test]
+    fn decrypt_rejects_truncated_ciphertext() {
+        let key = [0u8; 32];
+        let mut buf = [0u8; AES_GCM_TAG_LEN - 1];
+        let n = buf.len();
+        assert!(aes_decrypt_inplace(&key, &mut buf, n, 0).is_err());
+    }
+
+    #[test]
+    fn decrypt_rejects_wrong_key() {
+        let mut buf = [0u8; 32 + AES_GCM_TAG_LEN];
+        let ct_len = aes_encrypt_inplace(&[0x11u8; 32], &mut buf, 32, 3);
+        assert!(aes_decrypt_inplace(&[0x22u8; 32], &mut buf, ct_len, 3).is_err());
+    }
+
+    #[test]
+    fn decrypt_rejects_wrong_nonce_index() {
+        let mut buf = [0u8; 32 + AES_GCM_TAG_LEN];
+        let ct_len = aes_encrypt_inplace(&[0x33u8; 32], &mut buf, 32, 5);
+        assert!(aes_decrypt_inplace(&[0x33u8; 32], &mut buf, ct_len, 6).is_err());
+    }
+
+    #[test]
+    fn entropy_blob_roundtrip() {
+        let entropy = [0x7Du8; ENTROPY_LEN];
+        let master = [0xC3u8; 32];
+        let blob = encrypt_entropy_blob(&entropy, &master);
+        assert_eq!(blob.len(), ENTROPY_BLOB_LEN);
+        let out = decrypt_entropy_blob(&blob, &master).expect("decrypt");
+        assert_eq!(out, entropy);
+    }
+
+    #[test]
+    fn entropy_blob_rejects_wrong_master() {
+        let entropy = [0u8; ENTROPY_LEN];
+        let blob = encrypt_entropy_blob(&entropy, &[0xAAu8; 32]);
+        assert!(decrypt_entropy_blob(&blob, &[0xBBu8; 32]).is_err());
+    }
+
+    #[test]
+    fn entropy_blob_rejects_wrong_length() {
+        let mut blob = [0u8; ENTROPY_BLOB_LEN - 1];
+        assert!(decrypt_entropy_blob(&blob, &[0u8; 32]).is_err());
+        let _ = &mut blob; // silence "unused mut"
+    }
+}
+
+#[cfg(test)]
+mod pin_state_tests {
+    use super::*;
+
+    #[test]
+    fn serialize_deserialize_roundtrip() {
+        let mut slots = [[0u8; PER_SLOT_CT_LEN]; 3];
+        for (i, s) in slots.iter_mut().enumerate() {
+            s.fill(0x10 + i as u8);
+        }
+        let mut buf = [0u8; PIN_STATE_MAX_LEN];
+        let len = serialize_pin_state(2, &slots, &mut buf);
+        assert_eq!(len, 1 + 3 * PER_SLOT_CT_LEN);
+
+        let ps = deserialize_pin_state(&buf, len).expect("deserialize");
+        assert_eq!(ps.next_index, 2);
+        assert_eq!(ps.num_slots, 3);
+        for (i, expected) in slots.iter().enumerate() {
+            assert_eq!(&ps.encrypted_secrets[i], expected);
+        }
+    }
+
+    #[test]
+    fn deserialize_rejects_empty_blob() {
+        assert!(deserialize_pin_state(&[], 0).is_err());
+    }
+
+    #[test]
+    fn deserialize_rejects_misaligned_blob() {
+        let buf = [0u8; 1 + PER_SLOT_CT_LEN + 1];
+        assert!(deserialize_pin_state(&buf, buf.len()).is_err());
+    }
+
+    #[test]
+    fn deserialize_rejects_overlong_blob() {
+        let buf = [0u8; PIN_STATE_MAX_LEN + PER_SLOT_CT_LEN];
+        assert!(deserialize_pin_state(&buf, buf.len()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod kdf_tests {
+    use super::*;
+
+    #[test]
+    fn kdf_alias_matches_kdf() {
+        let a = kdf(b"dom", b"input", 3);
+        let b = kdf_sha256(b"dom", b"input", 3);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn kdf_distinguishes_index() {
+        assert_ne!(kdf(b"d", b"i", 0), kdf(b"d", b"i", 1));
+    }
+
+    #[test]
+    fn kdf_distinguishes_domain() {
+        assert_ne!(kdf(b"d1", b"i", 0), kdf(b"d2", b"i", 0));
+    }
+
+    #[test]
+    fn derive_entropy_nonce_is_master_bound() {
+        let n1 = derive_entropy_nonce(&[0u8; 32]);
+        let n2 = derive_entropy_nonce(&[1u8; 32]);
+        assert_ne!(n1, n2);
     }
 }

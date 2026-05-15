@@ -1,10 +1,11 @@
-/// Secure Element abstraction — low-level trait + high-level WalletStore.
-///
-/// `SecureElement` is the low-level r-mem/MACD abstraction implemented by
-/// backends with MAC-and-Destroy slot storage (Mock, Tropic01).
-///
-/// `WalletStore` is the high-level wallet-operations trait implemented by
-/// ALL backends (Mock, SE050, Tropic01). Call sites use only `WalletStore`.
+//! Secure Element abstraction — low-level trait + high-level [`WalletStore`].
+//!
+//! [`SecureElement`] is the low-level r-mem / MAC-and-Destroy abstraction
+//! implemented by backends with MACD slot storage (Mock, Tropic01).
+//!
+//! [`WalletStore`] is the high-level wallet-operations trait implemented
+//! by every backend (Mock, SE050, Tropic01, dual). Call sites depend on
+//! [`WalletStore`] only, so no `#[cfg]` feature gates leak out.
 
 #[derive(Debug)]
 pub enum SeError {

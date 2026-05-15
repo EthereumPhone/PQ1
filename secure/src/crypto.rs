@@ -1,29 +1,23 @@
-//! Crypto helpers — secure-side wrapper around `pqsigner-domain`.
+//! Crypto helpers — secure-side wrapper around [`pqsigner_domain`].
 //!
-//! Phase 5 PR 5.3 of the modularity refactor moved every pure-logic
-//! helper (KDFs, AES-GCM wrap/unwrap, BIP-39 → SPHINCS+C10 derivation,
-//! slot-key derivation, PIN-state encoding) into the standalone
-//! `pqsigner-domain` crate so the same code can power host-side
-//! reference signers and any future `fwsign verify-release --simulate`
-//! tool.
+//! The pure-logic primitives (KDFs, AES-GCM wrap/unwrap, BIP-39 ↔
+//! SPHINCS+C10 derivation, slot-key derivation, PIN-state encoding) live
+//! in [`pqsigner_domain`] so host-side reference signers can reuse them
+//! without the secure-world hardware deps.
 //!
 //! What stays here:
 //!
 //! * [`c10_sign_verified`] / [`c10_sign_verified_with_progress`] — the
 //!   FI-hardened verify-before-release wrapper. Depends on
-//!   `crate::fi::{wait_random, check_true}`, which are CPU-glitch
-//!   countermeasures keyed off the secure-world TRNG.
+//!   [`crate::fi`], whose hardening primitives are keyed off the
+//!   secure-world TRNG.
 //! * [`provision_from_mnemonic`] / [`store_macd_encrypted`] — the
 //!   `WalletStore` + `SecureElement` provisioning entry points used by
-//!   the wizard and by the mock/Tropic01 backends. They depend on the
-//!   secure-side `crate::secure_element::*` traits which themselves
-//!   pull in hardware r-mem semantics, so they don't belong in the
-//!   pure-logic crate.
+//!   the wizard and by the mock/Tropic01 backends. These touch the
+//!   secure-side `crate::secure_element::*` traits with r-mem
+//!   semantics, so they cannot live in the pure-logic crate.
 //!
-//! Every other public name in `pqsigner-domain` is re-exported below
-//! so existing call sites (`crate::crypto::derive_c10_master_*`,
-//! `crate::crypto::encrypt_entropy_blob`, `crate::crypto::kdf`, ...)
-//! compile unchanged.
+//! Every other public name in [`pqsigner_domain`] is re-exported below.
 
 pub use pqsigner_domain::*;
 

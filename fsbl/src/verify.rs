@@ -51,20 +51,21 @@ fn hash_flash_region(base: usize, len: usize) -> [u8; 32] {
     // We stream 256-byte chunks into the hasher to keep the stack
     // usage small. The `sha2::Sha256::update` path takes a slice, so
     // we need a local buffer — 256 B on a 16 KB stack is fine.
+    const CHUNK: usize = 256;
+
     let mut hasher = Sha256::new();
+    let mut chunk = [0u8; CHUNK];
     let mut off = 0usize;
-    let mut chunk = [0u8; 256];
     while off < len {
-        let n = core::cmp::min(256, len - off);
-        // SAFETY: flash is memory-mapped and readable throughout
-        // `[base, base + len)`. The caller (verify_images) has
-        // already checked `len <= slot_capacity` so the range is
-        // inside the chip's flash window.
-        unsafe {
-            let src = (base + off) as *const u8;
-            for i in 0..n {
-                chunk[i] = core::ptr::read_volatile(src.add(i));
-            }
+        let n = core::cmp::min(CHUNK, len - off);
+        let src = (base + off) as *const u8;
+        for (i, byte) in chunk[..n].iter_mut().enumerate() {
+            // SAFETY: flash is memory-mapped and readable throughout
+            // `[base, base + len)`. `verify_images` has already
+            // checked `len <= slot_capacity`, and `off + i < len` by
+            // the outer and inner loop bounds, so `src.add(i)` stays
+            // inside the chip's flash window.
+            *byte = unsafe { core::ptr::read_volatile(src.add(i)) };
         }
         hasher.update(&chunk[..n]);
         off += n;

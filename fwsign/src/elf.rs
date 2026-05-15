@@ -33,8 +33,12 @@ pub struct FlatImage {
 }
 
 impl FlatImage {
+    /// Image byte length, narrowed to `u32` to match the manifest field
+    /// type. Caller must ensure `bytes.len() <= u32::MAX` — which holds
+    /// trivially for any plausible firmware image (<< 4 GiB).
+    #[must_use]
     pub fn len(&self) -> u32 {
-        self.bytes.len() as u32
+        u32::try_from(self.bytes.len()).expect("flat image larger than 4 GiB")
     }
 }
 
@@ -68,7 +72,7 @@ pub fn flatten_elf(elf_path: &std::path::Path) -> Result<FlatImage> {
     let flash_base = phdrs
         .iter()
         .filter(|ph| ph.p_type(le) == PT_LOAD && ph.p_filesz(le) > 0)
-        .map(|ph| ph.p_paddr(le) as u64)
+        .map(|ph| u64::from(ph.p_paddr(le)))
         .min()
         .ok_or_else(|| anyhow!("{}: no PT_LOAD segments", elf_path.display()))?;
 
@@ -87,20 +91,19 @@ pub fn flatten_elf(elf_path: &std::path::Path) -> Result<FlatImage> {
     let size = (measurement_end - flash_base) as usize;
     let mut flash = vec![0xFFu8; size];
 
-    for ph in phdrs.iter() {
+    for ph in phdrs {
         if ph.p_type(le) != PT_LOAD {
             continue;
         }
-        let paddr = ph.p_paddr(le) as u64;
-        let filesz = ph.p_filesz(le) as usize;
-        if paddr < flash_base || paddr >= measurement_end || filesz == 0 {
+        let paddr = u64::from(ph.p_paddr(le));
+        if paddr < flash_base || paddr >= measurement_end || ph.p_filesz(le) == 0 {
             continue;
         }
         let offset = (paddr - flash_base) as usize;
         let data = ph
             .data(le, &*elf_data)
             .map_err(|_| anyhow!("cannot read PT_LOAD data at {paddr:#x}"))?;
-        let copy_len = core::cmp::min(data.len(), size - offset);
+        let copy_len = data.len().min(size - offset);
         flash[offset..offset + copy_len].copy_from_slice(&data[..copy_len]);
     }
 

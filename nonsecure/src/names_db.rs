@@ -107,23 +107,6 @@ pub fn build_bundle(chain_id: u64, address: &[u8; 20], out: &mut [u8]) -> Option
     Some(p)
 }
 
-/// Returns `true` if the DB has an entry for `(chain_id, address)`.
-/// Used by the USB-layer code to cheaply decide whether to spend
-/// buffer space building a full bundle.
-pub fn contains(chain_id: u64, address: &[u8; 20]) -> bool {
-    let Some(view) = open(NAMES_DB) else {
-        return false;
-    };
-    if view.find_index(&short_key(chain_id, address)).is_some() {
-        return true;
-    }
-    if chain_id == NAMES_WILDCARD_CHAIN_ID {
-        return false;
-    }
-    view.find_index(&short_key(NAMES_WILDCARD_CHAIN_ID, address))
-        .is_some()
-}
-
 struct DbView {
     blob: &'static [u8],
     entry_cnt: usize,

@@ -18,10 +18,11 @@
 
 use anyhow::{bail, Context, Result};
 use fw_manifest::{ManifestBuilder, TRY_ONCE_COMMITTED};
-use std::path::PathBuf;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
 
 use crate::bundle::{self, BundleInputs};
-use crate::elf;
+use crate::elf::{self, FlatImage};
 use crate::keystore::{self, VendorKey};
 
 pub struct Args {
@@ -36,140 +37,42 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> Result<()> {
-    // --- Parse + validate build_id ---
-    let build_id_bytes = hex::decode(&args.build_id_hex).with_context(|| "--build-id must be hex")?;
-    if build_id_bytes.len() != 32 {
-        bail!(
-            "--build-id must be 32 hex-encoded bytes (64 chars), got {} bytes",
-            build_id_bytes.len()
-        );
-    }
-    let mut build_id = [0u8; 32];
-    build_id.copy_from_slice(&build_id_bytes);
+    let build_id = parse_build_id(&args.build_id_hex)?;
+    let boot_counter_snap = resolve_boot_counter_snap(args.version, args.boot_counter_snap)?;
 
-    if args.version == 0 {
-        bail!("--version must be >= 1 (0 reserved for \"no firmware yet\")");
-    }
-
-    let boot_counter_snap = args.boot_counter_snap.unwrap_or(args.version.saturating_sub(1));
-    if boot_counter_snap >= args.version {
-        bail!(
-            "--boot-counter-snap ({}) must be < --version ({})",
-            boot_counter_snap, args.version
-        );
-    }
-
-    // --- Decrypt vendor key ---
-    let blob = std::fs::read(&args.key_path)
-        .with_context(|| format!("reading {}", args.key_path.display()))?;
-    let passphrase = keystore::prompt_passphrase("Vendor key passphrase")?;
-    let key = VendorKey::open(&blob, &passphrase)?;
-
+    let key = load_vendor_key(&args.key_path)?;
     let vendor_fpr = fw_manifest::vendor_pubkey_fingerprint(key.pk_seed(), key.pk_root());
     eprintln!("==> Vendor fingerprint: {}", hex::encode(vendor_fpr));
 
-    // --- Flatten ELFs ---
-    eprintln!("==> Flattening secure ELF    {}", args.secure_elf.display());
-    let secure = elf::flatten_elf(&args.secure_elf)?;
-    eprintln!(
-        "    base {:#010x}, {} bytes, hash {}",
-        secure.base,
-        secure.bytes.len(),
-        hex::encode(secure.hash)
-    );
+    let secure = flatten_logged("secure", &args.secure_elf)?;
+    let nonsecure = flatten_logged("nonsecure", &args.nonsecure_elf)?;
 
-    eprintln!("==> Flattening nonsecure ELF {}", args.nonsecure_elf.display());
-    let nonsecure = elf::flatten_elf(&args.nonsecure_elf)?;
-    eprintln!(
-        "    base {:#010x}, {} bytes, hash {}",
-        nonsecure.base,
-        nonsecure.bytes.len(),
-        hex::encode(nonsecure.hash)
-    );
-
-    // --- Assemble manifest preimage ---
-    let mut b = ManifestBuilder::new();
-    b.init(args.slot)
-        .fw_version(args.version)
-        .secure_image(&secure.hash, secure.len())
-        .nonsecure_image(&nonsecure.hash, nonsecure.len())
-        .vendor_pubkey_fpr(&vendor_fpr)
-        .build_id(&build_id)
-        .boot_counter_snap(boot_counter_snap)
-        .try_once(TRY_ONCE_COMMITTED);
-    let digest = b.finalize_preimage();
-
-    // --- Sign ---
-    eprintln!("==> Signing manifest digest (SPHINCS+C10, ~1 s)");
-    let sig = key.sign(&digest);
-    b.set_signature(&sig);
-
-    // Sanity: immediately verify the signature we just produced against
-    // the vendor pubkey. Cheap (~5 ms) and guards against a logic bug
-    // in the sign path shipping a bundle that no FSBL would accept.
-    let vk = sphincs_c10::VerifyingKey {
-        pk_seed: *key.pk_seed(),
-        pk_root: *key.pk_root(),
-    };
-    if !vk.verify(&digest, &sig) {
-        bail!("internal: freshly-signed signature failed self-verify");
-    }
-
-    let manifest_bytes = b.finalize();
+    let (manifest_bytes, digest) = build_signed_manifest(
+        &key,
+        args.slot,
+        args.version,
+        &secure,
+        &nonsecure,
+        &vendor_fpr,
+        &build_id,
+        boot_counter_snap,
+    )?;
     eprintln!("==> Manifest complete: {} bytes", manifest_bytes.len());
 
-    // --- Compose human-readable measurement ---
-    use sphincs_tz_bip39::{hash_to_word_indices, WORDLIST};
-    let secure_words = hash_to_word_indices(&secure.hash);
-    let nonsecure_words = hash_to_word_indices(&nonsecure.hash);
-    let mut measurement_txt = String::new();
-    measurement_txt.push_str(&format!(
-        "PQSigner firmware release v{} ({})\n\n",
+    let measurement_txt = build_measurement_txt(
         args.version,
-        if args.slot == fw_manifest::SLOT_A { "Slot A" } else { "Slot B" }
-    ));
-    measurement_txt.push_str("Secure image measurement (8 BIP-39 words):\n");
-    for (i, &idx) in secure_words.iter().enumerate() {
-        measurement_txt.push_str(&format!("  {} {}\n", i + 1, WORDLIST[idx as usize]));
-    }
-    measurement_txt.push_str(&format!("  SHA-256: {}\n\n", hex::encode(secure.hash)));
-    measurement_txt.push_str("Nonsecure image measurement (8 BIP-39 words):\n");
-    for (i, &idx) in nonsecure_words.iter().enumerate() {
-        measurement_txt.push_str(&format!("  {} {}\n", i + 1, WORDLIST[idx as usize]));
-    }
-    measurement_txt.push_str(&format!("  SHA-256: {}\n\n", hex::encode(nonsecure.hash)));
-    measurement_txt.push_str(&format!("build_id:   {}\n", args.build_id_hex));
-    measurement_txt.push_str(&format!(
-        "vendor fpr: {}\n",
-        hex::encode(vendor_fpr)
-    ));
-
-    // --- Compose release.json ---
-    // Minimal, hand-formatted so we don't pull in serde_json just for this.
-    let release_json = format!(
-        concat!(
-            "{{\n",
-            "  \"version\": {},\n",
-            "  \"slot\": \"{}\",\n",
-            "  \"build_id\": \"{}\",\n",
-            "  \"secure_hash\": \"{}\",\n",
-            "  \"nonsecure_hash\": \"{}\",\n",
-            "  \"secure_len\": {},\n",
-            "  \"nonsecure_len\": {},\n",
-            "  \"vendor_fingerprint\": \"{}\",\n",
-            "  \"manifest_digest\": \"{}\",\n",
-            "  \"boot_counter_snap\": {}\n",
-            "}}\n",
-        ),
-        args.version,
-        if args.slot == fw_manifest::SLOT_A { "A" } else { "B" },
-        args.build_id_hex,
-        hex::encode(secure.hash),
-        hex::encode(nonsecure.hash),
-        secure.len(),
-        nonsecure.len(),
-        hex::encode(vendor_fpr),
-        hex::encode(digest),
+        args.slot,
+        &secure.hash,
+        &nonsecure.hash,
+        &args.build_id_hex,
+        &vendor_fpr,
+    );
+    let release_json = build_release_json(
+        &args,
+        &secure,
+        &nonsecure,
+        &vendor_fpr,
+        &digest,
         boot_counter_snap,
     );
 
@@ -189,17 +92,178 @@ pub fn run(args: Args) -> Result<()> {
     eprintln!("==> Packing {}", args.out_path.display());
     bundle::pack(&inputs, &args.out_path)?;
 
-    // Record in the per-user signing ledger so accidental double-sign
-    // is caught. Tampering with this file defeats the check but does
-    // not defeat FSBL's OTP rollback floor — the ledger is convenience,
-    // not security.
+    // Record in the per-user signing ledger so accidental double-sign is
+    // caught. Tampering with this file defeats the check but does not
+    // defeat FSBL's OTP rollback floor — the ledger is convenience, not
+    // security.
     record_signing(&args.out_path, args.version, &vendor_fpr)?;
 
     eprintln!("==> Done.");
     Ok(())
 }
 
-fn record_signing(bundle_path: &std::path::Path, version: u32, vendor_fpr: &[u8; 32]) -> Result<()> {
+fn parse_build_id(hex_str: &str) -> Result<[u8; 32]> {
+    let bytes = hex::decode(hex_str).context("--build-id must be hex")?;
+    if bytes.len() != 32 {
+        bail!(
+            "--build-id must be 32 hex-encoded bytes (64 chars), got {} bytes",
+            bytes.len()
+        );
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&bytes);
+    Ok(out)
+}
+
+fn resolve_boot_counter_snap(version: u32, override_value: Option<u32>) -> Result<u32> {
+    if version == 0 {
+        bail!("--version must be >= 1 (0 reserved for \"no firmware yet\")");
+    }
+    let snap = override_value.unwrap_or(version.saturating_sub(1));
+    if snap >= version {
+        bail!("--boot-counter-snap ({snap}) must be < --version ({version})");
+    }
+    Ok(snap)
+}
+
+fn load_vendor_key(key_path: &Path) -> Result<VendorKey> {
+    let blob = std::fs::read(key_path)
+        .with_context(|| format!("reading {}", key_path.display()))?;
+    let passphrase = keystore::prompt_passphrase("Vendor key passphrase")?;
+    VendorKey::open(&blob, &passphrase)
+}
+
+fn flatten_logged(label: &str, path: &Path) -> Result<FlatImage> {
+    eprintln!("==> Flattening {label} ELF    {}", path.display());
+    let img = elf::flatten_elf(path)?;
+    eprintln!(
+        "    base {:#010x}, {} bytes, hash {}",
+        img.base,
+        img.bytes.len(),
+        hex::encode(img.hash)
+    );
+    Ok(img)
+}
+
+/// Build the manifest preimage, sign it, self-verify the signature, and
+/// return the finalised bytes plus the digest (the digest is reused in
+/// `release.json` for traceability).
+fn build_signed_manifest(
+    key: &VendorKey,
+    slot: u8,
+    version: u32,
+    secure: &FlatImage,
+    nonsecure: &FlatImage,
+    vendor_fpr: &[u8; 32],
+    build_id: &[u8; 32],
+    boot_counter_snap: u32,
+) -> Result<([u8; fw_manifest::MANIFEST_SIZE], [u8; 32])> {
+    let mut b = ManifestBuilder::new();
+    b.init(slot)
+        .fw_version(version)
+        .secure_image(&secure.hash, secure.len())
+        .nonsecure_image(&nonsecure.hash, nonsecure.len())
+        .vendor_pubkey_fpr(vendor_fpr)
+        .build_id(build_id)
+        .boot_counter_snap(boot_counter_snap)
+        .try_once(TRY_ONCE_COMMITTED);
+    let digest = b.finalize_preimage();
+
+    eprintln!("==> Signing manifest digest (SPHINCS+C10, ~1 s)");
+    let sig = key.sign(&digest);
+    b.set_signature(&sig);
+
+    // Cheap (~5 ms) self-verify: guards against a logic bug shipping a
+    // bundle that no FSBL would accept.
+    let vk = sphincs_c10::VerifyingKey {
+        pk_seed: *key.pk_seed(),
+        pk_root: *key.pk_root(),
+    };
+    if !vk.verify(&digest, &sig) {
+        bail!("internal: freshly-signed signature failed self-verify");
+    }
+
+    Ok((b.finalize(), digest))
+}
+
+fn slot_letter(slot: u8) -> &'static str {
+    if slot == fw_manifest::SLOT_A {
+        "A"
+    } else {
+        "B"
+    }
+}
+
+fn build_measurement_txt(
+    version: u32,
+    slot: u8,
+    secure_hash: &[u8; 32],
+    nonsecure_hash: &[u8; 32],
+    build_id_hex: &str,
+    vendor_fpr: &[u8; 32],
+) -> String {
+    use sphincs_tz_bip39::{hash_to_word_indices, WORDLIST};
+
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "PQSigner firmware release v{version} (Slot {})\n",
+        slot_letter(slot)
+    );
+
+    for (label, hash) in [("Secure", secure_hash), ("Nonsecure", nonsecure_hash)] {
+        let _ = writeln!(out, "{label} image measurement (8 BIP-39 words):");
+        for (i, &idx) in hash_to_word_indices(hash).iter().enumerate() {
+            let _ = writeln!(out, "  {} {}", i + 1, WORDLIST[idx as usize]);
+        }
+        let _ = writeln!(out, "  SHA-256: {}\n", hex::encode(hash));
+    }
+
+    let _ = writeln!(out, "build_id:   {build_id_hex}");
+    let _ = writeln!(out, "vendor fpr: {}", hex::encode(vendor_fpr));
+    out
+}
+
+// Minimal, hand-formatted release.json so we don't pull in serde_json just
+// for this. All embedded values are either u32, hex (validated), or a
+// single 'A'/'B' letter — no JSON-escaping hazards.
+fn build_release_json(
+    args: &Args,
+    secure: &FlatImage,
+    nonsecure: &FlatImage,
+    vendor_fpr: &[u8; 32],
+    digest: &[u8; 32],
+    boot_counter_snap: u32,
+) -> String {
+    format!(
+        concat!(
+            "{{\n",
+            "  \"version\": {version},\n",
+            "  \"slot\": \"{slot}\",\n",
+            "  \"build_id\": \"{build_id}\",\n",
+            "  \"secure_hash\": \"{secure_hash}\",\n",
+            "  \"nonsecure_hash\": \"{nonsecure_hash}\",\n",
+            "  \"secure_len\": {secure_len},\n",
+            "  \"nonsecure_len\": {nonsecure_len},\n",
+            "  \"vendor_fingerprint\": \"{vendor_fpr}\",\n",
+            "  \"manifest_digest\": \"{digest}\",\n",
+            "  \"boot_counter_snap\": {boot_counter_snap}\n",
+            "}}\n",
+        ),
+        version = args.version,
+        slot = slot_letter(args.slot),
+        build_id = args.build_id_hex,
+        secure_hash = hex::encode(secure.hash),
+        nonsecure_hash = hex::encode(nonsecure.hash),
+        secure_len = secure.len(),
+        nonsecure_len = nonsecure.len(),
+        vendor_fpr = hex::encode(vendor_fpr),
+        digest = hex::encode(digest),
+        boot_counter_snap = boot_counter_snap,
+    )
+}
+
+fn record_signing(bundle_path: &Path, version: u32, vendor_fpr: &[u8; 32]) -> Result<()> {
     use std::io::Write;
 
     let Some(data_dir) = dirs_local::data_dir() else {

@@ -70,6 +70,7 @@ pub const VERSION_HASH: [u8; 32] = [
 /// `pk_seed_32 || pk_root_32` are the same 64 bytes
 /// `derive_c10_master_keypair_from_entropy` returns; the helper at
 /// `cmd_get_wallet_address::run` uses the identical formula.
+#[must_use]
 pub fn proxy_address(pk_seed_32: &[u8; 32], pk_root_32: &[u8; 32]) -> [u8; 20] {
     let mut salt_in = [0u8; 64];
     salt_in[..32].copy_from_slice(pk_seed_32);
@@ -96,6 +97,7 @@ pub fn proxy_address(pk_seed_32: &[u8; 32], pk_root_32: &[u8; 32]) -> [u8; 20] {
 
 /// EIP-712 domain separator for the wallet at `verifying_contract` on
 /// `chain_id`, using the firmware-baked `(name, version)` constants.
+#[must_use]
 pub fn domain_separator(chain_id: u64, verifying_contract: &[u8; 20]) -> [u8; 32] {
     // abi.encode(typehash, nameHash, versionHash, chainId, verifyingContract)
     // — five 32-byte slots.
@@ -113,6 +115,7 @@ pub fn domain_separator(chain_id: u64, verifying_contract: &[u8; 20]) -> [u8; 32
 }
 
 /// `prefixed = keccak256("\x19Ethereum Signed Message:\n" || itoa(len) || msg)`.
+#[must_use]
 pub fn personal_sign_prefixed_hash(msg: &[u8]) -> [u8; 32] {
     let mut h = Keccak256::new();
     h.update(b"\x19Ethereum Signed Message:\n");
@@ -124,6 +127,7 @@ pub fn personal_sign_prefixed_hash(msg: &[u8]) -> [u8; 32] {
 }
 
 /// Final hash signed by the firmware on the PersonalSign workflow.
+#[must_use]
 pub fn personal_sign_replay_safe_hash(
     chain_id: u64,
     verifying_contract: &[u8; 20],

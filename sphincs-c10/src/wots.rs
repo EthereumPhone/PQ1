@@ -65,8 +65,10 @@ pub fn find_count(
             return (count, d, digits);
         }
     }
-    // TARGET_SUM=151 is near the mean (150.5), so this should always
-    // succeed within a few hundred iterations.
+    // For C10 (L=43, w=8, TARGET_SUM=205) the grinder is expected to
+    // succeed in ≪ 10M trials. Hitting this branch implies the digest
+    // distribution is broken — fail loudly rather than emit an invalid
+    // signature.
     panic!("WOTS+C count grinding failed after 10M iterations");
 }
 

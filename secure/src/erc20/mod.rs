@@ -1,15 +1,10 @@
 //! Secure-world trust gates for ERC20-aware sign confirmation.
 //!
-//! Phase 5 PR 5.4 of the modularity refactor moved the entire pure-
-//! logic body (calldata decoder, dispatch, Merkle verifier, bundle
-//! parser) into the standalone `pqsigner-tx` crate. This module is now
-//! a thin shim that re-exports those types and adds the `bundle`
-//! wrapper which threads the embedded `db_roots::ERC20_DB_ROOT` into
-//! the verifier — so existing call sites
-//! (`crate::erc20::bundle::verify_erc20_bundle(...)`,
-//! `crate::erc20::dispatch::dispatch_tx(...)`,
-//! `crate::erc20::calldata::*`,
-//! `crate::erc20::merkle::verify_proof`) keep working unchanged.
+//! Thin shim over the pure-logic [`pqsigner_tx::erc20`] crate (calldata
+//! decoder, dispatch, Merkle verifier, bundle parser). The local
+//! [`bundle`] module adds a wrapper that threads the firmware-embedded
+//! [`crate::db_roots::ERC20_DB_ROOT`] into the verifier so callers
+//! don't have to.
 
 pub use pqsigner_tx::erc20::{calldata, dispatch, merkle};
 pub use pqsigner_tx::erc20::dispatch::{dispatch_tx, TxKind};

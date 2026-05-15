@@ -47,7 +47,6 @@
 //! reason.
 
 #![no_std]
-#![allow(dead_code)]
 
 use zeroize::Zeroize;
 
@@ -133,6 +132,7 @@ pub fn wait_random_loop<R: FnMut() -> u8>(mut rng_byte: R) {
 ///
 /// `wait` is typically [`wait_random_loop`] closed over the caller's RNG.
 #[inline(never)]
+#[must_use]
 pub fn check_true<F: FnMut() -> bool, W: FnMut()>(mut cond: F, mut wait: W) -> bool {
     let v1 = cond();
     wait();
@@ -163,6 +163,7 @@ pub fn check_true<F: FnMut() -> bool, W: FnMut()>(mut cond: F, mut wait: W) -> b
 /// `== OK_SENTINEL → bool` reduction a wrapper would add is itself a
 /// one-skip-to-truthy step.)
 #[inline(never)]
+#[must_use]
 pub fn check_true_into_sentinel<F: FnMut() -> bool, W: FnMut()>(mut cond: F, mut wait: W) -> u32 {
     let v1 = cond();
     wait();
@@ -235,12 +236,12 @@ mod tests {
     }
 
     #[test]
-    fn check_true_into_sentinel_returns_OK_for_true() {
+    fn check_true_into_sentinel_returns_ok_for_true() {
         assert_eq!(check_true_into_sentinel(|| true, fixed_wait), OK_SENTINEL);
     }
 
     #[test]
-    fn check_true_into_sentinel_returns_FAIL_for_false() {
+    fn check_true_into_sentinel_returns_fail_for_false() {
         assert_eq!(check_true_into_sentinel(|| false, fixed_wait), FAIL_SENTINEL);
     }
 

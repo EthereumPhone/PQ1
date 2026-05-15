@@ -26,6 +26,12 @@ mod inner {
 
 #[cfg(feature = "hw-sha256")]
 mod inner {
+    // The linked binary must provide these three symbols and route them to
+    // the platform's hardware SHA-256 accelerator (e.g. STM32U585 HASH —
+    // see `secure/src/hw/hash.rs`). The hooks share a single global
+    // engine; the `Sha256` unit struct is just a typestate marker. The
+    // crate is `no_std`, single-threaded, and no caller interleaves two
+    // hash sessions, so the global state is safe.
     extern "C" {
         fn pqsigner_sha256_init();
         fn pqsigner_sha256_update(ptr: *const u8, len: usize);
@@ -42,15 +48,24 @@ mod inner {
 
     impl Digest for Sha256 {
         fn new() -> Self {
+            // SAFETY: FFI to the binary-supplied hash hook. Takes no
+            // arguments and returns no value; the implementation is
+            // responsible for initialising the global hash engine.
             unsafe { pqsigner_sha256_init() };
             Self
         }
         fn update(&mut self, data: impl AsRef<[u8]>) {
             let b = data.as_ref();
+            // SAFETY: `b.as_ptr()` is valid for `b.len()` bytes for the
+            // duration of this call (the slice borrow outlives the FFI
+            // call), and the hook only reads from `[ptr, ptr+len)`.
             unsafe { pqsigner_sha256_update(b.as_ptr(), b.len()) };
         }
         fn finalize(self) -> [u8; 32] {
             let mut out = [0u8; 32];
+            // SAFETY: `out.as_mut_ptr()` is valid for 32 bytes of writes
+            // (the array is on this stack frame and lives until after the
+            // call). The hook writes exactly the digest size.
             unsafe { pqsigner_sha256_final(out.as_mut_ptr()) };
             out
         }

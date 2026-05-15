@@ -35,8 +35,10 @@ pub fn read() -> Option<BootState> {
 unsafe fn parse(addr: usize) -> Option<BootState> {
     let src = addr as *const u8;
     let mut buf = [0u8; BSTATE_SIZE];
-    for i in 0..BSTATE_SIZE {
-        buf[i] = unsafe { read_volatile(src.add(i)) };
+    for (i, byte) in buf.iter_mut().enumerate() {
+        // SAFETY: caller guarantees `addr .. addr + BSTATE_SIZE` is a
+        // valid mapped flash region; `i < BSTATE_SIZE` by the loop bound.
+        *byte = unsafe { read_volatile(src.add(i)) };
     }
     if buf[0..4] != BSTATE_MAGIC {
         return None;

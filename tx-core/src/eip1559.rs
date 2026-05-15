@@ -62,34 +62,29 @@ impl From<RlpError> for TxError {
 ///
 /// Stored most-significant-byte first: `self.0[0]` is bits 248..255,
 /// `self.0[31]` is bits 0..7. All public accessors preserve that.
-#[derive(Copy, Clone, Default, Debug, PartialEq, Eq)]
+///
+/// The derived `PartialOrd`/`Ord` compare the inner `[u8; 32]`
+/// lexicographically, which — because the bytes are big-endian — is
+/// exactly the numeric magnitude ordering. Callers can use `<`, `>`,
+/// `<=`, `>=` directly.
+#[derive(Copy, Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct U256(pub [u8; 32]);
 
 impl U256 {
+    #[must_use]
     pub const fn zero() -> Self {
         Self([0u8; 32])
     }
 
+    #[must_use]
     pub fn is_zero(&self) -> bool {
         self.0.iter().all(|&b| b == 0)
     }
 
-    /// Return true iff `self >= other`.
-    pub fn ge(&self, other: &U256) -> bool {
-        // Big-endian bytewise compare.
-        for i in 0..32 {
-            match self.0[i].cmp(&other.0[i]) {
-                core::cmp::Ordering::Greater => return true,
-                core::cmp::Ordering::Less => return false,
-                core::cmp::Ordering::Equal => {}
-            }
-        }
-        true
-    }
-
-    /// Saturating `self * other_u64 -> U256` for fee-budget display
+    /// Saturating `self * rhs -> U256` for fee-budget display
     /// (`max_fee * gas_limit`). Returns `(product, overflow)`; the
     /// product saturates at `U256::MAX` on overflow.
+    #[must_use]
     pub fn saturating_mul_u64(&self, rhs: u64) -> (U256, bool) {
         let mut out = [0u8; 32];
         let mut carry: u128 = 0;
@@ -126,6 +121,7 @@ impl U256 {
     ///   - value = 1_500_000_000_000_000_000, frac=6, trim=false → "1.500000"
     ///   - value = 1,                    frac=18, trim=false → "0.000000000000000001"
     ///   - value = U256::MAX,            frac=0                → 78-digit integer
+    #[must_use]
     pub fn format_decimal(
         &self,
         decimals: u32,
@@ -235,6 +231,7 @@ impl U256 {
     /// `1 USDC` can't visually collide with `1.000000 USDC`. Used for
     /// ERC-20 token amounts where the decimals come from an
     /// attacker-supplied (but Merkle-verified) DB row.
+    #[must_use]
     pub fn format_decimal_fixed(
         &self,
         decimals: u32,
@@ -298,7 +295,7 @@ pub struct ParsedTx<'a> {
 /// structural invariant the EVM requires, so a successful return
 /// guarantees the transaction can be displayed to the user as-is
 /// without further validation.
-pub fn parse<'a>(envelope: &'a [u8]) -> Result<ParsedTx<'a>, TxError> {
+pub fn parse(envelope: &[u8]) -> Result<ParsedTx<'_>, TxError> {
     if envelope.len() > pqsigner_proto::MAX_TX_LEN {
         return Err(TxError::EnvelopeTooLong);
     }
@@ -326,7 +323,7 @@ pub fn parse<'a>(envelope: &'a [u8]) -> Result<ParsedTx<'a>, TxError> {
     let nonce = rlp::bytes_to_u64(iter.expect_bytes()?)?;
     let max_priority = U256(rlp::bytes_to_u256(iter.expect_bytes()?)?);
     let max_fee = U256(rlp::bytes_to_u256(iter.expect_bytes()?)?);
-    if max_priority.ge(&max_fee) && max_priority != max_fee {
+    if max_priority > max_fee {
         return Err(TxError::PriorityExceedsFee);
     }
     let gas_limit = rlp::bytes_to_u64(iter.expect_bytes()?)?;
@@ -506,10 +503,7 @@ mod tests {
 
     #[test]
     fn format_1_5_eth() {
-        // 1.5 * 10^18 wei
-        let _v = u256_from_bigint_pow10(18);
-        let _half = u256_from_bigint_pow10(17);
-        // Easier: just compute 1_500_000_000_000_000_000 = 0x14D1_120D_7B16_0000
+        // 1.5 * 10^18 wei = 0x14D1_120D_7B16_0000
         let raw: u128 = 1_500_000_000_000_000_000u128;
         let mut buf = [0u8; 32];
         buf[16..32].copy_from_slice(&raw.to_be_bytes());
@@ -617,12 +611,20 @@ mod tests {
     }
 
     #[test]
-    fn ge_compare() {
+    fn ord_matches_numeric_magnitude() {
+        // Derived Ord on `[u8; 32]` is lex-byte compare; because the
+        // bytes are big-endian, that equals numeric magnitude compare.
         let a = u256_from_u64(10);
         let b = u256_from_u64(5);
-        assert!(a.ge(&b));
-        assert!(!b.ge(&a));
-        assert!(a.ge(&a));
+        assert!(a > b);
+        assert!(!(b > a));
+        assert!(a >= a);
+        // Cross-byte boundary: 0x0100 (16-bit) > 0xff (8-bit).
+        let mut high = [0u8; 32];
+        high[30] = 0x01;
+        let mut low = [0u8; 32];
+        low[31] = 0xff;
+        assert!(U256(high) > U256(low));
     }
 
     // --- parser tests -----------------------------------------------------

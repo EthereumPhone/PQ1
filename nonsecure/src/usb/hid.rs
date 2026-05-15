@@ -65,21 +65,14 @@ impl<'a, B: UsbBus> PqSignerHid<'a, B> {
     /// Try to read a 64-byte HID report from the OUT endpoint.
     /// Returns the number of bytes read, or None if no data available.
     pub fn read_report(&mut self, buf: &mut [u8; REPORT_SIZE]) -> Option<usize> {
-        match self.ep_out.read(buf) {
-            Ok(n) => Some(n),
-            Err(UsbError::WouldBlock) => None,
-            Err(_) => None,
-        }
+        self.ep_out.read(buf).ok()
     }
 
     /// Write a 64-byte HID report to the IN endpoint.
-    /// Returns true if the write succeeded, false if the endpoint is busy.
+    /// Returns true if the write succeeded, false if the endpoint is busy
+    /// or the bus is otherwise unable to accept the report right now.
     pub fn write_report(&mut self, data: &[u8; REPORT_SIZE]) -> bool {
-        match self.ep_in.write(data) {
-            Ok(_) => true,
-            Err(UsbError::WouldBlock) => false,
-            Err(_) => false,
-        }
+        self.ep_in.write(data).is_ok()
     }
 }
 

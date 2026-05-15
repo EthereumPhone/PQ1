@@ -49,15 +49,6 @@ pub fn set_chain_index(adrs: &[u8; 32], idx: u32) -> [u8; 32] {
     out
 }
 
-/// Return a copy of `adrs` with the chain_pos field (bits [63..32]) set
-/// to `pos`. Used by chain hashing.
-#[inline]
-pub fn set_chain_pos(adrs: &[u8; 32], pos: u32) -> [u8; 32] {
-    let mut out = *adrs;
-    out[24..28].copy_from_slice(&pos.to_be_bytes());
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
