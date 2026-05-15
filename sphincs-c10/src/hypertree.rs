@@ -43,23 +43,12 @@ pub fn sign(
     sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, None, &ShuffleSeed::zero())
 }
 
-/// Like [`sign`] but calls `progress(percent)` at each major phase
-/// so the caller can update a UI indicator (0-100).
-pub fn sign_with_progress(
-    sk_seed: &[u8; 32],
-    pk_seed: &[u8; N],
-    pk_root: &[u8; N],
-    msg_hash: &[u8; 32],
-    opt_rand: Option<&[u8; N]>,
-    progress: fn(u8),
-) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, Some(progress), &ShuffleSeed::zero())
-}
-
-/// Like [`sign_with_progress`] but the per-signature shuffle seed
-/// randomises the COMPUTATION order of WOTS chains and FORS trees.
-/// Output is byte-identical to the un-shuffled path; the shuffle is
-/// purely a DPA-trace-misalignment defence (see `shuffle.rs`).
+/// Like [`sign`] but invokes `progress(percent)` (`0..=100`) at each
+/// major phase so the caller can update a UI indicator, and uses a
+/// per-signature shuffle seed that randomises the COMPUTATION order of
+/// WOTS chains and FORS trees. Output is byte-identical to the
+/// un-shuffled path; the shuffle is purely a DPA-trace-misalignment
+/// defence (see `shuffle.rs`).
 pub fn sign_with_shuffle(
     sk_seed: &[u8; 32],
     pk_seed: &[u8; N],
@@ -72,10 +61,6 @@ pub fn sign_with_shuffle(
     sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, Some(progress), shuffle)
 }
 
-// `_opt_rand` is reserved for a future hedged-signing extension and is
-// currently unused — the public-facing docs on `SigningKey::sign` say so.
-// R is derived deterministically by `fors::grind_r` from
-// `(pk_seed, pk_root, msg_hash)`.
 fn sign_inner(
     sk_seed: &[u8; 32],
     pk_seed: &[u8; N],

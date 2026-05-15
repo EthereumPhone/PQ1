@@ -95,29 +95,15 @@ pub fn keygen_pk(
     th_multi(seed, &pk_adrs, &pk_elements)
 }
 
-/// Sign a 16-byte node with WOTS+C at a given hypertree position.
+/// Sign a 16-byte node with WOTS+C at a given hypertree position with a
+/// per-call shuffle seed that randomises the COMPUTATION order of the
+/// L=43 WOTS chains. Output sigma (indexed by chain number, not
+/// processing step) is byte-identical to the un-shuffled path — see
+/// `crate::shuffle` for the correctness rationale. The `msg_hash` here
+/// is the 16-byte Merkle node being authenticated, padded to 32 bytes
+/// by the caller.
 ///
 /// Returns `(chain_values[L], count)`.
-///
-/// The `msg_hash` here is the 16-byte Merkle node being authenticated,
-/// padded to 32 bytes by the caller.
-pub fn sign(
-    seed: &[u8; 32],
-    sk_seed: &[u8; 32],
-    layer: u32,
-    tree: u64,
-    kp: u32,
-    msg_hash: &[u8; N],
-) -> ([[u8; N]; L], u32) {
-    // Backwards-compatible: identity shuffle.
-    sign_with_shuffle(seed, sk_seed, layer, tree, kp, msg_hash, &[0u8; 32])
-}
-
-/// Like [`sign`] but the per-call shuffle seed randomises the
-/// COMPUTATION order of the L=43 WOTS chains. Output sigma
-/// (indexed by chain number, not processing step) is byte-identical
-/// to the un-shuffled path — see `crate::shuffle` for the
-/// correctness rationale.
 pub fn sign_with_shuffle(
     seed: &[u8; 32],
     sk_seed: &[u8; 32],
