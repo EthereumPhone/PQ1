@@ -80,7 +80,7 @@ pub struct OptigaTrustM {
     shield: ShieldedConnection,
     ready: bool,
     entropy_blob_cache: [u8; crate::crypto::ENTROPY_BLOB_LEN],
-    blob_cached: bool,
+    blob_cached: crate::fih::FihBool,
     vk_cache: [u8; 32],
     vk_cached: bool,
     bootstrap_vk_cache: [u8; 32],
@@ -95,7 +95,7 @@ impl OptigaTrustM {
             shield: ShieldedConnection::new(),
             ready: false,
             entropy_blob_cache: [0; crate::crypto::ENTROPY_BLOB_LEN],
-            blob_cached: false,
+            blob_cached: crate::fih::FihBool::new_false(),
             vk_cache: [0; 32],
             vk_cached: false,
             bootstrap_vk_cache: [0; 32],
@@ -1752,7 +1752,7 @@ impl OptigaTrustM {
             // 9. Cache & return
             let blob = crate::crypto::encrypt_entropy_blob(&entropy, &master_secret);
             self.entropy_blob_cache.copy_from_slice(&blob);
-            self.blob_cached = true;
+            self.blob_cached.set_true();
 
             self.vk_cache.copy_from_slice(&vk);
             self.vk_cached = true;
@@ -2115,7 +2115,7 @@ impl OptigaTrustM {
 
     fn zeroize_caches_internal(&mut self) {
         self.entropy_blob_cache.zeroize();
-        self.blob_cached = false;
+        self.blob_cached.set_false();
         self.vk_cache.zeroize();
         self.vk_cached = false;
         self.bootstrap_vk_cache.zeroize();
@@ -2168,7 +2168,7 @@ impl WalletStore for OptigaTrustM {
     }
 
     fn read_entropy_blob(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
-        if !self.blob_cached || buf.len() < crate::crypto::ENTROPY_BLOB_LEN {
+        if !self.blob_cached.is_true_fi() || buf.len() < crate::crypto::ENTROPY_BLOB_LEN {
             return Err(SeError::SlotNotFound);
         }
         buf[..crate::crypto::ENTROPY_BLOB_LEN]

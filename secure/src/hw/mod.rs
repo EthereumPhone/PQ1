@@ -89,6 +89,12 @@ pub mod saes_cmac;
 #[cfg(feature = "boot-pulse")]
 pub mod boot_pulse;
 
+// `sca-trigger` GPIO instrumentation — production-fenced (see the
+// `compile_error!` in `nsc/mod.rs`). The module compiles to no-op
+// stubs when the feature is OFF, so the `sca_trigger::Trigger::raise()`
+// callsites elsewhere in the crate stay buildable on every config.
+pub mod sca_trigger;
+
 /// Minimal USART1 driver routed to the B-U585I-IOT02A ST-LINK VCP
 /// (PA9 TX). Used under `uart-console` for diagnostic output from
 /// builds that can't rely on semihosting — specifically the RDP1

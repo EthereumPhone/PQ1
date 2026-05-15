@@ -928,7 +928,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             s.slot_master_entropy.zeroize();
             crate::fi::zeroize_barrier();
             s.slot_master_entropy = *slot_master_entropy;
-            s.slot_master_derived = true;
+            s.slot_master_derived.set_true();
         });
     }
 

@@ -42,7 +42,7 @@ pub struct DualSecureElement {
     /// Cached encrypted entropy blob (full entropy encrypted under master_secret).
     /// Used by the signing flow to avoid re-authenticating per sign.
     entropy_blob_cache: [u8; crypto::ENTROPY_BLOB_LEN],
-    blob_cached: bool,
+    blob_cached: crate::fih::FihBool,
 }
 
 impl DualSecureElement {
@@ -51,7 +51,7 @@ impl DualSecureElement {
             optiga: OptigaTrustM::new(),
             se050: Se050::new(),
             entropy_blob_cache: [0; crypto::ENTROPY_BLOB_LEN],
-            blob_cached: false,
+            blob_cached: crate::fih::FihBool::new_false(),
         }
     }
 
@@ -217,7 +217,7 @@ impl WalletStore for DualSecureElement {
         // Cache the encrypted full-entropy blob for the signing flow.
         let blob = crypto::encrypt_entropy_blob(&full_entropy, &master_o);
         self.entropy_blob_cache.copy_from_slice(&blob);
-        self.blob_cached = true;
+        self.blob_cached.set_true();
 
         full_entropy.zeroize();
         crate::fi::zeroize_barrier();
@@ -227,7 +227,7 @@ impl WalletStore for DualSecureElement {
     }
 
     fn read_entropy_blob(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
-        if !self.blob_cached || buf.len() < crypto::ENTROPY_BLOB_LEN {
+        if !self.blob_cached.is_true_fi() || buf.len() < crypto::ENTROPY_BLOB_LEN {
             return Err(SeError::SlotNotFound);
         }
         buf[..crypto::ENTROPY_BLOB_LEN].copy_from_slice(&self.entropy_blob_cache);
@@ -257,7 +257,7 @@ impl WalletStore for DualSecureElement {
 
     fn zeroize_caches(&mut self) {
         self.entropy_blob_cache.zeroize();
-        self.blob_cached = false;
+        self.blob_cached.set_false();
         self.optiga.zeroize_caches();
         self.se050.zeroize_caches();
     }

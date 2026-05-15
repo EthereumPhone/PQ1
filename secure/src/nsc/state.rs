@@ -60,7 +60,13 @@ pub(super) struct SecureState {
     /// The ots_index used by the last successful signature.
     pub(super) last_ots_index: u32,
     /// Whether any signature has been produced this session.
-    pub(super) has_signed: bool,
+    ///
+    /// F-14-style hardening: `FihBool` complement-storage so a
+    /// single-fault flip in BSS can't make a stale session appear
+    /// signed. Currently write-only (no read site in the gateway),
+    /// but future code that gates on "has the session signed yet?"
+    /// inherits the storage-glitch defense for free.
+    pub(super) has_signed: FihBool,
 
     // -- Slot cache (session-scoped) ------------------------------------
     // Post-C10-cutover the firmware is stateless with respect to slot
@@ -74,7 +80,13 @@ pub(super) struct SecureState {
     pub(super) slot_master_entropy: [u8; 32],
 
     /// Whether `slot_master_entropy` has been derived this session.
-    pub(super) slot_master_derived: bool,
+    ///
+    /// F-14-style hardening: `FihBool` complement-storage. If this
+    /// flag is ever read as a "skip re-derive" optimization, a
+    /// single-fault flip from false→true would let a follow-up
+    /// command operate on stale / zero entropy. Defended now even
+    /// though current code doesn't gate on it.
+    pub(super) slot_master_derived: FihBool,
 
     // -- Bootstrap C10 pubkey LRU cache --------------------------------
     // Multi-account variant: one seed produces up to 256 independent
@@ -126,9 +138,9 @@ impl SecureState {
             last_chain_id: 0,
             last_key_index: 0,
             last_ots_index: 0,
-            has_signed: false,
+            has_signed: FihBool::new_false(),
             slot_master_entropy: [0u8; 32],
-            slot_master_derived: false,
+            slot_master_derived: FihBool::new_false(),
             bootstrap_cache: [NONE_ENTRY; BOOTSTRAP_CACHE_LEN],
             bootstrap_cache_tick: 0,
         }
@@ -150,10 +162,10 @@ impl SecureState {
         self.last_chain_id = 0;
         self.last_key_index = 0;
         self.last_ots_index = 0;
-        self.has_signed = false;
+        self.has_signed.set_false();
         self.slot_master_entropy.zeroize();
         crate::fi::zeroize_barrier();
-        self.slot_master_derived = false;
+        self.slot_master_derived.set_false();
         // Bootstrap pubkey halves are technically non-secret, but wipe
         // them anyway so a stale entry can't influence post-lock UI
         // assumptions and so the cache reverts to a clean slate on
@@ -274,8 +286,14 @@ impl SecureState {
     pub(super) fn mark_unlocked(&mut self, mut master: [u8; 32]) {
         self.master_secret.zeroize();
         crate::fi::zeroize_barrier();
+        // Trezor-parity: random delay before installing the new
+        // master_secret. The 32-byte copy below is a single fixed-
+        // duration block that an EM-glitch attacker could otherwise
+        // time-target; `wait_random` perturbs its temporal position.
+        crate::fi::wait_random();
         self.master_secret = master;
         master.zeroize();
+        crate::fi::zeroize_barrier();
         self.pin_verified.set_true();
         self.remaining_attempts = MAX_ATTEMPTS;
         // F-17: fresh unlock = full burst budget. The session sign

@@ -115,21 +115,24 @@ mod trailer;
         feature = "boot-pulse",
         feature = "bhk-hardcoded-master-key",
         feature = "se050-rotate-scp03",
+        feature = "sca-trigger",
     )
 ))]
 compile_error!(
     "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
      debug-log / ui-semihosting / ui-mirror / ui-capture / mock-se / \
      otp-hardcoded-master-key / bhk-hardcoded-master-key / saes-self-test / \
-     uart-console / boot-pulse / se050-rotate-scp03. These features leak \
-     secure-world state, replace the SE with a mock, replace the per-device \
-     OTP master key or BHK with a shared compile-time constant, halt the \
-     boot flow after a diagnostic, stream diagnostic bytes on PA9 UART, \
-     pulse PE13 with boot-progress markers, or perform a one-shot \
-     irreversible SCP03 key-rotation ceremony then halt. Hardware test \
-     images may opt in by also enabling `e2e-test` (auto-provisioning, \
-     non-interactive) or `dev-testkey` (interactive UI, OTP substituted \
-     with a compile-time constant)."
+     uart-console / boot-pulse / se050-rotate-scp03 / sca-trigger. These \
+     features leak secure-world state, replace the SE with a mock, replace \
+     the per-device OTP master key or BHK with a shared compile-time \
+     constant, halt the boot flow after a diagnostic, stream diagnostic \
+     bytes on PA9 UART, pulse PE13 with boot-progress markers, perform a \
+     one-shot irreversible SCP03 key-rotation ceremony then halt, or toggle \
+     a GPIO around security-critical primitives so a ChipWhisperer / \
+     NewAE-Scaffold rig can sync trace captures (a fatal leak on a \
+     production unit). Hardware test images may opt in by also enabling \
+     `e2e-test` (auto-provisioning, non-interactive) or `dev-testkey` \
+     (interactive UI, OTP substituted with a compile-time constant)."
 );
 
 // Dedicated guard: `otp-hardcoded-master-key` + `optiga-lock-operational` is
@@ -451,7 +454,16 @@ pub unsafe fn gated_unlock(
         }
     }
 
+    // Trezor-parity: randomise the timing of the SE-side PIN compare
+    // so a clock-aligned EM glitch can't reliably target the SE I2C
+    // transaction. The SE silicon's own PIN-compare is constant-time,
+    // but the MCU-side I/O setup (clock to-the-SE, SCP03 setup) is
+    // not — `wait_random` perturbs that window. Symmetric `wait_random`
+    // on the other side of the call would also defend a fault on the
+    // result code's arrival back into r0.
+    crate::fi::wait_random();
     let result = se.unlock(pin);
+    crate::fi::wait_random();
 
     // FI guard: capture the discriminant twice, separated by
     // `wait_random()`, and route the verdict through the
