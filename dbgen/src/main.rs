@@ -8,17 +8,23 @@
 //!
 //! Writes (checked into the repo, like the existing
 //! tools/export_zk_constants.js outputs):
-//!   secure/src/erc20/erc20_db.bin
-//!   secure/src/zk/vk_db.bin
+//!   nonsecure/src/erc20_db.bin
+//!   nonsecure/src/vk_db.bin
+//!   nonsecure/src/names_db.bin
+//!   tools/companion-stub/selectors_db.bin
+//!   tools/companion-stub/selectors_db_e2e.bin
+//!   secure/src/db_roots.rs
 //!   secure/data/vks.review.txt
+//!   circuits/generated/erc20_poseidon_tree.json
 //!
 //! Run manually after editing the JSON sources:
 //!
 //!   cargo run -p dbgen
 //!
-//! The runtime parser is in:
-//!   secure/src/erc20/db.rs   (ERC20 metadata)
-//!   secure/src/zk/vk_db.rs   (ZK clear-signing VKs)
+//! The runtime parsers live in:
+//!   nonsecure/src/erc20_db.rs   (ERC20 metadata)
+//!   nonsecure/src/vk_db.rs      (ZK clear-signing VKs)
+//!   nonsecure/src/names_db.rs   (address-name lookup)
 //!
 //! Both crates physically share the on-disk format definition via
 //! sphincs_tz_shared::db_format, so any field-layout change here is a
