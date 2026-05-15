@@ -22,7 +22,7 @@ Production contract — every shipping build must respect ALL. Pre-production ma
 
 No devices shipped, no funds on-chain — domain tags / parameters are still renamable pre-launch. Known acceptable regressions:
 
-- **TZSC config (regresses #4).** `secure/src/sau.rs` clears `GTZC1_TZSC_SECCFGR{1,2,3}` to 0 (everything NS) because USB OTG FS is on AHB2 (governed by GTZC2 — base address not yet confirmed; first guess `0x5203_4400` bus-faulted). I2C1 / AES / HASH / PKA / SAES / RNG reachable from NS until restored.
+- **TZSC config (originally regressed #4; designed-fix landed, awaits hardware validation).** `secure/src/sau.rs` now wires `GTZC1_TZSC_SECCFGR{1,3}` correctly: AHB2 peripherals (USB OTG FS, AES, HASH, RNG, PKA, SAES) are governed by `GTZC1_TZSC_SECCFGR3` of the SAME controller (not GTZC2 as previously assumed — verified via the CMSIS `GTZC_CFGR3_*_Pos` constants in STM32CubeU5). Allowlist marks AES/HASH/RNG/PKA/SAES + I2C1/I2C2 as SECURE; OTG (bit 10) stays NS for the USB HID stack. On-silicon validation (USB still enumerates + NS read of e.g. RNG_DR bus-faults) is the remaining outstanding item — QEMU e2e passes but doesn't exercise the GTZC path. TAMP (in GTZC2) is a separate follow-up.
 - **Debug instrumentation may ship in this branch.** `debug-log` allowed on hardware, `secure_log!` in the wizard, NS pre-USB register dumps, DHCSR-gated semihosting prints in `hw::hash::init_clock`. CI must still gate production on `debug-log` / `e2e-test` / `mock-se` OFF.
 - **Domain tags are sticky-but-renamable.** Tag `"sphincs-c6-v1"` is historical (was a different parameter set when written; now C10). Don't rename mid-bring-up (re-provisions every bench board); coordinated cleanup pre-launch is fine.
 

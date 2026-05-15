@@ -92,42 +92,63 @@ mod stm32 {
     // not the security config; do not conflate. This was the source of
     // the silently-no-op TZSC writes that motivated the audit.)
     //
-    // GTZC1 governs AHB1 / APB1 / APB2 peripherals only. AHB2 peripherals
-    // (USB OTG FS, RNG, AES, HASH, PKA, SDMMC, OCTOSPI, ...) are governed
-    // by a SECOND, separate controller — **GTZC2_TZSC** — whose exact
-    // base address on STM32U585 is still TBD (our first guess at
-    // 0x52034400 bus-faulted on touch). Until that's nailed down, the
-    // USB OTG FS security attribute can't be individually flipped from
-    // GTZC1, which is why the all-NS baseline below is required for
-    // bring-up.
+    // GTZC1_TZSC governs AHB1 + APB1 + APB2 + AHB2 peripherals on
+    // STM32U585. Verified against the STM32CubeU5 HAL headers
+    // (`vendor/STM32CubeU5/.../stm32u5xx_hal_gtzc.h` +
+    // `stm32u585xx.h`): the `GTZC_PERIPH_{OTG,AES,HASH,RNG,PKA,SAES}`
+    // constants all carry the `GTZC1_PERIPH_REG3` discriminator —
+    // i.e. they're all bits in `GTZC1_TZSC_SECCFGR3`, the same
+    // controller this function already writes to.
+    //
+    // The pre-fix comment claimed "AHB2 peripherals are governed by a
+    // SECOND, separate controller GTZC2_TZSC" — that was a
+    // misdiagnosis. GTZC2 on STM32U585 governs *RTC-domain*
+    // peripherals (TAMP, BKP-SRAM, etc., in `GTZC2_PERIPH_REG{1,2}`).
+    // The AHB2 crypto block + USB OTG FS all live in GTZC1's SECCFGR3.
+    //
+    // Base addr: `GTZC_TZSC1_BASE_S = 0x5003_2400` (= PERIPH_BASE_S
+    // 0x5000_0000 + AHB1PERIPH offset 0x0002_0000 + TZSC1 offset
+    // 0x0001_2400).
     const TZSC_BASE: u32 = 0x5003_2400;
     const TZSC_SECCFGR1: *mut u32 = (TZSC_BASE + 0x10) as *mut u32;
     const TZSC_SECCFGR2: *mut u32 = (TZSC_BASE + 0x14) as *mut u32;
     const TZSC_SECCFGR3: *mut u32 = (TZSC_BASE + 0x18) as *mut u32;
 
+    // ---- SECCFGR1 (APB1) — I2C1 + I2C2 SECURE ----
+    // Bit positions per `GTZC_CFGR1_*_Pos` in CMSIS `stm32u585xx.h`.
+    //
+    // - I2C1 (bit 13): OPTIGA Trust M + SE050 driver bus.
+    // - I2C2 (bit 14): STSAFE-A110 on-board probe bus.
+    // Both are secure-world-only; NS has no business touching either.
+    const SECCFGR1_I2C1_BIT: u32 = 1 << 13;
+    const SECCFGR1_I2C2_BIT: u32 = 1 << 14;
 
-    // ---- USB allowlist for TZSC ----
+    // ---- SECCFGR3 (AHB2) — crypto block SECURE, OTG NS ----
+    // Bit positions per `GTZC_CFGR3_*_Pos` in CMSIS `stm32u585xx.h`.
     //
-    // On STM32U585 the USB OTG FS controller is the only TZSC-gated
-    // peripheral the NS world needs direct register access to. The TZSC
-    // SECCFGRx layout is documented in RM0456 §54; note that the TZSC
-    // bit positions do NOT align with RCC AHB/APB clock-enable bits —
-    // each register groups a different bus (APB1 / APB2 / AHB) with its
-    // own ordering.
-    //
-    // UCPD1 stays SECURE: the CC-detection handshake is performed from
-    // the secure world at boot (`hw::usb_hw::init_ucpd`); the NS USB
-    // stack never touches UCPD1 registers after that.
-    //
-    // GPIOs are NOT gated by TZSC — their security is per-pin in the
-    // bank's GPIOx_SECCFGR register (see `hw::usb_hw::init`).
-    //
-    // TODO: verify this bit position against the STM32U585 reference
-    // manual once the usb feature is exercised on hardware. If OTG_FS
-    // is at a different bit, the post-allowlist self-check below will
-    // catch the mismatch.
-    #[cfg(feature = "usb")]
-    const SECCFGR2_OTG_FS_BIT: u32 = 1 << 14;
+    // - OTG (bit 10): USB OTG FS — **stays NS** so the NS USB stack
+    //   can manage DWC2 directly. The companion-facing HID transport
+    //   lives in NS; pulling USB control into the secure world would
+    //   require re-architecting transport, which is way out of scope.
+    //   GPIO security (PA11/PA12 = D+/D-) is governed separately by
+    //   GPIOA_SECCFGR; UCPD1 handshake is done from secure world at
+    //   boot and never touched again.
+    // - AES (bit 11): no current consumer (we use SAES); marked
+    //   SECURE defensively so a stale NS-side AES driver can't
+    //   accidentally race a secure SAES op.
+    // - HASH (bit 12): SHA-256 accelerator consumed by sphincs-c10
+    //   through the `pqsigner_sha256_*` extern fns.
+    // - RNG (bit 13): STM32 TRNG; backbone of `rng_strong::fill`
+    //   (the 3-source XOR per F-13/§10 work).
+    // - PKA (bit 14): BLS12-381 pairing accelerator for the
+    //   Groth16 ZK clear-signing verifier.
+    // - SAES (bit 15): Tier-1 KDF (DHUK / BHK derivation) — the
+    //   single most secret-bearing peripheral on the bus.
+    const SECCFGR3_AES_BIT:  u32 = 1 << 11;
+    const SECCFGR3_HASH_BIT: u32 = 1 << 12;
+    const SECCFGR3_RNG_BIT:  u32 = 1 << 13;
+    const SECCFGR3_PKA_BIT:  u32 = 1 << 14;
+    const SECCFGR3_SAES_BIT: u32 = 1 << 15;
 
     pub unsafe fn configure_gtzc() {
         // Enable GTZC1 clock
@@ -156,42 +177,60 @@ mod stm32 {
             );
         }
 
-        // ---- GTZC1 TZSC: pre-production all-NS baseline ----
+        // ---- GTZC1 TZSC: SECURE-allowlist policy (Trezor parity) ----
         //
-        // STM32U5 TZSC reset default is NS for every peripheral; the
-        // previous "lock everything secure then allowlist USB" pattern
-        // mis-identified which controller governs USB OTG FS (AHB2 —
-        // not touched by GTZC1). That left USB OTG FS SECURE and the NS
-        // USB stack hanging in the DWC2 core-reset poll, regressing
-        // working USB HID that the pre-hardening build relied on.
+        // CRIT-4 / Pre-Production Caveat fix: restores CLAUDE.md
+        // invariant #4 ("NS never sees secure-world peripherals").
         //
-        // For now (pre-production USB bring-up) explicitly mark every
-        // GTZC1-gated peripheral as NS and defer the minimal allowlist
-        // of secure-only peripherals (AES / HASH / PKA / SAES / I2C1 /
-        // RNG) until the correct AHB2 controller base (GTZC2_TZSC) is
-        // confirmed against RM0456 and hardware.
-        core::ptr::write_volatile(TZSC_SECCFGR1, 0);
-        core::ptr::write_volatile(TZSC_SECCFGR2, 0);
-        core::ptr::write_volatile(TZSC_SECCFGR3, 0);
+        // STM32U5 TZSC reset default is NS for every peripheral. We
+        // keep that as the baseline AND explicitly mark a small list
+        // of security-critical peripherals SECURE. Trezor uses the
+        // same pattern (`core/embed/sys/trustzone/stm32u5/trustzone.c`
+        // sets `GTZC_PERIPH_{RNG,SAES,HASH,IWDG,WWDG,...}` SEC,
+        // everything else stays NS).
+        //
+        // Locked-down peripherals (NS reads/writes will trip the GTZC
+        // illegal-access IRQ once the post-write check below validates):
+        //   - SECCFGR1: I2C1, I2C2 (SE driver buses; STSAFE probe)
+        //   - SECCFGR3: AES, HASH, RNG, PKA, SAES (the crypto block)
+        //
+        // Intentionally LEFT NS (the NS world legitimately needs them):
+        //   - OTG (SECCFGR3 bit 10): USB HID transport to companion
+        //   - GPIO banks: governed per-pin by GPIOx_SECCFGR, not TZSC
+        //   - TIM / SPI / USART / etc.: NS-side UI + debug logging
+        //
+        // Other peripherals (SDMMC, OCTOSPI, FDCAN, etc.) keep their
+        // NS reset default; we don't currently use them from the
+        // secure side, and they're irrelevant to the threat model.
+        //
+        // TAMP lives in GTZC2 (a different controller); its SECCFGR
+        // setup is owed in a follow-up (the `tamp` feature flag is
+        // log-only-on-this-branch per CLAUDE.md anyway).
+        let seccfgr1 = SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;
+        let seccfgr2: u32 = 0; // nothing security-critical in APB2 today
+        let seccfgr3 = SECCFGR3_AES_BIT
+            | SECCFGR3_HASH_BIT
+            | SECCFGR3_RNG_BIT
+            | SECCFGR3_PKA_BIT
+            | SECCFGR3_SAES_BIT;
+        core::ptr::write_volatile(TZSC_SECCFGR1, seccfgr1);
+        core::ptr::write_volatile(TZSC_SECCFGR2, seccfgr2);
+        core::ptr::write_volatile(TZSC_SECCFGR3, seccfgr3);
         cortex_m::asm::dsb();
-        let _ = (
-            core::ptr::read_volatile(TZSC_SECCFGR1),
-            core::ptr::read_volatile(TZSC_SECCFGR2),
-            core::ptr::read_volatile(TZSC_SECCFGR3),
-        );
 
-        // AHB2 peripheral TZSC (USB OTG FS + RNG + AES/HASH/PKA + SDMMC
-        // + OCTOSPI) lives in a **separate** controller, GTZC2_TZSC, not
-        // the GTZC1 block this function touches. The exact base for
-        // GTZC2_TZSC on STM32U585 is not yet confirmed against RM0456
-        // (our earlier guess at 0x52034400 BusFaulted on touch), so the
-        // USB allowlist is disabled until we have the right address.
-        // This means the NS USB stack currently cannot reach OTG_FS;
-        // that's the active bring-up bug we're tracking.
-
-        // No post-write check: every SECCFGR is intentionally cleared
-        // during pre-production USB bring-up. Tighten back once the
-        // correct AHB2 TZSC controller is identified.
+        // Post-write self-check: read back and assert. SECCFGR bits
+        // are R/W from the secure world, so a write-read round-trip
+        // is the right shape (no separate "is this bit even
+        // configurable" question — every documented bit in CFGR3
+        // for U585 corresponds to an attached peripheral). A
+        // mismatch here is diagnostic of a wrong base addr or a
+        // clock-not-enabled glitch.
+        let r1 = core::ptr::read_volatile(TZSC_SECCFGR1);
+        let r2 = core::ptr::read_volatile(TZSC_SECCFGR2);
+        let r3 = core::ptr::read_volatile(TZSC_SECCFGR3);
+        debug_assert_eq!(r1, seccfgr1, "TZSC_SECCFGR1 write-readback mismatch");
+        debug_assert_eq!(r2, seccfgr2, "TZSC_SECCFGR2 write-readback mismatch");
+        debug_assert_eq!(r3, seccfgr3, "TZSC_SECCFGR3 write-readback mismatch");
     }
 }
 
