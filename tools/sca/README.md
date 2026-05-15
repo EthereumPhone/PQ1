@@ -583,7 +583,7 @@ separate, not-yet-wired target, and note the meaningful FI threat against C10
 one-time keys → universal forgery), not a single-trace "did the output flip"
 check, so that target needs a 2-sign harness, not a re-run of this one.
 
-### F-15 — PIN-lockout gates were FAIL-OUT — a single branch-skip on the lockout `if` bypassed the wipe and let brute-forcing past `MAX_ATTEMPTS = 10` continue — **FIXED in `nsc::gated_unlock` + `cmd_request_unlock::verify_pin_with_chip` (FAIL-IN pattern + sentinel gate + double-read)**
+### F-15 — PIN-lockout gates were FAIL-OUT — a single branch-skip on the lockout `if` bypassed the wipe and let brute-forcing past `MAX_ATTEMPTS = 10` continue — **MITIGATED (not provably fixed) in `nsc::gated_unlock` + `cmd_request_unlock::verify_pin_with_chip` (FAIL-IN pattern + sentinel gate + double-read; residual attack surface documented below)**
 
 **Threat — the most common single-fault outcome.** Per the
 Masaryk-U Simonik thesis (76 % PIN-glitch bypass on STM32U5 silicon,
@@ -676,6 +676,57 @@ wipe (user loses wallet). This is acceptable because:
     wrong-PIN attempts → wipe → correct PIN rejected after exhaustion.
     The new FAIL-IN gate transitions cleanly through the full
     lockout sequence.
+
+**Residual attack surface (what we did NOT close).** "MITIGATED" not
+"FIXED" because each of the following stays exploitable in principle:
+
+  1. **Stale `OK_SENTINEL` in r0.** If a *previous*
+     `check_true_into_sentinel` call succeeded immediately before
+     (e.g. the F-14 FihBool gate at the start of the same handler),
+     r0 still carries `0xA5A5_A5A5`. An attacker who can skip the
+     `bl check_true_into_sentinel` for the lockout check inherits
+     that value → `r0 == OK_SENTINEL` → bypass. **Mitigation owed:**
+     a `wait_random()` + explicit register-scrub between gates that
+     share the sentinel ABI.
+
+  2. **Specific-value EM injection.** Documented in the SCA
+     literature (Riscure, NewAE) — an EM glitch can inject a
+     specific 32-bit word into a register directly. Hitting exactly
+     `0xA5A5_A5A5` is rare and equipment-dependent but not
+     theoretical. The Hamming weight (16) is moderate; a more
+     aggressive constant choice (extreme weight 1 or 31) would push
+     this harder.
+
+  3. **Coordinated 2-fault on `check_true_into_sentinel` internals.**
+     F-5 found the sentinel function itself is ~2-coordinated-skip-
+     defeatable. Two faults landing inside the function can produce
+     an `OK_SENTINEL` return on a `false` input. Single-fault
+     resistant; multi-fault not.
+
+  4. **Counter value-fault *outside* the scan.** Both
+     `pin_attempts_read` calls succeed and agree on the actual value,
+     but a fault between the agreement check and the closure capture
+     clamps `pre_count` / `remaining_after` to 0 (for `pre_count <
+     MAX_ATTEMPTS`) or non-zero (for `remaining_after != 0`). The
+     double-read covers mid-scan, not the post-assignment register
+     state.
+
+  5. **`pin_attempts_read` not internally F-12-hardened.** A
+     consistent underreport-by-1 fault (e.g. a control-flow glitch
+     that early-exits both scans the same way) slips past the
+     double-read because both reads land identically. The F-12 fix
+     to `offchain_count_read` (forward + reverse scan with
+     halt-on-mismatch) was not applied here yet — owed.
+
+**Threat-model accounting.** The Masaryk-U Simonik thesis 76 %
+single-skip primitive is closed by this commit. Multi-fault attacks
+and specific-value EM primitives remain. That places F-15 at the same
+maturity level as F-2 / F-3 / F-4 (mitigated; bounded by
+multi-fault cost). The audit-grade SCA literature accepts this for
+medium-severity gates where the seed-phrase backup
+(invariant #1) bounds the user-side cost of a successful brute-force.
+Tracked as residual in this section; a follow-up commit can knock
+out items 1 and 5 cheaply (~30 LoC).
 
 ### F-14 — `SecureState::pin_verified` was a plain `bool` — a single-fault bit-flip in SRAM (or stuck-at on the load register) bypassed every gated command — **FIXED in `secure::fih::FihBool` + 11 call-site migrations**
 
