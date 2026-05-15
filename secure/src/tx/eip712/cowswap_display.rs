@@ -26,7 +26,7 @@
 //!   6: "appData:"        / 0x<first 14h> / <last 14 hex>   / "> next"
 //!   7: ""                / "L=Cancel  "  / "R=Confirm    " / (buttons)
 
-use crate::tx::display::{Pages, MAX_PAGES};
+use crate::tx::display::Pages;
 use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 
 // ---------------------------------------------------------------------------
@@ -130,7 +130,6 @@ pub fn render_cowswap_pages(canonical: &[u8; 204], readable: &[u8; 128]) -> Page
     write_line(&mut pages.row_mut(7, 2), "L=Cancel");
     write_line(&mut pages.row_mut(7, 3), "R=Confirm");
 
-    let _ = MAX_PAGES;
     pages
 }
 
