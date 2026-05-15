@@ -40,8 +40,8 @@ pub fn confirm(pages: &[Page]) -> ConfirmResult {
     // bypass is enough to make every cmd_* path non-interactive.
     #[cfg(feature = "e2e-test")]
     {
-        for (idx, page) in pages.iter().enumerate() {
-            render_page(page, idx, pages.len());
+        for page in pages.iter() {
+            render_page(page);
         }
         return ConfirmResult::Confirmed;
     }
@@ -59,7 +59,7 @@ pub fn confirm(pages: &[Page]) -> ConfirmResult {
         // confirm dialogs count as activity.").
 
         loop {
-            render_page(&pages[idx], idx, pages.len());
+            render_page(&pages[idx]);
 
             let mut idle = || timeout::is_idle();
             let event = match input().wait_button(&mut idle) {
@@ -89,15 +89,11 @@ pub fn confirm(pages: &[Page]) -> ConfirmResult {
     }
 }
 
-fn render_page(page: &Page, idx: usize, total: usize) {
+fn render_page(page: &Page) {
     let d = display();
     d.clear();
     for (row_idx, row) in page.iter().enumerate() {
         d.draw_line(row_idx, super::ascii_str(row));
     }
-    // Footer indicator: "1/5" right-aligned isn't space — instead overlay on row 3.
-    // We assume the page renderer leaves room or that we can append.
-    // Simpler: log via secure_log.
-    let _ = (idx, total);
     d.flush();
 }

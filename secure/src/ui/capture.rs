@@ -71,9 +71,3 @@ const fn nibble_to_hex(n: u8) -> u8 {
         _ => b'?',
     }
 }
-
-/// Reset the frame counter. Useful between test cases so fingerprint
-/// indices align against a clean fixture start marker.
-pub fn reset_counter() {
-    FRAME_COUNTER.store(0, Ordering::Relaxed);
-}
