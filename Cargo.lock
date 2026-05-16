@@ -1424,6 +1424,9 @@ dependencies = [
 [[package]]
 name = "pqsigner-hal"
 version = "0.1.0"
+dependencies = [
+ "static_assertions",
+]
 
 [[package]]
 name = "pqsigner-proto"
