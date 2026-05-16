@@ -211,16 +211,156 @@ fn main() {
 mod tests {
     use super::*;
 
+    // ---------------- positive: parse_hex ----------------
+
     #[test]
-    fn parse_hex_accepts_prefix_and_underscores() {
+    fn positive_parse_hex_accepts_prefix_and_underscores() {
         assert_eq!(parse_hex("0x0C00_E000"), 0x0C00_E000);
         assert_eq!(parse_hex("0C00E000"), 0x0C00_E000);
         assert_eq!(parse_hex("0x0"), 0);
     }
 
     #[test]
-    fn format_hex_lowercase_zero_padded() {
+    fn positive_parse_hex_accepts_uppercase_and_lowercase_digits() {
+        // The Makefile examples mix cases; tool must accept both.
+        assert_eq!(parse_hex("0xDEADbeef"), 0xDEAD_BEEF);
+        assert_eq!(parse_hex("deadbeef"), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn positive_parse_hex_accepts_u64_max() {
+        // Per-slot bases on 64-bit fields must fit u64.
+        assert_eq!(parse_hex("0xFFFFFFFFFFFFFFFF"), u64::MAX);
+    }
+
+    #[test]
+    fn positive_parse_hex_strips_only_leading_0x_prefix() {
+        // `strip_prefix("0x")` only strips a single leading `0x` —
+        // confirm a value that legitimately contains '0' digits
+        // after the prefix is preserved exactly.
+        assert_eq!(parse_hex("0x000000000800E000"), 0x0800_E000);
+    }
+
+    // ---------------- positive: format_hex ----------------
+
+    #[test]
+    fn positive_format_hex_lowercase_zero_padded() {
         assert_eq!(format_hex(&[0x00, 0xab, 0xff]), "00abff");
         assert_eq!(format_hex(&[]), "");
+    }
+
+    #[test]
+    fn positive_format_hex_full_sha256_length() {
+        // SHA-256 hashes are 32 B → exactly 64 hex characters.
+        let hash = [0xA5u8; 32];
+        let hex = format_hex(&hash);
+        assert_eq!(hex.len(), 64);
+        assert!(hex.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(hex.chars().all(|c| !c.is_ascii_uppercase()));
+    }
+
+    #[test]
+    fn positive_format_hex_pairs_per_byte() {
+        // Every input byte must be exactly two hex chars; never 1 or 3.
+        for b in 0u8..=255 {
+            let s = format_hex(&[b]);
+            assert_eq!(s.len(), 2, "byte 0x{b:02x} produced {s:?}");
+        }
+    }
+
+    // ---------------- positive: FlashLayout ----------------
+
+    #[test]
+    fn positive_flash_layout_size_difference() {
+        let l = FlashLayout {
+            base: 0x0800_0000,
+            end: 0x0800_1000,
+        };
+        assert_eq!(l.size(), 0x1000);
+    }
+
+    #[test]
+    fn positive_flash_layout_size_zero_when_base_equals_end() {
+        let l = FlashLayout {
+            base: 0x1234,
+            end: 0x1234,
+        };
+        assert_eq!(l.size(), 0);
+    }
+
+    // ---------------- positive: invariants ----------------
+
+    #[test]
+    fn positive_max_flash_size_is_two_mib() {
+        // Cross-checks the constant against `fwsign::elf::MAX_FLASH_SIZE`.
+        // A change here without the sibling tool change would let the
+        // host hash a window the device wouldn't.
+        assert_eq!(MAX_FLASH_SIZE, 2 * 1024 * 1024);
+    }
+
+    #[test]
+    fn positive_usage_string_documents_both_flags() {
+        // Pin the help-text shape so refactors that drop/rename
+        // either flag will be caught (companion docs reference both).
+        assert!(USAGE.contains("--flash-base="));
+        assert!(USAGE.contains("--flash-end="));
+        assert!(USAGE.contains("<firmware.elf>"));
+    }
+
+    // ---------------- negative: parse_hex stripping behaviour ----------------
+
+    #[test]
+    fn negative_parse_hex_underscores_stripped_anywhere() {
+        // Documenting the contract: `_` is dropped before parsing,
+        // including in non-grouped positions. A future change that
+        // narrowed the strip to "thousands grouping only" would
+        // silently change accepted inputs.
+        assert_eq!(parse_hex("0x__08__00__"), 0x0800);
+    }
+
+    #[test]
+    fn negative_parse_hex_does_not_silently_accept_uppercase_0x() {
+        // `strip_prefix("0x")` is case-sensitive — `0X` is NOT a
+        // valid prefix. The hex parser will still accept the rest as
+        // hex digits IF and only if every char is a valid hex digit.
+        // `0X100` after strip is "0X100", and 'X' is not hex → must
+        // fail. We can't exercise `die` directly (it calls
+        // process::exit), but we can confirm `u64::from_str_radix`
+        // rejects it, which is what `parse_hex` relies on.
+        assert!(u64::from_str_radix("0X100", 16).is_err());
+    }
+
+    // ---------------- negative: format_hex is not Debug-leaking ----------------
+
+    #[test]
+    fn negative_format_hex_never_emits_uppercase() {
+        // Receipts must be reproducible byte-for-byte. Any future
+        // change to `{b:02X}` would break the "compare these hex
+        // strings" UX with the device, which renders lowercase.
+        for b in 0u8..=255 {
+            let s = format_hex(&[b]);
+            assert!(
+                s.chars().all(|c| !c.is_ascii_uppercase()),
+                "byte 0x{b:02x} produced uppercase {s:?}"
+            );
+        }
+    }
+
+    // ---------------- negative: FlashLayout::size on degenerate input ----------------
+
+    #[test]
+    #[should_panic]
+    fn negative_flash_layout_size_panics_when_end_before_base() {
+        // Documents the precondition: callers must never construct a
+        // layout with `end < base`. The (`end - base`) subtraction
+        // overflows. `compute_layout` enforces this via the
+        // veneer-window check + sidata fallback; if a future caller
+        // bypasses `compute_layout`, this test ensures the panic is
+        // not silenced by accident (no checked_sub fallback to 0).
+        let l = FlashLayout {
+            base: 0x100,
+            end: 0x080, // end < base
+        };
+        let _ = l.size();
     }
 }
