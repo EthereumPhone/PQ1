@@ -519,3 +519,320 @@ fn read_pool_string(blob: &[u8], at: usize) -> Option<&[u8]> {
     let len = *blob.get(at)? as usize;
     blob.get(at + 1..at + 1 + len)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn fixture_addr(suffix: u8) -> String {
+        format!("0x{}{:02x}", "0".repeat(38), suffix)
+    }
+
+    fn write_json(s: &str) -> NamedTempFile {
+        let mut f = NamedTempFile::new().expect("tempfile");
+        f.write_all(s.as_bytes()).unwrap();
+        f.flush().unwrap();
+        f
+    }
+
+    // === Positive ============================================================
+
+    /// Canonical leaf encoding is a frozen wire format — its byte
+    /// layout is mirrored in `secure/src/erc20/bundle.rs`. Any drift
+    /// here changes every on-chain root for shipped firmware. Pin one
+    /// exact preimage byte-by-byte.
+    #[test]
+    fn positive_canonical_erc20_leaf_byte_frozen() {
+        let chain_id: u64 = 0x0102_0304_0506_0708;
+        let contract: [u8; 20] = [
+            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+            0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23,
+        ];
+        let decimals = 18u8;
+        let name = b"Tether USD";
+        let symbol = b"USDT";
+        let got = canonical_erc20_leaf(chain_id, &contract, decimals, name, symbol);
+        let mut expected = Vec::new();
+        // chain_id u64 LE
+        expected.extend_from_slice(&0x0102_0304_0506_0708u64.to_le_bytes());
+        // contract 20 B
+        expected.extend_from_slice(&contract);
+        // decimals 1 B
+        expected.push(18u8);
+        // name_len 1 B + name
+        expected.push(name.len() as u8);
+        expected.extend_from_slice(name);
+        // symbol_len 1 B + symbol
+        expected.push(symbol.len() as u8);
+        expected.extend_from_slice(symbol);
+        assert_eq!(got, expected);
+        assert_eq!(got.len(), 8 + 20 + 1 + 1 + name.len() + 1 + symbol.len());
+    }
+
+    #[test]
+    fn positive_build_db_minimal_round_trip() {
+        let json = r#"[
+            {"chain_id": 1, "address": "0x1111111111111111111111111111111111111111",
+             "name": "Token One", "symbol": "ONE", "decimals": 18}
+        ]"#;
+        let f = write_json(json);
+        let res = build_db(f.path()).expect("build_db");
+        assert_eq!(res.blob[..4], ERC20_DB_MAGIC);
+        round_trip_check(&res.blob, f.path(), &res.root).expect("round-trip");
+        // Single-entry tree => depth 0 => root == leaf hash.
+        let canon = canonical_erc20_leaf(
+            1,
+            &[0x11; 20],
+            18,
+            b"Token One",
+            b"ONE",
+        );
+        assert_eq!(res.root, crate::merkle::leaf_hash(&canon));
+    }
+
+    #[test]
+    fn positive_build_db_sorts_and_interns_strings() {
+        // Same name+symbol on two chains — interning must dedupe.
+        let json = format!(
+            r#"[
+                {{"chain_id": 137, "address": "{}", "name": "USD Coin", "symbol": "USDC", "decimals": 6}},
+                {{"chain_id": 1, "address": "{}", "name": "USD Coin", "symbol": "USDC", "decimals": 6}}
+            ]"#,
+            fixture_addr(0xa1),
+            fixture_addr(0xa1),
+        );
+        let f = write_json(&json);
+        let res = build_db(f.path()).expect("build_db");
+        // 2 entries, but only 1 unique name string + 1 unique symbol string.
+        let entry_cnt = u32::from_le_bytes(res.blob[12..16].try_into().unwrap());
+        let pool_size = u32::from_le_bytes(res.blob[20..24].try_into().unwrap());
+        assert_eq!(entry_cnt, 2);
+        // Pool = [len][USD Coin] + [len][USDC] = 1+8 + 1+4 = 14
+        assert_eq!(pool_size, 14);
+        round_trip_check(&res.blob, f.path(), &res.root).expect("round-trip");
+    }
+
+    #[test]
+    fn positive_build_db_accepts_address_without_0x() {
+        let json = r#"[
+            {"chain_id": 1, "address": "1111111111111111111111111111111111111111",
+             "name": "N", "symbol": "S", "decimals": 0}
+        ]"#;
+        let f = write_json(json);
+        build_db(f.path()).expect("build_db should accept bare hex");
+    }
+
+    #[test]
+    fn positive_build_db_emits_correct_header_offsets() {
+        let json = r#"[
+            {"chain_id": 1, "address": "0x1111111111111111111111111111111111111111",
+             "name": "A", "symbol": "B", "decimals": 0},
+            {"chain_id": 1, "address": "0x2222222222222222222222222222222222222222",
+             "name": "C", "symbol": "D", "decimals": 0}
+        ]"#;
+        let f = write_json(json);
+        let res = build_db(f.path()).expect("build_db");
+        let entry_cnt = u32::from_le_bytes(res.blob[12..16].try_into().unwrap()) as usize;
+        let pool_off = u32::from_le_bytes(res.blob[16..20].try_into().unwrap()) as usize;
+        let proof_depth = u32::from_le_bytes(res.blob[24..28].try_into().unwrap()) as usize;
+        let proofs_off = u32::from_le_bytes(res.blob[28..32].try_into().unwrap()) as usize;
+        assert_eq!(entry_cnt, 2);
+        assert_eq!(pool_off, ERC20_DB_HEADER_LEN + entry_cnt * ERC20_DB_ENTRY_LEN);
+        assert_eq!(proof_depth, 1); // log2(2)
+        assert!(proofs_off > pool_off);
+    }
+
+    // === Negative ============================================================
+
+    /// build_db on an empty JSON array must reject — otherwise we'd
+    /// ship a header claiming entry_cnt=0 with a root the secure-world
+    /// would never produce for a real lookup.
+    #[test]
+    fn negative_build_db_empty_json_rejected() {
+        let f = write_json("[]");
+        let err = build_db(f.path()).err().expect("empty array must be rejected");
+        assert!(err.contains("no entries"), "got: {err}");
+    }
+
+    /// Names beyond 255 bytes — the on-disk format encodes name_len as
+    /// u8 (`buf.push(name.len() as u8)` would truncate silently and
+    /// produce a leaf the secure-world cannot reconstruct).
+    #[test]
+    fn negative_build_db_name_too_long_rejected() {
+        let huge = "x".repeat(256);
+        let json = format!(
+            r#"[{{"chain_id": 1, "address": "{}", "name": "{}", "symbol": "S", "decimals": 0}}]"#,
+            fixture_addr(0x01),
+            huge
+        );
+        let f = write_json(&json);
+        let err = build_db(f.path()).err().expect("256-byte name must be rejected");
+        assert!(err.contains("name too long"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_build_db_symbol_too_long_rejected() {
+        let huge = "y".repeat(300);
+        let json = format!(
+            r#"[{{"chain_id": 1, "address": "{}", "name": "N", "symbol": "{}", "decimals": 0}}]"#,
+            fixture_addr(0x01),
+            huge
+        );
+        let f = write_json(&json);
+        let err = build_db(f.path()).err().expect("oversize symbol must be rejected");
+        assert!(err.contains("symbol too long"), "got: {err}");
+    }
+
+    /// Bad-hex address — invariant: every address is a parsed 20-byte
+    /// blob. A `0x..` string of wrong length or non-hex chars must be
+    /// rejected at build time so the on-chain leaf cannot drift.
+    #[test]
+    fn negative_build_db_bad_address_length_rejected() {
+        let json = r#"[
+            {"chain_id": 1, "address": "0xabcd", "name": "N", "symbol": "S", "decimals": 0}
+        ]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("short address must be rejected");
+        assert!(err.contains("40 hex"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_build_db_non_hex_address_rejected() {
+        let json = r#"[
+            {"chain_id": 1, "address": "0xZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
+             "name": "N", "symbol": "S", "decimals": 0}
+        ]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("non-hex address must be rejected");
+        assert!(err.contains("hex decode") || err.contains("hex"), "got: {err}");
+    }
+
+    /// Duplicate `(chain_id, contract)` rows — almost always a typo
+    /// and would let an attacker substitute the second entry's
+    /// metadata at the first index. Curator gate.
+    #[test]
+    fn negative_build_db_duplicate_chain_contract_rejected() {
+        let json = format!(
+            r#"[
+                {{"chain_id": 1, "address": "{}", "name": "A", "symbol": "AA", "decimals": 0}},
+                {{"chain_id": 1, "address": "{}", "name": "B", "symbol": "BB", "decimals": 0}}
+            ]"#,
+            fixture_addr(0xaa),
+            fixture_addr(0xaa),
+        );
+        let f = write_json(&json);
+        let err = build_db(f.path()).err().expect("duplicate must be rejected");
+        assert!(err.contains("duplicate"), "got: {err}");
+    }
+
+    /// Same contract across two chains with DIFFERENT name/symbol is
+    /// almost always a copy-paste error. The build refuses to commit
+    /// it to the trust anchor so a UI display can't accidentally show
+    /// "WETH" on chain A as "DAI" on chain B.
+    #[test]
+    fn negative_build_db_same_contract_different_metadata_rejected() {
+        let json = format!(
+            r#"[
+                {{"chain_id": 1, "address": "{}", "name": "USDC", "symbol": "USDC", "decimals": 6}},
+                {{"chain_id": 137, "address": "{}", "name": "DAI", "symbol": "DAI", "decimals": 18}}
+            ]"#,
+            fixture_addr(0xbe),
+            fixture_addr(0xbe),
+        );
+        let f = write_json(&json);
+        let err = build_db(f.path()).err().expect(
+            "same contract cross-chain with different metadata must be rejected",
+        );
+        assert!(err.contains("multiple chains"), "got: {err}");
+    }
+
+    /// Tampered blob — if a single byte of the entries region flips,
+    /// round_trip_check must fail. This is the same trust gate the
+    /// runtime parser depends on.
+    #[test]
+    fn negative_round_trip_tampered_entry_decimals_rejected() {
+        let json = format!(
+            r#"[
+                {{"chain_id": 1, "address": "{}", "name": "X", "symbol": "Y", "decimals": 18}}
+            ]"#,
+            fixture_addr(0x01),
+        );
+        let f = write_json(&json);
+        let res = build_db(f.path()).expect("build_db");
+        let mut tampered = res.blob.clone();
+        let decimals_off = ERC20_DB_HEADER_LEN + ERC20_ENTRY_OFF_DECIMALS;
+        tampered[decimals_off] = 6;
+        let err = round_trip_check(&tampered, f.path(), &res.root)
+            .err().expect("decimals tamper must fail round-trip");
+        // decimals mismatch should surface as a "decimals mismatch" or
+        // Merkle-proof failure depending on which check fires first.
+        assert!(
+            err.contains("decimals") || err.contains("Merkle"),
+            "got: {err}",
+        );
+    }
+
+    /// Substituted Merkle root — round_trip_check must reject when
+    /// `expected_root` doesn't match the blob's reconstructed root.
+    /// This is the trust-anchor gate; if it passes a bogus root, a
+    /// future firmware build that loads the new root will accept a
+    /// blob that doesn't match.
+    #[test]
+    fn negative_round_trip_wrong_root_rejected() {
+        let json = format!(
+            r#"[
+                {{"chain_id": 1, "address": "{}", "name": "X", "symbol": "Y", "decimals": 18}},
+                {{"chain_id": 2, "address": "{}", "name": "X", "symbol": "Y", "decimals": 18}}
+            ]"#,
+            fixture_addr(0x01),
+            fixture_addr(0x02),
+        );
+        let f = write_json(&json);
+        let res = build_db(f.path()).expect("build_db");
+        let mut bogus_root = res.root;
+        bogus_root[0] ^= 0x01;
+        let err = round_trip_check(&res.blob, f.path(), &bogus_root)
+            .err().expect("bogus root must fail round-trip");
+        assert!(err.contains("Merkle"), "got: {err}");
+    }
+
+    /// Canonical leaf encoding length-prefix uses u8 — name + symbol
+    /// must each be ≤ 255 bytes. The build_db caller checks that, but
+    /// the canonical function itself silently truncates. Pin the
+    /// length-prefix byte for a 255-byte name (boundary) to detect any
+    /// change to the prefix width.
+    #[test]
+    fn negative_canonical_length_prefix_is_u8() {
+        let name = vec![b'N'; 255];
+        let symbol = b"S";
+        let buf = canonical_erc20_leaf(1, &[0u8; 20], 0, &name, symbol);
+        // Layout: 8 + 20 + 1 + 1(name_len) + 255 + 1(sym_len) + 1
+        assert_eq!(buf[8 + 20 + 1], 255);
+        // Symbol prefix is at 8+20+1+1+255 = 285
+        assert_eq!(buf[8 + 20 + 1 + 1 + 255], 1);
+    }
+
+    /// Domain-separator coupling: the leaf binds (chain_id, contract,
+    /// decimals, name, symbol). Shifting the LE-encoded chain_id
+    /// boundary by changing any single field must change the hash.
+    /// This proves there is no internal alignment gap an attacker can
+    /// exploit to substitute one field for another.
+    #[test]
+    fn negative_canonical_fields_each_affect_hash() {
+        let base = canonical_erc20_leaf(1, &[0u8; 20], 18, b"A", b"B");
+        let h_base = crate::merkle::leaf_hash(&base);
+        let cases: Vec<Vec<u8>> = vec![
+            canonical_erc20_leaf(2, &[0u8; 20], 18, b"A", b"B"),
+            canonical_erc20_leaf(1, &[1u8; 20], 18, b"A", b"B"),
+            canonical_erc20_leaf(1, &[0u8; 20], 6, b"A", b"B"),
+            canonical_erc20_leaf(1, &[0u8; 20], 18, b"B", b"B"),
+            canonical_erc20_leaf(1, &[0u8; 20], 18, b"A", b"C"),
+            canonical_erc20_leaf(1, &[0u8; 20], 18, b"AA", b"B"),
+        ];
+        for c in cases {
+            assert_ne!(crate::merkle::leaf_hash(&c), h_base);
+        }
+    }
+}

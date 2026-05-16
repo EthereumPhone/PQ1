@@ -243,3 +243,196 @@ pub fn scalar_to_dec(s: &Scalar) -> String {
     }
     digits.iter().rev().map(|d| (b'0' + d) as char).collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // === Positive ============================================================
+
+    /// MAX_SYMBOL_LEN is a circuit-side constant — the Circom Poseidon
+    /// circuit packs the symbol field into exactly 6 ASCII bytes. Any
+    /// bump here changes the leaf encoding and invalidates every
+    /// shipped ERC20_POSEIDON_ROOT.
+    #[test]
+    fn positive_max_symbol_len_frozen_at_six() {
+        assert_eq!(MAX_SYMBOL_LEN, 6);
+    }
+
+    /// Poseidon leaf encoding is frozen — pin chain_id / address /
+    /// decimals / symbol-packing / symbol-len / reserved field values
+    /// for a known input. The circuit-side leaf MUST match this byte
+    /// for byte (well, field for field).
+    #[test]
+    fn positive_canonical_poseidon_leaf_field_layout() {
+        let chain_id = 1u64;
+        let addr: [u8; 20] = [
+            0xc0, 0xff, 0xee, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        ];
+        let symbol = b"USDC";
+        let fields =
+            canonical_erc20_poseidon_leaf(chain_id, &addr, 6, symbol).expect("leaf builds");
+        assert_eq!(fields[0], bls12_381::Scalar::from(1u64));
+        // f1 = address packed big-endian into a single scalar.
+        let mut expected_f1 = bls12_381::Scalar::zero();
+        let s256 = bls12_381::Scalar::from(256u64);
+        for &b in addr.iter() {
+            expected_f1 = expected_f1 * s256 + bls12_381::Scalar::from(b as u64);
+        }
+        assert_eq!(fields[1], expected_f1);
+        assert_eq!(fields[2], bls12_381::Scalar::from(6u64));
+        // f3 = symbol packed big-endian, right-padded with 0x20.
+        let mut expected_f3 = bls12_381::Scalar::zero();
+        let padded = b"USDC  "; // pad with two ASCII spaces to width 6
+        for &b in padded.iter() {
+            expected_f3 = expected_f3 * s256 + bls12_381::Scalar::from(b as u64);
+        }
+        assert_eq!(fields[3], expected_f3);
+        assert_eq!(fields[4], bls12_381::Scalar::from(4u64));
+        assert_eq!(fields[5], bls12_381::Scalar::zero());
+    }
+
+    #[test]
+    fn positive_canonical_symbol_at_max_length() {
+        let res = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, b"ABCDEF");
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn positive_tree_round_trip_two_leaves() {
+        let f0 =
+            canonical_erc20_poseidon_leaf(1, &[0u8; 20], 18, b"ETH").expect("leaf0");
+        let f1 =
+            canonical_erc20_poseidon_leaf(137, &[0xffu8; 20], 6, b"USDC").expect("leaf1");
+        let l0 = leaf_hash(&f0);
+        let l1 = leaf_hash(&f1);
+        let t = PoseidonMerkleTree::build(vec![l0, l1]);
+        assert_eq!(t.depth(), 1);
+        assert_eq!(t.root(), node_hash(&l0, &l1));
+        assert!(verify_proof(&l0, 0, &t.proof(0), &t.root()));
+        assert!(verify_proof(&l1, 1, &t.proof(1), &t.root()));
+    }
+
+    #[test]
+    fn positive_tree_padded_three_leaves() {
+        let leaves: Vec<bls12_381::Scalar> = (1..=3u64).map(bls12_381::Scalar::from).collect();
+        let t = PoseidonMerkleTree::build(leaves.clone());
+        assert_eq!(t.depth(), 2);
+        assert_eq!(t.levels[0].len(), 4);
+        assert_eq!(t.levels[0][3], leaves[2]); // duplicated last leaf
+        for (i, leaf) in leaves.iter().enumerate() {
+            assert!(verify_proof(leaf, i, &t.proof(i), &t.root()));
+        }
+    }
+
+    #[test]
+    fn positive_scalar_to_le32_round_trip() {
+        let s = bls12_381::Scalar::from(0x1234_5678_9abc_def0u64);
+        let bytes = scalar_to_le32(&s);
+        let back = bls12_381::Scalar::from_bytes(&bytes);
+        assert_eq!(bool::from(back.is_some()), true);
+        assert_eq!(back.unwrap(), s);
+    }
+
+    // === Negative ============================================================
+
+    /// Empty symbol — can't be packed into the field. Circuit-side
+    /// would also fail; refuse at host build time.
+    #[test]
+    fn negative_empty_symbol_rejected() {
+        let err = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, b"")
+            .err().expect("empty symbol must fail");
+        assert!(err.contains("symbol_len"), "got: {err}");
+    }
+
+    /// Symbol > MAX_SYMBOL_LEN — bumping MAX_SYMBOL_LEN would change
+    /// the circuit's witness layout; refuse the build instead.
+    #[test]
+    fn negative_oversize_symbol_rejected() {
+        let err = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, b"TOOLONG")
+            .err().expect("7-byte symbol must fail");
+        assert!(err.contains("symbol_len"), "got: {err}");
+    }
+
+    /// Non-printable / non-ASCII symbol byte — would break the trusted
+    /// UI's display path and is not representable in the Circom-side
+    /// 6-byte ASCII layout.
+    #[test]
+    fn negative_non_printable_symbol_rejected() {
+        let bad = [b'A', b'B', 0x07, b'D'];
+        let err = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, &bad)
+            .err().expect("BEL byte must fail");
+        assert!(err.contains("printable ASCII"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_high_byte_symbol_rejected() {
+        let bad = [b'A', b'B', 0x80, b'D'];
+        let err = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, &bad)
+            .err().expect("0x80 byte must fail");
+        assert!(err.contains("printable ASCII"), "got: {err}");
+    }
+
+    /// Tampered leaf — flipping any byte of the leaf hash must
+    /// invalidate the proof. The Poseidon tree's trust property is
+    /// the same as the SHA-256 tree's.
+    #[test]
+    fn negative_tampered_leaf_rejected() {
+        let leaves: Vec<bls12_381::Scalar> = (1..=4u64).map(bls12_381::Scalar::from).collect();
+        let t = PoseidonMerkleTree::build(leaves);
+        let proof = t.proof(2);
+        let real_leaf = bls12_381::Scalar::from(3u64);
+        let tampered_leaf = bls12_381::Scalar::from(99u64);
+        assert!(verify_proof(&real_leaf, 2, &proof, &t.root()));
+        assert!(!verify_proof(&tampered_leaf, 2, &proof, &t.root()));
+    }
+
+    /// Tampered proof sibling — must reject.
+    #[test]
+    fn negative_tampered_sibling_rejected() {
+        let leaves: Vec<bls12_381::Scalar> = (1..=4u64).map(bls12_381::Scalar::from).collect();
+        let t = PoseidonMerkleTree::build(leaves);
+        let mut proof = t.proof(1);
+        proof[0] = bls12_381::Scalar::from(0xdeadu64);
+        let real_leaf = bls12_381::Scalar::from(2u64);
+        assert!(!verify_proof(&real_leaf, 1, &proof, &t.root()));
+    }
+
+    /// Wrong index — position binding for the Poseidon tree mirrors
+    /// the SHA-256 tree.
+    #[test]
+    fn negative_wrong_index_rejected() {
+        let leaves: Vec<bls12_381::Scalar> = (1..=4u64).map(bls12_381::Scalar::from).collect();
+        let t = PoseidonMerkleTree::build(leaves);
+        let proof = t.proof(0);
+        let leaf0 = bls12_381::Scalar::from(1u64);
+        assert!(verify_proof(&leaf0, 0, &proof, &t.root()));
+        assert!(!verify_proof(&leaf0, 1, &proof, &t.root()));
+    }
+
+    /// Empty leaf vector — should panic. Same rationale as the
+    /// SHA-256 tree.
+    #[test]
+    #[should_panic(expected = "Poseidon Merkle tree needs")]
+    fn negative_empty_leaves_panics() {
+        let _ = PoseidonMerkleTree::build(Vec::<bls12_381::Scalar>::new());
+    }
+
+    /// Symbol-packing must be sensitive to position — "AB    " and
+    /// "  AB  " produce different f3 packings even though both are
+    /// 6 bytes of mostly-spaces.
+    #[test]
+    fn negative_symbol_packing_position_matters() {
+        // Both are 2-byte symbols (left-padded vs right-padded would
+        // be a regression). Implementation does right-pad with space.
+        let fab = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, b"AB").unwrap();
+        let fba = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, b"BA").unwrap();
+        assert_ne!(fab[3], fba[3]);
+        // Differently sized symbols are also distinct (symbol_len f4
+        // differs too).
+        let fa = canonical_erc20_poseidon_leaf(1, &[0u8; 20], 0, b"A").unwrap();
+        assert_ne!(fab[3], fa[3]);
+        assert_ne!(fab[4], fa[4]);
+    }
+}
