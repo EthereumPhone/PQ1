@@ -894,3 +894,115 @@ fn test_zeroize() {
     a.zeroize();
     assert!(bool::from(a.is_zero()));
 }
+
+// ====================================================================
+// Tests for the local `pka` modifications to `Fp2::square`.
+// See UPSTREAM.md: the cfg block is a placeholder for a future
+// PKA-specific short-circuit. Until somebody intentionally diverges
+// them, the two branches must remain byte-identical — otherwise the
+// QEMU build silently runs different math from the firmware build.
+// ====================================================================
+
+#[cfg(test)]
+mod pka_local_mods_tests {
+    use super::*;
+    use std::string::String;
+    use std::vec::Vec;
+
+    /// Source-level guard: assert that the two `#[cfg]`-gated `square`
+    /// impls in this file have identical bodies (after whitespace
+    /// normalisation). If a future maintainer intentionally diverges
+    /// the PKA branch, they should update this test alongside the
+    /// new code so reviewers know the divergence is deliberate.
+    #[test]
+    fn negative_fp2_square_cfg_branches_identical() {
+        let src = include_str!("fp2.rs");
+
+        let cfg_no_pka = "#[cfg(not(feature = \"pka\"))]";
+        let cfg_pka = "#[cfg(feature = \"pka\")]";
+
+        let idx_no_pka = src
+            .find(cfg_no_pka)
+            .expect("fp2.rs must contain the #[cfg(not(feature = \"pka\"))] square branch");
+        let idx_pka = src
+            .find(cfg_pka)
+            .expect("fp2.rs must contain the #[cfg(feature = \"pka\")] square branch");
+        assert!(
+            idx_no_pka < idx_pka,
+            "fp2.rs cfg-branch ordering changed — re-check assumptions"
+        );
+
+        fn extract_square_body(slice: &str) -> String {
+            let fn_pos = slice.find("fn square(").expect("expected `fn square(` in slice");
+            let after_fn = &slice[fn_pos..];
+            let brace_open = after_fn.find('{').expect("expected `{` after fn square(");
+            let bytes = after_fn.as_bytes();
+            let mut depth: i32 = 0;
+            let mut end = 0usize;
+            for (i, &b) in bytes.iter().enumerate().skip(brace_open) {
+                match b {
+                    b'{' => depth += 1,
+                    b'}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = i + 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            assert!(end > 0, "could not find matching `}}` for fn square");
+            after_fn[brace_open..end]
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        let body_no_pka = extract_square_body(&src[idx_no_pka..idx_pka]);
+        let body_pka = extract_square_body(&src[idx_pka..]);
+
+        assert_eq!(
+            body_no_pka, body_pka,
+            "Fp2::square cfg branches must stay byte-identical (UPSTREAM.md). \
+             If you are intentionally diverging the PKA short-circuit, \
+             update this test along with the new code."
+        );
+    }
+
+    /// Algebraic invariant: `Fp2::square(a)` must equal
+    /// `Fp::sum_of_products`-style mul `a * a` produced by `Fp2::mul`.
+    /// This pins the formula independently of any future PKA
+    /// divergence — even if the two branches drift, both must still
+    /// compute the same `a^2`.
+    #[test]
+    fn positive_fp2_square_equals_mul_self_on_fixtures() {
+        let a = Fp2 {
+            c0: Fp::one(),
+            c1: Fp::one(),
+        };
+        assert_eq!(a.square(), a.mul(&a));
+
+        let b = Fp2 {
+            c0: Fp::zero(),
+            c1: Fp::one(),
+        };
+        // (0 + i)^2 = -1 + 0i  (since i^2 = -1 in Fp2's β = -1).
+        assert_eq!(
+            b.square(),
+            Fp2 {
+                c0: -Fp::one(),
+                c1: Fp::zero(),
+            }
+        );
+
+        let c = Fp2 {
+            c0: Fp::one(),
+            c1: Fp::zero(),
+        };
+        assert_eq!(c.square(), Fp2::one());
+
+        let z = Fp2::zero();
+        assert_eq!(z.square(), Fp2::zero());
+    }
+}

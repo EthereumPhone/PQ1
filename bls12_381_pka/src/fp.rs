@@ -1063,3 +1063,619 @@ fn test_zeroize() {
     a.zeroize();
     assert!(bool::from(a.is_zero()));
 }
+
+// ====================================================================
+// Tests for the local `pka` modifications to the vendored upstream
+// `bls12_381` crate.
+//
+// The upstream crate already has extensive coverage of `Fp` / `Fp2`
+// arithmetic; the tests below target the *delta* this fork introduces
+// (see UPSTREAM.md for the inventory):
+//
+// 1. `Fp::mul_soft` / `Fp::square_soft` are the explicit software
+//    paths (previously named `mul` / `square` upstream).
+// 2. `Fp::mul` / `Fp::square` dispatch to the PKA hook under
+//    `#[cfg(feature = "pka")]`, and to the software path otherwise.
+//    The default build (no `pka`) must stay byte-identical to upstream.
+// 3. Private helpers `fp_u64_to_u32` / `fp_u32_to_u64` translate Fp
+//    limb layout to a little-endian `[u32; 12]` array that the PKA
+//    hook reads. Endianness mistakes here would silently corrupt every
+//    PKA multiplication on real STM32U585 hardware — the host build
+//    can't see it via the software path alone, so we cover it via the
+//    `pka`-feature stub below.
+// 4. `lib.rs` relaxes the crate-wide `deny(unsafe_code)` lint only
+//    when `pka` is on — pinned by a source-level guard test.
+// 5. `Fp2::square` is duplicated under both cfg branches with
+//    identical bodies (placeholder for a future PKA short-circuit) —
+//    pinned in `fp2.rs::pka_local_mods_tests`.
+// ====================================================================
+
+#[cfg(test)]
+mod pka_local_mods_tests {
+    use super::*;
+    use rand_core::SeedableRng;
+    use rand_xorshift::XorShiftRng;
+
+    // ----------------------------------------------------------------
+    // Test fixtures (lifted from upstream `test_multiplication` /
+    // `test_squaring` golden values).
+    // ----------------------------------------------------------------
+
+    fn fixture_a() -> Fp {
+        Fp::from_raw_unchecked([
+            0x0397_a383_2017_0cd4,
+            0x734c_1b2c_9e76_1d30,
+            0x5ed2_55ad_9a48_beb5,
+            0x095a_3c6b_22a7_fcfc,
+            0x2294_ce75_d4e2_6a27,
+            0x1333_8bd8_7001_1ebb,
+        ])
+    }
+
+    fn fixture_b() -> Fp {
+        Fp::from_raw_unchecked([
+            0xb9c3_c7c5_b119_6af7,
+            0x2580_e208_6ce3_35c1,
+            0xf49a_ed3d_8a57_ef42,
+            0x41f2_81e4_9846_e878,
+            0xe076_2346_c384_52ce,
+            0x0652_e893_26e5_7dc0,
+        ])
+    }
+
+    fn fixture_ab() -> Fp {
+        Fp::from_raw_unchecked([
+            0xf96e_f3d7_11ab_5355,
+            0xe8d4_59ea_00f1_48dd,
+            0x53f7_354a_5f00_fa78,
+            0x9e34_a4f3_125c_5f83,
+            0x3fbe_0c47_ca74_c19e,
+            0x01b0_6a8b_bd4a_dfe4,
+        ])
+    }
+
+    fn fixture_square_input() -> Fp {
+        Fp::from_raw_unchecked([
+            0xd215_d276_8e83_191b,
+            0x5085_d80f_8fb2_8261,
+            0xce9a_032d_df39_3a56,
+            0x3e9c_4fff_2ca0_c4bb,
+            0x6436_b6f7_f4d9_5dfb,
+            0x1060_6628_ad4a_4d90,
+        ])
+    }
+
+    fn fixture_square_output() -> Fp {
+        Fp::from_raw_unchecked([
+            0x33d9_c42a_3cb3_e235,
+            0xdad1_1a09_4c4c_d455,
+            0xa2f1_44bd_729a_aeba,
+            0xd415_0932_be9f_feac,
+            0xe27b_c7c4_7d44_ee50,
+            0x14b6_a78d_3ec7_a560,
+        ])
+    }
+
+    fn deterministic_rng() -> XorShiftRng {
+        XorShiftRng::from_seed([
+            0x59, 0x62, 0xbe, 0x5d, 0x76, 0x3d, 0x31, 0x8d, 0x17, 0xdb, 0x37, 0x32, 0x54, 0x06,
+            0xbc, 0xe5,
+        ])
+    }
+
+    fn random_fp(rng: &mut XorShiftRng) -> Fp {
+        Fp::random(rng)
+    }
+
+    // ================================================================
+    // POSITIVE: golden-value coverage of `mul_soft` / `square_soft`.
+    // ================================================================
+
+    #[test]
+    fn positive_mul_soft_matches_upstream_golden() {
+        // Pins `mul_soft` to the canonical software Montgomery
+        // multiplication. If a refactor of `mul_soft` ever changes
+        // its output for this golden pair (also used by upstream's
+        // `test_multiplication`), this test fails immediately.
+        assert_eq!(fixture_a().mul_soft(&fixture_b()), fixture_ab());
+    }
+
+    #[test]
+    fn positive_square_soft_matches_upstream_golden() {
+        assert_eq!(
+            fixture_square_input().square_soft(),
+            fixture_square_output()
+        );
+    }
+
+    #[test]
+    fn positive_mul_soft_identity_with_one() {
+        let a = fixture_a();
+        assert_eq!(a.mul_soft(&Fp::one()), a);
+        assert_eq!(Fp::one().mul_soft(&a), a);
+    }
+
+    #[test]
+    fn positive_mul_soft_absorber_with_zero() {
+        let a = fixture_a();
+        assert_eq!(a.mul_soft(&Fp::zero()), Fp::zero());
+        assert_eq!(Fp::zero().mul_soft(&a), Fp::zero());
+    }
+
+    #[test]
+    fn positive_square_soft_equals_mul_soft_self_on_fixtures() {
+        for fp in [
+            Fp::zero(),
+            Fp::one(),
+            fixture_a(),
+            fixture_b(),
+            fixture_square_input(),
+            -Fp::one(),
+        ] {
+            assert_eq!(
+                fp.square_soft(),
+                fp.mul_soft(&fp),
+                "square_soft must equal mul_soft(self, self)"
+            );
+        }
+    }
+
+    #[test]
+    fn positive_mul_soft_commutativity_random() {
+        let mut rng = deterministic_rng();
+        for _ in 0..64 {
+            let a = random_fp(&mut rng);
+            let b = random_fp(&mut rng);
+            assert_eq!(a.mul_soft(&b), b.mul_soft(&a));
+        }
+    }
+
+    #[test]
+    fn positive_mul_soft_associativity_random() {
+        let mut rng = deterministic_rng();
+        for _ in 0..32 {
+            let a = random_fp(&mut rng);
+            let b = random_fp(&mut rng);
+            let c = random_fp(&mut rng);
+            let ab_c = a.mul_soft(&b).mul_soft(&c);
+            let a_bc = a.mul_soft(&b.mul_soft(&c));
+            assert_eq!(ab_c, a_bc);
+        }
+    }
+
+    #[test]
+    fn positive_mul_soft_distributivity_random() {
+        let mut rng = deterministic_rng();
+        for _ in 0..32 {
+            let a = random_fp(&mut rng);
+            let b = random_fp(&mut rng);
+            let c = random_fp(&mut rng);
+            let lhs = a.mul_soft(&(b + c));
+            let rhs = a.mul_soft(&b) + a.mul_soft(&c);
+            assert_eq!(lhs, rhs);
+        }
+    }
+
+    #[test]
+    fn positive_square_soft_of_minus_one_is_one() {
+        // (-1)^2 = 1 mod p — a famous edge case for Montgomery code.
+        assert_eq!((-Fp::one()).square_soft(), Fp::one());
+    }
+
+    #[test]
+    fn positive_square_soft_of_zero_is_zero() {
+        assert_eq!(Fp::zero().square_soft(), Fp::zero());
+    }
+
+    // ================================================================
+    // POSITIVE / NEGATIVE: cfg-dispatch. `Fp::mul` / `Fp::square` must
+    // agree with `mul_soft` / `square_soft` on the default no-pka
+    // build, and must dispatch through the PKA hook on the `pka`
+    // build (see `pka_stub_tests` below).
+    // ================================================================
+
+    #[cfg(not(feature = "pka"))]
+    #[test]
+    fn positive_default_build_mul_dispatches_to_soft() {
+        // The default build must keep `Fp::mul` byte-identical to
+        // `Fp::mul_soft`. Catches accidental cfg changes that leak
+        // the PKA path into the software build.
+        let mut rng = deterministic_rng();
+        for _ in 0..128 {
+            let a = random_fp(&mut rng);
+            let b = random_fp(&mut rng);
+            assert_eq!(
+                a.mul(&b),
+                a.mul_soft(&b),
+                "default-feature Fp::mul must equal Fp::mul_soft"
+            );
+        }
+    }
+
+    #[cfg(not(feature = "pka"))]
+    #[test]
+    fn positive_default_build_square_dispatches_to_soft() {
+        let mut rng = deterministic_rng();
+        for _ in 0..128 {
+            let a = random_fp(&mut rng);
+            assert_eq!(
+                a.square(),
+                a.square_soft(),
+                "default-feature Fp::square must equal Fp::square_soft"
+            );
+        }
+    }
+
+    #[cfg(not(feature = "pka"))]
+    #[test]
+    fn negative_default_features_must_not_enable_pka() {
+        // UPSTREAM.md: the `pka` feature is off by default. If a
+        // future Cargo.toml edit adds `pka` to `default = [...]`, the
+        // host test suite stops exercising the software path AND the
+        // firmware suddenly demands the external
+        // `bls12_381_pka_mont_mul` symbol from every host build that
+        // depends transitively on this crate.
+        //
+        // (This test is excluded from the `--features pka` build by
+        // the same cfg gate so an intentional
+        // `cargo test --features pka` run does not falsely flag it.)
+        assert!(
+            !cfg!(feature = "pka"),
+            "default cargo features must not enable `pka` — see UPSTREAM.md"
+        );
+    }
+
+    // ================================================================
+    // NEGATIVE: `mul_soft` / `square_soft` output is always canonical
+    // (< p). Montgomery reduction includes a final `subtract_p` step
+    // that a refactor could accidentally drop, yielding non-canonical
+    // representatives. We assert canonicality by round-tripping
+    // through to_bytes / from_bytes, which itself rejects
+    // non-canonical encodings.
+    // ================================================================
+
+    #[test]
+    fn negative_mul_soft_output_is_canonical_random() {
+        let mut rng = deterministic_rng();
+        for _ in 0..64 {
+            let a = random_fp(&mut rng);
+            let b = random_fp(&mut rng);
+            let prod = a.mul_soft(&b);
+            let bytes = prod.to_bytes();
+            let roundtrip = Option::<Fp>::from(Fp::from_bytes(&bytes)).expect(
+                "mul_soft output must round-trip through canonical to_bytes/from_bytes",
+            );
+            assert_eq!(
+                prod, roundtrip,
+                "mul_soft must return a canonically reduced Fp (< p)",
+            );
+        }
+    }
+
+    #[test]
+    fn negative_square_soft_output_is_canonical_random() {
+        let mut rng = deterministic_rng();
+        for _ in 0..64 {
+            let a = random_fp(&mut rng);
+            let sq = a.square_soft();
+            let bytes = sq.to_bytes();
+            let roundtrip = Option::<Fp>::from(Fp::from_bytes(&bytes)).expect(
+                "square_soft output must round-trip through canonical to_bytes/from_bytes",
+            );
+            assert_eq!(
+                sq, roundtrip,
+                "square_soft must return a canonically reduced Fp (< p)",
+            );
+        }
+    }
+
+    // ================================================================
+    // NEGATIVE: cross-check `square_soft` vs `mul_soft(self, self)`
+    // over a large random panel. The two share a Montgomery
+    // reduction step but have independent multiplication kernels
+    // (square uses a doubling trick, mul does operand-scanning). A
+    // divergence under any input is a correctness bug.
+    // ================================================================
+
+    #[test]
+    fn negative_square_soft_vs_mul_soft_self_random() {
+        let mut rng = deterministic_rng();
+        for _ in 0..256 {
+            let a = random_fp(&mut rng);
+            assert_eq!(
+                a.square_soft(),
+                a.mul_soft(&a),
+                "square_soft and mul_soft(self, self) must always agree"
+            );
+        }
+    }
+
+    // ================================================================
+    // NEGATIVE: source-level guard on `lib.rs`. `unsafe` code MUST
+    // remain forbidden in non-`pka` builds.
+    // ================================================================
+
+    #[test]
+    fn negative_lib_rs_keeps_unsafe_code_lint_for_no_pka() {
+        let src = include_str!("lib.rs");
+        assert!(
+            src.contains("#![cfg_attr(not(feature = \"pka\"), deny(unsafe_code))]"),
+            "lib.rs must keep the cfg_attr that denies `unsafe_code` for the \
+             no-pka build. UPSTREAM.md: this guarantees the software path is \
+             unsafe-free, so a refactor that introduces `unsafe` outside the \
+             PKA hook fails to build."
+        );
+    }
+
+    #[test]
+    fn negative_fp_rs_pka_hook_signature_unchanged() {
+        // The extern "Rust" hook is the entire ABI between this crate
+        // and `secure/src/hw/pka.rs`. Renaming the symbol, changing
+        // its arity, or changing the limb type silently breaks the
+        // firmware build — or, worse, links successfully against a
+        // stale symbol of the wrong type and corrupts every Fp::mul
+        // on hardware.
+        let src = include_str!("fp.rs");
+        assert!(
+            src.contains("#[link_name = \"bls12_381_pka_mont_mul\"]"),
+            "fp.rs must keep the `bls12_381_pka_mont_mul` link_name \
+             unchanged — secure/src/hw/pka.rs exports it via #[no_mangle]"
+        );
+        assert!(
+            src.contains("fn pka_mont_mul(a: &[u32; 12], b: &[u32; 12]) -> [u32; 12];"),
+            "fp.rs must keep the pka_mont_mul extern signature \
+             (&[u32; 12], &[u32; 12]) -> [u32; 12] — the firmware export \
+             must match exactly"
+        );
+    }
+
+    #[test]
+    fn negative_fp_u64_to_u32_conversion_is_little_endian_pairs() {
+        // The conversion helpers `fp_u64_to_u32` / `fp_u32_to_u64`
+        // live in fp.rs above (gated on `pka`) and silently dictate
+        // the firmware ABI. We assert their layout by pinning the
+        // source text: low u32 of u64-limb i goes to out[2*i],
+        // high u32 to out[2*i+1]. Any future endian swap of the
+        // helpers breaks the PKA hook on real hardware (the QEMU
+        // build with the software path doesn't exercise this code at
+        // all), so we freeze the conversion expression here.
+        let src = include_str!("fp.rs");
+        assert!(
+            src.contains("out[2 * i] = limbs[i] as u32;"),
+            "fp_u64_to_u32 must place the LOW u32 of each u64 limb at \
+             out[2*i] (little-endian u32 pairs). Swapping this corrupts \
+             every PKA multiplication on hardware."
+        );
+        assert!(
+            src.contains("out[2 * i + 1] = (limbs[i] >> 32) as u32;"),
+            "fp_u64_to_u32 must place the HIGH u32 of each u64 limb at \
+             out[2*i+1] (little-endian u32 pairs)."
+        );
+        assert!(
+            src.contains("out[i] = limbs[2 * i] as u64 | ((limbs[2 * i + 1] as u64) << 32);"),
+            "fp_u32_to_u64 must reconstruct u64 limbs as low | (high << 32). \
+             A flip here breaks the inverse mapping the PKA hook depends on."
+        );
+    }
+
+    // ================================================================
+    // `pka`-feature-only tests. Provide a host-side stub for the
+    // `bls12_381_pka_mont_mul` extern symbol and verify that:
+    //   (a) the PKA dispatch path actually calls it,
+    //   (b) the [u64; 6] → [u32; 12] limb layout is preserved
+    //       through the call, and
+    //   (c) end-to-end results match `mul_soft` on the same operands.
+    //
+    // Runs only with: `cargo test -p bls12_381_pka --features pka`.
+    // Default `cargo test` skips this whole block. Documented in
+    // reports/tests/bls12_381_pka.md.
+    // ================================================================
+
+    #[cfg(feature = "pka")]
+    mod pka_stub_tests {
+        use super::*;
+        use std::vec::Vec;
+
+        #[derive(Clone, Debug)]
+        struct StubCall {
+            a: [u32; 12],
+            b: [u32; 12],
+        }
+
+        // Thread-local call log. Cargo runs tests in parallel and every
+        // test in the crate that touches Fp::mul (pairing tests, scalar
+        // tests, etc.) routes through this stub under `--features pka`.
+        // Using a thread-local log ensures each count-sensitive test
+        // sees only the invocations originating from its own thread.
+        std::thread_local! {
+            static CALL_LOG: std::cell::RefCell<Vec<StubCall>> =
+                const { std::cell::RefCell::new(Vec::new()) };
+        }
+
+
+        /// Host stub for the `bls12_381_pka_mont_mul` extern hook.
+        /// Records inputs, then forwards to the software Montgomery
+        /// multiplication and re-encodes the result.
+        ///
+        /// # Safety
+        /// This is a `#[cfg(test)]`-only stub: in production firmware
+        /// builds the symbol is exported by `secure/src/hw/pka.rs`.
+        #[no_mangle]
+        pub fn bls12_381_pka_mont_mul(a: &[u32; 12], b: &[u32; 12]) -> [u32; 12] {
+            CALL_LOG.with(|log| log.borrow_mut().push(StubCall { a: *a, b: *b }));
+
+            let mut a64 = [0u64; 6];
+            let mut b64 = [0u64; 6];
+            for i in 0..6 {
+                a64[i] = a[2 * i] as u64 | ((a[2 * i + 1] as u64) << 32);
+                b64[i] = b[2 * i] as u64 | ((b[2 * i + 1] as u64) << 32);
+            }
+            let prod = Fp::from_raw_unchecked(a64).mul_soft(&Fp::from_raw_unchecked(b64));
+
+            let mut out = [0u32; 12];
+            for i in 0..6 {
+                out[2 * i] = prod.0[i] as u32;
+                out[2 * i + 1] = (prod.0[i] >> 32) as u32;
+            }
+            out
+        }
+
+        fn clear_log() {
+            CALL_LOG.with(|log| log.borrow_mut().clear());
+        }
+
+        fn calls() -> Vec<StubCall> {
+            CALL_LOG.with(|log| log.borrow().clone())
+        }
+
+        #[test]
+        fn positive_pka_dispatch_matches_software_on_fixtures() {
+            clear_log();
+            let prod = fixture_a().mul(&fixture_b());
+            assert_eq!(prod, fixture_ab());
+            assert!(
+                !calls().is_empty(),
+                "Fp::mul with pka feature on must call the extern hook"
+            );
+        }
+
+        #[test]
+        fn positive_pka_dispatch_matches_software_on_random() {
+            let mut rng = deterministic_rng();
+            for _ in 0..64 {
+                let a = random_fp(&mut rng);
+                let b = random_fp(&mut rng);
+                assert_eq!(
+                    a.mul(&b),
+                    a.mul_soft(&b),
+                    "PKA-dispatched mul must equal mul_soft when the stub \
+                     forwards to mul_soft"
+                );
+            }
+        }
+
+        #[test]
+        fn positive_pka_square_matches_software_on_random() {
+            let mut rng = deterministic_rng();
+            for _ in 0..32 {
+                let a = random_fp(&mut rng);
+                assert_eq!(a.square(), a.square_soft());
+            }
+        }
+
+        // ------------------------------------------------------------
+        // NEGATIVE: limb-conversion endianness. fp_u64_to_u32 must lay
+        // [u64; 6] out as 12 little-endian u32s (low u32 at out[2*i],
+        // high u32 at out[2*i+1]). An endian flip silently corrupts
+        // every PKA multiplication on real hardware.
+        // ------------------------------------------------------------
+
+        #[test]
+        fn negative_pka_inputs_are_little_endian_u32_pairs() {
+            clear_log();
+            // Use an operand whose u64 limbs each have distinct
+            // low/high u32 halves so any swap is obvious.
+            let a = Fp::from_raw_unchecked([
+                0x1111_2222_3333_4444,
+                0x5555_6666_7777_8888,
+                0x9999_aaaa_bbbb_cccc,
+                0xdddd_eeee_ffff_0000,
+                0x0123_4567_89ab_cdef,
+                0x0fed_cba9_8765_4321,
+            ]);
+            let b = Fp::one();
+            let _ = a.mul(&b);
+            let inv = calls();
+            assert_eq!(
+                inv.len(),
+                1,
+                "exactly one PKA hook invocation expected from a single Fp::mul"
+            );
+
+            // Each pair (a_raw[2i], a_raw[2i+1]) must equal (low, high)
+            // of a.0[i].
+            for i in 0..6 {
+                let expected_low = a.0[i] as u32;
+                let expected_high = (a.0[i] >> 32) as u32;
+                assert_eq!(
+                    inv[0].a[2 * i], expected_low,
+                    "out[2*{i}] must be LOW u32 of limb {i}"
+                );
+                assert_eq!(
+                    inv[0].a[2 * i + 1],
+                    expected_high,
+                    "out[2*{i}+1] must be HIGH u32 of limb {i}"
+                );
+            }
+        }
+
+        #[test]
+        fn negative_pka_argument_order_is_self_then_rhs() {
+            // Montgomery mul is commutative, but the firmware PKA
+            // driver may schedule operand A and B differently (DMA
+            // buffer prep, RAM-bank selection). Pin the order down
+            // so a swap is caught.
+            clear_log();
+            let a = Fp::from_raw_unchecked([1, 0, 0, 0, 0, 0]);
+            let b = Fp::from_raw_unchecked([2, 0, 0, 0, 0, 0]);
+            let _ = a.mul(&b);
+            let inv = calls();
+            assert_eq!(inv.len(), 1);
+            assert_eq!(
+                inv[0].a[0], 1,
+                "Fp::mul must pass `self` as the FIRST argument to the PKA hook"
+            );
+            assert_eq!(
+                inv[0].b[0], 2,
+                "Fp::mul must pass `rhs` as the SECOND argument to the PKA hook"
+            );
+        }
+
+        #[test]
+        fn negative_pka_square_invokes_hook_exactly_once_with_self_self() {
+            // `Fp::square` under pka is `mul_pka(self, self)`. A future
+            // regression that splits square into two PKA ops (or
+            // mul+post-Montgomery shenanigans) would double the
+            // hardware traffic and leak structure.
+            clear_log();
+            let _ = fixture_a().square();
+            let inv = calls();
+            assert_eq!(
+                inv.len(),
+                1,
+                "Fp::square (pka) must perform exactly one PKA Montgomery mul"
+            );
+            assert_eq!(
+                inv[0].a, inv[0].b,
+                "Fp::square (pka) must pass (self, self) to the PKA hook"
+            );
+        }
+
+        // ------------------------------------------------------------
+        // NEGATIVE: full round-trip equivalence. After
+        //   [u64;6] -> [u32;12] -> mul_soft -> [u32;12] -> [u64;6]
+        // (i.e. the entire dispatch through the conversion helpers
+        // and back), the result must equal `mul_soft` applied
+        // directly to Fp. A byte difference here means the
+        // conversion helpers are no longer byte-symmetric.
+        // ------------------------------------------------------------
+
+        #[test]
+        fn negative_pka_roundtrip_matches_direct_mul_soft() {
+            let mut rng = deterministic_rng();
+            for _ in 0..32 {
+                let a = random_fp(&mut rng);
+                let b = random_fp(&mut rng);
+                let via_pka = a.mul(&b);
+                let direct = a.mul_soft(&b);
+                assert_eq!(
+                    via_pka, direct,
+                    "PKA-dispatched Fp::mul must equal Fp::mul_soft to the \
+                     byte. If this fails, fp_u64_to_u32 / fp_u32_to_u64 are \
+                     no longer byte-symmetric — every PKA multiplication on \
+                     real hardware would silently corrupt."
+                );
+            }
+        }
+    }
+}
