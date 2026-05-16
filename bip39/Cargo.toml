@@ -13,4 +13,5 @@ hmac    = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
-hex = { workspace = true }
+hex  = { workspace = true }
+sha2 = { version = "0.10", default-features = false }
