@@ -185,6 +185,43 @@ fn parse_slot(s: &str) -> Result<u8, String> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- parse_slot ----
+
+    #[test]
+    fn positive_parse_slot_letter_a_or_zero() {
+        assert_eq!(parse_slot("A").unwrap(), fw_manifest::SLOT_A);
+        assert_eq!(parse_slot("a").unwrap(), fw_manifest::SLOT_A);
+        assert_eq!(parse_slot("0").unwrap(), fw_manifest::SLOT_A);
+    }
+
+    #[test]
+    fn positive_parse_slot_letter_b_or_one() {
+        assert_eq!(parse_slot("B").unwrap(), fw_manifest::SLOT_B);
+        assert_eq!(parse_slot("b").unwrap(), fw_manifest::SLOT_B);
+        assert_eq!(parse_slot("1").unwrap(), fw_manifest::SLOT_B);
+    }
+
+    #[test]
+    fn positive_slot_a_and_b_are_distinct() {
+        assert_ne!(fw_manifest::SLOT_A, fw_manifest::SLOT_B);
+    }
+
+    #[test]
+    fn negative_parse_slot_rejects_garbage() {
+        // Assumption attacked: silently coercing to A or B.  Signing for
+        // the wrong slot would build a bundle the device rejects at
+        // staging — annoying but not catastrophic; still, the wire
+        // contract says exactly two slots and parse_slot must enforce.
+        for bad in ["", "C", "2", "AA", "01", "-1", "256", "0x00", " A"] {
+            assert!(parse_slot(bad).is_err(), "must reject {bad:?}");
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {

@@ -166,3 +166,236 @@ fn into_fixed<const N: usize>(bytes: &[u8], name: &str) -> Result<[u8; N]> {
     out.copy_from_slice(bytes);
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn fixture_inputs() -> BundleInputs {
+        BundleInputs {
+            manifest_bytes: [0x11; fw_manifest::MANIFEST_SIZE],
+            secure_bytes: vec![0x22; 64],
+            nonsecure_bytes: vec![0x33; 96],
+            measurement_txt: "measurement contents\n".to_string(),
+            pubkey_bytes: [0x44; fw_manifest::VERIFYING_KEY_LEN],
+            release_json: "{\"version\":1}\n".to_string(),
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Positive
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn positive_pack_unpack_roundtrip() {
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("a.pqfw");
+        let inp = fixture_inputs();
+        pack(&inp, &out).unwrap();
+
+        let u = unpack(&out).unwrap();
+        assert_eq!(u.manifest_bytes, inp.manifest_bytes);
+        assert_eq!(u.secure_bytes, inp.secure_bytes);
+        assert_eq!(u.nonsecure_bytes, inp.nonsecure_bytes);
+        assert_eq!(u.pubkey_bytes, inp.pubkey_bytes);
+        assert_eq!(u.measurement_txt, inp.measurement_txt);
+        assert_eq!(u.release_json, inp.release_json);
+    }
+
+    #[test]
+    fn positive_source_date_epoch_yields_deterministic_bundle() {
+        // Two packs of identical inputs under the same SOURCE_DATE_EPOCH
+        // must be byte-identical.  Reproducible builds depend on this.
+        // We isolate to a single-threaded test path via the `epoch_*`
+        // env-var swap.
+        std::env::set_var("SOURCE_DATE_EPOCH", "1700000000");
+        let dir = tempdir().unwrap();
+        let a = dir.path().join("a.pqfw");
+        let b = dir.path().join("b.pqfw");
+        pack(&fixture_inputs(), &a).unwrap();
+        pack(&fixture_inputs(), &b).unwrap();
+        let a_bytes = std::fs::read(&a).unwrap();
+        let b_bytes = std::fs::read(&b).unwrap();
+        std::env::remove_var("SOURCE_DATE_EPOCH");
+        assert_eq!(a_bytes, b_bytes, "pack must be deterministic with SOURCE_DATE_EPOCH");
+    }
+
+    #[test]
+    fn positive_pack_overwrites_existing_file() {
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("a.pqfw");
+        std::fs::write(&out, b"old garbage").unwrap();
+        pack(&fixture_inputs(), &out).unwrap();
+        // Survives, and is parseable.
+        let _ = unpack(&out).unwrap();
+    }
+
+    #[test]
+    fn positive_unknown_entries_tolerated() {
+        // Future-compat: a producer adds a new tar entry; the consumer
+        // (older fwsign) must ignore it, not error.
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("a.pqfw");
+        let f = std::fs::File::create(&out).unwrap();
+        let mut t = tar::Builder::new(f);
+        let inp = fixture_inputs();
+        let mtime = 0;
+        append(&mut t, "manifest.bin", &inp.manifest_bytes, mtime).unwrap();
+        append(&mut t, "secure.bin", &inp.secure_bytes, mtime).unwrap();
+        append(&mut t, "nonsecure.bin", &inp.nonsecure_bytes, mtime).unwrap();
+        append(&mut t, "pubkey.bin", &inp.pubkey_bytes, mtime).unwrap();
+        append(&mut t, "future_thing.bin", b"hello future", mtime).unwrap();
+        t.finish().unwrap();
+
+        let u = unpack(&out).unwrap();
+        assert_eq!(u.secure_bytes.len(), 64);
+        // Optional entries are empty if missing.
+        assert!(u.release_json.is_empty());
+        assert!(u.measurement_txt.is_empty());
+    }
+
+    // ----------------------------------------------------------------
+    // Negative: required entries missing
+    // ----------------------------------------------------------------
+
+    fn pack_skipping(skip: &[&str]) -> std::path::PathBuf {
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("a.pqfw");
+        let f = std::fs::File::create(&out).unwrap();
+        let mut t = tar::Builder::new(f);
+        let inp = fixture_inputs();
+        let mtime = 0;
+        for (name, data) in [
+            ("manifest.bin", inp.manifest_bytes.as_slice()),
+            ("secure.bin", inp.secure_bytes.as_slice()),
+            ("nonsecure.bin", inp.nonsecure_bytes.as_slice()),
+            ("pubkey.bin", inp.pubkey_bytes.as_slice()),
+        ] {
+            if !skip.contains(&name) {
+                append(&mut t, name, data, mtime).unwrap();
+            }
+        }
+        t.finish().unwrap();
+        // Leak the tempdir so the path stays valid after return.
+        let leaked = dir.keep();
+        leaked.join("a.pqfw")
+    }
+
+    #[test]
+    fn negative_missing_manifest_bin_rejected() {
+        let p = pack_skipping(&["manifest.bin"]);
+        let err = unpack(&p).err().expect("expected Err").to_string();
+        assert!(err.contains("manifest.bin"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_missing_secure_bin_rejected() {
+        let p = pack_skipping(&["secure.bin"]);
+        let err = unpack(&p).err().expect("expected Err").to_string();
+        assert!(err.contains("secure.bin"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_missing_nonsecure_bin_rejected() {
+        let p = pack_skipping(&["nonsecure.bin"]);
+        let err = unpack(&p).err().expect("expected Err").to_string();
+        assert!(err.contains("nonsecure.bin"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_missing_pubkey_bin_rejected() {
+        let p = pack_skipping(&["pubkey.bin"]);
+        let err = unpack(&p).err().expect("expected Err").to_string();
+        assert!(err.contains("pubkey.bin"), "got: {err}");
+    }
+
+    // ----------------------------------------------------------------
+    // Negative: wrong-size required entries
+    // ----------------------------------------------------------------
+
+    fn pack_with_override(name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("a.pqfw");
+        let f = std::fs::File::create(&out).unwrap();
+        let mut t = tar::Builder::new(f);
+        let inp = fixture_inputs();
+        let mtime = 0;
+        let entries: [(&str, &[u8]); 4] = [
+            ("manifest.bin", inp.manifest_bytes.as_slice()),
+            ("secure.bin", inp.secure_bytes.as_slice()),
+            ("nonsecure.bin", inp.nonsecure_bytes.as_slice()),
+            ("pubkey.bin", inp.pubkey_bytes.as_slice()),
+        ];
+        for (n, d) in entries {
+            let data = if n == name { bytes } else { d };
+            append(&mut t, n, data, mtime).unwrap();
+        }
+        t.finish().unwrap();
+        dir.keep().join("a.pqfw")
+    }
+
+    #[test]
+    fn negative_manifest_wrong_size_rejected() {
+        // Assumption attacked: a producer (or attacker) shortens the
+        // manifest, hoping the consumer falls back to a parser that
+        // doesn't bounds-check. The strict length gate must fire.
+        let p = pack_with_override("manifest.bin", &[0u8; fw_manifest::MANIFEST_SIZE - 1]);
+        assert!(unpack(&p).err().expect("expected Err").to_string().contains("manifest.bin"));
+    }
+
+    #[test]
+    fn negative_manifest_too_large_rejected() {
+        let p = pack_with_override("manifest.bin", &[0u8; fw_manifest::MANIFEST_SIZE + 1]);
+        assert!(unpack(&p).err().expect("expected Err").to_string().contains("manifest.bin"));
+    }
+
+    #[test]
+    fn negative_pubkey_wrong_size_rejected() {
+        // Assumption attacked: an attacker swaps a 31-byte / 33-byte
+        // pubkey hoping the rest of the bundle still parses.
+        let p = pack_with_override("pubkey.bin", &[0u8; fw_manifest::VERIFYING_KEY_LEN - 1]);
+        assert!(unpack(&p).err().expect("expected Err").to_string().contains("pubkey.bin"));
+    }
+
+    #[test]
+    fn negative_pubkey_too_large_rejected() {
+        let p = pack_with_override("pubkey.bin", &[0u8; fw_manifest::VERIFYING_KEY_LEN + 1]);
+        assert!(unpack(&p).err().expect("expected Err").to_string().contains("pubkey.bin"));
+    }
+
+    #[test]
+    fn negative_empty_pubkey_rejected() {
+        let p = pack_with_override("pubkey.bin", &[]);
+        assert!(unpack(&p).is_err());
+    }
+
+    #[test]
+    fn negative_corrupt_archive_rejected() {
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("corrupt.pqfw");
+        std::fs::write(&out, b"this is not a tar archive at all").unwrap();
+        assert!(unpack(&out).is_err());
+    }
+
+    #[test]
+    fn negative_nonexistent_bundle_rejected() {
+        let dir = tempdir().unwrap();
+        let p = dir.path().join("missing.pqfw");
+        assert!(unpack(&p).is_err());
+    }
+
+    #[test]
+    fn negative_source_date_epoch_invalid_falls_back_to_zero() {
+        // Assumption attacked: a garbage env var breaks the pack flow.
+        // The code parses-or-falls-back, so a junk value must not
+        // panic. Determinism is the goal — falling back to 0 is fine.
+        std::env::set_var("SOURCE_DATE_EPOCH", "not-a-number");
+        let dir = tempdir().unwrap();
+        let out = dir.path().join("a.pqfw");
+        let r = pack(&fixture_inputs(), &out);
+        std::env::remove_var("SOURCE_DATE_EPOCH");
+        assert!(r.is_ok());
+        assert!(unpack(&out).is_ok());
+    }
+}
