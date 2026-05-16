@@ -28,6 +28,20 @@ bench-key-speed = []
 # `flash::erase_slot` (→ on pre-A/B-split builds that would corrupt
 # the running firmware). Use `make test-update-hw`.
 fwup-hw-test = ["stm32u585"]
+# Replaces the interactive main() with the GTZC1 TZSC + TZIC
+# enforcement validation driver. Hardware only — QEMU mps2-an505 has
+# no GTZC. Pairs with the secure crate's `e2e-test` feature (so the
+# `nsc_tzic_status` CMSE veneer + `mock-se` pre-unlock skip is
+# present) and `stm32u585`. Probes each NS-alias address of a
+# peripheral marked SECURE in `sau.rs`, then reads back the TZIC
+# counter and asserts. Use `make gtzc-enforcement-hw`.
+gtzc-test = ["e2e-test", "stm32u585"]
+# Slice 2 demo for the GTZC1 illegal-access → wipe escalation.
+# Pairs with the secure crate's `tzic-wipe` feature. Replaces the
+# interactive main() with a single-probe driver that would log a
+# `SURVIVED` marker if the wipe path did not fire — its absence is
+# the pass criterion. Hardware only. Use `make tzic-wipe-hw`.
+tzic-wipe-test = ["stm32u585"]
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
 

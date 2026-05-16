@@ -48,6 +48,8 @@ mod cmd_sign_userop;
 mod cmd_sign_userop_batch;
 #[cfg(feature = "e2e-test")]
 mod cmd_test_pin_lockout;
+#[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
+mod cmd_tzic_status;
 
 // Firmware-update commands. Only built for the STM32U585 target
 // because they depend on the bank-2 flash / OTP primitives that the
@@ -808,6 +810,20 @@ pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
     secure_log!("[NSC] test_pin_lockout");
     let r = unsafe { cmd_test_pin_lockout::run() };
     secure_log!("[NSC] test_pin_lockout -> {}", r);
+    r
+}
+
+/// CMD_TZIC_STATUS — read the GTZC1 illegal-access counter.
+///
+/// Non-destructive, no PIN required: returns the running u32 count of
+/// NS→SECURE access violations the TZIC IRQ has logged since boot.
+/// Pairs with the `gtzc-test` NS validation driver — see
+/// `cmd_tzic_status.rs`.
+#[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
+    let r = unsafe { cmd_tzic_status::run() };
+    secure_log!("[NSC] tzic_status -> {}", r);
     r
 }
 

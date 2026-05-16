@@ -548,6 +548,20 @@ pub const CMD_FW_ABORT: u32 = 24;
 /// path can wipe + re-provision on the next boot.
 pub const CMD_TEST_PIN_LOCKOUT: u32 = 200;
 
+/// CMD_TZIC_STATUS — read the GTZC1 TZIC illegal-access counter.
+///
+/// Test-only gateway command, compiled out unless `e2e-test` is set on
+/// the secure build. The counter increments inside the GTZC IRQ handler
+/// (`hw::tzic::on_violation`) each time NS attempts to read or write a
+/// peripheral marked SECURE in `TZSC_SECCFGRx`. Returning the counter
+/// as the `u32` status word lets the NS-side `gtzc-test` validation
+/// driver probe each protected NS-alias address and assert that the
+/// secure-world IRQ fired the expected number of times.
+///
+/// No PIN unlock required: this is a pure side-channel into the IRQ
+/// counter; no secret state is touched.
+pub const CMD_TZIC_STATUS: u32 = 201;
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks
@@ -1577,6 +1591,7 @@ const _: () = {
         CMD_FW_ABORT,
         CMD_SIGN_USEROP_BATCH,
         CMD_TEST_PIN_LOCKOUT,
+        CMD_TZIC_STATUS,
     ];
 
     let mut i = 0;

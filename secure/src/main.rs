@@ -2617,6 +2617,12 @@ unsafe fn DefaultHandler(irqn: i16) {
         #[cfg(feature = "tamp-irq")]
         2 => unsafe { hw::tamp::on_tamp_irq() }, // TAMP_IRQn
 
+        // GTZC1 illegal-access — NS tried to touch a SECURE
+        // peripheral. Logs the offender + bumps a counter; the
+        // gateway test harness (CMD_TZIC_STATUS) reads the
+        // counter to confirm enforcement is working.
+        8 => unsafe { hw::tzic::on_violation() }, // GTZC_IRQn
+
         // Unmatched — log + halt in WFE. NOT a panic so the host
         // semihosting backend gets a chance to flush the log line
         // before the chip stops responding.
