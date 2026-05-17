@@ -81,7 +81,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
 
 # Supply-chain audit. Hard-fails if any dependency is not cryptographically
 # pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
@@ -1422,6 +1422,77 @@ test-unit:
 test-solidity:
 	@echo "==> Running Foundry tests"
 	@cd contracts/smart-wallet && forge test
+
+# Lean 4 formal verification — type-checks the SphincsCVerify project.
+# See contracts/verification/README.md for what this proves and what it
+# leaves to the TCB.
+test-formal-verification:
+	@echo "==> Building SphincsCVerify Lean project"
+	@$(MAKE) -C contracts/verification verify
+	@echo "==> Auditing axioms + sorry inventory"
+	@$(MAKE) -C contracts/verification verify-audit
+
+# `test-all` — run every host-runnable test suite in the repo with one
+# command. Streams one progress line per suite (suite name, then
+# PASS/FAIL with test count when it finishes), keeps going past
+# failures, and exits non-zero with a per-suite summary at the end if
+# anything broke. Per-suite output is captured to
+# `/tmp/test-all.<suite>.log` and the log path is shown for any FAIL.
+#
+# Covers (no opt-in needed):
+#   1. Pure-logic workspace crates (`cargo test --workspace`, minus the
+#      firmware-only bins that don't link on host).
+#   2. `sphincs-tz-secure` host-testable subset behind `--features mock-se`.
+#   3. Standalone `fuzz/` workspace (harness + structure tests).
+#   4. Solidity contracts under `contracts/smart-wallet` via `forge test`
+#      (auto-skipped with a SKIP line if `forge` is not on PATH).
+#
+# NOT included (these are slow QEMU/HW integration tests, not unit tests):
+#   make e2e, make e2e-hw, make play, make run, make test-key-speed,
+#   make pin-gate-*-hw, make optiga-hw-counter-e2e, ...
+.PHONY: test-all
+test-all: SHELL := /usr/bin/env bash
+test-all:
+	@set -uo pipefail; \
+	pass=0; fail=0; failed=(); idx=0; \
+	run() { \
+	  idx=$$((idx+1)); \
+	  local name="$$1"; shift; \
+	  local slug=$$(echo "$$name" | tr ' /()' '____'); \
+	  local log="/tmp/test-all.$$slug.log"; \
+	  printf "[%2d] %-46s " "$$idx" "$$name"; \
+	  if "$$@" >"$$log" 2>&1; then \
+	    local n; n=$$(grep -E '^(test|Suite) result' "$$log" | awk '{tot+=$$4} END {print tot+0}'); \
+	    [ -z "$$n" ] && n="?"; \
+	    printf "PASS  (%s tests)\n" "$$n"; \
+	    pass=$$((pass+1)); \
+	    rm -f "$$log"; \
+	  else \
+	    printf "FAIL  (log: %s)\n" "$$log"; \
+	    fail=$$((fail+1)); \
+	    failed+=("$$name -> $$log"); \
+	  fi; \
+	}; \
+	echo "=== running all host-runnable test suites ==="; \
+	run "workspace host crates" cargo test --workspace --tests --no-fail-fast --quiet \
+	    --exclude sphincs-tz-secure --exclude sphincs-tz-nonsecure --exclude pqsigner-fsbl; \
+	run "sphincs-tz-secure --features mock-se" cargo test -p sphincs-tz-secure --tests \
+	    --features mock-se --no-fail-fast --quiet; \
+	run "fuzz workspace" bash -c "cd fuzz && cargo test --tests --no-fail-fast --quiet"; \
+	if command -v forge >/dev/null 2>&1; then \
+	  run "contracts/smart-wallet forge" bash -c "cd contracts/smart-wallet && forge test"; \
+	else \
+	  idx=$$((idx+1)); \
+	  printf "[%2d] %-46s SKIP  (forge not on PATH)\n" "$$idx" "contracts/smart-wallet forge"; \
+	fi; \
+	echo; \
+	if [ "$$fail" -eq 0 ]; then \
+	  echo "==== ALL $$pass SUITES PASSED ===="; \
+	else \
+	  echo "==== $$fail / $$((pass+fail)) SUITE(S) FAILED ===="; \
+	  for s in "$${failed[@]}"; do echo "  FAIL  $$s"; done; \
+	  exit 1; \
+	fi
 
 # Compute firmware measurement words from the secure ELF.
 # Displays the same 8 BIP-39 words the device shows at boot.
