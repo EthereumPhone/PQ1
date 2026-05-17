@@ -32,6 +32,7 @@ import SphincsCVerify.Verifier.Equivalence
 import SphincsCVerify.Wallet.Storage
 import SphincsCVerify.Wallet.MultiOwnable
 import SphincsCVerify.Wallet.ValidateUserOp
+import SphincsCVerify.Wallet.IsValidSignature
 import SphincsCVerify.Wallet.Factory
 import SphincsCVerify.Wallet.Invariants
 
@@ -39,9 +40,10 @@ import SphincsCVerify.Wallet.Invariants
 import SphincsCVerify.Crypto.Assumptions
 import SphincsCVerify.Crypto.EUFCMA
 
--- Stratum C: bridge to the Solidity verifier
+-- Stratum C: bridge to the Solidity verifier and EntryPoint v0.6
 import SphincsCVerify.Bridge.SolidityVerifier
 import SphincsCVerify.Bridge.Refinement
+import SphincsCVerify.Bridge.EntryPoint
 
 -- Utilities
 import SphincsCVerify.Util.Bits

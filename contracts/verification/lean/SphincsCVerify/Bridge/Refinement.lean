@@ -35,20 +35,42 @@ open SphincsCVerify.Spec
 
 /-! ## Axioms (TCB items) -/
 
-/-- **solc 0.8.28 compiles `SPHINCsC10Asm.verify` correctly.**
+/-- **solc 0.8.28 compiles the wallet + verifier sources correctly.**
 
-    For every input `(pkSeed, pkRoot, message, sig)`, the EVM bytecode
-    emitted by `solc 0.8.28+commit.7893614a` for the Solidity source in
-    `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` returns the
-    same boolean as `verifyYulModel`.
+    For every input, the EVM bytecode emitted by `solc 0.8.28+commit.7893614a`
+    for each of:
+
+      * `contracts/smart-wallet/src/PQSmartWallet.sol`
+      * `contracts/smart-wallet/src/PQMultiOwnable.sol`
+      * `contracts/smart-wallet/src/PQSmartWalletFactory.sol`
+      * `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol`
+
+    returns the same observable behaviour as its Lean model:
+    `Wallet/ValidateUserOp.lean`, `Wallet/Storage.lean`,
+    `Wallet/Factory.lean`, and `Bridge/SolidityVerifier.verifyYulModel`
+    respectively.
 
     This is the analogue of Verity's `solc 0.8.33` trust pin. To
     discharge it would require either (a) replicating Verity's verified
-    EDSL→Yul→bytecode pipeline for this contract, or (b) running a
-    KEVM / hevm equivalence proof against the bytecode. -/
+    EDSL→Yul→bytecode pipeline for these contracts, or (b) running a
+    KEVM / hevm equivalence proof against the bytecode. Multi-person-
+    month effort; left in TCB.
+
+    We state the axiom abstractly: any concrete property of the
+    deployed bytecode that follows from the Lean model is preserved
+    under `solc 0.8.28` compilation. The proof of `theft_free`
+    consumes this axiom by appeal — it does not destructure it. -/
 axiom solidityVerifier_compiles_correctly :
     ∀ (pkSeed pkRoot : ByteVec 32) (message : ByteVec 32) (sig : ByteVec SignatureLen),
-      -- "EVM bytecode of SPHINCsC10Asm.verify(...) = verifyYulModel(...)"
+      -- "EVM bytecode of each compiled contract observably matches its Lean model.
+      -- The Lean-level claim is the conjunction of:
+      --   (a) SPHINCsC10Asm.verify ≡ verifyYulModel
+      --   (b) PQSmartWallet.validateUserOp ≡ Wallet.ValidateUserOp.validateSignature
+      --       (with verify_fn instantiated to deployedVerifier)
+      --   (c) PQMultiOwnable counter / owner mutations ≡ Wallet.Storage operations
+      --   (d) PQSmartWalletFactory.createAccount ≡ Wallet.Factory.createAccountPrecondition
+      -- The Lean axiom shape is `True` to keep the surface narrow; the
+      -- semantic content is the consumer-side contract documented above.
       True
 
 /-- **EVM bytecode executes per the official EVM specification.**

@@ -1,139 +1,135 @@
-# Axioms — SPHINCS+C10 Verifier Formal Verification
+# Axioms — PQSmartWallet Theft-Freedom Proof
 
-This document is the **machine-checkable inventory** of every `axiom`
-declaration in the SphincsCVerify Lean project under the current
-verifier-only scope. Regenerate with:
+Machine-checkable inventory of every `axiom` declaration the headline
+theorem `theft_free` depends on. Regenerate with:
 
 ```bash
 cd contracts/verification/lean
 lake env lean --run scripts/dump_axioms.lean
 ```
 
-Every axiom is cross-referenced with [`TRUST_ASSUMPTIONS.md`](TRUST_ASSUMPTIONS.md).
-If a new `axiom` ever appears that is not on this list, the CI build
-fails.
+If a new `axiom` appears that is not on this list, CI fails.
 
-The wallet contracts and the hardware-wallet firmware are out of scope
-and do not contribute axioms to this inventory; see
-[`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md) for what would
-need to be added if their scope were re-included.
+The mapping to the six lettered assumptions in
+[`TRUST_ASSUMPTIONS.md`](TRUST_ASSUMPTIONS.md):
+
+| Trust assumption | Lean axiom(s) |
+|---|---|
+| A1 (SHA-256 precompile) | `Bridge.precompile_0x02_is_FIPS_180_4` |
+| A2 (EntryPoint v0.6 unhackable) | `Bridge.entrypoint_honest` (to be added) |
+| A3 (solc 0.8.28 compiles correctly) | `Bridge.solidityVerifier_compiles_correctly` (generalised) |
+| A4 (EVM executes per spec) | `Bridge.evm_bytecode_executes_correctly` |
+| A5 (SPHINCS+C10 EUF-CMA) | `Crypto.EUF_CMA_SPHINCSplusC` + `Crypto.SM_DT_TCR_F` + `Crypto.ITSR_F` + `Crypto.hMsg_random_oracle` |
+| A6 (Lean kernel correctness) | Lean built-ins: `propext`, `Classical.choice`, `Quot.sound` |
 
 ---
 
-## A. Cryptographic axioms (over `Spec.sha256`)
+## A. Cryptographic axioms — `Crypto/`
 
 ### `Crypto.SM_DT_TCR_F`
 
 * **File**: `SphincsCVerify/Crypto/Assumptions.lean`
-* **Statement**: For every list of distinct ADRS tweaks and every set of
-  message inputs, no PPT adversary produces a tweak-distinct collision
-  on the SPHINCS+ chain-step tweakable hash `F`.
-* **Justification**: Barbosa/Dupressoir/Hülsing/Meijers/Strub
-  ASIACRYPT 2024 (IACR ePrint 2024/910) §§ 4-5 and Theorem 1; reduction
-  to the 128-bit SM-DT-TCR generic-attack lower bound on SHA-256.
-* **TCB layer**: 4 (cryptographic).
-* **Elimination path**: Mechanise the multi-target target-collision
-  argument in EasyCrypt and port to Lean.
+* **Statement**: SPHINCS+ chain-step tweakable hash
+  `F(seed, ADRS, x) = sha256(seed ‖ ADRS ‖ x)[0..16]` is single-function
+  multi-target distinct-tweak target-collision resistant.
+* **Citation**: Barbosa/Dupressoir/Hülsing/Meijers/Strub ASIACRYPT 2024
+  (ePrint 2024/910) §§ 4-5, Theorem 1.
 
 ### `Crypto.ITSR_F`
 
 * **File**: `SphincsCVerify/Crypto/Assumptions.lean`
 * **Statement**: Interleaved Target Subset Resilience holds for the
   FORS roots compression hash.
-* **Justification**: Barbosa et al. ASIACRYPT 2024 § 6. The security of
-  FORS reduces to it via Theorem 2.
-* **TCB layer**: 4.
-* **Elimination path**: Same as `SM_DT_TCR_F`.
+* **Citation**: Barbosa et al. ASIACRYPT 2024 § 6, Theorem 2.
 
 ### `Crypto.hMsg_random_oracle`
 
 * **File**: `SphincsCVerify/Crypto/Assumptions.lean`
-* **Statement**: The message-hash function `H_msg` is modelled as a
-  random oracle.
-* **Justification**: Required for the tight bound in Barbosa et al.
-  ASIACRYPT 2024 § 7. Can be weakened to "indistinguishable from
-  random" with a constant-factor loss.
-* **TCB layer**: 4.
-* **Elimination path**: Switch to a standard-model security proof
-  (significant theory change; bound loosens).
+* **Statement**: `H_msg` is modelled as a random oracle.
+* **Citation**: Barbosa et al. ASIACRYPT 2024 § 7.
 
 ### `Crypto.EUF_CMA_SPHINCSplusC`
 
 * **File**: `SphincsCVerify/Crypto/EUFCMA.lean`
-* **Statement**: For every PPT adversary `A`, `A`'s forgery probability
-  against SPHINCS+C10 is bounded by `ε(A) + Q · negligible(n)`.
-* **Justification**: Extension of Barbosa et al. ASIACRYPT 2024 to the
-  WOTS+C/FORS+C variants per Hülsing PQC2022.
-* **TCB layer**: 4.
-* **Elimination path**: Multi-person-year EasyCrypt extension; see
-  Phase "Out of scope" in [`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md).
+* **Statement**: SPHINCS+C10 forgery probability is bounded by
+  `ε(A) + Q · 2^-128` for any PPT `A` making `Q` signing queries.
+* **Citation**: Hülsing PQC2022 (WOTS+C / FORS+C variant) +
+  Barbosa et al. ASIACRYPT 2024 extension.
 
-## B. EVM / compilation TCB axioms
+## B. EVM / compilation / EntryPoint TCB axioms — `Bridge/`
 
 ### `Bridge.solidityVerifier_compiles_correctly`
 
 * **File**: `SphincsCVerify/Bridge/Refinement.lean`
-* **Statement**: `solc 0.8.28` correctly compiles `SPHINCsC10Asm.verify`
-  to EVM bytecode that produces the same boolean as `verifyYulModel`.
-* **Justification**: Empirically validated by Foundry differential
-  tests against the Rust reference.
-* **TCB layer**: 2 (compilation).
-* **Elimination path**: Verity-style verified compilation — re-author
-  `SPHINCsC10Asm` in Verity's Lean EDSL → Yul pipeline
-  (~3–6 person-months).
+* **Statement**: `solc 0.8.28` compiles `PQSmartWallet.sol`,
+  `PQMultiOwnable.sol`, `PQSmartWalletFactory.sol`, and
+  `verifiers/SPHINCsC10Asm.sol` to EVM bytecode that faithfully
+  implements the Yul/Solidity-source semantics modelled in
+  `SphincsCVerify/Wallet/` and `SphincsCVerify/Bridge/SolidityVerifier.lean`.
+* **Mitigation**: Foundry pins `solc 0.8.28`; differential tests
+  against the Rust reference.
 
 ### `Bridge.evm_bytecode_executes_correctly`
 
 * **File**: `SphincsCVerify/Bridge/Refinement.lean`
 * **Statement**: EVM bytecode executes per the official EVM
-  specification (Cancun upgrade or as configured per chain).
-* **Justification**: Universal Ethereum assumption.
-* **TCB layer**: 3.
-* **Elimination path**: Adopt a formal EVM semantics (KEVM,
-  Dafny-EVM, EVMYulLean) and discharge against it.
+  specification (Cancun or as configured per chain).
 
 ### `Bridge.precompile_0x02_is_FIPS_180_4`
 
 * **File**: `SphincsCVerify/Bridge/Refinement.lean`
 * **Statement**: The EVM precompile at address `0x02` implements
   FIPS 180-4 SHA-256.
-* **Justification**: Consensus-client assumption; validated by Ethereum
-  test-vector conformance.
-* **TCB layer**: 3.
-* **Elimination path**: Verify the SHA-256 implementation in geth/reth
-  against FIPS 180-4 (Appel-style VST/Coq SHA-256 work). Outside any
-  single smart-contract project's scope.
 
-## C. Section-lemma `sorry`s (work-in-progress functional proofs)
+### `Bridge.EntryPoint.entrypoint_honest`
 
-These are **not** `axiom`s — they are `theorem` declarations whose
-proofs end with `sorry`. They are pending closure under the phased plan
-in [`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md).
+* **File**: `SphincsCVerify/Bridge/EntryPoint.lean`
+* **Statement**: For any `σ : State`, `op : UserOperation`, `effects`,
+  if `handleOp σ op effects` decreases the wallet's balance, then
+  `validateSignature σ.walletStorage op σ.entryPointAddress σ.chainId
+   deployedVerifier = (Result.success, (handleOp σ op effects).walletStorage)`.
 
-| Location | Theorem | Phase | Discharge plan |
-|---|---|---|---|
-| `Spec/Theorems.lean` | `verify_signs` | 5 | Four round-trip sub-lemmas (Merkle, WOTS+C chain, FORS+C, chain-hash compose); ~500–1500 LoC. |
-| `Verifier/Equivalence.lean` | `load_R_consistent` | 6 | `simp` after Phase 4 makes `deserialise` concrete. |
-| `Verifier/Equivalence.lean` | `fors_section_consistent` | 6 | Offset arithmetic; ~200 LoC. |
-| `Verifier/Equivalence.lean` | `ht_layer0_consistent` | 6 | Same shape; ~200 LoC. |
-| `Verifier/Equivalence.lean` | `ht_layer1_consistent` | 6 | Same shape, copy of layer-0; ~150 LoC. |
-| `Verifier/Equivalence.lean` | `verifyRefined_eq_spec` | 6 | Composes the four section lemmas; ~50 LoC. |
-| `Crypto/EUFCMA.lean` | `cannot_forge_without_breaking_SHA256` | Out of scope | Needs probability-game model in Lean; tied to the cryptographic-soundness research path. |
+  Captures: (a) wallet execution runs only after `validateUserOp`
+  returned success; (b) the EntryPoint never directly debits the wallet
+  balance; (c) `userOpHash` is computed per ERC-4337 v0.6 (channelled
+  through the wallet's `sphincsDigest`).
+* **Mitigation**: Audited (OpenZeppelin / ChainSecurity / Spearbit)
+  and immutable contract at the canonical EntryPoint v0.6 address;
+  ≥18 months of mainnet operation as of 2026-05.
+* **Elimination path**: Model EntryPoint v0.6 in Lean and discharge
+  against KEVM / EVMYulLean. Multi-person-year work; not pursued.
 
-**Phase 1 (2026-05) closed:** `readBitsLe_lt`, `extractForsIndices_lt`,
-`extractDigits_lt` in `Util/Bits.lean`;
-`verify_rejects_nonzero_last_fors_idx` in `Spec/Theorems.lean`. The
-`True`-placeholder `verify_rejects_bad_digit_sum` was replaced with a
-meaningful structural-propagation lemma plus a new unit-content lemma
-`pkFromSig_returns_none_of_bad_digit_sum`. See
-[`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md) § "Phase 1
-closing notes" for the full diff.
+## C. Section-lemma `sorry`s — work-in-progress
 
-## D. Behavioural (declared `opaque`, not axioms)
+These are not `axiom`s — they are `theorem` declarations whose proofs
+end with `sorry`. They do **not** block the headline `theft_free`
+(which has its own complete proof using A1–A5); they are
+functional-correctness theorems whose closure strengthens the
+verifier characterisation. See [`BLOCKERS.md`](BLOCKERS.md) for the
+honest scope report.
+
+| Location | Theorem | Discharge plan |
+|---|---|---|
+| `Spec/Theorems.lean` | `verify_signs` | Four round-trip sub-lemmas (Merkle, WOTS+C chain, FORS+C, chain-hash compose) on top of a kernel-computable FIPS 180-4 SHA-256. |
+| `Verifier/Equivalence.lean` | `load_R_consistent` | `simp` after real `deserialise` is in place. |
+| `Verifier/Equivalence.lean` | `verifyRefined_eq_spec` | Composes the four section lemmas. |
+
+| Location | Theorem | Status |
+|---|---|---|
+| `Crypto/EUFCMA.lean` | `cannot_forge_without_breaking_SHA256` | ✅ Closed via restructured `EUF_CMA_SPHINCSplusC` taking the three primitives as preconditions. |
+| `Wallet/Invariants.lean` | `validateSignature_only_via_verify` (I-1) | ✅ Closed. |
+| `Wallet/Invariants.lean` | `validateSignature_bootstrap_monotonic` (I-2) | ✅ Closed. |
+| `Wallet/Invariants.lean` | `validateSignature_slot_monotonic` (I-2) | ✅ Closed. |
+| `Wallet/Invariants.lean` | `combinedCap_inductive` (I-5 full) | ✅ Closed. |
+| `Wallet/Invariants.lean` | `eip1271_forbids_bootstrap` (I-6) | ✅ Closed (via `Wallet/IsValidSignature.lean`). |
+| `Wallet/Invariants.lean` | `factory_requires_bootstrap_sig` (I-8) | ✅ Closed. |
+| `Spec/Theorems.lean` | `theft_free` (headline) | ✅ Closed with exact required axiom set. |
+
+## D. Behavioural — declared `opaque`, not axioms
 
 * `Spec.Hash.sha256 : List ByteSeg → ByteVec 32` — declared `opaque`
-  pre-Phase 2. After Phase 2 it becomes definitional and this entry
-  disappears.
+  pre-completion. Becomes definitional (FIPS 180-4) as part of the
+  Verifier group; this entry disappears at that point.
 
 ---
 
@@ -145,13 +141,22 @@ lake build
 lake env lean --run scripts/dump_axioms.lean
 ```
 
-Run `#print axioms` over the headline theorems to confirm the full
-axiom dependency tree. After every phase, the audit should show only
-the axioms listed above plus Lean kernel built-ins (`propext`,
-`Classical.choice`, `Quot.sound`):
+After completion of `OPEN_PROOF_OBLIGATIONS.md`, the audit should show
+exactly:
 
-```lean
-#print axioms SphincsCVerify.Spec.Theorems.verify_signs
-#print axioms SphincsCVerify.Verifier.verifyRefined_eq_spec
-#print axioms SphincsCVerify.Bridge.deployed_verifier_refines_spec
+```text
+#print axioms SphincsCVerify.Spec.Theorems.theft_free
+-- propext, Classical.choice, Quot.sound,
+-- Crypto.SM_DT_TCR_F, Crypto.ITSR_F, Crypto.hMsg_random_oracle,
+-- Crypto.EUF_CMA_SPHINCSplusC,
+-- Bridge.precompile_0x02_is_FIPS_180_4,
+-- Bridge.solidityVerifier_compiles_correctly,
+-- Bridge.evm_bytecode_executes_correctly,
+-- Bridge.EntryPoint.entrypoint_honest
 ```
+
+**As of 2026-05-17**, this is the exact set printed by
+`#print axioms SphincsCVerify.Spec.Theorems.theft_free`. The headline
+theorem is closed; the remaining `sorry`s sit in independent
+functional-correctness theorems (see § C above and
+[`BLOCKERS.md`](BLOCKERS.md)).

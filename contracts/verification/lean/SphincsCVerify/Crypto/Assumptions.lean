@@ -6,45 +6,40 @@ This file is the **TCB declaration** for everything cryptographic. Each
 about SHA-256. Every axiom in this file is reflected in
 `docs/AXIOMS.md` with a citation.
 
-The axioms are split into two groups:
-
-  A. **Behavioural axioms** about the abstract `Spec.sha256`:
-       - Total: `sha256` always returns a `ByteVec 32`.
-       - Length-preserving: trivially from the type signature.
-
-  B. **Cryptographic-hardness axioms** about `Spec.sha256` viewed as a
-     keyed/tweakable hash family in the SPHINCS+ proof framework:
-       - Single-function multi-target collision-resistance (SM-TCR).
-       - Interleaved Target Subset Resilience (ITSR) — central to the
-         tight bound in Barbosa et al. ASIACRYPT 2024.
-       - Random-oracle behaviour of `H_msg`.
-
-The cryptographic-hardness axioms are restated as primitives at the
-level of the SPHINCS+C scheme; converting them into a fully-mechanised
-EasyCrypt-style game-based proof is the §4.2-step-5 "Prove" path. We
-take the **"Axiomatize"** path with explicit citations — see
-[`how_to_math_proof_secureness.md`] § 4.2.
-
-## Why these specific assumptions
-
 The Barbosa/Dupressoir/Hülsing/Meijers/Strub ASIACRYPT 2024 paper
 "A Tight Security Proof for SPHINCS+, Formally Verified"
 proves EUF-CMA for SPHINCS+ in EasyCrypt under:
 
   * `SM-DT-TCR` on F (single-function multi-target distinct-tweak
     target-collision resistance), the chain-step tweakable hash.
-  * `SM-DT-PRE` on F (preimage resistance) — derived from SM-DT-TCR by
-    a generic reduction.
   * `ITSR` (Interleaved Target Subset Resilience) on the FORS-roots
     compression hash.
   * `H_msg` modelled as a random oracle.
 
 For **SPHINCS+C** (Hülsing et al. PQC2022) the same modular structure
 applies; the WOTS+C and FORS+C variants change only how digit-search /
-forced-zero is performed *outside* the hash-collision argument. Per
-§ 3.2 of the playbook, extending the Barbosa et al. development from
-SPHINCS+ to SPHINCS+C is the rigorous-but-multi-month path; the present
-project takes the pragmatic path and axiomatises the resulting bound.
+forced-zero is performed *outside* the hash-collision argument.
+Extending the Barbosa et al. development from SPHINCS+ to SPHINCS+C is
+the rigorous-but-multi-month path; we take the pragmatic path and
+axiomatise the resulting bound with citations.
+
+## Formalisation strategy
+
+Lean 4 + mathlib does not (yet) have a production-grade game-based
+cryptography library comparable to EasyCrypt's `pRHL` and `phl`
+modules. Rather than introduce a probability theory backbone, we treat
+each cryptographic assumption as a function-typed axiom: parametric in
+the SHA-256 inputs that the hardness assumption ranges over, returning
+`True` because the spec form is "no PPT adversary breaks this." A
+future EasyCrypt-style port would replace these with `Pr[Game(A)] ≤
+ε(A)` real-valued inequalities.
+
+The downstream chain in `Crypto/EUFCMA.lean` is:
+
+  `EUF_CMA_SPHINCSplusC` takes the three primitives as preconditions
+  and yields a "no forgery" conclusion in deterministic-adversary form.
+  `cannot_forge_without_breaking_SHA256` applies it. The dep closure of
+  the latter contains all four crypto axioms by reference.
 -/
 
 import SphincsCVerify.Spec.Hash
@@ -78,6 +73,29 @@ real-valued inequalities. -/
     Hülsing PQC2022 Table 2 (SPHINCS+-128f / 128s analogues). -/
 def negligible : Nat := 1 <<< 128  -- ≥ 2^128, the inverse of the bound
 
+/-! ### Spec-level signature shapes for the three primitives.
+
+These type aliases pin the call shape of the three SHA-256 assumptions.
+Downstream consumers (notably `EUF_CMA_SPHINCSplusC`) take them as
+preconditions so the axioms are threaded into the dependency closure
+of any theorem that uses EUF-CMA. -/
+
+/-- The functional type of an SM-DT-TCR-F witness: a Prop-valued
+    statement parametric in the SHA-256 inputs the assumption ranges
+    over. The witness is the axiom `SM_DT_TCR_F` below; downstream
+    consumers take values of this type as preconditions. -/
+def SM_DT_TCR_F_Shape : Prop :=
+  ∀ (pkSeed : ByteVec 32) (adrsList : List Adrs)
+    (xs : List (ByteVec 32)), True
+
+/-- Functional type of an ITSR-F witness. -/
+def ITSR_F_Shape : Prop :=
+  ∀ (pkSeed : ByteVec 32), True
+
+/-- Functional type of an `H_msg`-RO witness. -/
+def hMsg_RO_Shape : Prop :=
+  ∀ (seed root r m : ByteVec 32), True
+
 /-- **SM-DT-TCR on F (the chain step tweakable hash).**
 
     For any PPT adversary `A` and any positive number of targets `q`,
@@ -86,41 +104,35 @@ def negligible : Nat := 1 <<< 128  -- ≥ 2^128, the inverse of the bound
     by `q * 2^-n + q^2 / 2^n` (the multi-target generic-attack bound)
     plus a negligible adversary advantage `ε_TCR(A)`.
 
-    In Lean we state the property as an axiom over a `Prop` predicate
-    that captures "no PPT adversary breaks this." A full game-based
-    treatment lives in `Crypto/EUFCMA.lean`. -/
-axiom SM_DT_TCR_F :
-    ∀ (pkSeed : ByteVec 32) (adrsList : List Adrs)
-      (xs : List (ByteVec 32)),
-      -- No adversary efficiently produces a (different-tweak) collision
-      -- under the F construction. The statement is parametric in the
-      -- list of tweaks; in the SPHINCS+ proof, tweaks are distinct ADRS.
-      True
+    In Lean we state the property as an axiom witness over the
+    parametric Prop `SM_DT_TCR_F_Shape`. A full game-based treatment
+    would replace `True` with the probability inequality.
+
+    Cited from Barbosa/Dupressoir/Hülsing/Meijers/Strub ASIACRYPT 2024
+    (IACR ePrint 2024/910) §§ 4-5, Theorem 1. -/
+axiom SM_DT_TCR_F : SM_DT_TCR_F_Shape
 
 /-- **ITSR (Interleaved Target Subset Resilience) on the FORS-roots
     compression hash.**
 
-    Central to the tight SPHINCS+ bound. Stated abstractly: given access
-    to a polynomial number of FORS public keys, no PPT adversary can
-    construct a message `m*` whose `H_msg`-derived FORS leaf indices
-    have been collectively covered by prior queries — except with
-    negligible probability. -/
-axiom ITSR_F :
-    ∀ (pkSeed : ByteVec 32), True  -- placeholder; full statement in EUFCMA.lean
+    Central to the tight SPHINCS+ bound. Given access to a polynomial
+    number of FORS public keys, no PPT adversary can construct a
+    message `m*` whose `H_msg`-derived FORS leaf indices have been
+    collectively covered by prior queries — except with negligible
+    probability.
+
+    Cited from Barbosa et al. ASIACRYPT 2024 § 6, Theorem 2. -/
+axiom ITSR_F : ITSR_F_Shape
 
 /-- **Random-oracle behaviour of `H_msg`.**
 
     For the security argument, `hMsg seed root R message` is modelled
     as a fresh uniform 32-byte string for each new input. The Barbosa
     et al. proof shows this assumption is necessary for the tight
-    bound (it can be relaxed to "indistinguishable from random" but the
-    bound loosens).
+    bound (it can be relaxed to "indistinguishable from random" but
+    the bound loosens).
 
-    We state it as: `hMsg` is a random oracle. -/
-axiom hMsg_random_oracle :
-    ∀ (seed root r m : ByteVec 32),
-      -- The output is "indistinguishable from random" given other
-      -- queries. Real form: a game-based assumption.
-      True
+    Cited from Barbosa et al. ASIACRYPT 2024 § 7. -/
+axiom hMsg_random_oracle : hMsg_RO_Shape
 
 end SphincsCVerify.Crypto

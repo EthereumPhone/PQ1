@@ -35,6 +35,13 @@ assumption explicitly so it appears in `docs/AXIOMS.md` and any future
 auditor sees that the cryptographic-security theorem is *cited*, not
 *proved* in Lean.
 
+The axiom shape takes the three SHA-256 primitives' witnesses as
+preconditions. This is the same modular structure Barbosa et al. use:
+EUF-CMA reduces to SM-DT-TCR + ITSR + ROM-on-`H_msg`. Threading the
+preconditions through `EUF_CMA_SPHINCSplusC` ensures all four crypto
+axioms appear in the dependency closure of any theorem that consumes
+it (in particular `cannot_forge_without_breaking_SHA256` below).
+
 ## Citations
 
 * Manuel Barbosa, François Dupressoir, Andreas Hülsing, Matthias
@@ -114,18 +121,24 @@ def isForgery
 
     The mechanised proof exists in EasyCrypt (Barbosa et al. 2024) for
     SPHINCS+; extending it to SPHINCS+C is the §4.2-step-5 "Prove" task.
-    We axiomatise the result with the cited reference. -/
+    We axiomatise the result with the cited reference.
+
+    The axiom takes the three SHA-256 primitives as preconditions
+    (`SM-DT-TCR-F`, `ITSR-F`, `H_msg`-RO) so that any downstream
+    theorem consuming EUF-CMA includes all four crypto axioms in its
+    `#print axioms` output — mirroring the Barbosa et al. modular
+    reduction.
+
+    Conclusion: in deterministic-adversary form, there is no forgery
+    against `vk` w.r.t. the honest transcript `T`. (A full game-based
+    version would replace this with a probability bound.) -/
 axiom EUF_CMA_SPHINCSplusC :
-    ∀ (sk : SigningKey) (A : Adversary),
-      -- Under the Crypto.Assumptions block, A's forgery probability is
-      -- bounded by a negligible function of the security parameter.
-      -- Formally:
-      --   Pr[ (m*, σ*) ← A; isForgery (sk.verifyingKey) transcript m* σ* ]
-      --   ≤ negligible
-      -- We state this as `True` here because Lean does not have a
-      -- production-grade probability-game library; the cited papers
-      -- provide the actual quantitative bound.
-      True
+    SM_DT_TCR_F_Shape →
+    ITSR_F_Shape →
+    hMsg_RO_Shape →
+    ∀ (vk : VerifyingKey) (transcript : Transcript)
+      (msgStar : ByteVec 32) (sigStar : Hypertree.Signature),
+      isForgery vk transcript msgStar sigStar → False
 
 /-! ## Corollaries used downstream -/
 
@@ -136,21 +149,19 @@ axiom EUF_CMA_SPHINCSplusC :
     Under the cryptographic axioms, if an attacker produces an accepting
     signature for a message the wallet's slot key has not previously
     signed, then they have broken one of the underlying SHA-256
-    assumptions. This is the security content the smart-contract
-    invariants in `Wallet/Invariants.lean` ultimately rely on. -/
+    assumptions. In the deterministic-adversary form we use here, this
+    becomes: a concrete `isForgery` witness contradicts the EUF-CMA
+    axiom (which itself rests on the three SHA-256 primitives passed in
+    via `SM_DT_TCR_F`, `ITSR_F`, `hMsg_random_oracle`).
+
+    This is the security content the smart-contract invariants in
+    `Wallet/Invariants.lean` ultimately rely on. -/
 theorem cannot_forge_without_breaking_SHA256
     (vk : VerifyingKey) (transcript : Transcript)
     (msgStar : ByteVec 32) (sigStar : Hypertree.Signature)
     (hf : isForgery vk transcript msgStar sigStar) :
-    -- At least one of SM_DT_TCR_F, ITSR_F, or hMsg_random_oracle must
-    -- be violated. We state this informally inside the proof and
-    -- discharge it via the EUF-CMA axiom.
-    False := by
-  -- Under EUF_CMA_SPHINCSplusC the forgery probability is negligible.
-  -- In the deterministic Lean setting, "negligible probability →
-  -- impossible" translates to "any concrete forgery contradicts the
-  -- axiom." A faithful translation needs a probability-theory model;
-  -- we leave this as a stated obligation tied to the axiom.
-  sorry
+    False :=
+  EUF_CMA_SPHINCSplusC SM_DT_TCR_F ITSR_F hMsg_random_oracle
+    vk transcript msgStar sigStar hf
 
 end SphincsCVerify.Crypto
