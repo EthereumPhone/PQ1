@@ -259,6 +259,20 @@ mod optiga_under_test;
 #[cfg(test)]
 mod se050_under_test;
 
+// ── Test-only scaffold for the `secure-zk` slice ──
+//
+// The production `zk` module is `#[cfg(not(test))]` because the
+// `render_clear_sign_pages` renderer pulls `crate::tx::display` (itself
+// `cfg(not(test))`) and `crate::ui::*`. The pure-logic verifier files
+// (`groth16.rs`, `poseidon.rs`, `vk_bundle.rs`) compile fine on host;
+// this scaffold re-mounts them under a parallel module tree so the
+// secure-side BLS12-381 Groth16 verifier + Poseidon hash + VK-bundle
+// Merkle decoder can be exercised against the committed
+// `test_vectors.rs` / `vk_data.rs` fixtures and adversarial inputs.
+// See `reports/tests/secure-zk.md`.
+#[cfg(test)]
+mod zk_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
