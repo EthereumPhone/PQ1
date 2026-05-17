@@ -213,6 +213,22 @@ mod main_sau_pure_tests;
 #[cfg(test)]
 pub(crate) mod nsc_core_under_test;
 
+// ── Test-only scaffold for the `secure-crypto-glue` slice ──
+//
+// `crypto.rs`, `dual_se.rs`, and `offchain_state.rs` are
+// `#[cfg(not(test))]` because they import hardware-only peers
+// (`crate::optiga`, `crate::se050`, `crate::rng_strong`,
+// `crate::sign_rate`, …) that cannot link on host. The scaffold
+// re-includes `offchain_state.rs` via `#[path]` so its mock SRAM
+// backend is reachable, and hosts source-text invariant pins for
+// the FI hardening / KDF tags / zeroization sites in `crypto.rs` +
+// `dual_se.rs`, alongside runtime tests for the four `db_roots`-
+// bound bundle wrappers (`erc20`, `names`, `selectors`) and the
+// `aa` re-export shim. See `reports/tests/secure-crypto-glue.md`
+// for the inventory.
+#[cfg(test)]
+mod secure_crypto_glue_under_test;
+
 // ── Test-only scaffold for the `secure-hw-crypto` slice ──
 //
 // The `hw` module is `#[cfg(not(test))]` because most of its files
