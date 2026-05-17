@@ -176,6 +176,17 @@ mod nsc_fw_update_pure_tests;
 #[cfg(test)]
 pub(crate) mod nsc_core_under_test;
 
+// ── Test-only scaffold for the `secure-hw-crypto` slice ──
+//
+// The `hw` module is `#[cfg(not(test))]` because most of its files
+// import cortex_m / MMIO and cannot link on host. This scaffold hosts
+// the host-runnable source-text + reference-algorithm pinning suite
+// for the slice's KDF labels, register addresses, FI guards and
+// zeroization sites. See the module's docstring + the test file's
+// header for what is and isn't covered.
+#[cfg(test)]
+mod hw_crypto_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
