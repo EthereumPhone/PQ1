@@ -155,6 +155,9 @@ mod nsc_trailer_under_test;
 #[cfg(test)]
 mod nsc_sign_userop_pure_tests;
 
+#[cfg(test)]
+mod nsc_batch_offchain_pure_tests;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
