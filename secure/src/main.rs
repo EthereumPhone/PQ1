@@ -273,6 +273,18 @@ mod se050_under_test;
 #[cfg(test)]
 mod zk_under_test;
 
+// ── Test-only scaffold for the `secure-ui` slice ──
+//
+// The production `ui` module is `#[cfg(not(test))]` because every
+// file in it depends on hardware-only peers (`cortex_m_semihosting`,
+// `embedded_graphics`, `ssd1306`, `rtt-target`, the GPIO button
+// driver, `crate::timeout`, `crate::rng_strong`, the
+// `static mut DISPLAY` / `static mut INPUT` singletons). The slice
+// is pinned host-side through `include_str!` source-text invariants
+// plus reference-algorithm checks; see `reports/tests/secure-ui.md`.
+#[cfg(test)]
+mod ui_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
