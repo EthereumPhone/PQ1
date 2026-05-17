@@ -187,6 +187,16 @@ pub(crate) mod nsc_core_under_test;
 #[cfg(test)]
 mod hw_crypto_under_test;
 
+// ── Test-only scaffold for the `secure-hw-platform` slice ──
+//
+// Same shape as `hw_crypto_under_test`: hosts the host-runnable
+// source-text + reference-encoding pinning suite for the platform
+// peripheral layer (flash geometry, RCC clock target, RNG/PKA/TAMP
+// register layout, dev-only production fences). See the module's
+// docstring + the pure_tests.rs header for what is and isn't covered.
+#[cfg(test)]
+mod hw_platform_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
