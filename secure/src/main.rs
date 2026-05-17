@@ -245,6 +245,20 @@ mod display_under_test;
 #[cfg(test)]
 mod optiga_under_test;
 
+// ── Test-only scaffold for the `secure-se050` slice ──
+//
+// The production `se050` module is `#[cfg(all(feature = "se050",
+// not(test)))]` because `t1oi2c.rs` calls `cortex_m::asm::nop()` (the
+// `cortex-m` crate is target-gated to `cfg(target_arch = "arm")` in
+// `secure/Cargo.toml` and does not link on x86_64) and `i2c.rs` binds
+// `hw::i2c_hw::I2C1` MMIO addresses that don't exist on host. This
+// scaffold pins the slice through `include_str!` source-text invariants
+// + reference-vector cross-checks of the GP 1.0 CRC-16 and the SCP03
+// wrap framing, alongside cross-checks against the always-on
+// `scp03_logic` / `iso7816` modules. See `reports/tests/secure-se050.md`.
+#[cfg(test)]
+mod se050_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
