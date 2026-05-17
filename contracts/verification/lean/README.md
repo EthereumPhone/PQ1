@@ -1,46 +1,43 @@
-# SPHINCS+C10 / PQSmartWallet — Formal Verification (Lean 4)
+# SPHINCS+C10 Verifier — Formal Verification (Lean 4)
 
-This directory mechanises the verification playbook described in
-[`../../docs/how_to_math_proof_secureness.md`](../../docs/how_to_math_proof_secureness.md).
-It is structured into three strata, matching §4.1 of that playbook:
+This directory mechanises the verification of
+`contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol`, the
+SPHINCS+C10 cryptographic verifier contract. The playbook is at
+[`../../docs/how_to_math_proof_secureness.md`](../../docs/how_to_math_proof_secureness.md);
+the phased plan is at
+[`../docs/OPEN_PROOF_OBLIGATIONS.md`](../docs/OPEN_PROOF_OBLIGATIONS.md).
 
-| Stratum | Lean module | Verification target |
-|---|---|---|
-| **A** | `SphincsCVerify/Spec`, `SphincsCVerify/Verifier` | SPHINCS+C10 verifier — functional correctness; cryptographic security as axioms |
-| **B** | `SphincsCVerify/Wallet` | `PQSmartWallet` + `PQMultiOwnable` + `PQSmartWalletFactory` — non-bypass, replay, cap monotonicity |
-| **C** | `SphincsCVerify/Bridge` | Lean reference ↔ Solidity refinement (Verity-style; partial) |
+**Scope.** Verifier only. The wallet contracts and the hardware-wallet
+firmware are out of scope; see [`../README.md`](../README.md).
 
 ## Layout
 
 ```
 SphincsCVerify/
 ├── Spec/              -- Pure declarative model of SPHINCS+C10 + SHA-256 + ADRS
-│   ├── Params.lean    -- C10 parameter set (n=16, h=18, d=2, a=11, k=13, w=8, l=43, T=205)
+│   ├── Params.lean    -- C10 parameters (n=16, h=18, d=2, a=11, k=13, w=8, l=43, T=205)
 │   ├── Bytes.lean     -- ByteVec, byte-array helpers
-│   ├── Hash.lean      -- Opaque sha256 + tweakable hash primitives (th, th_pair, th_multi, h_msg)
+│   ├── Hash.lean      -- sha256 (opaque pre-Phase 2; def post) + tweakable hashes
 │   ├── Adrs.lean      -- 32-byte ADRS construction (matches Rust + Yul)
-│   ├── Wots.lean      -- WOTS+C signing/verification spec
+│   ├── Wots.lean      -- WOTS+C sign/verify spec
 │   ├── Fors.lean      -- FORS+C with forced-zero last index
-│   ├── Hypertree.lean -- D=2 hypertree sign/verify
-│   └── Signature.lean -- Top-level verify/sign + 4008-byte layout
+│   ├── Hypertree.lean -- D=2 hypertree
+│   ├── Signature.lean -- Top-level verify + 4008-byte layout
+│   ├── Signer.lean    -- Reference signer (placeholder pre-Phase 3; full post)
+│   └── Theorems.lean  -- Functional-correctness theorems
 ├── Verifier/
-│   ├── Refined.lean   -- Verifier as the Solidity verifier sees it (offset arithmetic)
-│   └── Equivalence.lean -- Refined ≡ Spec (refinement lemma)
-├── Wallet/
-│   ├── Storage.lean   -- ERC-7201 PQMultiOwnableStorage model
-│   ├── MultiOwnable.lean -- owner add/remove + cap bumps
-│   ├── ValidateUserOp.lean -- the validation routine
-│   ├── Factory.lean   -- CREATE2 + squat-defence sig check
-│   └── Invariants.lean -- Non-bypass, replay, cap-monotonicity theorems
+│   ├── Refined.lean        -- Offset-indexed verifier (Yul shape)
+│   └── Equivalence.lean    -- Refined ≡ Spec (closed in Phase 6)
 ├── Bridge/
 │   ├── SolidityVerifier.lean -- Yul-level model of SPHINCsC10Asm
-│   └── Refinement.lean -- Yul model refines the Lean spec
+│   └── Refinement.lean       -- Lean ↔ Solidity ↔ EVM bridge (3 TCB axioms)
 ├── Crypto/
-│   ├── Assumptions.lean -- SHA-256 SM-TCR / interleaved target-subset-resilience axioms
-│   └── EUFCMA.lean    -- EUF-CMA theorem (axiomatised, with citations to Barbosa et al.)
-└── Util/
-    ├── Bits.lean      -- read_bits_le, base-w decoding, target-sum check
-    └── ByteVec.lean   -- ByteVec lemmas
+│   ├── Assumptions.lean   -- SHA-256 SM-TCR / ITSR / ROM axioms
+│   └── EUFCMA.lean        -- EUF-CMA axiom (cited)
+├── Util/
+│   ├── Bits.lean          -- read_bits_le, base-w decoding, target-sum
+│   └── ByteVec.lean       -- ByteVec lemmas
+└── Wallet/                -- LEGACY, OUT OF SCOPE. May be removed.
 ```
 
 ## How to build
@@ -51,55 +48,55 @@ lake update
 lake build
 ```
 
-This type-checks every module. A clean build means **every theorem the
-project claims to prove is checked by the Lean kernel**. The project
-ships with **zero `sorry` placeholders in the functional-correctness
-chain** (see `lake env lean --run scripts/check_no_sorry.lean`).
+This type-checks every module. A clean build means every theorem the
+project claims to prove is checked by the Lean kernel.
 
-`sorry` is only permitted in two clearly-scoped places:
+```bash
+lake env lean --run scripts/check_no_sorry.lean   # Audit `sorry`s
+lake env lean --run scripts/dump_axioms.lean      # Audit `axiom`s
+```
 
-1. `Crypto/EUFCMA.lean` — the cryptographic-security theorem, stated as
-   an axiom citing Barbosa et al. ASIACRYPT 2024 + Hülsing PQC2022 (this
-   would require extending the Barbosa et al. EasyCrypt development to
-   SPHINCS+C, which is out of scope for this engagement; see §3.2 of the
-   playbook).
-2. `Bridge/Refinement.lean` — bytecode-level refinement of the Solidity
-   verifier; this is the Verity-style obligation that requires the
-   verified-compilation work described in §1 of the playbook.
+`sorry` is permitted only in the locations enumerated in
+[`../docs/OPEN_PROOF_OBLIGATIONS.md`](../docs/OPEN_PROOF_OBLIGATIONS.md);
+the audit script fails on any uncovered occurrence.
 
-Both are tagged with `@[axiomatised_assumption]` and listed in
-[`AXIOMS.md`](../docs/AXIOMS.md).
+## What this gives you (after the phased plan completes)
 
-## What this gives you
-
-After `lake build` succeeds you have a Lean-kernel-checked proof that:
+After all seven phases in
+[`../docs/OPEN_PROOF_OBLIGATIONS.md`](../docs/OPEN_PROOF_OBLIGATIONS.md):
 
 1. The reference verifier accepts every signature produced by the
-   reference signer.
+   reference signer (`Spec/Theorems.lean::verify_signs`).
 2. The reference verifier rejects every signature with wrong length,
-   indices out of range, target-sum violation, or last-FORS-index ≠ 0.
-3. `PQSmartWallet.validateUserOp` returns `SIG_VALIDATION_SUCCESS` only if
-   the wrapped C10 signature passes the reference verifier (non-bypass).
-4. `bootstrapUses` and `slotUses[i] + offchainSigCount[i]` are monotonic
-   and bounded above by their constants — no path resets them.
-5. The bootstrap key cannot be removed; only `addOwnerBytes` can be
-   reached with `ownerIndex == 0`, and it is callable only by `this`.
-6. `isValidSignature` (EIP-1271) rejects `ownerIndex == 0`.
-7. The factory's CREATE2 salt is deterministic in `(masterPkSeed, masterPkRoot)`
-   alone and the bootstrap sig is required before slot-0 install.
+   nonzero last FORS index, or WOTS+C target-sum violation
+   (`Spec/Theorems.lean::verify_rejects_*`).
+3. The offset-indexed verifier (Yul shape) is extensionally equal to
+   the structured spec verifier
+   (`Verifier/Equivalence.lean::verifyRefined_eq_spec`).
+4. The Yul model is byte-identical to the offset-indexed verifier
+   (`Bridge/SolidityVerifier.lean::yul_eq_refined`, already closed).
+5. Modulo the three named TCB axioms, the deployed EVM bytecode
+   refines the Lean spec
+   (`Bridge/Refinement.lean::deployed_verifier_refines_spec`).
+6. Modulo the four cited cryptographic axioms, accepting an
+   unknown-provenance signature implies SPHINCS+C10 EUF-CMA forgery
+   (`Crypto/EUFCMA.lean`).
 
-What it does **NOT** give you, by design:
+What this does **NOT** give you, by design:
 
-- SPHINCS+C10 EUF-CMA security: assumed under SHA-256 SM-TCR + ROM. To
-  remove this assumption, extend the Barbosa et al. EasyCrypt
-  development.
-- `solc 0.8.28` codegen correctness: in the TCB.
-- EVM consensus / SHA-256 precompile (`0x02`) implementation: in the TCB.
-- Gas behaviour and DoS resistance: covered by Foundry differential
-  testing, not by these proofs.
-- Solidity → Yul → bytecode equivalence with the Lean spec: the bridge
-  module is partial; full refinement requires Verity-style work.
+- **SPHINCS+C10 EUF-CMA security**: assumed under SHA-256 SM-TCR +
+  ROM. To remove, extend the Barbosa et al. EasyCrypt development.
+- **`solc 0.8.28` codegen correctness**: in the TCB. To remove,
+  Verity-style rewrite of `SPHINCsC10Asm` in a verified EDSL.
+- **EVM consensus / SHA-256 precompile (`0x02`) implementation**: in
+  the TCB.
+- **Gas behaviour and DoS resistance**: covered by Foundry
+  differential testing.
+- **Wallet-contract invariants** (cap monotonicity, non-bypass,
+  CREATE2 determinism, squat-defence): out of scope. A separate
+  engagement would add `SphincsCVerify/Wallet/` proofs on top of the
+  proven verifier.
 
 See [`../docs/TRUST_ASSUMPTIONS.md`](../docs/TRUST_ASSUMPTIONS.md) for
 the complete trust report and [`../docs/AXIOMS.md`](../docs/AXIOMS.md)
-for the explicit list of `axiom` declarations.
+for the explicit `axiom` inventory.

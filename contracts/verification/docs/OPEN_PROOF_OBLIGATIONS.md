@@ -1,677 +1,701 @@
-# Open Proof Obligations — What Is Still Needed for a Fully Proven Wallet
+# Open Proof Obligations — Verifying `SPHINCsC10Asm.sol`
 
-This document is the **complete remaining work** to take the
-SphincsCVerify project from its current state ("scaffolding plus a few
-arithmetic identities and Lean-model lemmas") to the headline statement
-in `how_to_math_proof_secureness.md`:
+This document is the **complete remaining work** to take the SphincsCVerify
+project from its current state to a kernel-checked formal-verification result
+for the SPHINCS+C10 cryptographic verifier contract
+(`contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol`, 202 lines of Yul).
 
-> The deployed EVM bytecode of `PQSmartWallet` enforces every stated
-> invariant, and accepting a signature implies SPHINCS+C10 EUF-CMA
-> security under the cited SHA-256 assumptions.
+**Scope (2026-05).** Verifier only. The wallet contracts
+(`PQSmartWallet.sol`, `PQMultiOwnable.sol`, `PQSmartWalletFactory.sol`) and
+the hardware-wallet firmware (Rust under `secure/`, `nonsecure/`, …) are out
+of scope for the current engagement. The Lean files under
+`SphincsCVerify/Wallet/` are legacy and may be removed in a future cleanup
+commit; the headline result this document targets does not depend on them.
 
-Every item below is currently either an unfilled `sorry`, a named
-`axiom`, or a property that is not even stated in the Lean source yet.
-For each, the document records:
+The work is organised into seven phases. Each phase unblocks the next, so
+they should be tackled in order. For every obligation we record:
 
-  * **What** needs to be proven (the theorem statement).
-  * **Where** in the project it lives (or should live).
-  * **Discharge plan** (the proof technique that would close it).
+  * **Where** in the source it lives (file:line where applicable).
+  * **Current state** (verbatim from the source, where useful).
+  * **Statement** — the Lean theorem to close.
+  * **Discharge plan** — the proof technique that closes it, with a code
+    skeleton where helpful.
+  * **Time estimate** (one engineer).
+  * **Done criteria** — how to know the phase is finished.
 
-Organised by stratum from the playbook.
-
----
-
-## Stratum A — SPHINCS+C10 verifier core
-
-### A.1 SHA-256 modelling
-
-#### A.1.1 Kernel-computable SHA-256 specification
-
-* **Current state**: `Spec/Hash.lean::sha256` is declared `opaque`, so
-  no concrete digest can be evaluated inside the Lean kernel.
-* **What's needed**: a definition `sha256 : List ByteSeg → ByteVec 32`
-  that follows FIPS 180-4 step by step (initial constants, message
-  schedule, compression function, padding, length encoding), reducible
-  by `decide` / `native_decide`.
-* **Discharge plan**: port Verity's `Compiler/Keccak/Sponge.lean` style
-  to SHA-256. The FIPS 180-4 spec is small (~200 lines of Lean once the
-  `UInt32` bitwise operations are set up).
-* **Why this matters**: without it, no concrete test vector can be
-  executed inside the Lean kernel; the cross-validation harness is
-  shape-only.
-
-#### A.1.2 SHA-256 functional correctness against FIPS 180-4
-
-* **What's needed**: a theorem
-  `sha256_kernel_matches_FIPS_180_4 : ∀ input, sha256 input = FIPS_180_4(input)`
-  proved against a reference test-vector suite (NIST CAVS or similar).
-* **Discharge plan**: Appel-style verification (VST/Coq SHA-256
-  technique adapted to Lean). Could also reduce to bit-level
-  equivalence with the Rust `sha2` crate via `hax` extraction.
-
-#### A.1.3 Tweakable-hash output-size lemmas
-
-* **Current state**: `th_size`, `thPair_size`, `hMsg_size` are
-  trivially closed (`size_eq`), but the corresponding correctness
-  lemmas (that `th(s, a, x)` is the FIPS-180-4 SHA-256 of
-  `s ‖ a ‖ x` truncated to 16 bytes) are not stated.
-* **What's needed**: `th_unfolds_to_sha256`, `thPair_unfolds_to_sha256`,
-  `thMulti_unfolds_to_sha256`, `hMsg_unfolds_to_sha256` — each saying
-  the wrapper agrees with the explicit byte concatenation + SHA-256 +
-  optional truncation.
-* **Discharge plan**: definitionally true once `sha256` becomes
-  kernel-computable; `by rfl` or `by simp` should close them.
-
-### A.2 Util/Bits — bit-level operations
-
-#### A.2.1 `readBitsLe_lt`
-
-* **Where**: `Util/Bits.lean:71` — currently `sorry`.
-* **What**: `∀ digest off k, readBitsLe digest off k < 2^k`.
-* **Discharge plan**: induction on `k`. Each loop iteration ORs in a
-  bit of weight `2^i`, so the accumulator after `k` iterations is
-  bounded by `2^k - 1`. Standard mechanical proof in <30 LoC.
-
-#### A.2.2 `extractForsIndices_lt`
-
-* **Where**: `Util/Bits.lean:82` — currently `sorry`.
-* **What**: every extracted FORS index is `< 2^A`.
-* **Discharge plan**: direct corollary of `readBitsLe_lt` with
-  `numBits = A`.
-
-#### A.2.3 `extractDigits_lt`
-
-* **Where**: `Util/Bits.lean:93` — currently `sorry`.
-* **What**: every WOTS+C digit is `< W = 2^LogW = 8`.
-* **Discharge plan**: direct corollary of `readBitsLe_lt` with
-  `numBits = LogW`.
-
-#### A.2.4 `extractHtIndex_lt`
-
-* **What**: the hypertree index is `< 2^H = 262144`.
-* **Discharge plan**: corollary of `readBitsLe_lt`.
-
-### A.3 Spec/Signer — the reference signer
-
-#### A.3.1 Full signer definition
-
-* **Current state**: `Spec/Signer.lean::sign` is a placeholder that
-  returns a `defaultSignature`-shaped value with zero auth paths and
-  zero WOTS sigmas.
-* **What's needed**: a complete, declarative spec of:
-  - FORS leaf-secret derivation and Merkle root computation.
-  - WOTS+ chain start values and endpoint computation.
-  - WOTS+C `count` search (with `Option` return for non-termination).
-  - The R-grinding loop (with `Option` return).
-  - Iterative Treehash for auth-path extraction.
-  - Hypertree layer-by-layer assembly.
-* **Discharge plan**: mirror `sphincs-c10/src/{hypertree,wots,fors,
-  merkle}.rs` line-by-line as Lean `def`s.
-
-#### A.3.2 Termination of grinding loops
-
-* **What's needed**: `grindR_terminates_with_prob` and
-  `findCount_terminates_with_prob` stating that, under the SHA-256
-  ROM assumption, each grinding loop terminates within the chosen
-  bound (10^7) with overwhelming probability.
-* **Discharge plan**: probability-game argument, contingent on the
-  ROM machinery in M (below).
-
-### A.4 Spec/Signature — byte-level deserialiser
-
-#### A.4.1 Full deserialiser
-
-* **Current state**: `Spec/Signature.lean::deserialise` returns
-  `defaultSignature` regardless of input.
-* **What's needed**: a function that decomposes the 4008-byte input
-  into:
-  - `r : ByteVec 16` at offset 0.
-  - `forsSecrets : Array (ByteVec 16)` of length `K=13` at offset 16.
-  - `forsAuthPaths : Array (Array (ByteVec 16))` of shape `(K-1) × A`
-    at offset 224.
-  - `layers : Array LayerSig` of length `D=2`, each shaped as
-    `(L=43 chains + 4-byte count + SubtreeH=9 auth) = 836 bytes`.
-* **Discharge plan**: pure offset arithmetic using `ByteVec.extract`
-  / `ByteVec.take` / `ByteVec.drop`.
-
-#### A.4.2 Round-trip of deserialise/serialise
-
-* **What's needed**: `serialise (deserialise b) = b` for any 4008-byte
-  `b` whose internal field sizes are consistent.
-* **Discharge plan**: byte-level structural induction.
-
-### A.5 Spec/Theorems — functional correctness
-
-#### A.5.1 `verify_signs` (round-trip)
-
-* **Where**: `Spec/Theorems.lean:90` — currently `sorry`.
-* **What**: `∀ sk msg, consistent sk → ∀ sig, sign sk msg = some sig
-  → verify sk.verifyingKey msg sig = true`.
-* **Discharge plan**: structural induction over the hypertree layers,
-  reducing to four sub-lemmas:
-  - `Merkle round-trip`: `verifyAuthPath` after `buildSubtreeWithAuth`
-    recovers the original subtree root.
-  - `WOTS+C chain round-trip`: `pkFromSig` after `sign_with_shuffle`
-    recovers the original endpoint.
-  - `FORS+C round-trip`: `reconstructForsPk` after `sign_fors_tree`
-    recovers the original FORS PK.
-  - `chainHash` invertibility under the digit-encoding.
-* **Why hard**: each sub-lemma needs unfolding ~100 lines of definitions
-  and aligning the `for-in` accumulator with the structural recursion.
-
-#### A.5.2 `verify_rejects_nonzero_last_fors_idx`
-
-* **Where**: `Spec/Theorems.lean:118` — currently `sorry`.
-* **What**: if the last FORS index is non-zero, `verify` returns
-  `false`.
-* **Discharge plan**: unfold `Hypertree.verify`, expose the early
-  `if` on `indices.getD (K-1) 0 ≠ 0`, use `if_pos h`. The blocker is
-  Lean's reluctance to substitute into a `let`-inside-`def`; a
-  rewrite of the helper to use `match` directly should fix it.
-
-#### A.5.3 `verify_rejects_bad_digit_sum`
-
-* **Where**: `Spec/Theorems.lean:129` — currently a placeholder
-  `True` statement.
-* **What**: precise statement is "if for some HT layer the digits
-  extracted from `wotsDigest` do not sum to `TargetSum`, then
-  `verify` returns `false`."
-* **Discharge plan**: unfold `Wots.pkFromSig` (which returns `none`
-  on digit-sum mismatch); propagate `none` through `verifyHypertree`.
-
-#### A.5.4 Rejection of wrong-format signatures
-
-* **What**: rejection theorems for every malformed shape:
-  - Auth-path nodes out of the byte range expected by the verifier.
-  - Count field violating `count < 2^32`.
-  - FORS secret out of N-mask layout (top 16 bytes ≠ 0 padding).
-* **Discharge plan**: each is one structural unfolding plus a
-  contradiction.
+A `sorry` and axiom tracker at the bottom of the file records the expected
+state after each phase.
 
 ---
 
-## Stratum A (refined) — Yul / offset-indexed verifier
+## Phase 1 — Mechanical `sorry`s (1–2 weeks)
 
-### A.6 Verifier/Equivalence — refinement of structured ↔ refined
+Pure proof-script grind. No new design, no new definitions. Closes every
+verifier-scope `sorry` that does not depend on Phases 2+.
 
-#### A.6.1 Section lemmas
+### 1.1 `readBitsLe_lt`
 
-* **Where**: `Verifier/Equivalence.lean:48-67` — currently placeholder
-  `True` statements or `sorry`.
-* **What**:
-  - `load_R_consistent`: byte offset 0 of `sig` equals `Hypertree.Signature.r`.
-  - `fors_section_consistent`: `reconstructForsPkRefined sig _ _` equals
-    `Fors.reconstructForsPk _ _ (deserialise sig).fors`.
-  - `ht_layer0_consistent`: the layer-0 walk produces the same node.
-  - `ht_layer1_consistent`: the layer-1 walk produces the same node.
-* **Discharge plan**: byte-level offset arithmetic, aligning each
-  `loadValue16 sig (AUTH_START + i * AUTH_PER_TREE + h * N)` with the
-  corresponding `(deserialise sig).fors.authPaths[i][h]`.
+* **Where**: `SphincsCVerify/Util/Bits.lean:71`
+* **Current**: `sorry`
+* **Statement**:
+  ```lean
+  theorem readBitsLe_lt (digest : ByteVec 32) (off k : Nat) :
+      readBitsLe digest off k < 2 ^ k
+  ```
+* **Discharge plan**: induction on `k`. The inner `loop` in `readBitsLe` ORs
+  in one bit of weight `2^i` per iteration. Prove a strengthened induction
+  hypothesis on the accumulator:
+  ```lean
+  have aux : ∀ i acc, acc < 2 ^ i →
+      readBitsLe.loop digest off k i acc < 2 ^ k := …
+  ```
+  Then `readBitsLe digest off k = readBitsLe.loop digest off k 0 0` and
+  `0 < 2 ^ 0` close the base case. Use `Nat.or_lt_two_pow` (mathlib) or
+  prove a small bit-OR bound by hand.
+* **Time**: ~½ day.
 
-#### A.6.2 Top-level refinement
+### 1.2 `extractForsIndices_lt`
 
-* **Where**: `Verifier/Equivalence.lean:81` — currently `sorry`.
-* **What**: `verifyRefined (pad16 pkSeed) (pad16 pkRoot) msg sig =
-  Spec.Signature.verify ⟨pkSeed, pkRoot⟩ msg sig`.
-* **Discharge plan**: compose the four section lemmas.
+* **Where**: `SphincsCVerify/Util/Bits.lean:82`
+* **Current**: `sorry`
+* **Statement**: every extracted FORS index is `< 2 ^ A`.
+* **Discharge plan**: direct corollary — `exact readBitsLe_lt _ _ _`.
+* **Time**: ~1 hour.
 
----
+### 1.3 `extractDigits_lt`
 
-## Stratum B — Wallet scaffolding
+* **Where**: `SphincsCVerify/Util/Bits.lean:93`
+* **Current**: `sorry`
+* **Statement**: every WOTS+C digit is `< W = 2 ^ LogW = 8`.
+* **Discharge plan**: corollary of `readBitsLe_lt` with `k = LogW`, then
+  `W = 2 ^ LogW` (closed by `decide`).
+* **Time**: ~1 hour.
 
-### B.1 `Wallet/ValidateUserOp` — model completeness
+### 1.4 `verify_rejects_nonzero_last_fors_idx`
 
-#### B.1.1 Full `decodeWrappedSig`
+* **Where**: `SphincsCVerify/Spec/Theorems.lean:118`
+* **Current**: `sorry`
+* **Statement** (already in source):
+  ```lean
+  theorem verify_rejects_nonzero_last_fors_idx
+      (pkSeed pkRoot : ByteVec 16) (msg : ByteVec 32) (sig : Hypertree.Signature)
+      (h : (Util.extractForsIndices (hMsg …)).getD (K - 1) 0 ≠ 0) :
+      Hypertree.verify pkSeed pkRoot msg sig = false
+  ```
+* **Discharge plan**: `Hypertree.verify` has an early-return cascade. The
+  blocker today is that the predicate lives inside a `let`-binding rather
+  than as a `match` head, so `simp [Hypertree.verify]` doesn't surface it.
+  Two options:
+  1. **Preferred:** refactor `Hypertree.verify` to hoist the `if` predicate
+     to a top-level `match` — clean, ~10 LoC diff in `Spec/Hypertree.lean`;
+     closes 1.5 as a side-effect.
+  2. Keep the def, prove with explicit `unfold` + `split` tactics. Slightly
+     more brittle.
+* **Time**: 1–2 days.
 
-* **Current state**: `Wallet/ValidateUserOp.lean::decodeWrappedSig`
-  always returns `none`. This makes every downstream invariant on
-  `validateSignature` vacuously hold.
-* **What's needed**: a byte-level decoder of the
-  `abi.encode(uint256 ownerIndex, bytes c10Sig)` shape:
-  - First 32 bytes: `ownerIndex`.
-  - Next 32 bytes: offset field (must equal `0x40`).
-  - Next 32 bytes: inner length (must equal `C10_SIG_LEN = 4008`).
-  - Next `paddedInner` bytes: the 4008-byte inner signature, padded to
-    a 32-byte boundary.
-* **Discharge plan**: mirror the `calldataload`-based decode in
-  `_validateSignature` byte-for-byte; reject every malformed shape
-  with `none`.
+### 1.5 `verify_rejects_bad_digit_sum`
 
-#### B.1.2 Concrete `sphincsDigest`
-
-* **Current state**: declared `opaque`.
-* **What's needed**: definitional `sphincsDigest op entryPoint chainId
-  = sha256(op.sender ‖ op.nonce ‖ sha256(op.initCode) ‖ ... ‖ entryPoint
-  ‖ chainId)` matching `PQSmartWallet.sphincsDigest` exactly.
-* **Discharge plan**: write the explicit concatenation; relies on
-  kernel-computable SHA-256 (A.1.1).
-
-#### B.1.3 Concrete function selectors
-
-* **Current state**: `Selector.addOwnerBytes`, `executeWithOffchainCount`,
-  `executeBatchWithOffchainCount`, `removeOwnerAtIndex` are all `opaque`.
-* **What's needed**: `bytes4(keccak256("addOwnerBytes(bytes)"))` etc.
-  computed in-Lean.
-* **Discharge plan**: needs kernel-computable keccak256
-  (parallel to A.1.1, also feasible via Verity's `Sponge.lean`).
-
-### B.2 `Wallet/Invariants` — the security theorems
-
-#### B.2.1 `validateSignature_only_via_verify` (non-bypass)
-
-* **Where**: `Wallet/Invariants.lean:65` — currently `sorry`.
-* **What**: every successful `validateSignature` call routes through
-  `verify_fn`. Stated existentially as "there exist `(ownerIndex, pkSeed,
-  pkRoot, digest, innerSig)` such that `verify_fn = true`".
-* **Discharge plan**: case-split on each early-return in
-  `validateSignature`; each `failure` branch eliminates; the only path
-  to `success` includes the verifier check. Requires B.1.1 first.
-
-#### B.2.2 `validateSignature_bootstrap_monotonic`
-
-* **Where**: `Wallet/Invariants.lean:92` — currently `sorry`.
-* **What**: a successful validation never decreases `bootstrapUses`.
-* **Discharge plan**: same case-split as B.2.1; on the only path that
-  reaches `bumpBootstrap`, use `bumpBootstrap_monotonic`.
-
-#### B.2.3 `validateSignature_slot_monotonic`
-
-* **Where**: `Wallet/Invariants.lean:103` — currently `sorry`.
-* **What**: a successful validation never decreases `slotUses[i]` for
-  any `i`.
-* **Discharge plan**: same case-split; either no bump (so trivially
-  equal) or `bumpSlot_monotonic` on the right index.
-
-#### B.2.4 EIP-1271 non-bypass
-
-* **Not yet stated**: an analogue of B.2.1 for
-  `_erc1271IsValidSignatureNowCalldata`.
-* **What's needed**: every `true` return implies a successful
-  verifier call.
-* **Discharge plan**: model `_erc1271IsValidSignatureNowCalldata`
-  as a Lean function; replicate the B.2.1 case-split.
-
-#### B.2.5 EIP-1271 forbids bootstrap
-
-* **Not yet stated**: theorem that
-  `_erc1271IsValidSignatureNowCalldata _ sig` returns `false` whenever
-  the decoded `ownerIndex = 0`.
-* **Discharge plan**: structural unfolding; the Solidity check is
-  `if (ownerIndex == 0) return false`.
-
-#### B.2.6 N-mask layout enforced
-
-* **Not yet stated**: theorem that no `addOwner` call admits an
-  `OwnerBytes` whose bottom 16 bytes of `pkSeed` or `pkRoot` are non-zero.
-* **Discharge plan**: model the byte check from
-  `_addOwnerAtIndex` and prove it `false` on a non-zero low half.
-
-### B.3 `Wallet/Factory` — squat-defence
-
-#### B.3.1 No deployment without bootstrap signature
-
-* **Not yet stated**: theorem that if `createAccount` produces a new
-  proxy at `salt(masterPkSeed, masterPkRoot)`, then a valid bootstrap
-  signature over `addSlot0Digest(chainId, slot0PkSeed, slot0PkRoot)`
-  was supplied.
-* **Discharge plan**: model the factory's deploy path including the
-  `try/catch` on the verifier; case-split on the `if (!ok) revert`.
-
-#### B.3.2 Address uniqueness from collision resistance
-
-* **Not yet stated**: theorem that two distinct
-  `(masterPkSeed, masterPkRoot)` pairs yield distinct salts (modulo
-  SHA-256 collision resistance).
-* **Discharge plan**: needs the SHA-256 collision-resistance axiom
-  (A.1.x); reduce to that.
-
-### B.4 Storage <-> Solidity ERC-7201 correspondence
-
-#### B.4.1 Lean `Storage` matches `PQMultiOwnableStorage`
-
-* **Not yet stated** (the entire correspondence is outside the
-  formal layer right now).
-* **What's needed**: a theorem that for any sequence of operations
-  `addOwner`, `removeOwner`, `bumpBootstrap`, `bumpSlot`,
-  `setOffchain`, the Lean `Storage` value evolves the same way as
-  the on-chain ERC-7201 storage slot reads/writes would.
-* **Discharge plan**: this is structurally hard without an EVM
-  semantics in Lean. Two paths:
-  - Verity-style: rewrite the wallet in a verified EDSL and inherit
-    the storage-slot correctness from the verified compiler.
-  - KEVM/Kontrol: prove bytecode-level equivalence against the Lean
-    transition relation.
-
-### B.5 `validateUserOp` itself
-
-#### B.5.1 Model the EntryPoint-call constraint
-
-* **Not yet stated**: theorem that `validateUserOp` succeeds only
-  when `msg.sender = entryPoint`.
-* **Discharge plan**: model the `msg.sender` check as a Lean precondition;
-  trivial once stated.
-
-#### B.5.2 Compose `validateUserOp` ⇒ `validateSignature`
-
-* **Not yet stated**: `validateUserOp` returns `SIG_VALIDATION_SUCCESS`
-  iff `validateSignature` returns `success`.
-* **Discharge plan**: model `validateUserOp` as a Lean function and
-  show it delegates.
-
-#### B.5.3 No-bypass via `executeWithOffchainCount`
-
-* **Not yet stated**: `executeWithOffchainCount` reverts unless
-  `msg.sender = entryPoint`, so the only way to call it is through a
-  validated UserOp.
-* **Discharge plan**: model the access check; trivial unfolding.
-
----
-
-## Stratum C — Bridge to deployed bytecode
-
-### C.1 `solidityVerifier_compiles_correctly` (axiom)
-
-* **Where**: `Bridge/Refinement.lean:50` — currently an `axiom`.
-* **What's claimed**: solc 0.8.28 correctly compiles `SPHINCsC10Asm.verify`.
+* **Where**: `SphincsCVerify/Spec/Theorems.lean:128`
+* **Current**: placeholder `True` closed by `trivial`.
+* **Statement** (replace the placeholder):
+  ```lean
+  theorem verify_rejects_bad_digit_sum
+      (pkSeed pkRoot : ByteVec 16) (msg : ByteVec 32) (sig : Hypertree.Signature)
+      (layer : Nat) (hlayer : layer < D)
+      (hbad : digitSum (extractDigits
+                (wotsDigest (pad16 pkSeed) (Adrs.wots …) … …)) ≠ TargetSum) :
+      Hypertree.verify pkSeed pkRoot msg sig = false
+  ```
+  Concretely: `Wots.pkFromSig` returns `none` on digit-sum mismatch;
+  propagate that `none` through `Hypertree.verifyHypertree` to `false`.
 * **Discharge plan**:
-  - Verity-style: re-author `SPHINCsC10Asm` in Verity's Lean EDSL and
-    inherit the verified Yul→bytecode pipeline.
-  - KEVM/Kontrol: prove bytecode equivalence between the deployed
-    `SPHINCsC10Asm` bytecode and a Yul-from-Lean reference.
+  - Open `Spec/Wots.lean` and locate the `if digitSum digits = TargetSum`
+    branch in `pkFromSig`.
+  - Trace `none` to the layer-loop branch in `Hypertree.verify` that
+    returns `false`.
+  - After the Hypertree refactor from 1.4, `simp` closes it.
+* **Time**: 1–2 days.
 
-### C.2 `evm_bytecode_executes_correctly` (axiom)
+### Phase 1 done criteria
 
-* **Where**: `Bridge/Refinement.lean:62` — currently an `axiom`.
-* **What's claimed**: EVM bytecode obeys the official EVM spec.
-* **Discharge plan**: adopt KEVM / Dafny-EVM / EVMYulLean and
-  discharge against it. This is universal to every Ethereum smart
-  contract; rarely undertaken per-project.
+```bash
+cd contracts/verification/lean
+lake build
+lake env lean --run scripts/check_no_sorry.lean
+# Expected: 0 sorry in Util/Bits.lean and Spec/Theorems.lean except verify_signs
+```
 
-### C.3 `precompile_0x02_is_FIPS_180_4` (axiom)
-
-* **Where**: `Bridge/Refinement.lean:72` — currently an `axiom`.
-* **What's claimed**: the EVM precompile at `0x02` implements SHA-256
-  per FIPS 180-4.
-* **Discharge plan**: verify the SHA-256 implementation in
-  geth/reth/erigon against FIPS 180-4. Appel-VST-style work for a C
-  reference; would have to be re-done per consensus client.
-
-### C.4 `deployed_verifier_refines_spec`
-
-* **Where**: `Bridge/Refinement.lean:84` — currently a trivial
-  `True` statement.
-* **What's needed**: a Lean theorem of the form
-  `EVM.run (deployedBytecode SPHINCsC10Asm) (encodeCalldata pkSeed
-  pkRoot message sig) = encodeBool (Spec.Signature.verify ...)`.
-* **Discharge plan**: requires a Lean model of EVM execution
-  (currently absent). Once added, the proof composes C.1, C.2, C.3
-  plus `verifyRefined_eq_spec` (A.6.2).
-
-### C.5 Bridge for `keccak256` precompile
-
-* **Not yet stated**: `precompile_keccak256_is_correct` axiom — needed
-  for the CREATE2 address derivation (`keccak256(0xff ‖ deployer ‖
-  salt ‖ keccak256(initCode))`).
-* **Discharge plan**: same as C.3 but for keccak256.
-
-### C.6 Bridge for `sphincs.sphincsDigest`
-
-* **Not yet stated**: a theorem that the on-chain `sha256(...)`
-  call chain in `PQSmartWallet.sphincsDigest` produces the same
-  32-byte digest as `Wallet.ValidateUserOp.sphincsDigest`.
-* **Discharge plan**: combine C.3 (precompile is FIPS-180-4) with
-  the concrete digest definition (B.1.2).
+`sorry` count: drops from 11 → 6 (the remaining ones are
+`Spec/Theorems.lean::verify_signs` and four section lemmas in
+`Verifier/Equivalence.lean`, addressed in Phases 5 and 6).
 
 ---
 
-## Stratum D — Cryptographic security
+## Phase 2 — Kernel-computable SHA-256 (4–8 weeks) ★ highest leverage
 
-### D.1 `SM_DT_TCR_F` (axiom)
+The single highest-leverage phase. Until `Spec/Hash.lean::sha256` is
+definitional rather than `opaque`, no concrete digest can be evaluated
+inside the Lean kernel and Phases 5 and 7 are gated.
 
-* **Where**: `Crypto/Assumptions.lean:93` — currently an `axiom`.
-* **What's claimed**: the SPHINCS+ chain-step tweakable hash is
-  SM-DT-TCR.
-* **Discharge plan**: port the Barbosa/Dupressoir/Hülsing/Meijers/Strub
-  ASIACRYPT 2024 EasyCrypt proof to Lean, or accept the EasyCrypt
-  artefact's TCB alongside Lean's.
+### 2.1 FIPS 180-4 SHA-256 in Lean
 
-### D.2 `ITSR_F` (axiom)
+* **Where**: new file `SphincsCVerify/Spec/Sha256Impl.lean`.
+* **Statement**:
+  ```lean
+  def sha256_impl : List ByteSeg → ByteVec 32
+  ```
+  Following FIPS 180-4 §5.1 (padding), §5.3 (initial hash values H0..H7),
+  §6.2 (message schedule + compression function).
+* **Discharge plan**: structurally port the algorithm. Components:
+  - `UInt32` bitwise helpers: `rotr`, `ch`, `maj`, `bsig0`, `bsig1`,
+    `ssig0`, `ssig1` (each a one-liner using `<<<` / `>>>` / `^^^`).
+  - Round constants `K[0..63]` (literal array; FIPS 180-4 §4.2.2).
+  - `messageSchedule : ByteVec 64 → Array UInt32` (size 64) — §6.2.1.
+  - `compress : (state block : _) → Array UInt32` — §6.2.2.
+  - `padMessage : List ByteSeg → Array (ByteVec 64)` — §5.1.1.
+  - `sha256_impl segs = (List.foldl compress initialHash (padMessage segs)).flatten`
+    encoded as big-endian bytes.
 
-* **Where**: `Crypto/Assumptions.lean:109` — currently an `axiom`.
-* **What's claimed**: Interleaved Target Subset Resilience holds for
-  the FORS roots compression hash.
-* **Discharge plan**: same as D.1.
+  Pattern to copy: Verity's `Compiler/Keccak/Sponge.lean`, adjusting for
+  SHA-256's MD-style construction vs Keccak's sponge.
+* **Time**: 2–3 weeks for someone fluent in Lean + the FIPS spec.
 
-### D.3 `hMsg_random_oracle` (axiom)
+### 2.2 Replace `opaque sha256`
 
-* **Where**: `Crypto/Assumptions.lean:121` — currently an `axiom`.
-* **What's claimed**: `H_msg` is a random oracle.
-* **Discharge plan**: standard ROM assumption; alternative is a
-  standard-model bound with looser constants.
+* **Where**: `SphincsCVerify/Spec/Hash.lean:87`
+* **Current**:
+  ```lean
+  opaque sha256 : List ByteSeg → ByteVec 32
+  ```
+* **Replace with**:
+  ```lean
+  def sha256 (segs : List ByteSeg) : ByteVec 32 := sha256_impl segs
+  ```
+* **Done criteria**: `lake build` still passes; `#eval sha256 []` returns
+  the known empty-string digest
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 
-### D.4 `EUF_CMA_SPHINCSplusC` (axiom)
+### 2.3 Test-vector lemmas
 
-* **Where**: `Crypto/EUFCMA.lean:117` — currently an `axiom`.
-* **What's claimed**: existential unforgeability of SPHINCS+C10 under
-  chosen-message attack.
-* **Discharge plan**: extend the Barbosa et al. SPHINCS+ proof to
-  cover the WOTS+C and FORS+C variants (counter-search + forced-zero).
-  The Hülsing PQC2022 paper sketches the argument; mechanising it in
-  EasyCrypt is the deliverable.
+* **Where**: new file `SphincsCVerify/Spec/Sha256TestVectors.lean`.
+* **Statement**: for each `(input, expected)` in NIST CAVS
+  `SHA256ShortMsg.rsp`,
+  ```lean
+  example : sha256 [ByteSeg.ofByteVec input] = expected := by native_decide
+  ```
+* **Discharge plan**: import the CAVS file, emit one example per vector.
+  `native_decide` closes each in <100 ms.
+* **Time**: 2–3 days.
 
-### D.5 `cannot_forge_without_breaking_SHA256`
+### 2.4 Tweakable-hash unfolding lemmas
 
-* **Where**: `Crypto/EUFCMA.lean:141` — currently `sorry`.
-* **What**: corollary stating that any concrete forgery implies one of
-  D.1, D.2, D.3 is broken.
-* **Discharge plan**: requires a probability-game model in Lean (M
-  below); the proof composes D.1+D.2+D.3 to D.4 then specialises.
+* **Where**: extend `SphincsCVerify/Spec/Hash.lean` (after `th_size`).
+* **Statements**:
+  ```lean
+  theorem th_unfolds_to_sha256 (s : ByteVec 32) (a : Adrs) (x : ByteVec 32) :
+      th s a x = truncate16 (sha256 [
+        ByteSeg.ofByteVec s, ByteSeg.ofByteVec a, ByteSeg.ofByteVec x]) := rfl
 
-### D.6 SHA-256 collision resistance (axiom not yet stated)
+  theorem thPair_unfolds_to_sha256 …
+  theorem thMulti_unfolds_to_sha256 …
+  theorem hMsg_unfolds_to_sha256 …
+  ```
+* **Discharge plan**: each closes by `rfl` once `sha256` is definitional.
+* **Time**: <1 day.
 
-* **Not yet stated** in `Crypto/Assumptions.lean`.
-* **What's needed**: an axiom for standard 256-bit collision
-  resistance, used by `Factory.salt`'s uniqueness argument (B.3.2).
-* **Discharge plan**: state the assumption; the rest follows.
+### Phase 2 done criteria
 
----
-
-## Stratum E — Cross-implementation consistency
-
-### E.1 Lean ↔ Rust differential testing (byte-level)
-
-* **Current state**: shape-only (the executable prints constants).
-* **What's needed**: a way to execute `Spec.Signature.verify` on
-  concrete test vectors from `sphincs-c10/tests/`.
-* **Discharge plan**: requires kernel-computable SHA-256 (A.1.1).
-  Then write a Lean executable that reads
-  `c10_test_vectors.json` and confirms each `(pkSeed, pkRoot, msg, sig,
-  expected_bool)` round-trip.
-
-### E.2 Lean ↔ Solidity differential testing
-
-* **Current state**: in place at the Foundry level
-  (`contracts/smart-wallet/test/`).
-* **What's needed**: extension that runs each Foundry test vector
-  through the Lean verifier and checks the boolean matches.
-* **Discharge plan**: emit the same JSON corpus from Foundry; consume
-  in the Lean exe from E.1.
-
-### E.3 Drift detection on every PR
-
-* **What's needed**: CI job that re-runs E.1 + E.2 and fails on any
-  inconsistency. Parameter constants in `Spec/Params.lean` must equal
-  the Rust constants in `sphincs-c10/src/params.rs` and the Solidity
-  constants in `SPHINCsC10Asm.sol`.
-* **Discharge plan**: extend the existing
-  `pqsigner-xtask gen-solidity-constants --check` to also diff a
-  Lean-emitted constants file.
+```bash
+lake build
+lake env lean --run scripts/dump_axioms.lean
+# Expected: sha256 no longer appears as an opaque dependency.
+lake exe sha256-test-vectors  # all CAVS vectors pass via native_decide
+```
 
 ---
 
-## Stratum F — ByteVec / supporting library
+## Phase 3 — Complete reference signer (2–3 weeks)
 
-### F.1 `ByteVec.ofAscii` size lemma
+`Spec/Signer.lean::sign` is currently a placeholder returning zero-filled
+chains and auth paths. Phase 5's round-trip theorem cannot proceed without
+a real signer.
 
-* **Where**: `Spec/Bytes.lean:115` — currently `sorry`.
-* **What**: `(ofAscii s).size = s.length`.
-* **Discharge plan**: `Array.size_map` + `String.length_eq_data_length`.
+### 3.1 FORS Merkle root + auth path
 
-### F.2 `loadWord32` / `loadValue16` correctness
+* **Where**: extend `SphincsCVerify/Spec/Fors.lean`; rewrite the
+  `forsSecrets` / `forsAuthPaths` blocks in
+  `SphincsCVerify/Spec/Signer.lean`.
+* **Source of truth**: `sphincs-c10/src/fors.rs::sign_fors_tree` and
+  `sphincs-c10/src/merkle.rs::treehash`.
+* **What to add**:
+  - `def forsLeafHash (skSeed pkSeed : ByteVec 32) (treeIdx leafIdx : UInt32) : ByteVec 16`
+  - `def forsTreeHash (skSeed pkSeed : ByteVec 32) (treeIdx : UInt32) (height nodeIdx : Nat) : ByteVec 16` — declarative recursive Merkle hash (no need to match the iterative Treehash; the spec form is fine).
+  - `def forsAuthPath (skSeed pkSeed : ByteVec 32) (treeIdx leafIdx : UInt32) : Array (ByteVec 16)` of length `A`.
+* **Time**: ~1 week.
 
-* **Not yet stated**: theorems that `loadWord32 sig offset` equals the
-  32-byte slice `sig[offset:offset+32]` for in-bounds offsets, and
-  matches the EVM `calldataload` zero-padding semantics for
-  out-of-bounds offsets.
-* **Discharge plan**: `Array.extract` lemmas; mechanical.
+### 3.2 WOTS+ chains
 
-### F.3 `loadU32BE` correctness
+* **Where**: extend `SphincsCVerify/Spec/Wots.lean`.
+* **Source of truth**: `sphincs-c10/src/wots.rs::sign_with_shuffle`.
+* **What to add**:
+  - `def wotsChainStart (skSeed pkSeed : ByteVec 32) (wotsAdrs : Adrs) (i : Nat) : ByteVec 16` (the `sk_i` start node).
+  - `def wotsSignChain (skSeed pkSeed : ByteVec 32) (wotsAdrs : Adrs) (i digit : Nat) : ByteVec 16` (chain truncated at digit `d` instead of `W-1`).
+* **Time**: ~3 days.
 
-* **Not yet stated**: `loadU32BE sig offset` equals
-  `fromBytes(sig[offset:offset+4])` for the standard big-endian
-  encoding.
-* **Discharge plan**: bit-level structural unfolding.
+### 3.3 WOTS+C count and R-grinding correctness
 
-### F.4 `ByteVec.append`, `take`, `drop` lemmas
+* **Where**: `SphincsCVerify/Spec/Signer.lean` (already partly there).
+* **What's needed**:
+  - `findCount` / `grindR` already use `Option` to model probabilistic
+    non-termination — keep as-is.
+  - Phase 5 will need a correctness lemma; add the statement now as a
+    stub:
+    ```lean
+    theorem findCount_correct
+        (seed : ByteVec 32) (layer : UInt32) (tree : UInt64) (kp : UInt32)
+        (msgHash : ByteVec 32) (limit : Nat) (count : UInt32) (d : ByteVec 32) :
+        findCount seed layer tree kp msgHash limit = some (count, d) →
+        d = wotsDigest seed (Adrs.wots layer tree kp) msgHash count
+        ∧ digitSum (extractDigits d) = TargetSum
+    ```
+    Closes by `unfold findCount; intros h; …` once Phase 5 machinery
+    is in place.
+* **Time**: ~2 days.
 
-* **Mostly stated** as type-level size facts. Need:
-  - `(xs ++ ys).take xs.size = xs`
-  - `(xs ++ ys).drop xs.size = ys`
-  - `xs.take m ++ xs.drop m = xs` (for `m ≤ n`)
-* **Discharge plan**: `Array.extract` algebra; standard.
+### 3.4 Hypertree layer assembly
 
-### F.5 `pad16` / `truncate16` round-trip
+* **Where**: replace the per-layer placeholders in
+  `SphincsCVerify/Spec/Signer.lean` (the `Array.replicate L (zero 16)`
+  blocks).
+* **Source of truth**: `sphincs-c10/src/hypertree.rs::sign`.
+* **What to add**: for each layer in `[0..D)`: compute WOTS+C signature
+  via `wotsSignChain` per index, compute the subtree Merkle root, emit
+  the auth path.
+* **Time**: ~1 week.
 
-* **Not yet stated**: `truncate16 (pad16 v) = v`.
-* **Discharge plan**: byte-level `extract` lemma; mechanical.
+### Phase 3 done criteria
 
----
-
-## Stratum G — Selector / ABI opacity
-
-### G.1 Solidity selectors as concrete bytes
-
-* **Where**: `Wallet/ValidateUserOp.lean::Selector.*` — currently
-  `opaque`.
-* **What's needed**: definitional values
-  - `addOwnerBytes := bytes4(keccak256("addOwnerBytes(bytes)"))`
-  - `executeWithOffchainCount := bytes4(keccak256("executeWithOffchainCount(uint256,uint256,address,uint256,bytes)"))`
-  - `executeBatchWithOffchainCount := bytes4(keccak256("executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])"))`
-  - `removeOwnerAtIndex := bytes4(keccak256("removeOwnerAtIndex(uint256,bytes)"))`
-* **Discharge plan**: requires kernel-computable keccak256 (parallel
-  to A.1.1).
-
-### G.2 `Factory.factoryAddSlotDomain` concrete bytes
-
-* **Where**: `Wallet/Factory.lean::factoryAddSlotDomain` — currently
-  `opaque`.
-* **What's needed**: the literal 26-byte ASCII
-  `pqsigner.factoryAddSlot.v1`.
-* **Discharge plan**: trivial once F.1 (`ByteVec.ofAscii`) is closed.
-
----
-
-## Stratum H — Probability theory backbone
-
-### H.1 Game-based cryptography in Lean
-
-* **Current state**: absent.
-* **What's needed**: a Lean equivalent of EasyCrypt's pRHL / phl
-  for stating and proving probabilistic security games.
-* **Discharge plan**: a substantial library development; the
-  `mathlib4` `MeasureTheory` layer provides the measure-theoretic
-  base, but the game-based DSL on top of it does not exist.
-
-### H.2 Negligible function modelling
-
-* **Current state**: in `Crypto/Assumptions.lean::negligible` is
-  defined as a single `Nat` constant.
-* **What's needed**: a proper definition of
-  `negligible : (ℕ → ℝ) → Prop` matching "for every polynomial
-  `p`, eventually `|f n| < 1/p(n)`."
-* **Discharge plan**: standard definition; needs mathlib's
-  asymptotic / Filter machinery.
-
-### H.3 PPT adversary modelling
-
-* **Current state**: `Adversary` is a structure with a single
-  `attempt` function — no computation-time budget.
-* **What's needed**: a computation model that bounds adversary
-  running time and oracle queries.
-* **Discharge plan**: this is the deep end. EasyCrypt's `bypr` /
-  `pRHL` are essentially purpose-built for this and represent the
-  state of the art. Lean does not yet have a comparable library.
+`Spec/Signer.lean::sign` returns a structurally-correct `Signature` with
+no `Array.replicate (zero 16)` stubs. `lake build` passes.
 
 ---
 
-## Stratum I — Boot-level / out-of-scope
+## Phase 4 — Byte-level deserialiser (1–2 weeks)
 
-The following are not modelled in this verification project and would
-require entirely separate efforts.
+`Spec/Signature.lean::deserialise` currently returns `defaultSignature`
+regardless of input. Phases 5 and 6 need it to be concrete.
 
-### I.1 ERC-4337 EntryPoint correctness
+### 4.1 Real deserialise
 
-* The contract assumes EntryPoint v0.6 (`0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789`)
-  is the deployed implementation at that address on every target chain.
-* Discharge plan: pin the EntryPoint bytecode hash; verify the
-  EntryPoint independently (Vitalik & friends' work; outside our scope).
+* **Where**: `SphincsCVerify/Spec/Signature.lean:86`
+* **Current**:
+  ```lean
+  def deserialise (_bytes : ByteVec SignatureLen) : Hypertree.Signature :=
+    defaultSignature
+  ```
+* **Replace with**: offset arithmetic over the 4008-byte blob.
 
-### I.2 Solady ERC1271 / EIP-712 / ERC-6492 correctness
+  | Offset | Length | Field |
+  |---|---|---|
+  | 0 | 16 | `r` |
+  | 16 | `K * N = 208` | FORS secrets (one per `K=13` trees) |
+  | 224 | `(K-1) * A * N = 2112` | FORS auth paths |
+  | 2336 | `D * 836 = 1672` | hypertree layer sigs (`L*N=688` chains + 4 count + `SubtreeH*N=144` auth) |
 
-* Inherited base for nested EIP-712 wrapping.
-* Discharge plan: trust Solady's audit chain or formally verify it
-  (substantial work; community priority).
+  Total: `16 + 208 + 2112 + 2 × 836 = 4008`. Cross-check:
+  `signatureLen_eq_4008` in `Spec/Params.lean`.
+* **Code skeleton**:
+  ```lean
+  def deserialise (bytes : ByteVec SignatureLen) : Hypertree.Signature :=
+    let r := (bytes.take 16 (by decide)).cast (by decide)
+    let forsSecrets : Array (ByteVec 16) :=
+      Array.ofFn (n := K) fun i =>
+        ((bytes.drop (16 + i.val * N) (by …)).take 16 (by …))
+    let forsAuthPaths : Array (Array (ByteVec 16)) :=
+      Array.ofFn (n := K - 1) fun i =>
+        Array.ofFn (n := A) fun h =>
+          ((bytes.drop (224 + i.val * (A * N) + h.val * N) (by …)).take 16 (by …))
+    let layers : Array Hypertree.LayerSig :=
+      Array.ofFn (n := D) fun layer =>
+        let off := 2336 + layer.val * 836
+        { wots :=
+            { chains := Array.ofFn (n := L) fun i =>
+                ((bytes.drop (off + i.val * N) (by …)).take 16 (by …))
+              chainsLen := Array.size_ofFn
+              count := loadU32BE bytes (off + L * N) }
+          authPath := Array.ofFn (n := SubtreeH) fun h =>
+            ((bytes.drop (off + L * N + 4 + h.val * N) (by …)).take 16 (by …))
+          authPathLen := Array.size_ofFn }
+    ⟨r, …, layers, Array.size_ofFn⟩
+  ```
+  All `by …` `≤`-side conditions are arithmetic on `SignatureLen = 4008`,
+  closed by `omega` or `decide`.
+* **Time**: ~1 week.
 
-### I.3 Reentrancy in `executeWithOffchainCount`
+### 4.2 Round-trip lemma
 
-* The wallet calls `target.call{value: value}(data)` without a
-  reentrancy guard.
-* Discharge plan: formally state that no reentrant call can
-  manipulate the slot/bootstrap counters or the off-chain count
-  before the post-call update is committed. The current code
-  already commits the count *before* the external call, but this
-  ordering is not theorem-stated.
+* **Where**: `SphincsCVerify/Spec/Signature.lean`.
+* **Statement**:
+  ```lean
+  theorem serialise_deserialise_roundtrip (bytes : ByteVec SignatureLen) :
+      Signature.serialise (deserialise bytes) = bytes
+  ```
+  (Plus the converse `deserialise_serialise_roundtrip` over structured
+  inputs that satisfy the byte-shape invariants.)
+* **Discharge plan**: structural induction on the byte layout; each
+  field's `take`/`drop` composes to identity. Mechanical.
+* **Time**: ~3 days.
 
-### I.4 Gas safety / DoS resistance
+### Phase 4 done criteria
 
-* Out of formal scope; covered by empirical Foundry differential
-  tests.
-
-### I.5 Front-end / key management
-
-* The user's mnemonic / PIN / SE binding lives in firmware; not in
-  this verification.
+`deserialise` returns a structured signature reflecting the input bytes;
+`serialise_deserialise_roundtrip` closes.
 
 ---
 
-## Summary
+## Phase 5 — Round-trip theorem `verify_signs` (1–2 months) ★ headline functional result
 
-Every item above is currently either a `sorry`, a named `axiom`, or a
-property that has not yet been stated in Lean. Closing the full set
-would turn the headline conditional —
+The big one. If you sign and then verify, the verifier accepts.
 
-> *Given* a Lean kernel, solc, an EVM consensus client, the SHA-256
-> precompile, and the Barbosa et al. cryptographic axioms, **the
-> wallet is secure**
+### 5.1 Sub-lemma: Merkle round-trip
 
-— into an unconditional theorem against the deployed EVM bytecode,
-with every assumption either discharged or explicitly named with a
-citation. The closed core today proves only:
+* **Where**: new file `SphincsCVerify/Spec/Lemmas/MerkleRoundtrip.lean`.
+* **Statement**:
+  ```lean
+  theorem merkle_roundtrip
+      (seed : ByteVec 32) (leafHash : ByteVec 16) (idx : Nat) (height : Nat)
+      (siblings : Array (ByteVec 16)) (treeAdrs : Adrs) :
+      siblings.size = height →
+      Merkle.verifyAuthPath seed leafHash idx height siblings treeAdrs
+        = Merkle.buildRoot seed leafHash idx height siblings treeAdrs
+  ```
+* **Discharge plan**: induction on `height`. Base case `h = 0`:
+  `leafHash = leafHash`. Step: each iteration's `thPair` is the same
+  operation on both sides given identical sibling + identical
+  leaf-or-parity choice.
+* **Time**: ~1 week.
 
-  * The parameter-set arithmetic is internally consistent.
-  * The Lean **model** of the wallet (not the Solidity contract) has
-    monotonic, capped, non-resettable counters and an unremovable
-    bootstrap key.
-  * Two Lean definitions of the verifier are extensionally equal
-    by `rfl`.
+### 5.2 Sub-lemma: WOTS+C chain round-trip
 
-The next-step priority, ranked roughly by leverage per unit of work, is:
+* **Where**: new file `SphincsCVerify/Spec/Lemmas/WotsRoundtrip.lean`.
+* **Statement**:
+  ```lean
+  theorem wots_chain_roundtrip
+      (skSeed pkSeed : ByteVec 32) (wotsAdrs : Adrs) (i digit : Nat)
+      (hd : digit < W) :
+      let signedChain := wotsSignChain skSeed pkSeed wotsAdrs i digit
+      let recovered :=
+        chainHash pkSeed (setChainIndex wotsAdrs i)
+                  signedChain digit (W - 1 - digit)
+      recovered = chainHash pkSeed (setChainIndex wotsAdrs i)
+                            (wotsChainStart skSeed pkSeed wotsAdrs i) 0 (W - 1)
+  ```
+* **Discharge plan**: induction on `digit`. The chain is iterated `th`;
+  signing at digit `d` and recovering by `W - 1 - d` more steps lands at
+  the same `W - 1`-iteration node as the public-key endpoint.
+* **Time**: ~1 week.
 
-  1. Kernel-computable SHA-256 (A.1.1) — unblocks A.5, B.1.2, E.1, G.1.
-  2. Section lemmas in Verifier/Equivalence — closes A.6.
-  3. `decodeWrappedSig` plus B.2.1–B.2.3 — closes the wallet
-     non-bypass theorem.
-  4. Lean model of EVM execution (Stratum C) — enables C.4, C.5, C.6.
-  5. SPHINCS+C extension of Barbosa et al. EasyCrypt — closes D.4.
-  6. Probability-theory backbone (Stratum H) — closes D.5 and unifies
-     the cryptographic argument.
+### 5.3 Sub-lemma: FORS+C round-trip
+
+* **Where**: new file `SphincsCVerify/Spec/Lemmas/ForsRoundtrip.lean`.
+* **Statement**:
+  ```lean
+  theorem fors_roundtrip
+      (skSeed pkSeed : ByteVec 32) (treeIdx leafIdx : UInt32) :
+      let secret := forsSecret skSeed treeIdx leafIdx
+      let authPath := forsAuthPath skSeed pkSeed treeIdx leafIdx
+      Fors.reconstructTreeRoot pkSeed treeIdx leafIdx secret authPath
+        = forsTreeHash skSeed pkSeed treeIdx 0 0
+  ```
+* **Discharge plan**: applies `merkle_roundtrip` per tree; for the K-th
+  forced-zero tree, apply with `leafIdx = 0`.
+* **Time**: ~1 week.
+
+### 5.4 Sub-lemma: chain-hash composition
+
+* **Where**: new file `SphincsCVerify/Spec/Lemmas/ChainHash.lean`.
+* **Statement**:
+  ```lean
+  theorem chainHash_compose
+      (seed : ByteVec 32) (a : Adrs) (val : ByteVec 16)
+      (start steps1 steps2 : Nat) :
+      chainHash seed a (chainHash seed a val start steps1)
+                       (start + steps1) steps2
+        = chainHash seed a val start (steps1 + steps2)
+  ```
+* **Discharge plan**: induction on `steps2`. Base case trivial; step uses
+  associativity of iteration.
+* **Time**: ~3 days.
+
+### 5.5 Top-level `verify_signs`
+
+* **Where**: `SphincsCVerify/Spec/Theorems.lean:86` — replace the
+  current `sorry`.
+* **Statement** (already in source):
+  ```lean
+  theorem verify_signs
+      (sk : SigningKey) (message : ByteVec 32)
+      (hc : consistent sk) (sig : Hypertree.Signature)
+      (hsign : Signer.sign sk message = some sig) :
+      Hypertree.verify sk.pkSeed sk.pkRoot message sig = true
+  ```
+* **Discharge plan**: structural induction over the hypertree layers,
+  invoking 5.1–5.4 plus `findCount_correct` and `grindR_correct`
+  (Phase 3.3). Skeleton:
+  ```lean
+  theorem verify_signs sk message hc sig hsign := by
+    unfold Signer.sign at hsign
+    rcases hsign with ⟨r, digest, hgrind, …⟩
+    simp [Hypertree.verify]
+    refine ⟨?lastIdx, ?forsRoot, ?layers⟩
+    case lastIdx =>
+      -- by grindR_correct: last fors index = 0
+      exact grindR_returns_zero_last_idx hgrind
+    case forsRoot =>
+      -- fors_roundtrip per tree, then thMulti rfl
+      exact fors_roundtrip_aggregate …
+    case layers =>
+      -- induction on D, each step: wots_chain_roundtrip +
+      --   merkle_roundtrip + chainHash_compose
+      induction D with
+      | zero => rfl
+      | succ d ih => …
+  ```
+* **Time**: 2–3 weeks once 5.1–5.4 are in place.
+
+### 5.6 Tighten `consistent`
+
+The placeholder `def consistent : SigningKey → Prop := fun _ => True` is
+acceptable for Phase 5 but should be tightened to
+`Hypertree.computePkRoot sk = sk.pkRoot`. Leave as a follow-up TODO; the
+`verify_signs` proof above does not depend on the strengthening.
+
+### Phase 5 done criteria
+
+`Spec/Theorems.lean::verify_signs` closes with no `sorry`. Audit:
+
+```lean
+#print axioms SphincsCVerify.Spec.Theorems.verify_signs
+```
+shows only `propext`, `Classical.choice`, `Quot.sound` — no crypto axiom.
+
+---
+
+## Phase 6 — Refinement: Lean spec ↔ Yul model (2–3 weeks)
+
+The Solidity verifier (`SPHINCsC10Asm.sol`) reads calldata by offset.
+`Verifier/Refined.lean` already models that shape. The obligation is to
+prove it equivalent to the structured `Spec.Signature.verify`.
+
+### 6.1 Section lemma — load R
+
+* **Where**: `SphincsCVerify/Verifier/Equivalence.lean:48`
+* **Current**: `sorry`
+* **Statement** (already in source):
+  ```lean
+  theorem load_R_consistent (bytes : ByteVec SignatureLen) :
+      loadValue16 bytes 0 = (deserialise bytes).r
+  ```
+* **Discharge plan**: after Phase 4 makes `deserialise` concrete, both
+  sides reduce to `(bytes.take 16 _)`. `rfl` should close it; if not,
+  `simp [deserialise, loadValue16, loadWord32]`.
+* **Time**: ~½ day.
+
+### 6.2 Section lemma — FORS section
+
+* **Where**: `SphincsCVerify/Verifier/Equivalence.lean:54`
+* **Current**: placeholder `True` closed by `trivial`.
+* **Statement** (replace):
+  ```lean
+  theorem fors_section_consistent
+      (bytes : ByteVec SignatureLen) (pkSeed : ByteVec 16) (digest : ByteVec 32) :
+      reconstructForsPkRefined bytes (pad16 pkSeed) digest
+        = Fors.reconstructForsPk pkSeed
+            (deserialise bytes).fors (extractForsIndices digest)
+  ```
+* **Discharge plan**: align the offset arithmetic
+  `AUTH_START + i * AUTH_PER_TREE + h * N` with
+  `(deserialise bytes).fors.authPaths[i][h]`. Each step is
+  `Array.extract` + `ByteVec.take` algebra. ~200 LoC structural proof.
+* **Time**: ~1 week.
+
+### 6.3 Section lemma — HT layer 0
+
+* **Where**: `SphincsCVerify/Verifier/Equivalence.lean:60`
+* **Current**: placeholder `True`.
+* **Statement** (replace): the layer-0 walk in `verifyRefined` returns the
+  same node as `Hypertree.verifyLayer` on the structured form.
+* **Discharge plan**: same shape as 6.2; align offsets for `chains` (at
+  `sigOff + 0..L*N`), `count` (at `sigOff + 688`), `auth` (at
+  `sigOff + 692..836`).
+* **Time**: ~3 days.
+
+### 6.4 Section lemma — HT layer 1
+
+* **Where**: `SphincsCVerify/Verifier/Equivalence.lean:66`
+* **Discharge plan**: same as 6.3 with `sigOff = HT_START + 836 = 3172`.
+  Mostly a copy of 6.3.
+* **Time**: ~2 days.
+
+### 6.5 Top-level refinement
+
+* **Where**: `SphincsCVerify/Verifier/Equivalence.lean:81`
+* **Current**: `sorry`
+* **Statement** (already in source):
+  ```lean
+  theorem verifyRefined_eq_spec
+      (pkSeed pkRoot : ByteVec 16) (message : ByteVec 32)
+      (bytes : ByteVec SignatureLen) :
+      verifyRefined (pad16 pkSeed) (pad16 pkRoot) message bytes
+        = Spec.Signature.verify ⟨pkSeed, pkRoot⟩ message bytes
+  ```
+* **Discharge plan**: compose 6.1–6.4 plus the early-return case-split
+  on `lastIdx ≠ 0`. ~50 LoC.
+* **Time**: ~1 day after the section lemmas.
+
+### 6.6 `yul_eq_refined` — already closed
+
+`Bridge/SolidityVerifier.lean::yul_eq_refined` closes by `rfl` (the
+"Yul model" is a Lean copy of `verifyRefined` with the same control
+flow). Just verify post-Phase 6.5 that it still closes.
+
+### Phase 6 done criteria
+
+`Verifier/Equivalence.lean` has 0 `sorry`. The composed theorem closes
+in two rewrites:
+
+```lean
+example (pkSeed pkRoot : ByteVec 16) (msg : ByteVec 32) (bytes : ByteVec SignatureLen) :
+    Bridge.yulVerify pkSeed pkRoot msg bytes
+      = Spec.Signature.verify ⟨pkSeed, pkRoot⟩ msg bytes := by
+  rw [Bridge.yul_eq_refined, Verifier.verifyRefined_eq_spec]
+```
+
+---
+
+## Phase 7 — Cross-validation harness in CI (1 week, after Phase 2)
+
+### 7.1 Test-vector executable
+
+* **Where**: extend `SphincsCVerify/Main.lean` (or add
+  `verify_test_vectors.lean`).
+* **What to add**: read `sphincs-c10/tests/c10_test_vectors.json`, run
+  `Spec.Signature.verify` on each `(pkSeed, pkRoot, msg, sig)` pair,
+  compare against `expected_bool`.
+* **Discharge plan**: requires kernel-computable SHA-256 (Phase 2). Use
+  `Lean.Json.parse` + `native_decide` (or runtime `Bool` equality) to
+  evaluate each case.
+* **Time**: ~3 days.
+
+### 7.2 Foundry-to-Lean test-vector emitter
+
+* **Where**: extend `contracts/smart-wallet/test/`.
+* **What to add**: dump test vectors to JSON via Foundry's
+  `vm.writeJson`, into the same corpus consumed by 7.1.
+* **Time**: ~2 days.
+
+### 7.3 CI drift detection
+
+* **Where**: `.github/workflows/` (or local CI equivalent).
+* **What to add**:
+  - On every PR, run the Lean exe over the latest Rust/Foundry vectors.
+  - Diff parameter constants between `Spec/Params.lean`,
+    `sphincs-c10/src/params.rs`, and `SPHINCsC10Asm.sol`. Extend the
+    existing `pqsigner-xtask gen-solidity-constants --check` to emit a
+    Lean constants file and diff it.
+* **Time**: ~2 days.
+
+### Phase 7 done criteria
+
+`lake exe verify-test-vectors` returns 0 on every CAVS + Rust corpus
+vector. CI fails on any constant or vector mismatch.
+
+---
+
+## Out of scope: stays as named axiom
+
+After all seven phases, three sets of axioms remain. They are **not**
+unfinished work — they are inherent trust boundaries.
+
+### Cryptographic — `SphincsCVerify/Crypto/`
+
+| Axiom | File | Why irreducible without research |
+|---|---|---|
+| `SM_DT_TCR_F` | `Crypto/Assumptions.lean:93` | Single-function multi-target target-collision resistance of SHA-256. Proving from arithmetic would require breaking open problems in complexity theory. Cite: Barbosa/Dupressoir/Hülsing/Meijers/Strub ASIACRYPT 2024. |
+| `ITSR_F` | `Crypto/Assumptions.lean:109` | Interleaved Target Subset Resilience. Same citation. |
+| `hMsg_random_oracle` | `Crypto/Assumptions.lean:121` | Random-oracle modelling assumption. |
+| `EUF_CMA_SPHINCSplusC` | `Crypto/EUFCMA.lean:117` | Composite EUF-CMA bound for SPHINCS+**C** (counter-search + forced-zero). Discharging means porting Hülsing PQC2022 to EasyCrypt — 9–18-month research engagement. |
+
+### TCB — `SphincsCVerify/Bridge/`
+
+| Axiom | File | Elimination path (not in current scope) |
+|---|---|---|
+| `solidityVerifier_compiles_correctly` | `Bridge/Refinement.lean:50` | Re-author `SPHINCsC10Asm` in Verity's verified Lean→Yul EDSL (~3–6 person-months). Alternative: KEVM/Kontrol bytecode-equivalence proof. |
+| `evm_bytecode_executes_correctly` | `Bridge/Refinement.lean:62` | Adopt KEVM / Dafny-EVM / EVMYulLean. Universal Ethereum trust, not per-project. |
+| `precompile_0x02_is_FIPS_180_4` | `Bridge/Refinement.lean:72` | Verify SHA-256 in geth/reth (Appel-VST-style work). Outside any single smart-contract project. |
+
+### What this engagement explicitly does NOT discharge
+
+* `verify_signs` post-Phase 5 closes against the Lean **model** of
+  SHA-256. The bridge from that model to the deployed EVM bytecode rests
+  on the three TCB axioms above. The cryptographic argument from
+  SHA-256 properties to EUF-CMA is the `EUF_CMA_SPHINCSplusC` axiom.
+
+These axioms are listed precisely in [`AXIOMS.md`](AXIOMS.md); the trust
+report is in [`TRUST_ASSUMPTIONS.md`](TRUST_ASSUMPTIONS.md).
+
+---
+
+## `sorry` and axiom tracker
+
+| Phase | `sorry` (start → end) | New axioms |
+|---|---|---|
+| Start | 11 | 7 (4 crypto + 3 TCB) |
+| **After Phase 1** ✅ (2026-05) | **11 → 7** (closed: 3 in `Util/Bits.lean`, 1 in `Spec/Theorems.lean`; 1 `True`-placeholder replaced with a meaningful structural theorem) | unchanged — `dump_axioms.lean` confirms headline theorems depend only on `propext`/`Quot.sound` |
+| After Phase 2 | 7 → 7 (sha256 stops being `opaque`) | unchanged |
+| After Phase 3 | 7 → 6 (signer placeholder removed) | unchanged |
+| After Phase 4 | 6 → 5 | unchanged |
+| After Phase 5 | 5 → 2 (only Equivalence + cannot_forge remain) | unchanged |
+| After Phase 6 | 2 → 1 (only `cannot_forge_without_breaking_SHA256` remains; out-of-scope) | unchanged |
+| After Phase 7 | 1 → 1 | unchanged |
+
+End state: 1 `sorry` (Phase-H probability backbone, out of current scope), 7 named axioms with citations.
+
+### Phase 1 closing notes (2026-05)
+
+What was actually closed:
+
+| Location | Theorem | How |
+|---|---|---|
+| `Spec/Params.lean` (new) | `W_eq_two_pow_LogW` | `by decide` |
+| `Spec/Hypertree.lean` (refactor) | `verifyWithDigest` extracted from `verify` so the rejection predicates surface for `simp`/`if_pos` |
+| `Util/Bits.lean` (refactor) | `readBitsLe.stepValue` extracted from `readBitsLe.loop` so the per-step bound becomes a standalone lemma. Also a tiny private helper `and_one_lt_two : ∀ x, x &&& 1 < 2`. |
+| `Util/Bits.lean` | `readBitsLe.stepValue_lt` | `Nat.shiftLeft_eq` + `Nat.pow_succ` + `Nat.mul_lt_mul_right` + the `and_one_lt_two` helper |
+| `Util/Bits.lean` | `readBitsLe_loop_lt` (strengthened IH) | induction on `numBits - i`; closes via `Nat.or_lt_two_pow` + `stepValue_lt` |
+| `Util/Bits.lean` | `readBitsLe_lt` | corollary of `readBitsLe_loop_lt` at `(i := 0, acc := 0)` |
+| `Util/Bits.lean` | `extractForsIndices_lt` | `getElem!_pos` + `Array.getElem_ofFn` + `readBitsLe_lt` |
+| `Util/Bits.lean` | `extractDigits_lt` | same shape as above, with `W_eq_two_pow_LogW` |
+| `Spec/Theorems.lean` | `verify_rejects_nonzero_last_fors_idx` | `unfold Hypertree.verify; unfold Hypertree.verifyWithDigest; rw [if_pos h]` |
+| `Spec/Theorems.lean` | `pkFromSig_returns_none_of_bad_digit_sum` (new) | `unfold Wots.pkFromSig; simp [hbad]` |
+| `Spec/Theorems.lean` | `verify_rejects_bad_digit_sum` (rewritten from `True` placeholder) | structural form — given `verifyHypertree = none`, `verify = false`; needs Phase 5 to chain from per-layer bad digit sum |
+
+The interface signatures of `extractForsIndices_lt` and `extractDigits_lt` changed from `.get!` (deprecated) to `[]!` (modern form). Nothing downstream used these yet, so no breakage.
+
+`extractHtIndex_lt` (line 88 of `Util/Bits.lean`) was already trivially closed by `exact readBitsLe_lt _ _ _`; it now type-checks against the proven `readBitsLe_lt` rather than the old `sorry`.
+
+---
+
+## Suggested execution order
+
+1. **Start with Phase 1.** A few days; the satisfying "0 `sorry`s in
+   `Util/Bits.lean`" PR establishes momentum.
+2. **Phase 2 next.** Single highest-leverage piece. Without it Phases 5
+   and 7 are blocked.
+3. **Phases 3 and 4 in parallel.** Different files (signer vs
+   deserialiser), no internal dependency between them.
+4. **Phase 5.** Headline functional result; needs 1–4.
+5. **Phase 6.** Independent of Phase 5 in principle but trivially
+   easier after Phase 4.
+6. **Phase 7.** Parallel with Phase 6; needs only Phase 2.
+
+**Total**: ~4–6 person-months focused work for one engineer.

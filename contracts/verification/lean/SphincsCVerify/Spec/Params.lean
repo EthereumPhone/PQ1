@@ -130,6 +130,7 @@ theorem sigForsTotal_eq_2336 : SigForsTotal = 2336 := by decide
 theorem sigHtLayer_eq_836 : SigHtLayer = 836 := by decide
 theorem signatureLen_eq_4008 : SignatureLen = 4008 := by decide
 theorem wMask_eq_7 : WMask = 7 := by decide
+theorem W_eq_two_pow_LogW : W = 2 ^ LogW := by decide
 theorem subtreeLeaves_eq_512 : SubtreeLeaves = 512 := by decide
 theorem forsLeaves_eq_2048 : ForsLeaves = 2048 := by decide
 theorem verifyingKeyLen_eq_32 : VerifyingKeyLen = 32 := by decide

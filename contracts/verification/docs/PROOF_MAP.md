@@ -1,96 +1,112 @@
-# Proof Map — What Is Proven, What Is Axiomatised, Where to Find It
+# Proof Map — Verifier-Only Scope
 
-A user-facing index of every theorem the SphincsCVerify project ships,
-crossing referenced with the playbook in
-`docs/how_to_math_proof_secureness.md`.
+A user-facing index of every theorem the SphincsCVerify project ships in
+its current scope (the `SPHINCsC10Asm.sol` cryptographic verifier).
 
-## Top-level claims and where they live
+The wallet contracts (`PQSmartWallet`, `PQMultiOwnable`,
+`PQSmartWalletFactory`) and the hardware-wallet firmware are out of
+scope; the Lean files under `SphincsCVerify/Wallet/` are legacy and not
+indexed here.
 
-### Functional correctness — Stratum A
+For the phased plan to close every pending theorem, see
+[`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md).
 
-| Claim | Lean theorem | File | Status |
-|---|---|---|---|
-| Signature size is exactly 4008 bytes | `signatureLen_eq_4008` | `Spec/Params.lean` | ✅ Closed (`decide`) |
-| `(K-1) * A * N = 2112` | `k_minus_one_a_n_eq_2112` | `Spec/Params.lean` | ✅ Closed (`decide`) |
-| Hypertree positions = 262,144 | `hypertreePositions_eq` | `Spec/Params.lean` | ✅ Closed (`decide`) |
-| Per-chain cap < hypertree positions | `maxUses_lt_positions` | `Spec/Params.lean` | ✅ Closed (`decide`) |
-| Verifier is deterministic | `verify_deterministic` | `Spec/Theorems.lean` | ✅ Closed (`rfl`) |
-| Verifier rejects wrong length (type-level) | `verify_rejects_wrong_length` | `Spec/Theorems.lean` | ✅ Closed |
-| `th` returns 16 bytes | `th_size` | `Spec/Hash.lean` | ✅ Closed |
-| `thPair` returns 16 bytes | `thPair_size` | `Spec/Hash.lean` | ✅ Closed |
-| `hMsg` returns 32 bytes | `hMsg_size` | `Spec/Hash.lean` | ✅ Closed |
-| Signing/verifying round-trip | `verify_signs` | `Spec/Theorems.lean` | ⏳ Section lemmas pending |
-| Reject non-zero last FORS index | `verify_rejects_nonzero_last_fors_idx` | `Spec/Theorems.lean` | ⏳ Mechanical `simp` pending |
-| Reject bad WOTS+C digit sum | `verify_rejects_bad_digit_sum` | `Spec/Theorems.lean` | ⏳ Statement to refine + simp |
-| Refined ≡ Spec | `verifyRefined_eq_spec` | `Verifier/Equivalence.lean` | ⏳ 4 section lemmas pending |
-| Yul model ≡ Refined | `yul_eq_refined` | `Bridge/SolidityVerifier.lean` | ✅ Closed (`rfl`) |
+## Functional correctness
 
-### Cryptographic security — Stratum A continued
+| Claim | Lean theorem | File | Status | Phase |
+|---|---|---|---|---|
+| Signature size is 4008 bytes | `signatureLen_eq_4008` | `Spec/Params.lean` | ✅ Closed | — |
+| `(K-1) * A * N = 2112` | `k_minus_one_a_n_eq_2112` | `Spec/Params.lean` | ✅ Closed | — |
+| Hypertree positions = 262,144 | `hypertreePositions_eq` | `Spec/Params.lean` | ✅ Closed | — |
+| Cap < hypertree positions | `maxUses_lt_positions` | `Spec/Params.lean` | ✅ Closed | — |
+| Verifier deterministic | `verify_deterministic` | `Spec/Theorems.lean` | ✅ Closed | — |
+| Verifier rejects wrong length (type-level) | `verify_rejects_wrong_length` | `Spec/Theorems.lean` | ✅ Closed | — |
+| `th` returns 16 bytes | `th_size` | `Spec/Hash.lean` | ✅ Closed | — |
+| `thPair` returns 16 bytes | `thPair_size` | `Spec/Hash.lean` | ✅ Closed | — |
+| `hMsg` returns 32 bytes | `hMsg_size` | `Spec/Hash.lean` | ✅ Closed | — |
+| `readBitsLe` bounded | `readBitsLe_lt` | `Util/Bits.lean` | ✅ Closed (Phase 1, 2026-05) | 1 |
+| FORS indices bounded | `extractForsIndices_lt` | `Util/Bits.lean` | ✅ Closed (Phase 1) | 1 |
+| WOTS digits bounded | `extractDigits_lt` | `Util/Bits.lean` | ✅ Closed (Phase 1) | 1 |
+| Bit-extraction step bounded | `readBitsLe.stepValue_lt` (new in Phase 1) | `Util/Bits.lean` | ✅ Closed | 1 |
+| `W = 2^LogW` | `W_eq_two_pow_LogW` (new in Phase 1) | `Spec/Params.lean` | ✅ Closed | 1 |
+| Reject nonzero last FORS idx | `verify_rejects_nonzero_last_fors_idx` | `Spec/Theorems.lean` | ✅ Closed (Phase 1) | 1 |
+| `pkFromSig` returns `none` on bad digit sum | `pkFromSig_returns_none_of_bad_digit_sum` (new in Phase 1) | `Spec/Theorems.lean` | ✅ Closed | 1 |
+| `verify = false` when hypertree returns none | `verify_rejects_bad_digit_sum` (rewritten in Phase 1) | `Spec/Theorems.lean` | ✅ Closed (structural form; full per-layer chain is Phase 5) | 1 / 5 |
+| Kernel-computable SHA-256 | `sha256` (def, not theorem) | `Spec/Hash.lean` | ⏳ currently `opaque` | 2 |
+| `th` unfolds to SHA-256 | `th_unfolds_to_sha256` (+ siblings) | `Spec/Hash.lean` | ⏳ not stated | 2 |
+| SHA-256 matches CAVS vectors | `Sha256TestVectors.*` | `Spec/Sha256TestVectors.lean` | ⏳ not created | 2 |
+| Reference signer complete | `Signer.sign` (def) | `Spec/Signer.lean` | ⏳ placeholder | 3 |
+| `findCount` correctness | `findCount_correct` | `Spec/Signer.lean` | ⏳ not stated | 3 |
+| Real `deserialise` | `Signature.deserialise` (def) | `Spec/Signature.lean` | ⏳ placeholder | 4 |
+| `serialise/deserialise` round-trip | `serialise_deserialise_roundtrip` | `Spec/Signature.lean` | ⏳ not stated | 4 |
+| Merkle round-trip | `merkle_roundtrip` | `Spec/Lemmas/MerkleRoundtrip.lean` | ⏳ not created | 5 |
+| WOTS+C chain round-trip | `wots_chain_roundtrip` | `Spec/Lemmas/WotsRoundtrip.lean` | ⏳ not created | 5 |
+| FORS+C round-trip | `fors_roundtrip` | `Spec/Lemmas/ForsRoundtrip.lean` | ⏳ not created | 5 |
+| Chain-hash composition | `chainHash_compose` | `Spec/Lemmas/ChainHash.lean` | ⏳ not created | 5 |
+| Sign/verify round-trip | `verify_signs` | `Spec/Theorems.lean` | ⏳ `sorry` | 5 |
+| Load R consistent | `load_R_consistent` | `Verifier/Equivalence.lean` | ⏳ `sorry` | 6 |
+| FORS section consistent | `fors_section_consistent` | `Verifier/Equivalence.lean` | ⏳ stub | 6 |
+| HT layer-0 consistent | `ht_layer0_consistent` | `Verifier/Equivalence.lean` | ⏳ stub | 6 |
+| HT layer-1 consistent | `ht_layer1_consistent` | `Verifier/Equivalence.lean` | ⏳ stub | 6 |
+| Refined ≡ Spec | `verifyRefined_eq_spec` | `Verifier/Equivalence.lean` | ⏳ `sorry` | 6 |
+| Yul model ≡ Refined | `yul_eq_refined` | `Bridge/SolidityVerifier.lean` | ✅ Closed (`rfl`) | — |
 
-| Claim | Lean declaration | File | Status |
-|---|---|---|---|
-| SHA-256 SM-DT-TCR | `SM_DT_TCR_F` | `Crypto/Assumptions.lean` | 🔓 Axiom (cited from Barbosa et al. 2024) |
-| SHA-256 ITSR | `ITSR_F` | `Crypto/Assumptions.lean` | 🔓 Axiom (cited) |
-| `H_msg` is a random oracle | `hMsg_random_oracle` | `Crypto/Assumptions.lean` | 🔓 Axiom (cited) |
-| EUF-CMA for SPHINCS+C10 | `EUF_CMA_SPHINCSplusC` | `Crypto/EUFCMA.lean` | 🔓 Axiom (cited) |
-
-### Wallet invariants — Stratum B
-
-| Claim | Lean theorem | File | Status |
-|---|---|---|---|
-| `bumpBootstrap` monotonic | `bumpBootstrap_monotonic` | `Wallet/MultiOwnable.lean` | ✅ Closed |
-| `bumpBootstrap` capped | `bumpBootstrap_capped` | `Wallet/MultiOwnable.lean` | ✅ Closed |
-| `bumpSlot` monotonic | `bumpSlot_monotonic` | `Wallet/MultiOwnable.lean` | ✅ Closed |
-| `bumpSlot` no cross-effect | `bumpSlot_no_cross_effect` | `Wallet/MultiOwnable.lean` | ✅ Closed |
-| `setOffchain` monotonic | `setOffchain_monotonic` | `Wallet/MultiOwnable.lean` | ✅ Closed |
-| Combined-cap invariant | `combined_cap_invariant` | `Wallet/MultiOwnable.lean` | ✅ Closed |
-| Bootstrap unremovable | `bootstrap_unremovable` | `Wallet/MultiOwnable.lean` | ✅ Closed |
-| Cap preserved by `bumpSlot` | `combinedCap_preserved_by_bumpSlot` | `Wallet/Invariants.lean` | ✅ Closed |
-| Cap preserved by `setOffchain` | `combinedCap_preserved_by_setOffchain` | `Wallet/Invariants.lean` | ✅ Closed |
-| CREATE2 address chain-independent | `create2_address_chain_independent` | `Wallet/Invariants.lean` | ✅ Closed (`rfl`) |
-| Cannot remove bootstrap | `cannot_remove_bootstrap` | `Wallet/Invariants.lean` | ✅ Closed |
-| Non-bypass | `validateSignature_only_via_verify` | `Wallet/Invariants.lean` | ⏳ Awaits `decodeWrappedSig` |
-| Bootstrap monotonicity (validateUserOp) | `validateSignature_bootstrap_monotonic` | `Wallet/Invariants.lean` | ⏳ Mechanical |
-| Slot monotonicity (validateUserOp) | `validateSignature_slot_monotonic` | `Wallet/Invariants.lean` | ⏳ Mechanical |
-
-### Bridge to deployed bytecode — Stratum C
+## Cryptographic — `Crypto/` (named axioms with citations)
 
 | Claim | Lean declaration | File | Status |
 |---|---|---|---|
-| solc 0.8.28 correctness on the verifier | `solidityVerifier_compiles_correctly` | `Bridge/Refinement.lean` | 🔓 Axiom (Verity-style work to discharge) |
-| EVM bytecode obeys EVM spec | `evm_bytecode_executes_correctly` | `Bridge/Refinement.lean` | 🔓 Axiom (universal Ethereum) |
-| Precompile 0x02 is FIPS 180-4 | `precompile_0x02_is_FIPS_180_4` | `Bridge/Refinement.lean` | 🔓 Axiom (consensus client) |
-| Deployed verifier refines Lean spec | `deployed_verifier_refines_spec` | `Bridge/Refinement.lean` | ✅ Closed (the trivial composite; substance is in the three axioms above) |
+| SHA-256 SM-DT-TCR | `SM_DT_TCR_F` | `Crypto/Assumptions.lean` | 🔓 Axiom — Barbosa et al. ASIACRYPT 2024 |
+| SHA-256 ITSR | `ITSR_F` | `Crypto/Assumptions.lean` | 🔓 Axiom — Barbosa et al. ASIACRYPT 2024 |
+| `H_msg` random oracle | `hMsg_random_oracle` | `Crypto/Assumptions.lean` | 🔓 Axiom |
+| EUF-CMA SPHINCS+C10 | `EUF_CMA_SPHINCSplusC` | `Crypto/EUFCMA.lean` | 🔓 Axiom — Hülsing PQC2022 + Barbosa et al. extension |
+| Cannot forge without breaking SHA-256 | `cannot_forge_without_breaking_SHA256` | `Crypto/EUFCMA.lean` | ⏳ `sorry`; needs probability-game DSL (out of scope) |
 
-## Coverage matrix
+## Bridge — `Bridge/` (TCB axioms + composite)
 
-Playbook section → file containing the realisation:
+| Claim | Lean declaration | File | Status |
+|---|---|---|---|
+| solc 0.8.28 correct on verifier | `solidityVerifier_compiles_correctly` | `Bridge/Refinement.lean` | 🔓 Axiom |
+| EVM bytecode obeys spec | `evm_bytecode_executes_correctly` | `Bridge/Refinement.lean` | 🔓 Axiom |
+| Precompile 0x02 = FIPS 180-4 | `precompile_0x02_is_FIPS_180_4` | `Bridge/Refinement.lean` | 🔓 Axiom |
+| Deployed verifier refines spec | `deployed_verifier_refines_spec` | `Bridge/Refinement.lean` | ✅ Trivial composite (work is in the three axioms above) |
 
-| Playbook | File |
+## File coverage
+
+| File | Purpose |
 |---|---|
-| § 4.2 Step 1 — Parameters | `Spec/Params.lean` |
-| § 4.2 Step 2 — SHA-256 modelling | `Spec/Hash.lean` |
-| § 4.2 Step 3 — ADRS, WOTS+C, FORS+C, hypertree, verifier | `Spec/{Adrs,Wots,Fors,Hypertree,Signature}.lean` |
-| § 4.2 Step 4 — Functional correctness | `Spec/Theorems.lean` |
-| § 4.2 Step 5 — Cryptographic soundness | `Crypto/{Assumptions,EUFCMA}.lean` |
-| § 4.3 — AA scaffolding | `Wallet/{Storage,MultiOwnable,ValidateUserOp,Factory,Invariants}.lean` |
-| § 4.4 Recipe C1 — Bridge to deployed bytecode | `Bridge/{SolidityVerifier,Refinement}.lean` |
-| § 5.1 Track 1 step 1 — Lean reference verifier | `SphincsCVerify/Spec/*` |
-| § 5.1 Track 1 step 2 — AA scaffolding via Verity | Modelled in `Wallet/`; full Verity rewrite deferred |
-| § 5.1 Track 1 step 3 — Bridge proof | `Verifier/Equivalence.lean` + `Bridge/Refinement.lean` |
-| § 5.4 Trust report | `docs/TRUST_ASSUMPTIONS.md` |
+| `Spec/Params.lean` | C10 parameters + arithmetic identities |
+| `Spec/Bytes.lean` | ByteVec library |
+| `Spec/Adrs.lean` | ADRS construction |
+| `Spec/Hash.lean` | SHA-256 (opaque pre-Phase 2; def post) + tweakable hashes |
+| `Spec/Wots.lean` | WOTS+C sign/verify spec |
+| `Spec/Fors.lean` | FORS+C spec (forced-zero last index) |
+| `Spec/Hypertree.lean` | D=2 hypertree |
+| `Spec/Signature.lean` | Top-level verify + serialise/deserialise |
+| `Spec/Signer.lean` | Reference signer (stub pre-Phase 3) |
+| `Spec/Theorems.lean` | Functional-correctness theorems |
+| `Spec/Lemmas/*` | Round-trip sub-lemmas (created in Phase 5) |
+| `Spec/Sha256Impl.lean` | FIPS 180-4 SHA-256 (created in Phase 2) |
+| `Spec/Sha256TestVectors.lean` | CAVS-vector lemmas (created in Phase 2) |
+| `Verifier/Refined.lean` | Offset-indexed verifier (Yul shape) |
+| `Verifier/Equivalence.lean` | Refined ≡ Spec |
+| `Bridge/SolidityVerifier.lean` | Yul-level model |
+| `Bridge/Refinement.lean` | Lean ↔ Solidity ↔ EVM bridge (TCB axioms) |
+| `Crypto/Assumptions.lean` | SHA-256 cryptographic axioms |
+| `Crypto/EUFCMA.lean` | EUF-CMA axiom + sub-lemma |
+| `Util/Bits.lean` | Bit-level operations |
+| `Util/ByteVec.lean` | ByteVec helpers |
 
-## How to verify the project
+## How to verify
 
 ```bash
 cd contracts/verification/lean
 elan toolchain install $(cat lean-toolchain)
 lake update
-lake build                               # Type-checks every module.
-lake env lean --run scripts/check_no_sorry.lean   # Audit `sorry` count.
-lake env lean --run scripts/dump_axioms.lean      # Print every axiom used by headline theorems.
+lake build
+lake env lean --run scripts/check_no_sorry.lean
+lake env lean --run scripts/dump_axioms.lean
 ```
 
-A clean build → every closed theorem is checked by the Lean kernel. The
-audit scripts surface the remaining work (each `sorry` and each
+A clean build means every closed theorem is checked by the Lean kernel.
+The audit scripts surface the remaining work (each `sorry` and each
 `axiom`).

@@ -91,6 +91,26 @@ def verifyHypertree
         currentNode := verifyAuthPath seed layer32 tree64 wotsPk idxLeaf layerSig.authPath
   if bad then pure none else pure (some currentNode)
 
+/-- The post-digest portion of `verify`, factored out so the early-return
+    predicates (last-FORS-index zero, FORS PK reconstruction, hypertree
+    walk) appear at the top level of a single definition. This lets the
+    rejection theorems in `Spec/Theorems.lean` discharge by simple
+    `simp` + `if_pos` without fighting through `verify`'s `let` cascade. -/
+def verifyWithDigest
+    (seed : ByteVec 32) (pkRoot : ByteVec 16)
+    (digest : ByteVec 32) (sig : Signature) : Bool :=
+  let indices := extractForsIndices digest
+  let htIdx := extractHtIndex digest
+  if indices.getD (K - 1) 0 ≠ 0 then
+    false
+  else
+    match Fors.reconstructForsPk seed digest sig.fors with
+    | none => false
+    | some forsPk =>
+      match verifyHypertree seed forsPk htIdx sig.layers with
+      | none => false
+      | some finalRoot => decide (finalRoot = pkRoot)
+
 /-- The top-level SPHINCS+C10 verify routine.
 
     Mirrors `sphincs-c10/src/hypertree.rs::verify` and the Solidity
@@ -104,16 +124,6 @@ def verify
   let root := pad16 pkRoot
   let rB32 := pad16 sig.r
   let digest := hMsg seed root rB32 msgHash
-  let indices := extractForsIndices digest
-  let htIdx := extractHtIndex digest
-  if indices.getD (K - 1) 0 ≠ 0 then
-    false
-  else
-    match Fors.reconstructForsPk seed digest sig.fors with
-    | none => false
-    | some forsPk =>
-      match verifyHypertree seed forsPk htIdx sig.layers with
-      | none => false
-      | some finalRoot => decide (finalRoot = pkRoot)
+  verifyWithDigest seed pkRoot digest sig
 
 end SphincsCVerify.Spec.Hypertree

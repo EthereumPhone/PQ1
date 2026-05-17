@@ -107,30 +107,70 @@ theorem verify_rejects_wrong_length :
 /-- If the last FORS index in the digest is non-zero (the forced-zero
     constraint is violated), `verify` returns `false`.
 
-    The proof unfolds `Hypertree.verify`, exposes the early
-    `if-then-else` on the last FORS index, and uses `if_pos h` to pick
-    the `false` branch.
-
-    Listed as ⏳ in `docs/PROOF_MAP.md` and `docs/AXIOMS.md` § D — the
-    let-binding inside `Hypertree.verify` requires a structural
-    unfolding step to surface the predicate for `simp`/`if_pos`.
-    Pending mechanical work. -/
+    Phase-1 refactor: `Hypertree.verify` delegates to `verifyWithDigest`,
+    which surfaces the last-FORS-index predicate at the top of its
+    `if`-cascade. The proof then closes by `simp` driving `if_pos h`. -/
 theorem verify_rejects_nonzero_last_fors_idx
     (pkSeed pkRoot : ByteVec 16) (msg : ByteVec 32) (sig : Hypertree.Signature)
     (h : (Util.extractForsIndices
             (hMsg (ByteVec.pad16 pkSeed) (ByteVec.pad16 pkRoot)
                   (ByteVec.pad16 sig.r) msg)).getD (K - 1) 0 ≠ 0) :
     Hypertree.verify pkSeed pkRoot msg sig = false := by
-  sorry
+  unfold Hypertree.verify Hypertree.verifyWithDigest
+  rw [if_pos h]
 
-/-- If the WOTS+C digit sum at any layer is not equal to `TargetSum`,
-    `verify` returns `false`. -/
-theorem verify_rejects_bad_digit_sum :
-    ∀ (pkSeed pkRoot : ByteVec 16) (msg : ByteVec 32) (sig : Hypertree.Signature),
-      True := by
-  -- TODO: state precisely "if either layer's digit sum ≠ TargetSum then verify = false".
-  -- The proof unfolds `Wots.pkFromSig` and uses the `none` branch.
-  intros; trivial
+/-- The unit content of digit-sum rejection: `Wots.pkFromSig` returns
+    `none` exactly when the WOTS+C target-sum check fails. The hypothesis
+    threads the `wotsDigest` from the on-chain verifier's calldata-read
+    form. -/
+theorem pkFromSig_returns_none_of_bad_digit_sum
+    (seed : ByteVec 32) (layer : UInt32) (tree : UInt64) (kp : UInt32)
+    (msgHash : ByteVec 16) (sigma : Wots.Sigma)
+    (hbad : Util.digitSum (Util.extractDigits
+              (wotsDigest seed (Adrs.wots layer tree kp)
+                          (ByteVec.pad16 msgHash) sigma.count))
+            ≠ TargetSum) :
+    Wots.pkFromSig seed layer tree kp msgHash sigma = none := by
+  unfold Wots.pkFromSig
+  simp [hbad]
+
+/-- The structural propagation: when the D=2 hypertree walk returns
+    `none` (whether because a per-layer WOTS+C digit-sum check failed,
+    or any other in-walk rejection), `verify` returns `false`.
+
+    Phase-1 form. The original "if any layer's digits don't sum to
+    `TargetSum`, `verify = false`" statement requires unrolling the
+    `for layer in [:D]` loop's mutable-state propagation, which is
+    Phase 5 work. The two pieces shipped here —
+    `pkFromSig_returns_none_of_bad_digit_sum` (unit content) and
+    `verify_rejects_bad_digit_sum` (structural propagation) — together
+    suffice once Phase 5 supplies the loop lemma. -/
+theorem verify_rejects_bad_digit_sum
+    (pkSeed pkRoot : ByteVec 16) (msg : ByteVec 32) (sig : Hypertree.Signature)
+    (hidx : (Util.extractForsIndices
+              (hMsg (ByteVec.pad16 pkSeed) (ByteVec.pad16 pkRoot)
+                    (ByteVec.pad16 sig.r) msg)).getD (K - 1) 0 = 0)
+    (forsPk : ByteVec 16)
+    (hfors : Fors.reconstructForsPk (ByteVec.pad16 pkSeed)
+              (hMsg (ByteVec.pad16 pkSeed) (ByteVec.pad16 pkRoot)
+                    (ByteVec.pad16 sig.r) msg)
+              sig.fors = some forsPk)
+    (hht : Hypertree.verifyHypertree (ByteVec.pad16 pkSeed) forsPk
+              (Util.extractHtIndex (hMsg (ByteVec.pad16 pkSeed)
+                                          (ByteVec.pad16 pkRoot)
+                                          (ByteVec.pad16 sig.r) msg))
+              sig.layers = none) :
+    Hypertree.verify pkSeed pkRoot msg sig = false := by
+  unfold Hypertree.verify Hypertree.verifyWithDigest
+  -- hidx says ... = 0, so ¬(... ≠ 0).
+  have hne : ¬ ((Util.extractForsIndices
+                  (hMsg (ByteVec.pad16 pkSeed) (ByteVec.pad16 pkRoot)
+                        (ByteVec.pad16 sig.r) msg)).getD (K - 1) 0 ≠ 0) :=
+    fun h => h hidx
+  rw [if_neg hne]
+  -- After the if reduces to the else-branch, simp reduces the two matches
+  -- using hfors (Fors result) and hht (hypertree result).
+  simp [hfors, hht]
 
 /-! ## 3. Determinism
 
