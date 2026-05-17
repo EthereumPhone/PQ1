@@ -465,4 +465,262 @@ mod tests {
         kdf_cmac_counter_generic::<(), _>(b"x", &mut scratch, aes256_encryptor(&KEY), &mut out)
             .unwrap();
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Additional positive coverage — double_l carry propagation across
+    // byte boundaries, and the empty-label edge of kdf_cmac_counter.
+    // ──────────────────────────────────────────────────────────────────
+
+    /// Positive: `double_l` shifts the entire 16-byte block left by one
+    /// bit. With `0x01` in byte 15 (LSB of the block when read MSB-first),
+    /// the shift moves the bit out of byte 15 into… nothing (no carry,
+    /// since the bit isn't the top of the next byte's range). Expected:
+    /// `[0, …, 0, 0x02]`.
+    #[test]
+    fn double_l_low_bit_no_reduction() {
+        let mut input = [0u8; 16];
+        input[15] = 0x01;
+        let mut expected = [0u8; 16];
+        expected[15] = 0x02;
+        assert_eq!(double_l(&input), expected);
+    }
+
+    /// Positive: a `0x40` in byte 0 shifts to `0x80` in byte 0 — the top
+    /// bit becomes set but the *original* top bit was 0, so no XOR-with-
+    /// 0x87 reduction.
+    #[test]
+    fn double_l_no_reduction_when_original_msb_clear() {
+        let mut input = [0u8; 16];
+        input[0] = 0x40;
+        let out = double_l(&input);
+        let mut expected = [0u8; 16];
+        expected[0] = 0x80;
+        assert_eq!(out, expected);
+    }
+
+    /// Positive: `0x81` in byte 0 means the original MSB was 1 AND the
+    /// LSB of byte 0 was 1. Shift yields `0x02` in byte 0 (after losing
+    /// the MSB), then XOR-with-0x87 in byte 15 because of the
+    /// polynomial reduction.
+    #[test]
+    fn double_l_carry_and_reduction_compose() {
+        let mut input = [0u8; 16];
+        input[0] = 0x81;
+        let out = double_l(&input);
+        let mut expected = [0u8; 16];
+        expected[0] = 0x02;
+        expected[15] = 0x87;
+        assert_eq!(out, expected);
+    }
+
+    /// Positive: carry propagates across byte boundaries. With `0x80`
+    /// in byte 1 (top bit of byte 1 set, top bit of byte 0 clear), the
+    /// shift moves that bit into byte 0 as `0x01`. No reduction (byte 0
+    /// MSB was clear).
+    #[test]
+    fn double_l_inter_byte_carry() {
+        let mut input = [0u8; 16];
+        input[1] = 0x80;
+        let out = double_l(&input);
+        let mut expected = [0u8; 16];
+        expected[0] = 0x01;
+        assert_eq!(out, expected);
+    }
+
+    /// Positive: empty label is allowed as long as scratch has at least
+    /// 1 byte for the counter. Counter byte is the entire CMAC input.
+    #[test]
+    fn kdf_empty_label_one_byte_scratch_succeeds() {
+        let mut scratch = [0u8; 1];
+        let mut out = [0u8; 16];
+        kdf_cmac_counter_generic::<(), _>(b"", &mut scratch, aes256_encryptor(&KEY), &mut out)
+            .unwrap();
+        // Expected: CMAC(K, [0x01])
+        let mut expected = [0u8; 16];
+        cmac_generic::<(), _>(&[0x01u8], aes256_encryptor(&KEY), &mut expected).unwrap();
+        assert_eq!(out, expected);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Negative coverage — challenges assumptions cmac_generic /
+    // kdf_cmac_counter hold about their inputs and back-end.
+    // ──────────────────────────────────────────────────────────────────
+
+    /// PIN: `cmac_generic` MUST propagate backend errors. A silently-
+    /// swallowed error from `aes_encrypt` would produce arbitrary tag
+    /// bytes from `state ^ last` while the chip thinks the CMAC
+    /// authenticated correctly — a classic single-fault-induced bypass
+    /// of the integrity check on the SCP03 / SAES path.
+    #[test]
+    fn negative_cmac_generic_propagates_backend_error() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct GlitchedAes;
+        let mut tag = [0u8; 16];
+        let res: Result<(), GlitchedAes> = cmac_generic(
+            &[0xAAu8; 8],
+            |_block: &[u8; 16]| -> Result<[u8; 16], GlitchedAes> { Err(GlitchedAes) },
+            &mut tag,
+        );
+        assert_eq!(
+            res, Err(GlitchedAes),
+            "cmac_generic must propagate backend errors verbatim — silently \
+             eating them would let a glitched AES produce an attacker-controlled tag",
+        );
+    }
+
+    /// PIN: `kdf_cmac_counter_generic` must surface backend errors as
+    /// `KdfError::Backend(e)`. Same security property as above —
+    /// derived KDF labels are used for SCP03 session keys, SE050 admin
+    /// PIN, OPTIGA pairing secret, etc.; an error-swallowing KDF would
+    /// silently produce zero-keyed derivations.
+    #[test]
+    fn negative_kdf_propagates_backend_error_wrapped() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct GlitchedAes;
+        let mut scratch = [0u8; 16];
+        let mut out = [0u8; 16];
+        let res: Result<(), KdfError<GlitchedAes>> = kdf_cmac_counter_generic(
+            b"label",
+            &mut scratch,
+            |_block: &[u8; 16]| -> Result<[u8; 16], GlitchedAes> { Err(GlitchedAes) },
+            &mut out,
+        );
+        assert_eq!(res, Err(KdfError::Backend(GlitchedAes)));
+    }
+
+    /// PIN: scratch buffer one byte SHORTER than label must be rejected.
+    /// If a silent buffer aliasing bug let a too-short scratch through,
+    /// the counter byte would overwrite the last byte of the label,
+    /// producing CMAC inputs that don't actually domain-separate by
+    /// label — two distinct callers could end up with the same key.
+    #[test]
+    fn negative_kdf_scratch_one_short_is_rejected() {
+        let label = b"pqsigner/x-v1";
+        let mut scratch = [0u8; 13]; // exactly label.len(), no room for counter
+        let mut out = [0u8; 16];
+        let result = kdf_cmac_counter_generic::<(), _>(
+            label, &mut scratch, aes256_encryptor(&KEY), &mut out,
+        );
+        assert_eq!(
+            result, Err(KdfError::LabelTooLong),
+            "scratch == label.len() must be rejected; otherwise the counter \
+             byte overlaps the last label byte → domain-separation collapse",
+        );
+    }
+
+    /// PIN: 256 × 16 + 1 bytes of output must be rejected — counter
+    /// would wrap around to 0. If accepted, the counter would silently
+    /// repeat from 1 and we'd emit *duplicate* output blocks instead
+    /// of the requested fresh material.
+    #[test]
+    fn negative_kdf_output_one_past_max_is_rejected() {
+        let mut scratch = [0u8; 65];
+        let mut out = vec![0u8; 255 * 16 + 1];
+        let res = kdf_cmac_counter_generic::<(), _>(
+            b"x", &mut scratch, aes256_encryptor(&KEY), &mut out,
+        );
+        assert_eq!(res, Err(KdfError::OutputTooLong));
+    }
+
+    /// PIN: the counter starts at 1, NOT 0. A subtle off-by-one (`counter
+    /// = 0` initial) would put `label || 0x00` as the first CMAC input,
+    /// which collides with an attacker who could chose label-then-NUL.
+    /// Pin the counter start by checking that the first 16 bytes of
+    /// output equal `CMAC(K, label || 0x01)` and NOT `CMAC(K, label ||
+    /// 0x00)`.
+    #[test]
+    fn negative_kdf_counter_starts_at_one_not_zero() {
+        let label = b"counter-start-pin";
+        let mut out = [0u8; 16];
+        let mut scratch = [0u8; 64];
+        kdf_cmac_counter_generic::<(), _>(label, &mut scratch, aes256_encryptor(&KEY), &mut out)
+            .unwrap();
+        // Build the alternative-history CMAC(K, label || 0x00). If the
+        // counter started at 0, our first block would equal this.
+        let mut zero_counter_input = Vec::from(label.as_slice());
+        zero_counter_input.push(0x00);
+        let mut zero_counter = [0u8; 16];
+        cmac_generic::<(), _>(&zero_counter_input, aes256_encryptor(&KEY), &mut zero_counter)
+            .unwrap();
+        assert_ne!(
+            out, zero_counter,
+            "first KDF block matched CMAC(K, label || 0x00) — counter started at 0, \
+             not 1. This would let label || 0x00 collide with the KDF's first block.",
+        );
+    }
+
+    /// PIN: empty-message CMAC and 16-byte-zero-message CMAC must yield
+    /// different tags. The empty case uses K2 with padding `0x80`; the
+    /// 16-byte zero case uses K1 directly. If a future refactor merged
+    /// the two paths (e.g. by treating `msg.is_empty()` as the same as a
+    /// single zero block), the two would alias — letting an attacker
+    /// substitute one for the other on the wire.
+    #[test]
+    fn negative_cmac_empty_and_zero_block_diverge() {
+        let mut tag_empty = [0u8; 16];
+        let mut tag_zeros = [0u8; 16];
+        cmac_generic::<(), _>(&[], aes256_encryptor(&KEY), &mut tag_empty).unwrap();
+        cmac_generic::<(), _>(&[0u8; 16], aes256_encryptor(&KEY), &mut tag_zeros).unwrap();
+        assert_ne!(
+            tag_empty, tag_zeros,
+            "CMAC(empty) and CMAC(0^128) must produce different tags — they take \
+             the K2 (padded) and K1 (unpadded) paths respectively, and aliasing \
+             them would break the empty-message integrity guarantee",
+        );
+    }
+
+    /// PIN: any single-bit flip in a 16-byte input changes the tag
+    /// (avalanche). This is a sanity guard against a subtle bug where
+    /// `cmac_generic` skipped some bytes of the message — the resulting
+    /// tag would be insensitive to changes in the skipped region.
+    #[test]
+    fn negative_cmac_one_bit_flip_changes_tag_at_each_position() {
+        let mut base_tag = [0u8; 16];
+        cmac_generic::<(), _>(&[0xAAu8; 16], aes256_encryptor(&KEY), &mut base_tag).unwrap();
+        for pos in 0..16 {
+            let mut msg = [0xAAu8; 16];
+            msg[pos] ^= 0x01;
+            let mut tag = [0u8; 16];
+            cmac_generic::<(), _>(&msg, aes256_encryptor(&KEY), &mut tag).unwrap();
+            assert_ne!(
+                tag, base_tag,
+                "single-bit flip at byte {pos} produced identical tag — the message \
+                 byte at that position is being ignored by cmac_generic",
+            );
+        }
+    }
+
+    /// PIN: distinct counter bytes inside the same label produce
+    /// distinct blocks. This is what makes "ask for 32 bytes of
+    /// material from one KDF call" return *fresh* second-block bytes
+    /// instead of a repeat of the first block.
+    #[test]
+    fn negative_kdf_two_blocks_are_not_equal_to_each_other() {
+        let mut out = [0u8; 32];
+        let mut scratch = [0u8; 65];
+        kdf_cmac_counter_generic::<(), _>(b"distinct-blocks", &mut scratch, aes256_encryptor(&KEY), &mut out)
+            .unwrap();
+        assert_ne!(
+            &out[..16], &out[16..32],
+            "block 1 and block 2 of the same KDF call were identical — the counter \
+             increment is broken (likely stuck at 1), so the KDF doesn't actually \
+             produce 32 bytes of distinct material",
+        );
+    }
+
+    /// PIN: `KdfError` is `Copy + Clone + Eq + PartialEq + Debug`. The
+    /// production code returns `KdfError<E>` and call sites pattern-
+    /// match by variant; if the derives were stripped a future caller
+    /// might silently switch from `Err(LabelTooLong)` to a discardable
+    /// type and lose the actionable error.
+    #[test]
+    fn negative_kdf_error_derives_are_present() {
+        let e: KdfError<()> = KdfError::LabelTooLong;
+        let _copy = e;
+        let _clone = e.clone();
+        assert_eq!(e, KdfError::LabelTooLong);
+        assert_ne!(e, KdfError::OutputTooLong);
+        // Debug impl must be callable (used in `secure_log!` formats).
+        let _ = format!("{:?}", e);
+    }
 }

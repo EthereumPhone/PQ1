@@ -317,6 +317,19 @@ mod optiga_under_test;
 #[cfg(test)]
 mod se050_under_test;
 
+// ── Host-side test suite for the `secure-se-misc` slice ──
+//
+// Covers `secure/src/scp03_logic.rs`, `secure/src/cmac.rs`,
+// `secure/src/secure_element.rs` (each via inline `#[cfg(test)] mod
+// tests` blocks), and the firmware-only `secure/src/tropic01_se.rs` +
+// `secure/src/semihosting_spi.rs` (via `include_str!` source-text
+// invariant pins in this module, because both files depend on
+// `cortex_m_semihosting` / `tropic01` / `x25519-dalek` and cannot
+// link on host). See `reports/tests/secure-se-misc.md` for the
+// inventory.
+#[cfg(test)]
+mod secure_se_misc_pure_tests;
+
 // ── Test-only scaffold for the `secure-zk` slice ──
 //
 // The production `zk` module is `#[cfg(not(test))]` because the
