@@ -201,6 +201,21 @@ mod fw_update_boot_pure_tests;
 #[cfg(test)]
 mod main_sau_pure_tests;
 
+// ── Host-side test suite for the `secure-fi-pin-rng` slice ──
+//
+// Covers `fi.rs`, `fih.rs`, `fuzz_props.rs`, `host_rng.rs`,
+// `iso7816.rs`, `pin.rs`, `pin_diag.rs`, `rng.rs`, `rng_strong.rs`,
+// `sign_rate.rs`, `timeout.rs`. The slice mixes always-on host-
+// compileable modules (`fi`, `fih`, `iso7816`, `pin`, `sign_rate`,
+// `fuzz_props`) with `#[cfg(not(test))]`-excluded modules (`rng`,
+// `rng_strong`, `host_rng`, `pin_diag`, `timeout`). The suite
+// exercises the first group directly and pins the second via
+// `include_str!` source-text invariants, with a local re-mount of
+// `timeout.rs` so its pure logic is exercisable on host. See
+// `reports/tests/secure-fi-pin-rng.md` for the inventory.
+#[cfg(test)]
+mod secure_fi_pin_rng_pure_tests;
+
 // ── Test-only re-includes for the `secure-nsc-core` slice ──
 //
 // `nsc/ptr_validate.rs`, `nsc/ns_ptr.rs`, and `nsc/state.rs` are
