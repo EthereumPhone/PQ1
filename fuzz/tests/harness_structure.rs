@@ -431,12 +431,6 @@ fn negative_no_dev_feature_leaked_to_parser_deps() {
 // `reports/tests/fuzz.md`.
 
 #[test]
-#[ignore = "ORPHAN: fuzz_targets/apdu_parse_header.rs and \
-            fuzz_targets/hid_frame_assembler.rs are present but not \
-            registered in Cargo.toml [[bin]] — see \
-            reports/tests/fuzz.md production-code-bugs section. Add the \
-            two [[bin]] entries + a `sphincs-tz-shared` [dependency] then \
-            remove this #[ignore]."]
 fn negative_every_fuzz_target_file_is_registered_as_bin() {
     let on_disk: BTreeSet<String> =
         fuzz_target_files().iter().map(|p| file_stem(p)).collect();

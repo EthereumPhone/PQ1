@@ -279,7 +279,8 @@ fn round_up_to_32(n: u64) -> Option<u64> {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn word(body: &[u8], off: usize) -> Option<&[u8]> {
-    body.get(off..off + 32)
+    let end = off.checked_add(32)?;
+    body.get(off..end)
 }
 
 pub(crate) fn read_address(body: &[u8], off: usize) -> Option<[u8; 20]> {
@@ -1047,13 +1048,12 @@ mod tests {
     ///
     /// Fix: replace `body.get(off..off + 32)` with
     /// `body.get(off..off.checked_add(32)?)` (or use `usize::saturating_add`).
-    /// Un-ignore once landed.
     #[test]
-    #[ignore = "word() should return None on offset overflow; currently panics — see report"]
     fn negative_word_offset_overflow_should_return_none() {
         let body = vec![0u8; 64];
-        // EXPECTED: returns None. ACTUAL today: panics with "attempt
-        // to add with overflow" because `usize::MAX - 16 + 32` wraps.
+        // `off + 32` would wrap usize at `usize::MAX - 16`; the
+        // `checked_add` guard in word() must return None instead of
+        // panicking.
         assert!(word(&body, usize::MAX - 16).is_none());
     }
 

@@ -2313,12 +2313,14 @@ flash-hw-optiga-reset: optiga-reset-oids
 #   make fuzz-eip1559-parse [TIME=600]
 #   make fuzz-erc20-calldata [TIME=600]
 #   make fuzz-erc20-bundle [TIME=600]
+#   make fuzz-apdu-parse-header [TIME=600]
+#   make fuzz-hid-frame-assembler [TIME=600]
 #
 # TIME (seconds) bounds the libFuzzer run; omit for unbounded.
 FUZZ_TIME ?= $(TIME)
 FUZZ_LIBFUZZER_ARGS = $(if $(FUZZ_TIME),-- -max_total_time=$(FUZZ_TIME),)
 
-.PHONY: fuzz-list fuzz-aa-userop-parse fuzz-rlp-decode-item fuzz-eip1559-parse fuzz-erc20-calldata fuzz-erc20-bundle
+.PHONY: fuzz-list fuzz-aa-userop-parse fuzz-rlp-decode-item fuzz-eip1559-parse fuzz-erc20-calldata fuzz-erc20-bundle fuzz-apdu-parse-header fuzz-hid-frame-assembler
 
 fuzz-list:
 	@echo "Available fuzz targets (see fuzz/README.md):"
@@ -2342,6 +2344,12 @@ fuzz-erc20-calldata:
 
 fuzz-erc20-bundle:
 	cd fuzz && cargo +nightly fuzz run tx_erc20_verify_bundle $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-apdu-parse-header:
+	cd fuzz && cargo +nightly fuzz run apdu_parse_header $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-hid-frame-assembler:
+	cd fuzz && cargo +nightly fuzz run hid_frame_assembler $(FUZZ_LIBFUZZER_ARGS)
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

@@ -556,16 +556,8 @@ mod tests {
     /// On 32-bit ARM targets (the production target) `usize == u32`
     /// so this is not reachable in practice — but a host build is
     /// 64-bit and the trunc-cast is a real footgun.
-    ///
-    /// **Currently failing — see report's "Production-code bugs
-    /// surfaced by negative tests": `validate_ns_*_ptr` casts
-    /// `len as u32`, silently truncating oversized usize. Not
-    /// exploitable on the firmware target (32-bit ARM) but a real
-    /// API contract gap on host. Marked `#[ignore]` until production
-    /// gets a defensive `usize <= u32::MAX as usize` guard.**
     #[cfg(target_pointer_width = "64")]
     #[test]
-    #[ignore = "production-code gap: validate_ns_*_ptr truncates len as u32 on 64-bit (see report)"]
     fn negative_raw_validate_rejects_oversized_usize_len() {
         // 0x1_0000_0000 truncates to 0 — would otherwise look like a
         // zero-length range starting in NS SRAM and pass.
