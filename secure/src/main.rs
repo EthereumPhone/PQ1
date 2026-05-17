@@ -231,6 +231,20 @@ mod hw_io_under_test;
 #[cfg(test)]
 mod display_under_test;
 
+// ── Test-only scaffold for the `secure-optiga` slice ──
+//
+// The production `optiga` module is `#[cfg(not(test))]` because the
+// transceive layer pulls in `cortex_m` for the delay loops and
+// `crate::hw::i2c_hw` for the I²C1 MMIO addresses — neither links on
+// host. This scaffold path-includes `apdu.rs` and `shield.rs` under
+// stub `ifx_i2c` types so the byte-exact wire-format and crypto
+// primitives can be exercised against reference vectors, alongside the
+// `include_str!`-based source-text pins for the files that genuinely
+// cannot be host-compiled (`ifx_i2c.rs`, `i2c.rs`, `mod.rs`). See
+// `reports/tests/secure-optiga.md`.
+#[cfg(test)]
+mod optiga_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
