@@ -164,6 +164,18 @@ mod nsc_small_cmds_pure_tests;
 #[cfg(test)]
 mod nsc_fw_update_pure_tests;
 
+// ── Test-only re-includes for the `secure-nsc-core` slice ──
+//
+// `nsc/ptr_validate.rs`, `nsc/ns_ptr.rs`, and `nsc/state.rs` are
+// pure-logic enough to exercise on host, but they live under the
+// production `nsc` module which is `#[cfg(not(test))]`. Mount them
+// under a per-test scaffold module so the `super::ptr_validate::*`
+// imports inside `ns_ptr.rs` continue to resolve, and so the
+// `pub(super)` items in `state.rs` are reachable from the sibling
+// test file `nsc_core_pure_tests.rs`.
+#[cfg(test)]
+pub(crate) mod nsc_core_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
