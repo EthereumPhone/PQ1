@@ -129,6 +129,32 @@ mod ui;
 #[cfg(not(test))]
 mod zk;
 
+// ── Test-only re-includes for the `secure-nsc-sign-userop` slice ──
+//
+// `nsc` itself is `#[cfg(not(test))]` because most of its files pull in
+// hardware-only crates. The two helper files (`nsc/sig_wrapper.rs`,
+// `nsc/trailer.rs`) are pure logic, so we re-include them at the crate
+// root under `cfg(test)` to make them reachable from `cargo test`.
+//
+// `trailer.rs` calls `crate::ui::show_status(...)`; under test we
+// provide a no-op stub so the file compiles without dragging in the
+// real OLED stack.
+#[cfg(test)]
+mod ui {
+    pub fn show_status(_title: &str, _sub: &str) {}
+}
+
+#[cfg(test)]
+#[path = "nsc/sig_wrapper.rs"]
+mod nsc_sig_wrapper_under_test;
+
+#[cfg(test)]
+#[path = "nsc/trailer.rs"]
+mod nsc_trailer_under_test;
+
+#[cfg(test)]
+mod nsc_sign_userop_pure_tests;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
