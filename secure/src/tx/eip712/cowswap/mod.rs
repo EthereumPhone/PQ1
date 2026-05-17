@@ -60,6 +60,9 @@ pub use verify::{verify_and_bind_trailer, VerifiedCowswapV3};
 #[cfg(test)]
 mod test_vectors;
 
+#[cfg(test)]
+mod extra_tests;
+
 // ---------------------------------------------------------------------------
 // Public addresses
 // ---------------------------------------------------------------------------
