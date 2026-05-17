@@ -142,6 +142,16 @@ mod zk;
 #[cfg(test)]
 mod ui {
     pub fn show_status(_title: &str, _sub: &str) {}
+
+    // Mirrors the production constants in `crate::ui` so the
+    // `display_under_test` scaffold can re-mount the per-renderer
+    // source files under host test builds (see
+    // `crate::display_under_test`).
+    pub const DISPLAY_COLS: usize = 16;
+    pub const DISPLAY_ROWS: usize = 4;
+    pub mod confirm {
+        pub type Page = [[u8; super::DISPLAY_COLS]; super::DISPLAY_ROWS];
+    }
 }
 
 #[cfg(test)]
@@ -207,6 +217,19 @@ mod hw_platform_under_test;
 // header for what is and isn't covered.
 #[cfg(test)]
 mod hw_io_under_test;
+
+// ── Test-only scaffold for the `secure-tx-display` slice ──
+//
+// The production `tx::display` module is gated `#[cfg(not(test))]` (see
+// `secure/src/tx/mod.rs`) because several of its sibling files pull in
+// hardware-only code via `crate::ui`. This scaffold re-mounts the
+// per-renderer source files under a parallel module tree, alongside a
+// hand-supplied `Pages` container that mirrors the production
+// `tx::display::Pages` byte-for-byte, so the renderers' page output can
+// be unit-tested on the host. See
+// `reports/tests/secure-tx-display.md` for the inventory.
+#[cfg(test)]
+mod display_under_test;
 
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
