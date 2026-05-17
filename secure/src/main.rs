@@ -174,6 +174,20 @@ mod nsc_small_cmds_pure_tests;
 #[cfg(test)]
 mod nsc_fw_update_pure_tests;
 
+// ── Host-side test suite for the `secure-fw-update-boot` slice ──
+//
+// Covers `fw_update/mod.rs` (state-machine types + `verify_manifest`
+// + `check_chunk`), `fw_update/staging.rs` (QW-aligned writes),
+// `fw_update/verify.rs` (COMMIT-time defence in depth),
+// `fw_update/vendor_pubkey.rs`, `measured_boot.rs` (OS Fingerprint),
+// and `boot_ns.rs` (S→NS handover). All production files are
+// `#[cfg(not(test))]` or `stm32u585`-gated, so the suite is
+// dominated by `include_str!` source-text invariants plus
+// pure-logic mirrors of decision trees. See
+// `reports/tests/secure-fw-update-boot.md` for the inventory.
+#[cfg(test)]
+mod fw_update_boot_pure_tests;
+
 // ── Test-only re-includes for the `secure-nsc-core` slice ──
 //
 // `nsc/ptr_validate.rs`, `nsc/ns_ptr.rs`, and `nsc/state.rs` are
