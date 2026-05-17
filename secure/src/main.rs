@@ -188,6 +188,19 @@ mod nsc_fw_update_pure_tests;
 #[cfg(test)]
 mod fw_update_boot_pure_tests;
 
+// ── Host-side test suite for the `secure-main-sau` slice ──
+//
+// Covers `main.rs` (secure-world entry, SysTick/PendSV/DefaultHandler/
+// panic_handler trampolines, ARCH MMIO bindings, reset-cause
+// integration), `sau.rs` (SAU regions + GTZC1 MPCBB/TZSC config) and
+// `reset_cause.rs` (RCC_CSR classification). All three are
+// `#[cfg(not(test))]`-gated at the crate root because of
+// hardware-only deps; the suite is dominated by `include_str!` source-
+// text invariants plus a pure-logic mirror of `classify_bits`. See
+// `reports/tests/secure-main-sau.md` for the inventory.
+#[cfg(test)]
+mod main_sau_pure_tests;
+
 // ── Test-only re-includes for the `secure-nsc-core` slice ──
 //
 // `nsc/ptr_validate.rs`, `nsc/ns_ptr.rs`, and `nsc/state.rs` are
