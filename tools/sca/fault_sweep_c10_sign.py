@@ -329,7 +329,12 @@ def main():
     # post-bisect, ~100 % of stuck-at faults crash where they would otherwise
     # show a normal mix of rejected/clean/anomaly. Single-emulator-no-bisect
     # gives clean results.)
-    total_estimate = 2_618_037_609   # measured once via probe — re-measure if the mirror changes
+    total_estimate = 6_622_918_000   # measured 2026-05-18 via bisect under harness setup
+                                     # (e.reset() + stack-zero) — actual ∈ (6_622_915_000,
+                                     # 6_622_918_000]; snap_at = total - 30K = 6_622_888_000
+                                     # lands well inside the function. Re-measure if the
+                                     # mirror's instruction count drifts (MMIO refactor or
+                                     # sphincs-c10 changes will).
     sweep_snap_at = total_estimate - TAIL_DEPTH
     sweep_start_rel = 1
     sweep_end_rel = TAIL_DEPTH + 16   # small margin past function end → some "short" iterations
