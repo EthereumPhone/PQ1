@@ -293,6 +293,124 @@ static _KEEP_C10_KG: extern "C" fn(*const u8, *mut u8) = sca_c10_keygen;
 static _KEEP_C10_SIGN: extern "C" fn(*const u8, *mut u8) = sca_c10_sign;
 #[used]
 static _KEEP_C10_SIGN_SHUF: extern "C" fn(*const u8, *mut u8) = sca_c10_sign_shuffled;
+#[used]
+static _KEEP_BIP39_WORD_INDICES: extern "C" fn(*const u8, *mut u8) = sca_bip39_word_indices;
+#[used]
+static _KEEP_BIP39_WORDLIST_LOOKUP: extern "C" fn(*const u8, *mut u8) =
+    sca_bip39_wordlist_lookup;
+
+// BIP-39 wordlist included verbatim from the production crate. The bip39
+// crate uses `hmac = { workspace = true }` which is unreachable from this
+// detached workspace, but `wordlist.rs` is dep-free — a single
+// `pub static WORDLIST: [&str; 2048]`. `#[path]`-include it as a module
+// so any drift in the production list breaks this build.
+#[path = "../../../../bip39/src/wordlist.rs"]
+mod wordlist;
+
+/// First half of `Mnemonic::from_entropy`: SHA-256(entropy) → checksum
+/// bits, then split (entropy ‖ checksum) into 24 × 11-bit word indices.
+/// Writes 48 bytes to `out_ptr` (24 × u16 LE; each u16 ∈ [0, 2047]).
+///
+/// **The interesting samples here**: the loop that extracts 11-bit
+/// indices reads from `entropy_with_check[byte_idx]` where `byte_idx`
+/// is loop-counter-derived (NOT entropy-derived), so the addresses
+/// shouldn't depend on the secret. TVLA fixed-vs-random entropy should
+/// be flat — modulo the per-byte values flowing into the AES-NI-style
+/// VALUE channel which `mem_address` doesn't see.
+#[no_mangle]
+pub extern "C" fn sca_bip39_word_indices(entropy_ptr: *const u8, out_ptr: *mut u8) {
+    use sha2::Digest as _;
+    // SAFETY: harness passes 32 B entropy + 48 B output buffer.
+    let entropy: &[u8; 32] = unsafe { &*(entropy_ptr as *const [u8; 32]) };
+
+    // checksum = top 8 bits of SHA-256(entropy) for a 256-bit entropy.
+    let mut h = sha2::Sha256::new();
+    h.update(entropy);
+    let digest = h.finalize();
+    let checksum = digest[0];
+
+    // 33-byte buffer = entropy ‖ checksum, 264 bits total = 24 × 11.
+    let mut buf = [0u8; 33];
+    buf[..32].copy_from_slice(entropy);
+    buf[32] = checksum;
+
+    // Extract 24 × 11-bit indices, BE bit order per BIP-39.
+    for i in 0..24 {
+        let bit = i * 11;
+        let byte = bit / 8;
+        let off = bit % 8;
+        // u32 to fit the 24-bit shift window.
+        let hi = buf[byte] as u32;
+        let mid = buf[byte + 1] as u32;
+        let lo = if byte + 2 < buf.len() { buf[byte + 2] as u32 } else { 0 };
+        let win = (hi << 16) | (mid << 8) | lo;
+        let shifted = win >> (24 - off - 11);
+        let idx = (shifted & 0x07FF) as u16;
+        // SAFETY: i in 0..24 → offset 2i+1 < 48.
+        unsafe {
+            core::ptr::write_volatile(out_ptr.add(i * 2), idx as u8);
+            core::ptr::write_volatile(out_ptr.add(i * 2 + 1), (idx >> 8) as u8);
+        }
+    }
+}
+
+/// The actual leak suspect: given 24 entropy-derived word indices, look
+/// up `WORDLIST[index]` for each. The load address is
+/// `WORDLIST_BASE + index * STRIDE` (STRIDE = sizeof(&str) = 8 on a
+/// 32-bit target), so the low bits of every load address ENCODE the
+/// secret index — exactly the T-table-style address-bus leak that
+/// rainbow's `mem_address` channel detects.
+///
+/// Input: 32 B raw entropy. We re-derive the indices internally rather
+/// than taking them as input, so the TVLA can vary the entropy and see
+/// the FULL secret-handling chain — index derivation + wordlist
+/// lookup — rolled into one symbol. Output: a packed buffer of the
+/// 24 word lengths + first-byte-of-each-word (48 B); the body of each
+/// word isn't copied to keep the trace short and the leak focused on
+/// the table-lookup samples.
+#[no_mangle]
+pub extern "C" fn sca_bip39_wordlist_lookup(entropy_ptr: *const u8, out_ptr: *mut u8) {
+    use sha2::Digest as _;
+    // SAFETY: harness passes 32 B entropy + 48 B output buffer.
+    let entropy: &[u8; 32] = unsafe { &*(entropy_ptr as *const [u8; 32]) };
+
+    let mut h = sha2::Sha256::new();
+    h.update(entropy);
+    let digest = h.finalize();
+    let checksum = digest[0];
+
+    let mut buf = [0u8; 33];
+    buf[..32].copy_from_slice(entropy);
+    buf[32] = checksum;
+
+    for i in 0..24 {
+        let bit = i * 11;
+        let byte = bit / 8;
+        let off = bit % 8;
+        let hi = buf[byte] as u32;
+        let mid = buf[byte + 1] as u32;
+        let lo = if byte + 2 < buf.len() { buf[byte + 2] as u32 } else { 0 };
+        let win = (hi << 16) | (mid << 8) | lo;
+        let shifted = win >> (24 - off - 11);
+        let idx = (shifted & 0x07FF) as usize;
+
+        // THE LEAK SUSPECT. `WORDLIST[idx]` loads at
+        // `&WORDLIST[0] + idx * size_of::<&str>()`. The address depends
+        // on `idx` which depends on the entropy.
+        let w: &'static str = wordlist::WORDLIST[idx];
+        let wb = w.as_bytes();
+
+        // Write the word length + first byte. Avoids copying the full
+        // word body which would add more index-dependent reads from
+        // the (also-flash-resident) word body and dilute the lookup
+        // signal in noise.
+        // SAFETY: i in 0..24 → 2i+1 < 48.
+        unsafe {
+            core::ptr::write_volatile(out_ptr.add(i * 2), wb.len() as u8);
+            core::ptr::write_volatile(out_ptr.add(i * 2 + 1), wb[0]);
+        }
+    }
+}
 
 #[entry]
 fn main() -> ! {
@@ -304,6 +422,8 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_C10_KG);
     core::hint::black_box(&_KEEP_C10_SIGN);
     core::hint::black_box(&_KEEP_C10_SIGN_SHUF);
+    core::hint::black_box(&_KEEP_BIP39_WORD_INDICES);
+    core::hint::black_box(&_KEEP_BIP39_WORDLIST_LOOKUP);
     loop {
         cortex_m::asm::nop();
     }

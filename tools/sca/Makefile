@@ -45,7 +45,7 @@ SKDF_ELF := $(SKDF_DIR)/target/$(TARGET)/release/sca-saes-kdf-target
 DONJON   ?= donjon-sca
 SCARED   ?= scared-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak bip39-leak f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -146,6 +146,11 @@ saes-kdf: build-saes-kdf
 # new `sca_fi_wait_random_n(byte)` symbol.
 wait-random-leak: build
 	$(DONJON) run leakage_wait_random.py
+
+# BIP-39 entropy → seed: does `Mnemonic::from_entropy(entropy).to_seed("")`
+# leak entropy bits via WORDLIST[index] address-keyed loads?
+bip39-leak: build-kdf
+	$(DONJON) run leakage_bip39.py
 
 # F-9 re-test: did F-16's shuffle mask the FORS-leaf-index mem_address leak?
 # Compares post-F-16 max|t| against F-9's recorded baseline of 40.71.

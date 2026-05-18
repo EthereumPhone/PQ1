@@ -814,6 +814,114 @@ the cache or memory-bus side channel, on top of whatever the SAES
 silicon itself leaks. The test rules out one specific class of
 production leak at firmware level.
 
+## BIP-39 entropy → seed leakage — `leakage_bip39.py` + kdf_target's `sca_bip39_*`
+
+`make -C tools/sca bip39-leak` builds new symbols in `kdf_target`
+(`sca_bip39_word_indices` and `sca_bip39_wordlist_lookup`) that
+`#[path]`-include `bip39/src/wordlist.rs` verbatim and exercise the
+production `Mnemonic::to_seed()` chain's two key steps:
+
+1. SHA-256(entropy) for the BIP-39 checksum + 11-bit-index unpacking
+   (no wordlist access — control mirror).
+2. The actual `WORDLIST[idx]` loads — 24 of them, one per word index,
+   addressing into a `[&str; 2048]` flash-resident table.
+
+### F-22 — BIP-39 `Mnemonic::to_seed`'s wordlist lookups leak 24×11 = 264 entropy bits via address-keyed loads — **PRODUCTION-CRITICAL, FIX NEEDED**
+
+**`make bip39-leak` result on the post-merge tree:**
+
+| Symbol | Trace samples | max\|t\| | Verdict |
+|---|---|---|---|
+| `sca_bip39_word_indices` | 699 | **0.00** | flat — SHA-256 + unpacking don't leak |
+| `sca_bip39_wordlist_lookup` | 772 | **27.98** | **LEAKAGE** (6.2× threshold) |
+
+Peak at sample 671; top-5 peaks at 615, 671, 703, 727, 751 — periodic
+spacing of ~24-32 samples consistent with the 24 individual
+`WORDLIST[idx]` loads laid out across the trace.
+
+**Mechanism.** `Mnemonic::to_seed("")` (`bip39/src/lib.rs:183-217`)
+calls `self.words()` (`bip39/src/lib.rs:155-157`) which is
+`self.indices.iter().map(|&i| WORDLIST[i as usize])`. Each iteration
+performs a load at `&WORDLIST[0] + idx * sizeof(&str)` (the `&str`
+fat-pointer table) — the address ENCODES the secret idx. Subsequent
+copy of the word body (`copy_from_slice(wb)`) adds a second layer of
+address-keyed reads from the entry's `(ptr, len)` and the actual
+string bytes in flash. The control case `sca_bip39_word_indices`
+(same SHA-256 + index unpacking, NO wordlist access) shows max|t| =
+0.00, confirming the leak is in the lookup, not anywhere else in the
+chain.
+
+**Severity: HIGH (production critical, seed reconstruction).** This
+is the FIRST CPU operation that touches raw entropy during
+recovery / first-unlock. The 24 indices encode 264 bits — strictly
+more than the 256-bit BIP-39 entropy — so the address pattern is
+sufficient to fully reconstruct the seed from a single trace.
+Bypasses every downstream defense: FI guards protect against
+release of forged signatures, not against pre-existing seed leakage;
+the dual-SE XOR split protects entropy AT REST, not during the CPU
+derivation phase; the hardware PIN gate protects the SE storage, not
+the post-unlock CPU work. An attacker with physical access doing
+power/EM scoping of the cold-boot first-unlock recovers the seed in
+a single trace — they don't need a million attack traces; the leak
+is direct.
+
+**Attack model.** Requires physical access to the device during the
+first-unlock (when `derive_keypair_from_entropy` runs). After the
+first unlock, the bip39 seed is wiped (`bip39_seed.zeroize()` in
+`with_bip39_seed`), so subsequent signs don't re-derive — the
+exposure is the **single cold-boot trace**. An attacker who steals
+the device and scopes the first unlock-after-power-on can clone the
+wallet without ever extracting any SE-resident state.
+
+**Production reach.**
+- `secure/src/crypto.rs::provision_from_mnemonic` calls
+  `pqsigner_domain::derive_keypair_from_entropy` →
+  `with_bip39_seed` → `Mnemonic::to_seed` at every wallet creation /
+  recovery.
+- Every dual-SE unlock that needs to re-derive the master keypair
+  hits the same path (per `Se050::unlock`'s
+  `kdf("sphincs-master", &entropy, 0)` followed by
+  `derive_keypair_from_entropy` if the cached VK is missing).
+
+**Recommended fix.** Constant-time wordlist scan: for each of the 24
+word slots, load EVERY entry in `WORDLIST` and use `subtle::
+ConditionallySelectable` (or a manual `(mask & bytes) | (!mask &
+acc)` pattern) to conditionally copy into a fixed-length buffer iff
+the entry index matches the target index. This makes every word's
+load sequence identical at the address-bus level regardless of which
+index is being resolved. Cost: 2048 loads × 24 words × 8 bytes/load
+= 393 KB of reads per `to_seed` call, ~1 ms wall on Cortex-M33 —
+acceptable for a once-per-unlock operation.
+
+The variable-length password assembly that follows is a separate
+issue: the cumulative-offset writes into the password buffer have
+secret-dependent target addresses. Two options to fix:
+
+1. **Constant-stride password layout.** Pad every word slot to 8
+   bytes + 1 separator = 9 bytes; total password = 24 × 9 = 216 bytes
+   regardless of word lengths. **Breaks BIP-39 compatibility** — the
+   seed derived from a padded password differs from the canonical
+   one, so a user-written-down phrase wouldn't restore the same
+   wallet on a non-PQSigner BIP-39 verifier. **NOT viable.**
+2. **Interleaved constant-time write.** For each output byte
+   position 0..MAX_LEN of the password, scan all 2048 entries × 8
+   bytes / entry, conditionally write the correct byte. Expensive
+   but preserves BIP-39 compatibility. **Viable.**
+
+A third option — drop `Mnemonic::to_seed` entirely and run PBKDF2
+over a different entropy-derived encoding — is non-viable because
+the seed is the on-chain identity (CREATE2 salt derives from the
+master pk_seed/pk_root which come from this seed). Changing the
+derivation would change every wallet's address.
+
+**Status: documented, fix pending.** Implementation is a substantial
+crypto-engineering effort and warrants careful review (changing the
+BIP-39 hot path is high-stakes). Filed as work-todo entry; see
+`tools/sca/leakage_bip39.py` for the regression harness — any future
+fix must keep the harness's `sca_bip39_wordlist_lookup` TVLA flat
+AND keep `Mnemonic::to_seed("")` byte-identical with the BIP-39 test
+vectors in `bip39/src/lib.rs`'s test module.
+
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 
 `make -C tools/sca c10v` builds `sca-c10v-target` (a thin `#[no_mangle]` wrapper

@@ -31,6 +31,10 @@ sha2    = { version = "0.10", default-features = false }
 hmac    = { version = "0.12", default-features = false }
 # For Tier-2 leakage analysis on C10 sign + keygen.
 sphincs-c10 = { path = "../../../sphincs-c10" }
+# For the BIP-39 wordlist-lookup leakage target. The bip39 crate uses
+# `hmac = { workspace = true }` which is unreachable from this detached
+# workspace, so we `#[path]`-include just its `wordlist.rs` module
+# (a `pub static WORDLIST: [&str; 2048]`) — no extra deps needed.
 
 [build-dependencies]
 # Pre-computes PK_ROOT from the fixed SK_SEED/PK_SEED so `sca_c10_sign`
