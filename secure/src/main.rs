@@ -155,6 +155,10 @@ mod ui {
 }
 
 #[cfg(test)]
+#[path = "ui/secret_text.rs"]
+mod ui_secret_text_under_test;
+
+#[cfg(test)]
 #[path = "nsc/sig_wrapper.rs"]
 mod nsc_sig_wrapper_under_test;
 

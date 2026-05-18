@@ -209,6 +209,51 @@ impl Display {
         }
     }
 
+    /// F-24 stage D: flush with constant-time rendering for selected
+    /// rows. The rows listed in `secret_rows` are rendered via
+    /// `secret_text::render_secret_row` — every glyph load is a 96-entry
+    /// scan with no address dependence on the secret character. The rest
+    /// of `self.rows` go through embedded-graphics as usual.
+    ///
+    /// Used by `seed_wizard::render_mnemonic_page` for the word-display
+    /// rows. Caller MUST ensure the secret-row indices match what
+    /// they've stored in `self.rows` (e.g., still call `draw_line` for
+    /// the secret rows to keep the `rows` buffer consistent — the
+    /// `flush_with_secret_rows` path SKIPS those rows in the
+    /// embedded-graphics pass and instead uses CT rendering, so the
+    /// public render path doesn't expose the secret addressing).
+    ///
+    /// `secret_rows`: slice of `(page, text)` pairs. `page` is the OLED
+    /// row index 0..4. `text` is ASCII bytes (max DISPLAY_COLS = 16
+    /// chars + leading whitespace).
+    pub fn flush_with_secret_rows(&mut self, secret_rows: &[(usize, &[u8])]) {
+        self.fb.clear();
+        let style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
+        // Render non-secret rows via embedded-graphics.
+        for (i, row) in self.rows.iter().enumerate() {
+            let is_secret = secret_rows.iter().any(|(p, _)| *p == i);
+            if is_secret {
+                // Skip — the CT render below handles this page.
+                continue;
+            }
+            let s = super::ascii_str(row);
+            let _ = Text::with_baseline(s, Point::new(0, i as i32 * 8), style, Baseline::Top)
+                .draw(&mut self.fb);
+        }
+        // Render secret rows via the constant-time blit. We use the
+        // raw fb buffer via a small accessor; `Framebuf::buf_mut`
+        // returns `&mut [u8; 512]` keyed to the SSD1306 page layout.
+        for &(page, text) in secret_rows {
+            super::secret_text::render_secret_row(&mut self.fb.buf, page, text);
+        }
+        self.flush_fb();
+
+        #[cfg(feature = "ui-capture")]
+        {
+            super::capture::emit(self.fb.pages());
+        }
+    }
+
     /// Play the plug-in boot animation.
     ///
     /// Two stages over ~1 s total:

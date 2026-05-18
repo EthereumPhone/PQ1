@@ -89,6 +89,22 @@ impl Display {
             super::capture::emit(&flat);
         }
     }
+
+    /// `oled::Display::flush_with_secret_rows` parity. The semihosting
+    /// backend has no pixel framebuffer, so F-24 stage D's constant-
+    /// time blit is moot — we just stamp the rows and delegate to
+    /// `flush`. QEMU builds are public-only anyway.
+    pub fn flush_with_secret_rows(&mut self, secret_rows: &[(usize, &[u8])]) {
+        for &(row, text) in secret_rows {
+            if row < DISPLAY_ROWS {
+                let mut padded = [b' '; DISPLAY_COLS];
+                let n = text.len().min(DISPLAY_COLS);
+                padded[..n].copy_from_slice(&text[..n]);
+                self.rows[row] = padded;
+            }
+        }
+        self.flush();
+    }
 }
 
 pub struct Input;

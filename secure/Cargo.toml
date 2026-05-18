@@ -515,6 +515,11 @@ ui-mirror = ["dep:rtt-target", "ui-oled"]
 
 [build-dependencies]
 qrcodegen = "1.8"
+# Decodes the vendored `assets/font_5x8.png` (embedded-graphics' FONT_5X8
+# bitmap) into a flat `[[u8; 5]; 96]` table baked into `OUT_DIR/font_flat.rs`.
+# Consumed by `secure/src/ui/secret_text.rs` for the F-24 constant-time
+# glyph blit. Build-script only; not linked into the firmware.
+png = "0.17"
 # Used by `generate_vendor_pubkey` to embed `VENDOR_PK_{SEED,ROOT,FPR}`
 # into the secure image at build time. Mirrors `fsbl/build.rs`; both
 # must produce identical bytes from the same `FSBL_VENDOR_PUBKEY`

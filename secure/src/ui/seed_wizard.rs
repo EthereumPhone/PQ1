@@ -180,8 +180,15 @@ fn render_mnemonic_page(m: &Mnemonic, page: usize) {
     d.draw_line(0, super::ascii_str(&title));
 
     // Three word rows: "12 abandon". Use the constant-time `word_bytes`
-    // API (F-22 follow-up): no load address depends on the secret
+    // API (F-24 stage A-C): no load address depends on the secret
     // `indices[word_idx]`.
+    //
+    // Stash the rendered byte-rows on the stack so `flush_with_secret_rows`
+    // can paint them via the constant-time glyph blit (F-24 stage D),
+    // bypassing embedded-graphics' index-keyed `MonoFont::glyph` lookup
+    // for these specific rows.
+    let mut secret_rows_storage = [[b' '; DISPLAY_COLS]; WORDS_PER_PAGE];
+    let mut secret_row_count = 0usize;
     for slot in 0..WORDS_PER_PAGE {
         let word_idx = page * WORDS_PER_PAGE + slot;
         if word_idx >= WORD_COUNT {
@@ -189,7 +196,7 @@ fn render_mnemonic_page(m: &Mnemonic, page: usize) {
         }
         let mut wb = [0u8; MAX_WORD_BYTES];
         let wlen = m.word_bytes(word_idx, &mut wb) as usize;
-        let mut row = [b' '; DISPLAY_COLS];
+        let row = &mut secret_rows_storage[slot];
         // 1-based human numbering, right-aligned in 2 cols.
         let n = (word_idx + 1) as u8;
         if n >= 10 {
@@ -199,10 +206,18 @@ fn render_mnemonic_page(m: &Mnemonic, page: usize) {
         row[2] = b' ';
         let max = core::cmp::min(wlen, DISPLAY_COLS - 3);
         row[3..3 + max].copy_from_slice(&wb[..max]);
-        d.draw_line(slot + 1, super::ascii_str(&row));
+        secret_row_count += 1;
     }
 
-    d.flush();
+    // Build the `(page, text)` slice for `flush_with_secret_rows`.
+    // Up to WORDS_PER_PAGE entries; the page index is slot + 1 (row 0
+    // is the title). We use a 3-deep fixed array + a runtime length.
+    let secret_rows: [(usize, &[u8]); WORDS_PER_PAGE] = [
+        (1, &secret_rows_storage[0]),
+        (2, &secret_rows_storage[1]),
+        (3, &secret_rows_storage[2]),
+    ];
+    d.flush_with_secret_rows(&secret_rows[..secret_row_count]);
 }
 
 // ---------------------------------------------------------------------------

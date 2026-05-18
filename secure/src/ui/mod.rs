@@ -39,6 +39,12 @@ pub mod capture;
 pub mod confirm;
 pub mod pin_entry;
 pub mod seed_wizard;
+/// F-24 stage D: constant-time glyph blit for secret-bearing OLED rows.
+/// Bypasses embedded-graphics' address-keyed font lookups for the seed
+/// wizard's word rows. ui-oled-only; the `ui-semihosting` and `ui-noop`
+/// backends don't render pixels.
+#[cfg(feature = "ui-oled")]
+pub mod secret_text;
 
 /// Logical display dimensions (cells, not pixels).
 /// 16 columns × 4 rows: fits 5×8 font on 128×32 OLED, 8×13 on 128×64.

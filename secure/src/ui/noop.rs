@@ -19,6 +19,12 @@ impl Display {
     pub fn draw_line(&mut self, _row: usize, _text: &str) {}
 
     pub fn flush(&mut self) {}
+
+    /// No-op equivalent of `oled::Display::flush_with_secret_rows`. The
+    /// secret-text constant-time blit is OLED-only (it writes to a
+    /// pixel framebuffer); the noop backend has no display surface so
+    /// the secret rows are silently dropped.
+    pub fn flush_with_secret_rows(&mut self, _secret_rows: &[(usize, &[u8])]) {}
 }
 
 pub struct Input;
