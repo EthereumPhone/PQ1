@@ -45,7 +45,7 @@ SKDF_ELF := $(SKDF_DIR)/target/$(TARGET)/release/sca-saes-kdf-target
 DONJON   ?= donjon-sca
 SCARED   ?= scared-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak bip39-leak seed-deriv-leak recovery-leak f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf build-groth16 fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak bip39-leak seed-deriv-leak recovery-leak groth16 f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -91,6 +91,18 @@ build-flashctr: $(FCT_ELF)
 
 $(FCT_ELF): $(FCT_DIR)/src/main.rs $(FCT_DIR)/memory.x $(FCT_DIR)/build.rs $(FCT_DIR)/Cargo.toml ../../pqsigner-fi/src/lib.rs ../../secure/src/hw/flash.rs
 	cargo build --release --target $(TARGET) --manifest-path $(FCT_DIR)/Cargo.toml
+
+GROTH16_DIR := groth16_target
+GROTH16_ELF := $(GROTH16_DIR)/target/$(TARGET)/release/sca-groth16-target
+build-groth16: $(GROTH16_ELF)
+$(GROTH16_ELF): $(GROTH16_DIR)/src/main.rs $(GROTH16_DIR)/memory.x $(GROTH16_DIR)/build.rs $(GROTH16_DIR)/Cargo.toml ../../bls12_381_pka/src/lib.rs
+	cargo build --release --target $(TARGET) --manifest-path $(GROTH16_DIR)/Cargo.toml
+
+# Fault-injection sweep over the real Groth16 verifier. Targets the
+# clear-sign feature (Aave / CowSwap / etc.) — a fault that flips a
+# reject into an accept lets an attacker forge ZK clear-sign verifications.
+groth16: build-groth16
+	$(DONJON) run fault_sweep_groth16.py
 
 build-saes-kdf: $(SKDF_ELF)
 

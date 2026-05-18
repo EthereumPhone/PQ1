@@ -1,0 +1,35 @@
+# Standalone workspace — detached from the PQSigner workspace. Path-deps
+# `bls12_381_pka` (the workspace's BLS12-381 implementation, packaged as
+# `bls12_381`); the dep's own deps are all crates.io versioned, no
+# workspace inheritance, so the path-dep works from this detached crate.
+[workspace]
+
+[package]
+name = "sca-groth16-target"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "thumbv8m ELF wrapping the Groth16 verifier from secure/src/zk/groth16.rs, for the fault-sweep over the clear-sign ZK verification (real bls12_381 pairings, software path). Not shipped."
+
+[[bin]]
+name = "sca-groth16-target"
+path = "src/main.rs"
+
+[dependencies]
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+panic-halt  = "1"
+
+# The real BLS12-381 implementation. `package = "bls12_381_pka"` matches
+# the workspace alias in `Cargo.toml`'s `[workspace.dependencies]`; we
+# disable the `pka` feature here so the sweep runs the software path
+# (same code path that runs on QEMU / bench tooling).
+[dependencies.bls12_381]
+package = "bls12_381_pka"
+path = "../../../bls12_381_pka"
+default-features = false
+features = ["groups", "pairings"]
+
+[profile.release]
+opt-level = 3
+debug = true
