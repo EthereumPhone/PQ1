@@ -41,8 +41,9 @@ DISP_ELF := $(DISP_DIR)/target/$(TARGET)/release/sca-dispatch-target
 FCT_DIR  := flashctr_target
 FCT_ELF  := $(FCT_DIR)/target/$(TARGET)/release/sca-flashctr-target
 DONJON   ?= donjon-sca
+SCARED   ?= scared-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -135,6 +136,21 @@ f9-retest: build-kdf
 # without OOM. Drops to 200 traces (vs F-9's 600) to stay in 64 GB RAM.
 f9-deeper: build-kdf
 	$(DONJON) run f9_deeper.py
+
+# F-9 scared convergence — two stages:
+#   (1) f9-scared-collect: runs in donjon-sca venv (lascar + rainbow),
+#       captures 600 × 10M × stride=1 traces, dumps to out/f9_traces.npz
+#       (≈ 4 GB on disk). Re-uses f9_retest.py's input generator.
+#   (2) f9-scared:         runs in scared-sca venv (numpy 2 + scared 1.2),
+#       loads the .npz, runs TTestAnalysis with convergence_step=20,
+#       plots max|t| vs #traces, prints rank.
+# Env overrides: F9_SCARED_N (default 600), F9_SCARED_MAX_SAMPLES (10M),
+#   F9_SCARED_STRIDE (1), F9_SCARED_STEP (20).
+f9-scared-collect: build-kdf
+	$(DONJON) run f9_collect_for_scared.py
+
+f9-scared:
+	$(SCARED) run f9_scared_convergence.py
 
 sweeps: fi c10 pin fw-verify ns-ptr
 
