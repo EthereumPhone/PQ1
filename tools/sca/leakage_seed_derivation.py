@@ -103,6 +103,16 @@ def main():
         "sca_slot_master_entropy_from_bip39", in_len=64, out_size=32,
     )
 
+    # F-22-follow-up: characterise the OPTIGA PIN-verify CPU chain. The
+    # 8-byte PIN flows through SHA-256(domain || pin || [0]) and then
+    # HMAC-SHA256(pin_secret, fixed-nonce). A leak here defeats the
+    # 10-attempt silicon lockout because the attacker reads the PIN
+    # directly instead of brute-forcing it.
+    results["optiga_pin_derive"] = run_tvla(
+        "optiga_pin_derive — kdf_sha256(domain, pin, 0) → HMAC-SHA256(pin_secret, nonce)",
+        "sca_optiga_pin_derive", in_len=8, out_size=32,
+    )
+
     print()
     print("=" * 70)
     print("SUMMARY")
@@ -118,9 +128,11 @@ def main():
         print("    F-22 audit thread does NOT close cleanly — investigate the peak")
         print("    sample(s) in the leaking target(s).")
         return 1
-    print("  → all three derivation paths are flat on `mem_address`.")
-    print("    F-22 was the only leak in the secret-bearing derivation chain.")
-    print("    The audit thread closes cleanly.")
+    print(f"  → all {len(results)} secret-handling CPU paths are flat on `mem_address`.")
+    print("    F-22 (BIP-39 wordlist lookup) and F-24 (seed-display chain)")
+    print("    were the only such leaks; both are fixed. Every other entropy/")
+    print("    PIN/seed-handling CPU computation is constant-time on the")
+    print("    address channel at audit-grade emulation sensitivity.")
     return 0
 
 

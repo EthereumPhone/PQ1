@@ -265,6 +265,55 @@ pub extern "C" fn sca_bootstrap_seed_from_bip39(seed_ptr: *const u8, out_ptr: *m
     }
 }
 
+/// Mirror of the OPTIGA PIN-verification CPU-side chain:
+/// `derive_pin_secret(pin) = kdf("optiga-pin-auth-v1", pin, 0)` →
+/// `hmac_sha256(pin_secret, FIXED_NONCE) → 32-byte tag`.
+///
+/// This is the CPU work that handles raw PIN bytes during every
+/// successful unlock. The 8 PIN bytes enter the function, flow through
+/// SHA-256 (kdf) and HMAC-SHA256 (auth tag), then the resulting 32-byte
+/// tag goes to the SE over SCP03 — the PIN itself never leaves the CPU
+/// in plain form, but during these two hash calls the PIN bytes ARE in
+/// CPU memory. A leak here would let an attacker EM-scoping the CPU
+/// during user unlock recover the 8-digit PIN, defeating the 10-attempt
+/// silicon lockout (no need to brute-force when you can read it
+/// directly).
+///
+/// Input: 8 B PIN at `pin_ptr`. Output: 32 B HMAC tag at `out_ptr`.
+/// TVLA varies the PIN bytes; nonce + domain are fixed at compile time.
+#[no_mangle]
+pub extern "C" fn sca_optiga_pin_derive(pin_ptr: *const u8, out_ptr: *mut u8) {
+    use sha2::Digest as _;
+    use hmac::Mac as _;
+
+    // SAFETY: harness passes 8 B PIN + 32 B output buffer.
+    let pin: &[u8; 8] = unsafe { &*(pin_ptr as *const [u8; 8]) };
+
+    // Step 1: derive_pin_secret(pin) = SHA-256("optiga-pin-auth-v1" || pin || [0])
+    const PIN_AUTH_DOMAIN: &[u8] = b"optiga-pin-auth-v1";
+    let mut h = sha2::Sha256::new();
+    h.update(PIN_AUTH_DOMAIN);
+    h.update(pin);
+    h.update([0u8]);
+    let pin_secret_bytes: [u8; 32] = h.finalize().into();
+
+    // Step 2: HMAC-SHA256(pin_secret, FIXED_NONCE). The actual production
+    // nonce is a 16-byte TRNG output that's fresh per call — fixing it
+    // here ensures the TVLA isolates the PIN's contribution (otherwise
+    // the nonce dominates the leakage signal).
+    const FIXED_NONCE: [u8; 16] = *b"sca-fixed-nonce.";
+    type HmacSha256 = hmac::Hmac<sha2::Sha256>;
+    let mut mac = <HmacSha256 as hmac::Mac>::new_from_slice(&pin_secret_bytes).unwrap();
+    mac.update(&FIXED_NONCE);
+    let tag: [u8; 32] = mac.finalize().into_bytes().into();
+
+    unsafe {
+        for (i, &b) in tag.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+    }
+}
+
 /// Mirror of `pqsigner_domain::slot_master_entropy_from_bip39` for the
 /// `account_index == 0` path (the single-account formula that 99 %+ of
 /// users hit). A single `kdf_sha256` call over the seed. TVLA varies
@@ -404,6 +453,9 @@ static _KEEP_BOOTSTRAP_SEED: extern "C" fn(*const u8, *mut u8) =
 #[used]
 static _KEEP_SLOT_MASTER: extern "C" fn(*const u8, *mut u8) =
     sca_slot_master_entropy_from_bip39;
+#[used]
+static _KEEP_OPTIGA_PIN_DERIVE: extern "C" fn(*const u8, *mut u8) =
+    sca_optiga_pin_derive;
 
 // BIP-39 wordlist included verbatim from the production crate. The bip39
 // crate uses `hmac = { workspace = true }` which is unreachable from this
@@ -637,6 +689,7 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_SLHDSA_SEED);
     core::hint::black_box(&_KEEP_BOOTSTRAP_SEED);
     core::hint::black_box(&_KEEP_SLOT_MASTER);
+    core::hint::black_box(&_KEEP_OPTIGA_PIN_DERIVE);
     loop {
         cortex_m::asm::nop();
     }
