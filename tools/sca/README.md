@@ -975,6 +975,120 @@ digit-percent of `derive_keypair_from_entropy`'s overall cost
 (dominated by SPHINCS+C10 keygen at ~10 s) and called once per
 first-unlock. Acceptable.
 
+## BIP-39 seed-DISPLAY leakage (seed-wizard path) — F-24
+
+F-22 closed the wordlist-lookup leak in the seed-derivation hot path
+(`to_seed`). The same `WORDLIST[idx]` access pattern recurs in the
+**seed-wizard's word DISPLAY path** during provisioning:
+`secure/src/ui/seed_wizard.rs::render_mnemonic_page` shows each of the
+24 mnemonic words to the user so they can write them down. The leak
+chain has five stages, only some of which are firmware-fixable.
+
+### F-24 — Seed-wizard word DISPLAY leaks the mnemonic via five chained channels — **CPU-side stages A-D FIXED; stage E is hardware territory (accepted)**
+
+The display path for each word goes through:
+
+| Stage | Where | Channel | Firmware-fixable? |
+|---|---|---|---|
+| A | `m.word(idx)` returns `&'static str` at `WORDLIST_BASE + indices[idx] * 8` | `mem_address` | **YES — FIXED** via `Mnemonic::word_bytes` using F-22's `ct_load_word` |
+| B | `as_bytes()` follows fat-pointer to scattered flash | `mem_address` | YES — closed by A (constant-time scan returns bytes directly) |
+| C | `copy_from_slice(&wb[..max])` reads flash bytes | `mem_address` | YES — closed by A |
+| D | `embedded_graphics::Text::draw` calls `MonoFont::glyph(char)` for each rendered char | `mem_address` | **YES — FIXED** via `ui::secret_text::render_secret_row` (96-entry constant-time glyph scan, `core::hint::black_box` barriers) |
+| E | OLED itself broadcasts the rendered framebuffer to the user | mixed channels (see below) | **mostly NO at firmware level — see breakdown** |
+
+**Stage E breakdown** — the original "OLED emission" framing oversimplifies.
+The OLED has FOUR distinguishable side-channels with very different
+mitigation paths:
+
+1. **Optical emission (innate).** The OLED is designed to be visible.
+   Anyone with line of sight (camera, security camera, telescope,
+   reflection off a window) reads the words. There is no firmware fix
+   for "the screen showing the words to a person looking at it" — the
+   device is showing the words to the user on purpose. **Mitigation:
+   physical privacy during provisioning (user's responsibility);
+   off-light room or screen shroud for the most-paranoid users.**
+   For most threat models this is the dominant attack against the
+   display path.
+
+2. **Driver-IC EM emission (hardware-addressable).** The SSD1306 (or
+   similar) controller switches gate drivers at MHz rates. Each pixel
+   transition radiates a small RF signature in the 1-100 MHz band.
+   A near-field probe positioned at the OLED can recover the
+   per-pixel state — classic TEMPEST.
+   **Mitigation: PCB-level shielding (Faraday cage around the OLED
+   module, ground plane underneath, optional ferrite-bead choke on
+   the controller's supply pin).** Trezor's T3W1 implements exactly
+   this with a metal shield over the display module. **NOT a firmware
+   fix.** Tracked separately as a hardware-design item.
+
+3. **Power-supply ripple (hardware-addressable).** Lit-pixel count
+   modulates the OLED's current draw, which modulates the supply
+   rail. Coupling caps + power-line probing recover the lit-pixel
+   count. **Mitigation: dedicated linear regulator + bulk caps for
+   the OLED's supply rail, isolated from MCU supply.** Standard
+   hardware-security practice. **NOT a firmware fix.**
+
+4. **I2C/SPI bus EM emission (hardware OR firmware-addressable).**
+   The framebuffer bytes shift from MCU to OLED over a serial bus.
+   Each toggle radiates. Near-field probing of the bus traces or the
+   cable reveals the framebuffer.
+   - **Hardware mitigation**: shielded twisted-pair on the bus,
+     ground plane under the traces, board layout that keeps the bus
+     short.
+   - **Firmware mitigation**: **decoy frames**. Render the real
+     mnemonic interleaved with N=4-8 valid-but-fake mnemonics at high
+     refresh rate. User sees the real one via persistence-of-vision
+     (e.g., real frame at 90% duty, decoy frame at 10% — eye
+     averages, picks the dominant). The bus signature is the average
+     of N+1 frames so the real one isn't distinguishable. Cost:
+     ~4-6 hr engineering + visible flicker that some users find
+     unreadable. **Not implemented.** The bus channel is much
+     weaker than the optical channel for the realistic threat model
+     (camera attacker), so we accept this residual for now.
+   - **Firmware mitigation 2**: constant-pixel-count encoding. XOR
+     a fixed-but-different complement into each word's bitmap so
+     the lit-pixel count is identical regardless of content. Closes
+     the power-supply-modulation channel. Hurts UX (background
+     "noise" pixels). **Not implemented.**
+
+**What the F-24 stages A-D fix actually closes (audit threat model):**
+the attacker who can scope the **CPU** but not the **screen**. Rare
+class — typically a remote EM rig with line-of-sight to the device
+blocked. For this class our fix is complete: the CPU executes in
+constant-time regardless of which words are being rendered, so the
+trace doesn't carry the secret.
+
+**What stages A-D do NOT defend against**:
+- Optical observer (camera) — physical privacy required.
+- Near-field probe on OLED module — hardware shielding required.
+- Power-rail probe — hardware supply isolation required.
+- Bus-trace EM — hardware shielding OR firmware decoy frames.
+
+**Implementation references**:
+- `bip39/src/lib.rs::Mnemonic::word_bytes` — stage A-C fix (constant-
+  time wordlist scan, byte-identical to the F-22 fix in `to_seed`).
+- `secure/src/ui/secret_text.rs::render_secret_row` — stage D fix.
+- `secure/src/ui/oled.rs::Display::flush_with_secret_rows` — mixed
+  rendering glue used by `seed_wizard::render_mnemonic_page`.
+- `secure/build.rs::generate_font_flat` — compile-time extraction of
+  the FONT_5X8 glyph table into a flat `[[u8; 5]; 96]`.
+- `secure/assets/font_5x8.raw` — vendored from embedded-graphics
+  v0.8.2 (MIT); see `secure/assets/font_5x8.LICENSE`.
+
+**Verification**:
+- `ct_glyph_col_recovers_known_glyphs` — asserts the CT scan
+  reproduces FONT_5X8 byte-for-byte.
+- `render_secret_row_writes_expected_columns` — asserts a row render
+  produces the expected framebuffer column-bytes.
+- `cargo test -p sphincs-tz-secure --bins`: 1837/1837 pass.
+- Visual: `make play-hw-display` (when board is connected) renders
+  the seed-wizard pages; user can confirm the displayed words look
+  identical to the pre-F-24-D output.
+
+**Cost**: ~1.5 ms per word-row × ≤3 secret rows per page × 8 pages =
+≤36 ms total added latency during full 24-word provisioning. Once-per-
+wallet operation, human-paced; negligible.
+
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 
 `make -C tools/sca c10v` builds `sca-c10v-target` (a thin `#[no_mangle]` wrapper
