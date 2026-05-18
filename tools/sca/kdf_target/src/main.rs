@@ -191,6 +191,100 @@ pub extern "C" fn sca_hmac_sha512_kdf(seed_ptr: *const u8, out_ptr: *mut u8) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Secret-bearing derivation paths (audit follow-up to F-22).
+//
+// Each function mirrors a `pqsigner_domain` call that takes the 64-byte
+// `bip39_seed` (the SECRET output of PBKDF2-HMAC-SHA512) and feeds it
+// into one or two SHA-256 invocations to derive downstream key material.
+// The `sha2::Sha256` backend on thumbv8m is the same bitsliced soft
+// implementation that `sca_hmac_sha512_kdf` and `sca_aes256_encrypt_block`
+// have already characterised as constant-time on `mem_address`. We
+// expect these targets to come out flat — but unless the harness
+// actually checks, "expected to be clean" is not a finding.
+//
+// Run via `make bip39-leak` (the same harness runs all the secret-bearing
+// derivation TVLAs in series).
+// ---------------------------------------------------------------------------
+
+/// Mirror of `pqsigner_domain::kdf_sha256(domain, input, index)`:
+/// `SHA-256(domain || input || [index])`. Used by the three derivation
+/// targets below. Kept inline so the cost is the same as the production
+/// call (the wrapper has a `#[must_use]` + thin call).
+#[inline(always)]
+fn sca_kdf_sha256(domain: &[u8], input: &[u8], index: u8) -> [u8; 32] {
+    use sha2::Digest as _;
+    let mut h = sha2::Sha256::new();
+    h.update(domain);
+    h.update(input);
+    h.update([index]);
+    h.finalize().into()
+}
+
+/// Mirror of `pqsigner_domain::slhdsa_seed_from_bip39`. Takes the 64-byte
+/// `bip39_seed` (the secret) and runs two `kdf_sha256` calls to derive
+/// the 48-byte SLH-DSA seed (32 B `sk_seed` ‖ 16 B `pk_seed`). TVLA
+/// varies the seed; both SHA-256 invocations execute on the secret.
+///
+/// Input: 64 B `bip39_seed` at `seed_ptr`. Output: 48 B at `out_ptr`.
+#[no_mangle]
+pub extern "C" fn sca_slhdsa_seed_from_bip39(seed_ptr: *const u8, out_ptr: *mut u8) {
+    // SAFETY: harness maps 64 B at seed_ptr and 48 B at out_ptr.
+    let seed: &[u8; 64] = unsafe { &*(seed_ptr as *const [u8; 64]) };
+    let chunk0 = sca_kdf_sha256(b"sphincsc7-sk-seed", seed, 0);
+    let chunk1 = sca_kdf_sha256(b"sphincsc7-pk-seed", seed, 0);
+    unsafe {
+        for (i, &b) in chunk0.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+        for (i, &b) in chunk1.iter().take(16).enumerate() {
+            core::ptr::write_volatile(out_ptr.add(32 + i), b);
+        }
+    }
+}
+
+/// Mirror of `pqsigner_domain::bootstrap_seed_from_bip39`. Same shape
+/// as the SLH-DSA derivation but with different domain tags so the
+/// bootstrap signer's keypair is independent of the account-0 wallet
+/// keypair. TVLA varies the seed.
+///
+/// Input: 64 B `bip39_seed` at `seed_ptr`. Output: 48 B at `out_ptr`.
+#[no_mangle]
+pub extern "C" fn sca_bootstrap_seed_from_bip39(seed_ptr: *const u8, out_ptr: *mut u8) {
+    // SAFETY: harness maps 64 B at seed_ptr and 48 B at out_ptr.
+    let seed: &[u8; 64] = unsafe { &*(seed_ptr as *const [u8; 64]) };
+    let chunk0 = sca_kdf_sha256(b"pqwallet-c7-bootstrap-sk-seed", seed, 0);
+    let chunk1 = sca_kdf_sha256(b"pqwallet-c7-bootstrap-pk-seed", seed, 0);
+    unsafe {
+        for (i, &b) in chunk0.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+        for (i, &b) in chunk1.iter().take(16).enumerate() {
+            core::ptr::write_volatile(out_ptr.add(32 + i), b);
+        }
+    }
+}
+
+/// Mirror of `pqsigner_domain::slot_master_entropy_from_bip39` for the
+/// `account_index == 0` path (the single-account formula that 99 %+ of
+/// users hit). A single `kdf_sha256` call over the seed. TVLA varies
+/// the seed.
+///
+/// Input: 64 B `bip39_seed` at `seed_ptr`. Output: 32 B at `out_ptr`.
+#[no_mangle]
+pub extern "C" fn sca_slot_master_entropy_from_bip39(
+    seed_ptr: *const u8, out_ptr: *mut u8,
+) {
+    // SAFETY: harness maps 64 B at seed_ptr and 32 B at out_ptr.
+    let seed: &[u8; 64] = unsafe { &*(seed_ptr as *const [u8; 64]) };
+    let chunk = sca_kdf_sha256(b"pqwallet-slot-master", seed, 0);
+    unsafe {
+        for (i, &b) in chunk.iter().enumerate() {
+            core::ptr::write_volatile(out_ptr.add(i), b);
+        }
+    }
+}
+
 /// SPHINCS+C10 keygen — `SigningKey::keygen(sk_seed, pk_seed)`. Input: a
 /// 32-byte `sk_seed` (the secret); `pk_seed` is fixed at compile time.
 /// Output: the 16-byte `pk_root` written to `out_ptr`. TVLA varies sk_seed.
@@ -301,6 +395,15 @@ static _KEEP_BIP39_WORDLIST_LOOKUP: extern "C" fn(*const u8, *mut u8) =
 #[used]
 static _KEEP_BIP39_WORDLIST_LOOKUP_CT: extern "C" fn(*const u8, *mut u8) =
     sca_bip39_wordlist_lookup_ct;
+#[used]
+static _KEEP_SLHDSA_SEED: extern "C" fn(*const u8, *mut u8) =
+    sca_slhdsa_seed_from_bip39;
+#[used]
+static _KEEP_BOOTSTRAP_SEED: extern "C" fn(*const u8, *mut u8) =
+    sca_bootstrap_seed_from_bip39;
+#[used]
+static _KEEP_SLOT_MASTER: extern "C" fn(*const u8, *mut u8) =
+    sca_slot_master_entropy_from_bip39;
 
 // BIP-39 wordlist included verbatim from the production crate. The bip39
 // crate uses `hmac = { workspace = true }` which is unreachable from this
@@ -531,6 +634,9 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_BIP39_WORD_INDICES);
     core::hint::black_box(&_KEEP_BIP39_WORDLIST_LOOKUP);
     core::hint::black_box(&_KEEP_BIP39_WORDLIST_LOOKUP_CT);
+    core::hint::black_box(&_KEEP_SLHDSA_SEED);
+    core::hint::black_box(&_KEEP_BOOTSTRAP_SEED);
+    core::hint::black_box(&_KEEP_SLOT_MASTER);
     loop {
         cortex_m::asm::nop();
     }
