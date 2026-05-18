@@ -257,12 +257,42 @@ impl Mnemonic {
     }
 
     /// Look up the i-th word as a `&'static str` from the wordlist.
+    ///
+    /// **Address-leaks the index** (`WORDLIST[i].as_bytes()` loads from
+    /// flash at an address that encodes `i`). Safe for callers where `i`
+    /// is public (e.g. [`measured_boot`]'s firmware-hash word display
+    /// where the hash is signed and visible by design). For SECRET
+    /// indices — the master mnemonic in the provisioning wizard —
+    /// prefer [`Self::word_bytes`] which uses the F-22 constant-time
+    /// scan.
     #[must_use]
     pub fn word(&self, i: usize) -> &'static str {
         WORDLIST[self.indices[i] as usize]
     }
 
+    /// Constant-time word lookup: copy the i-th word's bytes into the
+    /// caller's `out` buffer (zero-padded to 8 bytes) and return the
+    /// actual length (3-8). No load or store address depends on the
+    /// secret index — uses the same [`ct_load_word`] scan that closes
+    /// F-22 in [`Self::to_seed`].
+    ///
+    /// `out` is 8 bytes (the max BIP-39 English word length); the
+    /// fixed-stride layout is what makes the scan address-deterministic.
+    /// Callers that want a `&str` view can do
+    /// `core::str::from_utf8(&out[..len as usize])` after — the SCAN
+    /// itself is constant-time, the post-scan handling depends on the
+    /// caller's secrecy stance.
+    pub fn word_bytes(&self, i: usize, out: &mut [u8; MAX_WORD_BYTES]) -> u8 {
+        let (bytes, len) = ct_load_word(self.indices[i]);
+        *out = bytes;
+        len
+    }
+
     /// Iterate the 24 words as static strings.
+    ///
+    /// **Same address-leak caveat as [`Self::word`].** For secret
+    /// indices, iterate `0..WORD_COUNT` and call [`Self::word_bytes`]
+    /// per index.
     pub fn words(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.indices.iter().map(|&i| WORDLIST[i as usize])
     }

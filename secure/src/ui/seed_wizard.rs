@@ -24,7 +24,9 @@
 use super::{display, input, show_status, Button, Press, DISPLAY_COLS, DISPLAY_ROWS};
 use crate::rng;
 use crate::timeout;
-use sphincs_tz_bip39::{lookup_prefix, Mnemonic, PrefixLookup, WORDLIST, WORD_COUNT};
+use sphincs_tz_bip39::{
+    lookup_prefix, Mnemonic, PrefixLookup, MAX_WORD_BYTES, WORDLIST, WORD_COUNT,
+};
 use zeroize::Zeroize;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -177,13 +179,16 @@ fn render_mnemonic_page(m: &Mnemonic, page: usize) {
     title[10] = b'0' + TOTAL_PAGES as u8;
     d.draw_line(0, super::ascii_str(&title));
 
-    // Three word rows: "12 abandon"
+    // Three word rows: "12 abandon". Use the constant-time `word_bytes`
+    // API (F-22 follow-up): no load address depends on the secret
+    // `indices[word_idx]`.
     for slot in 0..WORDS_PER_PAGE {
         let word_idx = page * WORDS_PER_PAGE + slot;
         if word_idx >= WORD_COUNT {
             break;
         }
-        let word = m.word(word_idx);
+        let mut wb = [0u8; MAX_WORD_BYTES];
+        let wlen = m.word_bytes(word_idx, &mut wb) as usize;
         let mut row = [b' '; DISPLAY_COLS];
         // 1-based human numbering, right-aligned in 2 cols.
         let n = (word_idx + 1) as u8;
@@ -192,8 +197,7 @@ fn render_mnemonic_page(m: &Mnemonic, page: usize) {
         }
         row[1] = b'0' + (n % 10);
         row[2] = b' ';
-        let wb = word.as_bytes();
-        let max = core::cmp::min(wb.len(), DISPLAY_COLS - 3);
+        let max = core::cmp::min(wlen, DISPLAY_COLS - 3);
         row[3..3 + max].copy_from_slice(&wb[..max]);
         d.draw_line(slot + 1, super::ascii_str(&row));
     }
