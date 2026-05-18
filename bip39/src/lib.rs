@@ -49,6 +49,117 @@ const BITS_PER_WORD: usize = 11;
 /// PBKDF2 iteration count required by BIP-39.
 const PBKDF2_ITERS: u32 = 2048;
 
+/// Maximum byte length of any English BIP-39 word.
+///
+/// The longest words ("abandon", "absurd", "ability", ..., "wrestle") max
+/// out at 8 bytes; this is used as the fixed stride for the constant-time
+/// flat wordlist (`WORDLIST_FLAT` / `WORDLIST_LENS`). Per-word lengths are
+/// in [3, 8].
+pub const MAX_WORD_BYTES: usize = 8;
+
+/// Constant-time flat representation of the BIP-39 wordlist.
+///
+/// `WORDLIST` is `&[&str; 2048]` — each entry is a fat pointer to a string
+/// elsewhere in `.rodata`. Reading `WORDLIST[idx].as_bytes()` therefore
+/// performs TWO address-keyed loads:
+///   1. `WORDLIST + idx * sizeof(&str)` — sequential if you iterate
+///      sequentially over `idx`, but **index-keyed** if you fetch a
+///      single entry whose index is a secret.
+///   2. The (ptr, len) fat-pointer dereferences a flash region whose
+///      address ALSO depends on `idx` (each word is at a different
+///      `.rodata` offset).
+///
+/// `WORDLIST_FLAT[idx]` is a fixed-stride 8-byte slot (zero-padded to 8
+/// bytes) and `WORDLIST_LENS[idx]` is a u8. Both arrays have predictable
+/// `&table + idx * stride` addresses — when you iterate sequentially
+/// over `idx` to perform a constant-time scan, the access pattern is
+/// fully deterministic regardless of which entry matches the secret
+/// `target_idx`. See [`Mnemonic::to_seed`] for the consumer + the
+/// `tools/sca/leakage_bip39.py` F-22 regression harness for the
+/// rationale.
+const fn flatten_wordlist() -> ([[u8; MAX_WORD_BYTES]; 2048], [u8; 2048]) {
+    let mut flat = [[0u8; MAX_WORD_BYTES]; 2048];
+    let mut lens = [0u8; 2048];
+    let mut i = 0;
+    while i < 2048 {
+        let w = WORDLIST[i].as_bytes();
+        let mut j = 0;
+        while j < w.len() {
+            flat[i][j] = w[j];
+            j += 1;
+        }
+        lens[i] = w.len() as u8;
+        i += 1;
+    }
+    (flat, lens)
+}
+
+const FLATTENED: ([[u8; MAX_WORD_BYTES]; 2048], [u8; 2048]) = flatten_wordlist();
+/// Fixed-stride 8-byte representation of each wordlist entry, zero-padded.
+/// See [`flatten_wordlist`] for the rationale (F-22 fix).
+pub static WORDLIST_FLAT: [[u8; MAX_WORD_BYTES]; 2048] = FLATTENED.0;
+/// Per-entry byte length corresponding to [`WORDLIST_FLAT`].
+pub static WORDLIST_LENS: [u8; 2048] = FLATTENED.1;
+
+/// Constant-time `target == entry` comparison for u16 — returns `0xFF`
+/// iff equal, `0x00` otherwise, with no secret-dependent branches.
+#[inline(always)]
+fn ct_eq_u16(a: u16, b: u16) -> u8 {
+    // x = 0 iff a == b. (x | -x) >> 31 = 0 iff x == 0, else 1.
+    let x: u32 = a as u32 ^ b as u32;
+    let nz: u32 = (x | x.wrapping_neg()) >> 31; // 0 iff eq, 1 iff diff
+    (nz as u8).wrapping_sub(1) // 0xFF iff eq, 0x00 iff diff
+}
+
+/// Constant-time `a < b` for u8 — returns `0xFF` iff `a < b`, `0x00` else.
+#[inline(always)]
+fn ct_lt_u8(a: u8, b: u8) -> u8 {
+    // (a - b) >> 7 in two's-complement = 1 iff a < b (sign bit set).
+    let r: i16 = (a as i16) - (b as i16);
+    let bit = ((r >> 15) & 1) as u8; // 1 iff a < b
+    bit.wrapping_neg() // 0xFF iff a < b, 0x00 else
+}
+
+/// Constant-time wordlist lookup: scan all 2048 entries, mask-and-OR the
+/// one matching `target_idx`. Writes the (zero-padded) 8-byte word + its
+/// length. Closes the F-22 leak (see [`flatten_wordlist`]).
+///
+/// `target_idx` is assumed in `[0, 2048)`. Caller guarantees that via
+/// the `Mnemonic::indices` invariant.
+///
+/// **`core::hint::black_box` barriers** are critical: without them LLVM
+/// notices `entry[b] & mask` is non-zero only at the matching index and
+/// "optimises" the 2048-entry scan into a direct `WORDLIST_FLAT[target_idx]`
+/// lookup — defeating the entire constant-time property. The barriers
+/// force the compiler to treat the mask, the entry pointer, and the
+/// accumulator as opaque values that must flow through every iteration.
+/// Verified by re-running `make -C tools/sca bip39-leak` and confirming
+/// `max|t| ≤ 4.5` on the post-fix `sca_bip39_wordlist_lookup_ct` probe.
+#[inline(never)]
+fn ct_load_word(target_idx: u16) -> ([u8; MAX_WORD_BYTES], u8) {
+    use core::hint::black_box;
+    let mut bytes = [0u8; MAX_WORD_BYTES];
+    let mut len: u8 = 0;
+    let mut entry_idx: u16 = 0;
+    while entry_idx < 2048 {
+        // Force LLVM to materialise each iteration's mask / loads / OR
+        // separately — without these barriers it folds the scan into a
+        // direct index-keyed lookup.
+        let entry_idx_obf = black_box(entry_idx);
+        let entry = &WORDLIST_FLAT[entry_idx_obf as usize];
+        let entry_len = WORDLIST_LENS[entry_idx_obf as usize];
+        let mask = black_box(ct_eq_u16(entry_idx_obf, target_idx));
+        let mut b = 0;
+        while b < MAX_WORD_BYTES {
+            bytes[b] = black_box(bytes[b] | (entry[b] & mask));
+            b += 1;
+        }
+        len = black_box(len | (entry_len & mask));
+        entry_idx += 1;
+    }
+    (bytes, len)
+}
+
 /// 24 BIP-39 word indices into the English wordlist.
 ///
 /// Wrapped so the only way to construct one is via [`Mnemonic::from_entropy`],
@@ -181,18 +292,81 @@ impl Mnemonic {
     /// different seed and brick recovery.
     #[must_use]
     pub fn to_seed(&self, passphrase: &str) -> [u8; SEED_BYTES] {
-        // Worst case password is 24 × 8 (longest BIP-39 word) + 23 spaces
-        // = 215 bytes, well under 256.
+        // F-22 constant-time password assembly. Three phases, all
+        // value-only — no address-keyed loads or stores depend on the
+        // secret indices.
+        //
+        // Phase 1: constant-time wordlist resolution.
+        //   For each of the 24 indices, scan all 2048 entries of
+        //   WORDLIST_FLAT, mask-and-OR the matching one. After this
+        //   loop, words[i] holds the i-th word's bytes (zero-padded
+        //   to 8) and lens[i] holds its length, with NO load-address
+        //   dependence on the secret indices.
+        let mut words = [[0u8; MAX_WORD_BYTES]; WORD_COUNT];
+        let mut lens = [0u8; WORD_COUNT];
+        for i in 0..WORD_COUNT {
+            let (w, l) = ct_load_word(self.indices[i]);
+            words[i] = w;
+            lens[i] = l;
+        }
+
+        // Phase 2: cumulative offsets in the password buffer.
+        //   offsets[i] = sum(lens[0..i]) + i (one space per prior word).
+        //   Pure arithmetic on lens — VALUES leak (length sum is observable
+        //   via PBKDF2's bit-length-of-password padding byte; ~7 bits worst
+        //   case, vastly smaller than the 264-bit F-22 leak this fix
+        //   closes; tracked as a separate follow-up).
+        let mut offsets = [0u16; WORD_COUNT];
+        let mut i = 1;
+        while i < WORD_COUNT {
+            offsets[i] = offsets[i - 1] + lens[i - 1] as u16 + 1;
+            i += 1;
+        }
+        let mut password_len: u16 = WORD_COUNT as u16 - 1; // 23 spaces
+        let mut j = 0;
+        while j < WORD_COUNT {
+            password_len += lens[j] as u16;
+            j += 1;
+        }
+
+        // Phase 3: constant-time password write.
+        //   For each output byte position p in 0..MAX_PASSWORD_LEN, scan
+        //   all (word, byte_in_word) candidates and mask-OR the right
+        //   byte. Every write is to `password[p]` at a fixed loop-counter-
+        //   derived offset — no secret-keyed store addresses. Word and
+        //   offset arrays are stack-resident at fixed addresses.
+        //
+        //   Cost: 24 words × 8 max-bytes × 215 max-positions ≈ 41 K
+        //   inner iterations; each is ~10 instructions; total ~0.4 M
+        //   cycles, < 5 ms on Cortex-M33 — acceptable for a once-per-
+        //   unlock op.
+        const MAX_PASSWORD_LEN: usize =
+            WORD_COUNT * MAX_WORD_BYTES + (WORD_COUNT - 1); // 24*8 + 23 = 215
         let mut password = [0u8; 256];
-        let mut password_len = 0usize;
-        for (i, w) in self.words().enumerate() {
-            if i > 0 {
-                password[password_len] = b' ';
-                password_len += 1;
+        let mut p = 0;
+        while p < MAX_PASSWORD_LEN {
+            let mut acc: u8 = 0;
+            let mut w = 0;
+            while w < WORD_COUNT {
+                let off = offsets[w];
+                // Word body bytes: position p == off + b, for b in [0, lens[w]).
+                let mut b = 0;
+                while b < MAX_WORD_BYTES {
+                    let in_range = ct_lt_u8(b as u8, lens[w]);
+                    let pos_match = ct_eq_u16(p as u16, off + b as u16);
+                    acc |= words[w][b] & in_range & pos_match;
+                    b += 1;
+                }
+                // Inter-word space: position p == off + lens[w] iff w is
+                // not the last word. ct_lt(w, WORD_COUNT-1) ensures the
+                // final word has no trailing space.
+                let is_not_last = ct_lt_u8(w as u8, (WORD_COUNT - 1) as u8);
+                let space_pos = ct_eq_u16(p as u16, off + lens[w] as u16);
+                acc |= b' ' & is_not_last & space_pos;
+                w += 1;
             }
-            let wb = w.as_bytes();
-            password[password_len..password_len + wb.len()].copy_from_slice(wb);
-            password_len += wb.len();
+            password[p] = acc;
+            p += 1;
         }
 
         // salt = "mnemonic" || passphrase
@@ -208,7 +382,12 @@ impl Mnemonic {
         let salt_len = SALT_PREFIX.len() + pp.len();
 
         let mut out = [0u8; SEED_BYTES];
-        pbkdf2_hmac_sha512(&password[..password_len], &salt[..salt_len], PBKDF2_ITERS, &mut out);
+        pbkdf2_hmac_sha512(
+            &password[..password_len as usize],
+            &salt[..salt_len],
+            PBKDF2_ITERS,
+            &mut out,
+        );
 
         // password reveals the mnemonic; salt may carry a user passphrase.
         password.zeroize();

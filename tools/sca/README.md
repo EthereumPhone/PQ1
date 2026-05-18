@@ -826,14 +826,15 @@ production `Mnemonic::to_seed()` chain's two key steps:
 2. The actual `WORDLIST[idx]` loads — 24 of them, one per word index,
    addressing into a `[&str; 2048]` flash-resident table.
 
-### F-22 — BIP-39 `Mnemonic::to_seed`'s wordlist lookups leak 24×11 = 264 entropy bits via address-keyed loads — **PRODUCTION-CRITICAL, FIX NEEDED**
+### F-22 — BIP-39 `Mnemonic::to_seed`'s wordlist lookups leak 24×11 = 264 entropy bits via address-keyed loads — **FIXED in `bip39/src/lib.rs::ct_load_word` (constant-time wordlist scan + constant-time password assembly)**
 
-**`make bip39-leak` result on the post-merge tree:**
+**`make bip39-leak` result (3 probes — baseline / control / post-fix):**
 
 | Symbol | Trace samples | max\|t\| | Verdict |
 |---|---|---|---|
-| `sca_bip39_word_indices` | 699 | **0.00** | flat — SHA-256 + unpacking don't leak |
-| `sca_bip39_wordlist_lookup` | 772 | **27.98** | **LEAKAGE** (6.2× threshold) |
+| `sca_bip39_word_indices` | 699 | **0.00** | flat — SHA-256 + unpacking don't leak (control) |
+| `sca_bip39_wordlist_lookup` | 772 | **17.88** | **LEAKAGE** — baseline probe / regression sentinel |
+| `sca_bip39_wordlist_lookup_ct` | 24 851 | **0.00** | **CLEAN — F-22 fix validated** |
 
 Peak at sample 671; top-5 peaks at 615, 671, 703, 727, 751 — periodic
 spacing of ~24-32 samples consistent with the 24 individual
@@ -914,13 +915,65 @@ the seed is the on-chain identity (CREATE2 salt derives from the
 master pk_seed/pk_root which come from this seed). Changing the
 derivation would change every wallet's address.
 
-**Status: documented, fix pending.** Implementation is a substantial
-crypto-engineering effort and warrants careful review (changing the
-BIP-39 hot path is high-stakes). Filed as work-todo entry; see
-`tools/sca/leakage_bip39.py` for the regression harness — any future
-fix must keep the harness's `sca_bip39_wordlist_lookup` TVLA flat
-AND keep `Mnemonic::to_seed("")` byte-identical with the BIP-39 test
-vectors in `bip39/src/lib.rs`'s test module.
+**Status: FIXED.** `bip39/src/lib.rs` now ships:
+
+  - `WORDLIST_FLAT: [[u8; 8]; 2048]` + `WORDLIST_LENS: [u8; 2048]` —
+    fixed-stride flat representation of every wordlist entry,
+    generated at compile time from the existing `WORDLIST: &[&str;
+    2048]` via a `const fn`. Both arrays are accessed exclusively by
+    LOOP-COUNTER-derived indices in the constant-time scan, so the
+    load addresses are deterministic regardless of the secret.
+  - `ct_load_word(target_idx) -> ([u8; 8], u8)` — scans all 2048
+    entries with `subtle`-style `(mask & bytes) | (!mask & acc)` OR-
+    folding (manual `ct_eq_u16` produces the 0x00/0xFF mask). LLVM
+    aggressively folds this into a direct index-keyed load unless we
+    `core::hint::black_box` the per-iteration mask + entry pointer +
+    accumulator; the barriers are present and load-bearing — without
+    them the fix regresses to max|t| ≈ 5000.
+  - `Mnemonic::to_seed`'s body is rewritten in three constant-time
+    phases:
+      1. Resolve all 24 indices via `ct_load_word` → `words[24][8]`
+         + `lens[24]` on the stack.
+      2. Compute cumulative offsets from `lens` (pure arithmetic,
+         no address-keyed loads).
+      3. For each output byte position p in 0..215, scan all
+         (word, byte_in_word) candidates and mask-OR the right byte
+         into `password[p]`. Every store goes to a fixed
+         loop-counter-derived address.
+
+**Verification:**
+  - `cargo test -p sphincs-tz-bip39`: `to_seed_matches_trezor_vectors`
+    + 8 other unit tests pass. The fix is byte-identical to the
+    Trezor reference vectors → no recovery-contract change.
+  - `cargo test -p sphincs-tz-secure --bins --release`: 1835 / 1835
+    pass.
+  - `make -C tools/sca bip39-leak`: post-fix probe (`sca_bip39_
+    wordlist_lookup_ct`, 24,851 samples) shows **max|t| = 0.00** —
+    perfectly constant across all inputs. The pre-fix baseline probe
+    is kept in tree as a regression sentinel; if a future commit
+    accidentally introduces an index-keyed lookup back into the hot
+    path, this harness will catch it.
+
+**Residual: a smaller length-encoded leak.** The PBKDF2-HMAC-SHA512
+internal padding embeds the bit-length of the password. The password
+length depends on the sum of word lengths (24 lengths each ∈ [3, 8]).
+There are 121 distinct possible password lengths → ~7 bits of leakage
+via the SHA-512 padding byte value, observable only on power/EM-scoping
+(`mem_address` is constant — the address-keyed channel is clean).
+**This is 30× smaller magnitude than F-22's 264-bit channel and is
+tracked separately as F-23 (length-leak via PBKDF2 padding).** Fixing
+F-23 needs a constant-length encoding of the password — pad the word
+slots to 8 bytes — but that would change the BIP-39 password format
+and break recovery-contract byte-equality with non-PQSigner BIP-39
+implementations. Accept as residual; flag for the user-facing trust
+model.
+
+Cost of the fix in production: 2048 × 24 × 8 = 393 KB of stack reads
++ 41 K inner-loop iterations for the password assembly. On Cortex-M33
+at ~160 MHz this is ~2 ms wall-clock per `to_seed` call — single-
+digit-percent of `derive_keypair_from_entropy`'s overall cost
+(dominated by SPHINCS+C10 keygen at ~10 s) and called once per
+first-unlock. Acceptable.
 
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 

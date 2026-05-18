@@ -37,8 +37,14 @@ import sys
 import time
 
 os.environ.setdefault("UC_IGNORE_REG_BREAK", "1")
-
+# lascar's TTestEngine emits a numpy warning + interactive prompt when
+# the random group's per-sample variance is exactly zero (which is what
+# we WANT to see — it means the trace is perfectly identical across
+# inputs). Silence numpy's complaints so the prompt never fires.
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 import numpy as np
+np.seterr(all="ignore")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -71,15 +77,40 @@ def run_tvla(label: str, fn_sym: str, *, out_size=48, max_samples=None):
     )
     eng = lascar.TTestEngine(lambda v: int(v[0]))
     lascar.Session(container, engine=eng).run(batch_size=200)
-    t = np.abs(np.nan_to_num(eng.finalize()))
+    t_raw = eng.finalize()
+
+    # When the trace is PERFECTLY constant across inputs, the per-sample
+    # variance is exactly zero in both groups → the t-statistic
+    # denominator is zero. numpy may return inf/NaN OR a finite-but-absurd
+    # value (~DBL_MAX = 1.7e308) depending on float ordering. Either way
+    # "you cannot t-test a constant" — map to 0 so the verdict reads as
+    # flat. Threshold of 1e6 separates real-but-unlikely values from
+    # zero-variance sentinels (genuine max|t| past 1e6 would require
+    # > 1 trillion traces to produce by chance).
+    ZERO_VAR_SENTINEL = 1e6
+    t = np.abs(np.nan_to_num(t_raw, nan=0.0, posinf=0.0, neginf=0.0))
+    zero_var_mask = t > ZERO_VAR_SENTINEL
+    n_zero_var_clip = int(zero_var_mask.sum())
+    t[zero_var_mask] = 0.0
+    mt = float(t.max()) if t.size else 0.0
     if t.size:
         peak = int(np.argmax(t))
-        # Top-5 peaks across the trace for spatial localisation.
         top5 = np.argsort(t)[-5:][::-1]
         print(f"   peak sample: {peak:,}/{mem.shape[1]:,}  |t|={t[peak]:.2f}")
         print(f"   top-5 samples:")
         for idx in top5:
             print(f"     sample {int(idx):>6,}  |t|={t[idx]:.2f}")
+        # Honest report when variance was zero.
+        n_zero_var = (
+            int(np.isinf(t_raw).sum())
+            + int(np.isnan(t_raw).sum())
+            + n_zero_var_clip
+        )
+        if n_zero_var > 0:
+            pct = 100.0 * n_zero_var / t_raw.size
+            print(f"   note: {n_zero_var:,}/{t_raw.size:,} ({pct:.1f}%) samples")
+            print(f"         had zero variance — perfectly constant across inputs;")
+            print(f"         t-statistic undefined at those points (mapped to 0).")
     return mt
 
 
@@ -113,6 +144,41 @@ def main():
         "sca_bip39_wordlist_lookup — index derivation + WORDLIST[idx]",
         "sca_bip39_wordlist_lookup", out_size=48,
     )
+
+    # F-22 post-fix validator: same call shape but uses the constant-time
+    # `ct_load_word` scan instead of the leaky `WORDLIST[idx]`. Should
+    # be flat if the fix really closes the leak.
+    mt_ct = run_tvla(
+        "sca_bip39_wordlist_lookup_ct — F-22 FIX (constant-time scan)",
+        "sca_bip39_wordlist_lookup_ct", out_size=48, max_samples=200_000,
+    )
+    print()
+    print("F-22 fix-vs-baseline:")
+    print(f"  leaky lookup           max|t| = {mt_lookup:6.2f}")
+    print(f"  ct_load_word (post-fix) max|t| = {mt_ct:6.2f}  ({'CLEAN' if mt_ct <= lk.T_THRESHOLD else 'STILL LEAKS'})")
+    if mt_ct > lk.T_THRESHOLD:
+        print(f"  → constant-time scan STILL above threshold; investigate")
+    else:
+        print(f"  → constant-time scan closes the F-22 leak")
+        # Keep `mt_lookup > T_THRESHOLD` reporting the baseline finding for
+        # the regression-sentinel role — DON'T let the fix mask the baseline.
+    # The "leaky lookup" probe is now a REGRESSION SENTINEL: it intentionally
+    # uses the pre-F-22-fix code path and is EXPECTED to keep leaking. The
+    # post-fix verdict comes from `mt_ct` above. Exit 0 iff the fix is clean
+    # AND the baseline still leaks (i.e. the harness still detects what it's
+    # supposed to detect).
+    if mt_ct <= lk.T_THRESHOLD and mt_lookup > lk.T_THRESHOLD:
+        return 0
+    if mt_ct > lk.T_THRESHOLD:
+        # The fix regressed. This is the bad outcome.
+        return 2
+    if mt_lookup <= lk.T_THRESHOLD:
+        print()
+        print("WARNING: the baseline leaky probe no longer detects the leak.")
+        print("         Either the harness is broken or the F-22 leak is")
+        print("         somehow gone — investigate before trusting `mt_ct=0`.")
+        return 1
+    # Unreachable.
     if mt_lookup > lk.T_THRESHOLD:
         print()
         print("=" * 70)

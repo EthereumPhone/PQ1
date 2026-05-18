@@ -298,6 +298,9 @@ static _KEEP_BIP39_WORD_INDICES: extern "C" fn(*const u8, *mut u8) = sca_bip39_w
 #[used]
 static _KEEP_BIP39_WORDLIST_LOOKUP: extern "C" fn(*const u8, *mut u8) =
     sca_bip39_wordlist_lookup;
+#[used]
+static _KEEP_BIP39_WORDLIST_LOOKUP_CT: extern "C" fn(*const u8, *mut u8) =
+    sca_bip39_wordlist_lookup_ct;
 
 // BIP-39 wordlist included verbatim from the production crate. The bip39
 // crate uses `hmac = { workspace = true }` which is unreachable from this
@@ -350,6 +353,109 @@ pub extern "C" fn sca_bip39_word_indices(entropy_ptr: *const u8, out_ptr: *mut u
         unsafe {
             core::ptr::write_volatile(out_ptr.add(i * 2), idx as u8);
             core::ptr::write_volatile(out_ptr.add(i * 2 + 1), (idx >> 8) as u8);
+        }
+    }
+}
+
+// F-22 constant-time wordlist scan — mirrors the post-fix
+// `bip39/src/lib.rs::ct_load_word`. Used by `sca_bip39_wordlist_lookup_ct`
+// below to validate that the production fix actually closes the leak.
+
+const MAX_WORD_BYTES: usize = 8;
+
+const fn flatten_wordlist() -> ([[u8; MAX_WORD_BYTES]; 2048], [u8; 2048]) {
+    let mut flat = [[0u8; MAX_WORD_BYTES]; 2048];
+    let mut lens = [0u8; 2048];
+    let mut i = 0;
+    while i < 2048 {
+        let w = wordlist::WORDLIST[i].as_bytes();
+        let mut j = 0;
+        while j < w.len() {
+            flat[i][j] = w[j];
+            j += 1;
+        }
+        lens[i] = w.len() as u8;
+        i += 1;
+    }
+    (flat, lens)
+}
+
+const FLAT_AND_LENS: ([[u8; MAX_WORD_BYTES]; 2048], [u8; 2048]) = flatten_wordlist();
+static WORDLIST_FLAT: [[u8; MAX_WORD_BYTES]; 2048] = FLAT_AND_LENS.0;
+static WORDLIST_LENS: [u8; 2048] = FLAT_AND_LENS.1;
+
+#[inline(always)]
+fn ct_eq_u16(a: u16, b: u16) -> u8 {
+    let x: u32 = a as u32 ^ b as u32;
+    let nz: u32 = (x | x.wrapping_neg()) >> 31;
+    (nz as u8).wrapping_sub(1)
+}
+
+#[inline(never)]
+fn ct_load_word(target_idx: u16) -> ([u8; MAX_WORD_BYTES], u8) {
+    use core::hint::black_box;
+    let mut bytes = [0u8; MAX_WORD_BYTES];
+    let mut len: u8 = 0;
+    let mut entry_idx: u16 = 0;
+    while entry_idx < 2048 {
+        let entry_idx_obf = black_box(entry_idx);
+        let entry = &WORDLIST_FLAT[entry_idx_obf as usize];
+        let entry_len = WORDLIST_LENS[entry_idx_obf as usize];
+        let mask = black_box(ct_eq_u16(entry_idx_obf, target_idx));
+        let mut b = 0;
+        while b < MAX_WORD_BYTES {
+            bytes[b] = black_box(bytes[b] | (entry[b] & mask));
+            b += 1;
+        }
+        len = black_box(len | (entry_len & mask));
+        entry_idx += 1;
+    }
+    (bytes, len)
+}
+
+/// **F-22 POST-FIX VALIDATOR** — same entropy → 24 word indices, but
+/// loads each word via `ct_load_word` (the constant-time scan that
+/// `bip39/src/lib.rs` now uses internally in `Mnemonic::to_seed`).
+/// Per-iteration access pattern is fixed: read `WORDLIST_FLAT[entry_idx]`
+/// sequentially over 2048 entries with a constant 8-byte stride and
+/// mask-OR into a stack-resident accumulator. No load address depends
+/// on the secret `target_idx`.
+///
+/// Expected: `max|t| ≤ 4.5` on the same harness that produces
+/// `max|t| ≈ 28` for the leaky `sca_bip39_wordlist_lookup`.
+#[no_mangle]
+pub extern "C" fn sca_bip39_wordlist_lookup_ct(entropy_ptr: *const u8, out_ptr: *mut u8) {
+    use sha2::Digest as _;
+    // SAFETY: harness passes 32 B entropy + 48 B output buffer.
+    let entropy: &[u8; 32] = unsafe { &*(entropy_ptr as *const [u8; 32]) };
+
+    let mut h = sha2::Sha256::new();
+    h.update(entropy);
+    let digest = h.finalize();
+    let checksum = digest[0];
+
+    let mut buf = [0u8; 33];
+    buf[..32].copy_from_slice(entropy);
+    buf[32] = checksum;
+
+    for i in 0..24 {
+        let bit = i * 11;
+        let byte = bit / 8;
+        let off = bit % 8;
+        let hi = buf[byte] as u32;
+        let mid = buf[byte + 1] as u32;
+        let lo = if byte + 2 < buf.len() { buf[byte + 2] as u32 } else { 0 };
+        let win = (hi << 16) | (mid << 8) | lo;
+        let shifted = win >> (24 - off - 11);
+        let idx = (shifted & 0x07FF) as u16;
+
+        let (word_bytes, word_len) = ct_load_word(idx);
+
+        // Same output layout as `sca_bip39_wordlist_lookup`: write len + first byte.
+        // SAFETY: i in 0..24 → 2i+1 < 48.
+        unsafe {
+            core::ptr::write_volatile(out_ptr.add(i * 2), word_len);
+            core::ptr::write_volatile(out_ptr.add(i * 2 + 1), word_bytes[0]);
         }
     }
 }
@@ -424,6 +530,7 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_C10_SIGN_SHUF);
     core::hint::black_box(&_KEEP_BIP39_WORD_INDICES);
     core::hint::black_box(&_KEEP_BIP39_WORDLIST_LOOKUP);
+    core::hint::black_box(&_KEEP_BIP39_WORDLIST_LOOKUP_CT);
     loop {
         cortex_m::asm::nop();
     }
