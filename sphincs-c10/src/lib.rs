@@ -91,39 +91,25 @@ impl SigningKey {
 
     /// Sign a 32-byte message hash.
     ///
-    /// `opt_rand` is reserved for a future hedged-signing extension and is
-    /// **currently ignored** — `R` is derived deterministically from
-    /// `(sk_seed, pk_seed, pk_root, message)` via R-grinding. The
-    /// parameter is kept in the public API to leave room for the hedged
-    /// path without an ABI break.
-    ///
-    /// Returns a 4,008-byte signature that verifies under the Solidity
-    /// `SPHINCsC10Asm` verifier and the Rust [`verify`] function.
+    /// `opt_rand` is mixed into the R-grinding hash when `Some` (see
+    /// [`fors::grind_r`](crate) for the F-9 rationale); when `None` the
+    /// path is deterministic and byte-stable with the pre-F-9-fix
+    /// behaviour. Returns a 4,008-byte signature that verifies under
+    /// the Solidity `SPHINCsC10Asm` verifier and the Rust [`verify`]
+    /// function.
     #[must_use]
     pub fn sign(&self, msg_hash: &[u8; 32], opt_rand: Option<&[u8; N]>) -> [u8; SIGNATURE_LEN] {
         hypertree::sign(&self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand)
     }
 
-    /// Like [`Self::sign`] but invokes `progress(percent)` (`0..=100`) at
-    /// each major signing phase so the caller can update a UI indicator
-    /// during the multi-second operation.
-    #[must_use]
-    pub fn sign_with_progress(
-        &self,
-        msg_hash: &[u8; 32],
-        opt_rand: Option<&[u8; N]>,
-        progress: fn(u8),
-    ) -> [u8; SIGNATURE_LEN] {
-        // Backwards-compatible: identity shuffle. Produces byte-
-        // identical output to the pre-shuffle implementation.
-        self.sign_with_shuffle(msg_hash, opt_rand, &shuffle::ShuffleSeed::zero(), progress)
-    }
-
     /// Sign with a fresh per-call shuffle seed that randomises the
     /// per-signature COMPUTATION order of WOTS chains and FORS
-    /// trees. The produced signature bytes are byte-identical to
-    /// the un-shuffled path; the shuffle is purely a side-channel
-    /// defence against profiled DPA's trace-alignment premise.
+    /// trees, invoking `progress(percent)` (`0..=100`) at each major
+    /// signing phase so the caller can update a UI indicator during the
+    /// multi-second operation. The produced signature bytes are
+    /// byte-identical to the un-shuffled path; the shuffle is purely a
+    /// side-channel defence against profiled DPA's trace-alignment
+    /// premise.
     ///
     /// Pass `ShuffleSeed::zero()` to get the un-shuffled
     /// (deterministic-order) behaviour — useful for regression

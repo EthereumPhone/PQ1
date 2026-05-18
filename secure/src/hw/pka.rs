@@ -43,8 +43,6 @@ const CR_MODE_MASK: u32 = 0x3F << CR_MODE_SHIFT;
 
 // SR bit fields
 const SR_INITOK: u32 = 1 << 0;
-#[allow(dead_code)]
-const SR_BUSY: u32 = 1 << 16;
 const SR_PROCENDF: u32 = 1 << 17;
 
 // CLRFR bit fields
@@ -52,11 +50,6 @@ const CLRFR_PROCENDFC: u32 = 1 << 17;
 
 // ── PKA operation modes ─────────────────────────────────────────────────
 
-#[allow(dead_code)]
-const MODE_MONTGOMERY_PARAM: u32 = 0x01;
-const MODE_MODULAR_INV: u32 = 0x08;
-const MODE_MODULAR_ADD: u32 = 0x0E;
-const MODE_MODULAR_SUB: u32 = 0x0F;
 const MODE_MONTGOMERY_MUL: u32 = 0x10;
 
 // ── PKA RAM offsets (byte addresses from PKA_BASE) ──────────────────────
@@ -238,44 +231,6 @@ pub unsafe fn mont_mul(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS]
     read_result(REG.result)
 }
 
-/// Modular inverse: result = a^{-1} mod p
-///
-/// Input is a regular (non-Montgomery) field element; output is also
-/// non-Montgomery. For inverting a Montgomery-form element, convert out
-/// of Montgomery form first, invert, then convert back. Alternatively,
-/// compute mont_mul(a_mont, R^3 mod p) to get the inverse in Montgomery form.
-///
-/// # Safety
-/// PKA must be initialized via `init()`.
-pub unsafe fn mod_inv(a: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    write_operand(REG.op1, a);
-    // Modulus is already loaded at REG.modulus from init()
-    execute(MODE_MODULAR_INV);
-    read_result(REG.result)
-}
-
-/// Modular addition: result = (a + b) mod p
-///
-/// # Safety
-/// PKA must be initialized via `init()`.
-pub unsafe fn mod_add(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    write_operand(REG.op1, a);
-    write_operand(REG.op2, b);
-    execute(MODE_MODULAR_ADD);
-    read_result(REG.result)
-}
-
-/// Modular subtraction: result = (a - b) mod p
-///
-/// # Safety
-/// PKA must be initialized via `init()`.
-pub unsafe fn mod_sub(a: &[u32; N_LIMBS], b: &[u32; N_LIMBS]) -> [u32; N_LIMBS] {
-    write_operand(REG.op1, a);
-    write_operand(REG.op2, b);
-    execute(MODE_MODULAR_SUB);
-    read_result(REG.result)
-}
-
 // ── Extern hook for bls12_381_pka fork ──────────────────────────────────
 
 /// Entry point called by the `bls12_381_pka` fork's `Fp::mul_pka`.
@@ -287,28 +242,3 @@ pub unsafe extern "Rust" fn bls12_381_pka_mont_mul(a: &[u32; N_LIMBS], b: &[u32;
     unsafe { mont_mul(a, b) }
 }
 
-// ── Conversion helpers ──────────────────────────────────────────────────
-
-/// Convert from `[u64; 6]` (bls12_381 crate Fp internal format, LE limb order)
-/// to `[u32; 12]` (PKA format, LE limb order).
-///
-/// Each u64 limb splits into (low_u32, high_u32) at the same index position.
-#[inline]
-pub fn fp_u64_to_u32(limbs: &[u64; 6]) -> [u32; N_LIMBS] {
-    let mut out = [0u32; N_LIMBS];
-    for i in 0..6 {
-        out[2 * i] = limbs[i] as u32;
-        out[2 * i + 1] = (limbs[i] >> 32) as u32;
-    }
-    out
-}
-
-/// Convert from `[u32; 12]` (PKA format) back to `[u64; 6]` (bls12_381 crate format).
-#[inline]
-pub fn fp_u32_to_u64(limbs: &[u32; N_LIMBS]) -> [u64; 6] {
-    let mut out = [0u64; 6];
-    for i in 0..6 {
-        out[i] = limbs[2 * i] as u64 | ((limbs[2 * i + 1] as u64) << 32);
-    }
-    out
-}

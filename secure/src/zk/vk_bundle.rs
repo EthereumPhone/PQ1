@@ -25,11 +25,6 @@ use crate::db_roots::VK_DB_ROOT;
 use crate::erc20::merkle::verify_proof;
 use sphincs_tz_shared::db_format::{VK_BLOB_LEN, VK_BLOB_LEN_2PUB, VK_BLOB_LEN_3PUB};
 
-/// Maximum total VK bundle size: header (8 + 20 + 1056 + 4 + 4) +
-/// up to 32 levels of Merkle proof (32 levels × 32 bytes = 1024 B).
-/// 1092 + 1024 = 2116 B.
-pub const MAX_VK_BUNDLE_LEN: usize = 8 + 20 + VK_BLOB_LEN + 4 + 4 + 32 * 32;
-
 /// Decoded + Merkle-verified VK bundle. Borrows the VK bytes from
 /// the gateway buffer the bundle was copied into. The VK pool slot
 /// is always `VK_BLOB_LEN` (1056 B) wide; callers slice it to the

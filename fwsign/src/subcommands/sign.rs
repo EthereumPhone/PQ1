@@ -291,6 +291,161 @@ fn record_signing(bundle_path: &Path, version: u32, vendor_fpr: &[u8; 32]) -> Re
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ----------------------------------------------------------------
+    // parse_build_id — positive
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn positive_parse_build_id_exactly_64_hex_chars() {
+        let hex_str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+        let bytes = parse_build_id(hex_str).unwrap();
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(bytes[1], 0x11);
+        assert_eq!(bytes[31], 0xff);
+    }
+
+    #[test]
+    fn positive_parse_build_id_uppercase_hex_accepted() {
+        let hex_str = "AABBCCDDEEFF00112233445566778899AABBCCDDEEFF00112233445566778899";
+        assert!(parse_build_id(hex_str).is_ok());
+    }
+
+    // ----------------------------------------------------------------
+    // parse_build_id — negative
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn negative_parse_build_id_too_short_rejected() {
+        // Assumption attacked: a short build_id silently zero-extends,
+        // making "0123" and "01230000..." collide in the audit log.
+        assert!(parse_build_id("aa").is_err());
+        assert!(parse_build_id("").is_err());
+        let short_63 = "0".repeat(63);
+        assert!(parse_build_id(&short_63).is_err());
+    }
+
+    #[test]
+    fn negative_parse_build_id_too_long_rejected() {
+        let long_66 = "0".repeat(66);
+        assert!(parse_build_id(&long_66).is_err());
+    }
+
+    #[test]
+    fn negative_parse_build_id_non_hex_rejected() {
+        assert!(parse_build_id("Z".repeat(64).as_str()).is_err());
+        assert!(parse_build_id("00112233445566778899aabbccddeeff00112233445566778899aabbccddeefg")
+            .is_err());
+    }
+
+    #[test]
+    fn negative_parse_build_id_odd_length_rejected() {
+        let odd = "0".repeat(63);
+        assert!(parse_build_id(&odd).is_err());
+    }
+
+    // ----------------------------------------------------------------
+    // resolve_boot_counter_snap — positive
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn positive_resolve_snap_default_is_version_minus_one() {
+        assert_eq!(resolve_boot_counter_snap(5, None).unwrap(), 4);
+        assert_eq!(resolve_boot_counter_snap(1, None).unwrap(), 0);
+    }
+
+    #[test]
+    fn positive_resolve_snap_explicit_lower_accepted() {
+        assert_eq!(resolve_boot_counter_snap(10, Some(3)).unwrap(), 3);
+        assert_eq!(resolve_boot_counter_snap(10, Some(0)).unwrap(), 0);
+    }
+
+    // ----------------------------------------------------------------
+    // resolve_boot_counter_snap — negative
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn negative_resolve_snap_version_zero_rejected() {
+        // Assumption attacked: per CLAUDE.md, version 0 is reserved
+        // for "no firmware yet" — a signed v0 bundle would never
+        // monotonically advance the OTP floor.
+        assert!(resolve_boot_counter_snap(0, None).is_err());
+        assert!(resolve_boot_counter_snap(0, Some(0)).is_err());
+    }
+
+    #[test]
+    fn negative_resolve_snap_equal_to_version_rejected() {
+        // Assumption attacked: snap == version would freeze the OTP
+        // floor at the current version, making future updates require
+        // a snap >= version (which the manifest forbids elsewhere) —
+        // a foot-gun the CLI catches up-front.
+        let err = resolve_boot_counter_snap(5, Some(5)).unwrap_err().to_string();
+        assert!(err.contains("must be <"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_resolve_snap_above_version_rejected() {
+        // Assumption attacked: snap > version would tell the device
+        // its OTP floor must jump *past* this release — bricking
+        // future updates of the same or earlier version.
+        assert!(resolve_boot_counter_snap(5, Some(6)).is_err());
+        assert!(resolve_boot_counter_snap(5, Some(u32::MAX)).is_err());
+    }
+
+    // ----------------------------------------------------------------
+    // slot_letter helper
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn positive_slot_letter_maps_a_and_b() {
+        assert_eq!(slot_letter(fw_manifest::SLOT_A), "A");
+        assert_eq!(slot_letter(fw_manifest::SLOT_B), "B");
+    }
+
+    // ----------------------------------------------------------------
+    // build_release_json — embedded values
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn positive_release_json_embeds_all_input_fields() {
+        let args = Args {
+            key_path: PathBuf::from("/dev/null"),
+            version: 42,
+            secure_elf: PathBuf::from("s.elf"),
+            nonsecure_elf: PathBuf::from("n.elf"),
+            slot: fw_manifest::SLOT_B,
+            build_id_hex: "ab".repeat(32),
+            boot_counter_snap: Some(41),
+            out_path: PathBuf::from("out.pqfw"),
+        };
+        let secure = FlatImage {
+            bytes: vec![],
+            base: 0x0800_0000,
+            hash: [0x01; 32],
+        };
+        let nonsecure = FlatImage {
+            bytes: vec![],
+            base: 0x0810_0000,
+            hash: [0x02; 32],
+        };
+        let vendor_fpr = [0x03; 32];
+        let digest = [0x04; 32];
+        let json = build_release_json(&args, &secure, &nonsecure, &vendor_fpr, &digest, 41);
+
+        assert!(json.contains("\"version\": 42"));
+        assert!(json.contains("\"slot\": \"B\""));
+        assert!(json.contains(&"ab".repeat(32)));
+        assert!(json.contains(&"01".repeat(32)));
+        assert!(json.contains(&"02".repeat(32)));
+        assert!(json.contains(&"03".repeat(32)));
+        assert!(json.contains(&"04".repeat(32)));
+        assert!(json.contains("\"boot_counter_snap\": 41"));
+    }
+}
+
 // Minimal replacement for the `dirs` crate — we don't want the
 // dependency just for one path lookup.
 mod dirs_local {

@@ -8,6 +8,8 @@
 #![cfg_attr(feature = "e2e-test", allow(dead_code))]
 #![cfg_attr(feature = "bench-key-speed", allow(dead_code, unused_imports))]
 #![cfg_attr(feature = "fwup-hw-test", allow(dead_code, unused_imports))]
+#![cfg_attr(feature = "gtzc-test", allow(dead_code, unused_imports))]
+#![cfg_attr(feature = "tzic-wipe-test", allow(dead_code, unused_imports))]
 
 // Panic handler selection. The QEMU/test paths use semihosting so panics
 // surface via `make e2e` / `make play`; the USB hardware build halts
@@ -25,6 +27,8 @@ use panic_halt as _;
     not(feature = "e2e-test"),
     not(feature = "bench-key-speed"),
     not(feature = "fwup-hw-test"),
+    not(feature = "gtzc-test"),
+    not(feature = "tzic-wipe-test"),
     not(feature = "usb"),
 ))]
 use cortex_m_semihosting::{debug, hprintln};
@@ -37,16 +41,28 @@ use cortex_m_semihosting::{debug, hprintln};
     not(feature = "e2e-test"),
     not(feature = "bench-key-speed"),
     not(feature = "fwup-hw-test"),
+    not(feature = "gtzc-test"),
+    not(feature = "tzic-wipe-test"),
     not(feature = "usb"),
 ))]
 use sphincs_tz_shared::{NscStatus, MAX_SIGN_RESPONSE_LEN, SIGN_USEROP_HEADER_LEN};
 
-#[cfg(feature = "e2e-test")]
+// `gtzc-test` / `tzic-wipe-test` each own their own `#[entry]`, so
+// exclude the other entry-owning modules when either is on (they
+// each declare a competing `#[cortex_m_rt::entry] fn main()` which
+// would fail to link).
+#[cfg(all(feature = "e2e-test", not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 mod e2e_test;
-#[cfg(feature = "bench-key-speed")]
+#[cfg(all(feature = "bench-key-speed", not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 mod bench_key_speed;
-#[cfg(feature = "fwup-hw-test")]
+#[cfg(all(feature = "fwup-hw-test", not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 mod fwup_hw_test;
+// GTZC1 TZSC enforcement validation driver. Hardware-only.
+#[cfg(feature = "gtzc-test")]
+mod gtzc_test;
+// GTZC1 illegal-access → wipe escalation demo. Hardware-only.
+#[cfg(feature = "tzic-wipe-test")]
+mod tzic_wipe_test;
 // The trailer-injection DBs are consumed only by the USB-side APDU
 // router (`usb::commands::maybe_inject_*`). Gating them on `usb`
 // keeps the QEMU smoke build and the test entry points from baking
@@ -61,7 +77,10 @@ mod nsc_api;
 // The selectors DB blob lives on the host; only the e2e-test build
 // stubs in a companion-side bundle builder so the QEMU NS test
 // driver can act as a dev-only companion.
-#[cfg(feature = "e2e-test")]
+// `selectors_db` is the e2e harness's host-side companion bundle
+// builder. Pulled in by `e2e-test` but irrelevant to `gtzc-test`,
+// which doesn't sign anything.
+#[cfg(all(feature = "e2e-test", not(feature = "gtzc-test")))]
 mod selectors_db;
 #[cfg(feature = "usb")]
 mod usb;
@@ -74,6 +93,8 @@ mod usb;
     not(feature = "e2e-test"),
     not(feature = "bench-key-speed"),
     not(feature = "fwup-hw-test"),
+    not(feature = "gtzc-test"),
+    not(feature = "tzic-wipe-test"),
     not(feature = "usb"),
 ))]
 static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
@@ -83,6 +104,8 @@ static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
     not(feature = "e2e-test"),
     not(feature = "bench-key-speed"),
     not(feature = "fwup-hw-test"),
+    not(feature = "gtzc-test"),
+    not(feature = "tzic-wipe-test"),
     not(feature = "usb"),
 ))]
 const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 256;
@@ -90,6 +113,8 @@ const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 256;
     not(feature = "e2e-test"),
     not(feature = "bench-key-speed"),
     not(feature = "fwup-hw-test"),
+    not(feature = "gtzc-test"),
+    not(feature = "tzic-wipe-test"),
     not(feature = "usb"),
 ))]
 static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
@@ -98,7 +123,7 @@ static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
 // USB main loop: polls USB HID, dispatches APDUs to the NSC gateway.
 // Active when the `usb` feature is enabled (hardware builds with host comms).
 // ---------------------------------------------------------------------------
-#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     ns_debug_log("[NS] main() entered");
@@ -157,7 +182,7 @@ fn main() -> ! {
 /// Emit a semihosting log line only if a debugger is attached (DHCSR.C_DEBUGEN=1).
 /// Required because NS uses `panic_halt` and `hprintln!` without a debugger
 /// BKPTs → HardFault → silent halt.
-#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 fn ns_debug_log(msg: &str) {
     const DHCSR: *const u32 = 0xE000_EDF0 as *const u32;
     let c_debugen = unsafe { core::ptr::read_volatile(DHCSR) } & 1;
@@ -170,7 +195,7 @@ fn ns_debug_log(msg: &str) {
 // Interactive QEMU demo (no USB). Exercises the unified sign
 // command end-to-end: unlock → sign a value-transfer → print result.
 // ---------------------------------------------------------------------------
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS] Non-secure world started!");
@@ -223,7 +248,7 @@ fn main() -> ! {
 
 /// Build a unified-sign payload for a value-transfer tx.
 /// Output layout matches `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN`.
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 fn build_value_transfer_payload(buf: &mut [u8]) -> usize {
     // Sepolia chain_id, slot 0 with FLAG_REGISTER_SLOT so the demo first-
     // sign emits the expected Type 1 + Type 2 bundle. (The stateless

@@ -19,16 +19,11 @@
 //! which is host-testable against the NIST AES-256-CMAC KATs. This file
 //! only supplies the SAES-DHUK closure.
 //!
-//! ## Key selectors
+//! ## Key selector
 //!
-//! Two functions, two SAES KEYSEL values:
-//! - `cmac_dhuk` — Tier 1 derivation primitive, drives `KeySel::Dhuk`.
-//! - `cmac_bhk`  — Tier 2 derivation primitive, drives `KeySel::Bhk`.
-//!
-//! Both share the exact `cmac_generic` core in `crate::cmac` so the
-//! NIST SP 800-38B KATs validate both paths. The two selectors are
-//! independent SAES key sources — a hypothetical compromise of one
-//! does not leak the other (defense-in-depth across two key axes).
+//! Drives `KeySel::Dhuk` via `cmac_dhuk` — the Tier 1 derivation
+//! primitive. Shares the `cmac_generic` core in `crate::cmac` so the
+//! NIST SP 800-38B KATs validate this path.
 
 #![cfg(feature = "saes-dhuk")]
 
@@ -48,24 +43,4 @@ use crate::hw::saes::{self, KeySel, SaesError};
 /// early.
 pub fn cmac_dhuk(msg: &[u8], tag: &mut [u8; 16]) -> Result<(), SaesError> {
     cmac_generic(msg, |block| saes::encrypt_ecb_block(KeySel::Dhuk, None, block), tag)
-}
-
-/// CMAC-AES-256 with the BHK as the key. Drives `KeySel::Bhk` instead
-/// of DHUK. Same shape as `cmac_dhuk`; the difference is the silicon
-/// key source.
-///
-/// **Tier 2 phase 2B prerequisite.** The Tier-2 first-boot provisioning
-/// step (work-todo #7 §"Tier 2 — BHK", phase 2B) must have run for the
-/// BHK selector to produce stable output: TRNG fill → DHUK-ECB wrap →
-/// flash write → on every subsequent boot, unwrap into TAMP backup
-/// registers + lock `TAMP_S->SECCFGR` so SAES is the only consumer.
-/// Without that boot-time setup, `KeySel::Bhk` reads back as zero on
-/// some silicon revisions — output is well-defined but device-
-/// independent (defeats the security claim).
-///
-/// # Errors
-///
-/// Same propagation as `cmac_dhuk` (`SaesError` from the ECB primitive).
-pub fn cmac_bhk(msg: &[u8], tag: &mut [u8; 16]) -> Result<(), SaesError> {
-    cmac_generic(msg, |block| saes::encrypt_ecb_block(KeySel::Bhk, None, block), tag)
 }

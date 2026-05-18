@@ -13,3 +13,11 @@ edition.workspace = true
 
 [dependencies]
 # `no_std`, no allocator, zero hardware deps. Trait crate only.
+
+[dev-dependencies]
+# Compile-time assertions used by `tests/` to lock down which traits
+# `KeySelector` and friends do / do NOT implement (e.g. `KeySelector`
+# must NOT impl `Debug` because the `Software` variant would leak its
+# key reference — the intent is documented in `src/lib.rs` and the
+# tests pin it.)
+static_assertions = "1.1"

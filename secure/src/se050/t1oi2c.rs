@@ -57,11 +57,9 @@ const PCB_I_BLOCK: u8 = 0x00; // Bit 7 = 0
 const PCB_I_CHAIN: u8 = 0x20; // Bit 5 = chaining (more frames follow)
 const PCB_I_SEQ: u8 = 0x40; // Bit 6 = sequence number (N(S))
 const PCB_R_BLOCK: u8 = 0x80; // Bits 7:6 = 10
-const PCB_S_BLOCK: u8 = 0xC0; // Bits 7:6 = 11
 const PCB_S_WTX_REQ: u8 = 0xC3; // S-block WTX request
 const PCB_S_WTX_RSP: u8 = 0xE3; // S-block WTX response
 const PCB_S_INTF_RESET_REQ: u8 = 0xCF; // S-block interface reset request (UM11225)
-const PCB_S_INTF_RESET_RSP: u8 = 0xEF; // S-block interface reset response
 
 // ---------------------------------------------------------------------------
 // CRC-16/CCITT (polynomial 0x1021, init 0xFFFF)

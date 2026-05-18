@@ -342,3 +342,200 @@ fn read_pool_string(blob: &[u8], at: usize) -> Option<&[u8]> {
     let len = *blob.get(at)? as usize;
     blob.get(at + 1..at + 1 + len)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn write_json(s: &str) -> NamedTempFile {
+        let mut f = NamedTempFile::new().expect("tempfile");
+        f.write_all(s.as_bytes()).unwrap();
+        f.flush().unwrap();
+        f
+    }
+
+    // === Positive ============================================================
+
+    /// Canonical selector-leaf encoding mirrors `secure/src/selectors/
+    /// bundle.rs`. Format drift here would break every shipped
+    /// SELECTOR_DB_ROOT.
+    #[test]
+    fn positive_canonical_selector_leaf_byte_frozen() {
+        let sel: [u8; 4] = [0xa9, 0x05, 0x9c, 0xbb];
+        let sig = b"transfer(address,uint256)";
+        let got = canonical_selector_leaf(&sel, sig);
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&sel);
+        expected.push(sig.len() as u8);
+        expected.extend_from_slice(sig);
+        assert_eq!(got, expected);
+        assert_eq!(got.len(), 4 + 1 + sig.len());
+    }
+
+    #[test]
+    fn positive_parse_selector_with_and_without_0x_prefix() {
+        let json_no_prefix = r#"[{"selector": "a9059cbb", "text_sig": "transfer(address,uint256)"}]"#;
+        let f = write_json(json_no_prefix);
+        build_db(f.path()).expect("bare hex accepted");
+    }
+
+    #[test]
+    fn positive_build_db_round_trip() {
+        let json = r#"[
+            {"selector": "0xa9059cbb", "text_sig": "transfer(address,uint256)"},
+            {"selector": "0x095ea7b3", "text_sig": "approve(address,uint256)"}
+        ]"#;
+        let f = write_json(json);
+        let res = build_db(f.path()).expect("build_db");
+        assert_eq!(res.blob[..4], SELECTOR_DB_MAGIC);
+        round_trip_check(&res.blob, f.path(), &res.root).expect("round-trip");
+    }
+
+    #[test]
+    fn positive_build_db_sorts_selectors() {
+        // Provide selectors out of order; the on-disk array must be
+        // sorted for binary search.
+        let json = r#"[
+            {"selector": "0xffffffff", "text_sig": "z()"},
+            {"selector": "0x00000000", "text_sig": "a()"},
+            {"selector": "0x80000000", "text_sig": "m()"}
+        ]"#;
+        let f = write_json(json);
+        let res = build_db(f.path()).expect("build_db");
+        // First entry's selector should be 0x00000000 (smallest).
+        let off = SELECTOR_DB_HEADER_LEN + SELECTOR_ENTRY_OFF_SELECTOR;
+        assert_eq!(&res.blob[off..off + 4], &[0, 0, 0, 0]);
+        // Last entry's selector should be 0xffffffff.
+        let last = SELECTOR_DB_HEADER_LEN + 2 * SELECTOR_DB_ENTRY_LEN;
+        assert_eq!(&res.blob[last..last + 4], &[0xff, 0xff, 0xff, 0xff]);
+    }
+
+    /// Canonical text-sigs that map to the same selector are deduped
+    /// in the string pool via interning.
+    #[test]
+    fn positive_build_db_interns_text_sigs() {
+        let json = r#"[
+            {"selector": "0x11111111", "text_sig": "same(uint256)"},
+            {"selector": "0x22222222", "text_sig": "same(uint256)"}
+        ]"#;
+        let f = write_json(json);
+        let res = build_db(f.path()).expect("build_db");
+        let pool_size = u32::from_le_bytes(res.blob[20..24].try_into().unwrap());
+        assert_eq!(pool_size as usize, 1 + "same(uint256)".len());
+    }
+
+    // === Negative ============================================================
+
+    #[test]
+    fn negative_build_db_empty_json_rejected() {
+        let f = write_json("[]");
+        let err = build_db(f.path()).err().expect("empty must fail");
+        assert!(err.contains("no entries"), "got: {err}");
+    }
+
+    /// Selector must be exactly 4 bytes — a longer or shorter
+    /// "selector" claim could let an attacker substitute the prefix
+    /// bytes used by the calldata[0..4] cross-check.
+    #[test]
+    fn negative_build_db_short_selector_rejected() {
+        let json = r#"[{"selector": "0xabcd", "text_sig": "f()"}]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("short selector must fail");
+        assert!(err.contains("8 hex"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_build_db_long_selector_rejected() {
+        let json = r#"[{"selector": "0xa9059cbb00", "text_sig": "f()"}]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("long selector must fail");
+        assert!(err.contains("8 hex"), "got: {err}");
+    }
+
+    #[test]
+    fn negative_build_db_non_hex_selector_rejected() {
+        let json = r#"[{"selector": "0xZZZZZZZZ", "text_sig": "f()"}]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("non-hex selector must fail");
+        assert!(err.contains("hex decode") || err.contains("hex"), "got: {err}");
+    }
+
+    /// Empty text_sig — would render as blank in the trusted UI.
+    #[test]
+    fn negative_build_db_empty_text_sig_rejected() {
+        let json = r#"[{"selector": "0xa9059cbb", "text_sig": ""}]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("empty text_sig must fail");
+        assert!(err.contains("empty"), "got: {err}");
+    }
+
+    /// text_sig past SELECTOR_TEXT_SIG_MAX_LEN can't fit across the
+    /// trusted UI's three 16-column rows — refuse so a truncated
+    /// signature can never reach the display.
+    #[test]
+    fn negative_build_db_text_sig_too_long_rejected() {
+        let huge = "x".repeat(SELECTOR_TEXT_SIG_MAX_LEN + 1);
+        let json = format!(
+            r#"[{{"selector": "0xa9059cbb", "text_sig": "{}"}}]"#,
+            huge
+        );
+        let f = write_json(&json);
+        let err = build_db(f.path()).err().expect("oversize text_sig must fail");
+        assert!(err.contains("too long"), "got: {err}");
+    }
+
+    /// Non-printable bytes in text_sig — UI-injection vector via
+    /// terminal escapes / cursor codes. Refuse.
+    #[test]
+    fn negative_build_db_non_printable_text_sig_rejected() {
+        let json = r#"[{"selector": "0xa9059cbb", "text_sig": "tab\there"}]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("tab must fail");
+        assert!(err.contains("non-printable"), "got: {err}");
+    }
+
+    /// Two rows claiming the same selector with different signatures
+    /// — an adversarial 4byte collision. Curator gate so the Merkle
+    /// root only commits to a single canonical signature.
+    #[test]
+    fn negative_build_db_duplicate_selector_rejected() {
+        let json = r#"[
+            {"selector": "0xa9059cbb", "text_sig": "transfer(address,uint256)"},
+            {"selector": "0xa9059cbb", "text_sig": "evil(address,uint256)"}
+        ]"#;
+        let f = write_json(json);
+        let err = build_db(f.path()).err().expect("dup must fail");
+        assert!(err.contains("duplicate"), "got: {err}");
+    }
+
+    /// Tampered selector byte in the on-disk entry — round-trip must
+    /// fail because the entry index is keyed by selector AND the
+    /// leaf hash binds it.
+    #[test]
+    fn negative_round_trip_tampered_selector_rejected() {
+        let json = r#"[
+            {"selector": "0xa9059cbb", "text_sig": "transfer(address,uint256)"},
+            {"selector": "0x095ea7b3", "text_sig": "approve(address,uint256)"}
+        ]"#;
+        let f = write_json(json);
+        let res = build_db(f.path()).expect("build_db");
+        let mut tampered = res.blob.clone();
+        // Flip a bit in the first entry's selector field.
+        tampered[SELECTOR_DB_HEADER_LEN] ^= 0xff;
+        let err = round_trip_check(&tampered, f.path(), &res.root)
+            .err().expect("tampered selector must fail");
+        assert!(
+            err.contains("missing") || err.contains("Merkle"),
+            "got: {err}",
+        );
+    }
+
+    /// SELECTOR_TEXT_SIG_MAX_LEN frozen at 63. UI assumes ≤63 chars
+    /// fit across three 16-column rows plus a continuation marker.
+    #[test]
+    fn negative_text_sig_max_len_frozen() {
+        assert_eq!(SELECTOR_TEXT_SIG_MAX_LEN, 63);
+    }
+}

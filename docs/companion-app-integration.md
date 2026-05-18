@@ -987,6 +987,42 @@ deployed account — all in one round trip, no on-chain state change.
      already EIP-6492-compatible.
 ```
 
+#### ERC-6492 verifier requirements (dapp side) — audit I-3
+
+The PQSmartWallet contract inherits Solady's ERC-6492 unwrap, but the
+**deploy-then-verify simulation** for counterfactual sigs lives on the
+dapp's side (Solady's `SignatureCheckerLib.isValidERC6492SignatureNow*`,
+Ambire's `UniversalSigValidator`, viem's `verifyMessage`).
+
+A naive 6492 verifier (`call factory.create(factoryCalldata); then
+signer.isValidSignature(hash, sig)`) is **fool-able by an attacker**
+who supplies:
+
+- An arbitrary `factory` address (an attacker-controlled contract),
+- `factoryCalldata` that deploys a "wallet" at any address the attacker
+  chooses,
+- A sig that the attacker's "wallet" accepts unconditionally.
+
+CREATE2 prevents this **only if** the dapp checks that the deployed
+address matches the **predicted** address — and the standard 6492
+envelope does NOT carry the predicted address, so the dapp must
+compute it externally.
+
+**Rule for dapps integrating PQSmartWallet:** When verifying a
+counterfactual PQSmartWallet signature, the dapp MUST check that the
+signer address it is verifying against equals
+`PQSmartWalletFactory.getAddress(masterPkSeed, masterPkRoot)` for the
+user's bootstrap key. Do NOT trust the `factory` field inside the 6492
+envelope to determine the signer's identity — that field is
+attacker-controlled. Use a 6492 verifier that takes the signer address
+as an explicit input (Solady's `isValidERC6492SignatureNow`, viem's
+`verifyMessage`) and rejects any envelope whose factory call produces
+a different address.
+
+The PQSmartWallet contract itself imposes no constraint here: it only
+sees the unwrapped inner signature once the dapp's verifier has
+authenticated the factory call, so the threat is purely client-side.
+
 ---
 
 ## 12. ERC-20 & ZK Clear-Sign Trailers

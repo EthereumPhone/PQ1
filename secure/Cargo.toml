@@ -196,6 +196,20 @@ tamp = ["stm32u585"]
 # escalation"). Off by default while polled-mode soaks; see
 # `docs/work-todo.md` #26 for the flip-when criteria.
 tamp-irq = ["tamp"]
+# Production escalation for GTZC1 illegal-access. When OFF, the TZIC
+# IRQ handler in `hw::tzic::on_violation` only snapshots SR + bumps a
+# counter (the `gtzc-test` validation path uses this — see the
+# `gtzc-enforcement-hw` Makefile target). When ON, the IRQ handler
+# additionally zeroizes SRAM secrets via
+# `nsc::zeroize_sensitive_state`, arms the page-125 wipe flag via
+# `hw::flash::arm_wipe_flag`, and triggers `SCB::sys_reset`. The
+# next boot's existing wipe-resume path (`main.rs:909`) finishes
+# the full SE factory_reset + flash erase under the same control
+# flow used by `cmd_request_unlock::trigger_lockout_wipe`. Implies
+# `stm32u585` (TZIC is U585-only). Off by default while the IRQ
+# wiring soaks; production CI must require this ON (analogous to
+# how TAMP will require its log→wipe flip).
+tzic-wipe = ["stm32u585"]
 # Power-consumption side-channel mask. Drives TIM2 CH1 PWM on PA5 with a
 # randomised duty cycle so the mask-pin power draw is uncorrelated with
 # the crypto work happening elsewhere on the die. Simpler than Trezor's

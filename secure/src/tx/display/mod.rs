@@ -15,7 +15,6 @@
 //!   * [`erc20_known`]       — decoded ERC20 call, token in the trusted DB
 //!   * [`erc20_unknown`]     — decoded ERC20 call, token NOT in the DB
 //!   * [`blind_sign`]        — non-empty calldata that doesn't decode
-//!   * [`contract_creation`] — `tx.to.is_none()`
 //!
 //! [`primitives`] holds every row-level helper (hex formatting, gwei
 //! formatting, `write_line`, …) so the renderers read as sequences of
@@ -24,7 +23,6 @@
 #[cfg(not(test))]
 pub mod batch;
 mod blind_sign;
-mod contract_creation;
 mod eip1271;
 mod erc20_known;
 mod erc20_unknown;
@@ -36,7 +34,6 @@ mod typed_call;
 mod value_transfer;
 
 pub use blind_sign::render_blind_sign_pages;
-pub use contract_creation::render_contract_creation_pages;
 pub use eip1271::{render_eip1271_personal_sign_pages, render_eip1271_raw32_pages};
 pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;
@@ -96,17 +93,6 @@ impl Pages {
     /// what `confirm()` consumes.
     pub fn as_slice(&self) -> &[Page] {
         &self.buf[..self.len]
-    }
-
-    /// Internal helper: zero-length `Pages` backed by a
-    /// space-initialised buffer. Not exported because external
-    /// consumers should not produce empty renderers.
-    #[allow(dead_code)]
-    fn empty() -> Self {
-        Pages {
-            buf: [[[b' '; DISPLAY_COLS]; DISPLAY_ROWS]; MAX_PAGES],
-            len: 0,
-        }
     }
 
     /// Construct a page bundle with exactly `len` visible pages,

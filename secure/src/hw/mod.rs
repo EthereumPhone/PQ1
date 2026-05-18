@@ -42,6 +42,13 @@ pub mod spi;
 #[cfg(feature = "stm32u585")]
 pub mod flash;
 
+/// GTZC1 TZIC — TrustZone Illegal-access Controller. Raises NVIC IRQ 8
+/// when NS attempts to access a SECURE-marked peripheral. Configured
+/// from `sau::stm32::configure_gtzc` and dispatched from
+/// `main::DefaultHandler`.
+#[cfg(feature = "stm32u585")]
+pub mod tzic;
+
 /// STM32U585 TAMP (tamper detection) — log-only dev harness. Feature-gated
 /// because enabling crypto-peripheral-fault monitoring (ITAMP9) during a
 /// probe-rs debug session on a dev board can false-trigger on glitch-sensitive

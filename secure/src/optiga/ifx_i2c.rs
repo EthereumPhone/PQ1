@@ -38,8 +38,6 @@ impl From<i2c::I2cError> for IfxError {
 
 /// Data register — read/write frame payloads.
 const REG_DATA: u8 = 0x80;
-/// Maximum data register length (2 bytes, big-endian).
-const REG_DATA_REG_LEN: u8 = 0x81;
 /// Device state register (4 bytes). Bit 6 of byte 0 = response ready.
 const REG_I2C_STATE: u8 = 0x82;
 /// Soft reset register — write `0x0000` to reset.
@@ -106,14 +104,9 @@ const MAX_PAYLOAD_PER_FRAME: usize = MAX_FRAME_SIZE - DL_HEADER_SIZE - TL_HEADER
 /// chip, which takes up to ~1 s wall clock on V3 silicon — bump to 3000
 /// so we don't time out mid-verify.
 const MAX_POLL_RETRIES: u32 = 3000;
-/// Maximum retransmission attempts on NACK.
-const MAX_TX_RETRIES: u32 = 3;
 
 /// I2C_STATE response-ready bit (bit 6 of byte 0).
 const STATE_RESP_READY: u8 = 0x40;
-
-/// Maximum reassembled APDU response size (stack buffer).
-const MAX_APDU_SIZE: usize = 1557;
 
 // ---------------------------------------------------------------------------
 // Infineon CRC-16 (nibble-based, NOT standard CRC-16/CCITT)
@@ -470,10 +463,6 @@ impl IfxState {
             }
         }
         Ok(())
-    }
-
-    unsafe fn send_apdu(&mut self, apdu: &[u8]) -> Result<(), IfxError> {
-        self.send_apdu_inner(apdu, false)
     }
 
     /// Send a single data frame. Fire-and-forget at this layer — the

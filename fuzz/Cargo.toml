@@ -25,13 +25,24 @@ libfuzzer-sys = "0.4"
 # builds cleanly for host (the workspace already exercises them in
 # `secure/src/fuzz_props.rs` proptests; this is the coverage-guided
 # variant the trezor-comparison §2.4 action list calls out).
-pqsigner-aa      = { path = "../aa" }
-pqsigner-tx-core = { path = "../tx-core" }
-pqsigner-tx      = { path = "../tx" }
+pqsigner-aa       = { path = "../aa" }
+pqsigner-tx-core  = { path = "../tx-core" }
+pqsigner-tx       = { path = "../tx" }
+sphincs-tz-shared = { path = "../shared" }
 
 # Prevent libFuzzer / asan from being built with sanitizer flags that
 # leak into the workspace crates — cargo-fuzz handles this via its
 # wrapper. No further config needed here.
+
+# Host-runnable tests in `tests/` that validate the harness's static
+# structure (Cargo.toml ↔ fuzz_targets/ consistency) and re-invoke
+# every parser the fuzz_targets call with pathological inputs to prove
+# the API surface hasn't drifted. None of these are linked into the
+# libFuzzer bins.
+[dev-dependencies]
+toml             = "0.8"
+pqsigner-proto   = { path = "../proto" }
+sphincs-tz-shared = { path = "../shared" }
 
 [[bin]]
 name = "aa_userop_parse_header"
@@ -64,6 +75,20 @@ bench = false
 [[bin]]
 name = "tx_erc20_verify_bundle"
 path = "fuzz_targets/tx_erc20_verify_bundle.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "apdu_parse_header"
+path = "fuzz_targets/apdu_parse_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hid_frame_assembler"
+path = "fuzz_targets/hid_frame_assembler.rs"
 test = false
 doc = false
 bench = false

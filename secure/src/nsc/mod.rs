@@ -17,34 +17,23 @@
 //!     handlers are shared across both transports; the only thing that
 //!     changes is who pulls the trigger.
 //!
-//! Gateway commands (see `sphincs_tz_shared::CMD_*`):
-//!
-//! | ID | Name            | NS → S args                              | S behavior |
-//! |----|-----------------|------------------------------------------|------------|
-//! | 1  | GET_REMAINING   | —                                        | reads chip; returns u32 |
-//! | 2  | REQUEST_UNLOCK  | —                                        | secure UI prompts for PIN |
-//! | 3  | GET_PUBKEY      | out_ptr, out_len                         | reads slot 2 |
-//! | 5  | CLEAR_SIGN      | payload_ptr, sig_out_ptr, total_len      | ZK verify → display → UserOp sign |
-//! | 7  | SIGN_USEROP     | payload_ptr, sig_out_ptr, total_len      | parse AA + inner tx → confirm → UserOp sign |
+//! Gateway commands are defined in `sphincs_tz_shared::CMD_*`; the
+//! authoritative table lives in `CLAUDE.md`. Each command has its own
+//! `cmd_*.rs` handler that the QEMU [`dispatch`] and STM32U585 CMSE
+//! veneers below both call into.
 //!
 //! ## Layout
 //!
 //! This module is split along command boundaries so each `cmd_*` handler
 //! lives in its own file and the shared plumbing (state, pointer
-//! validation, the decrypt→derive→sign tail) lives in its own. Adding a
-//! new gateway command means creating a new `cmd_*.rs` submodule, adding
-//! a match arm in [`dispatch`], and wiring up a new `CMD_*` constant in
-//! `sphincs_tz_shared`. **No other file in this module needs to change.**
+//! validation) lives alongside. Adding a new gateway command means
+//! creating a new `cmd_*.rs` submodule, adding a match arm in
+//! [`dispatch`] (and a CMSE veneer on stm32u585), and wiring up a new
+//! `CMD_*` constant in `sphincs_tz_shared`.
 //!
 //!   * [`state`]         — single `SecureState` singleton + `with_state`
 //!     closure accessors. The one and only place `static mut` lives.
 //!   * [`ptr_validate`]  — NS SRAM/flash pointer + length validators.
-//!   * [`sign_and_emit`] — shared "decrypt entropy → derive SK → hedged
-//!     SLH-DSA sign → write to NS" tail used by every signing command.
-//!   * [`userop_tail`]  — shared "reconstruct execute() callData →
-//!     compute userOpHash → decrypt_and_sign" tail used by every
-//!     UserOp signing command.
-//!   * [`cmd_get_remaining`], [`cmd_request_unlock`], [`cmd_sign_userop`].
 
 mod cmd_get_init_code;
 mod cmd_get_remaining;
@@ -59,6 +48,8 @@ mod cmd_sign_userop;
 mod cmd_sign_userop_batch;
 #[cfg(feature = "e2e-test")]
 mod cmd_test_pin_lockout;
+#[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
+mod cmd_tzic_status;
 
 // Firmware-update commands. Only built for the STM32U585 target
 // because they depend on the bank-2 flash / OTP primitives that the
@@ -819,6 +810,20 @@ pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
     secure_log!("[NSC] test_pin_lockout");
     let r = unsafe { cmd_test_pin_lockout::run() };
     secure_log!("[NSC] test_pin_lockout -> {}", r);
+    r
+}
+
+/// CMD_TZIC_STATUS — read the GTZC1 illegal-access counter.
+///
+/// Non-destructive, no PIN required: returns the running u32 count of
+/// NS→SECURE access violations the TZIC IRQ has logged since boot.
+/// Pairs with the `gtzc-test` NS validation driver — see
+/// `cmd_tzic_status.rs`.
+#[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
+    let r = unsafe { cmd_tzic_status::run() };
+    secure_log!("[NSC] tzic_status -> {}", r);
     r
 }
 

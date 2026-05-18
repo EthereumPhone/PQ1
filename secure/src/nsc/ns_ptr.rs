@@ -249,21 +249,325 @@ impl<T> WritePtr<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
+    use sphincs_tz_shared::{
+        NS_FLASH_BASE, NS_FLASH_END, NS_SRAM_BASE, NS_SRAM_END, SHARED_MAILBOX_BASE,
+        SHARED_MAILBOX_END,
+    };
+
+    // ----------------------------------------------------------------
+    // NsPtr / ReadPtr / WritePtr typestate — positive coverage
+    // ----------------------------------------------------------------
 
     /// `NsPtr::new` does not validate by itself.
     #[test]
-    fn ns_ptr_new_is_no_op() {
+    fn positive_ns_ptr_new_is_no_op() {
         let p: NsPtr<u8> = NsPtr::new(0xDEAD_BEEF);
         assert_eq!(p.raw(), 0xDEAD_BEEF);
     }
 
+    /// `NsPtr::new(0)` returns a struct (does not panic). Validation
+    /// rejects it; construction alone must remain pure.
+    #[test]
+    fn positive_ns_ptr_new_accepts_zero_addr() {
+        let p: NsPtr<u8> = NsPtr::new(0);
+        assert_eq!(p.raw(), 0);
+    }
+
+    /// A clean NS-SRAM read pointer survives validation and exposes
+    /// the address + length unchanged.
+    #[test]
+    fn positive_validate_read_ns_sram_passthrough() {
+        let p: NsPtr<u8> = NsPtr::new(NS_SRAM_BASE);
+        let rp = p.validate_read(64).expect("legit NS-SRAM read must validate");
+        assert_eq!(rp.raw(), NS_SRAM_BASE);
+        assert_eq!(rp.len(), 64);
+        assert!(!rp.is_empty());
+    }
+
+    /// A clean NS-flash read pointer is accepted (NS flash is read-only
+    /// but still NS-readable, used for static payloads like an unsigned
+    /// tx blob).
+    #[test]
+    fn positive_validate_read_ns_flash_is_accepted() {
+        let p: NsPtr<u8> = NsPtr::new(NS_FLASH_BASE);
+        let rp = p.validate_read(8).expect("NS flash must be readable");
+        assert_eq!(rp.raw(), NS_FLASH_BASE);
+        assert_eq!(rp.len(), 8);
+    }
+
+    /// A clean NS-SRAM write pointer survives validation.
+    #[test]
+    fn positive_validate_write_ns_sram_passthrough() {
+        let p: NsPtr<u8> = NsPtr::new(NS_SRAM_BASE);
+        let wp = p.validate_write(64).expect("legit NS-SRAM write must validate");
+        assert_eq!(wp.raw(), NS_SRAM_BASE);
+        assert_eq!(wp.len(), 64);
+        assert!(!wp.is_empty());
+    }
+
+    /// Validating right up to the boundary (`end == NS_SRAM_END`)
+    /// must be accepted — the bound check is `end <= NS_SRAM_END`.
+    #[test]
+    fn positive_validate_read_inclusive_upper_boundary() {
+        let ptr = NS_SRAM_END - 8;
+        let p: NsPtr<u8> = NsPtr::new(ptr);
+        assert!(p.validate_read(8).is_ok(), "end==NS_SRAM_END must be accepted");
+    }
+
+    /// `is_empty` follows length semantics.
+    #[test]
+    fn positive_zero_length_read_inside_region_is_accepted() {
+        // Zero-length, base inside the region — the bound check
+        // `end <= NS_SRAM_END` and `ptr >= NS_SRAM_BASE` both hold,
+        // and a zero-length range cannot overlap the mailbox.
+        let p: NsPtr<u8> = NsPtr::new(NS_SRAM_BASE);
+        let rp = p.validate_read(0).expect("zero-length at base must validate");
+        assert!(rp.is_empty());
+        assert_eq!(rp.len(), 0);
+    }
+
+    /// Address exactly past the mailbox is accepted — the overlap
+    /// predicate is strictly `ptr < SHARED_MAILBOX_END`, so a pointer
+    /// at SHARED_MAILBOX_END passes through.
+    #[test]
+    fn positive_address_exactly_past_mailbox_is_accepted() {
+        let p: NsPtr<u8> = NsPtr::new(SHARED_MAILBOX_END);
+        assert!(
+            p.validate_read(4).is_ok(),
+            "SHARED_MAILBOX_END boundary is not an overlap by the < check"
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // NsPtr / ReadPtr / WritePtr typestate — negative coverage
+    // ----------------------------------------------------------------
+
     /// `validate_read` / `validate_write` reject zero pointers (mirrors
     /// the legacy free-function behaviour).
+    ///
+    /// Assumption attacked: production handlers MUST refuse a NS arg
+    /// of 0 (the canonical "uninitialised pointer" attacker payload).
     #[test]
-    fn validate_rejects_null() {
+    fn negative_validate_rejects_null() {
         let p: NsPtr<u8> = NsPtr::new(0);
         assert_eq!(p.validate_read(8).map(|_| ()), Err(NscStatus::InvalidPointer));
         let q: NsPtr<u8> = NsPtr::new(0);
         assert_eq!(q.validate_write(8).map(|_| ()), Err(NscStatus::InvalidPointer));
+    }
+
+    /// Assumption: a NS pointer whose range overflows `u32::MAX` MUST
+    /// be rejected. Without the `checked_add` in the validator a
+    /// hostile NS could wrap around and end up "validating" a range
+    /// that aliases the very low SRAM region (or secure world on
+    /// targets without the SAU check).
+    #[test]
+    fn negative_validate_rejects_arithmetic_overflow() {
+        let p: NsPtr<u8> = NsPtr::new(0xFFFF_FFF0);
+        assert_eq!(
+            p.validate_read(0x20).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+            "ptr + len overflow MUST be rejected (would alias low memory after wrap)"
+        );
+        let q: NsPtr<u8> = NsPtr::new(0xFFFF_FFF0);
+        assert_eq!(
+            q.validate_write(0x20).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+            "ptr + len overflow MUST be rejected on the write path too"
+        );
+    }
+
+    /// Assumption: NS flash MUST be refused on the write path — flash
+    /// is read-only NS memory; admitting it would let NS trick the
+    /// secure world into trying a flash word-write through an MMIO
+    /// path that the production secure-flash driver does not gate
+    /// against.
+    #[test]
+    fn negative_validate_write_rejects_ns_flash() {
+        let p: NsPtr<u8> = NsPtr::new(NS_FLASH_BASE);
+        assert_eq!(
+            p.validate_write(8).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+            "NS flash is read-only — validate_write MUST refuse it"
+        );
+    }
+
+    /// Assumption: a pointer one byte below `NS_SRAM_BASE` is NOT
+    /// inside any NS region and MUST be refused.
+    #[test]
+    fn negative_validate_rejects_just_below_ns_sram_base() {
+        let p: NsPtr<u8> = NsPtr::new(NS_SRAM_BASE - 1);
+        assert_eq!(
+            p.validate_read(8).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+        );
+        let q: NsPtr<u8> = NsPtr::new(NS_SRAM_BASE - 1);
+        assert_eq!(
+            q.validate_write(8).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+        );
+    }
+
+    /// Assumption: a range that runs past `NS_SRAM_END` MUST be
+    /// refused even if it starts inside NS SRAM (cross-region access).
+    #[test]
+    fn negative_validate_rejects_range_running_past_ns_sram_end() {
+        let p: NsPtr<u8> = NsPtr::new(NS_SRAM_END - 4);
+        assert_eq!(
+            p.validate_read(8).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+            "range that crosses end-of-region boundary MUST be refused"
+        );
+    }
+
+    /// Assumption: a pointer exactly at `NS_SRAM_END` (i.e. one byte
+    /// past the last valid byte) cannot validate any nonzero range.
+    #[test]
+    fn negative_validate_rejects_addr_at_ns_sram_end_with_nonzero_len() {
+        let p: NsPtr<u8> = NsPtr::new(NS_SRAM_END);
+        assert_eq!(
+            p.validate_read(1).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+        );
+    }
+
+    /// Assumption: every byte of the shared-memory mailbox is OFF-
+    /// LIMITS to gateway-supplied NS pointers. Otherwise a hostile NS
+    /// could ask the secure world to overwrite the very mailbox word
+    /// it is dispatching on, racing the validator (TOCTOU on the
+    /// command itself).
+    #[test]
+    fn negative_validate_read_rejects_mailbox_base_overlap() {
+        let p: NsPtr<u8> = NsPtr::new(SHARED_MAILBOX_BASE);
+        assert_eq!(
+            p.validate_read(4).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+            "mailbox-base address MUST be refused (CMD slot overwrite)"
+        );
+    }
+
+    /// Assumption: a range that straddles the mailbox start is just
+    /// as dangerous as a range that lands on the mailbox proper.
+    #[test]
+    fn negative_validate_read_rejects_mailbox_straddle() {
+        let p: NsPtr<u8> = NsPtr::new(SHARED_MAILBOX_BASE - 4);
+        assert_eq!(
+            p.validate_read(8).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+            "straddling SHARED_MAILBOX_BASE MUST be refused"
+        );
+    }
+
+    /// Assumption: the mailbox is also off-limits on the write path
+    /// (the more dangerous one — an actual store could land on
+    /// CMD/ARG0/RESULT).
+    #[test]
+    fn negative_validate_write_rejects_mailbox_overlap() {
+        let p: NsPtr<u8> = NsPtr::new(SHARED_MAILBOX_BASE);
+        assert_eq!(
+            p.validate_write(4).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+        );
+        let q: NsPtr<u8> = NsPtr::new(SHARED_MAILBOX_BASE - 4);
+        assert_eq!(
+            q.validate_write(8).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+        );
+    }
+
+    /// Assumption: the mailbox-overlap window is exactly
+    /// `[BASE, END)`. The last byte of the mailbox (END-1) MUST be
+    /// rejected.
+    #[test]
+    fn negative_validate_read_rejects_mailbox_last_byte() {
+        let p: NsPtr<u8> = NsPtr::new(SHARED_MAILBOX_END - 1);
+        assert_eq!(
+            p.validate_read(1).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+        );
+    }
+
+    /// Assumption: a NS pointer that lands in an unmapped gap
+    /// between known NS regions (i.e. above NS flash but below NS
+    /// SRAM on the QEMU layout) MUST be refused — the validator
+    /// must not accidentally accept any non-region address.
+    #[test]
+    fn negative_validate_read_rejects_unmapped_gap() {
+        // Pick something between the QEMU NS_FLASH_END (0x0040_0000)
+        // and NS_SRAM_BASE (0x2802_0000) — e.g. 0x1000_0000.
+        let gap_addr: u32 = 0x1000_0000;
+        assert!(gap_addr > NS_FLASH_END);
+        assert!(gap_addr < NS_SRAM_BASE);
+        let p: NsPtr<u8> = NsPtr::new(gap_addr);
+        assert_eq!(
+            p.validate_read(8).map(|_| ()),
+            Err(NscStatus::InvalidPointer),
+        );
+    }
+
+    /// Assumption: returned error is exactly `InvalidPointer`, not
+    /// `InternalError` or another bucket — the companion app routes
+    /// off this enum variant.
+    #[test]
+    fn negative_validate_error_variant_is_invalid_pointer() {
+        let p: NsPtr<u8> = NsPtr::new(0);
+        let e = match p.validate_read(8) {
+            Ok(_) => panic!("validate_read(NULL) must fail"),
+            Err(e) => e,
+        };
+        assert_eq!(e as u32, NscStatus::InvalidPointer as u32);
+        assert_eq!(NscStatus::InvalidPointer as u32, 4,
+            "NscStatus::InvalidPointer wire value MUST stay 4 (companion ABI)");
+    }
+
+    // ----------------------------------------------------------------
+    // Raw validate_ns_read_ptr / validate_ns_write_ptr — exhaustive
+    // coverage of the underlying predicate (re-used by the typestate
+    // wrapper).
+    // ----------------------------------------------------------------
+
+    #[test]
+    fn positive_raw_validate_read_accepts_ns_sram_and_flash() {
+        assert!(validate_ns_read_ptr(NS_SRAM_BASE, 8));
+        assert!(validate_ns_read_ptr(NS_FLASH_BASE, 8));
+        assert!(validate_ns_read_ptr(NS_FLASH_END - 8, 8));
+    }
+
+    #[test]
+    fn positive_raw_validate_write_accepts_ns_sram_only() {
+        assert!(validate_ns_write_ptr(NS_SRAM_BASE, 8));
+        assert!(!validate_ns_write_ptr(NS_FLASH_BASE, 8),
+            "flash MUST NOT be writable");
+    }
+
+    #[test]
+    fn negative_raw_validate_zero_len_at_zero_ptr_still_refused() {
+        // The ptr==0 short-circuit fires regardless of len.
+        assert!(!validate_ns_read_ptr(0, 0));
+        assert!(!validate_ns_write_ptr(0, 0));
+    }
+
+    /// Assumption: passing a `usize` length larger than `u32::MAX`
+    /// must NOT be quietly accepted via truncation. If the validator
+    /// accepts it, the caller (which speaks `usize`) believes a
+    /// multi-gigabyte range is NS-valid even though the firmware
+    /// only checked the truncated low 32 bits.
+    ///
+    /// On 32-bit ARM targets (the production target) `usize == u32`
+    /// so this is not reachable in practice — but a host build is
+    /// 64-bit and the trunc-cast is a real footgun.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn negative_raw_validate_rejects_oversized_usize_len() {
+        // 0x1_0000_0000 truncates to 0 — would otherwise look like a
+        // zero-length range starting in NS SRAM and pass.
+        let huge: usize = (u32::MAX as usize) + 1;
+        let truncated_accepts = validate_ns_read_ptr(NS_SRAM_BASE, huge);
+        assert!(
+            !truncated_accepts,
+            "validator MUST refuse usize > u32::MAX rather than truncate; \
+             current behaviour silently truncates the length on 64-bit hosts \
+             (irrelevant on 32-bit ARM target_usize but a documented gap)"
+        );
     }
 }

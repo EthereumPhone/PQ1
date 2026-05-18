@@ -207,14 +207,6 @@ impl MockSecureElement {
     pub fn simulate_glitch(&mut self) {
         self.glitch_armed = true;
     }
-
-    /// Returns `true` iff every MACD slot has been programmed at least
-    /// once. The existing PIN-verify path resets all slots on a
-    /// successful unlock, so this is `true` after any `unlock()` in
-    /// the post-provision lifecycle.
-    pub fn macd_all_initialized(&self) -> bool {
-        self.macd_initialized.iter().all(|&b| b)
-    }
 }
 
 /// Simple HMAC-SHA256 for MACD simulation.
@@ -544,6 +536,382 @@ mod tests {
             r,
             Err(NscStatus::InternalError),
             "glitched MACD must surface as InternalError"
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Additional positive coverage — r-mem ops, MACD ops, default
+    // WalletStore methods.
+    // ──────────────────────────────────────────────────────────────────
+
+    /// r-mem round-trip: write → read → verify same bytes.
+    #[test]
+    fn positive_rmem_write_then_read_roundtrip() {
+        let mut se = MockSecureElement::new();
+        let data: [u8; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        se.r_mem_write(0, &data).unwrap();
+        let mut buf = [0u8; 9];
+        let n = se.r_mem_read(0, &mut buf).unwrap();
+        assert_eq!(n, 9);
+        assert_eq!(buf, data);
+    }
+
+    /// r-mem erase: written slot becomes SlotNotFound on read.
+    #[test]
+    fn positive_rmem_erase_clears_slot() {
+        let mut se = MockSecureElement::new();
+        se.r_mem_write(0, &[0xAAu8; 8]).unwrap();
+        se.r_mem_erase(0).unwrap();
+        let mut buf = [0u8; 8];
+        let res = se.r_mem_read(0, &mut buf);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "erased slot must report SlotNotFound, got {res:?}"
+        );
+    }
+
+    /// r-mem write of zero-length is accepted (the mock treats length-0
+    /// as a valid blob, and the production backends do too).
+    #[test]
+    fn positive_rmem_write_zero_length_accepted() {
+        let mut se = MockSecureElement::new();
+        se.r_mem_write(0, &[]).unwrap();
+        let mut buf = [0u8; 4];
+        let n = se.r_mem_read(0, &mut buf).unwrap();
+        assert_eq!(n, 0);
+    }
+
+    /// r-mem write at the max valid length (512 bytes) is accepted.
+    #[test]
+    fn positive_rmem_write_max_length_accepted() {
+        let mut se = MockSecureElement::new();
+        let data = [0x55u8; MAX_RMEM_DATA];
+        se.r_mem_write(0, &data).unwrap();
+        let mut buf = [0u8; MAX_RMEM_DATA];
+        let n = se.r_mem_read(0, &mut buf).unwrap();
+        assert_eq!(n, MAX_RMEM_DATA);
+        assert_eq!(buf, data);
+    }
+
+    /// MACD slot at the highest valid index (15) is accepted.
+    #[test]
+    fn positive_macd_max_slot_accepted() {
+        let mut se = MockSecureElement::new();
+        let r = se.mac_and_destroy((NUM_MACD_SLOTS - 1) as u16, &[0u8; 32]);
+        assert!(r.is_ok());
+    }
+
+    /// MACD on a freshly-initialized slot is deterministic given the
+    /// same input. Same input → same output, twice in a row.
+    #[test]
+    fn positive_macd_first_call_is_deterministic_per_input() {
+        let mut a = MockSecureElement::new();
+        let mut b = MockSecureElement::new();
+        let in1 = [0xAAu8; 32];
+        let out_a = a.mac_and_destroy(0, &in1).unwrap();
+        let out_b = b.mac_and_destroy(0, &in1).unwrap();
+        assert_eq!(out_a, out_b);
+    }
+
+    /// Default `random()` impl returns `SlotNotFound` because the mock
+    /// has no TRNG to offer (this is the documented "skip the SE-side
+    /// XOR layer" sentinel for `hw::rng_strong::fill`).
+    #[test]
+    fn positive_default_random_returns_slot_not_found() {
+        let mut se = MockSecureElement::new();
+        let mut buf = [0u8; 4];
+        let res = se.random(&mut buf);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "default random() must return SlotNotFound; rng_strong relies on this \
+             to treat the mock as 'no SE-side XOR layer'"
+        );
+    }
+
+    /// Default `pin_attempt_count()` is `None` on the mock.
+    #[test]
+    fn positive_default_pin_attempt_count_is_none() {
+        let mut se = MockSecureElement::new();
+        assert!(se.pin_attempt_count().is_none());
+    }
+
+    /// Default `pin_attempt_counts_divergent()` is `false` on
+    /// single-SE backends (only `DualSecureElement` ever returns true).
+    #[test]
+    fn positive_default_divergent_is_false() {
+        let mut se = MockSecureElement::new();
+        assert!(!se.pin_attempt_counts_divergent());
+    }
+
+    /// Default `factory_reset_admin()` calls `zeroize_caches` and
+    /// returns Ok on backends that don't persist anything.
+    #[test]
+    fn positive_default_factory_reset_admin_succeeds_on_mock() {
+        let mut se = MockSecureElement::new();
+        assert!(se.factory_reset_admin().is_ok());
+    }
+
+    /// `is_provisioned()` returns false on a fresh mock.
+    #[test]
+    fn positive_fresh_mock_is_not_provisioned() {
+        let mut se = MockSecureElement::new();
+        assert!(!se.is_provisioned());
+    }
+
+    /// `remaining_attempts()` returns `MAX_ATTEMPTS` on a fresh
+    /// (unprovisioned) mock — the deserialize fail path returns
+    /// `MAX_ATTEMPTS` so a brand-new chip looks "ready" to the caller.
+    #[test]
+    fn positive_fresh_mock_remaining_attempts_is_max() {
+        let mut se = MockSecureElement::new();
+        assert_eq!(se.remaining_attempts(), MAX_ATTEMPTS);
+    }
+
+    /// `sync_remaining_with_mcu` is a no-op on the mock (default
+    /// impl), which is the documented contract — the mock reads r-mem
+    /// directly so its counter is always authoritative.
+    #[test]
+    fn positive_sync_remaining_with_mcu_is_noop_on_mock() {
+        let mut se = make_provisioned();
+        let before = se.remaining_attempts();
+        se.sync_remaining_with_mcu(0);
+        assert_eq!(se.remaining_attempts(), before);
+        se.sync_remaining_with_mcu(255);
+        // The mock's MAX_ATTEMPTS bookkeeping doesn't change either way
+        // because the default impl is empty.
+        assert_eq!(se.remaining_attempts(), before);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Negative coverage — challenges assumptions Mock + the trait hold.
+    // ──────────────────────────────────────────────────────────────────
+
+    /// PIN: r-mem write with an out-of-range slot must be rejected. A
+    /// silent overflow into `rmem_data[slot as usize]` would either
+    /// panic (mock host build) or — worse, in a hypothetical
+    /// re-implementation that used `% NUM_RMEM_SLOTS` — alias high
+    /// slot indices onto valid ones, corrupting stored entropy /
+    /// VK / PIN-state.
+    #[test]
+    fn negative_rmem_write_out_of_range_slot_rejected() {
+        let mut se = MockSecureElement::new();
+        let res = se.r_mem_write(NUM_RMEM_SLOTS as u16, &[0u8; 4]);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "slot == NUM_RMEM_SLOTS must be rejected (boundary), got {res:?}",
+        );
+        let res = se.r_mem_write(65535, &[0u8; 4]);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "slot 0xFFFF must be rejected, got {res:?}",
+        );
+    }
+
+    /// PIN: r-mem write of data > MAX_RMEM_DATA must be rejected. A
+    /// silent `copy_from_slice` with the cap would either panic or
+    /// truncate; either way the chip's stored blob no longer matches
+    /// what the caller intended.
+    #[test]
+    fn negative_rmem_write_oversize_data_rejected() {
+        let mut se = MockSecureElement::new();
+        let oversize = [0u8; MAX_RMEM_DATA + 1];
+        let res = se.r_mem_write(0, &oversize);
+        assert!(
+            matches!(res, Err(SeError::InvalidParameter)),
+            "MAX_RMEM_DATA+1 bytes must be rejected, got {res:?}",
+        );
+    }
+
+    /// PIN: r-mem read of an unoccupied slot must be rejected. If the
+    /// implementation silently returned the previous slot contents
+    /// (from `rmem_data[s]` even when `rmem_occupied[s] == false`), an
+    /// attacker who erased a slot could still read the post-erase
+    /// memory image.
+    #[test]
+    fn negative_rmem_read_unoccupied_slot_rejected() {
+        let mut se = MockSecureElement::new();
+        let mut buf = [0u8; 4];
+        let res = se.r_mem_read(0, &mut buf);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "fresh / never-written slot must return SlotNotFound, got {res:?}",
+        );
+    }
+
+    /// PIN: r-mem read with a too-small buffer must be rejected. If
+    /// silently truncated, the caller's downstream deserialize would
+    /// fail in unpredictable ways instead of producing a clear
+    /// "buffer too small" signal.
+    #[test]
+    fn negative_rmem_read_buffer_too_small_rejected() {
+        let mut se = MockSecureElement::new();
+        se.r_mem_write(0, &[1u8, 2, 3, 4, 5]).unwrap();
+        let mut buf = [0u8; 3]; // only 3 bytes, need 5
+        let res = se.r_mem_read(0, &mut buf);
+        assert!(
+            matches!(res, Err(SeError::InvalidParameter)),
+            "too-small read buffer must be rejected, got {res:?}",
+        );
+    }
+
+    /// PIN: r-mem read with an out-of-range slot must be rejected.
+    #[test]
+    fn negative_rmem_read_out_of_range_slot_rejected() {
+        let mut se = MockSecureElement::new();
+        let mut buf = [0u8; 4];
+        let res = se.r_mem_read(NUM_RMEM_SLOTS as u16, &mut buf);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "out-of-range read slot must be rejected, got {res:?}",
+        );
+    }
+
+    /// PIN: r-mem erase with an out-of-range slot must be rejected.
+    /// If silently accepted, an attacker could trigger a panic at the
+    /// `rmem_data[s] = [0u8; MAX_RMEM_DATA]` line via NS-controlled
+    /// slot index.
+    #[test]
+    fn negative_rmem_erase_out_of_range_slot_rejected() {
+        let mut se = MockSecureElement::new();
+        let res = se.r_mem_erase(NUM_RMEM_SLOTS as u16);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "out-of-range erase slot must be rejected, got {res:?}",
+        );
+    }
+
+    /// PIN: MACD with an out-of-range slot must be rejected. Like the
+    /// r-mem path, this protects against NS-controlled slot indices
+    /// reaching native-array indexing without bounds checking.
+    #[test]
+    fn negative_macd_out_of_range_slot_rejected() {
+        let mut se = MockSecureElement::new();
+        let res = se.mac_and_destroy(NUM_MACD_SLOTS as u16, &[0u8; 32]);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "MACD slot == NUM_MACD_SLOTS must be rejected (boundary), got {res:?}",
+        );
+        let res = se.mac_and_destroy(65535, &[0u8; 32]);
+        assert!(
+            matches!(res, Err(SeError::SlotNotFound)),
+            "MACD slot 0xFFFF must be rejected, got {res:?}",
+        );
+    }
+
+    /// PIN: distinct MACD inputs on the same fresh slot must produce
+    /// distinct outputs. If a refactor accidentally hard-coded
+    /// `hmac_sha256(data_in, &[0u8; 32])` instead of using `data_in`
+    /// as the key, the output would still vary but in a different way;
+    /// this catches the regression where the input gets ignored
+    /// outright (e.g. swapped with a constant).
+    #[test]
+    fn negative_macd_distinct_inputs_diverge() {
+        let mut se = MockSecureElement::new();
+        let out_a = se.mac_and_destroy(0, &[0xAAu8; 32]).unwrap();
+        let mut se2 = MockSecureElement::new();
+        let out_b = se2.mac_and_destroy(0, &[0xBBu8; 32]).unwrap();
+        assert_ne!(out_a, out_b);
+    }
+
+    /// PIN: MACD output depends on the slot's PRIOR `data_in` (the
+    /// stored state). The mock documents this as
+    /// `output = HMAC(data_in, previous_state)` and explicitly stores
+    /// `data_in` as the new state. A wrong-PIN attempt that follows a
+    /// different prior call MUST produce a different output than the
+    /// same wrong-PIN against a fresh slot — otherwise an attacker who
+    /// can rewind the state could replay a cached MACD result.
+    #[test]
+    fn negative_macd_output_depends_on_prior_state() {
+        // Path A: fresh slot → mac(B). Output = HMAC(B, B).
+        let mut a = MockSecureElement::new();
+        let b_input = [0xBBu8; 32];
+        let out_a = a.mac_and_destroy(0, &b_input).unwrap();
+
+        // Path B: slot pre-seeded with A → mac(B). Output =
+        // HMAC(B, A). Different.
+        let mut b = MockSecureElement::new();
+        b.mac_and_destroy(0, &[0xAAu8; 32]).unwrap();
+        let out_b = b.mac_and_destroy(0, &b_input).unwrap();
+
+        assert_ne!(
+            out_a, out_b,
+            "MACD ignored the slot's prior state — output didn't depend on what \
+             the slot was initialized with. Replay of a wrong-PIN MACD result \
+             across slot histories would become possible.",
+        );
+    }
+
+    /// PIN: `simulate_glitch` is one-shot. Two armings in a row must
+    /// each fire exactly once — i.e. the flag must not "stick true"
+    /// after firing. (Already covered by an existing test; this test
+    /// adds the *double-arm* path, which probes that the clear-on-fire
+    /// runs once per arm.)
+    #[test]
+    fn negative_simulate_glitch_double_arm_is_independent() {
+        let mut se = MockSecureElement::new();
+        let dummy = [0u8; 32];
+
+        se.simulate_glitch();
+        assert!(matches!(se.mac_and_destroy(0, &dummy), Err(SeError::InternalError)));
+        // No re-arm — flag should be cleared.
+        assert!(se.mac_and_destroy(0, &dummy).is_ok());
+
+        // Second arm cycle.
+        se.simulate_glitch();
+        assert!(matches!(se.mac_and_destroy(0, &dummy), Err(SeError::InternalError)));
+        assert!(se.mac_and_destroy(0, &dummy).is_ok());
+    }
+
+    /// PIN: `SeError` and `UnlockError` MUST be `Debug` (used in
+    /// `secure_log!` formats), and printing the Debug repr must not
+    /// panic on any variant. Defends against a refactor that derived
+    /// `Debug` only for a subset of variants.
+    #[test]
+    fn negative_error_debug_impls_dont_panic_for_any_variant() {
+        for e in [
+            SeError::SlotNotFound,
+            SeError::SlotExpired,
+            SeError::InvalidParameter,
+            SeError::InternalError,
+        ] {
+            let _ = format!("{e:?}");
+        }
+        for e in [
+            UnlockError::PinIncorrect,
+            UnlockError::PinLocked,
+            UnlockError::InternalError,
+        ] {
+            let _ = format!("{e:?}");
+        }
+    }
+
+    /// PIN: the mock's r-mem and MACD slot counts MUST match the
+    /// values the production PIN brick path relies on (8 r-mem slots,
+    /// 16 MACD slots, 512 bytes/slot). A drift in these constants
+    /// would make the mock no-longer-representative of the deployed
+    /// hardware, masking PIN-state regressions.
+    #[test]
+    fn negative_mock_geometry_constants_pinned() {
+        assert_eq!(NUM_RMEM_SLOTS, 8);
+        assert_eq!(NUM_MACD_SLOTS, 16);
+        assert_eq!(MAX_RMEM_DATA, 512);
+    }
+
+    /// PIN: provisioning + unlock must return a non-zero master
+    /// secret. A degenerate code path that returned `[0u8; 32]` on
+    /// "success" would let downstream key derivation produce a
+    /// predictable zero-keyed wallet. Already implicitly checked by
+    /// `correct_pin_unlocks_and_resets_counter`; we restate it here
+    /// as a standalone negative to keep the assumption discoverable.
+    #[test]
+    fn negative_unlock_returns_nonzero_master_secret() {
+        let mut se = make_provisioned();
+        let pin = [b'1', b'2', b'3', b'4', 0, 0, 0, 0];
+        let secret = se.unlock(&pin).unwrap();
+        assert_ne!(
+            secret, [0u8; 32],
+            "unlock returned all-zero master_secret — downstream wallet derivation \
+             would produce a publicly-derivable wallet",
         );
     }
 }

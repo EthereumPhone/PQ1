@@ -60,6 +60,9 @@ pub use verify::{verify_and_bind_trailer, VerifiedCowswapV3};
 #[cfg(test)]
 mod test_vectors;
 
+#[cfg(test)]
+mod extra_tests;
+
 // ---------------------------------------------------------------------------
 // Public addresses
 // ---------------------------------------------------------------------------
@@ -291,7 +294,6 @@ pub fn compute_digest(canonical: &[u8; 204], chain_id: u64) -> Result<[u8; 32], 
 ///  bytes_len(32)=56 || orderUid(56) || zero_pad(8)` — so the orderUid
 /// starts at byte 100 and is 56 bytes wide.
 pub const SETPRESIG_ORDERUID_OFFSET: usize = 100;
-pub const SETPRESIG_ORDERUID_LEN: usize = 56;
 /// Slice of `orderUid` that is the 32-byte EIP-712 order digest.
 pub const SETPRESIG_ORDER_DIGEST_OFFSET: usize = SETPRESIG_ORDERUID_OFFSET;
 pub const SETPRESIG_ORDER_DIGEST_LEN: usize = 32;

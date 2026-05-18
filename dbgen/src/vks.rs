@@ -141,7 +141,7 @@ pub fn build_db(json_path: &Path, vks_dir: &Path) -> Result<VkBuildResult, Strin
             leaf_hash(&canonical)
         })
         .collect();
-    let tree = MerkleTree::build(leaf_hashes.clone());
+    let tree = MerkleTree::build(leaf_hashes);
     let root = tree.root();
     let proof_depth = tree.depth();
 

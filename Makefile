@@ -81,7 +81,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
 
 # Supply-chain audit. Hard-fails if any dependency is not cryptographically
 # pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
@@ -550,6 +550,134 @@ e2e-hw-dual-se:
 		exit 1; \
 	else \
 		echo "==> e2e-hw-dual-se: FAIL (no PASS/FAIL marker; rc=$$rc)"; \
+		exit 1; \
+	fi
+
+# GTZC1 TZSC + TZIC enforcement validation on real STM32U585 silicon.
+#
+# Production gate for invariant #4 ("all secrets live ONLY in TrustZone
+# secure world"). NS probes each peripheral the secure-world boot path
+# marked SECURE in `secure/src/sau.rs` (I2C1/2, AES, HASH, RNG, PKA,
+# SAES) via its NS-aliased control register. Each access should be
+# RAZ-gated by the AHB bridge and raise NVIC IRQ 8 (GTZC), bumping the
+# secure-world `hw::tzic::VIOLATION_COUNT`. The NS driver reads the
+# counter back via `nsc_tzic_status` CMSE veneer and asserts.
+#
+# Secure side:
+#   mock-se          — skips dual-SE provisioning (we're not signing)
+#   ui-semihosting   — secure-side `[S][TZIC]` lines come out on probe-rs
+#   debug-log        — `secure_log!` enabled
+#   e2e-test         — pre-unlock + exposes `nsc_tzic_status` veneer
+#   stm32u585        — real GTZC1 (not the QEMU MPC fallback)
+#   otp-hardcoded-master-key — stable OTP master across re-flashes
+#
+# NS side:
+#   gtzc-test        — replaces interactive main() with probe + assert
+#   stm32u585        — real hardware target
+#
+# Greps for `[NS][gtzc] === PASS ===` on stdout; missing marker = FAIL.
+#
+# Requires: ST-LINK on B-U585I-IOT02A. Non-destructive (no SE writes,
+# no PIN attempts). Safe to re-run.
+gtzc-enforcement-hw:
+	@echo "==> Building GTZC1 enforcement test (secure + stm32u585 + e2e-test + mock-se)"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key
+	@echo "==> Building GTZC1 enforcement test (NS + gtzc-test + stm32u585)"
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running GTZC enforcement validation on hardware..."
+	@log=$$(mktemp -t gtzc-enforcement-hw.XXXXXX.log); \
+	rc_file=$$(mktemp -t gtzc-enforcement-hw-rc.XXXXXX); \
+	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
+	{ timeout 120 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; \
+	  echo $$? >"$$rc_file"; } | tee "$$log"; \
+	rc=$$(cat "$$rc_file"); \
+	echo "===================================="; \
+	if grep -q "\[NS\]\[gtzc\] === PASS ===" "$$log"; then \
+		echo "==> gtzc-enforcement-hw: PASS — GTZC1 TZSC + TZIC enforcement confirmed"; \
+		exit 0; \
+	elif grep -q "\[NS\]\[gtzc\] === FAIL" "$$log"; then \
+		echo "==> gtzc-enforcement-hw: FAIL — violation counter mismatch (see log above)"; \
+		exit 1; \
+	else \
+		echo "==> gtzc-enforcement-hw: FAIL (no PASS/FAIL marker; rc=$$rc)"; \
+		exit 1; \
+	fi
+
+# Slice 2 demo: GTZC1 illegal-access → wipe escalation on real
+# STM32U585 silicon.
+#
+# Builds with `tzic-wipe` ON in the secure crate. NS does a single
+# probe of HASH_CR's NS alias; the TZIC IRQ fires, runs
+# `hw::tzic::trigger_tzic_wipe()` (zeroize SRAM → arm page-125 wipe
+# flag → SCB::sys_reset). The NS driver never reaches its
+# `SURVIVED` log line — its absence is the pass marker.
+#
+# probe-rs note: `probe-rs run` arms vector-catch-on-reset, so a
+# successful `SCB::sys_reset` from the IRQ is intercepted and
+# surfaces as "Firmware exited unexpectedly: Exception" rather
+# than a clean reboot loop. That's the EXPECTED success state for
+# this harness — the chip *did* reset, probe-rs just caught it.
+# On stand-alone power-up the chip reboots normally and the boot-
+# time wipe-resume path drives the full SE wipe.
+#
+# Pass criteria (host-side):
+#   * `[NS][gtzc-wipe] probing`  appears exactly 1 time
+#   * `[NS][gtzc-wipe] SURVIVED` appears 0 times (wipe preempted)
+#
+# Side-effect: leaves the page-125 wipe-armed flag set. Subsequent
+# boots of a `se050` or `dual-se` build will finish the SE wipe on
+# the next boot. Run `make wipe-for-wizard` to clear deliberately,
+# or any normal e2e target that includes `factory_reset_admin`.
+#
+# Requires: ST-LINK on B-U585I-IOT02A.
+tzic-wipe-hw:
+	@echo "==> Building TZIC wipe demo (secure + stm32u585 + tzic-wipe + e2e-test + mock-se)"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,tzic-wipe
+	@echo "==> Building TZIC wipe demo (NS + tzic-wipe-test + stm32u585)"
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features tzic-wipe-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running TZIC wipe demo on hardware (30 s probe-then-reset)..."
+	@log=$$(mktemp -t tzic-wipe-hw.XXXXXX.log); \
+	trap 'rm -f "$$log"' EXIT; \
+	timeout 30 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log" || true; \
+	probes=$$(grep -c '\[NS\]\[gtzc-wipe\] probing' "$$log" || true); \
+	survived=$$(grep -c '\[NS\]\[gtzc-wipe\] SURVIVED' "$$log" || true); \
+	reset_seen=$$(grep -c 'Exception\|Firmware exited' "$$log" || true); \
+	echo "===================================="; \
+	echo "==> Observed: probes=$$probes  survived=$$survived  reset_intercepted=$$reset_seen"; \
+	if [ "$$survived" -gt 0 ]; then \
+		echo "==> tzic-wipe-hw: FAIL — saw SURVIVED line; IRQ did not preempt"; \
+		exit 1; \
+	elif [ "$$probes" -ge 1 ] && [ "$$reset_seen" -ge 1 ]; then \
+		echo "==> tzic-wipe-hw: PASS — TZIC IRQ ran wipe path and chip reset (probe-rs intercepted)"; \
+		exit 0; \
+	else \
+		echo "==> tzic-wipe-hw: FAIL — probes=$$probes reset_seen=$$reset_seen"; \
 		exit 1; \
 	fi
 
@@ -1294,6 +1422,77 @@ test-unit:
 test-solidity:
 	@echo "==> Running Foundry tests"
 	@cd contracts/smart-wallet && forge test
+
+# Lean 4 formal verification — type-checks the SphincsCVerify project.
+# See contracts/verification/README.md for what this proves and what it
+# leaves to the TCB.
+test-formal-verification:
+	@echo "==> Building SphincsCVerify Lean project"
+	@$(MAKE) -C contracts/verification verify
+	@echo "==> Auditing axioms + sorry inventory"
+	@$(MAKE) -C contracts/verification verify-audit
+
+# `test-all` — run every host-runnable test suite in the repo with one
+# command. Streams one progress line per suite (suite name, then
+# PASS/FAIL with test count when it finishes), keeps going past
+# failures, and exits non-zero with a per-suite summary at the end if
+# anything broke. Per-suite output is captured to
+# `/tmp/test-all.<suite>.log` and the log path is shown for any FAIL.
+#
+# Covers (no opt-in needed):
+#   1. Pure-logic workspace crates (`cargo test --workspace`, minus the
+#      firmware-only bins that don't link on host).
+#   2. `sphincs-tz-secure` host-testable subset behind `--features mock-se`.
+#   3. Standalone `fuzz/` workspace (harness + structure tests).
+#   4. Solidity contracts under `contracts/smart-wallet` via `forge test`
+#      (auto-skipped with a SKIP line if `forge` is not on PATH).
+#
+# NOT included (these are slow QEMU/HW integration tests, not unit tests):
+#   make e2e, make e2e-hw, make play, make run, make test-key-speed,
+#   make pin-gate-*-hw, make optiga-hw-counter-e2e, ...
+.PHONY: test-all
+test-all: SHELL := /usr/bin/env bash
+test-all:
+	@set -uo pipefail; \
+	pass=0; fail=0; failed=(); idx=0; \
+	run() { \
+	  idx=$$((idx+1)); \
+	  local name="$$1"; shift; \
+	  local slug=$$(echo "$$name" | tr ' /()' '____'); \
+	  local log="/tmp/test-all.$$slug.log"; \
+	  printf "[%2d] %-46s " "$$idx" "$$name"; \
+	  if "$$@" >"$$log" 2>&1; then \
+	    local n; n=$$(grep -E '^(test|Suite) result' "$$log" | awk '{tot+=$$4} END {print tot+0}'); \
+	    [ -z "$$n" ] && n="?"; \
+	    printf "PASS  (%s tests)\n" "$$n"; \
+	    pass=$$((pass+1)); \
+	    rm -f "$$log"; \
+	  else \
+	    printf "FAIL  (log: %s)\n" "$$log"; \
+	    fail=$$((fail+1)); \
+	    failed+=("$$name -> $$log"); \
+	  fi; \
+	}; \
+	echo "=== running all host-runnable test suites ==="; \
+	run "workspace host crates" cargo test --workspace --tests --no-fail-fast --quiet \
+	    --exclude sphincs-tz-secure --exclude sphincs-tz-nonsecure --exclude pqsigner-fsbl; \
+	run "sphincs-tz-secure --features mock-se" cargo test -p sphincs-tz-secure --tests \
+	    --features mock-se --no-fail-fast --quiet; \
+	run "fuzz workspace" bash -c "cd fuzz && cargo test --tests --no-fail-fast --quiet"; \
+	if command -v forge >/dev/null 2>&1; then \
+	  run "contracts/smart-wallet forge" bash -c "cd contracts/smart-wallet && forge test"; \
+	else \
+	  idx=$$((idx+1)); \
+	  printf "[%2d] %-46s SKIP  (forge not on PATH)\n" "$$idx" "contracts/smart-wallet forge"; \
+	fi; \
+	echo; \
+	if [ "$$fail" -eq 0 ]; then \
+	  echo "==== ALL $$pass SUITES PASSED ===="; \
+	else \
+	  echo "==== $$fail / $$((pass+fail)) SUITE(S) FAILED ===="; \
+	  for s in "$${failed[@]}"; do echo "  FAIL  $$s"; done; \
+	  exit 1; \
+	fi
 
 # Compute firmware measurement words from the secure ELF.
 # Displays the same 8 BIP-39 words the device shows at boot.
@@ -2185,12 +2384,14 @@ flash-hw-optiga-reset: optiga-reset-oids
 #   make fuzz-eip1559-parse [TIME=600]
 #   make fuzz-erc20-calldata [TIME=600]
 #   make fuzz-erc20-bundle [TIME=600]
+#   make fuzz-apdu-parse-header [TIME=600]
+#   make fuzz-hid-frame-assembler [TIME=600]
 #
 # TIME (seconds) bounds the libFuzzer run; omit for unbounded.
 FUZZ_TIME ?= $(TIME)
 FUZZ_LIBFUZZER_ARGS = $(if $(FUZZ_TIME),-- -max_total_time=$(FUZZ_TIME),)
 
-.PHONY: fuzz-list fuzz-aa-userop-parse fuzz-rlp-decode-item fuzz-eip1559-parse fuzz-erc20-calldata fuzz-erc20-bundle
+.PHONY: fuzz-list fuzz-aa-userop-parse fuzz-rlp-decode-item fuzz-eip1559-parse fuzz-erc20-calldata fuzz-erc20-bundle fuzz-apdu-parse-header fuzz-hid-frame-assembler
 
 fuzz-list:
 	@echo "Available fuzz targets (see fuzz/README.md):"
@@ -2214,6 +2415,12 @@ fuzz-erc20-calldata:
 
 fuzz-erc20-bundle:
 	cd fuzz && cargo +nightly fuzz run tx_erc20_verify_bundle $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-apdu-parse-header:
+	cd fuzz && cargo +nightly fuzz run apdu_parse_header $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-hid-frame-assembler:
+	cd fuzz && cargo +nightly fuzz run hid_frame_assembler $(FUZZ_LIBFUZZER_ARGS)
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

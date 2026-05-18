@@ -19,3 +19,6 @@ hex = { workspace = true }
 # crate runs on the host, not the STM32U585 — which is already the
 # workspace default.
 bls12_381 = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

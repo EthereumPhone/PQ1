@@ -62,7 +62,6 @@ const ISR_TXIS: u32 = 1 << 1;
 const ISR_RXNE: u32 = 1 << 2;
 const ISR_NACKF: u32 = 1 << 4;
 const ISR_STOPF: u32 = 1 << 5;
-const ISR_TC: u32 = 1 << 6;
 const ISR_TCR: u32 = 1 << 7;
 const ISR_BERR: u32 = 1 << 8;
 const ISR_ARLO: u32 = 1 << 9;

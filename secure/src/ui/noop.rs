@@ -3,17 +3,13 @@
 //! All display and input calls are silent no-ops. Used when the device
 //! runs headless (USB HID mode without a debugger or OLED attached).
 
-use super::{Button, Press, DISPLAY_COLS, DISPLAY_ROWS};
+use super::{Button, Press};
 
-pub struct Display {
-    _rows: [[u8; DISPLAY_COLS]; DISPLAY_ROWS],
-}
+pub struct Display;
 
 impl Display {
     pub const fn new() -> Self {
-        Self {
-            _rows: [[b' '; DISPLAY_COLS]; DISPLAY_ROWS],
-        }
+        Self
     }
 
     pub fn init(&mut self) {}

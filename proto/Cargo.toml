@@ -43,3 +43,7 @@ stm32u585 = []
 # Property-based fuzzing for any future encode/decode helpers — runs
 # only on host via `cargo test -p pqsigner-proto`.
 proptest = "1"
+# Keccak-256 used in host-side tests to cross-check the on-chain
+# selectors and EIP-712 typehashes baked into this crate. Dev-only —
+# production firmware pulls keccak via `pqsigner-tx-core`, not here.
+tiny-keccak = { version = "2", features = ["keccak"] }

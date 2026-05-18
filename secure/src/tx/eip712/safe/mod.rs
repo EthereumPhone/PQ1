@@ -51,6 +51,9 @@ pub use verify::{verify_and_bind_trailer, VerifiedSafeV1};
 #[cfg(test)]
 mod test_vectors;
 
+#[cfg(test)]
+mod extra_tests;
+
 // ---------------------------------------------------------------------------
 // Decoded SafeTx
 // ---------------------------------------------------------------------------

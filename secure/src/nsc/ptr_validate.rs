@@ -118,6 +118,13 @@ pub(super) fn validate_ns_write_ptr(ptr: u32, len: usize) -> bool {
     if ptr == 0 {
         return false;
     }
+    // The validator reasons in 32-bit address space; an oversized
+    // `usize` would silently truncate in the `len as u32` cast below
+    // and approve a range orders of magnitude larger than measured.
+    // No-op on 32-bit ARM (`usize == u32`); defensive on hosts/tests.
+    if len > u32::MAX as usize {
+        return false;
+    }
     let end = match ptr.checked_add(len as u32) {
         Some(e) => e,
         None => return false,
@@ -143,6 +150,9 @@ pub(super) fn validate_ns_write_ptr(ptr: u32, len: usize) -> bool {
 #[inline]
 pub(super) fn validate_ns_read_ptr(ptr: u32, len: usize) -> bool {
     if ptr == 0 {
+        return false;
+    }
+    if len > u32::MAX as usize {
         return false;
     }
     let end = match ptr.checked_add(len as u32) {

@@ -177,6 +177,9 @@ mod transport {
 
         #[cfg(feature = "e2e-test")]
         fn nsc_test_pin_lockout() -> u32;
+
+        #[cfg(feature = "e2e-test")]
+        fn nsc_tzic_status() -> u32;
     }
 
     #[inline]
@@ -280,6 +283,12 @@ mod transport {
     pub(super) fn test_pin_lockout() -> u32 {
         unsafe { nsc_test_pin_lockout() }
     }
+
+    #[cfg(feature = "e2e-test")]
+    #[inline]
+    pub(super) fn tzic_status() -> u32 {
+        unsafe { nsc_tzic_status() }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +345,15 @@ pub fn lock() -> u32 {
 #[cfg(feature = "e2e-test")]
 pub fn test_pin_lockout() -> u32 {
     transport::test_pin_lockout()
+}
+
+/// Test-only: read the GTZC1 TZIC illegal-access counter. Returns the
+/// running u32 count of NS→SECURE access violations the IRQ has logged
+/// since boot. Pairs with the `gtzc-test` validation driver — see
+/// `nonsecure/src/gtzc_test.rs`.
+#[cfg(all(feature = "e2e-test", feature = "stm32u585"))]
+pub fn tzic_status() -> u32 {
+    transport::tzic_status()
 }
 
 /// Compute the CREATE2-predicted wallet address for `account_index`

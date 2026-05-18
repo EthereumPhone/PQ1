@@ -1,7 +1,7 @@
 //! Bare-metal I2C1 master driver for STM32U585.
 //!
-//! Provides blocking `write`, `read`, and `write_read` operations
-//! to communicate with the SE050 at I2C slave address 0x48.
+//! Provides blocking `write` and `read` operations to communicate with
+//! the SE050 at I2C slave address 0x48.
 //!
 //! Register base imported from `hw::i2c_hw`; the offsets are bound once
 //! into typed [`Reg32`] / [`RoReg32`] handles so individual touches in
@@ -61,16 +61,13 @@ const REG: I2cRegs = unsafe {
 // ---------------------------------------------------------------------------
 // I2C ISR (Interrupt and Status Register) bit positions
 // ---------------------------------------------------------------------------
-const ISR_TXE: u32 = 1 << 0; // Transmit data register empty
 const ISR_TXIS: u32 = 1 << 1; // Transmit interrupt status
 const ISR_RXNE: u32 = 1 << 2; // Receive data register not empty
 const ISR_NACKF: u32 = 1 << 4; // NACK received flag
 const ISR_STOPF: u32 = 1 << 5; // STOP detection flag
-const ISR_TC: u32 = 1 << 6; // Transfer complete
 const ISR_TCR: u32 = 1 << 7; // Transfer complete reload
 const ISR_BERR: u32 = 1 << 8; // Bus error
 const ISR_ARLO: u32 = 1 << 9; // Arbitration lost
-const ISR_BUSY: u32 = 1 << 15; // Bus busy
 
 // ICR (Interrupt Clear Register) bits
 const ICR_NACKCF: u32 = 1 << 4;
@@ -80,7 +77,6 @@ const ICR_ARLOCF: u32 = 1 << 9;
 
 // CR2 bits
 const CR2_START: u32 = 1 << 13;
-const CR2_STOP: u32 = 1 << 14;
 const CR2_AUTOEND: u32 = 1 << 25;
 const CR2_RELOAD: u32 = 1 << 24;
 const CR2_RD_WRN: u32 = 1 << 10; // 1 = read, 0 = write
@@ -213,36 +209,3 @@ pub fn read(buf: &mut [u8]) -> Result<(), I2cError> {
     Ok(())
 }
 
-/// Write `tx` then read `rx` in a single I2C transaction (repeated START).
-pub fn write_read(tx: &[u8], rx: &mut [u8]) -> Result<(), I2cError> {
-    if tx.is_empty() {
-        return read(rx);
-    }
-    if rx.is_empty() {
-        return write(tx);
-    }
-
-    // Write phase: no AUTOEND (we'll send repeated START instead of STOP)
-    configure_transfer(SE050_ADDR, tx.len().min(255) as u8, 0, 0);
-
-    for &byte in tx {
-        wait_flag(ISR_TXIS)?;
-        REG.txdr.write(byte as u32);
-    }
-
-    // Wait for transfer complete (not STOP — we disabled AUTOEND)
-    wait_flag(ISR_TC)?;
-
-    // Read phase: repeated START, AUTOEND
-    configure_transfer(SE050_ADDR, rx.len().min(255) as u8, CR2_RD_WRN, CR2_AUTOEND);
-
-    for byte in rx.iter_mut() {
-        wait_flag(ISR_RXNE)?;
-        *byte = REG.rxdr.read() as u8;
-    }
-
-    wait_flag(ISR_STOPF)?;
-    REG.icr.write(ICR_STOPCF);
-
-    Ok(())
-}

@@ -99,7 +99,7 @@ pub fn fisher_yates(seed: &[u8; 32], n: usize, perm: &mut [u8]) {
     let mut block_off: usize = 32; // force a refill on first use
     let mut counter: u32 = 0;
 
-    let mut next_u16 = |b: &mut [u8; 32], off: &mut usize, ctr: &mut u32| -> u16 {
+    let next_u16 = |b: &mut [u8; 32], off: &mut usize, ctr: &mut u32| -> u16 {
         let mut take_byte = || -> u8 {
             if *off >= 32 {
                 let mut h = Sha256::new();

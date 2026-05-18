@@ -7,10 +7,9 @@
 //!
 //! What stays here:
 //!
-//! * [`c10_sign_verified`] / [`c10_sign_verified_with_progress`] — the
-//!   FI-hardened verify-before-release wrapper. Depends on
-//!   [`crate::fi`], whose hardening primitives are keyed off the
-//!   secure-world TRNG.
+//! * [`c10_sign_verified_with_progress`] — the FI-hardened
+//!   verify-before-release wrapper. Depends on [`crate::fi`], whose
+//!   hardening primitives are keyed off the secure-world TRNG.
 //! * [`provision_from_mnemonic`] / [`store_macd_encrypted`] — the
 //!   `WalletStore` + `SecureElement` provisioning entry points used by
 //!   the wizard and by the mock/Tropic01 backends. These touch the
@@ -25,21 +24,14 @@ use crate::secure_element::SecureElement;
 use sphincs_tz_bip39::Mnemonic;
 use zeroize::Zeroize;
 
-/// Sign a 32-byte message hash with the bootstrap C10 signing key and the
-/// (optional) randomiser. Wraps `sphincs_c10::SigningKey::sign` with a
-/// verify-before-release fault-injection guard.
+/// Sign a 32-byte message hash with the bootstrap C10 signing key and
+/// the (optional) randomiser. Wraps `sphincs_c10::SigningKey::sign`
+/// with a verify-before-release fault-injection guard. Reports 0..100
+/// signing progress via the supplied callback so the trusted-UI
+/// progress bar stays responsive during the multi-second C10
+/// signature.
 ///
 /// Produces 4008-byte C10 signatures — see `sphincs-c10/src/params.rs`.
-pub fn c10_sign_verified(
-    sk: &sphincs_c10::SigningKey,
-    msg_hash: &[u8; 32],
-) -> Result<[u8; sphincs_c10::params::SIGNATURE_LEN], ()> {
-    c10_sign_verified_with_progress(sk, msg_hash, |_| {})
-}
-
-/// Like [`c10_sign_verified`] but reports 0..100 signing progress via the
-/// supplied callback so the trusted-UI progress bar stays responsive
-/// during the multi-second C10 signature.
 // F-18 (CFI): per-step magic constants for `c10_sign_verified_with_progress`.
 //
 // Distinct, non-trivial 32-bit values so no subset of skipped steps

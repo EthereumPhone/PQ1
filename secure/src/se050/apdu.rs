@@ -19,8 +19,6 @@ use super::t1oi2c::{T1Error, T1State};
 /// SE050 operation errors.
 #[derive(Debug)]
 pub enum Se050Error {
-    /// I2C bus failure.
-    I2c,
     /// T1oI2C framing, CRC, or timeout error.
     Transport,
     /// SCP03 handshake or cryptogram mismatch.
@@ -862,29 +860,6 @@ unsafe fn delete_id_list_page(
     }
 
     Ok((more, list_len, deleted, failed))
-}
-
-/// Request a platform-level factory reset via SetPlatformSCPRequest.
-///
-/// Note: `SetPlatformSCPRequest` only toggles whether SCP03 is mandatory
-/// — it does NOT wipe objects. Kept for compatibility; prefer
-/// `iterative_delete_all` for actual object cleanup.
-pub unsafe fn platform_factory_reset(
-    t1: &mut T1State,
-    scp03: &mut Scp03Session,
-) -> Result<(), Se050Error> {
-    const PLATFORM_SCP_OBJ: u32 = 0x7FFF_0207;
-    const P2_SCP: u8 = 0x52; // kSE05x_P2_SCP (correct NXP SDK value)
-    const FACTORY_RESET_REQ: u8 = 0x02;
-
-    let mut apdu = ApduBuf::new(0x80, INS_MGMT, P1_DEFAULT, P2_SCP);
-    apdu.tlv_u32(TAG_1, PLATFORM_SCP_OBJ);
-    apdu.tlv(TAG_2, &[FACTORY_RESET_REQ]);
-    let cmd = apdu.finish(false);
-
-    let mut resp = [0u8; 64];
-    send_apdu(t1, scp03, cmd, &mut resp)?;
-    Ok(())
 }
 
 /// `Se05x_API_GetRandom` (NXP AN12413 §5.13.1) — pull `out.len()` bytes

@@ -54,7 +54,6 @@ const SR_TXP: u32 = 1 << 1;   // Tx-packet space available
 const SR_RXP: u32 = 1 << 0;   // Rx-packet data available
 const SR_EOT: u32 = 1 << 3;   // End of transfer
 const SR_OVR: u32 = 1 << 6;   // Overrun
-const SR_TXTF: u32 = 1 << 4;  // Transmission transfer filled
 
 // CR1 bits
 const CR1_SPE: u32 = 1 << 0;  // SPI enable
@@ -205,10 +204,7 @@ impl spi::ErrorType for Stm32Spi {
 impl spi::SpiDevice for Stm32Spi {
     fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
         // Assert CS at the start of the transaction.
-        // SAFETY: `cs_assert` is a thin GPIO-BSRR write; single-threaded secure world.
-        unsafe {
-            cs_assert();
-        }
+        cs_assert();
 
         let mut result = Ok(());
         for op in operations {
@@ -249,10 +245,7 @@ impl spi::SpiDevice for Stm32Spi {
         }
 
         // Deassert CS at the end of the transaction (always, even on error).
-        // SAFETY: `cs_deassert` is a thin GPIO-BSRR write; single-threaded secure world.
-        unsafe {
-            cs_deassert();
-        }
+        cs_deassert();
 
         result
     }

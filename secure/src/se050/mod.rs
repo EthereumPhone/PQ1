@@ -464,20 +464,6 @@ impl Se050 {
         Ok(())
     }
 
-    /// Legacy platform factory reset — kept for completeness but does
-    /// NOT actually wipe objects. `SetPlatformSCPRequest` only toggles
-    /// SCP03-mandatory. Use `iterative_wipe` or `user_factory_reset`
-    /// for real cleanup.
-    pub fn factory_reset(&mut self) -> Result<(), Se050Error> {
-        self.init()?;
-        unsafe {
-            apdu::platform_factory_reset(&mut self.t1, &mut self.scp03)?;
-        }
-        self.ready = false;
-        self.scp03 = scp03::Scp03Session::new();
-        Ok(())
-    }
-
     /// Self-contained factory-reset roundtrip test.
     ///
     /// 1. Cleanup: if a previous test left a UserID at `TEST_USERID_OBJ`,
@@ -1550,36 +1536,6 @@ impl Se050 {
                 }
             }
         }
-
-        Ok(())
-    }
-
-    /// Provision the SE050 with admin-wipe support.
-    ///
-    /// Same as the WalletStore::provision path except every user object
-    /// gets a two-entry TAG_POLICY whose second entry authorises ADMIN_WIPE_OBJ
-    /// to delete. Caller (dual_se.rs) supplies the per-device admin PIN
-    /// derived from the OPTIGA PBS.
-    pub fn provision_with_admin(
-        &mut self,
-        entropy: &[u8; 32],
-        vk: &[u8; 32],
-        bootstrap_vk: &[u8; 32],
-        pin: &[u8; 8],
-        admin_pin: &[u8; 16],
-    ) -> Result<(), Se050Error> {
-        self.store_objects(
-            pin,
-            sphincs_tz_shared::MAX_ATTEMPTS as u16,
-            entropy, vk, bootstrap_vk,
-            Some(admin_pin),
-        )?;
-
-        self.vk_cache.copy_from_slice(vk);
-        self.vk_cached = true;
-        self.bootstrap_vk_cache.copy_from_slice(bootstrap_vk);
-        self.bootstrap_vk_cached = true;
-        self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
 
         Ok(())
     }

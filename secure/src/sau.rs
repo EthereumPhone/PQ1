@@ -309,6 +309,29 @@ mod stm32 {
         debug_assert_eq!(r1, seccfgr1, "TZSC_SECCFGR1 write-readback mismatch");
         debug_assert_eq!(r2, seccfgr2, "TZSC_SECCFGR2 write-readback mismatch");
         debug_assert_eq!(r3, seccfgr3, "TZSC_SECCFGR3 write-readback mismatch");
+
+        // Test-only: enable AES/PKA/SAES clocks so the gtzc-test
+        // validation driver can prove GTZC enforcement applies to
+        // all 7 protected peripherals. Without their clocks, NS
+        // reads to AES/PKA/SAES RAZ via the bus-default-no-responder
+        // path and TZIC never fires — indistinguishable from a
+        // successful block. HASH and RNG are already clocked by
+        // boot init (HASH self-test + TRNG init).
+        //
+        // Compiled out of production builds.
+        #[cfg(feature = "e2e-test")]
+        crate::hw::tzic::enable_test_target_clocks();
+
+        // Arm GTZC1 TZIC with the same masks. Without this an
+        // illegal NS access is silently RAZ/WI'd — the AHB bridge
+        // gates the access but no interrupt fires and the secure
+        // world never learns the violation happened. TZIC turns
+        // that into NVIC IRQ 8, dispatched in
+        // `main::DefaultHandler` to `hw::tzic::on_violation()`.
+        // SECCFGR4 is left untouched (AHB3 peripherals stay at
+        // their NS reset default; nothing security-critical there
+        // on this branch), so its IER mask is 0.
+        crate::hw::tzic::configure(seccfgr1, seccfgr2, seccfgr3, 0);
     }
 }
 

@@ -29,8 +29,6 @@ const GPIOB_S: u32 = 0x5202_0400;
 // ---------------------------------------------------------------------------
 pub const I2C1: u32 = 0x5000_5400;
 
-// The se050::t1oi2c driver reaches in for the raw register addresses; keep
-// the typed handles below as the source of truth.
 pub struct I2c1Regs {
     pub cr1: Reg32,
     pub cr2: Reg32,

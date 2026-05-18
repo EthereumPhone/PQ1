@@ -132,7 +132,7 @@ fn right_pressed() -> bool {
 // Initialization
 // ---------------------------------------------------------------------------
 
-/// Configure LEFT (PI2) and RIGHT (PA15) as inputs with pull-ups.
+/// Configure LEFT (PC1) and RIGHT (PA8) as inputs with pull-ups.
 ///
 /// Also configures PC13 (on-board USER button) for test reference.
 ///

@@ -336,19 +336,6 @@ pub fn se050_scp03_dek_key() -> Result<[u8; 16], OtpError> {
     Ok(out)
 }
 
-/// 32-byte TROPIC01 pairing key. Consumed by the Tropic driver's
-/// Noise_KK handshake once we wire it through — today the Tropic
-/// driver uses a hardcoded pairing key and the `tropic01-se` backend
-/// isn't built into the shipping target, so this derivation is
-/// currently unused. Stays on `derive_into` (DHUK) for now; would
-/// move to `derive_into_bhk` (BHK axis) alongside SE050 if/when
-/// TROPIC01 is re-enabled.
-pub fn tropic01_pairing_key() -> Result<[u8; 32], OtpError> {
-    let mut out = [0u8; 32];
-    derive_into(b"pqsigner/tropic01-pair-v1", &mut out)?;
-    Ok(out)
-}
-
 /// 16-byte SE050 admin-wipe PIN. Backs `ADMIN_WIPE_OBJ` (the admin
 /// UserID that holds `DELETE` authority on every user object via the
 /// two-entry TAG_POLICY). Derived (never persisted to flash), so:

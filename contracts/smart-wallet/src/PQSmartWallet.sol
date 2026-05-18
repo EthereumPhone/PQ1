@@ -74,11 +74,54 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     uint256 private constant SIG_VALIDATION_FAILED = 1;
     uint256 private constant SIG_VALIDATION_SUCCESS = 0;
 
+    // ── Transient storage slots (EIP-1153) ─────────────────────────
+    //
+    // EIP-4337 v0.6 pairs `validateUserOp` and the executed callData
+    // inside the same transaction. We thread two one-shot tokens via
+    // transient storage so the executed call is forced to match the
+    // signature that authorised it:
+    //
+    //   * `_TS_VALIDATED_OWNER_INDEX_PLUS_ONE` — the wrapper's
+    //     `ownerIndex` from `_validateSignature`, offset by +1 so 0
+    //     means "no validation has happened in this tx". Read and
+    //     cleared by `executeWithOffchainCount` /
+    //     `executeBatchWithOffchainCount` to enforce H-3 parity.
+    //   * `_TS_PENDING_BOOTSTRAP_BUMP` — set to 1 whenever a bootstrap
+    //     UserOp validates. Read and cleared by `addOwnerBytes`
+    //     immediately after `_addOwner` succeeds, gating the actual
+    //     bootstrap-budget bump (audit M-1). Bumping in validation
+    //     would otherwise burn 1/65536 of the cap for every UserOp
+    //     whose execution reverts (e.g. on `AlreadyOwner`).
+    //
+    // Both slots auto-clear at end of transaction (EIP-1153 semantics).
+    uint256 private constant _TS_VALIDATED_OWNER_INDEX_PLUS_ONE = 0;
+    uint256 private constant _TS_PENDING_BOOTSTRAP_BUMP = 1;
+
     // ── Errors ──────────────────────────────────────────────────────
 
     error NotFromEntryPoint();
     error NotFromSelf();
     error AlreadyInitialized();
+
+    /// @notice An `executeWithOffchainCount` / `executeBatchWithOffchainCount`
+    ///         call attempted to target the wallet itself. Blocking this
+    ///         closes the bootstrap role-split escape from audit H-2 —
+    ///         without it, a slot key could pipe `addOwnerBytes` through
+    ///         the slot-execute path's self-call and mint new owners.
+    error SelfCallForbidden();
+
+    /// @notice The `ownerIndex` passed in calldata to
+    ///         `executeWithOffchainCount` / `executeBatchWithOffchainCount`
+    ///         did not match the `ownerIndex` recovered from the validated
+    ///         signature wrapper. Closes audit H-3: without parity, a slot
+    ///         key could poison a different slot's `offchainSigCount` by
+    ///         signing under one index while updating another.
+    error OwnerIndexMismatch();
+
+    /// @notice `executeBatchWithOffchainCount` was called with mismatched
+    ///         `targets` / `values` / `datas` array lengths. Custom error
+    ///         instead of a plain-string revert (audit L-3).
+    error BatchArrayLengthMismatch();
 
     // ── Init ────────────────────────────────────────────────────────
 
@@ -177,6 +220,8 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         bytes calldata data
     ) external returns (bytes memory) {
         if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+        _consumeValidatedOwnerIndex(ownerIndex);
+        if (target == address(this)) revert SelfCallForbidden();
         _setOffchainSigCount(
             ownerIndex,
             newOffchainCount,
@@ -200,6 +245,7 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         bytes[] calldata datas
     ) external {
         if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
+        _consumeValidatedOwnerIndex(ownerIndex);
         _setOffchainSigCount(
             ownerIndex,
             newOffchainCount,
@@ -207,8 +253,9 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
             MAX_SLOT_USES
         );
         uint256 n = targets.length;
-        require(values.length == n && datas.length == n, "length mismatch");
+        if (values.length != n || datas.length != n) revert BatchArrayLengthMismatch();
         for (uint256 i; i < n; ++i) {
+            if (targets[i] == address(this)) revert SelfCallForbidden();
             (bool ok, bytes memory ret) = targets[i].call{value: values[i]}(datas[i]);
             if (!ok) {
                 assembly ("memory-safe") {
@@ -218,14 +265,44 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         }
     }
 
+    /// @dev Consume the one-shot ownerIndex token written by
+    ///      `_validateSignature` and revert unless it matches the
+    ///      `ownerIndex` argument this caller supplied. Forces the
+    ///      executed call to operate on the same slot the bundle was
+    ///      authorised for (audit H-3) and to follow a validated
+    ///      UserOp at all (a direct EntryPoint-impersonating call
+    ///      with no preceding validate finds the slot empty).
+    function _consumeValidatedOwnerIndex(uint256 ownerIndex) private {
+        uint256 expectedPlusOne;
+        assembly ("memory-safe") {
+            expectedPlusOne := tload(_TS_VALIDATED_OWNER_INDEX_PLUS_ONE)
+            tstore(_TS_VALIDATED_OWNER_INDEX_PLUS_ONE, 0)
+        }
+        if (expectedPlusOne == 0 || expectedPlusOne - 1 != ownerIndex) {
+            revert OwnerIndexMismatch();
+        }
+    }
+
     // ── Owner management (self-only, i.e. via a validated UserOp) ───
 
     /// @notice Add a new slot owner at the next index. Only callable by
     ///         `this` — i.e. via a UserOp whose signature was validated
     ///         against `ownerIndex == 0` (bootstrap).
+    ///
+    ///         Bootstrap-budget bump is deferred from `_validateSignature`
+    ///         to here (audit M-1): consume the transient
+    ///         `_TS_PENDING_BOOTSTRAP_BUMP` token AFTER `_addOwner`
+    ///         succeeds, so a revert in `_addOwner` (e.g. duplicate owner)
+    ///         no longer burns 1/65536 of the bootstrap cap.
     function addOwnerBytes(bytes calldata newOwner) external {
         if (msg.sender != address(this)) revert NotFromSelf();
         _addOwner(newOwner);
+        uint256 pending;
+        assembly ("memory-safe") {
+            pending := tload(_TS_PENDING_BOOTSTRAP_BUMP)
+            tstore(_TS_PENDING_BOOTSTRAP_BUMP, 0)
+        }
+        if (pending == 1) _bumpBootstrapUses(MAX_BOOTSTRAP_USES);
     }
 
     /// @notice Remove a slot owner. Only callable by `this` — i.e. via a
@@ -273,10 +350,11 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
 
         // ── Manual parse of `abi.encode(uint256 ownerIndex, bytes sig)` ──
         //
-        //   [0..32)    ownerIndex
-        //   [32..64)   offset to bytes (MUST be 0x40)
-        //   [64..96)   inner sig length (MUST be C10_SIG_LEN)
-        //   [96..96+padded) inner C10 sig (padded to 32-byte boundary)
+        //   [0..32)        ownerIndex
+        //   [32..64)       offset to bytes (MUST be 0x40)
+        //   [64..96)       inner sig length (MUST be C10_SIG_LEN)
+        //   [96..96+inner) inner C10 sig (4008 bytes)
+        //   [4104..4128)   ABI tail-pad (24 bytes; MUST be zero)
         uint256 paddedInner = ((C10_SIG_LEN + 31) / 32) * 32;
         uint256 expectedLen = 96 + paddedInner;
         if (sig.length != expectedLen) return SIG_VALIDATION_FAILED;
@@ -284,13 +362,27 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         uint256 ownerIndex;
         uint256 offsetField;
         uint256 innerLen;
+        uint256 tailPad;
         assembly ("memory-safe") {
             ownerIndex := calldataload(sig.offset)
             offsetField := calldataload(add(sig.offset, 32))
             innerLen := calldataload(add(sig.offset, 64))
+            // Read the last 32 bytes of the wrapper. The bottom 24 bytes
+            // of that word are the ABI tail-pad (positions [4104..4128));
+            // the top 8 bytes are the last 8 of the authenticated inner
+            // sig. Mask the top 8 bytes off so we only check the pad.
+            // 0x00..(8 bytes)..0x00 || 0xFF..(24 bytes)..0xFF
+            tailPad := and(
+                calldataload(add(sig.offset, 4096)),
+                0x0000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+            )
         }
         if (offsetField != 0x40) return SIG_VALIDATION_FAILED;
         if (innerLen != C10_SIG_LEN) return SIG_VALIDATION_FAILED;
+        // Audit L-1: reject non-zero tail-pad — the wrapper keccak must
+        // be malleable in zero ways, even though the C10 sig itself
+        // authenticates the digest.
+        if (tailPad != 0) return SIG_VALIDATION_FAILED;
 
         bytes calldata innerSig = sig[96:96 + C10_SIG_LEN];
 
@@ -335,10 +427,25 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         }
 
         // ── Counter bumps after successful verify ───────────────────
+        //
+        // Audit M-1: the bootstrap-budget bump is deferred to
+        //   `addOwnerBytes` so a reverting execution (e.g. `AlreadyOwner`)
+        //   doesn't burn a bootstrap unit. We just mark the bump as
+        //   pending here and let the execution-phase consume it.
+        //
+        // Audit H-3: stamp the validated ownerIndex into transient
+        //   storage (+1 so the absence sentinel stays 0) so
+        //   `executeWithOffchainCount` / `executeBatchWithOffchainCount`
+        //   can enforce that the calldata ownerIndex matches.
         if (ownerIndex == 0) {
-            _bumpBootstrapUses(MAX_BOOTSTRAP_USES);
+            assembly ("memory-safe") {
+                tstore(_TS_PENDING_BOOTSTRAP_BUMP, 1)
+            }
         } else {
             _bumpSlotUses(ownerIndex, MAX_SLOT_USES);
+            assembly ("memory-safe") {
+                tstore(_TS_VALIDATED_OWNER_INDEX_PLUS_ONE, add(ownerIndex, 1))
+            }
         }
         return SIG_VALIDATION_SUCCESS;
     }
@@ -377,8 +484,9 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     //     verification against the slot pubkey indicated by ownerIndex.
     //   * `_erc1271Signer()` — abstract on Solady's base; we have a
     //     multi-owner model so the single-signer concept does not apply.
-    //     Returning `address(this)` makes the default impl a no-op (we
-    //     override the only consumer of it anyway).
+    //     We override the only consumer (`_erc1271IsValidSignatureNowCalldata`)
+    //     and make `_erc1271Signer()` itself revert as a tripwire
+    //     against future refactors that drop the override (audit L-2).
     //
     // EIP-1271 is `view`-only. It NEVER bumps `slotUses` /
     // `offchainSigCount`. The firmware-side `local_offchain_count`
@@ -394,8 +502,16 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         return ("PQSmartWallet", "1");
     }
 
+    /// @dev Solady's default `_erc1271IsValidSignatureNowCalldata` would
+    ///      `staticcall` the address returned here back into this same
+    ///      contract — `address(this) → self → infinite recursion → OOG`.
+    ///      Our override below replaces that default body entirely, so
+    ///      this hook is never reached in a healthy build. Revert loudly
+    ///      to make any future refactor that accidentally drops the
+    ///      override fail at the first EIP-1271 call instead of failing
+    ///      silently with an unreadable out-of-gas (audit L-2).
     function _erc1271Signer() internal view override returns (address) {
-        return address(this);
+        revert("unreachable: multi-owner -- see _erc1271IsValidSignatureNowCalldata");
     }
 
     function _erc1271IsValidSignatureNowCalldata(bytes32 hash, bytes calldata signature)
@@ -411,13 +527,20 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         uint256 ownerIndex;
         uint256 offsetField;
         uint256 innerLen;
+        uint256 tailPad;
         assembly ("memory-safe") {
             ownerIndex := calldataload(signature.offset)
             offsetField := calldataload(add(signature.offset, 32))
             innerLen := calldataload(add(signature.offset, 64))
+            // Audit L-1: mirror `_validateSignature`'s tail-pad check.
+            tailPad := and(
+                calldataload(add(signature.offset, 4096)),
+                0x0000000000000000FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+            )
         }
         if (offsetField != 0x40) return false;
         if (innerLen != C10_SIG_LEN) return false;
+        if (tailPad != 0) return false;
 
         // Bootstrap key (ownerIndex == 0) is reserved for slot
         // registration. Forbid it for off-chain so the bootstrap budget

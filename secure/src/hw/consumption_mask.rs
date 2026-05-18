@@ -140,28 +140,11 @@ pub fn randomize() {
     REG.tim2_ccr1.write(duty);
 }
 
-/// Disable TIM2 output and put PA5 back to analog (reset) mode.
-/// Reverses [`init`].
-#[cfg(feature = "consumption-mask")]
-pub fn stop() {
-    use regs::*;
-    // Stop the counter and clear the main output.
-    REG.tim2_cr1.clear_bits(TIM_CR1_CEN);
-    // CCER.CC1E = 0.
-    REG.tim2_ccer.clear_bits(TIM_CCER_CC1E);
-    // PA5 → analog input (device reset state) so the pin stops
-    // sourcing from the AF mux. Bits [11:10] → 0b11 (analog).
-    REG.gpioa_moder.modify(|v| (v & !(0b11 << 10)) | (0b11 << 10));
-}
-
 #[cfg(not(feature = "consumption-mask"))]
 pub fn init() {}
 
 #[cfg(not(feature = "consumption-mask"))]
 pub fn randomize() {}
-
-#[cfg(not(feature = "consumption-mask"))]
-pub fn stop() {}
 
 #[cfg(feature = "consumption-mask")]
 const TIMER_PERIOD: u32 = 16_000;

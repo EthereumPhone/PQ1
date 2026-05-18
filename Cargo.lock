@@ -545,6 +545,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+name = "crunchy"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
+
+[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -622,6 +628,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sphincs-tz-shared",
+ "tempfile",
 ]
 
 [[package]]
@@ -1418,12 +1425,16 @@ dependencies = [
 [[package]]
 name = "pqsigner-hal"
 version = "0.1.0"
+dependencies = [
+ "static_assertions",
+]
 
 [[package]]
 name = "pqsigner-proto"
 version = "0.1.0"
 dependencies = [
  "proptest",
+ "tiny-keccak",
 ]
 
 [[package]]
@@ -1923,6 +1934,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "static_assertions",
  "zeroize",
 ]
 
@@ -2106,6 +2118,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
  "unicode-width",
+]
+
+[[package]]
+name = "tiny-keccak"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
+dependencies = [
+ "crunchy",
 ]
 
 [[package]]

@@ -83,10 +83,22 @@ contract PQSmartWalletFactory {
         if (chainId != block.chainid) revert WrongChainId(uint64(block.chainid), chainId);
 
         bytes32 salt = _salt(masterPkSeed, masterPkRoot);
-        address predicted = LibClone.predictDeterministicAddressERC1967(implementation, salt, address(this));
 
-        if (predicted.code.length > 0) {
-            return PQSmartWallet(payable(predicted));
+        // Call Solady's CREATE2 helper unconditionally. When the proxy is
+        // already deployed Solady forwards `msg.value` to it via `call`;
+        // otherwise it deploys + forwards in one shot. This avoids the
+        // earlier trap where the factory early-returned and stranded ETH
+        // on itself (it has no `receive` / withdraw path).
+        (bool alreadyDeployed, address deployed) =
+            LibClone.createDeterministicERC1967(msg.value, implementation, salt);
+        account = PQSmartWallet(payable(deployed));
+
+        if (alreadyDeployed) {
+            // Squat defence already enforced at first deploy; the wallet's
+            // owners are immutable in this dimension (bootstrap can't be
+            // rotated), so re-verifying `factorySig` here would only
+            // gatekeep top-ups for legitimate users. Skip and return.
+            return account;
         }
 
         // Squat defence: verify bootstrap authorised this slot-0 on this chain.
@@ -98,11 +110,6 @@ contract PQSmartWalletFactory {
             ok = false;
         }
         if (!ok) revert InvalidFactorySignature();
-
-        // CREATE2 the ERC-1967 proxy stub (always succeeds here — we
-        // already handled the `alreadyDeployed` branch above).
-        (, address deployed) = LibClone.createDeterministicERC1967(msg.value, implementation, salt);
-        account = PQSmartWallet(payable(deployed));
 
         // Initialise atomically — no front-runner window between
         // CREATE2 and this call.

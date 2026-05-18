@@ -30,13 +30,15 @@ contract SPHINCsC10AsmTest is Test {
     /// Snapshot of the verifier's `type(SPHINCsC10Asm).runtimeCode`
     /// keccak256, captured by `test_verifierBytecodeFrozen`. Update
     /// ONLY after a deliberate verifier source / compiler change,
-    /// and call it out in the commit message — silent changes to
+    /// and call it out in the commit message - silent changes to
     /// the production verifier MUST fail CI.
-    /// Captured 2026-05-11 from solc 0.8.28 / default optimizer settings.
+    /// Captured 2026-05-18 from solc 0.8.28 / default optimizer settings.
+    /// Refresh paired with audit M-2 (drop misleading memory-safe
+    /// annotation) and I-2 (add N-mask layout check on pkSeed/pkRoot).
     /// Any change here MUST be paired with a verifier source diff in
     /// the same commit + a justification in the commit message.
     bytes32 internal constant EXPECTED_RUNTIME_CODEHASH =
-        0xe905d5cd7173e02113a9f88a83a29ce881fb313dc7f6df48621d81f42c228988;
+        0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9;
 
     /// Gas ceiling for a single `verify(valid sig)`. The hand-tuned
     /// Yul currently runs ~1.7-4M gas (see handoff §8 footgun #3).
@@ -93,6 +95,38 @@ contract SPHINCsC10AsmTest is Test {
         (bytes32 pkSeed,, bytes32 message, bytes memory sig) = _load();
         bytes32 wrongRoot = bytes32(uint256(1) << 128);
         assertTrue(_verifyRejected(pkSeed, wrongRoot, message, sig), "wrong root must be rejected");
+    }
+
+    // Audit I-2 — the verifier itself MUST reject pubkeys that aren't
+    // N-masked (top 16 bytes populated, bottom 16 bytes zero), without
+    // relying on every caller to pre-validate.
+
+    function test_audit_i2_verifyRejectsNonNMaskedPkSeed() public view {
+        (bytes32 pkSeed, bytes32 pkRoot, bytes32 message, bytes memory sig) = _load();
+        // Smear bits into the low half of pkSeed.
+        bytes32 dirtySeed = pkSeed | bytes32(uint256(0xdeadbeefcafebabe));
+        assertTrue(_verifyRejected(dirtySeed, pkRoot, message, sig),
+            "non-N-masked pkSeed must be rejected at the verifier");
+    }
+
+    function test_audit_i2_verifyRejectsNonNMaskedPkRoot() public view {
+        (bytes32 pkSeed, bytes32 pkRoot, bytes32 message, bytes memory sig) = _load();
+        bytes32 dirtyRoot = pkRoot | bytes32(uint256(0xdeadbeefcafebabe));
+        assertTrue(_verifyRejected(pkSeed, dirtyRoot, message, sig),
+            "non-N-masked pkRoot must be rejected at the verifier");
+    }
+
+    function test_audit_i2_verifyReturnsFalseNotReverts() public view {
+        // The N-mask check returns `false`, it does NOT revert. That
+        // keeps the call-site `try / catch` shape predictable.
+        (, bytes32 pkRoot, bytes32 message, bytes memory sig) = _load();
+        bytes32 dirty = bytes32(uint256(1)); // bottom byte set
+        (bool ok, bytes memory ret) = address(verifier).staticcall(
+            abi.encodeWithSelector(verifier.verify.selector, dirty, pkRoot, message, sig)
+        );
+        assertTrue(ok, "verifier must return cleanly (not revert) on bad N-mask");
+        assertEq(ret.length, 32);
+        assertFalse(abi.decode(ret, (bool)));
     }
 
     function test_verifyMutatedSignatureFails() public {

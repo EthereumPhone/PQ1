@@ -31,3 +31,8 @@ hmac    = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
+sha2 = { version = "0.10", default-features = false }
+hmac = { workspace = true }
+sphincs-tz-bip39 = { workspace = true }
+sphincs-c10 = { workspace = true }
+pqsigner-proto = { workspace = true }

@@ -1,0 +1,10 @@
+# Lake / Lean build artefacts.
+.lake/
+build/
+*.olean
+*.ilean
+*.c
+
+# Local manifest — pinned in lakefile.toml.
+# (Keep `lake-manifest.json` in source so reviewers get the exact
+# dependency set.)

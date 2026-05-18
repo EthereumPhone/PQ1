@@ -54,8 +54,3 @@ pub fn idle_for() -> u32 {
 pub fn is_idle() -> bool {
     idle_for() > TIMEOUT_TICKS
 }
-
-/// Convenience: an `idle_check` callable suitable for `Input::wait_button`.
-pub fn idle_check() -> bool {
-    is_idle()
-}

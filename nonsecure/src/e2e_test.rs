@@ -1216,23 +1216,12 @@ fn main() -> ! {
             PAYLOAD_BUF[off] = 0;
             off += 1;
         }
-        // batch_count = 1, but we only emit the first 10 bytes of the
-        // 54-byte per-tx prefix.
+        // batch_count = 1.
         PAYLOAD_BUF[off] = 1;
-        off += 1;
-        for _ in 0..10 {
-            PAYLOAD_BUF[off] = 0xff;
-            off += 1;
-        }
-        // Total length is at least HEADER + per-tx-prefix, so the
-        // length pre-check passes; the parser then notices the per-tx
-        // block is short.
-        // Pad to header + per-tx-prefix - 1 byte (still under threshold)
-        // OR we extend so length ≥ header+prefix and the parser hits
-        // the `data_len > MAX_TX_LEN || cursor + data_len > total_len`
-        // branch. Easier: declare data_len that overruns total_len.
-        let header_plus_partial = SIGN_USEROP_BATCH_HEADER_LEN + 10;
-        // Override: write a full prefix BUT with data_len that overshoots.
+        // Write a full per-tx prefix with `data_len = 1000` and zero
+        // trailing data bytes, so the parser hits the
+        // `data_len > MAX_TX_LEN || cursor + data_len > total_len`
+        // branch and rejects the truncated inner-tx block.
         let mut off2 = SIGN_USEROP_BATCH_HEADER_LEN;
         PAYLOAD_BUF[off2..off2 + 20].fill(0xaa);
         off2 += 20;
@@ -1247,7 +1236,6 @@ fn main() -> ! {
         off2 += 2;
         // Append zero data bytes — will be way short of declared 1000.
         let total = off2;
-        let _ = header_plus_partial;
         let status = nsc_api::sign_userop_batch(&PAYLOAD_BUF[..total], &mut SIG_BUF);
         assert_eq!(
             status,

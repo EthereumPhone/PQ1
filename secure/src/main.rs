@@ -129,6 +129,233 @@ mod ui;
 #[cfg(not(test))]
 mod zk;
 
+// ── Test-only re-includes for the `secure-nsc-sign-userop` slice ──
+//
+// `nsc` itself is `#[cfg(not(test))]` because most of its files pull in
+// hardware-only crates. The two helper files (`nsc/sig_wrapper.rs`,
+// `nsc/trailer.rs`) are pure logic, so we re-include them at the crate
+// root under `cfg(test)` to make them reachable from `cargo test`.
+//
+// `trailer.rs` calls `crate::ui::show_status(...)`; under test we
+// provide a no-op stub so the file compiles without dragging in the
+// real OLED stack.
+#[cfg(test)]
+mod ui {
+    pub fn show_status(_title: &str, _sub: &str) {}
+
+    // Mirrors the production constants in `crate::ui` so the
+    // `display_under_test` scaffold can re-mount the per-renderer
+    // source files under host test builds (see
+    // `crate::display_under_test`).
+    pub const DISPLAY_COLS: usize = 16;
+    pub const DISPLAY_ROWS: usize = 4;
+    pub mod confirm {
+        pub type Page = [[u8; super::DISPLAY_COLS]; super::DISPLAY_ROWS];
+    }
+}
+
+#[cfg(test)]
+#[path = "nsc/sig_wrapper.rs"]
+mod nsc_sig_wrapper_under_test;
+
+#[cfg(test)]
+#[path = "nsc/trailer.rs"]
+mod nsc_trailer_under_test;
+
+#[cfg(test)]
+mod nsc_sign_userop_pure_tests;
+
+#[cfg(test)]
+mod nsc_batch_offchain_pure_tests;
+
+#[cfg(test)]
+mod nsc_small_cmds_pure_tests;
+
+#[cfg(test)]
+mod nsc_fw_update_pure_tests;
+
+// ── Host-side test suite for the `secure-fw-update-boot` slice ──
+//
+// Covers `fw_update/mod.rs` (state-machine types + `verify_manifest`
+// + `check_chunk`), `fw_update/staging.rs` (QW-aligned writes),
+// `fw_update/verify.rs` (COMMIT-time defence in depth),
+// `fw_update/vendor_pubkey.rs`, `measured_boot.rs` (OS Fingerprint),
+// and `boot_ns.rs` (S→NS handover). All production files are
+// `#[cfg(not(test))]` or `stm32u585`-gated, so the suite is
+// dominated by `include_str!` source-text invariants plus
+// pure-logic mirrors of decision trees. See
+// `reports/tests/secure-fw-update-boot.md` for the inventory.
+#[cfg(test)]
+mod fw_update_boot_pure_tests;
+
+// ── Host-side test suite for the `secure-main-sau` slice ──
+//
+// Covers `main.rs` (secure-world entry, SysTick/PendSV/DefaultHandler/
+// panic_handler trampolines, ARCH MMIO bindings, reset-cause
+// integration), `sau.rs` (SAU regions + GTZC1 MPCBB/TZSC config) and
+// `reset_cause.rs` (RCC_CSR classification). All three are
+// `#[cfg(not(test))]`-gated at the crate root because of
+// hardware-only deps; the suite is dominated by `include_str!` source-
+// text invariants plus a pure-logic mirror of `classify_bits`. See
+// `reports/tests/secure-main-sau.md` for the inventory.
+#[cfg(test)]
+mod main_sau_pure_tests;
+
+// ── Host-side test suite for the `secure-fi-pin-rng` slice ──
+//
+// Covers `fi.rs`, `fih.rs`, `fuzz_props.rs`, `host_rng.rs`,
+// `iso7816.rs`, `pin.rs`, `pin_diag.rs`, `rng.rs`, `rng_strong.rs`,
+// `sign_rate.rs`, `timeout.rs`. The slice mixes always-on host-
+// compileable modules (`fi`, `fih`, `iso7816`, `pin`, `sign_rate`,
+// `fuzz_props`) with `#[cfg(not(test))]`-excluded modules (`rng`,
+// `rng_strong`, `host_rng`, `pin_diag`, `timeout`). The suite
+// exercises the first group directly and pins the second via
+// `include_str!` source-text invariants, with a local re-mount of
+// `timeout.rs` so its pure logic is exercisable on host. See
+// `reports/tests/secure-fi-pin-rng.md` for the inventory.
+#[cfg(test)]
+mod secure_fi_pin_rng_pure_tests;
+
+// ── Test-only re-includes for the `secure-nsc-core` slice ──
+//
+// `nsc/ptr_validate.rs`, `nsc/ns_ptr.rs`, and `nsc/state.rs` are
+// pure-logic enough to exercise on host, but they live under the
+// production `nsc` module which is `#[cfg(not(test))]`. Mount them
+// under a per-test scaffold module so the `super::ptr_validate::*`
+// imports inside `ns_ptr.rs` continue to resolve, and so the
+// `pub(super)` items in `state.rs` are reachable from the sibling
+// test file `nsc_core_pure_tests.rs`.
+#[cfg(test)]
+pub(crate) mod nsc_core_under_test;
+
+// ── Test-only scaffold for the `secure-crypto-glue` slice ──
+//
+// `crypto.rs`, `dual_se.rs`, and `offchain_state.rs` are
+// `#[cfg(not(test))]` because they import hardware-only peers
+// (`crate::optiga`, `crate::se050`, `crate::rng_strong`,
+// `crate::sign_rate`, …) that cannot link on host. The scaffold
+// re-includes `offchain_state.rs` via `#[path]` so its mock SRAM
+// backend is reachable, and hosts source-text invariant pins for
+// the FI hardening / KDF tags / zeroization sites in `crypto.rs` +
+// `dual_se.rs`, alongside runtime tests for the four `db_roots`-
+// bound bundle wrappers (`erc20`, `names`, `selectors`) and the
+// `aa` re-export shim. See `reports/tests/secure-crypto-glue.md`
+// for the inventory.
+#[cfg(test)]
+mod secure_crypto_glue_under_test;
+
+// ── Test-only scaffold for the `secure-hw-crypto` slice ──
+//
+// The `hw` module is `#[cfg(not(test))]` because most of its files
+// import cortex_m / MMIO and cannot link on host. This scaffold hosts
+// the host-runnable source-text + reference-algorithm pinning suite
+// for the slice's KDF labels, register addresses, FI guards and
+// zeroization sites. See the module's docstring + the test file's
+// header for what is and isn't covered.
+#[cfg(test)]
+mod hw_crypto_under_test;
+
+// ── Test-only scaffold for the `secure-hw-platform` slice ──
+//
+// Same shape as `hw_crypto_under_test`: hosts the host-runnable
+// source-text + reference-encoding pinning suite for the platform
+// peripheral layer (flash geometry, RCC clock target, RNG/PKA/TAMP
+// register layout, dev-only production fences). See the module's
+// docstring + the pure_tests.rs header for what is and isn't covered.
+#[cfg(test)]
+mod hw_platform_under_test;
+
+// ── Test-only scaffold for the `secure-hw-io` slice ──
+//
+// Same shape as `hw_crypto_under_test` / `hw_platform_under_test`:
+// hosts the host-runnable source-text + reference-encoding pinning
+// suite for the bus / I/O peripheral layer (I2C1 OLED + SE050,
+// I2C2 STSAFE probe, SPI TROPIC01, USB OTG FS, USART1 RDP1 diag,
+// GPIO buttons). See the module's docstring + the pure_tests.rs
+// header for what is and isn't covered.
+#[cfg(test)]
+mod hw_io_under_test;
+
+// ── Test-only scaffold for the `secure-tx-display` slice ──
+//
+// The production `tx::display` module is gated `#[cfg(not(test))]` (see
+// `secure/src/tx/mod.rs`) because several of its sibling files pull in
+// hardware-only code via `crate::ui`. This scaffold re-mounts the
+// per-renderer source files under a parallel module tree, alongside a
+// hand-supplied `Pages` container that mirrors the production
+// `tx::display::Pages` byte-for-byte, so the renderers' page output can
+// be unit-tested on the host. See
+// `reports/tests/secure-tx-display.md` for the inventory.
+#[cfg(test)]
+mod display_under_test;
+
+// ── Test-only scaffold for the `secure-optiga` slice ──
+//
+// The production `optiga` module is `#[cfg(not(test))]` because the
+// transceive layer pulls in `cortex_m` for the delay loops and
+// `crate::hw::i2c_hw` for the I²C1 MMIO addresses — neither links on
+// host. This scaffold path-includes `apdu.rs` and `shield.rs` under
+// stub `ifx_i2c` types so the byte-exact wire-format and crypto
+// primitives can be exercised against reference vectors, alongside the
+// `include_str!`-based source-text pins for the files that genuinely
+// cannot be host-compiled (`ifx_i2c.rs`, `i2c.rs`, `mod.rs`). See
+// `reports/tests/secure-optiga.md`.
+#[cfg(test)]
+mod optiga_under_test;
+
+// ── Test-only scaffold for the `secure-se050` slice ──
+//
+// The production `se050` module is `#[cfg(all(feature = "se050",
+// not(test)))]` because `t1oi2c.rs` calls `cortex_m::asm::nop()` (the
+// `cortex-m` crate is target-gated to `cfg(target_arch = "arm")` in
+// `secure/Cargo.toml` and does not link on x86_64) and `i2c.rs` binds
+// `hw::i2c_hw::I2C1` MMIO addresses that don't exist on host. This
+// scaffold pins the slice through `include_str!` source-text invariants
+// + reference-vector cross-checks of the GP 1.0 CRC-16 and the SCP03
+// wrap framing, alongside cross-checks against the always-on
+// `scp03_logic` / `iso7816` modules. See `reports/tests/secure-se050.md`.
+#[cfg(test)]
+mod se050_under_test;
+
+// ── Host-side test suite for the `secure-se-misc` slice ──
+//
+// Covers `secure/src/scp03_logic.rs`, `secure/src/cmac.rs`,
+// `secure/src/secure_element.rs` (each via inline `#[cfg(test)] mod
+// tests` blocks), and the firmware-only `secure/src/tropic01_se.rs` +
+// `secure/src/semihosting_spi.rs` (via `include_str!` source-text
+// invariant pins in this module, because both files depend on
+// `cortex_m_semihosting` / `tropic01` / `x25519-dalek` and cannot
+// link on host). See `reports/tests/secure-se-misc.md` for the
+// inventory.
+#[cfg(test)]
+mod secure_se_misc_pure_tests;
+
+// ── Test-only scaffold for the `secure-zk` slice ──
+//
+// The production `zk` module is `#[cfg(not(test))]` because the
+// `render_clear_sign_pages` renderer pulls `crate::tx::display` (itself
+// `cfg(not(test))`) and `crate::ui::*`. The pure-logic verifier files
+// (`groth16.rs`, `poseidon.rs`, `vk_bundle.rs`) compile fine on host;
+// this scaffold re-mounts them under a parallel module tree so the
+// secure-side BLS12-381 Groth16 verifier + Poseidon hash + VK-bundle
+// Merkle decoder can be exercised against the committed
+// `test_vectors.rs` / `vk_data.rs` fixtures and adversarial inputs.
+// See `reports/tests/secure-zk.md`.
+#[cfg(test)]
+mod zk_under_test;
+
+// ── Test-only scaffold for the `secure-ui` slice ──
+//
+// The production `ui` module is `#[cfg(not(test))]` because every
+// file in it depends on hardware-only peers (`cortex_m_semihosting`,
+// `embedded_graphics`, `ssd1306`, `rtt-target`, the GPIO button
+// driver, `crate::timeout`, `crate::rng_strong`, the
+// `static mut DISPLAY` / `static mut INPUT` singletons). The slice
+// is pinned host-side through `include_str!` source-text invariants
+// plus reference-algorithm checks; see `reports/tests/secure-ui.md`.
+#[cfg(test)]
+mod ui_under_test;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
@@ -629,7 +856,7 @@ fn main() -> ! {
     // reloads are triggered by the external provisioner, not the user.
     if reset_cause.is_abnormal() {
         secure_log!("[S] Abnormal reset — zeroizing sensitive SRAM");
-        unsafe { nsc::zeroize_sensitive_state(); }
+        nsc::zeroize_sensitive_state();
     }
 
     // ---- STSAFE-A110 I2C2 bus probe ----
@@ -2592,10 +2819,6 @@ fn SysTick() {
     nsc::poll_gateway();
 }
 
-/// PendSV re-entry guard. Lives at module scope so `addr_of_mut!`
-/// returns the raw pointer LLVM expects; declaring it inside
-/// PendSV() gives a function-local binding whose address syntax is
-/// different.
 /// Catch-all device-IRQ handler.
 ///
 /// `cortex-m-rt` routes every unmasked NVIC IRQ that doesn't have a
@@ -2620,6 +2843,12 @@ unsafe fn DefaultHandler(irqn: i16) {
     match irqn {
         #[cfg(feature = "tamp-irq")]
         2 => unsafe { hw::tamp::on_tamp_irq() }, // TAMP_IRQn
+
+        // GTZC1 illegal-access — NS tried to touch a SECURE
+        // peripheral. Logs the offender + bumps a counter; the
+        // gateway test harness (CMD_TZIC_STATUS) reads the
+        // counter to confirm enforcement is working.
+        8 => unsafe { hw::tzic::on_violation() }, // GTZC_IRQn
 
         // Unmatched — log + halt in WFE. NOT a panic so the host
         // semihosting backend gets a chance to flush the log line

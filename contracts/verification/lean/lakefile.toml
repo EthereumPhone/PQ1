@@ -1,0 +1,43 @@
+# Lakefile for the SPHINCS+C10 / PQSmartWallet formal verification project.
+#
+# This project mechanises the playbook in
+# `docs/how_to_math_proof_secureness.md`. The deliverables are:
+#
+#   1. A Lean 4 reference implementation of SPHINCS+C10 (the C10 parameter
+#      set: h=18, d=2, a=11, k=13, w=8, l=43, target_sum=205, sig=4008B)
+#      that is byte-for-byte equivalent to:
+#        - the Rust signer at `sphincs-c10/`
+#        - the Solidity verifier `SPHINCsC10Asm.sol`
+#        - the on-chain SHA-256 precompile invocation pattern.
+#
+#   2. Functional-correctness theorems: a signature produced by the
+#      reference signer is accepted by the reference verifier; malformed
+#      signatures (wrong length, FORS index out of range, target-sum
+#      violated, last-FORS-not-zero) are rejected.
+#
+#   3. Cryptographic-soundness axioms (EUF-CMA under stated SHA-256
+#      assumptions) following Barbosa/Dupressoir/Hülsing/Meijers/Strub
+#      ASIACRYPT 2024 and Hülsing et al. PQC2022 (SPHINCS+C).
+#
+#   4. Lean models of `PQMultiOwnable`, `PQSmartWallet.validateUserOp`, and
+#      `PQSmartWalletFactory` with the non-bypass / replay / cap-monotonicity
+#      invariants stated and proved.
+#
+# Run `lake build` to type-check the whole development.
+#
+# Note: the project is **mathlib-free** by design. The byte-level
+# reasoning only needs core Lean's Array / Nat / UInt8 primitives; the
+# cryptographic-game layer (`Crypto/`) and probability-theory backbone
+# are deferred to a future engagement that would import mathlib.
+
+name = "SphincsCVerify"
+defaultTargets = ["SphincsCVerify"]
+precompileModules = false
+
+[[lean_lib]]
+name = "SphincsCVerify"
+roots = ["SphincsCVerify"]
+
+[[lean_exe]]
+name = "verify-test-vectors"
+root = "Main"

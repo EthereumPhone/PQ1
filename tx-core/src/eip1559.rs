@@ -225,21 +225,6 @@ impl U256 {
         debug_assert_eq!(w, need);
         Some(w)
     }
-
-    /// Fixed-width anti-spoof variant: always emits exactly
-    /// `frac_digits` fractional positions (no trailing-zero trim), so
-    /// `1 USDC` can't visually collide with `1.000000 USDC`. Used for
-    /// ERC-20 token amounts where the decimals come from an
-    /// attacker-supplied (but Merkle-verified) DB row.
-    #[must_use]
-    pub fn format_decimal_fixed(
-        &self,
-        decimals: u32,
-        frac_digits: u32,
-        out: &mut [u8],
-    ) -> Option<usize> {
-        self.format_decimal(decimals, frac_digits, false, out)
-    }
 }
 
 /// Divide a 32-byte big-endian U256 by 10 in place; returns remainder.

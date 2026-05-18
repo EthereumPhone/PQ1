@@ -667,15 +667,6 @@ impl OptigaTrustM {
         }
     }
 
-    /// Close + reopen the OPTIGA application context. Frees the chip's
-    /// per-session work buffer between long chains of writes where the
-    /// chip otherwise starts returning Status=0xff after a few operations.
-    unsafe fn reopen_application(&mut self) -> Result<(), OptigaError> {
-        secure_log!("[OPTIGA/prov] reopen_application");
-        apdu::close_application(&mut self.ifx)?;
-        apdu::open_application(&mut self.ifx)
-    }
-
     /// Lock an OID's lifecycle to Operational.
     ///
     /// **Irreversible** per SRM §"Life Cycle Status": `LcsO` is monotonic

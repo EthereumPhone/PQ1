@@ -289,4 +289,369 @@ mod tests {
             "uint256 internal constant SIG_WRAPPER_LEN = {expected_wrapper};"
         )));
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    //                       POSITIVE — extended
+    // ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn positive_padded_to_32_handles_protocol_relevant_values() {
+        // C10_SIG_LEN = 4008 → 4032 (used in SIG_WRAPPER_LEN).
+        assert_eq!(padded_to_32(4008), 4032);
+        // The EIP-6492 blob is 8608 bytes — already 32-aligned, must
+        // round to itself, not the next word.
+        assert_eq!(padded_to_32(8608), 8608);
+        // Exact multiples must be unchanged.
+        assert_eq!(padded_to_32(64), 64);
+        assert_eq!(padded_to_32(96), 96);
+        // One byte past a multiple must jump exactly one word up.
+        assert_eq!(padded_to_32(65), 96);
+        assert_eq!(padded_to_32(97), 128);
+    }
+
+    #[test]
+    fn positive_render_library_is_deterministic() {
+        // Pure-function contract: same input ⇒ same output, every time.
+        // CI relies on this for the `--check` diff to be stable across
+        // re-invocations.
+        let a = render_solidity_library();
+        let b = render_solidity_library();
+        let c = render_solidity_library();
+        assert_eq!(a, b);
+        assert_eq!(b, c);
+    }
+
+    #[test]
+    fn positive_render_library_emits_pragma_and_header() {
+        let s = render_solidity_library();
+        assert!(s.contains("pragma solidity ^0.8.28;"));
+        assert!(s.contains("AUTO-GENERATED — DO NOT EDIT."));
+        assert!(s.contains("Source of truth: `pqsigner-proto` crate (Rust)."));
+    }
+
+    #[test]
+    fn positive_section_header_format_is_exact() {
+        let mut s = String::new();
+        section_header(&mut s, "Hello");
+        let expected = "\n    // \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n    // Hello\n    // \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n";
+        assert_eq!(s, expected);
+    }
+
+    #[test]
+    fn positive_sol_uint256_with_doc_emits_doc_then_const() {
+        let mut s = String::new();
+        sol_uint256_with_doc(&mut s, "N", 42, "the answer");
+        assert_eq!(
+            s,
+            "    /// @dev the answer\n    uint256 internal constant N = 42;\n"
+        );
+    }
+
+    #[test]
+    fn positive_sol_uint256_emits_zero_and_large_values() {
+        let mut s = String::new();
+        sol_uint256(&mut s, "Z", 0);
+        assert_eq!(s, "    uint256 internal constant Z = 0;\n");
+
+        let mut s = String::new();
+        sol_uint256(&mut s, "BIG", u128::MAX);
+        assert_eq!(
+            s,
+            format!("    uint256 internal constant BIG = {};\n", u128::MAX),
+        );
+    }
+
+    #[test]
+    fn positive_sol_bytes4_zero_and_max() {
+        let mut s = String::new();
+        sol_bytes4(&mut s, "ZERO", &[0, 0, 0, 0]);
+        assert_eq!(s, "    bytes4 internal constant ZERO = 0x00000000;\n");
+
+        let mut s = String::new();
+        sol_bytes4(&mut s, "MAX", &[0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(s, "    bytes4 internal constant MAX = 0xffffffff;\n");
+    }
+
+    #[test]
+    fn positive_sol_bytes_empty_emits_string_literal() {
+        let mut s = String::new();
+        sol_bytes(&mut s, "EMPTY", b"");
+        assert_eq!(s, "    bytes internal constant EMPTY = \"\";\n");
+    }
+
+    #[test]
+    fn positive_sol_bytes_uses_string_literal_for_real_domain_tag() {
+        let mut s = String::new();
+        sol_bytes(&mut s, "T", b"pqwallet-factory-add-slot");
+        assert_eq!(
+            s,
+            "    bytes internal constant T = \"pqwallet-factory-add-slot\";\n"
+        );
+    }
+
+    #[test]
+    fn positive_is_solidity_string_safe_accepts_full_printable_range() {
+        // 0x20 (space) through 0x7E (~), excluding " and \.
+        for b in 0x20u8..=0x7Eu8 {
+            if b == b'"' || b == b'\\' {
+                continue;
+            }
+            assert!(
+                is_solidity_string_safe(&[b]),
+                "printable byte 0x{b:02x} must be accepted",
+            );
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //                       NEGATIVE — adversarial
+    // ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn negative_is_solidity_string_safe_rejects_every_control_byte() {
+        // Every byte 0x00–0x1F is a control char that would either
+        // break a Solidity string literal (e.g. CR/LF/tab inside "...")
+        // or render as invisible/garbage in the on-chain source. The
+        // generator must always force hex"..." encoding for these.
+        for b in 0u8..0x20 {
+            assert!(
+                !is_solidity_string_safe(&[b]),
+                "control byte 0x{b:02x} must be rejected — would corrupt the rendered Solidity",
+            );
+        }
+        // DEL (0x7F) and everything above must also be rejected.
+        assert!(!is_solidity_string_safe(&[0x7F]));
+    }
+
+    #[test]
+    fn negative_is_solidity_string_safe_rejects_quote_and_backslash_within_text() {
+        // Single unsafe byte inside otherwise-safe text MUST trip the
+        // check; otherwise the rendered Solidity would have an
+        // unescaped quote or backslash and fail to compile (or worse,
+        // alter the constant's value).
+        assert!(!is_solidity_string_safe(b"safe\"quote"));
+        assert!(!is_solidity_string_safe(b"safe\\back"));
+        assert!(!is_solidity_string_safe(b"\""));
+        assert!(!is_solidity_string_safe(b"\\"));
+        // Quote/backslash at every position is rejected.
+        assert!(!is_solidity_string_safe(b"\"hello"));
+        assert!(!is_solidity_string_safe(b"hello\""));
+        assert!(!is_solidity_string_safe(b"\\hello"));
+        assert!(!is_solidity_string_safe(b"hello\\"));
+    }
+
+    #[test]
+    fn negative_is_solidity_string_safe_rejects_every_non_ascii_byte() {
+        for b in 0x80u8..=0xFFu8 {
+            assert!(
+                !is_solidity_string_safe(&[b]),
+                "non-ASCII byte 0x{b:02x} must be rejected",
+            );
+        }
+    }
+
+    #[test]
+    fn negative_sol_bytes_picks_hex_when_input_contains_any_unsafe_byte() {
+        // A single 0xff inside otherwise-ASCII payload must force the
+        // hex encoding path. A regression would emit an unescaped
+        // 0xff inside a string literal, breaking Solidity parsing.
+        let mut s = String::new();
+        sol_bytes(&mut s, "T", b"hello\xffworld");
+        assert!(
+            s.starts_with("    bytes internal constant T = hex\""),
+            "any unsafe byte must force hex encoding, got: {s}",
+        );
+        assert!(s.contains("68656c6c6fff776f726c64"));
+    }
+
+    /// CLAUDE.md invariant #7: per-chain caps are monotonic and
+    /// unresettable. The same numeric values are baked into the
+    /// `PQMultiOwnable` storage checks and the rendered Solidity
+    /// library; if they drift in `pqsigner-proto`, every consumer
+    /// (firmware + on-chain wallet) breaks silently. This test fires
+    /// the moment anyone moves them.
+    #[test]
+    fn negative_proto_caps_match_frozen_on_chain_values() {
+        assert_eq!(
+            proto::MAX_BOOTSTRAP_USES,
+            65_536,
+            "MAX_BOOTSTRAP_USES drift — see CLAUDE.md invariant #7",
+        );
+        assert_eq!(
+            proto::MAX_SLOT_USES,
+            65_536,
+            "MAX_SLOT_USES drift — see CLAUDE.md invariant #7",
+        );
+        assert_eq!(
+            proto::MAX_OFFCHAIN_GAP,
+            100,
+            "MAX_OFFCHAIN_GAP drift — see CLAUDE.md invariant #9",
+        );
+    }
+
+    /// `C10_SIG_LEN` is baked into the Yul verifier
+    /// (`SPHINCsC10Asm.sol`) AND into every signature wrapper layout
+    /// (`SIG_WRAPPER_LEN = 4128`). Drift breaks every signature path.
+    #[test]
+    fn negative_c10_sig_len_is_frozen_at_4008() {
+        assert_eq!(proto::C10_SIG_LEN, 4008);
+    }
+
+    /// `OWNER_BYTES_LEN = 64` is the size the on-chain wallet allocates
+    /// for each owner entry (`ownerAtIndex`); drifting it would either
+    /// truncate slot keys (silent forgery surface) or break ABI decode.
+    #[test]
+    fn negative_owner_bytes_len_is_frozen_at_64() {
+        assert_eq!(proto::OWNER_BYTES_LEN, 64);
+    }
+
+    /// `EXECUTE_SELECTOR = keccak256("execute(address,uint256,bytes)")[..4]`
+    /// — drift means the firmware emits a calldata prefix the wallet
+    /// won't dispatch to, bricking the wallet at the next user tx.
+    #[test]
+    fn negative_execute_selectors_are_byte_exact() {
+        assert_eq!(proto::EXECUTE_SELECTOR, [0x14, 0x44, 0x3c, 0x57]);
+        assert_eq!(proto::EXECUTE_BATCH_SELECTOR, [0x7a, 0x38, 0x99, 0x33]);
+    }
+
+    /// CLAUDE.md "No casual KDF tag changes." `FACTORY_ADD_SLOT_DOMAIN`
+    /// is the domain-separator tag the bootstrap key signs over in
+    /// `PQSmartWalletFactory.createAccount`; renaming it invalidates
+    /// every already-issued bootstrap signature.
+    #[test]
+    fn negative_factory_add_slot_domain_tag_is_byte_exact() {
+        assert_eq!(proto::FACTORY_ADD_SLOT_DOMAIN, b"pqwallet-factory-add-slot");
+        // Length is part of the on-chain hash preimage — pin it.
+        assert_eq!(proto::FACTORY_ADD_SLOT_DOMAIN.len(), 25);
+    }
+
+    /// `SIG_WRAPPER_LEN` is `abi.encode(uint256 ownerIndex, bytes sig)`
+    /// head + tail: 32 (ownerIndex) + 32 (offset) + 32 (length) +
+    /// 32-aligned inner sig. For C10 (4008 B → 4032 padded) this is
+    /// exactly 4128. Any drift breaks on-chain ABI decoding.
+    #[test]
+    fn negative_sig_wrapper_len_is_4128_in_rendered_library() {
+        let expected = 32u128 + 32 + 32 + padded_to_32(proto::C10_SIG_LEN as u128);
+        assert_eq!(expected, 4128, "wrapper arithmetic drifted");
+        let rendered = render_solidity_library();
+        assert!(
+            rendered.contains("uint256 internal constant SIG_WRAPPER_LEN = 4128;"),
+            "SIG_WRAPPER_LEN must render as exactly 4128",
+        );
+    }
+
+    /// The single highest-value test in this suite: render the library
+    /// in-process and compare byte-for-byte against the checked-in
+    /// Solidity file. Mirrors what
+    /// `pqsigner-xtask gen-solidity-constants --check` does in CI —
+    /// any code change that alters the generator's output without
+    /// regenerating the on-chain library fires here, BEFORE CI.
+    #[test]
+    fn negative_rendered_output_matches_checked_in_solidity_byte_for_byte() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let checked_in = manifest_dir
+            .parent()
+            .expect("xtask sits one dir below workspace root")
+            .join(SOLIDITY_OUT_PATH);
+        let checked_in_text = fs::read_to_string(&checked_in)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", checked_in.display()));
+        let rendered = render_solidity_library();
+        assert_eq!(
+            rendered, checked_in_text,
+            "rendered Solidity drifted from checked-in file — \
+             regenerate with `cargo run -p pqsigner-xtask -- gen-solidity-constants`",
+        );
+    }
+
+    /// Defensive: the rendered library must always include the
+    /// auto-generated warning AND a pointer to the regenerator command.
+    /// Without these, an auditor could hand-edit the Solidity file and
+    /// have it survive a regen (until the next CI run catches the diff).
+    #[test]
+    fn negative_rendered_output_keeps_do_not_edit_warning() {
+        let rendered = render_solidity_library();
+        assert!(rendered.contains("AUTO-GENERATED — DO NOT EDIT."));
+        assert!(rendered.contains("Regenerate: `cargo run -p pqsigner-xtask -- gen-solidity-constants`."));
+    }
+
+    /// The factory domain tag is printable ASCII; the generator MUST
+    /// emit it as a string literal, never as `hex"..."`. A regression
+    /// to hex would still be semantically correct on-chain but would
+    /// (a) silently flip the rendered diff and (b) hide the tag's
+    /// human-readable form from auditors reading the contract.
+    #[test]
+    fn negative_factory_add_slot_domain_renders_as_string_literal() {
+        let rendered = render_solidity_library();
+        assert!(rendered.contains(
+            "bytes internal constant FACTORY_ADD_SLOT_DOMAIN = \"pqwallet-factory-add-slot\";"
+        ));
+        assert!(
+            !rendered.contains("FACTORY_ADD_SLOT_DOMAIN = hex"),
+            "domain tag must NOT fall through to hex encoding for printable ASCII",
+        );
+    }
+
+    /// `workspace_root()` derives from `CARGO_MANIFEST_DIR`. In a
+    /// `cargo test` invocation that env is always set, and the result
+    /// must point at the directory above the xtask manifest — i.e.
+    /// the workspace root that contains both `xtask/` and
+    /// `contracts/`.
+    #[test]
+    fn positive_workspace_root_is_parent_of_manifest_dir() {
+        let root = workspace_root();
+        // The workspace root must contain the contracts/ directory and
+        // the xtask/ directory; if `workspace_root()` resolves to "."
+        // or stays inside xtask/, we've regressed.
+        assert!(
+            root.join("contracts/smart-wallet/src/generated/PqsignerProto.sol").is_file(),
+            "workspace_root() must resolve to the actual workspace root, got {}",
+            root.display(),
+        );
+        assert!(
+            root.join("xtask/Cargo.toml").is_file(),
+            "workspace_root() must contain xtask/, got {}",
+            root.display(),
+        );
+    }
+
+    /// CLAUDE.md "No classical signer anywhere." The xtask renderer is
+    /// the bridge between Rust constants and the on-chain library; if
+    /// anyone ever adds a non-C10 sig-length / wrapper / selector
+    /// constant to `pqsigner-proto`, this test won't catch it directly
+    /// — but it does pin the rendered library to expose ONLY the
+    /// approved constant names. New entries are a conscious change.
+    #[test]
+    fn negative_rendered_library_exposes_only_approved_constants() {
+        let rendered = render_solidity_library();
+        let approved = [
+            "C10_SIG_LEN",
+            "SIG_WRAPPER_LEN",
+            "MAX_BOOTSTRAP_USES",
+            "MAX_SLOT_USES",
+            "MAX_OFFCHAIN_GAP",
+            "OWNER_BYTES_LEN",
+            "EXECUTE_SELECTOR",
+            "EXECUTE_BATCH_SELECTOR",
+            "FACTORY_ADD_SLOT_DOMAIN",
+        ];
+        // Every `internal constant` in the rendered output must be one
+        // of the approved names. We walk the lines and parse the name.
+        for line in rendered.lines() {
+            // Match lines like "    uint256 internal constant FOO = …;"
+            // or "    bytes4  internal constant FOO = …;" etc.
+            let trimmed = line.trim_start();
+            let Some(rest) = trimmed.strip_prefix("uint256 internal constant ")
+                .or_else(|| trimmed.strip_prefix("bytes4 internal constant "))
+                .or_else(|| trimmed.strip_prefix("bytes internal constant "))
+            else {
+                continue;
+            };
+            let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            assert!(
+                approved.contains(&name.as_str()),
+                "rendered library exposes unapproved constant `{name}` — \
+                 adding constants requires a conscious update to this allowlist",
+            );
+        }
+    }
 }
