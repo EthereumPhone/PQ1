@@ -242,7 +242,7 @@ Mirror of `PQSmartWallet.sol:401-443` (inherited from Solady
 `ownerIndex == 0` — bootstrap key is never an EIP-1271 signer.
 
 The Solidity also nests via `replaySafeHash` (Solady EIP-712 with
-`(name="PQSmart Wallet", version="1", chainId, address(this))`).
+`(name="PQSmartWallet", version="1", chainId, address(this))`).
 We model that as an opaque hash transformation — the firmware MUST
 apply the same wrapping. -/
 

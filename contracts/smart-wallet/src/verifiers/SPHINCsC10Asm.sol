@@ -23,7 +23,17 @@ contract SPHINCsC10Asm {
     function verify(bytes32 pkSeed, bytes32 pkRoot, bytes32 message, bytes calldata sig)
         external view returns (bool valid)
     {
-        assembly ("memory-safe") {
+        // Audit M-2: this block writes the Solidity free-memory pointer
+        // slot (0x40), the zero slot (0x60), and the region above the
+        // FMP without updating the FMP. That violates the `memory-safe`
+        // contract. It is currently *latent* — the block `return`s from
+        // within Yul before any Solidity epilogue can observe the
+        // corrupted FMP — but a future refactor that wraps `verify` in
+        // additional Solidity logic, or inlines it into a caller that
+        // allocates memory afterwards, would silently break. Drop the
+        // annotation so the compiler is no longer free to reorder under
+        // assumptions that don't hold.
+        assembly {
             let N_MASK := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000
             // Scratch slot for SHA-256 precompile output. Sits above every
             // other memory region the verifier touches (WOTS endpoints at
@@ -36,6 +46,22 @@ contract SPHINCsC10Asm {
                 mstore(0x24, 18)
                 mstore(0x44, "Invalid sig length")
                 revert(0x00, 0x64)
+            }
+
+            // Audit I-2: enforce the N-mask layout (top 16 bytes set,
+            // bottom 16 bytes zero) on `pkSeed` / `pkRoot` directly in
+            // the verifier, instead of relying on every caller (today
+            // only `PQMultiOwnable._addOwnerAtIndex`) to pre-validate.
+            // Returning `false` rather than reverting keeps the
+            // existing "verifier never reverts on key-shape" contract
+            // intact for upstream wrappers that use `try / catch`.
+            if iszero(eq(and(pkSeed, N_MASK), pkSeed)) {
+                mstore(0x00, 0)
+                return(0x00, 0x20)
+            }
+            if iszero(eq(and(pkRoot, N_MASK), pkRoot)) {
+                mstore(0x00, 0)
+                return(0x00, 0x20)
             }
 
             let seed := pkSeed
