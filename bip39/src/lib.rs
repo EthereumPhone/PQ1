@@ -541,31 +541,110 @@ pub enum PrefixLookup {
 /// Because BIP-39 English words have a unique 4-letter prefix, the user
 /// usually only needs to type 3 or 4 letters before the result becomes
 /// [`PrefixLookup::Unique`].
+///
+/// **F-25 fix (constant-time scan).** The previous implementation used
+/// `WORDLIST.partition_point` (binary search) + a forward `starts_with`
+/// walk, both of which visited `WORDLIST[idx]` at indices that depended
+/// on the typed prefix. During recovery (user typing 24 words back
+/// from a paper backup), an EM-scoping attacker could reconstruct each
+/// typed prefix from the per-keystroke address pattern (~45σ leak per
+/// call). Now scans all 2048 entries unconditionally and accumulates
+/// the matching range via constant-time mask-OR over the flat
+/// `WORDLIST_FLAT` + `WORDLIST_LENS` tables (same tables F-22 added
+/// for the `to_seed` fix). Cost: ~2048 × 8 = 16 KB of stack reads per
+/// keystroke; ~1 ms wall on Cortex-M33 (acceptable since keystroke
+/// rate ≤ 5/s).
+///
+/// `core::hint::black_box` barriers per iteration prevent LLVM from
+/// folding the scan into a binary search — same load-bearing pattern
+/// as F-22's `ct_load_word`.
 #[must_use]
 pub fn lookup_prefix(prefix: &str) -> PrefixLookup {
+    use core::hint::black_box;
+
     if prefix.is_empty() {
         return PrefixLookup::Multiple { start: 0, end: WORDLIST.len() };
     }
     let mut buf = [0u8; MAX_WORD_LEN];
-    let Some(len) = lowercase_ascii(prefix, &mut buf) else {
+    let Some(plen_raw) = lowercase_ascii(prefix, &mut buf) else {
         return PrefixLookup::None;
     };
-    let needle = &buf[..len];
+    // Lookups longer than MAX_WORD_BYTES (the longest BIP-39 word) can
+    // never match. Cap to MAX_WORD_BYTES for the scan; if the typed
+    // prefix is longer, none of the 2048 entries match.
+    if plen_raw > MAX_WORD_BYTES {
+        return PrefixLookup::None;
+    }
+    let plen: u8 = plen_raw as u8;
+    let mut needle = [0u8; MAX_WORD_BYTES];
+    needle[..plen_raw].copy_from_slice(&buf[..plen_raw]);
 
-    // First index whose word is >= needle (lexicographic lower bound).
-    let start = WORDLIST.partition_point(|w| w.as_bytes() < needle);
+    // Sentinel for "no match seen yet" — must be outside [0, 2048).
+    const NO_MATCH: u16 = 0xFFFF;
+    let mut first: u16 = NO_MATCH;
+    let mut count: u16 = 0;
 
-    // Walk forward while words still start with needle.
-    let mut end = start;
-    while end < WORDLIST.len() && WORDLIST[end].as_bytes().starts_with(needle) {
-        end += 1;
+    let mut entry_idx: u16 = 0;
+    while entry_idx < 2048 {
+        let idx_obf = black_box(entry_idx);
+        let entry = &WORDLIST_FLAT[idx_obf as usize];
+        let entry_len = WORDLIST_LENS[idx_obf as usize];
+
+        // is_match: does entry start with needle?
+        //   For each byte position 0..MAX_WORD_BYTES, check
+        //   (i >= plen) OR (entry[i] == needle[i]).
+        //   Then require entry_len >= plen.
+        let mut all_bytes_match: u8 = 0xFF;
+        let mut i = 0u8;
+        while (i as usize) < MAX_WORD_BYTES {
+            // 0xFF if i < plen (position is within the needle), else 0
+            let in_needle = ct_lt_u8(i, plen);
+            // out_of_needle = 0xFF if i >= plen
+            let out_of_needle = !in_needle;
+            // byte_eq = 0xFF iff entry[i] == needle[i]
+            let byte_eq = ct_eq_u8(entry[i as usize], needle[i as usize]);
+            // matches at this position if it's out-of-needle OR bytes are equal.
+            let pos_ok = out_of_needle | byte_eq;
+            all_bytes_match = black_box(all_bytes_match & pos_ok);
+            i += 1;
+        }
+        // entry_len >= plen ↔ NOT (entry_len < plen)
+        let len_ok = !ct_lt_u8(entry_len, plen);
+        let is_match: u8 = black_box(all_bytes_match & len_ok); // 0xFF if match
+
+        // first ← min(first, idx_obf if match else NO_MATCH).
+        // Since WORDLIST is sorted and matches are contiguous, the first
+        // match is the lowest matching index. We update first only the
+        // FIRST time is_match fires; afterwards first != NO_MATCH so the
+        // update predicate is false. All arithmetic is constant-time.
+        let mask16: u16 = is_match as u16 | ((is_match as u16) << 8);
+        let is_first_match: u16 = ct_eq_u16(first, NO_MATCH) as u16
+            | ((ct_eq_u16(first, NO_MATCH) as u16) << 8);
+        let update: u16 = mask16 & is_first_match;
+        first = black_box((first & !update) | (idx_obf & update));
+
+        // count++ on match. is_match >> 7 = 0 or 1.
+        count = black_box(count + ((is_match >> 7) as u16));
+
+        entry_idx += 1;
     }
 
-    match end - start {
+    match count {
         0 => PrefixLookup::None,
-        1 => PrefixLookup::Unique(start as u16),
-        _ => PrefixLookup::Multiple { start, end },
+        1 => PrefixLookup::Unique(first),
+        n => PrefixLookup::Multiple {
+            start: first as usize,
+            end: (first as usize) + (n as usize),
+        },
     }
+}
+
+/// Constant-time `a == b` for u8 — returns 0xFF iff equal, 0x00 else.
+#[inline(always)]
+fn ct_eq_u8(a: u8, b: u8) -> u8 {
+    let x = a ^ b;
+    let nz: u8 = ((x | x.wrapping_neg()) >> 7) & 1;
+    nz.wrapping_sub(1)
 }
 
 // ---------------------------------------------------------------------------

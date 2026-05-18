@@ -265,6 +265,141 @@ pub extern "C" fn sca_bootstrap_seed_from_bip39(seed_ptr: *const u8, out_ptr: *m
     }
 }
 
+/// Mirror of `bip39::lookup_prefix` — the function the recovery wizard
+/// calls on every keystroke as the user types each of the 24 mnemonic
+/// words back from their paper backup.
+///
+/// Implementation: binary search over `WORDLIST: [&str; 2048]` via
+/// `partition_point` + a forward sequential walk for `starts_with`
+/// matches. Both phases visit addresses keyed on the typed prefix
+/// bytes:
+///
+///   1. `partition_point` does `WORDLIST[mid].as_bytes() < needle` at
+///      11 (log2(2048)) mid-points. Each `WORDLIST[mid]` load goes to
+///      `&WORDLIST[0] + mid * sizeof(&str)`. The mid SEQUENCE depends
+///      on the needle, so the addresses visited reveal which
+///      alphabetic region the typed word lives in.
+///
+///   2. The walk-forward loop continues while
+///      `WORDLIST[end].as_bytes().starts_with(needle)`. Walk length
+///      depends on how many entries share the prefix.
+///
+/// Threat model: an attacker EM-scoping the CPU during recovery (user
+/// typing 24 words back over ~60-120 s) can collect per-keystroke
+/// address-pattern traces and reconstruct each word from the prefix.
+/// Symmetric pair to F-22/F-24: F-22 leaked the words DURING DISPLAY
+/// (provisioning); this leaks the words DURING ENTRY (recovery).
+///
+/// Input: 4-byte ASCII prefix (the typical BIP-39 unique-prefix
+/// length) at `prefix_ptr`. Output: 2 × u16 (start, end) at `out_ptr`.
+#[no_mangle]
+pub extern "C" fn sca_bip39_lookup_prefix(prefix_ptr: *const u8, out_ptr: *mut u8) {
+    // SAFETY: harness passes 4 B prefix + 4 B output.
+    let prefix: &[u8; 4] = unsafe { &*(prefix_ptr as *const [u8; 4]) };
+
+    // Binary search — identical shape to `lookup_prefix`'s
+    // `partition_point` (we re-implement here to avoid pulling in
+    // the bip39 crate's workspace-rooted deps).
+    let mut start: usize = 0;
+    let mut size: usize = wordlist::WORDLIST.len();
+    while size > 0 {
+        let half = size / 2;
+        let mid = start + half;
+        // Comparison: WORDLIST[mid].as_bytes() < prefix
+        let cmp = wordlist::WORDLIST[mid].as_bytes();
+        if cmp < &prefix[..] {
+            start = mid + 1;
+            size -= half + 1;
+        } else {
+            size = half;
+        }
+    }
+    // Walk forward.
+    let mut end = start;
+    while end < wordlist::WORDLIST.len()
+        && wordlist::WORDLIST[end].as_bytes().starts_with(&prefix[..])
+    {
+        end += 1;
+    }
+
+    // Output: start (u16 BE), end (u16 BE).
+    unsafe {
+        core::ptr::write_volatile(out_ptr, (start >> 8) as u8);
+        core::ptr::write_volatile(out_ptr.add(1), start as u8);
+        core::ptr::write_volatile(out_ptr.add(2), (end >> 8) as u8);
+        core::ptr::write_volatile(out_ptr.add(3), end as u8);
+    }
+}
+
+/// F-25 fix validator — constant-time prefix lookup that scans all 2048
+/// entries unconditionally and accumulates the matching range via
+/// mask-OR. Mirrors the new `bip39::lookup_prefix` so the harness
+/// validates the production code path.
+#[no_mangle]
+pub extern "C" fn sca_bip39_lookup_prefix_ct(prefix_ptr: *const u8, out_ptr: *mut u8) {
+    use core::hint::black_box;
+    // SAFETY: harness passes 4 B prefix + 4 B output.
+    let prefix: &[u8; 4] = unsafe { &*(prefix_ptr as *const [u8; 4]) };
+    let plen: u8 = 4;
+
+    let mut needle = [0u8; MAX_WORD_BYTES];
+    needle[..4].copy_from_slice(prefix);
+
+    const NO_MATCH: u16 = 0xFFFF;
+    let mut first: u16 = NO_MATCH;
+    let mut count: u16 = 0;
+    let mut entry_idx: u16 = 0;
+    while entry_idx < 2048 {
+        let idx_obf = black_box(entry_idx);
+        let entry = &WORDLIST_FLAT[idx_obf as usize];
+        let entry_len = WORDLIST_LENS[idx_obf as usize];
+
+        let mut all_bytes_match: u8 = 0xFF;
+        let mut i = 0u8;
+        while (i as usize) < MAX_WORD_BYTES {
+            let in_needle = ct_lt_u8_secret(i, plen);
+            let out_of_needle = !in_needle;
+            let byte_eq = ct_eq_u8_secret(entry[i as usize], needle[i as usize]);
+            let pos_ok = out_of_needle | byte_eq;
+            all_bytes_match = black_box(all_bytes_match & pos_ok);
+            i += 1;
+        }
+        let len_ok = !ct_lt_u8_secret(entry_len, plen);
+        let is_match: u8 = black_box(all_bytes_match & len_ok);
+
+        let mask16: u16 = (is_match as u16) | ((is_match as u16) << 8);
+        let is_first_match: u16 = (ct_eq_u16(first, NO_MATCH) as u16)
+            | ((ct_eq_u16(first, NO_MATCH) as u16) << 8);
+        let update: u16 = mask16 & is_first_match;
+        first = black_box((first & !update) | (idx_obf & update));
+        count = black_box(count + ((is_match >> 7) as u16));
+
+        entry_idx += 1;
+    }
+
+    let end = first.wrapping_add(count);
+    unsafe {
+        core::ptr::write_volatile(out_ptr, (first >> 8) as u8);
+        core::ptr::write_volatile(out_ptr.add(1), first as u8);
+        core::ptr::write_volatile(out_ptr.add(2), (end >> 8) as u8);
+        core::ptr::write_volatile(out_ptr.add(3), end as u8);
+    }
+}
+
+#[inline(always)]
+fn ct_eq_u8_secret(a: u8, b: u8) -> u8 {
+    let x = a ^ b;
+    let nz: u8 = ((x | x.wrapping_neg()) >> 7) & 1;
+    nz.wrapping_sub(1)
+}
+
+#[inline(always)]
+fn ct_lt_u8_secret(a: u8, b: u8) -> u8 {
+    let r: i16 = (a as i16) - (b as i16);
+    let bit = ((r >> 15) & 1) as u8;
+    bit.wrapping_neg()
+}
+
 /// Mirror of the OPTIGA PIN-verification CPU-side chain:
 /// `derive_pin_secret(pin) = kdf("optiga-pin-auth-v1", pin, 0)` →
 /// `hmac_sha256(pin_secret, FIXED_NONCE) → 32-byte tag`.
@@ -456,6 +591,12 @@ static _KEEP_SLOT_MASTER: extern "C" fn(*const u8, *mut u8) =
 #[used]
 static _KEEP_OPTIGA_PIN_DERIVE: extern "C" fn(*const u8, *mut u8) =
     sca_optiga_pin_derive;
+#[used]
+static _KEEP_BIP39_LOOKUP_PREFIX: extern "C" fn(*const u8, *mut u8) =
+    sca_bip39_lookup_prefix;
+#[used]
+static _KEEP_BIP39_LOOKUP_PREFIX_CT: extern "C" fn(*const u8, *mut u8) =
+    sca_bip39_lookup_prefix_ct;
 
 // BIP-39 wordlist included verbatim from the production crate. The bip39
 // crate uses `hmac = { workspace = true }` which is unreachable from this
@@ -690,6 +831,8 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_BOOTSTRAP_SEED);
     core::hint::black_box(&_KEEP_SLOT_MASTER);
     core::hint::black_box(&_KEEP_OPTIGA_PIN_DERIVE);
+    core::hint::black_box(&_KEEP_BIP39_LOOKUP_PREFIX);
+    core::hint::black_box(&_KEEP_BIP39_LOOKUP_PREFIX_CT);
     loop {
         cortex_m::asm::nop();
     }

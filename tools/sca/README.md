@@ -1089,6 +1089,92 @@ trace doesn't carry the secret.
 ≤36 ms total added latency during full 24-word provisioning. Once-per-
 wallet operation, human-paced; negligible.
 
+## BIP-39 recovery-path leakage — `leakage_recovery.py` + kdf_target's `sca_bip39_lookup_prefix*`
+
+F-22 and F-24 closed the leak chain DURING SEED CREATION (provisioning):
+F-22 fixed `to_seed`'s wordlist lookup, F-24 fixed the seed-display
+chain on the OLED. The OPPOSITE direction — SEED ENTRY during recovery
+— had the same class of leak via a different mechanism:
+`bip39::lookup_prefix` did a binary search over `WORDLIST: [&str; 2048]`
+on every keystroke as the user typed each of the 24 mnemonic words
+back from their paper backup.
+
+### F-25 — `bip39::lookup_prefix` leaks the typed mnemonic via binary-search address dependence — **FIXED in `bip39::lookup_prefix` via constant-time scan**
+
+**`make -C tools/sca recovery-leak` result:**
+
+| Symbol | Trace samples | max\|t\| | Verdict |
+|---|---|---|---|
+| `sca_bip39_lookup_prefix` (baseline / regression sentinel) | 248 | **45.43** | **LEAKAGE** (10× threshold) |
+| `sca_bip39_lookup_prefix_ct` (F-25 fix) | 45 089 | **0.000** | **CLEAN** |
+
+**Mechanism (pre-fix).** `lookup_prefix(prefix)` called:
+
+```rust
+let start = WORDLIST.partition_point(|w| w.as_bytes() < needle);
+let mut end = start;
+while end < WORDLIST.len() && WORDLIST[end].as_bytes().starts_with(needle) {
+    end += 1;
+}
+```
+
+Two address-leak phases:
+
+1. **Binary-search mid-points.** `partition_point` visits log2(2048) ≈ 11
+   mid-points. Each `WORDLIST[mid].as_bytes() < needle` loads from
+   `&WORDLIST[0] + mid * sizeof(&str)`. The `mid` sequence depends on
+   the prefix bytes, so an attacker EM-scoping the address bus during
+   one keystroke recovers the chosen alphabetic region (~5-7 bits per
+   keystroke).
+2. **Walk-forward scan.** The `starts_with` loop walks contiguous matches
+   in flash; walk length depends on how many words share the prefix.
+
+After 4 keystrokes per word × 24 words = 96 keystrokes during recovery,
+the seed is reconstructable.
+
+**Severity: HIGH (production-critical, symmetric to F-22).** Attack
+model: an attacker EM-scoping the CPU during the 60-120 second
+recovery-typing window collects per-keystroke traces and reconstructs
+each typed word. Closes the same threat class as F-22 (camera-blocked
+attacker with EM access to the device) for the RECOVERY direction.
+
+**Fix.** `bip39::lookup_prefix` rewritten to scan all 2048 entries
+unconditionally via constant-time mask-OR over the existing
+`WORDLIST_FLAT` + `WORDLIST_LENS` tables (added by the F-22 fix). For
+each entry:
+
+  - `byte_eq = (entry[i] == needle[i])` for each of the 8 byte positions
+  - `pos_ok = (i >= plen) | byte_eq`
+  - `all_bytes_match = AND of pos_ok across positions`
+  - `is_match = all_bytes_match & (entry_len >= plen)`
+
+The first match's index is captured via constant-time conditional select;
+the match count is incremented constant-time per iteration. Result:
+either `None`, `Unique(first)`, or `Multiple { start: first, end: first + count }`.
+
+**`core::hint::black_box` barriers** on every iteration's mask, entry
+load, and accumulator — same load-bearing pattern as F-22's
+`ct_load_word`. Without them LLVM folds the scan back into a binary
+search.
+
+**Verification:**
+- `cargo test -p sphincs-tz-bip39`: 9 unit + 7 wordlist-invariant + 1
+  doc-test pass; specifically `case_insensitive_lookup` confirms the
+  CT scan is byte-equivalent to the old binary-search behavior.
+- `cargo test -p sphincs-tz-secure --bins --release`: 1837/1837.
+- `make recovery-leak`: post-fix probe max|t| = 0.000 over 45 089
+  samples; baseline probe still flagged as LEAKAGE (regression
+  sentinel).
+
+**Cost in production.** The keystroke rate during recovery is ≤ 5/s
+(user typing speed). Each call now does 2048 × 8 = 16 KB of stack
+reads + ~20 inner-loop ops/iter ≈ ~40 K cycles. On Cortex-M33 at
+~160 MHz that's ~0.25 ms per call — well below the keystroke cadence.
+
+**No production migration needed.** `secure/src/ui/seed_wizard.rs`'s
+recovery path calls `bip39::lookup_prefix` directly; the fix lands
+in the shared callee. The on-screen-keyboard UX is unchanged.
+
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 
 `make -C tools/sca c10v` builds `sca-c10v-target` (a thin `#[no_mangle]` wrapper

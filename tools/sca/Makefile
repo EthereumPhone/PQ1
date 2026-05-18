@@ -45,7 +45,7 @@ SKDF_ELF := $(SKDF_DIR)/target/$(TARGET)/release/sca-saes-kdf-target
 DONJON   ?= donjon-sca
 SCARED   ?= scared-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak bip39-leak seed-deriv-leak f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak bip39-leak seed-deriv-leak recovery-leak f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -157,6 +157,11 @@ bip39-leak: build-kdf
 # `slot_master_entropy_from_bip39`) for similar leaks.
 seed-deriv-leak: build-kdf
 	$(DONJON) run leakage_seed_derivation.py
+
+# Recovery-path leakage: does bip39::lookup_prefix leak the typed
+# mnemonic-word prefix via binary-search address dependence?
+recovery-leak: build-kdf
+	$(DONJON) run leakage_recovery.py
 
 # F-9 re-test: did F-16's shuffle mask the FORS-leaf-index mem_address leak?
 # Compares post-F-16 max|t| against F-9's recorded baseline of 40.71.
