@@ -1,0 +1,31 @@
+# Standalone workspace — detached from the PQSigner workspace (its own profile;
+# not built by a root `cargo build`). Builds a thumbv8m ELF that exercises the
+# production CMAC wrapper (`secure/src/cmac.rs::cmac_generic`) byte-for-byte
+# under a software AES-256 closure, so scared can TVLA the WRAPPER's CPU work
+# (the AES primitive is software here because the SAES coprocessor isn't
+# emulated by rainbow / Unicorn).
+[workspace]
+
+[package]
+name = "sca-saes-kdf-target"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "thumbv8m ELF for scared/lascar leakage analysis: structural mirror of secure/src/cmac.rs::cmac_generic under software AES-256 (DHUK stand-in). Not shipped."
+
+[[bin]]
+name = "sca-saes-kdf-target"
+path = "src/main.rs"
+
+[dependencies]
+cortex-m    = "0.7"
+cortex-m-rt = "0.7"
+panic-halt  = "1"
+# Same `aes` 0.8 crate the production `aes-gcm` falls through to on Cortex-M33.
+# On thumbv8m it's the bitsliced "soft" backend (no AES-NI, no ARMv8 crypto
+# ext) — same code path as `kdf_target`'s `sca_aesgcm_wrap`.
+aes = { version = "0.8", default-features = false }
+
+[profile.release]
+opt-level = 3
+# Keep .symtab so rainbow can resolve `sca_*` symbols.

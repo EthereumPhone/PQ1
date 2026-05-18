@@ -757,6 +757,63 @@ lascar (Session.run with chunked input), or (b) multiple narrower
 windows captured via snapshot/restore at different sign-phase
 offsets (same machinery `fault_sweep_c10_sign.py` already uses).
 
+## SAES-DHUK KDF wrapper leakage — `leakage_saes_kdf.py` + `saes_kdf_target/`
+
+`make -C tools/sca saes-kdf` builds `sca-saes-kdf-target` (a thin
+`#[no_mangle]` wrapper over `secure/src/cmac.rs::cmac_generic` and
+`kdf_cmac_counter_generic`, `#[path]`-included verbatim from the
+production source) and runs four `mem_address`-channel TVLAs.
+
+**What the production code does.** `hw::secret_keys::derive_into_saes_kdf`
+calls `cmac_dhuk(scratch_with_label_and_counter, &mut tag)`, which in turn
+calls `cmac_generic(msg, |block| saes::encrypt_ecb_block(KeySel::Dhuk, ...), tag)`.
+On real silicon the DHUK key bytes live in SAES_KEY registers and never
+enter CPU memory — the wrapper code on the CPU operates on AES inputs /
+outputs / chain state, never on the key bytes themselves.
+
+**What this target tests.** Rainbow/Unicorn cannot model the SAES
+coprocessor, so we replace `saes::encrypt_ecb_block` with the same
+bitsliced software AES-256 the existing `kdf_target` already
+characterised (`aes` 0.8 crate, soft backend on thumbv8m). With the key
+now a function parameter in the emulation, we can directly TVLA
+"vary key, fix message" — which the production setup cannot do because
+DHUK isn't a function parameter there. **Four TVLA modes**:
+
+| Symbol | Vary | Fix | max\|t\| (600 traces × 7-9 K samples) |
+|---|---|---|---|
+| `sca_saes_cmac` | KEY (32 B) | message (16 zeros) | **0.00** → flat |
+| `sca_saes_cmac` | message (16 B) | key (32 zeros) | **0.00** → flat |
+| `sca_saes_kdf_one_block` | KEY (32 B) | label (16 zeros) | **0.00** → flat |
+| `sca_saes_kdf_one_block` | label (16 B) | key (32 zeros) | **0.00** → flat |
+
+**Interpretation.** All four modes show **no `mem_address` leakage**.
+The bitsliced software AES on thumbv8m has no T-table lookups (so no
+key-dependent memory addresses), and `cmac_generic` / `kdf_cmac_counter_generic`
+do not introduce any input-dependent memory addresses either: the
+`double_l` derivation of K1/K2, the CBC chain XORs, the final-block
+branch dispatch (length-keyed; lengths are fixed in this test), and
+the KDF's `scratch[..label.len()].copy_from_slice(label); scratch[label.len()] = counter;`
+packing all operate on stack-resident locals whose addresses don't vary
+with input. Same clean-signal result `leakage_kdf.py` already reports
+for `sca_aes256_encrypt_block` and `sca_aesgcm_wrap`.
+
+**What this does NOT cover.** rainbow only models CPU instructions — it
+records the Hamming weight of memory access ADDRESSES, not loaded
+VALUES. Power/EM leakage on register VALUES (S-box outputs, CBC state)
+is invisible to this emulator and requires on-silicon SCA with a
+scope. Production SAES coprocessor leakage is independent of the CPU
+wrapper and also requires silicon-grade measurement. The claim here is
+narrow: the wrapper CODE PATH that runs on the CPU has no data-
+dependent memory addresses, at audit-grade emulation resolution.
+
+**Why this is a useful claim despite the narrow scope.** A data-dependent
+memory address in the wrapper would be a real bug — it would mean the
+production CPU code (byte-identical to what's emulated here, modulo the
+SAES coprocessor closure) leaks the AES inputs/outputs/state through
+the cache or memory-bus side channel, on top of whatever the SAES
+silicon itself leaks. The test rules out one specific class of
+production leak at firmware level.
+
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 
 `make -C tools/sca c10v` builds `sca-c10v-target` (a thin `#[no_mangle]` wrapper

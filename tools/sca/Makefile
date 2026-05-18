@@ -40,10 +40,12 @@ DISP_DIR := dispatch_target
 DISP_ELF := $(DISP_DIR)/target/$(TARGET)/release/sca-dispatch-target
 FCT_DIR  := flashctr_target
 FCT_ELF  := $(FCT_DIR)/target/$(TARGET)/release/sca-flashctr-target
+SKDF_DIR := saes_kdf_target
+SKDF_ELF := $(SKDF_DIR)/target/$(TARGET)/release/sca-saes-kdf-target
 DONJON   ?= donjon-sca
 SCARED   ?= scared-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -90,6 +92,12 @@ build-flashctr: $(FCT_ELF)
 $(FCT_ELF): $(FCT_DIR)/src/main.rs $(FCT_DIR)/memory.x $(FCT_DIR)/build.rs $(FCT_DIR)/Cargo.toml ../../pqsigner-fi/src/lib.rs ../../secure/src/hw/flash.rs
 	cargo build --release --target $(TARGET) --manifest-path $(FCT_DIR)/Cargo.toml
 
+build-saes-kdf: $(SKDF_ELF)
+
+# Rebuilds when the production cmac.rs changes (it's `#[path]`-included).
+$(SKDF_ELF): $(SKDF_DIR)/src/main.rs $(SKDF_DIR)/memory.x $(SKDF_DIR)/build.rs $(SKDF_DIR)/Cargo.toml ../../secure/src/cmac.rs
+	cargo build --release --target $(TARGET) --manifest-path $(SKDF_DIR)/Cargo.toml
+
 fi: build
 	$(DONJON) run fault_sweep_fi.py
 
@@ -125,6 +133,13 @@ flashctr: build-flashctr
 
 kdf: build-kdf
 	$(DONJON) run leakage_kdf.py
+
+# SAES-CMAC wrapper leakage analysis (cmac_generic + kdf_cmac_counter_generic).
+# Four TVLA modes: vary-key / vary-msg × cmac_generic / kdf wrapper. Software
+# AES-256 stands in for the production SAES coprocessor (which rainbow/Unicorn
+# cannot model). See `leakage_saes_kdf.py` for the production-interpretation.
+saes-kdf: build-saes-kdf
+	$(DONJON) run leakage_saes_kdf.py
 
 # F-9 re-test: did F-16's shuffle mask the FORS-leaf-index mem_address leak?
 # Compares post-F-16 max|t| against F-9's recorded baseline of 40.71.
