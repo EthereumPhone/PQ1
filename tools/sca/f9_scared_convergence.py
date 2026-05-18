@@ -58,12 +58,15 @@ def load_traces():
 
 
 def make_ths(samples, is_fixed, msg):
-    """Wrap the loaded numpy arrays into scared's TraceHeaderSet."""
-    # scared / estraces expects float32 samples for the t-test pipeline;
-    # cast from the uint8 Hamming-weight proxy lascar's harness emitted.
-    samples_f32 = samples.astype(np.float32)
+    """Wrap the loaded numpy arrays into scared's TraceHeaderSet.
+
+    Keep samples as uint8 (NOT pre-cast to float32) — scared promotes
+    to its `precision=` dtype per-batch internally. Pre-casting 600 ×
+    10M × 4 B = 24 GB OOM-kills the analysis on a 64-GB host once
+    accumulators land on top.
+    """
     return read_ths_from_ram(
-        samples=samples_f32,
+        samples=samples,
         is_fixed=is_fixed.astype(np.uint8),
         msg=msg.astype(np.uint8),
     )
@@ -75,6 +78,14 @@ def main():
     print(f"Building TraceHeaderSet (n={n_traces}, samples={n_samples}) …")
     ths = make_ths(samples, is_fixed, msg)
     print(f"  {ths}")
+    print()
+
+    # Cap RAM: with N=600 × S=10M × float32 working set, default scared
+    # batch attempts the full allocation. Force ~64 MB / batch which
+    # at 10M samples gives ~6 traces per batch — comfortably below the
+    # 64-GB host ceiling once accumulators land on top.
+    scared.set_batch_size(64.0)
+    print(f"  scared batch size capped to 64 MB / batch")
     print()
 
     # Split into fixed-group and random-group ths views.
