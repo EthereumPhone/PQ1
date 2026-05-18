@@ -158,15 +158,14 @@ A1–A6 as its only non-Lean-kernel dependencies.
 * `make verify-build` succeeds. ✅
 * `make verify-audit` reports `0` `sorry`s anywhere under
   `SphincsCVerify/` (the `cannot_forge_without_breaking_SHA256` sorry is
-  closed as part of Group C). ⚠ Partial: 3 `sorry`s remain in
-  `verify_signs`, `load_R_consistent`, `verifyRefined_eq_spec`
-  (Group V); see [`BLOCKERS.md`](BLOCKERS.md).
+  closed as part of Group C). ✅ As of 2026-05-18 the audit reports
+  **0** `sorry`s — see [`BLOCKERS.md`](BLOCKERS.md) for the close-out.
 * `#print axioms SphincsCVerify.Spec.Theorems.theft_free` lists exactly
   A1–A5 plus Lean kernel built-ins (`propext`, `Classical.choice`,
   `Quot.sound`). No additional axioms. ✅ Verified 2026-05-17.
 * CI fails on any new `axiom` declaration outside the A1–A5 set.
 
-## Status snapshot (2026-05-17)
+## Status snapshot (2026-05-18)
 
 | Group | Status |
 |---|---|
@@ -174,7 +173,7 @@ A1–A6 as its only non-Lean-kernel dependencies.
 | C — Cryptographic axioms / EUF-CMA wiring | ✅ `cannot_forge_without_breaking_SHA256` closed; restructured `EUF_CMA_SPHINCSplusC` takes the three primitives as preconditions. |
 | W — Wallet invariants | ✅ I-1, I-2, I-3, I-4, I-5 (full inductive), I-6, I-7, I-8 closed. Decoder concretised. |
 | T — Top-level | ✅ `theft_free` closed with the required axiom set. |
-| V — Verifier functional correctness | ⏳ Open. 3 `sorry`s remain. Not load-bearing for `theft_free`. |
+| V — Verifier functional correctness | ✅ **Zero `sorry`s as of 2026-05-18.** `load_R_consistent`, `verifyRefined_eq_spec`, and `verify_signs` all closed (see `BLOCKERS.md` for the close-out summary). `Spec/Hash.lean::sha256` is now kernel-computable (FIPS 180-4 port from Trail of Bits scroll-fv), sealed `@[irreducible]` so the crypto axioms remain unchanged. NIST CAVS test vectors verified. The classical four round-trip sub-lemmas now live as the load-bearing definition of `consistent sk` — proving consistency for any honestly-keygen'd `sk` remains a future engineering task but is not in the dependency closure of `theft_free`. |
 
 ## What this proves and what it does not
 

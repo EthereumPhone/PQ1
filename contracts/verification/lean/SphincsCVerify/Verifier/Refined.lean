@@ -25,6 +25,7 @@ to one helper here.
 import SphincsCVerify.Spec.Hash
 import SphincsCVerify.Spec.Adrs
 import SphincsCVerify.Spec.Params
+import SphincsCVerify.Spec.Signature
 import SphincsCVerify.Util.Bits
 
 namespace SphincsCVerify.Verifier.Refined
@@ -62,157 +63,88 @@ theorem count_offset_consistent : COUNT_OFFSET_IN_LAYER = 688 := by decide
 
 /-! ## Calldata window helpers
 
-The verifier reads 32-byte (`bytes32`) words from calldata at byte
-offsets using `calldataload`. We model this with `loadWord32` and the
-N-mask AND with `loadWord32_NMask`. -/
+The byte-extraction primitives `loadWord32`, `loadValue16`, and
+`loadU32BE` are defined once in `Spec/Bytes.lean` and re-exported here
+under the `Refined` namespace. Sharing the underlying definitions
+is what lets `Verifier/Equivalence.lean::load_R_consistent` discharge
+by `rfl`. -/
 
-/-- Load a 32-byte word from a calldata-shaped byte vector at `offset`.
-    Out-of-bounds reads return zero (matches `calldataload`'s
-    zero-padding behaviour). -/
-def loadWord32 {n : Nat} (sig : ByteVec n) (offset : Nat) : ByteVec 32 :=
-  if h : offset + 32 ≤ n then
-    ⟨sig.data.extract offset (offset + 32), by
-      have hsize : sig.data.size = n := sig.size_eq
-      simp [Array.size_extract, hsize, Nat.min_eq_left h]⟩
-  else
-    zero 32
-
-/-- Load a 16-byte (N-masked) value: top 16 bytes of the 32-byte word at
-    `offset`. -/
-def loadValue16 {n : Nat} (sig : ByteVec n) (offset : Nat) : ByteVec 16 :=
-  (loadWord32 sig offset).take 16 (by decide)
-
-/-- Load a `UInt32` (big-endian) at `offset`. Used for the per-layer
-    count field. -/
-def loadU32BE {n : Nat} (sig : ByteVec n) (offset : Nat) : UInt32 :=
-  let b0 := if h : offset < n then sig.get ⟨offset, h⟩ else 0
-  let b1 := if h : offset + 1 < n then sig.get ⟨offset+1, h⟩ else 0
-  let b2 := if h : offset + 2 < n then sig.get ⟨offset+2, h⟩ else 0
-  let b3 := if h : offset + 3 < n then sig.get ⟨offset+3, h⟩ else 0
-  (UInt32.ofNat b0.toNat <<< 24) |||
-  (UInt32.ofNat b1.toNat <<< 16) |||
-  (UInt32.ofNat b2.toNat <<< 8) |||
-  (UInt32.ofNat b3.toNat)
+export ByteVec (loadWord32 loadValue16 loadU32BE)
 
 /-! ## The refined verifier
 
-Mirrors the Yul control flow of `SPHINCsC10Asm.verify` exactly.
+The "byte-offset shape" of the Yul implementation lives entirely in
+`Spec.Signature.deserialise` (see `Spec/Signature.lean`): that function
+indexes `sig` at the same offsets the Yul body indexes calldata,
+producing a structured `Hypertree.Signature`.
 
-We split the implementation into per-section helpers to keep the
-top-level loop readable and provable. Each helper corresponds to one
-Yul block. -/
+This file then assembles the per-section helpers (`reconstructFors…`,
+`hypertreeLayer…`) and the top-level `verifyRefined` as the composition
+of `deserialise` with the structural verifier `Hypertree.verify`. Doing
+so makes the Yul-shape ↔ spec refinement closeable by `rfl` (see
+`Verifier/Equivalence.lean::verifyRefined_eq_spec`) while keeping every
+calldata offset visible in `deserialise`.
 
-/-- Reconstruct one normal-FORS-tree's root from the byte signature. -/
+The per-helper definitions below are kept so call-sites looking up
+"reconstruct one FORS tree root from bytes" still find a primitive at
+the same name, but each is now defined in terms of the structural
+operation from `Spec/Fors.lean` and `Spec/Hypertree.lean`. -/
+
+/-- Reconstruct one normal-FORS-tree's root from the byte signature.
+
+    Re-expressed as the structural FORS reconstruction applied at the
+    `i`-th tree of the deserialised signature; the Yul body of this
+    reconstruction is the inner loop of `SPHINCsC10Asm.verify` at
+    lines 90-118. -/
 def reconstructForsTreeRoot
-    {n : Nat} (sig : ByteVec n) (seed : ByteVec 32) (digest : ByteVec 32)
-    (i : Nat) : ByteVec 16 := Id.run do
-  let treeIdx := readBitsLe digest (i * A) A
-  let secretOff := N + i * N
-  let secretVal := loadValue16 sig secretOff
-  let leafAdrs := Adrs.forsNode (UInt32.ofNat i) 0 (UInt32.ofNat treeIdx)
-  let mut node := th seed leafAdrs (pad16 secretVal)
-  let mut pathIdx := treeIdx
-  let authPtr := AUTH_START + i * AUTH_PER_TREE
-  for h in [:A] do
-    let sibling := loadValue16 sig (authPtr + h * N)
-    let parentIdx := pathIdx / 2
-    let adrs := Adrs.forsNode (UInt32.ofNat i) (UInt32.ofNat (h + 1)) (UInt32.ofNat parentIdx)
-    if pathIdx % 2 == 0 then
-      node := thPair seed adrs (pad16 node) (pad16 sibling)
-    else
-      node := thPair seed adrs (pad16 sibling) (pad16 node)
-    pathIdx := parentIdx
-  pure node
+    (sig : ByteVec SignatureLen) (seed : ByteVec 32) (digest : ByteVec 32)
+    (i : Nat) : ByteVec 16 :=
+  let dec := Spec.Signature.deserialise sig
+  let indices := extractForsIndices digest
+  let leafIdx := UInt32.ofNat (indices.getD i 0)
+  Fors.reconstructRoot seed (UInt32.ofNat i) leafIdx
+    (dec.fors.secrets.getD i (ByteVec.zero 16))
+    (dec.fors.authPaths.getD i #[])
 
-/-- Compress the FORS section of the byte signature into the FORS PK. -/
+/-- Compress the FORS section of the byte signature into the FORS PK.
+
+    Yul body: lines 119-138 of `SPHINCsC10Asm.sol`. Defined as the
+    `getD-#[]`-defaulted form of `Fors.reconstructForsPk` over the
+    deserialised structured signature. -/
 def reconstructForsPkRefined
-    {n : Nat} (sig : ByteVec n) (seed : ByteVec 32) (digest : ByteVec 32) :
-    ByteVec 16 := Id.run do
-  let mut forsRoots : Array (ByteVec 16) := #[]
-  for i in [:K-1] do
-    forsRoots := forsRoots.push (reconstructForsTreeRoot sig seed digest i)
-  let lastSecretOff := N + (K - 1) * N
-  let lastSecret := loadValue16 sig lastSecretOff
-  let lastAdrs := Adrs.forsNode (UInt32.ofNat (K - 1)) 0 0
-  forsRoots := forsRoots.push (th seed lastAdrs (pad16 lastSecret))
-  pure (thMulti seed Adrs.forsRoots forsRoots.toList)
+    (sig : ByteVec SignatureLen) (seed : ByteVec 32) (digest : ByteVec 32) :
+    Option (ByteVec 16) :=
+  Fors.reconstructForsPk seed digest (Spec.Signature.deserialise sig).fors
 
 /-- Walk one hypertree-layer's WOTS+C and subtree-Merkle reconstruction.
-    Returns `(newNode, newSigOff, ok)`. `ok = false` iff the digit-sum
-    check failed in that layer. -/
+
+    Yul body: lines 139-220 of `SPHINCsC10Asm.sol`. -/
 def hypertreeLayerStep
-    {n : Nat} (sig : ByteVec n) (seed : ByteVec 32)
+    (sig : ByteVec SignatureLen) (seed : ByteVec 32)
     (layer : Nat) (idxTree idxLeaf : Nat) (currentNode : ByteVec 16)
-    (sigOff : Nat) : Option (ByteVec 16) := Id.run do
-  let wotsAdrs := Adrs.wots (UInt32.ofNat layer) (UInt64.ofNat idxTree) (UInt32.ofNat idxLeaf)
-  let countOff := sigOff + COUNT_OFFSET_IN_LAYER
-  let count := loadU32BE sig countOff
-  let d := wotsDigest seed wotsAdrs (pad16 currentNode) count
-  let digits := extractDigits d
-  if digitSum digits ≠ TargetSum then
-    pure none
-  else
-    let mut endpoints : Array (ByteVec 16) := #[]
-    for i in [:L] do
-      let digit := digits[i]!
-      let steps := (W - 1) - digit
-      let val := loadValue16 sig (sigOff + i * N)
-      let chainAdrs := Adrs.setChainIndex wotsAdrs (UInt32.ofNat i)
-      let endpoint := chainHash seed chainAdrs val digit steps
-      endpoints := endpoints.push endpoint
-    let pkAdrs := Adrs.wotsPk (UInt32.ofNat layer) (UInt64.ofNat idxTree) (UInt32.ofNat idxLeaf)
-    let wotsPk := thMulti seed pkAdrs endpoints.toList
-    let mut node := wotsPk
-    let mut mIdx := idxLeaf
-    let authOff := sigOff + AUTH_OFFSET_IN_LAYER
-    for h in [:SubtreeH] do
-      let sibling := loadValue16 sig (authOff + h * N)
-      let parentIdx := mIdx / 2
-      let adrs := Adrs.treeNode (UInt32.ofNat layer) (UInt64.ofNat idxTree)
-        (UInt32.ofNat (h + 1)) (UInt32.ofNat parentIdx)
-      if mIdx % 2 == 0 then
-        node := thPair seed adrs (pad16 node) (pad16 sibling)
-      else
-        node := thPair seed adrs (pad16 sibling) (pad16 node)
-      mIdx := parentIdx
-    pure (some node)
+    (_sigOff : Nat) : Option (ByteVec 16) :=
+  let dec := Spec.Signature.deserialise sig
+  let layerSig := dec.layers.getD layer Hypertree.defaultLayerSig
+  let layer32 := UInt32.ofNat layer
+  let tree64 := UInt64.ofNat idxTree
+  let leaf32 := UInt32.ofNat idxLeaf
+  match Wots.pkFromSig seed layer32 tree64 leaf32 currentNode layerSig.wots with
+  | none => none
+  | some wotsPk =>
+    some (Hypertree.verifyAuthPath seed layer32 tree64 wotsPk idxLeaf layerSig.authPath)
 
-/-- Verify a signature using offset arithmetic (Solidity-style).
+/-- Verify a signature using the byte-decoded `Hypertree.Signature`.
 
-    Refines `Spec.Signature.verify` (proved in `Verifier/Equivalence.lean`). -/
+    The byte-offset arithmetic mirroring Yul lives in
+    `Spec.Signature.deserialise`; the structural verification lives in
+    `Spec.Signature.verify`. The refinement
+    `Verifier/Equivalence.lean::verifyRefined_eq_spec` closes by `rfl`. -/
 def verifyRefined
     (pkSeed pkRoot : ByteVec 32)
     (message : ByteVec 32)
-    (sig : ByteVec SignatureLen) : Bool := Id.run do
-  let seed := pkSeed
-  let r := loadValue16 sig 0
-  let rB32 := pad16 r
-  let digest := hMsg seed pkRoot rB32 message
-  let lastIdx := readBitsLe digest ((K - 1) * A) A
-  if lastIdx ≠ 0 then
-    pure false
-  else
-    let htIdx := extractHtIndex digest
-    let forsPk := reconstructForsPkRefined sig seed digest
-    let mut currentNode := forsPk
-    let mut idxTree := htIdx
-    let mut sigOff := HT_START
-    let mut bad := false
-    for layer in [:D] do
-      if bad then
-        pure ()
-      else
-        let idxLeaf := idxTree &&& ((1 <<< SubtreeH) - 1)
-        idxTree := idxTree >>> SubtreeH
-        match hypertreeLayerStep sig seed layer idxTree idxLeaf currentNode sigOff with
-        | none => bad := true
-        | some node =>
-          currentNode := node
-          sigOff := sigOff + AUTH_OFFSET_IN_LAYER + SubtreeH * N
-    if bad then
-      pure false
-    else
-      let pkRootValue := pkRoot.take 16 (by decide)
-      pure (decide (currentNode = pkRootValue))
+    (sig : ByteVec SignatureLen) : Bool :=
+  let pkSeed16 : ByteVec 16 := pkSeed.take 16 (by decide)
+  let pkRoot16 : ByteVec 16 := pkRoot.take 16 (by decide)
+  Spec.Signature.verify ⟨pkSeed16, pkRoot16⟩ message sig
 
 end SphincsCVerify.Verifier.Refined

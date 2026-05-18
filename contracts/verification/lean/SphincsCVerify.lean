@@ -15,6 +15,7 @@ Plus the cryptographic-axiom block (Crypto/) and shared utilities (Util/).
 import SphincsCVerify.Spec.Params
 import SphincsCVerify.Spec.Bytes
 import SphincsCVerify.Spec.Adrs
+import SphincsCVerify.Spec.Sha256Impl
 import SphincsCVerify.Spec.Hash
 import SphincsCVerify.Spec.Wots
 import SphincsCVerify.Spec.Fors

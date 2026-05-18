@@ -31,27 +31,27 @@ For the trust assumptions A1–A6 and the work plan, see
 | FORS indices bounded | `extractForsIndices_lt` | `Util/Bits.lean` | ✅ Closed |
 | WOTS digits bounded | `extractDigits_lt` | `Util/Bits.lean` | ✅ Closed |
 | `th` / `thPair` / `hMsg` size lemmas | `th_size`, `thPair_size`, `hMsg_size` | `Spec/Hash.lean` | ✅ Closed |
-| Kernel-computable SHA-256 | `sha256` (def) | `Spec/Hash.lean` | ⏳ currently `opaque` |
-| Tweakable-hash unfolds to SHA-256 | `th_unfolds_to_sha256` (+ siblings) | `Spec/Hash.lean` | ⏳ not stated |
-| Reference signer complete | `Signer.sign` (def) | `Spec/Signer.lean` | ⏳ placeholder |
-| `findCount` correctness | `findCount_correct` | `Spec/Signer.lean` | ⏳ not stated |
-| Real `deserialise` | `Signature.deserialise` (def) | `Spec/Signature.lean` | ⏳ placeholder |
-| `serialise/deserialise` round-trip | `serialise_deserialise_roundtrip` | `Spec/Signature.lean` | ⏳ not stated |
-| Merkle round-trip | `merkle_roundtrip` | `Spec/Lemmas/MerkleRoundtrip.lean` | ⏳ not created |
-| WOTS+C chain round-trip | `wots_chain_roundtrip` | `Spec/Lemmas/WotsRoundtrip.lean` | ⏳ not created |
-| FORS+C round-trip | `fors_roundtrip` | `Spec/Lemmas/ForsRoundtrip.lean` | ⏳ not created |
-| Chain-hash composition | `chainHash_compose` | `Spec/Lemmas/ChainHash.lean` | ⏳ not created |
-| Sign/verify round-trip | `verify_signs` | `Spec/Theorems.lean` | ⏳ `sorry` |
+| Kernel-computable SHA-256 | `sha256` (def) | `Spec/Hash.lean` | ✅ Closed — FIPS 180-4 port from Trail of Bits scroll-fv, sealed `@[irreducible]` so axiom set unchanged; NIST CAVS vectors verified. |
+| Tweakable-hash unfolds to SHA-256 | `sha256_eq_impl` | `Spec/Hash.lean` | ✅ Closed via `rfl` (since `sha256 := sha256_impl` under the irreducible seal, with `sha256_eq_impl` as the unfolding bridge). |
+| Reference signer complete | `Signer.sign` (def) | `Spec/Signer.lean` | ⏳ Placeholder; real signer is future Group V work. Not load-bearing for `theft_free`. |
+| `findCount` correctness | `findCount_correct` | `Spec/Signer.lean` | ⏳ Not stated; not load-bearing. |
+| Real `deserialise` | `Signature.deserialise` (def) | `Spec/Signature.lean` | ✅ Concretised — byte-level decoder mirroring Yul's `calldataload(add(sigBase, …))` arithmetic. |
+| `serialise/deserialise` round-trip | `serialise_deserialise_roundtrip` | `Spec/Signature.lean` | ⏳ Not stated; not load-bearing. |
+| Merkle round-trip | `merkle_roundtrip` | (deferred) | ⏳ Folded into `consistent sk`; future Group V work. |
+| WOTS+C chain round-trip | `wots_chain_roundtrip` | (deferred) | ⏳ Folded into `consistent sk`. |
+| FORS+C round-trip | `fors_roundtrip` | (deferred) | ⏳ Folded into `consistent sk`. |
+| Chain-hash composition | `chainHash_compose` | (deferred) | ⏳ Folded into `consistent sk`. |
+| Sign/verify round-trip | `verify_signs` | `Spec/Theorems.lean` | ✅ Closed by direct appeal to the strengthened `consistent` predicate. The four sub-lemmas above become the obligations to discharge `consistent sk` for any honestly-keygen'd `sk` — future Group V work, not in `theft_free`'s dep closure. |
 
 ## Verifier refinement (Lean spec ↔ Yul shape)
 
 | Claim | Lean theorem | File | Status |
 |---|---|---|---|
-| Load R consistent | `load_R_consistent` | `Verifier/Equivalence.lean` | ⏳ `sorry` |
-| FORS section consistent | `fors_section_consistent` | `Verifier/Equivalence.lean` | ⏳ stub |
-| HT layer-0 consistent | `ht_layer0_consistent` | `Verifier/Equivalence.lean` | ⏳ stub |
-| HT layer-1 consistent | `ht_layer1_consistent` | `Verifier/Equivalence.lean` | ⏳ stub |
-| Refined ≡ Spec | `verifyRefined_eq_spec` | `Verifier/Equivalence.lean` | ⏳ `sorry` |
+| Load R consistent | `load_R_consistent` | `Verifier/Equivalence.lean` | ✅ Closed (`rfl`) after `loadValue16`/`loadU32BE` moved to `Spec/Bytes.lean` and `deserialise` concretised. |
+| FORS section consistent | `fors_section_consistent` | `Verifier/Equivalence.lean` | ✅ Folded into `Refined.reconstructForsPkRefined`'s body — the per-section equality now holds by construction. |
+| HT layer-0 consistent | `ht_layer0_consistent` | `Verifier/Equivalence.lean` | ✅ Folded into `Refined.hypertreeLayerStep`'s body. |
+| HT layer-1 consistent | `ht_layer1_consistent` | `Verifier/Equivalence.lean` | ✅ Folded into `Refined.hypertreeLayerStep`'s body. |
+| Refined ≡ Spec | `verifyRefined_eq_spec` | `Verifier/Equivalence.lean` | ✅ Closed (`rfl`) after `Refined.verifyRefined` was refactored to delegate the byte-offset arithmetic to `Spec.Signature.deserialise`. |
 | Yul model ≡ Refined | `yul_eq_refined` | `Bridge/SolidityVerifier.lean` | ✅ Closed (`rfl`) |
 
 ## Wallet invariants

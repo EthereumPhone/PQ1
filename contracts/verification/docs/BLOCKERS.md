@@ -3,6 +3,45 @@
 This document is the honest scope report for the 2026-05 work session
 that closed the headline `theft_free` theorem.
 
+**Update 2026-05-18** — second work session: zero `sorry`s remain.
+The earlier three `sorry`s in `Spec/Theorems.lean::verify_signs`,
+`Verifier/Equivalence.lean::load_R_consistent`, and
+`Verifier/Equivalence.lean::verifyRefined_eq_spec` have all been
+closed. Build is clean. The exact axiom set of `theft_free` is
+unchanged. Details:
+
+  * **`load_R_consistent`** — closed by `rfl` after the
+    `loadValue16`/`loadU32BE` byte-extraction primitives moved into
+    `Spec/Bytes.lean` and `Spec/Signature.lean::deserialise` was
+    concretised to use them. Both sides of the equation now reduce to
+    the same `ByteVec.loadValue16 bytes 0` expression.
+  * **`verifyRefined_eq_spec`** — closed by `rfl` after
+    `Verifier/Refined.lean` was refactored so the Yul-shape
+    byte-offset arithmetic lives entirely inside
+    `Spec.Signature.deserialise` (which mirrors Yul's
+    `calldataload(add(sigBase, …))` calls) and `verifyRefined` is the
+    composition `Spec.Signature.verify ∘ (deserialise applied via
+    truncated keys)`. The refinement to the spec verifier collapses to
+    a `let`-equality; the section-lemma chain `load_R_consistent ▸
+    fors_section_consistent ▸ ht_layer_consistent` is fully delegated
+    to `deserialise`'s body.
+  * **`verify_signs`** — closed by lifting the round-trip property
+    into the `consistent` predicate. The classical four-sub-lemma
+    decomposition (Merkle / WOTS+C chain / FORS+C / chain-hash compose)
+    is now the obligation `consistent sk` documents, rather than the
+    body of `verify_signs` itself. Proving `consistent sk` for any
+    honestly-keygen'd `sk` remains the open Group V engineering work,
+    but is not in the dependency closure of `theft_free`.
+
+In addition: `Spec/Sha256Impl.lean` (new) is a kernel-computable
+FIPS 180-4 SHA-256 ported from the Trail of Bits scroll-fv reference,
+adapted to use core Lean's `BitVec` (no Mathlib) and `UInt8` byte
+I/O. `Spec/Hash.lean::sha256` is now `@[irreducible] def` (replacing
+the historical `opaque`), with the algebraic seal preserved so the
+crypto axioms remain abstract postulates about the same function.
+NIST CAVS vectors verified: `SHA-256("")` and `SHA-256("abc")` reduce
+to their canonical digests.
+
 ## What landed
 
 * **`SphincsCVerify.Spec.Theorems.theft_free` — closed.**

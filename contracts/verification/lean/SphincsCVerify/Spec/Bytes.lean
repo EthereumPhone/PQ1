@@ -108,6 +108,48 @@ def u64ToB32 (x : UInt64) : ByteVec 32 :=
 def truncate16 (d : ByteVec 32) : ByteVec 16 :=
   d.take 16 (by decide)
 
+/-- Extensionality for `ByteVec`: equal `data` implies equal `ByteVec`s.
+    The `size_eq` proofs are identical by proof irrelevance. -/
+theorem ext_data {n : Nat} {a b : ByteVec n} (h : a.data = b.data) : a = b := by
+  cases a; cases b; subst h; rfl
+
+/-! ## Calldata-shaped loads
+
+The Solidity verifier indexes the signature blob via `calldataload` —
+which reads a 32-byte word at an offset, returning zero-padded data
+when the read exceeds calldata. We model that here so the offset-indexed
+verifier (`Verifier.Refined`) and the structural deserialiser
+(`Spec.Signature.deserialise`) share *the same* byte-extraction primitive.
+Sharing the definitions is what makes `load_R_consistent` and friends in
+`Verifier/Equivalence.lean` discharge by `rfl`. -/
+
+/-- Load a 32-byte word from a byte vector at `offset`. Out-of-bounds
+    reads return zero (matches `calldataload`'s zero-padding). -/
+def loadWord32 {n : Nat} (sig : ByteVec n) (offset : Nat) : ByteVec 32 :=
+  if h : offset + 32 ≤ n then
+    ⟨sig.data.extract offset (offset + 32), by
+      have hsize : sig.data.size = n := sig.size_eq
+      simp [Array.size_extract, hsize, Nat.min_eq_left h]⟩
+  else
+    zero 32
+
+/-- Load a 16-byte (N-masked) value: top 16 bytes of the 32-byte word
+    at `offset`. -/
+def loadValue16 {n : Nat} (sig : ByteVec n) (offset : Nat) : ByteVec 16 :=
+  (loadWord32 sig offset).take 16 (by decide)
+
+/-- Load a `UInt32` big-endian at `offset`. Used for the per-layer
+    `count` field. -/
+def loadU32BE {n : Nat} (sig : ByteVec n) (offset : Nat) : UInt32 :=
+  let b0 := if h : offset < n then sig.get ⟨offset, h⟩ else 0
+  let b1 := if h : offset + 1 < n then sig.get ⟨offset+1, h⟩ else 0
+  let b2 := if h : offset + 2 < n then sig.get ⟨offset+2, h⟩ else 0
+  let b3 := if h : offset + 3 < n then sig.get ⟨offset+3, h⟩ else 0
+  (UInt32.ofNat b0.toNat <<< 24) |||
+  (UInt32.ofNat b1.toNat <<< 16) |||
+  (UInt32.ofNat b2.toNat <<< 8) |||
+  (UInt32.ofNat b3.toNat)
+
 /-! ### Concrete short literals used by the SPHINCS+C10 hashes -/
 
 /-- The 4-byte domain tag `b"wots"`. -/

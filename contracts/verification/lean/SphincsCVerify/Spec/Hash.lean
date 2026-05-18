@@ -8,42 +8,38 @@ Every function in this module corresponds byte-for-byte to:
 
 ## SHA-256 modeling strategy
 
-We declare `sha256` as an `opaque` function with two postconditions:
+We declare `sha256` as a kernel-computable `def` whose body is the
+FIPS 180-4 reference implementation in `Spec/Sha256Impl.lean`. The
+function is marked `@[irreducible]` so the existing algebraic proofs
+that treat `sha256` as a black box keep working without trying to
+unfold a 64-round body into every tactic context.
 
-  1. `output size = 32 bytes` — pure functional property; trivially used
-     everywhere `truncate16` is called.
-  2. `behaviour matches FIPS 180-4` — left as an explicit axiom in
-     `Crypto/Assumptions.lean`. We never need to reduce `sha256` to a
-     concrete digest inside a Lean proof; we only ever use it through
-     its algebraic properties (collision-resistance, SM-TCR,
-     interleaved target-subset resilience for the tweakable-hash
-     construction).
+Two consequences:
 
-This is the same strategy Verity takes for `keccak256` in
-`Compiler/Keccak/Sponge.lean`: model the primitive as opaque, surface a
-proven `keccak256_memory_slice_matches_evm` bridge to the EVM precompile.
-For our verifier the analogous bridge is "EVM precompile 0x02 implements
-FIPS 180-4 SHA-256," documented in `Bridge/Refinement.lean`.
+  1. NIST CAVS test vectors (`SHA-256("")`, `SHA-256("abc")`) reduce
+     by `native_decide` / `unfold sha256; rfl`, giving a kernel-checked
+     ground truth for the byte-level differential pipeline.
+  2. The cryptographic axioms in `Crypto/Assumptions.lean` are unchanged
+     — they remain abstract postulates about the *function* `sha256`,
+     which now happens to coincide with FIPS 180-4. The Lean kernel
+     never has to *compute* SHA-256 to verify the EUF-CMA argument;
+     computability is a strict strengthening of the prior opaque-only
+     treatment, and the audited axiom list of `theft_free` does not
+     change (no new axioms introduced — irreducibility is enforced via
+     a `@[irreducible] def`, not via `axiom`).
 
-## Why no concrete SHA-256 implementation in Lean?
-
-A kernel-computable SHA-256 spec (à la VST/Coq SHA-256 by Appel) would
-allow `decide`-style discharge of concrete test-vector cases inside Lean.
-This is on the roadmap (see §3.5 of `how_to_math_proof_secureness.md`)
-and would be roughly a 1-3 person-month effort; the structural pattern
-to follow is Verity's `Compiler/Keccak/Sponge.lean`. For the present
-deliverable we stop at the abstract spec because all our theorems are
-*algebraic* (functional correctness, refinement, EUF-CMA) and do not
-require executing the hash on a specific bit pattern inside the kernel.
-
-Differential cross-checking against concrete digests is done outside
-Lean, via the existing `c10_test_vectors.json` corpus in
-`sphincs-c10/tests/`.
+This is the same end-state Verity reaches for `keccak256` in
+`Compiler/Keccak/Sponge.lean`: a concrete sponge body + an
+`@[irreducible]` seal, plus a proven `keccak256_memory_slice_matches_evm`
+bridge to the EVM precompile. For our verifier the analogous bridge is
+"EVM precompile 0x02 implements FIPS 180-4 SHA-256," documented as
+axiom `Bridge.precompile_0x02_is_FIPS_180_4` in `Bridge/Refinement.lean`.
 -/
 
 import SphincsCVerify.Spec.Bytes
 import SphincsCVerify.Spec.Params
 import SphincsCVerify.Spec.Adrs
+import SphincsCVerify.Spec.Sha256Impl
 
 namespace SphincsCVerify.Spec
 
@@ -73,18 +69,44 @@ def ofByteVec {n : Nat} (v : ByteVec n) : ByteSeg :=
 
 end ByteSeg
 
-/-- We need an `Inhabited` instance for `ByteVec 32` to declare
-    `opaque sha256` — the kernel materialises an arbitrary default that
-    `sha256` is then *constrained* by axioms to depart from. The
-    instance carries no behavioural content. -/
+/-- The default 32-byte vector — used by `getD`-style helpers and the
+    `Inhabited` instance below. -/
 instance : Inhabited (ByteVec 32) :=
   ⟨zero 32⟩
 
-/-- Opaque SHA-256: takes a (length-erased) list of byte segments,
-    returns the 32-byte digest. The actual implementation is FIPS 180-4;
-    we treat it as a black box and reason about it via its axiomatised
-    properties (see `Crypto/Assumptions.lean`). -/
-opaque sha256 : List ByteSeg → ByteVec 32
+/-- Flatten a list of byte segments into a single `Array UInt8`. -/
+def ByteSeg.flatten (segs : List ByteSeg) : Array UInt8 :=
+  segs.foldl (init := #[]) fun acc seg => acc ++ seg.bytes.data
+
+/-- FIPS 180-4 SHA-256, lifted to take a list of byte segments and
+    return a fixed-length `ByteVec 32`.
+
+    This is the *concrete* SHA-256 backing every tweakable-hash and
+    domain-separation primitive in the SPHINCS+C10 stack. The
+    `@[irreducible]` attribute on `sha256` (below) prevents the kernel
+    from unfolding the 64-round body inside unrelated tactic contexts,
+    so all the existing algebraic proofs (treating `sha256` as a black
+    box) keep working unchanged. When you actually want to *compute* a
+    concrete digest (e.g. NIST CAVS test vectors), `unfold sha256
+    sha256_impl` exposes the FIPS 180-4 reference. -/
+def sha256_impl (segs : List ByteSeg) : ByteVec 32 :=
+  let bytes := ByteSeg.flatten segs
+  let digest := Sha256Impl.sha256Bytes bytes
+  ⟨digest, Sha256Impl.sha256Bytes_size bytes⟩
+
+/-- SHA-256 over a (length-erased) list of byte segments. Returns the
+    32-byte digest. Definitionally equal to `sha256_impl`, but sealed
+    by `@[irreducible]` so unrelated proofs don't accidentally try to
+    reduce the round function. -/
+@[irreducible] def sha256 : List ByteSeg → ByteVec 32 := sha256_impl
+
+/-- Unfolding lemma for `sha256`. Use this (or `show sha256_impl …`) in
+    proofs that need to inspect the underlying FIPS 180-4 implementation,
+    e.g. NIST CAVS test-vector decision proofs. -/
+theorem sha256_eq_impl (segs : List ByteSeg) :
+    sha256 segs = sha256_impl segs := by
+  unfold sha256
+  rfl
 
 /-- Apply `sha256` to a single concatenated byte vector. -/
 @[inline]
