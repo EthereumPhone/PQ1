@@ -1128,6 +1128,44 @@ contract PQSmartWalletTest is Test {
         w.executeWithOffchainCount(1, 0, address(0xbeef), 0, "");
     }
 
+    /// H-3 sibling — one-shot consumption. After a validated execute
+    /// runs once, a SECOND execute in the same tx with identical
+    /// parameters must revert: the transient ownerIndex token was
+    /// consumed by the first execute's `_consumeValidatedOwnerIndex`
+    /// (`tstore(0)` clears it regardless of success). Confirms the
+    /// "one validate → one execute" semantics, ruling out a replay
+    /// attack where an attacker who controls the EntryPoint queues
+    /// the same execute twice against one validated bundle.
+    function test_audit_h3_validateConsumedByPriorExecute() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        // Validate slot-1 + execute(1, ...) once — both succeed.
+        bytes memory callData = abi.encodeCall(
+            w.executeWithOffchainCount, (1, 7, address(0xbeef), 0, "")
+        );
+        bytes memory sig = _wrapSig(1, _fakeC10Sig());
+        vm.prank(ENTRY_POINT_ADDR);
+        assertEq(
+            w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(0), 0),
+            0
+        );
+        vm.prank(ENTRY_POINT_ADDR);
+        w.executeWithOffchainCount(1, 7, address(0xbeef), 0, "");
+        assertEq(w.offchainSigCount(1), 7);
+
+        // Second execute with the SAME parameters must revert — the
+        // transient token was consumed by the first execute's
+        // `_consumeValidatedOwnerIndex` (one-shot semantics).
+        vm.prank(ENTRY_POINT_ADDR);
+        vm.expectRevert(PQSmartWallet.OwnerIndexMismatch.selector);
+        w.executeWithOffchainCount(1, 7, address(0xbeef), 0, "");
+
+        // Counter wasn't bumped again (would have failed the monotonic
+        // check anyway, but the revert happens before that gate).
+        assertEq(w.offchainSigCount(1), 7);
+    }
+
     // M-1 — Bootstrap budget MUST NOT decrement when execution reverts.
 
     function test_audit_m1_bootstrapBumpDoesNotChargeOnRevertingAddOwner() public {
