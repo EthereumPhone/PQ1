@@ -72,6 +72,23 @@ pub extern "C" fn sca_fi_wait_random() {
     fi::wait_random();
 }
 
+/// `wait_random_loop` with a CALLER-SUPPLIED loop count — used by the
+/// `leakage_wait_random.py` TVLA harness to vary the byte across traces.
+/// Bypasses the `rng::byte()` stub (which always returns 5) and goes
+/// straight to `pqsigner_fi::wait_random_loop` with a one-shot closure
+/// returning `byte`. The closure side-effect (capturing `byte`) is
+/// `#[inline(never)]` so the harness's iteration-count measurement isn't
+/// confused by LLVM constant-folding the loop bound.
+#[inline(never)]
+#[no_mangle]
+pub extern "C" fn sca_fi_wait_random_n(byte: u32) {
+    let byte_u8 = (byte & 0xFF) as u8;
+    let mut once = Some(byte_u8);
+    pqsigner_fi::wait_random_loop(move || {
+        core::hint::black_box(once.take().unwrap_or(0))
+    });
+}
+
 // ---------------------------------------------------------------------------
 // C10 verify-before-release glue (mirror of secure/src/crypto.rs).
 // ---------------------------------------------------------------------------
@@ -246,6 +263,8 @@ static _KEEP_CHECK_TRUE: extern "C" fn(u32) -> u32 = sca_fi_check_true;
 #[used]
 static _KEEP_WAIT_RANDOM: extern "C" fn() = sca_fi_wait_random;
 #[used]
+static _KEEP_WAIT_RANDOM_N: extern "C" fn(u32) = sca_fi_wait_random_n;
+#[used]
 static _KEEP_COND: extern "C" fn(u32) -> bool = sca_fi_cond;
 #[used]
 static _KEEP_C10_RELEASE: extern "C" fn(u32) -> u32 = sca_c10_verify_release;
@@ -266,6 +285,7 @@ fn main() -> ! {
     // Touch the keep-statics too, belt-and-braces against aggressive DCE.
     core::hint::black_box(&_KEEP_CHECK_TRUE);
     core::hint::black_box(&_KEEP_WAIT_RANDOM);
+    core::hint::black_box(&_KEEP_WAIT_RANDOM_N);
     core::hint::black_box(&_KEEP_COND);
     core::hint::black_box(&_KEEP_C10_RELEASE);
     core::hint::black_box(&_KEEP_C10_SIGN);

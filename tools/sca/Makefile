@@ -45,7 +45,7 @@ SKDF_ELF := $(SKDF_DIR)/target/$(TARGET)/release/sca-saes-kdf-target
 DONJON   ?= donjon-sca
 SCARED   ?= scared-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -140,6 +140,12 @@ kdf: build-kdf
 # cannot model). See `leakage_saes_kdf.py` for the production-interpretation.
 saes-kdf: build-saes-kdf
 	$(DONJON) run leakage_saes_kdf.py
+
+# wait_random loop-count leakage: does fi::wait_random's body have any
+# mem_address pattern that depends on the loop counter? Re-uses fi_target's
+# new `sca_fi_wait_random_n(byte)` symbol.
+wait-random-leak: build
+	$(DONJON) run leakage_wait_random.py
 
 # F-9 re-test: did F-16's shuffle mask the FORS-leaf-index mem_address leak?
 # Compares post-F-16 max|t| against F-9's recorded baseline of 40.71.
