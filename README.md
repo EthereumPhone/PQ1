@@ -72,6 +72,7 @@ This is the *target architecture* for the production wallet. Every bullet here i
 - **Hardened gateway** — NS pointer validation, TOCTOU defense, sensitive memory zeroization, custom panic handler that clears secrets before halting. The same `cmd_*::run` handlers are shared across both transports — only the entry point differs.
 - **ZK clear signing** — for supported DeFi protocols (Aave V3 today), the wallet refuses to display a human-readable action string unless a Groth16 proof over BLS12-381 cryptographically certifies that the string is a faithful ABI interpretation of the raw calldata. The full VK pool lives in non-secure firmware rodata; the secure world only embeds a 32-byte Merkle root of the VK DB and re-verifies every supplied VK against that root before running Groth16, so neither the companion app nor a compromised non-secure world can substitute a malicious VK. *(Implemented in QEMU via `CMD_CLEAR_SIGN`; host-side `zk-test` crate verifies the Aave V3 supply proof in ~3.3 ms.)*
 - **ERC20-aware trusted display** — for transactions whose recipient contract is in the firmware's pinned ERC20 DB, the trusted UI renders "Send 100.000000 USDC to 0xabc..." with symbol and decimals from a Merkle-verified metadata bundle. Unknown contracts fall through to a Ledger-style "⚠ BLIND SIGNING" warning. The ERC20 DB is in non-secure rodata (Merkle-anchored the same way as the VK DB), so adding tokens does not cost any secure flash. *(Implemented; `dbgen` crate builds the Merkle trees at build time.)*
+- **ERC-7730 clear-signing ([clearsigning.org](https://clearsigning.org))** — every supported registry descriptor renders as Merkle-verified, binding-cross-checked, field-level pages on the trusted display (intent banner + per-field formatters + ERC-8213 fingerprint). The descriptor IR + Merkle proof are companion-supplied as an optional trailer on every sign request; the firmware re-verifies against a compiled-in `ERC7730_DESCRIPTORS_ROOT` and falls through to blind-sign on any mismatch. Production builds require descriptors that passed the host-side attestation policy at `dbgen` time; a `compile_error!`-fenced dev-only Cargo feature relaxes the policy for bring-up. FI-hardened binding gates wrap every `cross_check_*` call in the same Hamming-distant sentinel idiom that protects the SPHINCS+C10 verify-before-release. ERC-8176 attestation verification stays host-only (would violate invariant #5 — "no classical signer"). *(Implemented end-to-end across `pqsigner-erc7730/`, `secure/src/tx/display/erc7730/`, `dbgen::erc7730`. See `docs/erc7730-integration.md` for the full spec, `docs/erc8213-fingerprints.md` for cross-device verification, `docs/companion-erc7730-integration.md` for trailer assembly.)*
 
 ## Prerequisites
 
@@ -225,6 +226,9 @@ what you need:**
 | Firmware measurement / signed updates | `docs/firmware-update.md`, `docs/reproducible-builds.md`, README §"Firmware Update Model" |
 | USB protocol on the wire | `docs/usb-protocol-v2.md`, `docs/usb-hid-setup.md` |
 | OLED mirror / dev tooling | `docs/oled-mirror.md` |
+| ERC-7730 clear-signing ([clearsigning.org](https://clearsigning.org)) on-device | `docs/erc7730-integration.md` |
+| ERC-8213 fingerprint pages + cross-device verification recipe | `docs/erc8213-fingerprints.md` |
+| Companion-side ERC-7730 trailer assembly + lookup | `docs/companion-erc7730-integration.md` |
 
 ### Per-domain quick map (which doc covers each concern)
 
