@@ -205,6 +205,56 @@ slot is unregistered, the gap exceeds `MAX_OFFCHAIN_GAP = 100`, or the
 combined cap is exhausted. Bootstrap key (`ownerIndex == 0`) is
 **forbidden** for EIP-1271.
 
+The input header is 17 B (`account(1) | chain(8) | slot(4) | kind(1) |
+payload_len(2) | flags(1)`). The `kind` byte selects the payload
+format:
+
+| `kind`                          | Value | Payload                                                                                       |
+|---------------------------------|-------|-----------------------------------------------------------------------------------------------|
+| `OFFCHAIN_KIND_RAW32`           | 0     | 32 raw bytes — already the user's chosen hash; firmware wraps via Solady nested EIP-712.       |
+| `OFFCHAIN_KIND_PERSONAL_SIGN`   | 1     | UTF-8 message ≤ `MAX_OFFCHAIN_PERSONAL_SIGN_LEN`; firmware applies EIP-191 prefix + wraps.    |
+| `OFFCHAIN_KIND_EIP712_TYPED`    | 2     | EIP-712 typed-data (see below) — Phase 4 of the ERC-7730 rollout.                              |
+
+#### `kind = OFFCHAIN_KIND_EIP712_TYPED` (2) wire format
+
+Payload layout (immediately after the 17-byte header):
+
+```
+[u16 BE = 1]                  // domain_sep_present (must be 1)
+[u8; 32] domain_separator     // EIP-712 EIP712Domain final hash
+[u8; 32] primary_type_hash    // keccak256(typeString) of the typed message
+[u16 BE] encoded_data_len     // ≤ MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN
+[u8; encoded_data_len] encoded_data
+                              // ABI-encoded struct body (NOT including
+                              // the type hash) — what
+                              // viem::encodeAbiParameters() produces.
+[u16 BE] trailer_len          // ERC-7730 descriptor trailer length
+[u8; trailer_len] trailer     // ERC-7730 bundle (see docs/erc7730-integration.md)
+```
+
+The minimum payload length is `2 + 32 + 32 + 2 + 2 = 70` bytes (empty
+`encoded_data` + zero-length trailer is allowed for round-trip
+validation but the firmware rejects empty trailers with `7730 bundle
+fail`). The maximum payload length is
+`MAX_OFFCHAIN_EIP712_TYPED_LEN`.
+
+Secure-side processing:
+1. Verify the trailer bundle against `ERC7730_DESCRIPTORS_ROOT`.
+2. `cross_check_eip712(descriptor.ir, chain_id, contract,
+   domain_separator)` — FI-hardened binding gate (Phase 5 item 6).
+3. Compute `struct_hash = keccak256(primary_type_hash || encoded_data)`.
+4. Compute the EIP-712 final hash:
+   `final = keccak256(0x1901 || domain_separator || struct_hash)`.
+5. Render the descriptor's matching format via
+   `display::erc7730::render_erc7730_eip712_pages`; render the
+   ERC-8213 fingerprint with the `final` hash as the displayed value.
+6. Wrap `final` through Solady's nested PersonalSign envelope (no new
+   typehash, no on-chain change).
+7. Sign with the slot key + bump the per-slot off-chain counter.
+
+Output format matches the kind=0 / kind=1 paths exactly:
+`[new_local_offchain_count u64 BE][C10 sig (4008 B)]`.
+
 ### 0x63 OFFCHAIN_STATUS
 
 Per-slot `(local_offchain_count, last_userop_count, registered)` readback.

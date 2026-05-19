@@ -218,6 +218,7 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 | `shared/src/lib.rs` | Cross-world `#[repr(C)]` types, `NscStatus`, CMD constants. |
 | `sphincs-c10/` | C10 signing — `SigningKey::keygen/sign`, `verify`, hypertree, wots, fors, merkle, address, hash, params. |
 | `bip39/` | 24-word English BIP-39 (no_std). |
+| `pqsigner-erc7730/src/{ir,walker,bundle,binding,abi}.rs` | ERC-7730 clear-signing — IR parser, path walker, Merkle bundle verifier, `(chain_id, contract, ds)` binding cross-checks. Host-runnable; firmware re-exports via `secure/src/tx/erc7730.rs`. |
 
 ### Secure world
 | Path | Purpose |
@@ -228,6 +229,10 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 | `secure/src/aa/mod.rs` | Re-export shim over `pqsigner-aa`. |
 | `secure/src/tx/mod.rs` | Re-export shim over `pqsigner-tx-core` + display + EIP-712. |
 | `secure/src/tx/display/*` | Trusted-UI page renderers (value transfer, ERC-20 known/unknown, contract creation, slot rotation, blind sign, batch, EIP-1271, Safe, typed_call). |
+| `secure/src/tx/display/erc7730/{mod,intent,formatters,calldata_nested}.rs` | ERC-7730 renderer (intent banner + 14 FormatOp dispatchers + nested-calldata stub). Stack canary + `COMPACT_MODE` toggle; warning page under `erc7730-dev-unattested`. |
+| `secure/src/tx/display/erc8213.rs` | ERC-8213 fingerprint pages (2-page banner + full 32-byte hash). |
+| `secure/src/tx/erc7730_render/{params,visibility}.rs` | TLV parameter parser + visibility evaluator (host-testable; outside the `#[cfg(not(test))]`-gated display tree). `should_render_with_mode` for the Phase 5 compact-mode toggle. |
+| `secure/src/tx/erc7730.rs` | Re-export shim over `pqsigner-erc7730` + the firmware-pinned `ERC7730_DESCRIPTORS_ROOT`. |
 | `secure/src/tx/eip712/{cowswap,safe}/` | EIP-712 typed-data verifiers (test vectors + verify). |
 | `secure/src/tx/typed_call/{abi,parser}.rs` | Solidity ABI typed-call parser. |
 | `secure/src/{erc20,names,selectors}/mod.rs` | Re-export shims over `pqsigner-tx`; pass `crate::db_roots::*`. |
