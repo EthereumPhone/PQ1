@@ -615,6 +615,30 @@ qr-screen-test = ["ui-oled", "stm32u585", "mock-se"]  # Render QR + companion-ap
 # any build that has this feature enabled. See `tools/oled-mirror`.
 ui-mirror = ["dep:rtt-target", "ui-oled"]
 
+# ERC-7730 dev mode: relax the host-side attestation policy on-device.
+# When ON, descriptors whose IR shape is verified against the firmware-
+# pinned `ERC7730_DESCRIPTORS_ROOT` but whose pre-image at host-build
+# time was tagged `allow_unattested_dev_descriptors = true` (i.e. the
+# `--policy dev` corpus, not the `--policy production` corpus) render
+# with a "DEV: unattested descriptor" banner row inserted on the
+# intent banner page instead of forcing a fall-through to BLIND SIGN.
+#
+# Why a runtime knob and not a pure host-side gate: the firmware-pinned
+# Merkle root is the SAME bytes regardless of which corpus was used to
+# generate it (the bundle format embeds no attestation metadata; the
+# policy gate runs at `dbgen` time and rejects or accepts the leaf set
+# before the root is computed). The runtime feature only changes the
+# rendering: production-mode firmware should never see an "unattested"
+# descriptor because the production policy rejected it at build time,
+# but a bring-up developer building with `--policy dev` against a
+# vendored corpus wants to confirm the renderer wiring without
+# falling back to blind-sign every time.
+#
+# NEVER ship — registered in the production-build `compile_error!`
+# fence in `secure/src/nsc/mod.rs` alongside `debug-log` / `e2e-test`
+# / `mock-se` / `otp-hardcoded-master-key` / `ui-capture`.
+erc7730-dev-unattested = []
+
 [build-dependencies]
 qrcodegen = "1.8"
 # Decodes the vendored `assets/font_5x8.png` (embedded-graphics' FONT_5X8

@@ -107,13 +107,15 @@ mod trailer;
         feature = "bhk-hardcoded-master-key",
         feature = "se050-rotate-scp03",
         feature = "sca-trigger",
+        feature = "erc7730-dev-unattested",
     )
 ))]
 compile_error!(
     "Hardware release builds (stm32u585 + !debug_assertions) must not enable \
      debug-log / ui-semihosting / ui-mirror / ui-capture / mock-se / \
      otp-hardcoded-master-key / bhk-hardcoded-master-key / saes-self-test / \
-     uart-console / boot-pulse / se050-rotate-scp03 / sca-trigger. These \
+     uart-console / boot-pulse / se050-rotate-scp03 / sca-trigger / \
+     erc7730-dev-unattested. These \
      features leak secure-world state, replace the SE with a mock, replace \
      the per-device OTP master key or BHK with a shared compile-time \
      constant, halt the boot flow after a diagnostic, stream diagnostic \
@@ -124,6 +126,27 @@ compile_error!(
      production unit). Hardware test images may opt in by also enabling \
      `e2e-test` (auto-provisioning, non-interactive) or `dev-testkey` \
      (interactive UI, OTP substituted with a compile-time constant)."
+);
+
+// Dedicated guard: `mode-production` + `erc7730-dev-unattested` is a
+// catastrophic combination. The `erc7730-dev-unattested` feature relaxes
+// the on-device attestation gate so ERC-7730 descriptors that failed the
+// host-side production attestation policy still render (with a "DEV
+// unattested descriptor" warning row) instead of falling through to
+// blind-sign. Production builds must reject ALL unattested descriptors;
+// shipping with this feature on would let a hostile companion forge
+// rendering for descriptors that no `trusted_attesters` ever signed.
+#[cfg(all(
+    feature = "mode-production",
+    feature = "erc7730-dev-unattested",
+))]
+compile_error!(
+    "mode-production and erc7730-dev-unattested are mutually exclusive. \
+     The dev-unattested feature relaxes the on-device ERC-7730 \
+     attestation gate (renders a 'DEV: unattested descriptor' warning \
+     row instead of falling through to BLIND SIGN). Shipping firmware \
+     must reject every unattested descriptor — re-run `dbgen --policy \
+     production` and drop the feature."
 );
 
 // Dedicated guard: `otp-hardcoded-master-key` + `optiga-lock-operational` is

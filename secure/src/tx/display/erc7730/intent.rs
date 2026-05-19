@@ -24,12 +24,36 @@ use super::formatters::write_line_bytes;
 use super::Pages;
 use crate::tx::erc7730_render::RenderErr;
 
+/// Number of pages [`render_intent_banner`] writes. Always allocates
+/// at least the intent page; the `erc7730-dev-unattested` Cargo
+/// feature adds a preceding "DEV UNATTESTED" warning page.
+#[cfg(feature = "erc7730-dev-unattested")]
+pub const INTENT_BANNER_PAGES: usize = 2;
+#[cfg(not(feature = "erc7730-dev-unattested"))]
+pub const INTENT_BANNER_PAGES: usize = 1;
+
 /// Write the intent banner page. Always allocates exactly one page.
+///
+/// Under the `erc7730-dev-unattested` Cargo feature, allocates an
+/// EXTRA preceding page with a "DEV UNATTESTED" warning row so a dev
+/// confirming on a bring-up build cannot miss that the host-side
+/// attestation gate was relaxed. The feature is mutually exclusive
+/// with `mode-production` (compile_error in `nsc/mod.rs`), so a
+/// shipped build will never render this row.
 pub(super) fn render_intent_banner(
     pages: &mut Pages,
     ir: &Erc7730Ir<'_>,
     format: &FormatHeader<'_>,
 ) -> Result<(), RenderErr> {
+    #[cfg(feature = "erc7730-dev-unattested")]
+    {
+        let warn = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
+        write_line(pages.row_mut(warn, 0), "** DEV BUILD **");
+        write_line(pages.row_mut(warn, 1), "Unattested");
+        write_line(pages.row_mut(warn, 2), "descriptor");
+        write_line(pages.row_mut(warn, 3), "> next");
+    }
+
     let p = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
 
     // Row 0: "Sign: <intent>" (intent is ASCII-clean, ≤ 254 B by host
