@@ -2518,6 +2518,18 @@ fuzz-apdu-parse-header:
 fuzz-hid-frame-assembler:
 	cd fuzz && cargo +nightly fuzz run hid_frame_assembler $(FUZZ_LIBFUZZER_ARGS)
 
+fuzz-erc7730-verify-bundle:
+	cd fuzz && cargo +nightly fuzz run erc7730_verify_bundle $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-erc7730-ir-parse:
+	cd fuzz && cargo +nightly fuzz run erc7730_ir_parse $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-erc7730-walker:
+	cd fuzz && cargo +nightly fuzz run erc7730_walker $(FUZZ_LIBFUZZER_ARGS)
+
+fuzz-erc7730-render-dispatch:
+	cd fuzz && cargo +nightly fuzz run erc7730_render_dispatch $(FUZZ_LIBFUZZER_ARGS)
+
 # F-24 stage E Phase 1 — hardware flicker validation harness for the
 # decoy-mnemonic-frame defense. Builds a minimal secure firmware that
 # short-circuits `main()` into `ui::seed_wizard::decoy_flicker_test_loop`
