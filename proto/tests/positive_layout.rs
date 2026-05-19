@@ -61,8 +61,11 @@ fn positive_batch_tx_prefix_layout_sums() {
 
 #[test]
 fn positive_batch_max_payload_includes_every_tx_at_max_data() {
+    // Phase 3 (ERC-7730) added an optional trailer:
+    //   header + N × (tx_prefix + data) + 2 (trailer_len u16) + ERC7730_MAX_TRAILER_LEN.
     let expected = SIGN_USEROP_BATCH_HEADER_LEN
-        + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN);
+        + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
+        + 2 + ERC7730_MAX_TRAILER_LEN;
     assert_eq!(SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, expected);
 }
 
@@ -147,9 +150,18 @@ fn positive_sign_offchain_output_deployed_layout() {
 
 #[test]
 fn positive_sign_offchain_max_input_bounds_personal_sign() {
+    // Phase 3 (ERC-7730) added an optional EIP-712 typed-data path
+    // (MAX_OFFCHAIN_EIP712_TYPED_LEN) plus an attestation trailer.
+    // The max-input bound is now the longer of the two payload
+    // shapes + the trailer:
+    //   header + max(personal_sign, eip712_typed_len_with_trailer).
     assert_eq!(
         SIGN_OFFCHAIN_INPUT_MAX_LEN,
-        SIGN_OFFCHAIN_HEADER_LEN + MAX_OFFCHAIN_PERSONAL_SIGN_LEN
+        SIGN_OFFCHAIN_HEADER_LEN
+            + core::cmp::max(
+                MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
+                MAX_OFFCHAIN_EIP712_TYPED_LEN,
+            )
     );
     assert_eq!(MAX_OFFCHAIN_PERSONAL_SIGN_LEN, 700);
 }
