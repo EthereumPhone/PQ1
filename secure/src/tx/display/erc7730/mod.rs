@@ -36,10 +36,23 @@ use crate::tx::display::primitives::{
 use crate::tx::eip1559::Eip1559Tx;
 use crate::tx::erc7730::VerifiedDescriptor;
 use crate::tx::erc7730_render::params::parse as parse_params;
-use crate::tx::erc7730_render::visibility::{should_render, Action};
+use crate::tx::erc7730_render::visibility::{should_render_with_mode, Action};
 use crate::tx::erc7730_render::RenderErr;
 
 use super::Pages;
+
+/// Compact-mode display toggle (Phase 5 item 10).
+///
+/// When `true`, the renderer skips fields marked `Visibility::Optional`
+/// — the on-wire byte is unchanged; only the renderer's interpretation
+/// differs (Phase 4 collapsed Optional → Always for ALL descriptors;
+/// this distinguishes them under an opt-in flag).
+///
+/// Defaults to `false` so existing fixtures stay byte-identical. A
+/// future settings-page toggle can flip this const at runtime via a
+/// volatile flag in `crate::ui::settings` (deferred — Phase 5 v1 ships
+/// the const-only switch).
+pub const COMPACT_MODE: bool = false;
 
 /// Entry point for contract-context renders. Phase 4 wires this into
 /// [`super::pick_sign_pages`] between the Safe-V1 rung and the
@@ -151,7 +164,7 @@ fn render_fields(
     for field_result in format.fields() {
         let field = field_result.map_err(|_| RenderErr::Reject("7730 bad field"))?;
         let params = parse_params(ir, field.param_off)?;
-        match should_render(&params, None) {
+        match should_render_with_mode(&params, None, COMPACT_MODE) {
             Action::Render => formatters::dispatch(
                 &field, pages, ir, body, tx, erc20, resolver, &params,
             )?,

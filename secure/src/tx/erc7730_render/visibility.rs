@@ -48,18 +48,47 @@ pub enum Action {
 /// The caller is responsible for invoking the walker only when the
 /// decision actually needs the value (the API encodes that by accepting
 /// `Option<AbiValue>` rather than forcing the caller to walk first).
+///
+/// Convenience wrapper around [`should_render_with_mode`] that pins
+/// the compact-mode flag off. Existing call sites that don't yet plumb
+/// the toggle through keep working unchanged.
 pub fn should_render(
     params: &ParamSet<'_>,
     resolved: Option<&AbiValue<'_>>,
 ) -> Action {
+    should_render_with_mode(params, resolved, /* compact = */ false)
+}
+
+/// Phase 5 item 10 — explicit compact-mode toggle.
+///
+/// When `compact == true`, fields marked `Visibility::Optional` skip
+/// rather than render. Phase 4 collapsed Optional → Always; this
+/// distinguishes them again under an opt-in setting. The on-wire byte
+/// is unchanged — only the renderer's interpretation differs.
+///
+/// Callers wire `compact` from a renderer-level constant (today
+/// `crate::tx::display::erc7730::COMPACT_MODE = false`) so a future
+/// settings-page toggle can flip the const without touching every
+/// formatter.
+pub fn should_render_with_mode(
+    params: &ParamSet<'_>,
+    resolved: Option<&AbiValue<'_>>,
+    compact: bool,
+) -> Action {
     match params.visibility {
         Visibility::Always => Action::Render,
         Visibility::Never => Action::Skip,
-        // Phase 4 collapses Optional → Always. Phase 5 may distinguish
-        // it for a compact-display mode that the user can toggle in
-        // settings; the wire bit is preserved so a future firmware can
-        // read it without a descriptor reflash.
-        Visibility::Optional => Action::Render,
+        // Phase 5 item 10: under compact mode, Optional fields skip.
+        // Default (compact == false) preserves Phase 4 behaviour of
+        // rendering Optional unconditionally so existing fixtures stay
+        // byte-identical.
+        Visibility::Optional => {
+            if compact {
+                Action::Skip
+            } else {
+                Action::Render
+            }
+        }
         Visibility::IfNotIn => {
             // Without a value list (Phase 5+) there is nothing to filter
             // against. Render — matches the seed-corpus's pragmatic
@@ -109,6 +138,61 @@ mod tests {
     fn optional_renders_in_phase_4() {
         let p = params_with(Visibility::Optional);
         assert_eq!(should_render(&p, None), Action::Render);
+    }
+
+    #[test]
+    fn optional_skips_under_compact_mode() {
+        let p = params_with(Visibility::Optional);
+        assert_eq!(
+            should_render_with_mode(&p, None, true),
+            Action::Skip,
+            "Phase 5 item 10: compact mode skips Optional fields"
+        );
+    }
+
+    #[test]
+    fn always_still_renders_under_compact_mode() {
+        let p = params_with(Visibility::Always);
+        assert_eq!(should_render_with_mode(&p, None, true), Action::Render);
+    }
+
+    #[test]
+    fn never_still_skips_under_compact_mode() {
+        let p = params_with(Visibility::Never);
+        assert_eq!(should_render_with_mode(&p, None, true), Action::Skip);
+    }
+
+    #[test]
+    fn compact_mode_does_not_change_must_match_reject() {
+        let p = params_with(Visibility::MustMatch);
+        match should_render_with_mode(&p, None, true) {
+            Action::Reject(_) => (),
+            other => panic!("expected Reject under compact mode, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn page_count_compact_lt_full_when_optional_present() {
+        // Synthetic mini-descriptor: 1 Always + 1 Optional + 1 Always.
+        // Full mode renders all three; compact mode renders 2.
+        let always = params_with(Visibility::Always);
+        let optional = params_with(Visibility::Optional);
+        let mut full_count = 0;
+        let mut compact_count = 0;
+        for p in [&always, &optional, &always] {
+            if matches!(should_render_with_mode(p, None, false), Action::Render) {
+                full_count += 1;
+            }
+            if matches!(should_render_with_mode(p, None, true), Action::Render) {
+                compact_count += 1;
+            }
+        }
+        assert_eq!(full_count, 3);
+        assert_eq!(compact_count, 2);
+        assert!(
+            compact_count < full_count,
+            "Compact rendering must drop ≥1 page when descriptor has Optional fields"
+        );
     }
 
     #[test]
