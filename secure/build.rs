@@ -19,7 +19,17 @@ fn main() {
         return;
     }
 
-    // Mutually-exclusive UI backend check
+    // Mutually-exclusive UI backend check.
+    //
+    // `ui-lcd` is the NV3007/ZT165M017AT SPI LCD low-level driver
+    // (Phase A landed 2026-05-19). It does NOT yet implement the
+    // `ui::Display` trait — that's Phase C. For Phase A/B (driver
+    // bring-up on bench hardware), `ui-lcd` is paired with one of
+    // the existing display backends so the Display trait still
+    // resolves; the existing backend handles the wizard UI while
+    // `hw::lcd_nv3007` runs as a parallel raw-primitive surface.
+    // Once Phase C lands, `ui-lcd` will become a Display backend in
+    // its own right and this build check will gain a fourth arm.
     let ui_semihosting = env::var_os("CARGO_FEATURE_UI_SEMIHOSTING").is_some();
     let ui_oled = env::var_os("CARGO_FEATURE_UI_OLED").is_some();
     let ui_noop = env::var_os("CARGO_FEATURE_UI_NOOP").is_some();

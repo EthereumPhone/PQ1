@@ -599,8 +599,13 @@ fn positive_mod_i2c_hw_se_gate() {
 
 #[test]
 fn positive_mod_spi_tropic01_gate() {
+    // `spi_hw` is shared between the Tropic01 SE driver and the
+    // NV3007 LCD driver (Phase A landed 2026-05-19). The `spi`
+    // embedded-hal SpiDevice impl above it stays tropic01-specific
+    // because the LCD uses direct TXDR access (`hw::lcd_nv3007`),
+    // not the SpiDevice abstraction.
     assert!(HW_MOD_SRC.contains(
-        "#[cfg(all(feature = \"stm32u585\", feature = \"tropic01-se\"))]\npub mod spi_hw;"
+        "#[cfg(all(feature = \"stm32u585\", any(feature = \"tropic01-se\", feature = \"ui-lcd\")))]\npub mod spi_hw;"
     ));
     assert!(HW_MOD_SRC.contains(
         "#[cfg(all(feature = \"stm32u585\", feature = \"tropic01-se\"))]\npub mod spi;"

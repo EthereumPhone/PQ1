@@ -2531,5 +2531,40 @@ decoy-flicker-hw:
 	@echo "==> Running — watch the OLED. Ctrl-C to detach."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# LCD bring-up — Phase A check. Compiles the secure-world firmware
+# with the `ui-lcd` feature enabled so the NV3007 SPI LCD driver
+# (`secure/src/hw/lcd_nv3007.rs`) lands in the binary. The wizard UI
+# still runs over the existing `ui-noop` Display backend (Phase C
+# will wire the LCD into the Display trait); for Phase B bring-up
+# you'd call `hw::lcd_nv3007::init()` + `fill_screen(0x07E0)` (green)
+# from `main()` to verify SPI signalling + reset timing on the bench.
+#
+# Pin wiring (B-U585I-IOT02A → ZT165M017AT FPC):
+#   PE12 → CS    (Arduino D10)
+#   PE13 → SCL   (Arduino D13, AF5)
+#   PE15 → SDA   (Arduino D11, AF5)
+#   PE3  → D/CX  (jumper, free GPIO)
+#   PE1  → RES   (jumper, free GPIO)
+#   3V3  → VCC_2V8 + VLED+
+#   GND  → GND   + VLED-
+#
+# Use this target to verify the firmware compiles cleanly; the actual
+# LCD init/fill sanity check needs a Phase B short-circuit in main.rs
+# (analogous to `decoy-flicker-hw`).
+build-hw-lcd-bringup:
+	@echo "==> Building secure firmware with ui-lcd driver (Phase A scaffold)..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features ui-lcd,ui-noop,mock-se,debug-log,stm32u585,dev-testkey
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> LCD bring-up build ready (Phase A — no init call site yet)."
+	@echo "    Next: add a hw::lcd_nv3007::init() + fill_screen() call"
+	@echo "    in main.rs behind a lcd-test feature gate, mirror"
+	@echo "    decoy-flicker-hw's short-circuit pattern."
+
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o

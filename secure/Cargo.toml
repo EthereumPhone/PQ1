@@ -330,6 +330,15 @@ decoy-flicker-test = []
 # hardware supports subliminal decoys; bench-validate via the
 # `decoy-flicker-test` feature on the same display first.
 decoy-frames = []
+# SPI LCD backend (ZT165M017AT — 142×428 TFT with NV3007 driver IC).
+# Implies `spi1-arduino` because the LCD wiring on B-U585I-IOT02A
+# reuses the Arduino-header SPI1 pins: PE12 CS, PE13 SCK, PE15 MOSI.
+# DC and RES are additional GPIOs on PE3 + PE1 (configurable in
+# `secure/src/hw/lcd_nv3007.rs`). The driver primitives sit in
+# `hw::lcd_nv3007`; Display-trait integration is a separate Phase C
+# follow-up. Mutually exclusive with `ui-oled` (SSD1306 / I²C) — only
+# one display backend can ship per build.
+ui-lcd = ["spi1-arduino"]
 # Minimal USART1 → ST-LINK-VCP driver for diagnostic output that
 # survives RDP ≥ 1 (where SWD debug — and therefore semihosting — is
 # disabled). Pairs with `saes-self-test` for the RDP1 DHUK fingerprint

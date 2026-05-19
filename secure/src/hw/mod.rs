@@ -33,7 +33,7 @@ pub mod usb_hw;
 #[cfg(all(feature = "stm32u585", any(feature = "se050", feature = "optiga-trust-m")))]
 pub mod i2c_hw;
 
-#[cfg(all(feature = "stm32u585", feature = "tropic01-se"))]
+#[cfg(all(feature = "stm32u585", any(feature = "tropic01-se", feature = "ui-lcd")))]
 pub mod spi_hw;
 
 #[cfg(all(feature = "stm32u585", feature = "tropic01-se"))]
@@ -132,3 +132,11 @@ pub mod i2c2_probe;
 
 #[cfg(feature = "gpio-buttons")]
 pub mod buttons;
+
+/// NV3007 SPI LCD driver for the ZT165M017AT module (142×428 TFT,
+/// RGB565, 4-line SPI). Phase A: byte-level command/data primitives
+/// + the production init sequence + set_window + fill_color +
+/// write_pixels. Phase B–D follow once the LCD is physically wired.
+/// See module docs for pin mapping + bring-up plan.
+#[cfg(feature = "ui-lcd")]
+pub mod lcd_nv3007;
