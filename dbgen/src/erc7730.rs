@@ -285,6 +285,31 @@ pub fn load_policy(path: &Path) -> Result<Policy, String> {
     toml::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
+/// Compile every `*.json` under `input_dir` with the policy at
+/// `policy_path` BUT override `allow_unattested_dev_descriptors` per
+/// `force_production`. When `force_production = true`, the override
+/// forces production attestation enforcement regardless of the TOML
+/// file's value — this is what `dbgen --policy production` wires.
+///
+/// `force_production = false` keeps the TOML value as-is (which today
+/// means dev mode — no attestation requirement). Production CI must
+/// build with `force_production = true` and assert the corpus rebuilds
+/// clean: a CI matrix entry runs `cargo run -p dbgen -- --policy
+/// production` and fails loudly if any descriptor lacks the required
+/// attestations.
+pub fn build_db_with_policy_override(
+    input_dir: &Path,
+    policy_path: &Path,
+    force_production: bool,
+    registry_root: Option<&Path>,
+) -> Result<Erc7730BuildResult, String> {
+    let mut policy = load_policy(policy_path)?;
+    if force_production {
+        policy.allow_unattested_dev_descriptors = false;
+    }
+    build_db_inner(input_dir, &policy, registry_root)
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Public build result.
 // ─────────────────────────────────────────────────────────────────────
@@ -322,7 +347,14 @@ pub fn build_db(
     policy_path: &Path,
 ) -> Result<Erc7730BuildResult, String> {
     let policy = load_policy(policy_path)?;
+    build_db_inner(input_dir, &policy, None)
+}
 
+fn build_db_inner(
+    input_dir: &Path,
+    policy: &Policy,
+    registry_root: Option<&Path>,
+) -> Result<Erc7730BuildResult, String> {
     let mut sources: Vec<PathBuf> = fs::read_dir(input_dir)
         .map_err(|e| format!("read_dir {}: {e}", input_dir.display()))?
         .filter_map(|entry| entry.ok().map(|e| e.path()))
@@ -339,7 +371,7 @@ pub fn build_db(
 
     let mut emitted: Vec<Emitted> = Vec::with_capacity(sources.len() * 2);
     for src in &sources {
-        let entries = compile_descriptor(src, &policy).map_err(|e| {
+        let entries = compile_descriptor(src, policy, registry_root).map_err(|e| {
             format!("{}: {e}", src.display())
         })?;
         emitted.extend(entries);
@@ -473,7 +505,7 @@ pub fn build_db(
     }
     assert_eq!(blob.len(), total_size);
 
-    let review_text = render_review(&emitted, &policy, &root);
+    let review_text = render_review(&emitted, policy, &root);
 
     Ok(Erc7730BuildResult {
         blob,
@@ -601,22 +633,62 @@ fn synth_bundle(ir: &[u8], leaf_index: u32, proof: &[[u8; 32]]) -> Vec<u8> {
 // Per-descriptor compilation.
 // ─────────────────────────────────────────────────────────────────────
 
-fn compile_descriptor(path: &Path, policy: &Policy) -> Result<Vec<Emitted>, String> {
+fn compile_descriptor(
+    path: &Path,
+    policy: &Policy,
+    registry_root: Option<&Path>,
+) -> Result<Vec<Emitted>, String> {
     let raw = fs::read(path).map_err(|e| format!("read: {e}"))?;
-    let json: serde_json::Value =
+    let mut json: serde_json::Value =
         serde_json::from_slice(&raw).map_err(|e| format!("parse: {e}"))?;
 
     // ERC-8176 policy gate.
     enforce_policy(&json, policy)?;
 
+    // Phase 5: resolve top-level `includes` references against the
+    // local registry mirror at `--registry-root`. The reference can
+    // be a relative path (`./templates/erc2612-permit.json`) or a
+    // github.com URL whose path segment after the repo name is
+    // joined with `registry_root`. We deep-merge the referenced
+    // JSON into the current document (current keys win) and recurse
+    // until no `includes` remains.
+    let mut depth = 0usize;
+    while let Some(inc) = json
+        .get("includes")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+    {
+        depth += 1;
+        if depth > 8 {
+            return Err("includes recursion depth > 8 — refusing".to_string());
+        }
+        let root = registry_root.ok_or_else(|| {
+            format!(
+                "`includes: \"{inc}\"` requires `--registry-root <dir>`. \
+                 See secure/data/erc7730/REGISTRY_MIRROR.md."
+            )
+        })?;
+        let inc_path = resolve_include_path(root, path, &inc)?;
+        let inc_raw = fs::read(&inc_path)
+            .map_err(|e| format!("read include {}: {e}", inc_path.display()))?;
+        let inc_json: serde_json::Value = serde_json::from_slice(&inc_raw)
+            .map_err(|e| format!("parse include {}: {e}", inc_path.display()))?;
+        // Remove the `includes` key from current json before merge so
+        // the loop terminates if the include itself has no further
+        // `includes`.
+        if let Some(obj) = json.as_object_mut() {
+            obj.remove("includes");
+        }
+        json = merge_descriptors(inc_json, json);
+    }
+
     let descriptor: Descriptor =
         serde_json::from_value(json.clone()).map_err(|e| format!("schema: {e}"))?;
 
+    // After include-resolution `descriptor.includes` must be empty.
     if let Some(inc) = descriptor.includes.as_deref() {
         return Err(format!(
-            "`includes: \"{inc}\"` is not supported in Phase 2. \
-             Pre-merge the include or remove the field. Registry-style \
-             templated descriptors land in Phase 3 (see plan §3)."
+            "post-merge: residual `includes: \"{inc}\"` (recursion didn't reach a leaf)"
         ));
     }
 
@@ -1959,6 +2031,98 @@ fn utf16_codeunit_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 // ─────────────────────────────────────────────────────────────────────
 // Policy enforcement.
 // ─────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────
+// `includes` resolution (Phase 5, item 2).
+//
+// The ERC-7730 registry uses `"includes"` references so the
+// templated permit / EIP-712 common entries don't duplicate the
+// boilerplate. We resolve these against a local mirror of the
+// registry passed in via `--registry-root <dir>`. Three forms are
+// supported:
+//
+//   1. Relative file path           — `./templates/permit.json`
+//   2. Registry-relative path       — `registry/templates/permit.json`
+//   3. GitHub URL                   — `https://github.com/ethereum/
+//      clear-signing-erc7730-registry/blob/<sha>/templates/permit.json`
+//      → strip the host + branch prefix and resolve as a relative
+//      path under `registry_root`.
+//
+// Any include that resolves OUTSIDE `registry_root` (e.g. via `..`
+// escapes) is rejected — this prevents a hostile descriptor from
+// pulling in arbitrary files on the host build machine.
+// ─────────────────────────────────────────────────────────────────────
+
+fn resolve_include_path(
+    registry_root: &Path,
+    descriptor_path: &Path,
+    include_ref: &str,
+) -> Result<PathBuf, String> {
+    let registry_root = registry_root.canonicalize().map_err(|e| {
+        format!("canonicalize registry-root {}: {e}", registry_root.display())
+    })?;
+
+    let candidate: PathBuf = if let Some(stripped) =
+        include_ref.strip_prefix("https://github.com/")
+    {
+        // `<owner>/<repo>/blob/<ref>/<path>` or
+        // `<owner>/<repo>/raw/<ref>/<path>` — strip the first four
+        // segments to get the path inside the registry.
+        let parts: Vec<&str> = stripped.splitn(5, '/').collect();
+        if parts.len() < 5 {
+            return Err(format!(
+                "github URL include `{include_ref}` has too few path segments"
+            ));
+        }
+        registry_root.join(parts[4])
+    } else if include_ref.starts_with("./") || include_ref.starts_with("../") {
+        descriptor_path
+            .parent()
+            .ok_or_else(|| "descriptor path has no parent".to_string())?
+            .join(include_ref)
+    } else {
+        registry_root.join(include_ref)
+    };
+
+    let canonical = candidate.canonicalize().map_err(|e| {
+        format!("canonicalize include {}: {e}", candidate.display())
+    })?;
+    if !canonical.starts_with(&registry_root) {
+        return Err(format!(
+            "include `{include_ref}` resolves to {} which is outside registry-root {} — refusing",
+            canonical.display(),
+            registry_root.display()
+        ));
+    }
+    Ok(canonical)
+}
+
+/// Deep-merge `over` on top of `base`. For object-typed leaves the
+/// keys merge recursively; for any non-object leaf `over` wins. This
+/// matches the semantics that the ERC-7730 registry expects from its
+/// `includes` resolution (the descriptor is the "over" document; the
+/// template is the "base").
+fn merge_descriptors(
+    base: serde_json::Value,
+    over: serde_json::Value,
+) -> serde_json::Value {
+    use serde_json::Value;
+    match (base, over) {
+        (Value::Object(mut b), Value::Object(o)) => {
+            for (k, v) in o {
+                let merged = if let Some(existing) = b.remove(&k) {
+                    merge_descriptors(existing, v)
+                } else {
+                    v
+                };
+                b.insert(k, merged);
+            }
+            Value::Object(b)
+        }
+        // For non-objects, `over` wins.
+        (_, over) => over,
+    }
+}
 
 fn enforce_policy(json: &serde_json::Value, policy: &Policy) -> Result<(), String> {
     if policy.allow_unattested_dev_descriptors {

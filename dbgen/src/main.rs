@@ -54,8 +54,67 @@ fn repo_root() -> PathBuf {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    // Parse minimal CLI flags. We avoid pulling in `clap` to keep
+    // build-time deps tight on this tooling crate.
+    //
+    //   --policy <dev|production>     default: dev (matches the TOML)
+    //   --registry-root <dir>         optional; required if any descriptor
+    //                                 has an `includes` reference
+    let mut force_production = false;
+    let mut registry_root: Option<PathBuf> = None;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--policy" => {
+                let v = args.get(i + 1).map(|s| s.as_str()).unwrap_or("");
+                match v {
+                    "dev" => force_production = false,
+                    "production" => force_production = true,
+                    other => {
+                        eprintln!(
+                            "dbgen: --policy must be `dev` or `production` (got `{other}`)"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                i += 2;
+            }
+            "--registry-root" => {
+                let v = args.get(i + 1).cloned().unwrap_or_default();
+                if v.is_empty() {
+                    eprintln!("dbgen: --registry-root requires a directory argument");
+                    std::process::exit(2);
+                }
+                registry_root = Some(PathBuf::from(v));
+                i += 2;
+            }
+            "--help" | "-h" => {
+                eprintln!(
+                    "dbgen — build-time DB generator\n\
+                     \n\
+                     Flags:\n  \
+                       --policy <dev|production>  ERC-8176 attestation gate (default: dev)\n  \
+                       --registry-root <dir>      local mirror of the ERC-7730 registry\n  \
+                                                  (required if any descriptor has `includes`)\n"
+                );
+                std::process::exit(0);
+            }
+            other => {
+                eprintln!("dbgen: unknown flag `{other}`");
+                std::process::exit(2);
+            }
+        }
+    }
+
     let root = repo_root();
     println!("dbgen: workspace root = {}", root.display());
+    if force_production {
+        println!("dbgen: --policy production (attestation enforcement ON)");
+    }
+    if let Some(rr) = registry_root.as_ref() {
+        println!("dbgen: --registry-root {}", rr.display());
+    }
 
     // Source data lives under secure/data/ for historical reasons
     // (the curated JSON is the same regardless of which world hosts
@@ -199,8 +258,23 @@ fn main() {
     // companion looks up descriptors by `(chain_id, contract)` and
     // ships the matching IR + Merkle proof in the new sign-input
     // trailer slot (Phase 3 wires that path).
-    let erc7730_res = erc7730::build_db(&erc7730_dir, &erc7730_policy)
-        .expect("erc7730 db build failed");
+    let erc7730_res = erc7730::build_db_with_policy_override(
+        &erc7730_dir,
+        &erc7730_policy,
+        force_production,
+        registry_root.as_deref(),
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("dbgen: erc7730 db build failed: {e}");
+        if force_production {
+            eprintln!(
+                "dbgen: NOTE — running with --policy production. Every descriptor must \
+                 carry ≥ policy.min_attesters trusted attestations. Add attestations to \
+                 secure/data/erc7730/*.json or run with --policy dev for bring-up."
+            );
+        }
+        std::process::exit(1);
+    });
     erc7730::round_trip_check(&erc7730_res).expect("erc7730 round-trip failed");
     if let Some(parent) = erc7730_out.parent() {
         fs::create_dir_all(parent).expect("create tools/companion-stub");
@@ -225,8 +299,16 @@ fn main() {
     // any stub buffer. The matching ERC7730_DESCRIPTORS_ROOT_E2E in
     // db_roots.rs is selected at compile time via the same feature
     // gate.
-    let erc7730_e2e_res = erc7730::build_db(&erc7730_e2e_dir, &erc7730_policy)
-        .expect("erc7730 e2e db build failed");
+    let erc7730_e2e_res = erc7730::build_db_with_policy_override(
+        &erc7730_e2e_dir,
+        &erc7730_policy,
+        force_production,
+        registry_root.as_deref(),
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("dbgen: erc7730 e2e db build failed: {e}");
+        std::process::exit(1);
+    });
     erc7730::round_trip_check(&erc7730_e2e_res)
         .expect("erc7730 e2e round-trip failed");
     fs::write(&erc7730_e2e_out, &erc7730_e2e_res.blob)
