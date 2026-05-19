@@ -372,31 +372,55 @@ fn negative_verify_manifest_uses_baked_in_vendor_pubkey() {
 // ─────────────────────────────────────────────────────────────────────
 
 #[test]
-fn negative_confirm_commit_defaults_to_user_cancel_outside_e2e_test() {
+fn positive_confirm_commit_calls_trusted_ui_outside_e2e_test() {
+    // Pin the §31b wiring: non-e2e-test builds must route through
+    // `ui::confirm::confirm(&pages)` with the four trust-anchor
+    // pages (version + fw fingerprint + key fingerprint + final
+    // prompt). The e2e branch still short-circuits to `true` so
+    // the automated suite can exercise COMMIT.
     let body = FW_MOD_SRC
         .find("pub fn confirm_commit(")
         .expect("confirm_commit must exist as a pub fn");
     let body = &FW_MOD_SRC[body..];
-    // `false` for non-e2e-test builds, `true` for e2e-test.
-    let non_e2e_pos = body
-        .find("#[cfg(not(feature = \"e2e-test\"))]")
-        .expect("confirm_commit must gate its non-e2e branch on cfg(not(feature = \"e2e-test\"))");
+
     let e2e_pos = body
         .find("#[cfg(feature = \"e2e-test\")]")
         .expect("confirm_commit must gate its e2e branch on cfg(feature = \"e2e-test\")");
-    // Production path returns `false`.
-    let non_e2e_block = &body[non_e2e_pos..];
-    assert!(
-        non_e2e_block.contains("false"),
-        "confirm_commit non-e2e branch must return `false` — a half-ported UI must NOT \
-         accidentally confirm a malicious manifest"
-    );
+    let non_e2e_pos = body
+        .find("#[cfg(not(feature = \"e2e-test\"))]")
+        .expect("confirm_commit must gate its non-e2e branch on cfg(not(feature = \"e2e-test\"))");
+
     // The e2e short-circuit returns `true` for test automation.
     let e2e_block = &body[e2e_pos..non_e2e_pos.max(e2e_pos + 1)];
     assert!(
         e2e_block.contains("return true;"),
         "confirm_commit under e2e-test must short-circuit to true so the e2e suite \
          can exercise the COMMIT path"
+    );
+
+    // Non-e2e branch: must build the four §31b pages + call confirm().
+    // We grep the source string for each landmark — a refactor that
+    // drops any of these is a behavioral regression we want to catch.
+    let non_e2e_block = &body[non_e2e_pos..];
+    for landmark in &[
+        "build_version_page(",
+        "build_fingerprint_page(",
+        "build_confirm_prompt_page(",
+        "ui::confirm::{confirm, ConfirmResult, Page}",
+        "matches!(confirm(&pages), ConfirmResult::Confirmed)",
+    ] {
+        assert!(
+            non_e2e_block.contains(landmark),
+            "confirm_commit non-e2e branch lost `{landmark}` — §31b wiring regressed"
+        );
+    }
+    // Belt-and-braces: the version page must consult `rollback_floor()`
+    // so the upgrade/downgrade indicator can't drift to `new_version`-
+    // only logic in a future edit.
+    assert!(
+        non_e2e_block.contains("rollback_floor()"),
+        "confirm_commit must compare new_version against `otp::rollback_floor()` \
+         so the user sees UPGRADE / SAME / DOWNGRADE — §31b"
     );
 }
 

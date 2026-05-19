@@ -45,38 +45,193 @@ pub mod verify;
 /// user's long-right confirm (or long-left cancel). Returns true on
 /// confirm, false otherwise.
 ///
-/// Implementation detail: the first cut displays a simplified
-/// "Confirm firmware update vN — <8 words>" screen reusing the
-/// trusted-UI `confirm()` machinery the sign path uses. That module
-/// is part of the user's in-progress `secure/src/ui/` refactor; we
-/// wrap it here to keep a single integration point.
+/// The confirm dialog has four pages (navigated by short L/R taps):
+///   1. Version: "to vA.B.C.D" + UPGRADE / SAME VERSION / DOWNGRADE
+///   2. New-firmware fingerprint (8 BIP-39 words, "Nf abcde" format)
+///   3. Signing-key fingerprint (same format, "Nk abcde")
+///   4. Final yes/no confirm prompt
+///
+/// The user gets a defense-in-depth signal at three layers:
+///   * version + direction — catches accidental downgrade attempts
+///     (the verify chain also rejects them; this is user-visible)
+///   * firmware fingerprint — catches "valid sig for the WRONG
+///     release" (e.g. a release a different team member signed)
+///   * signing-key fingerprint — catches CI signing-key compromise.
+///     This fingerprint is the SAME on every legit release; if it
+///     differs from the value the user wrote down at first boot,
+///     the signer is compromised even though the chain verifies.
+///
+/// Per work-todo §31b.
 pub fn confirm_commit(
     ctx: &FwUpdateCtx,
-    _manifest: &ManifestRef,
+    manifest: &ManifestRef,
 ) -> bool {
-    use sphincs_tz_bip39::WORDLIST;
-
-    let (words, _hash) = verify::measurement_words_for_inactive_slot(ctx);
-
-    // Bail early if the user-side UI doesn't expose a confirm that
-    // fits our "show 8 words + ask yes/no" shape yet. The COMMIT
-    // handler treats `false` as user cancel, which is the safe
-    // default — no flash is touched until the caller returns true.
-    //
-    // Once `secure/src/ui/confirm.rs` is stable again we'll render
-    // the pages here and call `confirm(pages.as_slice())`. For now
-    // this is a stub that returns `false` so an accidentally-
-    // deployed half-ported UI can't slip a malicious commit through.
-    let _ = words;
-    let _ = WORDLIST;
     #[cfg(feature = "e2e-test")]
     {
+        let _ = (ctx, manifest);
         return true;
     }
     #[cfg(not(feature = "e2e-test"))]
     {
-        false
+        use crate::ui::confirm::{confirm, ConfirmResult, Page};
+        use sphincs_tz_bip39::hash_to_word_indices;
+
+        let new_version = manifest.fw_version();
+        let floor = crate::hw::otp::rollback_floor();
+        let (fw_words, _fw_hash) = verify::measurement_words_for_inactive_slot(ctx);
+
+        // The signing key fingerprint is the SHA-256 of the vendor
+        // pubkey (`pk_seed || pk_root`), precomputed at build time so
+        // the runtime cost is just a memcpy of the 32 bytes.
+        let key_fpr: [u8; 32] = vendor_pubkey::VENDOR_PK_FPR;
+        let key_words = hash_to_word_indices(&key_fpr);
+
+        let pages: [Page; 4] = [
+            build_version_page(new_version, floor),
+            build_fingerprint_page(&fw_words, b'f'),
+            build_fingerprint_page(&key_words, b'k'),
+            build_confirm_prompt_page(),
+        ];
+
+        matches!(confirm(&pages), ConfirmResult::Confirmed)
     }
+}
+
+#[cfg(not(feature = "e2e-test"))]
+fn build_version_page(new_version: u32, floor: u32) -> crate::ui::confirm::Page {
+    use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
+    let mut p: crate::ui::confirm::Page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+
+    // Row 0: title.
+    let r0 = b"FW UPDATE";
+    p[0][..r0.len()].copy_from_slice(r0);
+
+    // Row 1: "to vA.B.C.D" where bytes A..D are the manifest version's
+    // big-endian byte chunks. Mirrors Trezor's MAJOR.MINOR.PATCH.BUILD.
+    let bytes = new_version.to_be_bytes();
+    p[1][..3].copy_from_slice(b"to ");
+    let mut col = 3usize;
+    if col < DISPLAY_COLS {
+        p[1][col] = b'v';
+        col += 1;
+    }
+    for (i, &b) in bytes.iter().enumerate() {
+        let mut tmp = [0u8; 3];
+        let n = format_u8_decimal(b, &mut tmp);
+        let take = core::cmp::min(n, DISPLAY_COLS.saturating_sub(col));
+        p[1][col..col + take].copy_from_slice(&tmp[..take]);
+        col += take;
+        if i < 3 && col < DISPLAY_COLS {
+            p[1][col] = b'.';
+            col += 1;
+        }
+    }
+
+    // Row 2: direction indicator. The verify chain already rejects
+    // downgrades at BEGIN, so the DOWNGRADE label is unreachable in
+    // practice — keep it for defensive completeness.
+    let dir: &[u8] = if new_version > floor {
+        b"UPGRADE"
+    } else if new_version == floor {
+        b"SAME VERSION"
+    } else {
+        b"DOWNGRADE!"
+    };
+    let n = core::cmp::min(dir.len(), DISPLAY_COLS);
+    p[2][..n].copy_from_slice(&dir[..n]);
+
+    // Row 3: nav hint.
+    let r3 = b"R-tap = next";
+    p[3][..r3.len()].copy_from_slice(r3);
+
+    p
+}
+
+/// Render 8 BIP-39 words across 4 rows × 2 columns. The `discriminator`
+/// byte (`b'f'` for firmware hash, `b'k'` for signing-key fingerprint)
+/// appears next to each digit so the two fingerprint pages can't be
+/// visually confused with each other.
+///
+/// Per-cell layout (8 cols):
+///   col 0  digit ('1'..='4' on left half, '5'..='8' on right half)
+///   col 1  discriminator
+///   col 2  space
+///   col 3..7  word truncated to 5 chars
+///
+/// BIP-39 English wordlist has unique 4-letter prefixes by spec, so
+/// 5-char truncation always disambiguates.
+#[cfg(not(feature = "e2e-test"))]
+fn build_fingerprint_page(
+    words: &[u16; 8],
+    discriminator: u8,
+) -> crate::ui::confirm::Page {
+    use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
+    use sphincs_tz_bip39::word_bytes_at;
+    let mut p: crate::ui::confirm::Page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+
+    for row in 0..DISPLAY_ROWS {
+        // Left half: word index = row (0..=3) → display digit '1'..='4'.
+        let li = row;
+        p[row][0] = b'1' + row as u8;
+        p[row][1] = discriminator;
+        // col 2 stays blank
+        let (lw, llen) = word_bytes_at(words[li]);
+        let lmax = core::cmp::min(llen as usize, 5);
+        p[row][3..3 + lmax].copy_from_slice(&lw[..lmax]);
+
+        // Right half: word index = row + 4 → display digit '5'..='8'.
+        let ri = row + 4;
+        p[row][8] = b'5' + row as u8;
+        p[row][9] = discriminator;
+        // col 10 stays blank
+        let (rw, rlen) = word_bytes_at(words[ri]);
+        let rmax = core::cmp::min(rlen as usize, 5);
+        p[row][11..11 + rmax].copy_from_slice(&rw[..rmax]);
+    }
+
+    p
+}
+
+#[cfg(not(feature = "e2e-test"))]
+fn build_confirm_prompt_page() -> crate::ui::confirm::Page {
+    use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
+    let mut p: crate::ui::confirm::Page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+    let r0 = b"Confirm update?";
+    let r1 = b"R-hold = YES";
+    let r2 = b"L-hold = NO";
+    let r3 = b"L-tap = review";
+    p[0][..r0.len()].copy_from_slice(r0);
+    p[1][..r1.len()].copy_from_slice(r1);
+    p[2][..r2.len()].copy_from_slice(r2);
+    p[3][..r3.len()].copy_from_slice(r3);
+    p
+}
+
+/// Write `n` as ASCII decimal into `out`, return bytes written. Local
+/// because the existing `format_u64_decimal` lives in a sibling module
+/// (`tx::eip712::cowswap_display`) that pulls in EIP-712-specific code;
+/// duplicating these 14 lines keeps fw_update self-contained.
+#[cfg(not(feature = "e2e-test"))]
+fn format_u8_decimal(mut n: u8, out: &mut [u8]) -> usize {
+    if n == 0 {
+        if !out.is_empty() {
+            out[0] = b'0';
+            return 1;
+        }
+        return 0;
+    }
+    let mut buf = [0u8; 3];
+    let mut i = 0;
+    while n > 0 {
+        buf[i] = b'0' + n % 10;
+        n /= 10;
+        i += 1;
+    }
+    let len = core::cmp::min(i, out.len());
+    for j in 0..len {
+        out[j] = buf[i - 1 - j];
+    }
+    len
 }
 
 /// Streaming state. Held in SRAM across the BEGIN → CHUNK* → COMMIT
