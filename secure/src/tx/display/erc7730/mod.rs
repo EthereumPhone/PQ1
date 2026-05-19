@@ -54,10 +54,52 @@ use super::Pages;
 /// the const-only switch).
 pub const COMPACT_MODE: bool = false;
 
+/// Belt-and-braces stack canary for the ERC-7730 renderer (Phase 5
+/// item 11). The walker recurses for nested calldata (capped at depth
+/// 4 in the renderer, depth 8 in the walker proper); a hostile
+/// descriptor that somehow defeats the depth cap and recurses
+/// unbounded would smash the stack silently. Writing a known sentinel
+/// to a stack-resident `u32` at entry and asserting equality at exit
+/// catches that class of bug — any stack overrun that smashes the
+/// canary panics the secure world (which the panic handler routes
+/// through `secure_log!` + halt) instead of being silently
+/// undetectable. See `docs/HARDENING.md §"ERC-7730 timing channels"`
+/// for the surrounding threat-model context.
+const STACK_CANARY: u32 = 0xDEAD_BEEF;
+
 /// Entry point for contract-context renders. Phase 4 wires this into
 /// [`super::pick_sign_pages`] between the Safe-V1 rung and the
 /// plain-ETH check.
 pub fn render_erc7730_pages<'ir>(
+    tx: &Eip1559Tx,
+    inner_data: &[u8],
+    descriptor: &'ir VerifiedDescriptor<'ir>,
+    erc20: Option<&Erc20Metadata<'_>>,
+    resolver: &NameResolver<'_>,
+) -> Result<Pages, RenderErr> {
+    // Stack canary (Phase 5 item 11). Volatile read/write so LLVM
+    // cannot prove the value is dead and remove the check.
+    let mut canary: u32 = 0;
+    // SAFETY: `canary` is a unique local; the volatile write defeats
+    // dead-store elimination so a stack-overrun stomp on the slot is
+    // observable at function exit.
+    unsafe { core::ptr::write_volatile(&mut canary, STACK_CANARY) };
+
+    let result = render_erc7730_pages_inner(tx, inner_data, descriptor, erc20, resolver);
+
+    // SAFETY: same slot we wrote to above; no other context can have
+    // written it (secure world is single-threaded + non-reentrant).
+    let final_canary = unsafe { core::ptr::read_volatile(&canary) };
+    assert!(
+        final_canary == STACK_CANARY,
+        "ERC-7730 renderer stack canary smashed (got {:#x}, expected {:#x})",
+        final_canary,
+        STACK_CANARY
+    );
+    result
+}
+
+fn render_erc7730_pages_inner<'ir>(
     tx: &Eip1559Tx,
     inner_data: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
@@ -103,6 +145,42 @@ pub fn render_erc7730_pages<'ir>(
 /// [`pqsigner_erc7730::ir::FormatHeader`] and walk the typed-data
 /// fields.
 pub fn render_erc7730_eip712_pages<'ir>(
+    chain_id: u64,
+    verifying_contract: &[u8; 20],
+    primary_type_hash: &[u8; 32],
+    encoded_data: &[u8],
+    descriptor: &'ir VerifiedDescriptor<'ir>,
+    erc20: Option<&Erc20Metadata<'_>>,
+    resolver: &NameResolver<'_>,
+) -> Result<Pages, RenderErr> {
+    // Stack canary (Phase 5 item 11) — see render_erc7730_pages above.
+    let mut canary: u32 = 0;
+    // SAFETY: unique local, volatile write defeats dead-store
+    // elimination.
+    unsafe { core::ptr::write_volatile(&mut canary, STACK_CANARY) };
+
+    let result = render_erc7730_eip712_pages_inner(
+        chain_id,
+        verifying_contract,
+        primary_type_hash,
+        encoded_data,
+        descriptor,
+        erc20,
+        resolver,
+    );
+
+    // SAFETY: same slot we wrote to above.
+    let final_canary = unsafe { core::ptr::read_volatile(&canary) };
+    assert!(
+        final_canary == STACK_CANARY,
+        "ERC-7730 EIP-712 renderer stack canary smashed (got {:#x}, expected {:#x})",
+        final_canary,
+        STACK_CANARY
+    );
+    result
+}
+
+fn render_erc7730_eip712_pages_inner<'ir>(
     chain_id: u64,
     verifying_contract: &[u8; 20],
     primary_type_hash: &[u8; 32],
