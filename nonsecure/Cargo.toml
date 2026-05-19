@@ -44,6 +44,10 @@ gtzc-test = ["e2e-test", "stm32u585"]
 tzic-wipe-test = ["stm32u585"]
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
+# Prodtest companion. Mirrors the secure-side `prodtest` feature so the
+# NS-side `usb::commands` dispatcher routes `INS_V2_PRODTEST_*` codes
+# to the CMSE veneers exposed under the same secure-side gate.
+prodtest = ["stm32u585", "usb"]
 
 [dependencies]
 sphincs-tz-shared    = { workspace = true }

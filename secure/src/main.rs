@@ -1134,21 +1134,43 @@ fn main() -> ! {
     // See `docs/factory-prodtest.md` for the command reference +
     // fixture integration guide.
     #[cfg(feature = "prodtest")]
-    {
+    unsafe {
         // Initialize button GPIOs so `CMD_PRODTEST_BUTTON_TEST` (109)
         // can drive them. Safe to call before NS boot — the buttons
         // module only configures GPIOA/GPIOC bits via RMW on disjoint
         // pins, leaving SWDIO/SWCLK / I²C / SPI lines untouched.
         #[cfg(feature = "gpio-buttons")]
-        unsafe {
-            hw::buttons::init();
-        }
+        hw::buttons::init();
+
+        // USB OTG FS hardware init — must run before NS boot so the
+        // NS USB stack comes up against a configured controller.
+        // Mirrors the call at the tail of main() in the non-prodtest
+        // path, but we have to run it ourselves because the prodtest
+        // short-circuit jumps straight to `boot_ns::boot` and skips
+        // the wizard / unlock / pre-boot init that the production
+        // flow does down there.
+        hw::usb_hw::init();
+        secure_log!("[S] USB OTG FS hardware initialized (prodtest)");
+
+        // SysTick + DWT cycle counter — same final-stage init the
+        // production main() does between unlock and `boot_ns::boot`.
+        setup_systick();
+        ARCH.demcr.set_bits(1 << 24);       // TRCENA — enable trace unit
+        ARCH.dwt_lar.write(0xC5AC_CE55);    // unlock DWT for writes
+        ARCH.dwt_cyccnt.write(0);           // reset cycle counter
+        ARCH.dwt_ctrl.set_bits(1);          // CYCCNTENA — start counter
 
         ui::show_status(" PRODTEST READY", " USB cmds wait ");
-        secure_log!("[S] prodtest firmware ready — awaiting USB commands");
-        loop {
-            cortex_m::asm::wfi();
-        }
+        secure_log!("[S] prodtest firmware ready — booting NS world for USB");
+
+        // SAFETY: `boot_ns::boot` performs the irreducibly-unsafe
+        // TrustZone branch to the NS reset vector via BLXNS. Same
+        // primitive used at the tail of main(); no S-world state
+        // survives past it. The NS USB stack runs in NS world and
+        // routes `INS_V2_PRODTEST_*` codes to the CMSE veneers
+        // declared under `#[cfg(feature = "prodtest")]` in
+        // `secure/src/nsc/mod.rs::nsc_prodtest_*`.
+        boot_ns::boot(NS_FLASH_BASE);
     }
 
     // ---- One-shot OPTIGA OID recovery (optiga-reset-oids) ----

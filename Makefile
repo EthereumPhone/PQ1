@@ -2552,9 +2552,10 @@ decoy-flicker-hw:
 build-hw-prodtest:
 	@echo "==> Building prodtest firmware..."
 	@echo "    Boot sequence:"
-	@echo "      1. Normal STM32 + SE init"
+	@echo "      1. Normal STM32 + SE + button + USB init"
 	@echo "      2. Display 'PRODTEST READY' on OLED"
-	@echo "      3. Wait for USB commands (CMD_PRODTEST_* 100-105)"
+	@echo "      3. Launch NS world (USB stack)"
+	@echo "      4. Wait for USB INSes (INS_V2_PRODTEST_* 0x80-0x89)"
 	@echo "    Factory fixture drives the test sequence via USB HID."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
@@ -2563,9 +2564,9 @@ build-hw-prodtest:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,prodtest
 	@echo "==> Prodtest build ready."
-	@echo "    Phase B+: host fixture runner stub at tools/factory-prodtest-runner.py"
+	@echo "    Host fixture runner at tools/factory-prodtest-runner.py"
 
 # Factory provisioning firmware. Single-purpose build the factory
 # operator flashes to a fresh device. Runs the

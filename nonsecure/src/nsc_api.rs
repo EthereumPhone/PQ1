@@ -180,6 +180,30 @@ mod transport {
 
         #[cfg(feature = "e2e-test")]
         fn nsc_tzic_status() -> u32;
+
+        // Prodtest CMSE veneers. The secure side declares these under
+        // `#[cfg(feature = "prodtest")]`; the NS side mirrors the gate
+        // so non-prodtest builds don't link against missing symbols.
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_get_id(out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_display_pattern(in_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_saes_selftest(out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_bhk_selftest(out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_flash_rw(in_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_trng_sample(in_ptr: u32, out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_optiga_handshake(out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_se050_handshake(out_ptr: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_usb_loopback(in_ptr: u32, out_ptr: u32, n: u32) -> u32;
+        #[cfg(feature = "prodtest")]
+        fn nsc_prodtest_button_test(out_ptr: u32) -> u32;
     }
 
     #[inline]
@@ -288,6 +312,77 @@ mod transport {
     #[inline]
     pub(super) fn tzic_status() -> u32 {
         unsafe { nsc_tzic_status() }
+    }
+
+    // -----------------------------------------------------------------
+    // Prodtest transport wrappers
+    // -----------------------------------------------------------------
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_get_id_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_get_id(out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_display_pattern_call(in_ptr: *const u8) -> u32 {
+        unsafe { nsc_prodtest_display_pattern(in_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_saes_selftest_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_saes_selftest(out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_bhk_selftest_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_bhk_selftest(out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_flash_rw_call(in_ptr: *const u8) -> u32 {
+        unsafe { nsc_prodtest_flash_rw(in_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_trng_sample_call(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+    ) -> u32 {
+        unsafe { nsc_prodtest_trng_sample(in_ptr as u32, out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_optiga_handshake_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_optiga_handshake(out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_se050_handshake_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_se050_handshake(out_ptr as u32) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_usb_loopback_call(
+        in_ptr: *const u8,
+        out_ptr: *mut u8,
+        n: u32,
+    ) -> u32 {
+        unsafe { nsc_prodtest_usb_loopback(in_ptr as u32, out_ptr as u32, n) }
+    }
+
+    #[cfg(feature = "prodtest")]
+    #[inline]
+    pub(super) fn prodtest_button_test_call(out_ptr: *mut u8) -> u32 {
+        unsafe { nsc_prodtest_button_test(out_ptr as u32) }
     }
 }
 
@@ -454,4 +549,70 @@ pub fn fw_status(out: &mut [u8; sphincs_tz_shared::FW_STATUS_RESPONSE_LEN]) -> u
 #[cfg(feature = "stm32u585")]
 pub fn fw_abort() -> u32 {
     transport::fw_abort_call()
+}
+
+// ---------------------------------------------------------------------------
+// Prodtest public API (`prodtest` feature only)
+//
+// Each wrapper mirrors a `CMD_PRODTEST_*` from `proto/src/lib.rs` and
+// is routed by the USB dispatcher to the matching CMSE veneer in
+// `secure/src/nsc/mod.rs::nsc_prodtest_*`. Buffers are caller-owned
+// — typical caller is `usb::commands::cmd_prodtest_*`.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_get_id(out: &mut [u8; 24]) -> u32 {
+    transport::prodtest_get_id_call(out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_display_pattern(pattern: u32) -> u32 {
+    let buf = pattern.to_le_bytes();
+    transport::prodtest_display_pattern_call(buf.as_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_saes_selftest(out: &mut [u8; 8]) -> u32 {
+    transport::prodtest_saes_selftest_call(out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_bhk_selftest(out: &mut [u8; 8]) -> u32 {
+    transport::prodtest_bhk_selftest_call(out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_flash_rw(pattern: u32) -> u32 {
+    let buf = pattern.to_le_bytes();
+    transport::prodtest_flash_rw_call(buf.as_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_trng_sample(n: u32, out: &mut [u8]) -> u32 {
+    let len_buf = n.to_le_bytes();
+    transport::prodtest_trng_sample_call(len_buf.as_ptr(), out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_optiga_handshake(out: &mut [u8; 16]) -> u32 {
+    transport::prodtest_optiga_handshake_call(out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_se050_handshake(out: &mut [u8; 16]) -> u32 {
+    transport::prodtest_se050_handshake_call(out.as_mut_ptr())
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_usb_loopback(input: &[u8], out: &mut [u8]) -> u32 {
+    transport::prodtest_usb_loopback_call(
+        input.as_ptr(),
+        out.as_mut_ptr(),
+        input.len() as u32,
+    )
+}
+
+#[cfg(feature = "prodtest")]
+pub fn prodtest_button_test(out: &mut [u8; 4]) -> u32 {
+    transport::prodtest_button_test_call(out.as_mut_ptr())
 }

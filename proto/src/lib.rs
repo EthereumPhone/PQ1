@@ -817,6 +817,29 @@ pub const INS_V2_FW_STATUS: u8 = 0x73;
 /// INS_V2_FW_ABORT — discard partial update. No payload.
 pub const INS_V2_FW_ABORT: u8 = 0x74;
 
+// ---------------------------------------------------------------------------
+// Prodtest INS codes (companion → device, prodtest builds only)
+//
+// One INS per `CMD_PRODTEST_*` so each command gets its own LC=255
+// budget without a 4-byte cmd_id overhead inside the APDU body. The
+// numeric mapping `INS = 0x80 + (CMD_PRODTEST_* - 100)` is mechanical
+// — no code reads it that way, but the operator manual + factory DB
+// reports keep it readable. These INSes are wired into the NS USB
+// command dispatcher only under `#[cfg(feature = "prodtest")]`, so
+// production firmware does not expose them on the wire.
+// ---------------------------------------------------------------------------
+
+pub const INS_V2_PRODTEST_GET_ID: u8 = 0x80;
+pub const INS_V2_PRODTEST_DISPLAY_PATTERN: u8 = 0x81;
+pub const INS_V2_PRODTEST_SAES_SELFTEST: u8 = 0x82;
+pub const INS_V2_PRODTEST_BHK_SELFTEST: u8 = 0x83;
+pub const INS_V2_PRODTEST_FLASH_RW: u8 = 0x84;
+pub const INS_V2_PRODTEST_TRNG_SAMPLE: u8 = 0x85;
+pub const INS_V2_PRODTEST_OPTIGA_HANDSHAKE: u8 = 0x86;
+pub const INS_V2_PRODTEST_SE050_HANDSHAKE: u8 = 0x87;
+pub const INS_V2_PRODTEST_USB_LOOPBACK: u8 = 0x88;
+pub const INS_V2_PRODTEST_BUTTON_TEST: u8 = 0x89;
+
 // -- Continuation --
 pub const INS_V2_GET_RESPONSE: u8 = 0xC0;
 

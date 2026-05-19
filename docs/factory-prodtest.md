@@ -64,9 +64,16 @@ field reports stay interpretable.
 Phase A landed 2026-05-19 (architecture validation). Phase B landed
 same day (compute-only commands). Phase C landed 2026-05-19
 (communication tests for OPTIGA + SE050 + USB integrity). Phase D
-landed 2026-05-19 (interactive button test). Phases E + F (host
-fixture runner with full USB HID framing + operator manual photos)
-are tracked in work-todo §30.
+landed 2026-05-19 (interactive button test). Phase E landed
+2026-05-19 (NS-launch fix + USB INS dispatch + full Python HID
+framing). Phase F (operator manual photos) is tracked in work-todo §30.
+
+Each `CMD_PRODTEST_*` is wired to a unique `INS_V2_PRODTEST_*` code
+(0x80..0x89) in the v2 APDU dispatcher; see `proto/src/lib.rs` for
+the canonical mapping. The mapping is mechanical: `INS = 0x80 +
+(CMD - 100)`. The host runner (`tools/factory-prodtest-runner.py`)
+ships the production framing (APDU-over-HID, 64-byte reports,
+Ledger-compatible).
 
 ### CMD_PRODTEST_GET_ID (100)
 
@@ -287,18 +294,28 @@ Mass-production builds will be `prodtest + saes-dhuk + bhk +
 factory-production-irreversible-im-sure` (Phase D in work-todo
 §30) so the full Tier-1 + Tier-2 self-test paths are exercised.
 
-### Wire format (current scaffold — needs bench validation)
+### Wire format (Phase E — production framing)
 
-The `tools/factory-prodtest-runner.py` script's transport layer is
-a SCAFFOLD that documents the expected interface. The actual byte-
-level USB HID framing must be aligned with `nonsecure/src/usb/
-transport.rs` (the existing APDU-over-HID framing the production
-wallet uses). Phase C of work-todo §30 covers wiring the runner
-against the real USB transport.
+`tools/factory-prodtest-runner.py::ProdtestTransport` wraps each
+`CMD_PRODTEST_*` as a v2 APDU and fragments it into 64-byte HID
+reports per the Ledger-compatible framing in
+`shared/src/apdu_framing.rs`:
 
-Until then the script structure is correct (commands, response
-parsing, pass/fail criteria) but no actual USB I/O happens — every
-command returns `INTERNAL_ERROR` from the transport stub.
+```
+APDU:   [CLA=0xF0][INS=0x8x][P1=0x00][P2=0x00][LC][data]
+HID 0:  [chan(2 BE)][tag=0x05][seq=0x0000][total_len(2 BE)][data ≤ 57 B]
+HID N:  [chan(2 BE)][tag=0x05][seq(2 BE)][data ≤ 59 B]
+```
+
+The response is the inverse: HID frames reassemble into an APDU
+whose last 2 bytes are the ISO 7816-4 status word (`SW_OK = 0x9000`
+on success, `SW_INTERNAL_ERROR = 0x6F00` on chip / driver failure).
+Output bytes are returned in `resp[:-2]`.
+
+Linux hidapi requires a leading `0x00` report-ID byte on `write`
+(kernel hidraw inspects byte 0 as the report ID). The transport
+prepends it automatically; macOS / Windows behaviour is identical
+since hidapi normalises the host-side API.
 
 ---
 
@@ -310,6 +327,6 @@ command returns `INTERNAL_ERROR` from the transport stub.
 | B | Compute-only commands (SAES, BHK, FLASH_RW, TRNG_SAMPLE) | **DONE** 2026-05-19 |
 | C | Communication tests (OPTIGA_HANDSHAKE, SE050_HANDSHAKE, USB_LOOPBACK) | **DONE** 2026-05-19 |
 | D | Button test (BUTTON_TEST) | **DONE** 2026-05-19 |
-| E | Host-side fixture runner (full USB HID framing) | TODO |
+| E | Host-side fixture runner (full USB HID framing) | **DONE** 2026-05-19 |
 | F | Operator manual production-ready text + photos | TODO |
 | G | Compile fences for the irreversible production profile | DONE 2026-05-19 |

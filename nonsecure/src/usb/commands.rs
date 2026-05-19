@@ -190,6 +190,31 @@ impl CommandRouter {
             #[cfg(feature = "stm32u585")]
             INS_V2_FW_ABORT => return self.cmd_fw_abort(),
 
+            // Prodtest INSes (companion → device, prodtest builds only).
+            // No PIN gating — the prodtest firmware runs before any
+            // user state exists. Each command writes its output bytes
+            // into `RESP_BUF` followed by the 2-byte SW.
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_GET_ID => return self.cmd_prodtest_get_id(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_DISPLAY_PATTERN => return self.cmd_prodtest_display_pattern(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_SAES_SELFTEST => return self.cmd_prodtest_saes_selftest(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_BHK_SELFTEST => return self.cmd_prodtest_bhk_selftest(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_FLASH_RW => return self.cmd_prodtest_flash_rw(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_TRNG_SAMPLE => return self.cmd_prodtest_trng_sample(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_OPTIGA_HANDSHAKE => return self.cmd_prodtest_optiga_handshake(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_SE050_HANDSHAKE => return self.cmd_prodtest_se050_handshake(),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_USB_LOOPBACK => return self.cmd_prodtest_usb_loopback(data),
+            #[cfg(feature = "prodtest")]
+            INS_V2_PRODTEST_BUTTON_TEST => return self.cmd_prodtest_button_test(),
+
             _ => {}
         }
 
@@ -1030,6 +1055,135 @@ impl CommandRouter {
     unsafe fn cmd_fw_abort(&self) -> Response {
         let status = nsc_api::fw_abort();
         self.sw_response(nsc_status_to_sw(status))
+    }
+
+    // ===================================================================
+    // Prodtest command handlers (`prodtest` feature only)
+    // ===================================================================
+    //
+    // Each handler wraps a `CMD_PRODTEST_*` veneer. Response layout:
+    //   [output_bytes ... | sw_hi | sw_lo]
+    // SW is `SW_OK` on Ok, `SW_INTERNAL_ERROR` otherwise. Output bytes
+    // are appended even on failure paths so the host fixture can still
+    // log diagnostic data (e.g. the BUTTON_TEST step-status byte).
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn prodtest_finalize(&self, n: usize, status: u32) -> Response {
+        let sw = if status == 0 { SW_OK } else { SW_INTERNAL_ERROR };
+        RESP_BUF[n] = (sw >> 8) as u8;
+        RESP_BUF[n + 1] = (sw & 0xFF) as u8;
+        Response {
+            ptr: RESP_BUF.as_ptr(),
+            len: n + 2,
+        }
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_get_id(&self) -> Response {
+        let mut out = [0u8; 24];
+        let status = nsc_api::prodtest_get_id(&mut out);
+        RESP_BUF[..24].copy_from_slice(&out);
+        self.prodtest_finalize(24, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_display_pattern(&self, data: &[u8]) -> Response {
+        if data.len() != 4 {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let pattern = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let status = nsc_api::prodtest_display_pattern(pattern);
+        self.prodtest_finalize(0, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_saes_selftest(&self) -> Response {
+        let mut out = [0u8; 8];
+        let status = nsc_api::prodtest_saes_selftest(&mut out);
+        RESP_BUF[..8].copy_from_slice(&out);
+        self.prodtest_finalize(8, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_bhk_selftest(&self) -> Response {
+        let mut out = [0u8; 8];
+        let status = nsc_api::prodtest_bhk_selftest(&mut out);
+        RESP_BUF[..8].copy_from_slice(&out);
+        self.prodtest_finalize(8, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_flash_rw(&self, data: &[u8]) -> Response {
+        if data.len() != 4 {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let pattern = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let status = nsc_api::prodtest_flash_rw(pattern);
+        self.prodtest_finalize(0, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_trng_sample(&self, data: &[u8]) -> Response {
+        if data.len() != 4 {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let n = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        if n == 0 || n > 256 {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        let n_usize = n as usize;
+        // Buffer carved from RESP_BUF directly to avoid a stack copy.
+        let status = nsc_api::prodtest_trng_sample(n, &mut RESP_BUF[..n_usize]);
+        self.prodtest_finalize(n_usize, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_optiga_handshake(&self) -> Response {
+        let mut out = [0u8; 16];
+        let status = nsc_api::prodtest_optiga_handshake(&mut out);
+        RESP_BUF[..16].copy_from_slice(&out);
+        self.prodtest_finalize(16, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_se050_handshake(&self) -> Response {
+        let mut out = [0u8; 16];
+        let status = nsc_api::prodtest_se050_handshake(&mut out);
+        RESP_BUF[..16].copy_from_slice(&out);
+        self.prodtest_finalize(16, status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_usb_loopback(&self, data: &[u8]) -> Response {
+        if data.is_empty() || data.len() > 256 {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        // RESP_BUF == 256 bytes; we need data + 2 bytes SW. Worst case
+        // 256 + 2 = 258 > 256, so cap at 254 to be safe. The Phase C
+        // cap in the firmware is 256 but the single-APDU LC max is 255
+        // before SW; staying at 254 keeps headroom for the SW suffix
+        // inside RESP_BUF without needing GET_RESPONSE chunking.
+        if data.len() > 254 {
+            return self.sw_response(SW_WRONG_LENGTH);
+        }
+        // Use a stack buffer for the input copy so the input and
+        // output don't overlap on the secure side (`crate::SE` may not
+        // tolerate aliased ptrs).
+        let mut buf = [0u8; 256];
+        buf[..data.len()].copy_from_slice(data);
+        let status = nsc_api::prodtest_usb_loopback(
+            &buf[..data.len()],
+            &mut RESP_BUF[..data.len()],
+        );
+        self.prodtest_finalize(data.len(), status)
+    }
+
+    #[cfg(feature = "prodtest")]
+    unsafe fn cmd_prodtest_button_test(&self) -> Response {
+        let mut out = [0u8; 4];
+        let status = nsc_api::prodtest_button_test(&mut out);
+        RESP_BUF[..4].copy_from_slice(&out);
+        self.prodtest_finalize(4, status)
     }
 
     // ===================================================================

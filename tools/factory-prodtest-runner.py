@@ -66,6 +66,36 @@ CMD_PRODTEST_SE050_HANDSHAKE = 107
 CMD_PRODTEST_USB_LOOPBACK = 108
 CMD_PRODTEST_BUTTON_TEST = 109
 
+# Per-CMD INS codes for the v2 APDU dispatcher. Mirrors
+# `proto/src/lib.rs::INS_V2_PRODTEST_*`.
+INS_FOR_CMD = {
+    CMD_PRODTEST_GET_ID:            0x80,
+    CMD_PRODTEST_DISPLAY_PATTERN:   0x81,
+    CMD_PRODTEST_SAES_SELFTEST:     0x82,
+    CMD_PRODTEST_BHK_SELFTEST:      0x83,
+    CMD_PRODTEST_FLASH_RW:          0x84,
+    CMD_PRODTEST_TRNG_SAMPLE:       0x85,
+    CMD_PRODTEST_OPTIGA_HANDSHAKE:  0x86,
+    CMD_PRODTEST_SE050_HANDSHAKE:   0x87,
+    CMD_PRODTEST_USB_LOOPBACK:      0x88,
+    CMD_PRODTEST_BUTTON_TEST:       0x89,
+}
+
+# APDU + HID framing constants. Mirror `proto/src/lib.rs::APDU_CLA_V2`
+# and `shared/src/apdu_framing.rs`.
+APDU_CLA_V2 = 0xF0
+HID_REPORT_SIZE = 64
+HID_TAG_APDU = 0x05
+HID_FIRST_DATA = HID_REPORT_SIZE - 7  # 57 bytes after [chan(2)|tag(1)|seq(2)|len(2)]
+HID_CONT_DATA = HID_REPORT_SIZE - 5   # 59 bytes after [chan(2)|tag(1)|seq(2)]
+
+# ISO 7816-4 SW values mirrored from `proto/src/lib.rs::SW_*`.
+SW_OK = 0x9000
+SW_WRONG_LENGTH = 0x6700
+SW_INS_NOT_SUPPORTED = 0x6D00
+SW_CLA_NOT_SUPPORTED = 0x6E00
+SW_INTERNAL_ERROR_WIRE = 0x6F00
+
 # Step-status nibble decode for BUTTON_TEST. Upper = step, lower = error.
 BUTTON_STEP_DECODE = {
     0x00: ("PASS", "all 3 steps OK"),
@@ -130,17 +160,25 @@ class UnitReport:
 
 
 class ProdtestTransport:
-    """Minimal USB-HID transport stub for the prodtest commands.
+    """USB-HID APDU-over-Ledger-framing transport.
 
-    The real PQSigner USB stack frames commands using Ledger-style
-    APDUs over USB HID (see `nonsecure/src/usb/transport.rs`). This
-    class is a SCAFFOLD that documents the expected interface; the
-    actual byte-level framing must be wired against the firmware's
-    USB stack when bench-validating.
+    Frames CMD_PRODTEST_* calls as v2 APDUs:
+        [CLA=0xF0][INS=0x8x][P1=0x00][P2=0x00][LC][data]
+    where INS is selected by `INS_FOR_CMD[cmd]`. Frames the APDU into
+    64-byte HID reports per `shared/src/apdu_framing.rs`:
+        frame 0: [chan(2 BE)][tag=0x05][seq=0x0000][total_len(2 BE)][data ≤ 57 B]
+        frame N: [chan(2 BE)][tag=0x05][seq(2 BE)][data ≤ 59 B]
+    Channel ID is fixed at 0x0001; the firmware echoes whatever the
+    host sends.
 
-    Phase C work (per work-todo §30) replaces this scaffold with the
-    full APDU-over-HID framing.
+    Linux hidapi quirk: `device.write` requires a leading 0x00 report-
+    ID byte even when the descriptor has none (the kernel hidraw layer
+    inspects byte 0 as the report ID). `device.read` does NOT include
+    that byte.
     """
+
+    CHANNEL_ID = 0x0001
+    READ_TIMEOUT_MS = 60_000  # operator-interactive BUTTON_TEST can take ~30 s
 
     def __init__(self, vid: int, pid: int, verbose: bool = False) -> None:
         self.vid = vid
@@ -168,28 +206,122 @@ class ProdtestTransport:
             self._dev.close()
             self._dev = None
 
+    # ----- APDU + HID framing helpers -----
+
+    @staticmethod
+    def _build_apdu(ins: int, in_data: bytes) -> bytes:
+        if len(in_data) > 255:
+            raise ValueError(f"APDU LC overflow: {len(in_data)} > 255")
+        return bytes([APDU_CLA_V2, ins, 0x00, 0x00, len(in_data)]) + in_data
+
+    def _frame_apdu(self, apdu: bytes) -> list[bytes]:
+        """Fragment the APDU into 64-byte HID reports."""
+        frames = []
+        chan = self.CHANNEL_ID
+
+        # First frame.
+        first = bytearray(HID_REPORT_SIZE)
+        first[0] = (chan >> 8) & 0xFF
+        first[1] = chan & 0xFF
+        first[2] = HID_TAG_APDU
+        first[3] = 0x00
+        first[4] = 0x00
+        first[5] = (len(apdu) >> 8) & 0xFF
+        first[6] = len(apdu) & 0xFF
+        first_chunk = min(HID_FIRST_DATA, len(apdu))
+        first[7 : 7 + first_chunk] = apdu[:first_chunk]
+        frames.append(bytes(first))
+
+        off = first_chunk
+        seq = 1
+        while off < len(apdu):
+            f = bytearray(HID_REPORT_SIZE)
+            f[0] = (chan >> 8) & 0xFF
+            f[1] = chan & 0xFF
+            f[2] = HID_TAG_APDU
+            f[3] = (seq >> 8) & 0xFF
+            f[4] = seq & 0xFF
+            c = min(HID_CONT_DATA, len(apdu) - off)
+            f[5 : 5 + c] = apdu[off : off + c]
+            frames.append(bytes(f))
+            off += c
+            seq += 1
+        return frames
+
+    def _read_response(self) -> bytes:
+        """Reassemble one APDU response from the HID stream."""
+        buf = bytearray()
+        expected = 0
+        seq = 0
+        while True:
+            data = bytes(self._dev.read(HID_REPORT_SIZE, timeout_ms=self.READ_TIMEOUT_MS))
+            if len(data) == 0:
+                raise TimeoutError(f"HID read timeout after {self.READ_TIMEOUT_MS} ms")
+            if len(data) < 3 or data[2] != HID_TAG_APDU:
+                if self.verbose:
+                    print(f"[hid] dropping non-APDU frame: tag=0x{data[2]:02x}")
+                continue
+            r_seq = (data[3] << 8) | data[4]
+            if r_seq != seq:
+                raise IOError(f"HID seq mismatch: expected {seq}, got {r_seq}")
+            if seq == 0:
+                expected = (data[5] << 8) | data[6]
+                if self.verbose:
+                    print(f"[hid] response apdu_len={expected}")
+                payload_off = 7
+                chunk = min(HID_FIRST_DATA, expected)
+            else:
+                payload_off = 5
+                chunk = min(HID_CONT_DATA, expected - len(buf))
+            buf.extend(data[payload_off : payload_off + chunk])
+            seq += 1
+            if len(buf) >= expected:
+                break
+        return bytes(buf[:expected])
+
+    # ----- Public API -----
+
     def send_cmd(
         self, cmd: int, in_data: bytes = b"", out_size: int = 0
     ) -> tuple[int, bytes]:
-        """Send a prodtest command and read the response.
+        """Send one prodtest command, return (status_code, response_data).
 
-        Phase A wire format (placeholder — needs bench validation):
-            request:  [u32 cmd | u32 in_len | in_data...]
-            response: [u32 status | u32 out_len | out_data...]
-
-        Returns (status_code, response_bytes).
+        Status code is the ISO 7816-4 SW from the firmware:
+          SW_OK (0x9000)             — command succeeded
+          SW_INTERNAL_ERROR (0x6F00) — chip / driver failure (see response for diagnostic)
+          SW_WRONG_LENGTH (0x6700)   — input length not accepted by firmware
+        For backwards compat with the Phase A scaffold, `status == STATUS_OK`
+        is checked downstream — that constant is mapped to SW_OK below.
         """
-        # TODO Phase C: implement actual APDU-over-HID framing per
-        # the firmware's USB transport. The framing here is a
-        # placeholder so the script structure compiles.
+        if self._dev is None:
+            return STATUS_INTERNAL_ERROR, b""
+        ins = INS_FOR_CMD.get(cmd)
+        if ins is None:
+            return STATUS_INTERNAL_ERROR, b""
+
+        apdu = self._build_apdu(ins, in_data)
         if self.verbose:
             print(
-                f"[hid] send cmd=0x{cmd:02x} in_len={len(in_data)} "
+                f"[hid] send cmd={cmd} INS=0x{ins:02x} apdu_len={len(apdu)} "
                 f"out_size={out_size}"
             )
-        # Stub: return failure to make sure no one runs this against
-        # silicon expecting it to work without Phase C.
-        return STATUS_INTERNAL_ERROR, b""
+
+        for frame in self._frame_apdu(apdu):
+            # Linux hidapi: prepend report-ID byte 0x00.
+            self._dev.write(b"\x00" + frame)
+
+        resp = self._read_response()
+        if len(resp) < 2:
+            return STATUS_INTERNAL_ERROR, b""
+
+        sw = (resp[-2] << 8) | resp[-1]
+        data = bytes(resp[:-2])
+
+        # Map wire SW back to the script's status namespace: SW_OK → 0,
+        # everything else carries the wire SW unchanged so downstream
+        # `status != STATUS_OK` checks see the SW for logs.
+        status_code = STATUS_OK if sw == SW_OK else sw
+        return status_code, data
 
 
 # ---------------------------------------------------------------------------
