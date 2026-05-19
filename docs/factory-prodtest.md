@@ -108,6 +108,8 @@ should reach into the SSD1306 framebuffer directly for true
 per-pixel patterns. The text approximations are sufficient for
 catching dead-pixel + connector-detach defects.
 
+<!-- TODO photo: side-by-side OLED snapshots of each of the 5 patterns (WHITE / BLACK / HSTRIPES / VSTRIPES / CHECKER) on a known-good unit, so the operator can visually compare against the chip under test. -->
+
 ### CMD_PRODTEST_SAES_SELFTEST (102)
 
 Runs the Tier-1 SAES self-test (round-trip encrypt under the DHUK
@@ -251,16 +253,86 @@ Pass criterion: `step_status == 0x00`. The firmware returns
 ## Build + run
 
 ```bash
-# Build the prodtest firmware
+# Build the prodtest firmware (secure + nonsecure, both crates).
 make build-hw-prodtest
 
-# Phase B/C+: flash + run sequence (host fixture orchestration —
-# not yet written; tracked in work-todo §30 Phase E)
+# Flash + run sequence (the factory fixture's outer script wraps
+# these into a per-unit operation):
+#
 #   probe-rs download $(NONSECURE_ELF) $(SECURE_ELF)
 #   STM32_Programmer_CLI --optionbytes TZEN=1 ...
 #   probe-rs reset
 #   python tools/factory-prodtest-runner.py --report this-unit.json
+#
+# `factory-prodtest-runner.py` exits 0 if every test passed, non-
+# zero on any failure. The fixture inspects this exit code (and the
+# JSON report's `all_passed` field) to decide whether to chain
+# `flash-hw-factory-provisioning` against the same chip.
 ```
+
+---
+
+## Pre-flight checklist
+
+Run once at the start of every shift, before any units are tested:
+
+1. **Fixture USB cable** — plug a known-good "golden" prodtest unit
+   in, run the runner, confirm all 10 commands pass. If they fail
+   on the golden unit, the fixture cable / hub / driver host is the
+   problem, not the units under test.
+2. **probe-rs flash speed** — flash one unit and time it. > 30 s
+   for a ~250 KB firmware indicates a debug-adapter or USB hub
+   issue; debug before continuing.
+3. **Operator station lighting** — `DISPLAY_PATTERN(0)` (all
+   solid) and `DISPLAY_PATTERN(1)` (all blank) on the golden unit
+   should be visually distinguishable under the line's ambient
+   lighting. If patterns blend, the operator can't visually verify.
+4. **Anti-static wristband** continuity check — STM32U585 is CMOS;
+   ESD on the test pad gates burns FETs before the unit reaches
+   the customer. Drains must read < 10 Ω to grounded mat.
+5. **Defective-unit bin labeled** — when prodtest fails, that
+   unit goes in a tagged bin for triage, NOT back on the line.
+
+<!-- TODO photo: fixture wiring diagram showing probe-rs cable + USB-C cable + unit under test + golden reference unit positions. -->
+
+---
+
+## Troubleshooting matrix
+
+When prodtest reports a failure, the per-command output (status SW
++ raw_response bytes in the JSON report) maps to one of these
+remediation classes. The fixture operator picks the matching row;
+escalation to vendor (`REPORT VENDOR`) means "set this unit aside
+and contact the firmware team — don't repair on the line."
+
+| Command | Failure mode | Likely root cause | Action |
+|---|---|---|---|
+| GET_ID | `uid == 0x00 × 12` | STM32 boot ROM dead / OTP unreadable | REPORT VENDOR |
+| GET_ID | `uid == 0xFF × 12` | OTP wiped or chip never booted | REPORT VENDOR |
+| GET_ID | timeout / no response | USB cable unseated, fixture mis-wired, NS world never reached | Reseat cable + retry; if persistent → REPORT VENDOR |
+| DISPLAY_PATTERN | OK status, OLED black | OLED I²C dead / connector loose | Reseat connector; if persistent → set aside |
+| DISPLAY_PATTERN | OK status, pattern smeared | OLED contrast drift | Set aside (cosmetic — would ship but operator can't verify) |
+| SAES_SELFTEST | `SW_INTERNAL_ERROR` | SAES peripheral defective OR `saes-dhuk` feature missing from build | Re-verify build profile; if profile correct → REPORT VENDOR |
+| SAES_SELFTEST | all-zero fingerprint | DHUK not provisioned (silicon defect — DHUK is per-die intrinsic) | REPORT VENDOR |
+| BHK_SELFTEST | `SW_INTERNAL_ERROR` | BHK feature off in build, or BHK not loaded into TAMP backup regs | Re-verify build (`bhk + saes-dhuk` enabled); if both on → REPORT VENDOR |
+| FLASH_RW | `SW_INTERNAL_ERROR` (Phase B stub) | Test-page helpers not yet wired — known-not-implemented | Skip — pass criterion is "command is reachable", not the round-trip itself |
+| TRNG_SAMPLE | `< 32 distinct bytes in 256` | STM32 TRNG stuck or biased | REPORT VENDOR — this chip can never be a wallet |
+| OPTIGA_HANDSHAKE | `SW_INTERNAL_ERROR` | OPTIGA I²C unwired, RST line floating, OPTIGA chip absent | Reseat OPTIGA shield; rewire RST jumper (D6 → PE0); if persistent → set aside |
+| OPTIGA_HANDSHAKE | `rng == 0x00 × 16` or `0xFF × 16` | I²C bus pulled to GND/VCC | Reseat shield; if persistent → set aside |
+| SE050_HANDSHAKE | `SW_INTERNAL_ERROR` | SE050 absent, ENA line wrong, SCP03 default keys pre-rotated | Reseat SE050 shield; if persistent → set aside |
+| SE050_HANDSHAKE | `rng == 0x00 × 16` or `0xFF × 16` | I²C bus pulled to GND/VCC | Reseat shield; if persistent → set aside |
+| USB_LOOPBACK | byte mismatch at offset N | USB OTG TX corruption or HID fragmentation bug | If only this unit → set aside; if multiple → REPORT VENDOR (likely firmware) |
+| USB_LOOPBACK | timeout / SW_WRONG_LENGTH | Unit reboots mid-command (power instability) | Check power supply current limit; replace USB cable |
+| BUTTON_TEST | step_status `0x11` / `0x21` | LEFT / RIGHT button mechanically dead | Re-solder button; retry. If persistent → set aside |
+| BUTTON_TEST | step_status `0x12` / `0x22` | LEFT/RIGHT wires SWAPPED at connector | Rewire connector; retry |
+| BUTTON_TEST | step_status `0x31` | Operator did not press both buttons; OR right button works alone but left doesn't | First retry with explicit "press both at once" demo; if persistent → re-solder LEFT button |
+
+REPORT VENDOR means: tag the unit, photograph the per-unit JSON
+report, log the chip's UID + lot number, and send the lot info to
+the firmware team. Don't attempt board-level repair on a chip whose
+silicon has a defect — repair time will exceed the unit's BOM cost.
+
+<!-- TODO photo: per-status decision tree as a printable wallchart for the fixture operator. -->
 
 ---
 
@@ -328,5 +400,15 @@ since hidapi normalises the host-side API.
 | C | Communication tests (OPTIGA_HANDSHAKE, SE050_HANDSHAKE, USB_LOOPBACK) | **DONE** 2026-05-19 |
 | D | Button test (BUTTON_TEST) | **DONE** 2026-05-19 |
 | E | Host-side fixture runner (full USB HID framing) | **DONE** 2026-05-19 |
-| F | Operator manual production-ready text + photos | TODO |
+| F | Operator manual production-ready text (photos pending hardware bench) | **DONE** 2026-05-19 (text); photos blocked on hardware-on-bench session |
 | G | Compile fences for the irreversible production profile | DONE 2026-05-19 |
+
+Phase F note: every `<!-- TODO photo: ... -->` marker in this file
+identifies a place where a visual aid would help the operator. The
+markers describe what the photo should show; they do NOT paraphrase
+the photo into prose because (a) the operator's authority is the
+chip under test in front of them, not the manual, and (b)
+descriptions of UI states age into wrong-but-shippable documentation
+the moment the firmware changes a glyph. Photos land when the user
+runs a hardware-on-bench session and a USB-C camera can capture the
+fixture display.
