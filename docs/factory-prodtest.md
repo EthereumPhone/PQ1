@@ -44,7 +44,7 @@ tracking and decides whether to chain `flash-hw-factory-provisioning`.
 
 ## Command reference
 
-The prodtest firmware exposes 6 USB HID commands. All commands map
+The prodtest firmware exposes 9 USB HID commands. All commands map
 to `proto/src/lib.rs::CMD_PRODTEST_*`; keep these IDs STABLE so old
 field reports stay interpretable.
 
@@ -56,11 +56,15 @@ field reports stay interpretable.
 | 103 | `BHK_SELFTEST` | — | 8 B BHK fingerprint | B |
 | 104 | `FLASH_RW` | 4 B test pattern | — | B (stub) |
 | 105 | `TRNG_SAMPLE` | 4 B count (1..=256) | N B random | B |
+| 106 | `OPTIGA_HANDSHAKE` | — | 16 B OPTIGA RNG | C |
+| 107 | `SE050_HANDSHAKE` | — | 16 B SE050 RNG | C |
+| 108 | `USB_LOOPBACK` | N B input (1..=256) | N B echo | C |
 
 Phase A landed 2026-05-19 (architecture validation). Phase B landed
-same day (compute-only commands). Phases C-G (communication tests
-+ host fixture runner + button test + operator manual completion)
-are tracked in work-todo §30.
+same day (compute-only commands). Phase C landed 2026-05-19
+(communication tests for OPTIGA + SE050 + USB integrity). Phases
+D-F (button test + host fixture runner with full USB HID framing
++ operator manual photos) are tracked in work-todo §30.
 
 ### CMD_PRODTEST_GET_ID (100)
 
@@ -140,6 +144,64 @@ healthy TRNG returns at least 32 distinct byte values in 256 bytes.
 A defective TRNG repeating the same byte or following a low-entropy
 pattern fails this gate.
 
+### CMD_PRODTEST_OPTIGA_HANDSHAKE (106)
+
+Exercises the full IFX I²C → APDU stack against the OPTIGA Trust M
+without touching any persistent chip state. The firmware lazily
+runs `OptigaTrustM::init()` (RST pulse + `OpenApplication`) on first
+call, then sends a `GetRandom(16)` APDU. On a fresh chip there's no
+PBS yet, so the APDU goes through the plain (non-shielded) path —
+this is exactly what the fixture wants to validate, since the
+shielded connection requires `factory_provisioning` to have run.
+
+Catches:
+- missing chip / broken solder joint / I²C bus wedged
+- RST line wrong (D6 = PE0 on B-U585I-IOT02A; `pin_diag::run` pulse
+  must produce a visible falling edge)
+- power-rail / clock issues (`OpenApplication` times out)
+- chip RNG defect (returns all-zero or all-0xFF)
+
+Pass criterion: response status is `Ok`, all 16 bytes received, AND
+the bytes are neither all-zero nor all-0xFF. The host runner also
+records the bytes for the per-die-uniqueness traceability database.
+
+### CMD_PRODTEST_SE050_HANDSHAKE (107)
+
+Same shape as OPTIGA_HANDSHAKE but for the SE050 T=1' + SCP03 stack.
+`Se050::init()` runs `interface_reset` + ATR exchange + SCP03 session
+setup with NXP's default platform keys, then `GetRandom(16)`. On a
+fresh chip the default keys are still in place so the session opens
+cleanly; on a partially-provisioned chip whose SCP03 keys were
+rotated, this command fails — exactly the diagnostic signal the
+operator needs.
+
+Catches:
+- missing chip / broken solder / I²C bus wedged
+- ENA line wrong (SE050 stays in reset → no ATR)
+- cold-boot timing issues (handled by the SE050 driver's 3-attempt
+  retry loop in `Se050::init`)
+- pre-rotated SCP03 keys (chip wasn't blank as expected)
+- chip RNG defect
+
+Pass criterion: same as OPTIGA_HANDSHAKE.
+
+### CMD_PRODTEST_USB_LOOPBACK (108)
+
+Echo N bytes back to the host. The fact that the firmware RECEIVED
+the command already proves USB RX framing works; this command proves
+TX + full round-trip byte integrity for non-trivial payloads up to
+the 256 B per-call cap.
+
+The host runner uses a deterministic test pattern: `byte[i] = i ^
+0xA5` for `i ∈ [0, N)`. This catches:
+- byte-substitution bugs (host sends 0x00 expects 0xA5)
+- off-by-one in the USB transport layer (pattern shift would
+  surface as a wrong byte at offset 0)
+- bit-flip / bit-rot under sustained USB traffic
+- buffer-overflow corrupting tail of payload
+
+Pass criterion: every byte byte-identical to the input.
+
 ---
 
 ## Build + run
@@ -209,7 +271,7 @@ command returns `INTERNAL_ERROR` from the transport stub.
 |---|---|---|
 | A | Architecture: Cargo feature + 2 commands (GET_ID, DISPLAY_PATTERN) | **DONE** 2026-05-19 |
 | B | Compute-only commands (SAES, BHK, FLASH_RW, TRNG_SAMPLE) | **DONE** 2026-05-19 |
-| C | Communication tests (OPTIGA_HANDSHAKE, SE050_HANDSHAKE, USB_LOOPBACK) | TODO |
+| C | Communication tests (OPTIGA_HANDSHAKE, SE050_HANDSHAKE, USB_LOOPBACK) | **DONE** 2026-05-19 |
 | D | Button test (BUTTON_TEST) | TODO |
 | E | Host-side fixture runner (full USB HID framing) | TODO |
 | F | Operator manual production-ready text + photos | TODO |

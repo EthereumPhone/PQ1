@@ -402,6 +402,167 @@ pub(super) unsafe fn cmd_trng_sample_run(args: &GatewayArgs) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
+// CMD_PRODTEST_OPTIGA_HANDSHAKE (106) — Phase C
+// ---------------------------------------------------------------------------
+//
+// Drives the OPTIGA Trust M's IFX I²C → APDU stack end-to-end without
+// touching any persistent chip state. `OptigaTrustM::random()` lazily
+// runs `init()` (RST pulse + OpenApplication) then sends a `GetRandom`
+// APDU. On a fresh chip there's no PBS yet, so the call goes through
+// the plain APDU path (shield.active == false; see
+// `secure/src/optiga/apdu.rs::send_command`). Catches:
+//   - missing chip / broken solder / I²C bus wedged
+//   - RST line wrong / floating (init's pin_diag::run pulse fails)
+//   - power-rail / clock issues (OpenApplication times out)
+//   - chip RNG defect (returns garbage / all-zero)
+//
+// 16 bytes is the smallest RNG payload that satisfies the OPTIGA's
+// minimum (8 bytes) without padding overhead. Tests can also feed
+// these bytes into the fixture's per-die uniqueness DB.
+
+const OPTIGA_HANDSHAKE_RNG_LEN: usize = 16;
+
+/// # Safety
+/// CMSE non-secure-entry handler — writes 16 bytes to NS after
+/// `validate_ns_write_ptr`. Drives the OPTIGA Trust M I²C bus.
+pub(super) unsafe fn cmd_optiga_handshake_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_write_ptr(args.arg1, OPTIGA_HANDSHAKE_RNG_LEN) {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    #[cfg(feature = "dual-se")]
+    {
+        // SAFETY: dispatcher's non-reentrant invariant serialises
+        // `static mut crate::SE` access. We touch only `optiga`.
+        let se = unsafe { &mut *core::ptr::addr_of_mut!(crate::SE) };
+        let mut rng_buf = [0u8; OPTIGA_HANDSHAKE_RNG_LEN];
+        if se.optiga.random(&mut rng_buf).is_err() {
+            secure_log!("[PRODTEST] optiga_handshake: random() failed");
+            return NscStatus::InternalError as u32;
+        }
+        let out = args.arg1 as *mut u8;
+        for i in 0..OPTIGA_HANDSHAKE_RNG_LEN {
+            // SAFETY: validate_ns_write_ptr above checked
+            // OPTIGA_HANDSHAKE_RNG_LEN bytes writable at args.arg1.
+            unsafe {
+                core::ptr::write_volatile(out.add(i), rng_buf[i]);
+            }
+        }
+        return NscStatus::Ok as u32;
+    }
+    #[cfg(not(feature = "dual-se"))]
+    {
+        let _ = args;
+        NscStatus::InternalError as u32
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CMD_PRODTEST_SE050_HANDSHAKE (107) — Phase C
+// ---------------------------------------------------------------------------
+//
+// Same shape as OPTIGA_HANDSHAKE but for the SE050 T=1' stack.
+// `Se050::random()` lazily runs `init()` (interface_reset + ATR
+// exchange + SCP03 setup with default platform keys) then sends a
+// `GetRandom` APDU. On a fresh chip the SCP03 default keys are still
+// in place so the session opens cleanly. Catches:
+//   - missing chip / broken solder / I²C bus wedged
+//   - ENA line wrong (SE050 stays in reset)
+//   - power-rail / cold-boot timing issues (interface_reset retry loop)
+//   - default SCP03 keys missing / pre-rotated (factory replacement)
+//   - chip RNG defect
+
+const SE050_HANDSHAKE_RNG_LEN: usize = 16;
+
+/// # Safety
+/// CMSE non-secure-entry handler — writes 16 bytes to NS after
+/// `validate_ns_write_ptr`. Drives the SE050 I²C bus.
+pub(super) unsafe fn cmd_se050_handshake_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_write_ptr(args.arg1, SE050_HANDSHAKE_RNG_LEN) {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    #[cfg(feature = "dual-se")]
+    {
+        // SAFETY: dispatcher's non-reentrant invariant serialises
+        // `static mut crate::SE` access. We touch only `se050`.
+        let se = unsafe { &mut *core::ptr::addr_of_mut!(crate::SE) };
+        let mut rng_buf = [0u8; SE050_HANDSHAKE_RNG_LEN];
+        if se.se050.random(&mut rng_buf).is_err() {
+            secure_log!("[PRODTEST] se050_handshake: random() failed");
+            return NscStatus::InternalError as u32;
+        }
+        let out = args.arg1 as *mut u8;
+        for i in 0..SE050_HANDSHAKE_RNG_LEN {
+            // SAFETY: validate_ns_write_ptr above checked
+            // SE050_HANDSHAKE_RNG_LEN bytes writable at args.arg1.
+            unsafe {
+                core::ptr::write_volatile(out.add(i), rng_buf[i]);
+            }
+        }
+        return NscStatus::Ok as u32;
+    }
+    #[cfg(not(feature = "dual-se"))]
+    {
+        let _ = args;
+        NscStatus::InternalError as u32
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CMD_PRODTEST_USB_LOOPBACK (108) — Phase C
+// ---------------------------------------------------------------------------
+//
+// Echo N bytes back to the host. The fact the firmware RECEIVED the
+// command already proves USB RX framing works; this command proves
+// TX + full round-trip byte integrity for non-trivial payloads up to
+// the 256 B per-call cap (chosen to match TRNG_SAMPLE's bound).
+// Catches:
+//   - USB OTG FS TX path corruption
+//   - HID report fragmentation bugs in the NS-side stack
+//   - buffer-overflow / off-by-one in the USB transport layer
+//   - VCC instability under sustained USB TX
+
+const USB_LOOPBACK_MAX: usize = 256;
+
+/// # Safety
+/// CMSE non-secure-entry handler — reads N bytes from NS, writes N
+/// bytes to NS. Both pointers validated; N must be 1..=256.
+pub(super) unsafe fn cmd_usb_loopback_run(args: &GatewayArgs) -> u32 {
+    let n = args.arg2 as usize;
+    if n == 0 || n > USB_LOOPBACK_MAX {
+        return NscStatus::InvalidPointer as u32;
+    }
+    if !validate_ns_read_ptr(args.arg0, n) {
+        return NscStatus::InvalidPointer as u32;
+    }
+    if !validate_ns_write_ptr(args.arg1, n) {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    // TOCTOU: copy NS input to S-stack before parse / write-back so a
+    // racing NS thread can't switch the data between read and write.
+    let mut buf = [0u8; USB_LOOPBACK_MAX];
+    for i in 0..n {
+        // SAFETY: validate_ns_read_ptr above checked n bytes readable
+        // at args.arg0.
+        buf[i] = unsafe {
+            core::ptr::read_volatile((args.arg0 + i as u32) as *const u8)
+        };
+    }
+
+    let out = args.arg1 as *mut u8;
+    for i in 0..n {
+        // SAFETY: validate_ns_write_ptr above checked n bytes
+        // writable at args.arg1.
+        unsafe {
+            core::ptr::write_volatile(out.add(i), buf[i]);
+        }
+    }
+    NscStatus::Ok as u32
+}
+
+// ---------------------------------------------------------------------------
 // Host tests — pure helpers
 // ---------------------------------------------------------------------------
 
@@ -439,5 +600,22 @@ mod tests {
         // fixture's reference values stay reusable across builds.
         assert_eq!(SAES_FINGERPRINT_LEN, 8);
         assert_eq!(BHK_FINGERPRINT_LEN, 8);
+    }
+
+    #[test]
+    fn positive_phase_c_handshake_rng_lens_pinned() {
+        // Both handshake commands return 16 bytes — the fixture
+        // parses on these offsets in its per-die uniqueness DB. Any
+        // change here must also update `docs/factory-prodtest.md`
+        // and the host runner.
+        assert_eq!(OPTIGA_HANDSHAKE_RNG_LEN, 16);
+        assert_eq!(SE050_HANDSHAKE_RNG_LEN, 16);
+    }
+
+    #[test]
+    fn positive_usb_loopback_cap_matches_proto_doc() {
+        // Cap matches TRNG_SAMPLE_MAX so the same caller-side buffer
+        // can be reused for both commands.
+        assert_eq!(USB_LOOPBACK_MAX, 256);
     }
 }

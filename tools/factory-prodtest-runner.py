@@ -61,6 +61,9 @@ CMD_PRODTEST_SAES_SELFTEST = 102
 CMD_PRODTEST_BHK_SELFTEST = 103
 CMD_PRODTEST_FLASH_RW = 104
 CMD_PRODTEST_TRNG_SAMPLE = 105
+CMD_PRODTEST_OPTIGA_HANDSHAKE = 106
+CMD_PRODTEST_SE050_HANDSHAKE = 107
+CMD_PRODTEST_USB_LOOPBACK = 108
 
 # Response status codes — mirror `proto/src/lib.rs::NscStatus`.
 STATUS_OK = 0
@@ -300,6 +303,106 @@ def test_flash_rw(tx: ProdtestTransport) -> TestResult:
     )
 
 
+def test_optiga_handshake(tx: ProdtestTransport) -> TestResult:
+    status, resp = tx.send_cmd(CMD_PRODTEST_OPTIGA_HANDSHAKE, b"", out_size=16)
+    if status != STATUS_OK or len(resp) != 16:
+        return TestResult(
+            name="OPTIGA_HANDSHAKE",
+            cmd=CMD_PRODTEST_OPTIGA_HANDSHAKE,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes",
+        )
+    # OPTIGA RNG output must be non-trivial: all-zero / all-0xFF
+    # means the chip didn't actually run the GetRandom APDU (stuck
+    # bus / shorted line) and the firmware filled with sentinel.
+    if resp == b"\x00" * 16 or resp == b"\xff" * 16:
+        return TestResult(
+            name="OPTIGA_HANDSHAKE",
+            cmd=CMD_PRODTEST_OPTIGA_HANDSHAKE,
+            passed=False,
+            status_code=status,
+            detail=f"RNG looks bogus: {resp.hex()}",
+            raw_response=resp,
+        )
+    return TestResult(
+        name="OPTIGA_HANDSHAKE",
+        cmd=CMD_PRODTEST_OPTIGA_HANDSHAKE,
+        passed=True,
+        status_code=status,
+        detail=f"rng={resp.hex()}",
+        raw_response=resp,
+    )
+
+
+def test_se050_handshake(tx: ProdtestTransport) -> TestResult:
+    status, resp = tx.send_cmd(CMD_PRODTEST_SE050_HANDSHAKE, b"", out_size=16)
+    if status != STATUS_OK or len(resp) != 16:
+        return TestResult(
+            name="SE050_HANDSHAKE",
+            cmd=CMD_PRODTEST_SE050_HANDSHAKE,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes",
+        )
+    if resp == b"\x00" * 16 or resp == b"\xff" * 16:
+        return TestResult(
+            name="SE050_HANDSHAKE",
+            cmd=CMD_PRODTEST_SE050_HANDSHAKE,
+            passed=False,
+            status_code=status,
+            detail=f"RNG looks bogus: {resp.hex()}",
+            raw_response=resp,
+        )
+    return TestResult(
+        name="SE050_HANDSHAKE",
+        cmd=CMD_PRODTEST_SE050_HANDSHAKE,
+        passed=True,
+        status_code=status,
+        detail=f"rng={resp.hex()}",
+        raw_response=resp,
+    )
+
+
+def test_usb_loopback(tx: ProdtestTransport, n: int = 256) -> TestResult:
+    # Pseudo-random but reproducible test pattern: incrementing
+    # bytes XOR'd with the position-rotated key 0xA5. Catches off-by-
+    # one + bit-flip + byte-substitution bugs.
+    payload = bytes((i ^ 0xA5) & 0xFF for i in range(n))
+    status, resp = tx.send_cmd(CMD_PRODTEST_USB_LOOPBACK, payload, out_size=n)
+    if status != STATUS_OK or len(resp) != n:
+        return TestResult(
+            name=f"USB_LOOPBACK({n})",
+            cmd=CMD_PRODTEST_USB_LOOPBACK,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes",
+        )
+    if resp != payload:
+        # Pin first mismatch offset for diagnostics.
+        mismatch_i = next(
+            (i for i in range(n) if resp[i] != payload[i]), -1
+        )
+        return TestResult(
+            name=f"USB_LOOPBACK({n})",
+            cmd=CMD_PRODTEST_USB_LOOPBACK,
+            passed=False,
+            status_code=status,
+            detail=(
+                f"byte mismatch at offset {mismatch_i}: "
+                f"sent 0x{payload[mismatch_i]:02x} got 0x{resp[mismatch_i]:02x}"
+            ),
+            raw_response=resp,
+        )
+    return TestResult(
+        name=f"USB_LOOPBACK({n})",
+        cmd=CMD_PRODTEST_USB_LOOPBACK,
+        passed=True,
+        status_code=status,
+        detail=f"{n} bytes round-tripped byte-identical",
+    )
+
+
 def test_trng_sample(tx: ProdtestTransport, n: int = 256) -> TestResult:
     in_data = struct.pack("<I", n)
     status, resp = tx.send_cmd(CMD_PRODTEST_TRNG_SAMPLE, in_data, out_size=n)
@@ -352,6 +455,10 @@ def run_all_tests(tx: ProdtestTransport, report: UnitReport) -> None:
     report.results.append(test_bhk_selftest(tx))
     report.results.append(test_flash_rw(tx))
     report.results.append(test_trng_sample(tx, 256))
+    # Phase C: communication tests.
+    report.results.append(test_optiga_handshake(tx))
+    report.results.append(test_se050_handshake(tx))
+    report.results.append(test_usb_loopback(tx, 256))
 
 
 def main() -> int:

@@ -711,6 +711,18 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         sphincs_tz_shared::CMD_PRODTEST_TRNG_SAMPLE => {
             prodtest::cmd_trng_sample_run(args)
         }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_OPTIGA_HANDSHAKE => {
+            prodtest::cmd_optiga_handshake_run(args)
+        }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_SE050_HANDSHAKE => {
+            prodtest::cmd_se050_handshake_run(args)
+        }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_USB_LOOPBACK => {
+            prodtest::cmd_usb_loopback_run(args)
+        }
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -936,6 +948,52 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_trng_sample(in_ptr: u32, out_p
     };
     let r = unsafe { prodtest::cmd_trng_sample_run(&args) };
     secure_log!("[NSC] prodtest_trng_sample -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_OPTIGA_HANDSHAKE (106) — exercise OPTIGA I²C + APDU.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_optiga_handshake(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_optiga_handshake_run(&args) };
+    secure_log!("[NSC] prodtest_optiga_handshake -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_SE050_HANDSHAKE (107) — exercise SE050 T=1' + APDU.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_se050_handshake(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_se050_handshake_run(&args) };
+    secure_log!("[NSC] prodtest_se050_handshake -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_USB_LOOPBACK (108) — echo N bytes for USB integrity.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_usb_loopback(
+    in_ptr: u32,
+    out_ptr: u32,
+    n: u32,
+) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: out_ptr,
+        arg2: n,
+    };
+    let r = unsafe { prodtest::cmd_usb_loopback_run(&args) };
+    secure_log!("[NSC] prodtest_usb_loopback({}) -> {}", n, r);
     r
 }
 

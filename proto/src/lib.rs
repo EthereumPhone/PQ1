@@ -641,6 +641,40 @@ pub const CMD_PRODTEST_FLASH_RW: u32 = 104;
 /// count is 0 or > 256, `NscStatus::InternalError` on TRNG fault.
 pub const CMD_PRODTEST_TRNG_SAMPLE: u32 = 105;
 
+/// CMD_PRODTEST_OPTIGA_HANDSHAKE — exercise the full IFX I²C + APDU
+/// stack against the OPTIGA Trust M. Lazily runs OpenApplication (no
+/// PBS, no shielded connection) then `GetRandom(16)`. Catches missing
+/// chip / broken solder / I²C wiring / RST line / clock issues before
+/// the irreversible `factory_provisioning` ceremony writes E140.
+///   in_ptr  → ignored
+///   out_ptr → 16 bytes of OPTIGA RNG output
+/// Returns `NscStatus::Ok` on success, `NscStatus::InternalError` on
+/// any step of the I²C / APDU / RNG roundtrip failing.
+pub const CMD_PRODTEST_OPTIGA_HANDSHAKE: u32 = 106;
+
+/// CMD_PRODTEST_SE050_HANDSHAKE — exercise the SE050 T=1' + APDU stack.
+/// Runs `interface_reset` + `GetRandom(16)` over the default channel
+/// (no SCP03, no UserID PIN). Catches missing chip / broken solder /
+/// I²C wiring / ENA line / power-rail issues before the irreversible
+/// SCP03 rotation in `factory_provisioning`.
+///   in_ptr  → ignored
+///   out_ptr → 16 bytes of SE050 RNG output
+/// Returns `NscStatus::Ok` on success, `NscStatus::InternalError` on
+/// any step of the I²C / T=1' / APDU / RNG roundtrip failing.
+pub const CMD_PRODTEST_SE050_HANDSHAKE: u32 = 107;
+
+/// CMD_PRODTEST_USB_LOOPBACK — echo N bytes back to the host. Catches
+/// USB byte-corruption / HID fragmentation / buffer-overflow bugs in
+/// the firmware's USB stack. The fact that the firmware RECEIVED the
+/// command already proves USB RX works; this command proves TX +
+/// round-trip integrity for non-trivial payloads.
+///   in_ptr  → N bytes input (caller-allocated)
+///   out_ptr → N bytes output (caller-allocated; byte-identical to input)
+///   arg2    → N (length, 1..=256)
+/// Returns `NscStatus::Ok` on success, `NscStatus::InvalidPointer` if
+/// N is 0 or > 256 or pointer validation fails.
+pub const CMD_PRODTEST_USB_LOOPBACK: u32 = 108;
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks
