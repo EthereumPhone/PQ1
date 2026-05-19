@@ -143,9 +143,53 @@ pub const MASTER_KEY_SIZE: usize = 32;
 const MASTER_KEY_ADDR: u32 = OTP_BASE + MASTER_KEY_OFFSET;
 /// Number of 32-bit words in the device-master-key region (32 B = 8 words).
 const MASTER_KEY_WORDS: usize = MASTER_KEY_SIZE / 4;
+
+/// Byte offset of the factory-ceremony sentinel within OTP. Lives
+/// directly after the device master key (offset 160..176, one
+/// 128-bit quad-word). Used by the host-side factory fixture to
+/// verify the on-chip ceremony completed before the irreversible
+/// `STM32_Programmer_CLI --optionbytes RDP=0xCC` (RDP2 bump).
+///
+/// Encoding: 32-bit word at byte offset 0 of the QW.
+///
+///   bit 0: factory ceremony ran at least once
+///   bit 1: rehearsal mode completed
+///   bit 2: production mode completed (READY FOR RDP2)
+///   bits 3..31: reserved (must remain 1)
+///
+/// All bits are 1 (`0xFFFFFFFF`) on a fresh chip. Each completion
+/// clears the corresponding bits. Because OTP is one-way, the
+/// sentinel can only accumulate state — a chip that has run both
+/// rehearsal AND production reads as bits 0+1+2 cleared (raw value
+/// `0xFFFFFFF8`). The host fixture interprets:
+///
+/// | Raw value     | Meaning                                | RDP2 OK?  |
+/// |---------------|----------------------------------------|-----------|
+/// | `0xFFFFFFFF`  | never ran                              | NO        |
+/// | `0xFFFFFFFE`  | ran but didn't complete (interrupted)  | NO        |
+/// | `0xFFFFFFFC`  | rehearsal only                         | NO        |
+/// | `0xFFFFFFFA`  | production only                        | YES       |
+/// | `0xFFFFFFF8`  | both modes have completed              | YES       |
+///
+/// Rehearsal-then-production is the expected dev iteration path. The
+/// production-only and both-modes states are both "READY FOR RDP2"
+/// because the production run does the actual SE provisioning.
+pub const FACTORY_SENTINEL_OFFSET: u32 = MASTER_KEY_OFFSET + MASTER_KEY_SIZE as u32;
+/// Absolute address of the factory sentinel's 32-bit value.
+pub const FACTORY_SENTINEL_ADDR: u32 = OTP_BASE + FACTORY_SENTINEL_OFFSET;
+/// Size of the factory sentinel QW (16 B reserved; only the first 4
+/// are meaningful today).
+pub const FACTORY_SENTINEL_SIZE: u32 = 16;
+
+/// Bit masks for the factory sentinel.
+pub const FACTORY_SENTINEL_BIT_RAN: u32 = 1 << 0;
+pub const FACTORY_SENTINEL_BIT_REHEARSAL: u32 = 1 << 1;
+pub const FACTORY_SENTINEL_BIT_PRODUCTION: u32 = 1 << 2;
+
 /// Upper bound for `program_otp_qw` bounds checks — one past the last
 /// currently-used OTP byte.
-const OTP_RESERVED_BYTES: u32 = MASTER_KEY_OFFSET + MASTER_KEY_SIZE as u32;
+const OTP_RESERVED_BYTES: u32 =
+    FACTORY_SENTINEL_OFFSET + FACTORY_SENTINEL_SIZE;
 
 /// Read-only handle at the master-key region word 0.
 ///
@@ -562,6 +606,74 @@ pub unsafe fn ensure_device_master() -> Result<[u8; MASTER_KEY_SIZE], OtpError> 
     read_device_master()
 }
 
+// ---------------------------------------------------------------------------
+// Factory ceremony sentinel — used by the production factory firmware
+// to record one-way "ceremony ran" state for the host-side fixture to
+// read before bumping RDP2. See `secure/src/factory_provisioning.rs`
+// for the state machine that writes this.
+// ---------------------------------------------------------------------------
+
+/// Read the factory sentinel's 32-bit value. `0xFFFFFFFF` on a fresh
+/// (never-factory-run) chip; bits 0-2 are cleared by completion
+/// events per the docstring on `FACTORY_SENTINEL_OFFSET`.
+pub fn factory_sentinel_read() -> u32 {
+    // SAFETY: FACTORY_SENTINEL_ADDR is 4-byte aligned (OTP_BASE is
+    // 4 KB aligned, FACTORY_SENTINEL_OFFSET = 160 is 4-aligned) and
+    // sits inside the OTP region (160..176). Readable from secure
+    // world; pure load.
+    unsafe { core::ptr::read_volatile(FACTORY_SENTINEL_ADDR as *const u32) }
+}
+
+/// Record a factory-ceremony completion event in OTP. Bits are
+/// CUMULATIVE — calling this multiple times accumulates state (e.g.
+/// rehearsal then production yields `0xFFFFFFF8` with bits 0+1+2
+/// cleared). Calling with `bits_to_clear` that include bits already
+/// cleared is a no-op and returns `Ok(())`.
+///
+/// `bits_to_clear` is `OR`'d into the cleared-bits set. Pass any
+/// combination of `FACTORY_SENTINEL_BIT_*` constants. The production
+/// ceremony passes `BIT_RAN | BIT_PRODUCTION`; the rehearsal
+/// ceremony passes `BIT_RAN | BIT_REHEARSAL`.
+///
+/// # Safety
+///
+/// Commits one quad-word to OTP. The flips are **one-way**: once a
+/// bit transitions 1 → 0 there is no recovery path. This means a
+/// chip on which rehearsal has been completed cannot have its
+/// "rehearsal completed" bit un-set; the chip can still be put
+/// through production successfully (which clears bit 2 in addition),
+/// but a fixture seeing bit 1 cleared on a chip-supposed-to-be-fresh
+/// knows that chip went through rehearsal at some point.
+///
+/// Caller MUST coordinate exclusive access to the flash controller
+/// (no other op in flight). The secure world is single-threaded; we
+/// fence interrupts inside `program_otp_qw` to guard against any
+/// pending IRQ shifting the controller state.
+pub unsafe fn factory_sentinel_record(bits_to_clear: u32) -> Result<(), OtpError> {
+    // Compute the target value: AND-mask off the requested bits from
+    // the current sentinel. OTP only supports 1→0 transitions, so the
+    // AND is exactly the right operation — writing a value with bits
+    // already 0 keeps them 0, writing a bit at 1 leaves it 1.
+    let current = factory_sentinel_read();
+    let target = current & !bits_to_clear;
+    if target == current {
+        // Idempotent: requested bits already cleared.
+        return Ok(());
+    }
+
+    // Pack the 32-bit target into a 128-bit QW with the upper 96
+    // bits at 0xFF (untouched — they stay at their current OTP
+    // values, which are also 0xFF on a fresh chip).
+    let mut qw_bytes = [0xFFu8; 16];
+    qw_bytes[0..4].copy_from_slice(&target.to_le_bytes());
+
+    // SAFETY: FACTORY_SENTINEL_ADDR is 16-byte aligned (OTP_BASE is
+    // 4 KB aligned, FACTORY_SENTINEL_OFFSET = 160 is 16-aligned) and
+    // inside `OTP_RESERVED_BYTES = 176`. Caller's docstring covers
+    // the irreversibility contract.
+    unsafe { program_otp_qw(FACTORY_SENTINEL_ADDR, &qw_bytes) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -590,6 +702,19 @@ mod tests {
         assert_eq!(MASTER_KEY_OFFSET, 128);
         assert_eq!(MASTER_KEY_SIZE, 32);
         assert_eq!(MASTER_KEY_ADDR, OTP_BASE + 128);
-        assert_eq!(OTP_RESERVED_BYTES, 160);
+        assert_eq!(FACTORY_SENTINEL_OFFSET, 160);
+        assert_eq!(FACTORY_SENTINEL_ADDR, OTP_BASE + 160);
+        assert_eq!(FACTORY_SENTINEL_SIZE, 16);
+        assert_eq!(OTP_RESERVED_BYTES, 176);
+    }
+
+    #[test]
+    fn factory_sentinel_bit_layout() {
+        // Encoding contract — silent drift in these constants would
+        // make field reports (and the host fixture's RDP2-gate)
+        // misinterpret the OTP state.
+        assert_eq!(FACTORY_SENTINEL_BIT_RAN, 0x01);
+        assert_eq!(FACTORY_SENTINEL_BIT_REHEARSAL, 0x02);
+        assert_eq!(FACTORY_SENTINEL_BIT_PRODUCTION, 0x04);
     }
 }

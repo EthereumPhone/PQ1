@@ -364,6 +364,30 @@ ui-lcd = ["spi1-arduino"]
 # Mutually exclusive with `e2e-test` (which bypasses real
 # provisioning) at the production-fence level.
 factory-provisioning = ["dual-se", "stm32u585", "ui-oled"]
+# Rehearsal mode for `factory-provisioning`. Renders all 6 panels in
+# sequence on the OLED so the operator (or developer) can validate
+# the panel layout, but SKIPS the destructive `provision()` +
+# `factory_reset_admin()` calls in steps 4-6. The OTP sentinel is
+# still written, but with `BIT_REHEARSAL` instead of `BIT_PRODUCTION`
+# — so the host-side fixture refuses to bump RDP2 on a rehearsal-only
+# chip.
+#
+# Use this for dev iteration where you don't want to burn the chip's
+# SE-side state on every reflash. Implies `factory-provisioning`.
+factory-provisioning-rehearsal = ["factory-provisioning"]
+# Explicit opt-in for the irreversible production features.
+# `factory-provisioning` by itself REFUSES to build with any of
+# `optiga-lock-operational`, `bhk`, or a production OTP-master path
+# (i.e., neither `dev-testkey` nor `otp-hardcoded-master-key`).
+# To build the actual production factory image, the user must set
+# this feature AS WELL to acknowledge the chip-state changes are
+# permanent.
+#
+# This is a foot-gun guard, not a real cryptographic gate — anyone
+# who can set this feature can also remove it. The point is to
+# prevent the "I forgot dev-testkey in the Makefile" class of
+# accidental burns.
+factory-production-irreversible-im-sure = []
 # Minimal USART1 → ST-LINK-VCP driver for diagnostic output that
 # survives RDP ≥ 1 (where SWD debug — and therefore semihosting — is
 # disabled). Pairs with `saes-self-test` for the RDP1 DHUK fingerprint

@@ -34,15 +34,39 @@ more than ~30 seconds, treat as failure and report.
 ```
 ┌────────────────┐
 │  FACTORY OK    │
-│  6/6  passed   │
+│  7/7  passed   │
 │  POWER  OFF    │
 │ READY TO SHIP  │
 └────────────────┘
 ```
 
-Power off. Pack and ship. End user will see a first-boot wizard at
-their home asking them to set a PIN and back up their recovery
-phrase — that part is **NOT** part of the factory ceremony.
+Power off. The host fixture then verifies the OTP sentinel via
+probe-rs (sees `BIT_PRODUCTION` cleared at `0x0BFA_00A0`) and bumps
+the RDP option byte to Level 2 (`STM32_Programmer_CLI --optionbytes
+RDP=0xCC`). After that final step, pack and ship. End user will see
+a first-boot wizard at their home asking them to set a PIN and back
+up their recovery phrase — that part is **NOT** part of the factory
+ceremony.
+
+**Rehearsal mode panel** (developer-only build —
+`make build-hw-factory-provisioning-rehearsal`):
+
+```
+┌────────────────┐
+│ REHEARSAL OK  │
+│  7/7  panels ok│
+│ SE NOT changed │
+│ NOT for ship!  │
+└────────────────┘
+```
+
+This panel means the firmware was built with
+`factory-provisioning-rehearsal` — the destructive `provision()` +
+`factory_reset_admin()` calls were SKIPPED. The OTP sentinel
+records `BIT_REHEARSAL` (not `BIT_PRODUCTION`), so the host fixture
+will refuse to bump RDP2 on a chip that only has the rehearsal bit
+cleared. Use this build for OLED panel-layout iteration on dev
+chips without burning SE-side state.
 
 ---
 
@@ -118,6 +142,18 @@ uses this table to diagnose.
 | `E0602`   | Admin path unreachable after wipe        | Set aside — chip damaged by partial wipe. Contact vendor.      |
 | `E0603`   | PIN attempts counter (MCU page 124) dirty | Re-flash + retry. If persistent, set aside.                    |
 
+### Step 7 — Write OTP sentinel
+
+| Code      | Meaning                                          | Possible remedy                                                |
+|-----------|--------------------------------------------------|----------------------------------------------------------------|
+| `E0701`   | OTP sentinel write failed (flash controller)     | Re-flash + retry. If persistent, set aside.                    |
+| `E0702`   | OTP sentinel already marks this chip as RDP2-ready | Stop! This chip has already passed factory. Set aside, contact vendor. |
+
+`E0702` is surfaced by step 3 (pre-populated state check). It
+means a previous production ceremony has already completed on
+this chip — re-running production firmware against it is refused
+to prevent accidental wipes of a fielded device.
+
 ---
 
 ## Re-running the factory firmware on the same device
@@ -184,8 +220,85 @@ Example report:
 
 ## Engineering reference
 
+### Source map
+
 - Firmware source: `secure/src/factory_provisioning.rs`
 - Step list + error codes: `FactoryStep` + `FactoryErrorCode` enums in that file
-- Build target: `make build-hw-factory-provisioning`
+- OTP sentinel API: `secure/src/hw/otp.rs::factory_sentinel_{read,record}`
+- Build target (production): `make build-hw-factory-provisioning`
+- Build target (rehearsal): `make build-hw-factory-provisioning-rehearsal`
 - Host tests: `cargo test -p sphincs-tz-secure factory_provisioning`
-  (5 tests pinning the step / error / display invariants)
+  (7 tests pinning the step / error / display invariants)
+
+### OTP sentinel format
+
+The factory ceremony writes a 32-bit sentinel at OTP byte offset
+160 (`0x0BFA_00A0`). The bits are:
+
+| Bit | Mask          | Cleared by                                 |
+|-----|---------------|--------------------------------------------|
+| 0   | `0x01`        | Any factory ceremony completion (sentinel) |
+| 1   | `0x02`        | Rehearsal mode completion                  |
+| 2   | `0x04`        | Production mode completion                 |
+| 3–31| reserved      | (must remain `1`)                          |
+
+Read via probe-rs at `0x0BFA_00A0` (4 bytes, little-endian). The
+host fixture interprets:
+
+| Raw value     | Meaning                                | RDP2 bump OK? |
+|---------------|----------------------------------------|---------------|
+| `0xFFFFFFFF`  | never ran                              | NO            |
+| `0xFFFFFFFE`  | ran but didn't complete (interrupted)  | NO            |
+| `0xFFFFFFFC`  | rehearsal only                         | NO            |
+| `0xFFFFFFFA`  | production only                        | **YES**       |
+| `0xFFFFFFF8`  | both modes have completed              | **YES**       |
+
+Anything else (e.g., the high bits cleared) is a corrupt sentinel
+and should be treated as failure.
+
+### RDP2 — the actual no-take-backs line
+
+After the host fixture reads the sentinel and confirms `bit 2`
+cleared, it bumps the STM32 RDP option byte to Level 2:
+
+```
+STM32_Programmer_CLI --connect port=SWD --optionbytes RDP=0xCC
+```
+
+This is **irreversible**. After this command:
+
+- SWD/JTAG is permanently denied.
+- Semihosting, UART, and probe-rs read/write are all dead.
+- The chip's only window to the outside is whatever the firmware
+  decides to render on the OLED + the chip's external behavior
+  (USB enumeration, response to APDUs).
+- The only way to recover an RDP2 device is `STM32_Programmer_CLI
+  --regression` which mass-erases the entire flash and resets RDP
+  to Level 0 — wiping every secret on the chip + bricking any
+  field-shipped device that depends on the flash contents.
+
+**For this reason**, the host fixture's "verify sentinel" step is
+load-bearing: a fixture that bumps RDP2 on every flashed chip
+without verifying the sentinel would lock chips that failed the
+ceremony into permanent-brick state.
+
+### Build profile safety guards
+
+The firmware refuses to build the irreversible production profile
+without an explicit opt-in:
+
+| Feature combination                                     | Build result                                |
+|---------------------------------------------------------|---------------------------------------------|
+| `factory-provisioning` + `dev-testkey`                  | builds (dev/safe)                           |
+| `factory-provisioning,factory-provisioning-rehearsal`   | builds (rehearsal/safer)                    |
+| `factory-provisioning` + `optiga-lock-operational`      | **compile error** — needs opt-in            |
+| `factory-provisioning` + `bhk` (no `bhk-hardcoded-...`) | **compile error** — needs opt-in            |
+| `factory-provisioning` (without `dev-testkey`)          | **compile error** — needs opt-in            |
+| above + `factory-production-irreversible-im-sure`       | builds (real production, irreversible)      |
+
+The `factory-production-irreversible-im-sure` opt-in is a foot-gun
+guard, not a security gate. Anyone editing the Cargo build profile
+can add or remove it. The point is to make the irreversible build
+profile something the developer must deliberately type — not
+something they can stumble into by forgetting `dev-testkey` in a
+Makefile target.

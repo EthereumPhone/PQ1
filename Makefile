@@ -2575,6 +2575,35 @@ build-hw-factory-provisioning:
 	@echo "    Pair with flash-hw-factory-provisioning (separate target,"
 	@echo "    to be written) to flash + run on real silicon."
 
+# Factory provisioning REHEARSAL build. Identical state machine to
+# the production target above, except steps 4 (DualSeProvision), 5
+# (WipeUserState), and 6 (PostWipeValidation) SKIP their destructive
+# calls. The OLED still cycles through all 7 panels; the OTP
+# sentinel still gets written, but with BIT_REHEARSAL set instead of
+# BIT_PRODUCTION, so the host fixture refuses to bump RDP2 on a
+# rehearsal-only chip.
+#
+# Use this for OLED panel layout iteration without burning chip-side
+# state. Safe to run repeatedly on your dev chips.
+#
+# After running, the OLED reads "REHEARSAL OK" / "SE NOT changed" /
+# "NOT for ship!" — distinct from production's "FACTORY OK" /
+# "READY TO SHIP".
+build-hw-factory-provisioning-rehearsal:
+	@echo "==> Building factory provisioning REHEARSAL firmware..."
+	@echo "    Steps 4-6 SKIP their destructive calls."
+	@echo "    OLED shows 'REHEARSAL OK' on success."
+	@echo "    OTP sentinel records BIT_REHEARSAL (not BIT_PRODUCTION)."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features factory-provisioning,factory-provisioning-rehearsal,dev-testkey
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Rehearsal build ready (safe to flash on dev chips)."
+
 # LCD bring-up — Phase A check. Compiles the secure-world firmware
 # with the `ui-lcd` feature enabled so the NV3007 SPI LCD driver
 # (`secure/src/hw/lcd_nv3007.rs`) lands in the binary. The wizard UI

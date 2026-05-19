@@ -55,6 +55,45 @@
 
 #![cfg(feature = "factory-provisioning")]
 
+// ---------------------------------------------------------------------------
+// Compile-time fence — refuse to build a factory image that would
+// permanently burn chip state UNLESS the user explicitly opts in via
+// `factory-production-irreversible-im-sure`.
+//
+// What's caught:
+//   - `optiga-lock-operational`: bumps OPTIGA OIDs to LcsO=Op
+//     (one-way per the OPTIGA SRM).
+//   - `bhk` without `bhk-hardcoded-master-key`: TRNG-burns + flash-
+//     writes + BHKLOCKs the per-die BHK.
+//   - No `dev-testkey` AND no `otp-hardcoded-master-key`: triggers
+//     the production OTP master-key burn (one-way per the STM32U5
+//     OTP spec).
+//
+// This is a *foot-gun guard*, not a security gate — anyone who can
+// add `factory-production-irreversible-im-sure` to the build can
+// also remove it. The point is to make the irreversible build
+// profile something the user has to deliberately type, not something
+// they can stumble into by forgetting `dev-testkey` in a Makefile
+// target.
+// ---------------------------------------------------------------------------
+
+#[cfg(all(
+    not(feature = "factory-production-irreversible-im-sure"),
+    any(
+        feature = "optiga-lock-operational",
+        feature = "bhk",
+        not(any(feature = "dev-testkey", feature = "otp-hardcoded-master-key")),
+    )
+))]
+compile_error!(
+    "factory-provisioning would burn IRREVERSIBLE chip state without an explicit \
+     `factory-production-irreversible-im-sure` opt-in. \
+     One or more of: `optiga-lock-operational`, `bhk`, or a production OTP-master path \
+     (neither `dev-testkey` nor `otp-hardcoded-master-key`) is enabled. \
+     Add `factory-production-irreversible-im-sure` to acknowledge the chip-state changes \
+     are permanent, OR add `dev-testkey` to the build for dev iteration."
+);
+
 use crate::secure_element::WalletStore;
 use crate::ui::{display, ascii_str};
 
@@ -91,6 +130,12 @@ pub enum FactoryStep {
     /// gone (`is_provisioned() == false`), no admin-residue
     /// inconsistency.
     PostWipeValidation = 6,
+    /// Record the ceremony completion in OTP (one-way) so the
+    /// host-side factory fixture can verify "chip is ready for
+    /// RDP2" via a probe-rs read before bumping the option byte.
+    /// Production mode clears `BIT_RAN | BIT_PRODUCTION`;
+    /// rehearsal mode clears `BIT_RAN | BIT_REHEARSAL`.
+    WriteOtpSentinel = 7,
 }
 
 impl FactoryStep {
@@ -101,18 +146,19 @@ impl FactoryStep {
 
     /// Total step count, for "X/N" progress strings.
     pub const fn total() -> u8 {
-        6
+        7
     }
 
-    /// Short OLED label (max 13 chars to fit "[X/N] LABEL" in 16).
+    /// Short OLED label (max 10 chars to fit "[X/N] LABEL" in 16).
     pub fn label(self) -> &'static str {
         match self {
             Self::HardwareSelfTest => "HW selftest",
             Self::OtpMasterKey => "OTP master",
-            Self::PrePopulatedStateCheck => "Pre-state chk",
+            Self::PrePopulatedStateCheck => "Pre-chk",
             Self::DualSeProvisionInfrastructure => "Provisioning",
-            Self::WipeUserState => "Wiping dummy",
+            Self::WipeUserState => "Wipe dummy",
             Self::PostWipeValidation => "Post-validate",
+            Self::WriteOtpSentinel => "OTP sentinel",
         }
     }
 }
@@ -167,6 +213,14 @@ pub enum FactoryErrorCode {
     AdminUnreachableAfterWipe = 0x0602,
     /// Post-wipe: PIN attempts counter (MCU page 124) wasn't reset.
     AttemptsCounterDirty = 0x0603,
+    /// OTP sentinel write failed. Causes: flash controller error,
+    /// OTP region locked, prior bit-cleared state inconsistency.
+    SentinelWriteFailed = 0x0701,
+    /// OTP sentinel says the chip already has `BIT_PRODUCTION`
+    /// cleared — i.e., a previous run already completed the
+    /// production ceremony. Refuse to re-run (same fail-closed
+    /// posture as `AlreadyUserProvisioned`).
+    SentinelAlreadyProduction = 0x0702,
 }
 
 impl FactoryErrorCode {
@@ -191,6 +245,8 @@ impl FactoryErrorCode {
             Self::UserResidueAfterWipe => "incomplete wipe",
             Self::AdminUnreachableAfterWipe => "chip damaged",
             Self::AttemptsCounterDirty => "flash error",
+            Self::SentinelWriteFailed => "OTP error",
+            Self::SentinelAlreadyProduction => "RDP2 ready",
         }
     }
 }
@@ -260,26 +316,54 @@ fn halt_with_failure(step: FactoryStep, code: FactoryErrorCode) -> ! {
     }
 }
 
-/// Show the success panel and halt forever in WFI.
+/// Show the success panel and halt forever in WFI. Rehearsal mode
+/// renders a deliberately-different panel so the operator (and the
+/// host fixture if it falls back to OLED-photo verification) cannot
+/// confuse "rehearsal" with "production".
 fn halt_with_success() -> ! {
     secure_log!("[FACTORY] OK — all {} steps passed", FactoryStep::total());
 
     let d = display();
     d.clear();
-    d.draw_line(0, "  FACTORY OK   ");
 
-    let mut row1 = [b' '; DISPLAY_COLS];
-    let n = FactoryStep::total();
-    let label = b"  ";
-    row1[0..label.len()].copy_from_slice(label);
-    row1[2] = b'0' + n;
-    row1[3] = b'/';
-    row1[4] = b'0' + n;
-    row1[5..].copy_from_slice(b"  passed   ");
-    d.draw_line(1, ascii_str(&row1));
+    #[cfg(feature = "factory-provisioning-rehearsal")]
+    {
+        // Rehearsal — SE state unchanged. Host fixture sees
+        // BIT_REHEARSAL cleared in OTP but NOT BIT_PRODUCTION, so it
+        // refuses to bump RDP2.
+        d.draw_line(0, " REHEARSAL OK  ");
 
-    d.draw_line(2, " POWER  OFF   ");
-    d.draw_line(3, "READY TO SHIP ");
+        let mut row1 = [b' '; DISPLAY_COLS];
+        let n = FactoryStep::total();
+        let prefix = b"  ";
+        row1[..prefix.len()].copy_from_slice(prefix);
+        row1[2] = b'0' + n;
+        row1[3] = b'/';
+        row1[4] = b'0' + n;
+        row1[5..].copy_from_slice(b"  panels ok");
+        d.draw_line(1, ascii_str(&row1));
+
+        d.draw_line(2, "SE NOT changed ");
+        d.draw_line(3, "NOT for ship!  ");
+    }
+    #[cfg(not(feature = "factory-provisioning-rehearsal"))]
+    {
+        d.draw_line(0, "  FACTORY OK   ");
+
+        let mut row1 = [b' '; DISPLAY_COLS];
+        let n = FactoryStep::total();
+        let prefix = b"  ";
+        row1[..prefix.len()].copy_from_slice(prefix);
+        row1[2] = b'0' + n;
+        row1[3] = b'/';
+        row1[4] = b'0' + n;
+        row1[5..].copy_from_slice(b"  passed   ");
+        d.draw_line(1, ascii_str(&row1));
+
+        d.draw_line(2, " POWER  OFF   ");
+        d.draw_line(3, "READY TO SHIP ");
+    }
+
     d.flush();
 
     loop {
@@ -378,6 +462,13 @@ pub fn run_and_halt(se: &mut dyn WalletStore) -> ! {
         halt_with_failure(FactoryStep::PostWipeValidation, code);
     }
 
+    // Step 7: write the OTP sentinel for the host-side factory
+    // fixture to read before bumping RDP2.
+    show_step_running(FactoryStep::WriteOtpSentinel);
+    if let Err(code) = step_write_otp_sentinel() {
+        halt_with_failure(FactoryStep::WriteOtpSentinel, code);
+    }
+
     secure_log!("[FACTORY] ===== all steps OK =====");
     halt_with_success();
 }
@@ -436,15 +527,45 @@ fn step_pre_populated_state_check(se: &mut dyn WalletStore) -> Result<(), Factor
     // fresh chip. If the customer wants to re-run factory firmware
     // on a chip that's been used, they run `make wipe-for-wizard`
     // first to clear user state explicitly.
+    //
+    // Additional gate via the OTP sentinel: if the chip's OTP shows
+    // `BIT_PRODUCTION` already cleared, we've already completed a
+    // production run on this chip. Refuse to re-run. The host
+    // fixture should not be replaying production firmware against a
+    // shipped-and-returned chip.
     if se.is_provisioned() {
         return Err(FactoryErrorCode::AlreadyUserProvisioned);
     }
+
+    #[cfg(not(feature = "factory-provisioning-rehearsal"))]
+    {
+        // Production mode: check the OTP sentinel. If
+        // BIT_PRODUCTION is already cleared, we've been here
+        // before — refuse to re-run. Rehearsal mode is allowed to
+        // re-run since it doesn't change SE state.
+        let sentinel = crate::hw::otp::factory_sentinel_read();
+        if (sentinel & crate::hw::otp::FACTORY_SENTINEL_BIT_PRODUCTION) == 0 {
+            return Err(FactoryErrorCode::SentinelAlreadyProduction);
+        }
+    }
+
     Ok(())
 }
 
 fn step_dual_se_provision_infrastructure(
     se: &mut dyn WalletStore,
 ) -> Result<(), FactoryErrorCode> {
+    // REHEARSAL MODE: skip the actual provision call. The panel
+    // sequence still renders so the operator can validate the OLED
+    // layout, but no SE-side state is mutated. Useful for dev
+    // iteration without burning chip cycles.
+    #[cfg(feature = "factory-provisioning-rehearsal")]
+    {
+        let _ = se;
+        secure_log!("[FACTORY] step 4 SKIPPED (rehearsal mode)");
+        return Ok(());
+    }
+
     // Provision with deterministic-zero user state.
     //
     // The four secrets we pass through (`entropy`, `master_secret`,
@@ -465,60 +586,112 @@ fn step_dual_se_provision_infrastructure(
     // post-mortem, but the operator just sees a single
     // DualSeProvisionFailed code (or a sub-classified code if we
     // identified the failure mode further upstream).
-    let entropy = [0u8; 32];
-    let master_secret = [0u8; 32];
-    let vk = [0u8; 32];
-    let bootstrap_vk = [0u8; 32];
-    let pin = [0u8; 8];
+    #[cfg(not(feature = "factory-provisioning-rehearsal"))]
+    {
+        let entropy = [0u8; 32];
+        let master_secret = [0u8; 32];
+        let vk = [0u8; 32];
+        let bootstrap_vk = [0u8; 32];
+        let pin = [0u8; 8];
 
-    match se.provision(&entropy, &master_secret, &vk, &bootstrap_vk, &pin) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            secure_log!("[FACTORY] provision returned {:?}", e);
-            // Future: pattern-match `e` to surface OptigaHandshakeFailed
-            // or Se050Scp03RotationFailed when those specific failure
-            // modes are detectable. Today the DualSecureElement
-            // implementation maps every sub-failure to SeError::
-            // InternalError, so we collapse here.
-            Err(FactoryErrorCode::DualSeProvisionFailed)
+        match se.provision(&entropy, &master_secret, &vk, &bootstrap_vk, &pin) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                secure_log!("[FACTORY] provision returned {:?}", e);
+                // Future: pattern-match `e` to surface
+                // OptigaHandshakeFailed or Se050Scp03RotationFailed
+                // when those specific failure modes are detectable.
+                // Today DualSecureElement maps every sub-failure to
+                // SeError::InternalError, so we collapse here.
+                Err(FactoryErrorCode::DualSeProvisionFailed)
+            }
         }
     }
 }
 
 fn step_wipe_user_state(se: &mut dyn WalletStore) -> Result<(), FactoryErrorCode> {
+    // REHEARSAL MODE: skip the wipe (step 4 didn't write anything to
+    // wipe).
+    #[cfg(feature = "factory-provisioning-rehearsal")]
+    {
+        let _ = se;
+        secure_log!("[FACTORY] step 5 SKIPPED (rehearsal mode)");
+        return Ok(());
+    }
+
     // factory_reset_admin wipes user objects on both SEs, preserves
     // admin / SCP03 / PBS / metadata. After this step, the SEs are
     // "factory ready": SE infrastructure in place, no user data.
-    match se.factory_reset_admin() {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            secure_log!("[FACTORY] factory_reset_admin returned {:?}", e);
-            Err(FactoryErrorCode::WipeFailed)
+    #[cfg(not(feature = "factory-provisioning-rehearsal"))]
+    {
+        match se.factory_reset_admin() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                secure_log!("[FACTORY] factory_reset_admin returned {:?}", e);
+                Err(FactoryErrorCode::WipeFailed)
+            }
         }
     }
 }
 
 fn step_post_wipe_validation(se: &mut dyn WalletStore) -> Result<(), FactoryErrorCode> {
-    // After the wipe, `is_provisioned()` must return false (the user
-    // objects on both SEs were the only thing keeping it true). If
-    // it's still true, the wipe was incomplete.
-    if se.is_provisioned() {
-        return Err(FactoryErrorCode::UserResidueAfterWipe);
+    // REHEARSAL MODE: nothing was wiped, so nothing to validate.
+    // We still call is_provisioned() to exercise the read path on
+    // the SEs — that's the kind of basic communication smoke check
+    // that benefits from being run on every ceremony, rehearsal or
+    // not.
+    #[cfg(feature = "factory-provisioning-rehearsal")]
+    {
+        let _ = se.is_provisioned();
+        secure_log!("[FACTORY] step 6 in rehearsal mode (read-only smoke check)");
+        return Ok(());
     }
 
-    // Future hardening: verify the admin UserID is still reachable
-    // by attempting an `iterative_wipe` no-op against a known stale
-    // OID — should return "not found" rather than "access denied",
-    // which would prove the admin policy is functional.
-    //
-    // For now we trust factory_reset_admin's own readback in
-    // SE050::factory_reset_admin (`if !self.admin_exists() { erase
-    // admin page }`); if the admin had become unreachable mid-wipe,
-    // the admin page would be erased and a subsequent wizard run
-    // would re-trigger admin install — recoverable but worth
-    // surfacing here in a future hardening pass.
+    #[cfg(not(feature = "factory-provisioning-rehearsal"))]
+    {
+        // After the wipe, `is_provisioned()` must return false (the
+        // user objects on both SEs were the only thing keeping it
+        // true). If it's still true, the wipe was incomplete.
+        if se.is_provisioned() {
+            return Err(FactoryErrorCode::UserResidueAfterWipe);
+        }
 
-    Ok(())
+        // Future hardening: verify the admin UserID is still
+        // reachable by attempting an `iterative_wipe` no-op against
+        // a known stale OID — should return "not found" rather than
+        // "access denied", which would prove the admin policy is
+        // functional. Today we trust the readback inside
+        // factory_reset_admin (`if !self.admin_exists() { erase
+        // admin page }`).
+        Ok(())
+    }
+}
+
+fn step_write_otp_sentinel() -> Result<(), FactoryErrorCode> {
+    // Compose the bits to clear based on build mode. Rehearsal mode
+    // clears BIT_RAN | BIT_REHEARSAL; production mode clears BIT_RAN
+    // | BIT_PRODUCTION. Both modes set BIT_RAN so the host fixture
+    // can distinguish "ceremony at least attempted" from "fresh
+    // chip".
+    #[cfg(feature = "factory-provisioning-rehearsal")]
+    let bits = crate::hw::otp::FACTORY_SENTINEL_BIT_RAN
+        | crate::hw::otp::FACTORY_SENTINEL_BIT_REHEARSAL;
+    #[cfg(not(feature = "factory-provisioning-rehearsal"))]
+    let bits = crate::hw::otp::FACTORY_SENTINEL_BIT_RAN
+        | crate::hw::otp::FACTORY_SENTINEL_BIT_PRODUCTION;
+
+    // SAFETY: factory_sentinel_record commits one OTP quad-word. The
+    // irreversibility contract is documented at the call site doc-
+    // comment above. We're in the factory ceremony's final step —
+    // every prior step has passed, so this is the one-way
+    // commitment that says "this chip went through factory".
+    match unsafe { crate::hw::otp::factory_sentinel_record(bits) } {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            secure_log!("[FACTORY] factory_sentinel_record returned {:?}", e);
+            Err(FactoryErrorCode::SentinelWriteFailed)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -534,10 +707,11 @@ mod tests {
         // If we add a step without updating FactoryStep::total() the
         // progress display (`[X/N]`) would lie about the count and the
         // operator could think the run is done when it's not. Pin the
-        // count against the literal enum count.
-        let last = FactoryStep::PostWipeValidation;
+        // count against the literal last enum variant.
+        let last = FactoryStep::WriteOtpSentinel;
         assert_eq!(last as u8, FactoryStep::total(),
             "FactoryStep::total() must equal the last variant's number");
+        assert_eq!(FactoryStep::total(), 7);
     }
 
     #[test]
@@ -550,8 +724,8 @@ mod tests {
         );
         // FactoryStep::DualSeProvisionInfrastructure = 4
         // FactoryErrorCode::DualSeProvisionFailed = 0x0401
-        // Expected: "STEP 4/6 E0401  "
-        assert_eq!(s, "STEP 4/6 E0401  ");
+        // Expected: "STEP 4/7 E0401  "
+        assert_eq!(s, "STEP 4/7 E0401  ");
     }
 
     #[test]
@@ -573,6 +747,8 @@ mod tests {
             FactoryErrorCode::UserResidueAfterWipe,
             FactoryErrorCode::AdminUnreachableAfterWipe,
             FactoryErrorCode::AttemptsCounterDirty,
+            FactoryErrorCode::SentinelWriteFailed,
+            FactoryErrorCode::SentinelAlreadyProduction,
         ] {
             let mut buf = [0u8; DISPLAY_COLS];
             let s = format_step_err(FactoryStep::HardwareSelfTest, code, &mut buf);
@@ -605,6 +781,8 @@ mod tests {
             FactoryErrorCode::UserResidueAfterWipe,
             FactoryErrorCode::AdminUnreachableAfterWipe,
             FactoryErrorCode::AttemptsCounterDirty,
+            FactoryErrorCode::SentinelWriteFailed,
+            FactoryErrorCode::SentinelAlreadyProduction,
         ] {
             assert!(
                 code.hint().len() <= DISPLAY_COLS,
@@ -654,6 +832,8 @@ mod tests {
             FactoryErrorCode::UserResidueAfterWipe,
             FactoryErrorCode::AdminUnreachableAfterWipe,
             FactoryErrorCode::AttemptsCounterDirty,
+            FactoryErrorCode::SentinelWriteFailed,
+            FactoryErrorCode::SentinelAlreadyProduction,
         ];
         for i in 0..codes.len() {
             for j in (i + 1)..codes.len() {
