@@ -68,6 +68,28 @@ impl Pages {
     pub fn with_len(len: usize) -> Self {
         Self::empty_with_len(len)
     }
+
+    /// Mirrors the production `Pages::push_blank` (see
+    /// `tx/display/mod.rs:144`). Required for the test-mounted
+    /// `erc7730/` renderer which grows its page buffer dynamically.
+    pub fn push_blank(&mut self) -> Result<usize, ()> {
+        if self.len >= MAX_PAGES {
+            return Err(());
+        }
+        self.buf[self.len] = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+        let idx = self.len;
+        self.len += 1;
+        Ok(idx)
+    }
+
+    /// Mirrors the production `Pages::page_mut` (see
+    /// `tx/display/mod.rs:127`). Required for renderers that need to
+    /// access two rows of the same page simultaneously via
+    /// `split_at_mut`.
+    pub fn page_mut(&mut self, page: usize) -> &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS] {
+        assert!(page < self.len);
+        &mut self.buf[page]
+    }
 }
 
 #[path = "../tx/display/primitives.rs"]
