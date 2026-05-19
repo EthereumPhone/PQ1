@@ -1534,3 +1534,82 @@ fn negative_manifest_vendor_fpr_mismatch_rejected() {
         "verify_vendor_fpr must reject when fpr field disagrees with SHA256(pk_seed||pk_root)"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// 32. F-22/F-27 follow-up — no production caller of leaky bip39 APIs
+// ─────────────────────────────────────────────────────────────────────
+//
+// `Mnemonic::word(i) -> &'static str` and `Mnemonic::words() -> impl
+// Iterator<Item = &'static str>` both dereference `WORDLIST[i]` — an
+// address-keyed-load from `.rodata` whose target address encodes the
+// secret index. F-22 closed the leak on the secret-bearing
+// `to_seed`/derivation paths by routing every production caller
+// through `Mnemonic::word_bytes` (constant-time scan). F-27 + the
+// hygiene cleanup migrated every remaining production caller (the
+// seed-wizard recovery path, the measured-boot fingerprint display,
+// the debug-log first-boot dump, the now-CT `lookup_word_exact` +
+// `lookup_prefix` + `is_exact_wordlist_entry`).
+//
+// The leaky APIs are kept around solely for the bip39 crate's own
+// host-test convenience (`assert_eq!(m.word(0), "abandon")` reads
+// cleaner than the `word_bytes`-into-buffer-then-from_utf8 dance).
+// This test pins that the only callers anywhere in the production
+// tree under `secure/src/` are the comments referencing them — any
+// actual call would re-introduce the F-22-class leak.
+
+#[test]
+fn negative_no_production_caller_of_leaky_word_word_bytes_api() {
+    // Search every production secure-world source file for the two
+    // leaky-API patterns. Tests don't count (they live in
+    // `*/tests/*` or under `#[cfg(test)]` blocks in this same module
+    // tree; this assertion runs UNDER `cargo test` and pins the
+    // production source surface).
+    //
+    // The match patterns are deliberately specific so they don't
+    // false-positive on the substring "word" elsewhere (e.g. the
+    // word_bytes / word_index / word_count APIs, comments, log
+    // strings, or `WORDLIST` mentions).
+    use std::process::Command;
+
+    // `cargo test -p sphincs-tz-secure` runs with CWD =
+    // `<workspace>/secure`, so `src/` (the secure crate's source dir)
+    // is the right grep root. `CARGO_MANIFEST_DIR` pins this against
+    // any future CWD change.
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let src_path = format!("{}/src", manifest_dir);
+    let out = Command::new("grep")
+        .args(["-rnE", r"\.word\(|\.words\(\)",
+               "--include=*.rs",
+               &src_path])
+        .output()
+        .expect("running grep");
+    let text = String::from_utf8_lossy(&out.stdout);
+
+    // The regex `\.word\(|\.words\(\)` is already precise — it
+    // doesn't false-match `.word_bytes(`, `.word_index(`,
+    // `.word_count(`, etc. (those have different chars after
+    // `.word`). Only false positive: Rust comments that mention the
+    // leaky API by name (e.g. "migrate to `word_bytes` instead of
+    // `.words()`"). Strip those.
+    let mut leaks: Vec<&str> = Vec::new();
+    for line in text.lines() {
+        // grep -n line shape: "PATH:LINENO:CONTENT"; strip the first
+        // two `:`-fields to get the source line body.
+        if let Some(post_colon) = line.splitn(3, ':').nth(2) {
+            let trimmed = post_colon.trim_start();
+            if trimmed.starts_with("//") || trimmed.starts_with("/*")
+                || trimmed.starts_with("*")
+            {
+                continue;
+            }
+        }
+        leaks.push(line);
+    }
+    assert!(
+        leaks.is_empty(),
+        "Production code re-introduces a leaky `Mnemonic::word()` / \
+         `Mnemonic::words()` call site — migrate to `word_bytes` per \
+         the F-22 / F-27 hygiene contract. Offenders:\n{}",
+        leaks.join("\n"),
+    );
+}

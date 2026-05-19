@@ -258,13 +258,18 @@ impl Mnemonic {
 
     /// Look up the i-th word as a `&'static str` from the wordlist.
     ///
+    /// **DO NOT CALL FROM PRODUCTION CODE.** This is a test-convenience
+    /// API kept around so the bip39 crate's own host tests can compare
+    /// against `&str` literals (`assert_eq!(m.word(0), "abandon")`).
+    ///
     /// **Address-leaks the index** (`WORDLIST[i].as_bytes()` loads from
-    /// flash at an address that encodes `i`). Safe for callers where `i`
-    /// is public (e.g. [`measured_boot`]'s firmware-hash word display
-    /// where the hash is signed and visible by design). For SECRET
-    /// indices — the master mnemonic in the provisioning wizard —
-    /// prefer [`Self::word_bytes`] which uses the F-22 constant-time
-    /// scan.
+    /// flash at an address that encodes `i` — F-22-class). Every
+    /// production caller has been migrated to [`Self::word_bytes`]
+    /// (constant-time scan); a source-text regression test in
+    /// `secure/src/fw_update_boot_pure_tests.rs` asserts no production
+    /// code re-introduces a `.word(` call. If you need the index-as-str
+    /// for clear-sign rendering or similar, use [`Self::word_bytes`]
+    /// followed by `core::str::from_utf8(&out[..len as usize])`.
     #[must_use]
     pub fn word(&self, i: usize) -> &'static str {
         WORDLIST[self.indices[i] as usize]
@@ -290,9 +295,12 @@ impl Mnemonic {
 
     /// Iterate the 24 words as static strings.
     ///
-    /// **Same address-leak caveat as [`Self::word`].** For secret
-    /// indices, iterate `0..WORD_COUNT` and call [`Self::word_bytes`]
-    /// per index.
+    /// **DO NOT CALL FROM PRODUCTION CODE.** Same caveat + migration
+    /// status as [`Self::word`]: leaky address-keyed `WORDLIST[i]`
+    /// loads, kept for the bip39 crate's own host-test convenience.
+    /// Production callers iterate `0..WORD_COUNT` and call
+    /// [`Self::word_bytes`] per index instead. A source-text regression
+    /// test enforces this.
     pub fn words(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.indices.iter().map(|&i| WORDLIST[i as usize])
     }

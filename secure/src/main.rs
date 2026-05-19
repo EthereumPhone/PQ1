@@ -2604,11 +2604,19 @@ fn main() -> ! {
             // Debug-only: log the mnemonic and the resulting verifying key.
             // This is gated behind `debug-log` so production builds (which
             // omit that feature) leak nothing on the semihosting channel.
+            // CT lookup (`Mnemonic::word_bytes` instead of `.words()`) per
+            // the F-22 / F-27 hygiene migration — keeps the leaky
+            // `WORDLIST[idx]` access pattern out of the source so a future
+            // copy-paste can't inherit it.
             #[cfg(feature = "debug-log")]
             {
+                use sphincs_tz_bip39::MAX_WORD_BYTES;
                 secure_log!("[S] mnemonic (DEBUG):");
-                for (i, w) in mnemonic.words().enumerate() {
-                    secure_log!("  {} {}", i + 1, w);
+                for i in 0..sphincs_tz_bip39::WORD_COUNT {
+                    let mut wb = [0u8; MAX_WORD_BYTES];
+                    let wlen = mnemonic.word_bytes(i, &mut wb);
+                    let s = ui::ascii_str(&wb[..wlen as usize]);
+                    secure_log!("  {} {}", i + 1, s);
                 }
             }
 

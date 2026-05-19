@@ -244,10 +244,20 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
         let title_s = super::ascii_str(&title_buf);
 
         #[cfg(feature = "debug-log")]
-        secure_log!(
-            "[wizard] verify step {}/3: asking for word #{} (expected \"{}\", BIP39 idx {})",
-            step + 1, probe + 1, m.word(probe as usize), m.word_index(probe as usize),
-        );
+        {
+            // CT lookup — keeps the leaky `Mnemonic::word()` pattern out
+            // of the source (F-22 / F-27 hygiene; debug-log is gated
+            // out of production but the leaky access pattern shouldn't
+            // sit in a copy-paste-able location).
+            let mut eb = [0u8; MAX_WORD_BYTES];
+            let elen = m.word_bytes(probe as usize, &mut eb);
+            secure_log!(
+                "[wizard] verify step {}/3: asking for word #{} (expected \"{}\", BIP39 idx {})",
+                step + 1, probe + 1,
+                super::ascii_str(&eb[..elen as usize]),
+                m.word_index(probe as usize),
+            );
+        }
 
         match enter_single_word(title_s) {
             EnterWordResult::Word(idx) => {
