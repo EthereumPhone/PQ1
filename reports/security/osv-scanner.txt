@@ -1,0 +1,13 @@
+Starting filesystem walk for root: /
+Scanned /home/markus/Documents/PQ1/sphincs_rust/Cargo.lock file and found 289 packages
+End status: 0 dirs visited, 1 inodes visited, 1 Extract calls, 1.428836ms elapsed, 1.428896ms wall time
+
+Total 2 packages affected by 2 known vulnerabilities (0 Critical, 0 High, 0 Medium, 0 Low, 2 Unknown) from 1 ecosystem.
+0 vulnerabilities can be fixed.
+
++-----------------------------------+------+-----------+------------------+---------+---------------+------------+
+| OSV URL                           | CVSS | ECOSYSTEM | PACKAGE          | VERSION | FIXED VERSION | SOURCE     |
++-----------------------------------+------+-----------+------------------+---------+---------------+------------+
+| https://osv.dev/RUSTSEC-2026-0110 |      | crates.io | bare-metal       | 0.2.5   | --            | Cargo.lock |
+| https://osv.dev/RUSTSEC-2024-0370 |      | crates.io | proc-macro-error | 1.0.4   | --            | Cargo.lock |
++-----------------------------------+------+-----------+------------------+---------+---------------+------------+

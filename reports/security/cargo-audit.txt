@@ -1,0 +1,43 @@
+    Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
+      Loaded 1093 security advisories (from /home/markus/.cargo/advisory-db)
+    Updating crates.io index
+    Scanning Cargo.lock for vulnerabilities (289 crate dependencies)
+Crate:     bare-metal
+Version:   0.2.5
+Warning:   unmaintained
+Title:     bare-metal is deprecated
+Date:      2026-04-23
+ID:        RUSTSEC-2026-0110
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0110
+Dependency tree:
+bare-metal 0.2.5
+└── cortex-m 0.7.7
+    ├── synopsys-usb-otg 0.4.0
+    │   └── sphincs-tz-nonsecure 0.1.0
+    ├── sphincs-tz-secure 0.1.0
+    ├── sphincs-tz-nonsecure 0.1.0
+    ├── pqsigner-fsbl 0.1.0
+    ├── pqsigner-fi 0.1.0
+    │   ├── sphincs-tz-secure 0.1.0
+    │   └── pqsigner-fsbl 0.1.0
+    ├── panic-semihosting 0.6.0
+    │   └── sphincs-tz-nonsecure 0.1.0
+    └── cortex-m-semihosting 0.5.0
+        ├── sphincs-tz-secure 0.1.0
+        ├── sphincs-tz-nonsecure 0.1.0
+        └── panic-semihosting 0.6.0
+
+Crate:     proc-macro-error
+Version:   1.0.4
+Warning:   unmaintained
+Title:     proc-macro-error is unmaintained
+Date:      2024-09-01
+ID:        RUSTSEC-2024-0370
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0370
+Dependency tree:
+proc-macro-error 1.0.4
+└── maybe-async-cfg 0.2.4
+    └── ssd1306 0.10.0
+        └── sphincs-tz-secure 0.1.0
+
+warning: 2 allowed warnings found

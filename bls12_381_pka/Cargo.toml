@@ -62,7 +62,7 @@ version = "1.4"
 optional = true
 default-features = false
 [dev-dependencies.criterion]
-version = "0.3"
+version = "0.5"
 
 [dev-dependencies.csv]
 version = ">= 1.0, < 1.2"

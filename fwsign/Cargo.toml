@@ -28,7 +28,7 @@ rand_core   = { version = "0.6", features = ["std"] }
 clap         = { version = "4", features = ["derive"] }
 hex          = { workspace = true }
 anyhow       = "1"
-rpassword    = "7"
+rpassword    = "7.5"
 
 # ELF → flat image (reuses same logic as fwmeasure)
 object       = { version = "0.36", features = ["read_core", "elf", "std"] }

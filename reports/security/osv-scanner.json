@@ -1,0 +1,563 @@
+{
+  "results": [
+    {
+      "source": {
+        "path": "/home/markus/Documents/PQ1/sphincs_rust/Cargo.lock",
+        "type": "lockfile"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "atty",
+            "version": "0.2.14",
+            "ecosystem": "crates.io"
+          },
+          "groups": [
+            {
+              "ids": [
+                "RUSTSEC-2021-0145",
+                "GHSA-g98v-hv3f-hcfr"
+              ],
+              "aliases": [
+                "GHSA-g98v-hv3f-hcfr",
+                "RUSTSEC-2021-0145"
+              ],
+              "max_severity": ""
+            },
+            {
+              "ids": [
+                "RUSTSEC-2024-0375"
+              ],
+              "aliases": [
+                "RUSTSEC-2024-0375"
+              ],
+              "max_severity": ""
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "categories": [],
+                    "cvss": null,
+                    "informational": "unsound",
+                    "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2021-0145.json"
+                  },
+                  "ecosystem_specific": {
+                    "affected_functions": null,
+                    "affects": {
+                      "arch": [],
+                      "functions": [],
+                      "os": [
+                        "windows"
+                      ]
+                    }
+                  },
+                  "package": {
+                    "ecosystem": "crates.io",
+                    "name": "atty",
+                    "purl": "pkg:cargo/atty"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0.0.0-0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "aliases": [
+                "GHSA-g98v-hv3f-hcfr"
+              ],
+              "database_specific": {
+                "license": "CC0-1.0"
+              },
+              "details": "On windows, `atty` dereferences a potentially unaligned pointer.\n\nIn practice however, the pointer won't be unaligned unless a custom global allocator is used.\n\nIn particular, the `System` allocator on windows uses `HeapAlloc`, which guarantees a large enough alignment.\n\n# atty is Unmaintained\n\nA Pull Request with a fix has been provided over a year ago but the maintainer seems to be unreachable.\n\nLast release of `atty` was almost 3 years ago.\n\n## Possible Alternative(s)\n\nThe below list has not been vetted in any way and may or may not contain alternatives;\n\n - [std::io::IsTerminal](https://doc.rust-lang.org/stable/std/io/trait.IsTerminal.html) - Stable since Rust 1.70.0\n - [is-terminal](https://crates.io/crates/is-terminal) - Standalone crate supporting Rust older than 1.70.0",
+              "id": "RUSTSEC-2021-0145",
+              "modified": "2023-11-08T04:19:25.814075Z",
+              "published": "2021-07-04T12:00:00Z",
+              "references": [
+                {
+                  "type": "PACKAGE",
+                  "url": "https://crates.io/crates/atty"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://rustsec.org/advisories/RUSTSEC-2021-0145.html"
+                },
+                {
+                  "type": "REPORT",
+                  "url": "https://github.com/softprops/atty/issues/50"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/softprops/atty/pull/51"
+                },
+                {
+                  "type": "REPORT",
+                  "url": "https://github.com/softprops/atty/issues/57"
+                }
+              ],
+              "schema_version": "1.7.3",
+              "summary": "Potential unaligned read"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "categories": [],
+                    "cvss": null,
+                    "informational": "unmaintained",
+                    "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2024-0375.json"
+                  },
+                  "ecosystem_specific": {
+                    "affected_functions": null,
+                    "affects": {
+                      "arch": [],
+                      "functions": [],
+                      "os": []
+                    }
+                  },
+                  "package": {
+                    "ecosystem": "crates.io",
+                    "name": "atty",
+                    "purl": "pkg:cargo/atty"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0.0.0-0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "database_specific": {
+                "license": "CC0-1.0"
+              },
+              "details": "The maintainer of `atty` has [published](https://github.com/softprops/atty/commit/5bfdbe9e48c6ca6a4909e8d5b04f5e843a257e93) an official notice that the crate is no longer\nunder development, and that users should instead rely on the functionality in the standard library's [`IsTerminal`](https://doc.rust-lang.org/std/io/trait.IsTerminal.html) trait.\n\n## Alternative(s)\n\n- [std::io::IsTerminal](https://doc.rust-lang.org/stable/std/io/trait.IsTerminal.html) - Stable since Rust 1.70.0 and the recommended replacement per the `atty` maintainer.\n- [is-terminal](https://crates.io/crates/is-terminal) - Standalone crate supporting Rust older than 1.70.0",
+              "id": "RUSTSEC-2024-0375",
+              "modified": "2024-09-26T12:26:22Z",
+              "published": "2024-09-25T12:00:00Z",
+              "references": [
+                {
+                  "type": "PACKAGE",
+                  "url": "https://crates.io/crates/atty"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://rustsec.org/advisories/RUSTSEC-2024-0375.html"
+                },
+                {
+                  "type": "REPORT",
+                  "url": "https://github.com/softprops/atty/issues/57"
+                }
+              ],
+              "schema_version": "1.7.3",
+              "summary": "`atty` is unmaintained"
+            },
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2023/06/GHSA-g98v-hv3f-hcfr/GHSA-g98v-hv3f-hcfr.json"
+                  },
+                  "package": {
+                    "ecosystem": "crates.io",
+                    "name": "atty",
+                    "purl": "pkg:cargo/atty"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0"
+                        },
+                        {
+                          "last_affected": "0.2.14"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "aliases": [
+                "RUSTSEC-2021-0145"
+              ],
+              "database_specific": {
+                "cwe_ids": [],
+                "github_reviewed": true,
+                "github_reviewed_at": "2023-06-30T20:21:59Z",
+                "nvd_published_at": null,
+                "severity": "LOW"
+              },
+              "details": "On windows, `atty` dereferences a potentially unaligned pointer.\n\nIn practice however, the pointer won't be unaligned unless a custom global allocator is used.\n\nIn particular, the `System` allocator on windows uses `HeapAlloc`, which guarantees a large enough alignment.\n\n# atty is Unmaintained\n\nA Pull Request with a fix has been provided over a year ago but the maintainer seems to be unreachable.\n\nLast release of `atty` was almost 3 years ago.\n\n## Possible Alternative(s)\n\nThe below list has not been vetted in any way and may or may not contain alternatives;\n\n- [std::io::IsTerminal](https://doc.rust-lang.org/stable/std/io/trait.IsTerminal.html) - Stable since Rust 1.70.0\n- [is-terminal](https://crates.io/crates/is-terminal) - Standalone crate supporting Rust older than 1.70.0\"\n",
+              "id": "GHSA-g98v-hv3f-hcfr",
+              "modified": "2026-02-04T02:17:03.508617Z",
+              "published": "2023-06-30T20:21:59Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/softprops/atty/issues/50"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/softprops/atty/pull/51"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/softprops/atty"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://rustsec.org/advisories/RUSTSEC-2021-0145.html"
+                }
+              ],
+              "related": [
+                "CGA-hw4w-pxh2-8c54"
+              ],
+              "schema_version": "1.7.3",
+              "summary": "atty potential unaligned read"
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "bare-metal",
+            "version": "0.2.5",
+            "ecosystem": "crates.io"
+          },
+          "groups": [
+            {
+              "ids": [
+                "RUSTSEC-2026-0110"
+              ],
+              "aliases": [
+                "RUSTSEC-2026-0110"
+              ],
+              "max_severity": ""
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "categories": [],
+                    "cvss": null,
+                    "informational": "unmaintained",
+                    "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2026-0110.json"
+                  },
+                  "ecosystem_specific": {
+                    "affected_functions": null,
+                    "affects": {
+                      "arch": [],
+                      "functions": [],
+                      "os": []
+                    }
+                  },
+                  "package": {
+                    "ecosystem": "crates.io",
+                    "name": "bare-metal",
+                    "purl": "pkg:cargo/bare-metal"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0.0.0-0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "database_specific": {
+                "license": "CC0-1.0"
+              },
+              "details": "The `bare-metal` crate has been deprecated and archived.\n\nFor `Mutex` and `CriticalSection`, see the [`critical-section`](https://crates.io/crates/critical-section) crate instead.",
+              "id": "RUSTSEC-2026-0110",
+              "modified": "2026-04-24T09:45:08.136572Z",
+              "published": "2026-04-23T12:00:00Z",
+              "references": [
+                {
+                  "type": "PACKAGE",
+                  "url": "https://crates.io/crates/bare-metal"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://rustsec.org/advisories/RUSTSEC-2026-0110.html"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/rust-embedded/bare-metal/pull/49"
+                }
+              ],
+              "schema_version": "1.7.5",
+              "summary": "bare-metal is deprecated"
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "proc-macro-error",
+            "version": "1.0.4",
+            "ecosystem": "crates.io"
+          },
+          "groups": [
+            {
+              "ids": [
+                "RUSTSEC-2024-0370"
+              ],
+              "aliases": [
+                "RUSTSEC-2024-0370"
+              ],
+              "max_severity": ""
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "categories": [],
+                    "cvss": null,
+                    "informational": "unmaintained",
+                    "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2024-0370.json"
+                  },
+                  "ecosystem_specific": {
+                    "affected_functions": null,
+                    "affects": {
+                      "arch": [],
+                      "functions": [],
+                      "os": []
+                    }
+                  },
+                  "package": {
+                    "ecosystem": "crates.io",
+                    "name": "proc-macro-error",
+                    "purl": "pkg:cargo/proc-macro-error"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0.0.0-0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "database_specific": {
+                "license": "CC0-1.0"
+              },
+              "details": "proc-macro-error's maintainer seems to be unreachable, with no commits for 2 years, no releases pushed for 4 years, and no activity on the GitLab repo or response to email.\n\nproc-macro-error also depends on `syn 1.x`, which may be bringing duplicate dependencies into dependant build trees.\n\n## Possible Alternative(s)\n\n- [manyhow](https://crates.io/crates/manyhow)\n- [proc-macro-error2](https://crates.io/crates/proc-macro-error2)\n- [proc-macro2-diagnostics](https://github.com/SergioBenitez/proc-macro2-diagnostics)",
+              "id": "RUSTSEC-2024-0370",
+              "modified": "2024-09-09T12:08:37Z",
+              "published": "2024-09-01T12:00:00Z",
+              "references": [
+                {
+                  "type": "PACKAGE",
+                  "url": "https://crates.io/crates/proc-macro-error"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://rustsec.org/advisories/RUSTSEC-2024-0370.html"
+                },
+                {
+                  "type": "REPORT",
+                  "url": "https://gitlab.com/CreepySkeleton/proc-macro-error/-/issues/20"
+                }
+              ],
+              "schema_version": "1.7.3",
+              "summary": "proc-macro-error is unmaintained"
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "rpassword",
+            "version": "7.4.0",
+            "ecosystem": "crates.io"
+          },
+          "groups": [
+            {
+              "ids": [
+                "GHSA-2p6r-x3vv-xqm2"
+              ],
+              "aliases": [
+                "GHSA-2p6r-x3vv-xqm2"
+              ],
+              "max_severity": "3.8"
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "last_known_affected_version_range": "\u003c= 7.4.0",
+                    "source": "https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2026/05/GHSA-2p6r-x3vv-xqm2/GHSA-2p6r-x3vv-xqm2.json"
+                  },
+                  "package": {
+                    "ecosystem": "crates.io",
+                    "name": "rpassword",
+                    "purl": "pkg:cargo/rpassword"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0"
+                        },
+                        {
+                          "fixed": "7.5.0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "database_specific": {
+                "cwe_ids": [
+                  "CWE-200",
+                  "CWE-755"
+                ],
+                "github_reviewed": true,
+                "github_reviewed_at": "2026-05-06T21:49:33Z",
+                "nvd_published_at": null,
+                "severity": "LOW"
+              },
+              "details": "rpassword maintainers were made aware of a possible issue with a partial password reveal when input is interrupted.\n\nTo quote @squell:\n\n\u003e @conradkleinespel I've confirmed this problem with SequoiaPGP, which I think uses rpassword, e.g.:\n\u003e\n\u003e Suppose we use pkill -9 sq in a different terminal right after the password has been typed in:\n\u003e\n\u003e $ sq key generate --userid \"barf\" --with-password\n\u003e Enter password to protect the key: Killed\n\u003e $ hello^C\n\u003e\n\u003e Where the password I typed in is \"hello\".\n\nThis has been fixed in version v7.5.0 and above.",
+              "id": "GHSA-2p6r-x3vv-xqm2",
+              "modified": "2026-05-07T20:14:22.788471209Z",
+              "published": "2026-05-06T21:49:33Z",
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/conradkleinespel/rpassword/security/advisories/GHSA-2p6r-x3vv-xqm2"
+                },
+                {
+                  "type": "PACKAGE",
+                  "url": "https://github.com/conradkleinespel/rpassword"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/conradkleinespel/rpassword/releases/tag/v7.5.0"
+                }
+              ],
+              "related": [
+                "CGA-vvpx-6rr4-62xc"
+              ],
+              "schema_version": "1.7.5",
+              "severity": [
+                {
+                  "score": "CVSS:3.1/AV:P/AC:H/PR:H/UI:R/S:U/C:H/I:N/A:N",
+                  "type": "CVSS_V3"
+                }
+              ],
+              "summary": "rpassword affected by partial password reveal when input is interrupted "
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "serde_cbor",
+            "version": "0.11.2",
+            "ecosystem": "crates.io"
+          },
+          "groups": [
+            {
+              "ids": [
+                "RUSTSEC-2021-0127"
+              ],
+              "aliases": [
+                "RUSTSEC-2021-0127"
+              ],
+              "max_severity": ""
+            }
+          ],
+          "vulnerabilities": [
+            {
+              "affected": [
+                {
+                  "database_specific": {
+                    "categories": [],
+                    "cvss": null,
+                    "informational": "unmaintained",
+                    "source": "https://github.com/rustsec/advisory-db/blob/osv/crates/RUSTSEC-2021-0127.json"
+                  },
+                  "ecosystem_specific": {
+                    "affected_functions": null,
+                    "affects": {
+                      "arch": [],
+                      "functions": [],
+                      "os": []
+                    }
+                  },
+                  "package": {
+                    "ecosystem": "crates.io",
+                    "name": "serde_cbor",
+                    "purl": "pkg:cargo/serde_cbor"
+                  },
+                  "ranges": [
+                    {
+                      "events": [
+                        {
+                          "introduced": "0.0.0-0"
+                        }
+                      ],
+                      "type": "SEMVER"
+                    }
+                  ]
+                }
+              ],
+              "database_specific": {
+                "license": "CC0-1.0"
+              },
+              "details": "The `serde_cbor` crate is unmaintained. The author has archived the github repository.\n\nAlternatives proposed by the author:\n\n * [`ciborium`](https://crates.io/crates/ciborium)\n * [`minicbor`](https://crates.io/crates/minicbor)",
+              "id": "RUSTSEC-2021-0127",
+              "modified": "2021-12-01T14:04:55Z",
+              "published": "2021-08-15T12:00:00Z",
+              "references": [
+                {
+                  "type": "PACKAGE",
+                  "url": "https://crates.io/crates/serde_cbor"
+                },
+                {
+                  "type": "ADVISORY",
+                  "url": "https://rustsec.org/advisories/RUSTSEC-2021-0127.html"
+                },
+                {
+                  "type": "WEB",
+                  "url": "https://github.com/pyfisch/cbor"
+                }
+              ],
+              "schema_version": "1.7.3",
+              "summary": "serde_cbor is unmaintained"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "experimental_config": {
+    "licenses": {
+      "summary": false,
+      "allowlist": null
+    }
+  }
+}

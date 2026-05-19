@@ -1,0 +1,126 @@
+warning[duplicate]: found 2 duplicate entries for crate 'bitflags'
+   ┌─ /home/markus/Documents/PQ1/sphincs_rust/Cargo.lock:19:1
+   │  
+19 │ ╭ bitflags 1.3.2 registry+https://github.com/rust-lang/crates.io-index
+20 │ │ bitflags 2.11.1 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰─────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ bitflags v1.3.2
+     ├── clap v2.34.0
+     │   └── criterion v0.3.6
+     │       └── (dev) bls12_381_pka v0.8.0
+     │           ├── dbgen v0.1.0
+     │           ├── sphincs-tz-secure v0.1.0
+     │           └── zk-test v0.1.0
+     └── png v0.17.16
+         └── (build) sphincs-tz-secure v0.1.0 (*)
+   ├ bitflags v2.11.1
+     ├── libredox v0.1.16
+     │   └── filetime v0.2.27
+     │       └── tar v0.4.45
+     │           └── fwsign v0.1.0
+     ├── proptest v1.11.0
+     │   ├── (dev) fw-manifest v0.1.0
+     │   │   ├── fwsign v0.1.0 (*)
+     │   │   ├── pqsigner-fsbl v0.1.0
+     │   │   ├── sphincs-tz-nonsecure v0.1.0
+     │   │   └── sphincs-tz-secure v0.1.0
+     │   ├── (dev) pqsigner-proto v0.1.0
+     │   │   ├── pqsigner-aa v0.1.0
+     │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+     │   │   ├── (dev) pqsigner-domain v0.1.0
+     │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+     │   │   ├── pqsigner-tx v0.1.0
+     │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+     │   │   ├── pqsigner-tx-core v0.1.0
+     │   │   │   ├── pqsigner-aa v0.1.0 (*)
+     │   │   │   ├── pqsigner-tx v0.1.0 (*)
+     │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+     │   │   ├── pqsigner-xtask v0.1.0
+     │   │   └── sphincs-tz-shared v0.1.0
+     │   │       ├── dbgen v0.1.0
+     │   │       ├── pqsigner-tx v0.1.0 (*)
+     │   │       ├── sphincs-tz-nonsecure v0.1.0 (*)
+     │   │       └── sphincs-tz-secure v0.1.0 (*)
+     │   ├── (dev) sphincs-tz-secure v0.1.0 (*)
+     │   └── (dev) sphincs-tz-shared v0.1.0 (*)
+     ├── redox_syscall v0.7.4
+     │   └── libredox v0.1.16 (*)
+     └── rustix v1.1.4
+         ├── tempfile v3.27.0
+         │   ├── (dev) dbgen v0.1.0 (*)
+         │   ├── (dev) fwsign v0.1.0 (*)
+         │   ├── proptest v1.11.0 (*)
+         │   └── rusty-fork v0.3.1
+         │       └── proptest v1.11.0 (*)
+         └── xattr v1.6.1
+             └── tar v0.4.45 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows-sys'
+    ┌─ /home/markus/Documents/PQ1/sphincs_rust/Cargo.lock:211:1
+    │  
+211 │ ╭ windows-sys 0.59.0 registry+https://github.com/rust-lang/crates.io-index
+212 │ │ windows-sys 0.61.2 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ windows-sys v0.59.0
+      ├── rpassword v7.4.0
+      │   └── fwsign v0.1.0
+      └── rtoolbox v0.0.5
+          └── rpassword v7.4.0 (*)
+    ├ windows-sys v0.61.2
+      ├── anstyle-query v1.1.5
+      │   └── anstream v1.0.0
+      │       └── clap_builder v4.6.0
+      │           └── clap v4.6.1
+      │               └── fwsign v0.1.0
+      ├── anstyle-wincon v3.0.11
+      │   └── anstream v1.0.0 (*)
+      ├── errno v0.3.14
+      │   └── rustix v1.1.4
+      │       ├── tempfile v3.27.0
+      │       │   ├── (dev) dbgen v0.1.0
+      │       │   ├── (dev) fwsign v0.1.0 (*)
+      │       │   ├── proptest v1.11.0
+      │       │   │   ├── (dev) fw-manifest v0.1.0
+      │       │   │   │   ├── fwsign v0.1.0 (*)
+      │       │   │   │   ├── pqsigner-fsbl v0.1.0
+      │       │   │   │   ├── sphincs-tz-nonsecure v0.1.0
+      │       │   │   │   └── sphincs-tz-secure v0.1.0
+      │       │   │   ├── (dev) pqsigner-proto v0.1.0
+      │       │   │   │   ├── pqsigner-aa v0.1.0
+      │       │   │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+      │       │   │   │   ├── (dev) pqsigner-domain v0.1.0
+      │       │   │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+      │       │   │   │   ├── pqsigner-tx v0.1.0
+      │       │   │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+      │       │   │   │   ├── pqsigner-tx-core v0.1.0
+      │       │   │   │   │   ├── pqsigner-aa v0.1.0 (*)
+      │       │   │   │   │   ├── pqsigner-tx v0.1.0 (*)
+      │       │   │   │   │   └── sphincs-tz-secure v0.1.0 (*)
+      │       │   │   │   ├── pqsigner-xtask v0.1.0
+      │       │   │   │   └── sphincs-tz-shared v0.1.0
+      │       │   │   │       ├── dbgen v0.1.0 (*)
+      │       │   │   │       ├── pqsigner-tx v0.1.0 (*)
+      │       │   │   │       ├── sphincs-tz-nonsecure v0.1.0 (*)
+      │       │   │   │       └── sphincs-tz-secure v0.1.0 (*)
+      │       │   │   ├── (dev) sphincs-tz-secure v0.1.0 (*)
+      │       │   │   └── (dev) sphincs-tz-shared v0.1.0 (*)
+      │       │   └── rusty-fork v0.3.1
+      │       │       └── proptest v1.11.0 (*)
+      │       └── xattr v1.6.1
+      │           └── tar v0.4.45
+      │               └── fwsign v0.1.0 (*)
+      ├── rustix v1.1.4 (*)
+      ├── tempfile v3.27.0 (*)
+      └── winapi-util v0.1.11
+          ├── same-file v1.0.6
+          │   └── walkdir v2.5.0
+          │       └── criterion v0.3.6
+          │           └── (dev) bls12_381_pka v0.8.0
+          │               ├── dbgen v0.1.0 (*)
+          │               ├── sphincs-tz-secure v0.1.0 (*)
+          │               └── zk-test v0.1.0
+          └── walkdir v2.5.0 (*)
+
+bans ok
