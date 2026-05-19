@@ -179,3 +179,42 @@ correctness chain. The three remaining `sorry`s document precisely
 where Group V stops — the next engineer can pick up the work by
 following the breakdown in
 [`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md).
+
+## 2026-05-19 update — Tier 0 of the production-readiness plan
+
+The original closure ("axiom closure matches the documented set")
+described what is true in the kernel, but glossed over the substantive
+gap between the kernel-level statement and a real "money cannot be
+stolen" guarantee about deployed bytecode:
+
+- 3 bridge axioms (A1, A3, A4) and 3 cryptographic shape axioms
+  (SM_DT_TCR_F, ITSR_F, hMsg_random_oracle) have type `True` —
+  hostile removal does not break the proof.
+- The EntryPoint v0.6 axiom (A2) states a property of the Lean
+  fiction `Bridge.EntryPoint.handleOp`, not the deployed contract.
+- Several Lean model functions are stubs:
+  `Wallet/ValidateUserOp.lean::sphincsDigest` returns `sha256 []`
+  ignoring its inputs; Solidity selectors are placeholders
+  `0x00000000`, `0x00000001`, `0x00000002`.
+
+The tiered production-readiness plan at
+[`DISCHARGE_PLAN.md`](DISCHARGE_PLAN.md)
+describes the discharge sequence over ~12 months
+(single engineer, no external audits): honest reporting → real Lean
+model → Kontrol/Certora bytecode equivalence per contract → Kontrol
+against deployed EntryPoint v0.6 → tightened cryptographic axiom
+shapes → CI byte-level differential testing.
+
+Tier 0 has landed in this branch:
+- `contracts/verification/docs/AXIOM_STATUS.json` is the single
+  source of truth for per-axiom discharge state.
+- `contracts/verification/scripts/lint_axioms.sh` (called from
+  `make verify-theft-free`) fails CI if a new `True`-typed axiom or
+  `True := trivial` placeholder is introduced outside the allowlists.
+- `contracts/verification/scripts/format_axiom_status.py` prints the
+  honest per-axiom table at the end of `make verify-theft-free` —
+  replacing the previous over-claim "An adversary without an
+  installed SPHINCS+C10 secret key cannot cause a deployed
+  PQSmartWallet proxy's balance to decrease".
+
+Tiers 1.x and onwards remain open work.

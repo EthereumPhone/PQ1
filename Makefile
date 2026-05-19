@@ -1432,25 +1432,30 @@ test-formal-verification:
 	@echo "==> Auditing axioms + sorry inventory"
 	@$(MAKE) -C contracts/verification verify-audit
 
-# `verify-theft-free` — end-to-end machine check of the headline claim:
-#
-#   "An adversary who does not hold a SPHINCS+C10 secret key installed
-#    on the wallet cannot cause a deployed PQSmartWallet proxy's balance
-#    to decrease."
+# `verify-theft-free` — end-to-end machine check of the headline theorem
+# `SphincsCVerify.Spec.Theorems.theft_free`, plus an HONEST per-axiom
+# discharge-status report.
 #
 # Pipeline:
 #   1. Install the pinned Lean toolchain (idempotent; elan caches it).
 #   2. `lake build` — the kernel re-checks every closed theorem in the
 #      SphincsCVerify project, including `Spec.Theorems.theft_free` and
-#      wallet invariants I-1..I-8. A successful build IS the proof.
-#   3. Dump the axioms `theft_free` transitively depends on. We diff this
-#      against the expected TCB set (A1..A5 + Lean kernel built-ins).
-#      Any new axiom — or any missing one — fails the target.
+#      wallet invariants I-1..I-8.
+#   3. Audit the axiom dependency closure of `theft_free` and diff it
+#      against the expected set. Any drift fails the target.
+#   4. Run `lint_axioms.sh` — fails on any newly-introduced `True`-typed
+#      axiom or `True := trivial` placeholder theorem outside the
+#      allowlists in `contracts/verification/scripts/`.
+#   5. Print the per-axiom status table sourced from
+#      `contracts/verification/docs/AXIOM_STATUS.json`. The previous
+#      headline "An adversary cannot cause ... balance to decrease" line
+#      overclaimed: three of the bridge axioms have type `True` and do
+#      not constrain the deployed bytecode. The status table tells you
+#      WHICH axioms are placeholders vs cited-TCB vs discharged.
 #
-# Trust boundary: see contracts/verification/docs/TRUST_ASSUMPTIONS.md.
-# A1 SHA-256 precompile, A2 EntryPoint v0.6 honesty, A3 solc 0.8.28
-# correctness, A4 EVM-runs-per-spec, A5 four named crypto assumptions
-# (Barbosa et al. ASIACRYPT 2024 + Hülsing PQC 2022).
+# See `contracts/verification/docs/DISCHARGE_PLAN.md` for the tiered
+# plan to turn placeholders into discharged content.
+# Trust boundary: contracts/verification/docs/TRUST_ASSUMPTIONS.md.
 .PHONY: verify-theft-free
 verify-theft-free: export PATH := $(HOME)/.elan/bin:$(PATH)
 verify-theft-free:
@@ -1459,11 +1464,11 @@ verify-theft-free:
 	  echo "  curl https://elan.lean-lang.org/elan-init.sh -sSf | sh -s -- -y"; \
 	  exit 1; \
 	}
-	@echo "==> [1/3] Pinning Lean toolchain"
+	@echo "==> [1/5] Pinning Lean toolchain"
 	@cd contracts/verification/lean && elan toolchain install "$$(cat lean-toolchain)" >/dev/null 2>&1 || true
-	@echo "==> [2/3] lake build (kernel-checks every closed theorem)"
+	@echo "==> [2/5] lake build (kernel-checks every closed theorem)"
 	@$(MAKE) -s -C contracts/verification verify-build
-	@echo "==> [3/3] Auditing axiom closure of theft_free"
+	@echo "==> [3/5] Auditing axiom closure of theft_free"
 	@cd contracts/verification/lean && \
 	  lake env lean scripts/dump_axioms.lean 2>/dev/null > /tmp/theft_free_axioms.txt
 	@awk "/^'SphincsCVerify\\.Spec\\.Theorems\\.theft_free' depends on axioms:/{flag=1} flag" \
@@ -1485,36 +1490,20 @@ verify-theft-free:
 	    SphincsCVerify.Crypto.hMsg_random_oracle \
 	    propext \
 	  | sort -u > /tmp/theft_free_expected.txt
-	@if diff -u /tmp/theft_free_expected.txt /tmp/theft_free_seen.txt; then \
+	@if ! diff -u /tmp/theft_free_expected.txt /tmp/theft_free_seen.txt; then \
 	  echo ""; \
-	  echo "================================================================"; \
-	  echo "  theft_free: PROVED."; \
-	  echo ""; \
-	  echo "  Lean kernel re-checked every closed theorem in SphincsCVerify"; \
-	  echo "  including Spec.Theorems.theft_free and wallet invariants"; \
-	  echo "  I-1..I-8. The axiom closure of the headline theorem matches"; \
-	  echo "  the documented TCB exactly (A1..A5 + Lean kernel built-ins)."; \
-	  echo ""; \
-	  echo "  CONCLUSION: An adversary without an installed SPHINCS+C10"; \
-	  echo "  secret key cannot cause a deployed PQSmartWallet proxy's"; \
-	  echo "  balance to decrease, modulo:"; \
-	  echo "    A1  SHA-256 EVM precompile correctness"; \
-	  echo "    A2  EntryPoint v0.6 honesty"; \
-	  echo "    A3  solc 0.8.28 compiles the wallet+verifier faithfully"; \
-	  echo "    A4  EVM executes per spec"; \
-	  echo "    A5  SPHINCS+C10 is EUF-CMA secure"; \
-	  echo "        (SM-DT-TCR + ITSR + H_msg ROM, Barbosa et al. 2024)"; \
-	  echo "    A6  Lean 4 kernel is sound"; \
-	  echo ""; \
-	  echo "  Trust report: contracts/verification/docs/TRUST_ASSUMPTIONS.md"; \
-	  echo "  Theorem:      contracts/verification/lean/SphincsCVerify/Spec/Theorems.lean"; \
-	  echo "================================================================"; \
-	else \
-	  echo ""; \
-	  echo "FAIL: theft_free's axiom closure drifted from the documented TCB."; \
+	  echo "FAIL: theft_free's axiom closure drifted from the expected set."; \
 	  echo "Full dump: /tmp/theft_free_axioms.txt"; \
+	  echo "If you intentionally added/removed an axiom, update BOTH the"; \
+	  echo "expected list in this Makefile target AND the corresponding"; \
+	  echo "entry in contracts/verification/docs/AXIOM_STATUS.json."; \
 	  exit 1; \
 	fi
+	@echo "    closure matches the documented set (A1..A5 + Lean kernel built-ins)"
+	@echo "==> [4/5] Linting for placeholder axioms / True := trivial theorems"
+	@bash contracts/verification/scripts/lint_axioms.sh
+	@echo "==> [5/5] Honest per-axiom discharge status"
+	@python3 contracts/verification/scripts/format_axiom_status.py
 
 # `test-all` — run every host-runnable test suite in the repo with one
 # command. Streams one progress line per suite (suite name, then

@@ -1,0 +1,28 @@
+# Allowlist of `theorem ... : True := trivial` (or similar) entries
+# permitted in `SphincsCVerify/`.
+#
+# Format: one entry per line, fully-qualified Lean name.
+# Lines starting with `#` are comments. Blank lines are ignored.
+#
+# Goal: every entry here should eventually be discharged into a real
+# theorem with content. The list is documentation-mode; the lint
+# script `lint_axioms.sh` fails on any `True`-typed theorem NOT in
+# this allowlist.
+#
+# Add an entry here ONLY if you can name the tier (in the plan file)
+# that discharges it, and you put a TODO marker next to the entry.
+
+# Tier 1.8 will convert these to real propositional theorems.
+SphincsCVerify.Wallet.Invariants.no_reset_path
+SphincsCVerify.Wallet.Invariants.userop_acceptance_implies_signed_or_break
+
+# Tier 1.9 will supersede this — it becomes redundant once the bridge
+# axioms carry real content.
+SphincsCVerify.Bridge.deployed_verifier_refines_spec
+
+# Tier 1.4 will replace these three with real propositional content
+# about offset arithmetic. (Live under `namespace SphincsCVerify.Verifier`
+# in `Verifier/Equivalence.lean`.)
+SphincsCVerify.Verifier.fors_section_consistent
+SphincsCVerify.Verifier.ht_layer0_consistent
+SphincsCVerify.Verifier.ht_layer1_consistent

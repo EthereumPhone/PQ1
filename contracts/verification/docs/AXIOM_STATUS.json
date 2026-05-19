@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "last_updated": "2026-05-19",
+  "headline_theorem": "SphincsCVerify.Spec.Theorems.theft_free",
+  "headline_status": "partially-grounded",
+  "headline_status_explanation": "The theorem is kernel-checked by Lean 4, but the dependency closure currently contains seven `True`-typed axioms (three bridge + three crypto-shape + the Lean kernel built-ins that ARE genuine TCB). The bridge axioms therefore provide NO semantic constraint on the deployed bytecode — they are documentation markers in `#print axioms`. The cryptographic-content axiom `EUF_CMA_SPHINCSplusC` does have real propositional content (directly asserts non-forgery), and the kernel built-ins are universally trusted. The `entrypoint_honest` axiom has content but states a property of a Lean fiction (`Bridge.EntryPoint.handleOp`), not the deployed EntryPoint v0.6 at the canonical address. See the plan at `contracts/verification/docs/DISCHARGE_PLAN.md` for the discharge roadmap.",
+
+  "discharge_states": {
+    "placeholder": "Lean type reduces to `True` — axiom has no semantic content. Hostile removal of the axiom would not break the proof.",
+    "misleading": "Axiom has real content but states a property of a Lean model that is not formally connected to the deployed bytecode.",
+    "cited-tcb": "Axiom has real content; the discharge is a citation to a peer-reviewed proof or universally-trusted Ethereum infrastructure.",
+    "discharged": "Axiom has real content; a machine-checkable artifact (Kontrol session ID, Certora rule-set hash, Lean proof term) discharges it.",
+    "kernel-tcb": "Lean 4 kernel built-in. Trusted as part of the kernel's soundness."
+  },
+
+  "axioms": [
+    {
+      "id": "A1",
+      "name": "SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4",
+      "description": "EVM precompile 0x02 returns FIPS 180-4 SHA-256 of its input.",
+      "lean_type_today": "∀ (_input : List UInt8) (_output : ByteVec 32), True",
+      "status": "placeholder",
+      "status_detail": "Lean type is `True` — no semantic content. The axiom name is listed in the dependency closure as a TCB marker but it does not constrain anything in the kernel.",
+      "planned_discharge": [
+        "tier-1.9: refactor to `opaque DeployedBytecode.SHA256_precompile + axiom equality with Spec.Hash.sha256`",
+        "tier-5.3: Foundry parity test asserting precompile-0x02 output equals Spec.Hash.sha256 on the 10 KAT vectors",
+        "long-term: cited universal Ethereum TCB (Ethereum-consensus-client conformance: geth, reth, erigon, nethermind)"
+      ],
+      "citation": null
+    },
+    {
+      "id": "A2",
+      "name": "SphincsCVerify.Bridge.EntryPoint.entrypoint_honest",
+      "description": "If `handleOp` (Lean model of EntryPoint v0.6) decreases the wallet's balance, then `validateSignature` returned `Result.success`.",
+      "lean_type_today": "∀ σ op effects, (handleOp σ op effects).balance σ.walletAddress < σ.balance σ.walletAddress → validateSignature ... = (Result.success, _)",
+      "status": "misleading",
+      "status_detail": "Axiom has real propositional content but its subject is the Lean `handleOp` function defined in the same file — not the deployed EntryPoint v0.6 at 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789. As stated, the axiom is provable from the def of `handleOp`; its real role is to document the assumption that the real EntryPoint behaves the same way as the Lean fiction.",
+      "planned_discharge": [
+        "tier-1.7: rename to `LeanEntryPointModel.handleOp` to make the abstraction explicit",
+        "tier-3: Kontrol against deployed EntryPoint v0.6 mainnet bytecode at 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789, proving the three properties (wallet_executed_only_after_validate_success, entrypoint_never_directly_debits_wallet, userOpHash_per_v0.6_spec)",
+        "fallback if Kontrol intractable: codehash-pin + cite ERC-4337 v0.6 reference source"
+      ],
+      "citation": null
+    },
+    {
+      "id": "A3",
+      "name": "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly",
+      "description": "solc 0.8.28 compiles PQSmartWallet, PQMultiOwnable, PQSmartWalletFactory, SPHINCsC10Asm to EVM bytecode that faithfully implements the Lean models.",
+      "lean_type_today": "∀ (_pkSeed _pkRoot _message : ByteVec 32) (_sig : ByteVec SignatureLen), True",
+      "status": "placeholder",
+      "status_detail": "Lean type is `True` — no semantic content. The Lean theorem `theft_free` is therefore not formally connected to the deployed bytecode at codehash 0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9.",
+      "planned_discharge": [
+        "tier-1.9: refactor to four `opaque DeployedBytecode.*_result + axiom equality` shapes (verifier, wallet, factory, multi-ownable)",
+        "tier-2.1: Kontrol session for SPHINCsC10Asm.verify against pinned runtime codehash",
+        "tier-2.2: Certora rules for PQMultiOwnable (counter/owner-table monotonicity)",
+        "tier-2.3: Certora rules for PQSmartWalletFactory (CREATE2 determinism + squat-defence)",
+        "tier-2.4: Kontrol session for PQSmartWallet.validateUserOp and executeWithOffchainCount and isValidSignature against pinned runtime codehash"
+      ],
+      "citation": null
+    },
+    {
+      "id": "A4",
+      "name": "SphincsCVerify.Bridge.evm_bytecode_executes_correctly",
+      "description": "EVM bytecode executes per the EVM specification (Cancun and as configured per chain).",
+      "lean_type_today": "True",
+      "status": "placeholder",
+      "status_detail": "Lean type is `True` — no semantic content. Universal-Ethereum TCB; cannot be discharged at smart-contract project scope.",
+      "planned_discharge": [
+        "tier-1.9: opaque + axiom-equality refactor (statement becomes load-bearing in the dep closure)",
+        "long-term: cited universal Ethereum TCB (KEVM as the formal EVM semantics referent)"
+      ],
+      "citation": "KEVM (https://github.com/runtimeverification/evm-semantics) as formal EVM semantics reference"
+    },
+    {
+      "id": "A5-EUFCMA",
+      "name": "SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC",
+      "description": "SPHINCS+C10 is EUF-CMA secure: no PPT adversary produces a forgery against a fresh verifying key after at most Q signing-oracle queries, except with probability ε(A) + Q·2^-128.",
+      "lean_type_today": "SM_DT_TCR_F_Shape → ITSR_F_Shape → hMsg_RO_Shape → ∀ vk transcript msg* sig*, isForgery vk transcript msg* sig* → False",
+      "status": "cited-tcb",
+      "status_detail": "Axiom has real content (asserts non-forgery), but the three preconditions reduce to `True` (see SM_DT_TCR_F, ITSR_F, hMsg_random_oracle below). The Lean axiom is the cited result; the discharge is the EasyCrypt mechanization plus the SPHINCS+ → SPHINCS+C transition argument.",
+      "planned_discharge": [
+        "tier-4: replace `True`-typed preconditions with concrete advantage-bound shapes (no full Lean mechanization of EUF-CMA)",
+        "cited as: Barbosa/Dupressoir/Hülsing/Meijers/Strub ASIACRYPT 2024 (SPHINCS+) + Hülsing PQC2022 (+C variant)"
+      ],
+      "citation": "Barbosa, Dupressoir, Hülsing, Meijers, Strub. 'A Tight Security Proof for SPHINCS+, Formally Verified.' IACR ePrint 2024/910, ASIACRYPT 2024, LNCS 15487. SPHINCS+C variant: Hülsing et al. 'SPHINCS+C: Compressing SPHINCS+ With (Almost) No Cost.' NIST PQC2022. Tight bound: Hülsing, Kudinov. 'Recovering the tight security proof of SPHINCS+.' ASIACRYPT 2022."
+    },
+    {
+      "id": "A5-SMTCR",
+      "name": "SphincsCVerify.Crypto.SM_DT_TCR_F",
+      "description": "SM-DT-TCR on F (chain-step tweakable hash): no PPT adversary produces a distinct-tweak target collision except with bounded advantage.",
+      "lean_type_today": "∀ (_pkSeed : ByteVec 32) (_adrsList : List Adrs) (_xs : List (ByteVec 32)), True",
+      "status": "placeholder",
+      "status_detail": "Type reduces to `True`. The advantage function is documented in the file comment but the Lean statement carries no concrete bound.",
+      "planned_discharge": [
+        "tier-4: replace `True` body with a structured advantage-bound shape `SM_DT_TCR_F_Statement`; the advantage function `SM_DT_TCR_F_Advantage q = q * 2^N_BITS + q^2 / 2^N_BITS` becomes a concrete Lean `def`"
+      ],
+      "citation": "Barbosa et al. 2024 §§ 4-5, Theorem 1"
+    },
+    {
+      "id": "A5-ITSR",
+      "name": "SphincsCVerify.Crypto.ITSR_F",
+      "description": "Interleaved Target Subset Resilience on the FORS-roots compression hash.",
+      "lean_type_today": "∀ (_pkSeed : ByteVec 32), True",
+      "status": "placeholder",
+      "status_detail": "Type reduces to `True`.",
+      "planned_discharge": [
+        "tier-4: replace with concrete advantage-bound shape `ITSR_F_Statement`"
+      ],
+      "citation": "Barbosa et al. 2024 § 6, Theorem 2"
+    },
+    {
+      "id": "A5-RO",
+      "name": "SphincsCVerify.Crypto.hMsg_random_oracle",
+      "description": "Random-oracle behaviour of H_msg.",
+      "lean_type_today": "∀ (_seed _root _r _m : ByteVec 32), True",
+      "status": "placeholder",
+      "status_detail": "Type reduces to `True`.",
+      "planned_discharge": [
+        "tier-4: replace with a structured advantage-bound shape `hMsg_RO_Statement`"
+      ],
+      "citation": "Barbosa et al. 2024 § 7"
+    },
+    {
+      "id": "A6-propext",
+      "name": "propext",
+      "description": "Lean 4 kernel built-in: propositional extensionality.",
+      "lean_type_today": "∀ {a b : Prop}, (a ↔ b) → a = b",
+      "status": "kernel-tcb",
+      "status_detail": "Universal Lean 4 trust assumption.",
+      "planned_discharge": [],
+      "citation": "Lean 4 kernel"
+    },
+    {
+      "id": "A6-choice",
+      "name": "Classical.choice",
+      "description": "Lean 4 kernel built-in: classical choice axiom.",
+      "lean_type_today": "{α : Sort u} → Nonempty α → α",
+      "status": "kernel-tcb",
+      "status_detail": "Universal Lean 4 trust assumption.",
+      "planned_discharge": [],
+      "citation": "Lean 4 kernel"
+    },
+    {
+      "id": "A6-quot",
+      "name": "Quot.sound",
+      "description": "Lean 4 kernel built-in: quotient soundness.",
+      "lean_type_today": "{α : Sort u} → {r : α → α → Prop} → {a b : α} → r a b → Quot.mk r a = Quot.mk r b",
+      "status": "kernel-tcb",
+      "status_detail": "Universal Lean 4 trust assumption.",
+      "planned_discharge": [],
+      "citation": "Lean 4 kernel"
+    }
+  ],
+
+  "summary": {
+    "total_axioms_in_closure": 11,
+    "kernel_tcb": 3,
+    "placeholder_true_typed": 6,
+    "misleading": 1,
+    "cited_tcb": 1,
+    "discharged": 0
+  },
+
+  "headline_one_line": "theft_free is kernel-checked, but 6 of 11 axioms in the closure are `True`-typed placeholders (zero semantic content) and 1 is about a Lean fiction. No bridge axiom currently constrains the deployed bytecode. See `BLOCKERS.md` and the plan file for the discharge roadmap."
+}

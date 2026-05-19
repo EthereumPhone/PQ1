@@ -1,0 +1,24 @@
+# Allowlist of axioms in `SphincsCVerify/` whose elaborated type
+# is `True` or `∀ ..., True` (i.e., placeholder markers without
+# semantic content).
+#
+# Format: one entry per line, fully-qualified Lean name.
+# Lines starting with `#` are comments.
+#
+# These entries are the dependency-closure stubs that the plan
+# (`contracts/verification/docs/DISCHARGE_PLAN.md`)
+# will discharge:
+#
+#   - The three bridge axioms (A1, A3, A4) become `opaque + axiom
+#     equality` shapes in Tier 1.9 — at which point they are removed
+#     from this allowlist.
+#   - The three crypto-shape axioms (SM_DT_TCR_F, ITSR_F,
+#     hMsg_random_oracle) become advantage-bound `Statement`
+#     structures in Tier 4 — at which point they are removed too.
+
+SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4
+SphincsCVerify.Bridge.solidityVerifier_compiles_correctly
+SphincsCVerify.Bridge.evm_bytecode_executes_correctly
+SphincsCVerify.Crypto.SM_DT_TCR_F
+SphincsCVerify.Crypto.ITSR_F
+SphincsCVerify.Crypto.hMsg_random_oracle
