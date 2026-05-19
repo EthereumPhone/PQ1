@@ -562,6 +562,85 @@ pub const CMD_TEST_PIN_LOCKOUT: u32 = 200;
 /// counter; no secret state is touched.
 pub const CMD_TZIC_STATUS: u32 = 201;
 
+// ---------------------------------------------------------------------------
+// Prodtest commands (100-199) — only present in the `prodtest` build profile.
+//
+// Factory production-line test firmware. Replaces the wizard / unlock path
+// with a USB-command server that the factory fixture drives to validate each
+// hardware component before flashing the factory_provisioning firmware. See
+// `docs/factory-prodtest.md` for the full command reference + fixture
+// integration guide.
+//
+// Phase A (landed 2026-05-19): GET_ID + DISPLAY_PATTERN
+// Phase B (landed 2026-05-19): SAES_SELFTEST + BHK_SELFTEST + FLASH_RW +
+//                              TRNG_SAMPLE
+// Phase C-G (deferred to work-todo §30): communication tests, button test,
+//                              host-side fixture runner, operator manual.
+// ---------------------------------------------------------------------------
+
+/// CMD_PRODTEST_GET_ID — returns 24 bytes:
+///   [0..12]   STM32 chip UID (`0x0BFA_0700`, 96 bits per RM0456)
+///   [12..16]  Firmware version (u32 LE — host fixture's traceability DB)
+///   [16..24]  Reserved (zeroes today; future: build-hash prefix)
+/// Always succeeds; the response bytes are the canonical chip-ID for the
+/// fixture's per-unit traceability database.
+pub const CMD_PRODTEST_GET_ID: u32 = 100;
+
+/// CMD_PRODTEST_DISPLAY_PATTERN — render a known full-screen OLED test
+/// pattern for the fixture's camera (or operator) to verify.
+///   in_ptr → 4 bytes pattern ID (u32 LE):
+///     0 = all white (every pixel ON)
+///     1 = all black (every pixel OFF)
+///     2 = horizontal stripes (every other row ON)
+///     3 = vertical stripes (every other column ON)
+///     4 = checker (8×8 alternating)
+///   out_ptr → ignored
+/// Returns `NscStatus::Ok` on success, `NscStatus::InvalidParameter` if
+/// pattern ID is out of range.
+pub const CMD_PRODTEST_DISPLAY_PATTERN: u32 = 101;
+
+/// CMD_PRODTEST_SAES_SELFTEST — runs the Tier-1 SAES self-test (round-
+/// trip encrypt + decrypt under both software-key and DHUK key
+/// selectors) and returns the per-die DHUK fingerprint.
+///   in_ptr  → ignored
+///   out_ptr → 8 bytes DHUK fingerprint (first 8 bytes of
+///             `SAES-CBC(DHUK, [0u8; 32])`). Used by the fixture's
+///             per-die-uniqueness check + factory traceability DB.
+/// Returns `NscStatus::Ok` on success, `NscStatus::InternalError` if the
+/// SAES round-trip fails (silicon defect or wrong RDP state).
+pub const CMD_PRODTEST_SAES_SELFTEST: u32 = 102;
+
+/// CMD_PRODTEST_BHK_SELFTEST — runs the Tier-2 BHK self-test (load,
+/// TAMP-backup-register lock, AES round-trip under BHK key selector)
+/// and returns the per-die BHK fingerprint.
+///   in_ptr  → ignored
+///   out_ptr → 8 bytes BHK fingerprint
+/// Returns `NscStatus::Ok` on success, `NscStatus::InternalError` if the
+/// BHK isn't provisioned yet (flash page 126 blank) or if the AES
+/// round-trip fails.
+pub const CMD_PRODTEST_BHK_SELFTEST: u32 = 103;
+
+/// CMD_PRODTEST_FLASH_RW — write a known pattern to a designated test
+/// page, read it back, verify integrity. Used to catch flash defects
+/// before they wedge a customer wallet. **NEVER call against a
+/// non-test-page** — would clobber wallet state.
+///   in_ptr  → 4 bytes test pattern (u32 LE; 0xDEADBEEF is the canonical
+///             value used by the fixture)
+///   out_ptr → ignored
+/// Returns `NscStatus::Ok` on round-trip success, `NscStatus::Internal-
+/// Error` on readback mismatch.
+pub const CMD_PRODTEST_FLASH_RW: u32 = 104;
+
+/// CMD_PRODTEST_TRNG_SAMPLE — return raw bytes from the MCU TRNG (no SE
+/// XOR mix) for the fixture's statistical entropy check (χ² / Shannon
+/// estimator / etc.). Capped at 256 bytes per call to keep the USB HID
+/// buffer bounded.
+///   in_ptr  → 4 bytes byte count (u32 LE, must be 1..=256)
+///   out_ptr → N bytes of TRNG output
+/// Returns `NscStatus::Ok` on success, `NscStatus::InvalidParameter` if
+/// count is 0 or > 256, `NscStatus::InternalError` on TRNG fault.
+pub const CMD_PRODTEST_TRNG_SAMPLE: u32 = 105;
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks

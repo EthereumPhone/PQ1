@@ -50,6 +50,8 @@ mod cmd_sign_userop_batch;
 mod cmd_test_pin_lockout;
 #[cfg(all(feature = "stm32u585", feature = "e2e-test"))]
 mod cmd_tzic_status;
+#[cfg(feature = "prodtest")]
+mod prodtest;
 
 // Firmware-update commands. Only built for the STM32U585 target
 // because they depend on the bank-2 flash / OTP primitives that the
@@ -687,6 +689,28 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         CMD_LOCK => cmd_lock::run(),
         #[cfg(feature = "e2e-test")]
         sphincs_tz_shared::CMD_TEST_PIN_LOCKOUT => cmd_test_pin_lockout::run(),
+        // Prodtest commands — only present in the `prodtest` build
+        // profile, never in production firmware.
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_GET_ID => prodtest::cmd_get_id_run(args),
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_DISPLAY_PATTERN => {
+            prodtest::cmd_display_pattern_run(args)
+        }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_SAES_SELFTEST => {
+            prodtest::cmd_saes_selftest_run(args)
+        }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_BHK_SELFTEST => {
+            prodtest::cmd_bhk_selftest_run(args)
+        }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_FLASH_RW => prodtest::cmd_flash_rw_run(args),
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_TRNG_SAMPLE => {
+            prodtest::cmd_trng_sample_run(args)
+        }
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -824,6 +848,94 @@ pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
 pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
     let r = unsafe { cmd_tzic_status::run() };
     secure_log!("[NSC] tzic_status -> {}", r);
+    r
+}
+
+// ---------------------------------------------------------------------------
+// Prodtest CMSE veneers (`prodtest` feature)
+// ---------------------------------------------------------------------------
+
+/// CMD_PRODTEST_GET_ID (100) — read STM32 UID + firmware version.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_get_id(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_get_id_run(&args) };
+    secure_log!("[NSC] prodtest_get_id -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_DISPLAY_PATTERN (101) — render OLED test pattern.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_display_pattern(in_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: 0,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_display_pattern_run(&args) };
+    secure_log!("[NSC] prodtest_display_pattern -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_SAES_SELFTEST (102) — DHUK fingerprint.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_saes_selftest(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_saes_selftest_run(&args) };
+    secure_log!("[NSC] prodtest_saes_selftest -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_BHK_SELFTEST (103) — BHK fingerprint.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_bhk_selftest(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_bhk_selftest_run(&args) };
+    secure_log!("[NSC] prodtest_bhk_selftest -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_FLASH_RW (104) — flash R/W round-trip on the test page.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_flash_rw(in_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: 0,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_flash_rw_run(&args) };
+    secure_log!("[NSC] prodtest_flash_rw -> {}", r);
+    r
+}
+
+/// CMD_PRODTEST_TRNG_SAMPLE (105) — N bytes from MCU TRNG.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_trng_sample(in_ptr: u32, out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: in_ptr,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_trng_sample_run(&args) };
+    secure_log!("[NSC] prodtest_trng_sample -> {}", r);
     r
 }
 

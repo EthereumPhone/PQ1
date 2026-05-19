@@ -2531,6 +2531,42 @@ decoy-flicker-hw:
 	@echo "==> Running — watch the OLED. Ctrl-C to detach."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Factory production-line test (prodtest) firmware. Single-purpose
+# build that the factory operator flashes BEFORE the
+# factory_provisioning ceremony. Sits in WFI after boot, waiting for
+# the factory fixture to drive each component test via USB. See
+# `docs/factory-prodtest.md` for the command reference + fixture
+# integration guide.
+#
+# Phase A (landed 2026-05-19): CMD_PRODTEST_GET_ID +
+#                              CMD_PRODTEST_DISPLAY_PATTERN
+# Phase B (landed 2026-05-19): CMD_PRODTEST_{SAES,BHK}_SELFTEST,
+#                              CMD_PRODTEST_FLASH_RW (stub),
+#                              CMD_PRODTEST_TRNG_SAMPLE
+# Phase C-G (deferred to work-todo §30): communication tests
+#                              (OPTIGA/SE050 handshakes), button
+#                              test, host-side fixture runner.
+#
+# Use this target to validate the prodtest build compiles cleanly;
+# silicon validation is Phase B work in work-todo §30.
+build-hw-prodtest:
+	@echo "==> Building prodtest firmware..."
+	@echo "    Boot sequence:"
+	@echo "      1. Normal STM32 + SE init"
+	@echo "      2. Display 'PRODTEST READY' on OLED"
+	@echo "      3. Wait for USB commands (CMD_PRODTEST_* 100-105)"
+	@echo "    Factory fixture drives the test sequence via USB HID."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features prodtest,dev-testkey
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> Prodtest build ready."
+	@echo "    Phase B+: host fixture runner stub at tools/factory-prodtest-runner.py"
+
 # Factory provisioning firmware. Single-purpose build the factory
 # operator flashes to a fresh device. Runs the
 # `factory_provisioning::run_and_halt` state machine — validates

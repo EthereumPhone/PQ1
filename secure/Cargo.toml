@@ -388,6 +388,25 @@ factory-provisioning-rehearsal = ["factory-provisioning"]
 # prevent the "I forgot dev-testkey in the Makefile" class of
 # accidental burns.
 factory-production-irreversible-im-sure = []
+# Factory production-line test firmware. Replaces the wizard / unlock
+# path with a USB-command server the factory fixture drives to verify
+# each hardware component (OLED render, SAES Tier-1, BHK Tier-2, TRNG
+# entropy, flash R/W, STM32 UID readout) before flashing the
+# factory_provisioning firmware. See `docs/factory-prodtest.md`.
+#
+# Implies: `dual-se` (need both SEs alive for the communication
+# tests in Phase C), `stm32u585` (real silicon target), `ui-oled`
+# (visual status), `usb` (the command channel).
+#
+# Mutually exclusive with `factory-provisioning` at the build-target
+# level: prodtest runs FIRST in the factory line; factory_provisioning
+# runs AFTER a chip passes prodtest. Each is a separate flash cycle.
+#
+# Same opt-in fence as factory-provisioning for irreversible
+# production features (`optiga-lock-operational`, real OTP burn,
+# `bhk` without hardcoded key) — prodtest builds default to
+# `dev-testkey` for bring-up safety.
+prodtest = ["dual-se", "stm32u585", "ui-oled", "usb"]
 # Minimal USART1 → ST-LINK-VCP driver for diagnostic output that
 # survives RDP ≥ 1 (where SWD debug — and therefore semihosting — is
 # disabled). Pairs with `saes-self-test` for the RDP1 DHUK fingerprint

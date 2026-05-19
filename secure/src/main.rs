@@ -1122,6 +1122,26 @@ fn main() -> ! {
         factory_provisioning::run_and_halt(se);
     }
 
+    // ---- Prodtest short-circuit ----
+    //
+    // When `prodtest` is on, skip the wizard / unlock paths and
+    // show the "PRODTEST READY" panel. The CMSE veneers (declared
+    // under `#[cfg(feature = "prodtest")]` in `secure/src/nsc/mod.rs`)
+    // handle every prodtest command from the NS-world USB-HID ISR;
+    // main() just sits in WFI. The factory fixture drives the test
+    // sequence via USB and decides per-component pass/fail.
+    //
+    // See `docs/factory-prodtest.md` for the command reference +
+    // fixture integration guide.
+    #[cfg(feature = "prodtest")]
+    {
+        ui::show_status(" PRODTEST READY", " USB cmds wait ");
+        secure_log!("[S] prodtest firmware ready — awaiting USB commands");
+        loop {
+            cortex_m::asm::wfi();
+        }
+    }
+
     // ---- One-shot OPTIGA OID recovery (optiga-reset-oids) ----
     // Runs before any wallet provisioning. Provisions a Trust Anchor cert
     // at 0xE0E3 and sends SetObjectProtected reset manifests to the burned
