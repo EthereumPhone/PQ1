@@ -116,7 +116,7 @@ def grindR
 noncomputable def sign
     (sk : SigningKey) (message : ByteVec 32) (limit : Nat := 10_000_000) :
     Option Signature := Id.run do
-  let seed := pad16 sk.pkSeed
+  let _seed := pad16 sk.pkSeed
   -- (Signing produces a structured `Signature`; the byte-level
   -- 4008-byte serialisation is in `Signature.serialise`, with a
   -- round-trip theorem `deserialise (serialise s) = s` in `Bytes.lean`.)

@@ -66,7 +66,7 @@ def createAccountPrecondition
     it does NOT depend on `chainId`. This is invariant #6 (same 24
     words → same address on every chain). -/
 theorem salt_chain_independent
-    (masterPkSeed masterPkRoot : ByteVec 32) (chain1 chain2 : UInt64) :
+    (masterPkSeed masterPkRoot : ByteVec 32) (_chain1 _chain2 : UInt64) :
     salt masterPkSeed masterPkRoot = salt masterPkSeed masterPkRoot := by
   rfl
 

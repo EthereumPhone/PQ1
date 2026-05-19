@@ -182,7 +182,6 @@ def chainHash
       let next := th seed a' (pad16 current)
       aux i next
   aux steps val
-  termination_by steps - 0
 
 /-- WOTS digest for count-grinding.
 

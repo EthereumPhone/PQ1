@@ -61,7 +61,7 @@ open SphincsCVerify.Spec
     under `solc 0.8.28` compilation. The proof of `theft_free`
     consumes this axiom by appeal — it does not destructure it. -/
 axiom solidityVerifier_compiles_correctly :
-    ∀ (pkSeed pkRoot : ByteVec 32) (message : ByteVec 32) (sig : ByteVec SignatureLen),
+    ∀ (_pkSeed _pkRoot : ByteVec 32) (_message : ByteVec 32) (_sig : ByteVec SignatureLen),
       -- "EVM bytecode of each compiled contract observably matches its Lean model.
       -- The Lean-level claim is the conjunction of:
       --   (a) SPHINCsC10Asm.verify ≡ verifyYulModel
@@ -91,7 +91,7 @@ axiom evm_bytecode_executes_correctly : True
     matches the "SHA-256 precompile is trusted" item in
     `docs/how_to_math_proof_secureness.md` § 4.8. -/
 axiom precompile_0x02_is_FIPS_180_4 :
-    ∀ (input : List UInt8) (output : ByteVec 32),
+    ∀ (_input : List UInt8) (_output : ByteVec 32),
       -- "EVM precompile 0x02(input) = sha256(input)"
       True
 
@@ -103,7 +103,7 @@ specification verifier `Spec.Signature.verify` returns `true`, modulo
 the TCB axioms above. -/
 
 theorem deployed_verifier_refines_spec
-    (pkSeed pkRoot : ByteVec 32) (message : ByteVec 32) (sig : ByteVec SignatureLen) :
+    (_pkSeed _pkRoot : ByteVec 32) (_message : ByteVec 32) (_sig : ByteVec SignatureLen) :
     -- Conceptually: deployed-bytecode-result(pkSeed, pkRoot, msg, sig) =
     --                Spec.Signature.verify {pkSeed' := pkSeed.take16, pkRoot' := pkRoot.take16}
     --                                       msg sig

@@ -85,16 +85,16 @@ of any theorem that uses EUF-CMA. -/
     over. The witness is the axiom `SM_DT_TCR_F` below; downstream
     consumers take values of this type as preconditions. -/
 def SM_DT_TCR_F_Shape : Prop :=
-  ∀ (pkSeed : ByteVec 32) (adrsList : List Adrs)
-    (xs : List (ByteVec 32)), True
+  ∀ (_pkSeed : ByteVec 32) (_adrsList : List Adrs)
+    (_xs : List (ByteVec 32)), True
 
 /-- Functional type of an ITSR-F witness. -/
 def ITSR_F_Shape : Prop :=
-  ∀ (pkSeed : ByteVec 32), True
+  ∀ (_pkSeed : ByteVec 32), True
 
 /-- Functional type of an `H_msg`-RO witness. -/
 def hMsg_RO_Shape : Prop :=
-  ∀ (seed root r m : ByteVec 32), True
+  ∀ (_seed _root _r _m : ByteVec 32), True
 
 /-- **SM-DT-TCR on F (the chain step tweakable hash).**
 

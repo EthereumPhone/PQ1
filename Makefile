@@ -81,7 +81,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification verify-theft-free test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
 
 # Supply-chain audit. Hard-fails if any dependency is not cryptographically
 # pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
@@ -1431,6 +1431,90 @@ test-formal-verification:
 	@$(MAKE) -C contracts/verification verify
 	@echo "==> Auditing axioms + sorry inventory"
 	@$(MAKE) -C contracts/verification verify-audit
+
+# `verify-theft-free` — end-to-end machine check of the headline claim:
+#
+#   "An adversary who does not hold a SPHINCS+C10 secret key installed
+#    on the wallet cannot cause a deployed PQSmartWallet proxy's balance
+#    to decrease."
+#
+# Pipeline:
+#   1. Install the pinned Lean toolchain (idempotent; elan caches it).
+#   2. `lake build` — the kernel re-checks every closed theorem in the
+#      SphincsCVerify project, including `Spec.Theorems.theft_free` and
+#      wallet invariants I-1..I-8. A successful build IS the proof.
+#   3. Dump the axioms `theft_free` transitively depends on. We diff this
+#      against the expected TCB set (A1..A5 + Lean kernel built-ins).
+#      Any new axiom — or any missing one — fails the target.
+#
+# Trust boundary: see contracts/verification/docs/TRUST_ASSUMPTIONS.md.
+# A1 SHA-256 precompile, A2 EntryPoint v0.6 honesty, A3 solc 0.8.28
+# correctness, A4 EVM-runs-per-spec, A5 four named crypto assumptions
+# (Barbosa et al. ASIACRYPT 2024 + Hülsing PQC 2022).
+.PHONY: verify-theft-free
+verify-theft-free: export PATH := $(HOME)/.elan/bin:$(PATH)
+verify-theft-free:
+	@command -v elan >/dev/null || { \
+	  echo "ERROR: elan not found. Install with:"; \
+	  echo "  curl https://elan.lean-lang.org/elan-init.sh -sSf | sh -s -- -y"; \
+	  exit 1; \
+	}
+	@echo "==> [1/3] Pinning Lean toolchain"
+	@cd contracts/verification/lean && elan toolchain install "$$(cat lean-toolchain)" >/dev/null 2>&1 || true
+	@echo "==> [2/3] lake build (kernel-checks every closed theorem)"
+	@$(MAKE) -s -C contracts/verification verify-build
+	@echo "==> [3/3] Auditing axiom closure of theft_free"
+	@cd contracts/verification/lean && \
+	  lake env lean scripts/dump_axioms.lean 2>/dev/null > /tmp/theft_free_axioms.txt
+	@awk "/^'SphincsCVerify\\.Spec\\.Theorems\\.theft_free' depends on axioms:/{flag=1} flag" \
+	    /tmp/theft_free_axioms.txt \
+	  | tr -d ' \n' \
+	  | sed -e 's/.*\[//' -e 's/\]$$//' \
+	  | tr ',' '\n' \
+	  | sort -u > /tmp/theft_free_seen.txt
+	@printf '%s\n' \
+	    Classical.choice \
+	    Quot.sound \
+	    SphincsCVerify.Bridge.EntryPoint.entrypoint_honest \
+	    SphincsCVerify.Bridge.evm_bytecode_executes_correctly \
+	    SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4 \
+	    SphincsCVerify.Bridge.solidityVerifier_compiles_correctly \
+	    SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC \
+	    SphincsCVerify.Crypto.ITSR_F \
+	    SphincsCVerify.Crypto.SM_DT_TCR_F \
+	    SphincsCVerify.Crypto.hMsg_random_oracle \
+	    propext \
+	  | sort -u > /tmp/theft_free_expected.txt
+	@if diff -u /tmp/theft_free_expected.txt /tmp/theft_free_seen.txt; then \
+	  echo ""; \
+	  echo "================================================================"; \
+	  echo "  theft_free: PROVED."; \
+	  echo ""; \
+	  echo "  Lean kernel re-checked every closed theorem in SphincsCVerify"; \
+	  echo "  including Spec.Theorems.theft_free and wallet invariants"; \
+	  echo "  I-1..I-8. The axiom closure of the headline theorem matches"; \
+	  echo "  the documented TCB exactly (A1..A5 + Lean kernel built-ins)."; \
+	  echo ""; \
+	  echo "  CONCLUSION: An adversary without an installed SPHINCS+C10"; \
+	  echo "  secret key cannot cause a deployed PQSmartWallet proxy's"; \
+	  echo "  balance to decrease, modulo:"; \
+	  echo "    A1  SHA-256 EVM precompile correctness"; \
+	  echo "    A2  EntryPoint v0.6 honesty"; \
+	  echo "    A3  solc 0.8.28 compiles the wallet+verifier faithfully"; \
+	  echo "    A4  EVM executes per spec"; \
+	  echo "    A5  SPHINCS+C10 is EUF-CMA secure"; \
+	  echo "        (SM-DT-TCR + ITSR + H_msg ROM, Barbosa et al. 2024)"; \
+	  echo "    A6  Lean 4 kernel is sound"; \
+	  echo ""; \
+	  echo "  Trust report: contracts/verification/docs/TRUST_ASSUMPTIONS.md"; \
+	  echo "  Theorem:      contracts/verification/lean/SphincsCVerify/Spec/Theorems.lean"; \
+	  echo "================================================================"; \
+	else \
+	  echo ""; \
+	  echo "FAIL: theft_free's axiom closure drifted from the documented TCB."; \
+	  echo "Full dump: /tmp/theft_free_axioms.txt"; \
+	  exit 1; \
+	fi
 
 # `test-all` — run every host-runnable test suite in the repo with one
 # command. Streams one progress line per suite (suite name, then

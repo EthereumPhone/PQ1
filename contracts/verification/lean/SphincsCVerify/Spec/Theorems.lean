@@ -138,7 +138,7 @@ theorem verify_signs
     takes `ByteVec SignatureLen` so a non-4008-byte input cannot
     type-check. -/
 theorem verify_rejects_wrong_length :
-    ∀ (vk : VerifyingKey) (msg : ByteVec 32) (sig : ByteVec SignatureLen),
+    ∀ (_vk : VerifyingKey) (_msg : ByteVec 32) (sig : ByteVec SignatureLen),
       sig.data.size = SignatureLen := by
   intro _ _ sig; exact sig.size_eq
 

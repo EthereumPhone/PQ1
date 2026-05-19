@@ -64,7 +64,7 @@ def take {n : Nat} (v : ByteVec n) (k : Nat) (h : k ≤ n) : ByteVec k :=
     simp [Array.size_extract, hsize, Nat.min_eq_left h]⟩
 
 /-- Drop the first `k` bytes; requires `k ≤ n`. -/
-def drop {n : Nat} (v : ByteVec n) (k : Nat) (h : k ≤ n) : ByteVec (n - k) :=
+def drop {n : Nat} (v : ByteVec n) (k : Nat) (_h : k ≤ n) : ByteVec (n - k) :=
   ⟨v.data.extract k n, by
     have hsize : v.data.size = n := v.size_eq
     simp [Array.size_extract, hsize]⟩

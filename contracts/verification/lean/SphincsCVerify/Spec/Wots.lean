@@ -66,7 +66,7 @@ def pkFromSig
     let chainValues : List (ByteVec 16) :=
       (List.range L).map fun i =>
         let chainAdrs := Adrs.setChainIndex wotsAdrs (UInt32.ofNat i)
-        let digit := digits.get! i
+        let digit := digits[i]!
         let sigI :=
           if h : i < sigma.chains.size then sigma.chains[i]
           else zero 16
