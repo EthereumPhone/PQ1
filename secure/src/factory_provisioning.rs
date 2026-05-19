@@ -420,6 +420,28 @@ fn nibble_to_hex(n: u8) -> u8 {
 pub fn run_and_halt(se: &mut dyn WalletStore) -> ! {
     secure_log!("[FACTORY] ===== begin =====");
 
+    // Sentinel: mark "ceremony entered" before step 1. The host
+    // fixture's polling loop watches OTP for this bit to distinguish
+    // "chip never started ceremony" (sentinel = 0xFFFFFFFF) from
+    // "ceremony started, may be in progress or stalled at a failure
+    // panel" (sentinel = 0xFFFFFFFE). Failure to write the entry
+    // sentinel is silent — the operator still sees the FAIL panel on
+    // OLED if the ceremony actually crashes. We don't want a stuck
+    // OTP write to brick the ceremony before it's even started.
+    //
+    // The full ceremony-complete sentinel (bit 1 OR bit 2) is written
+    // at step 7 once all checks have passed. The host fixture treats:
+    //   0xFFFFFFFF  → didn't start
+    //   0xFFFFFFFE  → started, halted at failure panel
+    //   0xFFFFFFFC  → started + rehearsal completed
+    //   0xFFFFFFFA  → started + production completed (RDP2-eligible)
+    //   0xFFFFFFF8  → started + both completed (RDP2-eligible)
+    let _ = unsafe {
+        crate::hw::otp::factory_sentinel_record(
+            crate::hw::otp::FACTORY_SENTINEL_BIT_RAN,
+        )
+    };
+
     // Step 1: hardware self-test.
     // Currently delegates to the existing SAES self-test path under
     // `saes-self-test`. If that feature isn't compiled in, the step

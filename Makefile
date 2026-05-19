@@ -2572,8 +2572,77 @@ build-hw-factory-provisioning:
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
 		-p sphincs-tz-nonsecure --features stm32u585
 	@echo "==> Factory provisioning build ready."
-	@echo "    Pair with flash-hw-factory-provisioning (separate target,"
-	@echo "    to be written) to flash + run on real silicon."
+	@echo "    To flash + run the ceremony:"
+	@echo "        make flash-hw-factory-provisioning"
+	@echo "    To check the result + optionally bump RDP2:"
+	@echo "        tools/factory-provisioning-verify.sh [--bump-rdp2]"
+
+# Flash the production factory-provisioning firmware + configure
+# TZ option bytes + reset + verify the OTP sentinel via probe-rs.
+# Does NOT bump RDP2 — that's a separate deliberate step. Operator
+# (or the factory's automated fixture) inspects the verifier
+# output, then runs the bump target only when confident.
+#
+# This is the "happy path" target the factory's fixture script will
+# call after probe-rs download of any per-device data. Untested on
+# real silicon — Phase A is the "ready to send" milestone, Phase B
+# is the actual silicon trial.
+flash-hw-factory-provisioning: build-hw-factory-provisioning
+	@echo "==> Downloading factory firmware to STM32..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes (NOT RDP)..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting target — chip runs the ceremony autonomously..."
+	@probe-rs reset --chip STM32U585AIIx
+	@echo "==> Polling OTP sentinel for ceremony completion..."
+	@tools/factory-provisioning-verify.sh
+
+# Same as flash-hw-factory-provisioning but uses the rehearsal build.
+# Steps 4-6 SKIP their destructive calls; OTP sentinel records
+# BIT_REHEARSAL (not BIT_PRODUCTION). Useful for OLED panel layout
+# iteration without burning SE-side state on dev chips.
+flash-hw-factory-provisioning-rehearsal: build-hw-factory-provisioning-rehearsal
+	@echo "==> Downloading REHEARSAL firmware to STM32..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes (NOT RDP)..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Resetting target — chip runs the REHEARSAL ceremony..."
+	@probe-rs reset --chip STM32U585AIIx
+	@echo "==> Polling OTP sentinel for ceremony completion..."
+	@tools/factory-provisioning-verify.sh
+
+# IRREVERSIBLE: bumps STM32 RDP option byte to Level 2 after
+# verifying the OTP factory sentinel says the chip is production-
+# ready. Refuses if the sentinel is not RDP2-eligible. Requires the
+# operator to type "BUMP RDP2" at the interactive prompt as a final
+# confirmation.
+#
+# After this target completes:
+#   - SWD / JTAG is permanently denied
+#   - probe-rs read/write no longer works
+#   - semihosting/UART are dead
+#   - the only post-RDP2 diagnostic surface is OLED + USB behavior
+#   - the only "recovery" is mass-erase via STM32_Programmer_CLI
+#     --regression, which wipes every secret on the chip
+#
+# Run ONLY after `make flash-hw-factory-provisioning` has reported
+# PRODUCTION_OK or BOTH_OK.
+bump-rdp2-after-factory:
+	@echo "==> RDP2 bump — IRREVERSIBLE."
+	@echo "    Verifying OTP sentinel before proceeding..."
+	@tools/factory-provisioning-verify.sh --bump-rdp2
+
+# Read-only inspection target: report the OTP factory sentinel
+# state without flashing anything. Useful to check a chip's
+# current factory state mid-iteration.
+factory-status-hw:
+	@tools/factory-provisioning-verify.sh
 
 # Factory provisioning REHEARSAL build. Identical state machine to
 # the production target above, except steps 4 (DualSeProvision), 5

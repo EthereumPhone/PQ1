@@ -12,17 +12,46 @@ Internal design notes for engineers are in
 
 ## Quick procedure
 
-1. **Flash the firmware** the vendor ships you, using
-   `STM32_Programmer_CLI` (or the vendor-provided wrapper script).
-2. **Configure the TrustZone option bytes** the vendor specifies
-   (`TZEN=1`, secure-world memory split). The vendor's flash script
-   does this for you.
-3. **Power-cycle the device** (pull and reconnect VCC, or press the
-   RESET button if equipped).
-4. **Watch the OLED**. Expect either:
-   - `FACTORY OK` → device is ready to ship.
-   - `FACTORY FAIL @ STEP X` → device needs investigation. Note
-     the displayed code and report it to the vendor.
+The factory fixture script chains three steps. The operator just
+runs them and watches the OLED at step 2.
+
+```
+# Step 1 — flash + run the ceremony + verify OTP sentinel (does NOT
+#          bump RDP2)
+make flash-hw-factory-provisioning
+
+# Step 2 — operator visually confirms the OLED reads "FACTORY OK"
+#          (or sets aside on FACTORY FAIL)
+
+# Step 3 — IRREVERSIBLE: bump RDP=Level 2 after confirming success
+make bump-rdp2-after-factory
+```
+
+Internally, step 1:
+
+1. Flashes the firmware (`probe-rs download`).
+2. Configures TrustZone option bytes (`STM32_Programmer_CLI
+   --optionbytes TZEN=1 ...`).
+3. Resets the target so the firmware runs.
+4. Polls the OTP factory sentinel at `0x0BFA_00A0` until either the
+   ceremony completes or the 60-second timeout fires.
+5. Reports the sentinel state. Possible outcomes:
+   - `PRODUCTION_OK` / `BOTH_OK` → ceremony succeeded, OTP is
+     RDP2-eligible. Operator proceeds to step 3.
+   - `STARTED_FAILED` → ceremony entered then halted at a failure
+     panel. Operator reads the OLED for the step + error code and
+     reports.
+   - `DID_NOT_START` → chip never reached the ceremony entry. Try
+     a re-flash; if persistent, set aside.
+   - `REHEARSAL_ONLY` → this was the rehearsal build (`make
+     flash-hw-factory-provisioning-rehearsal`). Re-flash with the
+     real factory build.
+
+Step 3 reads the OTP sentinel again. If it's not RDP2-eligible,
+the bump is refused. If it is, the operator types `BUMP RDP2` at
+the prompt to confirm. RDP=Level-2 is then set via
+`STM32_Programmer_CLI`. **After step 3, the chip is permanently
+locked.**
 
 The whole ceremony takes a few seconds. If the OLED is blank for
 more than ~30 seconds, treat as failure and report.
@@ -225,8 +254,13 @@ Example report:
 - Firmware source: `secure/src/factory_provisioning.rs`
 - Step list + error codes: `FactoryStep` + `FactoryErrorCode` enums in that file
 - OTP sentinel API: `secure/src/hw/otp.rs::factory_sentinel_{read,record}`
+- Host-side verifier: `tools/factory-provisioning-verify.sh`
 - Build target (production): `make build-hw-factory-provisioning`
 - Build target (rehearsal): `make build-hw-factory-provisioning-rehearsal`
+- Flash + run + verify (production): `make flash-hw-factory-provisioning`
+- Flash + run + verify (rehearsal): `make flash-hw-factory-provisioning-rehearsal`
+- RDP2 bump (IRREVERSIBLE): `make bump-rdp2-after-factory`
+- Read-only sentinel check: `make factory-status-hw`
 - Host tests: `cargo test -p sphincs-tz-secure factory_provisioning`
   (7 tests pinning the step / error / display invariants)
 
