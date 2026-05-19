@@ -1076,15 +1076,25 @@ fn negative_measured_boot_words_derive_from_firmware_hash_not_entropy() {
 
 #[test]
 fn negative_measured_boot_render_uses_wordlist_indexed_by_bip39_indices() {
-    // Indices feeding `WORDLIST[idx as usize]` must come from
+    // Indices feeding the wordlist lookup must come from
     // `hash_to_word_indices`. Pin the textual access pattern.
+    // Post-F-27 hygiene: route through `word_bytes_at(indices[li/ri])`
+    // (constant-time scan) so the leaky `WORDLIST[idx]` pattern doesn't
+    // exist in the codebase for a future caller to inherit. The
+    // displayed words are public (firmware_hash-derived) — the CT
+    // routing is hygiene, not a security fix at this call site.
     assert!(
-        MEASURED_BOOT_SRC.contains("WORDLIST[indices[li] as usize].as_bytes();"),
-        "render_all_words must look up the left-column word via WORDLIST[indices[li]]"
+        MEASURED_BOOT_SRC.contains("word_bytes_at(indices[li])"),
+        "render_all_words must look up the left-column word via word_bytes_at(indices[li])"
     );
     assert!(
-        MEASURED_BOOT_SRC.contains("WORDLIST[indices[ri] as usize].as_bytes();"),
-        "render_all_words must look up the right-column word via WORDLIST[indices[ri]]"
+        MEASURED_BOOT_SRC.contains("word_bytes_at(indices[ri])"),
+        "render_all_words must look up the right-column word via word_bytes_at(indices[ri])"
+    );
+    // Belt-and-braces: the leaky pattern must NOT survive in this file.
+    assert!(
+        !MEASURED_BOOT_SRC.contains("WORDLIST[indices["),
+        "leaky `WORDLIST[indices[..]]` pattern must not exist in measured_boot.rs"
     );
 }
 
@@ -1096,8 +1106,8 @@ fn negative_measured_boot_layout_matches_8x4_two_column_grid() {
     assert!(MEASURED_BOOT_SRC.contains("for row in 0..4 {"));
     assert!(MEASURED_BOOT_SRC.contains("buf[0] = b'1' + row as u8;"));
     assert!(MEASURED_BOOT_SRC.contains("buf[8] = b'5' + row as u8;"));
-    assert!(MEASURED_BOOT_SRC.contains("let lmax = core::cmp::min(lw.len(), 6);"));
-    assert!(MEASURED_BOOT_SRC.contains("let rmax = core::cmp::min(rw.len(), 6);"));
+    assert!(MEASURED_BOOT_SRC.contains("let lmax = core::cmp::min(llen as usize, 6);"));
+    assert!(MEASURED_BOOT_SRC.contains("let rmax = core::cmp::min(rlen as usize, 6);"));
 }
 
 #[test]

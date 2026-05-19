@@ -7,7 +7,7 @@
 //! trust assumptions, just an open-source reproducible build.
 
 use sha2::{Digest, Sha256};
-use sphincs_tz_bip39::{hash_to_word_indices, WORDLIST};
+use sphincs_tz_bip39::{hash_to_word_indices, word_bytes_at};
 
 use crate::timeout;
 use crate::ui::{display, input, show_status, DISPLAY_COLS};
@@ -103,20 +103,28 @@ fn render_all_words(indices: &[u16; 8]) {
     for row in 0..4 {
         let mut buf = [b' '; DISPLAY_COLS];
 
-        // Left column: words 1-4 (cols 0-7)
+        // Left column: words 1-4 (cols 0-7).
+        // The displayed words derive from `firmware_hash` (public — the
+        // user is supposed to read and compare them against `fwmeasure`),
+        // so no secret rides on these wordlist accesses. We still route
+        // through `word_bytes_at` (constant-time scan) instead of
+        // `WORDLIST[idx].as_bytes()` so the leaky address-keyed-load
+        // pattern doesn't exist in the codebase for a future caller to
+        // inherit accidentally. Cost: ~16 KB stack reads × 8 = 128 KB
+        // at boot, well under 10 ms on Cortex-M33.
         let li = row;
         buf[0] = b'1' + row as u8;
         buf[1] = b' ';
-        let lw = WORDLIST[indices[li] as usize].as_bytes();
-        let lmax = core::cmp::min(lw.len(), 6);
+        let (lw, llen) = word_bytes_at(indices[li]);
+        let lmax = core::cmp::min(llen as usize, 6);
         buf[2..2 + lmax].copy_from_slice(&lw[..lmax]);
 
         // Right column: words 5-8 (cols 8-15)
         let ri = row + 4;
         buf[8] = b'5' + row as u8;
         buf[9] = b' ';
-        let rw = WORDLIST[indices[ri] as usize].as_bytes();
-        let rmax = core::cmp::min(rw.len(), 6);
+        let (rw, rlen) = word_bytes_at(indices[ri]);
+        let rmax = core::cmp::min(rlen as usize, 6);
         buf[10..10 + rmax].copy_from_slice(&rw[..rmax]);
 
         d.draw_line(row, crate::ui::ascii_str(&buf));
@@ -142,9 +150,14 @@ pub fn run() {
     secure_log!("[S] FW measurement: {:02x}{:02x}{:02x}{:02x}...",
         hash[0], hash[1], hash[2], hash[3]);
 
-    // Log words for semihosting comparison.
+    // Log words for semihosting comparison. Public data — words derive
+    // from firmware_hash — but route through the CT lookup so the leaky
+    // `WORDLIST[idx]` pattern doesn't survive in the codebase.
+    #[cfg(feature = "debug-log")]
     for (i, &idx) in indices.iter().enumerate() {
-        secure_log!("[S]   {} {}", i + 1, WORDLIST[idx as usize]);
+        let (wb, wlen) = word_bytes_at(idx);
+        let s = crate::ui::ascii_str(&wb[..wlen as usize]);
+        secure_log!("[S]   {} {}", i + 1, s);
     }
 
     // Phase 1: title screen — tells the user what's coming.

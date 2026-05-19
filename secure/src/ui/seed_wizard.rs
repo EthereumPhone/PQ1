@@ -26,7 +26,7 @@ use crate::rng;
 use crate::timeout;
 use sphincs_tz_bip39::{
     is_exact_wordlist_entry, lookup_prefix, word_bytes_at, Mnemonic, PrefixLookup,
-    MAX_WORD_BYTES, WORDLIST, WORD_COUNT,
+    MAX_WORD_BYTES, WORD_COUNT,
 };
 use zeroize::Zeroize;
 
@@ -254,12 +254,23 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
                 let expected = m.word_index(probe as usize);
                 if idx != expected {
                     #[cfg(feature = "debug-log")]
-                    secure_log!(
-                        "[wizard] verify step {}/3: MISMATCH — got BIP39 idx {} (\"{}\") but expected {} (\"{}\") at word #{}",
-                        step + 1, idx, WORDLIST[idx as usize],
-                        expected, m.word(probe as usize),
-                        probe + 1,
-                    );
+                    {
+                        // CT lookup — debug-log compiles out of production,
+                        // but keep the leaky `WORDLIST[idx]` pattern out of
+                        // the source so it can't be copy-pasted into a
+                        // secret-bearing context by accident.
+                        let (gb, glen) = word_bytes_at(idx);
+                        let mut eb = [0u8; MAX_WORD_BYTES];
+                        let elen = m.word_bytes(probe as usize, &mut eb);
+                        secure_log!(
+                            "[wizard] verify step {}/3: MISMATCH — got BIP39 idx {} (\"{}\") but expected {} (\"{}\") at word #{}",
+                            step + 1, idx,
+                            super::ascii_str(&gb[..glen as usize]),
+                            expected,
+                            super::ascii_str(&eb[..elen as usize]),
+                            probe + 1,
+                        );
+                    }
                     show_status("Wrong word", "retrying...");
                     return WizardResult::Cancelled;
                 }

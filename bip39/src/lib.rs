@@ -514,15 +514,62 @@ fn lowercase_ascii(input: &str, buf: &mut [u8; MAX_WORD_LEN]) -> Option<usize> {
 }
 
 /// Exact-match lookup. Case-insensitive in the ASCII range.
+///
+/// Returns the wordlist index of `input` (after ASCII-lowercasing) if it
+/// matches an English BIP-39 word, else `None`.
+///
+/// **Constant-time.** The previous implementation used
+/// `WORDLIST.binary_search_by` whose visited midpoint addresses leak the
+/// input. Today's only production caller is [`Mnemonic::from_words`]
+/// which the live firmware exercises only in the e2e-test path with a
+/// fixed mnemonic — so the leak was not on the production secret path.
+/// We still migrate the function (hygiene: don't leave the leaky
+/// pattern in the codebase for a future caller to inherit, and the
+/// CT cost of ~16 KB stack reads + ~40 K cycles ≈ 0.25 ms is negligible
+/// for the recovery / mnemonic-parsing use case).
 #[must_use]
 pub fn lookup_word_exact(input: &str) -> Option<u16> {
+    use core::hint::black_box;
     let mut buf = [0u8; MAX_WORD_LEN];
     let len = lowercase_ascii(input, &mut buf)?;
-    let needle = &buf[..len];
-    WORDLIST
-        .binary_search_by(|w| w.as_bytes().cmp(needle))
-        .ok()
-        .map(|i| i as u16)
+    if len == 0 || len > MAX_WORD_BYTES {
+        return None;
+    }
+    let nlen = len as u8;
+    let mut needle = [0u8; MAX_WORD_BYTES];
+    needle[..len].copy_from_slice(&buf[..len]);
+
+    const NO_MATCH: u16 = 0xFFFF;
+    let mut found: u16 = NO_MATCH;
+    let mut entry_idx: u16 = 0;
+    while entry_idx < 2048 {
+        let idx_obf = black_box(entry_idx);
+        let entry = &WORDLIST_FLAT[idx_obf as usize];
+        let entry_len = WORDLIST_LENS[idx_obf as usize];
+
+        let mut all_eq: u8 = 0xFF;
+        let mut i = 0;
+        while i < MAX_WORD_BYTES {
+            let byte_eq = ct_eq_u8(entry[i], needle[i]);
+            all_eq = black_box(all_eq & byte_eq);
+            i += 1;
+        }
+        let len_eq = ct_eq_u8(entry_len, nlen);
+        let is_match: u8 = black_box(all_eq & len_eq);
+
+        // Conditional-select: when `is_match` is non-zero, capture
+        // `idx_obf` into `found` (only the first hit lands, but
+        // wordlist entries are unique so there's at most one).
+        let mask16: u16 = (is_match as u16) | ((is_match as u16) << 8);
+        found = black_box((found & !mask16) | (idx_obf & mask16));
+
+        entry_idx += 1;
+    }
+    if found == NO_MATCH {
+        None
+    } else {
+        Some(found)
+    }
 }
 
 /// Constant-time wordlist-by-index lookup.
