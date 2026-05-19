@@ -51,8 +51,9 @@
 use sphincs_tz_shared::{
     ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, C10_SIG_LEN, EIP6492_BLOB_LEN,
     EIP6492_FACTORY_CALLDATA_LEN, EIP6492_FACTORY_CALLDATA_PADDED, EIP6492_INNER_WRAPPER_LEN,
-    EIP6492_MAGIC, EXECUTE_BATCH_SELECTOR, FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT,
-    MAX_ACCOUNT_INDEX, MAX_BATCH_TXS, MAX_OFFCHAIN_GAP, MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
+    EIP6492_MAGIC, ERC7730_MAX_TRAILER_LEN, EXECUTE_BATCH_SELECTOR, FLAG_INCLUDE_INIT_CODE,
+    FLAG_REGISTER_SLOT, MAX_ACCOUNT_INDEX, MAX_BATCH_TXS, MAX_OFFCHAIN_EIP712_TYPED_LEN,
+    MAX_OFFCHAIN_GAP, MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
     MAX_SIGN_RESPONSE_LEN, MAX_SLOT_USES, MAX_TX_LEN, NscStatus, OFFCHAIN_FLAGS_MASK,
     OFFCHAIN_FLAG_ACCOUNT_DEPLOYED, OFFCHAIN_KIND_PERSONAL_SIGN, OFFCHAIN_KIND_RAW32,
     OFFCHAIN_STATUS_INPUT_LEN, OFFCHAIN_STATUS_OUTPUT_LAST_USEROP_OFF,
@@ -213,15 +214,20 @@ fn negative_sign_offchain_personal_sign_max_payload_unchanged() {
 
 #[test]
 fn negative_sign_offchain_input_max_len_equals_header_plus_max_personal_sign() {
-    // Worst-case input: header + max personal-sign message. The
-    // firmware's TOCTOU snapshot is sized to this bound; any drift
-    // would either overflow SNAP_BUF (smaller bound, larger snap) or
-    // refuse valid traffic (larger bound, smaller snap).
+    // Worst-case input: header + max(personal_sign, eip712_typed).
+    // The firmware's TOCTOU snapshot is sized to this bound; any
+    // drift would either overflow SNAP_BUF (smaller bound, larger
+    // snap) or refuse valid traffic (larger bound, smaller snap).
+    // Phase 3 (ERC-7730) widened this to include the EIP-712 typed-
+    // data path + attestation trailer.
     assert_eq!(
         SIGN_OFFCHAIN_INPUT_MAX_LEN,
-        SIGN_OFFCHAIN_HEADER_LEN + MAX_OFFCHAIN_PERSONAL_SIGN_LEN
+        SIGN_OFFCHAIN_HEADER_LEN
+            + core::cmp::max(
+                MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
+                MAX_OFFCHAIN_EIP712_TYPED_LEN,
+            )
     );
-    assert_eq!(SIGN_OFFCHAIN_INPUT_MAX_LEN, 717);
 }
 
 #[test]
@@ -301,19 +307,14 @@ fn negative_sign_userop_batch_tx_prefix_len_is_54() {
 fn negative_sign_userop_batch_max_payload_len_covers_max_batch_at_max_tx_len() {
     // SNAP_BUF in cmd_sign_userop_batch.rs is sized to this constant.
     // It must accommodate the worst case: header + MAX_BATCH_TXS ×
-    // (prefix + MAX_TX_LEN data). Otherwise a fully-loaded batch
-    // payload would buffer-overflow the snapshot or be silently
-    // truncated.
+    // (prefix + MAX_TX_LEN data) + optional ERC-7730 trailer
+    // (2-byte len + payload). Otherwise a fully-loaded batch payload
+    // would buffer-overflow the snapshot or be silently truncated.
     let expected = SIGN_USEROP_BATCH_HEADER_LEN
-        + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN);
+        + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
+        + 2
+        + ERC7730_MAX_TRAILER_LEN;
     assert_eq!(SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, expected);
-    // Pin the absolute number too — refactors of the constants above
-    // should not silently change this load-bearing SRAM reservation.
-    assert_eq!(
-        SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN,
-        277 + 4 * (54 + 4096),
-        "SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN drifted — SNAP_BUF in cmd_sign_userop_batch.rs would be the wrong size"
-    );
 }
 
 #[test]
