@@ -1535,3 +1535,97 @@ fn negative_sync_remaining_with_mcu_monotonic_down() {
     assert!(MOD_SRC.contains("if mcu_remaining < self.remaining {"));
     assert!(MOD_SRC.contains("self.remaining = mcu_remaining;"));
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// 31. §25 Gap 4 — UserID silicon-lock SW maps to PinLocked, fires wipe
+// ═════════════════════════════════════════════════════════════════════
+//
+// When SE050's UserID auth_attempts hits max_attempts, the chip's
+// object policy refuses further VERIFY and the chip returns
+// SM_ERR_COMMAND_NOT_ALLOWED = 0x6986 ("Command not allowed — access
+// denied based on object policy", per `se05x_tlv.h::smStatus_t` +
+// AN13030 wording). The nominal production path never reaches this
+// state — `MAX_ATTEMPTS = 10` is the same on MCU page-124 and SE050,
+// so the MCU counter hits MAX first and `trigger_lockout_wipe` fires.
+// But the corruption/desync case (MCU counter reset via flash fault,
+// RDP regression mid-cycle, or dev-tool intervention while SE050 is
+// silicon-locked) needs the runtime path to also wipe. Pre-fix, the
+// 0x6986 fell through to the `Status(sw)` catch-all → `InternalError`
+// → gateway treats it as transient → device stuck in a no-wipe loop.
+//
+// The fix lives in two places (both pinned below):
+//   1. `apdu::verify_session`'s status-code match translates 0x6986
+//      to a new `Se050Error::AuthMethodBlocked` variant.
+//   2. `Se050::unlock`'s map_err (via the pure `classify_se050_unlock_
+//      error` helper) maps `AuthMethodBlocked` to
+//      `UnlockError::PinLocked`, which the gateway's
+//      `Err(UnlockError::PinLocked) => trigger_lockout_wipe()` arm
+//      handles directly.
+//
+// On-silicon empirical confirmation is the deferred step (next bench
+// session with a throwaway UserID).
+
+#[test]
+fn gap4_apdu_translates_0x6986_to_auth_method_blocked() {
+    // The apdu-layer arm that lifts 0x6986 to a typed variant. If
+    // this match arm goes away, 0x6986 would surface as
+    // `Se050Error::Status(0x6986)` which the classify-fn maps to
+    // `InternalError` (no wipe) — exactly the bug Gap 4 closes.
+    assert!(
+        APDU_SRC.contains("Err(Se050Error::Status(sw)) if sw == 0x6986 =>"),
+        "verify_session must translate 0x6986 to a typed variant; \
+         without it the unlock dispatch falls back to InternalError"
+    );
+    assert!(
+        APDU_SRC.contains("Err(Se050Error::AuthMethodBlocked)"),
+        "verify_session must surface 0x6986 as AuthMethodBlocked"
+    );
+    // The variant must exist in the enum definition.
+    assert!(
+        APDU_SRC.contains("AuthMethodBlocked,"),
+        "apdu.rs::Se050Error must declare the AuthMethodBlocked variant"
+    );
+}
+
+#[test]
+fn gap4_unlock_dispatch_maps_auth_method_blocked_to_pin_locked() {
+    // The unlock dispatch's pure helper. If this arm regresses to
+    // `_ => UnlockError::InternalError` the gateway won't wipe on
+    // silicon-lock — exact bug being defended against.
+    assert!(
+        MOD_SRC.contains("Se050Error::AuthMethodBlocked => UnlockError::PinLocked,"),
+        "classify_se050_unlock_error must map AuthMethodBlocked to PinLocked"
+    );
+    // The bookkeeping side-effect (zeroing the in-RAM remaining
+    // counter) must fire too — otherwise the remaining mirror lies
+    // about the chip's actual state.
+    assert!(
+        MOD_SRC.contains("Se050Error::AuthMethodBlocked => {")
+            && MOD_SRC.contains("self.remaining = 0;"),
+        "unlock's side-effect arm must zero self.remaining on AuthMethodBlocked"
+    );
+}
+
+#[test]
+fn gap4_pin_incorrect_still_maps_to_pin_incorrect() {
+    // Belt-and-braces: confirm the WRONG-PIN path didn't accidentally
+    // get rerouted to PinLocked during the Gap 4 refactor. Mapping
+    // wrong-PIN to PinLocked would wipe on the first mistyped digit —
+    // catastrophic UX.
+    assert!(
+        MOD_SRC.contains("Se050Error::PinIncorrect => UnlockError::PinIncorrect,"),
+        "classify_se050_unlock_error must keep PinIncorrect on the wrong-PIN path"
+    );
+}
+
+#[test]
+fn gap4_catch_all_still_maps_to_internal_error() {
+    // Transport glitches, SCP03 errors, and unknown SWs must STILL
+    // surface as InternalError (gateway treats as transient, no wipe).
+    // A regression that broadened the wipe trigger to all errors would
+    // silently DoS the user on a noisy I²C bus.
+    assert!(
+        MOD_SRC.contains("_ => UnlockError::InternalError,"),
+        "classify_se050_unlock_error must keep the catch-all on InternalError"
+    );
+}

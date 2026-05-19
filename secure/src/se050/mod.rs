@@ -2042,6 +2042,30 @@ impl Se050 {
 
 use crate::secure_element::{SeError, UnlockError, WalletStore};
 
+/// Translate an `Se050Error` from `authenticate_and_read` into the
+/// gateway-visible `UnlockError`.
+///
+/// Pure function so a host test can pin the §25 Gap 4 contract
+/// (`AuthMethodBlocked → PinLocked`) without needing an I2C transport.
+/// Attempt-counter bookkeeping (`self.remaining`) stays in the caller
+/// because it needs `&mut self`.
+///
+/// **Dispatch contract** (mirrored in `cmd_request_unlock.rs:117-122`):
+/// - `PinIncorrect` → `PinIncorrect` (gateway bumps MCU counter, wipes
+///   if MAX reached).
+/// - `AuthMethodBlocked` → `PinLocked` (gateway fires
+///   `trigger_lockout_wipe` directly; covers the desync case where
+///   SE050 is silicon-locked but MCU page-124 has been reset).
+/// - All other errors → `InternalError` (transport glitch, SCP03
+///   error, etc. — gateway treats as transient, no wipe).
+fn classify_se050_unlock_error(e: &Se050Error) -> UnlockError {
+    match e {
+        Se050Error::PinIncorrect => UnlockError::PinIncorrect,
+        Se050Error::AuthMethodBlocked => UnlockError::PinLocked,
+        _ => UnlockError::InternalError,
+    }
+}
+
 impl WalletStore for Se050 {
     fn is_provisioned(&mut self) -> bool {
         self.check_provisioned()
@@ -2153,14 +2177,26 @@ impl WalletStore for Se050 {
         use zeroize::Zeroize;
 
         let (mut entropy, vk_from_se, bvk_from_se) =
-            self.authenticate_and_read(pin).map_err(|e| match e {
-                Se050Error::PinIncorrect => {
-                    if self.remaining > 0 {
-                        self.remaining -= 1;
+            self.authenticate_and_read(pin).map_err(|e| {
+                // Side-effects (attempt-counter bookkeeping) live
+                // here because they need `&mut self`; the pure
+                // variant translation is in
+                // [`classify_se050_unlock_error`] so a host test
+                // can pin the §25 Gap 4 mapping
+                // (`AuthMethodBlocked → PinLocked`) without
+                // standing up a fake I2C transport.
+                match &e {
+                    Se050Error::PinIncorrect => {
+                        if self.remaining > 0 {
+                            self.remaining -= 1;
+                        }
                     }
-                    UnlockError::PinIncorrect
+                    Se050Error::AuthMethodBlocked => {
+                        self.remaining = 0;
+                    }
+                    _ => {}
                 }
-                _ => UnlockError::InternalError,
+                classify_se050_unlock_error(&e)
             })?;
 
         // Successful unlock — reset attempt counter.
@@ -2344,3 +2380,13 @@ impl Se050 {
         self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
     }
 }
+
+// Host tests for §25 Gap 4 live in
+// `secure/src/se050_under_test/pure_tests.rs` as source-text pins
+// (the established pattern in this crate, because the production
+// module is `#[cfg(not(test))]` gated and inline `#[cfg(test)]`
+// blocks never run). Real-silicon validation is the deferred step:
+// run `iterative_wipe` on a throwaway UserID to drive it to
+// attempts=0, then VERIFY, capture the SW — if it's not 0x6986
+// update both the `apdu::verify_session` arm and the
+// `AuthMethodBlocked` doc.

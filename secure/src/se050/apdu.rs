@@ -27,6 +27,26 @@ pub enum Se050Error {
     Status(u16),
     /// PIN verification failed (SE050 decremented attempt counter).
     PinIncorrect,
+    /// UserID authentication object is silicon-locked — the chip-side
+    /// `auth_attempts == max_attempts` and the policy now denies
+    /// further verification (SE050 surfaces this as
+    /// `SM_ERR_COMMAND_NOT_ALLOWED = 0x6986` per
+    /// `se05x_tlv.h::smStatus_t`, with AN13030 wording "Command not
+    /// allowed — access denied based on object policy"). Distinct
+    /// from `PinIncorrect` because the chip won't accept any more
+    /// attempts — the only recovery is `factory_reset_admin` + a
+    /// fresh `UserID` (re-provision).
+    ///
+    /// Empirical caveat: AN12413 (the authoritative APDU spec) is
+    /// behind NXP login and we have not yet captured the SW from the
+    /// chip directly. The mapping is informed by NXP's defined
+    /// `smStatus_t` set (0x6983 is NOT in SE050's enum — it's an
+    /// A71CL-era legacy code; SE050 uses 0x6986 for policy denial).
+    /// On-silicon confirmation is the deferred step in §25 Gap 4 —
+    /// run `iterative_wipe` against a throwaway UserID to drive it
+    /// to attempts=0, then send a fresh VERIFY and capture the SW.
+    /// If empirical SW differs from 0x6986, update this mapping.
+    AuthMethodBlocked,
     /// Device not provisioned (UserID object missing).
     NotProvisioned,
     /// Response data exceeds caller buffer.
@@ -510,8 +530,23 @@ pub unsafe fn verify_session(
     let mut resp = [0u8; 64];
     match send_apdu(t1, scp03, cmd, &mut resp) {
         Ok(_) => Ok(()),
+        // Wrong-PIN path: 0x6985 (`SM_ERR_CONDITIONS_NOT_SATISFIED`)
+        // or 0x63Cx (counter remaining nibble; documented as
+        // "Authentication failed, attempts left = x" in NXP's
+        // A71CL HAL header which SE050 inherits via ISO 7816-4).
         Err(Se050Error::Status(sw)) if sw == 0x6985 || (sw & 0xFF00) == 0x6300 => {
             Err(Se050Error::PinIncorrect)
+        }
+        // UserID silicon-lock path: §25 Gap 4. 0x6986
+        // (`SM_ERR_COMMAND_NOT_ALLOWED`, AN13030 wording "Command
+        // not allowed — access denied based on object policy") is
+        // SE050's policy-denial code. When the auth_attempts
+        // counter hits max_attempts the auth object's policy stops
+        // accepting VERIFY, which surfaces here. The mapping is
+        // documented-by-deduction (see `AuthMethodBlocked` doc);
+        // on-silicon confirmation deferred.
+        Err(Se050Error::Status(sw)) if sw == 0x6986 => {
+            Err(Se050Error::AuthMethodBlocked)
         }
         Err(e) => Err(e),
     }
