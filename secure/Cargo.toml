@@ -310,6 +310,26 @@ saes-dhuk = ["stm32u585"]
 # with `debug-log` at the make-target level (see `saes-self-test-hw`).
 # Use `make saes-self-test-hw`.
 saes-self-test = ["saes-dhuk"]
+# F-24 stage E Phase 1 — hardware flicker validation harness for the
+# decoy-mnemonic-frame defense. Short-circuits `main()` into a forever-
+# loop that renders page 0 of a fixed test mnemonic interleaved with
+# 4 fixed decoys at the production 5:1 (200ms:40ms) cadence. No wizard,
+# no buttons, no SE access — just OLED rendering. Use `make decoy-
+# flicker-hw` to flash a board and stare at the screen to validate
+# whether the cadence is visually readable. NEVER ship.
+decoy-flicker-test = []
+# F-24 stage E Phase 1 — enable decoy-mnemonic-frame rendering in the
+# production seed-wizard's show_mnemonic flow. Default OFF: the wizard
+# shows the real mnemonic on a stable display so the user can write it
+# down. Default ON would only make sense on a display whose pixel
+# response time is long enough that briefly-painted decoy frames don't
+# fully appear before being overwritten by the next real frame (LCD
+# with Tr+Tf > decoy-hold-MS). On bistable displays like the SSD1306
+# OLED, decoy frames are FULLY visible and the user sees N+1 mnemonics
+# cycling — breaks the wizard UX. Gate this feature on once the
+# hardware supports subliminal decoys; bench-validate via the
+# `decoy-flicker-test` feature on the same display first.
+decoy-frames = []
 # Minimal USART1 → ST-LINK-VCP driver for diagnostic output that
 # survives RDP ≥ 1 (where SWD debug — and therefore semihosting — is
 # disabled). Pairs with `saes-self-test` for the RDP1 DHUK fingerprint

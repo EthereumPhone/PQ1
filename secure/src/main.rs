@@ -1038,6 +1038,14 @@ fn main() -> ! {
     #[cfg(feature = "stm32u585")]
     setup_systick();
 
+    // F-24 stage E Phase 1 — hardware flicker validation harness.
+    // When this feature is on, short-circuit straight into the decoy-
+    // frame render loop. No measured_boot, no wizard, no SE access —
+    // just OLED rendering forever so a bench observer can judge the
+    // 5:1 (200 ms:40 ms) real:decoy cadence.
+    #[cfg(feature = "decoy-flicker-test")]
+    ui::seed_wizard::decoy_flicker_test_loop();
+
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
     // Skipped in automated e2e tests which need non-interactive boot.

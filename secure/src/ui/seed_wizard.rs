@@ -116,16 +116,22 @@ const TOTAL_PAGES: usize = WORD_COUNT / WORDS_PER_PAGE; // 8
 const N_DECOYS: usize = 4;
 
 /// How long the real mnemonic frame is held on screen before yielding
-/// to a decoy frame. Tuned for 5:1 real:decoy *time* ratio paired with
-/// [`DECOY_FRAME_HOLD_MS`]. Per the §F-24 stage E design note the
-/// realistic threat (camera attacker) is unaffected by decoy frames —
-/// these defend the bus-EM channel for an attacker who can scope the
-/// I²C cable but lacks line-of-sight to the screen.
+/// to a decoy frame. The 5:1 (200 ms:40 ms) cadence was the original
+/// Trezor-doc-referenced design.
 ///
-/// Bench-validate the visual flicker on real silicon (SSD1306 over I²C
-/// @ 400 kHz, ~36 ms per `flush_with_secret_rows` call). If users find
-/// the flicker distracting, increase this to 400-500 ms (reduces decoy
-/// coverage but smooths the visual).
+/// **Bench-validated 2026-05-19 on SSD1306 OLED + I²C @ 400 kHz: the
+/// defense does NOT work** on this display class. OLED pixels are
+/// bistable (hold state until repainted), so a 40 ms decoy hold is
+/// fully visible to the user — the wizard's read-the-seed UX breaks.
+/// Bumping REAL_FRAME_HOLD_MS to 2000 didn't help: the user still
+/// sees decoys as content changes, not subliminal flickers.
+///
+/// **Expected to work on slow-response LCDs** (e.g., ZT165M017AT TFT
+/// with NV3007 driver, Tr+Tf typ 35 ms max 40 ms). On those displays
+/// the *pixel response time itself* is the persistence-of-vision
+/// mechanism — a decoy painted then immediately overwritten by real
+/// never reaches full transition. Re-test the cadence (probably
+/// REAL=200 ms, DECOY=5-10 ms) once the new hardware is wired.
 const REAL_FRAME_HOLD_MS: u32 = 200;
 
 /// How long each decoy frame is held. Cycles through `[decoy_0 ..
@@ -146,6 +152,74 @@ pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {
         None => return WizardResult::IdleWipe,
     }
 
+    // Decoy frames are gated on `decoy-frames` (off by default).
+    // OLED displays are bistable — pixels hold state between paints,
+    // so a 40 ms decoy frame is fully visible to the user; the
+    // wizard's read-the-seed UX breaks at any decoy hold above the
+    // OLED's render time (~36 ms over I²C @ 400 kHz). On a slow-
+    // response LCD (Tr+Tf > decoy-hold), decoy pixels never fully
+    // appear before being overwritten by the next real frame; turn
+    // this feature on after bench-validating via `decoy-flicker-test`
+    // on the target display. See `tools/sca/README.md §F-24 stage E
+    // sub-channel 4` for the trade-off analysis.
+    #[cfg(feature = "decoy-frames")]
+    {
+        show_mnemonic_with_decoys(m)
+    }
+    #[cfg(not(feature = "decoy-frames"))]
+    {
+        show_mnemonic_simple(m)
+    }
+}
+
+#[cfg(not(feature = "decoy-frames"))]
+fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
+    let mut page: usize = 0;
+    let mut seen_last = false;
+    timeout::reset_activity();
+
+    loop {
+        render_mnemonic_page(m, page);
+        if page == TOTAL_PAGES - 1 {
+            seen_last = true;
+        }
+
+        let mut idle = || timeout::is_idle();
+        let event = match input().wait_button(&mut idle) {
+            Some(ev) => ev,
+            None => return WizardResult::IdleWipe,
+        };
+        timeout::reset_activity();
+
+        match event {
+            (Button::Right, Press::Short) => {
+                if page + 1 < TOTAL_PAGES {
+                    page += 1;
+                }
+            }
+            (Button::Left, Press::Short) => {
+                if page > 0 {
+                    page -= 1;
+                }
+            }
+            (Button::Right, Press::Long) => {
+                if seen_last {
+                    // Wipe display before returning so the words don't linger.
+                    show_status("Words shown", "");
+                    return WizardResult::Confirmed;
+                }
+                // Otherwise treat long-Right as "next page" hint.
+                if page + 1 < TOTAL_PAGES {
+                    page += 1;
+                }
+            }
+            (Button::Left, Press::Long) => return WizardResult::Cancelled,
+        }
+    }
+}
+
+#[cfg(feature = "decoy-frames")]
+fn show_mnemonic_with_decoys(m: &Mnemonic) -> WizardResult {
     // F-24 stage E (sub-channel 4) — generate N_DECOYS valid BIP-39
     // mnemonics. Each is built from independent rng_strong entropy and
     // interleaved with the real mnemonic during display
@@ -231,6 +305,7 @@ pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {
 /// content is not distinguishable from the decoys without independent
 /// ground-truth on which frame is which. The user reads the real one
 /// because it dominates persistence-of-vision (5/6 of the on-time).
+#[cfg(feature = "decoy-frames")]
 fn show_mnemonic_page_with_decoys(
     real: &Mnemonic,
     decoys: &[Mnemonic; N_DECOYS],
@@ -733,4 +808,51 @@ fn wrap_in_range(start: usize, end: usize, cur: usize, offset: isize) -> usize {
     let len = (end - start) as isize;
     let pos = (cur as isize - start as isize + offset).rem_euclid(len);
     start + pos as usize
+}
+
+// ---------------------------------------------------------------------------
+// F-24 stage E Phase 1 — hardware flicker validation harness
+// ---------------------------------------------------------------------------
+
+/// Standalone bench loop for visual validation of the decoy-frame
+/// cadence. No wizard, no buttons, no SE access — just a B-U585I +
+/// SSD1306 OLED rendering the 5:1 real:decoy interleave forever so a
+/// bench user can stare at the screen and report whether the flicker
+/// is readable.
+///
+/// Page 0 only. Cycles `decoy[0..N_DECOYS]` round-robin between every
+/// real frame. Fixed test entropy (no RNG dependency) so the screen
+/// content is deterministic across runs.
+#[cfg(feature = "decoy-flicker-test")]
+pub fn decoy_flicker_test_loop() -> ! {
+    use sphincs_tz_bip39::Mnemonic;
+
+    // Banner — title row reads "FLICKER TEST" so an observer can
+    // identify the build at a glance. This row is PUBLIC (rendered
+    // every frame, content-independent of the secret); only rows 1-3
+    // get the CT-blit treatment via render_mnemonic_page.
+    let real = Mnemonic::from_entropy(&[0xAAu8; 32]);
+    let decoys: [Mnemonic; N_DECOYS] = [
+        Mnemonic::from_entropy(&[0x11u8; 32]),
+        Mnemonic::from_entropy(&[0x22u8; 32]),
+        Mnemonic::from_entropy(&[0x33u8; 32]),
+        Mnemonic::from_entropy(&[0x44u8; 32]),
+    ];
+
+    #[cfg(feature = "debug-log")]
+    secure_log!("[S] decoy-flicker-test: starting render loop (page 0 only)");
+
+    // Run forever. Page 0 = words 1-3 of the test mnemonic.
+    // Real frame: 200 ms hold. Decoy frame: 40 ms hold. Cycle: 240 ms.
+    // Time ratio real:decoy = 5:1.
+    let mut decoy_idx: usize = 0;
+    loop {
+        render_mnemonic_page(&real, 0);
+        cortex_m::asm::delay(160_000 * REAL_FRAME_HOLD_MS);
+
+        render_mnemonic_page(&decoys[decoy_idx], 0);
+        cortex_m::asm::delay(160_000 * DECOY_FRAME_HOLD_MS);
+
+        decoy_idx = (decoy_idx + 1) % N_DECOYS;
+    }
 }

@@ -1036,23 +1036,55 @@ mitigation paths:
      ground plane under the traces, board layout that keeps the bus
      short.
    - **Firmware mitigation 1**: **decoy frames**. Render the real
-     mnemonic interleaved with N=4 valid-but-fake mnemonics at high
-     refresh rate. User sees the real one via persistence-of-vision
-     (real frame at 200 ms hold, decoy frame at 40 ms hold = 5:1
-     time ratio — eye averages, picks the dominant). The bus
-     signature is the average of N+1 frames so the real one isn't
-     distinguishable. **LANDED 2026-05-19** in
-     `secure/src/ui/seed_wizard.rs::show_mnemonic_page_with_decoys`.
+     mnemonic interleaved with N=4 valid-but-fake mnemonics. The
+     defense relies on the user seeing the real one via persistence-
+     of-vision while the bus carries N+1 valid mnemonics — bus
+     attacker sees the average, user sees the dominant frame.
+     **CODE LANDED 2026-05-19** in
+     `secure/src/ui/seed_wizard.rs::show_mnemonic_page_with_decoys`,
+     gated behind a new `decoy-frames` Cargo feature (default OFF).
      Decoys are generated from independent `rng_strong::fill`
      entropy at wizard entry, routed through the same constant-time
      `render_mnemonic_page` (so the per-frame CPU trace is content-
      independent per F-24 stages A-D), and zeroized via `Mnemonic`'s
-     Drop impl on wizard exit. Hardware flicker validation pending:
-     bench user reads 24 words off the real silicon and reports
-     whether the 5:1 ratio is readable. If unreadable, increase
-     `REAL_FRAME_HOLD_MS` to 400-500 ms (smooths visual, weakens
-     defense). 5 source-text regression sentinels in
+     Drop impl on wizard exit. 5 source-text regression sentinels in
      `secure/src/ui_under_test/pure_tests.rs::negative_*decoy*`.
+
+     **Bench-validation result (SSD1306 OLED + I²C @ 400 kHz, 2026-
+     05-19): the defense DOES NOT work on this display.** Tested
+     via the `decoy-flicker-test` feature + `make decoy-flicker-hw`
+     which short-circuits `main()` into a forever-loop rendering
+     page 0 of a fixed test mnemonic interleaved with 4 fixed
+     decoys. User sees N+1 mnemonics cycling through, not a stable
+     real mnemonic with brief decoy flashes. Increasing
+     REAL_FRAME_HOLD_MS from 200 → 2000 didn't help: the user still
+     perceives content changes, not subliminal flickers.
+
+     **Root cause**: OLED pixels are bistable — once painted, they
+     hold state indefinitely until repainted. Persistence-of-vision
+     (Trezor's referenced mechanism) works on displays with natural
+     decay (CRT phosphors, movie projectors) where each frame is
+     briefly lit. On OLEDs the eye locks onto every painted frame.
+     We cannot paint faster than ~25 ms over I²C, and a 25 ms
+     content change is well above the eye's flicker-fusion
+     threshold (~10 ms for content, ~40 ms for brightness).
+
+     **Path forward**: re-test on a slow-response LCD where the
+     *pixel response time itself* provides the persistence-of-
+     vision mechanism. Specifically, the **ZT165M017AT (TFT LCD,
+     NV3007 driver, SPI, 142×428 pixels, Tr+Tf typ 35 ms max
+     40 ms)** is the planned hardware. On that display, a decoy
+     painted for ~5-10 ms and immediately overwritten by real
+     never reaches full pixel transition (pixels are still moving
+     ~10-20% toward decoy when the real paint pulls them back).
+     Bus traffic still carries the full decoy frame so the defense
+     works on the bus side; the user sees only a minor brightness
+     fluctuation, not a content change. Phase 1 stays in tree as
+     a Cargo-feature-gated path (`decoy-frames`) so flipping it on
+     when the LCD is wired is one feature-flag change. Tune
+     `REAL_FRAME_HOLD_MS` / `DECOY_FRAME_HOLD_MS` empirically on
+     the LCD via `make decoy-flicker-hw` and update the constants
+     when the cadence is bench-validated.
    - **Firmware mitigation 2**: constant-pixel-count encoding. XOR
      a fixed-but-different complement into each word's bitmap so
      the lit-pixel count is identical regardless of content. Closes

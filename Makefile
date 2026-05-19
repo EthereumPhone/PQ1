@@ -2495,5 +2495,41 @@ fuzz-apdu-parse-header:
 fuzz-hid-frame-assembler:
 	cd fuzz && cargo +nightly fuzz run hid_frame_assembler $(FUZZ_LIBFUZZER_ARGS)
 
+# F-24 stage E Phase 1 — hardware flicker validation harness for the
+# decoy-mnemonic-frame defense. Builds a minimal secure firmware that
+# short-circuits `main()` into `ui::seed_wizard::decoy_flicker_test_loop`
+# (renders page 0 of a fixed test mnemonic interleaved with 4 fixed
+# decoys at the production 5:1 = 200ms:40ms cadence, forever). No
+# wizard, no buttons, no SE access. A bench user stares at the OLED
+# and reports whether the cadence is visually readable.
+#
+# Expected screen: row 0 = "Phrase 1/8" title, rows 1-3 = three words
+# from the test mnemonic (varying every ~240 ms cycle between real
+# and one of 4 decoys). If the flicker is acceptable, ship as-is. If
+# distracting, bump REAL_FRAME_HOLD_MS in
+# `secure/src/ui/seed_wizard.rs:129` to 400-500 (smooths visual at
+# cost of decoy coverage).
+decoy-flicker-hw:
+	@echo "==> Building decoy-flicker-test firmware..."
+	@echo "    Renders page 0 forever with 5:1 real:decoy cadence."
+	@echo "    No buttons, no wizard, no SE — just OLED rendering."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features decoy-flicker-test,mock-se,debug-log,ui-oled,stm32u585,dev-testkey
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running — watch the OLED. Ctrl-C to detach."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o
