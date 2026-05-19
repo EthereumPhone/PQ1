@@ -304,6 +304,7 @@ e2e:
 		"\\[NS\\]\\[e2e\\] Scenario 5j: self-attest typed render" \
 		"\\[NS\\]\\[e2e\\] Scenario 5k: self-attest keccak mismatch dropped" \
 		"\\[NS\\]\\[e2e\\] Scenario 5l: both selector trailers refused" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p: EIP-712 typed sign (kind=2) wire format" \
 		"\\[NS\\]\\[e2e\\] Scenario 6: brute-force protection" \
 		"\\[NS\\]\\[e2e\\] === All scenarios passed! ==="; do \
 		if grep -q "$$line" $$log; then \
