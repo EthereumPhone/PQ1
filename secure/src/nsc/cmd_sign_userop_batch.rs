@@ -237,15 +237,24 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             ) {
                 Ok(v) => {
                     // Find an inner tx whose (chain_id, to) matches.
+                    // FI-hardened binding cross-check (Phase 5 item 6): the
+                    // first match's verdict is double-evaluated via
+                    // `check_true_into_sentinel` with `wait_random` between
+                    // so a single-fault glitch that flips the `.is_ok()`
+                    // ALSO has to defeat a Hamming-distant sentinel compare.
                     let mut bind_idx: Option<usize> = None;
                     for i in 0..batch_count {
                         let ptx = parsed[i].as_ref().unwrap();
-                        if crate::tx::erc7730::cross_check_contract(
+                        let candidate_ok = crate::tx::erc7730::cross_check_contract(
                             &v.ir,
                             chain_id,
                             &ptx.to,
                         )
-                        .is_ok()
+                        .is_ok();
+                        crate::fi::wait_random();
+                        if crate::fi::check_true_into_sentinel(
+                            || core::hint::black_box(candidate_ok),
+                        ) == crate::fi::OK_SENTINEL
                         {
                             bind_idx = Some(i);
                             break;

@@ -188,6 +188,9 @@ mod nsc_fw_update_pure_tests;
 #[cfg(test)]
 mod nsc_erc7730_unattested_pure_tests;
 
+#[cfg(test)]
+mod nsc_erc7730_binding_fi_pure_tests;
+
 // ── Host-side test suite for the `secure-fw-update-boot` slice ──
 //
 // Covers `fw_update/mod.rs` (state-machine types + `verify_manifest`
