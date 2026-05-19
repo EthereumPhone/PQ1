@@ -1044,6 +1044,40 @@ The §8.4 agent-derived plan is the missing concrete porting content that §26 r
 
 ---
 
+### 31. Trezor-derived USB / FW-update hardening
+
+Items sourced from a 2026-05-19 review of `trezor-firmware/core/src/trezor/wire/{codec,thp}` against our stack. Our threat model differs (PIN never on wire, trusted-UI confirms every signature, transactions are public post-broadcast) so much of Trezor's THP (CPace pairing for encrypted wire, CRC-32 per frame, alternating-bit ACK protocol) earns minimal incremental security benefit at high engineering cost — skipped. The items below ARE worth adopting because each closes a concrete failure mode the existing stack doesn't defend against.
+
+#### 31a — USB HID layer (Tier 1, defense-in-depth)
+
+- [x] **Channel-ID isolation in `HidFrameAssembler` — already implemented; add regression test.** Re-audit on 2026-05-19: `process_frame` at `shared/src/apdu_framing.rs:364` ALREADY rejects continuation frames whose channel_id doesn't match the captured one from frame 0 (`if channel != self.channel_id || seq != self.rx_seq { self.reset(); return FrameOutcome::Dropped; }`). The proptest harness exercises this path via `hid_frame_random_input_never_panics` but no explicit positive-/negative-channel-ID test pins the behavior. Action: add a hand-written regression test that constructs frame 0 on channel A, frame 1 on channel B, asserts `FrameOutcome::Dropped` + reset state. ~20 LoC. Done so a future refactor can't accidentally weaken this without the test failing loudly.
+
+- [ ] **Frame-arrival timeout in `HidFrameAssembler`.** A malicious host can send frame 0 (claiming a 4 KB APDU) then never send the continuation, wedging the assembler in mid-stream forever. Fix: caller (the USB transport) tracks per-frame timestamp; if > T ms (default 5000 ms) passes between continuation frames, reset assembler state. Timeout best implemented at the transport layer (`nonsecure/src/usb/transport.rs::Transport`) using a SysTick counter rather than inside the pure assembler. ~50 LoC + integration test.
+
+- [ ] **Per-channel rate limit at USB transport.** Bus-bombing DoS / fuzzing defense. If > N frames/sec arrive (default N=200, comfortably above legitimate sign-userop throughput), drop frames + log. Cheap counter + sliding window. ~40 LoC.
+
+#### 31b — Firmware-update trusted-UI confirm (BLOCKED on `secure/src/ui/confirm.rs` WIP)
+
+Currently `fw_update::confirm_commit` in `secure/src/fw_update/mod.rs:53` is a stub returning `false`, so a non-`e2e-test` build cannot install firmware updates AT ALL (every COMMIT is treated as user-cancelled). This is safe-by-default (no malicious update can land) but also blocking (no legit update can land). When `secure/src/ui/confirm.rs` restabilizes, wire the confirm dialog to show:
+
+- [ ] **New firmware version** (decoded from manifest's `fw_version` field).
+- [ ] **New firmware fingerprint** as 8 BIP-39 words. `verify::measurement_words_for_inactive_slot` is already plumbed at `secure/src/fw_update/verify.rs:96`. Answers "did the firmware bytes change in any way?" — user compares against release-note fingerprint.
+- [ ] **Upgrade / downgrade indicator** — read OTP rollback floor (`hw::otp::rollback_counter_read`), compare against manifest's `fw_version`. Display "↑ upgrade" / "= same version" / "✗ downgrade refused" (the verify chain already rejects downgrades; this is just user-facing visibility).
+- [ ] **Signing-key fingerprint** as 8 BIP-39 words of SHA-256(`fwsign_pubkey`). Different question from #2 — answers "did someone steal/swap the signing key?" Should be identical on every release; a mismatch with the fingerprint the user wrote down at first boot signals CI key compromise. Pubkey lives in `secure/src/fw_update/vendor_pubkey.rs`. ~50 LoC.
+
+Once these 4 fields are wired, the COMMIT confirm dialog matches Trezor's defense-in-depth: even a valid signature + non-rollback firmware can't install without the user visually approving the version, fingerprint, direction, and signer.
+
+#### 31c — Skipped from Trezor's stack (with rationale)
+
+For audit-trail: each item below was evaluated and rejected as not worth the cost.
+
+- **CPace pairing / encrypted USB wire.** Trezor's THP encrypts all wire traffic between host and device. Defends against a malicious USB hub observing pre-broadcast transaction data. Our trusted-UI confirms every signature so origin-spoofing is defeated, and on-chain transactions are public seconds after signing anyway. ~2-3 weeks engineering; changes wire format which conflicts with launch invariant #6 (frozen target). **No.**
+- **CRC-32 per HID frame.** USB PHY already CRCs every packet at the bus level. Adding application-layer CRC is paranoia. **No.**
+- **Vendor key hierarchy** (SatoshiLabs root → vendor key → firmware key). Single SPHINCS+C10 fwsign key is fine for a launch wallet; hierarchy adds key-management complexity without near-term threat reduction. **No.**
+- **Alternating-bit ACK protocol.** Replay protection. Our per-command structure already defeats replays (on-chain counter bumps make every transaction unique; off-chain counter bumps in flash page 123 make every EIP-1271 sig unique). **No.**
+
+---
+
 ### 30. Factory production-line test (prodtest) firmware
 
 **Status:** Phases A through G landed 2026-05-19 except Phase F's photos which need a hardware-on-bench session. Phase F's text contribution (troubleshooting matrix, pre-flight checklist, TODO photo markers, operator wallchart narrative) landed in the same commit. The prodtest main-loop short-circuit runs the final-stage init (`usb_hw::init` + `setup_systick` + DWT) then calls `boot_ns::boot` so the NS USB stack comes up and routes `INS_V2_PRODTEST_*` codes to the CMSE veneers. All 10 commands are reachable over USB. Hardware bring-up is now blocked only on the user's hardware-on-bench session.

@@ -689,4 +689,120 @@ mod fuzz_props {
         assert_eq!(outcome, ChainStepOutcome::WrongLength);
         assert_eq!(s.pos(), 0);
     }
+
+    // ---------------------------------------------------------------
+    // HID channel-ID isolation regression test (work-todo §31a)
+    // ---------------------------------------------------------------
+    //
+    // Pins the assembler's mid-stream channel-ID enforcement so a
+    // future refactor can't silently weaken it. Trezor's codec_v1
+    // and ours both require continuation frames to carry the same
+    // channel_id the host claimed in frame 0; mismatch = host
+    // confused-deputy / cross-tab race and MUST drop.
+    //
+    // The proptest harness above exercises `process_frame` against
+    // millions of random byte sequences but doesn't construct THIS
+    // specific positive/negative pair, so a fix-then-regress on
+    // line 364 would slip past CI without a hand-written test.
+
+    fn hid_first_frame(chan: u16, expected: u16, payload: &[u8]) -> [u8; HID_REPORT_SIZE] {
+        let mut f = [0u8; HID_REPORT_SIZE];
+        f[0..2].copy_from_slice(&chan.to_be_bytes());
+        f[2] = HID_TAG_APDU;
+        f[3] = 0; // seq = 0
+        f[4] = 0;
+        f[5..7].copy_from_slice(&expected.to_be_bytes());
+        let take = core::cmp::min(payload.len(), HID_FIRST_DATA);
+        f[7..7 + take].copy_from_slice(&payload[..take]);
+        f
+    }
+
+    fn hid_cont_frame(chan: u16, seq: u16, payload: &[u8]) -> [u8; HID_REPORT_SIZE] {
+        let mut f = [0u8; HID_REPORT_SIZE];
+        f[0..2].copy_from_slice(&chan.to_be_bytes());
+        f[2] = HID_TAG_APDU;
+        f[3..5].copy_from_slice(&seq.to_be_bytes());
+        let take = core::cmp::min(payload.len(), HID_CONT_DATA);
+        f[5..5 + take].copy_from_slice(&payload[..take]);
+        f
+    }
+
+    #[test]
+    fn hid_channel_id_mismatch_on_continuation_drops_and_resets() {
+        let mut buf = [0u8; MAX_APDU_RX];
+        let mut asm = HidFrameAssembler::new();
+
+        // Frame 0: channel 0xAAAA, expected 120 bytes (needs ≥1 cont).
+        let f0 = hid_first_frame(0xAAAA, 120, &[0x11; HID_FIRST_DATA]);
+        let outcome0 = asm.process_frame(&f0, HID_REPORT_SIZE, &mut buf);
+        assert_eq!(outcome0, FrameOutcome::NeedMore);
+        assert_eq!(asm.channel_id(), 0xAAAA);
+        assert_eq!(asm.rx_expected(), 120);
+
+        // Frame 1 arrives on a DIFFERENT channel (0xBBBB). Host
+        // confused-deputy / cross-tab race. Must drop + reset.
+        let f1_wrong = hid_cont_frame(0xBBBB, 1, &[0x22; HID_CONT_DATA]);
+        let outcome1 = asm.process_frame(&f1_wrong, HID_REPORT_SIZE, &mut buf);
+        assert_eq!(outcome1, FrameOutcome::Dropped);
+        // State must be fully reset so a subsequent legit stream
+        // doesn't inherit half-filled buffers.
+        assert_eq!(asm.rx_expected(), 0);
+    }
+
+    #[test]
+    fn hid_channel_id_match_on_continuation_succeeds() {
+        // Sibling positive case so the regression test pair pins
+        // BOTH the accept-on-match and reject-on-mismatch paths.
+        let mut buf = [0u8; MAX_APDU_RX];
+        let mut asm = HidFrameAssembler::new();
+
+        let f0 = hid_first_frame(0xAAAA, 120, &[0x11; HID_FIRST_DATA]);
+        assert_eq!(
+            asm.process_frame(&f0, HID_REPORT_SIZE, &mut buf),
+            FrameOutcome::NeedMore
+        );
+
+        let f1 = hid_cont_frame(0xAAAA, 1, &[0x22; HID_CONT_DATA]);
+        let outcome1 = asm.process_frame(&f1, HID_REPORT_SIZE, &mut buf);
+        // 120 expected = 57 first + 59 cont + extra in a 3rd frame.
+        // Two cont frames carry 59 each = 118; with the first 57 we
+        // overshoot at 116 + extra. Actually: 57 first + 59 cont = 116;
+        // we still need 4 more so this should be NeedMore.
+        assert_eq!(outcome1, FrameOutcome::NeedMore);
+        assert_eq!(asm.channel_id(), 0xAAAA);
+    }
+
+    #[test]
+    fn hid_channel_id_mismatch_after_reset_can_start_fresh_stream() {
+        // After a reset triggered by channel mismatch, a brand-new
+        // frame 0 must be accepted (don't lock out the channel
+        // forever — only drop the in-flight stream).
+        let mut buf = [0u8; MAX_APDU_RX];
+        let mut asm = HidFrameAssembler::new();
+
+        let f0_a = hid_first_frame(0xAAAA, 120, &[0x11; HID_FIRST_DATA]);
+        assert_eq!(
+            asm.process_frame(&f0_a, HID_REPORT_SIZE, &mut buf),
+            FrameOutcome::NeedMore
+        );
+
+        let f1_wrong = hid_cont_frame(0xBBBB, 1, &[0x22; HID_CONT_DATA]);
+        assert_eq!(
+            asm.process_frame(&f1_wrong, HID_REPORT_SIZE, &mut buf),
+            FrameOutcome::Dropped
+        );
+
+        // Fresh start on a new channel ID — must work. Use a size
+        // that fits in one frame (HID_FIRST_DATA = 57) so the
+        // assembler completes in a single call without needing a
+        // continuation.
+        let small_expected = 50u16;
+        let f0_b = hid_first_frame(0xCCCC, small_expected, &[0x33; HID_FIRST_DATA]);
+        let outcome = asm.process_frame(&f0_b, HID_REPORT_SIZE, &mut buf);
+        assert_eq!(outcome, FrameOutcome::ApduComplete(small_expected as usize));
+        // After completion `channel_id` retains the most recently
+        // captured value but `rx_*` are reset.
+        assert_eq!(asm.channel_id(), 0xCCCC);
+        assert_eq!(asm.rx_expected(), 0);
+    }
 }
