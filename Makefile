@@ -81,7 +81,7 @@ empty :=
 space := $(empty) $(empty)
 NS_FEATURES_ARG = $(if $(NS_FEATURES_LIST),--features $(subst $(space),$(comma),$(NS_FEATURES_LIST)),)
 
-.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification verify-theft-free test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
+.PHONY: all clean secure nonsecure run play play-hw-display run-tropic01 run-hw setup-serial e2e e2e-hw e2e-erc7730-hw e2e-hw-display e2e-hw-dual-se build-hw flash-hw test test-unit test-solidity test-formal-verification verify-theft-free test-key-speed test-update-hw qr-screen measure factory-reset optiga-reset-oids flash-hw-optiga-reset verify-pins
 
 # Supply-chain audit. Hard-fails if any dependency is not cryptographically
 # pinned (Cargo.lock checksums, git rev= pins, foundry.lock matching
@@ -452,6 +452,19 @@ test-update-hw:
 
 # Same e2e suite but on real STM32U585 hardware via probe-rs semihosting.
 # Requires: ST-LINK connected, STM32_Programmer_CLI on PATH.
+# Phase 5 item 8 — ERC-7730 e2e on real STM32U585 hardware. Drives the
+# Scenario 5m + 5p clear-signing paths through probe-rs semihosting +
+# arrow-key forwarder. Requires the same hardware bench as `e2e-hw`
+# plus a UI device for descriptor confirmation. Stubbed — implementation
+# defers to the Phase 5+ EIP-712 descriptor mirror landing first so
+# Scenario 5p has a happy path to assert against.
+e2e-erc7730-hw:
+	@echo "HW required — run on STM32U585 host with probe-rs + ST-LINK +"
+	@echo "  the Phase 5+ EIP-712 descriptor mirror landed (handoff item 2)."
+	@echo "Until then this target fails by design so CI doesn't silently skip"
+	@echo "  the hardware parity gate. See docs/handoff-erc7730-phase5.md item 8."
+	@false
+
 e2e-hw:
 	@echo "==> Building e2e + stm32u585"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
