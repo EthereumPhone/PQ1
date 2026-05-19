@@ -64,6 +64,17 @@ CMD_PRODTEST_TRNG_SAMPLE = 105
 CMD_PRODTEST_OPTIGA_HANDSHAKE = 106
 CMD_PRODTEST_SE050_HANDSHAKE = 107
 CMD_PRODTEST_USB_LOOPBACK = 108
+CMD_PRODTEST_BUTTON_TEST = 109
+
+# Step-status nibble decode for BUTTON_TEST. Upper = step, lower = error.
+BUTTON_STEP_DECODE = {
+    0x00: ("PASS", "all 3 steps OK"),
+    0x11: ("FAIL", "step 1 (LEFT) timeout — no press in 10 s"),
+    0x12: ("FAIL", "step 1 (LEFT) wrong button — operator pressed RIGHT or wires are swapped"),
+    0x21: ("FAIL", "step 2 (RIGHT) timeout"),
+    0x22: ("FAIL", "step 2 (RIGHT) wrong button — operator pressed LEFT or wires are swapped"),
+    0x31: ("FAIL", "step 3 (BOTH) timeout — operator did not press both buttons together"),
+}
 
 # Response status codes — mirror `proto/src/lib.rs::NscStatus`.
 STATUS_OK = 0
@@ -403,6 +414,32 @@ def test_usb_loopback(tx: ProdtestTransport, n: int = 256) -> TestResult:
     )
 
 
+def test_button_test(tx: ProdtestTransport) -> TestResult:
+    """Operator-interactive button test. Allow up to ~35 s of total
+    USB wait time: 3 × 10 s per step + reaction-time buffer."""
+    status, resp = tx.send_cmd(CMD_PRODTEST_BUTTON_TEST, b"", out_size=4)
+    if len(resp) != 4:
+        return TestResult(
+            name="BUTTON_TEST",
+            cmd=CMD_PRODTEST_BUTTON_TEST,
+            passed=False,
+            status_code=status,
+            detail=f"status=0x{status:08x} got {len(resp)} bytes (expected 4)",
+        )
+    step_status = resp[0]
+    label, hint = BUTTON_STEP_DECODE.get(
+        step_status, ("FAIL", f"unknown step_status 0x{step_status:02x}")
+    )
+    return TestResult(
+        name="BUTTON_TEST",
+        cmd=CMD_PRODTEST_BUTTON_TEST,
+        passed=(step_status == 0x00),
+        status_code=status,
+        detail=f"{label}: {hint}",
+        raw_response=resp,
+    )
+
+
 def test_trng_sample(tx: ProdtestTransport, n: int = 256) -> TestResult:
     in_data = struct.pack("<I", n)
     status, resp = tx.send_cmd(CMD_PRODTEST_TRNG_SAMPLE, in_data, out_size=n)
@@ -459,6 +496,11 @@ def run_all_tests(tx: ProdtestTransport, report: UnitReport) -> None:
     report.results.append(test_optiga_handshake(tx))
     report.results.append(test_se050_handshake(tx))
     report.results.append(test_usb_loopback(tx, 256))
+    # Phase D: operator-interactive button test (last because the
+    # operator must be present and pressing buttons; failures from
+    # the prior automated tests are easier to recover from without
+    # involving a human).
+    report.results.append(test_button_test(tx))
 
 
 def main() -> int:

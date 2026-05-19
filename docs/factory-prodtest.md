@@ -44,7 +44,7 @@ tracking and decides whether to chain `flash-hw-factory-provisioning`.
 
 ## Command reference
 
-The prodtest firmware exposes 9 USB HID commands. All commands map
+The prodtest firmware exposes 10 USB HID commands. All commands map
 to `proto/src/lib.rs::CMD_PRODTEST_*`; keep these IDs STABLE so old
 field reports stay interpretable.
 
@@ -59,12 +59,14 @@ field reports stay interpretable.
 | 106 | `OPTIGA_HANDSHAKE` | — | 16 B OPTIGA RNG | C |
 | 107 | `SE050_HANDSHAKE` | — | 16 B SE050 RNG | C |
 | 108 | `USB_LOOPBACK` | N B input (1..=256) | N B echo | C |
+| 109 | `BUTTON_TEST` | — | 4 B step_status | D |
 
 Phase A landed 2026-05-19 (architecture validation). Phase B landed
 same day (compute-only commands). Phase C landed 2026-05-19
-(communication tests for OPTIGA + SE050 + USB integrity). Phases
-D-F (button test + host fixture runner with full USB HID framing
-+ operator manual photos) are tracked in work-todo §30.
+(communication tests for OPTIGA + SE050 + USB integrity). Phase D
+landed 2026-05-19 (interactive button test). Phases E + F (host
+fixture runner with full USB HID framing + operator manual photos)
+are tracked in work-todo §30.
 
 ### CMD_PRODTEST_GET_ID (100)
 
@@ -202,6 +204,41 @@ The host runner uses a deterministic test pattern: `byte[i] = i ^
 
 Pass criterion: every byte byte-identical to the input.
 
+### CMD_PRODTEST_BUTTON_TEST (109)
+
+Interactive 3-step button verification. The firmware drives the OLED
+through the sequence "PRESS LEFT" → "PRESS RIGHT" → "PRESS BOTH",
+giving the operator up to 10 s per step. The 4-byte output's first
+byte encodes step status (compact nibble layout: upper = step,
+lower = error kind):
+
+| step_status | Outcome |
+|---|---|
+| `0x00` | all 3 steps passed |
+| `0x11` | step 1 (LEFT) timeout — operator did not press LEFT in 10 s |
+| `0x12` | step 1 (LEFT) **wrong button** — RIGHT pressed instead (swapped wires at the connector) |
+| `0x21` | step 2 (RIGHT) timeout |
+| `0x22` | step 2 (RIGHT) **wrong button** — LEFT pressed instead |
+| `0x31` | step 3 (BOTH) timeout — operator pressed only one or neither |
+
+Catches:
+- mechanically dead buttons (membrane broken / spring missing)
+- broken solder joint on either button
+- L/R wires physically swapped at the connector (`0x12` / `0x22`)
+- pull-up resistor open (button reads always-pressed → timeout fires
+  on a different step than the operator intends)
+
+Diagnostic distinction `timeout` vs `wrong button` matters: timeout
+implies dead solder (re-solder + retry), wrong button implies
+swapped wires (rewire + retry). Both are recoverable; the fix path
+is different.
+
+Pass criterion: `step_status == 0x00`. The firmware returns
+`NscStatus::Ok` only when all 3 steps pass; any failure returns
+`InternalError` with the diagnostic byte in the output buffer.
+
+<!-- TODO photo: OLED showing each of the 3 button-test prompt panels (PRESS LEFT / PRESS RIGHT / PRESS BOTH) plus the BTN PASS / BTN FAIL outcome panels. -->
+
 ---
 
 ## Build + run
@@ -272,7 +309,7 @@ command returns `INTERNAL_ERROR` from the transport stub.
 | A | Architecture: Cargo feature + 2 commands (GET_ID, DISPLAY_PATTERN) | **DONE** 2026-05-19 |
 | B | Compute-only commands (SAES, BHK, FLASH_RW, TRNG_SAMPLE) | **DONE** 2026-05-19 |
 | C | Communication tests (OPTIGA_HANDSHAKE, SE050_HANDSHAKE, USB_LOOPBACK) | **DONE** 2026-05-19 |
-| D | Button test (BUTTON_TEST) | TODO |
+| D | Button test (BUTTON_TEST) | **DONE** 2026-05-19 |
 | E | Host-side fixture runner (full USB HID framing) | TODO |
 | F | Operator manual production-ready text + photos | TODO |
 | G | Compile fences for the irreversible production profile | DONE 2026-05-19 |

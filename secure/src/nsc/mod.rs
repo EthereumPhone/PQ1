@@ -723,6 +723,10 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
         sphincs_tz_shared::CMD_PRODTEST_USB_LOOPBACK => {
             prodtest::cmd_usb_loopback_run(args)
         }
+        #[cfg(feature = "prodtest")]
+        sphincs_tz_shared::CMD_PRODTEST_BUTTON_TEST => {
+            prodtest::cmd_button_test_run(args)
+        }
         _ => NscStatus::InternalError as u32,
     }
 }
@@ -994,6 +998,20 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_usb_loopback(
     };
     let r = unsafe { prodtest::cmd_usb_loopback_run(&args) };
     secure_log!("[NSC] prodtest_usb_loopback({}) -> {}", n, r);
+    r
+}
+
+/// CMD_PRODTEST_BUTTON_TEST (109) — 3-step LEFT/RIGHT/BOTH verification.
+#[cfg(feature = "prodtest")]
+#[no_mangle]
+pub extern "cmse-nonsecure-entry" fn nsc_prodtest_button_test(out_ptr: u32) -> u32 {
+    let args = GatewayArgs {
+        arg0: 0,
+        arg1: out_ptr,
+        arg2: 0,
+    };
+    let r = unsafe { prodtest::cmd_button_test_run(&args) };
+    secure_log!("[NSC] prodtest_button_test -> {}", r);
     r
 }
 

@@ -563,6 +563,192 @@ pub(super) unsafe fn cmd_usb_loopback_run(args: &GatewayArgs) -> u32 {
 }
 
 // ---------------------------------------------------------------------------
+// CMD_PRODTEST_BUTTON_TEST (109) — Phase D
+// ---------------------------------------------------------------------------
+//
+// Drives the trusted-UI button hardware (PC1 = LEFT / PA8 = RIGHT) via
+// the three-step LEFT → RIGHT → BOTH sequence. Each step has a 10 s
+// budget; pressing the WRONG button is diagnostically distinct from
+// timeout (swapped wires at the connector vs. dead solder), so the
+// step-status byte encodes both failure modes.
+//
+// Why no latency reporting: at the operator's reaction time scale,
+// per-press latency is dominated by the human, not the GPIO. The fact
+// that the press registered at all is the diagnostic signal; precise
+// µs timing adds no information.
+
+const BUTTON_TEST_TIMEOUT_MS: u32 = 10_000;
+const BUTTON_TEST_DEBOUNCE_MS: u32 = 30;
+const BUTTON_TEST_POLL_MS: u32 = 5;
+const BUTTON_TEST_OUT_LEN: usize = 4;
+
+const STEP_OK: u8 = 0x00;
+const STEP_LEFT_TIMEOUT: u8 = 0x11;
+const STEP_LEFT_WRONG: u8 = 0x12;
+const STEP_RIGHT_TIMEOUT: u8 = 0x21;
+const STEP_RIGHT_WRONG: u8 = 0x22;
+const STEP_BOTH_TIMEOUT: u8 = 0x31;
+
+#[cfg(all(feature = "gpio-buttons", feature = "ui-oled"))]
+fn show_button_prompt(line0: &str, line1: &str) {
+    let d = crate::ui::display();
+    d.clear();
+    d.draw_line(0, line0);
+    d.draw_line(2, line1);
+    d.flush();
+}
+
+/// Wait for a single-button press (LEFT or RIGHT, exclusive). Returns
+/// `STEP_OK` on success, the supplied `timeout_code` if the timeout
+/// expires with no press, or `wrong_code` if the unexpected button
+/// fired first (swapped solder / wires).
+#[cfg(feature = "gpio-buttons")]
+fn run_single_button_step(
+    expect_left: bool,
+    timeout_code: u8,
+    wrong_code: u8,
+) -> u8 {
+    use crate::hw::buttons::{busy_wait_ms, left_pressed, right_pressed};
+
+    let mut elapsed: u32 = 0;
+    loop {
+        let l = left_pressed();
+        let r = right_pressed();
+
+        // Wrong-button detection — fires only if the unexpected button
+        // is pressed CLEAN (no chord with the expected one), since the
+        // operator may also be holding both during the BOTH step.
+        if expect_left && r && !l {
+            return wrong_code;
+        }
+        if !expect_left && l && !r {
+            return wrong_code;
+        }
+
+        // Expected button pressed: debounce.
+        let pressed = if expect_left { l } else { r };
+        if pressed {
+            busy_wait_ms(BUTTON_TEST_DEBOUNCE_MS);
+            let still_pressed = if expect_left {
+                left_pressed()
+            } else {
+                right_pressed()
+            };
+            if still_pressed {
+                // Wait for clean release before returning so the next
+                // step starts from a known idle state.
+                loop {
+                    let still = if expect_left {
+                        left_pressed()
+                    } else {
+                        right_pressed()
+                    };
+                    if !still {
+                        break;
+                    }
+                    busy_wait_ms(BUTTON_TEST_POLL_MS);
+                }
+                busy_wait_ms(BUTTON_TEST_DEBOUNCE_MS);
+                return STEP_OK;
+            }
+            // Bounce — fall through to keep polling.
+        }
+
+        if elapsed >= BUTTON_TEST_TIMEOUT_MS {
+            return timeout_code;
+        }
+        busy_wait_ms(BUTTON_TEST_POLL_MS);
+        elapsed = elapsed.saturating_add(BUTTON_TEST_POLL_MS);
+    }
+}
+
+/// Wait for BOTH buttons pressed simultaneously. Pressing one alone is
+/// not an error (operator is positioning hands) — only timeout fails.
+#[cfg(feature = "gpio-buttons")]
+fn run_both_button_step() -> u8 {
+    use crate::hw::buttons::{busy_wait_ms, left_pressed, right_pressed};
+
+    let mut elapsed: u32 = 0;
+    loop {
+        if left_pressed() && right_pressed() {
+            busy_wait_ms(BUTTON_TEST_DEBOUNCE_MS);
+            if left_pressed() && right_pressed() {
+                // Wait for clean release.
+                while left_pressed() || right_pressed() {
+                    busy_wait_ms(BUTTON_TEST_POLL_MS);
+                }
+                busy_wait_ms(BUTTON_TEST_DEBOUNCE_MS);
+                return STEP_OK;
+            }
+        }
+        if elapsed >= BUTTON_TEST_TIMEOUT_MS {
+            return STEP_BOTH_TIMEOUT;
+        }
+        busy_wait_ms(BUTTON_TEST_POLL_MS);
+        elapsed = elapsed.saturating_add(BUTTON_TEST_POLL_MS);
+    }
+}
+
+/// # Safety
+/// CMSE non-secure-entry handler — writes 4 bytes to NS after
+/// `validate_ns_write_ptr`. Drives the OLED + button GPIOs.
+pub(super) unsafe fn cmd_button_test_run(args: &GatewayArgs) -> u32 {
+    if !validate_ns_write_ptr(args.arg1, BUTTON_TEST_OUT_LEN) {
+        return NscStatus::InvalidPointer as u32;
+    }
+
+    #[cfg(all(feature = "gpio-buttons", feature = "ui-oled"))]
+    let step_status = {
+        show_button_prompt("PRESS LEFT", "  (10 s)");
+        let s1 = run_single_button_step(true, STEP_LEFT_TIMEOUT, STEP_LEFT_WRONG);
+        if s1 != STEP_OK {
+            show_button_prompt("BTN FAIL", "step 1: LEFT");
+            s1
+        } else {
+            show_button_prompt("PRESS RIGHT", "  (10 s)");
+            let s2 = run_single_button_step(false, STEP_RIGHT_TIMEOUT, STEP_RIGHT_WRONG);
+            if s2 != STEP_OK {
+                show_button_prompt("BTN FAIL", "step 2: RIGHT");
+                s2
+            } else {
+                show_button_prompt("PRESS BOTH", "  (10 s)");
+                let s3 = run_both_button_step();
+                if s3 != STEP_OK {
+                    show_button_prompt("BTN FAIL", "step 3: BOTH");
+                    s3
+                } else {
+                    show_button_prompt("BTN PASS", "3/3 steps OK");
+                    STEP_OK
+                }
+            }
+        }
+    };
+
+    // If gpio-buttons or ui-oled is somehow off (shouldn't be — the
+    // prodtest feature pulls both in), report a generic timeout so the
+    // fixture sees the build profile is wrong.
+    #[cfg(not(all(feature = "gpio-buttons", feature = "ui-oled")))]
+    let step_status: u8 = STEP_LEFT_TIMEOUT;
+
+    let out = args.arg1 as *mut u8;
+    // SAFETY: validate_ns_write_ptr above checked BUTTON_TEST_OUT_LEN
+    // bytes writable at args.arg1.
+    unsafe {
+        core::ptr::write_volatile(out, step_status);
+        core::ptr::write_volatile(out.add(1), 0);
+        core::ptr::write_volatile(out.add(2), 0);
+        core::ptr::write_volatile(out.add(3), 0);
+    }
+
+    if step_status == STEP_OK {
+        NscStatus::Ok as u32
+    } else {
+        secure_log!("[PRODTEST] button_test: step_status=0x{:02x}", step_status);
+        NscStatus::InternalError as u32
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Host tests — pure helpers
 // ---------------------------------------------------------------------------
 
@@ -617,5 +803,40 @@ mod tests {
         // Cap matches TRNG_SAMPLE_MAX so the same caller-side buffer
         // can be reused for both commands.
         assert_eq!(USB_LOOPBACK_MAX, 256);
+    }
+
+    #[test]
+    fn positive_button_test_step_codes_have_compact_layout() {
+        // Upper nibble = step (1, 2, 3); lower nibble = error kind
+        // (1=timeout, 2=wrong button). The fixture's error table
+        // depends on this — change the encoding and the operator
+        // manual decoder also has to change.
+        assert_eq!(STEP_OK, 0x00);
+        assert_eq!(STEP_LEFT_TIMEOUT, 0x11);
+        assert_eq!(STEP_LEFT_WRONG, 0x12);
+        assert_eq!(STEP_RIGHT_TIMEOUT, 0x21);
+        assert_eq!(STEP_RIGHT_WRONG, 0x22);
+        assert_eq!(STEP_BOTH_TIMEOUT, 0x31);
+        // Compact-encoding invariant: per-step error nibbles are
+        // distinct and non-overlapping with success.
+        for code in [
+            STEP_LEFT_TIMEOUT,
+            STEP_LEFT_WRONG,
+            STEP_RIGHT_TIMEOUT,
+            STEP_RIGHT_WRONG,
+            STEP_BOTH_TIMEOUT,
+        ] {
+            assert_ne!(code, STEP_OK);
+            assert!((code >> 4) >= 1 && (code >> 4) <= 3);
+            assert!((code & 0x0F) >= 1 && (code & 0x0F) <= 2);
+        }
+    }
+
+    #[test]
+    fn positive_button_test_timeout_is_operator_friendly() {
+        // 10 s per step gives the operator enough time without
+        // making the per-unit test take forever (30 s total budget).
+        assert_eq!(BUTTON_TEST_TIMEOUT_MS, 10_000);
+        assert_eq!(BUTTON_TEST_OUT_LEN, 4);
     }
 }

@@ -1135,6 +1135,15 @@ fn main() -> ! {
     // fixture integration guide.
     #[cfg(feature = "prodtest")]
     {
+        // Initialize button GPIOs so `CMD_PRODTEST_BUTTON_TEST` (109)
+        // can drive them. Safe to call before NS boot — the buttons
+        // module only configures GPIOA/GPIOC bits via RMW on disjoint
+        // pins, leaving SWDIO/SWCLK / I²C / SPI lines untouched.
+        #[cfg(feature = "gpio-buttons")]
+        unsafe {
+            hw::buttons::init();
+        }
+
         ui::show_status(" PRODTEST READY", " USB cmds wait ");
         secure_log!("[S] prodtest firmware ready — awaiting USB commands");
         loop {

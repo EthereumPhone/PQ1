@@ -406,7 +406,7 @@ factory-production-irreversible-im-sure = []
 # production features (`optiga-lock-operational`, real OTP burn,
 # `bhk` without hardcoded key) — prodtest builds default to
 # `dev-testkey` for bring-up safety.
-prodtest = ["dual-se", "stm32u585", "ui-oled", "usb"]
+prodtest = ["dual-se", "stm32u585", "ui-oled", "usb", "gpio-buttons"]
 # Minimal USART1 → ST-LINK-VCP driver for diagnostic output that
 # survives RDP ≥ 1 (where SWD debug — and therefore semihosting — is
 # disabled). Pairs with `saes-self-test` for the RDP1 DHUK fingerprint

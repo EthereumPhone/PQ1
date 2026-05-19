@@ -675,6 +675,25 @@ pub const CMD_PRODTEST_SE050_HANDSHAKE: u32 = 107;
 /// N is 0 or > 256 or pointer validation fails.
 pub const CMD_PRODTEST_USB_LOOPBACK: u32 = 108;
 
+/// CMD_PRODTEST_BUTTON_TEST — interactive 3-step button verification.
+/// The firmware displays "PRESS LEFT" / "PRESS RIGHT" / "PRESS BOTH"
+/// on the OLED in sequence; the operator presses the indicated button
+/// (or both) within `BUTTON_TEST_TIMEOUT_MS = 10_000` per step. Catches
+/// mechanically dead buttons, broken solder joints, and L/R wires
+/// swapped at the connector.
+///   in_ptr  → ignored
+///   out_ptr → 4 bytes (step_status:1 + reserved:3). Step status:
+///     0x00 — all 3 steps passed
+///     0x11 — step 1 (LEFT) timeout (no press within 10 s)
+///     0x12 — step 1 (LEFT) wrong button (RIGHT pressed instead — swapped wires)
+///     0x21 — step 2 (RIGHT) timeout
+///     0x22 — step 2 (RIGHT) wrong button (LEFT pressed instead)
+///     0x31 — step 3 (BOTH) timeout
+/// Returns `NscStatus::Ok` if step_status == 0x00, `NscStatus::Internal-
+/// Error` otherwise. Upper nibble = step (1/2/3); lower nibble = error
+/// (1=timeout, 2=wrong button) so the fixture's error table is compact.
+pub const CMD_PRODTEST_BUTTON_TEST: u32 = 109;
+
 /// Maximum bytes of chunk data per CMD_FW_CHUNK payload. Chosen to fit
 /// comfortably within the NS-side 8 KB chain accumulator with header
 /// space; picked over the tighter 1024-ish USB HID MTU because chunks

@@ -106,6 +106,13 @@ fn delay_ms(ms: u32) {
     }
 }
 
+/// Calibrated busy-wait, crate-visible for callers that need to drive
+/// their own debounce loop (e.g. prodtest CMD_BUTTON_TEST). Same
+/// timebase as the internal `delay_ms`.
+pub(crate) fn busy_wait_ms(ms: u32) {
+    delay_ms(ms);
+}
+
 /// Detect SYSCLK from RCC_CFGR1 SWS bits.
 fn detect_sysclk_mhz() -> u32 {
     let cfgr1 = REG.rcc_cfgr1.read();
@@ -120,11 +127,11 @@ fn detect_sysclk_mhz() -> u32 {
 // Raw pin reads (active low: pressed = shorted to GND = reads 0)
 // ---------------------------------------------------------------------------
 
-fn left_pressed() -> bool {
+pub(crate) fn left_pressed() -> bool {
     REG.gpioc_idr.read() & LEFT_BIT == 0  // PC1
 }
 
-fn right_pressed() -> bool {
+pub(crate) fn right_pressed() -> bool {
     REG.gpioa_idr.read() & RIGHT_BIT == 0  // PA8
 }
 
