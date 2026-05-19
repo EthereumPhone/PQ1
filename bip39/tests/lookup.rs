@@ -3,7 +3,10 @@
 //! mnemonic word. A silent acceptance of a non-wordlist string here would
 //! propagate into `from_words` and brick recovery.
 
-use sphincs_tz_bip39::{lookup_prefix, lookup_word_exact, PrefixLookup, WORDLIST};
+use sphincs_tz_bip39::{
+    is_exact_wordlist_entry, lookup_prefix, lookup_word_exact, word_bytes_at,
+    MAX_WORD_BYTES, PrefixLookup, WORDLIST,
+};
 
 // ---------------------------------------------------------------------------
 // `lookup_word_exact`
@@ -207,4 +210,59 @@ fn positive_lookup_prefix_includes_exact_word_in_range() {
             PrefixLookup::None => panic!("exact word {w:?} matched nothing"),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// F-27 — constant-time wordlist primitives
+// ---------------------------------------------------------------------------
+
+#[test]
+fn positive_word_bytes_at_matches_wordlist_for_every_index() {
+    for (i, w) in WORDLIST.iter().enumerate() {
+        let (bytes, len) = word_bytes_at(i as u16);
+        assert_eq!(usize::from(len), w.len(),
+            "len mismatch at idx {i}: got {len}, want {}", w.len());
+        assert_eq!(&bytes[..len as usize], w.as_bytes(),
+            "body mismatch at idx {i} ({w:?})");
+        // padding past `len` must be zero (the CT contract).
+        for b in bytes.iter().skip(len as usize) {
+            assert_eq!(*b, 0, "non-zero padding at idx {i} ({w:?})");
+        }
+    }
+}
+
+#[test]
+fn positive_is_exact_wordlist_entry_accepts_every_word() {
+    for w in WORDLIST.iter() {
+        assert!(is_exact_wordlist_entry(w.as_bytes()),
+            "wordlist entry {w:?} not recognised as exact match");
+    }
+}
+
+#[test]
+fn negative_is_exact_wordlist_entry_rejects_obvious_non_words() {
+    assert!(!is_exact_wordlist_entry(b"notaword"));
+    assert!(!is_exact_wordlist_entry(b"xyzzy"));
+    // 4-letter prefix of "abandon" but not itself an entry:
+    assert!(!is_exact_wordlist_entry(b"aban"));
+    // Empty needle has no valid match (no zero-length wordlist entry).
+    assert!(!is_exact_wordlist_entry(b""));
+    // Over-long: no English BIP-39 word exceeds 8 bytes.
+    assert!(!is_exact_wordlist_entry(b"abandonment"));
+    // Trailing-zero-padding traps: an attacker could pass "act\0" (entry
+    // "act" + zero) — must still reject (length differs).
+    let mut tricky = [0u8; MAX_WORD_BYTES];
+    tricky[..3].copy_from_slice(b"act");
+    assert!(!is_exact_wordlist_entry(&tricky[..]));
+}
+
+#[test]
+fn negative_is_exact_wordlist_entry_is_case_sensitive() {
+    // The recovery flow normalises case before calling lookup helpers;
+    // the CT primitive itself stays byte-exact (mixing case would
+    // require either lowercasing inside the scan or maintaining a
+    // second case-fold table, both adding complexity for no benefit).
+    assert!(is_exact_wordlist_entry(b"abandon"));
+    assert!(!is_exact_wordlist_entry(b"ABANDON"));
+    assert!(!is_exact_wordlist_entry(b"Abandon"));
 }

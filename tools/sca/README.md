@@ -1175,6 +1175,143 @@ reads + ~20 inner-loop ops/iter ≈ ~40 K cycles. On Cortex-M33 at
 recovery path calls `bip39::lookup_prefix` directly; the fix lands
 in the shared callee. The on-screen-keyboard UX is unchanged.
 
+## BIP-39 candidate-pick gate leakage — `leakage_seedwizard_exact.py`
+
+While auditing `measured_boot.rs` and `secure/src/ui/*` for the F-22
+class of address-keyed `WORDLIST[idx]` loads, I found a second leaky
+binary search and a leaky display rendering path that F-25 hadn't
+reached: both inside the **candidate-pick gate** of
+`seed_wizard.rs::enter_single_word` — the on-screen keyboard's
+disambiguation flow that triggers when a typed prefix has multiple
+matches (e.g., typing "ab" surfaces "abandon" / "ability" / "able"
+and the user scrolls).
+
+### F-27 — Recovery candidate-pick gate leaks the typed prefix via a second `WORDLIST` binary-search + non-CT candidate display — **FIXED in `bip39::is_exact_wordlist_entry` + `bip39::word_bytes_at` + `seed_wizard::{prefix_is_exact_word, render_candidate_screen}`**
+
+Two leaks in the same call site, both on secret recovery input:
+
+**Leak A — `seed_wizard::prefix_is_exact_word`** (commit a76… —
+see git log).  When `lookup_prefix(prefix)` returned `Multiple{start,
+end}`, the wizard called a local `prefix_is_exact_word(prefix)` to
+decide whether to enter candidate-pick mode (e.g., the user typed
+"act" which is itself an entry AND a prefix of "actress"/"actor"/...).
+The implementation was a verbatim `WORDLIST.binary_search_by` —
+the exact construct F-25 closed in `bip39::lookup_prefix`, just at a
+different call site. F-25's commit + README never named this second
+copy; the leak survived in plain sight.
+
+**Leak B — `seed_wizard::render_candidate_screen`** (same commit).
+Once the gate enters candidate-pick mode, the screen renders 2
+candidate words from the prefix-narrowed `start..end` range. The
+per-slot path was:
+
+```rust
+let idx = wrap_in_range(start, end, cur, offset);
+let wb = WORDLIST[idx].as_bytes();           // F-22-class load
+row[2..2 + max].copy_from_slice(&wb[..max]);
+d.draw_line(slot + 1, ascii_str(&row));      // F-24 stage C path
+```
+
+Two address-keyed channels stacked on the same secret-derived index:
+the wordlist load itself, AND the embedded-graphics text-render path
+through `draw_line` (which is the same non-CT `MonoFont::glyph`
+lookup that F-24 stage C closed for the seed-display path —
+but `render_candidate_screen` never migrated to `flush_with_secret_rows`).
+
+**Result.**
+
+| symbol                                          | construct         | max\|t\| | samples | verdict |
+|-------------------------------------------------|-------------------|---------:|--------:|---------|
+| `sca_seedwizard_prefix_is_exact_word`           | binary search     |   42.905 |     239 | LEAK    |
+| `sca_seedwizard_prefix_is_exact_word_ct`        | CT scan + len check |    0.000 |  69,662 | flat    |
+
+600 traces (300 fixed @ "abou", 300 random `[a-z]^4`). Baseline peak
+samples 197/195/171/194/217 align with the ~11 binary-search midpoint
+loads. Same shape as F-25's `lookup_prefix` finding.
+
+**Fix.**
+
+`bip39/src/lib.rs` gains two new public CT primitives:
+
+```rust
+pub fn word_bytes_at(idx: u16) -> ([u8; MAX_WORD_BYTES], u8);
+pub fn is_exact_wordlist_entry(needle: &[u8]) -> bool;
+```
+
+`word_bytes_at` is a thin public wrapper over the private F-22-era
+`ct_load_word` — same 2048-entry mask-OR scan with `core::hint::black_box`
+barriers. Returns the 8-byte zero-padded word + actual length.
+
+`is_exact_wordlist_entry` adds the missing entry-length check that
+prevents zero-padded oversized needles from falsely matching a shorter
+entry's zero-padded storage (caught by a regression test:
+`"act\0\0\0\0\0"` MUST not match the entry "act"). The verdict per
+entry is `(entry_bytes == needle_padded) AND (entry_len == needle.len())`,
+both via `ct_eq_u8` with `black_box` barriers.
+
+`seed_wizard::prefix_is_exact_word` collapses to a one-liner that
+forwards to `is_exact_wordlist_entry(p.as_bytes())`.
+
+`seed_wizard::render_candidate_screen` follows the `render_mnemonic_page`
+template:
+
+```rust
+const SLOTS: usize = DISPLAY_ROWS - 2;
+let mut secret_rows_storage = [[b' '; DISPLAY_COLS]; SLOTS];
+for slot in 0..SLOTS {
+    let idx = wrap_in_range(start, end, cur, slot as isize - 1);
+    let (wb, wlen) = word_bytes_at(idx as u16);   // CT
+    let row = &mut secret_rows_storage[slot];
+    row[0] = if idx == cur { b'>' } else { b' ' };
+    row[2..2 + min(wlen as usize, DISPLAY_COLS - 2)]
+        .copy_from_slice(&wb[..min(wlen as usize, DISPLAY_COLS - 2)]);
+}
+let secret_rows = [(1, &secret_rows_storage[0][..]),
+                   (2, &secret_rows_storage[1][..])];
+d.flush_with_secret_rows(&secret_rows);            // CT (F-24 stage D)
+```
+
+Both halves of the per-slot chain are now CT: the wordlist load
+(`word_bytes_at`) AND the framebuffer paint (`flush_with_secret_rows`).
+Title row (row 0) and hint row (row 3) stay on `draw_line` —
+they're public text.
+
+**Cost.** Each `prefix_is_exact_word` call does ~16 KB stack reads
++ ~40 K cycles ≈ 0.25 ms on Cortex-M33. Each `render_candidate_screen`
+call does 2× `word_bytes_at` + the F-24 CT blit. Both are bounded by
+the user's keystroke cadence (≤5/sec long-presses); zero UX impact.
+
+**Why this surfaced via the measured-boot sweep.** Looking at
+`measured_boot.rs` for the F-22-class `WORDLIST[idx]` pattern, I also
+swept the trusted-UI display surface for the same construct. Six
+matches turned up; four are public-data (`measured_boot.rs` displays
+firmware_hash-derived words, all public; the wizard's confirm-status
+banner uses public copy); the two flagged here are on **secret**
+recovery typing. Reframed: the user's request was "sweep
+measured_boot + tx/display" — those paths are clean *because the data
+they render is public*; this finding came from the same sweep
+landing on `seed_wizard.rs`'s recovery flow, which IS secret-bearing
+and DID have the leak.
+
+**What this does *not* close.**
+
+- **`bip39::lookup_word_exact`** still uses a leaky
+  `WORDLIST.binary_search_by`. Its only caller is `Mnemonic::from_words`,
+  which itself is only invoked from the e2e-test path in `main.rs:2462`
+  (fixed TEST_WORDS). Not on the production recovery path. A follow-up
+  hygiene commit can migrate it to `is_exact_wordlist_entry` so the
+  leaky pattern doesn't survive in the codebase to be copy-pasted into
+  a future secret-bearing context.
+- **`measured_boot::render_all_words`** still uses
+  `WORDLIST[idx].as_bytes()`. The 8 displayed words derive from
+  `firmware_hash` (public — the user is supposed to read them and
+  compare against `fwmeasure` output), so there's no secret to leak.
+  Same hygiene argument as `lookup_word_exact`.
+
+Both hygiene migrations are deferred to a separate "delete leaky
+`WORDLIST[i]` access pattern from the codebase" commit so the F-27
+diff stays focused on the production-critical fix.
+
 ## Full C10 verify fault sweep — `fault_sweep_c10v.py` + `c10v_target/`
 
 `make -C tools/sca c10v` builds `sca-c10v-target` (a thin `#[no_mangle]` wrapper

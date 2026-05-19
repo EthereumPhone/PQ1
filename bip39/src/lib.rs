@@ -525,6 +525,71 @@ pub fn lookup_word_exact(input: &str) -> Option<u16> {
         .map(|i| i as u16)
 }
 
+/// Constant-time wordlist-by-index lookup.
+///
+/// Same scan + `black_box` barrier pattern as the private
+/// [`ct_load_word`] (which [`Mnemonic::word_bytes`] uses internally).
+/// Public so secret-bearing UI paths outside this crate
+/// (e.g. `seed_wizard::render_candidate_screen`) can resolve a wordlist
+/// entry by index without the address-keyed `WORDLIST[idx]` load.
+///
+/// Returns the 8-byte zero-padded word bytes and the actual length (3-8).
+#[must_use]
+pub fn word_bytes_at(idx: u16) -> ([u8; MAX_WORD_BYTES], u8) {
+    ct_load_word(idx)
+}
+
+/// Constant-time check: is `needle` exactly one of the 2048 BIP-39
+/// English wordlist entries?
+///
+/// Closes F-27: the previous in-`seed_wizard.rs` helper used
+/// `WORDLIST.binary_search_by(...)` whose visited midpoint addresses
+/// leaked the typed prefix in the recovery candidate-pick gate. This
+/// scans all 2048 entries unconditionally; mask-OR accumulates the
+/// per-entry verdict.
+///
+/// The verdict per entry is `(entry_bytes == needle_padded) AND
+/// (entry_len == needle.len())`. The length check is critical:
+/// `WORDLIST_FLAT` entries are zero-padded to [`MAX_WORD_BYTES`], so a
+/// bytewise-only compare would accept a needle like `"act\0\0\0\0\0"`
+/// (length 8) against the entry `"act"` (length 3 with 5 zero bytes
+/// of storage padding). Real callers slice their needle to its actual
+/// length, but the public API must be robust to oddly-shaped inputs.
+///
+/// `needle.len()` must be `<= MAX_WORD_BYTES`. Empty needle returns
+/// `false` (no wordlist entry has length 0). `core::hint::black_box`
+/// barriers per F-22's load-bearing pattern.
+#[must_use]
+pub fn is_exact_wordlist_entry(needle: &[u8]) -> bool {
+    use core::hint::black_box;
+    if needle.is_empty() || needle.len() > MAX_WORD_BYTES {
+        return false;
+    }
+    let nlen = needle.len() as u8;
+    let mut padded = [0u8; MAX_WORD_BYTES];
+    padded[..needle.len()].copy_from_slice(needle);
+
+    let mut any_match: u8 = 0;
+    let mut entry_idx: u16 = 0;
+    while entry_idx < 2048 {
+        let idx_obf = black_box(entry_idx);
+        let entry = &WORDLIST_FLAT[idx_obf as usize];
+        let entry_len = WORDLIST_LENS[idx_obf as usize];
+        let mut all_eq: u8 = 0xFF;
+        let mut i = 0;
+        while i < MAX_WORD_BYTES {
+            let byte_eq = ct_eq_u8(entry[i], padded[i]);
+            all_eq = black_box(all_eq & byte_eq);
+            i += 1;
+        }
+        let len_eq = ct_eq_u8(entry_len, nlen);
+        let is_match: u8 = black_box(all_eq & len_eq);
+        any_match = black_box(any_match | (is_match & 1));
+        entry_idx += 1;
+    }
+    any_match != 0
+}
+
 /// Result of a prefix-narrowing lookup, used by the recovery UX.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PrefixLookup {

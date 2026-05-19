@@ -25,7 +25,8 @@ use super::{display, input, show_status, Button, Press, DISPLAY_COLS, DISPLAY_RO
 use crate::rng;
 use crate::timeout;
 use sphincs_tz_bip39::{
-    lookup_prefix, Mnemonic, PrefixLookup, MAX_WORD_BYTES, WORDLIST, WORD_COUNT,
+    is_exact_wordlist_entry, lookup_prefix, word_bytes_at, Mnemonic, PrefixLookup,
+    MAX_WORD_BYTES, WORDLIST, WORD_COUNT,
 };
 use zeroize::Zeroize;
 
@@ -478,18 +479,11 @@ fn enter_single_word(title: &str) -> EnterWordResult {
 }
 
 fn prefix_is_exact_word(p: &str) -> bool {
-    // Binary search the wordlist for an exact match.
-    let mut lo = 0usize;
-    let mut hi = WORDLIST.len();
-    while lo < hi {
-        let mid = (lo + hi) / 2;
-        match WORDLIST[mid].as_bytes().cmp(p.as_bytes()) {
-            core::cmp::Ordering::Less => lo = mid + 1,
-            core::cmp::Ordering::Greater => hi = mid,
-            core::cmp::Ordering::Equal => return true,
-        }
-    }
-    false
+    // F-27 fix: the previous implementation did `WORDLIST.binary_search_by`
+    // — visited midpoint addresses leaked the typed prefix in the
+    // recovery candidate-pick gate. Route through bip39's constant-time
+    // primitive instead.
+    is_exact_wordlist_entry(p.as_bytes())
 }
 
 fn render_letter_screen(title: &str, buf: &[u8; MAX_LETTERS], len: usize) {
@@ -572,23 +566,33 @@ fn render_candidate_screen(title: &str, start: usize, end: usize, cur: usize) {
     let d = display();
     d.clear();
     d.draw_line(0, title);
+    d.draw_line(3, "L/R=scrl LR=ok");
 
-    // Show 1-3 candidates centered on `cur`.
-    let total = end - start;
-    let _ = total;
-    for slot in 0..(DISPLAY_ROWS - 2) {
-        // slot 0 → cur-1, slot 1 → cur, slot 2 → cur+1 (with wraparound)
+    // F-27 fix: previously read `WORDLIST[idx].as_bytes()` for each
+    // visible candidate (3 indexed loads addressed by `idx`, which
+    // derives from the typed prefix) AND rendered them through
+    // `d.draw_line` whose embedded-graphics font path is itself a
+    // non-constant-time glyph lookup (F-24 stage C). Both halves of
+    // the chain now route through bip39's `word_bytes_at` (constant-
+    // time wordlist load) + `flush_with_secret_rows` (constant-time
+    // glyph blit, F-24 stage D primitive).
+    const SLOTS: usize = DISPLAY_ROWS - 2;
+    let mut secret_rows_storage = [[b' '; DISPLAY_COLS]; SLOTS];
+    for slot in 0..SLOTS {
+        // slot 0 → cur-1, slot 1 → cur, slot 2 → cur+1 (with wraparound).
         let offset = slot as isize - 1;
         let idx = wrap_in_range(start, end, cur, offset);
-        let mut row = [b' '; DISPLAY_COLS];
+        let (wb, wlen) = word_bytes_at(idx as u16);
+        let row = &mut secret_rows_storage[slot];
         row[0] = if idx == cur { b'>' } else { b' ' };
-        let wb = WORDLIST[idx].as_bytes();
-        let max = core::cmp::min(wb.len(), DISPLAY_COLS - 2);
+        let max = core::cmp::min(wlen as usize, DISPLAY_COLS - 2);
         row[2..2 + max].copy_from_slice(&wb[..max]);
-        d.draw_line(slot + 1, super::ascii_str(&row));
     }
-    d.draw_line(3, "L/R=scrl LR=ok");
-    d.flush();
+    let secret_rows: [(usize, &[u8]); SLOTS] = [
+        (1, &secret_rows_storage[0]),
+        (2, &secret_rows_storage[1]),
+    ];
+    d.flush_with_secret_rows(&secret_rows[..]);
 }
 
 fn wrap_in_range(start: usize, end: usize, cur: usize, offset: isize) -> usize {

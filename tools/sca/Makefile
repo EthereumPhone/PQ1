@@ -45,7 +45,7 @@ SKDF_ELF := $(SKDF_DIR)/target/$(TARGET)/release/sca-saes-kdf-target
 DONJON   ?= donjon-sca
 SCARED   ?= scared-sca
 
-.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf build-groth16 fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak bip39-leak seed-deriv-leak recovery-leak groth16 groth16-full f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
+.PHONY: build build-kdf build-c10v build-fw-verify build-ns-ptr build-c10-sign build-cap build-dispatch build-flashctr build-saes-kdf build-groth16 fi fi-twofault c10 pin c10v fw-verify ns-ptr c10-sign cap dispatch flashctr kdf saes-kdf wait-random-leak bip39-leak seed-deriv-leak recovery-leak seedwizard-exact-leak groth16 groth16-full f9-retest f9-deeper f9-scared-collect f9-scared sweeps doctor clean
 
 build: $(FI_ELF)
 
@@ -183,6 +183,12 @@ seed-deriv-leak: build-kdf
 # mnemonic-word prefix via binary-search address dependence?
 recovery-leak: build-kdf
 	$(DONJON) run leakage_recovery.py
+
+# F-27: does seed_wizard.rs::prefix_is_exact_word's *second* binary search
+# (the one F-25 didn't reach — used inside the candidate-pick gate) leak
+# the typed prefix? Same shape as F-25.
+seedwizard-exact-leak: build-kdf
+	$(DONJON) run leakage_seedwizard_exact.py
 
 # F-9 re-test: did F-16's shuffle mask the FORS-leaf-index mem_address leak?
 # Compares post-F-16 max|t| against F-9's recorded baseline of 40.71.

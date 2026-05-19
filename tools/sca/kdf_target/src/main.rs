@@ -597,6 +597,12 @@ static _KEEP_BIP39_LOOKUP_PREFIX: extern "C" fn(*const u8, *mut u8) =
 #[used]
 static _KEEP_BIP39_LOOKUP_PREFIX_CT: extern "C" fn(*const u8, *mut u8) =
     sca_bip39_lookup_prefix_ct;
+#[used]
+static _KEEP_SEEDWIZARD_PREFIX_EXACT: extern "C" fn(*const u8, *mut u8) =
+    sca_seedwizard_prefix_is_exact_word;
+#[used]
+static _KEEP_SEEDWIZARD_PREFIX_EXACT_CT: extern "C" fn(*const u8, *mut u8) =
+    sca_seedwizard_prefix_is_exact_word_ct;
 
 // BIP-39 wordlist included verbatim from the production crate. The bip39
 // crate uses `hmac = { workspace = true }` which is unreachable from this
@@ -814,6 +820,83 @@ pub extern "C" fn sca_bip39_wordlist_lookup(entropy_ptr: *const u8, out_ptr: *mu
     }
 }
 
+/// F-27 baseline — mirrors `secure/src/ui/seed_wizard.rs::prefix_is_exact_word`
+/// verbatim. Binary-search over `WORDLIST` for an exact match of the user's
+/// typed prefix. Called during recovery (specifically the candidate-pick
+/// gate, when `lookup_prefix` returns `Multiple{start,end}` and we need to
+/// know whether the prefix itself is a wordlist entry).
+///
+/// Input: 4 B prefix (4-letter words cover most BIP-39 uniqueness cases).
+/// Output: 1 B (0 / 1).
+///
+/// Leakage shape mirrors F-25's `sca_bip39_lookup_prefix` baseline — every
+/// `WORDLIST[mid].as_bytes()` load addresses a secret-dependent index.
+#[no_mangle]
+pub extern "C" fn sca_seedwizard_prefix_is_exact_word(prefix_ptr: *const u8, out_ptr: *mut u8) {
+    // SAFETY: harness passes 4 B prefix + 1 B output.
+    let prefix: &[u8; 4] = unsafe { &*(prefix_ptr as *const [u8; 4]) };
+
+    let mut lo = 0usize;
+    let mut hi = wordlist::WORDLIST.len();
+    let mut found: u8 = 0;
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let entry = wordlist::WORDLIST[mid].as_bytes();
+        match entry.cmp(&prefix[..]) {
+            core::cmp::Ordering::Less => lo = mid + 1,
+            core::cmp::Ordering::Greater => hi = mid,
+            core::cmp::Ordering::Equal => {
+                found = 1;
+                break;
+            }
+        }
+    }
+    unsafe { core::ptr::write_volatile(out_ptr, found); }
+}
+
+/// F-27 fix validator — mirror of `bip39::is_exact_wordlist_entry`'s
+/// constant-time scan. Bytewise compare against the zero-padded
+/// `WORDLIST_FLAT[idx]` AND `entry_len == needle.len()` (the length
+/// check is critical: without it a zero-padded oversized needle like
+/// "act\0\0\0\0\0" would falsely match the 3-byte entry "act" whose
+/// storage is itself padded to 8 zero bytes). Mask-OR accumulation;
+/// every iteration touches `WORDLIST_FLAT[idx]` at a loop-counter-
+/// derived address.
+#[no_mangle]
+pub extern "C" fn sca_seedwizard_prefix_is_exact_word_ct(
+    prefix_ptr: *const u8,
+    out_ptr: *mut u8,
+) {
+    use core::hint::black_box;
+    // SAFETY: harness passes 4 B prefix + 1 B output.
+    let prefix: &[u8; 4] = unsafe { &*(prefix_ptr as *const [u8; 4]) };
+    let nlen: u8 = 4;
+    let mut needle = [0u8; MAX_WORD_BYTES];
+    needle[..4].copy_from_slice(prefix);
+
+    let mut any_match: u8 = 0;
+    let mut entry_idx: u16 = 0;
+    while entry_idx < 2048 {
+        let idx_obf = black_box(entry_idx);
+        let entry = &WORDLIST_FLAT[idx_obf as usize];
+        let entry_len = WORDLIST_LENS[idx_obf as usize];
+
+        let mut all_eq: u8 = 0xFF;
+        let mut i = 0u8;
+        while (i as usize) < MAX_WORD_BYTES {
+            let byte_eq = ct_eq_u8_secret(entry[i as usize], needle[i as usize]);
+            all_eq = black_box(all_eq & byte_eq);
+            i += 1;
+        }
+        let len_eq = ct_eq_u8_secret(entry_len, nlen);
+        let is_match: u8 = black_box(all_eq & len_eq);
+        any_match = black_box(any_match | (is_match & 1));
+
+        entry_idx += 1;
+    }
+    unsafe { core::ptr::write_volatile(out_ptr, any_match); }
+}
+
 #[entry]
 fn main() -> ! {
     core::hint::black_box(&_KEEP_WRAP);
@@ -833,6 +916,8 @@ fn main() -> ! {
     core::hint::black_box(&_KEEP_OPTIGA_PIN_DERIVE);
     core::hint::black_box(&_KEEP_BIP39_LOOKUP_PREFIX);
     core::hint::black_box(&_KEEP_BIP39_LOOKUP_PREFIX_CT);
+    core::hint::black_box(&_KEEP_SEEDWIZARD_PREFIX_EXACT);
+    core::hint::black_box(&_KEEP_SEEDWIZARD_PREFIX_EXACT_CT);
     loop {
         cortex_m::asm::nop();
     }
