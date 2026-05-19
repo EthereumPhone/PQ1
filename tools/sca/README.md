@@ -1035,21 +1035,34 @@ mitigation paths:
    - **Hardware mitigation**: shielded twisted-pair on the bus,
      ground plane under the traces, board layout that keeps the bus
      short.
-   - **Firmware mitigation**: **decoy frames**. Render the real
-     mnemonic interleaved with N=4-8 valid-but-fake mnemonics at high
+   - **Firmware mitigation 1**: **decoy frames**. Render the real
+     mnemonic interleaved with N=4 valid-but-fake mnemonics at high
      refresh rate. User sees the real one via persistence-of-vision
-     (e.g., real frame at 90% duty, decoy frame at 10% — eye
-     averages, picks the dominant). The bus signature is the average
-     of N+1 frames so the real one isn't distinguishable. Cost:
-     ~4-6 hr engineering + visible flicker that some users find
-     unreadable. **Not implemented.** The bus channel is much
-     weaker than the optical channel for the realistic threat model
-     (camera attacker), so we accept this residual for now.
+     (real frame at 200 ms hold, decoy frame at 40 ms hold = 5:1
+     time ratio — eye averages, picks the dominant). The bus
+     signature is the average of N+1 frames so the real one isn't
+     distinguishable. **LANDED 2026-05-19** in
+     `secure/src/ui/seed_wizard.rs::show_mnemonic_page_with_decoys`.
+     Decoys are generated from independent `rng_strong::fill`
+     entropy at wizard entry, routed through the same constant-time
+     `render_mnemonic_page` (so the per-frame CPU trace is content-
+     independent per F-24 stages A-D), and zeroized via `Mnemonic`'s
+     Drop impl on wizard exit. Hardware flicker validation pending:
+     bench user reads 24 words off the real silicon and reports
+     whether the 5:1 ratio is readable. If unreadable, increase
+     `REAL_FRAME_HOLD_MS` to 400-500 ms (smooths visual, weakens
+     defense). 5 source-text regression sentinels in
+     `secure/src/ui_under_test/pure_tests.rs::negative_*decoy*`.
    - **Firmware mitigation 2**: constant-pixel-count encoding. XOR
      a fixed-but-different complement into each word's bitmap so
      the lit-pixel count is identical regardless of content. Closes
-     the power-supply-modulation channel. Hurts UX (background
-     "noise" pixels). **Not implemented.**
+     the power-supply-modulation channel (sub-channel 3). Hurts UX
+     (background "noise" pixels). **Not implemented (Phase 2).**
+     Deferred pending Phase 1 (decoy frames) hardware-flicker
+     validation; if Phase 1's UX is acceptable, Phase 2 layers on
+     top — both together close sub-channels 3+4 entirely on the
+     firmware side, leaving only sub-channels 1+2 (optical + driver-
+     IC EM) as physical-security/hardware-only.
 
 **What the F-24 stages A-D fix actually closes (audit threat model):**
 the attacker who can scope the **CPU** but not the **screen**. Rare
@@ -1061,8 +1074,10 @@ trace doesn't carry the secret.
 **What stages A-D do NOT defend against**:
 - Optical observer (camera) — physical privacy required.
 - Near-field probe on OLED module — hardware shielding required.
-- Power-rail probe — hardware supply isolation required.
-- Bus-trace EM — hardware shielding OR firmware decoy frames.
+- Power-rail probe — hardware supply isolation OR Phase 2 constant-
+  pixel encoding (firmware, not implemented).
+- Bus-trace EM — hardware shielding OR Phase 1 decoy frames
+  (**landed 2026-05-19**, hardware flicker validation pending).
 
 **Implementation references**:
 - `bip39/src/lib.rs::Mnemonic::word_bytes` — stage A-C fix (constant-

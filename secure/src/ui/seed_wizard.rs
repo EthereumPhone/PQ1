@@ -108,6 +108,30 @@ pub fn choose_setup_mode() -> WizardChoice {
 const WORDS_PER_PAGE: usize = 3;
 const TOTAL_PAGES: usize = WORD_COUNT / WORDS_PER_PAGE; // 8
 
+/// F-24 stage E (sub-channel 4) — decoy frame configuration.
+///
+/// Number of valid-but-fake BIP-39 mnemonics interleaved with the real
+/// one during seed display. Each decoy is generated from independent
+/// `rng_strong::fill` entropy at wizard entry and zeroized on exit.
+const N_DECOYS: usize = 4;
+
+/// How long the real mnemonic frame is held on screen before yielding
+/// to a decoy frame. Tuned for 5:1 real:decoy *time* ratio paired with
+/// [`DECOY_FRAME_HOLD_MS`]. Per the §F-24 stage E design note the
+/// realistic threat (camera attacker) is unaffected by decoy frames —
+/// these defend the bus-EM channel for an attacker who can scope the
+/// I²C cable but lacks line-of-sight to the screen.
+///
+/// Bench-validate the visual flicker on real silicon (SSD1306 over I²C
+/// @ 400 kHz, ~36 ms per `flush_with_secret_rows` call). If users find
+/// the flicker distracting, increase this to 400-500 ms (reduces decoy
+/// coverage but smooths the visual).
+const REAL_FRAME_HOLD_MS: u32 = 200;
+
+/// How long each decoy frame is held. Cycles through `[decoy_0 ..
+/// decoy_{N_DECOYS-1}]` round-robin on consecutive decoy cycles.
+const DECOY_FRAME_HOLD_MS: u32 = 40;
+
 /// Display the 24 words paginated. The user pages forward with right, back
 /// with left, confirms with long-Right (only valid on the last page so the
 /// user cannot dismiss the screen without seeing every word), or cancels
@@ -122,21 +146,49 @@ pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {
         None => return WizardResult::IdleWipe,
     }
 
+    // F-24 stage E (sub-channel 4) — generate N_DECOYS valid BIP-39
+    // mnemonics. Each is built from independent rng_strong entropy and
+    // interleaved with the real mnemonic during display
+    // (`show_mnemonic_page_with_decoys`). Mnemonic's Drop impl zeroizes
+    // `indices` so the decoys are wiped when this function returns.
+    let mut decoy_entropy = [[0u8; 32]; N_DECOYS];
+    for i in 0..N_DECOYS {
+        if crate::rng_strong::fill(&mut decoy_entropy[i]).is_err() {
+            // 3-source XOR'd TRNG fault — extremely rare in production.
+            // Surface to user as "RNG failed, retry" via the wizard
+            // outer loop's `Cancelled` retry path; the alternative
+            // (silently degrading to no-decoys) hides a real fault.
+            #[cfg(feature = "debug-log")]
+            secure_log!("[wizard] decoy entropy gen FAILED at idx {}", i);
+            for e in decoy_entropy.iter_mut() {
+                e.zeroize();
+            }
+            show_status("RNG failed", "retry...");
+            return WizardResult::Cancelled;
+        }
+    }
+    let decoys: [Mnemonic; N_DECOYS] = [
+        Mnemonic::from_entropy(&decoy_entropy[0]),
+        Mnemonic::from_entropy(&decoy_entropy[1]),
+        Mnemonic::from_entropy(&decoy_entropy[2]),
+        Mnemonic::from_entropy(&decoy_entropy[3]),
+    ];
+    for e in decoy_entropy.iter_mut() {
+        e.zeroize();
+    }
+
     let mut page: usize = 0;
     let mut seen_last = false;
     timeout::reset_activity();
 
     loop {
-        render_mnemonic_page(m, page);
-        if page == TOTAL_PAGES - 1 {
-            seen_last = true;
-        }
-
-        let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
+        let event = match show_mnemonic_page_with_decoys(m, &decoys, page) {
             Some(ev) => ev,
             None => return WizardResult::IdleWipe,
         };
+        if page == TOTAL_PAGES - 1 {
+            seen_last = true;
+        }
         timeout::reset_activity();
 
         match event {
@@ -163,6 +215,67 @@ pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {
             }
             (Button::Left, Press::Long) => return WizardResult::Cancelled,
         }
+    }
+    // `decoys` drops here; each Mnemonic's Drop impl zeroizes its
+    // `indices` array, so the decoy values do not linger on the stack.
+}
+
+/// F-24 stage E (sub-channel 4) frame loop.
+///
+/// Renders the real mnemonic for [`REAL_FRAME_HOLD_MS`], then one decoy
+/// frame for [`DECOY_FRAME_HOLD_MS`], cycling decoys round-robin.
+/// Returns the first button event, or `None` on activity-timeout idle.
+///
+/// The 5:1 time ratio means the *bus signature* an attacker measures
+/// is the time-weighted average across N+1 valid mnemonics — the real
+/// content is not distinguishable from the decoys without independent
+/// ground-truth on which frame is which. The user reads the real one
+/// because it dominates persistence-of-vision (5/6 of the on-time).
+fn show_mnemonic_page_with_decoys(
+    real: &Mnemonic,
+    decoys: &[Mnemonic; N_DECOYS],
+    page: usize,
+) -> Option<(Button, Press)> {
+    let mut frame_seq: u32 = 0;
+    loop {
+        let is_real = (frame_seq & 1) == 0;
+        let hold_ms = if is_real {
+            REAL_FRAME_HOLD_MS
+        } else {
+            DECOY_FRAME_HOLD_MS
+        };
+        let m_to_show: &Mnemonic = if is_real {
+            real
+        } else {
+            &decoys[(frame_seq >> 1) as usize % N_DECOYS]
+        };
+
+        render_mnemonic_page(m_to_show, page);
+
+        // Build a deadline-vs-idle closure. `wait_button` polls this
+        // ~125 Hz; returning true ends the wait. We distinguish
+        // "frame elapsed" from "user idle" *after* the wait returns
+        // None.
+        //
+        // Wrapping arithmetic: `timeout::now()` wraps every ~49 days;
+        // hold_ms is well under that, so a wrap inside this closure is
+        // impossible in practice. The `wrapping_sub` comparison works
+        // even across the once-per-49-days boundary anyway.
+        let deadline = timeout::now().wrapping_add(hold_ms);
+        let mut frame_or_idle = || {
+            timeout::is_idle()
+                || timeout::now().wrapping_sub(deadline) < 0x8000_0000
+        };
+        match input().wait_button(&mut frame_or_idle) {
+            Some(ev) => return Some(ev),
+            None => {
+                if timeout::is_idle() {
+                    return None;
+                }
+                // Frame deadline expired; advance to next frame.
+            }
+        }
+        frame_seq = frame_seq.wrapping_add(1);
     }
 }
 

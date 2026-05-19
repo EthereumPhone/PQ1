@@ -1001,3 +1001,80 @@ fn negative_choose_setup_mode_long_left_is_always_cancel() {
     // cancel.
     assert!(WIZARD_SRC.contains("(Button::Left, Press::Long) => return WizardChoice::Cancelled,"));
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// F-24 stage E (sub-channel 4) — decoy-frame regression sentinels
+// ═════════════════════════════════════════════════════════════════════
+//
+// `show_mnemonic` cycles the real mnemonic with N=4 decoy mnemonics
+// during seed display, interleaved at a 5:1 (real:decoy) time ratio.
+// The decoys defend the I²C bus-EM channel from an attacker who can
+// scope the cable but lacks line-of-sight to the screen — the bus
+// signature becomes the average of N+1 valid mnemonics so the real
+// one isn't distinguishable. These tests pin the structural pieces
+// so a future refactor can't accidentally remove the defense.
+
+#[test]
+fn negative_show_mnemonic_generates_independent_decoy_entropy() {
+    // Decoys MUST come from rng_strong (the 3-source XOR'd CSPRNG),
+    // not a deterministic seed or a derivative of the real entropy.
+    // A regression that reused the real entropy as a decoy source
+    // would defeat the entire defense — the average across N+1
+    // frames would converge on the real mnemonic.
+    assert!(
+        WIZARD_SRC.contains("crate::rng_strong::fill(&mut decoy_entropy[i])"),
+        "decoy entropy must come from rng_strong::fill"
+    );
+    assert!(
+        WIZARD_SRC.contains("let mut decoy_entropy = [[0u8; 32]; N_DECOYS]"),
+        "decoy_entropy must be stack-local and zeroized post-use"
+    );
+}
+
+#[test]
+fn negative_decoys_are_valid_bip39_mnemonics() {
+    // Decoys go through Mnemonic::from_entropy so they have valid
+    // BIP-39 checksums — an attacker can't filter "real vs decoy"
+    // by checksum validity. A regression that used random index
+    // arrays directly (bypassing from_entropy) would be filterable.
+    assert!(
+        WIZARD_SRC.contains("Mnemonic::from_entropy(&decoy_entropy[0])"),
+        "decoys must be built via Mnemonic::from_entropy for valid checksum"
+    );
+}
+
+#[test]
+fn negative_decoy_entropy_is_zeroized_after_mnemonic_construction() {
+    // Once decoys are constructed, the raw 32-byte entropy buffers
+    // must be wiped — otherwise stack residue could leak via a later
+    // SCA / cold-boot attack.
+    assert!(
+        WIZARD_SRC.contains("for e in decoy_entropy.iter_mut() {")
+            && WIZARD_SRC.contains("e.zeroize();"),
+        "decoy_entropy buffers must be zeroized after Mnemonic construction"
+    );
+}
+
+#[test]
+fn negative_real_frame_dominates_time_ratio() {
+    // The 5:1 real:decoy time ratio is what keeps the real mnemonic
+    // visible to the user via persistence-of-vision. A regression
+    // that swapped the ratio (decoy dominant) would make the real
+    // unreadable.
+    assert!(WIZARD_SRC.contains("REAL_FRAME_HOLD_MS: u32 = 200"));
+    assert!(WIZARD_SRC.contains("DECOY_FRAME_HOLD_MS: u32 = 40"));
+}
+
+#[test]
+fn negative_frame_loop_uses_constant_time_render() {
+    // The frame loop must route every render — real and decoy —
+    // through the same `render_mnemonic_page` (constant-time per
+    // F-24 stages A-D). A regression that drew decoys via the
+    // non-CT `draw_line` path would leak the secret index of the
+    // REAL mnemonic via the bus pattern during real frames (decoys
+    // would average uniformly but real would still leak).
+    assert!(
+        WIZARD_SRC.contains("render_mnemonic_page(m_to_show, page)"),
+        "frame loop must call render_mnemonic_page (CT path) for both real and decoy"
+    );
+}
