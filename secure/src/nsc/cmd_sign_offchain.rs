@@ -372,13 +372,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InvalidPointer as u32;
             }
         };
-        if crate::tx::erc7730::cross_check_eip712(
+        // FI-hardened binding cross-check (Phase 5 item 6).
+        // Compute the verdict once, then double-evaluate via
+        // `check_true_into_sentinel` with `wait_random` between
+        // so a single-fault glitch that flips the `.is_err()`
+        // ALSO has to defeat a Hamming-distant sentinel compare.
+        // Mirrors the verify-before-release pattern in
+        // `crypto::c10_sign_verified_with_progress`.
+        let eip712_bind_ok = crate::tx::erc7730::cross_check_eip712(
             &v.ir,
             chain_id,
             &v.ir.contract,
             &domain_separator,
         )
-        .is_err()
+        .is_ok();
+        crate::fi::wait_random();
+        if crate::fi::check_true_into_sentinel(|| core::hint::black_box(eip712_bind_ok))
+            != crate::fi::OK_SENTINEL
         {
             crate::ui::show_status("EIP-1271", "7730 binding fail");
             return NscStatus::InvalidPointer as u32;
