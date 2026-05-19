@@ -563,3 +563,169 @@ During the research pass, four load-bearing claims from the deep-dive agents wer
 - ✅ PQSigner's existing `hw/secret_keys.rs`, `gated_unlock`, `pin_attempts_bump` all confirm the "validates existing plan" category is not speculative.
 
 The one OID-map conflict noted: Trezor's `F1D4` is `STRETCHED_PIN` (AUTOREF); PQSigner's `F1D4` is `OID_BOOTSTRAP_VK` per `secure/src/optiga/apdu.rs:151`. The two firmware families use disjoint Optiga object maps — symmetry is coincidental in the D4 digit, not meaningful. Do not treat per-OID analogies as portable without re-checking the `change/read/execute` metadata each side writes.
+
+---
+
+## Section 8 — Deeper subsystem analysis (2026-05-19)
+
+After the 2026-05-19 delta pass (which covered all *commits* since 2026-04-24), this section is a parallel deep-dive against six *subsystems* the earlier sections covered only thinly. Each subsection answers: what does Trezor do here, what does PQSigner do, what (if anything) should we adopt.
+
+### 8.1 Storage subsystem (`storage/storage.c` + `core/embed/sec/storage/`)
+
+Trezor encrypts wallet state on MCU flash with a PIN-derived key. PQSigner doesn't store any wallet secret on MCU flash at all (dual-SE XOR-split keeps the entropy off-chip by design — see invariant #1). The two architectures don't compete; they solve different problems for different threat models. Still, three Trezor patterns are worth naming.
+
+**KDF chain.** PBKDF2-HMAC-SHA256 / 20,000 iterations, salt = `HARDWARE_SALT(32B silicon-derived) ∥ STORAGE_SALT(32B per-PIN-change) ∥ EXTERNAL_SALT(32B passphrase, optional)`. On Optiga-equipped T3W1, the stretched PIN then goes into `optiga_pin_stretch_cmac_ecdh()` for a second SE-side stretch using CMAC+ECDH (`storage/storage.c:814-859`). Output → DEK (32B) + SAK (16B) → ChaCha20-Poly1305 over the EDEK_PVC_KEY flash entry.
+
+PQSigner equivalent: none, by design. We never have to derive a disk-encryption key because there's no encrypted disk. The dual-SE entropy XOR-split (`half_O` on OPTIGA, `half_E` on SE050) replaces the encrypted-flash blob model entirely.
+
+**Wipe-code mechanism.** Stored plaintext + 8B salt + 8B HMAC tag in flash entry `WIPE_CODE_DATA_KEY=0x06`. The constant-time check (`storage/storage.c:425-475`) **double-computes** the HMAC with `wait_random()` interleaved between the two computes — same FI-defense pattern we use in `c10_sign_verified_with_progress` for the C10 sign result. A wipe-code match triggers `storage_wipe()` immediately; the on-flash wipe-code itself is then erased along with the rest.
+
+PQSigner equivalent: none. We have `trigger_lockout_wipe` (PIN attempt MAX → `factory_reset_admin` on both SEs) but no second secret that triggers wipe on entry — the user has one PIN, ten tries, then wipe. Worth noting we *don't* have the wipe-code attack vector because we don't accept arbitrary entries in the unlock path; only ten PIN attempts.
+
+**Pre-commit counter with readback verification.** `storage/storage.c:1192-1228` reads `pin_get_fails(&ctr)`, increments via `storage_pin_fails_increase()`, then explicitly does `pin_get_fails(&ctr_ck)` and `ensure(ctr + 1 == ctr_ck)`. Glitch a single step of the increment-then-read path and the ensure() halts the chip.
+
+PQSigner equivalent: ✓ already present. `secure/src/nsc/mod.rs::gated_unlock` does the pre-commit, and `secure/src/hw/flash.rs::pin_attempts_read` is hardened with the F-12 forward+reverse double-scan (`secure_log!` reference) + the F-15.r5 halt-on-mismatch. The Trezor-shape `ctr + 1 == ctr_ck` micro-pattern is a one-liner check we could add at the call site as belt-and-braces; the existing F-12/F-15 chain already covers the harder class.
+
+**Adoption candidates.**
+- [P3, optional] Add the Trezor-style explicit `assert(ctr_before + 1 == ctr_after)` readback check at the `gated_unlock` pre-commit boundary as an additional micro-guard. The F-12/F-15 chain already covers this class; the explicit assert is the same-shape low-cost belt-and-braces.
+- [N/A] Wipe-code, storage-salt refresh, encrypted-disk KDF — different threat model. Document the architectural delta in `docs/architecture.md` so future engineers don't try to retrofit Trezor's encrypted storage onto PQSigner without realizing the XOR-split obsoletes it.
+
+### 8.2 Applet system — `USE_APPLETS` macro (2026-04 refactor)
+
+Trezor recently introduced the `USE_APPLETS` macro (`refactor(core): introduce USE_APPLETS macro`, `4c279521d5`). Applets are firmware-resident tasks within the same ELF — not separate binaries — isolated via MPU regions (`mpu_set_active_applet(&applet->layout)`, `core/embed/sys/mpu/stm32u5/mpu.c:335-394`) and called into the kernel via SVCall (`systask.c:155`).
+
+The full firmware (wallet logic + UI + crypto) runs as a single applet ("coreapp"). The kernel runs privileged; coreapp runs unprivileged. Cross-applet attack surface is small because only one applet runs at a time and MPU regions 2-4 are disabled when the kernel is active.
+
+**PQSigner relevance: do not adopt.** Trezor's applet pattern is software-MPU privilege separation *within a single world*. PQSigner already has the stronger hardware-enforced split: TrustZone S/NS with CMSE veneers as the gateway. The MPU + SVCall layer Trezor uses is parallel/equivalent to (and weaker than) what we already have. Stacking applet isolation on top of TrustZone makes sense for Trezor because their T3W1 design supports both; for PQSigner the TrustZone boundary alone is sufficient.
+
+The one PQSigner-relevant pattern that the applet research surfaced: the **per-mode MPU configuration** (`MPU_MODE_APP`, `MPU_MODE_APP_SAES`, `MPU_MODE_DEFAULT`) where the kernel temporarily grants a peripheral (e.g. SAES) to a specific applet via a callback (`secure_aes_unpriv.c:125-184`). If we ever want fine-grained peripheral access control inside the secure world (e.g., a "C10 sign" sub-context that can read SAES but not flash), this is the validated template. Not needed today.
+
+### 8.3 Boot chain handoff details (5-layer → our 2-layer)
+
+Trezor: boardloader → bootloader → secmon → kernel → firmware. PQSigner: FSBL → firmware. The agent's deep-dive surfaced four handoff patterns that are worth porting even within our 2-layer model, plus one Trezor-specific layer we structurally don't need.
+
+**Pattern 1 — register zero-out at the jump.** Trezor's `jump_to_next_stage(addr, args)` is a naked asm routine that zeroes R0-R12 + R14 and disables MSPLIM before `BX LR` to the next-stage vector table (`boardloader/main.c:365`, secmon's `jump_to_vectbl_ns` similar). PQSigner's FSBL→firmware handoff currently does not register-scrub.
+
+**Pattern 2 — monotonic counter write-then-read-verify at every handoff.** `monoctr_write(MONOCTR_BOOTLOADER_VERSION, hdr->monotonic)` is followed by a read-back; failure halts. PQSigner has OTP fuses for the equivalent role but doesn't do the read-back verify — we trust the fuse-burn hardware.
+
+**Pattern 3 — VTRUST flags in the manifest.** A 16-bit `vtrust` field in the vendor header gates provisioning mode, secret access level, vendor-screen display behavior. The bootloader enforces it BEFORE calling `secret_prepare_fw(...)`. PQSigner's FSBL doesn't have an equivalent — manifest is signed but doesn't carry runtime-policy flags.
+
+**Pattern 4 — `startup_args` versioned container for state passing.** `STARTUP_ARGS_TYPE_*` enum (`startup_args.h`) lets the bootloader pass typed payloads (MCU device cert today; presumably more later) to firmware without ABI breaks. PQSigner FSBL→firmware passes no structured state currently.
+
+**Pattern 5 (Trezor-specific) — secmon as TrustZone enforcer.** Secmon initializes secure peripherals + sets up NVIC/MPU for the non-secure kernel, then jumps to kernel in NS mode. PQSigner's SAU/GTZC setup happens inline in the secure entry point at `secure/src/main.rs`; we don't need a separate secmon layer because the FSBL is already trusted (it's WRP1A-locked) and the secure-world entry IS the equivalent.
+
+**Adoption candidates.**
+- [P2, ~half day] Register zero-out + MSPLIM disable at the FSBL→firmware handoff. `secure/src/main.rs`'s reset_handler runs before any FSBL-state could leak, but the FSBL itself doesn't scrub. Worth porting the asm pattern verbatim to `fsbl/src/jump.rs` (or wherever the jump-to-firmware happens).
+- [P3, audit-only] Verify our OTP fuse-burn path does read-back verification post-write. If not, add it — same shape as Trezor's `monoctr_write` + `monoctr_read` + ensure-equal.
+- [P3, design consider] `vtrust`-equivalent policy flags in our manifest. The `fw-manifest` format is already extensible (CBOR-ish); adding a `policy_flags` field with provisioning-mode + debug-log + sca-trigger bits would be a clean evolution. Defer until the production-vs-dev manifest split is a real shipping concern.
+- [P3] `startup_args` versioned container. Useful for §22 attestation cert handoff if/when we land it. Not blocking.
+- [N/A] Secmon layer — our FSBL+firmware split already covers the role.
+
+### 8.4 TAMP IRQ handler + response (work-todo §26 plan)
+
+The TAMP IRQ migration in work-todo §26 has been "Trezor-parity latency" with no concrete porting plan. The agent's deep-dive produced one.
+
+**Trezor enable list on T3W1** (`tamper.c:140-151`):
+- Internal: ITAMP1 (VBAT), ITAMP2 (temp), ITAMP3 (LSE CSS), ITAMP5 (RTC overflow), ITAMP8 (monotonic counter overflow), ITAMP11 (IWDG reset with tamper flag).
+- Crypto-fault-critical: **ITAMP9 (SAES/AES/PKA/TRNG fault)**, ITAMP7/12/13 (ADC4 analog watchdogs).
+- Debug: ITAMP6 (JTAG/SWD access when RDP > 0).
+- External: TAMP2 via `TAMPER_INPUT_2` GPIO macro.
+- `TAMP->CR3 = 0` → all enabled sources fire in confirmed mode (no warn/restrict layering).
+
+**Handler shape** (`tamper.c:252-276`): MPU re-init (because hardware erased SRAM2), disable external pin to prevent re-trigger on debounce rebound, read `TAMP->SR`, write it back to `TAMP->SCR` to clear, classify event into `systask_postmortem_t`, jump to `reboot_with_rsod()`. Total work: probably <100 µs on Cortex-M33.
+
+The critical assumption: **backup-domain erase happens in hardware before the IRQ fires.** Secrets in BKP0R-BKP31R + SRAM2 are gone by the time TAMP_IRQHandler runs. The firmware's job is housekeeping (re-MPU, disable re-trigger, display reason), not zeroize.
+
+**PQSigner TAMP IRQ migration plan** (concrete, ports to work-todo §26):
+
+1. **Port register initialization** verbatim from `tamper.c:100-173` into a rewritten `secure/src/hw/tamp.rs::init()`:
+   - `TAMP->CR1` bitmask (ITAMP1,2,3,5,8,9,11 — match Trezor's set; ITAMP9 is the FI-defense win)
+   - `TAMP->CR3 = 0` (confirmed mode)
+   - `TAMP->FLTCR` filter (8-cycle pre-charge, 4-sample debounce, RTCCLK/256 sampling)
+   - `TAMP->IER` enable-all
+   - `NVIC_SetPriority(TAMP_IRQn, IRQ_PRI_HIGHEST)` + `NVIC_EnableIRQ(TAMP_IRQn)`
+2. **Replace the log-only handler** in `secure/src/hw/tamp.rs` with: re-init MPU/SAU, disable external tamper pin (`TAMP->CR1 &= ~TAMP_CR1_TAMP2E`), clear status (`TAMP->SCR = sr`), call `trigger_lockout_wipe()` (instead of Trezor's `reboot_with_rsod`).
+3. **Coordinate `TAMP->CR2 |= TAMP_CR2_BKERASE`** at controlled-reboot paths (per `sysutils.c:67-72`) so we can force backup-domain erase from firmware when we choose to.
+4. **Verify ITAMP9 is enabled** — the crypto-peripheral-fault tamper is the biggest single FI defense add. It fires automatically on SAES/PKA/RNG anomalies (which our F-9/F-13/F-16 sweeps assume the attacker is *causing*).
+
+Estimated effort: 1-2 days including silicon validation (needs a board to actually fire a tamper event and confirm wipe completes).
+
+### 8.5 `secret_keys` derivation tree catalog
+
+Trezor's enum (`secret_keys_common.h:30-38`) has 9 KEY_INDEX values. The agent's catalog maps them to PQSigner equivalents:
+
+| Trezor KEY_INDEX | Purpose | PQSigner analog |
+|------------------|---------|-----------------|
+| MCU_DEVICE_AUTH (0) | ML-DSA-44 attestation seed | N/A — different attestation arch (§22 uses SLH-DSA-128s burned key) |
+| OPTIGA_PAIRING (1) | OPTIGA E1E0 pairing | ✓ `optiga_pairing_secret()` |
+| OPTIGA_MASKING (2) | OPTIGA on-chip ECDSA masking | N/A — we don't do classical ECDSA on OPTIGA |
+| TROPIC_PAIRING_UNPRIV (3) | Tropic01 user key | N/A — Tropic excluded |
+| TROPIC_PAIRING_PRIV (4) | Tropic01 admin key | N/A |
+| TROPIC_MASKING (5) | Tropic01 ECDSA masking | N/A |
+| NRF_PAIRING (6) | NRF BLE radio pairing | N/A — no BLE |
+| STORAGE_SALT (7) | MCU storage encryption salt | N/A — no MCU storage encryption |
+| DELEGATED_IDENTITY (8) | Rotation-enabled identity | Partial — `se050_admin_pin()` exists but rotation arg unused |
+
+**PQSigner-only keys (no Trezor analog):**
+- `se050_scp03_enc_key`, `se050_scp03_mac_key`, `se050_scp03_dek_key` — SE050 SCP03 session keys (Trezor doesn't pair an SE050; their SCP03 lives in the OPTIGA driver layer)
+- `tropic01_pairing_key` — provisioned but never wired (matching memory: `project_tropic01_excluded.md`)
+
+**Diversifier byte layout** (worth pinning for cross-implementation compat if we ever need it):
+```
+[INDEX_BE(2B) | SUBINDEX_BE(2B) | 0x00]                            // rotation == 0 (5B total)
+[INDEX_BE(2B) | SUBINDEX_BE(2B) | 0x00 | ROTATION_BE(2B)]          // rotation != 0 (7B total)
+```
+
+The middle `0x00` byte is reserved for a future "block-index" expansion (multi-block KDF outputs). Currently always zero.
+
+**Rotation use.** Only `KEY_INDEX_DELEGATED_IDENTITY` exposes `rotation_index` to callers. Every other purpose passes 0. The byte layout reflects the "rotation as opt-in extension" design choice — Trezor wanted future-proofing without disrupting existing derivations. PQSigner could mirror this if we ever need rotatable subkeys (e.g., SE050 admin PIN revocation post-incident).
+
+**Adoption candidates.**
+- [N/A] No critical PQSigner gaps. Every Trezor key purpose either has a PQSigner equivalent or is intentionally absent (Tropic, NRF, MCU-storage).
+- [P3, future] If we ever add rotatable subkeys, mirror Trezor's diversifier-byte-conditional-on-rotation pattern (5B vs 7B). It's a clean way to add the field without forcing a full version bump.
+- [P3, document] Add a comment to `secure/src/hw/secret_keys.rs` listing the SE050 SCP03 keys as PQSigner-only (not in Trezor), so a future reviewer comparing the two doesn't think we're missing something.
+
+### 8.6 Trezor-Host-Protocol (THP) — `rust/trezor-thp/`
+
+Trezor recently added a full session-protocol replacement for their legacy plaintext-ProtoBuf-over-HID transport. THP is:
+- **L2 framing**: Alternating Bit Protocol with CRC32, channel allocation, ACK piggybacking.
+- **L3 secure channel**: **Noise XX pattern** (mutual auth + forward secrecy) → AES-256-GCM AEAD.
+- **L4 application**: sessions + pairing credentials.
+
+Trezor's threat model: a malicious USB host program (or USB middleware, or multi-tenant host stack) shouldn't be able to (a) read PIN/passphrase/seed in transit, (b) MITM the host↔device conversation, or (c) replay old commands.
+
+**PQSigner threat model on transport.** Our USB HID + Ledger APDU framing is unauthenticated and unencrypted at the host↔device layer. **However:**
+- The PIN never crosses the USB cable — it's entered on the trusted UI (button-driven OLED PIN entry inside the secure world), never visible to the NS USB stack.
+- The seed never crosses the USB cable — it's reconstructed entirely inside the secure world from the two SE-stored XOR halves, and signing happens there; only signatures (public) leave.
+- SCP03 protects the device↔SE050 link inside the device; SE050 entropy halves are never on the bus unencrypted.
+
+So the THP threats that bite Trezor (PIN/passphrase plaintext in APDUs) don't apply to PQSigner — we already structured the secret flow to never expose those values to the USB layer.
+
+**The remaining attacker model THP would defend that PQSigner does not:**
+- An attacker who can read all USB traffic learns: *which* transaction the user signed (the userOp bytes), the resulting signature (publicly verifiable anyway), and command IDs. Nothing secret leaks; the attacker just gets observability into user behavior.
+- A MITM could swap the userOp the user intended for one the attacker chose — but the trusted UI re-renders the userOp on-screen for user confirmation before sign, so the swap would be visible if the user is paying attention.
+
+**Verdict: do not port THP.** The threats it defends are either bound elsewhere in our architecture (trusted UI for confirmation, SE-side entropy/SCP03 for secrets) or low-impact (signing-pattern observability). Adding a 5-10 KB Noise XX implementation + pairing-credential management for that gain is poor cost/benefit.
+
+One narrow exception: if a future PQSigner ever ships **BLE** (Trezor's N4W1 path), then untrusted-radio-link threats become real and THP-equivalent becomes mandatory. Document this so future BLE work knows to revisit.
+
+---
+
+## Section 8 action summary
+
+| # | Subsystem | Verdict | Effort | Priority |
+|---|-----------|---------|--------|----------|
+| 8.1 | Storage KDF / wipe-code | architectural delta, doc only | 30 min | P3 |
+| 8.1 | Pre-commit `ctr+1 == ctr_ck` micro-pattern | already covered by F-12/F-15; optional belt-and-braces | 1 h | P3 |
+| 8.2 | Applet / `USE_APPLETS` | do not adopt (TrustZone superior) | — | N/A |
+| 8.3 | Register zero-out at FSBL→firmware jump | adopt | ~half day | **P2** |
+| 8.3 | OTP write-then-read-verify at boot | audit + add if missing | ~half day | P3 |
+| 8.3 | VTRUST-equivalent manifest flags | design consideration | future | P3 |
+| 8.3 | `startup_args` versioned handoff container | adopt with §22 work | with §22 | P3 |
+| 8.4 | **TAMP IRQ migration** (work-todo §26) | **concrete plan now ready** | 1-2 days + silicon validation | **P1** |
+| 8.5 | secret_keys diversifier compatibility | document the PQSigner-only keys | 15 min | P3 |
+| 8.6 | THP / encrypted transport | do not adopt (threats bound elsewhere) | — | N/A |
+
+The single highest-yield item is **8.4 — TAMP IRQ migration**. The agent produced a concrete porting plan with specific registers, bitmasks, and the ITAMP9 crypto-fault tamper that directly hardens against the FI attacks we run sweeps for. Worth promoting to work-todo §26's actionable status.
+
+Second-tier: **8.3 register zero-out at FSBL→firmware jump**. Small, mechanical, eliminates a class of state-leak from FSBL → firmware that we currently don't bound.

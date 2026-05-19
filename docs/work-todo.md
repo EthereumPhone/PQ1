@@ -1003,6 +1003,15 @@ Total: **15 unlocks, 1 multi-scenario sign suite, 1 PIN-lockout brute-force test
 
 **When to do this:** during the production-hardening branch, alongside the parallel `production-todo.md` item ("TAMP escalation: log-only → `trigger_lockout_wipe()`"). Both flips MUST land together so review can verify the trigger surface end-to-end.
 
+**Production-flip register-by-register plan (added 2026-05-19 from `docs/trezor-comparison.md §8.4`).** The deeper Trezor analysis surfaced the specific TAMP enable list + handler shape we'd port:
+- `TAMP->CR1` enable bitmask: ITAMP1 (VBAT), 2 (temp), 3 (LSE CSS), 5 (RTC overflow), 8 (monoctr overflow), **9 (SAES/AES/PKA/TRNG crypto fault — the biggest FI defense win)**, 11 (IWDG-with-tamper). External pin via `TAMPER_INPUT_2` GPIO macro if we wire a tamper pin.
+- `TAMP->CR3 = 0` — all enabled sources fire in *confirmed mode* (no warn/restrict layering). Single terminal action.
+- `TAMP->FLTCR` filter: 8-cycle pre-charge, 4-sample debounce, RTCCLK/256 sampling (per Trezor `tamper.c:132-136`).
+- Handler body (drop-in replacement for the current log-only `on_tamp_irq`): re-init MPU/SAU (TAMP erased part of SRAM2), disable external pin to prevent debounce re-trigger (`TAMP->CR1 &= ~TAMP_CR1_TAMP2E`), clear status (`TAMP->SCR = sr`), call `trigger_lockout_wipe()`.
+- Coordinate `TAMP->CR2 |= TAMP_CR2_BKERASE` at controlled-reboot paths so firmware can force backup-domain erase when we choose to.
+
+The §8.4 agent-derived plan is the missing concrete porting content that §26 referenced as "production hardening" without specifying. Adopt verbatim with the default-flip when production-hardening branches.
+
 **Files to change for default-flip (when):** Remove `tamp-irq` feature gate and make IRQ-mode unconditional under `tamp`. The `DefaultHandler` fn in `secure/src/main.rs` and `enable_tamp_irq()` + `on_tamp_irq()` in `secure/src/hw/tamp.rs` are already in tree (commit `f5e6a8a`); the default-flip is a Cargo.toml + cfg-gate cleanup, not a behavioral change.
 
 ---
