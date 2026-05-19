@@ -114,3 +114,26 @@ path = "fuzz_targets/erc7730_walker.rs"
 test = false
 doc = false
 bench = false
+
+# Phase 5 item 9 — render-dispatch harness. Drives the renderer's
+# descriptor-side path (IR parse → find_format_by_selector → field
+# iteration) against arbitrary bytes. The full per-formatter Pages
+# emission stays out of scope until `Pages` is ungated out of
+# `secure/src/tx/display/` (the renderer entry depends on
+# hardware-only `crate::ui::*` bindings).
+[[bin]]
+name = "erc7730_render_dispatch"
+path = "fuzz_targets/erc7730_render_dispatch.rs"
+test = false
+doc = false
+bench = false
+
+# DEFERRED — Phase 5 item 9: `erc7730_params_parse` harness.
+# Requires moving `secure/src/tx/erc7730_render/{params,visibility}.rs`
+# (plus a `RenderErr` split into a parser-level `ParamError` and a
+# renderer-level `RenderErr` wrapper) into the host-runnable
+# `pqsigner-erc7730` crate. The handoff
+# (`docs/handoff-erc7730-phase5.md` item 9) flags this as a
+# >5-file-move cascade. Deferred — covered structurally by the
+# secure-crate unit tests at `secure/src/tx/erc7730_render/
+# params.rs::tests` until the move lands.
