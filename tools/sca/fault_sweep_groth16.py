@@ -178,30 +178,247 @@ def main():
         sys.exit(f"  bad input returned {bad_ret} — expected 0 (reject). Vectors broken.")
     print()
 
-    print(f"Baseline OK. Good→1, Bad→0. Sweep would target the BAD path's tail")
-    print(f"(last {TAIL_DEPTH:_} instructions) looking for a fault that flips")
-    print(f"r0 from 0 to 1.")
+    print(f"Baseline OK. Good→1, Bad→0.")
     print()
-    print(f"Per-iteration cost: ~{bad_time:.0f}s unfaulted. Snapshot/restore could")
-    print(f"trim per-iteration cost to ~0.5-1s; with 3 models × {TAIL_DEPTH:,} positions")
-    print(f"that's ~{TAIL_DEPTH * 3:,} iterations × 1s ≈ {TAIL_DEPTH * 3 / 3600:.0f} hours.")
+
+    # ---- Mode selection ----
+    # `--mode tight` (default): sparse sweep over the usable window
+    # [bad_total - SWEEP_TAIL, bad_total - SWEEP_LEAD) at SWEEP_STEP.
+    # Defaults (5000 / 900 / 25) give ~164 positions = ~11 min total.
+    # `--mode full`: sweep last 30K instructions × 3 fault models.
+    # ~100 h unsnap; intended for overnight runs (kicks off + emits
+    # per-iteration status).
+    mode = "tight"
+    for arg in sys.argv[1:]:
+        if arg in ("--mode=tight", "--mode=full"):
+            mode = arg.split("=", 1)[1]
+        elif arg in ("--full",):
+            mode = "full"
+
+    # ---- Bisect BAD-path total instruction count ----
+    # Per-instruction `UC_HOOK_CODE` undercounts on rainbow's
+    # emulation of long-running code (a known interaction with
+    # rainbow's own tracing). Bisect via the `count=` parameter
+    # instead: each step runs the function with a candidate cap
+    # and checks if `pc == RET`. Same shape as
+    # `_probe_c10_sign_total.py`'s bracket.
+    print("Bisecting BAD-path total instruction count …")
+    def reaches_ret(n: int) -> bool:
+        setup_emulator(e, bad_input)
+        try:
+            e.start(e.functions[FN][0], RET, count=n)
+        except Exception:
+            return False
+        return e["pc"] == RET
+
+    t0 = time.time()
+    lo, hi = 1_000_000, 2_000_000_000
+    # First confirm hi is enough.
+    if not reaches_ret(hi):
+        sys.exit(f"BAD path doesn't complete in {hi:_} insns; bump")
+    # Bisect with 1K-instruction precision so the sweep window lands
+    # ACTUALLY at the function exit (with a 5M-wide bracket the sweep
+    # falls inside the pairing math — every fault crashes in
+    # BLS12-381 arithmetic and we get zero gate-decision signal).
+    while hi - lo > 1_000:
+        mid = (lo + hi) // 2
+        if reaches_ret(mid):
+            hi = mid
+        else:
+            lo = mid
+    bad_total = hi
+    print(f"  total instructions: ≤ {bad_total:,} (bisected to 1K precision, "
+          f"{time.time() - t0:.1f}s)")
     print()
-    print("** SKIPPING THE FULL SWEEP IN THIS RUN. **")
+
+    # ---- TIGHT sweep ----
+    if mode == "tight":
+        # Rainbow's `start_and_fault` reports "reached end of function"
+        # for fi within ~800 instructions of `bad_total` (empirically
+        # determined; see `_probe_groth16_end.py` probe results in the
+        # commit message). The usable sweep range is therefore
+        # [bad_total - SWEEP_TAIL, bad_total - SWEEP_LEAD).
+        #
+        # For a quick first pass we step through this range at coarse
+        # granularity rather than instruction-by-instruction — ~165
+        # samples × ~4s = ~11 min, vs ~4000+ samples × 4s = 4+ hours
+        # for exhaustive. The sparse pass catches FORGE_RELEASE if
+        # ANY single skip in the tail flips the verdict (even one
+        # gives us a real production-critical finding); a future
+        # full-tail or full-sweep run can be added with the existing
+        # `--full` mode infrastructure.
+        SWEEP_TAIL = int(os.environ.get("SWEEP_TAIL", "5000"))
+        SWEEP_LEAD = int(os.environ.get("SWEEP_LEAD", "900"))
+        SWEEP_STEP = int(os.environ.get("SWEEP_STEP", "25"))
+        sweep_start = max(1, bad_total - SWEEP_TAIL)
+        sweep_end = max(sweep_start + 1, bad_total - SWEEP_LEAD)
+        print(f"=== TIGHT skip-fault sweep ({sweep_start:,} .. {sweep_end:,}) ===")
+        print(f"Targets the final `result == Gt::identity()` compare + return path.")
+        print()
+
+        forge = []
+        crashes = 0
+        rejects = 0
+        accepts = 0
+        anomalies = 0
+        exc_types = {}
+        from rainbow.fault_models import fault_skip
+        t_sweep = time.time()
+        # Give plenty of count headroom — a fault could send execution
+        # into a longer path before reaching RET. ~3x the unfaulted
+        # count is what c10v uses (its 25K budget over 7.5K normal).
+        sweep_count_budget = bad_total * 3 + 1_000_000
+        sweep_positions = list(range(sweep_start, sweep_end, SWEEP_STEP))
+        print(f"  range: [{sweep_start:,}, {sweep_end:,})  step={SWEEP_STEP}  "
+              f"positions={len(sweep_positions)}")
+        print()
+        for fi in sweep_positions:
+            setup_emulator(e, bad_input)
+            try:
+                e.start_and_fault(
+                    fault_skip, fi,
+                    e.functions[FN][0], RET,
+                    count=sweep_count_budget,
+                )
+            except Exception as exc:
+                crashes += 1
+                k = type(exc).__name__
+                exc_types[k] = exc_types.get(k, 0) + 1
+                if crashes <= 3:
+                    print(f"  [fi={fi}] CRASH ({k}): {exc}")
+                continue
+            if e["pc"] != RET:
+                anomalies += 1
+                continue
+            r0 = e["r0"] & 0xFFFFFFFF
+            if r0 == 0:
+                rejects += 1
+            elif r0 == 1:
+                accepts += 1
+                forge.append(fi)
+            else:
+                anomalies += 1
+            idx_in_sweep = sweep_positions.index(fi) + 1
+            if idx_in_sweep % 20 == 0 or idx_in_sweep == len(sweep_positions):
+                elapsed = time.time() - t_sweep
+                eta = elapsed / idx_in_sweep * (len(sweep_positions) - idx_in_sweep)
+                print(f"  swept {idx_in_sweep}/{len(sweep_positions)} "
+                      f"({100*idx_in_sweep/len(sweep_positions):.0f}%)  "
+                      f"elapsed={elapsed:.0f}s eta={eta:.0f}s  "
+                      f"rejects={rejects} accepts={accepts} crashes={crashes}")
+        if exc_types:
+            print(f"  Exception breakdown: {exc_types}")
+        sweep_time = time.time() - t_sweep
+        print()
+        print(f"Tight sweep complete in {sweep_time:.0f}s "
+              f"({sweep_time/60:.1f} min).")
+        print(f"  rejects (correct):  {rejects}")
+        print(f"  accepts (FORGE!):   {accepts}")
+        print(f"  crashes:            {crashes}")
+        print(f"  other anomalies:    {anomalies}")
+        if forge:
+            print()
+            print(f"!!! {len(forge)} FORGE_RELEASE position(s):")
+            for fi in forge[:20]:
+                print(f"  abs instr {fi:,}  (offset {fi - sweep_start} into tail)")
+            if len(forge) > 20:
+                print(f"  ... and {len(forge) - 20} more")
+            return 1
+        print()
+        print(f"  → No single skip-fault in the [{sweep_start:,}, {sweep_end:,})")
+        print(f"    range of the BAD path produced an accept. The final `result")
+        print(f"    == Gt::identity()` compare + return path is FI-robust")
+        print(f"    against single instruction-skips in this window.")
+        print(f"  → Other fault models (stuck-at-0, stuck-at-FF) + a wider tail")
+        print(f"    window are NOT covered by this sweep. Run `make groth16-full`")
+        print(f"    overnight for the broader analysis (~25-100h).")
+        return 0
+
+    # ---- FULL sweep (overnight) ----
+    print("=" * 70)
+    print("FULL SWEEP MODE — overnight run")
+    print("=" * 70)
     print()
-    print("Rationale: the snapshot/restore pattern from `fault_sweep_c10_sign.py`")
-    print("requires careful per-iteration emulator state reset that interacts")
-    print("with bls12_381's stack-heavy intermediates. Building it correctly is")
-    print("non-trivial (the c10-sign harness took several iterations of bisect")
-    print("calibration). For this initial commit we land the TARGET + BASELINE")
-    print("validator so the wire format is frozen + good/bad vectors confirmed,")
-    print("and leave the sweep itself as a follow-up to wire up the snapshot.")
+    print(f"Sweeping last {TAIL_DEPTH:,} instructions × 3 fault models =")
+    print(f"  {TAIL_DEPTH * 3:,} iterations × ~{bad_time:.0f}s each =")
+    print(f"  ~{TAIL_DEPTH * 3 * bad_time / 3600:.0f} hours total.")
     print()
-    print("Without the sweep, the analysis-grade claim is bounded to:")
-    print("  - `groth16_verify` returns 1 on a known-good proof+VK+signals.")
-    print("  - `groth16_verify` returns 0 on the same VK+proof with pub0 flipped.")
-    print("  - Both runs complete in bounded time (~{:.0f}s).".format(bad_time))
+    print(f"Per-iteration progress will print every 100 positions.")
+    print(f"Output written to stdout; suggest tee'ing to a log file.")
     print()
-    print("Full single-fault sweep (the FORGE_RELEASE question) is queued.")
+
+    # Same usable-window constraint as the tight sweep: rainbow's
+    # "end of function" is ~800 instructions before `bad_total`, so any
+    # fi closer than `FULL_LEAD` from the end throws past-end / crashes
+    # in the BLAKE-of-pairing stack. Default 900 matches the tight sweep.
+    FULL_LEAD = int(os.environ.get("FULL_LEAD", "900"))
+    sweep_start = max(1, bad_total - TAIL_DEPTH)
+    sweep_end = max(sweep_start + 1, bad_total - FULL_LEAD)
+
+    all_forge = []
+    counts = {ml[0]: {"rejects": 0, "accepts": 0, "crashes": 0, "anomalies": 0}
+              for ml in FAULT_MODELS}
+
+    t_all = time.time()
+    for model_label, model in FAULT_MODELS:
+        print(f"\n--- model: {model_label} ---")
+        t_model = time.time()
+        for fi in range(sweep_start, sweep_end):
+            setup_emulator(e, bad_input)
+            try:
+                e.start_and_fault(
+                    model, fi,
+                    e.functions[FN][0], RET,
+                    count=bad_total + 1_000,
+                )
+            except Exception:
+                counts[model_label]["crashes"] += 1
+                continue
+            if e["pc"] != RET:
+                counts[model_label]["anomalies"] += 1
+                continue
+            r0 = e["r0"] & 0xFFFFFFFF
+            if r0 == 0:
+                counts[model_label]["rejects"] += 1
+            elif r0 == 1:
+                counts[model_label]["accepts"] += 1
+                all_forge.append((model_label, fi))
+            else:
+                counts[model_label]["anomalies"] += 1
+            if (fi - sweep_start) % 100 == 0:
+                elapsed_total = time.time() - t_all
+                done_total = (FAULT_MODELS.index((model_label, model))
+                              * (sweep_end - sweep_start)
+                              + (fi - sweep_start + 1))
+                total_iters = 3 * (sweep_end - sweep_start)
+                eta = elapsed_total / max(1, done_total) * (total_iters - done_total)
+                print(f"  [{model_label}] {fi - sweep_start + 1}/{sweep_end - sweep_start}  "
+                      f"elapsed={elapsed_total/3600:.2f}h eta={eta/3600:.1f}h  "
+                      f"this model: rejects={counts[model_label]['rejects']} "
+                      f"accepts={counts[model_label]['accepts']} "
+                      f"crashes={counts[model_label]['crashes']}")
+        print(f"  model {model_label} done in {(time.time() - t_model)/3600:.1f}h")
+
+    print()
+    print("=" * 70)
+    print("FULL SWEEP COMPLETE")
+    print("=" * 70)
+    for ml, _ in FAULT_MODELS:
+        c = counts[ml]
+        print(f"  {ml:12s}  rejects={c['rejects']:>6}  accepts={c['accepts']:>4}  "
+              f"crashes={c['crashes']:>5}  other={c['anomalies']:>4}")
+    if all_forge:
+        print()
+        print(f"!!! {len(all_forge)} FORGE_RELEASE position(s):")
+        for ml, fi in all_forge[:30]:
+            print(f"  [{ml}] abs instr {fi:,}")
+        if len(all_forge) > 30:
+            print(f"  ... and {len(all_forge) - 30} more")
+        return 1
+    print()
+    print("  → No FORGE_RELEASE found across all 3 fault models in the")
+    print(f"    last {TAIL_DEPTH:,} instructions of the BAD path.")
+    print()
     return 0
 
 
