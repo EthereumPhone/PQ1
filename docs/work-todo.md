@@ -1052,9 +1052,7 @@ Items sourced from a 2026-05-19 review of `trezor-firmware/core/src/trezor/wire/
 
 - [x] **Channel-ID isolation in `HidFrameAssembler` — already implemented; add regression test.** Re-audit on 2026-05-19: `process_frame` at `shared/src/apdu_framing.rs:364` ALREADY rejects continuation frames whose channel_id doesn't match the captured one from frame 0 (`if channel != self.channel_id || seq != self.rx_seq { self.reset(); return FrameOutcome::Dropped; }`). The proptest harness exercises this path via `hid_frame_random_input_never_panics` but no explicit positive-/negative-channel-ID test pins the behavior. Action: add a hand-written regression test that constructs frame 0 on channel A, frame 1 on channel B, asserts `FrameOutcome::Dropped` + reset state. ~20 LoC. Done so a future refactor can't accidentally weaken this without the test failing loudly.
 
-- [ ] **Frame-arrival timeout in `HidFrameAssembler`.** A malicious host can send frame 0 (claiming a 4 KB APDU) then never send the continuation, wedging the assembler in mid-stream forever. Fix: caller (the USB transport) tracks per-frame timestamp; if > T ms (default 5000 ms) passes between continuation frames, reset assembler state. Timeout best implemented at the transport layer (`nonsecure/src/usb/transport.rs::Transport`) using a SysTick counter rather than inside the pure assembler. ~50 LoC + integration test.
-
-- [ ] **Per-channel rate limit at USB transport.** Bus-bombing DoS / fuzzing defense. If > N frames/sec arrive (default N=200, comfortably above legitimate sign-userop throughput), drop frames + log. Cheap counter + sliding window. ~40 LoC.
+(Items 2 + 3 from the initial Tier-1 list moved to §31c after re-audit — see below for rationale.)
 
 #### 31b — Firmware-update trusted-UI confirm (BLOCKED on `secure/src/ui/confirm.rs` WIP)
 
@@ -1070,6 +1068,10 @@ Once these 4 fields are wired, the COMMIT confirm dialog matches Trezor's defens
 #### 31c — Skipped from Trezor's stack (with rationale)
 
 For audit-trail: each item below was evaluated and rejected as not worth the cost.
+
+- **Frame-arrival timeout in `HidFrameAssembler`** (initially proposed as a Tier-1 add). Re-audit 2026-05-19: a malicious host CAN wedge the assembler by sending frame 0 then no continuation, but `process_frame` at line 336 unconditionally overwrites assembler state on ANY subsequent seq=0 frame, so the wedge can't persist past the next legitimate stream. The wedged bytes in `rx_buf` aren't exposed to dispatch (only `ApduComplete` returns a slice), so no info leak. No multi-stream state means no resource exhaustion. The "real" failure mode is "next legitimate seq=1 from the original host gets dropped, host retries from frame 0" — that's UX-equivalent to any USB transient, not a security event. Skipping. **No.**
+
+- **Per-channel rate limit at USB transport** (initially proposed as a Tier-1 add). Re-audit 2026-05-19: USB FS bulk caps at ~1200 frames/sec at 64 B, our frame-processing is constant-time + statically allocated, CPU ceiling sits at ~6%. The device is in the user's hand; unplug is recovery. Rate-limiting at this layer would just add code without changing what's already bounded. Skipping. **No.**
 
 - **CPace pairing / encrypted USB wire.** Trezor's THP encrypts all wire traffic between host and device. Defends against a malicious USB hub observing pre-broadcast transaction data. Our trusted-UI confirms every signature so origin-spoofing is defeated, and on-chain transactions are public seconds after signing anyway. ~2-3 weeks engineering; changes wire format which conflicts with launch invariant #6 (frozen target). **No.**
 - **CRC-32 per HID frame.** USB PHY already CRCs every packet at the bus level. Adding application-layer CRC is paranoia. **No.**
