@@ -339,6 +339,31 @@ decoy-frames = []
 # follow-up. Mutually exclusive with `ui-oled` (SSD1306 / I²C) — only
 # one display backend can ship per build.
 ui-lcd = ["spi1-arduino"]
+# Factory provisioning firmware — single-purpose build that the
+# factory flashes to a fresh chip. Short-circuits `main()` into a
+# state machine that:
+#
+#   1. validates hardware (SAES self-test, BHK lifecycle, OTP master);
+#   2. provisions OPTIGA + SE050 infrastructure (PBS, SCP03, admin
+#      UserID, F1Dx metadata) via the production `WalletStore::
+#      provision` path with deterministic-zero user state;
+#   3. immediately wipes the dummy user state via `factory_reset_admin`,
+#      leaving SE infrastructure intact for the end-user wizard to
+#      fill in later;
+#   4. cross-validates the resulting chip looks "factory ready"
+#      (admin functional, no user residue);
+#   5. halts on a "FACTORY OK — POWER OFF" panel.
+#
+# On any failure, the OLED shows a numbered step + error code that
+# the factory operator can read off the screen and report back. See
+# `docs/factory-provisioning.md` for the operator manual + error
+# code table.
+#
+# Implies: `dual-se` (both SEs required), `stm32u585` (real
+# silicon — no QEMU path), `ui-oled` (operator needs visual status).
+# Mutually exclusive with `e2e-test` (which bypasses real
+# provisioning) at the production-fence level.
+factory-provisioning = ["dual-se", "stm32u585", "ui-oled"]
 # Minimal USART1 → ST-LINK-VCP driver for diagnostic output that
 # survives RDP ≥ 1 (where SWD debug — and therefore semihosting — is
 # disabled). Pairs with `saes-self-test` for the RDP1 DHUK fingerprint

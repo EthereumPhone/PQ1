@@ -2531,6 +2531,50 @@ decoy-flicker-hw:
 	@echo "==> Running — watch the OLED. Ctrl-C to detach."
 	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
 
+# Factory provisioning firmware. Single-purpose build the factory
+# operator flashes to a fresh device. Runs the
+# `factory_provisioning::run_and_halt` state machine — validates
+# hardware, provisions OPTIGA + SE050 infrastructure, wipes the
+# dummy user state, cross-validates, and halts on a "FACTORY OK"
+# or "FACTORY FAIL @ STEP X" OLED panel.
+#
+# Build profile:
+#   - dual-se (required): both SEs must be alive to be provisioned.
+#   - stm32u585 (required): real silicon target.
+#   - ui-oled (required): the operator needs the OLED panel.
+#   - dev-testkey: factory uses the deterministic OTP-master constant
+#     during bring-up of this target. **REMOVE for real production**
+#     once the OTP-burn-from-TRNG path has been bench-validated.
+#   - NO debug-log: production-fence-compatible, no semihosting leaks.
+#   - NO e2e-test: ceremony runs the real provision path.
+#
+# After flashing, the factory operator:
+#   1. Power-cycles the device.
+#   2. Watches the OLED panel.
+#   3. Reports the displayed status (success or numbered fail).
+#
+# Error code lookup table + operator manual:
+#   docs/factory-provisioning.md
+#
+# Currently TARGETED but NOT YET VALIDATED on real silicon — this
+# builds a buildable factory image; bench-validation is a follow-up.
+build-hw-factory-provisioning:
+	@echo "==> Building factory provisioning firmware..."
+	@echo "    Output: $(SECURE_ELF)"
+	@echo "    The factory operator flashes this + power-cycles."
+	@echo "    OLED shows step progress + halts on OK/FAIL."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features factory-provisioning,dev-testkey
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Factory provisioning build ready."
+	@echo "    Pair with flash-hw-factory-provisioning (separate target,"
+	@echo "    to be written) to flash + run on real silicon."
+
 # LCD bring-up — Phase A check. Compiles the secure-world firmware
 # with the `ui-lcd` feature enabled so the NV3007 SPI LCD driver
 # (`secure/src/hw/lcd_nv3007.rs`) lands in the binary. The wizard UI

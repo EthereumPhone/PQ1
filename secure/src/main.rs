@@ -129,6 +129,13 @@ mod ui;
 #[cfg(not(test))]
 mod zk;
 
+/// Factory provisioning state machine (`factory-provisioning`
+/// feature). One-shot ceremony the factory operator flashes and
+/// runs once per device — sets up dual-SE infrastructure and halts
+/// on success / structured failure. See module docs.
+#[cfg(feature = "factory-provisioning")]
+mod factory_provisioning;
+
 // ── Test-only re-includes for the `secure-nsc-sign-userop` slice ──
 //
 // `nsc` itself is `#[cfg(not(test))]` because most of its files pull in
@@ -1097,6 +1104,22 @@ fn main() -> ! {
     #[cfg(all(feature = "stm32u585", any(feature = "optiga-trust-m", feature = "dual-se"), not(test)))]
     unsafe {
         nsc::reconcile_pin_attempts(&mut *core::ptr::addr_of_mut!(SE));
+    }
+
+    // ---- Factory provisioning short-circuit ----
+    //
+    // When `factory-provisioning` is on, run the one-shot factory
+    // ceremony here and halt. Never falls through to the wizard /
+    // unlock paths. The ceremony assumes both SEs are alive (the
+    // boot path above has already initialized them) and that the
+    // device is fresh-from-manufacturer (no user state).
+    //
+    // See `secure/src/factory_provisioning.rs` module docs for the
+    // step list + error code table + operator manual reference.
+    #[cfg(feature = "factory-provisioning")]
+    unsafe {
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        factory_provisioning::run_and_halt(se);
     }
 
     // ---- One-shot OPTIGA OID recovery (optiga-reset-oids) ----
