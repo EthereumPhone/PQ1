@@ -337,10 +337,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // resulting hash so a user can cross-check the *whole bundle*
     // (not just an individual inner call) against an off-device
     // reconstruction (e.g., `cast keccak (concat (per-tx digests))`).
-    let mut batch_digest = {
-        use sha3::Digest;
-        sha3::Keccak256::new()
-    };
+    use sha3::Digest;
+    let mut batch_digest = sha3::Keccak256::new();
 
     for i in 0..batch_count {
         let ptx = parsed[i].as_ref().unwrap();
