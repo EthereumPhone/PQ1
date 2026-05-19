@@ -222,6 +222,24 @@ below. Only the trigger differs: the QEMU build reads command + args
 out of a shared mailbox in SysTick, and the STM32U585 build enters
 them via CMSE SG veneers.
 
+**ABI design rule — no inner pointers in wire formats.** Every NSC
+command receives `(in_ptr, out_ptr)` as raw u32 register args, with
+each buffer being a **flat byte sequence** that the secure handler
+parses by offset (see e.g. the unified-sign input table in
+`CLAUDE.md`). NSC commands MUST NOT define a wire format where the
+in/out buffer itself embeds another pointer the secure handler would
+later dereference. This avoids a real class of gateway bug — the
+gateway's `NsPtr::validate_{read,write}` (and the underlying SAU
+`tt_range_is_ns` hardware check) only proves the OUTER buffer is
+in non-secure memory; if the buffer carried an embedded inner
+pointer, the secure handler would deref it without re-validating
+and an attacker could point it anywhere (including secure SRAM).
+Trezor hit exactly this bug in their `boot_image_check__verified`
+smcall verifier in 2026-03-26 (fixed by adding
+`probe_read_access(image->image_ptr, image->image_size)`); our
+flat-byte-only ABI structurally avoids the class. New commands MUST
+preserve this property.
+
 ### Transport A: STM32U585 — CMSE veneers (production path)
 
 On real STM32U585 silicon the gateway uses proper ARMv8-M Security

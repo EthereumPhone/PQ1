@@ -17,6 +17,244 @@ Trezor is **classical-crypto-first with a PQ overlay coming**; PQSigner is PQ-on
 
 ---
 
+## Delta since 2026-04-24
+
+Re-audit point: 2026-05-19. Trezor HEAD `9f5f454af3`. 148 commits since the baseline.
+Triage filter applied: security-relevant only (auth, crypto, gateway, OTP, FI/SCA primitives, boot chain). UX / translations / per-coin ABI changes intentionally skipped.
+
+### D1. ML-DSA-44 MCU device attestation — landed, host-side disabled
+
+**Trezor commits:** `ba51fa46d3` (2025-08-31, key wired), `f2eaa651d9` (2026-03-18, full feature),
+`1bce973547` (emulator certs), `71d0d534c9` (stack for ML-DSA in prodtest), `8bc6d1b28b` (2026-05-07, host-side outbound disabled with no changelog).
+
+**What landed.** A device-attestation primitive parallel to the existing
+Optiga-ECDSA `sign_device` path:
+
+- **Key derivation.** `secret_key_mcu_device_auth(seed[32])` →
+  `secret_key_derive_sym(SECRET_PRIVILEGED_MASTER_KEY_SLOT,
+  KEY_INDEX_MCU_DEVICE_AUTH, 0, 0, dest)` =
+  `HMAC-SHA256(privileged_master_key, diversifier_with_KEY_INDEX_MCU_DEVICE_AUTH)`.
+  Same domain-separation pattern as the rest of `secret_keys/` —
+  `core/embed/sec/secret_keys/stm32u5/secret_keys.c:42`. Seed feeds
+  `mldsa_keypair_internal` at sign time (no persistent ML-DSA keypair
+  on chip; reconstructed deterministically per signature).
+
+- **Signing primitive.** `mcu_attestation_sign(challenge, sig)` in
+  `core/embed/sec/mcu_attestation/mcu_attestation.c`. Re-derives seed,
+  rebuilds keypair, fresh 32-byte randomness from `rng_fill_buffer`,
+  calls `mldsa_signature_internal` with an empty context string.
+  Signature size: `MLDSA_BYTES(MLD_CONFIG_API_PARAMETER_SET)` =
+  ~2420 B for ML-DSA-44.
+
+- **Cert chain handoff.** Bootloader reads
+  `SECRET_MCU_DEVICE_CERT_OFFSET=0x870` (4 KB slot at
+  `secret_layout.h:47-48` on T3W1) via `secret_mcu_device_cert_read`,
+  passes it to firmware via the new `STARTUP_ARGS_TYPE_MCU_DEVICE_CERT`
+  startup-args channel. App-side `authenticate_device.py` was supposed
+  to nest the MCU sig + cert chain into the existing
+  `AuthenticityProof` response alongside the Optiga ECDSA sig.
+
+- **Library.** Vendored `pq-code-package/mldsa-native`
+  (`.gitmodules`) — formally-verified reference from the same group as
+  `mlkem-native`.
+
+- **Smcall surface.** New `smcall_dispatch` arm for the
+  `mcu_attestation_sign` syscall (the SECURE_MODE entry point) —
+  `smcall_verifiers.{c,h}`, `smcall_numbers.h`. Companion syscall path
+  for unprivileged firmware.
+
+**The walkback.** `8bc6d1b28b chore(core): don't send MCU attestation`,
+2026-05-07, deleted the `mcu.sign(challenge) +
+parse_cert_chain(mcu.get_certificate())` block from
+`authenticate_device.py`. `[no changelog]` flag + the matching
+`.changelog.d/6807.added` deletion. **The on-device infrastructure
+stays compiled in** (`USE_MCU_ATTESTATION=1` for T3W1 hardware +
+emulator, `utils.USE_MCU_ATTESTATION = mp_const_true`); only the
+host-side `AuthenticityProof` field was un-populated. Reads as:
+key+cert provisioning pipeline isn't ready, or a wire-protocol
+extension is in flight, or the cert-chain anchoring is incomplete.
+
+**What this means for PQSigner §22.** This is exactly the territory of
+our supply-chain attestation work-todo §22 (triple-UID binding +
+SLH-DSA-128s manifest). Three concrete takeaways:
+
+1. **PQ attestation is now a Trezor-validated pattern**, not just an
+   industry-projected one — confirms the §22 direction. The mailing
+   address of the PQ key (a domain-separated derivation from a
+   privileged master key slot, NOT a fixed factory-burned key) is
+   subtly different from our §22 plan (which has the SLH-DSA private
+   key burned at provisioning). Trezor's pattern lets the key rotate
+   if the master slot does; ours doesn't. Probably no change for us
+   since we want the binding stable per device, but worth flagging.
+2. **`mldsa-native` is the library choice** if PQSigner ever wires
+   ML-DSA. The §22 work-todo names SLH-DSA-128s for the manifest
+   signature; if we want a faster-signing ML-DSA option for boot
+   attestation (Trezor's exact split), the library to vendor is
+   `github.com/pq-code-package/mldsa-native`. ~14 KB code, ~2.4 KB sig,
+   ~1.3 KB pk.
+3. **The walkback is the lesson, not the addition.** Before we
+   announce PQSigner attestation to users, the host-side acceptance
+   path (companion app, web verifier) must be ready and the cert chain
+   must terminate at a factory pubkey we've actually published. Trezor
+   landed device-side March 18 and still hadn't shipped the wire by
+   May 7. Plan §22 accordingly: device side is the easy part.
+
+**Action:** add a §22 cross-reference noting that the Trezor pattern
+exists and is in-tree at `core/embed/sec/mcu_attestation/`. No
+adoption-blocker — our SLH-DSA-128s factory-manifest design is
+independently sound. If we ever want a per-boot fast attestation
+sig alongside the factory manifest, the Trezor split (factory cert +
+device-derived signing key) is the validated template.
+
+### D2. `boot_image_check__verified` smcall verifier — added `probe_read_access` on inner pointer
+
+**Trezor commit:** `59d8d78ef7` (2026-03-26).
+
+**What changed.** The smcall verifier for `boot_image_check` previously
+validated the `boot_image_t` struct's own address range but did not
+validate the inner `image_ptr + image_size` pointed to BY a field of
+that struct. Fix adds:
+
+```c
+// core/embed/sys/smcall/stm32/smcall_verifiers.c:65
+// and the matching syscall_verifiers.c:228
+if (!probe_read_access(image->image_ptr, image->image_size)) {
+    goto access_violation;
+}
+return boot_image_check(image);
+```
+
+Class: F-8-shape regression — gateway validates the outer descriptor
+but not the inner pointer it carries.
+
+**Mirror-check against PQSigner gateway.** Result: **clean by ABI
+design.** Every NSC command in `secure/src/nsc/cmd_*.rs` takes
+(in_ptr, out_ptr) as raw u32 register args; the wire format inside
+those buffers is a flat byte sequence (see `secure/src/nsc/
+cmd_sign_userop.rs:121-122` and CLAUDE.md's "Unified sign input"
+table). **No PQSigner gateway command embeds an inner pointer inside
+the validated buffer.** The Trezor bug class can't surface against
+our current ABI.
+
+This is a positive structural finding: our flat-byte ABI design
+(forced by the cross-world `#[repr(C)]` constraint + the
+"no allocator in secure world" rule) avoids a real class of gateway
+bug. Worth noting in §3 NSC docs so it's preserved as an invariant
+when adding future commands.
+
+**Action:** no code change. Add a one-line invariant to
+`docs/architecture.md` (or wherever the NSC contract is documented)
+naming "no inner pointers in gateway wire formats" as a design rule.
+
+### D3. `consteq` extracted to `crypto/consteq.{c,h}`
+
+**Trezor commit:** `1b051d71cd` (2026-04-18).
+
+**What changed.** Trezor pulled their internal constant-time-compare
+helper out into a standalone `crypto/consteq.{c,h}` for reuse across
+firmware + crypto subtree.
+
+**PQSigner equivalent.** We already use the `subtle` crate's
+`ConstantTimeEq` throughout. `git grep ConstantTimeEq` in `secure/`
+returns 30+ usages — same property, idiomatic Rust API.
+
+**Action:** none. The extract is a Trezor-internal cleanup; we have
+the equivalent already in a better form. Worth noting in the
+"existing PQSigner plan validated" section.
+
+### D4. Optiga signature masking fix
+
+**Trezor commit:** `ee55f006b3` (2026-03-18).
+
+**What changed.** Two C-specific bugs in `optiga_sign`:
+`ecdsa_sig_from_der(der_signature, der_signature_size, raw_signature)`
+was missing the deref on `der_signature_size` (which is `size_t *`),
+and `ecdsa_unmask_scalar(curve, ...)` was passing `curve` (a function
+arg shadowed name) instead of the static `&nist256p1`.
+
+**PQSigner relevance.** We don't do classical ECDSA on OPTIGA — our
+OPTIGA usage is data-object storage (PBS, halve-O entropy, F1D0
+AuthRef, E120 LUC counter) + the Shielded Connection. No
+`optiga_sign`-equivalent path. **No analog bug to mirror-check.**
+
+**Action:** none.
+
+### D5. Bootloader / NFC OOB-read fixes
+
+**Trezor commits:** `3b64e4e891` (read_vendor_header bounds-check
+length, 2026-03-26), `74618edb84` (NFC card emulation OOB,
+2026-03-26), `eebd2e5e2d` (codec v1 overflow in bootloader wire,
+2026-03-26), `c856ba57d7` (NFC driver crash on repeated deinit).
+
+**What changed.** Standard buffer-overread fixes in Trezor-specific
+attack surfaces.
+
+**PQSigner relevance.**
+- `read_vendor_header` is Trezor's classical signed-image header
+  parser. PQSigner uses `fw-manifest` for the equivalent role
+  (SLH-DSA-signed CBOR-ish manifest). Different code, different
+  parser; no direct port. Worth confirming that `fw-manifest`'s
+  parser bounds-checks every field length against the buffer it sits
+  in — we already have proptest coverage there.
+- NFC code paths don't exist in PQSigner (USB HID only).
+- Codec v1 is Trezor-Host-Protocol wire codec; doesn't apply.
+
+**Action:** none, but a quick `fw-manifest` proptest audit confirms
+the equivalent class is already covered in our fuzz corpus. Already
+done as part of the May 13 cargo-fuzz landing.
+
+### D6. Passphrase keyboard hide-chars + reveal-until-touch-end
+
+**Trezor commits:** `610a034a9f` (hide chars, 2026-04-15),
+`ca6099733a` (reveal-mode-until-touch-end, 2026-04-30).
+
+**What changed.** Per-character hide + hold-to-reveal flow on the
+Delizia / Bolt touchscreens. Defends against shoulder-surfing /
+camera-record attacks.
+
+**PQSigner relevance.** Our `pin_entry` already has digit scrambling
+(work-todo §6, landed) — a different defense for a different threat
+model (PIN entry vs passphrase, button-only vs touchscreen). No
+direct port. Worth noting the Trezor pattern in case we ever ship a
+touchscreen variant.
+
+**Action:** none.
+
+### D7. N4W1 backup/recovery flows + Tropic model adjustments
+
+**Trezor commits:** `7325bb6019` (N4W1 backup/recovery flows),
+`7da99aa1f9` (Tropic model config tweaks), `709940ffff` (Tropic
+model_server in uv).
+
+**What changed.** N4W1 is Trezor's new BLE-equipped non-touch model
+(per the N4W1-specific code in `nordic/trezor/`). Tropic01 is the
+NXP-alternative SE Trezor uses in the dual-SE attestation role.
+
+**PQSigner relevance.** We tested but never wired Tropic01 (see
+memory `project_tropic01_excluded.md`); production ships OPTIGA +
+SE050. The model-config tweaks don't translate. N4W1's BLE pairing
+flow could be relevant if PQSigner ever adds BLE — currently USB-HID
+only.
+
+**Action:** none. Confirms the dual-SE-with-attestation-only pattern
+as a Trezor-shipped configuration (already in our §6.3).
+
+---
+
+## Delta summary — what to actually do
+
+1. **§22 cross-ref** (5 min): add a sentence to work-todo §22 noting
+   Trezor's ML-DSA-44 attestation pattern + library choice + the
+   host-side-disabled walkback as the deployment lesson.
+2. **`docs/architecture.md` invariant** (10 min): name "no inner
+   pointers in NSC gateway wire formats" as a design rule, citing
+   the Trezor `probe_read_access` fix as the bug-class it avoids.
+3. **Everything else: no action** — either we already have it
+   (consteq → subtle), it doesn't apply (NFC, codec v1), or it's a
+   different threat model (touchscreen passphrase UX).
+
+---
+
 ## Section 1 — Must fix before shipping
 
 ### 1.1 TZSC peripheral allowlist (fixes CRIT-4 regression)
