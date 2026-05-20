@@ -157,15 +157,18 @@ play-hw-display:
 	@python3 tools/wallet_run_hw.py
 
 # §32 P4/P5 interactive UI test — drive JUST the duress-PIN setup dialogs
-# on the real OLED with keyboard-forwarded buttons. No SE, no provisioning
-# (mock-se + duress-ui-test short-circuits into a dialog loop at boot).
-# Arrow keys via wallet_run_hw.py (semihosting /input, no gpio-buttons).
+# on the real OLED. No SE, no provisioning (mock-se + duress-ui-test
+# short-circuits into a dialog loop at boot). Driven by the PHYSICAL
+# perfboard buttons (gpio-buttons: LEFT=PC1/D8, RIGHT=PA8/D9; both = OK,
+# long-left = cancel) — same input path as `play-hw-display`, so no host
+# key-forwarder is needed. wallet_run_hw.py still streams the OLED debug
+# lines if you want them.
 play-hw-duress-ui:
 	@echo "==> Building §32 duress-PIN UI harness (mock-se, dialogs only)"
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,debug-log,ui-oled,stm32u585,dev-testkey,duress-ui-test
+			--features mock-se,debug-log,ui-oled,stm32u585,dev-testkey,duress-ui-test,gpio-buttons
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
