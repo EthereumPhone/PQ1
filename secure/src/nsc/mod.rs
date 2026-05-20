@@ -438,6 +438,22 @@ pub unsafe fn gated_unlock(
 ) -> Result<[u8; 32], crate::secure_element::UnlockError> {
     use crate::secure_element::UnlockError;
 
+    // §18 P1 — entry jitter. The PIN gate is linear from its external
+    // trigger (USB `CMD_REQUEST_UNLOCK` dispatch, boot-unlock, PendSV
+    // re-unlock) to the F-15 sentinel check, with no internal shuffle
+    // like the sign path's F-16. A profiled single-fault attacker
+    // (Masaryk-thesis class, ~76 % on STM32U5) lands a glitch at a
+    // FIXED offset from that trigger. `wait_random()` here desyncs the
+    // absolute trigger→gate offset by 0..255 loop iterations
+    // (~0..19 µs at 160 MHz). This is a meaningful window against an
+    // UNCALIBRATED single-shot attacker but does NOT defeat a
+    // profile-then-attack rig with multi-attempt statistical recovery
+    // — the F-15 sentinel + F-17 rate limiter are the load-bearing
+    // defenses there. `#[inline(never)]` on both `wait_random` and
+    // `wait_random_loop` keeps this a real `bl` (a glitch that skips
+    // the call skips only the jitter, not the gate that follows).
+    crate::fi::wait_random();
+
     #[cfg(feature = "stm32u585")]
     {
         // F-15 hardening: double-read the page-124 counter to defend

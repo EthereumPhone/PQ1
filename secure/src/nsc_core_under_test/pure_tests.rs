@@ -291,6 +291,32 @@ fn positive_gated_unlock_is_unsafe_fn() {
 }
 
 #[test]
+fn positive_gated_unlock_has_entry_jitter_before_the_gate() {
+    // §18 P1 — the PIN gate is linear from external trigger to the
+    // F-15 sentinel with no internal shuffle, so a profiled
+    // single-fault attacker can glitch at a fixed offset. An entry
+    // `wait_random()` desyncs that offset. It MUST sit before the
+    // first `pin_attempts_read` (the start of the F-15 gate) so the
+    // jitter actually covers the gate, not just trail it.
+    let fn_start = NSC_MOD_SRC
+        .find("pub unsafe fn gated_unlock")
+        .expect("gated_unlock must exist");
+    let body = &NSC_MOD_SRC[fn_start..];
+    let first_wait = body
+        .find("crate::fi::wait_random();")
+        .expect("gated_unlock must call wait_random() for §18 entry jitter");
+    let first_read = body
+        .find("pin_attempts_read()")
+        .expect("gated_unlock must read the page-124 counter");
+    assert!(
+        first_wait < first_read,
+        "gated_unlock's entry-jitter wait_random() must precede the first \
+         pin_attempts_read — otherwise the jitter trails the gate it's \
+         meant to desync (§18 P1)"
+    );
+}
+
+#[test]
 fn positive_validate_ns_uses_f8_two_pass_pattern() {
     // F-8: the validator is called TWICE through
     // `check_true_into_sentinel`, with `wait_random()` between, before

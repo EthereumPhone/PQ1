@@ -637,6 +637,30 @@ fn negative_request_unlock_uses_gated_unlock_not_raw_se_unlock() {
 }
 
 #[test]
+fn positive_verify_pin_with_chip_has_entry_jitter_before_gated_unlock() {
+    // §18 P1 — verify_pin_with_chip is the entry from the USB
+    // `CMD_REQUEST_UNLOCK` veneer, the closest point to the external
+    // trigger. An entry `wait_random()` here desyncs the whole gate
+    // from USB arrival. It MUST precede the `gated_unlock` call so the
+    // jitter covers the gate rather than trailing it.
+    let fn_start = REQUEST_UNLOCK_SRC
+        .find("unsafe fn verify_pin_with_chip")
+        .expect("verify_pin_with_chip must exist");
+    let body = &REQUEST_UNLOCK_SRC[fn_start..];
+    let wait = body
+        .find("crate::fi::wait_random();")
+        .expect("verify_pin_with_chip must call wait_random() for §18 entry jitter");
+    let gate = body
+        .find("super::gated_unlock(se, pin)")
+        .expect("verify_pin_with_chip must route through gated_unlock");
+    assert!(
+        wait < gate,
+        "verify_pin_with_chip's entry-jitter wait_random() must precede the \
+         gated_unlock call (§18 P1)"
+    );
+}
+
+#[test]
 fn negative_request_unlock_pre_commits_attempt_counter_before_se_call() {
     // Sanity: the gated_unlock contract pre-commits the page-124
     // bump before calling the SE driver. `cmd_request_unlock` relies

@@ -52,6 +52,15 @@ pub(super) unsafe fn run() -> u32 {
 unsafe fn verify_pin_with_chip(pin: &[u8; 8]) -> u32 {
     use sphincs_tz_shared::MAX_ATTEMPTS;
 
+    // §18 P1 — entry jitter at the USB-triggered PIN-verify path. This
+    // is the closest point to the external trigger (the NS-world
+    // `CMD_REQUEST_UNLOCK` veneer call), so jittering here desyncs the
+    // whole gate from USB arrival. Layers with the second
+    // `wait_random()` at `gated_unlock`'s entry below. See that
+    // function's comment for the threat-model bound (~0..19 µs;
+    // uncalibrated-single-fault only).
+    crate::fi::wait_random();
+
     let se = &mut *core::ptr::addr_of_mut!(crate::SE);
 
     // `super::gated_unlock` handles the MCU-side counter (page 126):
