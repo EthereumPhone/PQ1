@@ -1138,3 +1138,18 @@ fn positive_duress_pin_collected_only_on_first_boot_and_threaded() {
     let wizard_pos = MAIN_SRC.find("run_first_boot_wizard();").expect("wizard present");
     assert!(collect_pos > wizard_pos, "duress collection must follow run_first_boot_wizard");
 }
+
+#[test]
+fn positive_wipe_on_duress_flag_armed_before_provision() {
+    // §32 P5: the wipe-on-duress flag MUST be written BEFORE
+    // provision_from_mnemonic — a crash after provision but before the
+    // flag write would silently downgrade the user's chosen wipe mode to
+    // the decoy default. Pin the ordering in the first-boot wizard.
+    let arm_pos = MAIN_SRC.find("arm_duress_wipe_mode()").expect("arm present");
+    // The wizard's provision call threads `duress_pin.as_ref()`.
+    let prov_pos = MAIN_SRC.find("&pin, duress_pin.as_ref())").expect("wizard provision present");
+    assert!(
+        arm_pos < prov_pos,
+        "arm_duress_wipe_mode must be written BEFORE provision_from_mnemonic",
+    );
+}

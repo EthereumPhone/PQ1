@@ -2379,6 +2379,27 @@ fn main() -> ! {
         }
         secure_log!("[S] [DURESS-PROV] step 19: post-wipe re-provision FULLY recoverable OK");
 
+        // ===== P5: wipe-on-duress dispatch (non-interactive) =====
+        // Bypass the wizard, program the wipe-mode flag directly, then
+        // prove gated_unlock(duress) WIPES both chips + returns PinLocked
+        // (instead of opening the decoy). This is the security-critical
+        // half of P5; the dialog that sets the flag is interactive-only.
+        if hw::flash::arm_duress_wipe_mode().is_err() { fail!("arm_duress_wipe_mode failed"); }
+        if !hw::flash::is_duress_wipe_mode() { fail!("is_duress_wipe_mode false after arm"); }
+        secure_log!("[S] [DURESS-PROV] step 20: wipe-on-duress flag armed OK");
+
+        let _ = crate::hw::flash::pin_attempts_reset();
+        match crate::nsc::gated_unlock(se, &duress_pin2) {
+            Err(crate::secure_element::UnlockError::PinLocked) => {
+                secure_log!("[S] [DURESS-PROV] step 21: gated_unlock(duress) in wipe mode → PinLocked OK");
+            }
+            Err(e) => { secure_log!("[S] [DURESS-PROV] step 21 wrong err {:?}", e); fail!("wipe-mode duress should return PinLocked"); }
+            Ok(_) => fail!("wipe-mode duress unexpectedly returned a master (no wipe!)"),
+        }
+        // The duress-wipe must have wiped the real wallet too.
+        if se.is_provisioned() { fail!("device still provisioned after wipe-on-duress"); }
+        secure_log!("[S] [DURESS-PROV] step 22: device wiped by wipe-on-duress OK");
+
         secure_log!("[S] [DURESS-PROV] === DURESS PROVISION VALIDATION: PASS ===");
         ui::show_status("DURESS-PROV", "PASS");
         cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
@@ -3279,6 +3300,22 @@ fn main() -> ! {
             let mut duress_pin = ui::seed_wizard::collect_duress_pin(&pin);
             #[cfg(not(feature = "duress-pin"))]
             let duress_pin: Option<[u8; sphincs_tz_shared::PIN_LEN]> = None;
+
+            // §32 P5: if a duress PIN was set, ask whether a duress entry
+            // should WIPE the device (vs the default: open the decoy).
+            // Persist the choice BEFORE provisioning — a crash after
+            // provision but before this write would silently downgrade
+            // wipe→decoy. Blank flash = decoy (safe default); we only
+            // ever 1→0 bit-clear here, so the wizard can only UPGRADE to
+            // wipe (stale-decoy is the conservative fallback).
+            #[cfg(feature = "duress-pin")]
+            {
+                if duress_pin.is_some() && ui::seed_wizard::choose_duress_wipe_mode() {
+                    if hw::flash::arm_duress_wipe_mode().is_err() {
+                        secure_log!("[S] [DURESS] arm_duress_wipe_mode FAILED — defaulting to decoy");
+                    }
+                }
+            }
 
             // Debug-only: log the mnemonic and the resulting verifying key.
             // This is gated behind `debug-log` so production builds (which

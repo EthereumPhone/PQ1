@@ -513,9 +513,29 @@ pub unsafe fn gated_unlock(
     // lockout state would distinguish duress from real.
     #[cfg(feature = "duress-pin")]
     let result = match se.unlock_duress(pin) {
-        Ok(m) => {
-            se.duress_pad(pin);
-            Ok(m)
+        Ok(mut m) => {
+            // §32 P5: duress matched. If the device is configured for
+            // wipe-on-duress, WIPE both wallets and report PinLocked
+            // instead of opening the decoy. Timing uniformity is NOT
+            // required here (the wipe IS the outcome — by the time an
+            // observer notices the latency, the secret is already gone),
+            // so we skip the duress_pad. The downstream Err arm returns
+            // PinLocked WITHOUT resetting page-124 (the wipe is terminal).
+            #[cfg(feature = "stm32u585")]
+            let wipe_mode = crate::hw::flash::is_duress_wipe_mode();
+            #[cfg(not(feature = "stm32u585"))]
+            let wipe_mode = false;
+            if wipe_mode {
+                use zeroize::Zeroize;
+                m.zeroize();
+                crate::fi::zeroize_barrier();
+                secure_log!("[NSC] duress=wipe configured — wiping device");
+                let _ = se.factory_reset_admin();
+                Err(UnlockError::PinLocked)
+            } else {
+                se.duress_pad(pin);
+                Ok(m)
+            }
         }
         Err(_) => se.unlock(pin),
     };

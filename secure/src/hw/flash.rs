@@ -471,6 +471,42 @@ pub fn is_wipe_armed() -> bool {
     unsafe { read_volatile(src) == WIPE_FLAG_ARMED }
 }
 
+// §32 P5 — duress action mode (page 125, QW2 @ offset 32).
+//   blank (0xFF) = DECOY  (default — `is_duress_wipe_mode()` is false)
+//   programmed (0x00) = WIPE on a duress-PIN unlock
+// Blank-as-decoy is the safe default: a power loss after `erase_admin_page`
+// but before the wizard sets the mode falls back to decoy (loses no funds),
+// matching the wipe-flag convention. Same QW lifecycle — `erase_admin_page`
+// (wipe finish) clears it back to decoy, and the next wizard re-collects.
+const DURESS_WIPE_MODE_OFFSET: u32 = 32;
+const DURESS_WIPE_MODE_SET: u8 = 0x00;
+
+/// Mark the device as WIPE-on-duress. 1→0 bit-clear on a blank QW (no page
+/// erase). MUST be called BEFORE provisioning the wallet: a crash between
+/// provisioning and this write would leave a duress PIN configured but
+/// mode = decoy (default), which silently downgrades the user's chosen
+/// protection — flush the mode first, then provision.
+///
+/// # Safety
+/// Programs a flash quad-word at `ADMIN_PAGE_ADDR + DURESS_WIPE_MODE_OFFSET`.
+#[cfg(feature = "duress-pin")]
+pub unsafe fn arm_duress_wipe_mode() -> Result<(), ()> {
+    let mut qw = [0xFFu8; 16];
+    qw[0] = DURESS_WIPE_MODE_SET;
+    // SAFETY: forwarded contract; dedicated duress-mode QW slot in page 125.
+    unsafe { write_quadword_verified(ADMIN_PAGE_ADDR + DURESS_WIPE_MODE_OFFSET, &qw) }
+}
+
+/// Returns true iff the device is configured to WIPE on a duress-PIN
+/// unlock (vs the default: open the decoy wallet). Read by
+/// `nsc::gated_unlock` in the duress-match branch.
+#[cfg(feature = "duress-pin")]
+pub fn is_duress_wipe_mode() -> bool {
+    let src = (ADMIN_PAGE_ADDR + DURESS_WIPE_MODE_OFFSET) as *const u8;
+    // SAFETY: fixed in-flash address inside page 125; memory-mapped read.
+    unsafe { read_volatile(src) == DURESS_WIPE_MODE_SET }
+}
+
 // ---------------------------------------------------------------------------
 // MCU-side PIN attempt counter — page 124
 // ---------------------------------------------------------------------------

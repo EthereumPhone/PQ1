@@ -304,6 +304,31 @@ fn positive_gated_unlock_duress_first_dispatch() {
 }
 
 #[test]
+fn positive_gated_unlock_wipe_on_duress_branch() {
+    // §32 P5: in wipe-on-duress mode, a duress match must WIPE
+    // (factory_reset_admin) and return PinLocked — NOT open the decoy.
+    assert!(
+        NSC_MOD_SRC.contains("is_duress_wipe_mode()"),
+        "gated_unlock must consult the wipe-on-duress flag on a duress match",
+    );
+    // The wipe branch must `factory_reset_admin()` then immediately
+    // return `Err(UnlockError::PinLocked)` — with NO `pin_attempts_reset`
+    // between them (a reset after a terminal wipe is confused state; the
+    // downstream Err arm handles the page-124 counter correctly by
+    // leaving it bumped). Check the window between the wipe call and the
+    // PinLocked return contains no reset.
+    let wipe_pos = NSC_MOD_SRC.find("se.factory_reset_admin()")
+        .expect("wipe-mode branch must factory_reset_admin");
+    let after = &NSC_MOD_SRC[wipe_pos..];
+    let locked_pos = after.find("Err(UnlockError::PinLocked)")
+        .expect("wipe must be followed by PinLocked");
+    assert!(
+        !after[..locked_pos].contains("pin_attempts_reset"),
+        "no pin_attempts_reset between the wipe and the PinLocked return (confused state)",
+    );
+}
+
+#[test]
 fn positive_gated_unlock_is_unsafe_fn() {
     // Calling gated_unlock requires exclusive access to the static SE
     // driver — encoded as `unsafe fn` so a call site has to spell out
