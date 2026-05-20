@@ -20,6 +20,12 @@
 //!         * plain ETH transfer  (2 pages: "Inner to" + "Send ETH")
 //!         * ERC-20 known        (4 pages: header + recipient + amount + contract)
 //!         * ERC-20 unknown      (4 pages: same shape, no symbol)
+//!         * Safe-mgmt           (1..3 pages, per-op intent banner;
+//!                                see [`super::safe_mgmt`]). Fires
+//!                                when `canonical.to == safe_address`
+//!                                and selector matches one of the
+//!                                eight Safe v1.3.0+ singleton ops.
+//!         * unknown Safe op     (3 pages: "Unknown Safe op" + Inner-to + selector/hash)
 //!         * blind-sign          (3 pages: "Unknown call" + "Inner to" + selector/hash)
 //!
 //!   last: "L=Cancel"
@@ -34,6 +40,9 @@ use super::primitives::{
     chain_name, format_u64, write_addr_full_or_name, write_calldata_hash_rows, write_chain,
     write_data_len_row, write_erc20_header, write_eth_two_rows, write_line, write_selector_row,
     write_token_amount_two_rows, write_token_name, AmountFit,
+};
+use super::safe_mgmt::{
+    classify_safe_mgmt, page_count as safe_mgmt_page_count, render_safe_mgmt_pages, SafeMgmtOp,
 };
 use super::Pages;
 use crate::erc20::bundle::Erc20Metadata;
@@ -84,16 +93,31 @@ pub fn render_safe_v1_pages(
     // *both* present and address-matches the inner `to`; otherwise we
     // fall back to `Erc20Unknown` (still readable shape, just no
     // symbol/decimals).
+    //
+    // Safe self-calls (`tx.to == tx.safe_address`) are routed to the
+    // Safe-mgmt decoder first: a positive classification yields a
+    // per-op intent banner; an unrecognised selector falls into the
+    // loud "Unknown Safe op" blind-sign branch so the user can tell
+    // it apart from a generic opaque inner call.
     let inner_value = U256(tx.value);
-    let inner_kind = match classify_inner(safe.raw_data, &inner_value) {
-        InnerKind::Erc20Known(call) if erc20.is_some() => InnerKind::Erc20Known(call),
-        InnerKind::Erc20Known(call) => InnerKind::Erc20Unknown(call),
-        other => other,
+    let inner_kind = if tx.to == tx.safe_address && !safe.raw_data.is_empty() {
+        match classify_safe_mgmt(safe.raw_data) {
+            Some(op) => InnerKind::SafeMgmt(op),
+            None => InnerKind::UnknownSafeSelf,
+        }
+    } else {
+        match classify_inner(safe.raw_data, &inner_value) {
+            InnerKind::Erc20Known(call) if erc20.is_some() => InnerKind::Erc20Known(call),
+            InnerKind::Erc20Known(call) => InnerKind::Erc20Unknown(call),
+            other => other,
+        }
     };
-    let inner_pages = match inner_kind {
+    let inner_pages = match &inner_kind {
         InnerKind::PlainEth => 2,
         InnerKind::EmptyCall => 1,
         InnerKind::Erc20Known(_) | InnerKind::Erc20Unknown(_) => 4,
+        InnerKind::SafeMgmt(op) => safe_mgmt_page_count(op),
+        InnerKind::UnknownSafeSelf => 3,
         InnerKind::Blind => 3,
     };
     let total_pages = SAFE_HEADER_PAGES + inner_pages + 1; // +1 = confirm
@@ -294,6 +318,44 @@ pub fn render_safe_v1_pages(
             }
             next_page += 1;
         }
+        InnerKind::SafeMgmt(op) => {
+            next_page = render_safe_mgmt_pages(
+                &mut pages,
+                next_page,
+                &op,
+                tx.chain_id,
+                &tx.safe_address,
+                resolver,
+            );
+        }
+        InnerKind::UnknownSafeSelf => {
+            // Loud variant of Blind that distinguishes "self-call to the
+            // Safe contract with an unrecognised selector" from a generic
+            // opaque inner call. The user sees the extra warning row and
+            // can refuse if the dapp didn't ask for a Safe-mgmt op.
+            write_line(&mut pages.buf[next_page][0], "! UNKNOWN SAFE OP");
+            write_line(&mut pages.buf[next_page][1], "Self-call to Safe");
+            write_line(&mut pages.buf[next_page][2], "Verify off-device");
+            write_line(&mut pages.buf[next_page][3], "> next");
+            next_page += 1;
+            // Inner `to` (= Safe address; rendered full so a name in the
+            // names bundle still lights up).
+            write_line(&mut pages.buf[next_page][0], "Inner to (Safe):");
+            {
+                let [_lbl, a, b, c] = &mut pages.buf[next_page];
+                write_addr_full_or_name(a, b, c, &tx.to, tx.chain_id, resolver);
+            }
+            next_page += 1;
+            // Selector + data length + bound data-hash (matches the
+            // Blind branch's last page so the user can compare on-device).
+            write_selector_row(&mut pages.buf[next_page][0], safe.raw_data);
+            write_data_len_row(&mut pages.buf[next_page][1], safe.raw_data.len());
+            {
+                let [_a, _b, r1, r2] = &mut pages.buf[next_page];
+                write_calldata_hash_rows(r1, r2, &tx.data_hash);
+            }
+            next_page += 1;
+        }
     }
 
     // ── Final: confirm prompt ───────────────────────────────────────
@@ -316,6 +378,14 @@ enum InnerKind {
     PlainEth,
     Erc20Known(Erc20Call),
     Erc20Unknown(Erc20Call),
+    /// Inner call targets `safe_address` and decoded as one of the
+    /// recognised Safe-native owner/module/guard/fallback ops.
+    SafeMgmt(SafeMgmtOp),
+    /// Inner call targets `safe_address` but the selector is not in
+    /// the recognised Safe-native set — loud blind-sign with an
+    /// explicit "Unknown Safe op" warning so the user can tell this
+    /// apart from a generic opaque call.
+    UnknownSafeSelf,
     Blind,
 }
 
@@ -327,6 +397,8 @@ fn inner_kind_hint(kind: &InnerKind) -> &'static str {
         InnerKind::PlainEth => "Inner: ETH xfer",
         InnerKind::Erc20Known(_) => "Inner: ERC-20",
         InnerKind::Erc20Unknown(_) => "Inner: ERC-20?",
+        InnerKind::SafeMgmt(_) => "Inner: Safe mgmt",
+        InnerKind::UnknownSafeSelf => "! Unkn self-call",
         InnerKind::Blind => "! Inner: opaque",
     }
 }

@@ -137,8 +137,17 @@ pub mod erc8213;
 // coverage lives in the firmware-side e2e harness; see
 // `reports/tests/secure-tx-display.md` "Coverage gaps".
 
+// `safe_mgmt` IS re-mounted: it has no unused helpers in the host-test
+// configuration, and its per-op renderers are pure-display logic that
+// should be host-asserted against expected page rows.
+#[path = "../tx/display/safe_mgmt.rs"]
+pub mod safe_mgmt;
+
 #[cfg(test)]
 mod pure_tests;
 
 #[cfg(test)]
 mod erc7730_render_pure_tests;
+
+#[cfg(test)]
+mod safe_mgmt_render_pure_tests;

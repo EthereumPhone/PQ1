@@ -31,6 +31,8 @@ pub mod erc8213;
 pub(super) mod primitives;
 #[cfg(not(test))]
 mod safe_display;
+#[cfg(not(test))]
+mod safe_mgmt;
 mod slot_rotation;
 mod typed_call;
 mod value_transfer;

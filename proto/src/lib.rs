@@ -1415,6 +1415,33 @@ pub const APPROVE_HASH_SELECTOR: [u8; 4] = [0xd4, 0xd9, 0xbd, 0xcd];
 /// 32-byte hash argument.
 pub const APPROVE_HASH_CALLDATA_LEN: usize = 4 + 32;
 
+// ---------------------------------------------------------------------------
+// Safe v1.3.0+ singleton management selectors (owner / module / guard /
+// fallback). Rendered with per-op intent banners by the secure-side
+// `safe_mgmt` decoder when the inner SafeTx targets the Safe itself
+// (`canonical.to == canonical.safe_address`). The keccak self-check
+// next to `SAFE_TX_TYPEHASH` (in `secure/src/tx/eip712/safe/mod.rs`)
+// verifies each constant against its canonical text signature on every
+// CI run.
+// ---------------------------------------------------------------------------
+
+/// `keccak256("addOwnerWithThreshold(address,uint256)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_ADD_OWNER_WITH_THRESHOLD: [u8; 4] = [0x0d, 0x58, 0x2f, 0x13];
+/// `keccak256("removeOwner(address,address,uint256)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_REMOVE_OWNER: [u8; 4] = [0xf8, 0xdc, 0x5d, 0xd9];
+/// `keccak256("swapOwner(address,address,address)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_SWAP_OWNER: [u8; 4] = [0xe3, 0x18, 0xb5, 0x2b];
+/// `keccak256("changeThreshold(uint256)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_CHANGE_THRESHOLD: [u8; 4] = [0x69, 0x4e, 0x80, 0xc3];
+/// `keccak256("enableModule(address)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_ENABLE_MODULE: [u8; 4] = [0x61, 0x0b, 0x59, 0x25];
+/// `keccak256("disableModule(address,address)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_DISABLE_MODULE: [u8; 4] = [0xe0, 0x09, 0xcf, 0xde];
+/// `keccak256("setGuard(address)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_SET_GUARD: [u8; 4] = [0xe1, 0x9a, 0x9d, 0xd9];
+/// `keccak256("setFallbackHandler(address)")[..4]`.
+pub const SAFE_MGMT_SELECTOR_SET_FALLBACK_HANDLER: [u8; 4] = [0xf0, 0x8a, 0x03, 0x23];
+
 /// `keccak256("EIP712Domain(uint256 chainId,address verifyingContract)")`.
 /// The Safe v1.3.0+ domain typehash. (Earlier Safes use a domain
 /// without `chainId`, which produces a different hash and is naturally

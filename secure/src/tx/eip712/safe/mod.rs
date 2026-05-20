@@ -48,6 +48,10 @@ use sphincs_tz_shared::{
 pub mod verify;
 pub use verify::{verify_and_bind_trailer, VerifiedSafeV1};
 
+// Pure-logic Safe-mgmt decoder. Host-runnable; renderer lives in the
+// `#[cfg(not(test))]`-gated `crate::tx::display::safe_mgmt` shim.
+pub mod mgmt_decode;
+
 #[cfg(test)]
 mod test_vectors;
 
@@ -258,5 +262,56 @@ mod typehash_tests {
     #[test]
     fn safe_tx_typehash_matches_preimage() {
         assert_eq!(keccak(SAFE_TX_TYPEHASH_PREIMAGE), SAFE_TX_TYPEHASH);
+    }
+
+    // Safe-mgmt selector keccak self-checks. Catches typos in the
+    // hardcoded byte literals in `proto/src/lib.rs` before they
+    // propagate into an on-device classifier mismatch.
+    use sphincs_tz_shared::{
+        SAFE_MGMT_SELECTOR_ADD_OWNER_WITH_THRESHOLD, SAFE_MGMT_SELECTOR_CHANGE_THRESHOLD,
+        SAFE_MGMT_SELECTOR_DISABLE_MODULE, SAFE_MGMT_SELECTOR_ENABLE_MODULE,
+        SAFE_MGMT_SELECTOR_REMOVE_OWNER, SAFE_MGMT_SELECTOR_SET_FALLBACK_HANDLER,
+        SAFE_MGMT_SELECTOR_SET_GUARD, SAFE_MGMT_SELECTOR_SWAP_OWNER,
+    };
+
+    fn selector_of(sig: &[u8]) -> [u8; 4] {
+        let h = keccak(sig);
+        [h[0], h[1], h[2], h[3]]
+    }
+
+    #[test]
+    fn safe_mgmt_selectors_match_signatures() {
+        assert_eq!(
+            selector_of(b"addOwnerWithThreshold(address,uint256)"),
+            SAFE_MGMT_SELECTOR_ADD_OWNER_WITH_THRESHOLD
+        );
+        assert_eq!(
+            selector_of(b"removeOwner(address,address,uint256)"),
+            SAFE_MGMT_SELECTOR_REMOVE_OWNER
+        );
+        assert_eq!(
+            selector_of(b"swapOwner(address,address,address)"),
+            SAFE_MGMT_SELECTOR_SWAP_OWNER
+        );
+        assert_eq!(
+            selector_of(b"changeThreshold(uint256)"),
+            SAFE_MGMT_SELECTOR_CHANGE_THRESHOLD
+        );
+        assert_eq!(
+            selector_of(b"enableModule(address)"),
+            SAFE_MGMT_SELECTOR_ENABLE_MODULE
+        );
+        assert_eq!(
+            selector_of(b"disableModule(address,address)"),
+            SAFE_MGMT_SELECTOR_DISABLE_MODULE
+        );
+        assert_eq!(
+            selector_of(b"setGuard(address)"),
+            SAFE_MGMT_SELECTOR_SET_GUARD
+        );
+        assert_eq!(
+            selector_of(b"setFallbackHandler(address)"),
+            SAFE_MGMT_SELECTOR_SET_FALLBACK_HANDLER
+        );
     }
 }
