@@ -2271,6 +2271,51 @@ fn main() -> ! {
             Err(e) => { secure_log!("[S] [DURESS-PROV] real unlock err {:?}", e); fail!("real wallet unlock failed after decoy provisioning"); }
         }
 
+        // ===== P3: gated_unlock dispatch validation (real / duress / wrong) =====
+        // Exercises the production timing-uniform dispatch end-to-end.
+        // Reset page-124 first so the MCU lockout gate starts clean.
+        let _ = crate::hw::flash::pin_attempts_reset();
+
+        // 10. Duress PIN through the dispatch → decoy master, E120 untouched.
+        let e120_before_duress = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        match crate::nsc::gated_unlock(se, &duress_pin) {
+            Ok(m) if m == decoy_master => {
+                secure_log!("[S] [DURESS-PROV] step 10: gated_unlock(duress) → decoy master OK");
+            }
+            Ok(_) => fail!("gated_unlock(duress) returned wrong master (not decoy)"),
+            Err(e) => { secure_log!("[S] [DURESS-PROV] gated_unlock(duress) err {:?}", e); fail!("gated_unlock(duress) failed"); }
+        }
+        let e120_after_duress = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        if e120_after_duress != e120_before_duress {
+            secure_log!("[S] [DURESS-PROV] step 11: E120 {}→{} on duress dispatch", e120_before_duress, e120_after_duress);
+            fail!("duress dispatch drifted real E120 (no-skip of real verify?)");
+        }
+        secure_log!("[S] [DURESS-PROV] step 11: E120 untouched ({}) by duress dispatch OK", e120_after_duress);
+
+        // 12. Real PIN through the dispatch → real master.
+        match crate::nsc::gated_unlock(se, &real_pin) {
+            Ok(m) if m == real_master => {
+                secure_log!("[S] [DURESS-PROV] step 12: gated_unlock(real) → real master OK");
+            }
+            Ok(_) => fail!("gated_unlock(real) returned wrong master (not real)"),
+            Err(e) => { secure_log!("[S] [DURESS-PROV] gated_unlock(real) err {:?}", e); fail!("gated_unlock(real) failed"); }
+        }
+
+        // 13. Wrong PIN through the dispatch → rejected.
+        let wrong_pin: [u8; 8] = *b"55555555";
+        match crate::nsc::gated_unlock(se, &wrong_pin) {
+            Err(_) => { secure_log!("[S] [DURESS-PROV] step 13: gated_unlock(wrong) rejected OK"); }
+            Ok(_) => fail!("gated_unlock(wrong) unexpectedly succeeded"),
+        }
+
+        // 14. Recovery: real PIN still works after a wrong + a duress unlock.
+        let _ = crate::hw::flash::pin_attempts_reset();
+        match crate::nsc::gated_unlock(se, &real_pin) {
+            Ok(m) if m == real_master => { secure_log!("[S] [DURESS-PROV] step 14: real unlock recovers after wrong+duress OK"); }
+            Ok(_) => fail!("step 14 real unlock wrong master"),
+            Err(e) => { secure_log!("[S] [DURESS-PROV] step 14 err {:?}", e); fail!("step 14 real unlock failed"); }
+        }
+
         secure_log!("[S] [DURESS-PROV] === DURESS PROVISION VALIDATION: PASS ===");
         ui::show_status("DURESS-PROV", "PASS");
         cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
