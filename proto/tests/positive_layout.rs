@@ -46,10 +46,17 @@ fn positive_unified_userop_header_layout_sums() {
 #[test]
 fn positive_batch_header_layout_sums() {
     // chain_id(8) + flags(4) + sender(20) + ep(20) + nonce(32)
-    // + 5×gas(160) + paymaster_hash(32) + batch_count(1)
-    let expected = 8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 1;
+    // + 5×gas(160) + paymaster_hash(32) + wire_version(1) + batch_count(1)
+    let expected = 8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 1 + 1;
     assert_eq!(SIGN_USEROP_BATCH_HEADER_LEN, expected);
-    assert_eq!(SIGN_USEROP_BATCH_HEADER_LEN, 277);
+    assert_eq!(SIGN_USEROP_BATCH_HEADER_LEN, 278);
+}
+
+#[test]
+fn positive_batch_wire_version_is_two() {
+    // Bump v1 → v2 when the TLV trailer list landed (batch-sign parity
+    // with single-tx). Firmware refuses any other value.
+    assert_eq!(SIGN_USEROP_BATCH_WIRE_VERSION, 2);
 }
 
 #[test]
@@ -60,13 +67,62 @@ fn positive_batch_tx_prefix_layout_sums() {
 }
 
 #[test]
-fn positive_batch_max_payload_includes_every_tx_at_max_data() {
-    // Phase 3 (ERC-7730) added an optional trailer:
-    //   header + N × (tx_prefix + data) + 2 (trailer_len u16) + ERC7730_MAX_TRAILER_LEN.
+fn positive_batch_trailer_record_header_sums() {
+    // kind(1) + tx_idx(1) + len(u16 BE, 2)
+    assert_eq!(SIGN_USEROP_BATCH_TRAILER_HEADER_LEN, 4);
+    assert_eq!(SIGN_USEROP_BATCH_TRAILER_HEADER_LEN, 1 + 1 + 2);
+}
+
+#[test]
+fn positive_batch_trailer_kind_enum_values_stable() {
+    // Pinned: the wire dispatch table on the secure side matches each
+    // const by value, so renumbering breaks deployed companions.
+    assert_eq!(TRAILER_KIND_ERC20, 1);
+    assert_eq!(TRAILER_KIND_ZK_V1, 2);
+    assert_eq!(TRAILER_KIND_ZK_V3, 3);
+    assert_eq!(TRAILER_KIND_SAFE_V1, 4);
+    assert_eq!(TRAILER_KIND_SEL_CURATED, 5);
+    assert_eq!(TRAILER_KIND_SEL_SELFATTEST, 6);
+    assert_eq!(TRAILER_KIND_ERC7730, 7);
+    assert_eq!(TRAILER_KIND_NAME, 8);
+    assert_eq!(TRAILER_TX_IDX_BATCH_WIDE, 0xff);
+}
+
+#[test]
+fn positive_max_trailers_per_batch_covers_worst_case() {
+    // Realistic worst case: every inner tx carries six per-tx kinds
+    // (ERC-20, ZK_V1, ZK_V3, SAFE_V1, ERC-7730, plus one of
+    // SEL_CURATED XOR SEL_SELFATTEST since they're mutually exclusive),
+    // plus the four batch-wide name bundles.
+    let worst_case = MAX_BATCH_TXS * 6 + 4 /* MAX_NAME_BUNDLES */;
+    assert!(
+        MAX_TRAILERS_PER_BATCH >= worst_case,
+        "MAX_TRAILERS_PER_BATCH ({}) must bound worst case ({})",
+        MAX_TRAILERS_PER_BATCH,
+        worst_case
+    );
+}
+
+#[test]
+fn positive_batch_max_payload_includes_trailers_budget() {
+    // v2 wire: header + N × (tx_prefix + data) + trailer_count(1)
+    //         + MAX_TRAILERS_PER_BATCH × per-record-header
+    //         + TRAILERS_TOTAL_MAX_LEN.
     let expected = SIGN_USEROP_BATCH_HEADER_LEN
         + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
-        + 2 + ERC7730_MAX_TRAILER_LEN;
+        + 1
+        + MAX_TRAILERS_PER_BATCH * SIGN_USEROP_BATCH_TRAILER_HEADER_LEN
+        + TRAILERS_TOTAL_MAX_LEN;
     assert_eq!(SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, expected);
+}
+
+#[test]
+fn positive_trailers_total_max_len_bounded() {
+    // 24 KB outer budget. Keeps SNAP_BUF in the ~41 KB range — well
+    // inside the secure SRAM budget but generous enough for realistic
+    // mixed-trailer batches.
+    assert_eq!(TRAILERS_TOTAL_MAX_LEN, 24 * 1024);
+    assert!(TRAILERS_TOTAL_MAX_LEN <= 64 * 1024); // sanity: not a runaway
 }
 
 #[test]

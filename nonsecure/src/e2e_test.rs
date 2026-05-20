@@ -470,7 +470,10 @@ fn build_batch_payload(
     off += 32;
     buf[off..off + 32].copy_from_slice(&SHA256_EMPTY);
     off += 32;
-    debug_assert_eq!(off, SIGN_USEROP_BATCH_HEADER_LEN - 1);
+    debug_assert_eq!(off, SIGN_USEROP_BATCH_HEADER_LEN - 2);
+    // Wire v2: version byte at offset 276, batch_count at offset 277.
+    buf[off] = sphincs_tz_shared::SIGN_USEROP_BATCH_WIRE_VERSION;
+    off += 1;
     buf[off] = inner.len() as u8;
     off += 1;
     debug_assert_eq!(off, SIGN_USEROP_BATCH_HEADER_LEN);
@@ -487,6 +490,16 @@ fn build_batch_payload(
         buf[off..off + tx.data.len()].copy_from_slice(tx.data);
         off += tx.data.len();
     }
+
+    // Empty TLV-tagged trailer list — `trailer_count = 0`. The
+    // legacy single-ERC-7730 trailer slot is gone; companions that
+    // want trailers emit them as kind/tx_idx/len/bytes records here.
+    // Without an explicit terminator byte the firmware refuses the
+    // payload (parse_batch_trailers expects `total_len` to consume to
+    // exactly one byte past `cursor` for the empty case).
+    buf[off] = 0u8;
+    off += 1;
+
     off
 }
 
@@ -1448,12 +1461,18 @@ fn main() -> ! {
     }
 
     // Scenario 5n: ERC-7730 trailer with mismatched contract — firmware
-    // must reject before reaching the renderer (binding check).
-    hprintln!("[NS][e2e] Scenario 5n: ERC-7730 binding-mismatch rejected");
+    // must DROP the descriptor (binding fail banner) and fall through
+    // to blind-sign. Per docs/companion-erc7730-implementation-guide.md
+    // §1: "If it ships a wrong / malformed / mis-bound trailer, the
+    // firmware refuses the descriptor and falls back to blind-sign with
+    // a brief status-line banner. Clear signing is never required."
+    hprintln!("[NS][e2e] Scenario 5n: ERC-7730 binding-mismatch falls through to blind-sign");
     #[cfg(feature = "e2e-test")]
     unsafe {
         // Same trailer (WETH descriptor) but `to` points at a different
-        // contract → cross_check_contract must fail.
+        // contract → cross_check_contract fails. The userop must still
+        // sign because clear-signing is an enhancement layer, not a
+        // precondition.
         let other: [u8; 20] = [0xDE; 20];
         let header_len = build_sign_payload(
             &mut PAYLOAD_BUF,
@@ -1474,11 +1493,13 @@ fn main() -> ! {
         let status = nsc_api::sign_userop(&PAYLOAD_BUF[..new_len], &mut SIG_BUF);
         assert_eq!(
             status,
-            NscStatus::InvalidPointer as u32,
-            "scenario 5n: binding mismatch must reject (got status {})",
+            NscStatus::Ok as u32,
+            "scenario 5n: binding mismatch must fall through to blind-sign \
+             (got status {}); InvalidPointer would mean the firmware \
+             aborted the userop instead of dropping the descriptor",
             status
         );
-        hprintln!("[NS][e2e]   → ERC-7730 binding mismatch rejected");
+        hprintln!("[NS][e2e]   → ERC-7730 binding mismatch dropped, blind-sign proceeded");
     }
 
     // counter at MAX and SE050 user UserID silicon-locked; next boot

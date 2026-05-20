@@ -65,8 +65,12 @@ use sphincs_tz_shared::{
     SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF, SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF,
     SIGN_OFFCHAIN_INPUT_SLOT_OFF, SIGN_OFFCHAIN_OUTPUT_COUNT_OFF, SIGN_OFFCHAIN_OUTPUT_LEN,
     SIGN_OFFCHAIN_OUTPUT_LEN_6492, SIGN_OFFCHAIN_OUTPUT_SIG_OFF, SIGN_USEROP_BATCH_HEADER_LEN,
-    SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, SIGN_USEROP_BATCH_TX_PREFIX_LEN, SIG_WRAPPER_LEN,
-    SLOT_INDEX_MASK,
+    SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, SIGN_USEROP_BATCH_TRAILER_HEADER_LEN,
+    SIGN_USEROP_BATCH_TX_PREFIX_LEN, SIGN_USEROP_BATCH_WIRE_VERSION, SIG_WRAPPER_LEN,
+    SLOT_INDEX_MASK, TRAILERS_TOTAL_MAX_LEN, TRAILER_KIND_ERC20, TRAILER_KIND_ERC7730,
+    TRAILER_KIND_NAME, TRAILER_KIND_SAFE_V1, TRAILER_KIND_SEL_CURATED,
+    TRAILER_KIND_SEL_SELFATTEST, TRAILER_KIND_ZK_V1, TRAILER_KIND_ZK_V3,
+    TRAILER_TX_IDX_BATCH_WIDE, MAX_TRAILERS_PER_BATCH,
 };
 
 // ─────────────────────────────────────────────────────────────────────
@@ -287,13 +291,13 @@ fn negative_eip6492_magic_suffix_is_repeating_6492() {
 // ─────────────────────────────────────────────────────────────────────
 
 #[test]
-fn negative_sign_userop_batch_header_len_is_277() {
-    // 8 (chain) + 4 (flags) + 20 (sender) + 20 (ep) + 32 (nonce) +
-    // 5×32 (gas) + 32 (paymaster hash) + 1 (batch_count) = 277.
-    assert_eq!(SIGN_USEROP_BATCH_HEADER_LEN, 277);
+fn negative_sign_userop_batch_header_len_is_278() {
+    // v2 wire: 8 (chain) + 4 (flags) + 20 (sender) + 20 (ep) + 32 (nonce)
+    // + 5×32 (gas) + 32 (paymaster hash) + 1 (wire_version) + 1 (batch_count) = 278.
+    assert_eq!(SIGN_USEROP_BATCH_HEADER_LEN, 278);
     assert_eq!(
         SIGN_USEROP_BATCH_HEADER_LEN,
-        8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 1
+        8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 1 + 1
     );
 }
 
@@ -306,14 +310,15 @@ fn negative_sign_userop_batch_tx_prefix_len_is_54() {
 #[test]
 fn negative_sign_userop_batch_max_payload_len_covers_max_batch_at_max_tx_len() {
     // SNAP_BUF in cmd_sign_userop_batch.rs is sized to this constant.
-    // It must accommodate the worst case: header + MAX_BATCH_TXS ×
-    // (prefix + MAX_TX_LEN data) + optional ERC-7730 trailer
-    // (2-byte len + payload). Otherwise a fully-loaded batch payload
-    // would buffer-overflow the snapshot or be silently truncated.
+    // v2 wire: header + MAX_BATCH_TXS × (prefix + MAX_TX_LEN data) +
+    // trailer_count(1) + MAX_TRAILERS_PER_BATCH × per-record-header(4)
+    // + TRAILERS_TOTAL_MAX_LEN budget. A fully-loaded batch payload must
+    // fit without overflowing the snapshot.
     let expected = SIGN_USEROP_BATCH_HEADER_LEN
         + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
-        + 2
-        + ERC7730_MAX_TRAILER_LEN;
+        + 1
+        + MAX_TRAILERS_PER_BATCH * SIGN_USEROP_BATCH_TRAILER_HEADER_LEN
+        + TRAILERS_TOTAL_MAX_LEN;
     assert_eq!(SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, expected);
 }
 
@@ -1033,11 +1038,21 @@ fn negative_batch_rejects_truncated_inner_tx() {
 
 #[test]
 fn negative_batch_rejects_trailing_bytes_after_last_inner_tx() {
-    // `cursor != total_len` after parsing N inner txs is rejected.
-    // A trailing-bytes attack would let an attacker stash data
-    // outside the per-tx confirm dialog scope.
-    assert!(CMD_SIGN_USEROP_BATCH_SRC.contains("cursor != total_len"));
-    assert!(CMD_SIGN_USEROP_BATCH_SRC.contains("trailing bytes"));
+    // Wire v2: the trailing-bytes check moved into
+    // `batch_trailers::parse_all` (refuses `walk != total_len` after
+    // consuming the TLV list). The batch handler delegates the parse
+    // via `parse_batch_trailers`, so the check is enforced indirectly
+    // — the parser source pins the refusal label.
+    assert!(CMD_SIGN_USEROP_BATCH_SRC.contains("parse_batch_trailers"));
+    const BATCH_TRAILERS_SRC: &str = include_str!("nsc/batch_trailers.rs");
+    assert!(
+        BATCH_TRAILERS_SRC.contains("trailing bytes"),
+        "batch_trailers::parse_all must refuse trailing bytes after last record"
+    );
+    assert!(
+        BATCH_TRAILERS_SRC.contains("walk != total_len"),
+        "batch_trailers::parse_all must enforce cursor-exhaustion"
+    );
 }
 
 #[test]
@@ -1370,8 +1385,21 @@ fn negative_proto_constants_used_by_handlers_resolve_to_pinned_values() {
     assert_eq!(OFFCHAIN_STATUS_INPUT_LEN, 13);
     assert_eq!(OFFCHAIN_STATUS_OUTPUT_LEN, 24);
     assert_eq!(OFFCHAIN_SYNC_INPUT_LEN, 21);
-    assert_eq!(SIGN_USEROP_BATCH_HEADER_LEN, 277);
+    assert_eq!(SIGN_USEROP_BATCH_HEADER_LEN, 278);
     assert_eq!(SIGN_USEROP_BATCH_TX_PREFIX_LEN, 54);
+    assert_eq!(SIGN_USEROP_BATCH_WIRE_VERSION, 2);
+    assert_eq!(MAX_TRAILERS_PER_BATCH, 32);
+    assert_eq!(TRAILERS_TOTAL_MAX_LEN, 24 * 1024);
+    assert_eq!(SIGN_USEROP_BATCH_TRAILER_HEADER_LEN, 4);
+    assert_eq!(TRAILER_KIND_ERC20, 1);
+    assert_eq!(TRAILER_KIND_ZK_V1, 2);
+    assert_eq!(TRAILER_KIND_ZK_V3, 3);
+    assert_eq!(TRAILER_KIND_SAFE_V1, 4);
+    assert_eq!(TRAILER_KIND_SEL_CURATED, 5);
+    assert_eq!(TRAILER_KIND_SEL_SELFATTEST, 6);
+    assert_eq!(TRAILER_KIND_ERC7730, 7);
+    assert_eq!(TRAILER_KIND_NAME, 8);
+    assert_eq!(TRAILER_TX_IDX_BATCH_WIDE, 0xff);
     assert_eq!(EIP6492_BLOB_LEN, 8608);
     assert_eq!(EXECUTE_BATCH_SELECTOR, [0x7a, 0x38, 0x99, 0x33]);
     assert_eq!(PQ_ADD_OWNER_BYTES_SELECTOR, [0x10, 0x14, 0x90, 0xcb]);

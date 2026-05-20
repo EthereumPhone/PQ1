@@ -36,7 +36,7 @@ If you only need one inner call, keep using `INS_V2_SIGN_USEROP` — the
 single-tx path is cheaper on-chain (`executeWithOffchainCount` calldata
 is smaller than `executeBatchWithOffchainCount` for `N=1`).
 
-## Wire format (request payload, big-endian unless noted)
+## Wire format (request payload, big-endian unless noted) — v2
 
 ```text
 [ 0.. 8)  chain_id            u64 BE
@@ -57,19 +57,93 @@ is smaller than `executeBatchWithOffchainCount` for `N=1`).
 [180..212) max_fee_per_gas    u256 BE
 [212..244) max_prio_per_gas   u256 BE
 [244..276) paymaster_and_data_hash  sha256 (SHA256_EMPTY = sha256("") when absent)
-[276..277) batch_count        u8     — 1..=MAX_BATCH_TXS (=4)
-[277..  )  inner-tx blocks, repeated `batch_count` times:
+[276..277) wire_version       u8     — MUST equal SIGN_USEROP_BATCH_WIRE_VERSION (2)
+[277..278) batch_count        u8     — 1..=MAX_BATCH_TXS (=4)
+[278..  )  inner-tx blocks, repeated `batch_count` times:
              [20]  to_address
              [32]  value (u256 BE)
              [ 2]  data_len (u16 BE, 0..=MAX_TX_LEN)
              [N]   data
+[...   )   TLV-tagged trailer list (see next section)
 ```
 
-No optional trailers. Batch txs render through the basic value /
-ERC-20-shape-decode / blind-sign ladder. ZK clear-sign, Safe
-`approveHash`, ERC-20 metadata bundles, and verified-selector bundles
-are all single-tx-only by construction (their security model assumes
-a 1:1 mapping between displayed-tx and signed-tx).
+The `wire_version` byte was introduced when the TLV-tagged trailer list
+landed (v1 → v2 cutover); the firmware refuses any payload with
+`wire_version != 2` so a stale companion never silently mis-parses.
+
+### TLV-tagged trailer list
+
+After the last inner-tx block, the payload terminates in a
+count-prefixed list of TLV records:
+
+```text
+[u8 trailer_count]                         — 0..=MAX_TRAILERS_PER_BATCH (32)
+[trailer_count × {
+    u8  kind                               — 1..=8 (see table below)
+    u8  tx_idx                             — 0..batch_count-1 for kinds 1..=7;
+                                             TRAILER_TX_IDX_BATCH_WIDE (0xff) for kind 8
+    u16 BE len                             — bounded per-kind (see table)
+    [len bytes]                            — trailer payload (the same bundle
+                                             format the single-tx path consumes)
+}]
+```
+
+Each per-tx kind binds via `tx_idx` to one inner transaction. The
+firmware verifies the bundle, FI-cross-checks the binding, and feeds
+the result into `pick_sign_pages` for that tx. Failed verifications
+drop silently (parity with single-tx — clear-signing is an enhancement
+layer that degrades gracefully) **except** for the two downgrade-
+mitigation gates below, which abort the whole batch with
+`InvalidPointer`. Kind 8 trailers accumulate batch-wide into a single
+`NameResolver` shared across renders.
+
+| `kind` | symbol | max bytes | verifier | applies to |
+|-------:|--------|----------:|----------|------------|
+| 1 | `TRAILER_KIND_ERC20`         | 1120 | `erc20::bundle::verify_erc20_bundle` (`ERC20_DB_ROOT`) | inner tx at `tx_idx` |
+| 2 | `TRAILER_KIND_ZK_V1`         | 2660 | `zk::verify_and_bind_trailer_v1` (`VK_DB_ROOT`)        | inner tx at `tx_idx` |
+| 3 | `TRAILER_KIND_ZK_V3`         | 2764 | `tx::eip712::cowswap::verify_and_bind_trailer`         | inner tx at `tx_idx` |
+| 4 | `TRAILER_KIND_SAFE_V1`       | 4379 | `tx::eip712::safe::verify_and_bind_trailer`            | inner tx at `tx_idx` |
+| 5 | `TRAILER_KIND_SEL_CURATED`   | 1156 | `selectors::verify_selector_bundle` (`SELECTOR_DB_ROOT`) | inner tx at `tx_idx` |
+| 6 | `TRAILER_KIND_SEL_SELFATTEST`|   68 | `selectors::parse_self_attest_bundle` (keccak self-check) | inner tx at `tx_idx` |
+| 7 | `TRAILER_KIND_ERC7730`       | 5130 | `tx::erc7730::verify_erc7730_bundle` (`ERC7730_DESCRIPTORS_ROOT`) | inner tx at `tx_idx` |
+| 8 | `TRAILER_KIND_NAME`          | 1156 | `names::verify_name_bundle` (`NAMES_DB_ROOT`)          | batch-wide (`tx_idx == 0xff`) |
+
+The firmware refuses at parse time:
+
+* `trailer_count > MAX_TRAILERS_PER_BATCH (32)`.
+* `kind == 0 || kind > 8`.
+* `kind ∈ 1..=7` with `tx_idx >= batch_count` (out-of-range routing).
+* `kind == 8` with `tx_idx != 0xff` (name bundle must be batch-wide).
+* duplicate `(kind, tx_idx)` for kinds 1..=7.
+* both `TRAILER_KIND_SEL_CURATED` and `TRAILER_KIND_SEL_SELFATTEST`
+  present for the same `tx_idx` (mutually exclusive).
+* more than `MAX_NAME_BUNDLES (4)` kind-8 records in the batch.
+* per-kind `len > cap` from the table above.
+* `Σ len > TRAILERS_TOTAL_MAX_LEN (24 576)` across all records.
+* any trailing bytes past the last record.
+
+### Downgrade-mitigation gates (per inner tx)
+
+Mirroring the single-tx path: before `pick_sign_pages` runs for inner
+tx `i`, the firmware refuses to sign with `InvalidPointer` if either
+gate fires. Companions MUST emit the corresponding routed trailer in
+these cases.
+
+* **CoW v3**: if `inner.data[0..4] == 0xec6cb13f` (setPreSignature) AND
+  `inner.to == GPV2_SETTLEMENT (0x9008…ab41)`, a kind 3 trailer with
+  `tx_idx = i` is mandatory.
+* **Safe v1**: if `inner.data[0..4] == 0xd4d9bdcd` (approveHash) AND
+  `inner.data.length == 36`, a kind 4 trailer with `tx_idx = i` is
+  mandatory.
+
+### Migration from v1
+
+The pre-v2 wire format placed `batch_count` at offset 276 and accepted
+at most one optional `[u16 BE len][erc7730_bundle]` trailer at the tail.
+The cutover is hard: the firmware refuses v1 payloads with
+`InvalidPointer / "bad wire_version"`. Companions check device
+protocol version (via `INS_GET_DEVICE_INFO`) before sending and
+refuse to send v2 payloads to firmware that doesn't advertise v2 support.
 
 ## Wire format (response)
 

@@ -403,11 +403,11 @@ pub const CMD_SIGN_OFFCHAIN: u32 = 16;
 /// (`executeBatchWithOffchainCount` instead of
 /// `executeWithOffchainCount`).
 ///
-/// ## Wire format (all integers big-endian unless noted)
+/// ## Wire format v2 (all integers big-endian unless noted)
 ///
 /// ```text
-///   [  0..  8)  chain_id   u64 BE
-///   [  8.. 12)  flags      u32 BE   (same layout as CMD_SIGN_USEROP)
+///   [  0..  8)  chain_id            u64 BE
+///   [  8.. 12)  flags               u32 BE   (same layout as CMD_SIGN_USEROP)
 ///   [ 12.. 32)  sender              20 B
 ///   [ 32.. 52)  entry_point         20 B
 ///   [ 52.. 84)  nonce               u256 BE
@@ -417,17 +417,34 @@ pub const CMD_SIGN_OFFCHAIN: u32 = 16;
 ///   [180..212)  max_fee_per_gas     u256 BE
 ///   [212..244)  max_prio_per_gas    u256 BE
 ///   [244..276)  paymaster_data_hash sha256 (SHA256_EMPTY when absent)
-///   [276..277)  batch_count u8 (1..=MAX_BATCH_TXS)
-///   [277..   )  repeat batch_count times:
-///                 [20]                to_address
-///                 [32]                value (u256 BE)
-///                 [ 2]                data_len (u16 BE, ≤ MAX_TX_LEN)
-///                 [data_len]          data
+///   [276..277)  wire_version        u8  == SIGN_USEROP_BATCH_WIRE_VERSION (2)
+///   [277..278)  batch_count         u8 (1..=MAX_BATCH_TXS)
+///   [278..   )  repeat batch_count times:
+///                 [20]              to_address
+///                 [32]              value (u256 BE)
+///                 [ 2]              data_len (u16 BE, ≤ MAX_TX_LEN)
+///                 [data_len]        data
+///   [...     )  trailer_count u8 (0..=MAX_TRAILERS_PER_BATCH)
+///   [...     )  repeat trailer_count times:
+///                 [ 1]              kind   u8 (1..=8; see TRAILER_KIND_*)
+///                 [ 1]              tx_idx u8 (0..batch_count-1 for kinds 1..=7;
+///                                              TRAILER_TX_IDX_BATCH_WIDE (0xff) for kind 8)
+///                 [ 2]              len    u16 BE  (bounded per-kind by the
+///                                              secure-side dispatch table)
+///                 [len]             trailer bytes
 /// ```
 ///
-/// No trailers. Batch txs render through the basic value/erc20-shape/
-/// blind-sign ladder; ZK / Safe / ERC-20-metadata trailers are
-/// single-tx-only by construction.
+/// Each per-tx kind (ERC-20, ZK v1, ZK v3, Safe v1, selector curated,
+/// selector self-attest, ERC-7730) routes to the inner-tx specified by
+/// `tx_idx`; the firmware verifies, FI-cross-checks the binding, and
+/// passes the result into `pick_sign_pages` for that inner-tx. Name
+/// bundles (kind 8) are batch-wide and accumulate into a single
+/// `NameResolver`. Sum of all `len` is bounded by `TRAILERS_TOTAL_MAX_LEN`.
+/// Curated and self-attest are mutually exclusive per `tx_idx`.
+///
+/// Cutover from v1 (single optional ERC-7730 trailer at the tail): hard.
+/// The firmware refuses `wire_version != 2` with `InvalidPointer`.
+/// Companions must check device protocol version before sending.
 pub const CMD_SIGN_USEROP_BATCH: u32 = 30;
 
 /// CMD_OFFCHAIN_STATUS — read per-slot off-chain signing state.
@@ -1483,28 +1500,97 @@ pub const MAX_EXECUTE_CALLDATA_LEN: usize = 4 * 1024 + 256; // 4352
 /// no hard cap.
 pub const MAX_BATCH_TXS: usize = 4;
 
+/// Wire-format version byte placed at offset 276 of every
+/// `CMD_SIGN_USEROP_BATCH` payload. Bump in lockstep with the
+/// secure-side parser when the wire format breaks compatibility.
+///
+/// v1: single optional `[u16 len][erc7730_bundle]` trailer at the tail.
+///     Pre-batch-parity build; no longer accepted.
+/// v2: TLV-tagged trailer list (every clear-signing kind, per-tx routed).
+///     This file's documented format.
+pub const SIGN_USEROP_BATCH_WIRE_VERSION: u8 = 2;
+
 /// Fixed-prefix length of the `CMD_SIGN_USEROP_BATCH` payload (header
 /// up to and including `batch_count`). Inner-tx blocks follow.
 ///
 /// Layout math: 8 (chain_id) + 4 (flags) + 20 (sender) + 20 (ep) + 32
-/// (nonce) + 5×32 (gas) + 32 (paym hash) + 1 (batch_count) = 277.
+/// (nonce) + 5×32 (gas) + 32 (paym hash) + 1 (wire_version) +
+/// 1 (batch_count) = 278.
 pub const SIGN_USEROP_BATCH_HEADER_LEN: usize =
-    8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 1; // 277
+    8 + 4 + 20 + 20 + 32 + 5 * 32 + 32 + 1 + 1; // 278
 
-const _: () = assert!(SIGN_USEROP_BATCH_HEADER_LEN == 277);
+const _: () = assert!(SIGN_USEROP_BATCH_HEADER_LEN == 278);
 
 /// Per-tx fixed prefix inside the batch payload: `to(20) + value(32) +
 /// data_len(2) = 54`.
 pub const SIGN_USEROP_BATCH_TX_PREFIX_LEN: usize = 20 + 32 + 2; // 54
 
-/// Worst-case `CMD_SIGN_USEROP_BATCH` payload length: header + every
-/// inner tx running at `MAX_TX_LEN` data + an optional ERC-7730
-/// trailer at the tail (`[u16 len][payload]`, applied to whichever
-/// inner tx the descriptor's `(chain_id, contract)` binding matches).
-/// The secure world's TOCTOU snapshot is sized to this bound.
+// ───────────────────────────────────────────────────────────────────────
+// TLV trailer kinds (CMD_SIGN_USEROP_BATCH wire v2)
+//
+// Each trailer record carries `(kind: u8, tx_idx: u8, len: u16 BE, bytes)`.
+// `tx_idx == TRAILER_TX_IDX_BATCH_WIDE (0xff)` is reserved for kind 8
+// (name bundles), which apply to every inner tx; other kinds MUST set a
+// concrete `tx_idx < batch_count`. Per-kind length caps live in the
+// secure-side dispatch table (`secure/src/nsc/batch_trailers.rs`) since
+// they reference `pqsigner-tx` types — proto stays dep-free.
+// ───────────────────────────────────────────────────────────────────────
+
+/// ERC-20 token metadata bundle. Verifier: `erc20::bundle::verify_erc20_bundle`.
+pub const TRAILER_KIND_ERC20: u8 = 1;
+/// ZK v1 clear-sign bundle (Groth16 + (calldata, readable) attest).
+pub const TRAILER_KIND_ZK_V1: u8 = 2;
+/// ZK v3 CoW EIP-712 bundle (Groth16 + Poseidon orderDigest binding).
+pub const TRAILER_KIND_ZK_V3: u8 = 3;
+/// Safe v1 `approveHash` clear-sign bundle (281-byte canonical SafeTx).
+pub const TRAILER_KIND_SAFE_V1: u8 = 4;
+/// Verified-selector bundle (curated Merkle DB of selector → text-sig).
+pub const TRAILER_KIND_SEL_CURATED: u8 = 5;
+/// Self-attested selector bundle (no Merkle proof; keccak self-check only).
+pub const TRAILER_KIND_SEL_SELFATTEST: u8 = 6;
+/// ERC-7730 clear-signing descriptor.
+pub const TRAILER_KIND_ERC7730: u8 = 7;
+/// Address-name bundle (batch-wide, `tx_idx == TRAILER_TX_IDX_BATCH_WIDE`).
+pub const TRAILER_KIND_NAME: u8 = 8;
+
+/// Sentinel `tx_idx` for batch-wide trailers (currently only kind 8 names).
+pub const TRAILER_TX_IDX_BATCH_WIDE: u8 = 0xff;
+
+/// Maximum number of trailer records the firmware accepts in one batch.
+/// Worst-case live use: `MAX_BATCH_TXS × 6` (six per-tx kinds, curated
+/// and self-attest are mutually exclusive) + `MAX_NAME_BUNDLES (4)` =
+/// 28. Round up to 32 for headroom + power-of-two array alignment.
+pub const MAX_TRAILERS_PER_BATCH: usize = 32;
+
+/// Sum-of-lengths bound on the trailer payload bytes in a batch. Covers
+/// a realistic full mix — e.g. ERC-7730 + Safe + ERC-20 across multiple
+/// inner txs — without enabling the absolute pathological case (every
+/// kind on every tx at max length, which would push the SRAM snapshot
+/// past 90 KB). Trailer payloads exceeding this in aggregate are
+/// refused at parse time with `NscStatus::InvalidPointer`.
+pub const TRAILERS_TOTAL_MAX_LEN: usize = 24 * 1024; // 24,576
+
+/// Per-record header overhead in the TLV trailer list:
+/// `kind(1) + tx_idx(1) + len(u16 BE, 2) = 4`.
+pub const SIGN_USEROP_BATCH_TRAILER_HEADER_LEN: usize = 1 + 1 + 2;
+
+/// Worst-case `CMD_SIGN_USEROP_BATCH` v2 payload length:
+///   header(278)
+/// + N × (tx_prefix(54) + MAX_TX_LEN(4096))
+/// + trailer_count u8 (1)
+/// + MAX_TRAILERS_PER_BATCH × per-record header (4)
+/// + TRAILERS_TOTAL_MAX_LEN
+///
+/// The secure-side TOCTOU snapshot (`SNAP_BUF` in
+/// `cmd_sign_userop_batch.rs`) is sized to this bound; living in BSS
+/// rather than the call stack so the 64 KB call-frame ceiling does not
+/// apply. Lands ~41 KB which fits the 192 KB secure SRAM budget with
+/// headroom.
 pub const SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN: usize = SIGN_USEROP_BATCH_HEADER_LEN
     + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
-    + 2 + ERC7730_MAX_TRAILER_LEN;
+    + 1
+    + MAX_TRAILERS_PER_BATCH * SIGN_USEROP_BATCH_TRAILER_HEADER_LEN
+    + TRAILERS_TOTAL_MAX_LEN;
 
 /// ABI selector for
 /// `PQSmartWallet.executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`.

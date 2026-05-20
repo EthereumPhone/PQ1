@@ -190,6 +190,10 @@ mod nsc_sig_wrapper_under_test;
 mod nsc_trailer_under_test;
 
 #[cfg(test)]
+#[path = "nsc/batch_trailers.rs"]
+mod nsc_batch_trailers_under_test;
+
+#[cfg(test)]
 mod nsc_sign_userop_pure_tests;
 
 #[cfg(test)]

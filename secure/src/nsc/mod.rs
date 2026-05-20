@@ -67,6 +67,7 @@ mod cmd_fw_commit;
 #[cfg(feature = "stm32u585")]
 mod cmd_fw_status;
 
+mod batch_trailers;
 mod factory_calldata;
 mod ns_ptr;
 mod ptr_validate;

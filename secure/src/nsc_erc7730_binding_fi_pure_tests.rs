@@ -121,60 +121,64 @@ fn cmd_sign_offchain_uses_fi_hardened_binding_check() {
 
 #[test]
 fn cmd_sign_userop_batch_uses_fi_hardened_per_candidate_check() {
+    // Wire v2 (TLV-tagged trailer list): the companion declares which
+    // inner tx an ERC-7730 trailer binds to via `tx_idx`, so the
+    // firmware does a single per-`tx_idx` binding check instead of
+    // searching for the matching inner tx. The cross_check_contract
+    // verdict is computed once into `bind_ok` so the
+    // `check_true_into_sentinel` can double-evaluate without re-running
+    // the keccak comparison.
     assert!(
         CMD_SIGN_USEROP_BATCH.contains("cross_check_contract"),
-        "cmd_sign_userop_batch.rs must call cross_check_contract per \
-         candidate to locate the matching inner tx."
+        "cmd_sign_userop_batch.rs must call cross_check_contract for \
+         every routed ERC-7730 trailer."
     );
     assert!(
         CMD_SIGN_USEROP_BATCH
-            .contains("let candidate_ok = crate::tx::erc7730::cross_check_contract("),
-        "batch dispatcher must compute per-candidate verdict into \
-         `candidate_ok` so the `check_true_into_sentinel` can \
-         double-evaluate without re-running the (expensive) keccak \
-         comparison."
+            .contains("let bind_ok = crate::tx::erc7730::cross_check_contract("),
+        "batch dispatcher must compute the ERC-7730 binding verdict \
+         once into `bind_ok` so the sentinel re-check is cheap."
     );
     assert!(
-        CMD_SIGN_USEROP_BATCH.contains(
-            "crate::fi::check_true_into_sentinel(\n                            || core::hint::black_box(candidate_ok),\n                        ) == crate::fi::OK_SENTINEL"
-        ) || CMD_SIGN_USEROP_BATCH
-            .contains("crate::fi::check_true_into_sentinel(|| core::hint::black_box(candidate_ok)) == crate::fi::OK_SENTINEL")
-        || CMD_SIGN_USEROP_BATCH.contains("check_true_into_sentinel(\n                            || core::hint::black_box(candidate_ok),"),
-        "batch dispatcher must check candidate_ok via sentinel idiom."
+        CMD_SIGN_USEROP_BATCH
+            .contains("check_true_into_sentinel(|| core::hint::black_box(bind_ok))"),
+        "batch dispatcher must check `bind_ok` via the sentinel idiom \
+         (parity with `cmd_sign_userop.rs:533-548`)."
     );
 }
 
 #[test]
 fn all_binding_sites_call_wait_random_before_sentinel() {
-    // Each of the three files must contain at least one
-    // `wait_random()` invocation immediately ahead of the sentinel
-    // compare (already validated structurally per-file above). This
-    // top-level test pins the invariant cardinality for the suite as
-    // a whole.
-    let total_sentinel_for_bindings = count_substr(
+    // Every binding cross-check site must wrap its verdict in
+    // `wait_random` + `check_true_into_sentinel(|| black_box(bind_ok))`.
+    // Three files emit such sites today:
+    //   * cmd_sign_userop.rs        — single-tx ERC-7730 binding
+    //   * cmd_sign_offchain.rs      — EIP-712 typed-data binding
+    //   * cmd_sign_userop_batch.rs  — per-tx ERC-7730 binding (wire v2)
+    let userop = count_substr(
         CMD_SIGN_USEROP,
         "check_true_into_sentinel(|| core::hint::black_box(bind_ok))",
-    ) + count_substr(
+    );
+    let offchain = count_substr(
         CMD_SIGN_OFFCHAIN,
         "check_true_into_sentinel(|| core::hint::black_box(eip712_bind_ok))",
     );
-    assert!(
-        total_sentinel_for_bindings >= 2,
-        "Phase 5 item 6 expected ≥2 sentinel-wrapped binding checks \
-         (sign_userop + sign_offchain). Got {}.",
-        total_sentinel_for_bindings
-    );
-    // batch dispatcher has the third sentinel check inside a loop;
-    // count it via its unique closure capture name.
-    let batch_count = count_substr(
+    let batch = count_substr(
         CMD_SIGN_USEROP_BATCH,
-        "core::hint::black_box(candidate_ok)",
+        "check_true_into_sentinel(|| core::hint::black_box(bind_ok))",
     );
     assert!(
-        batch_count >= 1,
-        "Phase 5 item 6 expected batch dispatcher to wrap \
-         per-candidate cross_check_contract verdict in a sentinel. \
-         Got {}.",
-        batch_count
+        userop >= 1,
+        "cmd_sign_userop.rs must keep its sentinel-wrapped binding check."
+    );
+    assert!(
+        offchain >= 1,
+        "cmd_sign_offchain.rs must keep its sentinel-wrapped binding check."
+    );
+    assert!(
+        batch >= 1,
+        "cmd_sign_userop_batch.rs must wrap the ERC-7730 binding check \
+         in `check_true_into_sentinel(|| black_box(bind_ok))`. Got {}.",
+        batch
     );
 }
