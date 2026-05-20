@@ -290,6 +290,13 @@ duress-pin = ["dual-se", "optiga-hw-counter"]
 # cross-check). Asserts E121 bumped + E120 untouched, real wallet still
 # unlocks. Stays LcsO=Creation. Use `make duress-provision-hw`.
 duress-provision-e2e = ["duress-pin"]
+# §32 P4/P5 INTERACTIVE UI harness. Compiles ONLY the duress-PIN setup
+# dialogs (`collect_duress_pin` / `choose_duress_wipe_mode`) — NOT the
+# dual-SE / OPTIGA storage stack — so the wizard dialogs can be driven on
+# the real OLED with keyboard-forwarded buttons (`make play-hw-duress-ui`)
+# without standing up a full dual-SE provision. main.rs short-circuits
+# into a dialog loop at boot. Pure UI; pairs with mock-se + ui-oled.
+duress-ui-test = []
 # Combined MCU page-124 + OPTIGA E120 + SE050 counter sync + desync
 # recovery e2e. Under dual-se with hw-counter, exercises the full PIN
 # lockout pipeline AND asserts all three counters stay in sync through

@@ -1086,6 +1086,49 @@ fn main() -> ! {
     #[cfg(feature = "decoy-flicker-test")]
     ui::seed_wizard::decoy_flicker_test_loop();
 
+    // §32 P4/P5 interactive UI harness. Short-circuits into a loop that
+    // drives JUST the duress-PIN setup dialogs on the real OLED — no SE,
+    // no wizard, no provisioning. Lets a bench operator validate the
+    // dialog rendering + button nav + the distinct-PIN reject + the
+    // wipe-mode chooser. Run: `make play-hw-duress-ui` (keyboard buttons
+    // forwarded via wallet_run_hw.py). The "main PIN" is fixed to
+    // 12345678 so the operator can verify the distinct-check rejects it.
+    #[cfg(feature = "duress-ui-test")]
+    unsafe {
+        use cortex_m_semihosting::hprintln;
+        use zeroize::Zeroize;
+        let main_pin: [u8; sphincs_tz_shared::PIN_LEN] = *b"12345678";
+        hprintln!("[DURESS-UI] harness ready. Main PIN = 12345678.");
+        hprintln!("[DURESS-UI] Try setting a duress PIN; enter 12345678 once to see the reject.");
+        loop {
+            ui::show_status("Duress UI test", "LR=start");
+            // Wait for any button to (re)start a pass.
+            let mut idle = || false;
+            let _ = ui::input().wait_button(&mut idle);
+
+            match ui::seed_wizard::collect_duress_pin(&main_pin) {
+                Some(mut p) => {
+                    hprintln!("[DURESS-UI] duress PIN accepted (distinct from main)");
+                    let wipe = ui::seed_wizard::choose_duress_wipe_mode();
+                    hprintln!("[DURESS-UI] wipe-on-duress = {}", wipe);
+                    ui::show_status(
+                        "Duress set",
+                        if wipe { "mode: WIPE" } else { "mode: DECOY" },
+                    );
+                    p.zeroize();
+                }
+                None => {
+                    hprintln!("[DURESS-UI] duress declined / exhausted -> random decoy");
+                    ui::show_status("Declined", "random decoy");
+                }
+            }
+            // Hold the result a moment, then loop for another pass.
+            for _ in 0..4_000_000u32 {
+                cortex_m::asm::nop();
+            }
+        }
+    }
+
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
     // Skipped in automated e2e tests which need non-interactive boot.

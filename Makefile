@@ -156,6 +156,30 @@ play-hw-display:
 	@echo "==> Starting interactive wallet (Ctrl-C to quit)..."
 	@python3 tools/wallet_run_hw.py
 
+# §32 P4/P5 interactive UI test — drive JUST the duress-PIN setup dialogs
+# on the real OLED with keyboard-forwarded buttons. No SE, no provisioning
+# (mock-se + duress-ui-test short-circuits into a dialog loop at boot).
+# Arrow keys via wallet_run_hw.py (semihosting /input, no gpio-buttons).
+play-hw-duress-ui:
+	@echo "==> Building §32 duress-PIN UI harness (mock-se, dialogs only)"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,debug-log,ui-oled,stm32u585,dev-testkey,duress-ui-test
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Starting interactive duress-UI harness (Ctrl-C to quit)..."
+	@python3 tools/wallet_run_hw.py
+
 # One-time chip hardening: set brown-out supervision + SRAM2 auto-erase
 # option bytes. Run once per device during provisioning; no need to
 # repeat unless the chip has been fully option-byte-reset.

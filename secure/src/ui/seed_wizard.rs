@@ -103,13 +103,13 @@ pub fn choose_setup_mode() -> WizardChoice {
 // §32 P4/P5 — duress (decoy) PIN setup dialogs
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "duress-pin")]
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
 use sphincs_tz_shared::PIN_LEN;
 
 /// Two-option yes/no chooser (mirrors `choose_setup_mode`'s navigation:
 /// L/R move the `>` cursor, long-Right selects, long-Left cancels = No).
 /// Returns `None` only on idle-timeout (caller treats as decline).
-#[cfg(feature = "duress-pin")]
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
 fn yes_no(title: &str) -> Option<bool> {
     let options = ["No", "Yes"];
     let mut idx: usize = 0;
@@ -152,7 +152,7 @@ fn yes_no(title: &str) -> Option<bool> {
 /// Bounded to 3 distinct-PIN attempts so a user repeatedly entering the
 /// main PIN (or mismatching) can't lock themselves in the dialog — after
 /// that it falls back to `None` (random decoy) and setup proceeds.
-#[cfg(feature = "duress-pin")]
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
 pub fn collect_duress_pin(main_pin: &[u8; PIN_LEN]) -> Option<[u8; PIN_LEN]> {
     use super::pin_entry::{enter_pin_with_confirm, PinEntryResult};
 
@@ -193,7 +193,7 @@ pub fn collect_duress_pin(main_pin: &[u8; PIN_LEN]) -> Option<[u8; PIN_LEN]> {
 /// than open the decoy wallet. `true` = wipe-on-duress. Only meaningful
 /// when a duress PIN was set; the caller persists the choice (default =
 /// decoy) before provisioning.
-#[cfg(feature = "duress-pin")]
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
 pub fn choose_duress_wipe_mode() -> bool {
     matches!(yes_no("Wipe on duress?"), Some(true))
 }
