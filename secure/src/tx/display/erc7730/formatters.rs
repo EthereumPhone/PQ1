@@ -310,6 +310,19 @@ fn render_token_amount(
     let p = pages.push_blank().map_err(|_| RenderErr::PageBudget)?;
     write_label_row(pages, p, field.label);
     let [_, r1, r2, foot] = pages.page_mut(p);
+    // Threshold check (Aragon/Coinbase Wallet/Rabby convention): when
+    // the descriptor supplies a `threshold` param and the on-chain
+    // value is greater-than-or-equal, render "unlimited <ticker>"
+    // instead of the digit string. BE byte arrays compare
+    // lexicographically — which is the same as numeric on full-width
+    // u256, so a direct `>=` over the raw bytes is correct.
+    if let Some(threshold) = params.threshold {
+        if value.0 >= *threshold {
+            write_unlimited_row(r1, ticker);
+            write_line(foot, "> next");
+            return Ok(());
+        }
+    }
     let fit = write_amount_two_rows(r1, r2, &value, decimals, 6, true, ascii_str(ticker));
     write_line(
         foot,
@@ -319,6 +332,20 @@ fn render_token_amount(
         },
     );
     Ok(())
+}
+
+/// Render `"unlimited <ticker>"` into a single 16-col OLED row. Used
+/// by `render_token_amount` when the descriptor's `threshold` param
+/// classifies the on-chain value as the approve-all sentinel.
+fn write_unlimited_row(row: &mut [u8; DISPLAY_COLS], ticker: &[u8]) {
+    let mut buf = [b' '; DISPLAY_COLS];
+    let prefix = b"unlimited ";
+    let n = core::cmp::min(prefix.len(), buf.len());
+    buf[..n].copy_from_slice(&prefix[..n]);
+    let room = buf.len() - n;
+    let take = core::cmp::min(ticker.len(), room);
+    buf[n..n + take].copy_from_slice(&ticker[..take]);
+    *row = buf;
 }
 
 fn render_nft_name(

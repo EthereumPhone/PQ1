@@ -294,39 +294,18 @@ fn diagnostic_dump_seed_corpus_path_offsets() {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// KNOWN BUG — `dbgen::erc7730` interns the first path program at pool
-// offset 0, but the on-device renderer treats `path_off == 0` as
-// "field has no path" (see `formatters::resolve_path`). Every
-// descriptor whose first interned path program ends up at offset 0
-// silently rejects with `RenderErr::Reject("7730 missing path")`, the
-// dispatcher surfaces a "7730 missing path" status banner, and the
-// user falls through to blind-sign — losing the entire clear-sign UX
-// for these descriptors. Confirmed by the
-// `diagnostic_dump_seed_corpus_path_offsets` test above:
+// `path_off == 0` collision fix landed in `dbgen::erc7730::Pool::new`:
+// the pool now reserves byte 0 with a 1-byte filler so the first
+// interned path program lands at offset 1. The on-device walker and
+// renderer's `path_off == 0` / `param_off == 0` "no path" sentinels
+// stay intact, and the descriptors that previously fell through to
+// blind-sign (weth.deposit, tether-usdt.transfer/approve, every
+// aave-v3-pool.* and circle-usdc-*) now render their full clear-sign
+// page sequence.
 //
-//   weth.json/deposit         → Amount path_off=0
-//   tether-usdt.json/approve  → Spender path_off=0
-//   tether-usdt.json/transfer → To      path_off=0
-//   aave-v3-pool.json/*       → first field path_off=0
-//   circle-usdc-*.json/*      → From    path_off=0
-//
-// Fix options (out of scope for this test commit; tracking via the
-// `should_panic` marker below):
-//   (a) host: have `dbgen::erc7730::Pool::new` push a 1-byte sentinel
-//       so offset 0 is unreachable. Bumps every interned offset by 1.
-//   (b) device: replace the `path_off == 0` sentinel with an
-//       `Option<u16>` or a dedicated `NO_PATH` constant outside the
-//       reachable pool range. Touches the wire format.
-//
-// Below are the three transaction render tests as the user wanted to
-// see them. They are written to PASS on the post-fix code path. Until
-// the bug is fixed they ride `#[should_panic(expected = ...)]` so:
-//   - The tree stays green on master.
-//   - When the bug is fixed, `should_panic` stops matching and the
-//     test fails — alerting whoever fixed it to remove the marker.
+// The three tests below assert the user-visible OLED text end-to-end.
 
 #[test]
-#[should_panic(expected = "7730 missing path")]
 fn positive_usdt_transfer_mainnet_renders_send_intent() {
     let res = build_seed();
     let entry = find_leaf(&res, "tether-usdt.json", 1);
@@ -398,7 +377,6 @@ fn positive_usdt_transfer_mainnet_renders_send_intent() {
 }
 
 #[test]
-#[should_panic(expected = "7730 missing path")]
 fn positive_usdt_approve_unlimited_renders_approve_intent() {
     let res = build_seed();
     let entry = find_leaf(&res, "tether-usdt.json", 1);
@@ -443,8 +421,11 @@ fn positive_usdt_approve_unlimited_renders_approve_intent() {
     // descriptor).
     let _spender_page = find_page_by_label(&pages, "Spender");
 
-    // Amount page — for U256::MAX with threshold set, the renderer
-    // surfaces "unlimited" rather than the full digit count.
+    // Amount page — for U256::MAX with the descriptor's threshold set,
+    // `render_token_amount` short-circuits the digit formatter and
+    // writes "unlimited <ticker>" on row 1. No `!AMOUNT OVERFLOW`
+    // banner, no truncated decimal soup — just the human-readable
+    // sentinel.
     let amount_page = find_page_by_label(&pages, "Amount");
     let amount_rows = page_strs(&pages, amount_page);
     let amount_blob = amount_rows.join("\n");
@@ -452,10 +433,17 @@ fn positive_usdt_approve_unlimited_renders_approve_intent() {
         amount_blob.to_lowercase().contains("unlimited"),
         "approve(MAX) should render 'unlimited', got:\n{amount_blob}",
     );
+    assert!(
+        amount_blob.contains("USDT"),
+        "unlimited row should carry the ticker, got:\n{amount_blob}",
+    );
+    assert!(
+        !amount_blob.contains("AMOUNT OVERFLOW"),
+        "threshold check must short-circuit before the overflow fallback, got:\n{amount_blob}",
+    );
 }
 
 #[test]
-#[should_panic(expected = "7730 missing path")]
 fn positive_weth_deposit_pulls_value_from_envelope() {
     let res = build_seed();
     let entry = find_leaf(&res, "weth.json", 1);
@@ -482,14 +470,20 @@ fn positive_weth_deposit_pulls_value_from_envelope() {
     assert_eq!(owner_r, "WETH");
     assert_eq!(contract_r, "WETH");
 
-    // Amount page — 0.5 ETH at 18 decimals. The amount formatter prints
-    // a decimal split across two rows; the integer "0" + decimal "5"
-    // should both be visible somewhere on the page.
+    // Amount page — 0.5 ETH at 18 decimals. `write_amount_two_rows`
+    // splits the integer / decimal across two rows on small values, so
+    // the rendered page reads `"Amount" / "0" / ".5 ETH" / "> next"`.
+    // Both halves must be visible somewhere on the page, and the ETH
+    // unit must appear.
     let amount_page = find_page_by_label(&pages, "Amount");
-    let amount_blob = page_strs(&pages, amount_page).join("\n");
+    let amount_rows = page_strs(&pages, amount_page);
+    let amount_blob = amount_rows.join("\n");
+    let single_row = amount_blob.contains("0.5") || amount_blob.contains("0,5");
+    let split_rows = amount_rows.iter().any(|r| r.trim_end() == "0")
+        && amount_rows.iter().any(|r| r.contains(".5") || r.contains(",5"));
     assert!(
-        amount_blob.contains("0.5") || amount_blob.contains("0,5"),
-        "weth.deposit amount should print '0.5 ETH', got:\n{amount_blob}",
+        single_row || split_rows,
+        "weth.deposit amount should print '0.5 ETH' (single- or split-row), got:\n{amount_blob}",
     );
     assert!(
         amount_blob.contains("ETH"),
