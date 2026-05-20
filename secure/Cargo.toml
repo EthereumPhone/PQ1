@@ -43,6 +43,9 @@ pqsigner-erc7730  = { workspace = true }
 
 # Crypto (all no_std, no alloc)
 sphincs-c10 = { workspace = true }
+# First-order masked SHA-256 building blocks — only linked for the
+# `bench-masked-sha` measurement firmware (work-todo §18 SHAKE-vs-SHA2).
+masked-sha2 = { workspace = true, optional = true }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
 aes = { version = "0.8", default-features = false }
 cmac = { version = "0.7", default-features = false }
@@ -315,6 +318,13 @@ saes-dhuk = ["stm32u585"]
 # with `debug-log` at the make-target level (see `saes-self-test-hw`).
 # Use `make saes-self-test-hw`.
 saes-self-test = ["saes-dhuk"]
+
+# Masked-SHA-256 overhead bench (work-todo §18 SHAKE-vs-SHA2 #2
+# measurement). Runs once at boot, DWT-times the masked gates +
+# HASH-peripheral / sha2 baselines, prints the projected masked-block
+# slowdown, then SYS_EXITs. Pairs with hw-sha256 (implied by stm32u585)
+# so the HASH-peripheral baseline is real. Use `make bench-masked-sha-hw`.
+bench-masked-sha = ["stm32u585", "dep:masked-sha2"]
 # F-24 stage E Phase 1 — hardware flicker validation harness for the
 # decoy-mnemonic-frame defense. Short-circuits `main()` into a forever-
 # loop that renders page 0 of a fixed test mnemonic interleaved with

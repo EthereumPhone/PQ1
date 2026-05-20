@@ -1190,6 +1190,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+name = "masked-sha2"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "maybe-async-cfg"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2042,6 +2049,7 @@ dependencies = [
  "fw-manifest",
  "hex",
  "hmac",
+ "masked-sha2",
  "png",
  "pqsigner-aa",
  "pqsigner-domain",

@@ -1,0 +1,21 @@
+[package]
+name = "masked-sha2"
+version = "0.1.0"
+edition.workspace = true
+
+# First-order (2-share) boolean-masked SHA-256 building blocks, used to
+# MEASURE the masking overhead vs the STM32U585 HASH peripheral (work-todo
+# §18 SHAKE-vs-SHA2 benchmark, #2 measurement). Pure no_std logic, generic
+# over an RNG closure; the secure-world bench harness wires in the TRNG.
+#
+# NOT a production signer (yet). This crate exists to answer "is masked
+# SHA-256 too slow?" before committing to the SHAKE migration. If the
+# measurement says SHA-256 masking is viable, these primitives graduate
+# into the signing path; if not, the SHAKE arm of the benchmark wins.
+
+[dependencies]
+
+[dev-dependencies]
+# Plain SHA-256 oracle: the masked compression's output, once unmasked,
+# must equal this byte-for-byte over thousands of random inputs.
+sha2 = { version = "0.10", default-features = false }

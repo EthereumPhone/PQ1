@@ -136,6 +136,13 @@ mod zk;
 #[cfg(feature = "factory-provisioning")]
 mod factory_provisioning;
 
+/// Masked-SHA-256 overhead bench (`bench-masked-sha` feature). Runs
+/// once at boot, measures the first-order-masked gate cost vs the HASH
+/// peripheral, prints the projected slowdown, halts. See module docs
+/// + work-todo §18 (SHAKE-vs-SHA2 #2 measurement).
+#[cfg(feature = "bench-masked-sha")]
+mod bench_masked_sha;
+
 // ── Test-only re-includes for the `secure-nsc-sign-userop` slice ──
 //
 // `nsc` itself is `#[cfg(not(test))]` because most of its files pull in
@@ -971,6 +978,13 @@ fn main() -> ! {
         d.draw_line(2, "BOOT 5 rng OK");
         d.flush();
     }
+
+    // Masked-SHA-256 overhead bench (work-todo §18). Runs once at boot
+    // after the HASH peripheral clock + TRNG are up, times the masked
+    // gates vs the HASH peripheral, prints the projection, SYS_EXITs.
+    // Never returns. Does nothing unless `bench-masked-sha` is enabled.
+    #[cfg(feature = "bench-masked-sha")]
+    bench_masked_sha::run_and_halt();
 
     // SAES self-test (Tier 1 of work-todo #7). Runs once at boot,
     // halts on PASS/FAIL. Does nothing unless `saes-self-test` is

@@ -53,6 +53,10 @@ members = [
     "bip39",
     "fwmeasure",
     "sphincs-c10",
+    # First-order boolean-masked SHA-256 building blocks. Measures the
+    # masking overhead vs the HASH peripheral to settle the
+    # SHAKE-vs-SHA2 question (work-todo §18). Pure no_std logic.
+    "masked-sha2",
     # FI hardening primitives shared by `secure` and `fsbl` (sentinels,
     # check_true_into_sentinel, wait_random_loop). RNG-independent —
     # callers supply their own RNG via a closure.
@@ -96,6 +100,7 @@ pqsigner-hal      = { path = "hal" }
 sphincs-tz-shared = { path = "shared" }
 sphincs-tz-bip39  = { path = "bip39" }
 sphincs-c10       = { path = "sphincs-c10" }
+masked-sha2       = { path = "masked-sha2" }
 fw-manifest       = { path = "fw-manifest" }
 pqsigner-fi       = { path = "pqsigner-fi" }
 bls12_381 = { package = "bls12_381_pka", path = "bls12_381_pka", default-features = false, features = ["groups", "pairings"] }

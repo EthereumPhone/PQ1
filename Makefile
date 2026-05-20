@@ -2248,6 +2248,46 @@ pin-diag-boot-hw:
 # Cross-boot check: run this twice on the same board — the DHUK
 # fingerprint must be byte-identical across reboots. Running on
 # different boards should yield different fingerprints.
+# Masked-SHA-256 overhead bench (work-todo §18 SHAKE-vs-SHA2 #2
+# measurement). Builds the bench firmware, flashes, configures TZ,
+# streams the DWT-timed results over semihosting. Reports the
+# projected masked-SHA-256-block slowdown vs the HASH peripheral.
+#
+# `e2e-test` escapes the production fence + permits `mock-se` (the
+# bench short-circuits before any SE access). `ui-noop` is headless.
+# `bench-masked-sha` implies stm32u585 (→ hw-sha256), so the
+# HASH-peripheral baseline is real silicon, not software.
+#
+# Pass: streams `[BENCH] ...` lines ending in
+#       `=== masked-sha2 bench complete ===`, then SYS_EXITs.
+bench-masked-sha-hw:
+	@echo "==> Building masked-SHA-256 overhead bench firmware..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features bench-masked-sha,debug-log,ui-noop,e2e-test,mock-se
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running masked-SHA-256 bench (streaming results)..."
+	@log=$$(mktemp -t bench-masked-sha.XXXXXX.log); \
+	trap 'rm -f "$$log"' EXIT; \
+	probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1 | tee "$$log"; \
+	echo "===================================="; \
+	if grep -q "=== masked-sha2 bench complete ===" "$$log"; then \
+		echo "==> bench-masked-sha: DONE"; exit 0; \
+	else \
+		echo "==> bench-masked-sha: FAIL (missing completion marker)"; exit 1; \
+	fi
+
 saes-self-test-hw:
 	@echo "==> Building SAES Tier-1 self-test firmware..."
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
