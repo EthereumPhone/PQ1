@@ -100,6 +100,105 @@ pub fn choose_setup_mode() -> WizardChoice {
 }
 
 // ---------------------------------------------------------------------------
+// §32 P4/P5 — duress (decoy) PIN setup dialogs
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "duress-pin")]
+use sphincs_tz_shared::PIN_LEN;
+
+/// Two-option yes/no chooser (mirrors `choose_setup_mode`'s navigation:
+/// L/R move the `>` cursor, long-Right selects, long-Left cancels = No).
+/// Returns `None` only on idle-timeout (caller treats as decline).
+#[cfg(feature = "duress-pin")]
+fn yes_no(title: &str) -> Option<bool> {
+    let options = ["No", "Yes"];
+    let mut idx: usize = 0;
+    timeout::reset_activity();
+    loop {
+        let d = display();
+        d.clear();
+        d.draw_line(0, title);
+        for (i, label) in options.iter().enumerate() {
+            let mut row = [b' '; DISPLAY_COLS];
+            row[0] = if i == idx { b'>' } else { b' ' };
+            let lb = label.as_bytes();
+            let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
+            row[2..2 + max].copy_from_slice(&lb[..max]);
+            d.draw_line(i + 1, super::ascii_str(&row));
+        }
+        d.draw_line(3, "L=- R=+ LR=ok");
+        d.flush();
+
+        let mut idle = || timeout::is_idle();
+        let event = match input().wait_button(&mut idle) {
+            Some(ev) => ev,
+            None => return None,
+        };
+        timeout::reset_activity();
+        match event {
+            (Button::Right, Press::Short) => idx = (idx + 1) % options.len(),
+            (Button::Left, Press::Short) => idx = (idx + options.len() - 1) % options.len(),
+            (Button::Right, Press::Long) => return Some(idx == 1),
+            (Button::Left, Press::Long) => return Some(false), // cancel = No
+        }
+    }
+}
+
+/// §32 P4: optionally collect a duress (decoy) PIN at first-boot setup.
+/// Returns `Some(pin)` if the user set one, confirmed-DISTINCT from the
+/// main PIN; `None` to decline — the caller then provisions a decoy with
+/// a RANDOM PIN (always-provision preserves deniability either way).
+///
+/// Bounded to 3 distinct-PIN attempts so a user repeatedly entering the
+/// main PIN (or mismatching) can't lock themselves in the dialog — after
+/// that it falls back to `None` (random decoy) and setup proceeds.
+#[cfg(feature = "duress-pin")]
+pub fn collect_duress_pin(main_pin: &[u8; PIN_LEN]) -> Option<[u8; PIN_LEN]> {
+    use super::pin_entry::{enter_pin_with_confirm, PinEntryResult};
+
+    match yes_no(" Set duress PIN?") {
+        Some(true) => {}
+        _ => return None,
+    }
+
+    for _ in 0..3 {
+        show_status("Duress PIN", "must differ");
+        match enter_pin_with_confirm() {
+            PinEntryResult::Pin(p) => {
+                // Constant-time-ish distinct check vs the main PIN.
+                let mut diff: u8 = 0;
+                for i in 0..PIN_LEN {
+                    diff |= p[i] ^ main_pin[i];
+                }
+                if diff == 0 {
+                    let mut pp = p;
+                    pp.zeroize();
+                    show_status("Same as main", "try again");
+                    continue;
+                }
+                return Some(p);
+            }
+            PinEntryResult::Mismatch => {
+                show_status("PIN mismatch", "try again");
+                continue;
+            }
+            PinEntryResult::Cancelled | PinEntryResult::IdleWipe => return None,
+        }
+    }
+    // Exhausted attempts → decline (random decoy PIN).
+    None
+}
+
+/// §32 P5: ask whether a duress-PIN entry should WIPE the device rather
+/// than open the decoy wallet. `true` = wipe-on-duress. Only meaningful
+/// when a duress PIN was set; the caller persists the choice (default =
+/// decoy) before provisioning.
+#[cfg(feature = "duress-pin")]
+pub fn choose_duress_wipe_mode() -> bool {
+    matches!(yes_no("Wipe on duress?"), Some(true))
+}
+
+// ---------------------------------------------------------------------------
 // 2. Show 24-word mnemonic across pages
 // ---------------------------------------------------------------------------
 

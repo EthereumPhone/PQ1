@@ -3270,6 +3270,16 @@ fn main() -> ! {
             secure_log!("[S] Unprovisioned — running first-boot wizard");
             let (mnemonic, mut pin) = run_first_boot_wizard();
 
+            // §32 P4: optionally collect a duress (decoy) PIN — ONLY on
+            // this unprovisioned first-boot path (never on the
+            // already-provisioned unlock path below). Declined / exhausted
+            // → None → a random decoy PIN is provisioned anyway
+            // (always-provision preserves deniability).
+            #[cfg(feature = "duress-pin")]
+            let mut duress_pin = ui::seed_wizard::collect_duress_pin(&pin);
+            #[cfg(not(feature = "duress-pin"))]
+            let duress_pin: Option<[u8; sphincs_tz_shared::PIN_LEN]> = None;
+
             // Debug-only: log the mnemonic and the resulting verifying key.
             // This is gated behind `debug-log` so production builds (which
             // omit that feature) leak nothing on the semihosting channel.
@@ -3291,7 +3301,15 @@ fn main() -> ! {
 
             ui::show_status("Provisioning", "...");
 
-            crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin, None);
+            crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin, duress_pin.as_ref());
+            #[cfg(feature = "duress-pin")]
+            {
+                use zeroize::Zeroize;
+                if let Some(ref mut dp) = duress_pin {
+                    dp.zeroize();
+                    crate::fi::zeroize_barrier();
+                }
+            }
             // Admin-wipe credential + canary selftest are installed
             // inside SE050's provision() for any stm32u585 build that
             // includes SE050 (standalone or dual-SE). A selftest failure

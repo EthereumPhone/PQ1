@@ -1115,3 +1115,26 @@ fn negative_ns_flash_base_constants_match_proto_layout() {
     assert!(MAIN_SRC.contains("const NS_FLASH_BASE: u32 = 0x0020_0000;"));
     assert!(MAIN_SRC.contains("const NS_FLASH_BASE: u32 = 0x0810_0000;"));
 }
+
+#[test]
+fn positive_duress_pin_collected_only_on_first_boot_and_threaded() {
+    // §32 P4: the duress-PIN dialog must run ONLY on the unprovisioned
+    // first-boot path (so it doesn't re-prompt on every unlock), and the
+    // collected PIN must be threaded into provisioning. Pin both: the
+    // collect call + that provision_from_mnemonic receives duress_pin
+    // (NOT the hardcoded `None` the e2e auto-provision path passes).
+    assert!(
+        MAIN_SRC.contains("ui::seed_wizard::collect_duress_pin(&pin)"),
+        "first-boot wizard must collect a duress PIN",
+    );
+    assert!(
+        MAIN_SRC.contains("&pin, duress_pin.as_ref())"),
+        "the wizard's provision_from_mnemonic must thread the collected duress PIN",
+    );
+    // Belt-and-braces: the collect call sits AFTER run_first_boot_wizard
+    // (the unprovisioned branch), not in the already-provisioned unlock
+    // loop which uses enter_pin() directly.
+    let collect_pos = MAIN_SRC.find("collect_duress_pin(&pin)").expect("collect present");
+    let wizard_pos = MAIN_SRC.find("run_first_boot_wizard();").expect("wizard present");
+    assert!(collect_pos > wizard_pos, "duress collection must follow run_first_boot_wizard");
+}

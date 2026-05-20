@@ -1078,3 +1078,29 @@ fn negative_frame_loop_uses_constant_time_render() {
         "frame loop must call render_mnemonic_page (CT path) for both real and decoy"
     );
 }
+
+#[test]
+fn positive_collect_duress_pin_must_differ_from_main() {
+    // §32 P4: the duress PIN MUST be confirmed-distinct from the main
+    // PIN (else the duress credential would be a no-op alias). Pin the
+    // constant-time-ish XOR-accumulate distinct check + the reject path.
+    assert!(
+        WIZARD_SRC.contains("diff |= p[i] ^ main_pin[i];"),
+        "collect_duress_pin must compare the duress PIN against the main PIN",
+    );
+    assert!(
+        WIZARD_SRC.contains("if diff == 0 {"),
+        "collect_duress_pin must reject a duress PIN equal to the main PIN",
+    );
+}
+
+#[test]
+fn positive_collect_duress_pin_is_bounded() {
+    // §32 P4: the distinct-PIN retry loop is bounded (3 attempts) so a
+    // user can't lock themselves in the dialog — after that it declines
+    // (None → random decoy, always-provision preserved).
+    assert!(
+        WIZARD_SRC.contains("for _ in 0..3 {"),
+        "collect_duress_pin must bound its retry loop to 3 attempts",
+    );
+}
