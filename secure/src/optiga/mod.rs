@@ -1357,14 +1357,14 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// E2E VALIDATION ONLY (`duress-provision-e2e`): authenticate the
-    /// DURESS AuthRef (F1D8, auto-state path firing LUC(E121)) with
-    /// `duress_pin` and read back the decoy OPTIGA half (F1D9). Mirrors
-    /// the hw-counter arm of `authenticate_and_read` but for the duress
-    /// credential set. Used by the P2 silicon-validation recipe to prove
-    /// the production `provision_duress` wrote a recoverable, correctly-
-    /// gated decoy. NOT a production unlock path — that is P3.
-    #[cfg(feature = "duress-provision-e2e")]
+    /// Authenticate the DURESS AuthRef (F1D8, auto-state path firing
+    /// LUC(E121)) with `duress_pin` and read back the decoy OPTIGA half
+    /// (F1D9). Mirrors the hw-counter arm of `authenticate_and_read` but
+    /// for the duress credential set. Returns `Err` (before the read) if
+    /// the verify fails — so a real-PIN entry costs exactly one duress
+    /// verify here, no read. Used by `DualSecureElement::unlock_duress`
+    /// (P3) and the P2 silicon-validation recipe.
+    #[cfg(feature = "duress-pin")]
     pub unsafe fn duress_read_half(&mut self, duress_pin: &[u8; 8]) -> Result<[u8; 32], OptigaError> {
         use zeroize::Zeroize;
         self.ensure_shield()?;
@@ -1388,6 +1388,31 @@ impl OptigaTrustM {
             apdu::OID_DURESS_ENTROPY, 0, 32, &mut half_o,
         )?;
         Ok(half_o)
+    }
+
+    /// Verify-ONLY against the DURESS AuthRef (F1D8, auto-state, fires
+    /// LUC(E121)) — no read. The §32 P3 timing PAD: on a duress-correct
+    /// unlock the real F1D0 verify is skipped (so E120 never drifts), and
+    /// this matched-LUC verify stands in for it as a byte-for-byte timing
+    /// twin (validated on silicon 2026-05-20). `Ok(())` on success.
+    #[cfg(feature = "duress-pin")]
+    pub unsafe fn duress_verify(&mut self, duress_pin: &[u8; 8]) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+        self.ensure_shield()?;
+        let mut nonce = [0u8; 16];
+        apdu::get_random_auto_state(
+            &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &mut nonce,
+        )?;
+        let mut pin_secret = Self::derive_pin_secret(duress_pin);
+        let mut hmac = Self::hmac_sha256(&pin_secret, &nonce);
+        pin_secret.zeroize();
+        let vr = apdu::hmac_verify_auto_state(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_DURESS_AUTH_REF, apdu::OID_SESSION, &nonce, &hmac,
+        );
+        nonce.zeroize();
+        hmac.zeroize();
+        vr
     }
 
     /// PROBE ONLY: read an arbitrary LUC counter OID's `(current, limit)`.

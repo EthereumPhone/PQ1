@@ -501,6 +501,25 @@ pub unsafe fn gated_unlock(
     // on the other side of the call would also defend a fault on the
     // result code's arrival back into r0.
     crate::fi::wait_random();
+    // §32 P3 — duress-first dispatch (timing-uniform). Try the DECOY
+    // credential first; on a match, run a matched-LUC pad (a 2nd duress
+    // verify, standing in for the SKIPPED real verify so E120 never
+    // drifts) and return the decoy master. On no match, fall through to
+    // the real unlock. Both correct paths execute the same op-count
+    // (4 SE verifies + 2 reads) so an observer cannot tell real-correct
+    // from duress-correct by total unlock latency (deniability). A
+    // duress-correct unlock resets the MCU counter exactly like a real
+    // success (handled by the shared post-match logic below) — else the
+    // lockout state would distinguish duress from real.
+    #[cfg(feature = "duress-pin")]
+    let result = match se.unlock_duress(pin) {
+        Ok(m) => {
+            se.duress_pad(pin);
+            Ok(m)
+        }
+        Err(_) => se.unlock(pin),
+    };
+    #[cfg(not(feature = "duress-pin"))]
     let result = se.unlock(pin);
     crate::fi::wait_random();
 

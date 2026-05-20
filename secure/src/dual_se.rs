@@ -201,6 +201,65 @@ impl WalletStore for DualSecureElement {
         self.optiga.duress_is_provisioned() && self.se050.duress_is_provisioned()
     }
 
+    /// §32 P3: attempt to unlock the DECOY wallet with `pin`. Reads both
+    /// decoy halves (OPTIGA F1D9 via F1D8 auto-state auth; SE050
+    /// `DURESS_ENTROPY_OBJ` via the duress UserID), reconstructs the decoy
+    /// entropy, and returns the decoy master. Returns `Err(PinIncorrect)`
+    /// if `pin` is not the duress PIN — the caller (`gated_unlock`) then
+    /// falls through to the real `unlock`.
+    ///
+    /// Timing: BOTH chips' duress verifies run even when the first fails
+    /// (no short-circuit), mirroring the three-counter-lockstep of the
+    /// real `unlock` and keeping the op-count uniform across real/duress
+    /// entries. The OPTIGA verify fires only LUC(E121) — the real E120 is
+    /// never touched on a duress entry, so no lockout drift.
+    #[cfg(feature = "duress-pin")]
+    fn unlock_duress(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+        let ro = unsafe { self.optiga.duress_read_half(pin) };
+        let re = self.se050.duress_read_half(pin);
+        match (ro, re) {
+            (Ok(mut half_o), Ok(mut half_e)) => {
+                let mut full = xor_32(&half_o, &half_e);
+                half_o.zeroize();
+                crate::fi::zeroize_barrier();
+                half_e.zeroize();
+                crate::fi::zeroize_barrier();
+                let decoy_master = crypto::kdf(b"sphincs-master", &full, 0);
+                let blob = crypto::encrypt_entropy_blob(&full, &decoy_master);
+                self.entropy_blob_cache.copy_from_slice(&blob);
+                self.blob_cached.set_true();
+                full.zeroize();
+                crate::fi::zeroize_barrier();
+                secure_log!("[DUAL/duress] decoy wallet unlocked");
+                Ok(decoy_master)
+            }
+            (other_o, other_e) => {
+                if let Ok(mut h) = other_o {
+                    h.zeroize();
+                    crate::fi::zeroize_barrier();
+                }
+                if let Ok(mut h) = other_e {
+                    h.zeroize();
+                    crate::fi::zeroize_barrier();
+                }
+                Err(UnlockError::PinIncorrect)
+            }
+        }
+    }
+
+    /// §32 P3 timing PAD: run one duress verify on each chip (no read).
+    /// Called on a duress-correct unlock to replace the SKIPPED real
+    /// verify so the total op-count matches a real unlock (4 verifies +
+    /// 2 reads either way). The OPTIGA verify is the matched-LUC twin of
+    /// the real F1D0 verify; the SE050 verify twins the real UserID
+    /// verify. Best-effort — a transient failure here doesn't fail the
+    /// already-successful unlock; it only perturbs the timing pad.
+    #[cfg(feature = "duress-pin")]
+    fn duress_pad(&mut self, pin: &[u8; 8]) {
+        let _ = unsafe { self.optiga.duress_verify(pin) };
+        let _ = self.se050.duress_verify(pin);
+    }
+
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
         // Three-counter lockstep: call SE050 on every PIN attempt,
         // even when OPTIGA rejects it, so SE050's UserID silicon

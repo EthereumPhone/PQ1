@@ -91,6 +91,20 @@ pub trait WalletStore {
         false
     }
 
+    /// §32 P3: attempt to unlock the DECOY wallet with `pin`. Returns the
+    /// decoy master on a duress-PIN match, else `Err(PinIncorrect)` so the
+    /// caller falls through to the real [`unlock`](Self::unlock). Default
+    /// `Err(PinIncorrect)` — backends without a duress path simply never
+    /// match, so `gated_unlock` always proceeds to the real unlock.
+    fn unlock_duress(&mut self, _pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+        Err(UnlockError::PinIncorrect)
+    }
+
+    /// §32 P3 timing pad: run one duress verify per chip (no read) on a
+    /// duress-correct unlock to keep the total op-count identical to a
+    /// real unlock. Default no-op (no duress credential to verify).
+    fn duress_pad(&mut self, _pin: &[u8; 8]) {}
+
     /// Verify PIN and return the 32-byte master secret on success.
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError>;
 

@@ -281,6 +281,29 @@ fn positive_pre_commit_pattern_in_gated_unlock() {
 }
 
 #[test]
+fn positive_gated_unlock_duress_first_dispatch() {
+    // §32 P3: gated_unlock must try the DECOY credential first and only
+    // fall through to the real unlock on no-match — the ordering that
+    // lets the duress path SKIP the real verify (no E120 drift) while the
+    // pad keeps timing uniform. Pin the dispatch shape in source.
+    assert!(
+        NSC_MOD_SRC.contains("se.unlock_duress(pin)"),
+        "gated_unlock must attempt the duress credential (unlock_duress)",
+    );
+    assert!(
+        NSC_MOD_SRC.contains("se.duress_pad(pin)"),
+        "gated_unlock must run the timing pad on a duress match",
+    );
+    // The duress branch must be tried BEFORE the real unlock so a duress
+    // match can skip the real verify. Verify unlock_duress appears before
+    // the fall-through `se.unlock(pin)` in the dispatch.
+    let dpos = NSC_MOD_SRC.find("se.unlock_duress(pin)").expect("unlock_duress present");
+    let rpos = NSC_MOD_SRC[dpos..].find("Err(_) => se.unlock(pin)")
+        .expect("real unlock must be the fall-through arm");
+    assert!(rpos > 0, "real unlock must be the Err fall-through of unlock_duress");
+}
+
+#[test]
 fn positive_gated_unlock_is_unsafe_fn() {
     // Calling gated_unlock requires exclusive access to the static SE
     // driver — encoded as `unsafe fn` so a call site has to spell out

@@ -405,13 +405,12 @@ impl Se050 {
         }
     }
 
-    /// E2E VALIDATION ONLY (`duress-provision-e2e`): authenticate the
-    /// duress UserID with `duress_pin` and read back the decoy SE050 half
-    /// (`DURESS_ENTROPY_OBJ`). Mirrors `authenticate_and_read` for the
-    /// duress credential. Used by the P2 silicon-validation recipe to
-    /// prove the production `provision_duress` wrote a recoverable,
-    /// correctly-gated decoy. NOT a production unlock path — that is P3.
-    #[cfg(feature = "duress-provision-e2e")]
+    /// Authenticate the duress UserID with `duress_pin` and read back the
+    /// decoy SE050 half (`DURESS_ENTROPY_OBJ`). Mirrors
+    /// `authenticate_and_read` for the duress credential. Returns `Err`
+    /// (before the read, session closed) if the verify fails. Used by
+    /// `DualSecureElement::unlock_duress` (P3) + the P2 validation recipe.
+    #[cfg(feature = "duress-pin")]
     pub fn duress_read_half(&mut self, duress_pin: &[u8]) -> Result<[u8; 32], Se050Error> {
         self.init()?;
         unsafe {
@@ -430,6 +429,21 @@ impl Se050 {
                 Ok(_) => Err(Se050Error::Transport),
                 Err(e) => Err(e),
             }
+        }
+    }
+
+    /// Verify-ONLY against the duress UserID — no read (session opened,
+    /// verified, closed). The SE050 half of the §32 P3 timing PAD: stands
+    /// in for the skipped real-UserID verify on a duress-correct unlock so
+    /// the total op-count matches a real unlock.
+    #[cfg(feature = "duress-pin")]
+    pub fn duress_verify(&mut self, duress_pin: &[u8]) -> Result<(), Se050Error> {
+        self.init()?;
+        unsafe {
+            let sid = apdu::create_session(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ)?;
+            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, duress_pin);
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+            r
         }
     }
 

@@ -1490,6 +1490,30 @@ fn negative_dual_se_duress_no_full_entropy_to_a_single_chip() {
 }
 
 #[test]
+fn positive_dual_se_unlock_duress_no_short_circuit_and_xor_reconstruct() {
+    // §32 P3: unlock_duress must call BOTH chips' duress_read_half via
+    // separate let-bindings (NOT `?` short-circuit) so a real-PIN entry
+    // costs the same SE op-count on both chips as a duress entry — the
+    // timing-uniformity property. And it must reconstruct the decoy
+    // entropy by XOR of the two halves (invariant #1 for the decoy).
+    assert!(
+        DUAL_SE_SRC.contains("let ro = unsafe { self.optiga.duress_read_half(pin) };")
+            && DUAL_SE_SRC.contains("let re = self.se050.duress_read_half(pin);"),
+        "unlock_duress must read both halves into bindings (no `?` short-circuit) for timing uniformity",
+    );
+    assert!(
+        DUAL_SE_SRC.contains("let mut full = xor_32(&half_o, &half_e);"),
+        "unlock_duress must reconstruct the decoy entropy by XOR of both halves",
+    );
+    // The pad must hit BOTH chips so it twins the real unlock's two verifies.
+    assert!(
+        DUAL_SE_SRC.contains("self.optiga.duress_verify(pin)")
+            && DUAL_SE_SRC.contains("self.se050.duress_verify(pin)"),
+        "duress_pad must verify on both chips to match the real unlock's op-count",
+    );
+}
+
+#[test]
 fn positive_crypto_duress_always_provisions_decoy() {
     // §32: always-provision is load-bearing for deniability — the wizard
     // must provision a decoy even when the user declines (random PIN),
