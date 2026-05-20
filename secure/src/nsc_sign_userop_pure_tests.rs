@@ -1078,6 +1078,20 @@ fn negative_slice_pins_safe_downgrade_mitigation_gate() {
 }
 
 #[test]
+fn negative_slice_pins_safe_exec_decode_gate() {
+    // Safe `execTransaction`: when the inner calldata selector matches
+    // and the calldata is long enough to satisfy the ABI head, a
+    // successful exec decode is MANDATORY. A parse failure (malformed,
+    // DelegateCall, non-canonical address, …) must refuse the sign
+    // rather than fall through to generic blind-sign — letting an
+    // attacker hide intent behind a Safe-shaped call would defeat the
+    // point of the Safe-aware renderer.
+    assert!(CMD_SIGN_USEROP_SRC.contains("EXEC_TRANSACTION_SELECTOR"));
+    assert!(CMD_SIGN_USEROP_SRC.contains("EXEC_TRANSACTION_MIN_CALLDATA_LEN"));
+    assert!(CMD_SIGN_USEROP_SRC.contains("safe_exec_verified.is_none()"));
+}
+
+#[test]
 fn negative_slice_checks_pin_verified_before_signing() {
     // CLAUDE.md invariant #2: hardware PIN gating. The dispatcher's
     // unlock check must fire before any signing path. Pin its

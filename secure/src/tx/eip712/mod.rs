@@ -93,7 +93,7 @@ pub fn final_digest(domain_separator: &[u8; 32], struct_hash: &[u8; 32]) -> [u8;
 // ---------------------------------------------------------------------------
 
 /// Errors that the protocol-specific decoder can return.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Eip712Error {
     /// One of the byte-encoded enum fields was outside its valid range.
     EnumOutOfRange,
@@ -102,4 +102,20 @@ pub enum Eip712Error {
     /// from pairing a legitimate cross-chain proof with a mismatched
     /// domain-separator bundle.
     ChainIdMismatch,
+    /// Calldata is shorter than the minimum required by the function's
+    /// fixed-head ABI encoding.
+    ShortInput,
+    /// First four bytes of the calldata don't match the expected selector.
+    WrongSelector,
+    /// An ABI address word had non-zero bytes in its top 12-byte padding
+    /// region. Solidity accepts non-canonical addresses on input but the
+    /// firmware rejects them so the on-device display can never diverge
+    /// from the on-chain interpretation.
+    NonCanonicalAddress,
+    /// A `uint256` offset / length word had bits beyond the low 32, or
+    /// the resolved offset would land outside the calldata.
+    OffsetOverflow,
+    /// A dynamic tail (the bytes payload that an offset points to) is
+    /// not fully present inside the calldata.
+    TruncatedDynamic,
 }

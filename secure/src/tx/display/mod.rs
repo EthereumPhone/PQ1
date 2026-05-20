@@ -42,7 +42,7 @@ pub use eip1271::{render_eip1271_personal_sign_pages, render_eip1271_raw32_pages
 pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;
 #[cfg(not(test))]
-pub use safe_display::render_safe_v1_pages;
+pub use safe_display::{render_safe_exec_pages, render_safe_v1_pages};
 pub use slot_rotation::build_slot_rotation_pages;
 pub use value_transfer::render_pages;
 
@@ -194,6 +194,7 @@ pub fn pick_sign_pages(
     v3: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
     v1: Option<&crate::zk::VerifiedClearSignV1>,
     safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
+    safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
     erc7730: Option<&crate::tx::erc7730::VerifiedDescriptor<'_>>,
     erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
     selector: Option<&crate::selectors::SelectorMeta<'_>>,
@@ -234,6 +235,22 @@ pub fn pick_sign_pages(
             if m.contract == inner_to { Some(m) } else { None }
         });
         return render_safe_v1_pages(safe, inner_meta, resolver);
+    }
+    if let Some(exec) = safe_exec {
+        // Same address-match rule for the exec path: the outer ERC-20
+        // metadata bundle only applies when its contract address matches
+        // the decoded inner `to`. This pairs with the approveHash branch
+        // above so both Safe surfaces handle ERC-20 attribution
+        // consistently.
+        let inner_meta: Option<&crate::erc20::bundle::Erc20Metadata<'_>> =
+            erc20.and_then(|m| {
+                if m.contract == exec.decoded.to {
+                    Some(m)
+                } else {
+                    None
+                }
+            });
+        return render_safe_exec_pages(exec, inner_meta, resolver);
     }
     if let Some(d) = erc7730 {
         match erc7730::render_erc7730_pages(tx, inner_data, d, erc20, resolver) {

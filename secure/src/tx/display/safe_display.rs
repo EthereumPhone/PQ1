@@ -49,12 +49,49 @@ use crate::erc20::bundle::Erc20Metadata;
 use crate::erc20::calldata::{is_unlimited_amount, parse_erc20_calldata, Erc20Call};
 use crate::names::NameResolver;
 use crate::tx::eip1559::U256;
-use crate::tx::eip712::safe::{decode_canonical, SafeTx, VerifiedSafeV1};
+use crate::tx::eip712::keccak;
+use crate::tx::eip712::safe::{decode_canonical, SafeTx, VerifiedSafeExec, VerifiedSafeV1};
 use crate::ui::DISPLAY_COLS;
 
 /// Number of fixed Safe-level header pages rendered before the inner-tx
 /// pages and the trailing confirm page.
 const SAFE_HEADER_PAGES: usize = 3;
+
+/// Which Safe flow the render is being driven from. Used to pick the
+/// banner string on page 0 and decide what to show on the metadata page
+/// (approveHash carries a SafeTx nonce in the canonical; execTransaction
+/// only sees the SafeTx nonce on-chain at execution time).
+#[derive(Copy, Clone)]
+enum SafeRenderFlavour {
+    /// `approveHash(bytes32)` — the firmware re-derived the SafeTx hash
+    /// from the trailer's canonical and bound it to the calldata
+    /// argument. The user is approving the hash now; the Safe will
+    /// execute it later once threshold approvals collect.
+    ApproveHash { nonce: [u8; 32] },
+    /// `execTransaction(...)` — the wallet is the EOA-equivalent
+    /// triggering the Safe to execute. SafeTx fields come from the
+    /// calldata directly (no separate trailer). Nonce is determined
+    /// by the Safe's storage at execution time and is not visible
+    /// to the firmware.
+    ExecTransaction { gas_price: [u8; 32] },
+}
+
+/// Normalised input to the shared Safe rendering body. Approve-hash and
+/// exec-transaction both reduce to the same display surface: chain, Safe
+/// address, op + inner-kind hint, inner-tx pages, confirm.
+struct SafeRenderInput<'a> {
+    flavour: SafeRenderFlavour,
+    chain_id: u64,
+    safe_address: [u8; 20],
+    to: [u8; 20],
+    value: [u8; 32],
+    raw_data: &'a [u8],
+    /// keccak256(raw_data). For approveHash this comes from the
+    /// canonical (already byte-equal to keccak256(raw_data) by the
+    /// verifier's bind step); for exec we compute it here so the
+    /// blind-sign branches can still surface it.
+    data_hash: [u8; 32],
+}
 
 /// Render a verified `safe_v1` trailer.
 ///
@@ -88,6 +125,90 @@ pub fn render_safe_v1_pages(
         nonce: [0u8; 32],
     });
 
+    let input = SafeRenderInput {
+        flavour: SafeRenderFlavour::ApproveHash { nonce: tx.nonce },
+        chain_id: tx.chain_id,
+        safe_address: tx.safe_address,
+        to: tx.to,
+        value: tx.value,
+        raw_data: safe.raw_data,
+        data_hash: tx.data_hash,
+    };
+    render_safe_pages_inner(&input, erc20, resolver)
+}
+
+/// Render a verified `execTransaction(...)` UserOp.
+///
+/// Mirrors `render_safe_v1_pages` but for the direct-execution flow:
+/// the wallet is acting as the EOA that calls `execTransaction` on a
+/// Safe, carrying co-signers' approvals in the function's `signatures`
+/// argument. SafeTx fields come from the decoded calldata; the SafeTx
+/// nonce is *not* visible (the Safe reads it from storage at execution
+/// time), so the metadata page surfaces an "(execute now)" row in place
+/// of the approve-hash nonce.
+///
+/// `erc20` follows the same address-match rule as the approveHash path:
+/// we apply outer-trailer metadata only when its contract address
+/// matches the decoded inner `to`. The decoded `signatures` blob is
+/// left intentionally undisplayed — it is multi-owner content and
+/// surfacing it would only add noise to the on-device confirm.
+pub fn render_safe_exec_pages(
+    exec: &VerifiedSafeExec<'_>,
+    erc20: Option<&Erc20Metadata<'_>>,
+    resolver: &NameResolver<'_>,
+) -> Pages {
+    let d = &exec.decoded;
+    // The verifier already proved `operation == 0`; the bind branch
+    // forbids DelegateCall, so callers that reach this function are
+    // safe to treat as `Op: Call`. Compute the data hash for the
+    // blind-sign / unknown-Safe-op branches that show it.
+    let data_hash = keccak(d.data);
+    let input = SafeRenderInput {
+        flavour: SafeRenderFlavour::ExecTransaction {
+            gas_price: d.gas_price,
+        },
+        chain_id: exec.chain_id,
+        safe_address: exec.safe_address,
+        to: d.to,
+        value: d.value,
+        raw_data: d.data,
+        data_hash,
+    };
+    render_safe_pages_inner(&input, erc20, resolver)
+}
+
+/// Shared rendering body for both approveHash and execTransaction.
+fn render_safe_pages_inner(
+    input: &SafeRenderInput<'_>,
+    erc20: Option<&Erc20Metadata<'_>>,
+    resolver: &NameResolver<'_>,
+) -> Pages {
+    // Local field aliases to keep the existing rendering body readable.
+    // We deliberately preserve the names the previous monolithic
+    // function used (`tx.to`, `safe.raw_data`, …) so the diff stays
+    // small.
+    let tx = SafeTxFields {
+        chain_id: input.chain_id,
+        safe_address: input.safe_address,
+        to: input.to,
+        value: input.value,
+        data_hash: input.data_hash,
+    };
+    let safe = SafeRawData {
+        raw_data: input.raw_data,
+    };
+
+    // Refund-risk warning page is added only on the execTransaction path
+    // when `gas_price != 0`. Safe's refund mechanism pays the executor
+    // back `(safeTxGas + baseGas) * gasPrice` in `gasToken` (or ETH if
+    // `gasToken == 0`), so a non-zero gasPrice is a real value flow the
+    // user should see.
+    let refund_warning = matches!(
+        input.flavour,
+        SafeRenderFlavour::ExecTransaction { gas_price }
+            if gas_price.iter().any(|&b| b != 0)
+    );
+
     // Decide inner-tx flavor up-front so we can size the page count.
     // ERC-20 calldata renders as `Erc20Known` only when metadata is
     // *both* present and address-matches the inner `to`; otherwise we
@@ -120,12 +241,17 @@ pub fn render_safe_v1_pages(
         InnerKind::UnknownSafeSelf => 3,
         InnerKind::Blind => 3,
     };
-    let total_pages = SAFE_HEADER_PAGES + inner_pages + 1; // +1 = confirm
+    let refund_pages = if refund_warning { 1 } else { 0 };
+    let total_pages = SAFE_HEADER_PAGES + refund_pages + inner_pages + 1; // +1 = confirm
     let total_pages = core::cmp::min(total_pages, super::MAX_PAGES);
     let mut pages = Pages::with_len(total_pages);
 
     // ── Page 0: banner + chain ──────────────────────────────────────
-    write_line(&mut pages.buf[0][0], "Approve Safe TX");
+    let banner = match input.flavour {
+        SafeRenderFlavour::ApproveHash { .. } => "Approve Safe TX",
+        SafeRenderFlavour::ExecTransaction { .. } => "Execute Safe TX",
+    };
+    write_line(&mut pages.buf[0][0], banner);
     write_chain(&mut pages.buf[0][1], tx.chain_id);
     write_line(&mut pages.buf[0][2], chain_name(tx.chain_id));
     write_line(&mut pages.buf[0][3], "> next");
@@ -137,14 +263,40 @@ pub fn render_safe_v1_pages(
         write_addr_full_or_name(a, b, c, &tx.safe_address, tx.chain_id, resolver);
     }
 
-    // ── Page 2: Safe-level metadata (nonce + op + inner kind hint) ──
-    write_safe_nonce_row(&mut pages.buf[2][0], &tx.nonce);
+    // ── Page 2: Safe-level metadata (flavour-specific top row + op +
+    //          inner-kind hint) ──────────────────────────────────────
+    match input.flavour {
+        SafeRenderFlavour::ApproveHash { nonce } => {
+            write_safe_nonce_row(&mut pages.buf[2][0], &nonce);
+        }
+        SafeRenderFlavour::ExecTransaction { .. } => {
+            // No SafeTx nonce visible from calldata — the Safe reads it
+            // from storage at execution time. Surface the flow so the
+            // user can tell this apart from an approveHash render at a
+            // glance.
+            write_line(&mut pages.buf[2][0], "(execute now)");
+        }
+    }
     write_line(&mut pages.buf[2][1], "Op: Call");
     write_line(&mut pages.buf[2][2], inner_kind_hint(&inner_kind));
     write_line(&mut pages.buf[2][3], "> next");
 
-    // ── Inner-tx pages ──────────────────────────────────────────────
+    // ── Optional page 3: refund-risk warning (exec only, gasPrice>0) ─
     let mut next_page = SAFE_HEADER_PAGES;
+    if refund_warning {
+        // The user is paying the executor `(safeTxGas + baseGas) * gasPrice`
+        // in `gasToken` (ETH when `gasToken == 0`). Most modern Safes set
+        // `gasPrice = 0`, so flagging the rare non-zero case loudly is
+        // proportional. We don't decode the amount — it depends on the
+        // executor's actual gas usage which the firmware can't know.
+        write_line(&mut pages.buf[next_page][0], "! GAS REFUND");
+        write_line(&mut pages.buf[next_page][1], "Safe pays exec");
+        write_line(&mut pages.buf[next_page][2], "gasPrice != 0");
+        write_line(&mut pages.buf[next_page][3], "> next");
+        next_page += 1;
+    }
+
+    // ── Inner-tx pages ──────────────────────────────────────────────
     match inner_kind {
         InnerKind::EmptyCall => {
             // P_n: "Inner: empty call" / "Inner to:" / addr-summary / "> next"
@@ -372,6 +524,24 @@ pub fn render_safe_v1_pages(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Lightweight view of the SafeTx fields the renderer needs. Lets the
+/// shared body keep its `tx.foo` references after the refactor without
+/// dragging the full canonical decode into the exec path.
+struct SafeTxFields {
+    chain_id: u64,
+    safe_address: [u8; 20],
+    to: [u8; 20],
+    value: [u8; 32],
+    data_hash: [u8; 32],
+}
+
+/// Twin of [`SafeTxFields`] for the raw inner-call payload. Borrows
+/// from the gateway's TOCTOU snapshot (approveHash) or the inner_data
+/// snapshot (exec).
+struct SafeRawData<'a> {
+    raw_data: &'a [u8],
+}
 
 enum InnerKind {
     EmptyCall,

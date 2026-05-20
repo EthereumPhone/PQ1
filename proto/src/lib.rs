@@ -1416,6 +1416,33 @@ pub const APPROVE_HASH_SELECTOR: [u8; 4] = [0xd4, 0xd9, 0xbd, 0xcd];
 pub const APPROVE_HASH_CALLDATA_LEN: usize = 4 + 32;
 
 // ---------------------------------------------------------------------------
+// Safe v1.3.0+ `execTransaction(...)` — clear-sign without a separate
+// trailer
+// ---------------------------------------------------------------------------
+//
+// `approveHash` carries an *opaque* 32-byte digest in its calldata, so the
+// firmware needs a separate `safe_v1` trailer to bring the preimage on-device.
+// `execTransaction` is structurally different: the SafeTx fields are encoded
+// directly into the function's argument list, so the firmware can decode them
+// straight out of `inner_data` and feed the existing Safe renderer — no
+// trailer required. The cryptographic story is also different: the wallet is
+// not "approving a hash for later", it is the EOA-equivalent that actually
+// triggers the Safe to execute, carrying co-signers' approvals in the
+// `signatures` argument. The clear-sign view shows what the Safe is about to
+// run.
+
+/// Function selector for
+/// `execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)`
+/// on Safe `Singleton` contracts. Equals
+/// `keccak256(<text signature>)[..4] = 0x6a761202`.
+pub const EXEC_TRANSACTION_SELECTOR: [u8; 4] = [0x6a, 0x76, 0x12, 0x02];
+
+/// Minimum calldata length for `execTransaction`: selector(4) + 10 head
+/// words(320) + two dynamic-length words(64) for `data` and `signatures`.
+/// Real calls are at least this long; anything shorter is malformed.
+pub const EXEC_TRANSACTION_MIN_CALLDATA_LEN: usize = 4 + 10 * 32 + 2 * 32;
+
+// ---------------------------------------------------------------------------
 // Safe v1.3.0+ singleton management selectors (owner / module / guard /
 // fallback). Rendered with per-op intent banners by the secure-side
 // `safe_mgmt` decoder when the inner SafeTx targets the Safe itself

@@ -625,12 +625,37 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // slots fall through `pick_sign_pages` to the lower-priority
         // renderers (value-transfer / ERC-20 shape / blind-sign).
         let r = routed[i].as_ref();
+        // Safe `execTransaction` decode is purely a function of
+        // `inner_data` (no trailer needed), so we run it per inner-tx
+        // inline rather than threading a new routed-trailer slot
+        // through. Selector + DelegateCall gate matches the single-tx
+        // handler's behaviour in `cmd_sign_userop`.
+        let safe_exec_verified = if inner_data.len() >= 4
+            && inner_data[..4] == sphincs_tz_shared::EXEC_TRANSACTION_SELECTOR
+        {
+            crate::tx::eip712::safe::verify_and_bind_exec(
+                inner_data,
+                chain_id,
+                &ptx.to,
+            )
+        } else {
+            None
+        };
+        let safe_exec_selector = inner_data.len() >= 4
+            && inner_data[..4] == sphincs_tz_shared::EXEC_TRANSACTION_SELECTOR;
+        let safe_exec_enough_len =
+            inner_data.len() >= sphincs_tz_shared::EXEC_TRANSACTION_MIN_CALLDATA_LEN;
+        if safe_exec_selector && safe_exec_enough_len && safe_exec_verified.is_none() {
+            ui::show_status("Batch sign", "exec parse fail");
+            return NscStatus::InvalidPointer as u32;
+        }
         let inner_pages = pick_sign_pages(
             &tx_for_display,
             inner_data,
             r.and_then(|r| r.zk_v3.as_ref()),
             r.and_then(|r| r.zk_v1.as_ref()),
             r.and_then(|r| r.safe_v1.as_ref()),
+            safe_exec_verified.as_ref(),
             r.and_then(|r| r.erc7730.as_ref()),
             r.and_then(|r| r.erc20.as_ref()),
             r.and_then(|r| r.selector.as_ref()),

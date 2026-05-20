@@ -52,6 +52,14 @@ pub use verify::{verify_and_bind_trailer, VerifiedSafeV1};
 // `#[cfg(not(test))]`-gated `crate::tx::display::safe_mgmt` shim.
 pub mod mgmt_decode;
 
+// Pure-logic `execTransaction` decoder + lightweight verifier. Used by
+// `cmd_sign_userop` when the inner calldata directly invokes a Safe's
+// `execTransaction(...)` rather than `approveHash(bytes32)`; no separate
+// trailer is needed because the SafeTx fields are encoded into the
+// calldata's argument list.
+pub mod exec_decode;
+pub use exec_decode::{verify_and_bind_exec, DecodedExec, VerifiedSafeExec};
+
 #[cfg(test)]
 mod test_vectors;
 
@@ -268,10 +276,11 @@ mod typehash_tests {
     // hardcoded byte literals in `proto/src/lib.rs` before they
     // propagate into an on-device classifier mismatch.
     use sphincs_tz_shared::{
-        SAFE_MGMT_SELECTOR_ADD_OWNER_WITH_THRESHOLD, SAFE_MGMT_SELECTOR_CHANGE_THRESHOLD,
-        SAFE_MGMT_SELECTOR_DISABLE_MODULE, SAFE_MGMT_SELECTOR_ENABLE_MODULE,
-        SAFE_MGMT_SELECTOR_REMOVE_OWNER, SAFE_MGMT_SELECTOR_SET_FALLBACK_HANDLER,
-        SAFE_MGMT_SELECTOR_SET_GUARD, SAFE_MGMT_SELECTOR_SWAP_OWNER,
+        EXEC_TRANSACTION_SELECTOR, SAFE_MGMT_SELECTOR_ADD_OWNER_WITH_THRESHOLD,
+        SAFE_MGMT_SELECTOR_CHANGE_THRESHOLD, SAFE_MGMT_SELECTOR_DISABLE_MODULE,
+        SAFE_MGMT_SELECTOR_ENABLE_MODULE, SAFE_MGMT_SELECTOR_REMOVE_OWNER,
+        SAFE_MGMT_SELECTOR_SET_FALLBACK_HANDLER, SAFE_MGMT_SELECTOR_SET_GUARD,
+        SAFE_MGMT_SELECTOR_SWAP_OWNER,
     };
 
     fn selector_of(sig: &[u8]) -> [u8; 4] {
@@ -313,5 +322,13 @@ mod typehash_tests {
             selector_of(b"setFallbackHandler(address)"),
             SAFE_MGMT_SELECTOR_SET_FALLBACK_HANDLER
         );
+    }
+
+    #[test]
+    fn exec_transaction_selector_matches_signature() {
+        // Safe v1.3.0+ `execTransaction(...)`: `Enum.Operation` is encoded
+        // as `uint8` in the canonical text signature.
+        let sig: &[u8] = b"execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)";
+        assert_eq!(selector_of(sig), EXEC_TRANSACTION_SELECTOR);
     }
 }

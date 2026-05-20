@@ -49,7 +49,8 @@
 
 use sphincs_tz_shared::{
     NscStatus, ACCOUNT_INDEX_MASK, ACCOUNT_INDEX_SHIFT, APPROVE_HASH_CALLDATA_LEN,
-    APPROVE_HASH_SELECTOR, C10_SIG_LEN, ERC7730_MAX_TRAILER_LEN, FLAG_INCLUDE_INIT_CODE,
+    APPROVE_HASH_SELECTOR, C10_SIG_LEN, ERC7730_MAX_TRAILER_LEN,
+    EXEC_TRANSACTION_MIN_CALLDATA_LEN, EXEC_TRANSACTION_SELECTOR, FLAG_INCLUDE_INIT_CODE,
     FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN,
     PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
     PQ_SMART_WALLET_FACTORY, SAFE_V1_PAYLOAD_MAX, SET_PRE_SIGNATURE_SELECTOR,
@@ -508,6 +509,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     cursor = erc7730_trailer.next_cursor;
 
+    // ERC-7730 is an enhancement layer: a wrong / malformed / mis-bound
+    // trailer MUST degrade gracefully to blind-sign instead of aborting
+    // the userop, per `docs/companion-erc7730-implementation-guide.md`
+    // §1: "If it ships a wrong / malformed / mis-bound trailer, the
+    // firmware refuses the descriptor and falls back to blind-sign with
+    // a brief status-line banner. Clear signing is never required — it
+    // is an enhancement layer the companion is free to skip per-tx."
+    //
+    // The banner is shown via `ui::show_status` so the user can see why
+    // clear-signing didn't engage; the subsequent confirmation pages
+    // then render the blind-sign ladder normally.
     let erc7730_verified: Option<crate::tx::erc7730::VerifiedDescriptor<'_>> =
         if erc7730_trailer.len > 0 {
             let bytes = &snap[erc7730_trailer.start
@@ -535,24 +547,25 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                         != crate::fi::OK_SENTINEL
                     {
                         ui::show_status("Sign", "7730 binding fail");
-                        return NscStatus::InvalidPointer as u32;
+                        None
+                    } else {
+                        #[cfg(feature = "debug-log")]
+                        {
+                            let c = &v.ir.contract;
+                            secure_log!(
+                                "[ERC-7730] matched: chain={} contract=0x{:02x}{:02x}{:02x}{:02x}..{:02x}{:02x}{:02x}{:02x} ir_len={}",
+                                v.ir.chain_id,
+                                c[0], c[1], c[2], c[3],
+                                c[16], c[17], c[18], c[19],
+                                v.ir.raw.len(),
+                            );
+                        }
+                        Some(v)
                     }
-                    #[cfg(feature = "debug-log")]
-                    {
-                        let c = &v.ir.contract;
-                        secure_log!(
-                            "[ERC-7730] matched: chain={} contract=0x{:02x}{:02x}{:02x}{:02x}..{:02x}{:02x}{:02x}{:02x} ir_len={}",
-                            v.ir.chain_id,
-                            c[0], c[1], c[2], c[3],
-                            c[16], c[17], c[18], c[19],
-                            v.ir.raw.len(),
-                        );
-                    }
-                    Some(v)
                 }
                 Err(_e) => {
                     ui::show_status("Sign", "7730 bundle fail");
-                    return NscStatus::InvalidPointer as u32;
+                    None
                 }
             }
         } else {
@@ -706,6 +719,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         None
     };
 
+    // 7c-ter. Safe-multisig `execTransaction(...)` decode — no trailer
+    // needed; the SafeTx fields are encoded directly into the function
+    // arguments, so the firmware decodes them straight out of
+    // `inner_data` once the selector matches. Companion of the
+    // approveHash path above for the case where the wallet is the
+    // EOA-equivalent actually triggering execution (carrying co-signers'
+    // approvals in the `signatures` argument).
+    let safe_exec_verified = if inner_data.len() >= 4
+        && inner_data[..4] == EXEC_TRANSACTION_SELECTOR
+    {
+        crate::tx::eip712::safe::verify_and_bind_exec(inner_data, chain_id, &to_address)
+    } else {
+        None
+    };
+
     // 7c-ter. Selector → text-signature bundle.
     //
     // Two parallel paths, mutually exclusive at the wire level:
@@ -793,6 +821,22 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InvalidPointer as u32;
     }
 
+    // Symmetric Safe `execTransaction` gate. The selector + minimum-
+    // length signature is unique enough that any NS attempt to feed
+    // execTransaction calldata SHOULD be honoured by the Safe-exec
+    // renderer; a parse failure means the calldata is malformed or
+    // requests DelegateCall. Either way the firmware refuses rather
+    // than falling through to a generic blind-sign view, which would
+    // confuse the user about the actual on-chain behaviour ("this
+    // looks like a Safe call, why is it asking me to blind-sign?").
+    let safe_exec_selector =
+        inner_data.len() >= 4 && inner_data[..4] == EXEC_TRANSACTION_SELECTOR;
+    let safe_exec_enough_len = inner_data.len() >= EXEC_TRANSACTION_MIN_CALLDATA_LEN;
+    if safe_exec_selector && safe_exec_enough_len && safe_exec_verified.is_none() {
+        ui::show_status("Safe sign", "exec parse fail");
+        return NscStatus::InvalidPointer as u32;
+    }
+
     // 7e. Address-name bundles.
     //
     // Every bundle crosses the Merkle gate against NAMES_DB_ROOT.
@@ -853,6 +897,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         zk_v3_verified.as_ref(),
         zk_v1_verified.as_ref(),
         safe_v1_verified.as_ref(),
+        safe_exec_verified.as_ref(),
         erc7730_verified.as_ref(),
         verified_meta.as_ref(),
         selector_verified.as_ref(),
