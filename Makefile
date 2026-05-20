@@ -2258,6 +2258,14 @@ pin-diag-boot-hw:
 # `bench-masked-sha` implies stm32u585 (→ hw-sha256), so the
 # HASH-peripheral baseline is real silicon, not software.
 #
+# NOTE: deliberately NO `debug-log`. `hw::rng::fill` emits a
+# `secure_log!("[S] rng::fill entry ...")` on EVERY call when debug-log
+# is on; the bench draws the TRNG hundreds of thousands of times, so
+# debug-log floods the semihosting channel (one slow probe round-trip
+# per draw) and the bench crawls. The bench prints its results via
+# unconditional `hprintln!`, which works under probe-rs regardless of
+# debug-log — so dropping it keeps the results AND kills the flood.
+#
 # Pass: streams `[BENCH] ...` lines ending in
 #       `=== masked-sha2 bench complete ===`, then SYS_EXITs.
 bench-masked-sha-hw:
@@ -2265,7 +2273,7 @@ bench-masked-sha-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features bench-masked-sha,debug-log,ui-noop,e2e-test,mock-se
+		--features bench-masked-sha,ui-noop,e2e-test,mock-se
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
