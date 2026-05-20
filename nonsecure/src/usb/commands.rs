@@ -628,8 +628,44 @@ impl CommandRouter {
             CHAIN_BUF[6],
             CHAIN_BUF[7],
         ]);
+        // Default lookup key is the outer tx.to. For Safe `execTransaction`
+        // UserOps the outer `to` is the Safe contract (which won't be in
+        // the ERC-20 DB), but the inner SafeTx target — encoded as the
+        // first head word of the calldata — IS the token contract when
+        // the Safe is being used to dispatch an ERC-20 transfer. Detect
+        // that selector and pivot the lookup to the inner address so the
+        // secure-world renderer sees a Merkle-verified Erc20Metadata
+        // bundle and surfaces the "Send USDC / Base USDC / amount" pages
+        // the user would get on a direct ERC-20 call.
+        //
+        // The inner read is purely advisory for DB lookup; the secure
+        // world still Merkle-verifies the bundle and re-decodes the
+        // execTransaction calldata via the strict verifier in
+        // `tx::eip712::safe::verify_and_bind_exec`, then enforces
+        // `bundle.contract == exec.decoded.to` inside
+        // `display::pick_sign_pages` before applying the metadata. A
+        // hostile companion that lies here only succeeds in either
+        // (a) hitting an unrelated DB row that mismatches the verifier's
+        // inner-to → bundle gets dropped → degrade to Erc20Unknown, or
+        // (b) hitting nothing at all → degrade to Erc20Unknown. No
+        // attribution can be lent to a wrong token.
         let mut to = [0u8; 20];
-        to.copy_from_slice(&CHAIN_BUF[276..296]);
+        let data_start = SIGN_USEROP_HEADER_LEN;
+        let data_end = data_start + data_len;
+        let exec_inner = data_len >= EXEC_TRANSACTION_MIN_CALLDATA_LEN
+            && CHAIN_BUF[data_start..data_start + 4] == EXEC_TRANSACTION_SELECTOR
+            // Canonical address word: top 12 bytes must be zero. If the
+            // companion / Safe encoded something non-canonical we fall
+            // back to the outer-to lookup (still safe — just no boost).
+            && CHAIN_BUF[data_start + 4..data_start + 4 + 12]
+                .iter()
+                .all(|&b| b == 0)
+            && data_end <= received_len;
+        if exec_inner {
+            to.copy_from_slice(&CHAIN_BUF[data_start + 4 + 12..data_start + 4 + 32]);
+        } else {
+            to.copy_from_slice(&CHAIN_BUF[276..296]);
+        }
 
         // Matches `MAX_ERC20_BUNDLE_LEN` in `secure/src/erc20/bundle.rs`.
         let mut bundle_buf = [0u8; 1120];
