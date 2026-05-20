@@ -198,10 +198,17 @@ pub fn pick_sign_pages(
     resolver: &crate::names::NameResolver<'_>,
 ) -> Pages {
     if let Some(v3) = v3 {
-        return crate::tx::eip712::cowswap_display::render_cowswap_pages(
-            &v3.canonical,
-            &v3.readable,
-        );
+        return match &v3.readable {
+            Some(readable) => {
+                crate::tx::eip712::cowswap_display::render_cowswap_pages(
+                    &v3.canonical,
+                    readable,
+                )
+            }
+            None => crate::tx::eip712::cowswap_display::render_cowswap_pages_addr(
+                &v3.canonical,
+            ),
+        };
     }
     if let Some(v1) = v1 {
         return crate::zk::render_clear_sign_pages(tx, &v1.readable, resolver);

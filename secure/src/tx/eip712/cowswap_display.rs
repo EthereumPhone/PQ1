@@ -35,9 +35,14 @@ use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
 // ---------------------------------------------------------------------------
 
 const OFF_CHAIN_ID: usize = 0;
+const OFF_SELL_TOKEN: usize = 8;
+const OFF_BUY_TOKEN: usize = 28;
 const OFF_RECEIVER: usize = 48;
+const OFF_SELL_AMOUNT: usize = 68;
+const OFF_BUY_AMOUNT: usize = 100;
 const OFF_FEE_AMOUNT: usize = 132;
 const OFF_VALID_TO: usize = 164;
+const OFF_KIND: usize = 168;
 const OFF_PARTIAL: usize = 169;
 const OFF_SELL_TOKEN_BAL: usize = 170;
 const OFF_BUY_TOKEN_BAL: usize = 171;
@@ -131,6 +136,155 @@ pub fn render_cowswap_pages(canonical: &[u8; 204], readable: &[u8; 128]) -> Page
     write_line(&mut pages.row_mut(7, 3), "R=Confirm");
 
     pages
+}
+
+/// Address-mode page renderer for a CowSwap order whose sell or buy
+/// token is absent from the firmware's Poseidon-Merkle ERC-20 registry.
+///
+/// The trailer for this path carries only the 204-byte canonical (no
+/// Groth16 proof, no readable ASCII), but `canonical → orderDigest →
+/// calldata.uid` is recomputed natively by the secure world, so every
+/// field of `GPv2Order` is still byte-bound to the on-chain calldata.
+/// What's lost compared to the proof-bearing path is the in-circuit
+/// formatting of amounts and registry-attested ticker symbols. The UI
+/// substitutes raw 20-byte token addresses + the full uint256 amounts
+/// shown as hex so the user can verify magnitudes without trusting the
+/// host for decimals.
+///
+/// Page layout (10 pages × 4 rows × 16 cols):
+///
+///   0: "Sign CowSwap?"  / chain        / chain name      / kind line
+///   1: "Sell token:"    / 0x.... addr  / ....XXXXXXXX    / "amt (hex) v"
+///   2: 16h | 16h | 16h | 16h  — full 32-byte sellAmount (BE)
+///   3: "Buy  token:"    / 0x.... addr  / ....XXXXXXXX    / "amt (hex) v"
+///   4: 16h | 16h | 16h | 16h  — full 32-byte buyAmount (BE)
+///   5: "Receiver:"      / 0x....       / ....XXXXXXXX    / "> next"
+///   6: "Expires:"       / unix N       / "Partial: Y/N"  / "> next"
+///   7: "Fee:"           / fee hex      / "src:X dst:Y"   / "> next"
+///   8: "appData:"       / 0x<14h>      / ...<12h>        / "> next"
+///   9: ""               / "L=Cancel"   / "R=Confirm"     / (buttons)
+pub fn render_cowswap_pages_addr(canonical: &[u8; 204]) -> Pages {
+    let mut pages = Pages::empty_with_len(10);
+
+    let chain_id = u64::from_be_bytes([
+        canonical[OFF_CHAIN_ID + 0],
+        canonical[OFF_CHAIN_ID + 1],
+        canonical[OFF_CHAIN_ID + 2],
+        canonical[OFF_CHAIN_ID + 3],
+        canonical[OFF_CHAIN_ID + 4],
+        canonical[OFF_CHAIN_ID + 5],
+        canonical[OFF_CHAIN_ID + 6],
+        canonical[OFF_CHAIN_ID + 7],
+    ]);
+
+    // ── Page 0: Header / chain / kind ──────────────────────────────
+    write_line(&mut pages.row_mut(0, 0), "Sign CowSwap?");
+    write_chain_row(&mut pages.row_mut(0, 1), chain_id);
+    write_line(&mut pages.row_mut(0, 2), chain_name_str(chain_id));
+    // Row 3: surface the order kind so the user has the sell/buy
+    // direction up-front, since the addr-mode pages don't carry the
+    // proof-bound "CowSwap SELL / BUY" header readable does.
+    write_line(
+        &mut pages.row_mut(0, 3),
+        if canonical[OFF_KIND] == 0 { "kind=SELL" } else { "kind=BUY" },
+    );
+
+    // ── Page 1: Sell token addr + amount-page hint ────────────────
+    write_line(&mut pages.row_mut(1, 0), "Sell token:");
+    let sell_token: [u8; 20] = canonical[OFF_SELL_TOKEN..OFF_SELL_TOKEN + 20]
+        .try_into()
+        .expect("20-byte slice");
+    {
+        let page = pages.page_mut(1);
+        let (head, tail) = page.split_at_mut(2);
+        write_addr_two_rows(&mut head[1], &mut tail[0], &sell_token);
+    }
+    write_line(&mut pages.row_mut(1, 3), "sellAmt(hex) >");
+
+    // ── Page 2: Sell amount, 4×16 hex = full 32-byte uint256 BE ──
+    write_uint256_hex_page(&mut pages, 2, &canonical[OFF_SELL_AMOUNT..OFF_SELL_AMOUNT + 32]);
+
+    // ── Page 3: Buy token addr + amount-page hint ─────────────────
+    write_line(&mut pages.row_mut(3, 0), "Buy  token:");
+    let buy_token: [u8; 20] = canonical[OFF_BUY_TOKEN..OFF_BUY_TOKEN + 20]
+        .try_into()
+        .expect("20-byte slice");
+    {
+        let page = pages.page_mut(3);
+        let (head, tail) = page.split_at_mut(2);
+        write_addr_two_rows(&mut head[1], &mut tail[0], &buy_token);
+    }
+    write_line(&mut pages.row_mut(3, 3), "buyAmt(hex)  >");
+
+    // ── Page 4: Buy amount, 4×16 hex = full 32-byte uint256 BE ───
+    write_uint256_hex_page(&mut pages, 4, &canonical[OFF_BUY_AMOUNT..OFF_BUY_AMOUNT + 32]);
+
+    // ── Page 5: Receiver ─────────────────────────────────────────
+    write_line(&mut pages.row_mut(5, 0), "Receiver:");
+    let receiver: [u8; 20] = canonical[OFF_RECEIVER..OFF_RECEIVER + 20]
+        .try_into()
+        .expect("20-byte slice");
+    {
+        let page = pages.page_mut(5);
+        let (head, tail) = page.split_at_mut(2);
+        write_addr_two_rows(&mut head[1], &mut tail[0], &receiver);
+    }
+    write_line(&mut pages.row_mut(5, 3), "> next");
+
+    // ── Page 6: Expires + partiallyFillable ──────────────────────
+    write_line(&mut pages.row_mut(6, 0), "Expires:");
+    let valid_to = u32::from_be_bytes([
+        canonical[OFF_VALID_TO + 0],
+        canonical[OFF_VALID_TO + 1],
+        canonical[OFF_VALID_TO + 2],
+        canonical[OFF_VALID_TO + 3],
+    ]);
+    write_u32_row(&mut pages.row_mut(6, 1), "unix ", valid_to);
+    write_partial_row(&mut pages.row_mut(6, 2), canonical[OFF_PARTIAL]);
+    write_line(&mut pages.row_mut(6, 3), "> next");
+
+    // ── Page 7: Fee + balance kinds ──────────────────────────────
+    write_line(&mut pages.row_mut(7, 0), "Fee:");
+    write_fee_row(
+        &mut pages.row_mut(7, 1),
+        &canonical[OFF_FEE_AMOUNT..OFF_FEE_AMOUNT + 32],
+    );
+    write_balance_row(
+        &mut pages.row_mut(7, 2),
+        canonical[OFF_SELL_TOKEN_BAL],
+        canonical[OFF_BUY_TOKEN_BAL],
+    );
+    write_line(&mut pages.row_mut(7, 3), "> next");
+
+    // ── Page 8: appData ──────────────────────────────────────────
+    write_line(&mut pages.row_mut(8, 0), "appData:");
+    let app = &canonical[OFF_APP_DATA..OFF_APP_DATA + 32];
+    write_app_data_prefix(&mut pages.row_mut(8, 1), app);
+    write_app_data_suffix(&mut pages.row_mut(8, 2), app);
+    write_line(&mut pages.row_mut(8, 3), "> next");
+
+    // ── Page 9: Confirm ──────────────────────────────────────────
+    write_line(&mut pages.row_mut(9, 0), "");
+    write_line(&mut pages.row_mut(9, 1), "  Long-press:");
+    write_line(&mut pages.row_mut(9, 2), "L=Cancel");
+    write_line(&mut pages.row_mut(9, 3), "R=Confirm");
+
+    pages
+}
+
+/// Render a 32-byte BE uint256 as 4 rows × 16 hex chars (no prefix /
+/// no label — the preceding page tells the user this is the amount).
+fn write_uint256_hex_page(pages: &mut Pages, page_idx: usize, bytes: &[u8]) {
+    for row_idx in 0..DISPLAY_ROWS {
+        let row = pages.row_mut(page_idx, row_idx);
+        *row = [b' '; DISPLAY_COLS];
+        let start = row_idx * 8; // 8 bytes per row → 16 hex chars
+        for i in 0..8 {
+            let b = bytes[start + i];
+            row[i * 2] = hex_nibble(b >> 4);
+            row[i * 2 + 1] = hex_nibble(b & 0x0f);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

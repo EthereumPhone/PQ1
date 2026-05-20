@@ -43,9 +43,27 @@ use super::{check_setpresig_calldata_shape, cross_check_setpresig_calldata};
 /// A v3 trailer that passed every verification step. The caller keeps
 /// the two fixed-size buffers on the stack until the trusted-UI render
 /// is done; nothing else references them.
+///
+/// Two flavours:
+///
+///   * `Full` — the regular proof-bearing trailer (716 B fixed prefix
+///     + VK bundle). The Groth16 proof binds `readable` to `canonical`
+///     and pins the Poseidon-Merkle ERC-20 registry; the trusted UI
+///     can therefore display formatted amounts and ticker symbols.
+///   * `AddrOnly` — a stripped trailer carrying only the 204-byte
+///     `canonical`. No proof, no readable, no registry lookup. Used by
+///     the host when one or both tokens are absent from the firmware-
+///     pinned Poseidon-Merkle registry: the order can still be
+///     clear-signed because `canonical → orderDigest → calldata.uid`
+///     is recomputable natively (keccak EIP-712), so every field of
+///     `GPv2Order` remains tamper-bound. The trusted UI shows raw
+///     20-byte token addresses instead of symbols.
 pub struct VerifiedCowswapV3 {
     pub canonical: [u8; EIP712_CANONICAL_LEN],
-    pub readable: [u8; EIP712_STRING_LEN],
+    /// `Some(_)` only for `Full` trailers — the Groth16-bound ASCII
+    /// readable. `None` for `AddrOnly`: the firmware renders pages
+    /// directly from `canonical` instead.
+    pub readable: Option<[u8; EIP712_STRING_LEN]>,
 }
 
 /// End-to-end verification of a v3 CoW EIP-712 trailer against the
@@ -72,6 +90,39 @@ pub fn verify_and_bind_trailer(
     chain_id: u64,
     userop_sender: &[u8; 20],
 ) -> Option<VerifiedCowswapV3> {
+    // ── AddrOnly fast path ─────────────────────────────────────────
+    //
+    // Bundle is exactly the 204-byte canonical with no proof or
+    // readable. There is no Groth16 path, but the canonical →
+    // orderDigest → calldata.uid keccak chain still byte-binds every
+    // GPv2Order field to the calldata the chain will see. The trusted
+    // UI shows raw token addresses; no registry lookup is involved.
+    if v3_bundle.len() == EIP712_CANONICAL_LEN {
+        let canonical_bytes: &[u8; EIP712_CANONICAL_LEN] =
+            v3_bundle.try_into().ok()?;
+
+        if inner_data.len() != ZK_MAX_CALLDATA {
+            return None;
+        }
+        let calldata_array: &[u8; ZK_MAX_CALLDATA] = inner_data.try_into().ok()?;
+
+        super::check_setpresig_calldata_shape(calldata_array).ok()?;
+        super::cross_check_setpresig_calldata(
+            canonical_bytes,
+            calldata_array,
+            chain_id,
+            userop_sender,
+        )
+        .ok()?;
+
+        let mut canonical = [0u8; EIP712_CANONICAL_LEN];
+        canonical.copy_from_slice(canonical_bytes);
+        return Some(VerifiedCowswapV3 {
+            canonical,
+            readable: None,
+        });
+    }
+
     if v3_bundle.len() < ZK_V3_FIXED_LEN {
         return None;
     }
@@ -130,6 +181,6 @@ pub fn verify_and_bind_trailer(
     readable.copy_from_slice(readable_bytes);
     Some(VerifiedCowswapV3 {
         canonical,
-        readable,
+        readable: Some(readable),
     })
 }
