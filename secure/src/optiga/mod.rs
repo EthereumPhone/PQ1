@@ -878,6 +878,40 @@ impl OptigaTrustM {
         Ok(())
     }
 
+    /// §32 duress variant of [`provision_user_oid`]: gate the OID's
+    /// Read/Change AC on `authref_oid` (the duress F1D8) instead of the
+    /// real F1D0, and NEVER lock (the duress OIDs must stay LcsO=Creation
+    /// so re-provisioning / recovery is always possible — same constraint
+    /// as the real OIDs under the default feature set, made explicit here).
+    #[cfg(feature = "duress-pin")]
+    unsafe fn provision_user_oid_authref(
+        &mut self,
+        oid: u16,
+        data: &[u8],
+        authref_oid: u16,
+        require_shielded_read: bool,
+    ) -> Result<(), OptigaError> {
+        secure_log!("[OPTIGA/duress] OID 0x{:04x}: set_data ({} bytes)", oid, data.len());
+        apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data)?;
+
+        let mut cur_meta = [0u8; 128];
+        let cur_len = apdu::get_metadata(
+            &mut self.ifx, &mut self.shield, oid, &mut cur_meta,
+        ).unwrap_or(0);
+        if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+            secure_log!(
+                "[OPTIGA/duress] OID 0x{:04x} at LcsO=Operational — skipping set_metadata",
+                oid
+            );
+            return Ok(());
+        }
+
+        let (meta, meta_len) = apdu::build_metadata_protected(authref_oid, require_shielded_read);
+        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len])?;
+        // Deliberately NO lock_oid — stay LcsO=Creation.
+        Ok(())
+    }
+
     // ---------------------------------------------------------------
     // Hardware PIN counter (`optiga-hw-counter`) — E120 + LUC binding.
     // ---------------------------------------------------------------
@@ -1609,6 +1643,95 @@ impl OptigaTrustM {
         Ok(())
     }
 
+    /// §32 duress (decoy) provisioning on OPTIGA. Mirrors the duress
+    /// portion of [`store_objects`] for the SECOND credential set:
+    ///   - E121 LUC counter (`Change=Auto(F1D8)`, `Exec=ALW`)
+    ///   - F1D8 AuthRef (`Execute=LUC(E121)` — matched-LUC, validated on
+    ///     silicon 2026-05-20) keyed by `duress_pin`
+    ///   - 4 decoy data OIDs (half_O / master / vk / bvk) gated on F1D8
+    ///
+    /// Assumes the REAL wallet is already provisioned (PBS + shield up):
+    /// duress provisioning runs immediately after `store_objects` in the
+    /// same wizard step, so PBS/E140 + the shielded connection are live.
+    /// Every credential stays LcsO=Creation — nothing is locked, so the
+    /// decoy is fully re-provisionable / recoverable. Uses the same
+    /// hard-reset-between-writes dance as `store_objects` (the chip wedges
+    /// after ~2-3 consecutive SetData ops per session).
+    #[cfg(feature = "duress-pin")]
+    fn store_duress_objects(
+        &mut self,
+        half_o: &[u8; 32],
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        duress_pin: &[u8; 8],
+    ) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+
+        secure_log!("[OPTIGA/duress] store_duress_objects start");
+        self.ensure_shield()?;
+
+        // 1. E121 duress LUC counter — Change=Auto(F1D8), Exec=ALW.
+        //    UNENFORCED limit (firmware never reads it for lockout); the
+        //    duress unlock resets it. High limit so it never trips.
+        unsafe {
+            let ctr_data = apdu::encode_pin_ctr(0, 0xFFFF);
+            apdu::set_data_object(
+                &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &ctr_data,
+            )?;
+            let (cmeta, clen) = apdu::build_metadata_pin_ctr_oid(apdu::OID_DURESS_AUTH_REF);
+            apdu::set_metadata(
+                &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &cmeta[..clen],
+            )?;
+        }
+        secure_log!("[OPTIGA/duress] E121 counter provisioned");
+        #[cfg(feature = "stm32u585")]
+        { self.hard_reset_and_reinit()?; self.ensure_shield()?; }
+
+        // 2. F1D8 duress AuthRef — Execute=LUC(E121).
+        {
+            let mut secret = Self::derive_pin_secret(duress_pin);
+            let r = unsafe {
+                apdu::set_data_object(
+                    &mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &secret,
+                )
+            };
+            secret.zeroize();
+            r?;
+            let (ameta, alen) = apdu::build_metadata_auth_ref_luc_oid(apdu::OID_PIN_CTR_DURESS);
+            unsafe {
+                apdu::set_metadata(
+                    &mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &ameta[..alen],
+                )?;
+            }
+            secure_log!("[OPTIGA/duress] F1D8 AuthRef (Execute=LUC(E121)) provisioned");
+            #[cfg(feature = "stm32u585")]
+            { self.hard_reset_and_reinit()?; self.ensure_shield()?; }
+        }
+
+        // 3. Decoy data OIDs, each gated on F1D8 (mirror the real layout's
+        //    require_shielded_read=false). Hard-reset between each.
+        macro_rules! duress_oid {
+            ($name:literal, $oid:expr, $data:expr) => {{
+                secure_log!("[OPTIGA/duress] write {}", $name);
+                unsafe {
+                    self.provision_user_oid_authref(
+                        $oid, $data, apdu::OID_DURESS_AUTH_REF, false,
+                    )
+                }?;
+                #[cfg(feature = "stm32u585")]
+                { self.hard_reset_and_reinit()?; self.ensure_shield()?; }
+            }};
+        }
+        duress_oid!("duress entropy", apdu::OID_DURESS_ENTROPY, half_o);
+        duress_oid!("duress master", apdu::OID_DURESS_MASTER_SECRET, master_secret);
+        duress_oid!("duress vk", apdu::OID_DURESS_VK, vk);
+        duress_oid!("duress bvk", apdu::OID_DURESS_BOOTSTRAP_VK, bootstrap_vk);
+
+        secure_log!("[OPTIGA/duress] store_duress_objects complete");
+        Ok(())
+    }
+
     /// Read the 1-byte attempt counter, returning `None` if the object is
     /// uninitialized (fresh chip) or the read fails for any other reason.
     unsafe fn read_counter_raw(&mut self) -> Option<u8> {
@@ -2294,6 +2417,42 @@ impl WalletStore for OptigaTrustM {
         self.remaining = MAX_ATTEMPTS;
 
         Ok(())
+    }
+
+    #[cfg(feature = "duress-pin")]
+    fn provision_duress(
+        &mut self,
+        entropy: &[u8; 32],
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        duress_pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        // `entropy` here is OPTIGA's decoy half_O (DualSE pre-split it).
+        self.store_duress_objects(entropy, master_secret, vk, bootstrap_vk, duress_pin)
+            .map_err(|_| SeError::InternalError)
+    }
+
+    #[cfg(feature = "duress-pin")]
+    fn duress_is_provisioned(&mut self) -> bool {
+        if self.init().is_err() {
+            return false;
+        }
+        if self.ensure_shield().is_err() {
+            return false;
+        }
+        // Liveness via the duress AuthRef metadata (Read on F1D8 data is
+        // NEV, but metadata is always readable). Non-empty metadata at
+        // F1D8 == the decoy credential set was provisioned.
+        let mut meta = [0u8; 128];
+        matches!(
+            unsafe {
+                apdu::get_metadata(
+                    &mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &mut meta,
+                )
+            },
+            Ok(n) if n > 0
+        )
     }
 
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {

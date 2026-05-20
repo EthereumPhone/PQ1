@@ -58,6 +58,39 @@ pub trait WalletStore {
         pin: &[u8; 8],
     ) -> Result<(), SeError>;
 
+    /// §32 duress (decoy) wallet provisioning. Stores a SECOND, fully
+    /// independent decoy wallet behind a SECOND PIN credential, so a
+    /// coerced user can reveal the duress PIN and surrender a plausible
+    /// decoy instead of the real wallet. Same shape as [`provision`] but
+    /// targets the duress OID/credential set (OPTIGA F1D8 + E121 matched-
+    /// LUC, SE050 `DURESS_USERID_OBJ`). On a [`DualSecureElement`] the
+    /// `entropy` is the full decoy entropy and is XOR-split internally;
+    /// on a single backend it is that backend's pre-split half.
+    ///
+    /// Always-provision is load-bearing for deniability: the wizard
+    /// provisions a decoy with a RANDOM PIN even when the user declines,
+    /// so "duress configured vs not" is indistinguishable. Default no-op
+    /// for backends without a duress path (Mock, Tropic01).
+    fn provision_duress(
+        &mut self,
+        _entropy: &[u8; 32],
+        _master_secret: &[u8; 32],
+        _vk: &[u8; 32],
+        _bootstrap_vk: &[u8; 32],
+        _duress_pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        Ok(())
+    }
+
+    /// Diagnostic: whether the duress (decoy) credential set is present.
+    /// Distinct from [`is_provisioned`](Self::is_provisioned), which
+    /// reports REAL-wallet state only — boot-wipe + wizard branching keys
+    /// off the real wallet, and a joint check would mis-handle a partial-
+    /// provision crash. Default `false`.
+    fn duress_is_provisioned(&mut self) -> bool {
+        false
+    }
+
     /// Verify PIN and return the 32-byte master secret on success.
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError>;
 
@@ -375,7 +408,7 @@ mod tests {
         let mut se = MockSecureElement::new();
         let mnemonic = Mnemonic::from_entropy(&[0u8; 32]);
         let pin = [b'1', b'2', b'3', b'4', 0, 0, 0, 0];
-        provision_from_mnemonic(&mut se, &mnemonic, &pin);
+        provision_from_mnemonic(&mut se, &mnemonic, &pin, None);
         se
     }
 

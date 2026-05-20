@@ -59,6 +59,53 @@ impl DualSecureElement {
     pub fn load_pbs(&mut self) {
         self.optiga.load_pbs();
     }
+
+    /// Generate a fresh OPTIGA-side XOR half via a 3-source TRNG mix
+    /// (STM32 ⊕ OPTIGA ⊕ SE050). The security of the dual-SE split
+    /// depends critically on this half being unpredictable: if an
+    /// attacker recovers the SE050 half (or guesses this one), they
+    /// reconstruct the seed by XOR. Mixing three sources means any single
+    /// unbroken source preserves entropy.
+    ///
+    /// Open-coded (not via `rng_strong::fill`) to avoid the re-entrancy
+    /// that would arise from calling `WalletStore::random` on the global
+    /// SE while we already hold `&mut self`; direct field borrows of
+    /// `self.optiga` / `self.se050` are the clean path. Fail-closed on an
+    /// all-zero result (stuck-at-0 fault surviving all three sources).
+    fn generate_split_half(&mut self) -> Result<[u8; 32], SeError> {
+        // `half_o` = the OPTIGA-side half in both the real and decoy
+        // splits (the SE050 half is `entropy XOR half_o`).
+        let mut half_o = [0u8; 32];
+        if crate::rng::fill(&mut half_o).is_err() {
+            secure_log!("[DUAL/prov] rng::fill FAILED");
+            return Err(SeError::InternalError);
+        }
+        let mut se_buf = [0u8; 32];
+        if self.optiga.random(&mut se_buf).is_ok() {
+            for i in 0..32 {
+                half_o[i] ^= se_buf[i];
+            }
+        }
+        se_buf.zeroize();
+        crate::fi::wait_random();
+        if self.se050.random(&mut se_buf).is_ok() {
+            for i in 0..32 {
+                half_o[i] ^= se_buf[i];
+            }
+        }
+        se_buf.zeroize();
+        crate::fi::zeroize_barrier();
+        let mut acc: u8 = 0;
+        for &b in half_o.iter() {
+            acc |= b;
+        }
+        if acc == 0 {
+            secure_log!("[DUAL/prov] half_o stuck at zero — FI suspected");
+            half_o.zeroize();
+            return Err(SeError::InternalError);
+        }
+        Ok(half_o)
+    }
 }
 
 impl WalletStore for DualSecureElement {
@@ -76,54 +123,7 @@ impl WalletStore for DualSecureElement {
     ) -> Result<(), SeError> {
         secure_log!("[DUAL/prov] start");
 
-        // Multi-source TRNG for the XOR-split half. The security of
-        // dual-SE depends critically on `half_o` being unpredictable:
-        // if an attacker recovers `half_e` from the SE050 (or guesses
-        // `half_o`), they reconstruct the seed by XOR. Defense: mix
-        // platform TRNG + OPTIGA TRNG + SE050 TRNG so any single
-        // unbroken source preserves entropy.
-        //
-        // Open-coded (not via `rng_strong::fill`) to avoid the
-        // re-entrancy that would arise from calling
-        // `WalletStore::random` on the global SE while we're already
-        // holding `&mut self` here. We have direct field access to
-        // `self.optiga` and `self.se050`, which is the cleanest path:
-        // distinct mutable field borrows are sound.
-        let mut half_o = [0u8; 32];
-        if crate::rng::fill(&mut half_o).is_err() {
-            secure_log!("[DUAL/prov] rng::fill FAILED");
-            return Err(SeError::InternalError);
-        }
-        // XOR OPTIGA contribution (best-effort — if the SE isn't
-        // responsive yet, half_o stays at the platform-TRNG baseline).
-        let mut se_buf = [0u8; 32];
-        if self.optiga.random(&mut se_buf).is_ok() {
-            for i in 0..32 {
-                half_o[i] ^= se_buf[i];
-            }
-        }
-        se_buf.zeroize();
-        crate::fi::wait_random();
-        // XOR SE050 contribution.
-        if self.se050.random(&mut se_buf).is_ok() {
-            for i in 0..32 {
-                half_o[i] ^= se_buf[i];
-            }
-        }
-        se_buf.zeroize();
-        crate::fi::zeroize_barrier();
-        // Fail-closed if the result is all-zero (defends a stuck-at-0
-        // fault that survives all three sources — same gate as
-        // `rng_strong::fill`).
-        let mut acc: u8 = 0;
-        for &b in half_o.iter() {
-            acc |= b;
-        }
-        if acc == 0 {
-            secure_log!("[DUAL/prov] half_o stuck at zero — FI suspected");
-            half_o.zeroize();
-            return Err(SeError::InternalError);
-        }
+        let mut half_o = self.generate_split_half()?;
         secure_log!("[DUAL/prov] rng OK (3-source XOR mix), calling optiga.provision");
         let half_e = xor_32(entropy, &half_o);
 
@@ -150,6 +150,55 @@ impl WalletStore for DualSecureElement {
 
         secure_log!("[DUAL] Provisioned: entropy XOR-split across OPTIGA Trust M + SE050");
         Ok(())
+    }
+
+    #[cfg(feature = "duress-pin")]
+    fn provision_duress(
+        &mut self,
+        entropy: &[u8; 32],
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        duress_pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        // `entropy` is the FULL decoy entropy; XOR-split it across the two
+        // chips exactly like the real wallet — invariant #1 (no full
+        // entropy on a single chip) applies to the decoy too. A fresh
+        // 3-source half is drawn so the decoy split is independent of the
+        // real one.
+        secure_log!("[DUAL/duress] start");
+        let mut half_o = self.generate_split_half()?;
+        let half_e = xor_32(entropy, &half_o);
+
+        if let Err(e) = self.optiga.provision_duress(&half_o, master_secret, vk, bootstrap_vk, duress_pin) {
+            secure_log!("[DUAL/duress] optiga.provision_duress FAILED: {:?}", e);
+            half_o.zeroize();
+            crate::fi::zeroize_barrier();
+            let mut he = half_e;
+            he.zeroize();
+            return Err(e);
+        }
+        if let Err(e) = self.se050.provision_duress(&half_e, master_secret, vk, bootstrap_vk, duress_pin) {
+            secure_log!("[DUAL/duress] se050.provision_duress FAILED: {:?}", e);
+            half_o.zeroize();
+            crate::fi::zeroize_barrier();
+            let mut he = half_e;
+            he.zeroize();
+            return Err(e);
+        }
+
+        half_o.zeroize();
+        crate::fi::zeroize_barrier();
+        let mut he = half_e;
+        he.zeroize();
+        crate::fi::zeroize_barrier();
+        secure_log!("[DUAL/duress] Provisioned decoy: entropy XOR-split across OPTIGA + SE050");
+        Ok(())
+    }
+
+    #[cfg(feature = "duress-pin")]
+    fn duress_is_provisioned(&mut self) -> bool {
+        self.optiga.duress_is_provisioned() && self.se050.duress_is_provisioned()
     }
 
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {

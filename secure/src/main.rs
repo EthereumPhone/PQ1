@@ -2979,7 +2979,7 @@ fn main() -> ! {
             );
         }
         #[cfg(not(feature = "e2e-skip-provision"))]
-        crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
+        crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin, None);
         #[cfg(feature = "e2e-skip-provision")]
         {
             let _ = &mnemonic; // silence unused warning under this feature
@@ -3072,7 +3072,7 @@ fn main() -> ! {
 
             ui::show_status("Provisioning", "...");
 
-            crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin);
+            crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin, None);
             // Admin-wipe credential + canary selftest are installed
             // inside SE050's provision() for any stm32u585 build that
             // includes SE050 (standalone or dual-SE). A selftest failure

@@ -150,13 +150,29 @@ pub const OID_VK:            u16 = 0xF1D3;
 pub const OID_BOOTSTRAP_VK:  u16 = 0xF1D4;
 pub const OID_COUNTER:       u16 = 0xF1E1;
 
-/// PROBE ONLY (`duress-probe-e2e`): a free type-3 data OID used to
-/// provision a SECOND AuthRef for the §32 duress-PIN feasibility test.
-/// F1D0..F1D5 are taken (auth/entropy/master/vk/bvk/soft-counter);
-/// F1D6..F1DB are the remaining free slots in the valid type-3 range.
-/// F1D8 is well clear of the used range. NOT a production OID.
+// ---- §32 duress (decoy) wallet OIDs (`duress-pin` feature) ----------------
+// A second, independent decoy wallet stored under a SECOND OPTIGA AuthRef
+// (F1D8) bound to its OWN LUC counter (E121, "matched-LUC" — validated on
+// silicon 2026-05-20, see work-todo §32). Mirrors the real layout
+// (auth/entropy/master/vk/bvk) in the free type-3 slots. F1D0..F1D5 are
+// taken (auth/entropy/master/vk/bvk/soft-counter); the free type-3 pool is
+// F1D6, F1D7, F1D9, F1DA, F1DB (F1D8 = duress auth). F1D7 is left spare.
+/// Duress AuthRef — PIN-derived HMAC key for the decoy wallet, Execute=LUC(E121).
+pub const OID_DURESS_AUTH_REF:      u16 = 0xF1D8;
+/// Duress half_O (decoy entropy OPTIGA share).
+pub const OID_DURESS_ENTROPY:       u16 = 0xF1D9;
+/// Duress master_secret (decoy, for cross-verify on duress unlock).
+pub const OID_DURESS_MASTER_SECRET: u16 = 0xF1DA;
+/// Duress verifying key (decoy wallet VK).
+pub const OID_DURESS_VK:            u16 = 0xF1DB;
+/// Duress bootstrap VK (decoy wallet).
+pub const OID_DURESS_BOOTSTRAP_VK:  u16 = 0xF1D6;
+
+/// PROBE ONLY (`duress-probe-e2e`): alias of [`OID_DURESS_AUTH_REF`] kept
+/// for the §32 feasibility/timing probe. Same OID; distinct name so the
+/// probe code reads as "probe scaffolding, not production wiring."
 #[cfg(feature = "duress-probe-e2e")]
-pub const OID_DURESS_AUTH_REF_PROBE: u16 = 0xF1D8;
+pub const OID_DURESS_AUTH_REF_PROBE: u16 = OID_DURESS_AUTH_REF;
 
 /// Silicon monotonic counter used under `optiga-hw-counter` to replace
 /// the soft `OID_COUNTER` (F1E1). `0xE120` is the first of the four
@@ -166,6 +182,16 @@ pub const OID_DURESS_AUTH_REF_PROBE: u16 = 0xF1D8;
 /// exercised (success + failure), and rejects the AuthRef once the
 /// counter reaches its threshold until the counter is re-written.
 pub const OID_PIN_CTR: u16 = 0xE120;
+
+/// §32 duress credential's own LUC counter (second of the four E120..E123
+/// slots). The duress AuthRef (F1D8) binds `Execute=LUC(E121)` so a duress
+/// verify runs the identical auto-state APDU as the real F1D0 verify (a
+/// byte-for-byte timing twin — validated on silicon 2026-05-20). E121 is
+/// functionally UNENFORCED: firmware never reads it for lockout, and the
+/// duress unlock resets it (`Change=Auto(F1D8)`) so it never trips. Its
+/// only purpose is timing uniformity + keeping the duress path off the
+/// real E120 (no drift on the real lockout counter).
+pub const OID_PIN_CTR_DURESS: u16 = 0xE121;
 
 // ---------------------------------------------------------------------------
 // Metadata tags and access-condition identifiers

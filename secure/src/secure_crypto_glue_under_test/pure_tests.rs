@@ -1465,6 +1465,54 @@ fn negative_dual_se_no_full_entropy_handed_to_a_single_chip() {
 }
 
 #[test]
+fn negative_dual_se_duress_no_full_entropy_to_a_single_chip() {
+    // §32: invariant #1 applies to the DECOY too. The duress XOR split
+    // must hand each chip a half (half_o / half_e), never the full decoy
+    // entropy. A refactor passing `entropy` directly to one chip's
+    // provision_duress would collapse the decoy's dual-SE security.
+    assert!(
+        !DUAL_SE_SRC.contains("self.optiga.provision_duress(&entropy"),
+        "OPTIGA.provision_duress must never receive the full decoy entropy (invariant #1)",
+    );
+    assert!(
+        !DUAL_SE_SRC.contains("self.se050.provision_duress(&entropy"),
+        "SE050.provision_duress must never receive the full decoy entropy (invariant #1)",
+    );
+    // And it must positively pass the halves.
+    assert!(
+        DUAL_SE_SRC.contains("self.optiga.provision_duress(&half_o, master_secret, vk, bootstrap_vk, duress_pin)"),
+        "OPTIGA.provision_duress must receive the OPTIGA half",
+    );
+    assert!(
+        DUAL_SE_SRC.contains("self.se050.provision_duress(&half_e, master_secret, vk, bootstrap_vk, duress_pin)"),
+        "SE050.provision_duress must receive the SE050 half",
+    );
+}
+
+#[test]
+fn positive_crypto_duress_always_provisions_decoy() {
+    // §32: always-provision is load-bearing for deniability — the wizard
+    // must provision a decoy even when the user declines (random PIN),
+    // so "duress configured vs not" is indistinguishable on-chip. Pin the
+    // unconditional call + the random-PIN-on-None path in source.
+    assert!(
+        CRYPTO_SRC.contains("provision_duress_wallet(store, duress_pin)"),
+        "provision_from_mnemonic must always call provision_duress_wallet under the feature",
+    );
+    assert!(
+        CRYPTO_SRC.contains("None => {")
+            && CRYPTO_SRC.contains("crate::rng::fill(&mut random_pin)"),
+        "declined duress (None) must provision a decoy with a fresh random PIN, not skip",
+    );
+    // Decoy must be an INDEPENDENT fresh entropy (separate-entropy model),
+    // not derived from the real seed.
+    assert!(
+        CRYPTO_SRC.contains("crate::rng::fill(&mut decoy_entropy)"),
+        "decoy entropy must be a fresh independent TRNG draw",
+    );
+}
+
+#[test]
 fn negative_dual_se_no_plaintext_kdf_tag_drift() {
     // The unlock cross-check derives master via the EXACT byte
     // string `"sphincs-master"`. A drift (sphincs_master,

@@ -61,6 +61,23 @@ pub const VK_OBJ: u32 = 0x7B10_0002;
 /// Bootstrap verifying key (32 bytes), policy requires UserID auth.
 pub const BOOTSTRAP_VK_OBJ: u32 = 0x7B10_0003;
 
+// ---- §32 duress (decoy) wallet objects (`duress-pin` feature) -------------
+// A second decoy wallet's SE050 share, gated behind a SECOND UserID with
+// `max_attempts=0` (unlimited — a wrong duress PIN must not trip SE050's
+// own silicon lockout; the MCU page-124 counter is what gates lockout on a
+// wrong duress entry, handled in the P3 unlock path). Lives in the v6
+// 0x7B10_xxxx range so the admin-wipe sweep (ADMIN_WIPE_OBJ has delete
+// authority over the range) reclaims it on factory reset. Coexistence with
+// the real UserID validated on silicon 2026-05-20 (`make duress-probe-hw`).
+/// Duress UserID (decoy wallet PIN gate, max_attempts=0 / unlimited).
+pub const DURESS_USERID_OBJ: u32 = 0x7B10_0010;
+/// Duress half_E (decoy entropy SE050 share), policy requires duress UserID auth.
+pub const DURESS_ENTROPY_OBJ: u32 = 0x7B10_0011;
+/// Duress verifying key (decoy wallet VK).
+pub const DURESS_VK_OBJ: u32 = 0x7B10_0012;
+/// Duress bootstrap verifying key (decoy wallet).
+pub const DURESS_BOOTSTRAP_VK_OBJ: u32 = 0x7B10_0013;
+
 /// Admin wipe UserID. Second auth object, created at provisioning
 /// with a hardware-root-derived PIN (`hw::secret_keys::se050_admin_pin()`
 /// → `derive_into_bhk("pqsigner/se050-admin-pin-v1")`): in a `bhk`
@@ -1600,6 +1617,96 @@ impl Se050 {
         Ok(())
     }
 
+    /// §32 duress (decoy) provisioning on SE050. Mirrors [`store_objects`]
+    /// for the SECOND credential set:
+    ///   - `DURESS_USERID_OBJ` UserID with `max_attempts=0` (UNLIMITED —
+    ///     a wrong duress PIN must NOT trip SE050's own silicon lockout;
+    ///     the MCU page-124 counter gates lockout on a wrong duress entry,
+    ///     handled in the P3 unlock path)
+    ///   - `DURESS_ENTROPY_OBJ` (decoy half_E), `DURESS_VK_OBJ`,
+    ///     `DURESS_BOOTSTRAP_VK_OBJ`, each gated on the duress UserID
+    ///
+    /// All objects carry the admin-delete policy entry (`admin_pin` →
+    /// `ADMIN_WIPE_OBJ`) so the existing factory-reset-admin sweep
+    /// reclaims them. Assumes the admin UserID already exists (the real
+    /// `store_objects` ran first in the same wizard step). Includes an
+    /// admin-auth stale sweep so re-provisioning is idempotent.
+    #[cfg(feature = "duress-pin")]
+    fn store_duress_objects(
+        &mut self,
+        half_e: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        duress_pin: &[u8],
+        admin_pin: Option<&[u8; 16]>,
+    ) -> Result<(), Se050Error> {
+        self.init()?;
+        let admin_ref = admin_pin.map(|_| ADMIN_WIPE_OBJ);
+
+        unsafe {
+            // Stale-duress-object sweep (admin-auth), idempotent re-provision.
+            if let Some(admin) = admin_pin {
+                const STALE: [u32; 4] = [
+                    DURESS_USERID_OBJ, DURESS_ENTROPY_OBJ, DURESS_VK_OBJ, DURESS_BOOTSTRAP_VK_OBJ,
+                ];
+                let mut present = [false; 4];
+                let mut any = false;
+                for (i, obj) in STALE.iter().enumerate() {
+                    if apdu::check_exists(&mut self.t1, &mut self.scp03, *obj).unwrap_or(false) {
+                        present[i] = true;
+                        any = true;
+                    }
+                }
+                if any {
+                    secure_log!("[SE050/duress] stale duress objects — sweeping via admin");
+                    let sid = apdu::create_session(&mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ)?;
+                    if let Err(e) = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, admin) {
+                        let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                        return Err(e);
+                    }
+                    for idx in [1usize, 2, 3, 0] {
+                        if present[idx] {
+                            if let Err(e) = apdu::delete_object_authed(
+                                &mut self.t1, &mut self.scp03, &sid, STALE[idx],
+                            ) {
+                                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                                return Err(e);
+                            }
+                        }
+                    }
+                    let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                }
+            }
+
+            // Duress UserID — max_attempts=0 (unlimited).
+            if !apdu::check_exists(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ).unwrap_or(false) {
+                secure_log!("[SE050/duress] writing DURESS_USERID_OBJ (max_attempts=0)");
+                apdu::write_userid(
+                    &mut self.t1, &mut self.scp03,
+                    DURESS_USERID_OBJ, duress_pin, 0, admin_ref,
+                )?;
+            }
+
+            // Duress data objects, gated on the duress UserID.
+            let objs: [(u32, &[u8]); 3] = [
+                (DURESS_ENTROPY_OBJ, half_e),
+                (DURESS_VK_OBJ, vk),
+                (DURESS_BOOTSTRAP_VK_OBJ, bootstrap_vk),
+            ];
+            for (obj_id, data) in &objs {
+                if !apdu::check_exists(&mut self.t1, &mut self.scp03, *obj_id).unwrap_or(false) {
+                    secure_log!("[SE050/duress] writing 0x{:08x}", obj_id);
+                    apdu::write_binary_gated(
+                        &mut self.t1, &mut self.scp03,
+                        *obj_id, data, DURESS_USERID_OBJ, admin_ref,
+                    )?;
+                }
+            }
+        }
+        secure_log!("[SE050/duress] store_duress_objects complete");
+        Ok(())
+    }
+
     /// Provision admin wipe credential on an already-initialized chip.
     ///
     /// Used by the dual-SE glue during first-boot to install the admin
@@ -2231,6 +2338,49 @@ impl WalletStore for Se050 {
         self.remaining = sphincs_tz_shared::MAX_ATTEMPTS;
 
         Ok(())
+    }
+
+    #[cfg(feature = "duress-pin")]
+    fn provision_duress(
+        &mut self,
+        entropy: &[u8; 32],
+        _master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        duress_pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        // `entropy` here is SE050's decoy half_E (DualSE pre-split it).
+        // Derive the admin PIN exactly as `provision` does so the duress
+        // objects carry the same admin-delete policy → factory_reset_admin
+        // sweeps them. QEMU / e2e-skip-admin-wipe use no admin (None).
+        #[cfg(all(feature = "stm32u585", not(feature = "e2e-skip-admin-wipe")))]
+        {
+            use zeroize::Zeroize;
+            let mut admin_pin = crate::hw::secret_keys::se050_admin_pin()
+                .map_err(|_| SeError::InternalError)?;
+            let r = self.store_duress_objects(
+                entropy, vk, bootstrap_vk, duress_pin, Some(&admin_pin),
+            );
+            admin_pin.zeroize();
+            r.map_err(|_| SeError::InternalError)?;
+        }
+        #[cfg(any(not(feature = "stm32u585"), feature = "e2e-skip-admin-wipe"))]
+        {
+            self.store_duress_objects(entropy, vk, bootstrap_vk, duress_pin, None)
+                .map_err(|_| SeError::InternalError)?;
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "duress-pin")]
+    fn duress_is_provisioned(&mut self) -> bool {
+        if self.init().is_err() {
+            return false;
+        }
+        unsafe {
+            apdu::check_exists(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ)
+                .unwrap_or(false)
+        }
     }
 
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {

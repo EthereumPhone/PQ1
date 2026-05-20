@@ -272,6 +272,15 @@ optiga-hw-counter-e2e = ["optiga-hw-counter"]
 # Needs the full dual-SE + hw-counter path. Stays LcsO=Creation (never
 # locks). Use `make duress-probe-hw`.
 duress-probe-e2e = ["dual-se", "optiga-hw-counter"]
+# §32 PRODUCTION duress (decoy) wallet. Provisions a second, fully
+# independent decoy wallet behind a second PIN credential (OPTIGA F1D8 +
+# E121 matched-LUC, SE050 DURESS_USERID_OBJ unlimited). When ON, the
+# wizard ALWAYS provisions a decoy (random PIN if the user declines) so
+# "duress configured vs not" is indistinguishable. Implies the matched-LUC
+# OPTIGA hw-counter path + dual-SE. The unlock-side dispatch (P3) is built
+# separately; with only this feature the decoy is provisioned but never
+# consulted, so the real wallet behaves identically.
+duress-pin = ["dual-se", "optiga-hw-counter"]
 # Combined MCU page-124 + OPTIGA E120 + SE050 counter sync + desync
 # recovery e2e. Under dual-se with hw-counter, exercises the full PIN
 # lockout pipeline AND asserts all three counters stay in sync through
