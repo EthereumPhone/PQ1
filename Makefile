@@ -2110,6 +2110,37 @@ dual-se-bhk-e2e:
 # boot wizard afterwards to restore.
 #
 # Watch semihosting for "[E2E-PIN-GATE] PIN-GATE ROUNDTRIP: PASS".
+# §32 duress-PIN feasibility probe. Provisions a SECOND OPTIGA AuthRef
+# (F1D8, Execute=ALW / no E120 binding) + a SECOND SE050 UserID
+# (max_attempts=0) alongside the real credentials, and asserts they
+# coexist AND that the duress OPTIGA auth leaves E120 untouched. Stays
+# LcsO=Creation on every OID (never locks → fully recoverable).
+# Reprovisions the bench chips with test data, like the other SE e2es.
+#
+# Pass: semihosting ends with "DURESS COEXISTENCE PROBE: PASS".
+duress-probe-hw:
+	@echo "==> Building §32 duress-PIN coexistence probe firmware..."
+	@echo "    Adds a 2nd OPTIGA AuthRef (F1D8, no E120) + 2nd SE050 UserID"
+	@echo "    (unlimited) next to the real credentials. NEVER locks an OID;"
+	@echo "    every credential stays LcsO=Creation / re-writable."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features duress-probe-e2e,stm32u585,ui-oled,debug-log,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running duress-PIN coexistence probe (watch for DURESS COEXISTENCE PROBE: PASS)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 pin-gate-hw-counter-e2e:
 	@echo "==> Building combined sync + desync recovery e2e firmware..."
 	@echo "    Exercises MCU page-124 + OPTIGA E120 + SE050 UserID counters"

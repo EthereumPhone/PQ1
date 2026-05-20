@@ -328,6 +328,46 @@ impl Se050 {
         Ok(())
     }
 
+    /// PROBE ONLY (`duress-probe-e2e`, §32 duress-PIN feasibility):
+    /// create a SECOND UserID at `obj_id` with `max_attempts=0`
+    /// (unlimited — like the admin UserID, so it never trips lockout),
+    /// then auth against it with `pin`. Returns `Ok(())` iff the
+    /// create + verify both succeed — i.e. a duress UserID coexists
+    /// with the real one and auths independently. Cleans up any stale
+    /// object at `obj_id` first so the probe is re-runnable.
+    #[cfg(feature = "duress-probe-e2e")]
+    pub fn probe_provision_and_auth_duress_userid(
+        &mut self,
+        obj_id: u32,
+        pin: &[u8],
+    ) -> Result<(), Se050Error> {
+        self.init()?;
+        unsafe {
+            // Re-runnable: if a duress UserID from a prior probe exists,
+            // auth with the same pin and self-delete it (best-effort).
+            if apdu::check_exists(&mut self.t1, &mut self.scp03, obj_id).unwrap_or(false) {
+                if let Ok(sid) = apdu::create_session(&mut self.t1, &mut self.scp03, obj_id) {
+                    if apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, pin).is_ok() {
+                        let _ = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, obj_id,
+                        );
+                    }
+                    let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                }
+            }
+            // Unlimited-attempts UserID (max_attempts = 0), no admin
+            // binding — the duress credential never locks out.
+            apdu::write_userid(&mut self.t1, &mut self.scp03, obj_id, pin, 0, None)?;
+
+            // Auth against it.
+            let session_id = apdu::create_session(&mut self.t1, &mut self.scp03, obj_id)?;
+            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &session_id, pin);
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
+            r?;
+        }
+        Ok(())
+    }
+
     /// Peek the silicon-enforced **failed-attempts USED** count on the
     /// USERID auth object — i.e. the `auth_attempts` field — WITHOUT
     /// burning an attempt.

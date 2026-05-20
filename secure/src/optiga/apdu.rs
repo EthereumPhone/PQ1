@@ -150,6 +150,14 @@ pub const OID_VK:            u16 = 0xF1D3;
 pub const OID_BOOTSTRAP_VK:  u16 = 0xF1D4;
 pub const OID_COUNTER:       u16 = 0xF1E1;
 
+/// PROBE ONLY (`duress-probe-e2e`): a free type-3 data OID used to
+/// provision a SECOND AuthRef for the §32 duress-PIN feasibility test.
+/// F1D0..F1D5 are taken (auth/entropy/master/vk/bvk/soft-counter);
+/// F1D6..F1DB are the remaining free slots in the valid type-3 range.
+/// F1D8 is well clear of the used range. NOT a production OID.
+#[cfg(feature = "duress-probe-e2e")]
+pub const OID_DURESS_AUTH_REF_PROBE: u16 = 0xF1D8;
+
 /// Silicon monotonic counter used under `optiga-hw-counter` to replace
 /// the soft `OID_COUNTER` (F1E1). `0xE120` is the first of the four
 /// OPTIGA Trust M V3 Lifetime-Usage-Counter objects (E120..E123 per

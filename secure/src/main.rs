@@ -1827,6 +1827,153 @@ fn main() -> ! {
         loop { cortex_m::asm::wfi(); }
     }
 
+    // ---- §32 duress-PIN feasibility probe ----
+    // Validates the load-bearing on-silicon assumptions for the duress
+    // PIN → decoy wallet design (work-todo §32) BEFORE committing the
+    // multi-session build:
+    //   * OPTIGA: a SECOND AuthRef at a free OID (F1D8) with Execute=ALW
+    //     (no E120/LUC binding) coexists with the real F1D0, auths
+    //     independently, and crucially leaves E120 UNTOUCHED (so the
+    //     duress credential never bumps the silicon lockout counter).
+    //     Then confirms the real F1D0 still bumps/resets E120 — i.e.
+    //     adding F1D8 didn't break the real lockout.
+    //   * SE050: a SECOND UserID (max_attempts=0, unlimited) provisions
+    //     + auths — i.e. an unlimited duress credential coexists with
+    //     the real user UserID (the production admin UserID already
+    //     proves this shape; this is a direct confirmation).
+    //
+    // STAYS LcsO=Creation throughout — never locks an OID, every
+    // credential remains re-writable / recoverable. Reprovisions the
+    // bench chips with test data (like optiga-hw-counter-e2e). Does NOT
+    // touch the real F1D0..F1D5 contents beyond the normal provision.
+    //
+    // Triggered by: make duress-probe-hw
+    #[cfg(feature = "duress-probe-e2e")]
+    unsafe {
+        use crate::secure_element::{UnlockError, WalletStore};
+
+        ui::show_status("DURESS-PROBE", "running");
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+
+        let test_entropy: [u8; 32] = [0x42; 32];
+        let test_master = crypto::kdf(b"sphincs-master", &test_entropy, 0);
+        let test_vk: [u8; 32] = [0xCC; 32];
+        let test_bvk: [u8; 32] = [0xDD; 32];
+        let real_pin: [u8; 8] = *b"00000000";
+        let wrong_pin: [u8; 8] = *b"99999999";
+        let duress_pin: [u8; 8] = *b"11111111";
+
+        // F1D8: free type-3 OID (F1D0..F1D5 used, F1D6..F1DB free) —
+        // mirrors apdu::OID_DURESS_AUTH_REF_PROBE.
+        const DURESS_AUTHREF_OID: u16 = 0xF1D8;
+        // Fresh SE050 OID range for the probe's duress UserID.
+        const DURESS_USERID_OBJ: u32 = 0x7B0D_0000;
+
+        macro_rules! fail {
+            ($msg:expr) => {{
+                secure_log!("[S] [DURESS-PROBE] FAIL: {}", $msg);
+                ui::show_status("DURESS", "FAIL");
+                // Clean SYS_EXIT so probe-rs detaches + flushes (the run
+                // is piped; without this it block-buffers + wfi-loops).
+                cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_FAILURE);
+                loop {
+                    cortex_m::asm::wfi();
+                }
+            }};
+        }
+
+        // Step 1: provision the real wallet (F1D0 + E120 + SE050 user UserID).
+        if se
+            .provision(&test_entropy, &test_master, &test_vk, &test_bvk, &real_pin)
+            .is_err()
+        {
+            fail!("real provision failed (chip may be LcsO=Op — run optiga-reset-oids)");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 1: real provision OK");
+
+        // ===== OPTIGA: second AuthRef at F1D8, no E120 binding =====
+        let (e0, _) = match se.optiga.read_hw_pin_counter() {
+            Some(p) => p,
+            None => fail!("E120 read returned None"),
+        };
+        secure_log!("[S] [DURESS-PROBE] step 2: E120 baseline = {}", e0);
+
+        if se
+            .optiga
+            .probe_provision_duress_authref(DURESS_AUTHREF_OID, &duress_pin)
+            .is_err()
+        {
+            fail!("OPTIGA duress AuthRef provision at F1D8 failed (F1D8 may be locked)");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 3: OPTIGA F1D8 duress AuthRef provisioned (Execute=ALW, no lock) OK");
+
+        let (e1, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        if e1 != e0 {
+            secure_log!("[S] [DURESS-PROBE] step 4: E120 {}→{} during F1D8 provision", e0, e1);
+            fail!("E120 moved while provisioning F1D8");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 4: E120 unchanged ({}) by F1D8 provision OK", e1);
+
+        if se
+            .optiga
+            .probe_hmac_auth_at(DURESS_AUTHREF_OID, &duress_pin)
+            .is_err()
+        {
+            fail!("OPTIGA F1D8 duress HMAC auth failed");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 5: OPTIGA F1D8 duress auth OK");
+
+        let (e2, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        if e2 != e0 {
+            secure_log!("[S] [DURESS-PROBE] step 6: E120={} expected {} — F1D8 auth BUMPED E120", e2, e0);
+            fail!("F1D8 auth touched E120 (unexpected LUC coupling)");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 6: E120 STILL unchanged ({}) after F1D8 auth — no LUC coupling OK", e2);
+
+        // Real F1D0 still bumps E120 on wrong PIN (coexistence intact).
+        match se.optiga.unlock(&wrong_pin) {
+            Err(UnlockError::PinIncorrect) => {}
+            other => {
+                secure_log!("[S] [DURESS-PROBE] step 7: real wrong PIN got {:?}", other.as_ref().err());
+                fail!("real F1D0 wrong-PIN not rejected after F1D8 added");
+            }
+        }
+        let (e3, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        if e3 != e0 + 1 {
+            secure_log!("[S] [DURESS-PROBE] step 7: E120={} expected {}", e3, e0 + 1);
+            fail!("real F1D0 wrong PIN didn't bump E120 with F1D8 present");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 7: real F1D0 wrong PIN → E120 {}→{} (coexistence intact) OK", e0, e3);
+
+        // Real F1D0 correct PIN resets E120.
+        if se.optiga.unlock(&real_pin).is_err() {
+            fail!("real F1D0 correct PIN rejected after F1D8 added");
+        }
+        let (e4, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        if e4 != 0 {
+            fail!("E120 not reset after real correct PIN");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 8: real F1D0 correct PIN → E120 reset to 0 OK");
+
+        // ===== SE050: second unlimited UserID =====
+        if se
+            .se050
+            .probe_provision_and_auth_duress_userid(DURESS_USERID_OBJ, &duress_pin)
+            .is_err()
+        {
+            fail!("SE050 duress UserID (unlimited) provision+auth failed");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 9: SE050 duress UserID (max_attempts=0) provisioned + auth'd, coexists with real UserID OK");
+
+        secure_log!("[S] [DURESS-PROBE] === DURESS COEXISTENCE PROBE: PASS ===");
+        secure_log!("[S] [DURESS-PROBE] verdict: OPTIGA 2nd AuthRef (no-LUC) + SE050 2nd unlimited UserID both coexist — §32 design feasible");
+        ui::show_status("DURESS", "PASS");
+        cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
+        loop {
+            cortex_m::asm::wfi();
+        }
+    }
+
     // ---- Combined MCU + OPTIGA E120 + SE050 sync + desync recovery ----
     // Exercises the full PIN lockout pipeline under `dual-se +
     // optiga-hw-counter` and asserts MCU page-124 stays in lockstep

@@ -265,6 +265,13 @@ optiga-hw-counter = ["optiga-trust-m"]
 # Uses standalone OPTIGA path (not dual-se) so the test isolates
 # OPTIGA behaviour from SE050. Use `make optiga-hw-counter-e2e`.
 optiga-hw-counter-e2e = ["optiga-hw-counter"]
+# §32 duress-PIN feasibility probe: provisions a SECOND OPTIGA AuthRef
+# (F1D8, Execute=ALW / no E120 binding) + a SECOND SE050 UserID
+# (max_attempts=0) alongside the real credentials, and asserts
+# coexistence + that the duress OPTIGA auth leaves E120 untouched.
+# Needs the full dual-SE + hw-counter path. Stays LcsO=Creation (never
+# locks). Use `make duress-probe-hw`.
+duress-probe-e2e = ["dual-se", "optiga-hw-counter"]
 # Combined MCU page-124 + OPTIGA E120 + SE050 counter sync + desync
 # recovery e2e. Under dual-se with hw-counter, exercises the full PIN
 # lockout pipeline AND asserts all three counters stay in sync through

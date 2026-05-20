@@ -1259,6 +1259,76 @@ impl OptigaTrustM {
         }
     }
 
+    /// PROBE ONLY (`duress-probe-e2e`, §32 duress-PIN feasibility):
+    /// provision a SECOND AuthRef at `oid` with `Execute=ALW` (NO
+    /// E120/LUC binding → it never bumps the silicon PIN counter) and
+    /// `Change=ALW` (stays LcsO=Creation — re-writable, never locked).
+    /// Mirrors `provision_auth_ref` but at an arbitrary OID with the
+    /// non-LUC metadata. Deliberately does NOT call `lock_oid`.
+    #[cfg(feature = "duress-probe-e2e")]
+    pub unsafe fn probe_provision_duress_authref(
+        &mut self,
+        oid: u16,
+        pin: &[u8; 8],
+    ) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+        self.ensure_shield()?;
+        let mut secret = Self::derive_pin_secret(pin);
+        let r = apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, &secret);
+        secret.zeroize();
+        r?;
+        // Non-LUC AuthRef metadata: Change=ALW / Read=NEV / Execute=ALW
+        // / DataType=AUTHREF. Change=ALW keeps the OID at LcsO=Creation.
+        let (meta, meta_len) = apdu::build_metadata_auth_ref();
+        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len])?;
+        Ok(())
+    }
+
+    /// PROBE ONLY: HMAC challenge-response auth against the AuthRef at
+    /// `oid` via the non-LUC `hmac_verify` path (does NOT touch E120).
+    /// Returns `Ok(())` on successful auth. Mirrors the non-hw-counter
+    /// arm of `authenticate_and_read`, parameterised by OID.
+    #[cfg(feature = "duress-probe-e2e")]
+    pub unsafe fn probe_hmac_auth_at(
+        &mut self,
+        oid: u16,
+        pin: &[u8; 8],
+    ) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+        self.ensure_shield()?;
+
+        // input_data = host_nonce(16) || chip_random(32) || host_tag(16),
+        // exactly as `authenticate_and_read`'s compound path.
+        let mut host_nonce = [0u8; 16];
+        let mut host_tag = [0u8; 16];
+        crate::rng::fill(&mut host_nonce).map_err(|_| OptigaError::Transport)?;
+        crate::rng::fill(&mut host_tag).map_err(|_| OptigaError::Transport)?;
+        let mut chip_random = [0u8; 32];
+        apdu::generate_auth_code(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_SESSION, &host_nonce, &mut chip_random,
+        )?;
+
+        let mut hmac_input = [0u8; 64];
+        hmac_input[..16].copy_from_slice(&host_nonce);
+        hmac_input[16..48].copy_from_slice(&chip_random);
+        hmac_input[48..].copy_from_slice(&host_tag);
+
+        let mut secret = Self::derive_pin_secret(pin);
+        let hmac = Self::hmac_sha256(&secret, &hmac_input);
+        secret.zeroize();
+
+        let r = apdu::hmac_verify(
+            &mut self.ifx, &mut self.shield,
+            oid, apdu::OID_SESSION, &hmac_input, &hmac,
+        );
+        hmac_input.zeroize();
+        host_nonce.zeroize();
+        host_tag.zeroize();
+        chip_random.zeroize();
+        r
+    }
+
     /// Provision the attempt counter: write 0, install AC, lock.
     unsafe fn provision_counter(&mut self) -> Result<(), OptigaError> {
         apdu::set_data_object(
