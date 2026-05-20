@@ -29,7 +29,7 @@ mod intent;
 
 use crate::erc20::bundle::Erc20Metadata;
 use crate::names::NameResolver;
-use crate::tx::display::primitives::{
+use super::primitives::{
     chain_name, write_chain, write_fee_budget_row, write_gas, write_gwei, write_line,
     write_nonce_row, write_tip_row,
 };

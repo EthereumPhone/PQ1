@@ -159,6 +159,15 @@ mod ui {
     pub mod confirm {
         pub type Page = [[u8; super::DISPLAY_COLS]; super::DISPLAY_ROWS];
     }
+
+    /// Mirrors the production `crate::ui::ascii_str`. Required by the
+    /// ERC-7730 formatter when mounted under `display_under_test`.
+    /// Tests enforce ASCII-by-construction via `assert_all_pages_printable`,
+    /// so non-UTF-8 here would surface as a panic — matching the
+    /// production contract.
+    pub(crate) fn ascii_str(buf: &[u8]) -> &str {
+        core::str::from_utf8(buf).expect("ascii_str: non-ASCII bytes in render buffer")
+    }
 }
 
 #[cfg(test)]

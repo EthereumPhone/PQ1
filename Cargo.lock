@@ -2036,6 +2036,7 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "cortex-m-semihosting",
+ "dbgen",
  "embedded-graphics",
  "embedded-hal 1.0.0",
  "fw-manifest",

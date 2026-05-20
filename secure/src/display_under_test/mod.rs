@@ -119,6 +119,17 @@ pub mod batch;
 #[path = "../tx/display/typed_call/mod.rs"]
 pub mod typed_call;
 
+// ERC-7730 / ERC-8213 renderers. Mounted alongside the other renderers
+// so host tests in `erc7730_render_pure_tests.rs` can call the full
+// `render_erc7730_pages` / `render_erc7730_eip712_pages` pipelines and
+// assert the resulting OLED rows byte-for-byte against the strings a
+// user would actually see on the device.
+#[path = "../tx/display/erc7730/mod.rs"]
+pub mod erc7730;
+
+#[path = "../tx/display/erc8213.rs"]
+pub mod erc8213;
+
 // `safe_display` is intentionally NOT re-mounted: it includes a handful
 // of helpers (`write_short_addr`, `write_raw_uint_two_rows`, …) that
 // the host-side suite would mark unused and which we cannot
@@ -128,3 +139,6 @@ pub mod typed_call;
 
 #[cfg(test)]
 mod pure_tests;
+
+#[cfg(test)]
+mod erc7730_render_pure_tests;
