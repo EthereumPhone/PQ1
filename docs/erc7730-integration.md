@@ -72,6 +72,17 @@ All `*_off` fields are offsets into the IR's flat byte array.
 `pool` is the shared interning area for ASCII strings + path bytecode
 programs.
 
+**Reserved offset 0**: `pool[0]` is a 1-byte `0xFF` filler produced by
+`dbgen::erc7730::Pool::new`. The on-device walker
+(`pqsigner_erc7730::walker::path_bytes`) and the renderer's param
+parser (`secure/src/tx/erc7730_render::params::parse`) both treat
+`path_off == 0` and `param_off == 0` as "no path" / "default params"
+sentinels and short-circuit before reading the pool. Companions that
+build their own IR (instead of consuming the `dbgen`-emitted blob)
+MUST keep this convention — without it the first interned program
+collides with the sentinel and every field on that descriptor falls
+through to blind-sign with a `"7730 missing path"` status banner.
+
 ### Formats
 
 Each format describes one (selector OR EIP-712 primaryTypeHash[..4])
@@ -90,8 +101,12 @@ Each `FieldEntry`:
 ```
 format_op    u8       (one of 0x01..0x0E)
 label_off    u16 BE   (pool offset for the field's label string)
-param_off    u16 BE   (pool offset for the TLV-encoded ParamSet)
-path_off     u16 BE   (pool offset for the path bytecode program)
+param_off    u16 BE   (pool offset for the TLV-encoded ParamSet;
+                       0 means "default params" — equivalent to an
+                       empty TLV blob with Visibility::Always)
+path_off     u16 BE   (pool offset for the path bytecode program;
+                       0 means "no path" — caller-specific behaviour,
+                       most formatters reject)
 ```
 
 `FormatOp` values (see `pqsigner-erc7730::ir::FormatOp`):
@@ -104,8 +119,8 @@ path_off     u16 BE   (pool offset for the path bytecode program)
 | 0x04   | Bool            | Render a boolean                     |
 | 0x05   | Bytes           | Render bytes / fixed bytesN          |
 | 0x06   | String          | Render a UTF-8 string                |
-| 0x07   | Amount          | Render a token amount (uses tokenRef)|
-| 0x08   | TokenAmount     | Render with looked-up decimals       |
+| 0x07   | Amount          | Render a value in `params.base` units (default `ETH`) at `params.decimals` (default 18) |
+| 0x08   | TokenAmount     | Same as Amount but resolves decimals + ticker from the looked-up token; `params.threshold` short-circuits the formatter to `"unlimited <ticker>"` when `value >= threshold` (use for ERC-20 `approve(uint256.MAX)`) |
 | 0x09   | Duration        | Render a duration (seconds → h/m/s)  |
 | 0x0A   | Date            | Render a date (block height or unix) |
 | 0x0B   | Enum            | Render an enum value                 |
