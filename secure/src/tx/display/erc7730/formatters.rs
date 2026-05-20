@@ -30,7 +30,7 @@
 
 use crate::erc20::bundle::Erc20Metadata;
 use crate::names::NameResolver;
-use crate::tx::display::primitives::{
+use super::super::primitives::{
     chain_name, write_addr_full, write_addr_full_or_name, write_amount_two_rows,
     write_line, AmountFit,
 };

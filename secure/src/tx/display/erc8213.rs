@@ -40,7 +40,7 @@
 //!   verify`. Re-exported from the Safe renderer.
 
 use super::Pages;
-use crate::tx::display::primitives::write_line;
+use super::primitives::write_line;
 use crate::ui::DISPLAY_COLS;
 
 /// Discriminator for the fingerprint kind + payload. All variants

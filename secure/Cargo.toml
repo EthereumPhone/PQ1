@@ -677,3 +677,12 @@ hex = { workspace = true }
 # (cargo-fuzz needs a `[lib]` target which `sphincs-tz-secure`
 # currently lacks). Coverage-guided libFuzzer is a follow-up.
 proptest = "1"
+
+# Host-side ERC-7730 catalogue compiler. Used by the host renderer
+# round-trip tests in `secure/src/display_under_test/erc7730_render_pure_tests.rs`
+# to compile the checked-in seed-corpus JSON into the byte-identical IR
+# the firmware would see on-wire, so the renderer is exercised against
+# real descriptors rather than hand-rolled IR fixtures. Host-only by
+# construction (`dbgen` pulls in `serde_json` / `toml` / `std::fs`) and
+# never reaches the no_std firmware binary.
+dbgen = { path = "../dbgen" }

@@ -17,7 +17,7 @@
 //! (e.g., "Send {amount} {token}" prints with the braces still in).
 //! That's intentionally ugly so a user-facing review notices.
 
-use crate::tx::display::primitives::write_line;
+use super::super::primitives::write_line;
 use crate::tx::erc7730::{Erc7730Ir, FormatHeader};
 
 use super::formatters::write_line_bytes;
