@@ -215,27 +215,50 @@ impl WalletStore for DualSecureElement {
     /// never touched on a duress entry, so no lockout drift.
     #[cfg(feature = "duress-pin")]
     fn unlock_duress(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+        // OPTIGA returns (half_o, stored_decoy_master_from_F1DA); SE050
+        // returns half_e. Both chips are ALWAYS verified (no `?` short-
+        // circuit) so the op-count is uniform across real/duress entries.
         let ro = unsafe { self.optiga.duress_read_half(pin) };
         let re = self.se050.duress_read_half(pin);
         match (ro, re) {
-            (Ok(mut half_o), Ok(mut half_e)) => {
+            (Ok((mut half_o, mut stored_master)), Ok(mut half_e)) => {
                 let mut full = xor_32(&half_o, &half_e);
                 half_o.zeroize();
                 crate::fi::zeroize_barrier();
                 half_e.zeroize();
                 crate::fi::zeroize_barrier();
-                let decoy_master = crypto::kdf(b"sphincs-master", &full, 0);
-                let blob = crypto::encrypt_entropy_blob(&full, &decoy_master);
+
+                // FI cross-check (parity with the real `unlock`): the
+                // master derived from the reconstructed decoy entropy MUST
+                // equal the decoy master stored on-chip (F1DA). Defends a
+                // glitch on the halve reads that yields wrong entropy.
+                // Two `ct_eq` compares separated by `wait_random`, gated
+                // through the hamming-distant sentinel.
+                let derived_master = crypto::kdf(b"sphincs-master", &full, 0);
+                let c1: bool = derived_master.ct_eq(&stored_master).into();
+                crate::fi::wait_random();
+                let c2: bool = derived_master.ct_eq(&stored_master).into();
+                stored_master.zeroize();
+                crate::fi::zeroize_barrier();
+                if crate::fi::check_true_into_sentinel(|| c1 && c2) != crate::fi::OK_SENTINEL {
+                    full.zeroize();
+                    crate::fi::zeroize_barrier();
+                    secure_log!("[DUAL/duress] CRITICAL: decoy entropy doesn't match stored master");
+                    return Err(UnlockError::InternalError);
+                }
+
+                let blob = crypto::encrypt_entropy_blob(&full, &derived_master);
                 self.entropy_blob_cache.copy_from_slice(&blob);
                 self.blob_cached.set_true();
                 full.zeroize();
                 crate::fi::zeroize_barrier();
                 secure_log!("[DUAL/duress] decoy wallet unlocked");
-                Ok(decoy_master)
+                Ok(derived_master)
             }
             (other_o, other_e) => {
-                if let Ok(mut h) = other_o {
+                if let Ok((mut h, mut m)) = other_o {
                     h.zeroize();
+                    m.zeroize();
                     crate::fi::zeroize_barrier();
                 }
                 if let Ok(mut h) = other_e {

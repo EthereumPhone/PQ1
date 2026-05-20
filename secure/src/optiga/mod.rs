@@ -946,6 +946,25 @@ impl OptigaTrustM {
     #[cfg(feature = "optiga-hw-counter")]
     pub const HW_PIN_CTR_LIMIT: u32 = 32;
 
+    /// §32 duress LUC counter (E121) limit. UNLIKE the real E120 (limit
+    /// 32, an enforced anti-extraction lockout), E121 is functionally
+    /// UNENFORCED — firmware never reads it for lockout; it exists only so
+    /// the duress F1D8 verify fires a LUC and is a timing twin of the real
+    /// F1D0 verify. The limit must therefore never trip in practice.
+    ///
+    /// CRITICAL: E121 is bumped by EVERY F1D8 execute — including the
+    /// failed duress verify that `unlock_duress` runs on a REAL-PIN entry
+    /// (the no-short-circuit timing structure). That bump CANNOT be reset
+    /// (E121.Change=Auto(F1D8) is not satisfied by a failed verify), so
+    /// E121 climbs ~1 per unlock REGARDLESS of whether duress is ever
+    /// used. The limit alone is what prevents a lifetime silicon-lockout
+    /// of the duress AuthRef: 0x00FF_FFFF = 16,777,215 ⇒ ~460 years at an
+    /// extreme 100 unlocks/day. (A duress-correct unlock additionally
+    /// resets E121 to 0 — see `duress_read_half` — which bounds the
+    /// decoy-heavy case, but the high limit is the load-bearing fix.)
+    #[cfg(feature = "duress-pin")]
+    pub const DURESS_CTR_LIMIT: u32 = 0x00FF_FFFF;
+
     /// Provision the silicon PIN counter at `apdu::OID_PIN_CTR` (0xE120).
     ///
     /// MUST be called BEFORE `provision_auth_ref` under this feature —
@@ -1359,13 +1378,24 @@ impl OptigaTrustM {
 
     /// Authenticate the DURESS AuthRef (F1D8, auto-state path firing
     /// LUC(E121)) with `duress_pin` and read back the decoy OPTIGA half
-    /// (F1D9). Mirrors the hw-counter arm of `authenticate_and_read` but
-    /// for the duress credential set. Returns `Err` (before the read) if
-    /// the verify fails — so a real-PIN entry costs exactly one duress
-    /// verify here, no read. Used by `DualSecureElement::unlock_duress`
-    /// (P3) and the P2 silicon-validation recipe.
+    /// (F1D9) AND the stored decoy master (F1DA). Mirrors the hw-counter
+    /// arm of `authenticate_and_read` but for the duress credential set.
+    /// Returns `(half_o, stored_decoy_master)`; `Err` (before any read)
+    /// if the verify fails — so a real-PIN entry costs exactly one duress
+    /// verify here, no read.
+    ///
+    /// On success it ALSO resets E121 to `(0, DURESS_CTR_LIMIT)` — the
+    /// F1D8 auth-state just established satisfies E121.Change=Auto(F1D8),
+    /// so this is the duress-side analogue of the real path's E120 reset.
+    /// (Bounds the decoy-heavy case; real-entry E121 bumps are unresettable
+    /// and bounded by the high limit instead — see `DURESS_CTR_LIMIT`.)
+    ///
+    /// Used by `DualSecureElement::unlock_duress` (P3) + the P2 recipe.
     #[cfg(feature = "duress-pin")]
-    pub unsafe fn duress_read_half(&mut self, duress_pin: &[u8; 8]) -> Result<[u8; 32], OptigaError> {
+    pub unsafe fn duress_read_half(
+        &mut self,
+        duress_pin: &[u8; 8],
+    ) -> Result<([u8; 32], [u8; 32]), OptigaError> {
         use zeroize::Zeroize;
         self.ensure_shield()?;
         let mut nonce = [0u8; 16];
@@ -1387,7 +1417,19 @@ impl OptigaTrustM {
             &mut self.ifx, &mut self.shield,
             apdu::OID_DURESS_ENTROPY, 0, 32, &mut half_o,
         )?;
-        Ok(half_o)
+        let mut stored_master = [0u8; 32];
+        apdu::get_data_object(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_DURESS_MASTER_SECRET, 0, 32, &mut stored_master,
+        )?;
+        // Reset E121 (F1D8 auth-state active → Change=Auto(F1D8) satisfied).
+        // Best-effort: the unlock already succeeded; a failed reset only
+        // means E121 keeps climbing toward its (very high) limit.
+        let ctr = apdu::encode_pin_ctr(0, Self::DURESS_CTR_LIMIT);
+        let _ = apdu::set_data_object(
+            &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &ctr,
+        );
+        Ok((half_o, stored_master))
     }
 
     /// Verify-ONLY against the DURESS AuthRef (F1D8, auto-state, fires
@@ -1752,7 +1794,7 @@ impl OptigaTrustM {
             secure_log!("[OPTIGA/duress] E121 already gated on F1D8 — skipping (idempotent)");
         } else {
             unsafe {
-                let ctr_data = apdu::encode_pin_ctr(0, 0xFFFF);
+                let ctr_data = apdu::encode_pin_ctr(0, Self::DURESS_CTR_LIMIT);
                 apdu::set_data_object(
                     &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &ctr_data,
                 )?;

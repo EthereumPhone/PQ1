@@ -2234,7 +2234,7 @@ fn main() -> ! {
 
         // 5. Read the OPTIGA decoy half (auths F1D8, fires LUC(E121)).
         let half_o = match se.optiga.duress_read_half(&duress_pin) {
-            Ok(h) => h,
+            Ok((h, _stored_master)) => h,
             Err(e) => { secure_log!("[S] [DURESS-PROV] optiga.duress_read_half err {:?}", e); fail!("OPTIGA decoy read/auth failed"); }
         };
 
@@ -2243,8 +2243,12 @@ fn main() -> ! {
         let e121_post = se.optiga.probe_read_counter(optiga::apdu::OID_PIN_CTR_DURESS).map(|(c, _)| c).unwrap_or(u32::MAX);
         secure_log!("[S] [DURESS-PROV] step 6: post-read E120={} E121={}", e120_post, e121_post);
         if e120_post != e120_pre { fail!("decoy read drifted real E120"); }
-        if e121_post != e121_pre + 1 { fail!("decoy read did not bump E121 by 1"); }
-        secure_log!("[S] [DURESS-PROV] step 6: isolation OK (E121 +1, E120 untouched)");
+        // duress_read_half fires LUC(E121) then RESETS it to 0 (F1D8
+        // auth-state active) — so post-read E121 must be 0, proving both
+        // the LUC fired AND the duress-side reset works.
+        if e121_post != 0 { fail!("decoy read did not reset E121 to 0"); }
+        let _ = e121_pre;
+        secure_log!("[S] [DURESS-PROV] step 6: isolation OK (E121 reset to 0, E120 untouched)");
 
         // 7. Read the SE050 decoy half.
         let half_e = match se.se050.duress_read_half(&duress_pin) {
