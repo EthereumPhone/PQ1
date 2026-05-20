@@ -262,8 +262,17 @@ pub fn provision_from_mnemonic(
     // independent 256-bit random (separate-entropy model), unrelated to
     // the real seed. Done AFTER the real wallet so PBS/shield (OPTIGA) and
     // the admin UserID (SE050) are already live.
+    //
+    // Atomicity: the real wallet is already on-chip at this point and
+    // `is_provisioned()` is real-only, so a half-provisioned decoy would
+    // leave the device "provisioned" yet without a decoy AND never re-run
+    // the wizard. If the decoy provision fails, wipe BOTH wallets so the
+    // next cold boot restarts the wizard cleanly (no stuck state).
     #[cfg(feature = "duress-pin")]
-    provision_duress_wallet(store, duress_pin);
+    if provision_duress_wallet(store, duress_pin).is_err() {
+        let _ = store.factory_reset_admin();
+        panic!("duress provisioning failed — wiped both wallets for wizard restart");
+    }
 
     #[cfg(not(feature = "duress-pin"))]
     let _ = duress_pin;
@@ -272,17 +281,19 @@ pub fn provision_from_mnemonic(
 /// §32: generate + store an independent decoy wallet behind the duress
 /// credential. See [`provision_from_mnemonic`] for the always-provision
 /// rationale. Separate fn so the hot path stays readable and the decoy
-/// generation is feature-gated in one place.
+/// generation is feature-gated in one place. Returns `Err` (rather than
+/// panicking) so the caller can roll back the real wallet atomically.
 #[cfg(feature = "duress-pin")]
 fn provision_duress_wallet(
     store: &mut impl crate::secure_element::WalletStore,
     duress_pin: Option<&[u8; 8]>,
-) {
+) -> Result<(), crate::secure_element::SeError> {
     // Fresh independent decoy entropy: STM32 TRNG XOR the SE-combined TRNG
     // (OPTIGA ⊕ SE050 via the store) — same multi-source quality as the
     // real seed path, no re-entrancy (we are not inside a store method).
     let mut decoy_entropy = [0u8; 32];
-    crate::rng::fill(&mut decoy_entropy).expect("TRNG fill failed (decoy entropy)");
+    crate::rng::fill(&mut decoy_entropy)
+        .map_err(|_| crate::secure_element::SeError::InternalError)?;
     let mut se_buf = [0u8; 32];
     if store.random(&mut se_buf).is_ok() {
         for i in 0..32 {
@@ -295,10 +306,11 @@ fn provision_duress_wallet(
     // declined (never entered by anyone → unguessable; the chip can't
     // distinguish a random-byte PIN from a digit PIN).
     let mut random_pin = [0u8; 8];
-    let actual_duress_pin: [u8; 8] = match duress_pin {
+    let mut actual_duress_pin: [u8; 8] = match duress_pin {
         Some(p) => *p,
         None => {
-            crate::rng::fill(&mut random_pin).expect("TRNG fill failed (decoy PIN)");
+            crate::rng::fill(&mut random_pin)
+                .map_err(|_| crate::secure_element::SeError::InternalError)?;
             random_pin
         }
     };
@@ -308,15 +320,20 @@ fn provision_duress_wallet(
     drop(sk);
     let decoy_bvk = derive_bootstrap_vk_from_entropy(&decoy_entropy);
 
-    store
-        .provision_duress(&decoy_entropy, &decoy_master, &decoy_vk, &decoy_bvk, &actual_duress_pin)
-        .expect("duress provisioning failed");
+    let result = store.provision_duress(
+        &decoy_entropy, &decoy_master, &decoy_vk, &decoy_bvk, &actual_duress_pin,
+    );
 
+    // Zeroize every secret regardless of success/failure.
     decoy_entropy.zeroize();
     crate::fi::zeroize_barrier();
     decoy_master.zeroize();
     crate::fi::zeroize_barrier();
+    actual_duress_pin.zeroize();
     random_pin.zeroize();
+    crate::fi::zeroize_barrier();
+
+    result
 }
 
 /// Store pre-derived entropy, VK, and PIN state via the MACD chain on an
