@@ -815,7 +815,7 @@ Comparative review against **Trezor Safe 7** (announced 2025-10-21, shipping Nov
 **What's needed — P1 (feature parity):**
 
 - [ ] **SLIP-39 Shamir backup.** SatoshiLabs-invented, MIT-licensed (github.com/satoshilabs/slips/blob/master/slip-0039.md). Single-24-word backup is a resilience SPOF. Support ≥2-of-3 and ≥3-of-5 share configurations for geographic distribution.
-- [ ] **BIP-39 passphrase ("hidden wallet").** Up to 50 ASCII chars, $5-wrench defence + plausible deniability. Maps straight into existing KDF as an extra input alongside the 24 words.
+- [~] **BIP-39 passphrase ("hidden wallet") — SUPERSEDED by §32 (duress PIN).** Original idea: up to 50 ASCII chars, $5-wrench defence + plausible deniability, mapping into the KDF via `to_seed(passphrase)`. Decision 2026-05-20: the deniability goal is better served by a **numeric duress PIN → decoy wallet** (§32, Keycard pattern) — same threat, reuses the numeric PIN-entry UI instead of an ASCII keyboard on a 2-button OLED. The `to_seed(passphrase)` plumbing stays available; the chosen UX is §32. (Verified the crypto already exists: `bip39::Mnemonic::to_seed(passphrase)` is standard-compliant but every call site hardcodes `""`.)
 - [ ] **On-device backup verification flow.** Equivalent of Trezor "Check backup": user re-enters the 24 words on OLED, device confirms they match the stored seed, no host involved. SSD1306 128×64 is constrained but doable.
 
 **What's needed — P3 (low priority / unlikely to ship):**
@@ -1239,6 +1239,31 @@ After Phase 11 lands the same metrics should read:
   submodules under `secure/src/nsc/sign_userop/`).
 - Solidity ↔ Rust shared constants exist in **one** place (Rust) and
   Solidity gets them via `cargo xtask gen-solidity-constants`.
+
+---
+
+### 32. Duress PIN → decoy wallet (plausible deniability, Keycard-pattern)
+
+**Status:** SCOPED 2026-05-20, not started. Supersedes §23's "BIP-39 passphrase" line as the chosen deniability mechanism — same goal ($5-wrench / coercion defence), but a second numeric PIN reusing the existing PIN-entry UI instead of an ASCII passphrase keyboard. Modelled on Keycard's duress PIN (`keycard-shell/app/keycard/keycard.c`): a second PIN unlocks a decoy wallet; always-provisioned (random if the user declines) so its presence reveals nothing.
+
+**Decoy-entropy model: SEPARATE entropy (user decision 2026-05-20, the stronger option).** The duress credential gates a DISTINCT XOR-split entropy; the real seed never enters SRAM during a duress session. Robust even against an attacker who duress-unlocks then dumps SRAM. Bonus: this *removes* the "duress flag must flow through every NSC handler" requirement that the same-entropy model would have needed — handlers just operate on whichever entropy got loaded, and the decoy entropy produces only the decoy wallet through the unchanged derivation path.
+
+**Design:**
+- **Two SE credentials per chip.** Real PIN = existing lockout-protected credential (SE050 UserID with `max_attempts`, OPTIGA F1D0 AuthRef bound to E120 LUC). Duress PIN = a SECOND credential provisioned with **unlimited attempts** (SE050 `max_attempts=0` like the admin UserID; OPTIGA AuthRef WITHOUT the E120-LUC lockout binding) so it never itself triggers the wipe. Real PIN ≠ duress PIN enforced at setup.
+- **Two XOR-split entropies.** Real: `real_half_o` (OPTIGA, gated by real AuthRef) ⊕ `real_half_e` (SE050, gated by real UserID). Decoy: `decoy_half_o` ⊕ `decoy_half_e` under the duress credentials. Invariant #1 (neither chip alone reveals a seed) holds for BOTH entropies.
+- **Timing-uniform unlock (mandatory).** `gated_unlock` must run BOTH credential verifies on every unlock — never short-circuit on duress success — else the real path's extra SE round-trip lets a coercion attacker *time* which PIN is real and defeat the deniability. Select which entropy to release from which credential matched; discard the unused verify's result.
+- **Counter / wipe (the genuinely hard part — open design decision).** Wrong PIN → both verifies fail → MCU page-124 + real-SE counters climb in lockstep → wipe at MAX (preserved). The drift problem: a duress entry succeeds on the duress credential but the (always-run) real verify fails, burning the real-SE counter by 1 each duress use → after N duress uses the real-SE counter could hit MAX and wipe. **Preferred fix (preserves the three-way lockstep + direct-I2C-attacker defence):** on EVERY successful unlock (real OR duress), reset BOTH SE credentials' counters via the firmware-derivable admin credential (`hw::secret_keys::se050_admin_pin()` already exists) + reset MCU — done on both paths so timing stays uniform. Alternative (advisor's "clean but weakening" option): demote SE counters to informational and make the MCU counter the sole wipe trigger — simpler but softens the direct-I2C-attacker defence the three-way lockstep was built for (project memory: "direct-I2C attacker can't burn E120 without touching SE050"). **Decide between these before implementing; re-verify the I2C-attacker model either way.**
+
+**Phases (medium-large, multi-session — touches the validated three-way PIN lockstep + provisioning ceremony):**
+- [ ] **P1 — derivation + provisioning of a second entropy.** Extend `dual_se::provision` + `crypto::provision_from_mnemonic` to generate + XOR-split a second (decoy) entropy and store its halves under the duress credentials. Decoy seed is just a second independent 256-bit entropy (or `to_seed(real_entropy, DURESS_TAG)` if we ever want it derived — but separate-entropy means independent random). Host-testable.
+- [ ] **P2 — second SE credential.** SE050 second UserID (`max_attempts=0`) + OPTIGA second AuthRef (no E120 binding). The careful part: provisioning both without regressing the validated single-credential three-way lockstep. Needs the OPTIGA/SE050 silicon (hardware-gated for validation).
+- [ ] **P3 — timing-uniform dual-verify `gated_unlock`** + the counter/wipe design decision above. Security-critical; advisor + on-silicon validation.
+- [ ] **P4 — wizard UI.** Reuse the numeric PIN entry: "Set duress PIN? (optional)" → enter + confirm, must differ from main PIN; always provision one (random if declined). `secure/src/ui/` — small, reuses `pin_entry`.
+- [ ] **P5 — wipe-on-duress option (maybe).** Some users want duress = silent wipe rather than decoy. Could offer as a setup choice. Defer unless requested.
+
+**Files:** `secure/src/dual_se.rs` (two entropies, dual-verify), `secure/src/se050/mod.rs` + `secure/src/optiga/mod.rs` (second credential), `secure/src/crypto.rs` (second-entropy provisioning), `secure/src/nsc/mod.rs::gated_unlock` (timing-uniform dual-verify + counter policy), `secure/src/ui/seed_wizard.rs` (duress PIN setup), `secure/src/nsc/cmd_request_unlock.rs` (wipe policy).
+
+**Cross-ref:** retires §23's ASCII-passphrase "BIP-39 passphrase" line (the `to_seed(passphrase)` capability stays available but the chosen deniability UX is this numeric duress PIN). NOT silicon-validated by intent — P2/P3 need the dual-SE bench.
 
 ---
 
