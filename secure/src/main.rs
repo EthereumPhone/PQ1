@@ -1125,8 +1125,9 @@ fn main() -> ! {
                     ui::show_status("Declined", "random decoy");
                 }
             }
-            // Hold the result a moment, then loop for another pass.
-            for _ in 0..4_000_000u32 {
+            // Hold the result on screen ~2.5 s (readable), then loop.
+            let start = timeout::now();
+            while timeout::now().wrapping_sub(start) < 2500 {
                 cortex_m::asm::nop();
             }
         }

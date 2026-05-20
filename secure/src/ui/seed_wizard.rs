@@ -106,6 +106,18 @@ pub fn choose_setup_mode() -> WizardChoice {
 #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
 use sphincs_tz_shared::PIN_LEN;
 
+/// Hold the currently-rendered status message on screen for `ms`
+/// milliseconds so the user can read it before the next dialog redraws
+/// over it (e.g. an error before `enter_pin_with_confirm` reclaims the
+/// display). `timeout::now()` is a 1 kHz SysTick counter.
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+fn hold_message(ms: u32) {
+    let start = timeout::now();
+    while timeout::now().wrapping_sub(start) < ms {
+        core::hint::spin_loop();
+    }
+}
+
 /// Two-option yes/no chooser (mirrors `choose_setup_mode`'s navigation:
 /// L/R move the `>` cursor, long-Right selects, long-Left cancels = No).
 /// Returns `None` only on idle-timeout (caller treats as decline).
@@ -173,13 +185,15 @@ pub fn collect_duress_pin(main_pin: &[u8; PIN_LEN]) -> Option<[u8; PIN_LEN]> {
                 if diff == 0 {
                     let mut pp = p;
                     pp.zeroize();
-                    show_status("Same as main", "try again");
+                    show_status("Same as main", "pick another");
+                    hold_message(1800);
                     continue;
                 }
                 return Some(p);
             }
             PinEntryResult::Mismatch => {
                 show_status("PIN mismatch", "try again");
+                hold_message(1800);
                 continue;
             }
             PinEntryResult::Cancelled | PinEntryResult::IdleWipe => return None,
