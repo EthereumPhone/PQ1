@@ -1357,10 +1357,43 @@ impl OptigaTrustM {
         Ok(())
     }
 
+    /// E2E VALIDATION ONLY (`duress-provision-e2e`): authenticate the
+    /// DURESS AuthRef (F1D8, auto-state path firing LUC(E121)) with
+    /// `duress_pin` and read back the decoy OPTIGA half (F1D9). Mirrors
+    /// the hw-counter arm of `authenticate_and_read` but for the duress
+    /// credential set. Used by the P2 silicon-validation recipe to prove
+    /// the production `provision_duress` wrote a recoverable, correctly-
+    /// gated decoy. NOT a production unlock path — that is P3.
+    #[cfg(feature = "duress-provision-e2e")]
+    pub unsafe fn duress_read_half(&mut self, duress_pin: &[u8; 8]) -> Result<[u8; 32], OptigaError> {
+        use zeroize::Zeroize;
+        self.ensure_shield()?;
+        let mut nonce = [0u8; 16];
+        apdu::get_random_auto_state(
+            &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &mut nonce,
+        )?;
+        let mut pin_secret = Self::derive_pin_secret(duress_pin);
+        let mut hmac = Self::hmac_sha256(&pin_secret, &nonce);
+        pin_secret.zeroize();
+        let vr = apdu::hmac_verify_auto_state(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_DURESS_AUTH_REF, apdu::OID_SESSION, &nonce, &hmac,
+        );
+        nonce.zeroize();
+        hmac.zeroize();
+        vr?;
+        let mut half_o = [0u8; 32];
+        apdu::get_data_object(
+            &mut self.ifx, &mut self.shield,
+            apdu::OID_DURESS_ENTROPY, 0, 32, &mut half_o,
+        )?;
+        Ok(half_o)
+    }
+
     /// PROBE ONLY: read an arbitrary LUC counter OID's `(current, limit)`.
     /// Generalises [`read_hw_pin_counter`] (pinned to E120) so the §32
-    /// probe can read E121 too. Read AC on E120..E123 is ALW.
-    #[cfg(feature = "duress-probe-e2e")]
+    /// probe + provision-e2e can read E121 too. Read AC on E120..E123 is ALW.
+    #[cfg(any(feature = "duress-probe-e2e", feature = "duress-provision-e2e"))]
     pub unsafe fn probe_read_counter(&mut self, ctr_oid: u16) -> Option<(u32, u32)> {
         self.ensure_shield().ok()?;
         let mut buf = [0u8; 8];
@@ -1674,19 +1707,39 @@ impl OptigaTrustM {
         // 1. E121 duress LUC counter — Change=Auto(F1D8), Exec=ALW.
         //    UNENFORCED limit (firmware never reads it for lockout); the
         //    duress unlock resets it. High limit so it never trips.
-        unsafe {
-            let ctr_data = apdu::encode_pin_ctr(0, 0xFFFF);
-            apdu::set_data_object(
-                &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &ctr_data,
-            )?;
-            let (cmeta, clen) = apdu::build_metadata_pin_ctr_oid(apdu::OID_DURESS_AUTH_REF);
-            apdu::set_metadata(
-                &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &cmeta[..clen],
-            )?;
+        //
+        //    Idempotency (mirrors provision_hw_pin_counter): once E121 is
+        //    Change=Auto(F1D8), a DATA re-write needs F1D8 auth (which we
+        //    don't have on a fresh-mnemonic re-provision). So if E121 is
+        //    already correctly gated, SKIP — its current value is
+        //    immaterial (the counter is unenforced; a non-zero leftover
+        //    from a prior run is harmless).
+        let e121_already = {
+            let mut m = [0u8; 128];
+            let n = unsafe {
+                apdu::get_metadata(&mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &mut m)
+            }.unwrap_or(0);
+            n > 0
+                && apdu::metadata_change_is_auto_oid(&m, n, apdu::OID_DURESS_AUTH_REF)
+                && apdu::metadata_execute_is_always(&m, n)
+        };
+        if e121_already {
+            secure_log!("[OPTIGA/duress] E121 already gated on F1D8 — skipping (idempotent)");
+        } else {
+            unsafe {
+                let ctr_data = apdu::encode_pin_ctr(0, 0xFFFF);
+                apdu::set_data_object(
+                    &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &ctr_data,
+                )?;
+                let (cmeta, clen) = apdu::build_metadata_pin_ctr_oid(apdu::OID_DURESS_AUTH_REF);
+                apdu::set_metadata(
+                    &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &cmeta[..clen],
+                )?;
+            }
+            secure_log!("[OPTIGA/duress] E121 counter provisioned");
+            #[cfg(feature = "stm32u585")]
+            { self.hard_reset_and_reinit()?; self.ensure_shield()?; }
         }
-        secure_log!("[OPTIGA/duress] E121 counter provisioned");
-        #[cfg(feature = "stm32u585")]
-        { self.hard_reset_and_reinit()?; self.ensure_shield()?; }
 
         // 2. F1D8 duress AuthRef — Execute=LUC(E121).
         {

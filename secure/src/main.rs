@@ -2166,6 +2166,113 @@ fn main() -> ! {
         }
     }
 
+    // ---- §32 P2: full production provision_duress silicon validation ----
+    // Provisions a real wallet + an independent decoy via the PRODUCTION
+    // store.provision / store.provision_duress path (KNOWN decoy entropy),
+    // then proves the decoy is recoverable + correctly gated + isolated:
+    //   - duress_is_provisioned() && is_provisioned() both true
+    //   - read OPTIGA decoy half (auth F1D8 auto-state, bumps E121) and
+    //     SE050 decoy half (auth duress UserID); half_o XOR half_e MUST
+    //     equal the known decoy entropy (mirrors the real unlock cross-check)
+    //   - the OPTIGA decoy read bumped ONLY E121, left real E120 untouched
+    //   - the real wallet still unlocks with the real PIN (coexistence)
+    // Everything stays LcsO=Creation. Run: make duress-provision-hw
+    #[cfg(feature = "duress-provision-e2e")]
+    unsafe {
+        use crate::secure_element::WalletStore;
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        se.load_pbs();
+        ui::show_status("DURESS-PROV", "running");
+
+        macro_rules! fail {
+            ($msg:expr) => {{
+                secure_log!("[S] [DURESS-PROV] FAIL: {}", $msg);
+                ui::show_status("DURESS-PROV", "FAIL");
+                cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_FAILURE);
+                loop { cortex_m::asm::wfi(); }
+            }};
+        }
+
+        // Fixtures.
+        let real_entropy: [u8; 32] = [0x42; 32];
+        let real_pin: [u8; 8] = *b"00000000";
+        let decoy_entropy: [u8; 32] = [0x7e; 32];
+        let duress_pin: [u8; 8] = *b"99999999";
+
+        let real_master = crypto::kdf(b"sphincs-master", &real_entropy, 0);
+        let (rsk, real_vk) = crypto::derive_keypair_from_entropy(&real_entropy);
+        drop(rsk);
+        let real_bvk = crypto::derive_bootstrap_vk_from_entropy(&real_entropy);
+
+        let decoy_master = crypto::kdf(b"sphincs-master", &decoy_entropy, 0);
+        let (dsk, decoy_vk) = crypto::derive_keypair_from_entropy(&decoy_entropy);
+        drop(dsk);
+        let decoy_bvk = crypto::derive_bootstrap_vk_from_entropy(&decoy_entropy);
+
+        // 1. Provision the real wallet (production path).
+        if se.provision(&real_entropy, &real_master, &real_vk, &real_bvk, &real_pin).is_err() {
+            fail!("real wallet provision failed");
+        }
+        secure_log!("[S] [DURESS-PROV] step 1: real wallet provisioned OK");
+
+        // 2. Provision the decoy (production path; DualSE XOR-splits it).
+        if se.provision_duress(&decoy_entropy, &decoy_master, &decoy_vk, &decoy_bvk, &duress_pin).is_err() {
+            fail!("provision_duress failed");
+        }
+        secure_log!("[S] [DURESS-PROV] step 2: decoy wallet provisioned OK");
+
+        // 3. Both provisioned.
+        if !se.is_provisioned() { fail!("is_provisioned() false after provision"); }
+        if !se.duress_is_provisioned() { fail!("duress_is_provisioned() false after provision_duress"); }
+        secure_log!("[S] [DURESS-PROV] step 3: is_provisioned + duress_is_provisioned both true OK");
+
+        // 4. Counter baselines before the OPTIGA decoy read.
+        let e120_pre = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e121_pre = se.optiga.probe_read_counter(optiga::apdu::OID_PIN_CTR_DURESS).map(|(c, _)| c).unwrap_or(u32::MAX);
+        if e120_pre == u32::MAX || e121_pre == u32::MAX { fail!("counter read failed pre decoy-read"); }
+        secure_log!("[S] [DURESS-PROV] step 4: pre-read E120={} E121={}", e120_pre, e121_pre);
+
+        // 5. Read the OPTIGA decoy half (auths F1D8, fires LUC(E121)).
+        let half_o = match se.optiga.duress_read_half(&duress_pin) {
+            Ok(h) => h,
+            Err(e) => { secure_log!("[S] [DURESS-PROV] optiga.duress_read_half err {:?}", e); fail!("OPTIGA decoy read/auth failed"); }
+        };
+
+        // 6. Isolation: E120 untouched, E121 bumped by exactly 1.
+        let e120_post = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e121_post = se.optiga.probe_read_counter(optiga::apdu::OID_PIN_CTR_DURESS).map(|(c, _)| c).unwrap_or(u32::MAX);
+        secure_log!("[S] [DURESS-PROV] step 6: post-read E120={} E121={}", e120_post, e121_post);
+        if e120_post != e120_pre { fail!("decoy read drifted real E120"); }
+        if e121_post != e121_pre + 1 { fail!("decoy read did not bump E121 by 1"); }
+        secure_log!("[S] [DURESS-PROV] step 6: isolation OK (E121 +1, E120 untouched)");
+
+        // 7. Read the SE050 decoy half.
+        let half_e = match se.se050.duress_read_half(&duress_pin) {
+            Ok(h) => h,
+            Err(e) => { secure_log!("[S] [DURESS-PROV] se050.duress_read_half err {:?}", e); fail!("SE050 decoy read/auth failed"); }
+        };
+
+        // 8. Reconstruct: half_o XOR half_e == known decoy entropy.
+        let mut recon = [0u8; 32];
+        for i in 0..32 { recon[i] = half_o[i] ^ half_e[i]; }
+        if recon != decoy_entropy { fail!("decoy half_o XOR half_e != known decoy entropy"); }
+        secure_log!("[S] [DURESS-PROV] step 8: decoy entropy reconstructs from both halves OK");
+
+        // 9. Coexistence: the real wallet still unlocks with the real PIN.
+        match se.unlock(&real_pin) {
+            Ok(m) if m == real_master => {
+                secure_log!("[S] [DURESS-PROV] step 9: real wallet unlock OK (master matches)");
+            }
+            Ok(_) => fail!("real unlock returned wrong master after decoy provisioning"),
+            Err(e) => { secure_log!("[S] [DURESS-PROV] real unlock err {:?}", e); fail!("real wallet unlock failed after decoy provisioning"); }
+        }
+
+        secure_log!("[S] [DURESS-PROV] === DURESS PROVISION VALIDATION: PASS ===");
+        ui::show_status("DURESS-PROV", "PASS");
+        cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- Combined MCU + OPTIGA E120 + SE050 sync + desync recovery ----
     // Exercises the full PIN lockout pipeline under `dual-se +
     // optiga-hw-counter` and asserts MCU page-124 stays in lockstep

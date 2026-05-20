@@ -281,6 +281,15 @@ duress-probe-e2e = ["dual-se", "optiga-hw-counter"]
 # separately; with only this feature the decoy is provisioned but never
 # consulted, so the real wallet behaves identically.
 duress-pin = ["dual-se", "optiga-hw-counter"]
+# §32 P2 silicon-validation recipe. Implies duress-pin + adds the read-back
+# helpers (`OptigaTrustM::duress_read_half` / `Se050::duress_read_half`)
+# and the main.rs validation block: provision real + decoy via the
+# PRODUCTION provision/provision_duress path with a KNOWN decoy entropy,
+# then re-auth the decoy on both chips, read both decoy halves, and assert
+# half_o XOR half_e == the known decoy entropy (mirrors the real unlock
+# cross-check). Asserts E121 bumped + E120 untouched, real wallet still
+# unlocks. Stays LcsO=Creation. Use `make duress-provision-hw`.
+duress-provision-e2e = ["duress-pin"]
 # Combined MCU page-124 + OPTIGA E120 + SE050 counter sync + desync
 # recovery e2e. Under dual-se with hw-counter, exercises the full PIN
 # lockout pipeline AND asserts all three counters stay in sync through

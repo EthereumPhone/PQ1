@@ -1212,11 +1212,20 @@ pub fn is_metadata_operational(metadata: &[u8], len: usize) -> bool {
 /// would require PIN auth — skip instead.
 #[cfg(feature = "optiga-hw-counter")]
 pub fn metadata_change_is_auto_authref(metadata: &[u8], len: usize) -> bool {
+    metadata_change_is_auto_oid(metadata, len, OID_AUTH_REF)
+}
+
+/// OID-parameterized variant of [`metadata_change_is_auto_authref`]:
+/// returns true if the metadata's Change AC is `Auto(auth_oid)`. Used as
+/// the §32 duress idempotency marker (E121 already gated on F1D8 → skip
+/// re-writing it, since the data write would need F1D8 auth).
+#[cfg(feature = "optiga-hw-counter")]
+pub fn metadata_change_is_auto_oid(metadata: &[u8], len: usize, auth_oid: u16) -> bool {
     match find_metadata_tag(metadata, len, META_CHANGE) {
         Some(v) if v.len() == 3 => {
             v[0] == AC_OP_AUTO_REF
-                && v[1] == (OID_AUTH_REF >> 8) as u8
-                && v[2] == OID_AUTH_REF as u8
+                && v[1] == (auth_oid >> 8) as u8
+                && v[2] == auth_oid as u8
         }
         _ => false,
     }

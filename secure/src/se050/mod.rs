@@ -405,6 +405,34 @@ impl Se050 {
         }
     }
 
+    /// E2E VALIDATION ONLY (`duress-provision-e2e`): authenticate the
+    /// duress UserID with `duress_pin` and read back the decoy SE050 half
+    /// (`DURESS_ENTROPY_OBJ`). Mirrors `authenticate_and_read` for the
+    /// duress credential. Used by the P2 silicon-validation recipe to
+    /// prove the production `provision_duress` wrote a recoverable,
+    /// correctly-gated decoy. NOT a production unlock path — that is P3.
+    #[cfg(feature = "duress-provision-e2e")]
+    pub fn duress_read_half(&mut self, duress_pin: &[u8]) -> Result<[u8; 32], Se050Error> {
+        self.init()?;
+        unsafe {
+            let sid = apdu::create_session(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ)?;
+            if let Err(e) = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, duress_pin) {
+                let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                return Err(e);
+            }
+            let mut half_e = [0u8; 32];
+            let n = apdu::read_authed(
+                &mut self.t1, &mut self.scp03, &sid, DURESS_ENTROPY_OBJ, &mut half_e,
+            );
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+            match n {
+                Ok(32) => Ok(half_e),
+                Ok(_) => Err(Se050Error::Transport),
+                Err(e) => Err(e),
+            }
+        }
+    }
+
     /// Peek the silicon-enforced **failed-attempts USED** count on the
     /// USERID auth object — i.e. the `auth_attempts` field — WITHOUT
     /// burning an attempt.
