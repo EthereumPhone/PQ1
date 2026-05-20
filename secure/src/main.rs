@@ -1095,11 +1095,14 @@ fn main() -> ! {
     // 12345678 so the operator can verify the distinct-check rejects it.
     #[cfg(feature = "duress-ui-test")]
     unsafe {
-        use cortex_m_semihosting::hprintln;
+        // NB: use `secure_log!` (DHCSR.C_DEBUGEN-gated), NOT raw
+        // `hprintln!` — an ungated semihosting BKPT HardFaults when no
+        // debugger is attached (e.g. straight after a probe-rs download
+        // resets the board), hanging the device before the OLED renders.
         use zeroize::Zeroize;
         let main_pin: [u8; sphincs_tz_shared::PIN_LEN] = *b"12345678";
-        hprintln!("[DURESS-UI] harness ready. Main PIN = 12345678.");
-        hprintln!("[DURESS-UI] Try setting a duress PIN; enter 12345678 once to see the reject.");
+        secure_log!("[DURESS-UI] harness ready. Main PIN = 12345678.");
+        secure_log!("[DURESS-UI] Try setting a duress PIN; enter 12345678 once to see the reject.");
         loop {
             ui::show_status("Duress UI test", "LR=start");
             // Wait for any button to (re)start a pass.
@@ -1108,9 +1111,9 @@ fn main() -> ! {
 
             match ui::seed_wizard::collect_duress_pin(&main_pin) {
                 Some(mut p) => {
-                    hprintln!("[DURESS-UI] duress PIN accepted (distinct from main)");
+                    secure_log!("[DURESS-UI] duress PIN accepted (distinct from main)");
                     let wipe = ui::seed_wizard::choose_duress_wipe_mode();
-                    hprintln!("[DURESS-UI] wipe-on-duress = {}", wipe);
+                    secure_log!("[DURESS-UI] wipe-on-duress = {}", wipe);
                     ui::show_status(
                         "Duress set",
                         if wipe { "mode: WIPE" } else { "mode: DECOY" },
@@ -1118,7 +1121,7 @@ fn main() -> ! {
                     p.zeroize();
                 }
                 None => {
-                    hprintln!("[DURESS-UI] duress declined / exhausted -> random decoy");
+                    secure_log!("[DURESS-UI] duress declined / exhausted -> random decoy");
                     ui::show_status("Declined", "random decoy");
                 }
             }
