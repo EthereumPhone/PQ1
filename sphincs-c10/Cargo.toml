@@ -16,6 +16,12 @@ zeroize = { workspace = true, features = ["zeroize_derive"] }
 # `sha2::Sha256`, which is what host tests need.
 hw-sha256 = []
 
+# Atomic per-category hash-call counters (work-todo §18 SCA step a):
+# count sk_seed-touching PRF calls (wots_secret / fors_secret) vs
+# public tree/chain hashes per sign. Adds a relaxed atomic increment
+# at the top of each hash primitive — measurement-only, never shipped.
+hash-counters = []
+
 [dev-dependencies]
 hex = { workspace = true }
 serde = { version = "1", features = ["derive"] }

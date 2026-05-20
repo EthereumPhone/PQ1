@@ -19,6 +19,85 @@ pub(crate) use inner::{Digest, Sha256};
 
 use crate::params::N;
 
+// ---------------------------------------------------------------------------
+// Hash-call counters (`hash-counters` feature — measurement only)
+//
+// Per-category atomic counts so step (a) of the §18 SCA analysis can
+// report exactly how many hash calls touch `sk_seed` (the PRF:
+// wots_secret / fors_secret) versus operate on public pk_seed-derived
+// data (th* tree hashing, chain_hash, wots_digest, h_msg) per sign.
+// Each primitive bumps its bucket with a relaxed atomic; the increment
+// is `#[cfg]`'d out entirely without the feature so production builds
+// pay nothing.
+// ---------------------------------------------------------------------------
+#[cfg(feature = "hash-counters")]
+pub mod counters {
+    use core::sync::atomic::{AtomicU64, Ordering};
+
+    pub static WOTS_SECRET: AtomicU64 = AtomicU64::new(0);
+    pub static FORS_SECRET: AtomicU64 = AtomicU64::new(0);
+    pub static CHAIN_HASH: AtomicU64 = AtomicU64::new(0);
+    pub static TH: AtomicU64 = AtomicU64::new(0);
+    pub static OTHER: AtomicU64 = AtomicU64::new(0);
+
+    /// Snapshot of all buckets at one instant.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub struct Snapshot {
+        /// `wots_secret` — PRF call, absorbs `sk_seed`. SECRET-touching.
+        pub wots_secret: u64,
+        /// `fors_secret` — PRF call, absorbs `sk_seed`. SECRET-touching.
+        pub fors_secret: u64,
+        /// `chain_hash` — WOTS chain F. The FIRST application per chain
+        /// consumes a secret-derived value; later ones are one-way.
+        pub chain_hash: u64,
+        /// `th` / `th_pair` / `th_multi` — tree hashing on public nodes.
+        pub th: u64,
+        /// `h_msg` / `wots_digest` — public.
+        pub other: u64,
+    }
+
+    impl Snapshot {
+        /// PRF calls that absorb `sk_seed` directly.
+        #[must_use]
+        pub fn secret_touching(&self) -> u64 {
+            self.wots_secret + self.fors_secret
+        }
+        #[must_use]
+        pub fn total(&self) -> u64 {
+            self.wots_secret + self.fors_secret + self.chain_hash + self.th + self.other
+        }
+    }
+
+    pub fn reset() {
+        WOTS_SECRET.store(0, Ordering::Relaxed);
+        FORS_SECRET.store(0, Ordering::Relaxed);
+        CHAIN_HASH.store(0, Ordering::Relaxed);
+        TH.store(0, Ordering::Relaxed);
+        OTHER.store(0, Ordering::Relaxed);
+    }
+
+    #[must_use]
+    pub fn snapshot() -> Snapshot {
+        Snapshot {
+            wots_secret: WOTS_SECRET.load(Ordering::Relaxed),
+            fors_secret: FORS_SECRET.load(Ordering::Relaxed),
+            chain_hash: CHAIN_HASH.load(Ordering::Relaxed),
+            th: TH.load(Ordering::Relaxed),
+            other: OTHER.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Bump a hash-counter bucket (no-op without the `hash-counters` feature).
+macro_rules! bump {
+    ($bucket:ident) => {
+        #[cfg(feature = "hash-counters")]
+        {
+            counters::$bucket.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        }
+    };
+}
+
 #[cfg(not(feature = "hw-sha256"))]
 mod inner {
     pub use sha2::{Digest, Sha256};
@@ -122,6 +201,7 @@ fn u32_to_b32(v: u32) -> [u8; 32] {
 /// Matches Solidity: `and(sha256_precompile(0x00, 0x60), N_MASK)` with
 /// `mstore(0x00, seed)`, `mstore(0x20, adrs)`, `mstore(0x40, val)`.
 pub fn th(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; 32]) -> [u8; N] {
+    bump!(TH);
     let mut h = Sha256::new();
     h.update(seed);
     h.update(adrs);
@@ -140,6 +220,7 @@ pub fn th_pair(
     left: &[u8; 32],
     right: &[u8; 32],
 ) -> [u8; N] {
+    bump!(TH);
     let mut h = Sha256::new();
     h.update(seed);
     h.update(adrs);
@@ -154,6 +235,7 @@ pub fn th_pair(
 ///
 /// Each value in `vals` is a 16-byte N-value that gets padded to 32 bytes.
 pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
+    bump!(TH);
     let mut h = Sha256::new();
     h.update(seed);
     h.update(adrs);
@@ -185,6 +267,7 @@ pub fn h_msg(
     r: &[u8; 32],
     message: &[u8; 32],
 ) -> [u8; 32] {
+    bump!(OTHER);
     let mut h = Sha256::new();
     h.update(seed);
     h.update(root);
@@ -216,6 +299,7 @@ pub fn chain_hash(
     start_pos: u32,
     steps: u32,
 ) -> [u8; N] {
+    bump!(CHAIN_HASH);
     let mut current = pad16(val);
     let mut a = *adrs;
     for step in 0..steps {
@@ -242,6 +326,7 @@ pub fn wots_digest(
     msg_hash: &[u8; 32],
     count: u32,
 ) -> [u8; 32] {
+    bump!(OTHER);
     let count_b32 = u32_to_b32(count);
     let mut h = Sha256::new();
     h.update(seed);
@@ -267,6 +352,7 @@ pub fn wots_secret(
     kp: u32,
     chain_idx: u32,
 ) -> [u8; N] {
+    bump!(WOTS_SECRET);
     let tree_b32 = u64_to_b32(tree);
     let mut h = Sha256::new();
     h.update(sk_seed);
@@ -286,6 +372,7 @@ pub fn wots_secret(
 ///
 /// `sha256(sk_seed_b32 || "fors" || to_b4(tree_idx) || to_b4(leaf_idx))[0..N]`
 pub fn fors_secret(sk_seed: &[u8; 32], tree_idx: u32, leaf_idx: u32) -> [u8; N] {
+    bump!(FORS_SECRET);
     let mut h = Sha256::new();
     h.update(sk_seed);
     h.update(b"fors");

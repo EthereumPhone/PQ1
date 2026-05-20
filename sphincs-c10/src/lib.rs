@@ -33,6 +33,13 @@ pub(crate) mod wots;
 // crates construct `ShuffleSeed` values to drive `sign_with_shuffle`.
 pub mod shuffle;
 
+// Measurement-only (work-todo §18 SCA step a): per-category hash-call
+// counters. Re-exported at the crate root so integration tests can read
+// the secret-touching (PRF) vs public (tree/chain) breakdown per sign.
+// Gated entirely out without the feature.
+#[cfg(feature = "hash-counters")]
+pub use hash::counters;
+
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use params::{N, SIGNATURE_LEN, VERIFYING_KEY_LEN};
