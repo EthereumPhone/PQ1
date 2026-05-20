@@ -2076,6 +2076,87 @@ fn main() -> ! {
             hprintln!("[DURESS-TIMING] verdict input: if this %% is tiny + below keygen jitter, timing uniformity is NOT load-bearing → skip real verify on duress → no drift");
         }
 
+        // ===== Step 10: matched-LUC dual-counter coexistence =====
+        // §32 DECIDED 2026-05-20: null the ~11 ms plain-vs-auto-state
+        // residual by binding the duress AuthRef (F1D8) to its OWN LUC
+        // counter (E121). This RE-PROVISIONS F1D8 with Execute=LUC(E121),
+        // overwriting the plain (Execute=ALW) variant from steps 3–6 +
+        // the timing block above — allowed because F1D8 Change=ALW (still
+        // LcsO=Creation). Runs AFTER the timing block so the plain-F1D8
+        // measurement above stays valid. The delta to validate vs the
+        // already-proven single-LUC + plain-F1D8 coexistence: (a) two
+        // LUC-bound AuthRefs (F1D0→E120, F1D8→E121) coexist; (b) a duress
+        // auto-state verify bumps ONLY E121, leaving the real E120
+        // untouched (no drift); (c) F1D8 auto-state timing is a twin of
+        // F1D0 auto-state (~0 residual).
+        const DURESS_CTR_OID: u16 = 0xE121;
+        const DURESS_CTR_LIMIT: u32 = 0xFFFF; // unenforced; high so the probe never trips it
+        if se
+            .optiga
+            .probe_provision_duress_authref_luc(
+                DURESS_AUTHREF_OID, DURESS_CTR_OID, DURESS_CTR_LIMIT, &duress_pin,
+            )
+            .is_err()
+        {
+            fail!("matched-LUC duress provision (F1D8→E121) failed (dual-LUC coexistence broken?)");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 10: F1D8 re-provisioned Execute=LUC(E121) + E121 counter OK");
+
+        // Read both counters pre-verify (a correct real PIN in step 8
+        // already reset E120 to 0; the timing block then bumped it by NT).
+        let e120_pre = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e121_pre = se.optiga.probe_read_counter(DURESS_CTR_OID).map(|(c, _)| c).unwrap_or(u32::MAX);
+        secure_log!("[S] [DURESS-PROBE] step 10: pre-verify E120={} E121={}", e120_pre, e121_pre);
+        if e120_pre == u32::MAX || e121_pre == u32::MAX {
+            fail!("could not read E120/E121 counters before duress auto-state verify");
+        }
+
+        // One auto-state verify against the matched-LUC duress credential.
+        if se
+            .optiga
+            .probe_hmac_auth_luc_at(DURESS_AUTHREF_OID, &duress_pin)
+            .is_err()
+        {
+            fail!("matched-LUC duress auto-state verify (F1D8) failed");
+        }
+
+        let e120_post = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e121_post = se.optiga.probe_read_counter(DURESS_CTR_OID).map(|(c, _)| c).unwrap_or(u32::MAX);
+        secure_log!("[S] [DURESS-PROBE] step 10: post-verify E120={} E121={}", e120_post, e121_post);
+        if e120_post != e120_pre {
+            secure_log!("[S] [DURESS-PROBE] step 10: E120 {}→{} — duress verify DRIFTED the real counter", e120_pre, e120_post);
+            fail!("duress auto-state verify bumped real E120 (matched-LUC isolation broken)");
+        }
+        if e121_post != e121_pre + 1 {
+            secure_log!("[S] [DURESS-PROBE] step 10: E121 {}→{} expected {}", e121_pre, e121_post, e121_pre + 1);
+            fail!("duress auto-state verify did not bump E121 by exactly 1 (LUC not firing on F1D8)");
+        }
+        secure_log!("[S] [DURESS-PROBE] step 10: matched-LUC OK — duress verify bumped ONLY E121 ({}→{}), E120 untouched ({}) — no drift", e121_pre, e121_post, e120_post);
+
+        // ===== Timing twin: F1D8 AUTO-STATE (matched-LUC) =====
+        // Confirm the duress verify via its OWN LUC counter is a timing
+        // twin of the real F1D0 auto-state verify (the thing the duress
+        // path pads/skips). If they match, the residual is nulled.
+        {
+            use cortex_m_semihosting::hprintln;
+            let cyc = || core::ptr::read_volatile(0xE000_1004 as *const u32);
+            const NT: u32 = 15;
+            const HZ_PER_US: u32 = 160;
+            let (mut d_sum, mut d_min, mut d_max) = (0u32, u32::MAX, 0u32);
+            for _ in 0..NT {
+                let t0 = cyc();
+                let _ = se.optiga.probe_hmac_auth_luc_at(DURESS_AUTHREF_OID, &duress_pin);
+                let d = cyc().wrapping_sub(t0);
+                d_sum += d;
+                if d < d_min { d_min = d; }
+                if d > d_max { d_max = d; }
+            }
+            hprintln!(
+                "[DURESS-TIMING] OPTIGA verify (F1D8 AUTO-STATE/matched-LUC): mean {} us / min {} us / max {} us (n={}) — compare to F1D0 AUTO-STATE above; ~0 delta = residual nulled",
+                (d_sum / NT) / HZ_PER_US, d_min / HZ_PER_US, d_max / HZ_PER_US, NT
+            );
+        }
+
         secure_log!("[S] [DURESS-PROBE] === DURESS COEXISTENCE PROBE: PASS ===");
         secure_log!("[S] [DURESS-PROBE] verdict: OPTIGA 2nd AuthRef (no-LUC) + SE050 2nd unlimited UserID both coexist — §32 design feasible");
         ui::show_status("DURESS", "PASS");

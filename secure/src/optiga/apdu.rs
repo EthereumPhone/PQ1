@@ -978,10 +978,21 @@ pub fn build_metadata_relaxed() -> (MetaBuf, usize) {
 /// counter may brick the AuthRef on the LcsO ratchet.
 #[cfg(feature = "optiga-hw-counter")]
 pub fn build_metadata_pin_ctr() -> (MetaBuf, usize) {
+    build_metadata_pin_ctr_oid(OID_AUTH_REF)
+}
+
+/// OID-parameterized variant of [`build_metadata_pin_ctr`]: gate the
+/// counter's `Change` (reset) AC on an arbitrary AuthRef OID. The real
+/// E120 is reset by `Auto(F1D0)`; the §32 duress counter (E121) is reset
+/// by `Auto(F1D8)`. The duress counter is functionally unenforced (the
+/// firmware never reads it for lockout) — it exists only so the duress
+/// verify runs the same auto-state APDU as the real one.
+#[cfg(feature = "optiga-hw-counter")]
+pub fn build_metadata_pin_ctr_oid(authref_oid: u16) -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
-    push_ac_auto(&mut inner, &mut c, META_CHANGE, OID_AUTH_REF);
+    push_ac_auto(&mut inner, &mut c, META_CHANGE, authref_oid);
     push_ac_simple(&mut inner, &mut c, META_READ, AC_ALW);
     push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_ALW);
 
@@ -1020,12 +1031,22 @@ pub fn metadata_execute_is_always(metadata: &[u8], len: usize) -> bool {
 /// - **Data type**: AUTHREF (0x31).
 #[cfg(feature = "optiga-hw-counter")]
 pub fn build_metadata_auth_ref_luc() -> (MetaBuf, usize) {
+    build_metadata_auth_ref_luc_oid(OID_PIN_CTR)
+}
+
+/// OID-parameterized variant of [`build_metadata_auth_ref_luc`]: bind the
+/// AuthRef's `Execute` AC to an arbitrary counter OID. The real F1D0 uses
+/// `OID_PIN_CTR` (E120); the §32 duress AuthRef (F1D8) uses its own LUC
+/// counter (E121) so its verify runs the identical auto-state path and is
+/// a byte-for-byte timing twin of the real verify.
+#[cfg(feature = "optiga-hw-counter")]
+pub fn build_metadata_auth_ref_luc_oid(ctr_oid: u16) -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
     push_ac_simple(&mut inner, &mut c, META_CHANGE, AC_ALW);
     push_ac_simple(&mut inner, &mut c, META_READ, AC_NEV);
-    push_ac_luc(&mut inner, &mut c, META_EXECUTE, OID_PIN_CTR);
+    push_ac_luc(&mut inner, &mut c, META_EXECUTE, ctr_oid);
     push_data_type(&mut inner, &mut c, DTYPE_AUTHREF);
 
     wrap_meta(inner, c)

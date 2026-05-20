@@ -1284,6 +1284,58 @@ impl OptigaTrustM {
         Ok(())
     }
 
+    /// PROBE ONLY (`duress-probe-e2e`, §32 matched-LUC validation):
+    /// provision a SECOND AuthRef at `authref_oid` (e.g. F1D8) bound to
+    /// its OWN LUC counter at `ctr_oid` (e.g. E121) — the matched-LUC
+    /// duress credential. Mirrors the real `provision_hw_pin_counter` +
+    /// `provision_auth_ref` LUC path but at parameterized OIDs and with
+    /// the simple (no idempotency/recovery) provisioning adequate for a
+    /// single probe run. Order: counter DATA first (Change=ALW at
+    /// Creation), then counter metadata (Change=Auto(authref_oid),
+    /// Exec=ALW), then the AuthRef data + metadata (Execute=LUC(ctr_oid)).
+    /// Stays LcsO=Creation throughout — never locks, fully recoverable.
+    #[cfg(feature = "duress-probe-e2e")]
+    pub unsafe fn probe_provision_duress_authref_luc(
+        &mut self,
+        authref_oid: u16,
+        ctr_oid: u16,
+        limit: u32,
+        pin: &[u8; 8],
+    ) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+        self.ensure_shield()?;
+
+        // 1. Counter data: [current=0, limit] (allowed at Creation ALW).
+        let ctr_data = apdu::encode_pin_ctr(0, limit);
+        apdu::set_data_object(&mut self.ifx, &mut self.shield, ctr_oid, &ctr_data)?;
+        // 2. Counter metadata: Change=Auto(authref_oid), Exec=ALW.
+        let (cmeta, clen) = apdu::build_metadata_pin_ctr_oid(authref_oid);
+        apdu::set_metadata(&mut self.ifx, &mut self.shield, ctr_oid, &cmeta[..clen])?;
+
+        // 3. AuthRef secret (PIN-derived HMAC key).
+        let mut secret = Self::derive_pin_secret(pin);
+        let r = apdu::set_data_object(&mut self.ifx, &mut self.shield, authref_oid, &secret);
+        secret.zeroize();
+        r?;
+        // 4. AuthRef metadata: Change=ALW / Read=NEV / Execute=LUC(ctr_oid).
+        let (ameta, alen) = apdu::build_metadata_auth_ref_luc_oid(ctr_oid);
+        apdu::set_metadata(&mut self.ifx, &mut self.shield, authref_oid, &ameta[..alen])?;
+        Ok(())
+    }
+
+    /// PROBE ONLY: read an arbitrary LUC counter OID's `(current, limit)`.
+    /// Generalises [`read_hw_pin_counter`] (pinned to E120) so the §32
+    /// probe can read E121 too. Read AC on E120..E123 is ALW.
+    #[cfg(feature = "duress-probe-e2e")]
+    pub unsafe fn probe_read_counter(&mut self, ctr_oid: u16) -> Option<(u32, u32)> {
+        self.ensure_shield().ok()?;
+        let mut buf = [0u8; 8];
+        match apdu::get_data_object(&mut self.ifx, &mut self.shield, ctr_oid, 0, 8, &mut buf) {
+            Ok(8) => apdu::parse_pin_ctr(&buf),
+            _ => None,
+        }
+    }
+
     /// PROBE ONLY (§32 timing): HMAC auth against the LUC-bound AuthRef
     /// at `oid` via the `auto_state` path — the EXACT production
     /// real-F1D0 verify (fires the E120 LUC). Used to measure whether
