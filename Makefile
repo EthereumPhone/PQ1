@@ -2118,6 +2118,32 @@ dual-se-bhk-e2e:
 # Reprovisions the bench chips with test data, like the other SE e2es.
 #
 # Pass: semihosting ends with "DURESS COEXISTENCE PROBE: PASS".
+# §32 timing-channel measurement (decides the P3 drift fix). Same
+# firmware as duress-probe-hw but built WITHOUT debug-log so the
+# measured SE verifies run at production speed (no per-I²C-transaction
+# semihosting). The coexistence steps run silently; the
+# [DURESS-TIMING] lines print via unconditional hprintln!. Watch for
+# the OPTIGA/SE050 per-verify latency + the "EXTRA real-verify cost".
+duress-timing-hw:
+	@echo "==> Building §32 timing-channel measurement firmware (no debug-log → production-speed verifies)..."
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features \
+		--features duress-probe-e2e,stm32u585,ui-oled,e2e-test,otp-hardcoded-master-key
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running timing measurement (watch for [DURESS-TIMING] lines)..."
+	@probe-rs run --chip STM32U585AIIx $(SECURE_ELF)
+
 duress-probe-hw:
 	@echo "==> Building §32 duress-PIN coexistence probe firmware..."
 	@echo "    Adds a 2nd OPTIGA AuthRef (F1D8, no E120) + 2nd SE050 UserID"

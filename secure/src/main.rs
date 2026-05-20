@@ -1965,6 +1965,84 @@ fn main() -> ! {
         }
         secure_log!("[S] [DURESS-PROBE] step 9: SE050 duress UserID (max_attempts=0) provisioned + auth'd, coexists with real UserID OK");
 
+        // ===== Timing-channel measurement (§32 P3 decision) =====
+        // The drift problem only exists IF we must run BOTH SE verifies
+        // on every unlock for timing uniformity. Measure the latency of
+        // the "extra real verify" (one OPTIGA HMAC verify + one SE050
+        // UserID verify) — the maximum timing signal an attacker gets
+        // from skip-vs-run on a duress entry. Compare to the
+        // keygen-dominated total unlock (~1-3 s). If it's a tiny
+        // fraction + below keygen jitter, timing uniformity is NOT
+        // load-bearing → skip the real verify on a duress match → the
+        // counter drift dissolves entirely (no E120 reset needed).
+        //
+        // hprintln! (not secure_log!) so the numbers print even with
+        // debug-log OFF — run `make duress-timing-hw` for clean,
+        // production-speed numbers (no per-I²C-transaction logging).
+        {
+            use cortex_m_semihosting::hprintln;
+            // Enable the DWT cycle counter (not yet armed this early in boot).
+            core::ptr::write_volatile(
+                0xE000_EDFC as *mut u32,
+                core::ptr::read_volatile(0xE000_EDFC as *const u32) | (1 << 24),
+            );
+            core::ptr::write_volatile(0xE000_1FB0 as *mut u32, 0xC5AC_CE55);
+            core::ptr::write_volatile(0xE000_1004 as *mut u32, 0);
+            core::ptr::write_volatile(
+                0xE000_1000 as *mut u32,
+                core::ptr::read_volatile(0xE000_1000 as *const u32) | 1,
+            );
+            let cyc = || core::ptr::read_volatile(0xE000_1004 as *const u32);
+            const NT: u32 = 15;
+            const HZ_PER_US: u32 = 160; // 160 MHz
+
+            // OPTIGA single HMAC verify (F1D8 auth — same APDU shape as
+            // the real F1D0 verify a duress entry would run).
+            let (mut o_sum, mut o_min, mut o_max) = (0u32, u32::MAX, 0u32);
+            for _ in 0..NT {
+                let t0 = cyc();
+                let _ = se.optiga.probe_hmac_auth_at(DURESS_AUTHREF_OID, &duress_pin);
+                let d = cyc().wrapping_sub(t0);
+                o_sum += d;
+                if d < o_min { o_min = d; }
+                if d > o_max { o_max = d; }
+            }
+            let o_mean_us = (o_sum / NT) / HZ_PER_US;
+            hprintln!(
+                "[DURESS-TIMING] OPTIGA verify: mean {} us / min {} us / max {} us (n={})",
+                o_mean_us, o_min / HZ_PER_US, o_max / HZ_PER_US, NT
+            );
+
+            // SE050 single UserID verify (create_session + verify + close).
+            let (mut s_sum, mut s_min, mut s_max) = (0u32, u32::MAX, 0u32);
+            for _ in 0..NT {
+                let t0 = cyc();
+                let _ = se
+                    .se050
+                    .probe_auth_existing_userid(DURESS_USERID_OBJ, &duress_pin);
+                let d = cyc().wrapping_sub(t0);
+                s_sum += d;
+                if d < s_min { s_min = d; }
+                if d > s_max { s_max = d; }
+            }
+            let s_mean_us = (s_sum / NT) / HZ_PER_US;
+            hprintln!(
+                "[DURESS-TIMING] SE050 verify: mean {} us / min {} us / max {} us (n={})",
+                s_mean_us, s_min / HZ_PER_US, s_max / HZ_PER_US, NT
+            );
+
+            let extra_us = o_mean_us + s_mean_us;
+            hprintln!(
+                "[DURESS-TIMING] EXTRA real-verify cost (skip vs run on duress): ~{} us total",
+                extra_us
+            );
+            hprintln!(
+                "[DURESS-TIMING] => ~{} % of a 2,000,000 us (2 s) keygen-dominated unlock",
+                (extra_us.saturating_mul(100)) / 2_000_000
+            );
+            hprintln!("[DURESS-TIMING] verdict input: if this %% is tiny + below keygen jitter, timing uniformity is NOT load-bearing → skip real verify on duress → no drift");
+        }
+
         secure_log!("[S] [DURESS-PROBE] === DURESS COEXISTENCE PROBE: PASS ===");
         secure_log!("[S] [DURESS-PROBE] verdict: OPTIGA 2nd AuthRef (no-LUC) + SE050 2nd unlimited UserID both coexist — §32 design feasible");
         ui::show_status("DURESS", "PASS");

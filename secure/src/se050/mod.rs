@@ -368,6 +368,26 @@ impl Se050 {
         Ok(())
     }
 
+    /// PROBE ONLY (`duress-probe-e2e`, §32 timing measurement): auth
+    /// against an EXISTING UserID at `obj_id` — create_session +
+    /// verify_session + close, no write/delete. This is the exact shape
+    /// of the "extra real verify" a duress entry would run for timing
+    /// uniformity, so its latency IS the timing signal we're measuring.
+    #[cfg(feature = "duress-probe-e2e")]
+    pub fn probe_auth_existing_userid(
+        &mut self,
+        obj_id: u32,
+        pin: &[u8],
+    ) -> Result<(), Se050Error> {
+        self.init()?;
+        unsafe {
+            let sid = apdu::create_session(&mut self.t1, &mut self.scp03, obj_id)?;
+            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, pin);
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+            r
+        }
+    }
+
     /// Peek the silicon-enforced **failed-attempts USED** count on the
     /// USERID auth object — i.e. the `auth_attempts` field — WITHOUT
     /// burning an attempt.
