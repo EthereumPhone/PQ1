@@ -203,8 +203,10 @@ pub const CMD_GET_MAIN_PUBKEY: u32 = 9;
 /// Legacy payload wire format:
 ///   [0..32)  message hash (the bytes32 to sign)
 ///
-/// On success the secure world writes a 17,088-byte SLH-DSA signature
-/// into the NS output buffer.
+/// On success the secure world would write a 4,008-byte SPHINCS+C10
+/// signature into the NS output buffer. (Historical note: pre-C10 this
+/// produced a 17,088-byte generic SLH-DSA-128f signature; the all-C10
+/// cutover replaced that with the custom 4,008-byte C10 parameter set.)
 pub const CMD_SIGN_BOOTSTRAP: u32 = 10;
 
 // CMDs 15/16/17 — the legacy slot-management commands are retired. With the
