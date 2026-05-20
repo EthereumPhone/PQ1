@@ -2316,6 +2316,69 @@ fn main() -> ! {
             Err(e) => { secure_log!("[S] [DURESS-PROV] step 14 err {:?}", e); fail!("step 14 real unlock failed"); }
         }
 
+        // ===== P2(b): post-wipe re-provision recoverability =====
+        // The recovery path a coerced/locked-out user hits: a wipe
+        // (factory_reset_admin) followed by a fresh setup. Re-provision
+        // with a DIFFERENT decoy entropy + duress PIN (the mnemonic-change
+        // case) and prove the decoy is fully recoverable — i.e. the
+        // surviving OPTIGA duress-OID metadata + the Conf(E140) rewrite
+        // path don't brick re-provisioning.
+        secure_log!("[S] [DURESS-PROV] step 15: factory_reset_admin (wipe both chips)");
+        if se.factory_reset_admin().is_err() {
+            fail!("factory_reset_admin (P2b wipe) failed");
+        }
+        if se.is_provisioned() { fail!("real wallet still provisioned after wipe"); }
+        secure_log!("[S] [DURESS-PROV] step 15: wipe OK, real wallet gone");
+
+        // Re-provision real (same fixtures) + decoy (NEW fixtures).
+        let decoy_entropy2: [u8; 32] = [0x3c; 32];
+        let duress_pin2: [u8; 8] = *b"77777777";
+        let decoy_master2 = crypto::kdf(b"sphincs-master", &decoy_entropy2, 0);
+        let (dsk2, decoy_vk2) = crypto::derive_keypair_from_entropy(&decoy_entropy2);
+        drop(dsk2);
+        let decoy_bvk2 = crypto::derive_bootstrap_vk_from_entropy(&decoy_entropy2);
+
+        if se.provision(&real_entropy, &real_master, &real_vk, &real_bvk, &real_pin).is_err() {
+            fail!("real re-provision after wipe failed");
+        }
+        if se.provision_duress(&decoy_entropy2, &decoy_master2, &decoy_vk2, &decoy_bvk2, &duress_pin2).is_err() {
+            fail!("decoy re-provision after wipe failed (P2b brick — duress OIDs not recoverable)");
+        }
+        secure_log!("[S] [DURESS-PROV] step 16: re-provisioned real + NEW decoy after wipe OK");
+
+        // 17. Both provisioned again.
+        if !se.is_provisioned() { fail!("real not provisioned after re-provision"); }
+        if !se.duress_is_provisioned() { fail!("duress not provisioned after re-provision"); }
+        secure_log!("[S] [DURESS-PROV] step 17: both provisioned again OK");
+
+        // 18. Decoy recoverable with the NEW duress PIN → reconstructs to NEW entropy.
+        let half_o2 = match se.optiga.duress_read_half(&duress_pin2) {
+            Ok((h, _)) => h,
+            Err(e) => { secure_log!("[S] [DURESS-PROV] re-read optiga err {:?}", e); fail!("OPTIGA decoy re-read after wipe failed"); }
+        };
+        let half_e2 = match se.se050.duress_read_half(&duress_pin2) {
+            Ok(h) => h,
+            Err(e) => { secure_log!("[S] [DURESS-PROV] re-read se050 err {:?}", e); fail!("SE050 decoy re-read after wipe failed"); }
+        };
+        let mut recon2 = [0u8; 32];
+        for i in 0..32 { recon2[i] = half_o2[i] ^ half_e2[i]; }
+        if recon2 != decoy_entropy2 { fail!("re-provisioned decoy reconstructs to wrong entropy"); }
+        secure_log!("[S] [DURESS-PROV] step 18: re-provisioned decoy reconstructs (NEW entropy) OK");
+
+        // 19. gated_unlock dispatch works on the re-provisioned wallets.
+        let _ = crate::hw::flash::pin_attempts_reset();
+        match crate::nsc::gated_unlock(se, &duress_pin2) {
+            Ok(m) if m == decoy_master2 => { secure_log!("[S] [DURESS-PROV] step 19: gated_unlock(new duress) → new decoy OK"); }
+            Ok(_) => fail!("step 19 duress wrong master"),
+            Err(e) => { secure_log!("[S] [DURESS-PROV] step 19 duress err {:?}", e); fail!("step 19 gated_unlock(duress) failed"); }
+        }
+        match crate::nsc::gated_unlock(se, &real_pin) {
+            Ok(m) if m == real_master => { secure_log!("[S] [DURESS-PROV] step 19: gated_unlock(real) → real OK"); }
+            Ok(_) => fail!("step 19 real wrong master"),
+            Err(e) => { secure_log!("[S] [DURESS-PROV] step 19 real err {:?}", e); fail!("step 19 gated_unlock(real) failed"); }
+        }
+        secure_log!("[S] [DURESS-PROV] step 19: post-wipe re-provision FULLY recoverable OK");
+
         secure_log!("[S] [DURESS-PROV] === DURESS PROVISION VALIDATION: PASS ===");
         ui::show_status("DURESS-PROV", "PASS");
         cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
