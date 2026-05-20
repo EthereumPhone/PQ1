@@ -1284,6 +1284,35 @@ impl OptigaTrustM {
         Ok(())
     }
 
+    /// PROBE ONLY (§32 timing): HMAC auth against the LUC-bound AuthRef
+    /// at `oid` via the `auto_state` path — the EXACT production
+    /// real-F1D0 verify (fires the E120 LUC). Used to measure whether
+    /// the auto-state verify timing matches the plain `probe_hmac_auth_at`
+    /// timing, which decides whether the option-B duress "pad" (a second
+    /// plain duress verify) is a clean stand-in for the skipped real
+    /// (auto-state) verify or needs a matched-LUC duress credential.
+    #[cfg(feature = "duress-probe-e2e")]
+    pub unsafe fn probe_hmac_auth_luc_at(
+        &mut self,
+        oid: u16,
+        pin: &[u8; 8],
+    ) -> Result<(), OptigaError> {
+        use zeroize::Zeroize;
+        self.ensure_shield()?;
+        let mut nonce = [0u8; 16];
+        apdu::get_random_auto_state(
+            &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &mut nonce,
+        )?;
+        let mut pin_secret = Self::derive_pin_secret(pin);
+        let hmac = Self::hmac_sha256(&pin_secret, &nonce);
+        pin_secret.zeroize();
+        let r = apdu::hmac_verify_auto_state(
+            &mut self.ifx, &mut self.shield, oid, apdu::OID_SESSION, &nonce, &hmac,
+        );
+        nonce.zeroize();
+        r
+    }
+
     /// PROBE ONLY: HMAC challenge-response auth against the AuthRef at
     /// `oid` via the non-LUC `hmac_verify` path (does NOT touch E120).
     /// Returns `Ok(())` on successful auth. Mirrors the non-hw-counter

@@ -2013,8 +2013,37 @@ fn main() -> ! {
             }
             let o_mean_us = (o_sum / NT) / HZ_PER_US;
             hprintln!(
-                "[DURESS-TIMING] OPTIGA verify: mean {} us / min {} us / max {} us (n={})",
+                "[DURESS-TIMING] OPTIGA verify (F1D8 PLAIN): mean {} us / min {} us / max {} us (n={})",
                 o_mean_us, o_min / HZ_PER_US, o_max / HZ_PER_US, NT
+            );
+
+            // OPTIGA real F1D0 verify via the LUC AUTO-STATE path (the
+            // production real-verify, the thing a duress entry skips).
+            // Compare to the F1D8 PLAIN verify above: if they match, the
+            // option-B "second duress verify" pad is a clean stand-in;
+            // if they differ materially, the duress credential needs its
+            // own LUC counter so its verify uses the same auto-state path.
+            // (Each call fires the E120 LUC; NT=15 < HW_PIN_CTR_LIMIT=32.)
+            let (mut a_sum, mut a_min, mut a_max) = (0u32, u32::MAX, 0u32);
+            for _ in 0..NT {
+                let t0 = cyc();
+                let _ = se
+                    .optiga
+                    .probe_hmac_auth_luc_at(optiga::apdu::OID_AUTH_REF, &real_pin);
+                let d = cyc().wrapping_sub(t0);
+                a_sum += d;
+                if d < a_min { a_min = d; }
+                if d > a_max { a_max = d; }
+            }
+            let a_mean_us = (a_sum / NT) / HZ_PER_US;
+            hprintln!(
+                "[DURESS-TIMING] OPTIGA verify (F1D0 AUTO-STATE/LUC): mean {} us / min {} us / max {} us (n={})",
+                a_mean_us, a_min / HZ_PER_US, a_max / HZ_PER_US, NT
+            );
+            let delta = if a_mean_us > o_mean_us { a_mean_us - o_mean_us } else { o_mean_us - a_mean_us };
+            hprintln!(
+                "[DURESS-TIMING] plain-vs-auto-state DELTA: {} us — if <~20000 us (20 ms) the plain F1D8 pad is clean; else use a matched-LUC duress credential",
+                delta
             );
 
             // SE050 single UserID verify (create_session + verify + close).
