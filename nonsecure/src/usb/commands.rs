@@ -608,13 +608,24 @@ impl CommandRouter {
         if payload_end > received_len {
             return received_len;
         }
-        // Only augment bare payloads. If the companion already provided
-        // trailer sections, trust its layout.
-        if received_len != payload_end {
-            return received_len;
-        }
         // Plain value transfer — no ERC-20 metadata needed.
         if data_len == 0 {
+            return received_len;
+        }
+        // Two acceptable injection sites:
+        //  (a) Bare payload: companion sent no trailers, so we just
+        //      append `[u16 len | bundle]` at `payload_end`.
+        //  (b) Companion attached a trailer skeleton with the erc20
+        //      slot empty (`[0x00, 0x00]` at `payload_end..+2`). We
+        //      shift the rest of the buffer right by `bundle_len` and
+        //      overwrite the empty slot. Lets the function work even
+        //      when the companion pre-attached later trailers
+        //      (selector / self-attest / erc7730 / names skeleton).
+        let bare = received_len == payload_end;
+        let skeleton_empty_erc20 = received_len >= payload_end + 2
+            && CHAIN_BUF[payload_end] == 0
+            && CHAIN_BUF[payload_end + 1] == 0;
+        if !bare && !skeleton_empty_erc20 {
             return received_len;
         }
 
@@ -673,14 +684,34 @@ impl CommandRouter {
             return received_len;
         };
 
-        let new_len = payload_end + 2 + bundle_len;
+        let new_len = received_len + bundle_len + if bare { 2 } else { 0 };
         if new_len > CHAIN_BUF_LEN {
             return received_len;
         }
 
-        CHAIN_BUF[payload_end..payload_end + 2]
-            .copy_from_slice(&(bundle_len as u16).to_be_bytes());
-        CHAIN_BUF[payload_end + 2..new_len].copy_from_slice(&bundle_buf[..bundle_len]);
+        if bare {
+            // Append fresh: `[u16 len | bundle]` at `payload_end`.
+            CHAIN_BUF[payload_end..payload_end + 2]
+                .copy_from_slice(&(bundle_len as u16).to_be_bytes());
+            CHAIN_BUF[payload_end + 2..payload_end + 2 + bundle_len]
+                .copy_from_slice(&bundle_buf[..bundle_len]);
+        } else {
+            // Skeleton case: rewrite the `[0x00, 0x00]` empty erc20 slot
+            // header to the real bundle length, then shift everything
+            // after the 2-byte header right by `bundle_len` to make room
+            // for the bundle bytes.
+            let tail_src_start = payload_end + 2;
+            let tail_end = received_len;
+            // copy_within handles overlapping ranges correctly.
+            CHAIN_BUF.copy_within(
+                tail_src_start..tail_end,
+                tail_src_start + bundle_len,
+            );
+            CHAIN_BUF[payload_end..payload_end + 2]
+                .copy_from_slice(&(bundle_len as u16).to_be_bytes());
+            CHAIN_BUF[payload_end + 2..payload_end + 2 + bundle_len]
+                .copy_from_slice(&bundle_buf[..bundle_len]);
+        }
         new_len
     }
 
