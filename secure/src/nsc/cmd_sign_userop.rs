@@ -653,15 +653,39 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // 7a. ERC-20 bundle — Merkle-verified token metadata, cross-checked
     // against the tx's chain_id + recipient address.
+    //
+    // Two acceptable recipient values:
+    //   (a) the outer tx `to_address` (direct ERC-20 call from the
+    //       wallet — `tx.to` IS the token contract);
+    //   (b) the inner SafeTx target decoded from `execTransaction`
+    //       calldata (Safe-wrapped ERC-20 — outer `to_address` is the
+    //       Safe contract, but the bundle attributes to the token the
+    //       Safe is about to call). Without this branch a Safe-wrapped
+    //       USDC tx fell through to `Erc20Unknown` on the OLED even
+    //       after the NS-side injector correctly looked up the inner
+    //       USDC address. Renderer paths in `pick_sign_pages` still
+    //       enforce their own per-flow address-match gate, so this is
+    //       defence-in-depth, not the sole check.
     let verified_meta: Option<Erc20Metadata<'_>> = if erc20.len > 0 {
         let bundle_slice = &snap[erc20.start..erc20.start + erc20.len];
         match verify_erc20_bundle(bundle_slice) {
             Some(meta) => {
-                let contract_match = match tx_for_display.to {
+                let outer_to_match = match tx_for_display.to {
                     Some(addr) => addr == meta.contract,
                     None => false,
                 };
-                if meta.chain_id == chain_id && contract_match {
+                let safe_exec_inner_match = inner_data.len()
+                    >= EXEC_TRANSACTION_MIN_CALLDATA_LEN
+                    && inner_data[..4] == EXEC_TRANSACTION_SELECTOR
+                    && inner_data[4..16].iter().all(|&b| b == 0)
+                    && {
+                        let mut inner_to = [0u8; 20];
+                        inner_to.copy_from_slice(&inner_data[16..36]);
+                        inner_to == meta.contract
+                    };
+                if meta.chain_id == chain_id
+                    && (outer_to_match || safe_exec_inner_match)
+                {
                     Some(meta)
                 } else {
                     None
