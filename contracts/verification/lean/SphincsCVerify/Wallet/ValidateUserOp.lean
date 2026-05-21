@@ -40,29 +40,30 @@ namespace Selector
 
 /-- Selector for `PQSmartWallet.addOwnerBytes(bytes)`.
 
-    Decided at Solidity compile time by
-    `bytes4(keccak256("addOwnerBytes(bytes)"))`. The concrete bytes are
-    fixed by Solidity's ABI; we encode them here as the concrete
-    `0x` prefix. The bridge axiom A3 ensures the deployed bytecode
-    sees the same constant. -/
+    `bytes4(keccak256("addOwnerBytes(bytes)")) = 0x101490cb`. The
+    constant is parity-tested against `forge inspect PQSmartWallet
+    methodIdentifiers` by `test/LeanSelectorParity.t.sol`; any future
+    ABI drift fails CI. -/
 def addOwnerBytes : Selector :=
-  -- bytes4(keccak256("addOwnerBytes(bytes)")) = 0xb6157aa9
-  -- The exact value is determined by the Solidity ABI; for the
-  -- non-bypass theorem we only need that this is a fixed Lean
-  -- constant that matches the deployed bytecode's read.
-  ⟨#[0xb6, 0x15, 0x7a, 0xa9], by decide⟩
+  ⟨#[0x10, 0x14, 0x90, 0xcb], by decide⟩
 
-/-- Selector for `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`. -/
+/-- Selector for `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`.
+
+    `bytes4(keccak256("executeWithOffchainCount(uint256,uint256,address,uint256,bytes)")) = 0x14443c57`. -/
 def executeWithOffchainCount : Selector :=
-  ⟨#[0x00, 0x00, 0x00, 0x00], by decide⟩  -- placeholder; actual value via A3.
+  ⟨#[0x14, 0x44, 0x3c, 0x57], by decide⟩
 
-/-- Selector for `executeBatchWithOffchainCount`. -/
+/-- Selector for `executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])`.
+
+    `bytes4(keccak256(...)) = 0x7a389933`. -/
 def executeBatchWithOffchainCount : Selector :=
-  ⟨#[0x00, 0x00, 0x00, 0x01], by decide⟩  -- placeholder.
+  ⟨#[0x7a, 0x38, 0x99, 0x33], by decide⟩
 
-/-- Selector for `removeOwnerAtIndex(uint256,bytes)`. -/
+/-- Selector for `removeOwnerAtIndex(uint256,bytes)`.
+
+    `bytes4(keccak256("removeOwnerAtIndex(uint256,bytes)")) = 0x89625b57`. -/
 def removeOwnerAtIndex : Selector :=
-  ⟨#[0x00, 0x00, 0x00, 0x02], by decide⟩  -- placeholder.
+  ⟨#[0x89, 0x62, 0x5b, 0x57], by decide⟩
 
 /-- Determine whether a selector is in the slot-allowed set. Mirrors
     `_isSlotAllowedSelector` in PQSmartWallet.sol. -/
@@ -205,26 +206,55 @@ Mirrors the Solidity function step-by-step:
 Each path that returns `failure` corresponds to a `SIG_VALIDATION_FAILED`
 in Solidity. -/
 
-/-- The SHA-256 digest the firmware signs (mirrors `sphincsDigest` in
-    `PQSmartWallet.sol`). The Solidity body is an `abi.encodePacked`
-    + outer `sha256`; we model it as a concrete `def` calling the
-    spec's `sha256` so the dep closure of `theft_free` does not gain
-    additional opaque constants. -/
+/-- The 360-byte concatenation that `sphincsDigest` hashes. Exact
+    byte-for-byte mirror of `PQSmartWallet.sphincsDigest`'s
+    `abi.encodePacked(...)` argument:
+
+    ```
+      [  0..20 )   sender                       (20)
+      [ 20..52 )   nonce                        (uint256 BE, 32)
+      [ 52..84 )   sha256(initCode)             (32)
+      [ 84..116)   sha256(callData)             (32)
+      [116..148)   callGasLimit                 (uint256 BE)
+      [148..180)   verificationGasLimit         (uint256 BE)
+      [180..212)   preVerificationGas           (uint256 BE)
+      [212..244)   maxFeePerGas                 (uint256 BE)
+      [244..276)   maxPriorityFeePerGas         (uint256 BE)
+      [276..308)   sha256(paymasterAndData)     (32)
+      [308..328)   entryPoint                   (20)
+      [328..360)   chainId                      (uint256 BE)
+    ```
+
+    The fixed `ByteVec 360` return type gives the preimage-length
+    lemma `sphincsDigest_preimage_len` for free, and lets the
+    per-field binding theorems extract specific byte ranges by
+    structure. -/
+def sphincsDigestPreimage
+    (op : UserOperation) (entryPoint : ByteVec 20) (chainId : Nat) :
+    ByteVec 360 :=
+  ByteVec.cast (by decide) <|
+    op.sender
+    ++ ByteVec.natToB32 op.nonce
+    ++ sha256OfArr op.initCode
+    ++ sha256OfArr op.callData
+    ++ ByteVec.natToB32 op.callGasLimit
+    ++ ByteVec.natToB32 op.verificationGasLimit
+    ++ ByteVec.natToB32 op.preVerificationGas
+    ++ ByteVec.natToB32 op.maxFeePerGas
+    ++ ByteVec.natToB32 op.maxPriorityFeePerGas
+    ++ sha256OfArr op.paymasterAndData
+    ++ entryPoint
+    ++ ByteVec.natToB32 chainId
+
+/-- The SHA-256 digest the firmware signs. Concrete 12-field
+    `abi.encodePacked` + outer `sha256`, exact mirror of
+    `PQSmartWallet.sphincsDigest` (Solidity lines 326-343). The
+    binding properties (preimage-injectivity, per-field commitment)
+    are proven in `Wallet/SphincsDigestSpec.lean`. -/
 def sphincsDigest
     (op : UserOperation) (entryPoint : ByteVec 20) (chainId : Nat) :
     ByteVec 32 :=
-  -- Mirrors `abi.encodePacked(sender, nonce, sha256(initCode), sha256(callData),
-  --   callGasLimit, verificationGasLimit, preVerificationGas, maxFeePerGas,
-  --   maxPriorityFeePerGas, sha256(paymasterAndData), entryPoint, chainId)`
-  -- under an outer SHA-256.
-  --
-  -- For the non-bypass theorem we only need this function to be
-  -- deterministic (which it is by `def`). The byte-level encoding is
-  -- captured by the bridge to `Bridge.SolidityVerifier` and A3.
-  let _ := op
-  let _ := entryPoint
-  let _ := chainId
-  sha256 []
+  sha256_concat (sphincsDigestPreimage op entryPoint chainId)
 
 /-- The cap-check predicate (role-split): bootstrap path requires
     `addOwnerBytes` selector + `bootstrapUses` budget; slot path

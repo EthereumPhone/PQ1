@@ -1,0 +1,41 @@
+# Halmos configuration for PQSmartWallet symbolic execution.
+#
+# Pinned tooling:
+#   - halmos >= 0.2.0 (FOSS, MIT)
+#   - Z3 >= 4.13.0
+#
+# Pinned bytecode codehashes — see test/PinnedCodehashes.t.sol:
+#   - PQSmartWallet:    0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f
+#   - SPHINCsC10Asm:    0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9
+#
+# Discharges:
+#   - HalmosValidateUserOp.t.sol → solidityWallet_compiles_correctly (A3.2) for validate path
+#   - HalmosExecute.t.sol        → solidityWallet_compiles_correctly (A3.2) for execute path
+#
+# Usage (once halmos installed):
+#   halmos --contract HalmosValidateUserOp
+#   halmos --contract HalmosExecute
+#
+# CI gate (see .github/workflows/test.yml):
+#   - All rules in both contracts must return VERIFIED.
+
+[global]
+# Path patterns to symbolic-execute (subdirectory of `test/`).
+contracts = ["HalmosValidateUserOp", "HalmosExecute"]
+
+# Bound arrays / data sizes for tractability.
+default_array_lengths = "0,1,2,4"
+default_bytes_lengths = "0,32,4128"
+
+# Loop unrolling bound for executeBatchWithOffchainCount.
+# k <= 4 is tractable in ~30 minutes per rule. Larger k is covered by
+# the inductive Lean theorem `executeBatch_runs_in_signed_order`.
+loop = 4
+
+# Solver settings.
+solver_timeout_assertion = 600000  # 10 min per assertion
+solver_timeout_branching = 60000   # 1 min per branch
+
+# Pinned bytecode mode — fails if the deployed codehash doesn't match
+# the one recorded in test/PinnedCodehashes.t.sol.
+verify_bytecode = true

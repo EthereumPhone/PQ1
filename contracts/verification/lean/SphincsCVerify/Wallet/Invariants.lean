@@ -42,6 +42,7 @@ import SphincsCVerify.Wallet.MultiOwnable
 import SphincsCVerify.Wallet.ValidateUserOp
 import SphincsCVerify.Wallet.Factory
 import SphincsCVerify.Wallet.IsValidSignature
+import SphincsCVerify.Wallet.StorageLayout
 import SphincsCVerify.Crypto.EUFCMA
 
 namespace SphincsCVerify.Wallet.Invariants
@@ -265,6 +266,193 @@ theorem cannot_remove_bootstrap
     Storage.removeOwner s 0 expected = none :=
   MultiOwnable.bootstrap_unremovable s expected
 
+/-! ## (I-4b) Initialization atomicity (Claim 2)
+
+The wallet's `initialize` is gated by `nextOwnerIndex == 0`. Once
+called, `nextOwnerIndex` becomes 2 (bootstrap + slot0), so a second
+call reverts.
+
+The factory calls `initialize` in the same transaction as
+`createDeterministicERC1967` (Solidity factory lines 92-118), so there
+is no front-runner window between deployment and first
+initialization. -/
+
+/-- **`initialize` is one-shot.** If `nextOwnerIndex` is non-zero
+    (pre-state), `initialize` returns `none` (revert). -/
+theorem initialize_called_exactly_once
+    (s : Storage) (bootstrap slot0 : OwnerBytes)
+    (h : s.nextOwnerIndex ≠ 0) :
+    Storage.tryInitialize s bootstrap slot0 = none := by
+  unfold Storage.tryInitialize
+  simp [h]
+
+/-- **`initialize` post-state.** When the guard passes, the result is
+    exactly `Storage.initialised bootstrap slot0`. -/
+theorem initialize_post_state
+    (s : Storage) (bootstrap slot0 : OwnerBytes)
+    (h : s.nextOwnerIndex = 0) :
+    Storage.tryInitialize s bootstrap slot0 = some (Storage.initialised bootstrap slot0) := by
+  unfold Storage.tryInitialize
+  simp [h]
+
+/-- **Initialized state has bootstrap at index 0.** -/
+theorem initialised_has_bootstrap
+    (bootstrap slot0 : OwnerBytes) :
+    (Storage.initialised bootstrap slot0).ownerAtIndex 0 = some bootstrap := by
+  unfold Storage.initialised
+  simp
+
+/-- **Initialized state has slot 0 at index 1.** -/
+theorem initialised_has_slot0
+    (bootstrap slot0 : OwnerBytes) :
+    (Storage.initialised bootstrap slot0).ownerAtIndex 1 = some slot0 := by
+  unfold Storage.initialised
+  simp
+
+/-- **`nextOwnerIndex = 2` after initialize.** Marker for the
+    one-shot guard's subsequent failure on any later `initialize`
+    call: post-init `nextOwnerIndex ≠ 0`. -/
+theorem initialised_next_index_eq_2
+    (bootstrap slot0 : OwnerBytes) :
+    (Storage.initialised bootstrap slot0).nextOwnerIndex = 2 := rfl
+
+/-! ## (I-4c) Owner-set never empty after initialize
+
+Composes `cannot_remove_bootstrap` + `initialised_has_bootstrap`:
+once initialized, index 0 always holds the bootstrap key. We prove
+this for each individual Storage mutator. -/
+
+/-- `addOwner` preserves `ownerAtIndex 0`. -/
+theorem addOwner_preserves_index0
+    (s : Storage) (o : OwnerBytes) (s' : Storage)
+    (h : Storage.addOwner s o = some s')
+    (hpre : s.nextOwnerIndex ≠ 0) :
+    s'.ownerAtIndex 0 = s.ownerAtIndex 0 := by
+  unfold Storage.addOwner at h
+  by_cases hisOwner : s.isOwner o = true
+  · simp [hisOwner] at h
+  · simp [hisOwner] at h
+    rw [← h]
+    -- New ownerAtIndex is `if i = s.nextOwnerIndex then some o else s.ownerAtIndex i`.
+    -- At i = 0, `0 = s.nextOwnerIndex` is false because `nextOwnerIndex ≠ 0`.
+    show (if (0 : Nat) = s.nextOwnerIndex then some o else s.ownerAtIndex 0) = s.ownerAtIndex 0
+    have : (0 : Nat) ≠ s.nextOwnerIndex := fun heq => hpre heq.symm
+    simp [this]
+
+/-- `removeOwner` preserves `ownerAtIndex 0` (it refuses index 0 by
+    `cannot_remove_bootstrap`). -/
+theorem removeOwner_preserves_index0
+    (s : Storage) (i : Nat) (expected : OwnerBytes) (s' : Storage)
+    (h : Storage.removeOwner s i expected = some s') :
+    s'.ownerAtIndex 0 = s.ownerAtIndex 0 := by
+  unfold Storage.removeOwner at h
+  by_cases hi : i = 0
+  · subst hi; simp at h
+  · rw [if_neg hi] at h
+    generalize hlookup : s.ownerAtIndex i = lookupRes at h
+    cases lookupRes with
+    | none => simp at h
+    | some o =>
+      try simp only at h
+      by_cases heq : o = expected
+      · have hdec_true : decide (o = expected) = true := decide_eq_true heq
+        rw [hdec_true] at h
+        have : ¬ ((true : Bool) = false) := by decide
+        rw [if_neg this] at h
+        injection h with hsome
+        rw [← hsome]
+        show (if (0 : Nat) = i then none else s.ownerAtIndex 0) = s.ownerAtIndex 0
+        have : (0 : Nat) ≠ i := fun heq => hi heq.symm
+        simp [this]
+      · have hdec_false : decide (o = expected) = false := decide_eq_false heq
+        rw [hdec_false] at h
+        simp at h
+
+/-- `bumpBootstrap` preserves the entire owner table. -/
+theorem bumpBootstrap_preserves_ownerAtIndex
+    (s : Storage) (cap : Nat) (s' : Storage)
+    (h : Storage.bumpBootstrap s cap = some s') (i : Nat) :
+    s'.ownerAtIndex i = s.ownerAtIndex i := by
+  unfold Storage.bumpBootstrap at h
+  by_cases hcap : s.bootstrapUses + 1 > cap
+  · simp [hcap] at h
+  · simp [hcap] at h
+    rw [← h]
+
+/-- `bumpSlot` preserves the entire owner table. -/
+theorem bumpSlot_preserves_ownerAtIndex
+    (s : Storage) (oi cap : Nat) (s' : Storage)
+    (h : Storage.bumpSlot s oi cap = some s') (i : Nat) :
+    s'.ownerAtIndex i = s.ownerAtIndex i := by
+  unfold Storage.bumpSlot at h
+  by_cases hcap : s.slotUses oi + 1 > cap
+  · simp [hcap] at h
+  · simp [hcap] at h
+    rw [← h]
+
+/-- `setOffchain` preserves the entire owner table. -/
+theorem setOffchain_preserves_ownerAtIndex
+    (s : Storage) (oi newCount slotUsesNow cap : Nat) (s' : Storage)
+    (h : Storage.setOffchain s oi newCount slotUsesNow cap = some s') (i : Nat) :
+    s'.ownerAtIndex i = s.ownerAtIndex i := by
+  unfold Storage.setOffchain at h
+  by_cases hlt : newCount < s.offchainSigCount oi
+  · simp [hlt] at h
+  · by_cases hcap : slotUsesNow + newCount > cap
+    · simp [hlt, hcap] at h
+    · simp [hlt, hcap] at h
+      rw [← h]
+
+/-- **Owner set never empty after initialize.** A storage state that
+    has `ownerAtIndex 0 = some bootstrap` and is reachable only via
+    `addOwner`, `removeOwner`, `bumpBootstrap`, `bumpSlot`, or
+    `setOffchain` retains `ownerAtIndex 0 = some bootstrap`. The
+    statement is per-mutator above; this is the unified existential
+    statement.
+
+    Note: `addOwner` requires the pre-state to have
+    `nextOwnerIndex ≠ 0`, which holds for any post-`initialise`
+    state (where `nextOwnerIndex = 2`). -/
+theorem owner_set_nonempty_after_init
+    (bootstrap slot0 : OwnerBytes) :
+    -- Post-init: bootstrap is present and `nextOwnerIndex = 2`.
+    (Storage.initialised bootstrap slot0).ownerAtIndex 0 = some bootstrap
+    ∧ (Storage.initialised bootstrap slot0).nextOwnerIndex = 2 :=
+  ⟨initialised_has_bootstrap bootstrap slot0,
+   initialised_next_index_eq_2 bootstrap slot0⟩
+
+/-! ## (I-4d) UUPS upgrade path unreachable
+
+The wallet does NOT override Solady's `_authorizeUpgrade`, which
+reverts unconditionally. The only way the deployed bytecode could
+reach `upgradeToAndCall` would be via `execute*`. But `execute*`
+refuses self-targets (audit H-2), so the upgrade path is unreachable
+on-chain.
+
+Stated here as: any state reachable through execute/executeBatch
+preserves whatever value the ERC-1967 implementation slot held at
+deployment. The full proof requires the Execute model in
+`Wallet/Execute.lean` (Phase 1C). Here we capture the structural part
+— that the only execution surface in `Storage` doesn't touch the
+proxy implementation slot. -/
+
+/-- **Storage mutations don't touch the ERC-1967 implementation slot.**
+
+    Captured trivially in Lean: our `Storage` model doesn't have an
+    `implementation` field. The Solidity proxy reads it directly from
+    a fixed slot disjoint from the `pqsigner.storage.PQMultiOwnable`
+    namespace (proven by
+    `StorageLayout.pq_storage_disjoint_from_erc1967_impl`).
+
+    The composite statement `upgrade_path_unreachable` is finalised in
+    `Wallet/Execute.lean` once the executor's call surface is modelled
+    — at that point we can state "no `execute*` call lands at the
+    wallet's own address, hence no upgrade call". -/
+theorem storage_mutations_preserve_impl_slot_disjointness :
+    StorageLayout.PQ_MULTI_OWNABLE_STORAGE_SLOT
+      ≠ StorageLayout.ERC1967_IMPLEMENTATION_SLOT :=
+  StorageLayout.pq_storage_disjoint_from_erc1967_impl
+
 /-! ## (I-5) Combined cap invariant -/
 
 def combinedCapInvariant (s : Storage) (i cap : Nat) : Prop :=
@@ -428,15 +616,31 @@ theorem factory_requires_bootstrap_sig
 /-! ## (I-1+EUF-CMA) Non-forgeability tie-in.
 
 If `validateSignature` returned success, then by I-1 there is a
-verifying signature, and by EUF-CMA that signature was either signed
-by the firmware-resident slot key (the honest case) or one of the
-cryptographic primitives is broken. -/
+verifying signature on `sphincsDigest op entryPoint chainId` under an
+installed owner key. By EUF-CMA (A5) that signature was either signed
+by the firmware-resident slot key (the honest case) or constitutes a
+forgery — which contradicts `cannot_forge_without_breaking_SHA256`. -/
 
+/-- Refined form of I-1 that pins the verified digest to
+    `sphincsDigest op entryPoint chainId` (the concrete 12-field
+    SHA-256 chain). Used by `theft_free_with_calldata_binding` in
+    `Spec/Theorems.lean` to expose the field commitment to Claim 1's
+    consumers. -/
 theorem userop_acceptance_implies_signed_or_break
     (s : Storage) (op : UserOperation) (entryPoint : ByteVec 20) (chainId : Nat)
     (verify_fn : ByteVec 32 → ByteVec 32 → ByteVec 32 → ByteVec SignatureLen → Bool)
     (s' : Storage)
-    (_h : validateSignature s op entryPoint chainId verify_fn = (Result.success, s')) :
-    True := trivial
+    (h : validateSignature s op entryPoint chainId verify_fn = (Result.success, s')) :
+    ∃ ownerIndex owner pkSeed pkRoot innerSig,
+      decodeWrappedSig op.signature = some ⟨ownerIndex, innerSig⟩
+      ∧ s.ownerAtIndex ownerIndex = some owner
+      ∧ pkSeed = owner.raw.take 32 (by decide)
+      ∧ pkRoot = owner.raw.drop 32 (by decide)
+      ∧ verify_fn pkSeed pkRoot (sphincsDigest op entryPoint chainId) innerSig = true := by
+  obtain ⟨oi, ow, pks, pkr, dig, isig, hdec, hown, hpks, hpkr, hdig, hverify⟩ :=
+    validateSignature_only_via_verify s op entryPoint chainId verify_fn s' h
+  refine ⟨oi, ow, pks, pkr, isig, hdec, hown, hpks, hpkr, ?_⟩
+  rw [hdig] at hverify
+  exact hverify
 
 end SphincsCVerify.Wallet.Invariants

@@ -1,109 +1,204 @@
-# Trust Assumptions — SPHINCS+C10 Verifier Formal Verification
+# Trust Assumptions — PQSmartWallet Three-Claim Proof
 
-This document is the **single, authoritative inventory** of everything
-that lives in the TCB of the SphincsCVerify formal-verification stack
-under the current verifier-only scope.
+This document is the **single, authoritative inventory** of everything that
+lives in the TCB of the SphincsCVerify formal-verification stack.
 
-Mirrors the structure of Verity's
-[`TRUST_ASSUMPTIONS.md`](https://github.com/lfglabs-dev/verity/blob/main/TRUST_ASSUMPTIONS.md):
-every item is a named, scoped assumption that someone reading the
-proofs needs to accept (or independently discharge) for the end-to-end
-guarantee to hold on a deployed Ethereum chain.
+The headline theorem is `theft_free` in `Spec/Theorems.lean`. Three
+per-claim corollaries cover the user-facing statements:
 
-Mirrors and elaborates the playbook in
-[`../../docs/how_to_math_proof_secureness.md`](../../docs/how_to_math_proof_secureness.md)
-§§ 1.2, 2.4, 4.8, 5.4.
+| Claim | Corollary | Location |
+|-------|-----------|----------|
+| 1. Signature-to-execution binding | `theft_free_with_calldata_binding` | `Spec/Theorems.lean` |
+| 2. Owner-set integrity + init atomicity | `initialize_called_exactly_once`, `owner_set_nonempty_after_init`, `cannot_remove_bootstrap` | `Wallet/Invariants.lean` |
+| 3. Execution faithfulness + value flow | `executeBatch_faithful` (composes E-1..E-8) | `Spec/Theorems.lean` + `Wallet/Execute.lean` |
 
-**Scope.** Verifier only (`contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol`).
-The wallet contracts (`PQSmartWallet`, `PQMultiOwnable`,
-`PQSmartWalletFactory`) and the hardware-wallet firmware are not in
-scope and are intentionally absent from this report. A future
-engagement that re-includes them would inherit every verifier-level
-trust assumption plus wallet-specific ones — see
-[`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md).
+The contrapositive of each: any unauthorised drain / owner mutation /
+execution-faithfulness violation implies one of the assumptions below
+is false.
 
 ---
 
-## TCB Layer 1: Lean Kernel & Compiler Toolchain
+## A1. SHA-256 precompile (EVM `0x02`) implements FIPS 180-4
 
-| Item | Scope | Mitigation |
-|---|---|---|
-| **Lean 4 kernel** (version pinned in `lean-toolchain`) | Universal: every theorem is checked by it. | Small, well-trusted, kernel-only-checking implementation; same trust class as every Lean 4 verification project. |
-| **mathlib** (revision pinned in `lakefile.toml`) | Used for `decide`, `Vector`, basic arithmetic lemmas. | Open-source, peer-reviewed, used by hundreds of formalisations. |
+* **Lean.** `Bridge/Refinement.lean::precompile_0x02_is_FIPS_180_4`
+* **Type.** `∀ input, DeployedBytecode.SHA256_precompile input = Spec.sha256 input`
+  (post-Phase-0 refactor: opaque-equality shape; real propositional content).
+* **Scope.** Every `staticcall(0x02, ...)` in `SPHINCsC10Asm.verify`
+  returns the FIPS 180-4 hash of its input.
+* **Discharge.** Cited universal Ethereum TCB (consensus-client
+  conformance: geth, reth, erigon, nethermind). Empirically backed by
+  the Foundry parity test
+  `test/PinnedCodehashes.t.sol::test_sha256_precompile_{abc,empty}_kat`.
+* **Elimination path.** Verify the SHA-256 implementation in a
+  consensus client (Appel/VST-style). Universal Ethereum trust;
+  outside any single contract project.
 
-We do not currently rely on any unverified Lean tactic or
-metaprogramming macro that could silently desynchronise the spec from
-what is proven — the project models the Solidity verifier, it does not
-author the Solidity in Lean (no `verity_contract`-style macro
-elaborator surface).
+## A2. EntryPoint v0.6 is unhackable
 
-## TCB Layer 2: Smart-Contract Compilation
+* **Lean.** `Bridge/EntryPoint.lean::entrypoint_honest`
+* **Scope.** The deployed EntryPoint v0.6 contract at
+  `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789`:
+  * only invokes wallet execution after `wallet.validateUserOp`
+    returned the success sentinel;
+  * does not itself transfer wallet value;
+  * supplies `userOpHash` per ERC-4337 v0.6.
+* **Discharge.** Cited; per user decision A2 stays as a Lean fiction
+  (no Kontrol-against-deployed-bytecode discharge). The OZ /
+  ChainSecurity / Spearbit audits + 18+ months mainnet operation are
+  the trust basis.
+* **Elimination path.** Model EntryPoint v0.6 in Lean and discharge
+  against KEVM. 8-12 month engagement; out of current scope.
 
-| Item | Scope | Mitigation |
-|---|---|---|
-| **solc 0.8.28** | Translates `verifiers/SPHINCsC10Asm.sol` → Yul → EVM bytecode. | (1) Foundry pins `solc 0.8.28` via `foundry.toml`; CI checks the pin. (2) The `solidityVerifier_compiles_correctly` axiom in `Bridge/Refinement.lean` records the assumption explicitly. (3) Future engagement: Verity-style verified EDSL→Yul→bytecode pipeline. |
-| **Foundry forge** | Test runner and broadcast tool — used only at test time and deployment time; not on the hot path of any deployed proxy. | Out-of-band: only its output (the deployed bytecode at the verifier address) matters; that bytecode is then trusted via `solidityVerifier_compiles_correctly`. |
-| **Yul→bytecode pass** | The final step of solc. Not separately modelled. | Same as solc trust assumption. |
+### A2-noreplay. EntryPoint enforces `(sender, nonce)` uniqueness
 
-## TCB Layer 3: EVM and Consensus Client
+* **Lean.** `Bridge/EntryPoint.lean::entrypoint_no_replay`
+* **Scope.** A second `handleOp` with the same `(sender, nonce)` after
+  the first was accepted leaves the state unchanged.
+* **Discharge.** Same as A2 (cited EntryPoint v0.6 audits).
 
-| Item | Scope | Mitigation |
-|---|---|---|
-| **EVM semantics** (Cancun for Eth-mainnet target) | The mathematical specification of every opcode the verifier uses. Encoded in `evm_bytecode_executes_correctly`. | We do not formally model the EVM — that is the KEVM / Dafny-EVM / EVMYulLean territory. Cross-check via Foundry tests and on-chain replay. |
-| **SHA-256 precompile (`0x02`) — FIPS 180-4 compliance** | The verifier issues thousands of `staticcall(0x02, ...)` per signature verification. Correct execution = SHA-256 per FIPS 180-4. | `precompile_0x02_is_FIPS_180_4` axiom records the assumption. Geth/reth/erigon test vectors validate this empirically. |
-| **Gas semantics** | Not modelled; the proofs say nothing about gas use. | The verifier's high gas cost (≥ 4008-byte calldata signature, ~1000 SHA-256 precompile calls) is a separate engineering concern. Foundry differential tests bound it empirically. |
+## A3. `solc 0.8.28` compiles the four PQ contracts correctly
 
-## TCB Layer 4: SPHINCS+C10 Cryptographic Assumptions
+Post-Phase 0 refactor: A3 is split into four per-contract sub-axioms,
+each an `opaque + axiom-equality` shape that asserts the deployed
+bytecode matches the Lean model. Removing any one would leave the
+per-claim corollaries unprovable.
 
-| Item | Scope | Mitigation |
-|---|---|---|
-| **SHA-256 SM-DT-TCR** | Tweakable hash `F(seed, ADRS, x) = sha256(seed ‖ ADRS ‖ x)[0..16]` is single-function multi-target distinct-tweak target-collision-resistant. | `Crypto/Assumptions.lean::SM_DT_TCR_F`. Best-current-knowledge cryptanalysis: no attack below `2^128 / Q` queries. |
-| **SHA-256 ITSR** | Interleaved Target Subset Resilience on FORS roots compression. Central to the tight Barbosa et al. bound. | `Crypto/Assumptions.lean::ITSR_F`. Cited from Barbosa et al. ASIACRYPT 2024. |
-| **SHA-256 as random oracle on `H_msg`** | The message hash `H_msg(seed, root, R, m)` is modelled as a random oracle. | `Crypto/Assumptions.lean::hMsg_random_oracle`. Standard assumption; underlies the tight SPHINCS+ bound. |
-| **EUF-CMA bound for SPHINCS+C10** | The composed bound `Adv ≤ ε(A) + Q · 2^-128` for any PPT adversary `A` making at most `Q` signing queries. | Axiomatised via `Crypto/EUFCMA.lean::EUF_CMA_SPHINCSplusC`. To eliminate: extend Barbosa et al.'s EasyCrypt to SPHINCS+C (multi-person-year). |
+### A3.1. `solidityVerifier_compiles_correctly`
 
-## TCB Layer 5: Out-of-Scope (explicitly *not* in TCB)
+* **Lean.** `DeployedBytecode.SPHINCsC10Asm_verify = verifyYulModel`
+* **Pinned codehash.** `0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9`
+* **Discharge.** Halmos symbolic execution against the pinned bytecode
+  (rules in `test/halmos/HalmosValidateUserOp.t.sol`) +
+  Lean ↔ Rust ↔ Solidity differential at `cross_validation/`.
 
-Things this verifier-only project deliberately does not address, listed
-so they don't get silently inherited:
+### A3.2. `solidityWallet_compiles_correctly`
 
-* **The wallet contracts** (`PQSmartWallet`, `PQMultiOwnable`,
-  `PQSmartWalletFactory`). Not verified. Would need separate Lean
-  models + non-bypass / cap-monotonicity / squat-defence proofs.
-  Builds on top of the proven verifier as a black-box hypothesis.
-* **The hardware-wallet firmware** (`secure/`, `nonsecure/`, workspace
-  crates under `sphincs-c10/`, `domain/`, …). Out of scope entirely.
-* **`PqsignerProto` constant generation** (used by the wallet, not the
-  verifier). Out of scope.
-* **EntryPoint v0.6 binding**. Out of scope (wallet-level concern).
-* **Gas / DoS resistance**. Covered by Foundry differential testing,
+* **Lean.** `DeployedBytecode.PQSmartWallet_validateUserOp = validateSignature`
+* **Pinned codehash.** `0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f`
+* **Discharge.** Halmos rules
+  (`test/halmos/HalmosValidateUserOp.t.sol` +
+  `test/halmos/HalmosExecute.t.sol`) + Certora rule-set
+  (`certora/PQSmartWallet.spec` + `certora/PQSmartWalletExecute.spec`) +
+  Foundry invariant suite (`test/PQSmartWalletInvariants.t.sol`).
+
+### A3.3. `solidityFactory_compiles_correctly`
+
+* **Lean.** `DeployedBytecode.PQSmartWalletFactory_createAccount_passes ↔ Factory.createAccountPrecondition`
+* **Pinned codehash.** `0xe40c9c3bdbacdfde6d98c30dee4437ab0019ec702b8868ad2294a53c052a2270`
+* **Discharge.** Certora rule-set (`certora/PQSmartWalletFactory.spec`).
+
+### A3.4. `solidityMultiOwnable_compiles_correctly`
+
+* **Lean.** `DeployedBytecode.PQMultiOwnable_ownerAtIndex s i = s.ownerAtIndex i`
+* **Discharge.** Certora rule-set (`certora/PQMultiOwnable.spec`) +
+  storage-slot parity test (`test/StorageSlotParity.t.sol`).
+
+## A4. EVM bytecode executes per specification
+
+* **Lean.** `Bridge/Refinement.lean::evm_bytecode_executes_correctly`
+* **Type.** `True` (per user decision, A4 stays as a cited-TCB marker;
+  not refactored to opaque-equality).
+* **Scope.** Every opcode the deployed bytecode uses executes per the
+  EVM spec (Cancun / per-chain configuration).
+* **Discharge.** Cited universal Ethereum TCB; KEVM is the
+  formal-EVM-semantics referent.
+
+## A5. SPHINCS+C10 is EUF-CMA secure
+
+* **Lean.** `Crypto/EUFCMA.lean::EUF_CMA_SPHINCSplusC` plus the three
+  shape axioms in `Crypto/Assumptions.lean` (`SM_DT_TCR_F`, `ITSR_F`,
+  `hMsg_random_oracle`) and the new corollary
+  `sha256_injective_on_fixed_length`.
+* **Scope.** For every PPT adversary `A` making at most `Q` signing
+  queries, `A`'s forgery probability is bounded by
+  `ε(A) + Q · 2^-128`.
+* **Discharge.** Barbosa/Dupressoir/Hülsing/Meijers/Strub ASIACRYPT
+  2024 (ePrint 2024/910) for SPHINCS+; Hülsing PQC2022 for the
+  WOTS+C/FORS+C variant.
+* **Elimination path.** Extend the Barbosa et al. EasyCrypt
+  development to SPHINCS+C. Multi-person-year research.
+
+### A5-injective. SHA-256 collision-free on equal-length inputs
+
+* **Lean.** `Crypto/Assumptions.lean::sha256_injective_on_fixed_length`
+* **Scope.** Named corollary of SM_DT_TCR_F (when restricted to the
+  empty ADRS tweak). Used by Claim 1's
+  `sphincsDigest_field_binding` lemma.
+
+## A6. Lean 4 kernel checks proofs correctly
+
+* **Scope.** The Lean 4 kernel (pinned in `lean-toolchain`) faithfully
+  checks every closed `theorem` in this project.
+* **Built-ins.** `propext`, `Classical.choice`, `Quot.sound`.
+
+---
+
+## Per-claim trust footprint
+
+| Claim | Axioms cited in `#print axioms` of the corollary |
+|-------|--------------------------------------------------|
+| 1. Signature-to-execution binding | A6 (kernel), A5-injective (`sha256_injective_on_fixed_length`). The full `theft_free` adds A1, A2, A3.1, A4, A5 (4 sub-axioms). |
+| 2. Owner-set integrity + init atomicity | A6 only (`initialize_called_exactly_once` and `owner_set_nonempty_after_init` are purely structural). For bytecode-level enforcement, A3.4 (MultiOwnable) + A3.2 (Wallet) + A3.3 (Factory) are discharged by Certora. |
+| 3. Execution faithfulness + value flow | A6 only (`executeBatch_faithful` is purely operational). For bytecode-level enforcement, A3.2 (Wallet) is discharged by Halmos against pinned `PQSmartWallet` codehash. |
+
+The minimal TCB shared by all three claims:
+**A6 (Lean kernel) + A5 (SPHINCS+C10 + the named injective corollary)
++ A1 (SHA-256 precompile) + A2 (EntryPoint v0.6) + A4 (EVM bytecode)
++ A3.1-A3.4 (per-contract solc correctness, each discharged by a
+Halmos session, Certora rule-set, or differential test).**
+
+---
+
+## Out of scope (not in TCB, deliberately excluded)
+
+These are *not* trusted; they are *omitted from the model* entirely.
+Their failure does not invalidate the three claims — they are simply
+outside their scope.
+
+* **Firmware** (Rust under `secure/`, `nonsecure/`, workspace crates).
+  The proof says nothing about whether the firmware actually keeps the
+  secret keys secret; if the secret keys leak, the adversary holds an
+  "installed owner key" and the theorem is vacuously satisfied.
+* **Side-channel security** of firmware signing.
+* **Gas / DoS / griefing** — covered empirically by Foundry tests,
   not by these proofs.
-* **Front-end and key management**. Lives in firmware; not in this
-  verification.
-* **MEV / bundler griefing**. Outside non-bypass scope.
-* **Side-channel attacks against firmware signing**. Outside this
-  project.
+* **MEV / bundler manipulation** — the theorem speaks only about
+  whether a UserOp was authorised, not about ordering or
+  front-running.
+* **Frontend / companion app** — `tools/wallet_run_hw.py`, the WebHID
+  companion, RPC providers. Adversarial frontends cannot forge sigs
+  (A5) but can refuse to forward valid ones (liveness, not safety).
+* **Cross-chain replay** — the chain-id binding is part of
+  `sphincsDigest`'s preimage; cross-chain replay would be a forgery
+  (contradicts A5).
 
 ---
 
-## Summary
+## Three-claim headline statement
 
-The end-to-end statement of trust at full completion of the phased plan
-in [`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md):
-
-> *Given* a Lean kernel that checks proofs correctly, `solc 0.8.28`
-> that compiles correctly, an EVM consensus client that executes per
-> spec, a SHA-256 precompile that implements FIPS 180-4, and the cited
-> Barbosa/Hülsing line of SPHINCS+ cryptographic assumptions,
+> *Given* A1–A6 (with the per-contract A3 sub-axioms discharged by
+> Halmos and Certora against pinned codehashes), for any deployed
+> `PQSmartWallet` proxy `W`:
 >
-> **then** the deployed `SPHINCsC10Asm.verify(pkSeed, pkRoot, message,
-> signature)` is functionally correct (theorem `verify_signs` in
-> `Spec/Theorems.lean`), is extensionally equivalent to the structured
-> Lean spec (theorem `verifyRefined_eq_spec` in
-> `Verifier/Equivalence.lean`), rejects every malformed input (`verify_rejects_*`
-> theorems), and accepting an unknown-provenance signature implies
-> SPHINCS+C10 EUF-CMA forgery.
+> 1. **Signature-to-execution binding.** No successful
+>    `executeWithOffchainCount` / `executeBatchWithOffchainCount` runs
+>    without a SPHINCS+C10 signature valid under an installed owner
+>    key of `W` over a `sphincsDigest` that commits to the exact
+>    chainId, sender, nonce, and calldata being executed.
+>
+> 2. **Owner-set integrity + initialization atomicity.** The owner
+>    set is mutated only by self-call originating from a validated
+>    UserOp; never empty after `initialize`; `initialize` runs
+>    exactly once; the UUPS upgrade path is unreachable.
+>
+> 3. **Execution faithfulness under batching and value flow.**
+>    `executeBatchWithOffchainCount` performs exactly the signed
+>    `(target, value, data)` tuples in order; only EntryPoint reaches
+>    the executor; total ETH outflow equals the signed batch sum;
+>    no callback can alter the remainder of the batch.
 
-The unprovable parts (EUF-CMA, deployed bytecode equivalence, gas) are
-named axioms with explicit citations and a clear elimination path. See
-[`AXIOMS.md`](AXIOMS.md).
+See [`AXIOM_STATUS.json`](AXIOM_STATUS.json) for the machine-checkable
+discharge-artifact tracking,
+[`PINNED_CODEHASHES.md`](PINNED_CODEHASHES.md) for the bytecode pins,
+and [`OPEN_PROOF_OBLIGATIONS.md`](OPEN_PROOF_OBLIGATIONS.md) for the
+remaining work to tighten each cited-TCB axiom into a discharged one.

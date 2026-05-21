@@ -104,6 +104,14 @@ def u32ToB32 (x : UInt32) : ByteVec 32 :=
 def u64ToB32 (x : UInt64) : ByteVec 32 :=
   cast (by decide) ((zero 24).append (ofU64BE x))
 
+/-- Encode a `Nat` as a 32-byte big-endian uint256. Only the bottom
+    256 bits of `x` are used (matches Solidity `uint256` semantics).
+    The encoding is byte-equal to `abi.encodePacked(uint256(x))`. -/
+def natToB32 (x : Nat) : ByteVec 32 :=
+  ⟨Array.ofFn (n := 32) (fun (i : Fin 32) =>
+     UInt8.ofNat ((x >>> ((31 - i.val) * 8)) &&& 0xff)),
+   by simp [Array.size_ofFn]⟩
+
 /-- Truncate a 32-byte digest to the top `N = 16` bytes. -/
 def truncate16 (d : ByteVec 32) : ByteVec 16 :=
   d.take 16 (by decide)

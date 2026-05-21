@@ -34,8 +34,9 @@ cd ../contracts/smart-wallet
 forge test --match-test test_test_vectors -vv
 
 # Step 3: type-check the Lean spec API against the same vector shapes.
-#         (Byte-level replay becomes available after Phase 7; see
-#          ../docs/OPEN_PROOF_OBLIGATIONS.md for the plan.)
+#         (Byte-level replay becomes available once `Spec/Hash.lean`
+#          ships a kernel-computable SHA-256; tracked in
+#          ../docs/OPEN_PROOF_OBLIGATIONS.md under Group V.)
 cd ../verification/lean
 lake exe verify-test-vectors
 ```
@@ -52,6 +53,6 @@ Drift surfaces as either:
 * **Rust ↔ Solidity differential testing**: already in place
   (`contracts/smart-wallet/test/SPHINCsC10Asm.t.sol`).
 * **Rust ↔ Lean differential testing**: shape-only today. Byte-level
-  replay inside Lean requires a kernel-computable SHA-256 spec
-  (Phase 2) and the Lean test-vector executable (Phase 7); both are
-  scoped in [`../docs/OPEN_PROOF_OBLIGATIONS.md`](../docs/OPEN_PROOF_OBLIGATIONS.md).
+  replay inside Lean requires a kernel-computable SHA-256 spec; both
+  it and the Lean test-vector executable are scoped under Group V in
+  [`../docs/OPEN_PROOF_OBLIGATIONS.md`](../docs/OPEN_PROOF_OBLIGATIONS.md).

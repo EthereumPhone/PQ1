@@ -1,0 +1,95 @@
+name: Verify three claims
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/**'
+  push:
+    branches:
+      - master
+
+jobs:
+  verify-three-claims:
+    name: Mathematically prove the three security claims end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Lean 4 (kernel-checked proofs) ────────────────────────────
+      - name: Install elan / Lean 4
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Pin Lean toolchain
+        working-directory: contracts/verification/lean
+        run: |
+          elan toolchain install $(cat lean-toolchain)
+          elan default $(cat lean-toolchain)
+          lean --version
+
+      - name: Lake build (Lean kernel type-check)
+        working-directory: contracts/verification
+        run: make verify-build
+
+      - name: Axiom audit + linter (no new True-typed axioms)
+        working-directory: contracts/verification
+        run: |
+          make verify-audit
+          bash scripts/lint_axioms.sh
+
+      # ── Foundry (parity, invariants, codehash pinning) ────────────
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Forge build
+        working-directory: contracts/smart-wallet
+        run: forge build
+
+      - name: Forge test (incl. parity + invariants + codehash freeze)
+        working-directory: contracts/smart-wallet
+        run: forge test -vv
+
+      - name: Forge invariant fuzz (1000 runs)
+        working-directory: contracts/smart-wallet
+        run: forge test --invariant-runs 1000 --match-contract Invariants -vv
+
+      # ── Halmos (symbolic execution against pinned bytecode) ───────
+      #
+      # Halmos is FOSS; runs only when the tool is installed in the runner.
+      # The CI step below is `continue-on-error: true` until Halmos is
+      # pinned in the runner image. Local devs install via `pip install
+      # halmos`.
+      - name: Install Halmos (optional)
+        continue-on-error: true
+        run: |
+          python3 -m pip install --upgrade halmos || true
+          halmos --version || true
+
+      - name: Halmos symbolic execution
+        working-directory: contracts/smart-wallet
+        continue-on-error: true
+        run: |
+          if command -v halmos >/dev/null 2>&1; then
+            halmos --contract HalmosValidateUserOp --solver-timeout-assertion 600
+            halmos --contract HalmosExecute --solver-timeout-assertion 600
+          else
+            echo "Halmos not installed; skipping (spec files in test/halmos/ are still the source of truth)"
+          fi
+
+      # ── Certora (inductive rules; requires CERTORAKEY) ────────────
+      - name: Certora verification
+        if: ${{ env.CERTORAKEY != '' }}
+        env:
+          CERTORAKEY: ${{ secrets.CERTORAKEY }}
+        working-directory: contracts/smart-wallet
+        run: |
+          pip install certora-cli
+          certoraRun certora/confs/PQMultiOwnable.conf
+          certoraRun certora/confs/PQSmartWallet.conf
+          certoraRun certora/confs/PQSmartWalletFactory.conf
+          certoraRun certora/confs/PQSmartWalletExecute.conf

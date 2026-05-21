@@ -31,5 +31,17 @@ import SphincsCVerify
 --   propext, Classical.choice, Quot.sound  (Lean kernel)
 --   SM_DT_TCR_F, ITSR_F, hMsg_random_oracle, EUF_CMA_SPHINCSplusC  (A5)
 --   precompile_0x02_is_FIPS_180_4 (A1), entrypoint_honest (A2),
---   solidityVerifier_compiles_correctly (A3), evm_bytecode_executes_correctly (A4)
+--   solidityVerifier_compiles_correctly (A3.1), evm_bytecode_executes_correctly (A4)
 #print axioms SphincsCVerify.Spec.Theorems.theft_free
+
+-- Claim 1 corollary — adds sha256_injective_on_fixed_length to the closure.
+#print axioms SphincsCVerify.Spec.Theorems.theft_free_with_calldata_binding
+
+-- Claim 3 corollary — composes the 6 Wallet.Execute theorems.
+#print axioms SphincsCVerify.Spec.Theorems.executeBatch_faithful
+
+-- Claim 2 corollaries — owner-set integrity + initialization atomicity
+-- (covered by I-4 + initialize_called_exactly_once + owner_set_nonempty_after_init).
+#print axioms SphincsCVerify.Wallet.Invariants.initialize_called_exactly_once
+#print axioms SphincsCVerify.Wallet.Invariants.owner_set_nonempty_after_init
+#print axioms SphincsCVerify.Wallet.Invariants.storage_mutations_preserve_impl_slot_disjointness

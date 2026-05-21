@@ -113,6 +113,15 @@ theorem sha256_eq_impl (segs : List ByteSeg) :
 def sha256_concat {n : Nat} (v : ByteVec n) : ByteVec 32 :=
   sha256 [ByteSeg.ofByteVec v]
 
+/-- Apply `sha256` to a single `Array UInt8`. Wraps the array in a
+    `ByteSeg` of its actual size. Used by `sphincsDigest` for
+    `sha256(initCode)`, `sha256(callData)`, and
+    `sha256(paymasterAndData)` — fields whose lengths are not fixed at
+    the type level. -/
+@[inline]
+def sha256OfArr (bytes : Array UInt8) : ByteVec 32 :=
+  sha256 [⟨bytes.size, ⟨bytes, rfl⟩⟩]
+
 /-! ## Tweakable hash primitives -/
 
 /-- `th(seed, adrs, val)` — tweakable hash with one 32-byte input,

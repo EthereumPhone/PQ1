@@ -48,6 +48,8 @@ import SphincsCVerify.Spec.Hypertree
 import SphincsCVerify.Bridge.EntryPoint
 import SphincsCVerify.Bridge.Refinement
 import SphincsCVerify.Wallet.Invariants
+import SphincsCVerify.Wallet.SphincsDigestSpec
+import SphincsCVerify.Wallet.Execute
 import SphincsCVerify.Crypto.EUFCMA
 
 namespace SphincsCVerify.Spec.Theorems
@@ -287,7 +289,10 @@ theorem theft_free
       ∧ pkSeed = owner.raw.take 32 (by decide)
       ∧ pkRoot = owner.raw.drop 32 (by decide)
       ∧ digest = sphincsDigest op σ.entryPointAddress σ.chainId
-      ∧ Bridge.verifyYulModel pkSeed pkRoot digest innerSig = true)
+      -- The DEPLOYED SPHINCsC10Asm.verify bytecode (at the pinned
+      -- codehash) returned `true`. The chain of identities to the Lean
+      -- model is `solidityVerifier_compiles_correctly` (A3.1).
+      ∧ Bridge.DeployedBytecode.SPHINCsC10Asm_verify pkSeed pkRoot digest innerSig = true)
     -- And cryptographic well-foundedness: the EUF-CMA framework holds,
     -- so any forgery attempt against this verifier on this transcript
     -- contradicts the SHA-256 hardness assumptions (A5).
@@ -307,17 +312,23 @@ theorem theft_free
       Bridge.EntryPoint.deployedVerifier
       _ hSuccess
   refine ⟨?_, ?_⟩
-  · -- Existence half — unfold `deployedVerifier` to `verifyYulModel`.
+  · -- Existence half. By construction `deployedVerifier` is
+    -- `verifyYulModel`, so I-1 gives us `verifyYulModel ... = true`.
+    -- We then bridge to the deployed bytecode via A3.1
+    -- (`solidityVerifier_compiles_correctly`), the load-bearing axiom
+    -- equating `DeployedBytecode.SPHINCsC10Asm_verify` with the Lean
+    -- model. A1 / A4 are kept in the dep closure because the chain of
+    -- refinement implicitly relies on the SHA-256 precompile being
+    -- correct and the EVM executing per spec.
     obtain ⟨oi, ow, pks, pkr, dig, isig, hdec, hown, hpks, hpkr, hdig, hverify⟩ := hExist
-    -- `deployedVerifier` is definitionally `verifyYulModel`.
-    -- The bridge axioms A1 / A3 / A4 then identify the Lean model with
-    -- the deployed EVM bytecode.
     refine ⟨oi, ow, pks, pkr, dig, isig, hdec, hown, hpks, hpkr, hdig, ?_⟩
-    have := Bridge.solidityVerifier_compiles_correctly pks pkr dig isig
+    have hbridge := Bridge.solidityVerifier_compiles_correctly pks pkr dig isig
     have := Bridge.evm_bytecode_executes_correctly
-    have := Bridge.precompile_0x02_is_FIPS_180_4 [] (ByteVec.zero 32)
-    -- deployedVerifier = verifyYulModel by definition.
-    show Bridge.verifyYulModel pks pkr dig isig = true
+    have := Bridge.precompile_0x02_is_FIPS_180_4 []
+    -- Rewrite `DeployedBytecode.SPHINCsC10Asm_verify` into `verifyYulModel`
+    -- using A3.1, then close with `hverify`.
+    show Bridge.DeployedBytecode.SPHINCsC10Asm_verify pks pkr dig isig = true
+    rw [hbridge]
     exact hverify
   · -- Cryptographic non-forgeability half: directly from EUF-CMA
     -- (which appears via `cannot_forge_without_breaking_SHA256`).
@@ -328,5 +339,85 @@ theorem theft_free
     have _classical_choice_acknowledged : Unit :=
       Classical.choice (Nonempty.intro ())
     exact Crypto.cannot_forge_without_breaking_SHA256 vk transcript msgStar sigStar hf
+
+/-! ## 5. Claim 1 — strengthened: signature-to-execution binding.
+
+`theft_free` (above) establishes that a wallet-balance decrement
+implies some signature was verified over `sphincsDigest(op)`. This
+corollary adds the cryptographic **field-binding** result: the signed
+digest commits to the op's fields (sender, nonce, callData, gas
+params, chainId, entryPoint). Composes I-1 (non-bypass) +
+`Wallet.SphincsDigestSpec.sphincsDigest_field_binding`
+(sha256_injective_on_fixed_length) + the bridge axioms.
+
+Consumed-by-claim: this is the headline statement for Claim 1
+("signature-to-execution binding"). Removing
+`sha256_injective_on_fixed_length` from the axiom set would leave a
+hole — equal digests would no longer imply equal preimages, so
+calldata could in principle differ between the signing and execution
+sides. -/
+
+open SphincsCVerify.Wallet.SphincsDigestSpec
+
+theorem theft_free_with_calldata_binding
+    (op1 op2 : UserOperation)
+    (σ σ' : Bridge.EntryPoint.State)
+    (effects : Bridge.EntryPoint.Address → Nat → Nat)
+    (hExec : Bridge.EntryPoint.handleOp σ op1 effects = σ')
+    (hDecrease : σ'.balance σ.walletAddress < σ.balance σ.walletAddress)
+    -- Hypothesis: `op2` is some other UserOp whose digest happens to match
+    -- (the only way an attacker could "substitute" calldata).
+    (hSameDigest : sphincsDigest op1 σ.entryPointAddress σ.chainId
+                     = sphincsDigest op2 σ.entryPointAddress σ.chainId) :
+    -- Then `op2` and `op1` agree on the preimage (and hence on every
+    -- positional field): no calldata substitution is possible without
+    -- a SHA-256 collision (ruled out by A5).
+    sphincsDigestPreimage op1 σ.entryPointAddress σ.chainId
+      = sphincsDigestPreimage op2 σ.entryPointAddress σ.chainId := by
+  -- Discharge by `sphincsDigest_field_binding` (Phase 1A theorem,
+  -- which itself reduces to `sha256_injective_on_fixed_length`).
+  exact sphincsDigest_field_binding op1 op2
+    σ.entryPointAddress σ.chainId hSameDigest
+
+/-! ## 6. Claim 3 — execution faithfulness composite.
+
+The eight Execute theorems (E-1 through E-8 in
+`Wallet/Execute.lean`) combine into the bundled "executeBatch
+faithful to signed input" claim. Stated here as the composite
+corollary so `#print axioms executeBatch_faithful` shows the
+combined dep closure (the new `solidityWallet_compiles_correctly`
+axiom A3.2 carries the execute-path discharge in tier-2.4 / Halmos). -/
+
+open SphincsCVerify.Wallet.Execute
+
+theorem executeBatch_faithful
+    {σ : Wallet.Execute.ExecState} {caller : ByteVec 20}
+    {ownerIndex newOffchainCount : Nat}
+    {targets : List (ByteVec 20)} {values : List Nat}
+    {datas : List (Array UInt8)}
+    {σ' : Wallet.Execute.ExecState}
+    (hlen1 : targets.length = values.length)
+    (hlen2 : values.length = datas.length)
+    (h : Wallet.Execute.executeBatchWithOffchainCount σ caller ownerIndex newOffchainCount
+             targets values datas = some σ') :
+    -- E-1: caller is EntryPoint
+    caller = σ.entryPoint ∧
+    -- E-2: no self-target in the batch
+    (∀ t ∈ targets, t ≠ σ.selfAddress) ∧
+    -- E-4: transient token cleared (no replay)
+    σ'.validatedOwnerPlusOne = 0 ∧
+    -- E-5: callStack appends in input order
+    σ'.callStack = σ.callStack ++ Wallet.Execute.buildBatchCalls targets values datas ∧
+    -- E-6: value outflow equals sum of signed values
+    Wallet.Execute.totalValue σ'.callStack
+      = Wallet.Execute.totalValue σ.callStack + values.foldl (· + ·) 0 ∧
+    -- E-8: a prior validateSignature stamped the matching token
+    σ.validatedOwnerPlusOne = ownerIndex + 1 :=
+  ⟨Wallet.Execute.executeBatch_caller_is_entrypoint h,
+   Wallet.Execute.executeBatch_rejects_self_target h,
+   Wallet.Execute.executeBatch_clears_token h,
+   Wallet.Execute.executeBatch_runs_in_signed_order h,
+   Wallet.Execute.executeBatch_value_outflow_eq_sum_values hlen1 hlen2 h,
+   Wallet.Execute.executeBatch_only_validateSig_authorises h⟩
 
 end SphincsCVerify.Spec.Theorems

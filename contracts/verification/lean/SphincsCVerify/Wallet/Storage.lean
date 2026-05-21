@@ -127,6 +127,19 @@ def removeOwner
         isOwner := fun o' => !decide (o' = o) && s.isOwner o',
         removedOwnersCount := s.removedOwnersCount + 1 }
 
+/-- The wallet's `initialize` function. Returns `none` (i.e. revert)
+    if the one-shot guard `nextOwnerIndex == 0` fails; otherwise
+    installs `bootstrap` at index 0 and `slot0` at index 1.
+
+    Mirrors `PQSmartWallet.initialize` (Solidity lines 150-156) +
+    `PQMultiOwnable._initializeOwners` (lines 162-172).
+
+    Named `tryInitialize` (rather than `initialize`) because
+    `initialize` is reserved in Lean 4. -/
+def tryInitialize (s : Storage) (bootstrap slot0 : OwnerBytes) : Option Storage :=
+  if s.nextOwnerIndex ≠ 0 then none
+  else some (Storage.initialised bootstrap slot0)
+
 end Storage
 
 end SphincsCVerify.Wallet

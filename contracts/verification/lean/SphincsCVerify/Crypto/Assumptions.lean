@@ -135,4 +135,30 @@ axiom ITSR_F : ITSR_F_Shape
     Cited from Barbosa et al. ASIACRYPT 2024 § 7. -/
 axiom hMsg_random_oracle : hMsg_RO_Shape
 
+/-! ## C. Named corollaries used by wallet-level theorems. -/
+
+/-- **SHA-256 is collision-free on equal-total-length inputs.**
+
+    For any two segment lists whose flattened byte arrays have the same
+    length, if their SHA-256 digests match then the flattened arrays
+    are equal. Stated as the contrapositive: any pair of distinct
+    same-length preimages that collide under SHA-256 would constitute a
+    collision-resistance break, contradicting `SM_DT_TCR_F` (when
+    restricted to the empty `ADRS` tweak, which yields the unkeyed
+    collision-resistance statement).
+
+    This is the cryptographic content needed by Claim 1's
+    `sphincsDigest_field_binding` lemma: equal `sphincsDigest(op)`
+    digests imply equal preimages, which (with a fixed 240-byte
+    layout) means equal field values.
+
+    Stated as an axiom because Lean does not formalise the probabilistic
+    advantage bound; the discharge is the same Barbosa et al. 2024
+    EasyCrypt reduction that backs `SM_DT_TCR_F`. -/
+axiom sha256_injective_on_fixed_length :
+    ∀ (segs1 segs2 : List ByteSeg),
+      (ByteSeg.flatten segs1).size = (ByteSeg.flatten segs2).size →
+      sha256 segs1 = sha256 segs2 →
+      ByteSeg.flatten segs1 = ByteSeg.flatten segs2
+
 end SphincsCVerify.Crypto

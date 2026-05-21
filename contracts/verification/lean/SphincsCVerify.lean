@@ -35,6 +35,9 @@ import SphincsCVerify.Wallet.MultiOwnable
 import SphincsCVerify.Wallet.ValidateUserOp
 import SphincsCVerify.Wallet.IsValidSignature
 import SphincsCVerify.Wallet.Factory
+import SphincsCVerify.Wallet.SphincsDigestSpec
+import SphincsCVerify.Wallet.StorageLayout
+import SphincsCVerify.Wallet.Execute
 import SphincsCVerify.Wallet.Invariants
 
 -- Cryptographic axioms (Stratum A continued)

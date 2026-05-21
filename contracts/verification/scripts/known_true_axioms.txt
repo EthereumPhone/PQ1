@@ -5,19 +5,26 @@
 # Format: one entry per line, fully-qualified Lean name.
 # Lines starting with `#` are comments.
 #
-# These entries are the dependency-closure stubs that the plan
-# (`contracts/verification/docs/DISCHARGE_PLAN.md`)
-# will discharge:
+# After the Phase 0 / Tier-1.9 refactor, the bridge axioms A1
+# (`precompile_0x02_is_FIPS_180_4`) and A3.1
+# (`solidityVerifier_compiles_correctly`) and A3.2/A3.3/A3.4 are now
+# `opaque + axiom-equality` shapes carrying real propositional content,
+# and are NOT on this allowlist any more.
 #
-#   - The three bridge axioms (A1, A3, A4) become `opaque + axiom
-#     equality` shapes in Tier 1.9 — at which point they are removed
-#     from this allowlist.
+# What remains:
+#
+#   - A4 (`evm_bytecode_executes_correctly`) — kept as a cited universal
+#     Ethereum TCB marker per user decision. KEVM is the formal-EVM-
+#     semantics referent.
+#   - A2 (`entrypoint_honest`) — `_Shape`-typed (Prop carries content
+#     about the Lean `handleOp` fiction) but the user explicitly opted
+#     to keep this as-is rather than discharge against deployed
+#     EntryPoint v0.6 bytecode.
 #   - The three crypto-shape axioms (SM_DT_TCR_F, ITSR_F,
-#     hMsg_random_oracle) become advantage-bound `Statement`
-#     structures in Tier 4 — at which point they are removed too.
+#     hMsg_random_oracle) — cited Barbosa et al. ASIACRYPT 2024
+#     EUF-CMA reduction; mechanising the advantage bound in Lean is a
+#     multi-person-year effort.
 
-SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4
-SphincsCVerify.Bridge.solidityVerifier_compiles_correctly
 SphincsCVerify.Bridge.evm_bytecode_executes_correctly
 SphincsCVerify.Crypto.SM_DT_TCR_F
 SphincsCVerify.Crypto.ITSR_F
