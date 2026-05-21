@@ -339,7 +339,7 @@ pin in `test/PinnedCodehashes.t.sol`. The CI gate fails until:
 | `contracts/verification/scripts/dump_axioms.lean` | Prints axiom closure per top-level theorem |
 | `contracts/.github/workflows/verify-three-claims.yml` | CI workflow |
 | `contracts/smart-wallet/halmos.toml` | Halmos config |
-| `contracts/smart-wallet/lib/halmos-cheatcodes/` | Local stub so Halmos tests compile with plain `forge build` |
+| `contracts/smart-wallet/stubs/halmos-cheatcodes/` | Local stub so Halmos tests compile with plain `forge build` |
 
 ---
 
@@ -368,3 +368,128 @@ This is what "mathematically proven" looks like in practice — every
 artifact is independently re-runnable, every trust assumption is
 named and pinned, and the dependency closure of each per-claim
 corollary is auditable in one `#print axioms` output.
+
+---
+
+## Marketing / public claims — what you can and cannot say
+
+This section exists to keep public statements about the proof
+defensible. The work is real and substantial; overclaiming would
+undermine its credibility and expose us to consumer-protection risk
+if a wallet is later drained.
+
+### The current honest state
+
+| Layer | Status |
+|-------|--------|
+| Lean 4 kernel-checked theorems | ✅ **Verified.** `lake build` exits 0, zero sorries, axiom closures match what's documented. |
+| Foundry parity + invariant tests | ✅ **Verified.** 92 unit tests + 7 invariants × 128,000 fuzz calls pass on every CI run. |
+| Halmos symbolic execution against pinned bytecode | ⚠️ **Spec committed, tool not yet run in CI.** The rules are written and `halmos.toml` pins versions, but no one has executed `halmos --bytecode <pin>` against the runtime codehash. The A3.1 / A3.2 bridge axioms are therefore *defined* but *not mechanically discharged*. |
+| Certora inductive rules | ⚠️ **Spec committed, license not provisioned.** Same situation for A3.3 / A3.4. |
+| A2 (EntryPoint v0.6) | 📚 **Cited-TCB.** Per project decision, kept as cited (OZ / ChainSecurity / Spearbit audits + 18 mo mainnet operation). Not in-Lean discharged. |
+| A4 (EVM bytecode executes per spec) | 📚 **Cited-TCB.** Universal Ethereum trust statement; KEVM as referent. |
+| A5 (SPHINCS+C10 EUF-CMA) | 📚 **Cited-TCB.** Barbosa et al. ASIACRYPT 2024 proved EUF-CMA for SPHINCS+; the SPHINCS+C transition is by published reduction (Hülsing PQC2022) but not re-mechanized in EasyCrypt. |
+
+### ✅ Safe to say
+
+These are exactly accurate descriptions of what is true today:
+
+- "Formal verification of three core security properties in Lean 4,
+  kernel-checked with zero `sorry`."
+- "Three security claims are mathematically proven against models of
+  the wallet's signature validation, owner management, and execution
+  paths, modulo a documented set of cited trust assumptions
+  (Ethereum EVM, SHA-256 precompile, SPHINCS+C10 EUF-CMA, EntryPoint
+  v0.6, Lean 4 kernel)."
+- "Every axiom in the dependency closure is named and pinned; the
+  closure is machine-checkable via `#print axioms`."
+- "Discharge artifacts (Halmos and Certora rule sets, Foundry
+  invariants) are committed and re-runnable; each bytecode-level
+  axiom is bound to a pinned runtime codehash."
+- "The wallet vendor cannot move user funds or change accounts — this
+  is a theorem (`Wallet.Invariants.cannot_remove_bootstrap` +
+  `addOwner_preserves_index0` + the Certora `onlySelfCanChange*`
+  rules), not a promise."
+- "92 unit and parity tests + 7 stateful invariants (128,000 fuzz
+  calls each) pass on every CI run."
+
+### ⚠️ Defensible only with qualifiers
+
+- "**Mathematically proven**" — only when paired with *what* is
+  proven (the three claims, named) and *under what* (cited axioms).
+  Never standalone, never as "mathematically proven secure" in the
+  general sense.
+- "**Bytecode-verified**" — only after Halmos and Certora have
+  actually been run in CI. Until then, the bytecode bridge is
+  axiomatic, not discharged.
+
+### ❌ Do not say
+
+- "Unhackable."
+- "No bugs are possible."
+- "Provably secure" (without naming what's proven).
+- "The Lean kernel verified the smart contracts." (It verified the
+  Lean *models* of them, with a documented bridge axiom to the
+  deployed bytecode.)
+- "Quantum-secure forever." (SPHINCS+C10 is conjectured PQ-secure
+  under SHA-256 standard assumptions; "forever" is unscientific.)
+- Anything that implies the proof covers domains it doesn't:
+  gas / DoS / MEV / bundler ordering / frontend integrity / key
+  extraction / side channels / firmware bugs.
+
+### Recommended pitch (long form)
+
+> *"We formally verified three security properties of our smart wallet
+> using Lean 4: signature-to-execution binding, owner-set integrity,
+> and execution faithfulness. Every theorem is kernel-checked, zero
+> sorries, and the trust assumptions are named and pinned —
+> Ethereum's EVM semantics, the SHA-256 precompile, SPHINCS+C10's
+> EUF-CMA security (per Barbosa et al. ASIACRYPT 2024), EntryPoint v0.6
+> (cited audits), and the Lean 4 kernel. Discharge artifacts (Halmos
+> symbolic execution against pinned bytecode, Certora inductive rules)
+> are committed and re-runnable on every PR. The full proof, axiom
+> ledger, and discharge map are open-source at [link]. As a corollary:
+> we — the wallet maker — cannot move your funds or change your
+> account. This is a theorem with a citation, not a promise with a
+> brand."*
+
+### Recommended pitch (short form)
+
+> *"Three security properties of this wallet are mathematically
+> proven in Lean 4, under cited trust assumptions (Ethereum EVM,
+> SHA-256, SPHINCS+C10 EUF-CMA, EntryPoint v0.6). Even we — the
+> wallet maker — cannot move your funds. Proof and trust ledger:
+> [link]."*
+
+### Before launching the campaign
+
+To maximally tighten the claims, in order of difficulty:
+
+1. **Run Halmos in CI** (FOSS; `pip install halmos`). Upgrades A3.1
+   and A3.2 from "spec-defined" to "discharged against pinned
+   bytecode." Couple-hour exercise.
+2. **Run Certora in CI** (needs `CERTORAKEY` secret). Upgrades A3.3
+   and A3.4. Couple-day exercise once licensed.
+3. **Third-party audit of the Lean modeling decisions** — not the
+   proofs themselves (the kernel checks those), but whether the Lean
+   `ExecState` / `Storage` / `sphincsDigest` definitions faithfully
+   capture the Solidity semantics. Most rigorous addition.
+4. **Pin a public discharge artifact ID** in `AXIOM_STATUS.json` after
+   each tool run, so external auditors can independently re-verify by
+   re-running the exact pinned session.
+
+Until step 1 lands, the most accurate framing of the Halmos/Certora
+layers is "spec-defined and ready to re-run" rather than "currently
+discharged." The Lean kernel work and the Foundry suite are
+unconditionally honest as stated.
+
+### Legal posture
+
+This proof reduces — but does not eliminate — wallet-loss tail risk.
+The remaining risk lives in: (a) implementation bugs outside the
+spec (gas, DoS, frontend, firmware), (b) cryptographic-assumption
+failure (SHA-256, SPHINCS+C10 EUF-CMA), (c) the cited-TCB axioms
+(EntryPoint v0.6, EVM semantics), and (d) the modeling assumptions
+(does our Lean `ExecState` perfectly mirror the EVM call stack?
+mostly yes, but not formally proven). Public statements should not
+imply zero residual risk.
