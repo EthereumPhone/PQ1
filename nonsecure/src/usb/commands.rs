@@ -857,9 +857,9 @@ impl CommandRouter {
     /// A count of 0 is never emitted — if there are no hits the
     /// trailer is absent, which the secure world treats as "no
     /// names bundles".
-    /// Ensure the `[erc20][v1_zk][v3_zk][safe_v1][selector]` u16-prefixed
-    /// trailer skeleton is fully present before `received_len`, padding
-    /// any missing prefix with `[0x00, 0x00]`.
+    /// Ensure the `[erc20][v1_zk][v3_zk][safe_v1][selector][self_attest][erc7730]`
+    /// u16-prefixed trailer skeleton is fully present before `received_len`,
+    /// padding any missing prefix with `[0x00, 0x00]`.
     ///
     /// Background: the secure-world sign_userop parser walks trailers
     /// positionally in that exact order and then reads the `names`
@@ -890,17 +890,31 @@ impl CommandRouter {
         }
         let mut pos = after_data;
         let mut new_len = received_len;
-        // Six empty u16 prefixes to ensure, in secure-parser order:
-        // erc20, v1_zk, v3_zk, safe_v1, selector, self_attest. Must match
-        // the parse sequence in `secure/src/nsc/cmd_sign_userop.rs::run`
-        // exactly — any divergence causes the names trailer to misalign
-        // with the secure parser's cursor and surfaces on the OLED as a
-        // "bad <section> bundle" / "bad self-attest" error.
-        // (Bumped from 5 → 6 when commit 33cd0ed added the self_attest
-        // slot to the secure parser; without this the NS-injected names
-        // count byte got read as the self_attest u16 length and tripped
-        // "bad self-attest" on every ETH transfer to a named address.)
-        for _ in 0..6 {
+        // Seven empty u16 prefixes to ensure, in secure-parser order:
+        // erc20, v1_zk, v3_zk, safe_v1, selector, self_attest, erc7730.
+        // Must match the parse sequence in
+        // `secure/src/nsc/cmd_sign_userop.rs::run` exactly — any
+        // divergence causes the names trailer to misalign with the
+        // secure parser's cursor and surfaces on the OLED as a
+        // "bad <section> bundle" / "bad names count" / etc. error.
+        //
+        // History:
+        // - Bumped from 5 → 6 when commit 33cd0ed added the self_attest
+        //   slot; without this the NS-injected names count byte got read
+        //   as the self_attest u16 length and tripped "bad self-attest"
+        //   on every ETH transfer to a named address.
+        // - Bumped from 6 → 7 when the ERC-7730 clear-signing trailer
+        //   slot landed (after self_attest, before names). Without this
+        //   bump, an NS-injected ERC-20 bundle / names section for a
+        //   companion that ships no ERC-7730 trailer caused the secure
+        //   parser to read the names `[count][bundle_len]` as the
+        //   erc7730 trailer's u16 length, skip 256–1024 bytes of names
+        //   payload, then sample a random byte from inside the names
+        //   bundle as the next names_count → "bad names count" on the
+        //   OLED. The fix simply pads a 7th `[0, 0]` u16 so the secure
+        //   parser sees an absent erc7730 slot and lands on the real
+        //   NS-written names count byte.
+        for _ in 0..7 {
             if pos + 2 > new_len {
                 if pos + 2 > CHAIN_BUF_LEN {
                     return new_len;
