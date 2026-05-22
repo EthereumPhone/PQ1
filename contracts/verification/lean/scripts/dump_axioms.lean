@@ -45,3 +45,12 @@ import SphincsCVerify
 #print axioms SphincsCVerify.Wallet.Invariants.initialize_called_exactly_once
 #print axioms SphincsCVerify.Wallet.Invariants.owner_set_nonempty_after_init
 #print axioms SphincsCVerify.Wallet.Invariants.storage_mutations_preserve_impl_slot_disjointness
+
+-- Claim 4 — execution-gate non-bypass: no wallet-initiated external call
+-- in σ'.callStack without a successful verifier-true validate earlier in
+-- the trace. Closure: propext + I-1 (validateSignature_only_via_verify
+-- via validateSignature_success_iff) + E-8 (execute_only_validateSig_authorises)
+-- composed with the applyStep token-write lemma. No new axioms.
+#print axioms SphincsCVerify.Spec.Theorems.every_call_gated_by_verifier
+#print axioms SphincsCVerify.Spec.Theorems.no_call_without_prior_verifier_acceptance
+#print axioms SphincsCVerify.Wallet.TxFlow.callstack_grew_implies_some_verify_true

@@ -60,6 +60,28 @@ What this kills:
 - Malicious-target reentrancy into the account itself
 - Batch-ordering exploits
 
+### Claim 4 — Execution-gate non-bypass (call-graph)
+
+> For any per-transaction step-trace through the wallet, every external
+> call appearing in the post-state `callStack` was authorised by at
+> least one `validate` step earlier in the same trace whose
+> `c10Verifier.verify` returned `true` on the decoded
+> `(pkSeed, pkRoot, sphincsDigest, innerSig)` under an installed owner
+> key. There is no path — direct, re-entrant, transient-replayed, or
+> via a different gateway — by which the wallet emits an external
+> call without that prior verifier acceptance.
+
+What this kills:
+- "Skip-validate" attacks where a crafted EntryPoint call somehow
+  reaches the executor without `validateUserOp` running first
+- Transient-slot replay (re-using a single validate's
+  `validatedOwnerPlusOne` for multiple executes — H-3)
+- "Verifier returned false but the wallet still executed" branches
+  (composes `_validateSignature`'s strict-success path with
+  `_consumeValidatedOwnerIndex`'s one-shot token clear)
+- Re-entry from a callback inside `executeBatch` that tries to drive
+  the executor without re-validating
+
 ---
 
 ## Verification stack
@@ -195,6 +217,52 @@ no cryptographic axioms needed).
 - `invariant_combined_cap_slot0` / `invariant_combined_cap_slot1`
 - `invariant_bootstrapUses_monotonic`
 
+### Claim 4
+
+**Lean** — `Wallet/TxFlow.lean` + `Spec/Theorems.lean::every_call_gated_by_verifier`.
+Composes:
+- `Wallet/TxFlow.lean::applyStep_token_set_only_by_validate_success` —
+  the transient `validatedOwnerPlusOne` is unforgeable: every
+  `0 → non-zero` transition is a slot-path `validate` step whose
+  `validateSignatureOk` predicate holds at the pre-state (so
+  `verify_fn` returned `true`).
+- `Wallet/TxFlow.lean::validate_step_preserves_callstack` — `validate`
+  cannot, by definition, append a call.
+- `Wallet/Execute.lean::execute_only_validateSig_authorises` (E-8) —
+  every successful `execute` / `executeBatch` step requires
+  `validatedOwnerPlusOne = ownerIndex + 1` on entry.
+- `Wallet/Invariants.lean::validateSignature_only_via_verify` (I-1) —
+  bridges `validateSignatureOk` to the explicit `verify_fn = true`
+  witness used inside `StepVerified`.
+- Trace-level induction over `runTrace` assembles the above into the
+  headline statement.
+
+Closure: `propext, Classical.choice, Quot.sound` (kernel-only — no
+new axioms; reuses I-1 and E-8). Under the existing bridge axioms
+(A1 + A3.1 + A4) the model-level `verify_fn = true` lifts to "the
+deployed `SPHINCsC10Asm.verify` bytecode returned `true`", giving
+the on-chain corollary.
+
+The conclusion is existential ("some validated step in the trace"),
+not per-call attribution — that strengthening is in
+`OPEN_PROOF_OBLIGATIONS.md`. The existential is already sufficient
+to rule out the bypass attack: a trace containing zero verifier-true
+validates cannot produce any external call.
+
+**Halmos** — `test/halmos/HalmosExecute.t.sol::check_execute_requires_validated_owner_index`
+and `check_execute_clears_token_no_replay` discharge the
+per-transaction shape against the pinned bytecode (one execute per
+validate; no transient replay).
+
+**Certora** — `certora/PQSmartWalletExecute.spec::onlyEntryPoint_reaches_executor`
++ `onlyEntryPoint_reaches_batch_executor` cover the universal
+quantification over methods that could reach `target.call`.
+
+**Foundry** — `test/PQSmartWallet.t.sol::test_bootstrapCannotCallExecute`
++ `test_rotationBootstrap...` exercise the transient gating
+concretely (try-execute-without-validate reverts; validate-then-execute
+succeeds).
+
 ---
 
 ## Trust assumptions (cited TCB)
@@ -292,7 +360,7 @@ pin in `test/PinnedCodehashes.t.sol`. The CI gate fails until:
 
 | File | Role |
 |------|------|
-| `Spec/Theorems.lean` | Headline theorem `theft_free` + per-claim corollaries `theft_free_with_calldata_binding` and `executeBatch_faithful` |
+| `Spec/Theorems.lean` | Headline theorem `theft_free` + per-claim corollaries `theft_free_with_calldata_binding`, `executeBatch_faithful`, `every_call_gated_by_verifier`, `no_call_without_prior_verifier_acceptance` |
 | `Bridge/Refinement.lean` | A1, A3 sub-axioms in `opaque + axiom-equality` shape |
 | `Bridge/EntryPoint.lean` | A2 + `entrypoint_no_replay` |
 | `Bridge/SolidityVerifier.lean` | Yul-shape model of `SPHINCsC10Asm.verify` |
@@ -304,6 +372,7 @@ pin in `test/PinnedCodehashes.t.sol`. The CI gate fails until:
 | `Wallet/SphincsDigestSpec.lean` | `sphincsDigest_preimage_len`, `sphincsDigest_field_binding`, preimage injectivity |
 | `Wallet/StorageLayout.lean` | ERC-7201 slot literal + ERC-1967 reserved slot disjointness |
 | `Wallet/Execute.lean` | 8 theorems for Claim 3 (E-1..E-8); `executeWithOffchainCount`, `executeBatchWithOffchainCount` operational model |
+| `Wallet/TxFlow.lean` | Per-transaction `Step` / `applyStep` / `runTrace` model + Claim 4 trace-level non-bypass (`callstack_grew_implies_some_verify_true`) |
 | `Wallet/Invariants.lean` | All 8 wallet invariants I-1..I-8 + Claim 2 initialization theorems |
 | `Wallet/Factory.lean` | CREATE2 salt + `addSlot0Digest` + `createAccountPrecondition` |
 | `Wallet/IsValidSignature.lean` | EIP-1271 model + bootstrap rejection |

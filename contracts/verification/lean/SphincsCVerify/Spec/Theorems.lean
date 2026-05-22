@@ -50,6 +50,7 @@ import SphincsCVerify.Bridge.Refinement
 import SphincsCVerify.Wallet.Invariants
 import SphincsCVerify.Wallet.SphincsDigestSpec
 import SphincsCVerify.Wallet.Execute
+import SphincsCVerify.Wallet.TxFlow
 import SphincsCVerify.Crypto.EUFCMA
 
 namespace SphincsCVerify.Spec.Theorems
@@ -419,5 +420,72 @@ theorem executeBatch_faithful
    Wallet.Execute.executeBatch_runs_in_signed_order h,
    Wallet.Execute.executeBatch_value_outflow_eq_sum_values hlen1 hlen2 h,
    Wallet.Execute.executeBatch_only_validateSig_authorises h⟩
+
+/-! ## 7. Claim 4 — execution-gate non-bypass.
+
+For any transaction trace `runTrace σ0 trace = some σ'` starting from a
+clean transient (`σ0.validatedOwnerPlusOne = 0`, the EIP-1153 boundary
+at transaction entry), every wallet-initiated external call appearing
+in `σ'.callStack` (i.e. any growth beyond `σ0.callStack`) is authorised
+by at least one `validate` step in `trace` whose on-chain
+`c10Verifier.verify` returned `true` over `sphincsDigest(op)` under an
+installed owner key.
+
+The composition is:
+
+  * `Wallet.TxFlow.applyStep_token_set_only_by_validate_success` — the
+    transient `validatedOwnerPlusOne` cannot be lifted from `0` to a
+    non-zero value except by a successful slot-path `validate` step.
+  * `Wallet.Execute.execute_only_validateSig_authorises` (E-8) — every
+    successful `execute` / `executeBatch` step required
+    `validatedOwnerPlusOne = ownerIndex + 1` on entry.
+  * `Wallet.Invariants.validateSignature_only_via_verify` (I-1) — every
+    successful `validateSignature` implies `verify_fn` returned `true`
+    on the decoded `(pkSeed, pkRoot, sphincsDigest, innerSig)`.
+  * `Wallet.TxFlow.callstack_grew_implies_some_verify_true` — assembles
+    the above into the trace-level statement.
+
+Removing any of {I-1, E-8, the `applyStep` token-write lemma} would
+leave the conclusion unprovable; under the bridge axioms the
+`verify_fn` of the model coincides with the deployed
+`SPHINCsC10Asm.verify` bytecode (A1, A3.1, A4), so "the model's
+verifier returned true" lifts to "the on-chain verifier returned true".
+-/
+
+open SphincsCVerify.Wallet.TxFlow
+
+/-- **Execution-gate non-bypass.** Any wallet-initiated external call in
+    the post-state was authorised by at least one `validate` step
+    earlier in the same transaction whose `verify_fn` returned `true`
+    on the decoded `(pkSeed, pkRoot, sphincsDigest, innerSig)` under
+    an installed owner key.
+
+    Note the consequent is existential ("some validated step in the
+    trace"), not per-call attribution — that stronger form is left as
+    an `OPEN_PROOF_OBLIGATIONS` follow-up. The existential form is
+    already sufficient to rule out the bypass attack: a transaction
+    trace containing zero verifier-true validates cannot produce any
+    external call. -/
+theorem every_call_gated_by_verifier
+    (σ0 σ' : Wallet.Execute.ExecState) (trace : List Wallet.TxFlow.Step)
+    (hrun : Wallet.TxFlow.runTrace σ0 trace = some σ')
+    (hinit : σ0.validatedOwnerPlusOne = 0)
+    (hgrew : σ0.callStack.length < σ'.callStack.length) :
+    ∃ (σ_pre : Wallet.Execute.ExecState) (step : Wallet.TxFlow.Step),
+      step ∈ trace ∧ Wallet.TxFlow.StepVerified σ_pre step :=
+  Wallet.TxFlow.callstack_grew_implies_some_verify_true σ0 σ' trace hrun hinit hgrew
+
+/-- Restated form auditors will reach for first: starting from an empty
+    callStack, any non-empty post-state callStack implies a
+    verifier-true validate appeared in the trace. -/
+theorem no_call_without_prior_verifier_acceptance
+    (σ0 σ' : Wallet.Execute.ExecState) (trace : List Wallet.TxFlow.Step)
+    (hrun : Wallet.TxFlow.runTrace σ0 trace = some σ')
+    (hinit : σ0.validatedOwnerPlusOne = 0)
+    (hempty : σ0.callStack = [])
+    (hsome : σ'.callStack ≠ []) :
+    ∃ (σ_pre : Wallet.Execute.ExecState) (step : Wallet.TxFlow.Step),
+      step ∈ trace ∧ Wallet.TxFlow.StepVerified σ_pre step :=
+  Wallet.TxFlow.any_call_implies_some_verify_true σ0 σ' trace hrun hinit hempty hsome
 
 end SphincsCVerify.Spec.Theorems

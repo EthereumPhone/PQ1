@@ -39,6 +39,7 @@ import SphincsCVerify.Wallet.SphincsDigestSpec
 import SphincsCVerify.Wallet.StorageLayout
 import SphincsCVerify.Wallet.Execute
 import SphincsCVerify.Wallet.Invariants
+import SphincsCVerify.Wallet.TxFlow
 
 -- Cryptographic axioms (Stratum A continued)
 import SphincsCVerify.Crypto.Assumptions
