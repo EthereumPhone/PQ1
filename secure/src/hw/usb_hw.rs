@@ -44,6 +44,7 @@ struct UsbHwRegs {
     rcc_apb1enr2: Reg32,
     rcc_ahb2rstr1: Reg32,
     pwr_svmcr: Reg32,
+    pwr_ucpdr: Reg32,
     gpioa_moder: Reg32,
     gpioa_ospeedr: Reg32,
     gpioa_afrh: Reg32,
@@ -68,6 +69,7 @@ const REG: UsbHwRegs = unsafe {
         rcc_apb1enr2: Reg32::new(RCC_S + 0xA0),
         rcc_ahb2rstr1: Reg32::new(RCC_S + 0x64),
         pwr_svmcr: Reg32::new(PWR + 0x10),
+        pwr_ucpdr: Reg32::new(PWR + 0x2C),
         gpioa_moder: Reg32::new(GPIOA_S + 0x00),
         gpioa_ospeedr: Reg32::new(GPIOA_S + 0x08),
         gpioa_afrh: Reg32::new(GPIOA_S + 0x24),
@@ -232,22 +234,30 @@ fn init_ucpd() {
     cortex_m::asm::dsb();
 
     // UCPD1 CR: enable CC PHYs and connect Rd pull-downs (sink mode).
-    // Bit 9:     ANAMODE = 1 (sink → connects 5.1kΩ Rd on CC lines)
+    // Bit 9:     ANAMODE  = 1  (sink → connects 5.1kΩ Rd on CC lines)
     // Bits 11:10 CCENABLE = 11 (both CC1 and CC2 PHYs enabled)
-    // Bits 21:20 CC2TCDIS:CC1TCDIS = 11 (disable dead-battery pull-downs)
     //
-    // Dead-battery Rd pull-downs are active by default after reset so that
-    // a USB-C host can detect the sink even before firmware runs.  Once we
-    // configure the UCPD controller with its own Rd (ANAMODE=1) we must
-    // disable the dead-battery resistors — they add a parallel path that
-    // shifts the CC voltage and can cause mis-detection with USB-C to USB-C
-    // cables (where the host Rp is driven by a UCPD controller, not a
-    // fixed 56 kΩ pull-up in the cable plug as with USB-A to USB-C).
+    // IMPORTANT: bits 20/21 are **CC1TCDIS / CC2TCDIS = the Type-C voltage
+    // *detector* disables**, NOT a dead-battery control (verified against
+    // ST's LL driver: `LL_UCPD_TypeCDetectionCC1Disable() = SET_BIT(
+    // CC1TCDIS)`). A prior version set them to 1 — which BLINDED the CC
+    // voltage detectors (UCPD_SR.TYPEC_VSTATE stuck at 0, no attach ever
+    // detected). We leave them CLEAR so the detectors run.
     let cr: u32 = (0b11 << 10)  // CCENABLE: both CC lines enabled
-        | (1 << 9)               // ANAMODE: sink (Rd pull-down)
-        | (1 << 20)              // CC1TCDIS: disable CC1 dead-battery
-        | (1 << 21);             // CC2TCDIS: disable CC2 dead-battery
+        | (1 << 9);              // ANAMODE: sink (Rd pull-down)
     REG.ucpd1_cr.write(cr);
+    cortex_m::asm::dsb();
+
+    // Disable the DEAD-BATTERY pull-downs the CORRECT way: PWR_UCPDR.
+    // UCPD_DBDIS (bit 0). Mirrors `LL_PWR_DisableUCPDDeadBattery()` =
+    // `SET_BIT(PWR->UCPDR, PWR_UCPDR_UCPD_DBDIS)` (PWR @ 0x5602_0800,
+    // UCPDR @ +0x2C). After reset the dead-battery Rd is engaged (so an
+    // unpowered/just-booted sink presents Rd); now that UCPD presents its
+    // own Rd (ANAMODE=1) we release the dead-battery so it doesn't sit in
+    // PARALLEL with the UCPD Rd and shift the CC voltage the host reads
+    // (which is what broke USB-C-to-USB-C detection). Done AFTER the CR
+    // config so there is no window with no Rd presented.
+    REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS
     cortex_m::asm::dsb();
 
     // Settling delay for CC pull-downs

@@ -752,6 +752,17 @@ flash-hw-usb-test: build-hw-usb-test
 	probe-rs reset --chip STM32U585AIIx
 	probe-rs attach --chip STM32U585AIIx $(SECURE_ELF)
 
+# mock-se USB build WITH debug-log — boot-trace the USB path over probe-rs
+# semihosting (does boot reach USB init / does it fault?). Diagnostic only.
+build-hw-usb-test-debug:
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test,debug-log
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	@echo "==> mock-se USB test (debug) build ready."
+
 # SE050 + USB build with auto-provisioning for testing.
 # Secure world: se050 (real SE via I2C1), ui-noop, USB hardware init, e2e-test auto-provision.
 # NS world: usb feature for USB HID main loop.
