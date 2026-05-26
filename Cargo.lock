@@ -892,6 +892,7 @@ dependencies = [
  "proptest",
  "sha2 0.10.9",
  "sphincs-c10",
+ "subtle",
 ]
 
 [[package]]

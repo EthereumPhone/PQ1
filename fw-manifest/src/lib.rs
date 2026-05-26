@@ -425,7 +425,14 @@ impl<'a> ManifestRef<'a> {
         h.update(vendor_pk_seed);
         h.update(vendor_pk_root);
         let expected: [u8; 32] = h.finalize().into();
-        if &expected == self.vendor_pubkey_fpr() {
+        // Constant-time compare (finding #2 in usb-fw-update-hardening.md).
+        // The compared value is itself public — the build-baked vendor
+        // fingerprint — so a slice `==` short-circuit would leak nothing
+        // secret. But this is a security-critical verify path; a non-CT
+        // compare here has no upside and is the kind of pattern a future
+        // refactor might copy into a *secret*-compare site.
+        use subtle::ConstantTimeEq;
+        if bool::from(expected.ct_eq(self.vendor_pubkey_fpr())) {
             Ok(())
         } else {
             Err(VerifyError::WrongVendor)
