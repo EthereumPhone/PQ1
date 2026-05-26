@@ -171,8 +171,8 @@ audit had several confidently-wrong specifics; those are excluded).
 | 2 | LOW | `fw-manifest/src/lib.rs:428` | `verify_vendor_fpr` uses `&expected == self.vendor_pubkey_fpr()` — Rust slice `==` is short-circuiting. The value isn't secret (it's the build-baked public fpr), so the leak reveals nothing; but it's an unmotivated non-CT compare in a security-critical path. | Use `subtle::ConstantTimeEq::ct_eq` for hygiene. |
 | 3 | LOW | `secure/src/fw_update/staging.rs::write_chunk` | All arithmetic (`base_addr + chunk_offset`, `expected - received`, `abs_addr + off`) is unchecked, relying on `check_chunk` having been called first. Today the only caller does call it; any future code path that calls `write_chunk` directly has overflow/underflow bugs latent. | Either belt-and-braces `checked_add`/`checked_sub` inside `write_chunk`, or typestate (a `ChunkValidated` token from `check_chunk` that `write_chunk` requires). |
 | 4 | LOW | `nonsecure/src/usb/commands.rs:232` | `chain.step(ins, p1, lc, CHAIN_BUF_LEN)` passes the *global* max as the bound; per-CMD bounds are checked only at execute time. Lets an attacker accumulate up to `CHAIN_BUF_LEN` bytes before per-CMD rejection. Bounded by Rust slice indexing — no overflow — just wasted cycles. | Switch on `ins` and pass the per-CMD bound (`CHAIN_BUF_LEN_FW`, `CHAIN_BUF_LEN_SIGN`, etc.). |
-| 5 | INFO | `fw-manifest/src/lib.rs` `verify_structural` | Open Q: are reserved bytes (`OFF_RESERVED_1`) verified to be zero? If not, they're a 2-byte covert channel from a malicious vendor. | Verify; if missing, add `if self.bytes[OFF_RESERVED_1..OFF_RESERVED_1+2] != [0, 0] { return Err(Structural) }`. |
-| 6 | INFO | `secure/src/fw_update/mod.rs::confirm_commit` | Open Q: does the 4-page dialog have a timeout? An attacker who reaches COMMIT can otherwise pin the device in the dialog indefinitely (user can press cancel, but a slow-burn DoS until power cycle). | Verify; if missing, bound on the same 120 s inactivity TIM as the rest of the secure world. |
+| 5 | DONE | `fw-manifest/src/lib.rs::verify_structural` | Reserved bytes (`OFF_RESERVED_1` = bytes 6..7, expected zero; `OFF_RESERVED_2` = bytes 4193..8188, expected `0xFF` erased pattern) were unsigned and unchecked. A malicious vendor with the signing key could plant arbitrary bytes there and still produce a fully verifying manifest. Not exploited today (bytes are never read by production code), but a wire-format hygiene gap. | **Implemented:** added both `BadReserved` checks after the magic/version/slot checks. Cost ~50µs vs ~1s of crypto = negligible. Future MANIFEST_VERSION bumps carry their own structural check (this one is gated to v0x02 by the version-byte check above it). |
+| 6 | VERIFIED-DEFENDED | `secure/src/ui/confirm.rs::confirm` | The 4-page COMMIT dialog **does** honour the 120 s inactivity TIM: `wait_button(&mut \|\| timeout::is_idle())` returns `None` on timeout, and `confirm()` returns `ConfirmResult::IdleWipe`. A button press resets activity via `timeout::reset_activity()` only after the event lands (no-activity-on-entry — the file has an explicit `HIGH-13` fix comment preventing NS from spamming entries to keep the window open). **No code change needed.** |
 
 **Not findings (verified false from the Explore audit, included here so
 they don't get re-litigated):**
@@ -228,19 +228,21 @@ hardware required); CI can run it on a budget. Crashes land in
 
 ---
 
-## 7 — Open questions queued for the implementation pass
+## 7 — Open questions: status
 
-These need verification before fixing (so we don't "fix" something that
-isn't broken — see the Explore-audit false-positive list in §5):
-
-1. Does `verify_structural` already reject non-zero reserved bytes?
-   (Finding #5.)
-2. Does `confirm_commit` honour the 120 s inactivity timeout, or can an
-   attacker pin the user in the dialog? (Finding #6.)
-3. Should we ever permit an in-flight CHUNK to span the secure/NS image
-   boundary? (Today it can't, because `image_kind` is fixed per-chunk
-   and `received_secure`/`received_nonsecure` are tracked separately —
-   but the design intent is worth documenting.)
+1. **Does `verify_structural` reject non-zero reserved bytes?** No — it
+   didn't. **Resolved 2026-05-24:** added both `OFF_RESERVED_1` (bytes
+   6..7 = `[0,0]`) and `OFF_RESERVED_2` (bytes 4193..8188 = `[0xFF; 3995]`)
+   checks. See finding #5 row above.
+2. **Does `confirm_commit` honour the inactivity timeout?** Yes —
+   `confirm()` polls `timeout::is_idle()` inside `wait_button` and returns
+   `ConfirmResult::IdleWipe` on `None`. No code change needed; see
+   finding #6 row above.
+3. Should an in-flight CHUNK ever span the secure/NS image boundary?
+   Today it can't — `image_kind` is fixed per-chunk and
+   `received_secure`/`received_nonsecure` are tracked separately. The
+   design intent is "no straddling"; documenting here so a future
+   refactor doesn't accidentally permit it.
 
 ---
 

@@ -245,6 +245,14 @@ pub enum VerifyError {
     SecureHashMismatch,
     /// The NS-image SHA-256 doesn't match `nonsecure_hash`.
     NonsecureHashMismatch,
+    /// A reserved region (`OFF_RESERVED_1` = bytes 6..7, expected zero;
+    /// `OFF_RESERVED_2` = bytes 4193..8188, expected 0xFF erased pattern)
+    /// contained unexpected bytes for this manifest version. Hygiene
+    /// invariant — these regions are unsigned and unused by the
+    /// firmware, so a non-zero value is benign today but indicates a
+    /// non-conformant signer (or a covert channel from a compromised
+    /// vendor key). See `docs/usb-fw-update-hardening.md` finding #5.
+    BadReserved,
 }
 
 // ---------------------------------------------------------------------------
@@ -360,6 +368,28 @@ impl<'a> ManifestRef<'a> {
         let s = self.slot();
         if s != SLOT_A && s != SLOT_B {
             return Err(VerifyError::BadSlot);
+        }
+        // Reserved-region hygiene for manifest_version 0x02 (finding #5):
+        // OFF_RESERVED_1 (bytes 6..7) is zeroed by `init`; OFF_RESERVED_2
+        // (bytes 4193..8188) is the "erased flash 0xFF" pattern. Both are
+        // covered by the CRC (so a network mutation breaks CRC first),
+        // but neither is signed-over (the digest covers only fw_version
+        // + secure_hash + nonsecure_hash), so a malicious vendor *could*
+        // plant arbitrary bytes here and still produce a fully verifying
+        // manifest. The bytes are never read by production code, so the
+        // exploit surface today is zero — these checks enforce the
+        // wire-format invariant so any drift is caught at parse time,
+        // not as a downstream weirdness. A future MANIFEST_VERSION that
+        // repurposes either region carries its own structural check
+        // (this one is bound to v0x02 by the version-byte gate above).
+        if self.bytes[OFF_RESERVED_1..OFF_RESERVED_1 + 2] != [0, 0] {
+            return Err(VerifyError::BadReserved);
+        }
+        if self.bytes[OFF_RESERVED_2..OFF_CRC32]
+            .iter()
+            .any(|&b| b != 0xFF)
+        {
+            return Err(VerifyError::BadReserved);
         }
         Ok(())
     }
