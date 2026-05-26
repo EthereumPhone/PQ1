@@ -3030,3 +3030,23 @@ dev-pubkey-fixture: $(DEV_VENDOR_PUBKEY)
 $(DEV_VENDOR_PUBKEY):
 	@mkdir -p $(@D)
 	@cargo run --release -p fwsign --quiet -- dev-pubkey --out $@
+
+# Fuzz the fw-manifest verify chain (the trust decision the USB FW-update
+# path makes at CMD_FW_BEGIN). Standalone cargo-fuzz workspace under
+# `fw-manifest/fuzz/`. Requires:
+#   rustup toolchain install nightly
+#   cargo install cargo-fuzz
+# Then:
+#   make fuzz-manifest                 # full verify-chain fuzz (slower)
+#   make fuzz-manifest-crc             # structural+CRC only (faster)
+# Or build-check only (CI-friendly, no nightly required if libfuzzer-sys
+# can be compiled with stable; otherwise needs nightly):
+#   make fuzz-manifest-build
+fuzz-manifest:
+	cd fw-manifest && cargo +nightly fuzz run fuzz_target_verify_manifest
+
+fuzz-manifest-crc:
+	cd fw-manifest && cargo +nightly fuzz run fuzz_target_structural_crc
+
+fuzz-manifest-build:
+	cd fw-manifest/fuzz && cargo +nightly build --release

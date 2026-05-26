@@ -1,0 +1,48 @@
+# cargo-fuzz harness for `fw-manifest`.
+#
+# Drives arbitrary attacker bytes into the public `ManifestRef` verify chain
+# (structural -> CRC -> digest -> vendor_fpr -> signature -> rollback) — the
+# trust decision the USB FW-update path makes at `CMD_FW_BEGIN`. The vendor
+# key is fixed (the dev seed); the fuzzer drives manifest bytes.
+#
+# This is a STANDALONE workspace (the `[workspace]` line) — cargo-fuzz pulls
+# in libfuzzer-sys, which requires nightly + sanitizer linkage that would
+# conflict with the firmware target's build. Run with:
+#
+#   make fuzz-manifest               # convenience wrapper
+#   # or directly:
+#   cd fw-manifest && cargo +nightly fuzz run fuzz_target_verify_manifest
+
+[package]
+name = "fw-manifest-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+fw-manifest = { path = ".." }
+sphincs-c10 = { path = "../../sphincs-c10" }
+
+[[bin]]
+name = "fuzz_target_verify_manifest"
+path = "fuzz_targets/fuzz_target_verify_manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_target_structural_crc"
+path = "fuzz_targets/fuzz_target_structural_crc.rs"
+test = false
+doc = false
+bench = false
+
+# Don't apply firmware-target opt levels here.
+[profile.release]
+debug = 1
