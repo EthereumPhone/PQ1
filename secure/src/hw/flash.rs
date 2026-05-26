@@ -151,8 +151,100 @@ const KEY_PAGE_NUM: u32 = 127;
 // 0x0C0F_C000) was freed by work-todo #24 — the Platform Binding
 // Secret is now re-derived from the OTP master on every boot via
 // `hw::secret_keys::optiga_pairing_secret`, so there is nothing to
-// seal. The page is currently reserved (0xFF after factory erase).
-// See `docs/optiga-brick-postmortem.md` for the history.
+// seal. The page is now reused as the cross-power-cycle FW-update
+// verify-failure counter (`fw_fail_*` below). See
+// `docs/optiga-brick-postmortem.md` for the history and the
+// hardening doc finding B / persistence follow-up for the new use.
+
+// ---------------------------------------------------------------------------
+// Firmware-update verify-failure counter — page 126 (was OPTIGA PBS seal).
+// ---------------------------------------------------------------------------
+//
+// Cross-power-cycle tally of consecutive `verify_manifest` failures at
+// CMD_FW_BEGIN. Persists across boots so a physical attacker doing
+// glitch-injection on the signature verify can't reset their attempt
+// budget by power-cycling. Pairs with the in-RAM per-power-cycle
+// counter in `nsc::cmd_fw_begin` (layered defense: in-RAM bounds the
+// burst rate within a cycle, this flash counter bounds the lifetime
+// budget across cycles).
+//
+// Layout: 8 KB page, 16-byte QWs. Each fail programs the next blank
+// QW with all-zeros. Count = number of programmed (any-zero) QWs.
+// Reset = page erase, called from BEGIN on a passing verify chain.
+// Threshold check + wipe trigger live in `nsc::cmd_fw_begin`.
+
+/// Base address of the FW-update verify-failure counter page.
+pub const FW_FAIL_PAGE_ADDR: u32 = 0x0C0F_C000;
+const FW_FAIL_PAGE_NUM: u32 = 126;
+
+/// Soft cap on the tally we ever count up to. The page holds 512 QWs;
+/// we stop counting at the threshold (saturating) so a wrap can't
+/// happen and so the `>= threshold` check stays cheap. The hardening-
+/// doc threshold is well under 512.
+const FW_FAIL_PAGE_CAPACITY: u32 = 512;
+const FW_FAIL_QW_SIZE: u32 = 16;
+
+/// Read the cross-power-cycle verify-failure tally. Counts how many QWs
+/// on page 126 have been programmed (any byte != 0xFF). A partially-
+/// programmed QW (brown-out mid-write) counts as programmed —
+/// conservative: we under-credit the attacker by at most one, never
+/// over-credit.
+pub fn fw_fail_count() -> u32 {
+    let base = FW_FAIL_PAGE_ADDR as *const u8;
+    let mut count: u32 = 0;
+    for qw_idx in 0..FW_FAIL_PAGE_CAPACITY {
+        let qw_base_offset = (qw_idx * FW_FAIL_QW_SIZE) as usize;
+        let mut programmed = false;
+        for byte_idx in 0..FW_FAIL_QW_SIZE {
+            // SAFETY: `qw_base_offset + byte_idx < FW_FAIL_PAGE_CAPACITY *
+            // FW_FAIL_QW_SIZE = 8192`, inside the 8 KB page.
+            let b = unsafe { core::ptr::read_volatile(base.add(qw_base_offset + byte_idx as usize)) };
+            if b != 0xFF {
+                programmed = true;
+                break;
+            }
+        }
+        if !programmed {
+            // First blank QW — all later QWs are also blank.
+            break;
+        }
+        count += 1;
+    }
+    count
+}
+
+/// Bump the cross-power-cycle verify-failure tally by 1 (program one
+/// QW). Returns `Err(())` if the page is exhausted (extremely unlikely
+/// in practice — the threshold check + wipe trigger fire long before
+/// 512 lifetime failures accumulate).
+///
+/// # Safety
+/// Single-QW flash program. Idempotent at the QW level (writing zeros
+/// to an already-zero QW is a no-op on NOR flash); the increment is
+/// monotonic by construction.
+pub unsafe fn fw_fail_bump() -> Result<(), ()> {
+    let pre = fw_fail_count();
+    if pre >= FW_FAIL_PAGE_CAPACITY {
+        return Err(());
+    }
+    let target_addr = FW_FAIL_PAGE_ADDR + pre * FW_FAIL_QW_SIZE;
+    let sentinel = [0u8; 16];
+    // SAFETY: target QW is inside page 126 and was confirmed blank above.
+    unsafe { write_quadword_verified(target_addr, &sentinel) }
+}
+
+/// Erase the FW-fail counter page (page 126) — resets the tally to 0.
+/// Called from `cmd_fw_begin` after a manifest passes the full verify
+/// chain + length bounds (a legit update is the signal that the device
+/// is not under attack right now, so the lifetime budget resets).
+///
+/// # Safety
+/// Page erase is irreversible for already-programmed bits; the page is
+/// dedicated to this counter (and was 0xFF erased after factory wipe of
+/// the old OPTIGA PBS seal), so erasing it has no other side effects.
+pub unsafe fn fw_fail_reset() -> Result<(), ()> {
+    unsafe { erase_secure_page(FW_FAIL_PAGE_NUM) }
+}
 
 // ---------------------------------------------------------------------------
 // Low-level helpers

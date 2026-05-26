@@ -25,72 +25,117 @@ use crate::fw_update::{
 use crate::hw::{flash, otp};
 use crate::timeout;
 
-/// Consecutive-`verify_manifest`-failure counter for the glitch-resistance
-/// defense (finding B in `docs/usb-fw-update-hardening.md` — modelled on
-/// Trezor's repeated-FW-failure → wipe pattern in
-/// `wf_firmware_update.c`). Incremented on every BEGIN whose manifest is
-/// rejected (bad sig / bad version / bad length / etc.); reset to zero on
-/// every BEGIN that passes the full verify chain. On reaching
-/// `FW_VERIFY_FAIL_THRESHOLD`, we arm the standard admin-wipe flag and
-/// `sys_reset` — the boot-time wipe-resume path in `main.rs:1334`
-/// completes the SE/storage wipe, matching the response to a 10-wrong-PIN
-/// lockout or a TZIC violation.
+/// Verify-failure counter for the glitch-resistance defense (finding B
+/// in `docs/usb-fw-update-hardening.md` — modelled on Trezor's repeated-
+/// FW-failure → wipe pattern). Incremented on every BEGIN whose manifest
+/// is rejected (bad sig / bad version / bad length / etc.); reset to
+/// zero on every BEGIN that passes the full verify chain.
 ///
-/// In-RAM (so it resets on power-cycle): bounds a glitch-attack window
-/// to a power-cycle. A persistent (flash) counter would tighten this to
-/// a *lifetime* budget but needs careful page allocation; left as a
-/// follow-up. The PIN-verified gate on BEGIN means only an unlocked user
-/// session can hit the threshold — a casual buggy host can't trip it
-/// without the user's PIN.
-static mut FW_VERIFY_FAIL_COUNT: u32 = 0;
+/// **Layered defense (in-RAM + flash):**
+///   * In-RAM `FW_VERIFY_FAIL_COUNT_RAM` (threshold `..._RAM`) catches a
+///     high-rate attack within a single power-cycle (a glitch rig that
+///     can iterate dozens of times per second).
+///   * Flash-backed tally on page 126 (threshold `..._FLASH`) catches a
+///     slow-burn attack across many power-cycles (an attacker who
+///     power-cycles between attempts to dodge an in-RAM counter).
+///
+/// On reaching EITHER threshold, we arm the standard admin-wipe flag
+/// and `sys_reset` — the boot-time wipe-resume path in `main.rs:1334`
+/// completes the SE/storage wipe, matching the response to a 10-wrong-
+/// PIN lockout or a TZIC violation. The PIN-verified gate on BEGIN
+/// means only an unlocked user session can hit the threshold — a
+/// casual buggy host can't trip it without the user's PIN.
+static mut FW_VERIFY_FAIL_COUNT_RAM: u32 = 0;
 
-/// Threshold for the wipe trigger. Picked to be high enough that legit
-/// development/testing retries don't trip it (a few back-to-back failures
-/// while iterating on a bundle), low enough that a glitch attacker can't
-/// iterate freely (~5 attempts per power-cycle window).
-const FW_VERIFY_FAIL_THRESHOLD: u32 = 5;
+/// In-RAM threshold: bounds the *burst* attack rate within one power
+/// cycle. Resets at every reboot.
+const FW_VERIFY_FAIL_THRESHOLD_RAM: u32 = 5;
 
-/// Record a manifest-verify failure. If the running tally reaches the
-/// threshold, arm the wipe flag and reset — does not return.
+/// Flash threshold: bounds the *lifetime* attack budget across power
+/// cycles. Higher than the RAM threshold because legit dev/testing
+/// retries accumulate over time, but well below the 512-QW page
+/// capacity so a glitch attacker can't fill the page faster than the
+/// wipe trigger fires.
+const FW_VERIFY_FAIL_THRESHOLD_FLASH: u32 = 20;
+
+/// Trigger the admin wipe + reset. Doesn't return.
+#[inline(never)]
+fn arm_wipe_and_reset() -> ! {
+    // SAFETY: dedicated single-QW idempotent flash write to the
+    // wipe-flag slot on page 125. Established pattern (also called
+    // from TZIC violation, OPTIGA tamper, SE050 errors).
+    #[cfg(feature = "stm32u585")]
+    let _ = unsafe { flash::arm_wipe_flag() };
+    cortex_m::peripheral::SCB::sys_reset();
+}
+
+/// Record a manifest-verify failure. Bumps both the in-RAM and the
+/// flash-backed counters; if either hits its threshold, arms the wipe
+/// flag and resets — does not return.
 #[inline(never)]
 fn record_verify_failure_and_maybe_wipe() {
+    // ---- In-RAM counter ----
     // SAFETY: single-threaded, non-reentrant gateway path; this is the
-    // only writer of `FW_VERIFY_FAIL_COUNT`. `addr_of_mut!` is used
+    // only writer of `FW_VERIFY_FAIL_COUNT_RAM`. `addr_of_mut!` is used
     // (rather than `&mut`) to side-step the `static_mut_refs` lint.
-    let new_count = unsafe {
-        let p = core::ptr::addr_of_mut!(FW_VERIFY_FAIL_COUNT);
+    let ram_count = unsafe {
+        let p = core::ptr::addr_of_mut!(FW_VERIFY_FAIL_COUNT_RAM);
         let cur = core::ptr::read_volatile(p);
         let n = cur.saturating_add(1);
         core::ptr::write_volatile(p, n);
         n
     };
+
+    // ---- Flash-backed counter ----
+    // SAFETY: single-QW program on a dedicated page. Stays cheap even
+    // on the failure path (~ms; the verify chain itself was already
+    // ~1s of SPHINCS+C10 work).
+    #[cfg(feature = "stm32u585")]
+    let _ = unsafe { flash::fw_fail_bump() };
+    #[cfg(feature = "stm32u585")]
+    let flash_count = flash::fw_fail_count();
+    #[cfg(not(feature = "stm32u585"))]
+    let flash_count: u32 = 0;
+
     secure_log!(
-        "[S][fwup] verify failure {}/{}",
-        new_count,
-        FW_VERIFY_FAIL_THRESHOLD
+        "[S][fwup] verify failure: ram {}/{} flash {}/{}",
+        ram_count,
+        FW_VERIFY_FAIL_THRESHOLD_RAM,
+        flash_count,
+        FW_VERIFY_FAIL_THRESHOLD_FLASH
     );
-    if new_count >= FW_VERIFY_FAIL_THRESHOLD {
+
+    if ram_count >= FW_VERIFY_FAIL_THRESHOLD_RAM
+        || flash_count >= FW_VERIFY_FAIL_THRESHOLD_FLASH
+    {
         secure_log!(
-            "[S][fwup] verify-failure threshold reached — arming wipe + reset"
+            "[S][fwup] verify-failure threshold reached (ram>={} OR flash>={}) — arming wipe + reset",
+            FW_VERIFY_FAIL_THRESHOLD_RAM,
+            FW_VERIFY_FAIL_THRESHOLD_FLASH
         );
-        // SAFETY: dedicated single-QW idempotent flash write to the
-        // wipe-flag slot on page 125. Established pattern (also called
-        // from TZIC violation, OPTIGA tamper, SE050 errors).
-        #[cfg(feature = "stm32u585")]
-        let _ = unsafe { flash::arm_wipe_flag() };
-        cortex_m::peripheral::SCB::sys_reset();
+        arm_wipe_and_reset();
     }
 }
 
-/// Reset the consecutive-failure tally after a manifest passes the full
-/// verify chain + length bounds. Successful updates don't accumulate
-/// failures over a device's lifetime.
+/// Reset both the in-RAM and the flash-backed failure tallies after a
+/// manifest passes the full verify chain + length bounds. Successful
+/// updates don't accumulate failures over a device's lifetime.
 #[inline(never)]
 fn record_verify_success() {
     // SAFETY: single-threaded, non-reentrant gateway path; sole writer.
     unsafe {
-        core::ptr::write_volatile(core::ptr::addr_of_mut!(FW_VERIFY_FAIL_COUNT), 0);
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(FW_VERIFY_FAIL_COUNT_RAM),
+            0,
+        );
     }
+    // SAFETY: page-erase of the dedicated FW-fail counter page. No
+    // other state lives on this page (work-todo #24 freed it from the
+    // OPTIGA PBS seal). Failure to erase here is non-fatal — the worst
+    // case is one extra latent failure carrying over to the next
+    // update attempt, which is still bounded by the threshold.
+    #[cfg(feature = "stm32u585")]
+    let _ = unsafe { flash::fw_fail_reset() };
 }
 
 /// # Safety
