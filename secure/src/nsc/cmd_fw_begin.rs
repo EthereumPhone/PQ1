@@ -75,6 +75,22 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Err(_) => return NscStatus::FwUpdateBadManifest as u32,
     }
 
+    // Defense-in-depth: the manifest's declared image lengths are signed-
+    // over (so a network attacker can't change them), but the verify chain
+    // doesn't itself bound them against the actual A/B slot capacity.
+    // Without this check, a vendor-signed manifest declaring
+    // `secure_len = u32::MAX` would let later CHUNKs walk past the slot
+    // until `check_chunk`'s per-chunk `checked_add` on
+    // `base_addr + chunk_offset` finally tripped — overwriting the other
+    // slot / FSBL pages / etc. in the meantime. (Trezor enforces the
+    // analogous bound against `FIRMWARE_MAXSIZE`.) See
+    // `docs/usb-fw-update-hardening.md` finding #1.
+    if m.secure_len() > flash::SLOT_SECURE_CAPACITY
+        || m.nonsecure_len() > flash::SLOT_NS_CAPACITY
+    {
+        return NscStatus::FwUpdateBadManifest as u32;
+    }
+
     // Determine inactive slot (the one we're NOT currently running).
     let active = fw_update::read_active_slot();
     let inactive = match active {
