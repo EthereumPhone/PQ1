@@ -424,11 +424,33 @@ fn positive_usb_tcpp03_pb5_drive_high() {
 
 #[test]
 fn positive_usb_ucpd_sink_mode_with_dead_battery_disabled() {
-    // ANAMODE=1 (sink), CCENABLE=11, CC1TCDIS+CC2TCDIS=11.
+    // Commit b325dd8 fixed two register bugs in `init_ucpd`:
+    //   1. CC1TCDIS/CC2TCDIS were being set, which DISABLES the Type-C
+    //      voltage detectors (per ST's `LL_UCPD_TypeCDetectionCC1Disable`
+    //      = `SET_BIT(CC1TCDIS)`) — blinding UCPD_SR so the host's Rp
+    //      was never sensed. Now LEFT CLEAR.
+    //   2. Dead-battery was never disabled. The CORRECT disable is
+    //      `PWR_UCPDR.UCPD_DBDIS` bit 0 — `LL_PWR_DisableUCPDDeadBattery`.
+    // Pin both invariants so a refactor can't quietly regress them.
     assert!(USB_HW_SRC.contains("(0b11 << 10)  // CCENABLE"));
-    assert!(USB_HW_SRC.contains("(1 << 9)               // ANAMODE: sink"));
-    assert!(USB_HW_SRC.contains("(1 << 20)              // CC1TCDIS"));
-    assert!(USB_HW_SRC.contains("(1 << 21);             // CC2TCDIS"));
+    assert!(USB_HW_SRC.contains("| (1 << 9);              // ANAMODE: sink"));
+    // Check that the bit-SET syntax `| (1 << 20)` / `| (1 << 21)` is
+    // absent (those are the literal lines that used to set
+    // CC1TCDIS/CC2TCDIS). The CCxTCDIS *name* still appears in the
+    // explanatory comment above the CR write — that's fine, what we
+    // care about is that the bits aren't being set.
+    assert!(
+        !USB_HW_SRC.contains("| (1 << 20)") && !USB_HW_SRC.contains("| (1 << 21)"),
+        "CC1TCDIS (bit 20) / CC2TCDIS (bit 21) must NOT be OR'd into the \
+         UCPD_CR write — those are the Type-C voltage *detector* disables \
+         (blinding UCPD_SR), not dead-battery. Dead-battery is disabled \
+         via PWR_UCPDR.UCPD_DBDIS instead. See commit b325dd8."
+    );
+    assert!(
+        USB_HW_SRC.contains("REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"),
+        "dead-battery must be disabled via PWR_UCPDR.UCPD_DBDIS (bit 0) — \
+         the correct register per ST's `LL_PWR_DisableUCPDDeadBattery()`."
+    );
 }
 
 #[test]

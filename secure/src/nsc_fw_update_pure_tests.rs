@@ -966,47 +966,58 @@ fn negative_begin_resets_activity_timer_after_seed() {
 // ─────────────────────────────────────────────────────────────────────
 
 #[test]
-fn negative_commit_runs_verify_images_before_confirm_ui() {
-    // We don't ask the user to confirm a measurement that doesn't
-    // match what's actually in flash — that would let a torn write
-    // be confirmed silently.
-    let body = COMMIT_SRC;
-    let verify_pos = body
-        .find("verify_images(ctx, &manifest)")
-        .expect("COMMIT must verify_images");
-    let confirm_pos = body
-        .find("confirm_commit(ctx, &manifest)")
-        .expect("COMMIT must confirm_commit");
+fn positive_begin_runs_verify_manifest_before_confirm_install_before_erase() {
+    // Finding A moved the user confirm from COMMIT to BEGIN: BEGIN must
+    // pass the full `verify_manifest` chain BEFORE asking the user (so
+    // the user is only ever prompted on a vendor-authentic bundle), and
+    // the confirm must run BEFORE `erase_slot` (so a user-cancel costs
+    // zero flash work and leaves the inactive slot untouched). Pin the
+    // ordering — a refactor that reordered any of these would silently
+    // break the property.
+    let verify_pos = BEGIN_SRC
+        .find("fw_update::verify_manifest(&m, floor)")
+        .expect("BEGIN must call verify_manifest");
+    let confirm_pos = BEGIN_SRC
+        .find("fw_update::confirm_install(&m)")
+        .expect("BEGIN must call confirm_install (finding A moved confirm from COMMIT to BEGIN)");
+    let erase_pos = BEGIN_SRC
+        .find("flash::erase_slot(inactive)")
+        .expect("BEGIN must erase the inactive slot");
     assert!(
         verify_pos < confirm_pos,
-        "verify_images MUST precede confirm_commit — measurement must reflect actually-staged bytes"
+        "verify_manifest MUST precede confirm_install — the user is only ever asked to confirm an already-vendor-authenticated bundle"
+    );
+    assert!(
+        confirm_pos < erase_pos,
+        "confirm_install MUST precede flash::erase_slot — a user-cancel costs zero flash work (finding A)"
     );
 }
 
 #[test]
-fn negative_commit_user_cancel_short_circuits_before_destructive_ops() {
-    // After confirm_commit returns false the handler must return
-    // UserRejected WITHOUT touching OTP / manifest flash / boot
-    // state. Pin the return.
-    let cancel_block_start = COMMIT_SRC
-        .find("if !confirmed {")
-        .expect("COMMIT must have a cancel branch");
-    let return_pos = COMMIT_SRC[cancel_block_start..]
+fn negative_begin_user_cancel_short_circuits_before_erase() {
+    // Finding A: when `confirm_install` returns false the handler must
+    // return `UserRejected` WITHOUT erasing the inactive slot. Pin the
+    // shape: the `if !fw_update::confirm_install(&m)` branch returns
+    // `NscStatus::UserRejected` AND that branch sits before any
+    // `flash::erase_slot` call in the source.
+    let cancel_block_start = BEGIN_SRC
+        .find("if !fw_update::confirm_install(&m) {")
+        .expect("BEGIN must have a cancel branch on confirm_install returning false");
+    let return_pos = BEGIN_SRC[cancel_block_start..]
         .find("NscStatus::UserRejected")
         .expect("Cancel branch must return UserRejected");
-    let next_destructive = COMMIT_SRC[cancel_block_start + return_pos..]
-        .find("otp::bump_to");
+    let erase_pos = BEGIN_SRC
+        .find("flash::erase_slot(inactive)")
+        .expect("BEGIN must erase the inactive slot somewhere");
     assert!(
-        next_destructive.is_some(),
-        "Sanity: otp::bump_to should exist after the cancel branch"
+        cancel_block_start < erase_pos,
+        "Cancel handling MUST precede flash::erase_slot — the whole point of finding A"
     );
-    // The cancel branch's return MUST be reached before reaching otp::bump_to.
-    let bump_pos = COMMIT_SRC
-        .find("otp::bump_to(new_version)")
-        .expect("COMMIT must bump OTP");
+    // Belt-and-braces: the return is part of the cancel branch, not a
+    // later fall-through.
     assert!(
-        cancel_block_start < bump_pos,
-        "Cancel handling must precede otp::bump_to"
+        return_pos < (erase_pos - cancel_block_start),
+        "UserRejected return must be inside the cancel branch, not later in the function"
     );
 }
 

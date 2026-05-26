@@ -174,6 +174,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // legit updates don't accumulate failures over the device's lifetime.
     record_verify_success();
 
+    // Trusted-display install confirm BEFORE any destructive flash op
+    // (Trezor pattern, finding A in docs/usb-fw-update-hardening.md). A
+    // user-cancel here costs zero flash work and leaves the inactive
+    // slot untouched. The fingerprint shown is the SIGNED
+    // `manifest.secure_hash()`; COMMIT's `verify_images` re-hashes the
+    // actually-streamed bytes against the same field and auto-aborts on
+    // mismatch (no further user prompt — they've already given consent).
+    if !fw_update::confirm_install(&m) {
+        return NscStatus::UserRejected as u32;
+    }
+
     // Determine inactive slot (the one we're NOT currently running).
     let active = fw_update::read_active_slot();
     let inactive = match active {

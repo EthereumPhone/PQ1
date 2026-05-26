@@ -55,20 +55,14 @@ pub(super) unsafe fn run(_args: &GatewayArgs) -> u32 {
         }
     }
 
-    // Render the measurement + confirm dialog. Implementation lives
-    // in `fw_update::confirm_ui` once the user WIP in secure/src/ui/
-    // lands; for now we call a simplified placeholder.
-    let confirmed = fw_update::confirm_commit(ctx, &manifest);
-    if !confirmed {
-        // User cancelled. Drop the context; leave flash alone.
-        // SAFETY: category 5 — exclusive write to `static mut FW_UPDATE`
-        // under the non-reentrant dispatcher. The dropped value's
-        // ZeroizeOnDrop wipes the manifest copy and running hashers.
-        unsafe {
-            *core::ptr::addr_of_mut!(FW_UPDATE) = None;
-        }
-        return NscStatus::UserRejected as u32;
-    }
+    // No user prompt at COMMIT — finding A moved that to CMD_FW_BEGIN
+    // (see fw_update::confirm_install). If `verify_images` above
+    // succeeded, the bytes streamed into the inactive slot match the
+    // manifest's signed hashes — the same hashes whose fingerprint
+    // the user already confirmed at BEGIN — so we have everything we
+    // need to commit. A `verify_images` failure already returned
+    // FwUpdateBadImage/BadChunk above; COMMIT only reaches here on a
+    // bit-perfect verified install.
 
     // -- Commit -----------------------------------------------------
 

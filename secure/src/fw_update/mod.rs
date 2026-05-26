@@ -62,13 +62,30 @@ pub mod verify;
 ///     the signer is compromised even though the chain verifies.
 ///
 /// Per work-todo §31b.
-pub fn confirm_commit(
-    ctx: &FwUpdateCtx,
-    manifest: &ManifestRef,
-) -> bool {
+/// Trusted-display install confirm. Called from `CMD_FW_BEGIN` AFTER
+/// `verify_manifest` has accepted the bundle's vendor signature, version,
+/// and length bounds, and BEFORE any destructive flash op (erase / OTP /
+/// boot-state). Renders four OLED pages — version+floor, firmware
+/// fingerprint, vendor-key fingerprint, confirm prompt — and waits for
+/// the user's physical button press. A user-cancel (or the
+/// inactivity-timeout's `IdleWipe`) returns `false`, the BEGIN handler
+/// then aborts without erasing.
+///
+/// The firmware fingerprint shown here is derived from the **signed**
+/// `secure_hash` field of the manifest — the same value `verify_images`
+/// will re-check against the bytes streamed into flash at COMMIT.
+/// COMMIT itself runs silently after `verify_images`: if the streamed
+/// bytes match the signed hash the install proceeds; if they don't,
+/// COMMIT auto-aborts with no further prompt (the user has already given
+/// their consent at BEGIN; an integrity failure is the device's
+/// responsibility to detect and report). See finding A in
+/// `docs/usb-fw-update-hardening.md` — moves the confirm forward from
+/// COMMIT to BEGIN so a user-cancel costs zero flash work + zero
+/// inactive-slot churn (matches Trezor's wf_firmware_update.c pattern).
+pub fn confirm_install(manifest: &ManifestRef) -> bool {
     #[cfg(feature = "e2e-test")]
     {
-        let _ = (ctx, manifest);
+        let _ = manifest;
         return true;
     }
     #[cfg(not(feature = "e2e-test"))]
@@ -78,7 +95,13 @@ pub fn confirm_commit(
 
         let new_version = manifest.fw_version();
         let floor = crate::hw::otp::rollback_floor();
-        let (fw_words, _fw_hash) = verify::measurement_words_for_inactive_slot(ctx);
+        // Derive 8 BIP-39 words from the manifest's SIGNED secure-image
+        // hash — what the user is being asked to install. The device's
+        // COMMIT-time `verify_images` re-hashes the streamed bytes
+        // against this same field; an attacker who substitutes the
+        // streamed bytes will trip that check (silent abort) without
+        // ever reaching another user prompt.
+        let fw_words = hash_to_word_indices(manifest.secure_hash());
 
         // The signing key fingerprint is the SHA-256 of the vendor
         // pubkey (`pk_seed || pk_root`), precomputed at build time so

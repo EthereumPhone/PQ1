@@ -372,30 +372,31 @@ fn negative_verify_manifest_uses_baked_in_vendor_pubkey() {
 // ─────────────────────────────────────────────────────────────────────
 
 #[test]
-fn positive_confirm_commit_calls_trusted_ui_outside_e2e_test() {
-    // Pin the §31b wiring: non-e2e-test builds must route through
-    // `ui::confirm::confirm(&pages)` with the four trust-anchor
-    // pages (version + fw fingerprint + key fingerprint + final
-    // prompt). The e2e branch still short-circuits to `true` so
-    // the automated suite can exercise COMMIT.
+fn positive_confirm_install_calls_trusted_ui_outside_e2e_test() {
+    // Finding A moved the confirm from COMMIT to BEGIN — the function
+    // was renamed `confirm_commit` -> `confirm_install` and now derives
+    // the fw fingerprint from the SIGNED `manifest.secure_hash()` (the
+    // chunks haven't been streamed yet at BEGIN). Otherwise §31b wiring
+    // is identical: non-e2e-test builds must route through
+    // `ui::confirm::confirm(&pages)` with the four trust-anchor pages.
     let body = FW_MOD_SRC
-        .find("pub fn confirm_commit(")
-        .expect("confirm_commit must exist as a pub fn");
+        .find("pub fn confirm_install(")
+        .expect("confirm_install must exist as a pub fn (finding A renamed from confirm_commit)");
     let body = &FW_MOD_SRC[body..];
 
     let e2e_pos = body
         .find("#[cfg(feature = \"e2e-test\")]")
-        .expect("confirm_commit must gate its e2e branch on cfg(feature = \"e2e-test\")");
+        .expect("confirm_install must gate its e2e branch on cfg(feature = \"e2e-test\")");
     let non_e2e_pos = body
         .find("#[cfg(not(feature = \"e2e-test\"))]")
-        .expect("confirm_commit must gate its non-e2e branch on cfg(not(feature = \"e2e-test\"))");
+        .expect("confirm_install must gate its non-e2e branch on cfg(not(feature = \"e2e-test\"))");
 
     // The e2e short-circuit returns `true` for test automation.
     let e2e_block = &body[e2e_pos..non_e2e_pos.max(e2e_pos + 1)];
     assert!(
         e2e_block.contains("return true;"),
-        "confirm_commit under e2e-test must short-circuit to true so the e2e suite \
-         can exercise the COMMIT path"
+        "confirm_install under e2e-test must short-circuit to true so the e2e suite \
+         can exercise the install path"
     );
 
     // Non-e2e branch: must build the four §31b pages + call confirm().
@@ -411,7 +412,7 @@ fn positive_confirm_commit_calls_trusted_ui_outside_e2e_test() {
     ] {
         assert!(
             non_e2e_block.contains(landmark),
-            "confirm_commit non-e2e branch lost `{landmark}` — §31b wiring regressed"
+            "confirm_install non-e2e branch lost `{landmark}` — §31b wiring regressed"
         );
     }
     // Belt-and-braces: the version page must consult `rollback_floor()`
@@ -419,8 +420,15 @@ fn positive_confirm_commit_calls_trusted_ui_outside_e2e_test() {
     // only logic in a future edit.
     assert!(
         non_e2e_block.contains("rollback_floor()"),
-        "confirm_commit must compare new_version against `otp::rollback_floor()` \
+        "confirm_install must compare new_version against `otp::rollback_floor()` \
          so the user sees UPGRADE / SAME / DOWNGRADE — §31b"
+    );
+    // Finding A: the fingerprint MUST be derived from the SIGNED
+    // `manifest.secure_hash()`, not from a flash re-hash (chunks aren't
+    // staged yet at BEGIN-time).
+    assert!(
+        non_e2e_block.contains("hash_to_word_indices(manifest.secure_hash())"),
+        "confirm_install must derive fw_words from the signed manifest.secure_hash() — finding A"
     );
 }
 
@@ -698,9 +706,13 @@ fn negative_write_chunk_only_accepts_short_final_chunk() {
         STAGING_SRC.contains("if data.len() & 0xF != 0 {"),
         "write_chunk must guard the short-chunk path with a length-mismatch check"
     );
+    // Finding #3 hardening: `expected - received` is now `checked_sub`
+    // so a corrupt-state underflow returns NonMonotonic instead of UB.
+    // Pin the new shape so a refactor can't quietly drop the guard.
     assert!(
-        STAGING_SRC.contains("let remaining = expected - ctx.received(image_kind);"),
-        "the short-chunk path must compute `expected - received` as the only valid short length"
+        STAGING_SRC.contains(".checked_sub(ctx.received(image_kind))")
+            && STAGING_SRC.contains(".ok_or(ChunkError::NonMonotonic)"),
+        "the short-chunk path must compute `expected.checked_sub(received)` and map None to NonMonotonic"
     );
     assert!(
         STAGING_SRC.contains("if (data.len() as u32) != remaining {"),
@@ -770,13 +782,25 @@ fn negative_write_chunk_received_counter_bumped_with_actual_byte_count() {
     // by `chunk_len & !0xF`). A regression to a QW-rounded bump would
     // shift the next chunk_offset off-by-one for short final chunks
     // and break the monotonic-append invariant.
+    // Finding #3 hardening: the `received_*` bump is now `checked_add`
+    // against a pre-bound `data_len_u32`. Pin both the `data_len_u32`
+    // local (so the cast doesn't get inlined back to `data.len() as u32`
+    // in a `wrapping_add` regression) and the `.checked_add(data_len_u32)`
+    // pattern on each `received_*` field.
     assert!(
-        STAGING_SRC.contains("ctx.received_secure += data.len() as u32;"),
-        "received_secure must bump by data.len(), not by a rounded multiple of 16"
+        STAGING_SRC.contains("let data_len_u32 = data.len() as u32;"),
+        "write_chunk must bind `data.len() as u32` once so the checked_add can't drift back to wrapping"
     );
     assert!(
-        STAGING_SRC.contains("ctx.received_nonsecure += data.len() as u32;"),
-        "received_nonsecure must bump by data.len(), not by a rounded multiple of 16"
+        STAGING_SRC.contains("ctx.received_secure = ctx")
+            && STAGING_SRC.contains(".received_secure")
+            && STAGING_SRC.contains(".checked_add(data_len_u32)"),
+        "received_secure must bump by data_len_u32 via checked_add, not by a rounded multiple of 16 or wrapping_add"
+    );
+    assert!(
+        STAGING_SRC.contains("ctx.received_nonsecure = ctx")
+            && STAGING_SRC.contains(".received_nonsecure"),
+        "received_nonsecure must bump by data_len_u32 via checked_add, not by a rounded multiple of 16 or wrapping_add"
     );
 }
 
