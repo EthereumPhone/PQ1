@@ -88,6 +88,33 @@ const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN_OR_BATCH > CHAIN_BUF_LEN_FW {
     CHAIN_BUF_LEN_FW
 };
 
+/// Per-CMD upper bound on accumulated chain payload. The global
+/// `CHAIN_BUF_LEN` is the max of all chained CMDs; passing it to
+/// `ChainState::step` would let a hostile host accumulate up to that
+/// global max for any one CMD before the per-CMD execute-time length
+/// check rejected it (e.g. fill ~8 KB for FW_BEGIN even though the
+/// real bound is `MANIFEST_SIZE = 8192`). Tighten per-CMD here so the
+/// step layer itself rejects oversized accumulations as soon as `lc`
+/// pushes past the *real* limit for that CMD. See finding #4 in
+/// `docs/usb-fw-update-hardening.md`.
+///
+/// Unknown CMDs fall back to the global max — execute_chain returns
+/// `INS_NOT_SUPPORTED` at the next layer, no behaviour change.
+const fn per_cmd_chain_bound(ins: u8) -> usize {
+    match ins {
+        INS_V2_SIGN_USEROP => CHAIN_BUF_LEN_SIGN,
+        INS_V2_SIGN_USEROP_BATCH => CHAIN_BUF_LEN_BATCH,
+        INS_V2_SIGN_OFFCHAIN => SIGN_OFFCHAIN_INPUT_MAX_LEN,
+        // `INS_V2_FW_BEGIN`'s handler is `#[cfg(feature = "stm32u585")]`-
+        // gated; the wire constant exists unconditionally, so we match it
+        // here without a cfg so this stays a `const fn`. On a non-
+        // stm32u585 build, `execute_chain` returns `INS_NOT_SUPPORTED` —
+        // tightening the bound costs nothing.
+        INS_V2_FW_BEGIN => CHAIN_BUF_LEN_FW,
+        _ => CHAIN_BUF_LEN,
+    }
+}
+
 /// Response buffer — sized for the maximum unified output plus
 /// the 2-byte SW.
 static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN + 2] = [0u8; MAX_SIGN_RESPONSE_LEN + 2];
@@ -229,7 +256,7 @@ impl CommandRouter {
         // `ChainState::step` — see `shared/src/apdu_framing.rs`. We
         // only need to copy `lc` bytes into `CHAIN_BUF` at the cursor
         // the helper hands us, then either ack or execute.
-        match self.chain.step(ins, p1, lc, CHAIN_BUF_LEN) {
+        match self.chain.step(ins, p1, lc, per_cmd_chain_bound(ins)) {
             ChainStepOutcome::Appended { write_at, lc } => {
                 if lc > 0 {
                     CHAIN_BUF[write_at..write_at + lc].copy_from_slice(data);
