@@ -258,3 +258,36 @@ hardware required); CI can run it on a budget. Crashes land in
    after the fuzz harness has a clean baseline, so we can confirm the
    refactor doesn't break the happy path.
 6. Run `make fuzz-manifest` after each change. Commit per finding.
+
+---
+
+## 9 — Trezor cross-reference: status (2026-05-24)
+
+After the §5 findings landed we did a deeper read of Trezor's
+`core/embed/projects/bootloader/workflow/wf_firmware_update.c` to look
+for patterns worth porting. Most of Trezor's defenses (per-CMD payload
+bound, per-block write guard, multi-phase verify chain, HID frame
+buffering) collapse with things we already do; a couple
+(per-message timeout reset on every CHUNK, per-chunk hash retry) conflict
+with explicit invariants we hold or assume a manifest layout we don't
+share. Three patterns turned out to be real gaps:
+
+| # | Item | Status |
+|---|---|---|
+| A | **Confirm-before-erase** — show the firmware fingerprint at BEGIN, before erasing the slot (Trezor's `ctx->confirmed=true` gate). | **DONE** (commit `e92cdfc`). `confirm_commit(ctx, manifest)` → `confirm_install(manifest)`. Called from BEGIN after `verify_manifest` + length-bound + counter-reset, before `read_active_slot` + `erase_slot`. Fingerprint derived from the **signed** `manifest.secure_hash()`. COMMIT runs silently after `verify_images`: success → OTP/manifest/reset; mismatch → `FwUpdateBadImage` (no further prompt — user already gave consent). Silicon-validated. Trade-off: previously the user only ever confirmed bytes that had been re-hashed against the manifest; now they confirm the signed manifest's claim with the device's auto-abort on mismatch as the integrity backstop. Since the user can't manually verify the bytes either way (they trust the device's chain), moving the prompt forward is a strict UX win at no security cost — and zero wasted flash on user-cancel. |
+| B | **Wipe-on-repeated-verify-failure** — Trezor escalates to a storage wipe after N consecutive workflow failures. We had wipe-after-10-wrong-PINs but no analogue for FW-update. | **DONE** (commit `05968c7`). Per-power-cycle `FW_VERIFY_FAIL_COUNT` in `cmd_fw_begin.rs`, threshold 5. Each `verify_manifest` rejection (bad sig / version / fpr / structural / length-bound) increments; a passing verify chain resets. On threshold: `flash::arm_wipe_flag()` + `SCB::sys_reset()` — boot-time wipe-resume path completes the SE wipe, same as 10-wrong-PIN / TZIC violation. In-RAM (resets on power cycle) — bounds a glitch-attack window to a power cycle. The PIN-verified gate on BEGIN means only an unlocked session can trip the threshold; a buggy host without PIN cannot. **Follow-up:** a persistent (flash) cross-boot counter would tighten this to a lifetime budget; left as a future enhancement once page allocation is designed. |
+| C | **Clamped error codes** — Trezor maps every FW-update error to a single `Failure_ProcessError`; we return granular `FwUpdateBadVersion` / `FwUpdateBadManifest` / `FwUpdateFlashError` / etc. | **DEFERRED — discussed, not implemented.** Granular = debuggability + tiny information leak (host can probe failure mode). Clamped = no leak but harder to debug. The leak is mostly *timing* (sig verify ~1 s vs. rollback check ms), so clamping the wire code without normalizing timing only half-closes the channel. Worth a small refactor for production (clamp wire codes, keep granular `secure_log!` internally) once timing-normalization is also designed. Tracked here; not blocking shipping. |
+
+### Patterns we explicitly chose NOT to port
+
+- **Per-message timeout reset on every CHUNK.** Trezor resets a 10 s deadline on each message; CLAUDE.md *explicitly forbids* this for us ("NS pings do NOT reset [the inactivity timer]. Only real button presses on S-world confirm dialogs count as activity"). This is a deliberate hardening on our side that Trezor doesn't have.
+- **Per-chunk hash retry loop.** Trezor has per-chunk hashes in the manifest and retries on mismatch. We sign over only the *full-image* hashes; the COMMIT-time `verify_images` re-hash is the equivalent integrity check. The retry pattern doesn't map cleanly and would add complexity without a security gain.
+
+### Patterns we already had
+
+Per-CMD payload bound (`per_cmd_chain_bound`, finding #4); per-block write
+offset guard (`checked_add` in `write_chunk`, finding #3); multi-phase
+verify chain (`verify_manifest`'s structural→CRC→digest→fpr→FI-hardened
+sig→rollback); HID frame buffering (full APDU buffered before dispatch);
+concurrent-upload protection (`HandlerGuard` + single-threaded NSC
+gateway); user-confirm-before-destructive-op (now at BEGIN, finding A).
