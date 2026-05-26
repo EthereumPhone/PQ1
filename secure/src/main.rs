@@ -96,6 +96,12 @@ mod reset_cause;
 /// transport doesn't expose the update commands either.
 #[cfg(all(feature = "stm32u585", not(test)))]
 mod fw_update;
+/// Reversible firmware anti-rollback test (feature `fw-rollback-e2e`). Drives
+/// the real `fw_update::verify_manifest` chain with dev-key-signed v1/v2/v3
+/// manifests against literal test floors — proves downgrade rejection with no
+/// OTP burn / flash / reboot. Runs early in `main()` and halts.
+#[cfg(all(feature = "fw-rollback-e2e", feature = "stm32u585", not(test)))]
+mod fw_rollback_e2e;
 #[cfg(not(test))]
 mod offchain_state;
 #[cfg(not(test))]
@@ -995,6 +1001,15 @@ fn main() -> ! {
     // enabled — the driver module itself is gated on `saes-dhuk`.
     #[cfg(feature = "saes-self-test")]
     saes_self_test_and_halt();
+
+    // Firmware anti-rollback test (feature `fw-rollback-e2e`). Runs the real
+    // verify_manifest chain against dev-key-signed v1/v2/v3 manifests + test
+    // floors, proving downgrade rejection with NO irreversible side effects
+    // (no OTP bump, no flash erase, no reboot). Halts on PASS/FAIL. Reflash
+    // to revert. Production OTP-burn FW-update testing is deferred to
+    // dedicated hardware. Needs HASH/RNG up (done above) for SPHINCS+C10.
+    #[cfg(all(feature = "fw-rollback-e2e", feature = "stm32u585"))]
+    fw_rollback_e2e::run_and_halt();
 
     // SAES init for the Tier-1 derivation path. Only needed when we're
     // actually going to call `SAES-CMAC(DHUK, ...)` — i.e., `saes-dhuk`

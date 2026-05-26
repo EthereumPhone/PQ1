@@ -185,6 +185,14 @@ hw-sha256 = ["sphincs-c10/hw-sha256"]
 # Logs the chosen TxKind variant on every cmd_sign for assertions.
 # NEVER ship in production: it disables every meaningful trust gate.
 e2e-test = []
+# Reversible firmware anti-rollback test: drives the real fw_update::
+# verify_manifest chain with dev-key-signed v1/v2/v3 manifests against
+# literal test floors (no OTP burn, no flash, no reboot). Runs early in
+# main() and halts. Implies e2e-test (the sanctioned hardware-test opt-in
+# that relaxes the release-hardware fence) + debug-log (PASS/FAIL output).
+# Fenced out of mode-production by a dedicated compile_error! in nsc/mod.rs.
+# See secure/src/fw_rollback_e2e.rs. NEVER ship.
+fw-rollback-e2e = ["e2e-test", "debug-log"]
 usb = []  # Enable USB OTG hardware init (clock, GPIO, GTZC) for host communication
 se050 = []  # NXP SE050 secure element via I2C1 (OM-SE050ARD on Arduino R3 headers)
 # STM32U585 TAMP (tamper detection) — backup-domain voltage, LSE clock,

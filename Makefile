@@ -138,7 +138,7 @@ play: all
 # Requires: ST-LINK connected, SSD1306 OLED wired to PB8/PB9/3V3/GND.
 play-hw-display:
 	@echo "==> Building secure + nonsecure for interactive OLED play"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-oled,stm32u585,dev-testkey,gpio-buttons
@@ -165,7 +165,7 @@ play-hw-display:
 # lines if you want them.
 play-hw-duress-ui:
 	@echo "==> Building §32 duress-PIN UI harness (mock-se, dialogs only)"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-oled,stm32u585,dev-testkey,duress-ui-test,gpio-buttons
@@ -375,7 +375,7 @@ e2e:
 # Fail: exits 1 if any sign returns non-Ok or the PASS line is missing.
 test-key-speed:
 	@echo "==> Building secure (e2e-test auto-provision) + NS (bench-key-speed) + SHA-256 HW accel"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
@@ -442,7 +442,7 @@ test-key-speed:
 # Fail: exits 1 if any test case fails or the PASS marker is missing.
 test-update-hw:
 	@echo "==> Building secure (e2e-test auto-unlock) + NS (fwup-hw-test) + SHA-256 HW accel"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585,hw-sha256
@@ -494,7 +494,7 @@ e2e-erc7730-hw:
 
 e2e-hw:
 	@echo "==> Building e2e + stm32u585"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-semihosting,e2e-test,stm32u585
@@ -519,7 +519,7 @@ e2e-hw:
 # Requires: ST-LINK connected, SSD1306 OLED wired to PB8/PB9/3V3/GND.
 e2e-hw-display:
 	@echo "==> Building e2e + stm32u585 + OLED display"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,debug-log,ui-oled,e2e-test,stm32u585
@@ -558,7 +558,7 @@ e2e-hw-dual-se:
 	@echo "==> Building e2e + stm32u585 + dual-SE (OPTIGA + SE050) + OLED"
 	@echo "    WARNING: re-provisions wallet state on BOTH chips with the"
 	@echo "    fixed e2e test mnemonic (abandon × 23 || art, PIN 00000000)."
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features dual-se,ui-oled,debug-log,e2e-test,e2e-skip-admin-wipe,stm32u585,otp-hardcoded-master-key
@@ -622,7 +622,7 @@ e2e-hw-dual-se:
 # no PIN attempts). Safe to re-run.
 gtzc-enforcement-hw:
 	@echo "==> Building GTZC1 enforcement test (secure + stm32u585 + e2e-test + mock-se)"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key
@@ -686,7 +686,7 @@ gtzc-enforcement-hw:
 # Requires: ST-LINK on B-U585I-IOT02A.
 tzic-wipe-hw:
 	@echo "==> Building TZIC wipe demo (secure + stm32u585 + tzic-wipe + e2e-test + mock-se)"
-	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
 			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,tzic-wipe
@@ -2963,3 +2963,70 @@ build-hw-lcd-bringup:
 
 clean:
 	rm -rf target/secure target/nonsecure target/veneers.o
+
+
+# Firmware anti-rollback test on real STM32U585 silicon — REVERSIBLE.
+#
+# Proves downgrade rejection (v1 install OK; v2 update OK; v2->v1 downgrade
+# REJECTED; same-version reinstall REJECTED; forward v3 OK; forged signature
+# REJECTED) by driving the REAL fw_update::verify_manifest chain (the exact
+# function CMD_FW_BEGIN runs: structural -> CRC -> digest -> vendor-fpr ->
+# FI-hardened SPHINCS+C10 signature -> rollback floor) with dev-key-signed
+# manifests against literal test floors passed as a function argument.
+#
+# REVERSIBLE — burns NOTHING: no OTP rollback-floor bump, no flash erase, no
+# boot-state write, no reboot, no USB. The chip stays fully reflashable.
+# (Production OTP-burn FW-update validation is deferred to dedicated HW.)
+#
+# Greps for `[S][fwrb] === PASS ===`. Requires ST-LINK on B-U585I-IOT02A.
+# Uses `probe-rs run` (NOT reset — reset leaves the core halted on this setup).
+fw-rollback-hw: dev-pubkey-fixture
+	@echo "==> Building FW anti-rollback test (secure + stm32u585 + fw-rollback-e2e + mock-se)"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+	  -p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,fw-rollback-e2e
+	@echo "==> Building minimal NS image (stm32u585; not reached, flashed for layout)"
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+	  -p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip STM32U585AIIx $(NONSECURE_ELF)
+	@probe-rs download --chip STM32U585AIIx $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@STM32_Programmer_CLI --connect port=SWD \
+	  --optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+	  SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running FW anti-rollback test on hardware (~10s; signs 4 manifests)..."
+	@log=$$(mktemp -t fw-rollback-hw.XXXXXX.log); \
+	rc_file=$$(mktemp -t fw-rollback-hw-rc.XXXXXX); \
+	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
+	{ timeout 120 probe-rs run --chip STM32U585AIIx $(SECURE_ELF) 2>&1; \
+	  echo $$? >"$$rc_file"; } | tee "$$log"; \
+	rc=$$(cat "$$rc_file"); \
+	echo "===================================="; \
+	if grep -q "\[S\]\[fwrb\] === PASS ===" "$$log"; then \
+	  echo "==> fw-rollback-hw: PASS — downgrade rejected, forward allowed, forged sig rejected"; \
+	  exit 0; \
+	elif grep -q "\[S\]\[fwrb\] === FAIL ===" "$$log"; then \
+	  echo "==> fw-rollback-hw: FAIL — an anti-rollback assertion mismatched (see log)"; \
+	  exit 1; \
+	else \
+	  echo "==> fw-rollback-hw: FAIL (no PASS/FAIL marker; rc=$$rc)"; \
+	  exit 1; \
+	fi
+
+# DEV vendor pubkey fixture (32 bytes = pk_seed[16] || pk_root[16]) derived
+# from the built-in dev seed via `fwsign dev-pubkey`. The secure crate has no
+# sphincs-c10 build-dep (feature unification would leak host features into
+# the firmware target), so `secure/build.rs` cannot compute this itself — it
+# reads `FSBL_VENDOR_PUBKEY` instead. This target writes the dev pubkey to a
+# stable path the test/dev builds can point at. Byte-identical to the key
+# `fsbl/build.rs` falls back to when `FSBL_VENDOR_PUBKEY` is unset.
+DEV_VENDOR_PUBKEY := $(CURDIR)/target/dev_vendor_pubkey.bin
+
+dev-pubkey-fixture: $(DEV_VENDOR_PUBKEY)
+
+$(DEV_VENDOR_PUBKEY):
+	@mkdir -p $(@D)
+	@cargo run --release -p fwsign --quiet -- dev-pubkey --out $@

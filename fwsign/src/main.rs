@@ -67,6 +67,19 @@ enum Cmd {
         out: std::path::PathBuf,
     },
 
+    /// Emit the built-in DEV vendor public key (32 bytes,
+    /// `pk_seed[16] || pk_root[16]`) derived from the fixed dev seed —
+    /// byte-identical to the key `fsbl/build.rs` falls back to when
+    /// `FSBL_VENDOR_PUBKEY` is unset. Used by `make dev-pubkey-fixture` so
+    /// the *secure* world (which has no `sphincs-c10` build-dep) embeds
+    /// the same dev key the FSBL does, letting dev-signed manifests verify.
+    /// **Never production.** No passphrase; the seed is in the source tree.
+    DevPubkey {
+        /// Output path for the 32-byte DEV public key.
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
+
     /// Sign a pair of secure + nonsecure ELFs into a `.pqfw` release
     /// bundle.
     Sign {
@@ -227,6 +240,7 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Cmd::Keygen { out } => subcommands::keygen::run(&out),
         Cmd::Pubkey { key, out } => subcommands::pubkey::run(&key, &out),
+        Cmd::DevPubkey { out } => subcommands::dev_pubkey::run(&out),
         Cmd::Sign {
             key,
             version,

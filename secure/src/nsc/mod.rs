@@ -168,6 +168,16 @@ compile_error!(
      publishing the Shielded Connection pairing secret."
 );
 
+// Dedicated guard: `fw-rollback-e2e` is a dev/test image that embeds the dev
+// vendor SIGNING seed and replaces `main()` with a self-contained
+// anti-rollback test that halts. It must never coexist with `mode-production`.
+#[cfg(all(feature = "mode-production", feature = "fw-rollback-e2e"))]
+compile_error!(
+    "mode-production and fw-rollback-e2e are mutually exclusive. \
+     fw-rollback-e2e embeds the development vendor signing seed and short- \
+     circuits boot into a firmware anti-rollback test — never a shipping image."
+);
+
 // ---------------------------------------------------------------------------
 // UI-axis mutual exclusivity (Phase 2)
 //
