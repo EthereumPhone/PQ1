@@ -25,6 +25,74 @@ use crate::fw_update::{
 use crate::hw::{flash, otp};
 use crate::timeout;
 
+/// Consecutive-`verify_manifest`-failure counter for the glitch-resistance
+/// defense (finding B in `docs/usb-fw-update-hardening.md` — modelled on
+/// Trezor's repeated-FW-failure → wipe pattern in
+/// `wf_firmware_update.c`). Incremented on every BEGIN whose manifest is
+/// rejected (bad sig / bad version / bad length / etc.); reset to zero on
+/// every BEGIN that passes the full verify chain. On reaching
+/// `FW_VERIFY_FAIL_THRESHOLD`, we arm the standard admin-wipe flag and
+/// `sys_reset` — the boot-time wipe-resume path in `main.rs:1334`
+/// completes the SE/storage wipe, matching the response to a 10-wrong-PIN
+/// lockout or a TZIC violation.
+///
+/// In-RAM (so it resets on power-cycle): bounds a glitch-attack window
+/// to a power-cycle. A persistent (flash) counter would tighten this to
+/// a *lifetime* budget but needs careful page allocation; left as a
+/// follow-up. The PIN-verified gate on BEGIN means only an unlocked user
+/// session can hit the threshold — a casual buggy host can't trip it
+/// without the user's PIN.
+static mut FW_VERIFY_FAIL_COUNT: u32 = 0;
+
+/// Threshold for the wipe trigger. Picked to be high enough that legit
+/// development/testing retries don't trip it (a few back-to-back failures
+/// while iterating on a bundle), low enough that a glitch attacker can't
+/// iterate freely (~5 attempts per power-cycle window).
+const FW_VERIFY_FAIL_THRESHOLD: u32 = 5;
+
+/// Record a manifest-verify failure. If the running tally reaches the
+/// threshold, arm the wipe flag and reset — does not return.
+#[inline(never)]
+fn record_verify_failure_and_maybe_wipe() {
+    // SAFETY: single-threaded, non-reentrant gateway path; this is the
+    // only writer of `FW_VERIFY_FAIL_COUNT`. `addr_of_mut!` is used
+    // (rather than `&mut`) to side-step the `static_mut_refs` lint.
+    let new_count = unsafe {
+        let p = core::ptr::addr_of_mut!(FW_VERIFY_FAIL_COUNT);
+        let cur = core::ptr::read_volatile(p);
+        let n = cur.saturating_add(1);
+        core::ptr::write_volatile(p, n);
+        n
+    };
+    secure_log!(
+        "[S][fwup] verify failure {}/{}",
+        new_count,
+        FW_VERIFY_FAIL_THRESHOLD
+    );
+    if new_count >= FW_VERIFY_FAIL_THRESHOLD {
+        secure_log!(
+            "[S][fwup] verify-failure threshold reached — arming wipe + reset"
+        );
+        // SAFETY: dedicated single-QW idempotent flash write to the
+        // wipe-flag slot on page 125. Established pattern (also called
+        // from TZIC violation, OPTIGA tamper, SE050 errors).
+        #[cfg(feature = "stm32u585")]
+        let _ = unsafe { flash::arm_wipe_flag() };
+        cortex_m::peripheral::SCB::sys_reset();
+    }
+}
+
+/// Reset the consecutive-failure tally after a manifest passes the full
+/// verify chain + length bounds. Successful updates don't accumulate
+/// failures over a device's lifetime.
+#[inline(never)]
+fn record_verify_success() {
+    // SAFETY: single-threaded, non-reentrant gateway path; sole writer.
+    unsafe {
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(FW_VERIFY_FAIL_COUNT), 0);
+    }
+}
+
 /// # Safety
 /// CMSE non-secure-entry handler — invoked by the gateway dispatcher
 /// with NS-supplied `GatewayArgs`. The handler must validate every NS
@@ -70,9 +138,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     match fw_update::verify_manifest(&m, floor) {
         Ok(()) => {}
         Err(fw_manifest::VerifyError::BelowRollback) => {
-            return NscStatus::FwUpdateBadVersion as u32
+            // Glitch-resistance: count consecutive verify failures so an
+            // attacker can't iterate freely on signature/version glitches.
+            // See `docs/usb-fw-update-hardening.md` finding B.
+            record_verify_failure_and_maybe_wipe();
+            return NscStatus::FwUpdateBadVersion as u32;
         }
-        Err(_) => return NscStatus::FwUpdateBadManifest as u32,
+        Err(_) => {
+            record_verify_failure_and_maybe_wipe();
+            return NscStatus::FwUpdateBadManifest as u32;
+        }
     }
 
     // Defense-in-depth: the manifest's declared image lengths are signed-
@@ -88,8 +163,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if m.secure_len() > flash::SLOT_SECURE_CAPACITY
         || m.nonsecure_len() > flash::SLOT_NS_CAPACITY
     {
+        // Treat as a verify failure — a manifest with absurd lengths is
+        // a glitch / forgery candidate just like a bad signature.
+        record_verify_failure_and_maybe_wipe();
         return NscStatus::FwUpdateBadManifest as u32;
     }
+
+    // Manifest passes the full verify chain (signature, rollback, vendor,
+    // structural, length bound) — reset the glitch-defense counter so
+    // legit updates don't accumulate failures over the device's lifetime.
+    record_verify_success();
 
     // Determine inactive slot (the one we're NOT currently running).
     let active = fw_update::read_active_slot();
