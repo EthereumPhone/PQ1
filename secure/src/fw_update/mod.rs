@@ -380,9 +380,6 @@ pub fn verify_manifest(
     m: &ManifestRef,
     rollback_floor: u32,
 ) -> Result<(), VerifyError> {
-    m.verify_structural()?;
-    m.verify_crc()?;
-    m.verify_digest()?;
     // C-1 fix: the secure firmware now embeds the vendor SPHINCS+C10
     // public key (mirrored from `fsbl/build.rs`). We verify the
     // manifest's signature here, BEFORE the destructive ops in COMMIT
@@ -404,23 +401,54 @@ pub fn verify_manifest(
     // With the signature check here, COMMIT only runs on a real
     // vendor-signed manifest, so the OTP bump only fires on
     // legitimate updates.
-    m.verify_vendor_fpr(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)?;
-    // F-7 hardening (FW-update bypass under single fault): call verify_signature
-    // through `fi::check_true_into_sentinel`, which double-evaluates the closure
-    // with `wait_random()` between, sentinel-commits the verdict to a volatile
-    // local, and re-checks before encoding into OK_SENTINEL / FAIL_SENTINEL.
-    // Combined with the caller's `!= OK_SENTINEL` discrimination, this lifts the
-    // bar from 1 single-fault skip/stuck-at to ~2 coordinated faults — the same
-    // residual as F-5 for the rest of the secure firmware. See
-    // `tools/sca/README.md` §F-7 for the bypass evidence this defends against.
+    //
+    // **Timing normalization (finding C in docs/usb-fw-update-hardening.md):**
+    // we deliberately do NOT short-circuit on early failures — every
+    // check below is executed regardless of any prior check's verdict.
+    // Without this, an attacker timing the response could distinguish
+    // "fails verify_structural" (microseconds) from "fails verify_signature"
+    // (~1 s of SPHINCS+C10) and learn which step their forged manifest
+    // tripped on. Running every step on every input collapses the timing
+    // to a single bucket (≈ structural + crc + digest + fpr + sig + rollback,
+    // dominated by sig). The total work runs even on a 4-byte structural
+    // miss; that's the point. Cost is bounded by the wipe-on-repeated-
+    // failure trigger (see B in cmd_fw_begin), so a flood is capped.
+    //
+    // F-7 hardening (FW-update bypass under single fault): verify_signature
+    // is called through `fi::check_true_into_sentinel`, which double-
+    // evaluates the closure with `wait_random()` between, sentinel-commits
+    // the verdict to a volatile local, and re-checks before encoding into
+    // OK_SENTINEL / FAIL_SENTINEL. Combined with the `!= OK_SENTINEL`
+    // discrimination, this lifts the bar from 1 single-fault skip/stuck-at
+    // to ~2 coordinated faults — the same residual as F-5 for the rest of
+    // the secure firmware. See `tools/sca/README.md` §F-7 for the bypass
+    // evidence this defends against.
+    let s_err = m.verify_structural();
+    let c_err = m.verify_crc();
+    let d_err = m.verify_digest();
+    let f_err = m.verify_vendor_fpr(
+        &vendor_pubkey::VENDOR_PK_SEED,
+        &vendor_pubkey::VENDOR_PK_ROOT,
+    );
     let sig_verdict = crate::fi::check_true_into_sentinel(|| {
-        m.verify_signature(&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT)
-            .is_ok()
+        m.verify_signature(
+            &vendor_pubkey::VENDOR_PK_SEED,
+            &vendor_pubkey::VENDOR_PK_ROOT,
+        )
+        .is_ok()
     });
+    let r_err = m.verify_rollback(rollback_floor);
+
+    // Now report errors in the documented chain order. The work above is
+    // already done; this just picks which Err (if any) to surface.
+    s_err?;
+    c_err?;
+    d_err?;
+    f_err?;
     if sig_verdict != crate::fi::OK_SENTINEL {
         return Err(VerifyError::BadSignature);
     }
-    m.verify_rollback(rollback_floor)?;
+    r_err?;
     Ok(())
 }
 

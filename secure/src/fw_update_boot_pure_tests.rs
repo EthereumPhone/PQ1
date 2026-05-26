@@ -327,12 +327,19 @@ fn negative_verify_manifest_runs_full_chain_in_documented_order() {
     // verify_rollback first would let an attacker enumerate the OTP
     // floor via a chosen-version oracle.
     let order = [
-        "m.verify_structural()?;",
-        "m.verify_crc()?;",
-        "m.verify_digest()?;",
-        "m.verify_vendor_fpr(",
-        "check_true_into_sentinel",
-        "m.verify_rollback(rollback_floor)?;",
+        // Finding C timing normalization removed the `?` short-circuit:
+        // every check is called unconditionally and errors are reported
+        // in order afterwards. The CALL-SITE ordering still needs to
+        // match the documented chain. We use the `let <name> = ...`
+        // capture-site substrings rather than bare method names so the
+        // (longer) comment block above the function doesn't accidentally
+        // match first.
+        "let s_err = m.verify_structural()",
+        "let c_err = m.verify_crc()",
+        "let d_err = m.verify_digest()",
+        "let f_err = m.verify_vendor_fpr(",
+        "let sig_verdict = crate::fi::check_true_into_sentinel(",
+        "let r_err = m.verify_rollback(rollback_floor)",
     ];
     let mut last = 0usize;
     for step in order {
@@ -354,8 +361,12 @@ fn negative_verify_manifest_uses_baked_in_vendor_pubkey() {
     // pk_root from the build-time-baked constants — never from caller
     // input. An attacker who could supply the pubkey would forge
     // a manifest trivially.
+    // Both names must appear; finding C's timing-normalization refactor
+    // split the args across multiple lines, so we check the names
+    // independently rather than as one literal substring.
     assert!(
-        FW_MOD_SRC.contains("&vendor_pubkey::VENDOR_PK_SEED, &vendor_pubkey::VENDOR_PK_ROOT"),
+        FW_MOD_SRC.contains("vendor_pubkey::VENDOR_PK_SEED")
+            && FW_MOD_SRC.contains("vendor_pubkey::VENDOR_PK_ROOT"),
         "verify_manifest must pin the vendor pubkey from the build-time include — \
          no caller-supplied pubkey path may exist"
     );

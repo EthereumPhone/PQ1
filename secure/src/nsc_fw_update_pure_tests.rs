@@ -1151,13 +1151,19 @@ fn negative_verify_manifest_runs_full_chain_in_documented_order() {
     // Cheap checks first, expensive crypto last; signature verify
     // BEFORE rollback so we don't reveal the OTP floor to a forged
     // manifest. Pin the order by finding each step's source position.
+    //
+    // Finding C (timing normalization) removed the `?` short-circuit
+    // and added a longer explanatory comment that also mentions these
+    // names. To make sure we're picking up the CALL SITES rather than
+    // the prose, grep for the `let <name> = ...` capture-site form
+    // unique to the function body.
     let order = [
-        "verify_structural",
-        "verify_crc",
-        "verify_digest",
-        "verify_vendor_fpr",
-        "check_true_into_sentinel",
-        "verify_rollback",
+        "let s_err = m.verify_structural()",
+        "let c_err = m.verify_crc()",
+        "let d_err = m.verify_digest()",
+        "let f_err = m.verify_vendor_fpr(",
+        "let sig_verdict = crate::fi::check_true_into_sentinel(",
+        "let r_err = m.verify_rollback(",
     ];
     let mut last = 0;
     for step in order {
