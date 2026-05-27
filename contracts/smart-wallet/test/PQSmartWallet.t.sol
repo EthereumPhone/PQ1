@@ -285,11 +285,10 @@ contract PQSmartWalletTest is Test {
         // counter still reads 0 until the rotation actually lands.
         assertEq(w.bootstrapUses(), 0, "bootstrap bump must defer to addOwnerBytes");
 
-        // Drive the execute half of the EntryPoint pair: a self-call
-        // into `addOwnerBytes` (in production EntryPoint sends this
-        // through the wallet; the test takes the shortcut of pranking
-        // as the wallet, matching `test_rotationBootstrap...`).
-        vm.prank(address(w));
+        // Drive the execute half of the EntryPoint pair the way v0.6 does:
+        // the EntryPoint dispatches `userOp.callData` to the wallet, so the
+        // EntryPoint — not the wallet — is `msg.sender` for `addOwnerBytes`.
+        vm.prank(ENTRY_POINT_ADDR);
         w.addOwnerBytes(slot1Bytes);
         assertEq(w.bootstrapUses(), 1, "bootstrap MUST bump once rotation lands");
     }
@@ -359,7 +358,7 @@ contract PQSmartWalletTest is Test {
             0
         );
 
-        vm.prank(address(w));
+        vm.prank(ENTRY_POINT_ADDR);
         w.addOwnerBytes(slot1Bytes);
         assertEq(w.nextOwnerIndex(), 3);
 
@@ -398,7 +397,7 @@ contract PQSmartWalletTest is Test {
             w.validateUserOp(_packedOp(address(w), addOwnerCall, bootstrapSig), bytes32(uint256(1)), 0),
             0
         );
-        vm.prank(address(w));
+        vm.prank(ENTRY_POINT_ADDR);
         w.addOwnerBytes(slot1Bytes);
         assertEq(w.bootstrapUses(), 65_536);
 
@@ -512,7 +511,7 @@ contract PQSmartWalletTest is Test {
     function test_addOwnerBytesRejectsNonNMaskedOwner() public {
         PQSmartWallet w = _deployWallet();
         bytes memory dirty = abi.encodePacked(DIRTY_SEED, SLOT1_PK_ROOT);
-        vm.prank(address(w));
+        vm.prank(ENTRY_POINT_ADDR);
         vm.expectRevert(
             abi.encodeWithSelector(PQMultiOwnable.InvalidNMaskLayout.selector, dirty)
         );
@@ -522,7 +521,7 @@ contract PQSmartWalletTest is Test {
     function test_addOwnerBytesRejectsNonNMaskedRoot() public {
         PQSmartWallet w = _deployWallet();
         bytes memory dirty = abi.encodePacked(SLOT1_PK_SEED, DIRTY_SEED);
-        vm.prank(address(w));
+        vm.prank(ENTRY_POINT_ADDR);
         vm.expectRevert(
             abi.encodeWithSelector(PQMultiOwnable.InvalidNMaskLayout.selector, dirty)
         );
@@ -1189,11 +1188,11 @@ contract PQSmartWalletTest is Test {
         // Per M-1: bootstrap counter is NOT yet bumped.
         assertEq(w.bootstrapUses(), 0, "validation must not bump bootstrap before execute");
 
-        // Execute as `address(this)` (the wallet self-calling pattern).
-        // Inside `addOwnerBytes`, `_addOwner` reverts on `AlreadyOwner`.
-        // The pending transient bump must NEVER be consumed since the
-        // call body unwinds before reaching the bump path.
-        vm.prank(address(w));
+        // Execute via the EntryPoint (v0.6 dispatches `userOp.callData`, so
+        // the EntryPoint is `msg.sender`). Inside `addOwnerBytes`, `_addOwner`
+        // reverts on `AlreadyOwner`; the pending transient bump must NEVER be
+        // consumed since the call body unwinds before reaching the bump path.
+        vm.prank(ENTRY_POINT_ADDR);
         vm.expectRevert(
             abi.encodeWithSelector(PQMultiOwnable.AlreadyOwner.selector, existingBootstrap)
         );
@@ -1217,7 +1216,7 @@ contract PQSmartWalletTest is Test {
         );
         assertEq(w.bootstrapUses(), 0);
 
-        vm.prank(address(w));
+        vm.prank(ENTRY_POINT_ADDR);
         w.addOwnerBytes(slot1);
         assertEq(w.bootstrapUses(), 1, "successful rotation bumps");
         assertEq(w.nextOwnerIndex(), 3);

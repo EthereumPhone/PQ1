@@ -92,7 +92,7 @@ contract WalletInvariantHandler is Test {
         uint256 result = wallet.validateUserOp(op, bytes32(0), 0);
         if (result != 0) return;
 
-        vm.prank(address(wallet));
+        vm.prank(ENTRY_POINT_ADDR);
         try wallet.addOwnerBytes(ownerBytes) {
             _bumpMonotonic(0);
         } catch {}

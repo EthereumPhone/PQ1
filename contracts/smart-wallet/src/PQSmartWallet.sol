@@ -100,7 +100,6 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     // ── Errors ──────────────────────────────────────────────────────
 
     error NotFromEntryPoint();
-    error NotFromSelf();
     error AlreadyInitialized();
 
     /// @notice An `executeWithOffchainCount` / `executeBatchWithOffchainCount`
@@ -283,11 +282,17 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         }
     }
 
-    // ── Owner management (self-only, i.e. via a validated UserOp) ───
+    // ── Owner management (EntryPoint-only: a validated UserOp's callData) ──
 
-    /// @notice Add a new slot owner at the next index. Only callable by
-    ///         `this` — i.e. via a UserOp whose signature was validated
-    ///         against `ownerIndex == 0` (bootstrap).
+    /// @notice Add a new slot owner at the next index. Only callable by the
+    ///         EntryPoint — i.e. as the `callData` of a UserOp whose
+    ///         signature `_validateSignature` accepted against
+    ///         `ownerIndex == 0` (bootstrap). In ERC-4337 v0.6 the EntryPoint
+    ///         is `msg.sender` when it dispatches `userOp.callData`, so the
+    ///         guard is `_entryPoint`, not `address(this)`. The role-split in
+    ///         `_validateSignature` is what restricts this selector to the
+    ///         bootstrap key; a self-call cannot reach here anyway (every
+    ///         `execute*` path rejects `target == address(this)`, audit H-2).
     ///
     ///         Bootstrap-budget bump is deferred from `_validateSignature`
     ///         to here (audit M-1): consume the transient
@@ -295,7 +300,7 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     ///         succeeds, so a revert in `_addOwner` (e.g. duplicate owner)
     ///         no longer burns 1/65536 of the bootstrap cap.
     function addOwnerBytes(bytes calldata newOwner) external {
-        if (msg.sender != address(this)) revert NotFromSelf();
+        if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
         _addOwner(newOwner);
         uint256 pending;
         assembly ("memory-safe") {
@@ -305,11 +310,12 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         if (pending == 1) _bumpBootstrapUses(MAX_BOOTSTRAP_USES);
     }
 
-    /// @notice Remove a slot owner. Only callable by `this` — i.e. via a
-    ///         UserOp whose signature was validated against `ownerIndex >= 1`.
-    ///         Refuses to remove index 0 (see `PQMultiOwnable`).
+    /// @notice Remove a slot owner. Only callable by the EntryPoint — i.e.
+    ///         as the `callData` of a UserOp whose signature was validated
+    ///         against `ownerIndex >= 1`. Refuses to remove index 0 (see
+    ///         `PQMultiOwnable`).
     function removeOwnerAtIndex(uint256 index, bytes calldata owner) external {
-        if (msg.sender != address(this)) revert NotFromSelf();
+        if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
         _removeOwnerAtIndex(index, owner);
     }
 
