@@ -84,8 +84,8 @@ production optimizer (`optimizer_runs=200`, `via_ir=true`,
 from the pinned production hash.
 
 - Production pin (from `halmos.toml` + `test/PinnedCodehashes.t.sol`):
-  - PQSmartWallet: `0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f`
-  - SPHINCsC10Asm: `0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9`
+  - PQSmartWallet: `0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680`
+  - SPHINCsC10Asm: `0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0`
 - `forge coverage --ir-minimum` codehashes (today):
   - PQSmartWallet: `0x9e88d1e2cb6339506e9fca0ebb6fc57a612e12906f7c74aeff2acc3f655b4d34`
   - SPHINCsC10Asm: `0x41f8482f017e7d34748c36dc3370a328834bcd364975996ab3230dad6bb2bdd4`

@@ -24,22 +24,32 @@ import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 ///         test_codehash_print -vv` output below, then re-run the
 ///         discharge artifacts (Halmos, Certora).
 contract PinnedCodehashesTest is Test {
-    // ── Codehash freeze constants (pinned at 2026-05-21 branch-cut) ────
+    // ── Codehash freeze constants ─────────────────────────────────────
     //
-    // Re-capture via `forge test --match-test test_codehash_pinned_or_print -vv`
-    // and update here when the bytecode legitimately changes (compiler
-    // bump / source change). Each update must be accompanied by re-running
-    // the discharge artifacts for the affected axiom:
+    // Originally pinned at the 2026-05-21 branch-cut. RE-PINNED 2026-05-27
+    // after the EntryPoint-guard fix (addOwnerBytes / removeOwnerAtIndex).
+    //
+    // DISCHARGE PENDING: these were re-captured from a LOCAL `forge build`
+    // (solc 0.8.28, via_ir, runs=200). The Halmos discharge for axiom A3.2
+    // has NOT been re-run against them (halmos unavailable in the dev env)
+    // — see AXIOM_STATUS.json, where A3.2 is marked `pending`. They must be
+    // re-captured + re-discharged in the canonical build env before the
+    // axiom is trusted: note the import-free SPHINCsC10Asm hash moved with
+    // ZERO source change between 05-21 and 05-27, so the `bytecode_hash =
+    // "ipfs"` metadata makes these non-reproducible across toolchains.
+    //
+    // Re-capture via `forge test --match-test test_codehash_pinned_or_print -vv`.
+    // Each update must be accompanied by re-running the discharge artifact:
     //   * PQ_SMART_WALLET_CODEHASH    → Halmos (HalmosValidateUserOp + HalmosExecute)
     //   * PQ_SMART_WALLET_FACTORY_CODEHASH → Certora (PQSmartWalletFactory.spec)
     //   * SPHINCS_C10_ASM_CODEHASH    → cross_validation/ Lean ↔ Rust ↔ Solidity
     bytes32 constant PQ_SMART_WALLET_CODEHASH =
-        0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f;
+        0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680;
     bytes32 constant PQ_MULTI_OWNABLE_CODEHASH = bytes32(0);  // embedded in PQSmartWallet; no independent deploy
     bytes32 constant PQ_SMART_WALLET_FACTORY_CODEHASH =
-        0xe40c9c3bdbacdfde6d98c30dee4437ab0019ec702b8868ad2294a53c052a2270;
+        0x604e4000bb7d3fef349d1f9b09e3f048c6baa7a37f10d1bdfebef9ce1ecf3e02;
     bytes32 constant SPHINCS_C10_ASM_CODEHASH =
-        0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9;
+        0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0;
 
     SPHINCsC10Asm internal sphincs;
     MockSPHINCSVerifier internal c10;

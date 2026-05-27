@@ -5,8 +5,13 @@
 #   - Z3 >= 4.13.0
 #
 # Pinned bytecode codehashes — see test/PinnedCodehashes.t.sol:
-#   - PQSmartWallet:    0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f
-#   - SPHINCsC10Asm:    0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9
+#   - PQSmartWallet:    0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680
+#   - SPHINCsC10Asm:    0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0
+#
+# RE-PINNED 2026-05-27 (EntryPoint-guard fix + clean rebuild). The Halmos
+# discharge has NOT been re-run against these hashes — A3.1/A3.2 are
+# `pending-rerun` in AXIOM_STATUS.json. Re-run the two contracts below
+# before relying on `verify_bytecode = true`.
 #
 # Discharges:
 #   - HalmosValidateUserOp.t.sol → solidityWallet_compiles_correctly (A3.2) for validate path

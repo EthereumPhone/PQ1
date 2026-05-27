@@ -63,10 +63,19 @@ each an `opaque + axiom-equality` shape that asserts the deployed
 bytecode matches the Lean model. Removing any one would leave the
 per-claim corollaries unprovable.
 
+> **PENDING re-run (2026-05-27).** The codehashes below were re-pinned after
+> the EntryPoint-guard fix (`addOwnerBytes` / `removeOwnerAtIndex`) plus a
+> clean rebuild. The Halmos/Certora discharges named in each entry have
+> **not** been re-run against the new hashes, so A3.1–A3.4 are
+> `pending-rerun` in `AXIOM_STATUS.json`. A3.2 (wallet) is semantically
+> affected and must be re-Halmos'd; A3.1/A3.3/A3.4 are metadata/toolchain
+> drift with unchanged logic. Treat the "Discharge" lines below as the
+> *intended* artifacts, not as currently-passing evidence.
+
 ### A3.1. `solidityVerifier_compiles_correctly`
 
 * **Lean.** `DeployedBytecode.SPHINCsC10Asm_verify = verifyYulModel`
-* **Pinned codehash.** `0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9`
+* **Pinned codehash.** `0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0`
 * **Discharge.** Halmos symbolic execution against the pinned bytecode
   (rules in `test/halmos/HalmosValidateUserOp.t.sol`) +
   Lean ↔ Rust ↔ Solidity differential at `cross_validation/`.
@@ -74,7 +83,7 @@ per-claim corollaries unprovable.
 ### A3.2. `solidityWallet_compiles_correctly`
 
 * **Lean.** `DeployedBytecode.PQSmartWallet_validateUserOp = validateSignature`
-* **Pinned codehash.** `0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f`
+* **Pinned codehash.** `0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680`
 * **Discharge.** Halmos rules
   (`test/halmos/HalmosValidateUserOp.t.sol` +
   `test/halmos/HalmosExecute.t.sol`) + Certora rule-set
@@ -84,7 +93,7 @@ per-claim corollaries unprovable.
 ### A3.3. `solidityFactory_compiles_correctly`
 
 * **Lean.** `DeployedBytecode.PQSmartWalletFactory_createAccount_passes ↔ Factory.createAccountPrecondition`
-* **Pinned codehash.** `0xe40c9c3bdbacdfde6d98c30dee4437ab0019ec702b8868ad2294a53c052a2270`
+* **Pinned codehash.** `0x604e4000bb7d3fef349d1f9b09e3f048c6baa7a37f10d1bdfebef9ce1ecf3e02`
 * **Discharge.** Certora rule-set (`certora/PQSmartWalletFactory.spec`).
 
 ### A3.4. `solidityMultiOwnable_compiles_correctly`

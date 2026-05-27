@@ -25,7 +25,7 @@ overstated:
    of type `True` (`no_reset_path`, `userop_acceptance_implies_signed_or_break`).
 7. The Lean ↔ deployed-bytecode bridge is informal: `verifyYulModel` is a
    Lean function, not a model of the on-chain bytecode at the codehash
-   `0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9`.
+   `0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0`.
 8. `Bridge.EntryPoint.entrypoint_honest` is an axiom about the Lean
    `handleOp` definition, not the deployed EntryPoint v0.6 at
    `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789`.
@@ -292,7 +292,7 @@ The cryptographic core. Pure Yul, 0 storage, 0 external calls except
 `staticcall(0x02)`. Deliverable: a Kontrol claim
 `kevm[runtimeCode(SPHINCsC10Asm)](pkSeed, pkRoot, msg, sig) =
  lean_verifyYulModel_smt(pkSeed, pkRoot, msg, sig)` proved against
-the pinned runtime codehash `0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9`.
+the pinned runtime codehash `0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0`.
 
 Concrete steps:
 1. Install Kontrol; pin a Kontrol version in `flake.nix` /

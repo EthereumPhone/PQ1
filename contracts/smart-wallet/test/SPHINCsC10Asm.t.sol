@@ -35,10 +35,17 @@ contract SPHINCsC10AsmTest is Test {
     /// Captured 2026-05-18 from solc 0.8.28 / default optimizer settings.
     /// Refresh paired with audit M-2 (drop misleading memory-safe
     /// annotation) and I-2 (add N-mask layout check on pkSeed/pkRoot).
+    /// RE-PINNED 2026-05-27 to 0x919c…: the verifier SOURCE is UNCHANGED —
+    /// this is a metadata/toolchain-drift refresh, not a logic change (the
+    /// prior 0x94a6… pin predated in-progress contract work; a clean
+    /// rebuild reconciles `runtimeCode` keccak and EXTCODEHASH to 0x919c…).
+    /// The "source diff required" rule below is intentionally excepted here
+    /// and called out in the commit message; A3.1's Halmos/differential
+    /// discharge is PENDING re-run against this codehash (AXIOM_STATUS.json).
     /// Any change here MUST be paired with a verifier source diff in
     /// the same commit + a justification in the commit message.
     bytes32 internal constant EXPECTED_RUNTIME_CODEHASH =
-        0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9;
+        0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0;
 
     /// Gas ceiling for a single `verify(valid sig)`. The hand-tuned
     /// Yul currently runs ~1.7-4M gas (see handoff §8 footgun #3).

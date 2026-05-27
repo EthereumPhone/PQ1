@@ -12,8 +12,8 @@
     "SphincsCVerify.Wallet.Invariants.factory_requires_bootstrap_sig",
     "SphincsCVerify.Wallet.Invariants.eip1271_forbids_bootstrap"
   ],
-  "headline_status": "kernel-checked-with-bridge-axioms",
-  "headline_status_explanation": "After the Phase 0 / Tier-1.9 refactor (2026-05-21), A1 and the four per-contract A3 sub-axioms (solidityVerifier / solidityWallet / solidityFactory / solidityMultiOwnable _compiles_correctly) are now `opaque + axiom-equality` shapes carrying real propositional content. Removing any one of them would leave the per-claim corollaries unprovable. A2 (entrypoint_honest) and A4 (evm_bytecode_executes_correctly) remain as cited-TCB items per user decision. A5 (EUF-CMA + 3 hardness shape axioms) remain cited-TCB per Barbosa et al. 2024. The Lean kernel built-ins (propext, Classical.choice, Quot.sound) are kernel-TCB. All three security claims are mathematically proven at the Lean kernel level, modulo the cited TCB axioms.",
+  "headline_status": "bridge-discharge-pending-rerun",
+  "headline_status_explanation": "After the Phase 0 / Tier-1.9 refactor (2026-05-21), A1 and the four per-contract A3 sub-axioms (solidityVerifier / solidityWallet / solidityFactory / solidityMultiOwnable _compiles_correctly) are now `opaque + axiom-equality` shapes carrying real propositional content. Removing any one of them would leave the per-claim corollaries unprovable. A2 (entrypoint_honest) and A4 (evm_bytecode_executes_correctly) remain as cited-TCB items per user decision. A5 (EUF-CMA + 3 hardness shape axioms) remain cited-TCB per Barbosa et al. 2024. The Lean kernel built-ins (propext, Classical.choice, Quot.sound) are kernel-TCB. All three security claims are mathematically proven at the Lean kernel level, modulo the cited TCB axioms. UPDATE 2026-05-27: the four A3 bridge discharges are PENDING re-run — the EntryPoint-guard fix (addOwnerBytes/removeOwnerAtIndex) plus prior in-progress contract work re-pinned every deployed codehash (see test/PinnedCodehashes.t.sol). A3.2 (wallet) is semantically affected and MUST be re-Halmos'd; A3.1/A3.3/A3.4 moved via bytecode metadata/toolchain drift with unchanged logic. Until re-discharged against the new codehashes, the per-claim corollaries citing A3.* are not bytecode-backed; the Lean kernel proofs themselves are unchanged.",
 
   "discharge_states": {
     "placeholder": "Lean type reduces to `True` — axiom has no semantic content. Hostile removal would not break the proof.",
@@ -81,13 +81,13 @@
       "name": "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly",
       "description": "Deployed SPHINCsC10Asm.verify equals the Lean Yul model `verifyYulModel`.",
       "lean_type": "∀ pkSeed pkRoot message sig, DeployedBytecode.SPHINCsC10Asm_verify ... = verifyYulModel ...",
-      "status": "discharged-bytecode",
-      "status_detail": "Post-Phase 0 refactor: now opaque-equality shape (load-bearing). Discharged by Halmos symbolic execution against pinned bytecode + Lean ↔ Rust ↔ Solidity differential test.",
+      "status": "pending-rerun",
+      "status_detail": "Post-Phase 0 refactor: opaque-equality shape (load-bearing). Was discharged by Halmos + Lean ↔ Rust ↔ Solidity differential against the prior pinned bytecode. PENDING re-run 2026-05-27: verifier source is unchanged, but the pinned codehash moved to 0x919cf8ef…89c0 (bytecode_hash=ipfs metadata/toolchain drift predating in-progress contract work); re-discharge expected to pass but NOT executed (halmos unavailable in dev env).",
       "discharge_artifacts": [
         {
           "type": "halmos-session",
           "path": "contracts/smart-wallet/test/halmos/HalmosValidateUserOp.t.sol",
-          "pinned_codehash": "0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9",
+          "pinned_codehash": "0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0",
           "tool": "halmos >= 0.2.0 / Z3 >= 4.13.0"
         },
         {
@@ -103,18 +103,18 @@
       "name": "SphincsCVerify.Bridge.solidityWallet_compiles_correctly",
       "description": "Deployed PQSmartWallet.validateUserOp equals the Lean validateSignature model.",
       "lean_type": "∀ s op ep cid, DeployedBytecode.PQSmartWallet_validateUserOp ... = validateSignature ... DeployedBytecode.SPHINCsC10Asm_verify",
-      "status": "discharged-bytecode",
-      "status_detail": "New Phase 0 sub-axiom. Discharged by Halmos against pinned PQSmartWallet codehash.",
+      "status": "pending-rerun",
+      "status_detail": "New Phase 0 sub-axiom. PENDING re-run 2026-05-27: the EntryPoint-guard fix changed addOwnerBytes / removeOwnerAtIndex authorization (msg.sender == _entryPoint, not address(this)), so the Halmos sessions MUST be re-run against the new PQSmartWallet codehash 0xdc2aa6c4…3680. Not executed (halmos unavailable in dev env).",
       "discharge_artifacts": [
         {
           "type": "halmos-session",
           "path": "contracts/smart-wallet/test/halmos/HalmosValidateUserOp.t.sol",
-          "pinned_codehash": "0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f"
+          "pinned_codehash": "0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680"
         },
         {
           "type": "halmos-session",
           "path": "contracts/smart-wallet/test/halmos/HalmosExecute.t.sol",
-          "pinned_codehash": "0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f"
+          "pinned_codehash": "0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680"
         },
         {
           "type": "certora-rule-set",
@@ -139,14 +139,14 @@
       "name": "SphincsCVerify.Bridge.solidityFactory_compiles_correctly",
       "description": "Deployed PQSmartWalletFactory.createAccount equals the Lean createAccountPrecondition model.",
       "lean_type": "∀ ms mr s0s s0r chainId factorySig, DeployedBytecode.PQSmartWalletFactory_createAccount_passes ... = true ↔ Factory.createAccountPrecondition ... DeployedBytecode.SPHINCsC10Asm_verify",
-      "status": "discharged-bytecode",
-      "status_detail": "New Phase 0 sub-axiom. Discharged by Certora rule-set against pinned PQSmartWalletFactory codehash.",
+      "status": "pending-rerun",
+      "status_detail": "New Phase 0 sub-axiom. PENDING re-run 2026-05-27: factory logic unchanged, but its codehash moved to 0x604e4000…3e02 (it imports the edited PQSmartWallet, so its metadata changed); Certora not re-run against the new codehash.",
       "discharge_artifacts": [
         {
           "type": "certora-rule-set",
           "path": "contracts/smart-wallet/certora/PQSmartWalletFactory.spec",
           "conf": "contracts/smart-wallet/certora/confs/PQSmartWalletFactory.conf",
-          "pinned_codehash": "0xe40c9c3bdbacdfde6d98c30dee4437ab0019ec702b8868ad2294a53c052a2270"
+          "pinned_codehash": "0x604e4000bb7d3fef349d1f9b09e3f048c6baa7a37f10d1bdfebef9ce1ecf3e02"
         }
       ],
       "citation": null
@@ -156,14 +156,14 @@
       "name": "SphincsCVerify.Bridge.solidityMultiOwnable_compiles_correctly",
       "description": "Deployed PQMultiOwnable.ownerAtIndex equals the Lean Storage.ownerAtIndex model.",
       "lean_type": "∀ s i, DeployedBytecode.PQMultiOwnable_ownerAtIndex s i = s.ownerAtIndex i",
-      "status": "discharged-bytecode",
-      "status_detail": "New Phase 0 sub-axiom. Discharged by Certora rule-set (PQMultiOwnable is abstract; embedded in PQSmartWallet's deployed bytecode).",
+      "status": "pending-rerun",
+      "status_detail": "New Phase 0 sub-axiom. Was discharged by Certora rule-set (PQMultiOwnable is abstract; embedded in PQSmartWallet's deployed bytecode). PENDING re-run 2026-05-27: the embedding PQSmartWallet bytecode changed to 0xdc2aa6c4…3680; Certora not re-run.",
       "discharge_artifacts": [
         {
           "type": "certora-rule-set",
           "path": "contracts/smart-wallet/certora/PQMultiOwnable.spec",
           "conf": "contracts/smart-wallet/certora/confs/PQMultiOwnable.conf",
-          "pinned_codehash": "0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f"
+          "pinned_codehash": "0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680"
         },
         {
           "type": "foundry-parity",

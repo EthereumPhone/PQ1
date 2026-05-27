@@ -11,12 +11,19 @@ by `contracts/smart-wallet/test/PinnedCodehashes.t.sol`, which
 asserts that the deployed `address(<contract>).codehash` equals the
 pinned value below. Any drift fails CI.
 
-## Pinned values (2026-05-21 branch-cut)
+## Pinned values (re-pinned 2026-05-27)
+
+> **Re-pinned 2026-05-27** after the EntryPoint-guard fix (`addOwnerBytes` /
+> `removeOwnerAtIndex`) plus a clean rebuild that reconciled prior
+> in-progress drift. The A3 bridge discharges (Halmos for the wallet/verifier,
+> Certora for the factory) have **NOT** been re-run against these hashes yet —
+> A3.1–A3.4 are marked `pending-rerun` in `AXIOM_STATUS.json`. Re-run the
+> discharge artifacts before treating these pins as proof-backed.
 
 ```
-PQSmartWallet         0x4201b2b6933ca9ab4222e25a22616feb61947e03f96e51c8e078a121fc3d006f
-PQSmartWalletFactory  0xe40c9c3bdbacdfde6d98c30dee4437ab0019ec702b8868ad2294a53c052a2270
-SPHINCsC10Asm         0x94a6a6a4d4905760b264099eb8de6d9a58b1d97992b93ca9b66e7361aaa350e9
+PQSmartWallet         0xdc2aa6c4db5cc6ebec277d97ef6adada7c448d09a76749ddfa94edd4879a3680
+PQSmartWalletFactory  0x604e4000bb7d3fef349d1f9b09e3f048c6baa7a37f10d1bdfebef9ce1ecf3e02
+SPHINCsC10Asm         0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0
 PQMultiOwnable        (embedded in PQSmartWallet; no independent deploy)
 ```
 
