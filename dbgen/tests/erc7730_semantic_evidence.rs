@@ -50,6 +50,10 @@ fn uniswap_evidence_root() -> PathBuf {
     workspace_root().join("tests/erc7730-semantic-evidence/uniswap-router02-single-hop")
 }
 
+fn quickswap_evidence_root() -> PathBuf {
+    workspace_root().join("tests/erc7730-semantic-evidence/quickswap-router02-remove-liquidity")
+}
+
 fn weth9_evidence_root() -> PathBuf {
     workspace_root().join("tests/erc7730-semantic-evidence/weth9-deposit")
 }
@@ -4801,5 +4805,421 @@ fn allowance_sources_fixed_deployments_descriptors_and_ir_agree() {
             );
             assert_eq!(params.message, message, "message for {signature}");
         }
+    }
+}
+
+#[test]
+fn quickswap_router02_evidence_binds_static_remove_liquidity_admission() {
+    let root = workspace_root();
+    let evidence = quickswap_evidence_root();
+    let manifest = read_json(&evidence.join("manifest.json"));
+
+    assert_eq!(manifest["schema_version"].as_u64(), Some(1));
+    assert_eq!(
+        manifest["policy"]["outcome"].as_str(),
+        Some("constrained_admission")
+    );
+
+    let deployment = &manifest["deployment"];
+    assert_eq!(deployment["chain_id"].as_u64(), Some(137));
+    assert_eq!(deployment["block_number"].as_u64(), Some(4_931_900));
+    assert_eq!(deployment["deployer_nonce"].as_u64(), Some(7));
+    assert_eq!(deployment["receipt_status"].as_u64(), Some(1));
+    assert_eq!(deployment["creation_input_bytes"].as_u64(), Some(22_398));
+    assert!(required_str(deployment, "receipt_contract_address")
+        .eq_ignore_ascii_case(required_str(deployment, "address")));
+    let contract: [u8; 20] = decode_hex_text(required_str(deployment, "address"))
+        .try_into()
+        .expect("QuickSwap address width");
+
+    let admitted_specs = manifest["policy"]["admitted_routes"]
+        .as_array()
+        .expect("admitted route array");
+    assert_eq!(admitted_specs.len(), 3);
+    let mut admitted = BTreeMap::<String, [u8; 4]>::new();
+    for route in admitted_specs {
+        let signature = required_str(route, "canonical_signature");
+        let selector: [u8; 4] = decode_hex_text(required_str(route, "selector"))
+            .try_into()
+            .expect("QuickSwap selector width");
+        assert_eq!(&keccak256(signature.as_bytes())[..4], selector.as_slice());
+        admitted.insert(signature.to_owned(), selector);
+    }
+    assert_eq!(
+        admitted,
+        BTreeMap::from([
+            (
+                "removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)"
+                    .to_owned(),
+                [0xba, 0xa2, 0xab, 0xde],
+            ),
+            (
+                "removeLiquidityETH(address,uint256,uint256,uint256,address,uint256)"
+                    .to_owned(),
+                [0x02, 0x75, 0x1c, 0xec],
+            ),
+            (
+                "removeLiquidityETHSupportingFeeOnTransferTokens(address,uint256,uint256,uint256,address,uint256)"
+                    .to_owned(),
+                [0xaf, 0x29, 0x79, 0xeb],
+            ),
+        ])
+    );
+
+    let runtime_spec = &manifest["runtime"];
+    let runtime_file = evidence.join(required_str(runtime_spec, "file"));
+    let runtime_text = fs::read(&runtime_file).expect("read QuickSwap runtime text");
+    assert_eq!(
+        sha256_hex(&runtime_text),
+        required_str(runtime_spec, "file_sha256")
+    );
+    let runtime = read_hex(&runtime_file);
+    assert_eq!(
+        runtime.len() as u64,
+        runtime_spec["bytes"].as_u64().unwrap()
+    );
+    assert_eq!(sha256_hex(&runtime), required_str(runtime_spec, "sha256"));
+    assert_eq!(
+        keccak_hex(&runtime),
+        required_str(runtime_spec, "keccak256")
+    );
+    assert!(!runtime.starts_with(&[0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73]));
+    for (signature, selector) in &admitted {
+        assert!(
+            runtime.windows(4).any(|window| window == selector),
+            "deployed runtime lost {signature}"
+        );
+    }
+    for key in [
+        "eip1967_implementation_slot_value",
+        "eip1967_admin_slot_value",
+        "eip1967_beacon_slot_value",
+    ] {
+        assert_eq!(decode_hex_text(required_str(runtime_spec, key)), [0u8; 32]);
+    }
+
+    let evidence_block = &manifest["evidence_block"];
+    assert_eq!(evidence_block["number"].as_u64(), Some(90_561_024));
+    let rpc_path = evidence.join(required_str(evidence_block, "rpc_receipt_file"));
+    let rpc_bytes = fs::read(&rpc_path).expect("read QuickSwap RPC receipt");
+    assert_eq!(
+        sha256_hex(&rpc_bytes),
+        required_str(evidence_block, "rpc_receipt_sha256")
+    );
+    let rpc: Value = serde_json::from_slice(&rpc_bytes).expect("parse QuickSwap RPC receipt");
+    let responses = rpc["responses"]
+        .as_array()
+        .expect("dual RPC response array");
+    assert_eq!(responses.len(), 2);
+    for response in responses {
+        assert_eq!(response["fixed_block"]["hash"], evidence_block["hash"]);
+        assert_eq!(
+            response["fixed_block"]["stateRoot"],
+            evidence_block["state_root"]
+        );
+        assert_eq!(response["code"]["bytes"], runtime_spec["bytes"]);
+        assert_eq!(response["code"]["sha256"], runtime_spec["sha256"]);
+        assert_eq!(response["code"]["keccak256"], runtime_spec["keccak256"]);
+        for key in ["eip1967_implementation", "eip1967_admin", "eip1967_beacon"] {
+            assert_eq!(
+                decode_hex_text(required_str(&response["storage"], key)),
+                [0u8; 32]
+            );
+        }
+        assert_eq!(
+            decode_abi_word_address(required_str(&response["calls"], "factory")),
+            "0x5757371414417b8c6caad45baef941abc7d3ab32"
+        );
+        assert_eq!(
+            decode_abi_word_address(required_str(&response["calls"], "WETH")),
+            "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270"
+        );
+        assert_eq!(
+            response["deployment_transaction"]["hash"],
+            deployment["transaction_hash"]
+        );
+        assert_eq!(
+            response["deployment_receipt"]["contractAddress"],
+            deployment["receipt_contract_address"]
+        );
+        assert_eq!(
+            response["deployment_block"]["hash"],
+            deployment["block_hash"]
+        );
+        assert_eq!(
+            response["deployment_block"]["stateRoot"],
+            deployment["state_root"]
+        );
+    }
+
+    let source_spec = &manifest["verified_source"];
+    assert_eq!(
+        source_spec["upstream_commit"].as_str(),
+        Some("69617118cda519dab608898d62aaa79877a61004")
+    );
+    assert_eq!(
+        source_spec["upstream_tree"].as_str(),
+        Some("c51c6054bdf6ebb391a57212882587e58ae6a374")
+    );
+    assert_eq!(
+        source_spec["sourcify_creation_match"].as_str(),
+        Some("match")
+    );
+    assert_eq!(
+        source_spec["sourcify_runtime_match"].as_str(),
+        Some("match")
+    );
+    assert_eq!(
+        source_spec["compiler"].as_str(),
+        Some("0.6.6+commit.6c089d02")
+    );
+    assert_eq!(source_spec["evm_version"].as_str(), Some("istanbul"));
+    assert_eq!(source_spec["optimizer_runs"].as_u64(), Some(999_999));
+    let mut archived = BTreeMap::<String, String>::new();
+    for file in source_spec["files"].as_array().expect("source file array") {
+        let archive_file = required_str(file, "archive_file");
+        let bytes = fs::read(evidence.join(archive_file)).expect("read QuickSwap source input");
+        assert_eq!(bytes.len() as u64, file["bytes"].as_u64().unwrap());
+        assert_eq!(sha256_hex(&bytes), required_str(file, "sha256"));
+        archived.insert(
+            archive_file.to_owned(),
+            String::from_utf8(bytes).expect("QuickSwap source input is UTF-8"),
+        );
+    }
+    let waffle: Value = serde_json::from_str(&archived["build/.waffle.json"])
+        .expect("parse QuickSwap waffle config");
+    assert_eq!(
+        waffle["compilerOptions"]["evmVersion"].as_str(),
+        Some("istanbul")
+    );
+    assert_eq!(
+        waffle["compilerOptions"]["optimizer"]["runs"].as_u64(),
+        Some(999_999)
+    );
+    let package: Value = serde_json::from_str(&archived["build/package.json"])
+        .expect("parse QuickSwap package manifest");
+    assert_eq!(package["devDependencies"]["solc"].as_str(), Some("0.6.6"));
+    assert_eq!(
+        package["dependencies"]["@uniswap/v2-core"].as_str(),
+        Some("1.0.0")
+    );
+    assert_eq!(
+        package["dependencies"]["@uniswap/lib"].as_str(),
+        Some("1.1.1")
+    );
+
+    let router = &archived["source/UniswapV2Router02.sol"];
+    let remove = normalized_solidity_function(router, "function removeLiquidity(");
+    assert_fragments_in_order(
+        &remove,
+        &[
+            "ensure(deadline)",
+            "UniswapV2Library.pairFor(factory, tokenA, tokenB)",
+            "transferFrom(msg.sender, pair, liquidity)",
+            "burn(to)",
+            "tokenA == token0 ? (amount0, amount1) : (amount1, amount0)",
+            "amountA >= amountAMin",
+            "amountB >= amountBMin",
+        ],
+    );
+    let remove_native = normalized_solidity_function(router, "function removeLiquidityETH(");
+    assert_fragments_in_order(
+        &remove_native,
+        &[
+            "removeLiquidity(",
+            "token, WETH, liquidity, amountTokenMin, amountETHMin, address(this), deadline",
+            "safeTransfer(token, to, amountToken)",
+            "withdraw(amountETH)",
+            "safeTransferETH(to, amountETH)",
+        ],
+    );
+    let supporting = normalized_solidity_function(
+        router,
+        "function removeLiquidityETHSupportingFeeOnTransferTokens(",
+    );
+    assert_fragments_in_order(
+        &supporting,
+        &[
+            "removeLiquidity(",
+            "token, WETH, liquidity, amountTokenMin, amountETHMin, address(this), deadline",
+            "safeTransfer(token, to, IERC20(token).balanceOf(address(this)))",
+            "withdraw(amountETH)",
+            "safeTransferETH(to, amountETH)",
+        ],
+    );
+    let library = normalized_whitespace(&archived["source/UniswapV2Library.sol"]);
+    assert_fragments_in_order(
+        &library,
+        &[
+            "function pairFor(address factory, address tokenA, address tokenB)",
+            "sortTokens(tokenA, tokenB)",
+            "hex'ff'",
+            "factory",
+            "keccak256(abi.encodePacked(token0, token1))",
+        ],
+    );
+
+    let abi_spec = &manifest["abi"];
+    let abi_bytes = fs::read(evidence.join(required_str(abi_spec, "archive_file")))
+        .expect("read QuickSwap route ABI");
+    assert_eq!(
+        sha256_hex(&abi_bytes),
+        required_str(abi_spec, "archive_file_sha256")
+    );
+    let abi: Value = serde_json::from_slice(&abi_bytes).expect("parse QuickSwap route ABI");
+    let abi_entries = abi.as_array().expect("QuickSwap route ABI array");
+    assert_eq!(abi_entries.len(), 3);
+    for entry in abi_entries {
+        assert_eq!(entry["stateMutability"].as_str(), Some("nonpayable"));
+        let types = entry["inputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|input| input["type"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        let signature = format!("{}({})", entry["name"].as_str().unwrap(), types.join(","));
+        assert!(
+            admitted.contains_key(&signature),
+            "unexpected ABI route {signature}"
+        );
+    }
+
+    let descriptor_spec = &manifest["descriptor"];
+    let curated = fs::read(root.join(required_str(descriptor_spec, "curated_file")))
+        .expect("read curated QuickSwap descriptor");
+    assert_eq!(
+        sha256_hex(&curated),
+        required_str(descriptor_spec, "sha256")
+    );
+    assert_eq!(
+        curated,
+        fs::read(root.join(required_str(descriptor_spec, "vendored_file")))
+            .expect("read installed QuickSwap descriptor")
+    );
+    let descriptor: Value = serde_json::from_slice(&curated).expect("parse QuickSwap descriptor");
+    assert!(descriptor["context"]["contract"]["deployments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|candidate| candidate["chainId"].as_u64() == Some(137)
+            && candidate["address"].as_str().is_some_and(
+                |address| address.eq_ignore_ascii_case(required_str(deployment, "address"))
+            )));
+    for route in admitted_specs {
+        let fields = descriptor["display"]["formats"][required_str(route, "descriptor_format_key")]
+            ["fields"]
+            .as_array()
+            .expect("QuickSwap descriptor fields");
+        assert_eq!(fields[0]["path"].as_str(), Some("liquidity"));
+        assert_eq!(fields[0]["label"].as_str(), Some("LP token amount"));
+        assert_eq!(fields[0]["format"].as_str(), Some("raw"));
+        assert_eq!(fields[0]["visible"].as_str(), Some("always"));
+    }
+
+    let registry_root = root.join("secure/data/erc7730-registry");
+    let erc20 = dbgen::erc20::build_db(&root.join("secure/data/erc20.json"))
+        .expect("build production ERC20 capabilities");
+    let (registry, _) = build_db_tolerant_with_erc20_capabilities(
+        &registry_root.join("registry"),
+        &root.join("secure/data/erc7730/policy.toml"),
+        Some(&registry_root),
+        &erc20.capabilities,
+    )
+    .expect("build production ERC-7730 registry");
+    let entries: Vec<_> = registry
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry.source.file_name().and_then(|name| name.to_str())
+                == Some("calldata-QuickSwap.json")
+        })
+        .collect();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].chain_id, 137);
+    assert_eq!(entries[0].contract, contract);
+    let ir = Erc7730Ir::parse(&entries[0].ir_bytes).expect("parse QuickSwap IR");
+    let admitted_ir: BTreeSet<_> = ir
+        .format_iter()
+        .map(|format| format.expect("QuickSwap format parses").selector)
+        .collect();
+    let expected_ir = BTreeSet::from([
+        keccak256(b"addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)")[..4]
+            .try_into()
+            .unwrap(),
+        keccak256(b"addLiquidityETH(address,uint256,uint256,uint256,address,uint256)")[..4]
+            .try_into()
+            .unwrap(),
+        admitted["removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)"],
+        admitted["removeLiquidityETH(address,uint256,uint256,uint256,address,uint256)"],
+        admitted["removeLiquidityETHSupportingFeeOnTransferTokens(address,uint256,uint256,uint256,address,uint256)"],
+    ]);
+    assert_eq!(
+        admitted_ir, expected_ir,
+        "only five static QuickSwap routes are admitted"
+    );
+
+    for route in admitted_specs {
+        let selector: [u8; 4] = decode_hex_text(required_str(route, "selector"))
+            .try_into()
+            .unwrap();
+        let format = ir
+            .find_format_by_selector(&selector)
+            .expect("QuickSwap format table parses")
+            .expect("admitted QuickSwap route exists");
+        assert_eq!(
+            format.static_head_words as u64,
+            route["head_words"].as_u64().unwrap()
+        );
+        let fields: Vec<_> = format
+            .fields()
+            .map(|field| field.expect("QuickSwap field parses"))
+            .collect();
+        assert_eq!(fields.len(), 5);
+        let liquidity_word = route["liquidity_word"].as_u64().unwrap() as u8;
+        assert_eq!(fields[0].label, b"LP token amount");
+        assert_eq!(FormatOp::try_from(fields[0].format_op), Ok(FormatOp::Raw));
+        assert_eq!(
+            ir.path_bytes(fields[0].path_off).unwrap(),
+            [
+                PathOp::RootStructured as u8,
+                PathOp::FieldIdx as u8,
+                0,
+                liquidity_word,
+            ]
+        );
+        let liquidity = parse_params(&ir, fields[0].param_off).expect("liquidity params");
+        assert_eq!(liquidity.visibility, Visibility::Always);
+        assert_eq!(liquidity.terminal_kind, Some(TerminalKind::Unsigned));
+        assert_eq!(liquidity.integer_width_bytes, Some(32));
+        assert!(liquidity.token.is_none());
+        assert!(liquidity.token_path.is_none());
+        assert!(registry.known_calls.contains(&(137, contract, selector)));
+    }
+
+    for route in manifest["policy"]["excluded_routes"]
+        .as_array()
+        .expect("excluded route array")
+    {
+        let signature = required_str(route, "canonical_signature");
+        let selector: [u8; 4] = decode_hex_text(required_str(route, "selector"))
+            .try_into()
+            .expect("excluded selector width");
+        assert_eq!(&keccak256(signature.as_bytes())[..4], selector.as_slice());
+        assert!(
+            ir.find_format_by_selector(&selector)
+                .expect("QuickSwap format table parses")
+                .is_none(),
+            "excluded QuickSwap route entered IR: {signature}"
+        );
+        assert!(
+            registry.known_calls.contains(&(137, contract, selector)),
+            "excluded QuickSwap route lost exact known-call refusal: {signature}"
+        );
+        assert!(pqsigner_erc7730::known_calls::may_contain(
+            &registry.known_calls_bloom,
+            137,
+            &contract,
+            &selector,
+        ));
     }
 }

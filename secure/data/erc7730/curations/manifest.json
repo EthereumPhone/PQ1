@@ -25,8 +25,8 @@
   "curated_corpus": {
     "domain": "pqsigner/erc7730-vendor-corpus-v1",
     "files": 387,
-    "bytes": 781582,
-    "sha256": "beee93154b6d32437d7b34a5324e7dbc55ee8abd64a640afa752a855b92b2a87"
+    "bytes": 782246,
+    "sha256": "34d62a5378c3ca75c070bb1b1d2a3d6febd07b2a017930877aca13c8dbdabdef"
   },
   "policy": {
     "path": "secure/data/erc7730/policy.toml",
@@ -94,8 +94,8 @@
       "path": "dbgen",
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 15,
-      "bytes": 1310243,
-      "sha256": "ec1959188b33f594bd8ff9cc02b009fbd407fe15d606c947e2cb2aed82e8dc08"
+      "bytes": 1326939,
+      "sha256": "92c751414065c24f6f8342b4600e58dd207066555b8036971d573e8aad52d90f"
     },
     {
       "path": "pqsigner-erc7730",
@@ -144,7 +144,7 @@
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 5,
       "bytes": 269876,
-      "sha256": "dc4f462f62680b90e19fde495f7d317785ec00980117c257e2a0449574ac0197"
+      "sha256": "6ab5d9c2bdbc50ea18f7e4cade1103cea881c56406f0e2c21e79c7c6e34d5385"
     }
   ],
   "capability_inputs": [
@@ -293,6 +293,13 @@
       "upstream_sha256": "64be6591af3a86287c7478728ff4d81cfabc94ecf85435022230f6ff50755b5e",
       "replacement_bytes": 2504,
       "replacement_sha256": "ee8b405e19674c61429188d0d5bf2a34273d0d0eabac1b8e8da1982019c25524"
+    },
+    {
+      "path": "registry/quickswap/calldata-QuickSwap.json",
+      "upstream_bytes": 15749,
+      "upstream_sha256": "19e2481f20414ae9b6669050c9740f919ca3896713693df7b50e60dba685d15f",
+      "replacement_bytes": 16413,
+      "replacement_sha256": "87b1a00b3ad310315ef62e954c555d538abc8a093cb362828560906ff1210320"
     },
     {
       "path": "registry/serenita/calldata-EthVault.json",

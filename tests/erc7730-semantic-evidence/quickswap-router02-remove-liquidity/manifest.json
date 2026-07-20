@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "scope": "QuickSwap V2 Router02 static remove-liquidity semantic evidence for PQ1 constrained ERC-7730 admission",
+  "captured_at_utc": "2026-07-20T11:24:00Z",
+  "policy": {
+    "outcome": "constrained_admission",
+    "mechanism": "PQ1 admits only three all-static non-permit remove-liquidity routes. The exact signed LP-token quantity is shown as an unscaled raw uint256 because the pair address and LP-token decimals are not signed. Both minimum outputs, all token identities, the beneficiary, and the deadline remain visible. Permit-bearing and dynamic-path routes remain exact known-call hard refusals.",
+    "admitted_routes": [
+      {
+        "canonical_signature": "removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)",
+        "selector": "0xbaa2abde",
+        "descriptor_format_key": "removeLiquidity(address tokenA, address tokenB, uint256 liquidity, uint256 amountAMin, uint256 amountBMin, address to, uint256 deadline)",
+        "head_words": 7,
+        "liquidity_word": 2
+      },
+      {
+        "canonical_signature": "removeLiquidityETH(address,uint256,uint256,uint256,address,uint256)",
+        "selector": "0x02751cec",
+        "descriptor_format_key": "removeLiquidityETH(address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline)",
+        "head_words": 6,
+        "liquidity_word": 1
+      },
+      {
+        "canonical_signature": "removeLiquidityETHSupportingFeeOnTransferTokens(address,uint256,uint256,uint256,address,uint256)",
+        "selector": "0xaf2979eb",
+        "descriptor_format_key": "removeLiquidityETHSupportingFeeOnTransferTokens(address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline)",
+        "head_words": 6,
+        "liquidity_word": 1
+      }
+    ],
+    "excluded_routes": [
+      { "canonical_signature": "removeLiquidityWithPermit(address,address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)", "selector": "0x2195995c", "reason": "signature-bearing permit authority remains outside this slice" },
+      { "canonical_signature": "removeLiquidityETHWithPermit(address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)", "selector": "0xded9382a", "reason": "signature-bearing permit authority remains outside this slice" },
+      { "canonical_signature": "removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)", "selector": "0x5b0d5984", "reason": "signature-bearing permit authority remains outside this slice" },
+      { "canonical_signature": "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)", "selector": "0x38ed1739", "reason": "the complete dynamic path is not rendered" },
+      { "canonical_signature": "swapExactTokensForETH(uint256,uint256,address[],address,uint256)", "selector": "0x18cbafe5", "reason": "the complete dynamic path is not rendered" },
+      { "canonical_signature": "swapExactETHForTokens(uint256,address[],address,uint256)", "selector": "0x7ff36ab5", "reason": "the complete dynamic path is not rendered" },
+      { "canonical_signature": "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)", "selector": "0x8803dbee", "reason": "the complete dynamic path is not rendered" },
+      { "canonical_signature": "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)", "selector": "0x5c11d795", "reason": "the complete dynamic path is not rendered" },
+      { "canonical_signature": "swapTokensForExactETH(uint256,uint256,address[],address,uint256)", "selector": "0x4a25d94a", "reason": "the complete dynamic path is not rendered" },
+      { "canonical_signature": "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)", "selector": "0xb6f9de95", "reason": "the complete dynamic path is not rendered" }
+    ]
+  },
+  "deployment": {
+    "chain_id": 137,
+    "address": "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff",
+    "official_address_document": "https://docs.quickswap.exchange/overview/contracts-and-addresses",
+    "transaction_hash": "0x74709bbbb5a2d5f044af0b22336e8f649724f3a7b5322d71dda71c7a8e131e26",
+    "block_number": 4931900,
+    "block_number_hex": "0x4b413c",
+    "block_hash": "0x8b1841bca2c55ecbe41bba70ea6b052c0127c3a4e4de273d344dc9add658e1db",
+    "state_root": "0x838c16dfbda733ee3df66d707fb070c9255d80d786c24c76f13192f2ec7050f8",
+    "timestamp": 1601031121,
+    "timestamp_utc": "2020-09-25T10:52:01Z",
+    "deployer": "0x476307dac3fd170166e007fcaa14f0a129721463",
+    "deployer_nonce": 7,
+    "receipt_status": 1,
+    "receipt_contract_address": "0xa5e0829caced8ffdd4de3c43696c57f7d7a678ff",
+    "creation_input_bytes": 22398
+  },
+  "evidence_block": {
+    "number": 90561024,
+    "number_hex": "0x565da00",
+    "hash": "0x22308ac27c35e0d800c9521260d491e8870966822f880ab7c479053327b19c86",
+    "state_root": "0xb817791cae78a36964bd5ef7d7ab9171a52abd139818c54e1eee32492210e42a",
+    "parent_hash": "0x2702ee84d0ee9685816198fc66c268f648d6cf69dde6ece191c6eb2ad4870217",
+    "timestamp": 1784546533,
+    "timestamp_utc": "2026-07-20T11:22:13Z",
+    "rpc_receipt_file": "rpc/fixed-block-receipt.json",
+    "rpc_receipt_sha256": "65d26241e50c398fdf2eac62d88ba6527ef55360adc9ccd69ad975d5e14490cf"
+  },
+  "runtime": {
+    "file": "runtime/UniswapV2Router02.polygon.hex",
+    "file_sha256": "0dddc4924526052d5ea66b273eb573cc0b99e583bbe3f657cd223c7a156aca87",
+    "bytes": 21943,
+    "sha256": "431401af6d05a344004411a430cc77bbb1c3b3c23407974f55901260544412a9",
+    "keccak256": "0xf1ce1bb9d7403281292baa290f5c56136484cc34395dc3666ad7f94c79f99b71",
+    "eip1967_implementation_slot_value": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "eip1967_admin_slot_value": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "eip1967_beacon_slot_value": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "proxy_claim": "The block-hash-bound runtime is not an EIP-1967 implementation/admin/beacon proxy or EIP-1167 minimal proxy; Sourcify also reports isProxy=false. This is not a universal claim about every exotic proxy convention."
+  },
+  "verified_source": {
+    "upstream_repository": "https://github.com/QuickSwap/QuickSwap-periphery",
+    "upstream_commit": "69617118cda519dab608898d62aaa79877a61004",
+    "upstream_tree": "c51c6054bdf6ebb391a57212882587e58ae6a374",
+    "sourcify_url": "https://sourcify.dev/server/v2/contract/137/0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff?fields=all",
+    "sourcify_match_id": "710780",
+    "sourcify_creation_match": "match",
+    "sourcify_runtime_match": "match",
+    "contract_name": "UniswapV2Router02",
+    "compiler": "0.6.6+commit.6c089d02",
+    "evm_version": "istanbul",
+    "optimizer_enabled": true,
+    "optimizer_runs": 999999,
+    "metadata_bytecode_hash": "ipfs",
+    "constructor_factory": "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32",
+    "constructor_wrapped_native": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+    "source_match_method": "The ten flattened verified-source sections match the pinned QuickSwap source and its locked @uniswap/v2-core 1.0.0 and @uniswap/lib 1.1.1 dependencies after CRLF/import normalization; the router section differs only by blank lines left after flattening imports. Sourcify records creation/runtime matches with constructor immutable and metadata normalization.",
+    "files": [
+      { "archive_file": "source/UniswapV2Router02.sol", "upstream_path": "contracts/UniswapV2Router02.sol", "bytes": 18466, "sha256": "acabe6d6c9c275aa5c27d8ed59b3d23d21616523071043e89eea7bca474babb8" },
+      { "archive_file": "source/UniswapV2Library.sol", "upstream_path": "contracts/libraries/UniswapV2Library.sol", "bytes": 4454, "sha256": "4f83e9334f833568fa47b36e9ceca435f6c2962760a0596b043c4e538d0fd9f2" },
+      { "archive_file": "build/.waffle.json", "upstream_path": ".waffle.json", "bytes": 466, "sha256": "caed25c32e151f5eb6d9b43b1851993fbf6acf47c8f3e671f30e33d46d20e6ed" },
+      { "archive_file": "build/package.json", "upstream_path": "package.json", "bytes": 1244, "sha256": "a3f397b7b5116e78ce72d9b0f62cc168fae1eaee3b4d3842f0279690f55c6280" }
+    ]
+  },
+  "abi": {
+    "archive_file": "abi/remove-liquidity.abi.json",
+    "archive_file_sha256": "07a43321cf876e592e57b0d55d023bca84b569e486595feec5fcea168d07b792",
+    "routes": 3
+  },
+  "descriptor": {
+    "curated_file": "secure/data/erc7730/curations/files/registry/quickswap/calldata-QuickSwap.json",
+    "vendored_file": "secure/data/erc7730-registry/registry/quickswap/calldata-QuickSwap.json",
+    "sha256": "87b1a00b3ad310315ef62e954c555d538abc8a093cb362828560906ff1210320"
+  },
+  "semantic_hazards": [
+    "LP-token decimals and the derived pair address are not signed calldata, so liquidity must remain an exact raw uint256 rather than a scaled tokenAmount.",
+    "The supporting-fee route checks the pair's gross token burn output against amountTokenMin; a transfer-tax token can deliver less net value to the beneficiary.",
+    "The supporting-fee route transfers the router's entire current balance of the selected token, so it can also sweep pre-existing router dust to the signed beneficiary.",
+    "The official repository was created after deployment; deployment identity rests on QuickSwap's official address list plus the deployment transaction and verified source, with the pinned repository commit serving as an exact source mirror."
+  ]
+}

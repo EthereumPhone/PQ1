@@ -6,7 +6,7 @@ The exact commit/tree and curation-manifest identity are machine-owned by the
 managed receipt below; they are not duplicated in hand-maintained prose. The
 checked-in corpus is **not byte-identical to that upstream revision**: the
 firmware-pinned `ERC7730_DESCRIPTORS_ROOT` is derived from the upstream baseline
-plus the 33 reviewed full-file replacements listed below, under
+plus the 34 reviewed full-file replacements listed below, under
 `secure/data/erc7730/policy.toml`. The strict manifest at
 `secure/data/erc7730/curations/manifest.json` binds the upstream repository,
 commit, tree, v2 schema, pristine/excluded/curated corpus receipts, policy,
@@ -42,13 +42,13 @@ tuple-set SHA-256, and Bloom bytes. Merkle-root or Bloom equality alone is not
 accepted as a faithfulness proof.
 
 <!-- BEGIN XTASK-VERIFIED ERC7730 REGISTRY RECEIPT -->
-Checked-in curated receipt, verified against a fresh build by `--check`: **437 leaves**, **366,010-byte**
+Checked-in curated receipt, verified against a fresh build by `--check`: **437 leaves**, **366,361-byte**
 compiled companion catalogue, root
-`450ed1985601eda4e95f04538f6c9edb921caf51e745ce541ca79a2cee3e45fb`,
+`99e4b2556f5a77d6e7d9b8f07b067e9b87a4187b3e472375e602877a2810bcfe`,
 **4,544** canonical known-call tuples, tuple-set SHA-256
 `593a8c77ccb5323cdd2fc2830af32916722dfc3fb570aa33ca94b7fcdf8dd781`.
 Curation manifest SHA-256
-`52c95c37a40c59e9b9f8b61985fcfafe239dd332ab568b6ffc4e7530323c06c0` binds upstream commit
+`87550052b604fdcf195460bbde65ab620af9f1830837e20a04f1568a85f36bdf` binds upstream commit
 `784c87c925e8438e7b4736b2af85a501f8d2a265` and tree
 `8da8dba78c3e581bbd06c15cc681d07e570dcfb1`.
 The Bloom contains 28,248 / 131,072 set bits, below the generator's 25% cap.
@@ -60,7 +60,7 @@ the machine-checked source/overlay identities live in the curation manifest,
 while the generated catalogue authority remains in the artifacts and managed
 receipt above.
 
-Current reviewed full-file replacements (33):
+Current reviewed full-file replacements (34):
 
 - `ercs/calldata-erc20-tokens.json`
 - `registry/aave/calldata-WrappedTokenGatewayV3.json`
@@ -82,6 +82,7 @@ Current reviewed full-file replacements (33):
 - `registry/p2p/calldata-NativeTokenVault.json`
 - `registry/p2p/calldata-P2pOrgUnlimitedEthDepositor.json`
 - `registry/p2p/calldata-P2pSsvProxyFactory.json`
+- `registry/quickswap/calldata-QuickSwap.json`
 - `registry/serenita/calldata-EthVault.json`
 - `registry/tether/calldata-usdt.json`
 - `registry/threshold/calldata-L1BitcoinDepositor-address.json`

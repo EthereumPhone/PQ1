@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-07-20T11:24:00Z",
+  "request_binding": {
+    "contract": "0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff",
+    "chain_id": 137,
+    "evidence_block_hash": "0x22308ac27c35e0d800c9521260d491e8870966822f880ab7c479053327b19c86",
+    "requireCanonical": true,
+    "note": "eth_getCode, eth_getStorageAt, and eth_call were EIP-1898 block-hash bound; deployment transaction/receipt and blocks were independently cross-checked."
+  },
+  "responses": [
+    {
+      "endpoint": "https://polygon.drpc.org",
+      "fixed_block": {
+        "number": "0x565da00",
+        "hash": "0x22308ac27c35e0d800c9521260d491e8870966822f880ab7c479053327b19c86",
+        "parentHash": "0x2702ee84d0ee9685816198fc66c268f648d6cf69dde6ece191c6eb2ad4870217",
+        "stateRoot": "0xb817791cae78a36964bd5ef7d7ab9171a52abd139818c54e1eee32492210e42a",
+        "timestamp": "0x6a5e04e5"
+      },
+      "code": {
+        "bytes": 21943,
+        "sha256": "431401af6d05a344004411a430cc77bbb1c3b3c23407974f55901260544412a9",
+        "keccak256": "0xf1ce1bb9d7403281292baa290f5c56136484cc34395dc3666ad7f94c79f99b71",
+        "archived_file": "runtime/UniswapV2Router02.polygon.hex"
+      },
+      "storage": {
+        "eip1967_implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "eip1967_admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "eip1967_beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "calls": {
+        "factory": "0x0000000000000000000000005757371414417b8c6caad45baef941abc7d3ab32",
+        "WETH": "0x0000000000000000000000000d500b1d8e8ef31e21c99d1db9a6444d3adf1270"
+      },
+      "deployment_transaction": {
+        "hash": "0x74709bbbb5a2d5f044af0b22336e8f649724f3a7b5322d71dda71c7a8e131e26",
+        "blockNumber": "0x4b413c",
+        "blockHash": "0x8b1841bca2c55ecbe41bba70ea6b052c0127c3a4e4de273d344dc9add658e1db",
+        "from": "0x476307dac3fd170166e007fcaa14f0a129721463",
+        "nonce": "0x7",
+        "transactionIndex": "0x0",
+        "creationInputBytes": 22398
+      },
+      "deployment_receipt": {
+        "status": "0x1",
+        "contractAddress": "0xa5e0829caced8ffdd4de3c43696c57f7d7a678ff",
+        "gasUsed": "0x489369",
+        "blockNumber": "0x4b413c",
+        "blockHash": "0x8b1841bca2c55ecbe41bba70ea6b052c0127c3a4e4de273d344dc9add658e1db",
+        "transactionIndex": "0x0"
+      },
+      "deployment_block": {
+        "number": "0x4b413c",
+        "hash": "0x8b1841bca2c55ecbe41bba70ea6b052c0127c3a4e4de273d344dc9add658e1db",
+        "stateRoot": "0x838c16dfbda733ee3df66d707fb070c9255d80d786c24c76f13192f2ec7050f8",
+        "timestamp": "0x5f6dcbd1"
+      }
+    },
+    {
+      "endpoint": "https://polygon.gateway.tenderly.co",
+      "fixed_block": {
+        "number": "0x565da00",
+        "hash": "0x22308ac27c35e0d800c9521260d491e8870966822f880ab7c479053327b19c86",
+        "parentHash": "0x2702ee84d0ee9685816198fc66c268f648d6cf69dde6ece191c6eb2ad4870217",
+        "stateRoot": "0xb817791cae78a36964bd5ef7d7ab9171a52abd139818c54e1eee32492210e42a",
+        "timestamp": "0x6a5e04e5"
+      },
+      "code": {
+        "bytes": 21943,
+        "sha256": "431401af6d05a344004411a430cc77bbb1c3b3c23407974f55901260544412a9",
+        "keccak256": "0xf1ce1bb9d7403281292baa290f5c56136484cc34395dc3666ad7f94c79f99b71",
+        "archived_file": "runtime/UniswapV2Router02.polygon.hex"
+      },
+      "storage": {
+        "eip1967_implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "eip1967_admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "eip1967_beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "calls": {
+        "factory": "0x0000000000000000000000005757371414417b8c6caad45baef941abc7d3ab32",
+        "WETH": "0x0000000000000000000000000d500b1d8e8ef31e21c99d1db9a6444d3adf1270"
+      },
+      "deployment_transaction": {
+        "hash": "0x74709bbbb5a2d5f044af0b22336e8f649724f3a7b5322d71dda71c7a8e131e26",
+        "blockNumber": "0x4b413c",
+        "blockHash": "0x8b1841bca2c55ecbe41bba70ea6b052c0127c3a4e4de273d344dc9add658e1db",
+        "from": "0x476307dac3fd170166e007fcaa14f0a129721463",
+        "nonce": "0x7",
+        "transactionIndex": "0x0",
+        "creationInputBytes": 22398
+      },
+      "deployment_receipt": {
+        "status": "0x1",
+        "contractAddress": "0xa5e0829caced8ffdd4de3c43696c57f7d7a678ff",
+        "gasUsed": "0x489369",
+        "blockNumber": "0x4b413c",
+        "blockHash": "0x8b1841bca2c55ecbe41bba70ea6b052c0127c3a4e4de273d344dc9add658e1db",
+        "transactionIndex": "0x0"
+      },
+      "deployment_block": {
+        "number": "0x4b413c",
+        "hash": "0x8b1841bca2c55ecbe41bba70ea6b052c0127c3a4e4de273d344dc9add658e1db",
+        "stateRoot": "0x838c16dfbda733ee3df66d707fb070c9255d80d786c24c76f13192f2ec7050f8",
+        "timestamp": "0x5f6dcbd1"
+      }
+    }
+  ],
+  "additional_code_agreement": [
+    "https://polygon-bor-rpc.publicnode.com",
+    "https://polygon.api.onfinality.io/public"
+  ]
+}

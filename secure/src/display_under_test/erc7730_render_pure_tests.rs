@@ -7923,6 +7923,248 @@ fn uniswap_v2_swap_binds_first_and_last_array_element() {
     );
 }
 
+// ───────────────────────────────────────────────────────────────────────
+// QuickSwap V2 Router02 — three static remove-liquidity routes only.
+// LP-token metadata is derived rather than signed, so the exact liquidity
+// word is deliberately rendered raw. Permit and dynamic-path routes remain
+// known hard refusals.
+// ───────────────────────────────────────────────────────────────────────
+const QUICKSWAP_ROUTER: [u8; 20] = [
+    0xa5, 0xe0, 0x82, 0x9c, 0xac, 0xed, 0x8f, 0xfd, 0xd4, 0xde, 0x3c, 0x43, 0x69, 0x6c, 0x57, 0xf7,
+    0xd7, 0xa6, 0x78, 0xff,
+];
+const QUICKSWAP_REMOVE: &str =
+    "removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)";
+const QUICKSWAP_REMOVE_NATIVE: &str =
+    "removeLiquidityETH(address,uint256,uint256,uint256,address,uint256)";
+const QUICKSWAP_REMOVE_NATIVE_FOT: &str =
+    "removeLiquidityETHSupportingFeeOnTransferTokens(address,uint256,uint256,uint256,address,uint256)";
+
+fn quickswap_liquidity_word() -> [u8; 32] {
+    [
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+        0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+        0x1e, 0x1f,
+    ]
+}
+
+fn quickswap_remove_calldata(signature: &str) -> Vec<u8> {
+    let token_a = [0x11; 20];
+    let token_b = [0x22; 20];
+    let beneficiary = [0x33; 20];
+    let liquidity = quickswap_liquidity_word();
+    match signature {
+        QUICKSWAP_REMOVE => calldata_static(
+            signature,
+            &[
+                abi_address_word(token_a),
+                abi_address_word(token_b),
+                liquidity,
+                u256_from_u64(1_234_567).0,
+                u256_from_u64(7_654_321).0,
+                abi_address_word(beneficiary),
+                u256_from_u64(2_000_000_000).0,
+            ],
+        ),
+        QUICKSWAP_REMOVE_NATIVE | QUICKSWAP_REMOVE_NATIVE_FOT => calldata_static(
+            signature,
+            &[
+                abi_address_word(token_a),
+                liquidity,
+                u256_from_u64(1_234_567).0,
+                u256_from_u64(1_000_000_000_000_000_000).0,
+                abi_address_word(beneficiary),
+                u256_from_u64(2_000_000_000).0,
+            ],
+        ),
+        _ => panic!("unsupported QuickSwap test route: {signature}"),
+    }
+}
+
+fn assert_some_page_shows_full_address(pages: &Pages, address: &[u8; 20]) {
+    let mut expected = [[b' '; DISPLAY_COLS]; 3];
+    let [r1, r2, r3] = &mut expected;
+    write_addr_full(r1, r2, r3, address);
+    assert!(
+        pages.as_slice().iter().any(|page| page[1..4] == expected),
+        "no page shows full address 0x{}\n{}",
+        hex::encode(address),
+        dump_pages(pages)
+    );
+}
+
+#[test]
+fn production_quickswap_admits_exactly_five_static_routes_and_refuses_broader_calls() {
+    let registry = build_registry();
+    let entry = find_leaf(registry, "calldata-QuickSwap.json", 137);
+    assert_eq!(entry.contract, QUICKSWAP_ROUTER);
+    let bundle = synth_bundle(&registry.blob, &entry.ir_bytes, entry.leaf_index);
+    let verified = verify_erc7730_bundle(&bundle, &registry.root).expect("verify QuickSwap leaf");
+    let ir = &verified.ir;
+
+    let admitted_signatures = [
+        "addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)",
+        "addLiquidityETH(address,uint256,uint256,uint256,address,uint256)",
+        QUICKSWAP_REMOVE,
+        QUICKSWAP_REMOVE_NATIVE,
+        QUICKSWAP_REMOVE_NATIVE_FOT,
+    ];
+    let admitted: std::collections::BTreeSet<_> = ir
+        .format_iter()
+        .map(|format| format.expect("QuickSwap format parses").selector)
+        .collect();
+    let expected: std::collections::BTreeSet<[u8; 4]> = admitted_signatures
+        .iter()
+        .map(|signature| keccak256(signature.as_bytes())[..4].try_into().unwrap())
+        .collect();
+    assert_eq!(admitted, expected);
+
+    for signature in [
+        QUICKSWAP_REMOVE,
+        QUICKSWAP_REMOVE_NATIVE,
+        QUICKSWAP_REMOVE_NATIVE_FOT,
+    ] {
+        let calldata = quickswap_remove_calldata(signature);
+        assert_selector_matches(ir, &calldata, signature);
+    }
+
+    let excluded = [
+        "removeLiquidityWithPermit(address,address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)",
+        "removeLiquidityETHWithPermit(address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)",
+        "removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(address,uint256,uint256,uint256,address,uint256,bool,uint8,bytes32,bytes32)",
+        "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
+        "swapExactTokensForETH(uint256,uint256,address[],address,uint256)",
+        "swapExactETHForTokens(uint256,address[],address,uint256)",
+        "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)",
+        "swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256,uint256,address[],address,uint256)",
+        "swapTokensForExactETH(uint256,uint256,address[],address,uint256)",
+        "swapExactETHForTokensSupportingFeeOnTransferTokens(uint256,address[],address,uint256)",
+    ];
+    let tx = envelope(137, QUICKSWAP_ROUTER);
+    let resolver = NameResolver::new();
+    for signature in excluded {
+        assert_selector_excluded(ir, signature);
+        let digest = keccak256(signature.as_bytes());
+        let selector: [u8; 4] = digest[..4].try_into().expect("selector width");
+        assert!(
+            registry
+                .known_calls
+                .contains(&(137, QUICKSWAP_ROUTER, selector)),
+            "excluded QuickSwap call must remain exactly known: {signature}"
+        );
+        assert!(pqsigner_erc7730::known_calls::may_contain(
+            &registry.known_calls_bloom,
+            137,
+            &QUICKSWAP_ROUTER,
+            &selector,
+        ));
+        let calldata = selector.to_vec();
+        assert!(matches!(
+            render_erc7730_pages(&tx, &calldata, &verified, None, &resolver),
+            Err(crate::tx::erc7730_render::RenderErr::NoFormat)
+        ));
+
+        let mut dispatch_proofs = DispatchPageProofs::new();
+        dispatch_proofs.fail_initialize();
+        assert!(
+            pick_sign_pages(
+                &tx,
+                &calldata,
+                &[0u8; 20],
+                None,
+                None,
+                None,
+                Some(&verified),
+                None,
+                None,
+                &resolver,
+                &mut dispatch_proofs,
+            )
+            .is_err(),
+            "known excluded QuickSwap call must not fall back: {signature}"
+        );
+    }
+}
+
+#[test]
+fn production_quickswap_remove_liquidity_renders_every_signed_byte_or_refuses() {
+    let registry = build_registry();
+    let entry = find_leaf(registry, "calldata-QuickSwap.json", 137);
+    let bundle = synth_bundle(&registry.blob, &entry.ir_bytes, entry.leaf_index);
+    let verified = verify_erc7730_bundle(&bundle, &registry.root).expect("verify QuickSwap leaf");
+    let tx = envelope(137, QUICKSWAP_ROUTER);
+    let resolver = NameResolver::new();
+    let signer = [0x44; 20];
+    let beneficiary = [0x33; 20];
+    let token_a = [0x11; 20];
+    let token_b = [0x22; 20];
+    let liquidity = quickswap_liquidity_word();
+
+    for signature in [
+        QUICKSWAP_REMOVE,
+        QUICKSWAP_REMOVE_NATIVE,
+        QUICKSWAP_REMOVE_NATIVE_FOT,
+    ] {
+        let calldata = quickswap_remove_calldata(signature);
+        let rendered = render_erc7730_pages_with_signer_checked(
+            &tx, &calldata, &verified, None, &resolver, &signer,
+        )
+        .unwrap_or_else(|error| panic!("render QuickSwap {signature}: {error:?}"));
+        assert_all_pages_printable(&rendered.pages);
+        assert_raw_word_pages(&rendered.pages, "LP token amount", &liquidity);
+        assert_full_address_field_page(&rendered.pages, "Beneficiary", &beneficiary);
+        assert_some_page_shows_full_address(&rendered.pages, &token_a);
+        if signature == QUICKSWAP_REMOVE {
+            assert_some_page_shows_full_address(&rendered.pages, &token_b);
+        }
+        find_page_by_label(&rendered.pages, "Minimum amount");
+        find_page_by_label(&rendered.pages, "Deadline");
+        assert!(rendered
+            .transcript_receipt
+            .range_matches(&rendered.pages, 0));
+
+        for index in 0..calldata.len() {
+            let mut mutated = calldata.clone();
+            mutated[index] ^= 1;
+            if let Ok(changed) = render_erc7730_pages_with_signer_checked(
+                &tx, &mutated, &verified, None, &resolver, &signer,
+            ) {
+                assert_ne!(
+                    rendered.pages.as_slice(),
+                    changed.pages.as_slice(),
+                    "calldata byte {index} changed silently for {signature}"
+                );
+                assert!(
+                    !rendered
+                        .transcript_receipt
+                        .exact_match(&changed.transcript_receipt),
+                    "calldata byte {index} preserved transcript for {signature}"
+                );
+            }
+        }
+
+        let mut short = calldata.clone();
+        short.pop();
+        assert!(render_erc7730_pages_with_signer_checked(
+            &tx, &short, &verified, None, &resolver, &signer,
+        )
+        .is_err());
+        let mut trailing = calldata.clone();
+        trailing.push(0);
+        assert!(render_erc7730_pages_with_signer_checked(
+            &tx, &trailing, &verified, None, &resolver, &signer,
+        )
+        .is_err());
+    }
+
+    assert_eq!(
+        cross_check_contract(&verified.ir, 137, &QUICKSWAP_ROUTER),
+        Ok(())
+    );
+    assert!(cross_check_contract(&verified.ir, 1, &QUICKSWAP_ROUTER).is_err());
+    assert!(cross_check_contract(&verified.ir, 137, &[0x55; 20]).is_err());
+}
+
 #[test]
 fn uniswap_exact_input_c2_decoy_path_cannot_reach_renderer() {
     assert_uniswap_router_call_excluded_but_known("exactInput((bytes,address,uint256,uint256))");
