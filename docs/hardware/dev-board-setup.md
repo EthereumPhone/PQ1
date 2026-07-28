@@ -190,7 +190,11 @@ Expected output:
 |---------|--------|-------------|----------------|
 | SRAM1   | 192 KB | Secure      | `0x30000000`   |
 | SRAM2   | 64 KB  | Non-secure  | `0x20030000`   |
-| SRAM3   | 832 KB | Non-secure  | (unused)       |
+| SRAM3       | 512 KB | Non-secure  | `0x30040000` (unused) |
+| SRAM4       | 16 KB  | Non-secure  | `0x38000000` (unused) |
+| Backup SRAM | 2 KB   | Non-secure  | `0x50036400` (unused) |
+
+Totals to the 786 KB quoted in §1 (192 + 64 + 512 + 16 + 2). Block sizes, aliases and ECC capability per block are tabulated in [`docs/security/brownout-hardening.md`](../security/brownout-hardening.md). Note that only SRAM1 has always-on ECC, and only the **first 256 KB** of SRAM3 is ECC-capable at all.
 
 The shared-memory gateway mailbox is at the end of NS SRAM (`0x2802FF00` on QEMU). It is only used by the QEMU transport — on STM32U585 the gateway runs through CMSE `cmse-nonsecure-entry` veneers and the mailbox region is unused (the `SHARED_MAILBOX_BASE = 0x2003FF00` constant is still kept in `sphincs_tz_shared` so `ptr_validate` can exclude the range as a belt-and-braces measure, but no code reads or writes it).
 
