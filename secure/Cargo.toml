@@ -56,7 +56,7 @@ sphincs-c10 = { workspace = true }
 # First-order masked SHA-256 building blocks — only linked for the
 # `bench-masked-sha` measurement firmware (work-todo §18 SHAKE-vs-SHA2).
 masked-sha2 = { workspace = true, optional = true }
-aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+aes-gcm = { version = "0.11", default-features = false, features = ["aes"] }
 aes = { version = "0.8", default-features = false, features = ["zeroize"] }
 cmac = { version = "0.7", default-features = false, features = ["zeroize"] }
 sha2 = { version = "0.10", default-features = false }
