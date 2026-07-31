@@ -24,7 +24,7 @@ edition.workspace = true
 pqsigner-proto      = { workspace = true }
 sphincs-tz-bip39    = { workspace = true, features = ["full-wordlist"] }
 sphincs-c10         = { workspace = true }
-aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+aes-gcm = { version = "0.11", default-features = false, features = ["aes"] }
 sha2    = { version = "0.10", default-features = false }
 zeroize = { workspace = true }
 hmac    = { workspace = true }
