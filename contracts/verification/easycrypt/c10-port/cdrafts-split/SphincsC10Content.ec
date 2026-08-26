@@ -567,8 +567,17 @@ lemma MODEL_JOINT_on_actual_globals (r : int) (c0 c1 : cntr) (d0 d1 : dgstblock)
   (forall (ps : pseed) (tw : adrs) (x : dgst),
      thfc (8 * n + r + 2) ps tw x
      = if (exists (mm : dgstblock), x = emb_in1 (mm, c0)) then d0 else d1) =>
-  (* (iv) the ACTUAL encode_msgWOTS_C -- a FREE op, so the capstone's OWN bridge
-     premise is discharged by this same model rather than left dangling. *)
+  (* (iv) the ACTUAL encode_msgWOTS_C.  UPDATED 2026-08-25: this annotation used to
+     read "a FREE op", which is no longer true -- WOTS_C_Real.ec:403 gives it the body
+     `encode_msgWOTS (ThC p a x cc)`, so this hypothesis is now TRIVIALLY SATISFIABLE
+     and the bridge equation is a theorem (WOTS_C_Real.ec::encode_msgWOTS_C_compat).
+     THE HYPOTHESIS IS KEPT DELIBERATELY: dropping it would move this lemma's pinned
+     statement, which is a design decision and not a comment fix.  What it buys is now
+     smaller -- it no longer discharges a dangling capstone premise (there is none to
+     discharge), it just states the model agrees with the definition.
+     NOTE FOR AUDITORS: no gate would have caught this sentence.  Comments carry no
+     census rows and no statement pins, so a stale claim inside a certified cone file
+     rides through a GREEN run.  It was found by adversarial review, not by the gate. *)
   encode_msgWOTS_C = (fun (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr) =>
                         encode_msgWOTS (ThC p a x cc)) =>
     (* ==== the induced member indices ==== *)

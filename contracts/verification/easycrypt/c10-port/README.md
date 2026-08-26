@@ -44,8 +44,8 @@ numerically meaningful bound**.
 > instantiated at `mkg_adv := 0`, which is sound because `mkg_adv` is a
 > universally quantified lemma parameter constrained only by `0%r <= mkg_adv`,
 > and 0 is its **tightest admissible value**. It is therefore **strictly
-> tighter**, carries **6 premises not 7**, and contains **no free real** — see
-> the final section of this file. The description below is of the parent, which
+> tighter**, carries **6 premises not 7** (**5 since 2026-08-25**, see below),
+> and contains **no free real** — see the final section of this file. The description below is of the parent, which
 > it is derived from and which remains gated and true.
 >
 > **For the PRODUCT, quote
@@ -54,10 +54,22 @@ numerically meaningful bound**.
 > deployed parameter pins (n=16, len=43, k=13). It is the **first** deployed
 > statement that is N2-free, Q-free *and* free-real-free; until 2026-08-24 every
 > deployed variant still carried N2.
+>
+> **:white_check_mark: UPDATE 2026-08-25 — it now carries FIVE premises, not six,
+> and only ONE of them is substantive.** The encode-compatibility premise `hencb`
+> was discharged (`encode_msgWOTS_C` is now a definition, so the equation is the
+> theorem `WOTS_C_Real.ec::encode_msgWOTS_C_compat`). Four of the five remaining
+> premises are the deployed parameter pins; the only substantive one left is
+> `c <= p_tgts`, which this tree already classifies as a parameter choice rather
+> than a theorem. Counts, read off the proof binders: `CHARGED_QWIRED` 7→6,
+> `_TIGHT` 6→5, `_TIGHT_AT_DEPLOYED_PARAMS` 6→5. Ledger unchanged at 242.
+> See the final section of this file.
 
 **What the headline carries.** Its premises are `c <= p_tgts`, `0%r <= mkg_adv`,
-the encode-compatibility equation `encode_msgWOTS_C p a x cc = encode_msgWOTS
-(ThC p a x cc)`, and four C10 width facts on `dfC0`. Its right-hand side is the
+and four C10 width facts on `dfC0` — **six**. Until 2026-08-25 it also carried the
+encode-compatibility equation `encode_msgWOTS_C p a x cc = encode_msgWOTS
+(ThC p a x cc)`; that is now a **theorem**
+(`WOTS_C_Real.ec::encode_msgWOTS_C_compat`) and no longer a premise. Its right-hand side is the
 SKG-PRF distinguishing advantage, the free real `mkg_adv`, and **ten named game
 probabilities**: `M.F.ITSRC10`; the three that replace `Q`
 (`F_OpenPRE.SM_DT_OpenPRE`, `TRHC_TCR.SM_DT_TCR_C`, `TRCOC_TCR.SM_DT_TCR_C`); the
@@ -139,10 +151,29 @@ Requires EasyCrypt **r2026.02** (the pinned toolchain; r2026.06 fails four
 closure files). A container recipe is in `../docker/`.
 
 ```sh
-export LC_ALL=C          # REQUIRED: identity hashing is collation-sensitive
-bash cert_gate_split.sh  # 24 targets, 87 pins, 1159 census rows
-bash cert_gate_fork.sh   # 19 targets,  9 pins, 1089 census rows
+# RUN THEM INSIDE THE PINNED CONTAINER.  These scripts call `easycrypt` straight off
+# $PATH, so a bare `bash cert_gate_split.sh` from a host shell silently uses whatever
+# EasyCrypt is installed there and produces a PLAUSIBLE BUT WRONG receipt.
+sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
+  cd /work && bash cert_gate_split.sh'"   # 24 targets, 87 pins, 1159 census rows
+sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
+  cd /work && bash cert_gate_fork.sh'"    # 19 targets,  9 pins, 1089 census rows
 ```
+
+`LC_ALL=C` is REQUIRED: identity hashing is collation-sensitive.
+
+**Check the header lines before believing any receipt.** A valid run prints
+`### TOOLCHAIN GIT hash: r2026.02` and `### PROVERS <hash> 25 configurations`.
+If it says `r2026.06` / `6 configurations`, it ran on the host — discard it.
+This paragraph exists because the block above previously showed a bare
+`bash cert_gate_split.sh`, which contradicted the r2026.02 requirement stated
+one line earlier and duly produced a host-toolchain run on 2026-08-25.
+
+Killing a gate on the host kills the `docker exec` *client*, not the in-container
+`easycrypt`, which keeps writing `.eco` into the tree — use
+`docker exec ec-grind pkill -f <file>`. The concurrency guard
+(`cert_gate_split.sh:167`) catches the leftover and exits 3 rather than emit a
+racy receipt.
 
 Both must end `RESULT: GREEN` / `CERT_FAILURES=0`. Expected identities are
 committed in `cert-identity.tsv`; each gate recomputes and compares, and
@@ -1900,3 +1931,193 @@ was read off the error rather than guessed.
 counted lines *ending* in `=>`, silently missing multi-line premises. Re-counted by proof
 binders: `GROUNDED` 7, `CHARGED_QWIRED` 7, `TIGHT` 6, `AT_DEPLOYED_PARAMS_QWIRED` 7 —
 every count in this README was right; only the verbal one was wrong.
+
+### UPDATE 2026-08-25 — the encode-compat premise is DISCHARGED, not traded
+
+`hencb` — `forall p a x cc, encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)` —
+was a **premise of every capstone in this tree** since the family was built. It is now a
+**theorem**, and the headline family no longer carries it.
+
+**What changed, in one line.** `encode_msgWOTS_C` was a FREE op
+(`cdrafts-split/WOTS_C_Real.ec`, previously line 377). It now has a body:
+`encode_msgWOTS (ThC p a x cc)`.
+
+**Why that is a discharge and not a sleight of hand.** By functional extensionality the
+premise already pinned the op to exactly this value, so *every model of (free op +
+premise) is a model of the definition and conversely*. The model class is unchanged and
+the premise is gone. That is different in kind from the 2026-08-24 deployed-params work,
+which **traded** four abstract width facts for four deployed pins.
+
+**Premise counts, measured from the proof binders** (not from lines ending in `=>` — that
+method produced a wrong count once in this log already):
+
+| theorem | before | after |
+|---|---|---|
+| `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED` | 7 | **6** |
+| `..._TIGHT` | 6 | **5** |
+| `..._TIGHT_AT_DEPLOYED_PARAMS` | 6 | **5** |
+
+For the deployed statement, four of the five remaining premises are the deployed
+parameter pins (`n = c10_n`, `len = c10_len`, `k = c10_k`, and the serialisation width).
+**Exactly one substantive premise is left: `c <= p_tgts`** — which
+`C10DeployedGeometry.ec:464` already classifies as "NOT A THEOREM AND NOT MEANT TO BE …
+a PARAMETER CHOICE … satisfiable by construction".
+
+#### This is NOT the move this tree previously declined
+
+`C10DeployedGeometry.ec:453` records `hencb` as "NOT RECEIPTABLE HERE, and deliberately
+not faked". Read precisely what it rejects:
+
+* an **existential** receipt `exists E, forall .., E .. = encode_msgWOTS (ThC ..)` —
+  "trivially true (take the composition) and says NOTHING about the actual op";
+* a **`clone … realize`** — "EasyCrypt cannot re-interpret an already-declared op FROM
+  INSIDE THE THEORY".
+
+This is neither. It edits the **declaration site**, which is the one place the
+re-interpretation obstruction does not apply, and it constrains **the actual op**.
+
+`C10DeployedGeometry.ec:598` calls `hencb` "LOAD-BEARING", but the stated consequent is
+that **dropping** it kills the reduction to MM45's WOTS-TW. Nothing is dropped: the
+equation still holds, now by computation, so `R_int_WOTSTW` is preserved exactly. That
+section also calls `hencb` "the whole of the unfaithfulness" because it forced `ThC`'s
+output to width `8*n` — but that is a **fork-tree** statement written 2026-07-31, before
+the split. In the split tree `msgWOTS = mdgstblock` at independent width `8*n_m`
+(`WOTS_TW_ES.ec:270`) and `ThC` already returns the wide type. That is what the split was
+for; the fork's unfaithfulness verdict does not carry into it.
+
+#### The evidence, two-sided
+
+`scratch/encode_compat_derivable.ec` (MUST-PASS, gate-run) proves `hencb` **with no
+hypotheses**. Measured both ways:
+
+* op DEFINED → `__EC_RC=0`
+* op reverted to the abstract declaration → `[critical] … [by]: cannot close goals`,
+  `__EC_RC=1`
+
+So the control **deletes information**: it goes RED for the declared reason if the body
+is removed. It is not a restatement of the definition.
+
+`encode_msgWOTS_C` is now **op-pinned**, which it was not before — `predC`, `ThC`,
+`emb_in`, `emb_in0`, `emb_in1` and `emb_tw` all were, and this one was missed. The pin is
+body-sensitive, measured before being trusted: a semantic body change, a purely cosmetic
+reparenthesisation, and a revert to abstract each move the digest
+(`scratch/encode-compat/PIN_DISCRIMINATION.txt`). The bridge equation is additionally
+kept legible in the closure as the named lemma
+`WOTS_C_Real.ec::encode_msgWOTS_C_compat`, also pinned — a reader auditing what this
+artifact commits to about the encoder should not have to notice that an op quietly
+acquired a body.
+
+#### Cost: zero assumptions
+
+Census: `abstract-op` 145 → 144, `defined-op` 301 → 302, total 1634 → 1634,
+**LEDGER UNCHANGED AT 242**. Predicted in `scratch/encode-compat/PREDICTION.md`
+*before* the run and matched exactly, row for row.
+
+#### What this does NOT mean
+
+**"One fewer premise" is not "one fewer assumption about the deployed signer."** What was
+eliminated is a **model-internal degree of freedom**. After the change the correspondence
+to the deployed encoder is carried entirely by `ThC`, whose own deployment gaps are
+unchanged and unreceipted: `emb_in` and `thfc` are still free ops, and the two projection
+members remain correlated under the instantiation. `encode_msgWOTS` itself also remains
+free, so no generality is lost in the encoder — but none is gained in fidelity either.
+
+The headline is still not a numerically meaningful bound. `Pr[M.F.ITSRC10 …]` is carried
+unreduced and is **provably** irreducible (`scratch/_countermodel.ec::countermodel_pr1`).
+Discharging `hencb` moves a premise; it does not touch that.
+
+#### Three corrections from this change
+
+**I ran the gate on the host first and it was wrong.** The receipt printed
+`### TOOLCHAIN GIT hash: r2026.06-16-g3800968` and `### PROVERS … 6 configurations`;
+a valid run prints **r2026.02** and **25 configurations**. The gates call `easycrypt`
+straight off `$PATH`, and "Reproducing the GREEN" above showed a bare
+`bash cert_gate_split.sh` one line after stating r2026.02 is required. The two disagreed
+and I followed the copy-pasteable one. That section now shows the `docker exec` form and
+names the header lines to check.
+
+**I recomputed `INPUTS_SHA256` myself instead of reading it off the gate — twice, wrongly.**
+The hash is collation-sensitive, and host runs without `LC_ALL=C` produced two
+plausible-but-wrong values (`ddd456c5…`, `2bcbb7ce…`). Same shape as a third error the
+same day: I hand-rolled the census `comm` comparison instead of using the gate's pipeline
+and got a meaningless total-diff. **When the gate computes a number, take the gate's
+number.** `scratch/encode-compat/inputs_id.sh` now recomputes it correctly and is
+self-validating — it reproduces the gate's printed value on an unchanged tree.
+
+**I recorded a false finding as fact.** An audit lens reported that my container-gate
+runner self-matched its own `grep`, and I wrote that up as a confirmed bug without testing
+it. It is **false**: measured `SELF_MATCH_COUNT=0` both ways, because the regex
+`[e]asycrypt` needs an `e` immediately followed by `asycrypt` and the literal text
+`[e]asycrypt` has `e` followed by `]` — which is the whole point of the idiom. Two
+reviewers disagreed and I believed the wrong one. The lesson recorded in
+`scratch/encode-compat/AUDIT_FINDINGS.md`: I *did* verify the fork-gate and arity hazards
+by hand and skipped this one, because it was a claim about **my own** mistake, which I was
+primed to accept. A reviewer's finding about your error deserves more scrutiny, not less.
+
+**Related, and load-bearing for anyone re-running this:** killing a gate on the host kills
+the `docker exec` client but NOT the in-container script, which keeps writing `.eco` into
+the tree — the incident `cert_gate_split.sh:163` records. It happened twice here. Use
+`docker exec ec-grind pkill -f <file>`.
+
+#### A stale claim that NO GATE CAN CATCH
+
+Adversarial review found `cdrafts-split/SphincsC10Content.ec:570` still annotating
+hypothesis (iv) as *"the ACTUAL `encode_msgWOTS_C` — a **FREE op**"*. After this change
+that is false, and the file is inside the certified cone and inside the identity hash.
+**Comments carry no census rows and no statement pins, so a fully GREEN run certifies the
+false sentence.** The sibling site in `C10DeployedGeometry.ec` had already been amended;
+this one was missed. Both are now corrected, and the annotation carries a note saying the
+gate could not have caught it. The hypothesis itself is **kept** — dropping it would move
+a pinned statement, which is a design decision and not a comment fix. A stale
+`WOTS_TW_ES.ec:569` cite (actual: `:624`) was corrected in the same pass. Verified: both
+files still compile and **no pin moved**.
+
+#### The fork tree
+
+Unchanged, checked two ways rather than assumed. Its `INPUTS_SHA256` recomputes to
+`9c2d21280c84d52c30b22111151f1135` — **identical** to the committed value — over the
+computed require-cone of the fork roots plus `cert-baseline.tsv`,
+`cert-statements-fork.tsv`, `cert-controls.tsv`, every control source, the five canaries,
+both tools and `cert_gate_fork.sh`. That is stronger than "no fork file in `git status`".
+The full fork gate was then run as behavioural confirmation.
+
+Note for future runs: **the two gates race bidirectionally on `scratch/`** —
+`cert_gate_fork.sh:164-166` purges it recursively and `:167` fails if any `.eco` survives
+there, while `cert_gate_split.sh:189` purges the same directory and builds its six
+controls in it. Their own concurrency guards do **not** cover this pair: they grep for
+`base-c10-split` and `base-c10-fork`, which are disjoint. Run them sequentially.
+
+#### Adversarial audit
+
+A four-lens read-only audit ran against this change before it was committed
+(`scratch/encode-compat/AUDIT_FINDINGS.md`). It confirmed the op is unconstrained
+by construction rather than by keyword search — all 29 axiom/declare-axiom rows in the
+cone live in 8 files, none of which mentions the token — and raised one **serious**
+hazard worth recording: `cert_gate_fork.sh` reads `cert-controls.tsv` (no `-fork`
+suffix) **wholesale** and compiles each control with fork includes, where the op is still
+abstract at the older type. A MUST-PASS control registered there would have turned the
+sibling gate RED for a reason nobody would look for. Verified by hand: the control is in
+`cert-controls-split.tsv` only. The control fail-open floor was raised 5 → 6 in the same
+change, since a floor below the actual inventory cannot detect a control being deleted.
+
+#### Receipts
+
+Both gates GREEN inside `ec-grind` (**r2026.02, 25 prover configurations**).
+
+```
+SPLIT   ### RESULT: GREEN            __GATE_RC=0   __WALL_S=5227
+        OK  INPUTS_SHA256 matches the committed identity (88de8169...)
+        statements pinned = 1072/1072
+        OK  coverage: all 987 top-level statements across 45 CONE files are pinned
+        OK  quarantine intact
+        cone: keys 1555=1555 | ROWS 1634=1634 | added=0 removed=0
+        ledger=242  parameters=214  bindings=366  meaning=389  definitions=423
+        controls executed (unique)=6
+        OK  inputs unchanged across the run
+
+FORK    ### CERT_FAILURES=0          __FORK_RC=0   __WALL_S=2736
+        OK  INPUTS_SHA256 matches the committed identity (9c2d2128...) -- UNCHANGED
+        statements pinned = 9/9 | controls 12/12, each for its DECLARED reason
+        OK  inputs unchanged across the run
+```
+

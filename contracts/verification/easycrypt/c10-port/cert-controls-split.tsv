@@ -11,3 +11,4 @@ scratch/probe_len46.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/c10_spec_vacuity_canary.ec	MUST-FAIL	cannot prove goal (strict)
 cdrafts-split/C10SpecControls.ec	MUST-PASS	-
 scratch/tier0_degenerate_encoder_excluded.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/encode_compat_derivable.ec	MUST-PASS	-

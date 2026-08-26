@@ -1,3 +1,11 @@
+# ENCODE-COMPAT DISCHARGED (2026-08-25).  `encode_msgWOTS_C` moved from
+# abstract-op:f9542be91ac8 to defined-op:0075335b8622 -- it was a FREE op and is now
+# DEFINED as `encode_msgWOTS (ThC p a x cc)`, which makes the capstone premise `hencb`
+# a theorem (WOTS_C_Real.ec::encode_msgWOTS_C_compat) instead of an assumption.
+# LEDGER IS UNCHANGED AT 242: abstract-op is a PARAMETERS row and defined-op is a
+# DEFINITIONS row, and neither is a ledger class.  parameters 215->214,
+# definitions 422->423, total 1634->1634.  Predicted before the run in
+# scratch/encode-compat/PREDICTION.md and matched exactly.
 # CONE BASELINE -- SPLIT tree.  REGENERATED 2026-08-22.
 # Bodied DEFINITIONS carry defined-<kind>:<body-digest> rows (2026-08-21), and
 # PARAMETERISED clone operands are now captured (2026-08-22): both the operand
@@ -1580,7 +1588,7 @@ cdrafts-split/WOTS_C_Real.ec	defined-op:ed1d5c7f137b	cw_sum	# line 252
 cdrafts-split/WOTS_C_Real.ec	defined-op:c1cd383d3435	predC	# line 279
 cdrafts-split/WOTS_C_Real.ec	defined-op:52d308813ba4	TargetSumReachable	# line 286
 cdrafts-split/WOTS_C_Real.ec	defined-const:8cd1f778f243	p_tgts	# line 340
-cdrafts-split/WOTS_C_Real.ec	abstract-op:f9542be91ac8	encode_msgWOTS_C	# line 377
+cdrafts-split/WOTS_C_Real.ec	defined-op:0075335b8622	encode_msgWOTS_C	# line 403
 cdrafts-split/WOTS_C_Real.ec	defined-op:75a1f84afa2f	grindC	# line 380
 cdrafts-split/WOTS_C_Reduction.ec	module-type:c07b516ee250	Adv_EUFNACMA_WOTSC	# line 32
 cdrafts-split/WOTS_C_Reduction.ec	module:c3da2ecae1f2	EUF_NACMA_WOTSC	# line 37

@@ -94,8 +94,6 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED
   &m :
     c <= p_tgts =>
     0%r <= mkg_adv =>
-    (forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
-       encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
     dfC0 <> 8 * n =>
     dfC0 <> 8 * n * len =>
     dfC0 <> 8 * n * 2 =>
@@ -129,7 +127,7 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED
                   res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps
                                   O_MEUFGCMA_WOTSC_Default.qs] ).
 proof.
-move=> hc hmkg hencb hdf8n hdflen hdf2 hdfnk.
+move=> hc hmkg hdf8n hdflen hdf2 hdfnk.
 have h := EUFCMA_SPHINCS_PLUS_C10_CHARGED F mkg_adv
             Pr[FTWES.F_OpenPRE.SM_DT_OpenPRE(R_OPRE_Gproc(R_fors_p(F)),
                  FTWES.F_OpenPRE.O_SMDTOpenPRE_Default).main() @ &m : res]
@@ -139,7 +137,7 @@ have h := EUFCMA_SPHINCS_PLUS_C10_CHARGED F mkg_adv
             Pr[FTWES.TRCOC_TCR.SM_DT_TCR_C(R_TRCO_Gproc(R_fors_p(F)),
                  FTWES.TRCOC_TCR.O_SMDTTCR_Default,
                  FTWES.TRCOC.O_THFC_Default).main() @ &m : res]
-            &m hc hmkg hencb hdf8n hdflen hdf2 hdfnk _.
+            &m hc hmkg encode_msgWOTS_C_compat hdf8n hdflen hdf2 hdfnk _.
 + by apply (gproc_Q_bound (R_fors_p(F)) &m).
 by smt().
 qed.
@@ -161,8 +159,6 @@ qed.
 lemma charged_qwired_at_witness (mkg_adv : real) &m :
     c <= p_tgts =>
     0%r <= mkg_adv =>
-    (forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
-       encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
     dfC0 <> 8 * n =>
     dfC0 <> 8 * n * len =>
     dfC0 <> 8 * n * 2 =>
@@ -259,8 +255,6 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT
              -FTWES.TRCOC_TCR.O_SMDTTCR_Default, -FTWES.TRCOC.O_THFC_Default })
   &m :
     c <= p_tgts =>
-    (forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
-       encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
     dfC0 <> 8 * n =>
     dfC0 <> 8 * n * len =>
     dfC0 <> 8 * n * 2 =>
@@ -293,8 +287,8 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT
                   res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps
                                   O_MEUFGCMA_WOTSC_Default.qs] ).
 proof.
-move=> hc henc hd1 hd2 hd3 hd4.
-have h := EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED F 0%r &m hc _ henc hd1 hd2 hd3 hd4; first by [].
+move=> hc hd1 hd2 hd3 hd4.
+have h := EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED F 0%r &m hc _ hd1 hd2 hd3 hd4; first by [].
 smt().
 qed.
 
@@ -345,8 +339,6 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
              -FTWES.TRCOC_TCR.O_SMDTTCR_Default, -FTWES.TRCOC.O_THFC_Default })
   &m :
     c <= p_tgts =>
-    (forall (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr),
-       encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)) =>
     n       = c10_n     =>   (* 16, params.rs:19 *)
     len     = c10_len   =>   (* 43, params.rs:49 *)
     k       = c10_k     =>   (* 13, params.rs:34 *)
@@ -380,13 +372,15 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
                                   O_MEUFGCMA_WOTSC_Default.qs] ).
 
 proof.
-(* Binder order follows the STATEMENT, which keeps `c <= p_tgts` and the encode
-   equation first (inherited from the parent) and appends the deployed block.  The
+(* Binder order follows the STATEMENT, which keeps `c <= p_tgts` first (inherited
+   from the parent) and appends the deployed block.  The encode equation was a
+   premise here until 2026-08-25 and is now discharged by `encode_msgWOTS_C_compat`
+   (WOTS_C_Real.ec), so it no longer appears in this binder list.  The
    first attempt used AT_DEPLOYED_PARAMS_QWIRED's order and misaligned every name:
    `hc` was fed where `n = c10_n` was expected.  EasyCrypt reported it precisely --
    "this proof-term proves: c <= p_tgts / but is expected to prove: n = c10_n" -- so
    this is read off the error, not guessed. *)
-move=> hc henc hn hlen hk hsz.
+move=> hc hn hlen hk hsz.
 have [# h0 h1 h2 h3 g0 g1 g2 g3 hnem] := c10_dfC_separations_deployed hn hlen hk hsz.
-exact (EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT F &m hc henc h0 h1 h2 h3).
+exact (EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT F &m hc h0 h1 h2 h3).
 qed.

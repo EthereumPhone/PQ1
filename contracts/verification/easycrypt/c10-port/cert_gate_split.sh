@@ -30,11 +30,11 @@ TMPD=$(mktemp -d) || { echo 'FAIL mktemp'; exit 1; }
 trap 'rm -rf "$TMPD"' EXIT
 # Expected inventory sizes, COMMITTED. A guard that recomputes its expectation
 # from the file it is checking cannot detect truncation of that file.
-EXPECT_PINS=1070
+EXPECT_PINS=1072
 # Committed count of top-level statements across the 38 certified roots.  Guards
 # PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
 # somebody must say why.  896 measured 2026-08-20.
-EXPECT_STMTS=986
+EXPECT_STMTS=987
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/
@@ -769,8 +769,12 @@ done < cert-controls-split.tsv
 # FAIL-OPEN GUARD: with an empty or truncated control file the loop runs zero
 # controls and the gate still reaches GREEN. Require the expected count.
 n_ctl=$(printf '%s\n' $ran | sort -u | grep -c .)
-echo "controls executed (unique)=$n_ctl expected>=5"
-[ "$n_ctl" -ge 5 ] || { echo "FAIL control file truncated or empty (fail-open guard)"; fail=$((fail+1)); }
+# COUNT RAISED 5 -> 6 (2026-08-25) when scratch/encode_compat_derivable.ec was added.
+# A floor BELOW the actual control count cannot detect one being deleted: with six
+# controls and a `-ge 5` guard, dropping any single one still scores OK.  The floor
+# must track the inventory or it only catches total truncation.
+echo "controls executed (unique)=$n_ctl expected>=6"
+[ "$n_ctl" -ge 6 ] || { echo "FAIL control file truncated or empty (fail-open guard)"; fail=$((fail+1)); }
 
 # IDENTITY RE-VERIFICATION AT THE END (run 13, GPT-5.6).  The identity was
 # computed ONCE, before a compile phase that runs for the better part of an

@@ -1,0 +1,18 @@
+TWO-SIDED CONTROL -- scratch/encode_compat_derivable.ec
+Run 2026-08-25, ec-grind container, gate flags (-timeout 60 -I base-c10-split -I cdrafts-split -I scratch).
+
+GREEN LEG -- encode_msgWOTS_C DEFINED (cdrafts-split/WOTS_C_Real.ec:403)
+  __EC_RC=0
+
+RED LEG -- encode_msgWOTS_C reverted to the ABSTRACT declaration
+  [critical] [scratch/encode_compat_derivable.ec: line 24 (7-53)] [by]: cannot close goals
+  __EC_RC=1
+
+Line 24 is `proof. by move=> p a x cc; rewrite /encode_msgWOTS_C. qed.`
+With an abstract op there is no body to delta-reduce, so `rewrite /encode_msgWOTS_C`
+is a no-op and the goal does not close.  That is the DECLARED reason, not an
+incidental failure: the control fails because the information it tests was deleted.
+
+CONCLUSION: the premise `hencb` is derivable IF AND ONLY IF the op carries the body.
+The green leg is therefore not a restatement of the definition -- it is evidence that
+the capstone premise is now discharged rather than assumed.

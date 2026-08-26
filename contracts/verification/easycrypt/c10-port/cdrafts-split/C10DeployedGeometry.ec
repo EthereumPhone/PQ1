@@ -451,8 +451,12 @@ qed.
      non-instantiability.
 
    * `hencb`  (encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc))
+     — SUPERSEDED 2026-08-25, SEE THE NOTE AFTER THIS BULLET.  The verdict below
+     was correct when written and is now stale in its PREMISE: `encode_msgWOTS_C`
+     is no longer an abstract op.
      — NOT RECEIPTABLE HERE, and deliberately not faked.  `encode_msgWOTS_C` is
-     an abstract op (WOTS_C_Real.ec:337).  The available existential receipt,
+     an abstract op (WOTS_C_Real.ec:337 — that is the FORK's line; in this SPLIT
+     file it was :377, and since 2026-08-25 it is :403 and DEFINED).  The available existential receipt,
      `exists E, forall .., E .. = encode_msgWOTS (ThC ..)`, is trivially true
      (take the composition) and says NOTHING about the actual op -- it is
      precisely the "weak witness" SphincsC10Content.ec's PART G header already
@@ -470,6 +474,34 @@ qed.
 
    So the residual is now: one family discharged, two families explained rather
    than receipted.  That is the honest resolution, not a full one.
+
+   UPDATE 2026-08-25 — `hencb` IS NOW DISCHARGED, and the bullet above is superseded.
+   `encode_msgWOTS_C` was given the body `encode_msgWOTS (ThC p a x cc)` at
+   WOTS_C_Real.ec:403, so the equation is a THEOREM
+   (WOTS_C_Real.ec::encode_msgWOTS_C_compat) and the headline family carries it no
+   longer.  CHARGED_QWIRED 7->6 premises, _TIGHT and _TIGHT_AT_DEPLOYED_PARAMS 6->5.
+
+   THIS IS NOT THE MOVE THE BULLET ABOVE REJECTED.  It rejected (a) an EXISTENTIAL
+   receipt, which is trivially true and says nothing about the actual op, and (b) a
+   `clone .. realize`, blocked because EasyCrypt cannot re-interpret an already-declared
+   op FROM INSIDE the theory.  Editing the DECLARATION SITE is neither: it is the one
+   place (b)'s obstruction does not apply, and it constrains THE actual op.  Section 8's
+   "hencb IS LOAD-BEARING" also stands unchanged -- its consequent is that DROPPING the
+   equation kills the reduction to MM45's WOTS-TW, and nothing is dropped here; the
+   equation now holds by computation, so R_int_WOTSTW is preserved exactly.
+
+   AND SECTION 8's "the whole of the unfaithfulness" DOES NOT CARRY INTO THIS TREE.
+   That was written 2026-07-31, PRE-SPLIT, when `hencb` forced ThC's output to width
+   8*n.  In the split `msgWOTS = mdgstblock` at independent width 8*n_m
+   (WOTS_TW_ES.ec:270) and ThC already returns the wide type -- which is what the split
+   was for.
+
+   WHAT IT DOES NOT BUY.  This eliminates a MODEL-INTERNAL degree of freedom, not a
+   deployment-facing assumption.  The correspondence to the deployed encoder is now
+   carried entirely by `ThC`, whose own gaps are unchanged and unreceipted: `emb_in` and
+   `thfc` are still free ops and the two projection members remain correlated under the
+   instantiation.  `hc` (c <= p_tgts) remains the only substantive premise of the
+   deployed statement, and remains a parameter choice, exactly as the bullet above says.
    -------------------------------------------------------------------------- *)
 
 (* ==========================================================================

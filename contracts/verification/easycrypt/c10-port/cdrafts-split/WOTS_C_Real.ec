@@ -369,12 +369,55 @@ proof. exact: STCRC_WC.query_targets_predC. qed.
 (* --------------------------------------------------------------------------
    3.  WOTS+C encoding (the count-dependent replacement for encode_msgWOTS).
        CONTRAST the abstract WOTS-TW hook `encode_msgWOTS : msgWOTS -> emsgWOTS`
-       (WOTS_TW_ES.ec:569) — a pure function of the message alone.  WOTS+C's
+       (WOTS_TW_ES.ec:624 — the file says :569, measured 2026-08-25) — a pure
+       function of the message alone.  WOTS+C's
        encoding additionally depends on (pseed, adrs, counter), which is exactly
        why WOTS+C is a REDUCTION, not an `encode_msgWOTS` instantiation
        (see WOTS_C_Encoding.ec / PLAN.md §1).
    -------------------------------------------------------------------------- *)
-op encode_msgWOTS_C : pseed -> adrs -> dgstblock -> cntr -> EmsgWOTS.emsgWOTS.
+(* DEFINED, NOT DECLARED (2026-08-25).  This op was abstract until today, and every
+   capstone in the family carried the equation below as the premise `hencb`:
+
+       forall p a x cc, encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)
+
+   Giving it the body MAKES THAT EQUATION DEFINITIONALLY TRUE, so the premise can be
+   discharged by reflexivity instead of assumed.  The model class is UNCHANGED: by
+   functional extensionality the premise already pinned this op to exactly this value,
+   so every model of (free op + premise) IS a model of the definition and conversely.
+   One fewer premise, same theorem.
+
+   IT IS A DEFINITION, NOT AN AXIOM -- the same reasoning `predC` was tied under at
+   line 279 above.  A definition cannot introduce inconsistency.  Nothing is added to
+   the assumption ledger; the census trades one `abstract-op` row for one `defined-op`
+   row whose BODY is digest-pinned, so a later change to this body is gate-fatal.
+
+   WHAT THIS IS NOT.  C10DeployedGeometry.ec:453 declined two DIFFERENT moves at this
+   seam: an existential receipt `exists E, forall .., E .. = encode_msgWOTS (ThC ..)`
+   (trivially true, says nothing about the actual op), and a `clone .. realize`
+   (EasyCrypt cannot re-interpret an already-declared op FROM INSIDE the theory).
+   This is neither -- it edits the DECLARATION SITE, which is the one place the
+   re-interpretation obstruction does not apply, and it constrains THE actual op.
+   Geometry:598 calls `hencb` load-bearing, but the stated consequent is that DROPPING
+   it kills the reduction to MM45's WOTS-TW.  Nothing is dropped here: the equation
+   still holds, now by computation, so R_int_WOTSTW is preserved exactly.
+   `encode_msgWOTS` itself REMAINS FREE, so no generality is lost in the encoder. *)
+op encode_msgWOTS_C (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr)
+  : EmsgWOTS.emsgWOTS =
+  encode_msgWOTS (ThC p a x cc).
+
+(* THE BRIDGE EQUATION, KEPT VISIBLE IN THE CLOSURE.  This is verbatim the premise
+   `hencb` that the capstone family carried until 2026-08-25.  It is now a THEOREM,
+   and the headline family discharges it with this term instead of assuming it.
+
+   It is stated separately rather than left implicit in the definition ON PURPOSE:
+   a reader auditing what the artifact commits to about the encoder should find the
+   commitment as a NAMED, PINNED result in the closure, not have to notice that an
+   op acquired a body.  Pinned twice -- the op body at
+   `op:cdrafts-split/WOTS_C_Real.ec::encode_msgWOTS_C` and this statement -- so
+   neither the commitment nor its wording can move without the gate saying so. *)
+lemma encode_msgWOTS_C_compat (p : pseed) (a : adrs) (x : dgstblock) (cc : cntr) :
+  encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc).
+proof. by rewrite /encode_msgWOTS_C. qed.
 
 (* The signer's counter search is the proved total grind. *)
 op grindC (ps : pseed) (ad : adrs) (m : dgstblock) : cntr = STCRC_WC.G.grind ps ad m.

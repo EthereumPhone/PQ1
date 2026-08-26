@@ -554,8 +554,17 @@ qed.
 lemma WOTSC_C2_hop2 (A <: Adv_EUFNACMA_WOTSC{-R_WOTSTW_WOTSC, -STCRC_WC.Col.O_THFC_Default}) &m :
     (* encode bridge (faithful modeling fact): the +C encoding of (m,c) IS the
        standard WOTS-TW encoding of the +C digest ThC.  This is the DEFINITION of
-       `encode_msgWOTS_C` (= base_w of Th+C), abstract here only because the whole
-       reduction keeps `encode_msgWOTS` parametric (see WOTS_C_Real.ec §3). *)
+       `encode_msgWOTS_C` (= base_w of Th+C).
+
+       UPDATED 2026-08-25.  This annotation used to end "abstract here only because
+       the whole reduction keeps `encode_msgWOTS` parametric (see WOTS_C_Real.ec §3)".
+       `encode_msgWOTS_C` IS NO LONGER ABSTRACT: WOTS_C_Real.ec:403 gives it exactly
+       this body, so the hypothesis below is now DERIVABLE, by
+       WOTS_C_Real.ec::encode_msgWOTS_C_compat.  It is KEPT as a hypothesis here ON
+       PURPOSE -- this reduction is stated without relying on the body, and
+       discharging it would move a pinned statement, which is a design decision and
+       not a comment fix.  The stated REASON still holds for `encode_msgWOTS` itself,
+       which remains a free op (WOTS_TW_ES.ec:624). *)
     (forall (p : pseed) (a : adrs) (x : dgstblock) (c : cntr),
        encode_msgWOTS_C p a x c = encode_msgWOTS (ThC p a x c)) =>
     Pr[GAME1_WOTSC(A, STCRC_WC.Col.O_THFC_Default).main() @ &m : res]

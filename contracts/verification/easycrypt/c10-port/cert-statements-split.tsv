@@ -47,6 +47,7 @@ op:cdrafts-split/WOTS_C_Real.ec::emb_in0	5ed94536c6c97215706c7dbdd71599c7
 op:cdrafts-split/WOTS_C_Real.ec::emb_in1	a8c773c14b498dc3ea771864bbbe7094
 op:cdrafts-split/WOTS_C_Real.ec::emb_tw	d1f13099b62ef240723195ef707528b6
 op:cdrafts-split/WOTS_C_Real.ec::predC	68813dccd39048d6d08e8635b84ad21d
+op:cdrafts-split/WOTS_C_Real.ec::encode_msgWOTS_C	04327ba9c94f4c4bbd7b8aa8b01302f2
 base-c10-split/WOTS_TW_ES.ec::nhchwcoll_hchwpre_msg	03628641e003721058af3e8110b2db24
 cdrafts-split/C10DeployedCapstone.ec::EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER	0458787fbaa4ccc6fd7d9fc62c39773e
 cdrafts-split/C10DeployedCapstone.ec::c10_deployed_STCR_premises_hold	a935072fe5917bab452498c5d88a0109
@@ -134,8 +135,8 @@ cdrafts-split/DarkSideC10.ec::c10_ds_ge_1t	eeaa76b8d9c8fd39c257ffc1964d5588
 cdrafts-split/DarkSideC10.ec::c10_forsc_le_fors	8ef97e2cd27b93997513a9c4670d9652
 cdrafts-split/DarkSide.ec::mixture_le_moment	464ad56df8ab57d55e0c23b25a13eb23
 cdrafts-split/DarkSide.ec::mixture_le_moment_finite_ex	0ac2baaf163e806d0a3ad4905121d50d
-cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED	b1ac3dd439cda438df8627fcb47bcf62
-cdrafts-split/GprocChargedQWired.ec::charged_qwired_at_witness	d2e768c10d18a584875d479fb6421c56
+cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED	b80928e1d3392cbae58677c035c6af02
+cdrafts-split/GprocChargedQWired.ec::charged_qwired_at_witness	5405125da8ca0ccfd3c9c4fe071e95c5
 
 # --- C10DeployedScope (promoted 2026-08-19 from experiments/ptgts-pin/PTgtsPin.ec) ---
 # The DEPLOYED-SCOPE facts.  Pinned because their VALUE is entirely in what they
@@ -212,6 +213,7 @@ cdrafts-split/WOTS_C_Real.ec::emb_in1_size	37511401fb2982114c394e64726443d3
 cdrafts-split/WOTS_C_Real.ec::emb_in01_distinct_members	3b109959845eb76f660da8b9ae908c88
 cdrafts-split/WOTS_C_Real.ec::emb_in0_inj	48726472e3c3908e1acb1e46d31eb4cf
 cdrafts-split/WOTS_C_Real.ec::predC_iff_sum	19d897c8abb99075b7ef2c7eaff99203
+cdrafts-split/WOTS_C_Real.ec::encode_msgWOTS_C_compat	4826796705a478679a4dfb48836a25c7
 cdrafts-split/WOTS_C_Real.ec::targetSumReachable	9b2a16b88b9e4d7dba460a86789726c2
 cdrafts-split/WOTS_C_Real.ec::wotsc_grind_targets_predC	c81f8d3cef40270e06717bb569cc7972
 cdrafts-split/WOTS_C_Real.ec::O_STCRC_query_ll	8c340d00f966b328310abe27b298ff06
@@ -1152,8 +1154,8 @@ op:cdrafts-split/FORS_C.ec::verifyC	0bec72ca57ce72a09a89023c7e144710
 # the "honest fix" for an OPEN accounting hazard; the term is a universally quantified
 # free real, so instantiating at its tightest admissible value is sound and yields a
 # STRICTLY TIGHTER bound with one fewer premise and NO free real.
-cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT	de541fd033b367fc762a539e1d79fb36
+cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT	94dcf5999dfbf5d19a2c53f796010a3b
 # --- the clean statement AT DEPLOYED PARAMETERS (2026-08-24) ---
 # Every previous deployed variant carried N2; the only N2-free/Q-free/free-real-free
 # statement was not deployed.  This is the first that is all four.
-cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS	f284fc09dfe073ca84886a06c77b2276
+cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS	7fe65ec61d8c7ef6f1c5e9188729b960

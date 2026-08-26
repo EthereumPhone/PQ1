@@ -1,0 +1,33 @@
+OP-PIN ANTI-VACUITY -- op:cdrafts-split/WOTS_C_Real.ec::encode_msgWOTS_C
+Run 2026-08-25.  A pin that does not move when the thing it pins moves is not a pin.
+tools/stmt_digest.py digest_op(), measured:
+
+  baseline (the committed body)      04327ba9c94f4c4bbd7b8aa8b01302f2
+  body reparenthesised (cosmetic)    51e28fbdf0c3fa17e0d279b66c9add01   MOVED
+  body semantically changed (cc+1)   617ec0965e17f29fd0a6e5170b533862   MOVED
+  reverted to the ABSTRACT decl      672bebb274eabbcd94be6c58d0715ff8   MOVED
+  restored                           04327ba9c94f4c4bbd7b8aa8b01302f2   == baseline
+
+So the pin is BODY-sensitive, not signature-only.  Any future edit to this
+definition -- including one that only reparenthesises it -- is gate-fatal at PHASE 1c.
+That is what makes it legitimate to discharge `hencb` from the body: the body is
+now a pinned, human-visible commitment rather than an invisible model choice.
+
+CROSS-CHECK that the tool is reading the right file: in the same run, predC digests
+to 68813dccd39048d6d08e8635b84ad21d and ThC to 186da9998320a0e8066351cbf710d89a,
+both EQUAL to their already-committed rows at cert-statements-split.tsv:49 and :44.
+
+--------------------------------------------------------------------------------
+IDENTITY CALCULATOR, VALIDATED (scratch/encode-compat/inputs_id.sh)
+Earlier in this arc I computed INPUTS_SHA256 on the HOST without LC_ALL=C and produced
+TWO wrong-but-plausible values (ddd456c5.., 2bcbb7ce..).  The hash is collation-sensitive.
+The script now reproduces the gate's own printed value EXACTLY for an unchanged tree:
+
+    gate printed : e14a1422f9713edfbe10a6c316ee12e3
+    script       : e14a1422f9713edfbe10a6c316ee12e3   MATCH
+
+It is therefore trustworthy for computing the identity of the NEXT tree state without
+burning a full gate run to discover it.  It is self-validating by construction: if it ever
+stops reproducing the gate's printed value on an unchanged tree, do not trust it -- take
+the gate's value.  It lives in scratch/encode-compat/, which is NOT in the hashed set, so
+adding it does not perturb the identity it computes.
