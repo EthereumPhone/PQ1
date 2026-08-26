@@ -105,7 +105,7 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
 # proof, and PHASE 2b/2c only canary two specific behaviours of it.
 INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 echo "### INPUTS_SHA256 $INPUTS_ID"
 # AND NOW COMPARE IT.  This line was printed and checked by nothing: an identity
 # receipt that no run can fail on is decoration.  The expected value lives in
@@ -886,11 +886,51 @@ else
   fail=$((fail+1))
 fi
 
+echo '### PHASE 5 — TAINT CONTAINMENT (name-level over-approximation, NOT a proof-term check)'
+# WHAT THIS ADDS.  Every earlier phase pins what the admits SAY; none checked HOW FAR THEY
+# REACH.  README asserts "neither admit reaches the headline"; until 2026-08-25 that was a
+# hand-verified claim, re-checked by hand each time somebody remembered to.  The recorded
+# fail-open was: a `ledger class = 0` count computed FILE-LOCALLY reads as "admit-free
+# cone" -- so assert instead that nothing on the headline's side ever APPLIES the tainted
+# lemma.  That is what this phase does.
+#
+# HONEST SCOPE, and this header is as much the deliverable as the check.  It is a NAME-LEVEL
+# OVER-APPROXIMATION over comment-stripped code.  It does NOT see a bare `smt()` that takes
+# a lemma from ambient context without naming it, nor reachability through a clone
+# instantiation or a module argument.  The over-approximation direction is the safe one for
+# an EXCLUSION claim, and those two holes are exactly why they are written down here rather
+# than left for the next reader to discover.
+#
+# The specific regression guarded: wiring EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded into the
+# headline. That promotes a REFUTABLE lemma (a collision falsifies nhchwcoll_hchwpre_msg
+# outright) into the certified result. Control T1 exercises exactly that.
+if [ -f tools/taint_closure.py ] && [ -f cert-taint-closure.tsv ]; then
+  if out=$(python3 tools/taint_closure.py --check 2>&1); then
+    echo "$out" | sed 's/^/     /'
+  else
+    echo "$out" | sed 's/^/     /'; fail=$((fail+1))
+  fi
+  # AND PROVE THE CHECK CAN GO RED.  A containment check that cannot fail is decoration;
+  # these five mutations each DELETE a specific piece of information and must be rejected
+  # FOR THE DECLARED REASON, graded on the message and not merely on exit status.
+  if [ -f scratch/taint_controls.sh ]; then
+    if cout=$(bash scratch/taint_controls.sh 2>&1); then
+      echo "OK   taint controls: $(printf '%s' "$cout" | tail -1)"
+    else
+      echo "FAIL taint controls did not all discriminate:"; printf '%s\n' "$cout" | sed 's/^/       /'; fail=$((fail+1))
+    fi
+  else
+    echo "FAIL scratch/taint_controls.sh missing -- the containment check is unvalidated"; fail=$((fail+1))
+  fi
+else
+  echo "FAIL taint inputs missing (tools/taint_closure.py / cert-taint-closure.tsv)"; fail=$((fail+1))
+fi
+
 # close a determined TOCTOU race, but it does mean any edit that PERSISTS
 # past the compile is caught, and it costs one second.
 INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 if [ "$INPUTS_ID_END" != "$INPUTS_ID" ]; then
   echo "FAIL inputs CHANGED DURING THE RUN: start $INPUTS_ID, end $INPUTS_ID_END"
   fail=$((fail+1))

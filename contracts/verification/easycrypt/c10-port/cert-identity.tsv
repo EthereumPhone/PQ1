@@ -526,7 +526,13 @@
 #
 # 2026-08-24 (second).  split cb901c18d79650eef742a8ddcd884094 -> 6eead428c24e60501204f9cd378fedf8.
 # 2026-08-25.  split 6eead428c24e60501204f9cd378fedf8 -> 88de8169ed19b856ddd270fedd287f90.
+# 2026-08-26.  split 88de8169ed19b856ddd270fedd287f90 -> b661e2a66fd8682d2648adadc2aad95f.
+#   PHASE 5 taint containment: tools/taint_closure.py, cert-taint-closure.tsv,
+#   scratch/taint_controls.sh all JOIN the hashed set.
 #   encode_msgWOTS_C free op -> DEFINITION; `hencb` discharged from the headline
+#   NB: a86a4a72.. appears nowhere as a real identity -- it was produced by a STALE
+#   copy of the hashed-file list in scratch/encode-compat/inputs_id.sh, which had not
+#   picked up the three files PHASE 5 added.  That script now DERIVES the list.
 #   family; +1 op pin, +1 lemma pin, +1 control, control floor 5->6.
 #   THE CLEAN STATEMENT NOW EXISTS AT DEPLOYED PARAMETERS.  New lemma
 #   NB: two earlier values in this arc (ddd456c5.., 2bcbb7ce..) were computed on
@@ -1073,5 +1079,5 @@
 #   Updated to the live 242/217/345/389/1193 with a dated note; the superseded
 #   value stays recoverable in git and in the dated entries below it.
 # tree	hash
-split	88de8169ed19b856ddd270fedd287f90
+split	b661e2a66fd8682d2648adadc2aad95f
 fork	9c2d21280c84d52c30b22111151f1135

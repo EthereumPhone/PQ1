@@ -3,6 +3,13 @@
 # MUST be run inside ec-grind with LC_ALL=C -- the hash is collation-sensitive.
 # SELF-VALIDATING: run it against an unchanged tree and it must reproduce the value the
 # gate printed.  If it does not, do NOT trust it -- take the gate's printed value instead.
+#
+# 2026-08-26: the file list below is now DERIVED FROM cert_gate_split.sh by
+# regenerating this script, not hand-copied.  The hand-copied version went stale the
+# instant PHASE 5 added three files to the gate's hashed set, and confidently produced
+# a WRONG identity (a86a4a72 vs the gate's b661e2a6).  Duplicating the gate's logic is
+# the same mistake as hand-rolling its census diff -- if you edit the gate's sha256sum
+# line, regenerate this.
 set -u
 cd /work
 export LC_ALL=C
@@ -15,4 +22,4 @@ while read -r n; do case "$n" in ''|\#*) continue;; esac; ROOTS_ID="$ROOTS_ID $D
 for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_ID $B/$n.ec"; done
 { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32
