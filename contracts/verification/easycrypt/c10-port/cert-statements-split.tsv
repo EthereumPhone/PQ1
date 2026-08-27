@@ -1159,3 +1159,5 @@ cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGH
 # Every previous deployed variant carried N2; the only N2-free/Q-free/free-real-free
 # statement was not deployed.  This is the first that is all four.
 cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS	16c2ad3b98c5667d09032f6cf2e4c473
+cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_PINNED_ENCODER	78cb5748ac4e222308c8ec0f4e0789e9
+cdrafts-split/GprocChargedQWired.ec::pinned_encoder_is_not_degenerate	b11d7c6c4e810027b2b06f6ba2431138

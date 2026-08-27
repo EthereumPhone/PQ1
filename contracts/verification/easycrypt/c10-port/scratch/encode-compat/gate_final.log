@@ -1,9 +1,9 @@
-### INPUTS_SHA256 7a40d9b1f07b29cb56bc56ce9ca74e3a
+### INPUTS_SHA256 f2b459d0205e8b1c4fbf116e541d14be
 OK   INPUTS_SHA256 matches the committed identity
 ### TOOLCHAIN GIT hash: r2026.02
 ### PROVERS 0a5b3d54dcce300e 25 configurations
 OK   no dual-extension theory names on the include path
-### ECO_PURGED=40
+### ECO_PURGED=39
 ### ECO_REMAINING=0
 ### PHASE 1 — TARGETS
 OK   base/WOTS_TW_ES
@@ -85,7 +85,7 @@ OK   GprocQBound (cli, 12 cmds)
 OK   GprocQWired (cli, 46 cmds)
 OK   DarkSide (cli, 153 cmds)
 OK   DarkSideC10 (cli, 14 cmds)
-OK   GprocChargedQWired (cli, 42 cmds)
+OK   GprocChargedQWired (cli, 53 cmds)
 ### CLI_FILES_RUN=38 CLI_DISAGREEMENTS=0
 ### PHASE 1f — WATCHED FILES (T1/T2/T3 branch proofs; NOT certified)
 ### WATCHED_FILES_RUN=0 WATCHED_FAILURES=0
@@ -1171,9 +1171,11 @@ OK   statement pinned: op:cdrafts-split/FORS_C.ec::fverify
 OK   statement pinned: op:cdrafts-split/FORS_C.ec::verifyC
 OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT
 OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
-statements pinned=1072 expected=1072 (manifest rows)
+OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_PINNED_ENCODER
+OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::pinned_encoder_is_not_degenerate
+statements pinned=1074 expected=1074 (manifest rows)
 ### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)
-OK   coverage: all 987 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
+OK   coverage: all 989 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
 ### PHASE 1g — POLICY-CAP QUARANTINE (cdrafts-split/C10DeployedScope.ec)
 OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
 ### PHASE 2 — CONE CENSUS vs cert-baseline-split.tsv (ADDITIONS FATAL)
@@ -1199,8 +1201,8 @@ OK   margin guardrails 4/4 (happy path)
 OK   margin negative controls 3/3 (guardrails demonstrably fire)
 OK   margin figures match the committed manifest (7/7)
 ### PHASE 5 — TAINT CONTAINMENT (name-level over-approximation, NOT a proof-term check)
-     OK   taint containment: closure = 6 lemmas, none of the 6 headline results is in it (name-level over-approximation)
+     OK   taint containment: closure = 6 lemmas, none of the 7 headline results is in it (name-level over-approximation)
 OK   taint controls: taint controls: pass=5 fail=0
-OK   inputs unchanged across the run (7a40d9b1f07b29cb56bc56ce9ca74e3a)
+OK   inputs unchanged across the run (f2b459d0205e8b1c4fbf116e541d14be)
 ### RESULT: GREEN
-__GATE_RC=0 __WALL_S=4528
+__GATE_RC=0 __WALL_S=4499

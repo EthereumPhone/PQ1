@@ -46,6 +46,10 @@ HEADLINE = [
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT',
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS',
+    # Added 2026-08-27 with the variant itself.  A headline result that is NOT in this
+    # list is NOT checked for taint -- adding a capstone without adding it here is a
+    # silent coverage hole, so the two edits belong in the same commit.
+    'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_PINNED_ENCODER',
     'EUFCMA_SPHINCS_PLUS_C10_GROUNDED',
     'EUFCMA_SPHINCS_PLUS_C10_QWIRED',
     'gproc_Q_bound',

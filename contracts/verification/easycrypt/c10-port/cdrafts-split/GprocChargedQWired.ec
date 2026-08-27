@@ -414,3 +414,117 @@ move=> hc hsz.
 have [# h0 h1 h2 h3] := c10_dfC_separations_from_width_alone hsz.
 exact (EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT F &m hc h0 h1 h2 h3).
 qed.
+
+(* ==========================================================================
+   THE SAME STATEMENT WITH THE ENCODER PINNED, NOT MERELY WIDTH-CONSTRAINED.
+
+   WHY THIS EXISTS, and it is NOT a cosmetic re-spelling.  _AT_PINNED_ENCODER and
+   _AT_DEPLOYED_PARAMS both carry TWO premises, but they are not equally informative.
+   `size (emb_in witness) = 8*n + c10_r` is DEGENERATELY SATISFIABLE, and this tree
+   says so at C10DeployedInstance.ec:322 (adversarial review, 2026-08-01):
+
+     "a CONSTANT `emb_in` satisfies it while collapsing every ThC input and making
+      the S-TCR term trivially winnable."
+
+   A constant encoder does not make the bound FALSE -- it makes it UNINFORMATIVE, by
+   sending the S-TCR summand to ~1.  Pinning `emb_in = c10_embg` excludes exactly those
+   models: `c10_embg_not_constant` (C10DeployedCapstone.ec) is proved PREMISE-FREE, and
+   `c10_embg_inj` gives injectivity given the counter-space bound
+   `STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`.  So this variant buys NON-DEGENERACY at equal
+   premise count, which is the thing the width fact could not give.
+
+   WHAT IT COSTS, stated plainly.  `emb_in = c10_embg` is a STRICTLY STRONGER premise
+   than the width fact, so this theorem covers FEWER models than _AT_DEPLOYED_PARAMS.
+   Neither supersedes the other: the width form is more general, this one is more
+   informative.  Both are gated; quote whichever the claim needs.
+
+   AND WHAT IT DOES *NOT* BUY.  `c10_embg` is an EasyCrypt definition
+   (`DigestBlock.val x.`1 ++ int2bs c10_r (index x.`2 ...)`).  That it matches what
+   `sphincs-c10` actually serialises is a FIDELITY claim, argued in
+   C10DeployedInstance.ec and NOT machine-checked against the Rust.  Pinning the encoder
+   moves the assumption from "some encoder of this width" to "this specific encoder";
+   it does not verify the deployment.
+
+   STATEMENT DERIVED MECHANICALLY from _AT_DEPLOYED_PARAMS by script -- the width premise
+   replaced by the encoder pin, with an assertion that no `size (emb_in` premise survives.
+   ========================================================================== *)
+lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_PINNED_ENCODER
+  (F <: Adv_EUFCMA_C{ -R_int_STCRC, -R_int_WOTSTW,
+             -O_MEUFGCMA_WOTSC_Default, -O_MEUFGCMA_WOTSTWESNPRF,
+             -STCRC_WC.O_STCRC_Default, -FC.O_THFC_Default, -O_THFC_MA, -G0_INT,
+             -R_MEUFGCMAWOTSC_EUFNAGCMA_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_C,
+             -O_MEUFGCMA_WOTSC_V, -R_SMDTTCRCPKCO_C, -R_SMDTTCRCTRH_C,
+             -FSSLXMTWES.PKCOC_TCR.O_SMDTTCR_Default, -FSSLXMTWES.PKCOC.O_THFC_Default,
+             -FSSLXMTWES.TRHC_TCR.O_SMDTTCR_Default, -FSSLXMTWES.TRHC.O_THFC_Default,
+             -R_top,
+             -DSSC.Stateless.O_CMA_Default, -O_CMA_SPHINCSPLUSTWC_FS,
+             -SKG_PRF.O_PRF_Default, -EUF_CMA_SPHINCSPLUSTWC_NPRFNPRF_V,
+             -R_top_C, -EUF_NAGCMA_FLSLXMSSMTTWCESNPRF_RV,
+             -R_fors_p, -O_CMA_Gproc, -O_CMA_Gproc_I, -R_ITSRC10_Gproc,
+             -EUF_CMA_Gproc_I, -M.F.O_ITSRC10_Default,
+             (* the nine Q-leg separations gproc_Q_bound needs -- identical to the
+                block GprocQWired.ec carries, and a deliberate NARROWING of F. *)
+             -EUF_CMA_Gproc_V, -R_OPRE_Gproc, -R_TRH_Gproc, -R_TRCO_Gproc,
+             -FTWES.F_OpenPRE.O_SMDTOpenPRE_Default,
+             -FTWES.TRHC_TCR.O_SMDTTCR_Default, -FTWES.TRHC.O_THFC_Default,
+             -FTWES.TRCOC_TCR.O_SMDTTCR_Default, -FTWES.TRCOC.O_THFC_Default })
+  &m :
+    c <= p_tgts =>
+    (* TWO PREMISES, AND THEY DIFFER IN KIND:
+         * `c <= p_tgts`      -- a PARAMETER CHOICE (the SM-DT-TCR game must be given at
+           least as many targets as there are instances); this tree classifies it as
+           not-a-theorem-and-not-meant-to-be (C10DeployedGeometry.ec:464).
+         * `emb_in = c10_embg` -- pins the SERIALISATION ITSELF.  Strictly stronger than
+           the width fact the sibling assumes, and deliberately so: the width fact is
+           DEGENERATELY SATISFIABLE by a constant encoder (C10DeployedInstance.ec:322),
+           which collapses every ThC input and sends the S-TCR summand to ~1.  See
+           `pinned_encoder_is_not_degenerate` below -- that exclusion is a THEOREM here,
+           not a comment. *)
+    emb_in = c10_embg =>   (* the encoder itself, not merely its width *)
+    Pr[EUFCMA_C10(F).main() @ &m : res]
+      <= `|  Pr[SKG_PRF.PRF(R_SKGPRF_EUFCMA_C(F), SKG_PRF.O_PRF_Default).main(false) @ &m : res]
+           - Pr[SKG_PRF.PRF(R_SKGPRF_EUFCMA_C(F), SKG_PRF.O_PRF_Default).main(true) @ &m : res] |
+       + ( Pr[M.F.ITSRC10(R_ITSRC10_Gproc(R_fors_p(F)),
+                          M.F.O_ITSRC10_Default).main() @ &m : res]
+           + ( Pr[FTWES.F_OpenPRE.SM_DT_OpenPRE(R_OPRE_Gproc(R_fors_p(F)),
+                    FTWES.F_OpenPRE.O_SMDTOpenPRE_Default).main() @ &m : res]
+             + Pr[FTWES.TRHC_TCR.SM_DT_TCR_C(R_TRH_Gproc(R_fors_p(F)),
+                    FTWES.TRHC_TCR.O_SMDTTCR_Default,
+                    FTWES.TRHC.O_THFC_Default).main() @ &m : res]
+             + Pr[FTWES.TRCOC_TCR.SM_DT_TCR_C(R_TRCO_Gproc(R_fors_p(F)),
+                    FTWES.TRCOC_TCR.O_SMDTTCR_Default,
+                    FTWES.TRCOC.O_THFC_Default).main() @ &m : res] ) )
+       + ( Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))),
+                                      O_MEUFGCMA_WOTSTWESNPRF, FC.O_THFC_Default).main() @ &m : res]
+           + Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))),
+                               STCRC_WC.O_STCRC_Default).main() @ &m : res]
+           + Pr[FSSLXMTWES.PKCOC_TCR.SM_DT_TCR_C(R_SMDTTCRCPKCO_C(R_top_C(F)),
+                  FSSLXMTWES.PKCOC_TCR.O_SMDTTCR_Default,
+                  FSSLXMTWES.PKCOC.O_THFC_Default).main() @ &m : res]
+           + Pr[FSSLXMTWES.TRHC_TCR.SM_DT_TCR_C(R_SMDTTCRCTRH_C(R_top_C(F)),
+                  FSSLXMTWES.TRHC_TCR.O_SMDTTCR_Default,
+                  FSSLXMTWES.TRHC.O_THFC_Default).main() @ &m : res]
+           + Pr[GAME1_INT(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)),
+                          O_MEUFGCMA_WOTSC_Default, FC.O_THFC_Default).main() @ &m :
+                  res /\ gfail_of O_MEUFGCMA_WOTSC_Default.ps
+                                  O_MEUFGCMA_WOTSC_Default.qs] ).
+
+proof.
+(* Two premises, same count as _AT_DEPLOYED_PARAMS -- but the WIDTH fact is DERIVED here
+   rather than assumed, from the premise-free `c10_embg_size`. *)
+move=> hc hemb.
+have hsz : size (emb_in witness) = 8 * n + c10_r by rewrite hemb c10_embg_size.
+have [# h0 h1 h2 h3] := c10_dfC_separations_from_width_alone hsz.
+exact (EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT F &m hc h0 h1 h2 h3).
+qed.
+
+(* ANTI-VACUITY RECEIPT for the premise above.  The whole point of pinning the encoder
+   rather than its width is to exclude the degenerate constant model; a comment saying so
+   is not evidence.  This is the exclusion, machine-checked, and it needs NO side
+   condition -- `c10_embg_not_constant` is proved premise-free.
+   HONEST SCOPE: this rules out the CONSTANT encoder.  Full injectivity additionally
+   needs the counter-space bound and is `c10_embg_inj` / `c10_embg_meets_LEN_and_INJ`
+   (C10DeployedInstance.ec), not restated here. *)
+lemma pinned_encoder_is_not_degenerate :
+  emb_in = c10_embg => exists (x y : dgstblock * cntr), emb_in x <> emb_in y.
+proof. by move=> hemb; rewrite hemb; exact c10_embg_not_constant. qed.
