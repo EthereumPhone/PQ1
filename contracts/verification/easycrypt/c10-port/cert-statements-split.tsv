@@ -1158,4 +1158,4 @@ cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGH
 # --- the clean statement AT DEPLOYED PARAMETERS (2026-08-24) ---
 # Every previous deployed variant carried N2; the only N2-free/Q-free/free-real-free
 # statement was not deployed.  This is the first that is all four.
-cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS	7fe65ec61d8c7ef6f1c5e9188729b960
+cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS	16c2ad3b98c5667d09032f6cf2e4c473

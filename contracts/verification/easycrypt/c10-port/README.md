@@ -55,14 +55,24 @@ numerically meaningful bound**.
 > statement that is N2-free, Q-free *and* free-real-free; until 2026-08-24 every
 > deployed variant still carried N2.
 >
-> **:white_check_mark: UPDATE 2026-08-25 — it now carries FIVE premises, not six,
-> and only ONE of them is substantive.** The encode-compatibility premise `hencb`
-> was discharged (`encode_msgWOTS_C` is now a definition, so the equation is the
-> theorem `WOTS_C_Real.ec::encode_msgWOTS_C_compat`). Four of the five remaining
-> premises are the deployed parameter pins; the only substantive one left is
-> `c <= p_tgts`, which this tree already classifies as a parameter choice rather
-> than a theorem. Counts, read off the proof binders: `CHARGED_QWIRED` 7→6,
-> `_TIGHT` 6→5, `_TIGHT_AT_DEPLOYED_PARAMS` 6→5. Ledger unchanged at 242.
+> **:white_check_mark: UPDATE 2026-08-27 — it now carries TWO premises, and BOTH
+> are substantive.** Two eliminations, on 2026-08-25 and 2026-08-27:
+> the encode-compatibility premise `hencb` is now the theorem
+> `WOTS_C_Real.ec::encode_msgWOTS_C_compat`, and the three deployed-parameter pins
+> (`n = c10_n`, `len = c10_len`, `k = c10_k`) are gone because the four `dfC0`
+> separations never needed them — the argument is mod-8 and never looks at
+> 16/43/13. Counts, read off the proof binders: `CHARGED_QWIRED` 7→6, `_TIGHT` 6→5,
+> `_TIGHT_AT_DEPLOYED_PARAMS` **6→2**. Ledger unchanged at 242 throughout.
+>
+> **:warning: CORRECTION.** Between 2026-08-25 and 2026-08-27 this block said the
+> deployed statement had five premises of which **"only ONE is substantive"**.
+> **That overstated the artifact.** It counted
+> `size (emb_in witness) = 8*n + c10_r` among "the deployed parameter pins", but
+> that is a CONSTRAINT ON A FREE OP — `emb_in` is `abstract-op:f718c0661391` and
+> nothing in the closure pins its width — not a restatement of a deployed value.
+> The two surviving premises differ in kind and both are real:
+> `c <= p_tgts` is a parameter choice satisfiable by construction, and the
+> `emb_in` width fact is the artifact's **least visible real assumption**.
 > See the final section of this file.
 
 **What the headline carries.** Its premises are `c <= p_tgts`, `0%r <= mkg_adv`,
@@ -1957,11 +1967,19 @@ method produced a wrong count once in this log already):
 | `..._TIGHT` | 6 | **5** |
 | `..._TIGHT_AT_DEPLOYED_PARAMS` | 6 | **5** |
 
-For the deployed statement, four of the five remaining premises are the deployed
-parameter pins (`n = c10_n`, `len = c10_len`, `k = c10_k`, and the serialisation width).
-**Exactly one substantive premise is left: `c <= p_tgts`** — which
-`C10DeployedGeometry.ec:464` already classifies as "NOT A THEOREM AND NOT MEANT TO BE …
-a PARAMETER CHOICE … satisfiable by construction".
+For the deployed statement, three of the five remaining premises were the parameter pins
+`n = c10_n`, `len = c10_len`, `k = c10_k`.
+
+> **:warning: CORRECTED 2026-08-27.** This paragraph originally continued: *"Exactly one
+> substantive premise is left: `c <= p_tgts`."* **That overstated the artifact**, by
+> counting `size (emb_in witness) = 8*n + c10_r` as a deployed parameter pin. It is not —
+> it constrains the FREE op `emb_in`, which nothing in the closure pins. And the three
+> genuine pins turned out to be **removable**, not merely redundant-looking: see the
+> 2026-08-27 section at the end of this file. The deployed statement now carries **two**
+> premises and **both are substantive**: `c <= p_tgts`, which `C10DeployedGeometry.ec:464`
+> classifies as "NOT A THEOREM AND NOT MEANT TO BE … a PARAMETER CHOICE … satisfiable by
+> construction"; and the `emb_in` width fact, which is the artifact's least visible real
+> assumption.
 
 #### This is NOT the move this tree previously declined
 
@@ -2252,3 +2270,117 @@ The fork gate is unaffected: PHASE 5, its tool, its manifest and its controls ar
 into `cert_gate_split.sh` only, and `cert-controls.tsv` — which `cert_gate_fork.sh` reads
 wholesale with fork includes — is untouched.
 
+### UPDATE 2026-08-27 — the deployed statement drops to TWO premises, and I correct my own overstatement
+
+`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS` now carries **two**
+premises. It carried six when written on 2026-08-24.
+
+```
+c <= p_tgts                                <- a PARAMETER CHOICE
+size (emb_in witness) = 8 * n + c10_r      <- a CONSTRAINT ON A FREE OP
+```
+
+#### The three parameter pins were never needed
+
+`n = c10_n`, `len = c10_len`, `k = c10_k` fed exactly one thing: the four `dfC0`
+separations. Those separations are a **mod-8 argument** — `dfC0 = 8n + 33 ≡ 1 (mod 8)`
+while `8n`, `8n·len`, `8n·2`, `8n·k` are all `≡ 0 (mod 8)` for **any** integers — so the
+argument never looks at 16/43/13.
+
+**This tree already knew that, and had already proved the replacement.**
+`C10DeployedCapstone.ec:407` records it verbatim: *"the four dfC0 separations follow from
+the WIDTH premise ALONE, with n, len and k FREE … its name promises more than its proof
+uses"*, and `c10_dfC_separations_from_width_alone` is the lemma it proved for exactly this,
+pinned since. When I wrote `_TIGHT_AT_DEPLOYED_PARAMS` on 2026-08-24 I reached for
+`c10_dfC_separations_deployed` — the variant **with** the premises — instead. **That was my
+miss, not a gap in the tree.** The fix is a one-line swap at the call site.
+
+So this is an **elimination, not a trade**. The 2026-08-24 section claimed the deployed
+variant was "a trade, not an elimination: the premise count is unchanged at 6". True of the
+proof as I wrote it; it did not have to be.
+
+#### And the claim I published on 2026-08-25 was wrong
+
+I wrote that the deployed statement had *"only ONE substantive premise"*. **That overstated
+the artifact.** I counted `size (emb_in witness) = 8*n + c10_r` among "the deployed
+parameter pins". It is not one: `emb_in` is `abstract-op:f718c0661391` and **nothing in the
+closure pins its width**. It is a genuine assumption about a free operator, and with the
+three real pins now gone it is the artifact's **least visible real assumption** — quieter
+than `c <= p_tgts`, which at least has a paragraph explaining itself.
+
+The two surviving premises differ in kind, and a write-up that calls both "substantive" and
+stops there is not much better than the sentence it replaces:
+
+* **`c <= p_tgts`** — the SM-DT-TCR game must be given at least as many targets as there
+  are instances. `C10DeployedGeometry.ec:464` classifies it as "NOT A THEOREM AND NOT MEANT
+  TO BE … satisfiable by construction". Nothing about the deployment can make it false.
+* **`size (emb_in witness) = 8*n + c10_r`** — asserts the serialisation is exactly
+  `NODE ‖ u32 counter`. This is a **fidelity** claim about the deployed encoder, and it is
+  assumed, not verified against `sphincs-c10`.
+
+#### A structural fact worth stating plainly
+
+While checking this I confirmed that `n`, `len`, `k`, `log2_w`, `h'` and `d` are pinned by
+**axioms** in the cone (`SPHINCS_PLUS.ec:44,53,73,97,106,116`, all ledger `axiom` rows). So
+the *whole* development is specialised to C10's geometry, not parameter-generic — the
+declaration site says so deliberately: *"the whole development below is now about C10's
+actual geometry"*, with the constants left opaque plus a `*_val` axiom so MM45's tuned
+proofs are not perturbed. That is documented and intended; it is noted here only because it
+means the "abstract" capstones are not abstract in the parameters either, and a reader
+should not infer generality from their statements.
+
+**It also means the pins were doubly removable** — derivable from `n_val`/`len_val`/`k_val`
+*and* unnecessary to the separations. The fix taken uses the second route, which is
+strictly better: it consumes no axiom, and the separations hold with the parameters free.
+
+#### The remaining `emb_in` premise HAS a known discharge route — it is just not taken here
+
+Stated so nobody reads "least visible real assumption" as "irreducible". The tree already
+has both halves:
+
+* `C10DeployedInstance.ec::c10_embg_size` proves `size (c10_embg x) = 8*n + c10_r`
+  **with no premises at all**; and
+* the `..._PINNED_ENCODER` family (`C10DeployedCapstone.ec:191`,
+  `GprocQWired.ec:418`) already takes `emb_in = c10_embg` as a premise.
+
+So a `_TIGHT_AT_PINNED_ENCODER` corollary would carry `c <= p_tgts` and
+`emb_in = c10_embg`, discharging the width fact by `rewrite … c10_embg_size`. That trades
+a bare width assumption for a **pin to the concrete C10 serialisation** — the same premise
+count, but a fidelity statement a reader can check against `sphincs-c10` instead of an
+unexplained arithmetic side condition. It is the obvious next unit and is **not** done
+here; it would need its own gate run.
+
+#### Residual: the superseded capstones still carry the redundant pins
+
+The three parameter pins were removed from the statement the README tells the product to
+quote. A comment-stripped sweep of all 45 cone files finds them still carried by
+`C10DeployedCapstone.ec::{EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS,
+…_PINNED_ENCODER}` and `GprocQWired.ec::{…_AT_DEPLOYED_PARAMS_QWIRED,
+…_AT_DEPLOYED_PARAMS_PINNED_ENCODER_QWIRED, deployed_qwired_at_witness}`. Those are
+superseded variants, and `C10DeployedCapstone.ec:407` has documented their redundancy
+since 2026-08-03. They are left alone deliberately — each fix is another pin change and
+another gate run for a statement the product does not quote — and are recorded here rather
+than left for a reader to rediscover. The carriers in `C10DeployedGeometry.ec` and
+`C10DeployedInstance.ec` are a different case entirely: those lemmas are *about* the
+deployed parameters, so the pins are their subject matter, not dead weight.
+
+#### Cost
+
+Predicted before the run and matched exactly: census `added=0 removed=0`, **ledger 242**,
+`CONE_FILES` 45, coverage 987/987, taint closure 6 — and **exactly one** statement digest
+moved, the deployed lemma's own. `C10DeployedCapstone` was already a certified root, so the
+new `require` adds no cone file.
+
+```
+### RESULT: GREEN            __GATE_RC=0   __WALL_S=4528
+OK  INPUTS_SHA256 matches the committed identity (7a40d9b1...)
+### TOOLCHAIN GIT hash: r2026.02   ### PROVERS 0a5b3d54dcce300e 25 configurations
+statements pinned = 1072/1072
+OK  coverage: all 987 top-level statements across 45 CONE files are pinned
+cone: keys 1555=1555 | ROWS 1634=1634 | added=0 removed=0
+ledger=242  parameters=214  bindings=366  meaning=389  definitions=423  total=1634
+controls executed (unique)=6
+OK  taint containment: closure = 6 lemmas, none of the 6 headline results is in it
+OK  taint controls: pass=5 fail=0
+OK  inputs unchanged across the run
+```

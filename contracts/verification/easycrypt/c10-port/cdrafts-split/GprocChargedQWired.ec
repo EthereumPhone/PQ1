@@ -61,6 +61,10 @@ require import GprocQWired.   (* reuse its WitnessF for the anti-vacuity check *
    GprocQWired.ec:55 uses, and both files are ALREADY closure members, so this adds
    no new file to the cone -- verified after the edit (CONE_FILES stays 45). *)
 require import C10DeployedInstance.
+(* for c10_dfC_separations_from_width_alone -- the four dfC0 separations WITHOUT the
+   redundant n/len/k premises.  C10DeployedCapstone is already a certified root and is
+   already in the 45-file cone, so this adds no cone file. *)
+require import C10DeployedCapstone.
 
 import FSSLXMTWES.
 import FSSLXMTWES.WTWES.
@@ -304,18 +308,29 @@ qed.
    than the abstract headline.  This is the first deployed statement that is
    N2-free AND Q-free AND free-real-free.
 
-   WHAT IS AND IS NOT TRADED.  The four ABSTRACT width disequalities
-   (`dfC0 <> 8*n`, `... * len`, `... * 2`, `... * k`) are DISCHARGED here by
-   c10_dfC_separations_deployed (C10DeployedInstance.ec:294) from the four
-   DEPLOYED parameter pins.  That is a trade, not an elimination: the premise
-   count is unchanged at 6.  What it buys is that the remaining premises are
-   about DEPLOYED PARAMETERS -- n = 16, len = 43, k = 13, and the embedding width
-   -- rather than about an abstract constant, which is the whole point of a
-   deployed quotation surface.
+   WHAT IS AND IS NOT TRADED -- CORRECTED 2026-08-27.  This paragraph used to read:
+   "The four ABSTRACT width disequalities are DISCHARGED here by
+   c10_dfC_separations_deployed (C10DeployedInstance.ec:294) from the four DEPLOYED
+   parameter pins.  That is a trade, not an elimination: the premise count is
+   unchanged at 6.  What it buys is that the remaining premises are about DEPLOYED
+   PARAMETERS -- n = 16, len = 43, k = 13, and the embedding width."
+   THAT WAS TRUE OF THE PROOF AS WRITTEN AND IT DID NOT HAVE TO BE.  The four dfC0
+   separations DO NOT NEED n, len or k at all: the argument is MOD 8 --
+   dfC0 = 8n + 33 = 1 (mod 8) while 8n, 8n*len, 8n*2 and 8n*k are 0 (mod 8) for ANY
+   integers -- so it never looks at 16/43/13.  This tree recorded exactly that on
+   2026-08-03 (C10DeployedCapstone.ec:407, "its name promises more than its proof
+   uses") and proved `c10_dfC_separations_from_width_alone` for it.  When this lemma
+   was written on 2026-08-24 I reached for the variant WITH the premises anyway.
+   That was MY MISS, not a gap in the tree, and it is fixed here.
 
-   Statement derived MECHANICALLY from CHARGED_QWIRED_TIGHT: the four dfC0
-   premises were replaced by the deployed block by script, asserting no `dfC0`
-   token survives.
+   SO IT IS NOW AN ELIMINATION, NOT A TRADE: 5 premises -> 2.  And the two that
+   remain are DIFFERENT IN KIND, which the old paragraph's "n = 16, len = 43,
+   k = 13, and the embedding width" phrasing hid:
+     * `c <= p_tgts` is a PARAMETER CHOICE, satisfiable by construction;
+     * `size (emb_in witness) = 8*n + c10_r` is a CONSTRAINT ON A FREE OP
+       (`emb_in` is abstract-op:f718c0661391, unpinned anywhere in the closure).
+   The second is the artifact's least visible real assumption.  Do not describe the
+   deployed statement as having "one substantive premise": it has two.
    ========================================================================== *)
 lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
   (F <: Adv_EUFCMA_C{ -R_int_STCRC, -R_int_WOTSTW,
@@ -339,9 +354,22 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
              -FTWES.TRCOC_TCR.O_SMDTTCR_Default, -FTWES.TRCOC.O_THFC_Default })
   &m :
     c <= p_tgts =>
-    n       = c10_n     =>   (* 16, params.rs:19 *)
-    len     = c10_len   =>   (* 43, params.rs:49 *)
-    k       = c10_k     =>   (* 13, params.rs:34 *)
+    (* THE THREE DEPLOYED-PARAMETER PREMISES ARE GONE (2026-08-27).  They were
+       REDUNDANT and this tree already knew it: C10DeployedCapstone.ec:407 records
+       "the four dfC0 separations follow from the WIDTH premise ALONE, with n, len and
+       k FREE ... its name promises more than its proof uses", and proves
+       `c10_dfC_separations_from_width_alone` for exactly that.  The separations are a
+       MOD-8 argument -- dfC0 = 8n+33 = 1 (mod 8) while 8n, 8n*len, 8n*2, 8n*k are all
+       0 (mod 8) for ANY integers -- so it never looks at 16/43/13.  When this lemma was
+       written on 2026-08-24 it reached for `c10_dfC_separations_deployed` (the variant
+       WITH the premises) instead; that was my miss, not a gap in the tree.
+       WHAT REMAINS IS TWO PREMISES, AND THEY DIFFER IN KIND:
+         * `c <= p_tgts`                     -- a PARAMETER CHOICE (the SM-DT-TCR game
+           must be given at least as many targets as there are instances); the tree
+           classifies it as not-a-theorem-and-not-meant-to-be (C10DeployedGeometry:464).
+         * `size (emb_in witness) = 8*n + c10_r` -- a genuine CONSTRAINT ON A FREE OP.
+           `emb_in` is abstract-op:f718c0661391; nothing in the closure pins its width.
+           This is the artifact's least visible real assumption. *)
     size (emb_in witness) = 8 * n + c10_r =>   (* NODE || u32 counter *)
     Pr[EUFCMA_C10(F).main() @ &m : res]
       <= `|  Pr[SKG_PRF.PRF(R_SKGPRF_EUFCMA_C(F), SKG_PRF.O_PRF_Default).main(false) @ &m : res]
@@ -372,15 +400,17 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
                                   O_MEUFGCMA_WOTSC_Default.qs] ).
 
 proof.
-(* Binder order follows the STATEMENT, which keeps `c <= p_tgts` first (inherited
-   from the parent) and appends the deployed block.  The encode equation was a
-   premise here until 2026-08-25 and is now discharged by `encode_msgWOTS_C_compat`
-   (WOTS_C_Real.ec), so it no longer appears in this binder list.  The
-   first attempt used AT_DEPLOYED_PARAMS_QWIRED's order and misaligned every name:
+(* Binder order follows the STATEMENT: `c <= p_tgts` (inherited from the parent) then
+   the single width fact.  TWO premises now, not six.  The encode equation was a premise
+   here until 2026-08-25 and is discharged by `encode_msgWOTS_C_compat`
+   (WOTS_C_Real.ec); the n/len/k pins were premises until 2026-08-27 and are gone
+   because the dfC0 separations never needed them.  History kept because it is the
+   reason the binder list looks nothing like it did when first written:
+   the first attempt used AT_DEPLOYED_PARAMS_QWIRED's order and misaligned every name:
    `hc` was fed where `n = c10_n` was expected.  EasyCrypt reported it precisely --
    "this proof-term proves: c <= p_tgts / but is expected to prove: n = c10_n" -- so
    this is read off the error, not guessed. *)
-move=> hc hn hlen hk hsz.
-have [# h0 h1 h2 h3 g0 g1 g2 g3 hnem] := c10_dfC_separations_deployed hn hlen hk hsz.
+move=> hc hsz.
+have [# h0 h1 h2 h3] := c10_dfC_separations_from_width_alone hsz.
 exact (EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT F &m hc h0 h1 h2 h3).
 qed.
