@@ -25,7 +25,7 @@ earlier stage of the same work and is retained only as history.
 Read this section before quoting anything from this directory.
 
 The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
-(`cdrafts-split/GprocChargedQWired.ec:69`) — a gated closure member whose statement
+(`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a
 numerically meaningful bound**.
 
@@ -89,8 +89,10 @@ and four C10 width facts on `dfC0` — **six**. Until 2026-08-25 it also carried
 encode-compatibility equation `encode_msgWOTS_C p a x cc = encode_msgWOTS
 (ThC p a x cc)`; that is now a **theorem**
 (`WOTS_C_Real.ec::encode_msgWOTS_C_compat`) and no longer a premise. Its right-hand side is the
-SKG-PRF distinguishing advantage, the free real `mkg_adv`, and **ten named game
-probabilities**: `M.F.ITSRC10`; the three that replace `Q`
+SKG-PRF distinguishing advantage, the free real `mkg_adv`, and **nine named game
+probabilities** (**corrected 2026-08-27 — this said "ten" while the list below it
+enumerated nine; counted off the lemma, the RHS carries nine distinct `Pr[…]` games**):
+`M.F.ITSRC10`; the three that replace `Q`
 (`F_OpenPRE.SM_DT_OpenPRE`, `TRHC_TCR.SM_DT_TCR_C`, `TRCOC_TCR.SM_DT_TCR_C`); the
 four hypertree terms (`M_EUF_GCMA_WOTSTWESNPRF`, `S_TCR_C_Int_MA`,
 `PKCOC_TCR.SM_DT_TCR_C`, `TRHC_TCR.SM_DT_TCR_C`); and `GAME1_INT`, which is the
@@ -151,7 +153,7 @@ headline swap:
   (`FORS_ES.ec:4828-4832`), so without this the T3 reduction has no alignable
   left-hand side. Nine theorems, zero new assumptions — the split ledger stayed
   at 239 across the promotion. It is a **prerequisite**, not a bound.
-* `FORS_C_TreePort.ec` (1733 lines) is the prior attempt at bounding `Q`. It was
+* `FORS_C_TreePort.ec` (1732 lines) is the prior attempt at bounding `Q`. It was
   admitted to the split closure in run 23 *specifically so its real status is
   gate-enforced rather than asserted in its own prose*; certifying it raised the
   split census by 100 rows. Note what it does and does not bound:
@@ -2476,3 +2478,45 @@ OK  taint controls: pass=5 fail=0
 OK  inputs unchanged across the run
 ```
 
+
+### UPDATE 2026-08-27 (third) — audit of the product-facing section; three corrections
+
+After five units in two days, I re-checked **"What is actually proved, and what is not"**
+line by line against the current tree, rather than trusting that edits had kept it true.
+This section is the surface the product quotes, and this artifact has now produced five
+stale-claim findings in three days, three of them mine.
+
+**Corrected:**
+
+1. **"ten named game probabilities" → NINE.** The RHS of `CHARGED_QWIRED` carries nine
+   distinct `Pr[…]` games, counted off the lemma. The README's *own enumeration
+   underneath the sentence already listed nine* — `M.F.ITSRC10` (1), the three that
+   replace `Q` (4), the four hypertree terms (8), `GAME1_INT` (9). The prose and the list
+   had disagreed with each other, and the prose was wrong. Nothing about the artifact
+   changed; the count of its residual terms was overstated by one.
+2. **`GprocChargedQWired.ec:69` → `:77`.** My own drift, one day old: the
+   `require import C10DeployedCapstone` added on 2026-08-27 shifted the headline lemma
+   down eight lines.
+3. **"`FORS_C_TreePort.ec` (1733 lines)" → 1732.** Confirmed both by `wc -l` and by
+   `awk END{print NR}`; the file ends with a newline, so the two agree.
+
+**Checked and CORRECT — recorded so the audit is not just its findings:**
+
+* `FORS_ES.ec:4828` genuinely is the `_V` → `_VI` hop the text cites it for
+  (`have ->: Pr[…_V.main() …] = Pr[…_VI.main() …]`, closed by
+  `byequiv Eqv_EUF_CMA_MFORSTWESNPRF_V_VI`).
+* `GprocQBound.ec:62` is `lemma gproc_Q_bound`, as cited.
+* "Each cone contains two admits" — split: `nhchwcoll_hchwpre_msg` and `extract_op`;
+  fork: `nhchwcoll_hchwpre_msg` and `EUFNAGCMA_FLSLXMSSMTTWESNPRF`. All four named
+  correctly.
+* "`GprocVI.ec` … Nine theorems" — nine declarations (7 `lemma` + 2 `equiv`).
+
+**Two of my four checks were wrong, not the README.** My first pass "found" only two
+admits missing and only seven theorems in `GprocVI.ec`; both were my own pattern-naive
+greps (`	admit	` does not match the `admit:<digest>` census format, and `^lemma `
+misses `local lemma` and `equiv`). That is the third time in this session a naive grep
+produced a false finding — the others being `MEUFGCMA_WOTSTWESNPRF` matching the oracle
+module `O_MEUFGCMA_WOTSTWESNPRF`, and a taint sweep matching a comment I had just written.
+**A grep that hits is a lead; open the file.**
+
+No gate run: the README is not a gate input, and no `.ec` file, manifest or tool changed.
