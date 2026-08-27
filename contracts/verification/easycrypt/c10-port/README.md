@@ -2520,3 +2520,40 @@ module `O_MEUFGCMA_WOTSTWESNPRF`, and a taint sweep matching a comment I had jus
 **A grep that hits is a lead; open the file.**
 
 No gate run: the README is not a gate input, and no `.ec` file, manifest or tool changed.
+
+
+### UPDATE 2026-08-27 (fourth) — a citation checker was MEASURED and NOT built
+
+Stale `file:line` citations have caused **four** defects in three days, and no gate catches
+them: citations live in comments, which carry no census rows and no statement pins. A
+mechanical checker was the obvious fix, so I measured it before building it.
+
+**It is not viable, and the reason is specific to this tree.** Full write-up:
+`scratch/FINDING-citation-checking-is-not-viable.md`. In short — 581 citations across the
+45 cone files; every candidate rule had a double-digit false-positive rate; and the one
+rule that looked airtight (a line number beyond EOF *must* be wrong) flagged **88
+citations that are all correct**, because this tree cites **four versions of the same
+file** by basename:
+
+```
+base-c10-split/SPHINCS_PLUS.ec            1020 lines
+base-c10-fork/SPHINCS_PLUS.ec             4613 lines
+FV-SPHINCSPLUS-EC/proofs/SPHINCS_PLUS.ec  4609 lines   (upstream MM45)
+```
+
+`SPHINCS_PLUS.ec:2243` is out of range for the split file and valid for upstream. **I
+nearly reported 88 correct citations as stale.** The narrow fallback — restrict to
+`cdrafts-split`, which has no *upstream* twin — fails too: every such file has a **fork**
+twin of similar length, so in-range citations stay ambiguous.
+
+A gate phase with that error rate would be worse than nothing: it trains readers to skip
+the phase, which is how a real finding gets ignored later. So the artifact gains a
+documented negative result instead of a noisy check.
+
+**What is worth doing instead**, and is cheap: say which version you mean when it is not
+the split file (`C10DeployedGeometry.ec:454` now does); prefer `File.ec::name` over
+`File.ec:N`, since names do not drift when a `require` is added; and re-check citations in
+a section when you edit near it — which is exactly what the audit earlier today did, and
+it caught three.
+
+No gate run: no `.ec` file, manifest or tool changed.
