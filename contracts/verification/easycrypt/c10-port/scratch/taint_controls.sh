@@ -135,6 +135,30 @@ open(p,'w').write(s.replace(old, "if re.match(r'\\s*qed\\.', l) or re.match(r'\\
 T8PY
 grade "T8 terminator re-broken to line-initial only" "parser coverage"
 
+echo "=== T9 CLONE ROUTE (PHASE 5's second named hole): cloning an admit-containing"
+echo "        theory must be REFUSED -- the name-level check cannot follow taint through it ==="
+farm cdrafts-split/GprocQWired.ec
+python3 - "$T/w/cdrafts-split/GprocQWired.ec" <<'T9PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+s += "\n\nclone import WOTS_TW_ES as T9_CloneRoute.\n"
+open(p,'w').write(s)
+T9PY
+grade "T9 clone of an admit-containing theory" "clone route into an admit-containing theory is now LIVE"
+
+echo "=== T10 CLONE-SCANNER VACUITY: if the clone scanner stops finding clones it must"
+echo "        FAIL, not pass the clone guard trivially ==="
+farm
+python3 - "$T/w/tools/taint_closure.py" <<'T10PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+frag = "[^.]{0,400}?"
+assert s.count(frag)==1, 'T10 mutation target not found -- control would be vacuous'
+open(p,'w').write(s.replace(frag, "ZZNEVERMATCHESZZ"))
+
+T10PY
+grade "T10 clone scanner blinded" "clone-route guard is vacuous"
+
 echo
 echo "taint controls: pass=$pass fail=$fail"
 [ "$fail" -eq 0 ] || exit 1

@@ -45,6 +45,7 @@ EXPECT_SEEDS       = 2      # the cone's two admits
 EXPECT_CLOSURE     = None   # filled from the manifest, but cross-checked against EXPECT_MIN
 # Declarations the parser is allowed not to register (duplicate (file,name) pairs collapse).
 # Committed, not recomputed: a budget derived from the thing it checks cannot detect drift.
+MIN_CLONE_STMTS  = 60  # MEASURED 80; a floor, so a broken clone scanner cannot pass vacuously.
 MAX_UNREGISTERED = 2   # MEASURED: 951 declarations, 949 registered; the 2 are
                        # duplicate (file,name) pairs collapsing.  A LOOSE budget hides
                        # exactly the bugs this guard exists to catch -- keep it exact.
@@ -144,6 +145,33 @@ def parse():
                  f'registered ({missed} unregistered, budget {MAX_UNREGISTERED}). '
                  f'An unregistered lemma is INVISIBLE to the closure, which is the unsafe '
                  f'direction for an exclusion claim.')
+    # CLONE-ROUTE GUARD (added 2026-08-28).  PHASE 5's SECOND named hole is "reachability
+    # through a clone instantiation rather than a named application".  MEASURED: it is NOT
+    # LIVE in this tree -- of 80 clone statements across the 45 cone files, ZERO name an
+    # admit-containing theory, and both admits sit at FILE TOP LEVEL (not inside any
+    # cloneable sub-theory), so cloning the whole file is the only route and nobody does it.
+    # This guard keeps it that way.  It derives the forbidden names from the COMPUTED
+    # admits, so it tracks the tree rather than a hardcoded list.
+    admit_theories = {os.path.splitext(os.path.basename(f))[0] for (f, _n) in admitted}
+    clone_stmts = 0
+    offenders = []
+    CLONE = re.compile(r'\bclone\b[^.]{0,400}?\.', re.S)
+    for f in cone_files():
+        src = strip_comments(open(f).read())
+        for m in CLONE.finditer(src):
+            clone_stmts += 1
+            blob = m.group(0)
+            for t in admit_theories:
+                if re.search(r'(?:^|[^A-Za-z0-9_])' + re.escape(t) + r'(?![A-Za-z0-9_])', blob):
+                    offenders.append(f'{f}:{src[:m.start()].count(chr(10))+1} clones {t}')
+    # ANTI-VACUITY: a scanner that finds no clones at all would pass this guard trivially.
+    if clone_stmts < MIN_CLONE_STMTS:
+        sys.exit(f'FAIL clone-route guard is vacuous: only {clone_stmts} clone statements '
+                 f'scanned (expected >= {MIN_CLONE_STMTS}) -- the scanner is broken')
+    if offenders:
+        sys.exit('FAIL clone route into an admit-containing theory is now LIVE:\n  ' +
+                 '\n  '.join(offenders) +
+                 '\n  PHASE 5 is a NAME-level check and cannot follow taint through a clone.')
     return lemmas, admitted, opdecls
 
 def mentions(body, name):

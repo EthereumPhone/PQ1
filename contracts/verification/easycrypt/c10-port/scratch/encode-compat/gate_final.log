@@ -1,9 +1,9 @@
-### INPUTS_SHA256 b524583771bd089be5b1add06d90e3f7
+### INPUTS_SHA256 a2f591e8e93b26575e85692437a70f7f
 OK   INPUTS_SHA256 matches the committed identity
 ### TOOLCHAIN GIT hash: r2026.02
 ### PROVERS 0a5b3d54dcce300e 25 configurations
 OK   no dual-extension theory names on the include path
-### ECO_PURGED=1
+### ECO_PURGED=41
 ### ECO_REMAINING=0
 ### PHASE 1 — TARGETS
 OK   base/WOTS_TW_ES
@@ -1202,7 +1202,7 @@ OK   margin negative controls 3/3 (guardrails demonstrably fire)
 OK   margin figures match the committed manifest (7/7)
 ### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)
      OK   taint containment: closure = 6 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
-OK   taint controls: taint controls: pass=9 fail=0
-OK   inputs unchanged across the run (b524583771bd089be5b1add06d90e3f7)
+OK   taint controls: taint controls: pass=11 fail=0
+OK   inputs unchanged across the run (a2f591e8e93b26575e85692437a70f7f)
 ### RESULT: GREEN
-__GATE_RC=0 __WALL_S=4561
+__GATE_RC=0 __WALL_S=4548

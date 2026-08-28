@@ -2221,6 +2221,30 @@ EasyCrypt has no `#print axioms`. It does **not** see:
 * reachability through a clone instantiation or a module argument rather than a named
   application.
 
+> **:white_check_mark: THE SECOND HOLE IS NOT LIVE, AND IS NOW GUARDED — measured
+> 2026-08-28.** Of **80 clone statements** across the 45 cone files, **zero** name an
+> admit-containing theory, and both admits sit at **file top level** — not inside any
+> cloneable sub-theory — so cloning the whole file is the only clone route and nobody
+> takes it. `tools/taint_closure.py` now refuses any clone naming an admit-containing
+> theory, deriving those names from the **computed** admits rather than a hardcoded list,
+> with a floor on the clone count so a broken scanner cannot pass the guard vacuously.
+> Controls **T9** (clone an admit-containing theory -> must be refused) and **T10** (blind
+> the clone scanner -> must fail as vacuous) cover both directions.
+>
+> The **module-argument** half is a different matter, and this is an *argument*, not a
+> measurement: a lemma proved for `M <: T` and applied at a concrete module is still a
+> **named application**, and section-closing generalisation does not change that — so it
+> is not a distinct escape route. Flagged as reasoning about EasyCrypt's semantics rather
+> than something measured, because that is what it is.
+
+```
+### RESULT: GREEN            __GATE_RC=0   __WALL_S=4548
+OK  INPUTS_SHA256 matches the committed identity (a2f591e8...)
+statements pinned = 1074/1074 | coverage 989/989 | added=0 removed=0 | ledger=242
+OK  taint containment: closure = 6 lemmas, none of the 7 headline results is in it
+OK  taint controls: pass=11 fail=0
+```
+
 > **:warning: THE FIRST HOLE IS NOT HYPOTHETICAL — MEASURED 2026-08-28.** It was written
 > as a precaution; it is a fact, and the mechanism works on the exact lemma PHASE 5 exists
 > to contain. Restating the **admitted** `nhchwcoll_hchwpre_msg` with its exact hypotheses
