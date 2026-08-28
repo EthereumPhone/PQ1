@@ -5,8 +5,11 @@ WHAT THIS IS.  Starting from the cone's `admit`ed lemmas, compute every lemma wh
 proof BODY names a tainted lemma, to a fixpoint.  A theorem outside that closure does
 not reach the admit by any NAMED application.
 
-WHAT THIS IS NOT -- read before trusting it.  This is a NAME-LEVEL OVER-APPROXIMATION
-of "uses".  It does NOT see:
+WHAT THIS IS NOT -- read before trusting it.  This is a NAME-LEVEL approximation of
+"uses", and the direction is NOT uniformly safe.  An EXCLUSION claim needs an
+OVER-approximation, but every hole below SHRINKS the closure, i.e. UNDER-approximates.
+An earlier version of this header called the whole thing an "over-approximation", which
+implied a safety margin it does not have (Kimi K3 adversarial review, 2026-08-27).  It does NOT see:
   * a bare `smt()` that picks a lemma out of the ambient context without naming it;
   * reachability through a clone instantiation or a module argument rather than a
     named application.
@@ -24,9 +27,9 @@ mitigations, both implemented below:
   * AMBIGUOUS EDGES ARE KEPT, NOT DROPPED.  Where the positional rule cannot decide
     (both the op and the lemma precede the mention) the edge is retained and LABELLED
     `ambig`.  Retaining is the conservative direction for an EXCLUSION claim: it can only
-    make the closure larger, never let a real taint escape.  The over-approximation direction is the SAFE one for exclusion:
-if a name is absent from the closure it is absent from the true closure too --
-EXCEPT via the two holes above, which is exactly why they are named here.
+    make the closure larger, never let a real taint escape.  So the honest statement is: this phase catches NAMED-APPLICATION DRIFT.  It is NOT a
+soundness proof of exclusion.  A name absent from the closure is absent from the true
+closure ONLY modulo the two holes above -- and both are unsafe-direction.
 
 Usage:  taint_closure.py            -> print the closure
         taint_closure.py --check    -> compare against cert-taint-closure.tsv, exit 1 on drift
@@ -40,6 +43,11 @@ MANIFEST      = 'cert-taint-closure.tsv'
 # reads its expectation out of the file it is checking cannot detect that file being gutted.
 EXPECT_SEEDS       = 2      # the cone's two admits
 EXPECT_CLOSURE     = None   # filled from the manifest, but cross-checked against EXPECT_MIN
+# Declarations the parser is allowed not to register (duplicate (file,name) pairs collapse).
+# Committed, not recomputed: a budget derived from the thing it checks cannot detect drift.
+MAX_UNREGISTERED = 2   # MEASURED: 951 declarations, 949 registered; the 2 are
+                       # duplicate (file,name) pairs collapsing.  A LOOSE budget hides
+                       # exactly the bugs this guard exists to catch -- keep it exact.
 EXPECT_MIN_CLOSURE = 3      # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
@@ -74,7 +82,11 @@ def cone_files():
     return fs
 
 def parse():
-    """-> {name: (file, decl_line, body_text)} and the set of admitted names."""
+    """-> {(file,name): (file, decl_line, body)} and the set of admitted (file,name) keys.
+
+    KEYED BY (FILE, NAME), not by bare name (fixed 2026-08-27, GPT-5.6 adversarial review).
+    54 lemma basenames are declared in MORE THAN ONE cone file; a bare-name dict silently
+    kept only the LAST, so a taint edge into a shadowed lemma could be lost entirely."""
     lemmas={}; admitted=set(); opdecls={}
     for f in cone_files():
         if not os.path.exists(f): sys.exit(f'FAIL cone file missing: {f}')
@@ -87,14 +99,51 @@ def parse():
             m=DECL.match(l)
             if m:
                 cur=m.group(1); start=i; buf=[]
+                # SAME-LINE `qed.` (fixed 2026-08-27, found by GPT-5.6 adversarial review).
+                # This used to `continue` unconditionally, so a one-line
+                # `lemma f : X. proof. .... qed.` was NEVER REGISTERED -- and worse, `cur`
+                # stayed set and swallowed the following text into that lemma's body until
+                # some LATER qed.  12 such declarations exist in the cone.  A one-line lemma
+                # applying an admitted result would have been INVISIBLE to the closure.
+                if re.search(r'(?:^|[^A-Za-z0-9_\'])qed\.', l):
+                    body=l
+                    lemmas[(f,cur)]=(f, start, body)
+                    if re.search(r'(?:^|[^A-Za-z0-9_\'])admit(?:ted)?\s*\.', body): admitted.add((f,cur))
+                    cur=None; buf=[]
                 continue
             if cur is not None:
                 buf.append(l)
-                if re.match(r'\s*qed\.', l) or re.match(r'\s*abort\.', l):
+                # TERMINATOR MATCHED ANYWHERE ON THE LINE (fixed 2026-08-27, found by
+                # Kimi K3 adversarial review).  This used to be `re.match(r'\s*qed\.')`,
+                # i.e. LINE-INITIAL ONLY -- so a proof closed as `proof. by .... qed.`
+                # never terminated, and the lemma's body silently swallowed everything up
+                # to the next line-initial `qed.`.  314 of the cone's `qed.` lines are of
+                # that shape (33% of 951 declarations), so bodies were routinely
+                # mis-attributed and edges could be both invented and lost.
+                if re.search(r'(?:^|[^A-Za-z0-9_\'])(?:qed|abort)\.', l):
                     body='\n'.join(buf)
-                    lemmas[cur]=(f, start, body)
-                    if re.search(r'(?:^|[^A-Za-z0-9_])admit(?:ted)?\s*\.', body): admitted.add(cur)
+                    lemmas[(f,cur)]=(f, start, body)
+                    if re.search(r'(?:^|[^A-Za-z0-9_])admit(?:ted)?\s*\.', body): admitted.add((f,cur))
                     cur=None; buf=[]
+    # PARSER-COVERAGE GUARD (added 2026-08-27, Kimi K3's recommendation).
+    # Three separate parser bugs in this tool were each INVISIBLE because nothing compared
+    # what the parser REGISTERED against what is actually declared: one-line proofs (12),
+    # bare-basename overwrites (54 duplicated names), and a line-initial-only terminator
+    # (314 of 951 `qed.` lines).  Every one silently SHRANK the closure, which is the
+    # unsafe direction for an exclusion claim.  So: count declarations independently and
+    # require the parser to have registered essentially all of them.
+    raw = 0
+    for f in cone_files():
+        for l in strip_comments(open(f).read()).split('\n'):
+            if DECL.match(l): raw += 1
+    if raw == 0:
+        sys.exit('FAIL anti-vacuity: zero declarations scanned -- the parser is broken')
+    missed = raw - len(lemmas)
+    if missed > MAX_UNREGISTERED:
+        sys.exit(f'FAIL parser coverage: {raw} declarations scanned but only {len(lemmas)} '
+                 f'registered ({missed} unregistered, budget {MAX_UNREGISTERED}). '
+                 f'An unregistered lemma is INVISIBLE to the closure, which is the unsafe '
+                 f'direction for an exclusion claim.')
     return lemmas, admitted, opdecls
 
 def mentions(body, name):
@@ -105,19 +154,28 @@ def closure():
     if len(admitted) != EXPECT_SEEDS:
         sys.exit(f'FAIL anti-vacuity: found {len(admitted)} admitted lemmas, expected {EXPECT_SEEDS} '
                  f'-- the parser or the tree changed: {sorted(admitted)}')
+    # HEADLINE is matched on the NAME half of the key; a headline name that is itself
+    # duplicated across cone files is refused rather than silently resolved.
+    hkeys={}
     for h in HEADLINE:
-        if h not in lemmas:
+        ks=[k for k in lemmas if k[1]==h]
+        if not ks:
             sys.exit(f'FAIL anti-vacuity: headline name {h} not found as a declaration -- '
                      f'the exclusion check would be vacuous')
+        if len(ks)>1:
+            sys.exit(f'FAIL headline name {h} is declared in {len(ks)} cone files {sorted(x[0] for x in ks)} '
+                     f'-- ambiguous, refusing to guess which one the exclusion is about')
+        hkeys[h]=ks[0]
     def edge(user, t):
         """Does `user` plausibly APPLY tainted lemma `t`?  -> None | 'sure' | 'ambig'"""
         uf, uln, ubody = lemmas[user]
         tf, tln, _tb  = lemmas[t]
-        if not mentions(ubody, t): return None
+        tname = t[1]
+        if not mentions(ubody, tname): return None
         # POSITIONAL RULE (sound): no forward lemma references within a file.
         if uf == tf and uln < tln: return None
         # An `op` of the same name also in scope makes the edge undecidable by name.
-        if (tf, t) in opdecls and opdecls[(tf, t)] < uln: return 'ambig'
+        if (tf, tname) in opdecls and opdecls[(tf, tname)] < uln: return 'ambig'
         return 'sure'
 
     tainted = {a: 'ADMIT' for a in admitted}
@@ -134,7 +192,7 @@ def closure():
 
 def main():
     lemmas, admitted, tainted = closure()
-    rows=sorted((lemmas[n][0], lemmas[n][1], n, tainted[n]) for n in tainted)
+    rows=sorted((lemmas[k][0], lemmas[k][1], k[1], tainted[k]) for k in tainted)
     if '--check' not in sys.argv:
         for f,ln,n,tag in rows:
             print(f'{f}\t{ln}\t{n}\t{tag}')
@@ -144,9 +202,9 @@ def main():
     problems=[]
     if len(rows) < EXPECT_MIN_CLOSURE:
         problems.append(f'closure size {len(rows)} < EXPECT_MIN_CLOSURE {EXPECT_MIN_CLOSURE} -- suspiciously small')
-    for h in HEADLINE:
-        if h in tainted:
-            problems.append(f'HEADLINE IS TAINTED: {h} transitively applies an admitted lemma')
+    for k in tainted:
+        if k[1] in HEADLINE:
+            problems.append(f'HEADLINE IS TAINTED: {k[1]} ({k[0]}) transitively applies an admitted lemma')
     if not os.path.exists(MANIFEST):
         problems.append(f'{MANIFEST} missing -- the closure is unpinned')
     else:
@@ -176,7 +234,7 @@ def main():
         for p in problems: print(f'FAIL taint: {p}')
         return 1
     print(f'OK   taint containment: closure = {len(rows)} lemmas, none of the {len(HEADLINE)} '
-          f'headline results is in it (name-level over-approximation)')
+          f'headline results is in it (name-level, NOT a soundness proof -- see the tool header)')
     return 0
 
 sys.exit(main())

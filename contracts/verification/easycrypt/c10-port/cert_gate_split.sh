@@ -886,7 +886,7 @@ else
   fail=$((fail+1))
 fi
 
-echo '### PHASE 5 — TAINT CONTAINMENT (name-level over-approximation, NOT a proof-term check)'
+echo '### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)'
 # WHAT THIS ADDS.  Every earlier phase pins what the admits SAY; none checked HOW FAR THEY
 # REACH.  README asserts "neither admit reaches the headline"; until 2026-08-25 that was a
 # hand-verified claim, re-checked by hand each time somebody remembered to.  The recorded
@@ -895,11 +895,16 @@ echo '### PHASE 5 — TAINT CONTAINMENT (name-level over-approximation, NOT a pr
 # lemma.  That is what this phase does.
 #
 # HONEST SCOPE, and this header is as much the deliverable as the check.  It is a NAME-LEVEL
-# OVER-APPROXIMATION over comment-stripped code.  It does NOT see a bare `smt()` that takes
+# check over comment-stripped code, and the DIRECTION IS NOT UNIFORMLY SAFE: an exclusion
+# claim needs an OVER-approximation, but every hole below SHRINKS the closure.  Calling it
+# an "over-approximation" (as this header did until 2026-08-27) implied a margin it does not
+# have -- Kimi K3 adversarial review.  It does NOT see a bare `smt()` that takes
 # a lemma from ambient context without naming it, nor reachability through a clone
 # instantiation or a module argument.  The over-approximation direction is the safe one for
-# an EXCLUSION claim, and those two holes are exactly why they are written down here rather
-# than left for the next reader to discover.
+# Three FURTHER parser holes were found on 2026-08-27 by GPT-5.6 and Kimi K3 -- one-line
+# proofs, bare-basename overwrites, and a line-initial-only terminator (314 of 951 qed.
+# lines) -- all now fixed and guarded by a parser-coverage assertion plus controls T5-T8.
+# The two holes above remain, and both are unsafe-direction.
 #
 # The specific regression guarded: wiring EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded into the
 # headline. That promotes a REFUTABLE lemma (a collision falsifies nhchwcoll_hchwpre_msg

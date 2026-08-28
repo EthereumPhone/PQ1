@@ -34,7 +34,9 @@
 #
 # NOT COVERED (read tools/taint_closure.py's header): a bare `smt()` taking a lemma from
 # ambient context without naming it, and reachability via a clone or module argument.
-# This is a NAME-LEVEL OVER-APPROXIMATION, not a proof-term dependency check.
+# This is a NAME-LEVEL check, not a proof-term dependency check -- and NOT uniformly safe:
+# an exclusion claim needs an OVER-approximation, while both remaining holes SHRINK the
+# closure.  Corrected 2026-08-27 (Kimi K3); this header previously said "over-approximation".
 #
 # file	decl_line	lemma	label
 base-c10-split/WOTS_TW_ES.ec	1505	nhchwcoll_hchwpre_msg	ADMIT

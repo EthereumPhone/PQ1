@@ -366,7 +366,7 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
        WHAT REMAINS IS TWO PREMISES, AND THEY DIFFER IN KIND:
          * `c <= p_tgts`                     -- a PARAMETER CHOICE (the SM-DT-TCR game
            must be given at least as many targets as there are instances); the tree
-           classifies it as not-a-theorem-and-not-meant-to-be (C10DeployedGeometry:464).
+           classifies it as not-a-theorem-and-not-meant-to-be (C10DeployedGeometry.ec:468).
          * `size (emb_in witness) = 8*n + c10_r` -- a genuine CONSTRAINT ON A FREE OP.
            `emb_in` is abstract-op:f718c0661391; nothing in the closure pins its width.
            This is the artifact's least visible real assumption. *)
@@ -430,8 +430,16 @@ qed.
    sending the S-TCR summand to ~1.  Pinning `emb_in = c10_embg` excludes exactly those
    models: `c10_embg_not_constant` (C10DeployedCapstone.ec) is proved PREMISE-FREE, and
    `c10_embg_inj` gives injectivity given the counter-space bound
-   `STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`.  So this variant buys NON-DEGENERACY at equal
-   premise count, which is the thing the width fact could not give.
+   `STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`.
+
+   BUT THE PIN DOES NOT RESCUE THE S-TCR TERM, and an earlier draft of this comment implied
+   it did.  Found by Kimi K3 adversarial review, 2026-08-27, and verified: `thfc` is declared
+   with ZERO AXIOMS (SPHINCS_PLUS.ec:488; no axiom row in the census mentions it).  Since
+   `ThC = join_dgst (thfc ..) (thfc ..)`, the interpretation `thfc := const` STILL collapses
+   every ThC input even with `emb_in` pinned.  The degeneracy simply moves ONE COMPOSITION
+   STEP DOWN.  What this variant buys is therefore narrower than "non-degeneracy": it
+   excludes degeneracy VIA `emb_in`, and says nothing about degeneracy via `thfc`.
+   Do not describe it as making the S-TCR term meaningful.
 
    WHAT IT COSTS, stated plainly.  `emb_in = c10_embg` is a STRICTLY STRONGER premise
    than the width fact, so this theorem covers FEWER models than _AT_DEPLOYED_PARAMS.
@@ -473,7 +481,7 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_PINNED_ENCODER
     (* TWO PREMISES, AND THEY DIFFER IN KIND:
          * `c <= p_tgts`      -- a PARAMETER CHOICE (the SM-DT-TCR game must be given at
            least as many targets as there are instances); this tree classifies it as
-           not-a-theorem-and-not-meant-to-be (C10DeployedGeometry.ec:464).
+           not-a-theorem-and-not-meant-to-be (C10DeployedGeometry.ec:468).
          * `emb_in = c10_embg` -- pins the SERIALISATION ITSELF.  Strictly stronger than
            the width fact the sibling assumes, and deliberately so: the width fact is
            DEGENERATELY SATISFIABLE by a constant encoder (C10DeployedInstance.ec:322),

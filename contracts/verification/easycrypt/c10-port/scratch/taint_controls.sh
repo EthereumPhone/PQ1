@@ -77,6 +77,64 @@ farm
 sed -i 's|^base-c10-split/WOTS_TW_ES.ec\t6578\t|base-c10-split/WOTS_TW_ES.ec\t6579\t|' "$T/w/cert-taint-closure.tsv"
 grade "T4 stale manifest line" "does not resolve"
 
+echo "=== T5 ONE-LINE PROOF (hole found by GPT-5.6, 2026-08-27): a same-line lemma that"
+echo "        applies an admit must NOT be invisible to the closure ==="
+farm base-c10-split/WOTS_TW_ES.ec
+python3 - "$T/w/base-c10-split/WOTS_TW_ES.ec" <<'T5PY'
+import sys
+p=sys.argv[1]; L=open(p).read().split('\n')
+hit=False
+for i,l in enumerate(L):
+    if i>1513 and l.strip()=='qed.':
+        L.insert(i+1, "lemma T5_oneline_taint : true. proof. have _ := nhchwcoll_hchwpre_msg. trivial. qed.")
+        hit=True; break
+assert hit, 'T5 mutation did not apply -- the control would be vacuous'
+open(p,'w').write('\n'.join(L))
+T5PY
+grade "T5 one-line lemma applying an admit" "TAINT CLOSURE GREW"
+
+echo "=== T6 SHADOWED BASENAME (hole found by GPT-5.6, 2026-08-27): 54 basenames are"
+echo "        declared in >1 cone file; a duplicated HEADLINE name must be REFUSED ==="
+farm cdrafts-split/GprocQWired.ec
+python3 - "$T/w/cdrafts-split/GprocQWired.ec" <<'T6PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+s += "\n\nlemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT : true. proof. trivial. qed.\n"
+open(p,'w').write(s)
+T6PY
+grade "T6 headline basename shadowed in a 2nd file" "ambiguous, refusing to guess"
+
+echo "=== T7 TRAILING qed (hole found by Kimi K3, 2026-08-27): a proof closed as"
+echo "        \`proof. by ... qed.\` must TERMINATE, not swallow the rest of the file ==="
+farm base-c10-split/WOTS_TW_ES.ec
+python3 - "$T/w/base-c10-split/WOTS_TW_ES.ec" <<'T7PY'
+import sys
+p=sys.argv[1]; L=open(p).read().split('\n')
+hit=False
+for i,l in enumerate(L):
+    if i>1513 and l.strip()=='qed.':
+        # trailing-qed shape: if the terminator is line-initial-only, this never closes
+        L.insert(i+1, "lemma T7_trailing : true.")
+        L.insert(i+2, "proof. have _ := nhchwcoll_hchwpre_msg. trivial. qed.")
+        hit=True; break
+assert hit, 'T7 mutation did not apply -- the control would be vacuous'
+open(p,'w').write('\n'.join(L))
+T7PY
+grade "T7 trailing-qed lemma applying an admit" "TAINT CLOSURE GREW"
+
+echo "=== T8 PARSER COVERAGE (the guard Kimi recommended): if the parser stops"
+echo "        registering declarations, that must FAIL, not silently shrink the closure ==="
+farm
+python3 - "$T/w/tools/taint_closure.py" <<'T8PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+# re-break the terminator exactly as it was before the 2026-08-27 fix
+old = "if re.search(r'(?:^|[^A-Za-z0-9_\\'])(?:qed|abort)\\.', l):"
+assert s.count(old)==1, 'T8 mutation target not found -- control would be vacuous'
+open(p,'w').write(s.replace(old, "if re.match(r'\\s*qed\\.', l) or re.match(r'\\s*abort\\.', l):"))
+T8PY
+grade "T8 terminator re-broken to line-initial only" "parser coverage"
+
 echo
 echo "taint controls: pass=$pass fail=$fail"
 [ "$fail" -eq 0 ] || exit 1

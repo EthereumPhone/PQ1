@@ -79,7 +79,10 @@ numerically meaningful bound**.
 > `emb_in = c10_embg`, deriving the width fact instead of assuming it. That matters
 > because the width fact is **degenerately satisfiable** — a constant `emb_in` meets
 > it while sending the S-TCR summand to ~1 — and the pin excludes those models
-> (`pinned_encoder_is_not_degenerate`, premise-free). **Neither variant supersedes the
+> (`pinned_encoder_is_not_degenerate` — which carries the pin as its premise; only
+> `c10_embg_not_constant` is premise-free). **But the pin does NOT make the S-TCR term
+> meaningful: `thfc` is axiom-free, so `thfc := const` still collapses `ThC`.**
+> **Neither variant supersedes the
 > other:** the pin is a strictly stronger premise, so it covers fewer models. The width
 > form is more general, the pinned one more informative. Quote whichever your claim
 > needs, and say which. See the final section of this file.
@@ -89,10 +92,12 @@ and four C10 width facts on `dfC0` — **six**. Until 2026-08-25 it also carried
 encode-compatibility equation `encode_msgWOTS_C p a x cc = encode_msgWOTS
 (ThC p a x cc)`; that is now a **theorem**
 (`WOTS_C_Real.ec::encode_msgWOTS_C_compat`) and no longer a premise. Its right-hand side is the
-SKG-PRF distinguishing advantage, the free real `mkg_adv`, and **nine named game
-probabilities** (**corrected 2026-08-27 — this said "ten" while the list below it
-enumerated nine; counted off the lemma, the RHS carries nine distinct `Pr[…]` games**):
-`M.F.ITSRC10`; the three that replace `Q`
+SKG-PRF distinguishing advantage (**two** `Pr[…]` experiments forming one advantage), the
+free real `mkg_adv`, and **nine named game probabilities** — **eleven `Pr[…]` expressions
+on the RHS in total**. (Corrected twice: this said "ten" while the list below it
+enumerated nine; the 2026-08-27 fix then wrote "the RHS carries nine distinct `Pr[…]`
+games", which is also wrong — the RHS has eleven `Pr[…]`, of which nine are the named
+games. Found by GPT-5.6 adversarial review.) The nine are: `M.F.ITSRC10`; the three that replace `Q`
 (`F_OpenPRE.SM_DT_OpenPRE`, `TRHC_TCR.SM_DT_TCR_C`, `TRCOC_TCR.SM_DT_TCR_C`); the
 four hypertree terms (`M_EUF_GCMA_WOTSTWESNPRF`, `S_TCR_C_Int_MA`,
 `PKCOC_TCR.SM_DT_TCR_C`, `TRHC_TCR.SM_DT_TCR_C`); and `GAME1_INT`, which is the
@@ -176,7 +181,7 @@ closure files). A container recipe is in `../docker/`.
 # $PATH, so a bare `bash cert_gate_split.sh` from a host shell silently uses whatever
 # EasyCrypt is installed there and produces a PLAUSIBLE BUT WRONG receipt.
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
-  cd /work && bash cert_gate_split.sh'"   # 24 targets, 87 pins, 1159 census rows
+  cd /work && bash cert_gate_split.sh'"   # 38 targets, 1074 pins, 1634 census rows
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
   cd /work && bash cert_gate_fork.sh'"    # 19 targets,  9 pins, 1089 census rows
 ```
@@ -1956,18 +1961,38 @@ every count in this README was right; only the verbal one was wrong.
 ### UPDATE 2026-08-25 — the encode-compat premise is DISCHARGED, not traded
 
 `hencb` — `forall p a x cc, encode_msgWOTS_C p a x cc = encode_msgWOTS (ThC p a x cc)` —
-was a **premise of every capstone in this tree** since the family was built. It is now a
-**theorem**, and the headline family no longer carries it.
+was a premise of every capstone in this tree since the family was built. It is now a
+**theorem**. **Only the four members of the charged-Q-wired headline family actually drop
+it**; the legacy capstones (`SphincsC10CapstoneCharged.ec`, `GprocQWired.ec`,
+`SphincsC10CapstoneWired.ec`, `C10DeployedCapstone.ec`, `GFailCharged.ec`) still carry it
+as a now-tautological premise. "Discharged" below means *discharged in the headline
+family*, not tree-wide.
 
 **What changed, in one line.** `encode_msgWOTS_C` was a FREE op
 (`cdrafts-split/WOTS_C_Real.ec`, previously line 377). It now has a body:
 `encode_msgWOTS (ThC p a x cc)`.
 
-**Why that is a discharge and not a sleight of hand.** By functional extensionality the
-premise already pinned the op to exactly this value, so *every model of (free op +
-premise) is a model of the definition and conversely*. The model class is unchanged and
-the premise is gone. That is different in kind from the 2026-08-24 deployed-params work,
-which **traded** four abstract width facts for four deployed pins.
+**Why that is a discharge and not a sleight of hand.** Among the models that satisfied
+the premise, the theorem covers exactly what it covered before: the premise pinned the op
+to this value already, so the capstone's instances are unchanged, and **no axiom was
+added** (ledger 242, and `defined-op` is not a ledger class). That is different in kind
+from the 2026-08-24 deployed-params work, which **traded** four abstract width facts for
+four deployed pins.
+
+> **:warning: CORRECTED 2026-08-27 (GPT-5.6 adversarial review, verified).** This
+> paragraph originally claimed *"every model of (free op + premise) is a model of the
+> definition and conversely. **The model class is unchanged**"*, and called the edit a
+> **conservative definitional extension**. **Both are false**, and the falsifier is
+> already in this tree: `WOTS_C_Real.ec::encode_msgWOTS_C_compat` is now provable with no
+> hypotheses and was **not** provable before — my own two-sided control
+> (`scratch/encode_compat_derivable.ec`) measured exactly that, RED with the abstract
+> declaration. A conservative extension cannot create a new theorem in the old language.
+> The premise was an **antecedent of individual theorems**, never a global constraint, so
+> the old theory admitted models where the equation fails; those models are now gone.
+> **The global model class SHRANK.** The accurate description is: *an axiom-free
+> specification change that internalizes the previous capstone hypothesis — it restricts
+> the model class, while covering exactly the old capstone instances that satisfied
+> `hencb`.* Say "zero new axioms", not "zero semantic cost".
 
 **Premise counts, measured from the proof binders** (not from lines ending in `=>` — that
 method produced a wrong count once in this log already):
@@ -1987,7 +2012,7 @@ For the deployed statement, three of the five remaining premises were the parame
 > it constrains the FREE op `emb_in`, which nothing in the closure pins. And the three
 > genuine pins turned out to be **removable**, not merely redundant-looking: see the
 > 2026-08-27 section at the end of this file. The deployed statement now carries **two**
-> premises and **both are substantive**: `c <= p_tgts`, which `C10DeployedGeometry.ec:464`
+> premises and **both are substantive**: `c <= p_tgts`, which `C10DeployedGeometry.ec:468`
 > classifies as "NOT A THEOREM AND NOT MEANT TO BE … a PARAMETER CHOICE … satisfiable by
 > construction"; and the `emb_in` width fact, which is the artifact's least visible real
 > assumption.
@@ -2196,8 +2221,26 @@ EasyCrypt has no `#print axioms`. It does **not** see:
 * reachability through a clone instantiation or a module argument rather than a named
   application.
 
-The over-approximation direction is the safe one for an *exclusion* claim — a name absent
-from the closure is absent from the true closure — **except** through those two holes,
+> **:warning: TWO MORE HOLES, found 2026-08-27 by GPT-5.6 adversarial review and now
+> FIXED — the phase was weaker than this section claimed.** (a) The parser skipped the
+> declaration line outright, so a **one-line** `lemma f : X. proof. … qed.` was never
+> registered at all — **12 exist in the cone**, and one applying an admit would have been
+> invisible. (b) Lemmas were keyed by **bare basename**, and **54 basenames are declared
+> in more than one cone file**, so a later declaration silently overwrote an earlier one
+> and could hide a taint edge. Both are fixed; the closure is unchanged at 6, so the
+> *result* was right while the *guard* was not sound against future edits. Controls **T5**
+> (one-line lemma applying an admit) and **T6** (headline basename shadowed in a second
+> file) now cover them — 7 controls, all graded on failure reason.
+
+**The direction label was wrong, and that matters more than the holes themselves.** An
+*exclusion* claim needs **over**-approximation, but every hole listed above — the bare
+`smt()`, clone reachability, and all three parser bugs — **shrinks** the closure. They are
+**under**-approximations, i.e. the unsafe direction. Calling the phase a "name-level
+over-approximation" implied a safety margin it did not have (Kimi K3, 2026-08-27). The
+parser bugs are fixed and guarded; the `smt()` and clone holes remain and are genuinely
+unsafe-direction. The honest statement is: *this phase catches named-application drift; it
+is not a soundness proof of exclusion.* A name absent from the closure is absent from the
+true closure **only** modulo those two remaining holes,
 which is precisely why they are written into the tool header, the manifest header and the
 phase header rather than left for the next reader to find. A check that reads stronger
 than it is becomes the next fail-open.
@@ -2323,7 +2366,7 @@ The two surviving premises differ in kind, and a write-up that calls both "subst
 stops there is not much better than the sentence it replaces:
 
 * **`c <= p_tgts`** — the SM-DT-TCR game must be given at least as many targets as there
-  are instances. `C10DeployedGeometry.ec:464` classifies it as "NOT A THEOREM AND NOT MEANT
+  are instances. `C10DeployedGeometry.ec:468` classifies it as "NOT A THEOREM AND NOT MEANT
   TO BE … satisfiable by construction". Nothing about the deployment can make it false.
 * **`size (emb_in witness) = 8*n + c10_r`** — asserts the serialisation is exactly
   `NODE ‖ u32 counter`. This is a **fidelity** claim about the deployed encoder, and it is
@@ -2332,7 +2375,8 @@ stops there is not much better than the sentence it replaces:
 #### A structural fact worth stating plainly
 
 While checking this I confirmed that `n`, `len`, `k`, `log2_w`, `h'` and `d` are pinned by
-**axioms** in the cone (`SPHINCS_PLUS.ec:44,53,73,97,106,116`, all ledger `axiom` rows). So
+**axioms** in the cone (`SPHINCS_PLUS.ec:44,53,59,73,97,106,116` — **seven**, including
+`a_val : a = 11`, which I missed on the first pass; all ledger `axiom` rows). So
 the *whole* development is specialised to C10's geometry, not parameter-generic — the
 declaration site says so deliberately: *"the whole development below is now about C10's
 actual geometry"*, with the constants left opaque plus a `*_val` axiom so MM45's tuned
@@ -2417,19 +2461,40 @@ The reason is recorded in this tree, from an adversarial review on 2026-08-01
 > *"a CONSTANT `emb_in` satisfies it while collapsing every ThC input and making the
 > S-TCR term trivially winnable."*
 
-A constant encoder does not make the sibling's bound **false**. It makes it
-**uninformative** — it sends the S-TCR summand to ~1, and the inequality then holds for
-reasons that have nothing to do with C10. Pinning `emb_in = c10_embg` excludes exactly
-those models.
+A constant encoder does not make the sibling's bound **false**; it makes it
+uninformative. Pinning `emb_in = c10_embg` excludes every constant-encoder model.
 
-**And that exclusion is a theorem here, not a comment.**
+> **:warning: CORRECTED 2026-08-27 (GPT-5.6 adversarial review, verified).** This
+> originally said the pin *"excludes **exactly** those models"* and that a constant
+> encoder *"sends the S-TCR summand to ~1"*. **Both overstate.**
+> (a) The equality pin excludes constant encoders **and also every other good
+> non-constant serialisation** — it is not a surgical exclusion of the degenerate ones.
+> (b) That the S-TCR summand actually goes to ~1 for *this* reduction and adversary is
+> **not proved** from constant `emb_in`; this tree records at
+> `C10DeployedCapstone.ec:267-274` that with a free `thfc := const` the S-TCR collision
+> term can be 1 **regardless**, which is a separate hole the pin does not touch.
+> What is proved is exactly `pinned_encoder_is_not_degenerate`: **non-constancy**, which
+> is strictly weaker than injectivity and says nothing about the game's probability.
+>
+> **:warning: AND THE SHARPER OBJECTION (Kimi K3, verified).** The pin does not rescue the
+> S-TCR term *at all*, because the degeneracy survives one composition step down:
+> **`op thfc` is declared with ZERO axioms** (`SPHINCS_PLUS.ec:488`; no axiom row in the
+> census mentions it). Since `ThC = join_dgst (thfc …) (thfc …)`, the interpretation
+> `thfc := const` still collapses every `ThC` input **even with `emb_in = c10_embg`
+> pinned**. So the correct claim is narrow: the pin excludes degeneracy **via `emb_in`**,
+> and says nothing about degeneracy via `thfc`. Do not describe it as making the S-TCR
+> term meaningful — that is a separate, still-open hole.
+
+**What is proved is a theorem here, not a comment — and it is only non-constancy.**
 `GprocChargedQWired.ec::pinned_encoder_is_not_degenerate` proves
 
 ```
 emb_in = c10_embg => exists (x y : dgstblock * cntr), emb_in x <> emb_in y
 ```
 
-with **no side condition** — `c10_embg_not_constant` is itself premise-free. Full
+under the pin as its only hypothesis. (**Corrected 2026-08-27:** an earlier draft called
+this lemma "premise-free". It is not — it carries `emb_in = c10_embg`. The premise-free
+lemma is `c10_embg_not_constant`, which it consumes.) Full
 injectivity additionally needs the counter-space bound
 `STCRC_WC.G.CntrFT.card <= 2 ^ c10_r` and is `c10_embg_inj` /
 `c10_embg_meets_LEN_and_INJ`; it is not restated in the capstone file.
@@ -2557,3 +2622,80 @@ a section when you edit near it — which is exactly what the audit earlier toda
 it caught three.
 
 No gate run: no `.ec` file, manifest or tool changed.
+
+
+### UPDATE 2026-08-27 (fifth) — adversarial round: GPT-5.6 + Kimi K3, and they DIVERGED on the main claim
+
+Both models reviewed the five changes above, read-only, from the same prompt. Neither
+modified a file (`git status` checked). **Every finding below was verified against source
+before being acted on.** They found five real defects, three of them in claims I had
+already published.
+
+#### The divergence is the most useful part
+
+**GPT-5.6: C1 is FATAL — not a conservative extension. Kimi K3: "C1 is conservative. Full
+stop."** Reconciled rather than voted: **they answered different questions under the same
+word.** Kimi's five agents enumerated the cone for *constraints* on `encode_msgWOTS_C` —
+axioms, clone bindings, `realize`, section `declare`, shadowing — and found none. That
+settles consistency and "no new axioms", which was the failure mode I named. GPT tested
+*conservativity in the technical sense* and produced a falsifier. On the term I actually
+published, **GPT is right**, and the correction is in the 2026-08-25 section above.
+
+#### What each caught that the other missed
+
+| finding | by | status |
+|---|---|---|
+| "conservative extension / model class unchanged" is false | GPT-5.6 | corrected |
+| PHASE 5 keyed lemmas by **bare basename**; 54 are declared in >1 cone file | GPT-5.6 | fixed + control T6 |
+| **12 one-line proofs** never registered by the parser | GPT-5.6 | fixed + control T5 |
+| RHS has **eleven** `Pr[…]`, not "nine distinct games" — my own correction was wrong | GPT-5.6 | corrected |
+| `a_val : a = 11` — **seven** geometry axioms, not six | GPT-5.6 | corrected |
+| **`thfc` is axiom-free, so the pin does NOT rescue S-TCR** | Kimi K3 | corrected — the sharpest finding of the round |
+| terminator matched **line-initial `qed.` only** — 314 of 951 missed | Kimi K3 | fixed + control T7 |
+| the **"over-approximation" label is backwards** — every hole shrinks the closure | Kimi K3 | corrected |
+| `pinned_encoder_is_not_degenerate` called "premise-free"; it carries the pin | Kimi K3 | corrected |
+| stale repro numbers (`24 targets, 87 pins, 1159 rows`) | Kimi K3 | corrected |
+
+#### The sharpest finding
+
+Kimi did not merely say my C3 phrasing overstated — it showed **why the claim fails**.
+`op thfc` is declared with **zero axioms** (`SPHINCS_PLUS.ec:488`), and
+`ThC = join_dgst (thfc …) (thfc …)`, so `thfc := const` collapses every `ThC` input **even
+with `emb_in = c10_embg` pinned**. The pin excludes degeneracy *via `emb_in`* and nothing
+more. I had implied it made the S-TCR term meaningful; it does not.
+
+#### PHASE 5 was weaker than it claimed, in the unsafe direction
+
+Three independent parser bugs, each of which **shrank** the closure — and an exclusion
+claim needs the opposite. The closure is unchanged at **6** after all three fixes, so the
+*result* held throughout while the *guard* did not. Added the parser-coverage guard Kimi
+recommended, with the budget set to the **measured** truth (951 declarations, 949
+registered, budget 2) rather than a loose one — a loose budget hides exactly the bugs the
+guard exists to catch. Controls are now **9**, up from 5, each graded on failure reason.
+
+#### And a citation I broke myself, this week
+
+`C10DeployedGeometry.ec:464` → `:468`: my own 2026-08-27 edit to that file shifted the
+line, breaking **four** citations (two here, two in `GprocChargedQWired.ec`). This is the
+concrete case the citation-checker finding above predicted and could not have caught.
+
+#### Receipt
+
+```
+### RESULT: GREEN            __GATE_RC=0   __WALL_S=4561
+OK  INPUTS_SHA256 matches the committed identity (b5245837...)
+### TOOLCHAIN GIT hash: r2026.02   ### PROVERS 0a5b3d54dcce300e 25 configurations
+statements pinned = 1074/1074
+OK  coverage: all 989 top-level statements across 45 CONE files are pinned
+cone: keys 1555=1555 | ROWS 1634=1634 | added=0 removed=0
+ledger=242  parameters=214  bindings=366  meaning=389  definitions=423  total=1634
+controls executed (unique)=6
+OK  taint containment: closure = 6 lemmas, none of the 7 headline results is in it
+OK  taint controls: pass=9 fail=0
+OK  inputs unchanged across the run
+```
+
+Neither reviewer modified a file (`git status` checked in both trees). Ledger **242**
+throughout — this round changed comments, the taint tool and its controls, so no
+EasyCrypt-level number moved.
+
