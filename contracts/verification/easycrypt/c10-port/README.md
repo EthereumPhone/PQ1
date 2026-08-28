@@ -2221,6 +2221,28 @@ EasyCrypt has no `#print axioms`. It does **not** see:
 * reachability through a clone instantiation or a module argument rather than a named
   application.
 
+> **:warning: THE FIRST HOLE IS NOT HYPOTHETICAL — MEASURED 2026-08-28.** It was written
+> as a precaution; it is a fact, and the mechanism works on the exact lemma PHASE 5 exists
+> to contain. Restating the **admitted** `nhchwcoll_hchwpre_msg` with its exact hypotheses
+> and **no hint**, a bare `smt()` **closes it**
+> (`scratch/probe_smt_lemma_reach.ec`). It cannot have derived it: the step the admit
+> stands in for is encoder injectivity, which this tree proves is *impossible* at C10's
+> geometry. The two-sided control matters — dropping `m <> m'` makes the statement false
+> by the tree's own refutation, and there `smt` reports **"cannot prove goal (strict)"**
+> (`…_NEG.ec`), so `smt` discriminates and the closure above is evidence rather than an
+> artefact. **Exposure, comment-stripped over the 45 cone files: 921 bare `smt()` against
+> 2139 hinted — 30% of all `smt` calls give the prover no hint list**, concentrated in
+> `GprocT2Trh.ec` (162), `XmssmtCC_All.ec` (150), `FxChain.ec` (143), `GprocT1Opre.ec`
+> (110). Full write-up: `scratch/FINDING-bare-smt-reaches-the-admit.md`.
+>
+> This does **not** show the headline consumes the admit — the closure is still 6 and no
+> escaping path is exhibited. It shows PHASE 5 **cannot rule that out**. Read
+> "gate-enforced containment" as *catches named-application drift*, never as *proved
+> containment*. Closing it properly would need an `#print axioms`-style dependency
+> facility, which EasyCrypt does not have; the alternative — removing 921 bare `smt()`
+> calls — is a large mechanical change with real regression risk. Stating the measured
+> bound is the honest option and is the one taken.
+
 > **:warning: TWO MORE HOLES, found 2026-08-27 by GPT-5.6 adversarial review and now
 > FIXED — the phase was weaker than this section claimed.** (a) The parser skipped the
 > declaration line outright, so a **one-line** `lemma f : X. proof. … qed.` was never
