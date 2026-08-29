@@ -2745,3 +2745,73 @@ Neither reviewer modified a file (`git status` checked in both trees). Ledger **
 throughout — this round changed comments, the taint tool and its controls, so no
 EasyCrypt-level number moved.
 
+
+### UPDATE 2026-08-29 — the admit-free route past admit B is now IN the cone
+
+Two lemmas, proved on 2026-08-12 and left in `scratch/` where nothing gate-protected them,
+are now certified members of `base-c10-split/WOTS_TW_ES.ec`, sitting immediately after the
+admit they replace:
+
+```
+admit_free_caller_split :
+     P m => P m' => ! has_chwcoll ps ad (encode m) (encode m') sig sig'
+  => encode_msgWOTS m = encode_msgWOTS m'                    <- the BadEnc branch
+  \/ has_chwpre ps ad (encode m) (encode m') sig sig'
+
+caller_split_recovers_admit_under_badenc :
+     excluding the left branch recovers the admitted lemma's EXACT conclusion
+```
+
+Both are proved from the **already-complete** `nhchwcoll_hchwpre` (`:1476`), which takes
+`encode m <> encode m'` as a **hypothesis** rather than deriving it. Note the first needs
+**no `m <> m'`** — strictly weaker premises than the admitted lemma, and it still gives the
+caller everything except the charge.
+
+#### Verified, not assumed: neither is in the taint closure
+
+They apply `:1476`, never the admit at `:1505`, so **PHASE 5 itself certifies the
+replacement is admit-free** — closure unchanged at 6, and both new names absent from it.
+That is the property that makes them worth landing.
+
+#### Why the admit cannot simply be discharged
+
+`nhchwcoll_hchwpre_msg` is not merely unproven, it is **REFUTABLE**. `is_chwcoll` (`:763`)
+and `is_chwpre` (`:808`) share the conjunct `BaseW.val em'.[i] < BaseW.val em.[i]`, which
+under `em = em'` is `x < x` — false at every index. So a collision makes `!has_chwcoll`
+**hold** while `has_chwpre` **fails**, for any `sig`/`sig'` and independent of `ps`: the
+whole five-hypothesis lemma is false there. And the step it stands in for — encoder
+injectivity — is **impossible** at C10's geometry (`:711-725`: the largest antichain of
+`{0..7}^43` is `2^123.76 < 2^128`, and the encoding is deliberately many-to-one).
+
+So the repair was never "discharge it". It is: replace with the disjunction, lift it at the
+Game4 caller, and **charge the left branch**. This is the first half, and it cost nothing.
+
+#### Nothing is wired, deliberately
+
+The remaining work — splitting Game4 before `:6542`, using the codeword-level lemma only in
+the unequal-codeword branch, exporting a B-free bound — is a separate unit. **Merely wiring
+the existing `_Unfolded` would be a REGRESSION**: it promotes a refutable lemma into the
+headline. That is precisely what PHASE 5 exists to catch, and control **T1** exercises it.
+
+#### A control rotted, and only the grading caught it
+
+**T4 hardcoded line `6578`.** Inserting these lemmas shifted that closure member to
+`6634`, so T4's `sed` matched nothing, the mutation never applied, and the control **passed
+while testing nothing**. It surfaced only because `grade()` distinguishes *passed* from
+*passed for the declared reason* — the discipline that exists for exactly this. T4 now
+derives the line number from the manifest instead of hardcoding it.
+
+#### Cost
+
+Predicted before the run and matched: pins 1074 → **1076**, statements 989 → **991**,
+coverage 991/991, census `added=0 removed=0`, **ledger 242**, `CONE_FILES` 45, taint
+closure 6 with both new lemmas absent, and **zero existing statement digests moved** —
+digests are content-based, so shifting later lemmas down moves nothing.
+
+```
+### RESULT: GREEN            __GATE_RC=0   __WALL_S=4719
+OK  INPUTS_SHA256 matches the committed identity (a3900ab8...)
+statements pinned = 1076/1076 | coverage 991/991 | added=0 removed=0 | ledger=242
+OK  taint containment: closure = 6 lemmas, none of the 7 headline results is in it
+OK  taint controls: pass=11 fail=0
+```

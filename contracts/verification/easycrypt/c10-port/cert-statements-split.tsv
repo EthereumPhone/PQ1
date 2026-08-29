@@ -887,6 +887,8 @@ base-c10-split/WOTS_TW_ES.ec::Game3_Game4_WOTSTWES_Hchwcoll	3490cde3cdb9b2d9b9ae
 base-c10-split/WOTS_TW_ES.ec::Step_Game3_Game4_WOTSTWES_SMDTTCRC	0c17092a523a28719f905b110bfff0b8
 base-c10-split/WOTS_TW_ES.ec::Step_Game4_WOTSTWES_SMDTPREC	58e11c65f664cee3196cea13aa00f523
 base-c10-split/WOTS_TW_ES.ec::MEUFGCMA_WOTSTWESNPRF	ba2719f993b93adf7fbfe8dfd2cafe8f
+base-c10-split/WOTS_TW_ES.ec::admit_free_caller_split	8af4adc4ba92031c5b1495aa39f19074
+base-c10-split/WOTS_TW_ES.ec::caller_split_recovers_admit_under_badenc	1f6cf3d5f42b2ee1a5ecd3f38961e87d
 base-c10-split/FL_SL_XMSS_MT_ES.ec::ge2_lp	b6b2b77e0398b039bee97b15db0b9dd2
 base-c10-split/FL_SL_XMSS_MT_ES.ec::ge1_h	d9609c80357ab97957aa6690a313b732
 base-c10-split/FL_SL_XMSS_MT_ES.ec::ge2_l	6431b370d33b1e10969fb76f8c0fd1d5

@@ -74,7 +74,21 @@ grade "T3 manifest gutted" "no rows"
 
 echo "=== T4 manifest site does not resolve (stale line number) ==="
 farm
-sed -i 's|^base-c10-split/WOTS_TW_ES.ec\t6578\t|base-c10-split/WOTS_TW_ES.ec\t6579\t|' "$T/w/cert-taint-closure.tsv"
+# DERIVE the line number instead of hardcoding it.  This control hardcoded 6578 and
+# silently stopped discriminating on 2026-08-29 when a lemma insertion shifted that
+# member to 6634: the sed matched nothing, the mutation never applied, and the check
+# passed while testing NOTHING.  Caught only because grade() distinguishes "passed" from
+# "passed for the right reason".  Now it increments whatever line the manifest carries.
+python3 - "$T/w/cert-taint-closure.tsv" <<'T4PY'
+import sys, re
+p=sys.argv[1]; L=open(p).read().split('\n'); hit=False
+for i,l in enumerate(L):
+    m=re.match(r'^(base-c10-split/WOTS_TW_ES\.ec\t)(\d+)(\t.*)$', l)
+    if m:
+        L[i]=m.group(1)+str(int(m.group(2))+1)+m.group(3); hit=True; break
+assert hit, 'T4 mutation did not apply -- the control would be vacuous'
+open(p,'w').write('\n'.join(L))
+T4PY
 grade "T4 stale manifest line" "does not resolve"
 
 echo "=== T5 ONE-LINE PROOF (hole found by GPT-5.6, 2026-08-27): a same-line lemma that"

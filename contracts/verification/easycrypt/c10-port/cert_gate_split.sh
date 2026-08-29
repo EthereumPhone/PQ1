@@ -30,11 +30,11 @@ TMPD=$(mktemp -d) || { echo 'FAIL mktemp'; exit 1; }
 trap 'rm -rf "$TMPD"' EXIT
 # Expected inventory sizes, COMMITTED. A guard that recomputes its expectation
 # from the file it is checking cannot detect truncation of that file.
-EXPECT_PINS=1074
+EXPECT_PINS=1076
 # Committed count of top-level statements across the 38 certified roots.  Guards
 # PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
 # somebody must say why.  896 measured 2026-08-20.
-EXPECT_STMTS=989
+EXPECT_STMTS=991
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/

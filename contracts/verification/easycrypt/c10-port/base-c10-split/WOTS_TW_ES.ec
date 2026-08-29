@@ -1513,6 +1513,62 @@ move=> hPm hPmp hne; apply nhchwcoll_hchwpre => //.
 admit.    (* <-- THE PRE-EXISTING GAP: encode m <> encode m' *)
 qed.
 
+(* ==========================================================================
+   THE ADMIT-FREE ROUTE PAST THE GAP ABOVE.  Landed 2026-08-29; proved 2026-08-12
+   in scratch/wots_admit_is_injectivity.ec and kept out of the cone until now, where
+   nothing gate-protected it.
+
+   WHY IT MATTERS.  `nhchwcoll_hchwpre_msg` is not merely unproven -- it is REFUTABLE.
+   `is_chwcoll` (:763) and `is_chwpre` (:808) share the conjunct
+   `BaseW.val em'.[i] < BaseW.val em.[i]`, which under `em = em'` is `x < x`, false at
+   every index.  So a collision `encode m = encode m'` makes `!has_chwcoll` HOLD while
+   `has_chwpre` FAILS, for any sig/sig' and independent of ps -- the whole five-hypothesis
+   lemma is false there.  And the missing step it stands in for, encoder injectivity, is
+   IMPOSSIBLE at C10's geometry (:711-725: the largest antichain of {0..7}^43 is
+   2^123.76 < 2^128, and the encoding is deliberately many-to-one).
+
+   SO THE REPAIR IS NOT "DISCHARGE THE ADMIT".  It is: replace it with a DISJUNCTION whose
+   left branch is the BadEnc event, lift that disjunction at the Game4 caller, and charge
+   the branch.  These two lemmas are the first half, and they cost nothing: both are proved
+   from the ALREADY-COMPLETE `nhchwcoll_hchwpre` (:1476), which needs `encode m <> encode m'`
+   as a HYPOTHESIS rather than deriving it.
+
+   NOTHING IS WIRED HERE, DELIBERATELY.  The remaining work -- splitting Game4 before :6542,
+   using the codeword-level lemma only in the unequal-codeword branch, and exporting a
+   B-free bound -- is a separate unit.  Merely wiring the existing `_Unfolded` would be a
+   REGRESSION: it promotes the refutable lemma into the headline.  PHASE 5 exists to catch
+   exactly that, and these two lemmas must stay OUT of its taint closure -- they apply
+   :1476, never :1505.  That is checked, not assumed.
+   ========================================================================== *)
+lemma admit_free_caller_split
+      (ps : pseed) (ad : adrs) (m m' : msgWOTS) (sig sig' : sigWOTS) :
+     P m
+  => P m'
+  => ! has_chwcoll ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'
+  =>  encode_msgWOTS m = encode_msgWOTS m'
+   \/ has_chwpre ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'.
+proof.
+move=> hP hP' hnc; case (encode_msgWOTS m = encode_msgWOTS m') => [heq | hne].
++ by left.
+by right; apply (nhchwcoll_hchwpre ps ad m m' sig sig').
+qed.
+
+(* RECONCILIATION: excluding the BadEnc branch recovers EXACTLY the admitted lemma's
+   conclusion, so the split LOSES NOTHING -- it makes the missing side condition VISIBLE
+   instead of admitted.  Note this lemma is proved from the split above and NOT from
+   :1505, so it too stays out of the taint closure. *)
+lemma caller_split_recovers_admit_under_badenc
+      (ps : pseed) (ad : adrs) (m m' : msgWOTS) (sig sig' : sigWOTS) :
+     P m
+  => P m'
+  => encode_msgWOTS m <> encode_msgWOTS m'
+  => ! has_chwcoll ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'
+  => has_chwpre ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'.
+proof.
+move=> hP hP' hbad hnc.
+by case (admit_free_caller_split ps ad m m' sig sig' hP hP' hnc).
+qed.
+
 (* If there is chain that contains a preimage, then find_chwpreidx is between 0 and len *)
 lemma hchwpre_findprerng (ps : pseed) (ad : adrs) (m m' : msgWOTS) (sig sig' : sigWOTS) :
      has_chwpre ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'
