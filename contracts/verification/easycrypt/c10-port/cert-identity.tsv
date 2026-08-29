@@ -526,6 +526,9 @@
 #
 # 2026-08-24 (second).  split cb901c18d79650eef742a8ddcd884094 -> 6eead428c24e60501204f9cd378fedf8.
 # 2026-08-25.  split 6eead428c24e60501204f9cd378fedf8 -> 88de8169ed19b856ddd270fedd287f90.
+# 2026-08-29 (second).  split a3900ab8d4ac2d18956a97ee452029b3 -> 9659a41c3602270a17a9340fb4136f50.
+#   corrected my own overstatement: the pin is an injective RANK encoder,
+#   not the firmware's u32 -- the tree already said so at C10DeployedCapstone:150.
 # 2026-08-29.  split a2f591e8e93b26575e85692437a70f7f -> a3900ab8d4ac2d18956a97ee452029b3.
 #   admit-free replacement (admit_free_caller_split +
 #   caller_split_recovers_admit_under_badenc) landed in WOTS_TW_ES.ec; pins 1074->1076.
@@ -1094,5 +1097,5 @@
 #   Updated to the live 242/217/345/389/1193 with a dated note; the superseded
 #   value stays recoverable in git and in the dated entries below it.
 # tree	hash
-split	a3900ab8d4ac2d18956a97ee452029b3
+split	9659a41c3602270a17a9340fb4136f50
 fork	9c2d21280c84d52c30b22111151f1135

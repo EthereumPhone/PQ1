@@ -40,7 +40,7 @@ binders**, not off lines ending in `=>`:
 | `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED` | 6 | `c <= p_tgts`, `0%r <= mkg_adv`, four `dfC0` width disequalities |
 | `..._TIGHT` | 5 | the same at `mkg_adv := 0` — strictly tighter, **no free real** |
 | `..._TIGHT_AT_DEPLOYED_PARAMS` | **2** | `c <= p_tgts`, `size (emb_in witness) = 8*n + c10_r` |
-| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` |
+| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` (an injective **rank** encoder, *not* the firmware's u32) |
 
 **Which to quote is a real choice, not a default.** The last two are *incomparable*:
 `emb_in = c10_embg` is a **strictly stronger** premise, so the pinned variant covers fewer
@@ -2491,9 +2491,21 @@ has both halves:
 
 So a `_TIGHT_AT_PINNED_ENCODER` corollary would carry `c <= p_tgts` and
 `emb_in = c10_embg`, discharging the width fact by `rewrite … c10_embg_size`. That trades
-a bare width assumption for a **pin to the concrete C10 serialisation** — the same premise
-count, but a fidelity statement a reader can check against `sphincs-c10` instead of an
-unexplained arithmetic side condition. It is the obvious next unit and is **not** done
+a bare width assumption for a pin to an **injective rank encoder of the right shape** —
+the same premise count, and it excludes the constant-encoder collapse.
+
+> **:warning: CORRECTED 2026-08-29 — and the correction is this tree's own, from
+> 2026-08-03.** This originally read *"a pin to the concrete C10 serialisation … a fidelity
+> statement a reader can check against `sphincs-c10`"*. **It is not that.**
+> `C10DeployedCapstone.ec:150-156` and `C10DeployedInstance.ec:489-493` already record,
+> after a round-14 GPT-5.6/Opus-5 review, that `c10_embg` serialises the counter's **rank
+> in an arbitrary enumeration** (`int2bs c10_r (index x.\`2 CntrFT.enum)`), that `cntr` is
+> an **abstract FinType whose cardinality no axiom bounds**, and that **a singleton counter
+> satisfies every premise**. Nothing pins cardinality, enumeration order, numeric meaning
+> or byte order. So the pinned object is **not** the firmware's big-endian u32 in a 32-byte
+> slot (`sphincs-c10/src/hash.rs:350-363`) — and a reader cannot check it against the Rust,
+> because it is not that object. **I should have found that passage when I built the
+> variant.** It is the obvious next unit and is **not** done
 here; it would need its own gate run.
 
 #### Residual: the superseded capstones still carry the redundant pins
@@ -2567,8 +2579,11 @@ uninformative. Pinning `emb_in = c10_embg` excludes every constant-encoder model
 > What is proved is exactly `pinned_encoder_is_not_degenerate`: **non-constancy**, which
 > is strictly weaker than injectivity and says nothing about the game's probability.
 >
-> **:warning: AND THE SHARPER OBJECTION (Kimi K3, verified).** The pin does not rescue the
-> S-TCR term *at all*, because the degeneracy survives one composition step down:
+> **:warning: AND THE SHARPER OBJECTION — Kimi K3 surfaced it; THIS TREE ALREADY HAD IT.**
+> `C10DeployedInstance.ec:485-488` records it in those words: *"Pinning `emb_in` moved the
+> collapse ONE COMPOSITION STEP; it did not remove it."* Credited accurately rather than
+> presented as novel. The pin does not rescue the S-TCR term *at all*, because the
+> degeneracy survives one composition step down:
 > **`op thfc` is declared with ZERO axioms** (`SPHINCS_PLUS.ec:488`; no axiom row in the
 > census mentions it). Since `ThC = join_dgst (thfc …) (thfc …)`, the interpretation
 > `thfc := const` still collapses every `ThC` input **even with `emb_in = c10_embg`

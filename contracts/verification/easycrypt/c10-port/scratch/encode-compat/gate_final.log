@@ -1,4 +1,4 @@
-### INPUTS_SHA256 a3900ab8d4ac2d18956a97ee452029b3
+### INPUTS_SHA256 9659a41c3602270a17a9340fb4136f50
 OK   INPUTS_SHA256 matches the committed identity
 ### TOOLCHAIN GIT hash: r2026.02
 ### PROVERS 0a5b3d54dcce300e 25 configurations
@@ -1205,6 +1205,6 @@ OK   margin figures match the committed manifest (7/7)
 ### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)
      OK   taint containment: closure = 6 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
 OK   taint controls: taint controls: pass=11 fail=0
-OK   inputs unchanged across the run (a3900ab8d4ac2d18956a97ee452029b3)
+OK   inputs unchanged across the run (9659a41c3602270a17a9340fb4136f50)
 ### RESULT: GREEN
-__GATE_RC=0 __WALL_S=4719
+__GATE_RC=0 __WALL_S=4441

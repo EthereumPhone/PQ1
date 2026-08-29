@@ -433,7 +433,10 @@ qed.
    `STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`.
 
    BUT THE PIN DOES NOT RESCUE THE S-TCR TERM, and an earlier draft of this comment implied
-   it did.  Found by Kimi K3 adversarial review, 2026-08-27, and verified: `thfc` is declared
+   it did.  ATTRIBUTION, corrected 2026-08-29: Kimi K3 surfaced this to me on 2026-08-27,
+   but THIS TREE ALREADY RECORDED IT at C10DeployedInstance.ec:485-488 -- "Pinning `emb_in`
+   moved the collapse ONE COMPOSITION STEP; it did not remove it."  I should have found that
+   when I built this variant.  Verified independently: `thfc` is declared
    with ZERO AXIOMS (SPHINCS_PLUS.ec:488; no axiom row in the census mentions it).  Since
    `ThC = join_dgst (thfc ..) (thfc ..)`, the interpretation `thfc := const` STILL collapses
    every ThC input even with `emb_in` pinned.  The degeneracy simply moves ONE COMPOSITION
@@ -446,12 +449,22 @@ qed.
    Neither supersedes the other: the width form is more general, this one is more
    informative.  Both are gated; quote whichever the claim needs.
 
-   AND WHAT IT DOES *NOT* BUY.  `c10_embg` is an EasyCrypt definition
-   (`DigestBlock.val x.`1 ++ int2bs c10_r (index x.`2 ...)`).  That it matches what
-   `sphincs-c10` actually serialises is a FIDELITY claim, argued in
-   C10DeployedInstance.ec and NOT machine-checked against the Rust.  Pinning the encoder
-   moves the assumption from "some encoder of this width" to "this specific encoder";
-   it does not verify the deployment.
+   AND WHAT IT DOES *NOT* BUY -- CORRECTED 2026-08-29, and the correction is this tree's
+   own, from 2026-08-03.  An earlier draft said the pin moves the assumption to "THIS
+   SPECIFIC ENCODER".  IT DOES NOT.  C10DeployedCapstone.ec:150-156 and
+   C10DeployedInstance.ec:489-493 already record why, after a round-14 review by GPT-5.6
+   and Opus 5:
+
+     `c10_embg` serialises the counter's RANK IN AN ARBITRARY ENUMERATION
+     (`int2bs c10_r (index x.`2 CntrFT.enum)`), and `cntr` is an ABSTRACT FinType whose
+     cardinality NO AXIOM BOUNDS.  A SINGLETON COUNTER SATISFIES EVERY PREMISE.  Nothing
+     pins cardinality, enumeration order, numeric meaning or byte order.
+
+   So the pin buys an INJECTIVE RANK ENCODER OF THE RIGHT SHAPE -- not the firmware's
+   big-endian u32 inside a 32-byte slot (sphincs-c10/src/hash.rs:350-363).  It excludes
+   the constant-encoder collapse and nothing more.  Do not call it "the deployed encoder",
+   and do not describe it as something a reader can check against the Rust: the object
+   pinned is not that object.
 
    STATEMENT DERIVED MECHANICALLY from _AT_DEPLOYED_PARAMS by script -- the width premise
    replaced by the encoder pin, with an assertion that no `size (emb_in` premise survives.
