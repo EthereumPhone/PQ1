@@ -29,6 +29,51 @@ The headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a
 numerically meaningful bound**.
 
+### CURRENT STATE — read this, then the history below if you want to know how it got here
+
+Four members of the headline family live in `cdrafts-split/GprocChargedQWired.ec`. All are
+gated closure members, statement-pinned by digest. Premise counts are read off the **proof
+binders**, not off lines ending in `=>`:
+
+| theorem | premises | what they are |
+|---|---|---|
+| `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED` | 6 | `c <= p_tgts`, `0%r <= mkg_adv`, four `dfC0` width disequalities |
+| `..._TIGHT` | 5 | the same at `mkg_adv := 0` — strictly tighter, **no free real** |
+| `..._TIGHT_AT_DEPLOYED_PARAMS` | **2** | `c <= p_tgts`, `size (emb_in witness) = 8*n + c10_r` |
+| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` |
+
+**Which to quote is a real choice, not a default.** The last two are *incomparable*:
+`emb_in = c10_embg` is a **strictly stronger** premise, so the pinned variant covers fewer
+models but is more informative — the width fact alone is **degenerately satisfiable** by a
+constant encoder. Quote whichever your claim needs, **and say which**.
+
+**Both remaining premises are substantive, and they differ in kind.** `c <= p_tgts` is a
+parameter choice, satisfiable by construction (`C10DeployedGeometry.ec:468`). The `emb_in`
+condition constrains a **free op** — nothing in the closure pins `emb_in` — and is a
+*fidelity* claim about the deployed serialisation, argued but **not machine-checked against
+`sphincs-c10`**.
+
+**The right-hand side carries eleven `Pr[…]` expressions**: two SKG-PRF experiments forming
+one distinguishing advantage, plus **nine named game probabilities**. `CHARGED_QWIRED` also
+carries the free real `mkg_adv`; `_TIGHT` and below do not.
+
+**None of this is a numerically meaningful bound.** `Pr[M.F.ITSRC10 …]` is carried
+unreduced and is **provably irreducible** — `scratch/_countermodel.ec::countermodel_pr1`
+exhibits a legal clone where it equals 1. Separately, `op thfc` is **axiom-free**, so
+`thfc := const` collapses `ThC` and sends the S-TCR summand to ~1 in some models; no pin in
+this tree excludes that. The theorem is a **reduction**: it names the terms, it does not
+bound them.
+
+**Two admits remain in the cone**, both contained and gate-checked (PHASE 5), neither
+reaching any headline result. The admit-free replacement for the WOTS one is landed
+(`WOTS_TW_ES.ec::admit_free_caller_split`) but **deliberately not wired**.
+
+#### How the headline got here — dated history, kept deliberately
+
+The blocks below are the audit trail, including the claims this file has had to withdraw.
+They are preserved rather than tidied away: the retractions are as much the record as the
+results. **Where they conflict with the snapshot above, the snapshot is current.**
+
 > **Headline changed 2026-08-24, and the previous one is kept below.** Until this
 > date the front page advertised `EUFCMA_SPHINCS_PLUS_C10_GROUNDED`
 > (`cdrafts-split/SphincsC10CapstoneWired.ec`), which is **measurably weaker**:
