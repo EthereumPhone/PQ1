@@ -260,13 +260,27 @@ mod stm32 {
     // - IWDG (bit 7): Secure-owned watchdog. Selected only with the `iwdg`
     //   feature, which is mandatory for production and for any production
     //   forced-blind build. Runtime register access uses only 0x5000_3000.
-    // - I2C1 (bit 13): OPTIGA Trust M + SE050 driver bus.
-    // - I2C2 (bit 14): STSAFE-A110 on-board probe bus.
+    // - I2C1 (bit 13): OPTIGA Trust M (+ SE050 too, on `iota2`).
+    // - I2C2 (bit 14): STSAFE-A110 on-board probe bus (`iota2`); the
+    //   AW99703 backlight + AW21036 RGB LED drivers (`pq1`).
+    // - I2C4 (bit 16): SE050's dedicated bus — `pq1` only.
     // All selected entries are secure-world-only; NS has no writer.
     #[cfg(feature = "iwdg")]
     const SECCFGR1_IWDG_BIT: u32 = 1 << 7;
     const SECCFGR1_I2C1_BIT: u32 = 1 << 13;
     const SECCFGR1_I2C2_BIT: u32 = 1 << 14;
+    // I2C4 (bit 16, `GTZC_CFGR1_I2C4_Pos`): the SE050's OWN bus on `pq1`,
+    // which splits the two secure elements across I2C1 and I2C4 instead of
+    // sharing one. Unused on `iota2`, where both chips are on I2C1.
+    //
+    // This bit is the sharpest invariant-#3/#4 hazard in the whole board
+    // port, because leaving it clear has **no functional symptom at all**:
+    // the SE050 works perfectly from the secure world either way. The only
+    // thing that changes is whether the non-secure world can also drive the
+    // bus. `configure_gtzc` writes SECCFGR1 absolutely, so a missing bit is
+    // actively driven to 0, not merely left at reset.
+    #[cfg(feature = "board-pq1")]
+    const SECCFGR1_I2C4_BIT: u32 = 1 << 16;
 
     // ---- SECCFGR2 (APB2) — SPI1 (trusted display) SECURE (finding F1) ----
     // Bit position per `GTZC_CFGR2_SPI1_Pos` in CMSIS `stm32u585xx.h` (= 1).
@@ -404,22 +418,53 @@ mod stm32 {
         // is cited as evidence for it. Recorded as HW-ASSUME-CMSE-SAU's note
         // and work-todo C3; closing it needs the test rebuilt on the shipping
         // combo, which these pins make reviewable in the meantime.
+        // The image is two orthogonal choices — IWDG on/off, and which
+        // board — so it is built from two independently-cfg'd terms rather
+        // than four hand-written totals. The `assert!`s below still pin the
+        // FULL expected value for each of the four combinations, by exact
+        // equality: a subset test would let a stray extra bit through, and
+        // the whole point of this pin is that every secured peripheral was
+        // deliberately chosen.
         #[cfg(feature = "iwdg")]
-        const SECCFGR1_IMAGE: u32 =
-            SECCFGR1_IWDG_BIT | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;
+        const SECCFGR1_IWDG_IMAGE: u32 = SECCFGR1_IWDG_BIT;
         #[cfg(not(feature = "iwdg"))]
-        const SECCFGR1_IMAGE: u32 = SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;
-        #[cfg(feature = "iwdg")]
+        const SECCFGR1_IWDG_IMAGE: u32 = 0;
+
+        #[cfg(feature = "board-pq1")]
+        const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;
+        #[cfg(not(feature = "board-pq1"))]
+        const SECCFGR1_BOARD_IMAGE: u32 = 0;
+
+        const SECCFGR1_IMAGE: u32 =
+            SECCFGR1_IWDG_IMAGE | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT | SECCFGR1_BOARD_IMAGE;
+
+        #[cfg(all(feature = "iwdg", not(feature = "board-pq1")))]
         const _: () = assert!(
             SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14),
             "TZSC_SECCFGR1 IWDG image drifted — IWDG must be Secure alongside the SE buses. \
              Source closure is not #79 silicon denial evidence."
         );
-        #[cfg(not(feature = "iwdg"))]
+        #[cfg(all(not(feature = "iwdg"), not(feature = "board-pq1")))]
         const _: () = assert!(
             SECCFGR1_IMAGE == (1 << 13) | (1 << 14),
             "TZSC_SECCFGR1 image drifted — I2C1+I2C2 are the SE buses (invariant #3). \
              Update the pin ONLY with a matching gtzc-enforcement-hw receipt."
+        );
+        #[cfg(all(feature = "iwdg", feature = "board-pq1"))]
+        const _: () = assert!(
+            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16),
+            "TZSC_SECCFGR1 pq1+IWDG image drifted — on pq1 the SE050 has its OWN bus (I2C4, \
+             bit 16) and it MUST be Secure: a clear bit hands the non-secure world the SE050 \
+             bus with no functional symptom whatsoever. Update ONLY with a matching \
+             gtzc-enforcement-hw receipt taken on pq1 silicon."
+        );
+        #[cfg(all(not(feature = "iwdg"), feature = "board-pq1"))]
+        const _: () = assert!(
+            SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16),
+            "TZSC_SECCFGR1 pq1 image drifted — on pq1 the SE050 has its OWN bus (I2C4, bit 16) \
+             and it MUST be Secure: a clear bit hands the non-secure world the SE050 bus with \
+             no functional symptom whatsoever. Update ONLY with a matching gtzc-enforcement-hw \
+             receipt taken on pq1 silicon."
         );
         // SECCFGR2 is the one that differs between the tested and shipped
         // builds. Both arms are pinned so neither can move unnoticed.

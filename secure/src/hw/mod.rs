@@ -136,3 +136,21 @@ pub mod lcd_nv3007;
 /// otherwise, so call sites in `main` stay cfg-free. The off-build's
 /// `init` never starts the watchdog, so test builds can't self-reset.
 pub mod iwdg;
+
+/// Secure-element supply + enable lines. No-op on boards where the SE rail
+/// is unconditionally live (`iota2`); on `pq1` it asserts `LDO2_EN` (PA8),
+/// without which **both** secure elements are unpowered and every I2C
+/// transaction fails in a way that looks like a bus fault. Must run before
+/// `i2c_hw::init`.
+#[cfg(all(feature = "stm32u585", any(feature = "se050", feature = "optiga-trust-m")))]
+pub mod se_power;
+
+/// Non-destructive secure-element address probe (`se-i2c-probe`). Zero data
+/// bytes reach either chip — see the module header before extending it.
+/// Bench diagnostic only; in `PROD_FORBIDDEN`.
+#[cfg(all(
+    feature = "se-i2c-probe",
+    feature = "stm32u585",
+    any(feature = "se050", feature = "optiga-trust-m")
+))]
+pub mod se_i2c_probe;

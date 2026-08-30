@@ -8,6 +8,43 @@
 //! USB stack starts.  The USB OTG peripheral itself is marked non-secure
 //! by GTZC TZSC (see sau.rs).
 
+// ---------------------------------------------------------------------------
+// Board fence — USB is `iota2`-only until the pq1 USB port lands.
+// ---------------------------------------------------------------------------
+//
+// This module's UCPD/TCPP03 handling targets the dev board's USB-C front
+// end. Three of the pins it claims are assigned to something else entirely
+// on pq1, and it both reconfigures them and hands them to the non-secure
+// world:
+//
+//   * PA15 -> ANALOG for `UCPD1_CC1`. On pq1 PA15 is **`SE_RST`**, the
+//     OPTIGA's reset line.
+//   * PB15 -> ANALOG for `UCPD1_CC2`. On pq1 PB15 is **`LCM_EN`**, the
+//     trusted display's backlight enable.
+//   * PB5 driven HIGH as the TCPP03 enable. On pq1 PB5 is **`SE1_EN`**,
+//     the SE050's own enable pin — and there is no TCPP03 on this board
+//     (it uses an AW35602 instead).
+//
+// All three are then cleared in `GPIOA_SECCFGR` / `GPIOB_SECCFGR`, i.e.
+// marked NON-SECURE. On pq1 that would give the non-secure world control of
+// both secure elements' reset and enable lines and of the trusted display's
+// backlight — a direct breach of invariant #4, with no functional symptom
+// to notice it by.
+//
+// This cannot be fixed by remapping: pq1 routes no CC lines to the MCU at
+// all, so the UCPD half has no counterpart here and must be compiled out
+// rather than moved. Treat the pq1 USB port as a security change needing
+// review, not as a pin-table edit.
+#[cfg(feature = "board-pq1")]
+compile_error!(
+    "hw/usb_hw.rs targets the iota2 USB-C front end and is unsafe on pq1: it puts \
+     PA15 (= pq1 SE_RST) and PB15 (= pq1 LCM_EN) into ANALOG mode, drives PB5 \
+     (= pq1 SE1_EN) high for a TCPP03 that does not exist on this board, and marks \
+     all three NON-SECURE — handing NS both SEs' reset/enable and the trusted \
+     display's backlight (invariant #4). pq1 routes no CC lines to the MCU, so the \
+     UCPD path must be compiled out, not remapped. Needs a reviewed port."
+);
+
 use crate::hw::mmio::Reg32;
 
 // ---------------------------------------------------------------------------

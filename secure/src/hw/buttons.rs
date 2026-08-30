@@ -79,6 +79,42 @@ const REG: ButtonsRegs = unsafe {
 // Pin assignments (from UM2839 Table 23)
 // ---------------------------------------------------------------------------
 const LEFT_BIT: u32 = 1 << 1;   // PC1  (CN13 pin 1, Arduino D8)
+// ---------------------------------------------------------------------------
+// Board fence — this driver is `iota2`-only until the pq1 button port lands.
+// ---------------------------------------------------------------------------
+//
+// The pins below are the dev board's: PC1 (LEFT), PA8 (RIGHT), PC13 (USER).
+// On pq1 all three are wrong, and one of them is actively dangerous:
+//
+//   * PC1  — not bonded on the 48-pin UFQFPN package.
+//   * PC13 — bonded but unused; pq1 has only TWO buttons (PA0 / PA1).
+//   * PA8  — **`LDO2_EN`**, the enable for the `VDD1_3V3` rail that powers
+//     BOTH secure elements.
+//
+// That last one is not a cosmetic mismatch. `init()` below configures its
+// RIGHT pin as a pulled-up *input*, and `ui::init()` runs AFTER
+// `hw::se_power::init()` in the boot sequence — so on pq1 this driver would
+// quietly undo the SE rail enable a few hundred microseconds after it was
+// asserted: the internal pull-up against the board's 10 kΩ `R130` pull-down
+// leaves `LDO2_EN` well below the LDO's enable threshold, powering both
+// chips off again. The symptom would be an SE that answers during early
+// boot and then stops, which points at everything except the real cause.
+//
+// Rather than leave that as a runtime trap, it is a build error. Remove
+// this fence in the same change that repoints the pins at
+// `board::BTN_*` — and note pq1 has no third button, so the UI's
+// three-action dialogs (PIN entry, seed wizard) need a chord or long-press
+// decision before `gpio-buttons` is meaningful there at all.
+#[cfg(feature = "board-pq1")]
+compile_error!(
+    "hw/buttons.rs still uses the iota2 pin map (PC1/PA8/PC13) and is unsafe on pq1: \
+     PA8 is LDO2_EN, the supply enable for BOTH secure elements, and this driver \
+     would reconfigure it as a pulled-up input AFTER hw::se_power::init() has \
+     asserted it — silently powering the SEs back down. Port the pins to \
+     board::BTN_* (and decide how two buttons cover three UI actions) before \
+     enabling `gpio-buttons` on pq1. Note `ui-lcd` implies `gpio-buttons`."
+);
+
 const RIGHT_BIT: u32 = 1 << 8;  // PA8  (CN13 pin 2, Arduino D9)
 
 // ---------------------------------------------------------------------------

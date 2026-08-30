@@ -1244,13 +1244,30 @@ fn negative_se050_i2c_address_is_0x48() {
 }
 
 #[test]
-fn negative_i2c_uses_secure_alias_for_i2c1() {
-    // The SE050 bus address must come from the always-Secure alias
-    // (`I2C1` re-exported by `hw::i2c_hw`) so NS code cannot redirect
-    // SE writes through a softer alias. The slice imports the constant
-    // — pin the import line.
-    assert!(I2C_SRC.contains("use crate::hw::i2c_hw::I2C1;"));
+fn negative_i2c_uses_secure_alias_from_board_map() {
+    // The SE050 bus address must come from an always-Secure alias so NS
+    // code cannot redirect SE writes through a softer one. Which physical
+    // bus that is became a board fact when pq1 moved the SE050 onto its own
+    // I2C4, so the driver now imports `board::SE050_I2C_BASE` — pin the
+    // import line, and pin BOTH boards' values for it so neither can drift
+    // to a non-secure alias unnoticed.
+    assert!(I2C_SRC.contains("use crate::board::SE050_I2C_BASE as I2C_BASE;"));
     assert!(I2C_SRC.contains("use crate::hw::mmio::{Reg32, RoReg32};"));
+
+    const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
+    const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
+    const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
+
+    // iota2: shares OPTIGA's I2C1. pq1: its own I2C4.
+    assert!(BOARD_IOTA2_SRC.contains("pub const SE050_I2C_BASE: u32 = I2C1_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const SE050_I2C_BASE: u32 = I2C4_S;"));
+    // Both are SECURE aliases (0x5..., not 0x4...).
+    assert!(BOARD_MOD_SRC.contains("pub const I2C1_S: u32 = 0x5000_5400;"));
+    assert!(BOARD_MOD_SRC.contains("pub const I2C4_S: u32 = 0x5000_8400;"));
+    assert!(
+        !I2C_SRC.contains("0x4000_"),
+        "SE050 driver must never name a non-secure peripheral alias"
+    );
 }
 
 #[test]

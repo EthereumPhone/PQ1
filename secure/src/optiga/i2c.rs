@@ -1,14 +1,15 @@
-//! Bare-metal I2C1 master driver for OPTIGA Trust M (address 0x30).
+//! Bare-metal I2C master driver for OPTIGA Trust M (address 0x30).
 //!
 //! Structurally identical to `se050/i2c.rs` but targets the OPTIGA Trust M
 //! slave address instead of SE050. Both chips share the same I2C1 bus
 //! (PB8 SCL, PB9 SDA) — no address conflict.
 //!
-//! Register base imported from `hw::i2c_hw`; the offsets are bound once
-//! into typed [`Reg32`] / [`RoReg32`] handles so individual touches in
-//! the transfer loops are safe.
+//! The register base comes from `crate::board`, so which physical bus
+//! this driver talks on is a board fact rather than a literal here; the
+//! offsets are bound once into typed [`Reg32`] / [`RoReg32`] handles so
+//! individual touches in the transfer loops are safe.
 
-use crate::hw::i2c_hw::I2C1;
+use crate::board::OPTIGA_I2C_BASE as I2C_BASE;
 use crate::hw::mmio::{Reg32, RoReg32};
 
 /// OPTIGA Trust M I2C slave address (7-bit).
@@ -60,18 +61,21 @@ struct I2cRegs {
 }
 
 // SAFETY: each address below is a real, 4-byte-aligned MMIO register on
-// I2C1 (base 0x5000_5400, secure alias) exclusively owned by the SE
-// drivers. The secure world is single-threaded and non-preemptive —
-// the OPTIGA and SE050 drivers share I2C1 sequentially, never racing.
+// the I2C peripheral `crate::board` assigns to the OPTIGA Trust M (secure alias),
+// exclusively owned by the SE drivers. The secure world is single-threaded
+// and non-preemptive, so even where a board puts both chips on ONE bus
+// (`iota2`: OPTIGA and SE050 both on I2C1) the two drivers use it
+// sequentially and never race; where a board gives them separate buses
+// (`pq1`: this driver keeps I2C1 on PB8/PB9) they cannot interfere at all.
 // After this one-time construction every register touch below is via
 // safe `.read()` / `.write()` methods.
 const REG: I2cRegs = unsafe {
     I2cRegs {
-        cr2: Reg32::new(I2C1 + 0x04),
-        isr: RoReg32::new(I2C1 + 0x18),
-        icr: Reg32::new(I2C1 + 0x1C),
-        rxdr: RoReg32::new(I2C1 + 0x24),
-        txdr: Reg32::new(I2C1 + 0x28),
+        cr2: Reg32::new(I2C_BASE + 0x04),
+        isr: RoReg32::new(I2C_BASE + 0x18),
+        icr: Reg32::new(I2C_BASE + 0x1C),
+        rxdr: RoReg32::new(I2C_BASE + 0x24),
+        txdr: Reg32::new(I2C_BASE + 0x28),
     }
 };
 

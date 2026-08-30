@@ -99,6 +99,11 @@ mod die_id;
 // compiles only the pure logic on x86_64.
 #[cfg(not(test))]
 mod boot_ns;
+/// Board pin / peripheral map — which physical board this image targets.
+/// Selected by the `board-pq1` feature; absent it, the B-U585I-IOT02A dev
+/// board. STM32-only: every constant is an MCU address or pin number.
+#[cfg(feature = "stm32u585")]
+mod board;
 mod crypto;
 mod fi;
 mod fih;
@@ -155,6 +160,11 @@ mod rng_exact;
 // fresh-block-per-chunk discipline) is compiled and exercised by the
 // host test suite.
 mod rng_strong_fold;
+// Pure xorshift32 PRNG + reseed windowing used by `hw::consumption_mask` —
+// kept OUT of that target-only MMIO driver (same pattern as rng_strong_fold)
+// so the static-mut state protocol is compiled and exercised by the host
+// test suite (and the Miri leg).
+mod consumption_mask_prng;
 mod pin;
 #[cfg(all(feature = "stm32u585", feature = "optiga-trust-m", not(test)))]
 mod pin_diag;
@@ -307,6 +317,21 @@ mod main_sau_pure_tests;
 // `reports/tests/secure-fi-pin-rng.md` for the inventory.
 #[cfg(test)]
 mod secure_fi_pin_rng_pure_tests;
+
+// ── Host-side crash/fault matrix for the PIN-lockout wallet wipe ──
+//
+// Covers the lockout-wipe path end to end as host tests:
+// `nsc/cmd_request_unlock.rs::trigger_lockout_wipe` (step order + the
+// discarded `factory_reset_admin` result), the OPTIGA/SE050/dual-SE
+// wipe legs (arm-before-work, sentinel-first, conditional page-125
+// erase, survivor detection), `hw/flash.rs` pages 124/125 (counter +
+// wipe flag), and the `main.rs` boot-time wipe-resume triggers. The
+// production files are `#[cfg(not(test))]`, so the suite pairs an
+// executable model (fault-injectable `MockSecureElement` + a flash
+// mirror) with `include_str!` source-text pins. See
+// `reports/tests/secure-lockout-wipe-fi.md` for the inventory.
+#[cfg(test)]
+mod secure_lockout_wipe_fi_pure_tests;
 
 // ── Test-only re-includes for the `secure-nsc-core` slice ──
 //
@@ -1240,13 +1265,65 @@ fn main() -> ! {
         }
     }
 
-    // Initialize I2C1 for SE050 and/or OPTIGA Trust M BEFORE any SE operations.
-    // Both chips share I2C1 (SE050 at 0x48, OPTIGA at 0x30). No address conflict.
-    // Must come after rcc::init() (clocks) and sau::init() (peripherals).
+    // Power the secure elements, THEN bring up their I2C buses, BEFORE any
+    // SE operation. Must come after rcc::init() (clocks — the settle delays
+    // and TIMINGR both assume 160 MHz) and sau::init() (peripheral security).
+    //
+    // The power step is a no-op on boards whose SE rail is unconditionally
+    // live (`iota2`). On `pq1` it is mandatory: PA8 (`LDO2_EN`) gates the
+    // only supply either chip has, and it is held off at reset by a 10 kΩ
+    // pull-down, so skipping it makes every subsequent I2C transaction fail
+    // in a way that looks like a bus fault rather than a power fault.
+    // No `unsafe` block: both `se_power::init` and `i2c_hw::init` are safe
+    // functions that encapsulate their own MMIO — the block that used to sit
+    // here wrapped nothing unsafe.
     #[cfg(all(feature = "stm32u585", any(feature = "se050", feature = "optiga-trust-m")))]
-    unsafe {
+    {
+        let se_power = hw::se_power::init();
+        if se_power.all_asserted() {
+            secure_log!("[S] SE power/enable lines asserted: {:?}", se_power);
+        } else {
+            // A false read-back means the write did not land — most likely
+            // an unclocked GPIO port, which drops writes silently on this
+            // silicon. Loud, because everything downstream will now fail
+            // for a reason that points at the wrong subsystem.
+            secure_log!(
+                "[S] SE power/enable READ-BACK FAILED: {:?} — both SEs may be unpowered",
+                se_power
+            );
+        }
+
         hw::i2c_hw::init();
-        secure_log!("[S] I2C1 initialized (PB8/PB9, 400 kHz)");
+        for bus in board::SE_I2C_BUSES {
+            secure_log!("[S] SE bus initialized: {} @ 400 kHz", bus.name);
+        }
+
+        // Bench diagnostic: address-probe each secure element before
+        // anything else touches the buses, so the probe is the first
+        // transaction either chip ever sees. Zero data bytes — safe on a
+        // virgin OPTIGA. Absent from every build without `se-i2c-probe`.
+        //
+        // TERMINAL BY DESIGN. It exits via `SYS_EXIT` instead of returning,
+        // because everything after this point in boot — `ui::init`, the
+        // wizard, SE attest/unlock, and under `e2e-test` the fixed-mnemonic
+        // auto-provisioning — WRITES to the secure elements. On a virgin
+        // OPTIGA those writes are irreversible. Letting boot continue would
+        // make the "non-destructive probe" target destructive a few hundred
+        // milliseconds after it printed PASS, which is precisely the trap
+        // this feature exists to avoid. Do not turn this into a plain call.
+        #[cfg(feature = "se-i2c-probe")]
+        {
+            let ok = hw::se_i2c_probe::run();
+            secure_log!("[S][se-probe] halting — this build never touches the SEs again");
+            cortex_m_semihosting::debug::exit(if ok {
+                cortex_m_semihosting::debug::EXIT_SUCCESS
+            } else {
+                cortex_m_semihosting::debug::EXIT_FAILURE
+            });
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
     }
 
     ui::init();

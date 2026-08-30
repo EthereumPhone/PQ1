@@ -188,6 +188,38 @@ ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)
 # because on real silicon we always want the HASH peripheral — the software
 # `sha2::Sha256` path would waste ~19x the signing time for no reason.
 stm32u585 = ["sphincs-tz-shared/stm32u585", "hw-sha256"]
+
+# ---------------------------------------------------------------------------
+# Board axis — which physical board an `stm32u585` image targets.
+#
+# `secure/src/board/` holds one pin/peripheral map per board and re-exports
+# the selected one, so drivers name a constant instead of a port base.
+#
+#   board-iota2  ST B-U585I-IOT02A dev board, STM32U585AII6 (169-pin BGA).
+#   board-pq1    AL_A66_MB_V10 production board, STM32U585CIU6 (48-pin
+#                UFQFPN — only PA0-15, PB0-15 and PC13 are bonded).
+#
+# Selection is *opt-in to pq1*: `board-pq1` picks pq1, and anything else
+# gets iota2. That asymmetry is deliberate. This manifest has `default = []`
+# and all ~200 Makefile recipes pass an explicit `--features` list, so
+# making iota2 the absence of `board-pq1` leaves every existing bench flow
+# byte-identical rather than needing 200 edits. `board-iota2` therefore
+# carries no implications — it exists so a recipe can name its board — and
+# `secure/src/board/mod.rs` hard-errors if both are set.
+#
+# Use `make <target> BOARD=pq1`, which sets the feature and the probe-rs
+# chip name together.
+board-iota2 = []
+board-pq1 = []
+
+# Bench-only, read-only secure-element address probe (`hw::se_i2c_probe`).
+# Answers "does the chip at this address ACK?" and nothing else: every probe
+# is a zero-data-byte transfer, so no payload reaches either part. Exists
+# because on a production board the OPTIGA is virgin and its lifecycle
+# transitions are irreversible — this is the one SE check that is safe to run
+# on hardware you cannot replace. NEVER SHIP: it is a diagnostic, and it is
+# listed in the Makefile's PROD_FORBIDDEN.
+se-i2c-probe = []
 # Route every SHA-256 call in the signing crates through the STM32U585 HASH
 # peripheral (the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`).
 # Without this feature the signing crates use software `sha2::Sha256` — what

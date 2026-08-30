@@ -849,16 +849,34 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
     // race a transfer and steal session-key material.
     assert!(SAU_SRC.contains("const SECCFGR1_I2C1_BIT: u32 = 1 << 13;"));
     assert!(SAU_SRC.contains("const SECCFGR1_I2C2_BIT: u32 = 1 << 14;"));
+    // pq1 splits the two secure elements across I2C1 and its own I2C4, so
+    // that board secures a THIRD bus (bit 16). This is the one SECCFGR bit
+    // whose omission has no functional symptom at all — the SE050 works
+    // fine from S-world either way; only NS reachability changes — so it is
+    // pinned here as well as by the build-time assert.
+    assert!(SAU_SRC.contains("const SECCFGR1_I2C4_BIT: u32 = 1 << 16;"));
     // The image is now a named const with a compile-time pin (work-todo C3,
     // 2026-07-17) rather than an inline expression — a strictly stronger form:
     // the `const _: () = assert!(SECCFGR1_IMAGE == ...)` below fails the BUILD,
-    // not just this test, if the composition drifts. Pin both.
-    assert!(SAU_SRC.contains("SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;"));
+    // not just this test, if the composition drifts. Pin the composition and
+    // all four cfg arms of its value (iwdg x board).
+    assert!(SAU_SRC.contains(
+        "SECCFGR1_IWDG_IMAGE | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT | SECCFGR1_BOARD_IMAGE;"
+    ));
+    assert!(SAU_SRC.contains("const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;"));
     assert!(SAU_SRC.contains("let seccfgr1 = SECCFGR1_IMAGE;"));
-    assert!(
-        SAU_SRC.contains("SECCFGR1_IMAGE == (1 << 13) | (1 << 14)"),
-        "the SECCFGR1 image must stay compile-time-pinned to the two SE buses"
-    );
+    for arm in [
+        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14)",                        // iota2, no iwdg
+        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14)",             // iota2 + iwdg
+        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16)",            // pq1, no iwdg
+        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16)", // pq1 + iwdg
+    ] {
+        assert!(
+            SAU_SRC.contains(arm),
+            "the SECCFGR1 image must stay compile-time-pinned for every \
+             iwdg x board combination; missing arm: {arm}"
+        );
+    }
 }
 
 #[test]
@@ -868,11 +886,19 @@ fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
     // with the rest of the register image, and reached only via its S alias.
     // The separate CPU/GPDMA denial receipt remains silicon work.
     assert!(SAU_SRC.contains("const SECCFGR1_IWDG_BIT: u32 = 1 << 7;"));
+    // The IWDG term is now its own cfg'd const OR-ed into the image, so the
+    // iwdg and board choices stay orthogonal instead of needing one hand-
+    // written total per combination.
+    assert!(SAU_SRC.contains("const SECCFGR1_IWDG_IMAGE: u32 = SECCFGR1_IWDG_BIT;"));
     assert!(SAU_SRC.contains(
-        "SECCFGR1_IWDG_BIT | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT;"
+        "SECCFGR1_IWDG_IMAGE | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT | SECCFGR1_BOARD_IMAGE;"
     ));
+    // Both boards' iwdg-on totals stay pinned — bit 7 must be present in each.
     assert!(SAU_SRC.contains(
         "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14)"
+    ));
+    assert!(SAU_SRC.contains(
+        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16)"
     ));
     assert!(IWDG_SRC.contains("const IWDG_SECURE_ALIAS: u32 = 0x5000_3000;"));
     assert!(!IWDG_SRC.contains("const IWDG: u32 = 0x4000_3000;"));
