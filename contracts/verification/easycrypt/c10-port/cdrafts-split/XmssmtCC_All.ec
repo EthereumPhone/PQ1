@@ -8895,11 +8895,20 @@ lemma EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded
             FSSLXMTWES.PKCOC.O_THFC_Default).main() @ &m : res]
      + Pr[FSSLXMTWES.TRHC_TCR.SM_DT_TCR_C(R_SMDTTCRCTRH_C(A_ht),
             FSSLXMTWES.TRHC_TCR.O_SMDTTCR_Default,
-            FSSLXMTWES.TRHC.O_THFC_Default).main() @ &m : res].
+            FSSLXMTWES.TRHC.O_THFC_Default).main() @ &m : res]
+     (* THREADED 2026-08-30 (promoted from experiments/wots-badenc, proved 2026-08-12):
+        MM45's ADMITTED encoder injectivity is GONE from the WOTS leg.  What replaces it
+        is this explicit encoding-collision term, at the SAME adversary instantiation as
+        the UD/TCR/PRE terms above.  IT IS NOT A NEW ASSUMPTION -- it is the admit, made
+        VISIBLE AND PRICED.  Carried unreduced, exactly as this artifact carries
+        Pr[M.F.ITSRC10 ..]; bounding it is a separate research unit. *)
+     + Pr[Game4_WOTSTWES_BadEnc(
+             R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht))).main() @ &m
+             : res /\ BadEncFlag.badenc].
 proof.
 move=> hc hembdisj hencb hN2 hdf8n hdflen hdf2 A_wf_ht allnchads
        allnpkcoads allntrhads A_ht_choose_ll A_ht_forge_ll.
-move: (MEUFGCMA_WOTSTWESNPRF (R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht))) _ _ &m)
+move: (MEUFGCMA_WOTSTWESNPRF_Charged (R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(A_ht))) _ _ &m)
       (EUFNAGCMA_FLSLXMSSMTTWCESNPRF A_ht &m hc hembdisj hencb hN2 hdf8n hdflen hdf2
          A_wf_ht allnchads allnpkcoads allntrhads); 3: smt().
 + (* ---- OBLIGATION 1: choose is lossless ---- *)

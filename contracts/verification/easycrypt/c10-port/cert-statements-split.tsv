@@ -48,7 +48,7 @@ op:cdrafts-split/WOTS_C_Real.ec::emb_in1	a8c773c14b498dc3ea771864bbbe7094
 op:cdrafts-split/WOTS_C_Real.ec::emb_tw	d1f13099b62ef240723195ef707528b6
 op:cdrafts-split/WOTS_C_Real.ec::predC	68813dccd39048d6d08e8635b84ad21d
 op:cdrafts-split/WOTS_C_Real.ec::encode_msgWOTS_C	04327ba9c94f4c4bbd7b8aa8b01302f2
-base-c10-split/WOTS_TW_ES.ec::nhchwcoll_hchwpre_msg	03628641e003721058af3e8110b2db24
+base-c10-split/WOTS_TW_ES.ec::nhchwcoll_hchwpre_msg	49f15718059803921bb9a55e407506c1
 cdrafts-split/C10DeployedCapstone.ec::EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER	0458787fbaa4ccc6fd7d9fc62c39773e
 cdrafts-split/C10DeployedCapstone.ec::c10_deployed_STCR_premises_hold	a935072fe5917bab452498c5d88a0109
 cdrafts-split/C10DeployedInstance.ec::c10_deployed_encoder_meets_model	b24fd3b56800d450ebf046c9614f44d2
@@ -357,7 +357,7 @@ cdrafts-split/XmssmtCC_All.ec::ht_telescope_contra	48132ad7495119e19e40e4ffde52f
 cdrafts-split/XmssmtCC_All.ec::seam_branch2_trh	302024962b697bc3f720d6c6a1b53bd4
 cdrafts-split/XmssmtCC_All.ec::seam_branch2	ab20057729ac4748b3028079f5af0997
 cdrafts-split/XmssmtCC_All.ec::EUFNAGCMA_FLSLXMSSMTTWCESNPRF	a724c60e7a94145839c918953ba4d255
-cdrafts-split/XmssmtCC_All.ec::EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded	10cdd5acc71e153f17137d07b6f6b39a
+cdrafts-split/XmssmtCC_All.ec::EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded	eb8e2ccc24c1a76d39ac9b8d134cdf62
 cdrafts-split/XmssmtCC_All.ec::size_trco_input	0d2f7c7ce570ba2b5b2795f4491b6d04
 cdrafts-split/XmssmtCC_All.ec::mem4_neq_dfC	a82a43f568d570af58a11bdb8d76b701
 cdrafts-split/XmssmtCC_All.ec::all_in_thfc4_neq_dfC	6bbfc5c3cabe38d33381fa8c4d483313
@@ -885,10 +885,12 @@ base-c10-split/WOTS_TW_ES.ec::DistRCH_SMDTUDC	416b1cbb209620c436691eae2bad7d07
 base-c10-split/WOTS_TW_ES.ec::Step_Game2_Game3_WOTSTWES_SMDTUDC	858cd46d01d1b64f9f6c421389ef1738
 base-c10-split/WOTS_TW_ES.ec::Game3_Game4_WOTSTWES_Hchwcoll	3490cde3cdb9b2d9b9ae19017a51ddc7
 base-c10-split/WOTS_TW_ES.ec::Step_Game3_Game4_WOTSTWES_SMDTTCRC	0c17092a523a28719f905b110bfff0b8
-base-c10-split/WOTS_TW_ES.ec::Step_Game4_WOTSTWES_SMDTPREC	58e11c65f664cee3196cea13aa00f523
-base-c10-split/WOTS_TW_ES.ec::MEUFGCMA_WOTSTWESNPRF	ba2719f993b93adf7fbfe8dfd2cafe8f
+base-c10-split/WOTS_TW_ES.ec::Step_Game4_WOTSTWES_SMDTPREC	6b6340c85a3525781fa48db6c0954c50
+base-c10-split/WOTS_TW_ES.ec::MEUFGCMA_WOTSTWESNPRF_Charged	7b24d2be220ca1bf21408927145c38b1
 base-c10-split/WOTS_TW_ES.ec::admit_free_caller_split	8af4adc4ba92031c5b1495aa39f19074
 base-c10-split/WOTS_TW_ES.ec::caller_split_recovers_admit_under_badenc	1f6cf3d5f42b2ee1a5ecd3f38961e87d
+base-c10-split/WOTS_TW_ES.ec::Alt_BadEnc_eq	8fa676418a03b1e927e29afcf7322888
+base-c10-split/WOTS_TW_ES.ec::EqPr_BadEnc	2d59b43dccd39b52caf9128cb1205f18
 base-c10-split/FL_SL_XMSS_MT_ES.ec::ge2_lp	b6b2b77e0398b039bee97b15db0b9dd2
 base-c10-split/FL_SL_XMSS_MT_ES.ec::ge1_h	d9609c80357ab97957aa6690a313b732
 base-c10-split/FL_SL_XMSS_MT_ES.ec::ge2_l	6431b370d33b1e10969fb76f8c0fd1d5

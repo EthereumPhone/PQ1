@@ -39,21 +39,25 @@ farm
 out=$(cd "$T/w" && python3 tools/taint_closure.py --check 2>&1); rc=$?
 if [ $rc -eq 0 ]; then echo "  OK   baseline green"; pass=$((pass+1)); else echo "  FAIL baseline RED -- controls would be meaningless: $out"; fail=$((fail+1)); fi
 
-echo "=== T1 THE NAMED REGRESSION: wire _Unfolded into the headline ==="
+echo "=== T1 THE NAMED REGRESSION: wire a TAINTED lemma into the headline ==="
+echo "        RETARGETED 2026-08-30: this used to wire EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded,"
+echo "        whose taint came from the WOTS admit.  That admit is GONE, so _Unfolded is now"
+echo "        CLEAN and wiring it proves nothing.  Now wires fors_c_tree_port, which is in the"
+echo "        surviving extract_op chain.  A control must track what it tests."
 farm cdrafts-split/GprocChargedQWired.ec
 python3 - "$T/w/cdrafts-split/GprocChargedQWired.ec" <<'PY'
 import sys,re
 p=sys.argv[1]; s=open(p).read()
 old="move=> hc hmkg hdf8n hdflen hdf2 hdfnk.\n"
 assert s.count(old)==1, s.count(old)
-s=s.replace(old, old+"have _taint := EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded.\n")
+s=s.replace(old, old+"have _taint := fors_c_tree_port.\n")
 open(p,'w').write(s)
 PY
-grade "T1 headline wired to _Unfolded" "HEADLINE IS TAINTED"
+grade "T1 headline wired to a tainted lemma" "HEADLINE IS TAINTED"
 
 echo "=== T2 the admit disappears (parser/tree drift) ==="
-farm base-c10-split/WOTS_TW_ES.ec
-python3 - "$T/w/base-c10-split/WOTS_TW_ES.ec" <<'PY'
+farm cdrafts-split/FORS_C_TreePort.ec
+python3 - "$T/w/cdrafts-split/FORS_C_TreePort.ec" <<'PY'
 import sys
 p=sys.argv[1]; s=open(p).read().split('\n')
 import re
@@ -83,7 +87,7 @@ python3 - "$T/w/cert-taint-closure.tsv" <<'T4PY'
 import sys, re
 p=sys.argv[1]; L=open(p).read().split('\n'); hit=False
 for i,l in enumerate(L):
-    m=re.match(r'^(base-c10-split/WOTS_TW_ES\.ec\t)(\d+)(\t.*)$', l)
+    m=re.match(r'^(cdrafts-split/FORS_C_TreePort\.ec\t)(\d+)(\t.*)$', l)
     if m:
         L[i]=m.group(1)+str(int(m.group(2))+1)+m.group(3); hit=True; break
 assert hit, 'T4 mutation did not apply -- the control would be vacuous'
@@ -93,14 +97,14 @@ grade "T4 stale manifest line" "does not resolve"
 
 echo "=== T5 ONE-LINE PROOF (hole found by GPT-5.6, 2026-08-27): a same-line lemma that"
 echo "        applies an admit must NOT be invisible to the closure ==="
-farm base-c10-split/WOTS_TW_ES.ec
-python3 - "$T/w/base-c10-split/WOTS_TW_ES.ec" <<'T5PY'
+farm cdrafts-split/FORS_C_TreePort.ec
+python3 - "$T/w/cdrafts-split/FORS_C_TreePort.ec" <<'T5PY'
 import sys
 p=sys.argv[1]; L=open(p).read().split('\n')
 hit=False
 for i,l in enumerate(L):
     if i>1513 and l.strip()=='qed.':
-        L.insert(i+1, "lemma T5_oneline_taint : true. proof. have _ := nhchwcoll_hchwpre_msg. trivial. qed.")
+        L.insert(i+1, "lemma T5_oneline_taint : true. proof. have _ := extract_op. trivial. qed.")
         hit=True; break
 assert hit, 'T5 mutation did not apply -- the control would be vacuous'
 open(p,'w').write('\n'.join(L))
@@ -120,8 +124,8 @@ grade "T6 headline basename shadowed in a 2nd file" "ambiguous, refusing to gues
 
 echo "=== T7 TRAILING qed (hole found by Kimi K3, 2026-08-27): a proof closed as"
 echo "        \`proof. by ... qed.\` must TERMINATE, not swallow the rest of the file ==="
-farm base-c10-split/WOTS_TW_ES.ec
-python3 - "$T/w/base-c10-split/WOTS_TW_ES.ec" <<'T7PY'
+farm cdrafts-split/FORS_C_TreePort.ec
+python3 - "$T/w/cdrafts-split/FORS_C_TreePort.ec" <<'T7PY'
 import sys
 p=sys.argv[1]; L=open(p).read().split('\n')
 hit=False
@@ -129,7 +133,7 @@ for i,l in enumerate(L):
     if i>1513 and l.strip()=='qed.':
         # trailing-qed shape: if the terminator is line-initial-only, this never closes
         L.insert(i+1, "lemma T7_trailing : true.")
-        L.insert(i+2, "proof. have _ := nhchwcoll_hchwpre_msg. trivial. qed.")
+        L.insert(i+2, "proof. have _ := extract_op. trivial. qed.")
         hit=True; break
 assert hit, 'T7 mutation did not apply -- the control would be vacuous'
 open(p,'w').write('\n'.join(L))
@@ -155,7 +159,7 @@ farm cdrafts-split/GprocQWired.ec
 python3 - "$T/w/cdrafts-split/GprocQWired.ec" <<'T9PY'
 import sys
 p=sys.argv[1]; s=open(p).read()
-s += "\n\nclone import WOTS_TW_ES as T9_CloneRoute.\n"
+s += "\n\nclone import FORS_C_TreePort as T9_CloneRoute.\n"
 open(p,'w').write(s)
 T9PY
 grade "T9 clone of an admit-containing theory" "clone route into an admit-containing theory is now LIVE"

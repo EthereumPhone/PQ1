@@ -40,18 +40,55 @@ binders**, not off lines ending in `=>`:
 | `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED` | 6 | `c <= p_tgts`, `0%r <= mkg_adv`, four `dfC0` width disequalities |
 | `..._TIGHT` | 5 | the same at `mkg_adv := 0` — strictly tighter, **no free real** |
 | `..._TIGHT_AT_DEPLOYED_PARAMS` | **2** | `c <= p_tgts`, `size (emb_in witness) = 8*n + c10_r` |
-| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` (an injective **rank** encoder, *not* the firmware's u32) |
+| `..._TIGHT_AT_PINNED_ENCODER` | **2** | `c <= p_tgts`, `emb_in = c10_embg` (a **non-constant rank encoding of the right width** — *not* injective here, and *not* the firmware's u32) |
 
-**Which to quote is a real choice, not a default.** The last two are *incomparable*:
-`emb_in = c10_embg` is a **strictly stronger** premise, so the pinned variant covers fewer
-models but is more informative — the width fact alone is **degenerately satisfiable** by a
-constant encoder. Quote whichever your claim needs, **and say which**.
+**Quote `..._TIGHT_AT_DEPLOYED_PARAMS`.** It **logically subsumes**
+`..._TIGHT_AT_PINNED_ENCODER`: since `emb_in = c10_embg` implies the width fact (via
+`c10_embg_size`), every model satisfying the pin already satisfies the width premise, and
+the pinned proof takes exactly the same path afterwards. The pinned variant is an
+**immediate corollary adding no logical strength**; its value is *documentary* — it
+exhibits one premise set under which the constant-encoder degeneracy is excluded. Quote it
+only when that is the point being made, and say so.
+(**Corrected 2026-08-30, GPT-5.6:** this block previously called the two *incomparable* and
+said "neither supersedes the other". The pinned proof at `GprocChargedQWired.ec` is the
+disproof.)
 
-**Both remaining premises are substantive, and they differ in kind.** `c <= p_tgts` is a
-parameter choice, satisfiable by construction (`C10DeployedGeometry.ec:468`). The `emb_in`
-condition constrains a **free op** — nothing in the closure pins `emb_in` — and is a
-*fidelity* claim about the deployed serialisation, argued but **not machine-checked against
-`sphincs-c10`**.
+**And the pinned encoder is NOT injective in that theorem.**
+`C10DeployedInstance.ec:336` proves `c10_embg_inj` only under
+`STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`, and the pinned headline carries **no such premise** —
+its hypotheses are `c <= p_tgts` and `emb_in = c10_embg`, nothing else. With `cntr` an
+abstract FinType of unbounded cardinality, a 32-bit rank encoding **need not be injective at
+all**. What is available premise-free is **non-constancy**. Calling it an "injective rank
+encoder" was itself a *correction*, made 2026-08-29, and was still too strong — the second
+overstatement in this spot.
+
+**Both remaining premises are substantive, and they differ in kind.**
+
+* **`c <= p_tgts` is a reduction-side TARGET CAP — not a bound on how many messages a key
+  may sign.** This is worth spelling out because the tree records mistaking it for a query
+  bound as a weeks-long error (`scratch/FINDING-bootstrap-scope-is-unwritten.md`).
+  `c` is the **structural number of WOTS-TW instances in the hypertree**, fixed by geometry
+  — `op c = bigi predT (fun d' => nr_nodes_ht d' 0) 0 d` (`WOTS_C_Real.ec:41`), pinning to
+  262656 at H=18, d=2. `p_tgts` is an abstract constant carrying only `0 <= p_tgts`
+  (`WOTS_C_Real.ec:340`). The premise says the SM-DT-TCR game must be given at least as
+  many targets as there are instances: `C10DeployedGeometry.ec:468` classifies it as "NOT A
+  THEOREM AND NOT MEANT TO BE … satisfiable by construction and not derivable from the
+  closure".
+* **The `emb_in` condition constrains a FREE op** — nothing in the closure pins `emb_in` —
+  and is a *fidelity* claim about the deployed serialisation, argued but **not
+  machine-checked against `sphincs-c10`**.
+
+**The theorem is ROLE-AGNOSTIC, and that is deliberate.** `EUFCMA_C10`
+(`FxChain.ec:255`) is the textbook **single-key stateless EUF-CMA game**: one keypair, one
+adversary, one signing oracle. There is no chain identifier, no owner index, no
+bootstrap/slot distinction and no per-key counter anywhere in it. So the statement applies
+**verbatim to the bootstrap key as well as to slot keys** — an adversary collecting Type-1
+authorisations across many chains is simply an adversary in the same game, and nothing
+becomes unsound. What *does* degrade under cross-chain bootstrap reuse is the **number** a
+reader might quote, not the theorem: substituting `q = C·2^16` moves the generic
+multi-target floor to `96 − 2·log₂ C` bits. The scope facts are gated in
+`cdrafts-split/C10DeployedScope.ec`; the capstone still has no query parameter, so which
+key's numbers are being quoted remains a documentation matter, not a proof one.
 
 **The right-hand side carries eleven `Pr[…]` expressions**: two SKG-PRF experiments forming
 one distinguishing advantage, plus **nine named game probabilities**. `CHARGED_QWIRED` also
@@ -64,8 +101,21 @@ exhibits a legal clone where it equals 1. Separately, `op thfc` is **axiom-free*
 this tree excludes that. The theorem is a **reduction**: it names the terms, it does not
 bound them.
 
-**Two admits remain in the cone**, both contained and gate-checked (PHASE 5), neither
-reaching any headline result. The admit-free replacement for the WOTS one is landed
+**ONE admit remains in the cone — the WOTS one was REMOVED on 2026-08-30, not contained.**
+`nhchwcoll_hchwpre_msg` used to end `admit.` on encoder injectivity, a step this tree proves
+**impossible** at C10's geometry, and its admitted *statement* was **refutable**. Its
+conclusion is now the BadEnc disjunction, and MM45's admitted injectivity is replaced by an
+explicit named probability `Pr[Game4_WOTSTWES_BadEnc(…) : res /\ BadEncFlag.badenc]` in
+`MEUFGCMA_WOTSTWESNPRF_Charged` — carried **unreduced**, exactly as this artifact carries
+`ITSRC10`. **LEDGER 242 → 241**, the first assumption *removed* rather than relocated in
+this arc; taint closure **6 → 2**. `extract_op` remains.
+
+**The remaining admit.** PHASE 5 checks that **no named application path**
+reaches a headline result, and none does. That is *not* the same as proved containment:
+this artifact measured (2026-08-28) that a bare `smt()` reaches the admitted lemma without
+naming it, at **921 candidate sites** — and the headline proof itself contains bare `smt()`
+calls. No escaping path is exhibited, but the categorical phrasing "contained, neither
+reaching any headline" overstates what is checked. The admit-free replacement for the WOTS one is landed
 (`WOTS_TW_ES.ec::admit_free_caller_split`) but **deliberately not wired**.
 
 #### How the headline got here — dated history, kept deliberately
@@ -123,14 +173,14 @@ results. **Where they conflict with the snapshot above, the snapshot is current.
 > variant.** `…_TIGHT_AT_PINNED_ENCODER` carries `c <= p_tgts` and
 > `emb_in = c10_embg`, deriving the width fact instead of assuming it. That matters
 > because the width fact is **degenerately satisfiable** — a constant `emb_in` meets
-> it while sending the S-TCR summand to ~1 — and the pin excludes those models
-> (`pinned_encoder_is_not_degenerate` — which carries the pin as its premise; only
+> it while collapsing every `ThC` input — and the pin excludes the constant-encoder models
+> (`pinned_encoder_is_not_degenerate`, which carries the pin as its premise; only
 > `c10_embg_not_constant` is premise-free). **But the pin does NOT make the S-TCR term
 > meaningful: `thfc` is axiom-free, so `thfc := const` still collapses `ThC`.**
-> **Neither variant supersedes the
-> other:** the pin is a strictly stronger premise, so it covers fewer models. The width
-> form is more general, the pinned one more informative. Quote whichever your claim
-> needs, and say which. See the final section of this file.
+> **And the width variant SUPERSEDES the pinned one** — `emb_in = c10_embg` implies the
+> width fact, so `_AT_DEPLOYED_PARAMS` applies to every model the pin admits and yields the
+> same bound. The pinned variant adds no logical strength; its value is documentary. See
+> the CURRENT STATE block above.
 
 **What the headline carries.** Its premises are `c <= p_tgts`, `0%r <= mkg_adv`,
 and four C10 width facts on `dfC0` — **six**. Until 2026-08-25 it also carried the
@@ -226,7 +276,7 @@ closure files). A container recipe is in `../docker/`.
 # $PATH, so a bare `bash cert_gate_split.sh` from a host shell silently uses whatever
 # EasyCrypt is installed there and produces a PLAUSIBLE BUT WRONG receipt.
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
-  cd /work && bash cert_gate_split.sh'"   # 38 targets, 1074 pins, 1634 census rows
+  cd /work && bash cert_gate_split.sh'"   # 38 targets, 1078 pins, 1637 census rows
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
   cd /work && bash cert_gate_fork.sh'"    # 19 targets,  9 pins, 1089 census rows
 ```
@@ -2466,7 +2516,7 @@ stops there is not much better than the sentence it replaces:
 #### A structural fact worth stating plainly
 
 While checking this I confirmed that `n`, `len`, `k`, `log2_w`, `h'` and `d` are pinned by
-**axioms** in the cone (`SPHINCS_PLUS.ec:44,53,59,73,97,106,116` — **seven**, including
+**axioms** in the cone (`SPHINCS_PLUS.ec:44,53,60,73,97,106,116` — **seven**, including
 `a_val : a = 11`, which I missed on the first pass; all ledger `axiom` rows). So
 the *whole* development is specialised to C10's geometry, not parameter-generic — the
 declaration site says so deliberately: *"the whole development below is now about C10's
@@ -2559,7 +2609,7 @@ assumed, from `C10DeployedInstance.ec::c10_embg_size`, which is proved premise-f
 #### This is not a cosmetic re-spelling — the width premise is degenerately satisfiable
 
 The reason is recorded in this tree, from an adversarial review on 2026-08-01
-(`C10DeployedInstance.ec:322`):
+(`C10DeployedInstance.ec:330`):
 
 > *"a CONSTANT `emb_in` satisfies it while collapsing every ThC input and making the
 > S-TCR term trivially winnable."*
@@ -2607,11 +2657,21 @@ injectivity additionally needs the counter-space bound
 
 #### What it costs, and what it does not buy
 
-**Neither variant supersedes the other, and the README does not pick one for you.**
-`emb_in = c10_embg` is a **strictly stronger** premise than the width fact, so this
-theorem covers **fewer models** than `_AT_DEPLOYED_PARAMS`. The width form is more
-general; this one is more informative. Both are gated closure members. Quote whichever
-the claim actually needs — and say which.
+**CORRECTED 2026-08-30 (GPT-5.6, verified): the width variant SUPERSEDES this one.**
+This paragraph said *"neither variant supersedes the other, and the README does not pick
+one for you"*. It does now. Since `emb_in = c10_embg` **implies** the width fact via the
+premise-free `c10_embg_size`, every model satisfying the pin already satisfies the width
+premise — so `_AT_DEPLOYED_PARAMS` applies to it and yields the same bound. The pinned
+proof is literally that derivation. It adds **no logical strength**; its value is
+**documentary**, exhibiting one premise set under which the constant-encoder degeneracy is
+excluded.
+
+**And the width premise is not a serialisation claim either.**
+`size (emb_in witness) = 8*n + c10_r` is **one integer equation about one point**. It says
+nothing about concatenation, counter value, byte order, or any other input — a *constant*
+encoder satisfies it (`C10DeployedInstance.ec:330`). Wherever this file or the source calls
+it "`NODE ‖ u32 counter`", read that as a *description of the intended deployment*, not as
+something the premise asserts.
 
 **It does not verify the deployment.** `c10_embg` is an EasyCrypt definition
 (`DigestBlock.val x.\`1 ++ int2bs c10_r (index x.\`2 …)`). That it matches what

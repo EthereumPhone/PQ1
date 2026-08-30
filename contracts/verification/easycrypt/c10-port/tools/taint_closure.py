@@ -41,7 +41,12 @@ MANIFEST      = 'cert-taint-closure.tsv'
 
 # COMMITTED CONSTANTS -- these live in the TOOL, not only in the manifest.  A guard that
 # reads its expectation out of the file it is checking cannot detect that file being gutted.
-EXPECT_SEEDS       = 2      # the cone's two admits
+EXPECT_SEEDS       = 1      # the cone's ONE admit.  WAS 2 UNTIL 2026-08-30: the WOTS
+                            # admit (nhchwcoll_hchwpre_msg) was REMOVED, not contained --
+                            # its conclusion is now the BadEnc disjunction and the charge
+                            # is an explicit named probability.  `extract_op` remains.
+                            # This constant is deliberately EXACT, not a floor: the guard
+                            # fired on the change and forced this edit to be reviewed.
 EXPECT_CLOSURE     = None   # filled from the manifest, but cross-checked against EXPECT_MIN
 # Declarations the parser is allowed not to register (duplicate (file,name) pairs collapse).
 # Committed, not recomputed: a budget derived from the thing it checks cannot detect drift.
@@ -49,7 +54,8 @@ MIN_CLONE_STMTS  = 60  # MEASURED 80; a floor, so a broken clone scanner cannot 
 MAX_UNREGISTERED = 2   # MEASURED: 951 declarations, 949 registered; the 2 are
                        # duplicate (file,name) pairs collapsing.  A LOOSE budget hides
                        # exactly the bugs this guard exists to catch -- keep it exact.
-EXPECT_MIN_CLOSURE = 3      # the closure can never be smaller than seeds+1 while a consumer exists
+EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consumer.
+                            # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
     'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED',

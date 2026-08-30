@@ -500,8 +500,13 @@ qed.
    deployment-facing assumption.  The correspondence to the deployed encoder is now
    carried entirely by `ThC`, whose own gaps are unchanged and unreceipted: `emb_in` and
    `thfc` are still free ops and the two projection members remain correlated under the
-   instantiation.  `hc` (c <= p_tgts) remains the only substantive premise of the
-   deployed statement, and remains a parameter choice, exactly as the bullet above says.
+   instantiation.  `hc` (c <= p_tgts) remains a parameter choice, exactly as the
+   bullet above says.  [CORRECTED 2026-08-30, GPT-5.6 adversarial review: this sentence
+   used to end "remains THE ONLY substantive premise of the deployed statement".  That is
+   stale -- the deployed statement now carries TWO, and the second is substantive in a
+   DIFFERENT way: `size (emb_in witness) = 8*n + c10_r` constrains the FREE op `emb_in`,
+   which nothing in the closure pins.  It is a one-point WIDTH condition, not a
+   serialisation: a constant encoder satisfies it (see :467 below).]
    -------------------------------------------------------------------------- *)
 
 (* ==========================================================================

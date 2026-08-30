@@ -39,9 +39,5 @@
 # closure.  Corrected 2026-08-27 (Kimi K3); this header previously said "over-approximation".
 #
 # file	decl_line	lemma	label
-base-c10-split/WOTS_TW_ES.ec	1505	nhchwcoll_hchwpre_msg	ADMIT
-base-c10-split/WOTS_TW_ES.ec	6394	Step_Game4_WOTSTWES_SMDTPREC	sure
-base-c10-split/WOTS_TW_ES.ec	6634	MEUFGCMA_WOTSTWESNPRF	sure
 cdrafts-split/FORS_C_TreePort.ec	1485	extract_op	ADMIT
 cdrafts-split/FORS_C_TreePort.ec	1646	fors_c_tree_port	ambig
-cdrafts-split/XmssmtCC_All.ec	8811	EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded	sure
