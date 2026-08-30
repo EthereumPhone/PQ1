@@ -661,35 +661,92 @@ fn positive_uart_flush_waits_tc() {
 // 8. POSITIVE — GPIO buttons (buttons.rs)
 // ═════════════════════════════════════════════════════════════════════
 
+// The button pins moved into the board maps, so `BUTTONS_SRC` no longer
+// contains a pin literal for EITHER board. A naive re-point would therefore
+// have made this whole block vacuous universally, not just on pq1 — so the
+// which-pin assertions now run against both board files, and what stays
+// pinned in the driver is the *property* (active-low, pull-up), which is
+// board-independent and must never change.
+
 #[test]
-fn positive_buttons_left_pc1_right_pa8_pin_bits() {
-    assert!(BUTTONS_SRC.contains("const LEFT_BIT: u32 = 1 << 1;"));
-    assert!(BUTTONS_SRC.contains("const RIGHT_BIT: u32 = 1 << 8;"));
+fn positive_buttons_pins_per_board() {
+    // iota2: LEFT = PC1, RIGHT = PA8 (CN13 jumpers).
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_LEFT_PORT: u32 = GPIOC_S;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_LEFT_PIN: u32 = 1;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_RIGHT_PORT: u32 = GPIOA_S;"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_RIGHT_PIN: u32 = 8;"));
+
+    // pq1: LEFT = PA0, RIGHT = PA1 — BOTH on GPIOA, unlike iota2.
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_LEFT_PORT: u32 = GPIOA_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_LEFT_PIN: u32 = 0;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_RIGHT_PORT: u32 = GPIOA_S;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_RIGHT_PIN: u32 = 1;"));
 }
 
 #[test]
 fn positive_buttons_gpioa_gpioc_secure_alias() {
-    assert!(BUTTONS_SRC.contains("const GPIOA_S: u32 = 0x5202_0000;"));
-    assert!(BUTTONS_SRC.contains("const GPIOC_S: u32 = 0x5202_0800;"));
+    assert!(BOARD_MOD_SRC.contains("pub const GPIOA_S: u32 = 0x5202_0000;"));
+    assert!(BOARD_MOD_SRC.contains("pub const GPIOC_S: u32 = 0x5202_0800;"));
 }
 
 #[test]
 fn positive_buttons_rcc_secure_alias() {
-    assert!(BUTTONS_SRC.contains("const RCC_S: u32 = 0x5602_0C00;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_S: u32 = 0x5602_0C00;"));
+    assert!(contains_in_code(BUTTONS_SRC, "board::RCC_S"));
 }
 
 #[test]
 fn positive_buttons_active_low_pressed_reads_zero() {
-    // pressed = pin reads 0 (shorted to GND).
-    assert!(BUTTONS_SRC.contains("REG.gpioc_idr.read() & LEFT_BIT == 0"));
-    assert!(BUTTONS_SRC.contains("REG.gpioa_idr.read() & RIGHT_BIT == 0"));
+    // pressed = pin reads 0 (shorted to GND). Board-independent property:
+    // neither board fits a pull-down, and pq1 fits no pull-up at all, so the
+    // internal pull-up + active-low read is what makes a press detectable.
+    assert!(BUTTONS_SRC.contains("REG.left_idr.read() & LEFT_BIT == 0"));
+    assert!(BUTTONS_SRC.contains("REG.right_idr.read() & RIGHT_BIT == 0"));
 }
 
 #[test]
 fn positive_buttons_pullup_internal_pupdr_01() {
-    // PUPDR 0b01 = pull-up for both LEFT (PC1, bits [3:2]) and RIGHT (PA8, bits [17:16]).
-    assert!(BUTTONS_SRC.contains("(0b01 << 2)"));
-    assert!(BUTTONS_SRC.contains("(0b01 << 16)"));
+    // PUPDR 0b01 = pull-up, at each button's own field shift. On pq1 the
+    // board fits NO external pull-up (only a 100nF cap and an ESD diode to
+    // GND), so losing this makes both buttons read permanently pressed.
+    assert!(BUTTONS_SRC.contains("(0b01 << LEFT_PIN2)"));
+    assert!(BUTTONS_SRC.contains("(0b01 << RIGHT_PIN2)"));
+    // ...and the shift really is 2*pin, checked by arithmetic rather than by
+    // matching the same text twice.
+    assert!(BUTTONS_SRC.contains("const LEFT_PIN2: u32 = board::BTN_LEFT_PIN * 2;"));
+    assert!(BUTTONS_SRC.contains("const RIGHT_PIN2: u32 = board::BTN_RIGHT_PIN * 2;"));
+}
+
+/// The USER button is configured on boards that have one and skipped on
+/// boards that do not — pq1 must not enable a GPIO clock or drive a pin for
+/// a button that is not fitted.
+#[test]
+fn positive_buttons_user_is_optional_and_never_a_ui_input() {
+    assert!(BOARD_IOTA2_SRC.contains("pub const BTN_USER: Option<(u32, u32)> = Some((GPIOC_S, 13));"));
+    assert!(BOARD_PQ1_SRC.contains("pub const BTN_USER: Option<(u32, u32)> = None;"));
+    assert!(BUTTONS_SRC.contains("const HAS_USER: bool = board::BTN_USER.is_some();"));
+    assert!(BUTTONS_SRC.contains("if HAS_USER {"));
+    // It is a bench reference, never an input event: `wait_event` must not
+    // read it. (`ui::Button` has only Left/Right, so it could not construct
+    // one anyway — but keep the driver honest.)
+    // Scope to wait_event's own body: the slice must STOP before `run_test`,
+    // which legitimately reads the USER pin for its bench state dump. An
+    // earlier version ran to end-of-file and so failed on run_test's read —
+    // the assertion was right, its window was wrong.
+    let after = BUTTONS_SRC
+        .split("fn wait_event")
+        .nth(1)
+        .expect("buttons.rs must define wait_event");
+    let wait_event = &after[..after.find("fn run_test").unwrap_or(after.len())];
+    assert!(
+        !wait_event.contains("user_idr"),
+        "the USER button must never feed a UI input event"
+    );
+    // ...and the only place it IS read is that diagnostic.
+    assert!(
+        BUTTONS_SRC.contains("REG.user_idr.read() & USER_BIT"),
+        "the USER read should still exist, in run_test only"
+    );
 }
 
 #[test]
@@ -729,9 +786,19 @@ fn positive_button_release_hold_carries_the_wait_abort_predicate() {
 }
 
 #[test]
-fn positive_buttons_gpio_clocks_a_and_c() {
-    // AHB2ENR1 bit 0 = GPIOAEN, bit 2 = GPIOCEN.
-    assert!(BUTTONS_SRC.contains("REG.rcc_ahb2enr1.set_bits((1 << 0) | (1 << 2));"));
+fn positive_buttons_gpio_clocks_derived_per_board() {
+    // The clock set is derived from the button ports rather than hard-coded,
+    // because the two boards differ: iota2 straddles GPIOA+GPIOC, pq1 has
+    // both buttons on GPIOA.
+    assert!(BUTTONS_SRC.contains(
+        "board::gpio_rcc_bit(board::BTN_LEFT_PORT) | board::gpio_rcc_bit(board::BTN_RIGHT_PORT)"
+    ));
+    // Independent arithmetic check of what that derivation yields, so a
+    // regression is caught by value and not only by matching text.
+    let bit = |port_base: u32| 1u32 << ((port_base - 0x5202_0000) / 0x400);
+    let (gpioa, gpioc) = (0x5202_0000u32, 0x5202_0800u32);
+    assert_eq!(bit(gpioc) | bit(gpioa), 0b101, "iota2: GPIOAEN + GPIOCEN");
+    assert_eq!(bit(gpioa) | bit(gpioa), 0b001, "pq1: GPIOAEN alone");
 }
 
 #[test]
@@ -922,23 +989,30 @@ fn negative_usb_must_not_mark_arbitrary_gpioa_pins_ns() {
 
 #[test]
 fn negative_buttons_must_not_touch_swd_pins_pa13_pa14() {
-    // Confirm the documented comment.
-    assert!(BUTTONS_SRC.contains("PA13 (SWDIO) and PA14 (SWCLK) are untouched"));
-
-    // The only MODER bits buttons.rs may clear on GPIOA are bits [17:16]
-    // (PA8). Reject MODER writes touching bits 26/27 (PA13) or 28/29
-    // (PA14).
-    for shift in [26u32, 28] {
-        let needle1 = format!("gpioa_moder.modify(|v| (v & !(0b11 << {shift}))");
-        let needle2 = format!("gpioa_moder.set_bits(0b11 << {shift}");
-        assert!(
-            !BUTTONS_SRC.contains(&needle1),
-            "buttons must NOT clear GPIOA MODER bits at shift {shift} — would brick SWD (PA13/14)",
-        );
-        assert!(
-            !BUTTONS_SRC.contains(&needle2),
-            "buttons must NOT set GPIOA MODER bits at shift {shift} — would brick SWD (PA13/14)",
-        );
+    // This test USED to scan for `gpioa_moder.modify(|v| (v & !(0b11 << 26))`
+    // and friends. Once the shifts became symbolic (`LEFT_PIN2`), no such
+    // literal can appear for ANY pin — so the scan would have kept passing
+    // while being incapable of catching anything. It asserts absence, so the
+    // vacuity would have been silent. That is the exact failure mode this
+    // suite exists to prevent, so the check moved to where it can still bite:
+    // a compile-time collision assert in the driver, over the board's pins.
+    assert!(BUTTONS_SRC.contains("(Some((board::GPIOA_S, 13)), \"SWDIO\")"));
+    assert!(BUTTONS_SRC.contains("(Some((board::GPIOA_S, 14)), \"SWCLK\")"));
+    assert!(BUTTONS_SRC.contains("const fn collides(pin: (u32, u32)) -> bool"));
+    assert!(BUTTONS_SRC.contains("!collides((board::BTN_LEFT_PORT, board::BTN_LEFT_PIN)),"));
+    assert!(BUTTONS_SRC.contains("!collides((board::BTN_RIGHT_PORT, board::BTN_RIGHT_PIN)),"));
+    // The driver must still only ever touch its own two pins' fields.
+    assert!(BUTTONS_SRC.contains("PA13 (SWDIO) and PA14 (SWCLK) in AF mode"));
+    // And neither board may place a button on a debug pin (belt and braces —
+    // the const assert is the enforcement, this is the readable statement).
+    for src in [BOARD_IOTA2_SRC, BOARD_PQ1_SRC] {
+        for pin in [13u32, 14] {
+            assert!(
+                !src.contains(&format!("pub const BTN_LEFT_PIN: u32 = {pin};"))
+                    || !src.contains("pub const BTN_LEFT_PORT: u32 = GPIOA_S;"),
+                "a button on PA{pin} would brick SWD"
+            );
+        }
     }
 }
 
@@ -1229,20 +1303,43 @@ fn negative_buttons_long_press_threshold_is_500ms() {
 
 #[test]
 fn negative_buttons_must_not_consume_extra_swd_pins() {
-    // GPIOC moder is touched at bits [3:2] (PC1) and [27:26] (PC13). No
-    // other shifts allowed.
-    let allowed_c_modes = ["!(0b11 << 2)", "!(0b11 << 26)"];
-    for line in BUTTONS_SRC.lines() {
-        if line.contains("gpioc_moder.modify") {
-            let mut ok = false;
-            for allowed in allowed_c_modes {
-                if line.contains(allowed) {
-                    ok = true;
-                    break;
-                }
-            }
-            assert!(ok, "buttons gpioc_moder.modify touches unexpected bits: `{line}`");
-        }
+    // USED to iterate BUTTONS_SRC.lines() filtering on `gpioc_moder.modify`.
+    // pq1 has no GPIOC button path at all, and after the refactor the handles
+    // are role-named (`left_*`/`right_*`), so that loop body would never
+    // execute and the test would pass having asserted nothing.
+    //
+    // The property it wanted — "buttons touch ONLY their own pins' fields" —
+    // is now structural: every MODER/PUPDR write is at a derived
+    // `{LEFT,RIGHT,USER}_PIN2` shift, so it cannot reach another pin's field
+    // by construction, and which pins those are is guarded by the collision
+    // assert.
+    // Match WRITES only — `.modify(` on a moder/pupdr handle. (An earlier
+    // version of this filter also matched the bare struct field declaration
+    // `left_pupdr: Reg32,` and failed on it; the test was right to complain,
+    // the filter was wrong.) The `.modify(` calls are split across lines by
+    // rustfmt, so join the source first.
+    let flat = BUTTONS_SRC.replace('\n', " ");
+    let writes: Vec<&str> = flat
+        .match_indices(".modify(")
+        .map(|(i, _)| {
+            let start = flat[..i].rfind("REG.").unwrap_or(i);
+            let end = flat[i..].find(");").map_or(flat.len(), |e| i + e);
+            &flat[start..end]
+        })
+        .filter(|w| w.contains("_moder") || w.contains("_pupdr"))
+        .collect();
+    assert!(
+        !writes.is_empty(),
+        "the pin-config writes vanished — this test would be vacuous"
+    );
+    for w in &writes {
+        let symbolic =
+            w.contains("LEFT_PIN2") || w.contains("RIGHT_PIN2") || w.contains("USER_PIN2");
+        assert!(
+            symbolic,
+            "buttons.rs configures a GPIO field at a NON-derived shift, which can \
+             reach a pin the board map never named: `{w}`"
+        );
     }
 }
 
@@ -1319,19 +1416,34 @@ fn negative_spi_hw_public_surface_only_init_cs() {
 
 #[test]
 fn positive_buttons_bit_positions_match_pin_numbers() {
-    // PC1 = pin 1, so LEFT_BIT = 1 << 1.
-    let left_pin: u32 = 1;
-    assert!(BUTTONS_SRC.contains(&format!("const LEFT_BIT: u32 = 1 << {left_pin};")));
-    // PA8 = pin 8, so RIGHT_BIT = 1 << 8.
-    let right_pin: u32 = 8;
-    assert!(BUTTONS_SRC.contains(&format!("const RIGHT_BIT: u32 = 1 << {right_pin};")));
+    // COMPUTED-NEEDLE REWRITE. This used to format!() the literal pin numbers
+    // into needles like `const LEFT_BIT: u32 = 1 << {left_pin};`. After the
+    // pins moved to the board maps, none of those six needles could ever
+    // match again — it would have failed loudly (good), and the tempting fix
+    // is to relax the needles, which makes it assert nothing (bad).
+    //
+    // The computation moved to where the numbers now live: each BOARD file is
+    // checked for the pin it declares, and the driver is checked for deriving
+    // the mask and shift from that constant rather than restating a literal.
+    for (src, board, left, right) in [
+        (BOARD_IOTA2_SRC, "iota2", 1u32, 8u32),
+        (BOARD_PQ1_SRC, "pq1", 0u32, 1u32),
+    ] {
+        assert!(
+            src.contains(&format!("pub const BTN_LEFT_PIN: u32 = {left};")),
+            "{board} LEFT pin drifted"
+        );
+        assert!(
+            src.contains(&format!("pub const BTN_RIGHT_PIN: u32 = {right};")),
+            "{board} RIGHT pin drifted"
+        );
+        // MODER/PUPDR field for pin N is [2N+1:2N] — assert the arithmetic
+        // the driver relies on, per board, by value.
+        assert_eq!(left * 2, [2u32, 0][usize::from(board == "pq1")]);
+        assert_eq!(right * 2, [16u32, 2][usize::from(board == "pq1")]);
+    }
 
-    // MODER bits for pin N are [2N+1:2N].
-    let pc1_moder_shift = 2 * left_pin; // 2
-    let pa8_moder_shift = 2 * right_pin; // 16
-    assert!(BUTTONS_SRC.contains(&format!("!(0b11 << {pc1_moder_shift})")));
-    assert!(BUTTONS_SRC.contains(&format!("!(0b11 << {pa8_moder_shift})")));
-    // PUPDR bits same shift as MODER (2N+1:2N).
-    assert!(BUTTONS_SRC.contains(&format!("(0b01 << {pc1_moder_shift})")));
-    assert!(BUTTONS_SRC.contains(&format!("(0b01 << {pa8_moder_shift})")));
+    // The driver derives, never restates.
+    assert!(BUTTONS_SRC.contains("const LEFT_BIT: u32 = 1 << board::BTN_LEFT_PIN;"));
+    assert!(BUTTONS_SRC.contains("const RIGHT_BIT: u32 = 1 << board::BTN_RIGHT_PIN;"));
 }

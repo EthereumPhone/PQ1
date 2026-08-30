@@ -331,6 +331,39 @@ What this closes, without a single data byte having reached either part:
 Nothing here exercises SCP03, the shielded connection, or any lifecycle state —
 an address ACK is not a handshake.
 
+### UPDATE 2026-08-30 — Tier 2: buttons ported (compile-verified only)
+
+`hw::buttons` now takes its pins from `board::BTN_*`: iota2 keeps PC1/PA8 (+
+PC13 as a bench reference), pq1 uses **PA0 / PA1**, both on GPIOA. The clock
+enable is derived (`gpio_rcc_bit(LEFT_PORT) | gpio_rcc_bit(RIGHT_PORT)`), which
+folds to GPIOAEN alone on pq1 and GPIOAEN|GPIOCEN on iota2 with no `cfg`. The
+USER-button path is gated on `board::BTN_USER` being `Some`, so pq1 does not
+configure a pin it has not fitted.
+
+**The `compile_error!` fence is gone, replaced by something stronger.** The
+fence kept pq1 out wholesale; a `const assert!` now checks the actual property
+on *every* board — that neither button pin collides with the SE supply enable,
+either SE reset/enable, the console TX, or SWDIO/SWCLK, and that LEFT != RIGHT.
+That is the check which would have caught the original PA8 = `LDO2_EN` bug
+instead of quarantining it, and it keeps working as boards are added.
+
+**No UI design decision was needed, contrary to what this document and the
+board maps previously said.** The trusted UI has always been two-button:
+`ui::Button` has exactly two variants, `ui::Press` adds Short/Long, every
+dialog matches all four arms with no wildcard (compile-time proof the event
+space is exactly four), confirm is `(Right, Long)`, and
+`hw::buttons::wait_combo_release` already implements the both-buttons chord.
+The dev board's PC13 was never a UI input — configured, never sampled by
+`wait_event`. Those claims have been retracted where they were written.
+
+**NOT verified on hardware.** No buttons are fitted to the board — pads
+`J203`/`J204` (LEFT) and `J205`/`J206` (RIGHT) are bare. Each pad pair is
+signal + GND with a 100nF cap and an ESD diode and **no board pull-up**, so the
+driver's internal pull-up plus active-low read is what makes a press
+detectable; that is unchanged from iota2 and is the property the gates pin. To
+check it when buttons exist (or with tweezers across a pad pair), build with
+`gpio-buttons` and use the `button-test` scanner.
+
 ### UPDATE 2026-08-30 (later still) — step 4 CLOSED: the I2C4 SECCFGR receipt
 
 `make gtzc-enforcement-hw BOARD=pq1` → **PASS, 8/8**, with the eighth probe

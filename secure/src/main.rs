@@ -1372,8 +1372,10 @@ fn main() -> ! {
         //   Right short = +1 digit, Left short = -1 digit,
         //   Right long  = next position / confirm at the last,
         //   Left long   = previous position / cancel at the first.
-        // Needs physical buttons on the gpio-buttons pins (LEFT=PC1/D8,
-        // RIGHT=PA8/D9). Loops so it can be re-tested.
+        // Needs physical buttons on whichever pins the board map names
+        // (`board::BTN_LEFT_*` / `BTN_RIGHT_*` — iota2: PC1/PA8 on the CN13
+        // jumpers; pq1: PA0/PA1 on solder pads J203/J205). Loops so it can
+        // be re-tested.
         secure_log!("[LCD-UI] interactive PIN: L/R short=-/+digit, R-long=next/ok, L-long=prev/cancel");
         loop {
             match ui::pin_entry::enter_pin() {

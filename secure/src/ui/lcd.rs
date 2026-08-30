@@ -331,7 +331,12 @@ impl Input {
         #[cfg(feature = "gpio-buttons")]
         unsafe {
             crate::hw::buttons::init();
-            secure_log!("[S][LCD] GPIO buttons ready (LEFT=PC1/D8, RIGHT=PA8/D9)");
+            secure_log!(
+                "[S][LCD] GPIO buttons ready on {} (LEFT=pin {}, RIGHT=pin {})",
+                crate::board::BOARD_NAME,
+                crate::board::BTN_LEFT_PIN,
+                crate::board::BTN_RIGHT_PIN
+            );
         }
 
         #[cfg(feature = "debug-log")]

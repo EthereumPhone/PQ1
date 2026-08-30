@@ -128,13 +128,20 @@ impl Input {
         #[cfg(feature = "gpio-buttons")]
         unsafe {
             crate::hw::buttons::init();
-            hprintln!("[S][SEMI] GPIO buttons ready (LEFT=PC1/D8, RIGHT=PA8/D9)");
+            hprintln!(
+                "[S][SEMI] GPIO buttons ready on {} (LEFT=pin {}, RIGHT=pin {})",
+                crate::board::BOARD_NAME,
+                crate::board::BTN_LEFT_PIN,
+                crate::board::BTN_RIGHT_PIN
+            );
         }
     }
 
     /// Read a button press.
     ///
-    /// With `gpio-buttons`: polls PC1 (LEFT) and PA8 (RIGHT) hardware pins.
+    /// With `gpio-buttons`: polls the two hardware pins named by
+    /// `board::BTN_LEFT_*` / `board::BTN_RIGHT_*` (iota2: PC1/PA8;
+    /// pq1: PA0/PA1).
     /// Without: blocks on semihosting READC for keyboard input from host.
     pub fn wait_button(&mut self, idle_check: &mut dyn FnMut() -> bool) -> Option<(Button, Press)> {
         #[cfg(feature = "gpio-buttons")]

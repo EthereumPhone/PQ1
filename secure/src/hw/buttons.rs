@@ -28,34 +28,44 @@
 //! The on-board blue USER button (PC13) is also monitored in test mode
 //! as a reference to confirm the firmware is running.
 
+use crate::board;
 use crate::hw::mmio::{Reg32, RoReg32};
 
 // ---------------------------------------------------------------------------
-// RCC (secure alias)
+// Register handles, named by ROLE not by port
 // ---------------------------------------------------------------------------
-const RCC_S: u32 = 0x5602_0C00;
-
-// ---------------------------------------------------------------------------
-// GPIOA (secure alias) — PA8 = RIGHT button (CN13 pin 2 / Arduino D9)
-// ---------------------------------------------------------------------------
-const GPIOA_S: u32 = 0x5202_0000;
-
-// ---------------------------------------------------------------------------
-// GPIOC (secure alias) — PC1 = LEFT button  (CN13 pin 1 / Arduino D8)
-//                         PC13 = on-board USER button (test reference)
-// ---------------------------------------------------------------------------
-const GPIOC_S: u32 = 0x5202_0800;
+//
+// The ports come from `crate::board`. Naming these `left_*`/`right_*` rather
+// than `gpioa_*`/`gpioc_*` matters now that a board can put both buttons on
+// the SAME port: iota2 straddles GPIOC (PC1) and GPIOA (PA8), pq1 has both on
+// GPIOA (PA0/PA1). Two `Reg32` handles onto one base are harmless — `Reg32` is
+// just an address wrapper — but port-named fields would read as a lie.
 
 struct ButtonsRegs {
     rcc_ahb2enr1: Reg32,
     rcc_cfgr1: RoReg32,
-    gpioa_moder: Reg32,
-    gpioa_pupdr: Reg32,
-    gpioa_idr: RoReg32,
-    gpioc_moder: Reg32,
-    gpioc_pupdr: Reg32,
-    gpioc_idr: RoReg32,
+    left_moder: Reg32,
+    left_pupdr: Reg32,
+    left_idr: RoReg32,
+    right_moder: Reg32,
+    right_pupdr: Reg32,
+    right_idr: RoReg32,
+    /// Only bound on a board that has a third button; `BTN_USER` is
+    /// configured for bench reference and never read by the UI.
+    user_moder: Reg32,
+    user_pupdr: Reg32,
+    user_idr: RoReg32,
 }
+
+/// `(port, pin)` of the optional USER button, or a harmless stand-in when the
+/// board has none. `HAS_USER` gates every use, so the stand-in is never
+/// touched — it exists only so the `const` register block can be built
+/// unconditionally.
+const USER: (u32, u32) = match board::BTN_USER {
+    Some(p) => p,
+    None => (board::GPIOA_S, 0),
+};
+const HAS_USER: bool = board::BTN_USER.is_some();
 
 // SAFETY: each address is a real, 4-byte-aligned MMIO register. The
 // GPIO MODER/PUPDR registers are shared with other drivers but all
@@ -64,65 +74,107 @@ struct ButtonsRegs {
 // only via set/clear-bit RMW, so this is safe.
 const REG: ButtonsRegs = unsafe {
     ButtonsRegs {
-        rcc_ahb2enr1: Reg32::new(RCC_S + 0x8C),
-        rcc_cfgr1: RoReg32::new(RCC_S + 0x1C),
-        gpioa_moder: Reg32::new(GPIOA_S),
-        gpioa_pupdr: Reg32::new(GPIOA_S + 0x0C),
-        gpioa_idr: RoReg32::new(GPIOA_S + 0x10),
-        gpioc_moder: Reg32::new(GPIOC_S),
-        gpioc_pupdr: Reg32::new(GPIOC_S + 0x0C),
-        gpioc_idr: RoReg32::new(GPIOC_S + 0x10),
+        rcc_ahb2enr1: Reg32::new(board::RCC_S + board::RCC_AHB2ENR1_OFF),
+        rcc_cfgr1: RoReg32::new(board::RCC_S + 0x1C),
+        left_moder: Reg32::new(board::BTN_LEFT_PORT),
+        left_pupdr: Reg32::new(board::BTN_LEFT_PORT + 0x0C),
+        left_idr: RoReg32::new(board::BTN_LEFT_PORT + 0x10),
+        right_moder: Reg32::new(board::BTN_RIGHT_PORT),
+        right_pupdr: Reg32::new(board::BTN_RIGHT_PORT + 0x0C),
+        right_idr: RoReg32::new(board::BTN_RIGHT_PORT + 0x10),
+        user_moder: Reg32::new(USER.0),
+        user_pupdr: Reg32::new(USER.0 + 0x0C),
+        user_idr: RoReg32::new(USER.0 + 0x10),
     }
 };
 
 // ---------------------------------------------------------------------------
-// Pin assignments (from UM2839 Table 23)
-// ---------------------------------------------------------------------------
-const LEFT_BIT: u32 = 1 << 1;   // PC1  (CN13 pin 1, Arduino D8)
-// ---------------------------------------------------------------------------
-// Board fence — this driver is `iota2`-only until the pq1 button port lands.
+// Pin masks + register field shifts, derived from the board map
 // ---------------------------------------------------------------------------
 //
-// The pins below are the dev board's: PC1 (LEFT), PA8 (RIGHT), PC13 (USER).
-// On pq1 all three are wrong, and one of them is actively dangerous:
+// iota2: LEFT = PC1, RIGHT = PA8 (CN13 jumpers, Arduino D8/D9).
+// pq1:   LEFT = PA0, RIGHT = PA1 (solder pads J203/J205, each against a GND
+//        pad; the board has no pull-up, so the internal one below is what
+//        makes the active-low read work).
+const LEFT_BIT: u32 = 1 << board::BTN_LEFT_PIN;
+const RIGHT_BIT: u32 = 1 << board::BTN_RIGHT_PIN;
+/// Bit position of a pin's 2-bit field in `MODER` / `PUPDR`.
+const LEFT_PIN2: u32 = board::BTN_LEFT_PIN * 2;
+const RIGHT_PIN2: u32 = board::BTN_RIGHT_PIN * 2;
+const USER_PIN2: u32 = USER.1 * 2;
+const USER_BIT: u32 = 1 << USER.1;
+// ---------------------------------------------------------------------------
+// Pin-collision guard
+// ---------------------------------------------------------------------------
 //
-//   * PC1  — not bonded on the 48-pin UFQFPN package.
-//   * PC13 — bonded but unused; pq1 has only TWO buttons (PA0 / PA1).
-//   * PA8  — **`LDO2_EN`**, the enable for the `VDD1_3V3` rail that powers
-//     BOTH secure elements.
+// This replaces an earlier `compile_error!` that fenced pq1 off wholesale.
+// The hazard it guarded was real and specific: PA8 is the RIGHT button on
+// iota2 and **`LDO2_EN`** on pq1 — the supply enable for BOTH secure
+// elements — and `ui::init()` runs AFTER `hw::se_power::init()`, so
+// configuring it as a pulled-up input here would silently power both chips
+// back down a few hundred microseconds after they were brought up.
 //
-// That last one is not a cosmetic mismatch. `init()` below configures its
-// RIGHT pin as a pulled-up *input*, and `ui::init()` runs AFTER
-// `hw::se_power::init()` in the boot sequence — so on pq1 this driver would
-// quietly undo the SE rail enable a few hundred microseconds after it was
-// asserted: the internal pull-up against the board's 10 kΩ `R130` pull-down
-// leaves `LDO2_EN` well below the LDO's enable threshold, powering both
-// chips off again. The symptom would be an SE that answers during early
-// boot and then stops, which points at everything except the real cause.
+// A fence keeps one board out. This asserts the actual property, on every
+// board, at compile time: a button pin may not land on any pin that
+// something else owns. It is the check that would have caught the original
+// bug rather than merely quarantining it, and unlike the fence it keeps
+// working as new boards are added.
 //
-// Rather than leave that as a runtime trap, it is a build error. Remove
-// this fence in the same change that repoints the pins at `board::BTN_*`.
-//
-// An earlier version of this note added a second reason — that pq1's lack of
-// a third button needed "a chord or long-press decision" first. That was
-// wrong, and the code this file feeds refutes it: `ui::Button` has exactly two
-// variants, `ui::Press` supplies Short/Long, every dialog matches all four
-// arms with no wildcard, and `wait_combo_release` below already implements the
-// two-button chord. There is no design decision outstanding; the port is a pin
-// swap. Note it is not a *mechanical* one either, though: pq1 puts both
-// buttons on GPIOA (PA0/PA1), so the GPIOC register handles, the GPIOC clock
-// enable and the PC13 init block should be deleted rather than repointed.
-#[cfg(feature = "board-pq1")]
-compile_error!(
-    "hw/buttons.rs still uses the iota2 pin map (PC1/PA8/PC13) and is unsafe on pq1: \
-     PA8 is LDO2_EN, the supply enable for BOTH secure elements, and this driver \
-     would reconfigure it as a pulled-up input AFTER hw::se_power::init() has \
-     asserted it — silently powering the SEs back down. Port the pins to \
-     board::BTN_* (LEFT=PA0, RIGHT=PA1, both on GPIOA) before enabling \
-     `gpio-buttons` on pq1. Note `ui-lcd` implies `gpio-buttons`."
+// Precedent for the shape: the exact-equality `const assert!` arms in
+// `sau.rs::configure_gtzc`.
+
+/// Pins that must never be claimed as a button, with why.
+///
+/// `None` entries (a line the board does not have) can never collide, so
+/// the check folds them away.
+const RESERVED: [(Option<(u32, u32)>, &str); 6] = [
+    (board::SE_RAIL_EN, "SE supply enable (LDO2_EN)"),
+    (board::OPTIGA_RST, "OPTIGA reset (SE_RST)"),
+    (board::SE050_EN, "SE050 enable (SE1_EN)"),
+    (
+        Some((board::CONSOLE_TX_PORT, board::CONSOLE_TX_PIN)),
+        "debug console UART TX",
+    ),
+    (Some((board::GPIOA_S, 13)), "SWDIO"),
+    (Some((board::GPIOA_S, 14)), "SWCLK"),
+];
+
+/// True if `pin` collides with any reserved line.
+const fn collides(pin: (u32, u32)) -> bool {
+    let mut i = 0;
+    while i < RESERVED.len() {
+        if let Some(r) = RESERVED[i].0 {
+            if r.0 == pin.0 && r.1 == pin.1 {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+const _: () = assert!(
+    !collides((board::BTN_LEFT_PORT, board::BTN_LEFT_PIN)),
+    "the LEFT button pin collides with a reserved line for this board — see \
+     RESERVED in hw/buttons.rs. On pq1 the classic case is PA8, which is \
+     LDO2_EN (the supply enable for BOTH secure elements): claiming it as a \
+     pulled-up input silently powers the secure elements down, because \
+     ui::init() runs after hw::se_power::init()."
+);
+const _: () = assert!(
+    !collides((board::BTN_RIGHT_PORT, board::BTN_RIGHT_PIN)),
+    "the RIGHT button pin collides with a reserved line for this board — see \
+     RESERVED in hw/buttons.rs. On pq1 the classic case is PA8, which is \
+     LDO2_EN (the supply enable for BOTH secure elements): claiming it as a \
+     pulled-up input silently powers the secure elements down, because \
+     ui::init() runs after hw::se_power::init()."
+);
+const _: () = assert!(
+    !(board::BTN_LEFT_PORT == board::BTN_RIGHT_PORT
+        && board::BTN_LEFT_PIN == board::BTN_RIGHT_PIN),
+    "LEFT and RIGHT are the same pin — the two-button UI would see one input"
 );
 
-const RIGHT_BIT: u32 = 1 << 8;  // PA8  (CN13 pin 2, Arduino D9)
 
 // ---------------------------------------------------------------------------
 // Timing
@@ -171,20 +223,22 @@ fn detect_sysclk_mhz() -> u32 {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn left_pressed() -> bool {
-    REG.gpioc_idr.read() & LEFT_BIT == 0  // PC1
+    REG.left_idr.read() & LEFT_BIT == 0
 }
 
 pub(crate) fn right_pressed() -> bool {
-    REG.gpioa_idr.read() & RIGHT_BIT == 0  // PA8
+    REG.right_idr.read() & RIGHT_BIT == 0
 }
 
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 
-/// Configure LEFT (PC1) and RIGHT (PA8) as inputs with pull-ups.
+/// Configure LEFT and RIGHT as inputs with pull-ups, on whichever pins the
+/// board map names.
 ///
-/// Also configures PC13 (on-board USER button) for test reference.
+/// Also configures the USER button when the board has one — it is a bench
+/// reference only, never read by the UI.
 ///
 /// # Safety
 /// Direct register access. Call after `rcc::init()`.
@@ -194,23 +248,38 @@ pub unsafe fn init() {
     let mhz = detect_sysclk_mhz();
     unsafe { LOOPS_PER_MS = mhz * 200; }
 
-    // Enable GPIO clocks: GPIOA (bit 0), GPIOC (bit 2)
-    REG.rcc_ahb2enr1.set_bits((1 << 0) | (1 << 2));
+    // Enable the GPIO clock for each button's port. On iota2 these are two
+    // different ports (bits 0 | 2); on pq1 both buttons are on GPIOA so this
+    // folds to bit 0 alone. Deriving it means no `cfg` is needed either way.
+    let mut gpio_clocks =
+        board::gpio_rcc_bit(board::BTN_LEFT_PORT) | board::gpio_rcc_bit(board::BTN_RIGHT_PORT);
+    if HAS_USER {
+        gpio_clocks |= board::gpio_rcc_bit(USER.0);
+    }
+    REG.rcc_ahb2enr1.set_bits(gpio_clocks);
     cortex_m::asm::dsb();
 
-    // --- PC1 (LEFT, D8): clear MODER[3:2] → 00 (input), PUPDR → 01 (pull-up) ---
-    REG.gpioc_moder.modify(|v| v & !(0b11 << 2));
-    REG.gpioc_pupdr.modify(|v| (v & !(0b11 << 2)) | (0b01 << 2));
+    // Each button: MODER field → 00 (input), PUPDR field → 01 (pull-up).
+    //
+    // Only the two bits belonging to each pin are touched. That is what keeps
+    // PA13 (SWDIO) and PA14 (SWCLK) in AF mode for the debug connection — and
+    // it is now enforced rather than merely intended: the `const assert!`
+    // above rejects a board map that puts a button on either of them.
+    REG.left_moder.modify(|v| v & !(0b11 << LEFT_PIN2));
+    REG.left_pupdr
+        .modify(|v| (v & !(0b11 << LEFT_PIN2)) | (0b01 << LEFT_PIN2));
 
-    // --- PA8 (RIGHT, D9): clear MODER[17:16] → 00 (input), PUPDR → 01 (pull-up) ---
-    // Only touching bits 17:16. PA13 (SWDIO) and PA14 (SWCLK) are untouched —
-    // they stay in AF mode for the SWD debug connection.
-    REG.gpioa_moder.modify(|v| v & !(0b11 << 16));
-    REG.gpioa_pupdr.modify(|v| (v & !(0b11 << 16)) | (0b01 << 16));
+    REG.right_moder.modify(|v| v & !(0b11 << RIGHT_PIN2));
+    REG.right_pupdr
+        .modify(|v| (v & !(0b11 << RIGHT_PIN2)) | (0b01 << RIGHT_PIN2));
 
-    // --- PC13 (USER button, test reference): MODER[27:26] → 00 (input), pull-up ---
-    REG.gpioc_moder.modify(|v| v & !(0b11 << 26));
-    REG.gpioc_pupdr.modify(|v| (v & !(0b11 << 26)) | (0b01 << 26));
+    // USER button (bench reference), only where the board has one. pq1 has
+    // two buttons and no third pin to configure.
+    if HAS_USER {
+        REG.user_moder.modify(|v| v & !(0b11 << USER_PIN2));
+        REG.user_pupdr
+            .modify(|v| (v & !(0b11 << USER_PIN2)) | (0b01 << USER_PIN2));
+    }
 
     cortex_m::asm::dsb();
 }
@@ -397,7 +466,7 @@ pub unsafe fn run_test() -> ! {
 
     let mut prev_left = left_pressed();
     let mut prev_right = right_pressed();
-    let mut prev_user = REG.gpioc_idr.read() & (1 << 13) == 0;
+    let mut prev_user = REG.user_idr.read() & USER_BIT == 0;
 
     hprintln!("[BTN] Baseline: PC1(D8)={} PA8(D9)={} PC13(USER)={}",
         prev_left as u8, prev_right as u8, prev_user as u8);
@@ -408,7 +477,7 @@ pub unsafe fn run_test() -> ! {
 
         let l = left_pressed();
         let r = right_pressed();
-        let u = REG.gpioc_idr.read() & (1 << 13) == 0;
+        let u = REG.user_idr.read() & USER_BIT == 0;
 
         if l != prev_left {
             hprintln!("[BTN]   PC1  (LEFT/D8)  {}", if l { "PRESSED" } else { "released" });
@@ -428,8 +497,15 @@ pub unsafe fn run_test() -> ! {
     hprintln!("[BTN]");
     hprintln!("========================================");
     hprintln!("[BTN] Phase 2: Button event detection");
-    hprintln!("[BTN]   LEFT  = PC1/D8  (short <500ms, long >=500ms)");
-    hprintln!("[BTN]   RIGHT = PA8/D9  (short <500ms, long >=500ms)");
+    hprintln!("[BTN]   board = {}", board::BOARD_NAME);
+    hprintln!(
+        "[BTN]   LEFT  = pin {}  (short <500ms, long >=500ms)",
+        board::BTN_LEFT_PIN
+    );
+    hprintln!(
+        "[BTN]   RIGHT = pin {}  (short <500ms, long >=500ms)",
+        board::BTN_RIGHT_PIN
+    );
     hprintln!("[BTN]   BOTH pressed together = confirm chord");
     hprintln!("[BTN]                           (reports as RIGHT LONG)");
     hprintln!("[BTN] Waiting for events...");
