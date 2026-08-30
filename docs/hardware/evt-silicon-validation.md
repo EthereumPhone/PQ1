@@ -328,11 +328,51 @@ What this closes, without a single data byte having reached either part:
   PA15.
 - The two buses are independent: one answered while the other did not.
 
-Still open from the list above: **step 3** (scope/LA the two buses during a
-real transaction) and **step 4** (`make gtzc-enforcement-hw` on pq1 silicon for
-the I2C4 SECCFGR bit, which remains the one item with no functional symptom
-either way). Nothing here exercises SCP03, the shielded connection, or any
-lifecycle state — an address ACK is not a handshake.
+Nothing here exercises SCP03, the shielded connection, or any lifecycle state —
+an address ACK is not a handshake.
+
+### UPDATE 2026-08-30 (later still) — step 4 CLOSED: the I2C4 SECCFGR receipt
+
+`make gtzc-enforcement-hw BOARD=pq1` → **PASS, 8/8**, with the eighth probe
+being the one that matters:
+
+```
+[NS][gtzc] target: STM32U585CIU6 AL_A66_MB_V10 (pq1)
+[NS][gtzc] probe 8/8  addr=0x40008400 (I2C4_CR1)
+[NS][gtzc]   read=0x00000000  tzic_count=8  irqs_for_probe=1
+[NS][gtzc] tzic_status final = 8 (delta = 8, expected = 8)
+```
+
+**The first run of this target did NOT close the item, and looked like it did.**
+`nonsecure/src/gtzc_test.rs` carried a fixed seven-entry probe table written for
+iota2 — I2C1, I2C2, AES, HASH, RNG, PKA, SAES. I2C4 was simply not in it, so the
+target reported `PASS — GTZC1 TZSC + TZIC enforcement confirmed` on pq1 while
+never touching the bit whose whole risk is that it has no functional symptom.
+The probe table is now board-conditional (pq1 = 8), which required giving the
+non-secure crate the `board-*` axis it did not have; its banner also hardcoded
+`B-U585I-IOT02A` regardless of target and now reports the real board.
+
+**Control run — the receipt can fail.** Un-securing I2C4 (dropping the bit from
+`SECCFGR1_BOARD_IMAGE` *and* relaxing the two pq1 `const assert!` arms that
+guard it, since otherwise the build stops first):
+
+```
+[NS][gtzc] probe 8/8  addr=0x40008400 (I2C4_CR1)
+[NS][gtzc]   read=0x00000000  tzic_count=7  irqs_for_probe=0
+[NS][gtzc] tzic_status final = 7 (delta = 7, expected = 8)
+[NS][gtzc] === FAIL n=7 expected=8 ===
+```
+
+Worth reading that carefully: **`read` is `0x00000000` in BOTH cases.** The RAZ
+value is not the discriminator — I2C4_CR1 reads zero anyway when the peripheral
+is idle. Only `irqs_for_probe` (1 → 0) distinguishes "NS was denied" from "NS
+was allowed in". A future reader scraping this log for `read=0x0` as evidence of
+denial would draw the wrong conclusion.
+
+So invariant #3/#4 for the SE050's dedicated bus now has a silicon denial
+receipt on the shipping board, which is what the `const assert!` message in
+`sau.rs` demands. **Step 3 (scope/LA both buses during a real transaction)
+remains the only open item from this list.**
 
 **Still unverified on silicon — the port compiles and the gates hold, but no SE
 has answered yet.** In order:

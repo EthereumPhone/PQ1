@@ -4,6 +4,13 @@ version = "0.1.0"
 edition.workspace = true
 
 [features]
+# Board axis — mirrors `secure/Cargo.toml`. The NS crate needs it only so the
+# GTZC enforcement probe list can cover the peripherals a given board actually
+# secures: pq1 gives the SE050 its own I2C4 bus, which iota2 has no equivalent
+# of. Opt-in to pq1, same as the secure side; `board-iota2` is inert.
+board-iota2 = []
+board-pq1 = []
+
 default = []
 # Non-interactive automated end-to-end test mode. Replaces the
 # default interactive main() with a scripted runner that exercises

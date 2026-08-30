@@ -41,9 +41,16 @@ struct Probe {
     label: &'static str,
 }
 
-/// All 7 peripherals marked SECURE in `secure/src/sau.rs`. Order
-/// matches the SECCFGR1 → SECCFGR3 ordering in the source file so
+/// Every peripheral marked SECURE in `secure/src/sau.rs`, for THIS board.
+/// Order matches the SECCFGR1 → SECCFGR3 ordering in the source file so
 /// log scraping is predictable.
+///
+/// The list is board-conditional because the secured SET is: `pq1` gives the
+/// SE050 its own **I2C4** bus (`SECCFGR1` bit 16) where `iota2` has both
+/// secure elements on I2C1, so pq1 secures one peripheral more. Keeping the
+/// probe list fixed at iota2's seven would leave the one bit that has **no
+/// functional symptom either way** — NS reachability of the SE050 bus —
+/// permanently unverified, while still reporting PASS.
 ///
 /// NS-alias = SECURE-alias with bit 28 cleared (`0x5...` → `0x4...`).
 /// Addresses chosen to hit a benign register on each peripheral:
@@ -65,13 +72,20 @@ const PROBES: &[Probe] = &[
     Probe { addr: 0x420C_0800, label: "RNG_CR"    },
     Probe { addr: 0x420C_2000, label: "PKA_CR"    },
     Probe { addr: 0x420C_0C00, label: "SAES_CR"   },
+    // pq1 only: I2C4 is the SE050's dedicated bus. NS alias of the
+    // `0x5000_8400` secure alias in `secure/src/board/mod.rs`.
+    #[cfg(feature = "board-pq1")]
+    Probe { addr: 0x4000_8400, label: "I2C4_CR1"  },
 ];
 
 /// NS-side entry point under `--features gtzc-test`.
 #[entry]
 fn main() -> ! {
     let _ = hprintln!("[NS][gtzc] === GTZC1 TZSC enforcement validation ===");
-    let _ = hprintln!("[NS][gtzc] target: STM32U585 B-U585I-IOT02A");
+    #[cfg(feature = "board-pq1")]
+    let _ = hprintln!("[NS][gtzc] target: STM32U585CIU6 AL_A66_MB_V10 (pq1)");
+    #[cfg(not(feature = "board-pq1"))]
+    let _ = hprintln!("[NS][gtzc] target: STM32U585AII6 B-U585I-IOT02A (iota2)");
     let _ = hprintln!("[NS][gtzc] probes: {}", PROBES.len());
 
     // Baseline read of the counter before probing. The boot path may
