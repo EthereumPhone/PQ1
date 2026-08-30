@@ -235,7 +235,12 @@ se-i2c-probe = []
 # Mutually exclusive with `sca-trigger` (both want PB3 on pq1) and, on iota2,
 # with a real SE backend (the pins there ARE the SE bus) — both enforced by
 # const asserts in `hw::soft_i2c`. NEVER SHIP: it is in PROD_FORBIDDEN.
-ui-oled-bench = ["dep:embedded-graphics", "stm32u585"]
+# Implies `gpio-buttons` for the same reason `ui-lcd` does: this backend exists
+# for untethered / RDP>=1 use, and in exactly that configuration there is no
+# semihosting input, so without physical buttons `wait_button` falls to a WFE
+# stub and the UI has no input source at all. pq1's buttons are on-board
+# PA0/PA1, so this is satisfiable there.
+ui-oled-bench = ["dep:embedded-graphics", "gpio-buttons", "stm32u585"]
 # Route every SHA-256 call in the signing crates through the STM32U585 HASH
 # peripheral (the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`).
 # Without this feature the signing crates use software `sha2::Sha256` — what

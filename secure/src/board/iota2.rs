@@ -106,8 +106,9 @@ pub const SE050_I2C_AF: u32 = 4;
 /// peripheral and one as a GPIO for bit-banging. `hw::soft_i2c` rejects that
 /// combination at compile time; use `mock-se` for OLED builds on this board.
 ///
-/// (pq1 has no such problem — it bit-bangs on PB3/PA3, which nothing else
-/// claims.)
+/// (pq1 bit-bangs on PB3/PA3 instead, which no *secure element* claims — but
+/// PB3 there is the SCA scope trigger, so that board has its own exclusivity
+/// rule. Both are enforced in `hw::soft_i2c`.)
 pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOB_S, 8));
 pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOB_S, 9));
 

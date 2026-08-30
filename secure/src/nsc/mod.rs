@@ -131,6 +131,7 @@ compile_error!(
         feature = "se050-rotate-scp03",
         feature = "se050-scp03-allow-factory-fallback",
         feature = "sca-trigger",
+        feature = "ui-oled-bench",
     )
 ))]
 compile_error!(
@@ -849,6 +850,20 @@ compile_error!(
     "UI backends `ui-lcd` and `ui-noop` are mutually exclusive. Pick exactly \
      one. (`ui-lcd` became a standalone Display backend in Phase C; the old \
      Phase A/B `ui-lcd`+`ui-noop` pairing is no longer valid.)"
+);
+
+// `ui-capture` hashes whatever buffer a backend hands `capture::emit`, and the
+// backends hand it different things: `ui-semihosting` passes the 64-byte
+// character grid, this OLED backend passes its 512-byte SSD1306 page buffer,
+// and `ui-lcd` does not call emit at all. Combining them would produce a
+// [UI-FP] fingerprint stream matching neither `tests/ui_fixtures.json` nor the
+// LCD's silence — a green-looking capture run that compares nothing.
+#[cfg(all(feature = "ui-oled-bench", feature = "ui-capture"))]
+compile_error!(
+    "`ui-oled-bench` and `ui-capture` are incompatible: capture fingerprints the \
+     backend's own framebuffer, and this backend's is the 512-byte SSD1306 page \
+     buffer rather than the character grid the fixtures were recorded against. \
+     Capture runs belong on `ui-semihosting`."
 );
 
 #[cfg(all(feature = "ui-oled-bench", feature = "ui-lcd"))]

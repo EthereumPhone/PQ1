@@ -141,20 +141,32 @@ impl Display {
     }
 
     pub fn init(&mut self) {
+        // Bring the bit-banged bus up FIRST. Without this the GPIO port clocks
+        // are never enabled and the pins keep their reset state — on pq1 PB3
+        // is AF0 (JTDO/SWO) and PA3 is analog — so every `write` below toggles
+        // BSRR on pins that drive nothing, both probes NACK, and this function
+        // returns "no display" having never touched the bus.
+        //
+        // The predecessor of this file relied on `main.rs` calling
+        // `hw::i2c::init(mhz)`; doing it here instead keeps the display's
+        // transport owned by the display, so the backend cannot be selected
+        // without its bus being configured.
+        hw::soft_i2c::init();
+
         // Probe for the display on both possible I2C addresses.
-        let addr = unsafe {
-            // Try primary address first (0x3C), then alternate (0x3D).
-            if hw::soft_i2c::write(SSD1306_ADDR_PRIMARY, &[0x00, 0xAE]) {
-                secure_log!("[S][OLED] found display at 0x{:02x}", SSD1306_ADDR_PRIMARY);
-                SSD1306_ADDR_PRIMARY
-            } else if hw::soft_i2c::write(SSD1306_ADDR_ALT, &[0x00, 0xAE]) {
-                secure_log!("[S][OLED] found display at 0x{:02x}", SSD1306_ADDR_ALT);
-                SSD1306_ADDR_ALT
-            } else {
-                secure_log!("[S][OLED] no display at 0x3C/0x3D on the bit-banged bus — skipping");
-                return;
-            }
+        // Try primary address first (0x3C), then alternate (0x3D).
+        let addr = if hw::soft_i2c::write(SSD1306_ADDR_PRIMARY, &[0x00, 0xAE]) {
+            secure_log!("[S][OLED] found display at 0x{:02x}", SSD1306_ADDR_PRIMARY);
+            SSD1306_ADDR_PRIMARY
+        } else if hw::soft_i2c::write(SSD1306_ADDR_ALT, &[0x00, 0xAE]) {
+            secure_log!("[S][OLED] found display at 0x{:02x}", SSD1306_ADDR_ALT);
+            SSD1306_ADDR_ALT
+        } else {
+            secure_log!("[S][OLED] no display at 0x3C/0x3D on the bit-banged bus — skipping");
+            return;
         };
+        // SAFETY: single-threaded secure world; this static is written once
+        // here during init and only read afterwards.
         unsafe { SSD1306_ADDR = addr };
 
         // SSD1306 initialization sequence (128×32, charge-pump enabled).
@@ -177,14 +189,12 @@ impl Display {
             0xAF,       // Display ON
         ];
         for &cmd in init_cmds {
-            unsafe { hw::soft_i2c::write(addr, &[0x00, cmd]) };
+            hw::soft_i2c::write(addr, &[0x00, cmd]);
         }
 
         // Set full-screen column/page window for bulk writes.
-        unsafe {
-            hw::soft_i2c::write(addr, &[0x00, 0x21, 0x00, 0x7F]); // col 0–127
-            hw::soft_i2c::write(addr, &[0x00, 0x22, 0x00, 0x03]); // page 0–3
-        }
+        hw::soft_i2c::write(addr, &[0x00, 0x21, 0x00, 0x7F]); // col 0–127
+        hw::soft_i2c::write(addr, &[0x00, 0x22, 0x00, 0x03]); // page 0–3
 
         // Clear display.
         self.fb.clear();
