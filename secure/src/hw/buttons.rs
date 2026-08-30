@@ -101,18 +101,25 @@ const LEFT_BIT: u32 = 1 << 1;   // PC1  (CN13 pin 1, Arduino D8)
 // boot and then stops, which points at everything except the real cause.
 //
 // Rather than leave that as a runtime trap, it is a build error. Remove
-// this fence in the same change that repoints the pins at
-// `board::BTN_*` — and note pq1 has no third button, so the UI's
-// three-action dialogs (PIN entry, seed wizard) need a chord or long-press
-// decision before `gpio-buttons` is meaningful there at all.
+// this fence in the same change that repoints the pins at `board::BTN_*`.
+//
+// An earlier version of this note added a second reason — that pq1's lack of
+// a third button needed "a chord or long-press decision" first. That was
+// wrong, and the code this file feeds refutes it: `ui::Button` has exactly two
+// variants, `ui::Press` supplies Short/Long, every dialog matches all four
+// arms with no wildcard, and `wait_combo_release` below already implements the
+// two-button chord. There is no design decision outstanding; the port is a pin
+// swap. Note it is not a *mechanical* one either, though: pq1 puts both
+// buttons on GPIOA (PA0/PA1), so the GPIOC register handles, the GPIOC clock
+// enable and the PC13 init block should be deleted rather than repointed.
 #[cfg(feature = "board-pq1")]
 compile_error!(
     "hw/buttons.rs still uses the iota2 pin map (PC1/PA8/PC13) and is unsafe on pq1: \
      PA8 is LDO2_EN, the supply enable for BOTH secure elements, and this driver \
      would reconfigure it as a pulled-up input AFTER hw::se_power::init() has \
      asserted it — silently powering the SEs back down. Port the pins to \
-     board::BTN_* (and decide how two buttons cover three UI actions) before \
-     enabling `gpio-buttons` on pq1. Note `ui-lcd` implies `gpio-buttons`."
+     board::BTN_* (LEFT=PA0, RIGHT=PA1, both on GPIOA) before enabling \
+     `gpio-buttons` on pq1. Note `ui-lcd` implies `gpio-buttons`."
 );
 
 const RIGHT_BIT: u32 = 1 << 8;  // PA8  (CN13 pin 2, Arduino D9)

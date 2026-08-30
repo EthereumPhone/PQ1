@@ -132,6 +132,15 @@ pub const BTN_LEFT_PIN: u32 = 1;
 /// `RIGHT` — PA8, Arduino `D9` (CN13 pin 2 jumper).
 pub const BTN_RIGHT_PORT: u32 = GPIOA_S;
 pub const BTN_RIGHT_PIN: u32 = 8;
-/// The blue on-board `USER` (B3) button — a genuine third input, which the
-/// UI's three-action dialogs (up / down / select) rely on.
+/// The blue on-board `USER` (B3) button.
+///
+/// **Not a UI input.** An earlier version of this comment called it "a genuine
+/// third input, which the UI's three-action dialogs rely on" — that was wrong.
+/// `hw::buttons::init` configures PC13, but `wait_event` never samples it; the
+/// only reads are inside the `button-test` diagnostic, where it just prints a
+/// state change. It never constructs a `Button` and never reaches a dialog.
+///
+/// Kept here because the pin *is* wired on this board and is useful as a
+/// bench "is the firmware alive" reference, but nothing in the tree consumes
+/// this constant.
 pub const BTN_USER: Option<(u32, u32)> = Some((GPIOC_S, 13));

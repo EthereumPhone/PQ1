@@ -41,9 +41,10 @@
 //! - **PA5 is the LCD clock**, so the `consumption-mask` TIM2_CH1 PWM
 //!   cannot live there. PA6, PA10, PC13 are the free pins (PB4 is bonded
 //!   but unrouted).
-//! - **Two buttons, not three.** `UP`/`DOWN` only; there is no third
-//!   `SELECT` input. Any interactive dialog (PIN entry, seed wizard)
-//!   needs a chord or long-press before it is usable here.
+//! - **Two buttons, not three** — `UP`/`DOWN` only. This is NOT a limitation:
+//!   the trusted UI is already a two-button design (`(Left|Right)` x
+//!   `(Short|Long)`, confirm = `(Right, Long)`), and the dev board's third
+//!   button was never a UI input. See `BTN_USER` below.
 //! - The pads on `J211` are the debug UART connector, in order
 //!   `TX, RX, BOOT0, GND`; `TP101`/`TP102`/`TP103` are test points sitting
 //!   on the first three of those nets.
@@ -214,8 +215,21 @@ pub const BTN_LEFT_PIN: u32 = 0;
 /// `DOWN_KEY` / `RIGHT` — PA1.
 pub const BTN_RIGHT_PORT: u32 = GPIOA_S;
 pub const BTN_RIGHT_PIN: u32 = 1;
-/// **No third button.** See the module note — interactive dialogs that
-/// assume a separate `SELECT` need a chord or long-press on this board.
+/// No third button on this board — **and none is needed.**
+///
+/// An earlier version of this comment claimed dialogs assuming a separate
+/// `SELECT` would need "a chord or long-press on this board". That was a false
+/// premise on both counts. The trusted UI has always been a two-button design:
+/// `ui::Button` has exactly two variants (its own doc says "Two-button input
+/// event"), `ui::Press` adds Short/Long, and every dialog matches all four
+/// `(Left|Right) x (Short|Long)` arms **with no wildcard** — which is
+/// compile-time proof the event space is exactly those four. Confirm is
+/// `(Right, Long)`, cancel is `(Left, Long)`. And the both-buttons chord is
+/// already implemented too (`hw::buttons::wait_combo_release`), synthesised as
+/// `(Right, Long)` with an 80 ms skew window.
+///
+/// So this constant records a board fact, not a limitation, and it is
+/// consumed by nothing.
 pub const BTN_USER: Option<(u32, u32)> = None;
 
 // ---------------------------------------------------------------------------
