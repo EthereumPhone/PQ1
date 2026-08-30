@@ -1,19 +1,13 @@
-# ENCODE-COMPAT DISCHARGED (2026-08-25).  `encode_msgWOTS_C` moved from
-# abstract-op:f9542be91ac8 to defined-op:0075335b8622 -- it was a FREE op and is now
-# DEFINED as `encode_msgWOTS (ThC p a x cc)`, which makes the capstone premise `hencb`
-# a theorem (WOTS_C_Real.ec::encode_msgWOTS_C_compat) instead of an assumption.
-# LEDGER IS UNCHANGED AT 242: abstract-op is a PARAMETERS row and defined-op is a
-# DEFINITIONS row, and neither is a ledger class.  parameters 215->214,
-# definitions 422->423, total 1634->1634.  Predicted before the run in
-# scratch/encode-compat/PREDICTION.md and matched exactly.
-# CONE BASELINE -- SPLIT tree.  REGENERATED 2026-08-22.
-# Bodied DEFINITIONS carry defined-<kind>:<body-digest> rows (2026-08-21), and
-# PARAMETERISED clone operands are now captured (2026-08-22): both the operand
-# matcher and its TERMINATOR required the name to sit immediately before `<-`/`<=`,
-# so `op P i <= ...` matched NEITHER -- the binding carried no row AND could not end
-# its PREDECESSOR value, whose digest therefore over-reached into it.  21 such
-# bindings in the split cone; +21 new rows and 21 predecessor digests corrected.
-# LEDGER=242 PARAMETERS=215 BINDINGS=366 MEANING=389 DEFINITIONS=422 TOTAL=1634   (LIVE)
+# CONE BASELINE -- SPLIT tree.  RE-BASELINED 2026-08-30.
+# THE WOTS ADMIT IS GONE.  `admit:aac0bca56296 nhchwcoll_hchwpre_msg` LEAVES this census:
+# the lemma's conclusion is now the BadEnc disjunction (admit-free), and MM45's admitted
+# encoder injectivity is replaced by an explicit named probability in
+# MEUFGCMA_WOTSTWESNPRF_Charged.  LEDGER 242 -> 241 -- the first assumption REMOVED, as
+# opposed to relocated, in this arc.
+# The only ADDED rows are `module` (BadEncFlag, Game4_WOTSTWES_BadEnc, Game4_WOTSTWES_Alt,
+# O_Game34_WOTSTWES_AltX and two anonymous A), which are MEANING rows, not ledger.  No new
+# axiom, declare-axiom, op-annotation or clone-obligation: verified before re-baselining,
+# because a ledger move for any reason OTHER than the admit leaving would be a finding.
 base-c10-split/BinaryTrees.ec	defined-op:7ad6319948b8	height	# line 16
 base-c10-split/BinaryTrees.ec	defined-op:ddd3b90ca64e	fully_balanced	# line 39
 base-c10-split/BinaryTrees.ec	defined-op:c0ebb6c47688	sub_bt	# line 66
@@ -922,12 +916,11 @@ base-c10-split/TweakableHashFunctions.eca	module:9a8477bf7a31	A	# line 798
 base-c10-split/TweakableHashFunctions.eca	module-type:1f32fffd53e3	Adv_SMDTUDC	# line 839
 base-c10-split/TweakableHashFunctions.eca	module:fd4649b67633	SM_DT_UD_C	# line 844
 base-c10-split/TweakableHashFunctions.eca	module:dbf9afbbb4ac	A	# line 845
-base-c10-split/WOTS_TW_ES.ec	admit:aac0bca56296	nhchwcoll_hchwpre_msg	# line 1513
 base-c10-split/WOTS_TW_ES.ec	axiom	valid_widxvals_idxvals	# line 390
 base-c10-split/WOTS_TW_ES.ec	axiom	ch0	# line 559
 base-c10-split/WOTS_TW_ES.ec	axiom	chS	# line 566
-base-c10-split/WOTS_TW_ES.ec	declare-axiom	A_choose_ll	# line 3210
-base-c10-split/WOTS_TW_ES.ec	declare-axiom	A_forge_ll	# line 3214
+base-c10-split/WOTS_TW_ES.ec	declare-axiom	A_choose_ll	# line 3419
+base-c10-split/WOTS_TW_ES.ec	declare-axiom	A_forge_ll	# line 3423
 base-c10-split/WOTS_TW_ES.ec	refined-const:d0bb5c86cf0a	ge2_adrslen	# line 20
 base-c10-split/WOTS_TW_ES.ec	refined-const:fdf3d5d7834a	ge1_n	# line 28
 base-c10-split/WOTS_TW_ES.ec	refined-const:56725145425c	val_log2w	# line 55
@@ -987,9 +980,9 @@ base-c10-split/WOTS_TW_ES.ec	clone-obligation:Subtype	WAddress.valP	# line 1035
 base-c10-split/WOTS_TW_ES.ec	clone-obligation:Subtype	WAddress.valK	# line 1035
 base-c10-split/WOTS_TW_ES.ec	clone-obligation:Subtype	WAddress.inhabited	# line 1035
 base-c10-split/WOTS_TW_ES.ec	clone-discharge:none	WAddress	# line 1035
-base-c10-split/WOTS_TW_ES.ec	operand:4700c5ff2a14	DListSample.t	# line 3176
-base-c10-split/WOTS_TW_ES.ec	operand:5d70b641dcf4	DListSample.d	# line 3176
-base-c10-split/WOTS_TW_ES.ec	clone-discharge:star	DListSample	# line 3176
+base-c10-split/WOTS_TW_ES.ec	operand:4700c5ff2a14	DListSample.t	# line 3385
+base-c10-split/WOTS_TW_ES.ec	operand:5d70b641dcf4	DListSample.d	# line 3385
+base-c10-split/WOTS_TW_ES.ec	clone-discharge:star	DListSample	# line 3385
 base-c10-split/WOTS_TW_ES.ec	op-annotation:lossless	dpseed	# line 302
 base-c10-split/WOTS_TW_ES.ec	op-annotation:lossless	ddgstblock	# line 305
 base-c10-split/WOTS_TW_ES.ec	defined-const:3a59ec8cd1b1	adrs_len	# line 20
@@ -1079,74 +1072,78 @@ base-c10-split/WOTS_TW_ES.ec	defined-op:39173dc2c5e7	qsdgpre_idx	# line 1011
 base-c10-split/WOTS_TW_ES.ec	defined-type:44f7cb14c3a8	wadrs	# line 1039
 base-c10-split/WOTS_TW_ES.ec	defined-type:18feb6e8a61b	pkWOTSTW	# line 1045
 base-c10-split/WOTS_TW_ES.ec	defined-type:23137f3896ae	skWOTSTW	# line 1048
-base-c10-split/WOTS_TW_ES.ec	module:d74bf9751f3f	WOTS_TW_ES	# line 2241
-base-c10-split/WOTS_TW_ES.ec	module:28b2a6a8f825	WOTS_TW_ES_NPRF	# line 2380
-base-c10-split/WOTS_TW_ES.ec	module-type:df1d3a4d5242	Oracle_MEUFGCMA_WOTSTWESNPRF	# line 2506
-base-c10-split/WOTS_TW_ES.ec	module-type:af40d66aeb00	Adv_MEUFGCMA_WOTSTWESNPRF	# line 2519
-base-c10-split/WOTS_TW_ES.ec	module:b98f61274a2a	M_EUF_GCMA_WOTSTWESNPRF	# line 2527
-base-c10-split/WOTS_TW_ES.ec	module:6a47373903f1	A	# line 2528
-base-c10-split/WOTS_TW_ES.ec	module:5908780a4518	M_EUF_GCMA_WOTSTWESNPRF_UG	# line 2627
-base-c10-split/WOTS_TW_ES.ec	module:1abc6a3bdf95	A	# line 2628
-base-c10-split/WOTS_TW_ES.ec	module:d491056a9230	O_MEUFGCMA_WOTSTWESNPRF	# line 2710
-base-c10-split/WOTS_TW_ES.ec	module:6223f3e43be8	R_SMDTUDC_Game23WOTSTWES	# line 2762
-base-c10-split/WOTS_TW_ES.ec	module:85ac436cc0fc	O_DistRCH	# line 2763
-base-c10-split/WOTS_TW_ES.ec	module:d4348a0743a0	O_R_DistRCH_Game23WOTSTW	# line 2821
-base-c10-split/WOTS_TW_ES.ec	module:e55627e3b87d	O_R_DistRCH_Game23WOTSTW_THFC	# line 2873
-base-c10-split/WOTS_TW_ES.ec	module:fe857fb811f0	A	# line 2897
-base-c10-split/WOTS_TW_ES.ec	module:b864e96843e4	R_SMDTTCRC_Game34WOTSTWES	# line 2957
-base-c10-split/WOTS_TW_ES.ec	module:d4bb838944ea	O_R_SMDTTCRC_Game34WOTSTWES	# line 2958
-base-c10-split/WOTS_TW_ES.ec	module:ffddd139e2b5	A	# line 3025
-base-c10-split/WOTS_TW_ES.ec	module:9e08d9076be6	R_SMDTPREC_Game4WOTSTWES	# line 3067
-base-c10-split/WOTS_TW_ES.ec	module:a4fd1473a90b	O_R_SMDTPREC_Game4WOTSTWES	# line 3068
-base-c10-split/WOTS_TW_ES.ec	module:b0d4ddbe9860	A	# line 3130
-base-c10-split/WOTS_TW_ES.ec	module-type:1026a248f9c0	Oracle_DistRCH	# line 3185
-base-c10-split/WOTS_TW_ES.ec	module-type:dddb13198211	Adv_DistRCH	# line 3191
-base-c10-split/WOTS_TW_ES.ec	module:5cd2cec8c0fd	A	# line 3199
-base-c10-split/WOTS_TW_ES.ec	module:ef04bf2d24fb	O_MEUFGCMA_WOTSTWESNPRF_Inlined	# line 3220
-base-c10-split/WOTS_TW_ES.ec	module:113c6330669a	O_Game2_WOTSTWES	# line 3267
-base-c10-split/WOTS_TW_ES.ec	module:612e4a1c6f95	O_Game34_WOTSTWES	# line 3316
-base-c10-split/WOTS_TW_ES.ec	module:1883019728cd	O_DistRCH	# line 3367
-base-c10-split/WOTS_TW_ES.ec	module:422317b18a42	O_MEUFGCMA_WOTSTWESNPRF_Inlined_SampleSample	# line 3408
-base-c10-split/WOTS_TW_ES.ec	module:b64e190ace01	O_MEUFGCMA_WOTSTWESNPRF_Inlined_LoopSnocSample	# line 3451
-base-c10-split/WOTS_TW_ES.ec	module:4695c00ae6f5	O_MEUFGCMA_WOTSTWESNPRF_Inlined_Alt	# line 3494
-base-c10-split/WOTS_TW_ES.ec	module:6e714638587c	O_Game34_WOTSTWES_SampleSample	# line 3591
-base-c10-split/WOTS_TW_ES.ec	module:5e8986108a0e	O_Game34_WOTSTWES_LoopSnocSample	# line 3641
-base-c10-split/WOTS_TW_ES.ec	module:921502b02022	O_Game34_WOTSTWES_LoopSnocSampleAlt	# line 3694
-base-c10-split/WOTS_TW_ES.ec	module:1372f83495c0	O_Game34_WOTSTWES_Alt	# line 3748
-base-c10-split/WOTS_TW_ES.ec	module:446235832bc7	Game2_WOTSTWES	# line 3929
-base-c10-split/WOTS_TW_ES.ec	module:c6cc4f100bb2	Game3_WOTSTWES	# line 3939
-base-c10-split/WOTS_TW_ES.ec	module:3d02b2e1cb54	Game4_WOTSTWES	# line 3948
-base-c10-split/WOTS_TW_ES.ec	module:96ac676bcde7	A	# line 3949
-base-c10-split/WOTS_TW_ES.ec	module:5eb5e99f04c6	Game3_WOTSTWES_Hchwcoll	# line 4000
-base-c10-split/WOTS_TW_ES.ec	module:9575ac5d702c	A	# line 4003
-base-c10-split/WOTS_TW_ES.ec	module:84148a1aa28e	Game4_WOTSTWES_Alt	# line 4054
-base-c10-split/WOTS_TW_ES.ec	module:8a7d1afdb6d5	A	# line 4055
-base-c10-split/WOTS_TW_ES.ec	module:fb6cd54adc91	R_DistRCH_Game23WOTSTW	# line 4121
-base-c10-split/WOTS_TW_ES.ec	module:ac1f7fea3474	O_R_DistRCH_Game23WOTSTW	# line 4122
-base-c10-split/WOTS_TW_ES.ec	module:e85b2925beae	O_R_DistRCH_Game23WOTSTW_THFC	# line 4174
-base-c10-split/WOTS_TW_ES.ec	module:826bc2b9b4b3	A	# line 4198
-base-c10-split/WOTS_TW_ES.ec	module:0b8700427a39	R_SMDTUDC_DistRCH	# line 4245
-base-c10-split/WOTS_TW_ES.ec	module:d25a49a4287b	O_R_SMDTUDC_DistRCH	# line 4246
-base-c10-split/WOTS_TW_ES.ec	module:60a88ab6c5b7	R	# line 4298
-base-c10-split/WOTS_TW_ES.ec	module:4a7c658a1f8f	R_SMDTUDC_DistRCHil	# line 4320
-base-c10-split/WOTS_TW_ES.ec	module:361fc5c2522a	O_R_SMDTUDC_DistRCHil	# line 4321
-base-c10-split/WOTS_TW_ES.ec	module:8c9dfefb07d1	R	# line 4373
-base-c10-split/WOTS_TW_ES.ec	module:e4c25a1d2f0d	DistRCH	# line 4397
-base-c10-split/WOTS_TW_ES.ec	module:421a064eec95	R	# line 4398
-base-c10-split/WOTS_TW_ES.ec	module:62d5101cf87e	DistRCHi	# line 4421
-base-c10-split/WOTS_TW_ES.ec	module:30d50e09804f	O_DistRCHi	# line 4422
-base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4450
-base-c10-split/WOTS_TW_ES.ec	module:eb43bd68027e	DistRCHi_SampleSample	# line 4467
-base-c10-split/WOTS_TW_ES.ec	module:9017c88fa31a	O_DistRCHi	# line 4468
-base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4496
-base-c10-split/WOTS_TW_ES.ec	module:8b65b4e10458	DistRCHi_LoopSnocSample	# line 4513
-base-c10-split/WOTS_TW_ES.ec	module:eb777a10e659	O_DistRCHi	# line 4514
-base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4542
-base-c10-split/WOTS_TW_ES.ec	module:a996d9621650	DistRCHil	# line 4559
-base-c10-split/WOTS_TW_ES.ec	module:87c4f34fd130	O_DistRCHi	# line 4560
-base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4592
-base-c10-split/WOTS_TW_ES.ec	module:e21cf1d8598b	SM_DT_UD_Ci	# line 4686
-base-c10-split/WOTS_TW_ES.ec	module:1a0289cf30ad	SM_DT_UD_Cir	# line 4713
+base-c10-split/WOTS_TW_ES.ec	module:d74bf9751f3f	WOTS_TW_ES	# line 2316
+base-c10-split/WOTS_TW_ES.ec	module:28b2a6a8f825	WOTS_TW_ES_NPRF	# line 2455
+base-c10-split/WOTS_TW_ES.ec	module-type:df1d3a4d5242	Oracle_MEUFGCMA_WOTSTWESNPRF	# line 2581
+base-c10-split/WOTS_TW_ES.ec	module-type:af40d66aeb00	Adv_MEUFGCMA_WOTSTWESNPRF	# line 2594
+base-c10-split/WOTS_TW_ES.ec	module:b98f61274a2a	M_EUF_GCMA_WOTSTWESNPRF	# line 2602
+base-c10-split/WOTS_TW_ES.ec	module:6a47373903f1	A	# line 2603
+base-c10-split/WOTS_TW_ES.ec	module:5908780a4518	M_EUF_GCMA_WOTSTWESNPRF_UG	# line 2702
+base-c10-split/WOTS_TW_ES.ec	module:1abc6a3bdf95	A	# line 2703
+base-c10-split/WOTS_TW_ES.ec	module:d491056a9230	O_MEUFGCMA_WOTSTWESNPRF	# line 2785
+base-c10-split/WOTS_TW_ES.ec	module:6223f3e43be8	R_SMDTUDC_Game23WOTSTWES	# line 2837
+base-c10-split/WOTS_TW_ES.ec	module:85ac436cc0fc	O_DistRCH	# line 2838
+base-c10-split/WOTS_TW_ES.ec	module:d4348a0743a0	O_R_DistRCH_Game23WOTSTW	# line 2896
+base-c10-split/WOTS_TW_ES.ec	module:e55627e3b87d	O_R_DistRCH_Game23WOTSTW_THFC	# line 2948
+base-c10-split/WOTS_TW_ES.ec	module:fe857fb811f0	A	# line 2972
+base-c10-split/WOTS_TW_ES.ec	module:b864e96843e4	R_SMDTTCRC_Game34WOTSTWES	# line 3032
+base-c10-split/WOTS_TW_ES.ec	module:d4bb838944ea	O_R_SMDTTCRC_Game34WOTSTWES	# line 3033
+base-c10-split/WOTS_TW_ES.ec	module:ffddd139e2b5	A	# line 3100
+base-c10-split/WOTS_TW_ES.ec	module:9e08d9076be6	R_SMDTPREC_Game4WOTSTWES	# line 3142
+base-c10-split/WOTS_TW_ES.ec	module:a4fd1473a90b	O_R_SMDTPREC_Game4WOTSTWES	# line 3143
+base-c10-split/WOTS_TW_ES.ec	module:b0d4ddbe9860	A	# line 3205
+base-c10-split/WOTS_TW_ES.ec	module:27bc0ffad905	BadEncFlag	# line 3273
+base-c10-split/WOTS_TW_ES.ec	module:480fa7475d75	O_Game34_WOTSTWES_AltX	# line 3275
+base-c10-split/WOTS_TW_ES.ec	module:66c8b0c8b0c6	Game4_WOTSTWES_BadEnc	# line 3331
+base-c10-split/WOTS_TW_ES.ec	module:f5612e4222dd	A	# line 3332
+base-c10-split/WOTS_TW_ES.ec	module-type:1026a248f9c0	Oracle_DistRCH	# line 3394
+base-c10-split/WOTS_TW_ES.ec	module-type:dddb13198211	Adv_DistRCH	# line 3400
+base-c10-split/WOTS_TW_ES.ec	module:5cd2cec8c0fd	A	# line 3408
+base-c10-split/WOTS_TW_ES.ec	module:ef04bf2d24fb	O_MEUFGCMA_WOTSTWESNPRF_Inlined	# line 3429
+base-c10-split/WOTS_TW_ES.ec	module:113c6330669a	O_Game2_WOTSTWES	# line 3476
+base-c10-split/WOTS_TW_ES.ec	module:612e4a1c6f95	O_Game34_WOTSTWES	# line 3525
+base-c10-split/WOTS_TW_ES.ec	module:1883019728cd	O_DistRCH	# line 3576
+base-c10-split/WOTS_TW_ES.ec	module:422317b18a42	O_MEUFGCMA_WOTSTWESNPRF_Inlined_SampleSample	# line 3617
+base-c10-split/WOTS_TW_ES.ec	module:b64e190ace01	O_MEUFGCMA_WOTSTWESNPRF_Inlined_LoopSnocSample	# line 3660
+base-c10-split/WOTS_TW_ES.ec	module:4695c00ae6f5	O_MEUFGCMA_WOTSTWESNPRF_Inlined_Alt	# line 3703
+base-c10-split/WOTS_TW_ES.ec	module:6e714638587c	O_Game34_WOTSTWES_SampleSample	# line 3800
+base-c10-split/WOTS_TW_ES.ec	module:5e8986108a0e	O_Game34_WOTSTWES_LoopSnocSample	# line 3850
+base-c10-split/WOTS_TW_ES.ec	module:921502b02022	O_Game34_WOTSTWES_LoopSnocSampleAlt	# line 3903
+base-c10-split/WOTS_TW_ES.ec	module:1372f83495c0	O_Game34_WOTSTWES_Alt	# line 3957
+base-c10-split/WOTS_TW_ES.ec	module:446235832bc7	Game2_WOTSTWES	# line 4138
+base-c10-split/WOTS_TW_ES.ec	module:c6cc4f100bb2	Game3_WOTSTWES	# line 4148
+base-c10-split/WOTS_TW_ES.ec	module:3d02b2e1cb54	Game4_WOTSTWES	# line 4157
+base-c10-split/WOTS_TW_ES.ec	module:96ac676bcde7	A	# line 4158
+base-c10-split/WOTS_TW_ES.ec	module:5eb5e99f04c6	Game3_WOTSTWES_Hchwcoll	# line 4209
+base-c10-split/WOTS_TW_ES.ec	module:9575ac5d702c	A	# line 4212
+base-c10-split/WOTS_TW_ES.ec	module:4462a89b3e55	Game4_WOTSTWES_Alt	# line 4263
+base-c10-split/WOTS_TW_ES.ec	module:3882d958e55f	A	# line 4264
+base-c10-split/WOTS_TW_ES.ec	module:fb6cd54adc91	R_DistRCH_Game23WOTSTW	# line 4331
+base-c10-split/WOTS_TW_ES.ec	module:ac1f7fea3474	O_R_DistRCH_Game23WOTSTW	# line 4332
+base-c10-split/WOTS_TW_ES.ec	module:e85b2925beae	O_R_DistRCH_Game23WOTSTW_THFC	# line 4384
+base-c10-split/WOTS_TW_ES.ec	module:826bc2b9b4b3	A	# line 4408
+base-c10-split/WOTS_TW_ES.ec	module:0b8700427a39	R_SMDTUDC_DistRCH	# line 4455
+base-c10-split/WOTS_TW_ES.ec	module:d25a49a4287b	O_R_SMDTUDC_DistRCH	# line 4456
+base-c10-split/WOTS_TW_ES.ec	module:60a88ab6c5b7	R	# line 4508
+base-c10-split/WOTS_TW_ES.ec	module:4a7c658a1f8f	R_SMDTUDC_DistRCHil	# line 4530
+base-c10-split/WOTS_TW_ES.ec	module:361fc5c2522a	O_R_SMDTUDC_DistRCHil	# line 4531
+base-c10-split/WOTS_TW_ES.ec	module:8c9dfefb07d1	R	# line 4583
+base-c10-split/WOTS_TW_ES.ec	module:e4c25a1d2f0d	DistRCH	# line 4607
+base-c10-split/WOTS_TW_ES.ec	module:421a064eec95	R	# line 4608
+base-c10-split/WOTS_TW_ES.ec	module:62d5101cf87e	DistRCHi	# line 4631
+base-c10-split/WOTS_TW_ES.ec	module:30d50e09804f	O_DistRCHi	# line 4632
+base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4660
+base-c10-split/WOTS_TW_ES.ec	module:eb43bd68027e	DistRCHi_SampleSample	# line 4677
+base-c10-split/WOTS_TW_ES.ec	module:9017c88fa31a	O_DistRCHi	# line 4678
+base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4706
+base-c10-split/WOTS_TW_ES.ec	module:8b65b4e10458	DistRCHi_LoopSnocSample	# line 4723
+base-c10-split/WOTS_TW_ES.ec	module:eb777a10e659	O_DistRCHi	# line 4724
+base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4752
+base-c10-split/WOTS_TW_ES.ec	module:a996d9621650	DistRCHil	# line 4769
+base-c10-split/WOTS_TW_ES.ec	module:87c4f34fd130	O_DistRCHi	# line 4770
+base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4802
+base-c10-split/WOTS_TW_ES.ec	module:e21cf1d8598b	SM_DT_UD_Ci	# line 4896
+base-c10-split/WOTS_TW_ES.ec	module:1a0289cf30ad	SM_DT_UD_Cir	# line 4923
 cdrafts-split/C10DeployedGeometry.ec	defined-op:9fb98081dd8d	c10_n	# line 66
 cdrafts-split/C10DeployedGeometry.ec	defined-op:51a2b549384e	c10_log2_w	# line 67
 cdrafts-split/C10DeployedGeometry.ec	defined-op:e19e9578444e	c10_w	# line 68
@@ -1588,8 +1585,8 @@ cdrafts-split/WOTS_C_Real.ec	defined-op:ed1d5c7f137b	cw_sum	# line 252
 cdrafts-split/WOTS_C_Real.ec	defined-op:c1cd383d3435	predC	# line 279
 cdrafts-split/WOTS_C_Real.ec	defined-op:52d308813ba4	TargetSumReachable	# line 286
 cdrafts-split/WOTS_C_Real.ec	defined-const:8cd1f778f243	p_tgts	# line 340
-cdrafts-split/WOTS_C_Real.ec	defined-op:0075335b8622	encode_msgWOTS_C	# line 403
-cdrafts-split/WOTS_C_Real.ec	defined-op:75a1f84afa2f	grindC	# line 380
+cdrafts-split/WOTS_C_Real.ec	defined-op:0075335b8622	encode_msgWOTS_C	# line 404
+cdrafts-split/WOTS_C_Real.ec	defined-op:75a1f84afa2f	grindC	# line 423
 cdrafts-split/WOTS_C_Reduction.ec	module-type:c07b516ee250	Adv_EUFNACMA_WOTSC	# line 32
 cdrafts-split/WOTS_C_Reduction.ec	module:c3da2ecae1f2	EUF_NACMA_WOTSC	# line 37
 cdrafts-split/WOTS_C_Reduction.ec	module:c1ea25a2aebb	AA	# line 38
@@ -1620,9 +1617,9 @@ cdrafts-split/XmssmtCC_All.ec	defined-op:0a020bd7a9e3	ht_root	# line 5201
 cdrafts-split/XmssmtCC_All.ec	defined-op:56487a93180d	ht_cnt	# line 5204
 cdrafts-split/XmssmtCC_All.ec	defined-op:35c353cd1e6a	ht_sigc	# line 5208
 cdrafts-split/XmssmtCC_All.ec	defined-op:1da56ec1f6e0	ht_sigc_at	# line 5242
-cdrafts-split/XmssmtCC_All.ec	defined-op:a9a5552c448a	mem4	# line 9097
-cdrafts-split/XmssmtCC_All.ec	defined-op:33d3c094629a	in_thfc4	# line 9100
-cdrafts-split/XmssmtCC_All.ec	defined-type:daba08868f84	sigSPHINCSPLUSTWC	# line 9554
+cdrafts-split/XmssmtCC_All.ec	defined-op:a9a5552c448a	mem4	# line 9106
+cdrafts-split/XmssmtCC_All.ec	defined-op:33d3c094629a	in_thfc4	# line 9109
+cdrafts-split/XmssmtCC_All.ec	defined-type:daba08868f84	sigSPHINCSPLUSTWC	# line 9563
 cdrafts-split/XmssmtCC_All.ec	module:29a9b21faf30	FL_SL_XMSS_MT_C_ES_NPRF	# line 190
 cdrafts-split/XmssmtCC_All.ec	module-type:c615be208350	Adv_EUFNAGCMA_FLSLXMSSMTTWCESNPRF	# line 316
 cdrafts-split/XmssmtCC_All.ec	module:4ed527928915	EUF_NAGCMA_FLSLXMSSMTTWCESNPRF	# line 322
@@ -1638,13 +1635,13 @@ cdrafts-split/XmssmtCC_All.ec	module:b2fa9320ebc3	R_SMDTTCRCTRH_C	# line 2112
 cdrafts-split/XmssmtCC_All.ec	module:6c8053c77ac3	O_THFC	# line 2127
 cdrafts-split/XmssmtCC_All.ec	module:42a77a204253	O_MEUFGCMA_WOTSC_V	# line 2433
 cdrafts-split/XmssmtCC_All.ec	module:31074aee963b	O_MEUFGCMA_WOTSC_DLP	# line 2474
-cdrafts-split/XmssmtCC_All.ec	module:090a9ecb35b9	A_ht_trco	# line 9342
-cdrafts-split/XmssmtCC_All.ec	module-type:9099deec967f	SOracle_CMA_C	# line 9557
-cdrafts-split/XmssmtCC_All.ec	module-type:63f31af1a00f	Adv_EUFCMA_C	# line 9563
-cdrafts-split/XmssmtCC_All.ec	module:91876904afe6	R_top	# line 9578
-cdrafts-split/XmssmtCC_All.ec	module:bfd7215bb02e	O_CMA	# line 9592
-cdrafts-split/XmssmtCC_All.ec	module-type:e9a56ab9ff85	Adv_EUFCMA_C_OC	# line 9907
-cdrafts-split/XmssmtCC_All.ec	module:56b8ab614858	R_top_OC	# line 9916
-cdrafts-split/XmssmtCC_All.ec	module:1404b4722204	O_CMA	# line 9918
-cdrafts-split/XmssmtCC_All.ec	module:db55adac56dc	F_leak	# line 9937
-cdrafts-split/XmssmtCC_All.ec	module:083f75b2c62f	F_triv	# line 10009
+cdrafts-split/XmssmtCC_All.ec	module:090a9ecb35b9	A_ht_trco	# line 9351
+cdrafts-split/XmssmtCC_All.ec	module-type:9099deec967f	SOracle_CMA_C	# line 9566
+cdrafts-split/XmssmtCC_All.ec	module-type:63f31af1a00f	Adv_EUFCMA_C	# line 9572
+cdrafts-split/XmssmtCC_All.ec	module:91876904afe6	R_top	# line 9587
+cdrafts-split/XmssmtCC_All.ec	module:bfd7215bb02e	O_CMA	# line 9601
+cdrafts-split/XmssmtCC_All.ec	module-type:e9a56ab9ff85	Adv_EUFCMA_C_OC	# line 9916
+cdrafts-split/XmssmtCC_All.ec	module:56b8ab614858	R_top_OC	# line 9925
+cdrafts-split/XmssmtCC_All.ec	module:1404b4722204	O_CMA	# line 9927
+cdrafts-split/XmssmtCC_All.ec	module:db55adac56dc	F_leak	# line 9946
+cdrafts-split/XmssmtCC_All.ec	module:083f75b2c62f	F_triv	# line 10018

@@ -23,8 +23,14 @@
    WHY IT IS WORTH A FILE.  Before this, the port forced a choice: quote the
    CHARGED capstone and carry an unreduced Q, or quote the QWIRED capstone and
    carry the universal N2 premise.  Neither dominated.  This lemma has both
-   improvements at once and is therefore the strongest deployed-shape statement
-   the closure supports.
+   improvements at once.
+
+   [STALE NAVIGATION CORRECTED 2026-08-30, GPT-5.6.  This used to end "and is therefore
+   THE STRONGEST deployed-shape statement the closure supports".  It is not, and has not
+   been since 2026-08-24: `..._TIGHT` below instantiates mkg_adv at 0 (5 premises, no free
+   real), and `..._TIGHT_AT_DEPLOYED_PARAMS` carries only TWO.  A source header that names
+   a superseded result as "the strongest" mis-navigates the next reader, which is exactly
+   how a weaker statement gets quoted.] 
 
    WHAT IT DOES **NOT** BUY, stated as flatly as its siblings do.
      * Nothing numeric improves.  `Pr[M.F.ITSRC10 ..]` is still carried UNREDUCED
@@ -421,13 +427,13 @@ qed.
    WHY THIS EXISTS, and it is NOT a cosmetic re-spelling.  _AT_PINNED_ENCODER and
    _AT_DEPLOYED_PARAMS both carry TWO premises, but they are not equally informative.
    `size (emb_in witness) = 8*n + c10_r` is DEGENERATELY SATISFIABLE, and this tree
-   says so at C10DeployedInstance.ec:322 (adversarial review, 2026-08-01):
+   says so at C10DeployedInstance.ec:330 (adversarial review, 2026-08-01):
 
      "a CONSTANT `emb_in` satisfies it while collapsing every ThC input and making
       the S-TCR term trivially winnable."
 
    A constant encoder does not make the bound FALSE -- it makes it UNINFORMATIVE, by
-   sending the S-TCR summand to ~1.  Pinning `emb_in = c10_embg` excludes exactly those
+   collapsing every ThC input.  Pinning `emb_in = c10_embg` excludes the CONSTANT-ENCODER
    models: `c10_embg_not_constant` (C10DeployedCapstone.ec) is proved PREMISE-FREE, and
    `c10_embg_inj` gives injectivity given the counter-space bound
    `STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`.
@@ -444,10 +450,17 @@ qed.
    excludes degeneracy VIA `emb_in`, and says nothing about degeneracy via `thfc`.
    Do not describe it as making the S-TCR term meaningful.
 
-   WHAT IT COSTS, stated plainly.  `emb_in = c10_embg` is a STRICTLY STRONGER premise
-   than the width fact, so this theorem covers FEWER models than _AT_DEPLOYED_PARAMS.
-   Neither supersedes the other: the width form is more general, this one is more
-   informative.  Both are gated; quote whichever the claim needs.
+   WHAT IT COSTS -- CORRECTED 2026-08-30 (GPT-5.6).  An earlier version said "NEITHER
+   SUPERSEDES THE OTHER".  That is FALSE, and the proof below is the disproof: it derives
+   `hsz` from `hemb` via c10_embg_size and then takes EXACTLY the same path as
+   _AT_DEPLOYED_PARAMS.  Since `emb_in = c10_embg` IMPLIES the width fact, every model
+   satisfying the pin already satisfies the width premise, so _AT_DEPLOYED_PARAMS applies
+   to it and yields the same bound.  _AT_DEPLOYED_PARAMS LOGICALLY SUBSUMES THIS THEOREM;
+   this one is an immediate corollary and adds NO logical strength.
+   What it adds is DOCUMENTARY: it exhibits one premise set under which the
+   constant-encoder degeneracy is excluded.  That is a statement about the premise set,
+   not about the bound.  Quote _AT_DEPLOYED_PARAMS for strength; quote this one only when
+   the point being made is about non-degeneracy, and say so.
 
    AND WHAT IT DOES *NOT* BUY -- CORRECTED 2026-08-29, and the correction is this tree's
    own, from 2026-08-03.  An earlier draft said the pin moves the assumption to "THIS
@@ -460,11 +473,20 @@ qed.
      cardinality NO AXIOM BOUNDS.  A SINGLETON COUNTER SATISFIES EVERY PREMISE.  Nothing
      pins cardinality, enumeration order, numeric meaning or byte order.
 
-   So the pin buys an INJECTIVE RANK ENCODER OF THE RIGHT SHAPE -- not the firmware's
-   big-endian u32 inside a 32-byte slot (sphincs-c10/src/hash.rs:350-363).  It excludes
-   the constant-encoder collapse and nothing more.  Do not call it "the deployed encoder",
-   and do not describe it as something a reader can check against the Rust: the object
-   pinned is not that object.
+   So the pin buys a PREMISE-FREE NON-CONSTANT RANK ENCODING OF THE RIGHT WIDTH -- not the
+   firmware's big-endian u32 inside a 32-byte slot (sphincs-c10/src/hash.rs:350-363).  Do
+   not call it "the deployed encoder", and do not describe it as something a reader can
+   check against the Rust: the object pinned is not that object.
+
+   AND DO NOT CALL IT INJECTIVE HERE (corrected 2026-08-30, GPT-5.6 adversarial review).
+   An earlier version of this comment said "INJECTIVE RANK ENCODER".  That is ALSO too
+   strong, and it was itself a correction -- the second overstatement in this spot.
+   `c10_embg_inj` (C10DeployedInstance.ec:336) proves injectivity ONLY under
+   `STCRC_WC.G.CntrFT.card <= 2 ^ c10_r`, and THIS THEOREM DOES NOT CARRY THAT PREMISE:
+   its two hypotheses are `c <= p_tgts` and `emb_in = c10_embg`, nothing else.  With
+   `cntr` an abstract FinType of unbounded cardinality, a 32-bit rank encoding need not be
+   injective at all.  What IS available premise-free is NON-CONSTANCY
+   (`c10_embg_not_constant`), which is what `pinned_encoder_is_not_degenerate` states.
 
    STATEMENT DERIVED MECHANICALLY from _AT_DEPLOYED_PARAMS by script -- the width premise
    replaced by the encoder pin, with an assertion that no `size (emb_in` premise survives.
@@ -497,8 +519,10 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_PINNED_ENCODER
            not-a-theorem-and-not-meant-to-be (C10DeployedGeometry.ec:468).
          * `emb_in = c10_embg` -- pins the SERIALISATION ITSELF.  Strictly stronger than
            the width fact the sibling assumes, and deliberately so: the width fact is
-           DEGENERATELY SATISFIABLE by a constant encoder (C10DeployedInstance.ec:322),
-           which collapses every ThC input and sends the S-TCR summand to ~1.  See
+           DEGENERATELY SATISFIABLE by a constant encoder (C10DeployedInstance.ec:330),
+           which collapses every ThC input.  (NOT "sends the S-TCR summand to ~1": that
+           was retracted 2026-08-27 -- it is not proved for this reduction, and `thfc` is
+           axiom-free so the collapse survives the pin regardless.)  See
            `pinned_encoder_is_not_degenerate` below -- that exclusion is a THEOREM here,
            not a comment. *)
     emb_in = c10_embg =>   (* the encoder itself, not merely its width *)

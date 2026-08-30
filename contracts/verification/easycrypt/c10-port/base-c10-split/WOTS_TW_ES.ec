@@ -1502,17 +1502,6 @@ qed.
 (* MANY-TO-ONE encoding, m <> m' does not give encode m <> encode m'.     *)
 (* The real repair discharges it in a game hop BEFORE the case split.     *)
 (* ===================================================================== *)
-lemma nhchwcoll_hchwpre_msg (ps : pseed) (ad : adrs) (m m' : msgWOTS) (sig sig' : sigWOTS) :
-     P m
-  => P m'
-  => m <> m'
-  => !has_chwcoll ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'
-  => has_chwpre ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'.
-proof.
-move=> hPm hPmp hne; apply nhchwcoll_hchwpre => //.
-admit.    (* <-- THE PRE-EXISTING GAP: encode m <> encode m' *)
-qed.
-
 (* ==========================================================================
    THE ADMIT-FREE ROUTE PAST THE GAP ABOVE.  Landed 2026-08-29; proved 2026-08-12
    in scratch/wots_admit_is_injectivity.ec and kept out of the cone until now, where
@@ -1533,7 +1522,7 @@ qed.
    from the ALREADY-COMPLETE `nhchwcoll_hchwpre` (:1476), which needs `encode m <> encode m'`
    as a HYPOTHESIS rather than deriving it.
 
-   NOTHING IS WIRED HERE, DELIBERATELY.  The remaining work -- splitting Game4 before :6542,
+   NOTHING IS WIRED HERE, DELIBERATELY.  The remaining work -- splitting Game4 before :6598,
    using the codeword-level lemma only in the unequal-codeword branch, and exporting a
    B-free bound -- is a separate unit.  Merely wiring the existing `_Unfolded` would be a
    REGRESSION: it promotes the refutable lemma into the headline.  PHASE 5 exists to catch
@@ -1567,6 +1556,36 @@ lemma caller_split_recovers_admit_under_badenc
 proof.
 move=> hP hP' hbad hnc.
 by case (admit_free_caller_split ps ad m m' sig sig' hP hP' hnc).
+qed.
+
+(* ==========================================================================
+   THE ADMIT IS GONE (promoted 2026-08-30 from experiments/wots-badenc, proved there
+   2026-08-12).  This lemma USED TO END `admit.` on the step `encode m <> encode m'` --
+   encoder injectivity, which this file proves IMPOSSIBLE at C10's geometry (:711-725).
+   Worse, the admitted STATEMENT was REFUTABLE: under a collision `!has_chwcoll` holds
+   while `has_chwpre` fails, so the five-hypothesis lemma was false there.
+
+   ITS CONCLUSION IS NOW THE BADENC DISJUNCTION.  The left disjunct is the
+   encoding-collision event, charged downstream as an explicit named probability
+   (`MEUFGCMA_WOTSTWESNPRF_Charged`).  NOTHING IS ADMITTED.
+
+   RECONCILIATION, decided deliberately rather than drifted into.  The experiment
+   rewrote this lemma in place with its own case-split proof.  Here it is proved instead
+   from `admit_free_caller_split` above -- the SAME disjunction with STRICTLY WEAKER
+   premises (it needs no `m <> m'`).  One line, and the dependency is explicit.
+   `m <> m'` is retained in the STATEMENT only so the chain promoted alongside applies
+   unchanged; THE PROOF DOES NOT USE IT.
+   ========================================================================== *)
+lemma nhchwcoll_hchwpre_msg (ps : pseed) (ad : adrs) (m m' : msgWOTS) (sig sig' : sigWOTS) :
+     P m
+  => P m'
+  => m <> m'
+  => !has_chwcoll ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'
+  =>  encode_msgWOTS m = encode_msgWOTS m'
+   \/ has_chwpre ps ad (encode_msgWOTS m) (encode_msgWOTS m') sig sig'.
+proof.
+move=> hPm hPmp _ hnc.
+exact (admit_free_caller_split ps ad m m' sig sig' hPm hPmp hnc).
 qed.
 
 (* If there is chain that contains a preimage, then find_chwpreidx is between 0 and len *)
@@ -3223,6 +3242,140 @@ module (R_SMDTPREC_Game4WOTSTWES (A : Adv_MEUFGCMA_WOTSTWESNPRF) : Adv_SMDTPREC)
 }.
 
 
+(* ==========================================================================
+   STEP 3 (experiment wots-badenc) -- THE EXPORT SURFACE FOR THE BADENC CHARGE.
+
+   `Game4_WOTSTWES_Alt` and its oracle are section-LOCAL, so the charged bound
+   proved inside the section cannot be quoted outside in terms of them.  The
+   established pattern in this file for exactly this problem is a functor over
+   the adversary declared before the section, carrying its own copy of the
+   oracle -- see `R_SMDTPREC_Game4WOTSTWES` (:3073), which inlines its own
+   `O_R_SMDTPREC_Game4WOTSTWES` for the same reason.
+
+   Neither module below depends on anything section-local: the oracle body is
+   the verbatim `O_Game34_WOTSTWES_Alt` body, whose only module reference is
+   `O_MEUFGCMA_WOTSTWESNPRF` (already global, it appears in the exported game),
+   and the game body is the verbatim `Game4_WOTSTWES_Alt.main` body.  The ONLY
+   difference is the return value: this game returns the CHARGED EVENT, i.e.
+   Game4's win condition CONJOINED with the encoding collision.
+   ========================================================================== *)
+(* The flag lives in its own pre-section module so the section-local game and
+   the exportable game write the SAME global and therefore have statement-
+   identical bodies -- which is what lets `sim` relate them.  (First attempt put
+   the flag on the local module and made the exportable game return the event as
+   a conjunct; the two tails then differed and `sim` correctly refused with
+   "cannot infer the set of equalities".)
+
+   `A` may write this variable freely: it is assigned AFTER `A` has finished, so
+   the assignment overwrites anything `A` did.  No restriction on `A` is needed,
+   and none is added -- adding one would change the exported theorem's
+   memory-separation obligations for every caller. *)
+module BadEncFlag = { var badenc : bool }.
+
+module O_Game34_WOTSTWES_AltX : Oracle_MEUFGCMA_WOTSTWESNPRF = {
+  include var O_MEUFGCMA_WOTSTWESNPRF [-query]
+
+  proc query(wad : wadrs, m : msgWOTS) : pkWOTS * sigWOTS = {
+    var ad : adrs;
+    var pk : dgstblock list;
+    var sk : dgstblock list;
+    var sig : dgstblock list;
+    var em : emsgWOTS;
+    var pk_ele, sk_ele, sig_ele : dgstblock;
+    var em_ele : int;
+    var pksig : pkWOTS * sigWOTS;
+    var admpksig : adrs * msgWOTS * pkWOTS * sigWOTS;
+
+    ad <- val wad;
+
+    em <- encode_msgWOTS m;
+    sk <- [];
+    sig <- [];
+    while (size sig < len) {
+      sk_ele <$ ddgstblock;
+
+      em_ele <- BaseW.val em.[size sig];
+      if (em_ele = 0) {
+        sig_ele <- sk_ele;
+      } else {
+        sig_ele <- cf ps (set_chidx ad (size sig)) (em_ele - 1) 1 (val sk_ele);
+      }
+
+      sk <- rcons sk sk_ele;
+      sig <- rcons sig sig_ele;
+    }
+
+    pk <- [];
+    while (size pk < len){
+      sig_ele <- nth witness sig (size pk);
+      em_ele <- BaseW.val em.[size pk];
+      pk_ele <- cf ps (set_chidx ad (size pk)) em_ele (w - 1 - em_ele) (val sig_ele);
+      pk <- rcons pk pk_ele;
+    }
+
+    admpksig <- (ad, m, insubd pk, insubd sig);
+    qs <- rcons qs admpksig;
+
+    pksig <- (insubd pk, insubd sig);
+
+    return pksig;
+  }
+}.
+
+(* THE CHARGED EVENT AS A GAME.  Its `res` is precisely
+   `Game4_WOTSTWES_Alt`'s `res` conjoined with `encode m = encode m'`.
+   This is the term the WOTS-TW bound now pays for instead of admitting
+   encoder injectivity, and bounding it is where +C seed-withholding applies
+   (one layer up the messages are `ThC ps ad x c`, so `encode o ThC ps ad .`
+   is seed-keyed -- see experiments/wots-badenc/RESULT.md). *)
+module Game4_WOTSTWES_BadEnc (A : Adv_MEUFGCMA_WOTSTWESNPRF) = {
+  module A = A(O_Game34_WOTSTWES_AltX, O_THFC_Default)
+
+  proc main() : bool = {
+    var ps : pseed;
+    var ad : adrs;
+    var pk : pkWOTS;
+    var i : int;
+    var m, m' : msgWOTS;
+    var em, em' : emsgWOTS;
+    var sig, sig': sigWOTS;
+    var adlO, adlOC : adrs list;
+    var nrqs : int;
+    var is_valid, is_fresh, dist_wgpidxs, hchwcoll : bool;
+
+    ps <$ dpseed;
+
+    O_MEUFGCMA_WOTSTWESNPRF.init(ps);
+    O_THFC_Default.init(ps);
+
+    A.choose();
+
+    (i, m', sig') <@ A.forge(ps);
+
+    (ad, m, pk, sig) <@ O_MEUFGCMA_WOTSTWESNPRF.get(i);
+
+    is_valid <@ WOTS_TW_ES.verify((pk, ps, ad), m', sig');
+
+    is_fresh <- m' <> m;
+
+    nrqs <@ O_MEUFGCMA_WOTSTWESNPRF.nr_queries();
+
+    dist_wgpidxs <@ O_MEUFGCMA_WOTSTWESNPRF.dist_addresses();
+
+    adlO <@ O_MEUFGCMA_WOTSTWESNPRF.get_addresses();
+    adlOC <@ O_THFC_Default.get_tweaks();
+
+    em <- encode_msgWOTS m;
+    em' <- encode_msgWOTS m';
+    BadEncFlag.badenc <- em = em';
+    hchwcoll <- has_chwcoll ps ad em em' sig sig';
+
+    return 0 <= nrqs <= c /\ 0 <= i < nrqs /\
+           is_valid /\ is_fresh /\ dist_wgpidxs /\ disj_wgpidxs adlO adlOC /\ !hchwcoll
+           /\ P m /\ P m';
+  }
+}.
+
 section Proof_M_EUF_GCMA_WOTS_TW_ES_NPRF.
 (* -- Auxiliary/Local Imports -- *)
 (*
@@ -4146,6 +4299,7 @@ local module Game4_WOTSTWES_Alt = {
 
     em <- encode_msgWOTS m;
     em' <- encode_msgWOTS m';
+    BadEncFlag.badenc <- em = em';
     hchwcoll <- has_chwcoll ps ad em em' sig sig';
 
     return 0 <= nrqs <= c /\ 0 <= i < nrqs /\
@@ -6391,14 +6545,23 @@ by apply collision_extraction.
 qed.
 
 (* Sixth step: Reduce/Bound success probability in Game4_WOTSTWES *)
+(* STEP 2 (wots-badenc): THE CHARGED STEP.  The admitted injectivity lemma is
+   gone; `nhchwcoll_hchwpre_msg` now delivers the BadEnc DISJUNCTION, and the
+   collision branch is paid for by an explicit probability instead of an admit. *)
 local lemma Step_Game4_WOTSTWES_SMDTPREC &m :
   Pr[Game4_WOTSTWES.main() @ &m : res]
   <=
-  Pr[SM_DT_PRE_C(R_SMDTPREC_Game4WOTSTWES(A), O_SMDTPRE_Default, O_THFC_Default).main() @ &m : res].
+  Pr[SM_DT_PRE_C(R_SMDTPREC_Game4WOTSTWES(A), O_SMDTPRE_Default, O_THFC_Default).main() @ &m : res]
+  + Pr[Game4_WOTSTWES_Alt.main() @ &m : res /\ BadEncFlag.badenc].
 proof.
+have ->: Pr[Game4_WOTSTWES.main() @ &m : res] = Pr[Game4_WOTSTWES_Alt.main() @ &m : res].
++ by byequiv Game4_WOTSTWES_Orig_Alt.
+rewrite Pr[mu_split BadEncFlag.badenc].
+have hle :
+  Pr[Game4_WOTSTWES_Alt.main() @ &m : res /\ !BadEncFlag.badenc]
+  <= Pr[SM_DT_PRE_C(R_SMDTPREC_Game4WOTSTWES(A), O_SMDTPRE_Default, O_THFC_Default).main() @ &m : res];
+  last by smt().
 byequiv => //.
-transitivity Game4_WOTSTWES_Alt.main (={glob A} ==> ={res}) (={glob A} ==> res{1} => res{2}) => [/# | // | |].
-+ by apply Game4_WOTSTWES_Orig_Alt.
 proc; inline *.
 swap{2} 12 -10.
 wp => /=.
@@ -6593,10 +6756,14 @@ while{1} (true) (len - size pkWOTS0{1}).
 + move=> _ z.
   by wp; skip; smt(size_rcons).
 wp; skip => |> &1 &2 qsch rcqsad rcqsdg uqpfdjpf_impl_djl pk'.
-split => [/# | /lezNgt gelen_szq3 ge1_szqs led_szqs ge0_i0 ltszqs_i0 eqins_pkp neqq2_mp uqpf djpf nhchwcoll hPq2 hPmp2].
+split => [/# | /lezNgt gelen_szq3 ge1_szqs led_szqs ge0_i0 ltszqs_i0 eqins_pkp neqq2_mp uqpf djpf nhchwcoll hPq2 hPmp2 hbadenc].
 pose q := nth witness O_MEUFGCMA_WOTSTWESNPRF.qs{2} i0{2}; rewrite eq_sym in neqq2_mp.
 move/(nhchwcoll_hchwpre_msg ps{2} q.`1 _ _ q.`4 sig'{2} hPq2 hPmp2) /(_ _): (neqq2_mp) => //.
-move=> hchwpre; rewrite eq_sym; pose qsdgidx := qsdgpre_idx _ _ _.
+(* THE BADENC BRANCH.  NOT admitted: !badenc, carried down from the strengthened
+   postcondition, says the two encodings differ -- contradicting the left
+   disjunct outright. *)
+move=> [hbad | hchwpre]; first by smt().
+rewrite eq_sym; pose qsdgidx := qsdgpre_idx _ _ _.
 split.
 + rewrite -(size_map (fun (adx : _ * _) => adx.`2)  O_SMDTPRE_Default.ts{2}) rcqsdg.
   move: (qsdgpreidx_rng O_MEUFGCMA_WOTSTWESNPRF.qs{2} i0{2} (find_chwpreidx ps{2} q.`1 (encode_msgWOTS q.`2) (encode_msgWOTS m'{2}) q.`4 sig'{2})) => /=.
@@ -6631,13 +6798,46 @@ qed.
   Final result: Bound M_EUF_GCMA of WOTS-TW in an encompassing structure (without PRF) with
   properties of tweakable hash function used in the chains.
 *)
-lemma MEUFGCMA_WOTSTWESNPRF &m :
+(* STEP 3 (wots-badenc), INTERNAL FORM.  The MM45 bound with the encoding-collision
+   charge threaded through.  It is `local` ONLY because `Game4_WOTSTWES_Alt` is a
+   section-local module and an exported statement cannot name it -- the export
+   needs a pre-section functor (see experiments/wots-badenc/RESULT.md).  The
+   BOUND ITSELF is fully proved here, admit-free.
+
+   The extra summand is PARENTHESISED with the PRE term so that the existing
+   `rewrite ler_add 1:ler_add` splits the RHS as (UD + TCR) + (PRE + BADENC) and
+   the final goal is exactly the charged Step. *)
+(* The section-local charge equals the exportable game's advantage.  Same code,
+   same globals (both oracles `include var O_MEUFGCMA_WOTSTWESNPRF`), the only
+   difference being that the flag is a variable on one side and a conjunct of
+   the result on the other. *)
+local equiv Alt_BadEnc_eq :
+  Game4_WOTSTWES_Alt.main ~ Game4_WOTSTWES_BadEnc(A).main :
+    ={glob A} ==> ={res} /\ ={glob BadEncFlag}.
+proof.
+proc; inline *.
+seq 1 1 : (#pre /\ ={ps}); first by rnd.
+seq 7 7 : (={glob A, glob O_MEUFGCMA_WOTSTWESNPRF, glob O_THFC_Default, ps}); last by sim.
+sp => /=.
+call (: ={glob O_MEUFGCMA_WOTSTWESNPRF, glob O_THFC_Default}); last by auto.
++ conseq (: ={glob O_MEUFGCMA_WOTSTWESNPRF, wad, m} ==> ={glob O_MEUFGCMA_WOTSTWESNPRF, res}) => //.
+  by proc; sim.
+by sim.
+qed.
+
+local lemma EqPr_BadEnc &m :
+  Pr[Game4_WOTSTWES_Alt.main() @ &m : res /\ BadEncFlag.badenc]
+  = Pr[Game4_WOTSTWES_BadEnc(A).main() @ &m : res /\ BadEncFlag.badenc].
+proof. by byequiv Alt_BadEnc_eq. qed.
+
+lemma MEUFGCMA_WOTSTWESNPRF_Charged &m :
      Pr[M_EUF_GCMA_WOTSTWESNPRF(A, O_MEUFGCMA_WOTSTWESNPRF, O_THFC_Default).main() @ &m : res]
   <=    (w - 2)%r
         * `|Pr[SM_DT_UD_C(R_SMDTUDC_Game23WOTSTWES(A), O_SMDTUD_Default, O_THFC_Default).main(false) @ &m : res]
             - Pr[SM_DT_UD_C(R_SMDTUDC_Game23WOTSTWES(A), O_SMDTUD_Default, O_THFC_Default).main(true) @ &m : res]|
      + Pr[SM_DT_TCR_C(R_SMDTTCRC_Game34WOTSTWES(A), O_SMDTTCR_Default, O_THFC_Default).main() @ &m : res]
-     + Pr[SM_DT_PRE_C(R_SMDTPREC_Game4WOTSTWES(A), O_SMDTPRE_Default, O_THFC_Default).main() @ &m : res].
+     + ( Pr[SM_DT_PRE_C(R_SMDTPREC_Game4WOTSTWES(A), O_SMDTPRE_Default, O_THFC_Default).main() @ &m : res]
+       + Pr[Game4_WOTSTWES_BadEnc(A).main() @ &m : res /\ BadEncFlag.badenc] ).
 proof.
 have ^ -> ->:
   forall b,
@@ -6673,7 +6873,7 @@ apply (ler_trans (  `|Pr[Game2_WOTSTWES.main() @ &m : res] -
 rewrite ler_add 1:ler_add.
 + by rewrite Step_Game2_Game3_WOTSTWES_SMDTUDC.
 + by apply Step_Game3_Game4_WOTSTWES_SMDTTCRC.
-by apply Step_Game4_WOTSTWES_SMDTPREC.
+by rewrite -EqPr_BadEnc; apply Step_Game4_WOTSTWES_SMDTPREC.
 qed.
 
 end section Proof_M_EUF_GCMA_WOTS_TW_ES_NPRF.

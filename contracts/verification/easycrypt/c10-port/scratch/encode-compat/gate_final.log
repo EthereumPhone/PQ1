@@ -1,9 +1,9 @@
-### INPUTS_SHA256 9659a41c3602270a17a9340fb4136f50
+### INPUTS_SHA256 534572bd7147c4f0cc1227d5c2ccaa6b
 OK   INPUTS_SHA256 matches the committed identity
 ### TOOLCHAIN GIT hash: r2026.02
 ### PROVERS 0a5b3d54dcce300e 25 configurations
 OK   no dual-extension theory names on the include path
-### ECO_PURGED=39
+### ECO_PURGED=32
 ### ECO_REMAINING=0
 ### PHASE 1 — TARGETS
 OK   base/WOTS_TW_ES
@@ -48,7 +48,7 @@ OK   GprocChargedQWired
 ### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)
 OK   all closure files are requirable
 ### PHASE 1e — BOTH DRIVERS (compile AND cli)
-OK   base/WOTS_TW_ES (cli, 2164 cmds)
+OK   base/WOTS_TW_ES (cli, 2185 cmds)
 OK   base/FL_SL_XMSS_MT_ES (cli, 679 cmds)
 OK   base/FORS_ES (cli, 2191 cmds)
 OK   base/SPHINCS_PLUS (cli, 456 cmds)
@@ -930,9 +930,11 @@ OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::Step_Game2_Game3_WOTSTWES_S
 OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::Game3_Game4_WOTSTWES_Hchwcoll
 OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::Step_Game3_Game4_WOTSTWES_SMDTTCRC
 OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::Step_Game4_WOTSTWES_SMDTPREC
-OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::MEUFGCMA_WOTSTWESNPRF
+OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::MEUFGCMA_WOTSTWESNPRF_Charged
 OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::admit_free_caller_split
 OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::caller_split_recovers_admit_under_badenc
+OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::Alt_BadEnc_eq
+OK   statement pinned: base-c10-split/WOTS_TW_ES.ec::EqPr_BadEnc
 OK   statement pinned: base-c10-split/FL_SL_XMSS_MT_ES.ec::ge2_lp
 OK   statement pinned: base-c10-split/FL_SL_XMSS_MT_ES.ec::ge1_h
 OK   statement pinned: base-c10-split/FL_SL_XMSS_MT_ES.ec::ge2_l
@@ -1175,14 +1177,14 @@ OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_
 OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
 OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_PINNED_ENCODER
 OK   statement pinned: cdrafts-split/GprocChargedQWired.ec::pinned_encoder_is_not_degenerate
-statements pinned=1076 expected=1076 (manifest rows)
+statements pinned=1078 expected=1078 (manifest rows)
 ### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)
-OK   coverage: all 991 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
+OK   coverage: all 993 top-level statements across 45 CONE files are pinned (roots 38 + transitively required)
 ### PHASE 1g — POLICY-CAP QUARANTINE (cdrafts-split/C10DeployedScope.ec)
 OK   quarantine intact: 24 declarations, 3 require lines, sealed leaf, no inbound requires, no magnitude leakage
 ### PHASE 2 — CONE CENSUS vs cert-baseline-split.tsv (ADDITIONS FATAL)
-cone: keys now=1555 baseline=1555 | ROWS now=1634 baseline=1634 | added=0 removed=0
-  ledger=242  parameters=214  bindings=366  meaning=389  definitions=423  total=1634
+cone: keys now=1558 baseline=1558 | ROWS now=1637 baseline=1637 | added=0 removed=0
+  ledger=241  parameters=214  bindings=366  meaning=393  definitions=423  total=1637
 ### PHASE 2b — CENSUS REGRESSION CANARY (admitted.)
 OK   census detects 'admitted.' (canary caught)
 ### PHASE 2c — DIGEST DISCRIMINATION CANARY
@@ -1203,8 +1205,8 @@ OK   margin guardrails 4/4 (happy path)
 OK   margin negative controls 3/3 (guardrails demonstrably fire)
 OK   margin figures match the committed manifest (7/7)
 ### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundness proof)
-     OK   taint containment: closure = 6 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
+     OK   taint containment: closure = 2 lemmas, none of the 7 headline results is in it (name-level, NOT a soundness proof -- see the tool header)
 OK   taint controls: taint controls: pass=11 fail=0
-OK   inputs unchanged across the run (9659a41c3602270a17a9340fb4136f50)
+OK   inputs unchanged across the run (534572bd7147c4f0cc1227d5c2ccaa6b)
 ### RESULT: GREEN
-__GATE_RC=0 __WALL_S=4441
+__GATE_RC=0 __WALL_S=4621
