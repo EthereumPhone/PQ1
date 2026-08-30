@@ -803,6 +803,48 @@ e2e-hw-dual-se:
 #   ACK on a late attempt -> part is fine, settle time is short
 #
 #   make se-i2c-probe-hw BOARD=pq1
+# Bench-only SSD1306 OLED over BIT-BANGED I2C.
+#
+# Exists because the pq1 board exposes almost nothing — a 2x5 debug header and
+# four pads — so until the NV3007 panel is fitted there is no way to see the
+# trusted UI on the device itself. It validates NOTHING about the shipping
+# display path (different bus, driver, geometry), and while a debugger is
+# attached `ui-semihosting` shows the identical 16x4 text for free. It wins
+# only untethered, or at RDP >= 1 where SWD and semihosting are both gone.
+#
+# Wiring (pq1) — three of four connections are on the debug header:
+#     OLED VCC -> header VDD        OLED SCL -> header SWO  (PB3)
+#     OLED GND -> header GND        OLED SDA -> RX pad      (PA3)
+#
+# Those are the only two free GPIOs the board brings out, and no I2C
+# peripheral can reach the pair (PB3's AF4 is I2C1_SDA — the OPTIGA's
+# peripheral — and PA3 has no I2C AF at all), hence software I2C.
+#
+# The driver auto-probes 0x3C then 0x3D and skips cleanly if neither answers,
+# so a wrong-address module shows up in the log rather than hanging.
+#
+#   make oled-bench-hw BOARD=pq1
+oled-bench-hw: ## Bench SSD1306 over bit-banged I2C on PB3/PA3 (HW)
+	@echo "==> Building bench OLED image ($(BOARD_FEATURE), bit-banged I2C)"
+	@echo "    Wiring: VCC->VDD  GND->GND  SCL->SWO(PB3)  SDA->RX pad(PA3)"
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,ui-oled-bench,gpio-buttons,debug-log,dev-testkey,stm32u585,$(BOARD_FEATURE)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features stm32u585
+	@echo "==> Flashing..."
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running (Ctrl-C to quit). Look for '[S][OLED] found display at 0x..'"
+	@echo "    'no display at 0x3C/0x3D' => check wiring, or the module is at another address"
+	@probe-rs run --chip $(CHIP) $(SECURE_ELF)
+
 se-i2c-probe-hw: ## Non-destructive SE I2C address probe: does each chip ACK? (HW)
 	@echo "==> Building SE I2C probe (dual-se + se-i2c-probe + $(BOARD_FEATURE))"
 	@echo "    NOTE: read-only. Zero data bytes reach either secure element."
@@ -2381,7 +2423,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  se050-crash-safety-e2e se050-admin-extract-attempt-e2e se050-stress \
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e duress-provision-e2e \
-                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe
+                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-oled-bench
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required

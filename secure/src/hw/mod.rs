@@ -154,3 +154,9 @@ pub mod se_power;
     any(feature = "se050", feature = "optiga-trust-m")
 ))]
 pub mod se_i2c_probe;
+
+/// Bit-banged I2C for the bench OLED (`ui-oled-bench`). **Display only** —
+/// it has none of the hardware peripheral's timing, error reporting or GTZC
+/// coverage, so it must never carry secure-element traffic.
+#[cfg(all(feature = "ui-oled-bench", feature = "stm32u585"))]
+pub mod soft_i2c;

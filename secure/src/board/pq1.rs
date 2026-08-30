@@ -249,6 +249,28 @@ pub const RGB_I2C_ADDR: u8 = 0x34;
 /// bonded on this package).
 pub const RGB_EN: Option<(u32, u32)> = Some((GPIOB_S, 12));
 
+/// Bench-only SSD1306 OLED, bit-banged I2C. **`ui-oled-bench` only.**
+///
+/// These are the only two GPIOs this board actually exposes that are free:
+/// after the 2x5 debug header (SWDIO/SWCLK/NRST/VDD/GND) and the four
+/// `J211` pads (TX/RX/BOOT0/GND), everything else is either committed or not
+/// brought out at all. PB8/PB9 — the natural I2C1 choice — are **not
+/// exposed**, which is why this is soft-I2C rather than the peripheral.
+///
+/// - `SCL` = **PB3**, the `SWO` pin on the debug header. Firmware-unused.
+/// - `SDA` = **PA3**, the `RX` pad. The console is TX-only, so this is free
+///   and the UART console keeps working alongside the display.
+///
+/// Hardware I2C is impossible here: PB3's AF4 is `I2C1_SDA`, but that is the
+/// same peripheral the OPTIGA occupies and a peripheral has one SDA pin;
+/// PA3 has no I2C alternate function at all (DS13086 Tables 28/29).
+///
+/// **Collides with [`SCA_TRIGGER`]**, which also wants PB3 — the two bench
+/// features are mutually exclusive, enforced by a `compile_error!` in
+/// `hw::soft_i2c`.
+pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOB_S, 3));
+pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOA_S, 3));
+
 /// `FLAGB` — PB10, the AW35602 USB port-protection fault flag (input).
 /// Nothing reads it today.
 pub const USB_FAULT_FLAG: Option<(u32, u32)> = Some((GPIOB_S, 10));

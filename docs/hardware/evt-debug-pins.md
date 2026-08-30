@@ -146,6 +146,36 @@ non-existent port E:
 USB-C **`SBU2`** line — so its level can depend on what is plugged into the Type-C
 port. Worth knowing before debugging a board that "flashes fine but never runs".
 
+### Bench SSD1306 OLED (`make oled-bench-hw BOARD=pq1`)
+
+The board exposes exactly two free GPIOs — everything else on the header and
+pads is either committed or a debug line you must not touch:
+
+| OLED | Board | Pin |
+|---|---|---|
+| VCC | header `VDD` | — |
+| GND | header `GND` | — |
+| SCL | header `SWO` | **PB3** |
+| SDA | `RX` pad | **PA3** |
+
+`PA3` is free because the console is TX-only, so the UART keeps working
+alongside the display. Three of the four connections are pins on the 2x5
+header.
+
+**Software I2C, necessarily.** No I2C peripheral can reach this pair: `PB3`'s
+AF4 is `I2C1_SDA`, but that is the OPTIGA's peripheral and a peripheral has one
+SDA pin; `PA3` has no I2C alternate function at all (DS13086 Rev 10, Tables
+28/29). PB8/PB9 — the obvious choice — are **not brought out**. So
+`hw::soft_i2c` bit-bangs at ~100 kHz, which an SSD1306 does not strain.
+
+Mutually exclusive with `sca-trigger` (also wants PB3) — a `compile_error!`,
+not a surprise. Driver auto-probes 0x3C then 0x3D and skips cleanly if neither
+answers. Written for **128x32**; a 128x64 module will letterbox into the top
+half.
+
+This validates nothing about the NV3007 path and is `PROD_FORBIDDEN`. While a
+debugger is attached, `ui-semihosting` shows the same 16x4 text for free.
+
 ### SCA scope trigger
 
 PD2 was requested; **port D does not exist** in this package. The repoint is

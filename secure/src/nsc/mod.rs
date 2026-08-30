@@ -851,6 +851,27 @@ compile_error!(
      Phase A/B `ui-lcd`+`ui-noop` pairing is no longer valid.)"
 );
 
+#[cfg(all(feature = "ui-oled-bench", feature = "ui-lcd"))]
+compile_error!(
+    "UI backends `ui-oled-bench` and `ui-lcd` are mutually exclusive. Pick exactly \
+     one. (`ui-oled-bench` became a standalone Display backend in Phase C; the old \
+     Phase A/B `ui-oled-bench`+`ui-lcd` pairing is no longer valid.)"
+);
+
+#[cfg(all(feature = "ui-oled-bench", feature = "ui-semihosting"))]
+compile_error!(
+    "UI backends `ui-oled-bench` and `ui-semihosting` are mutually exclusive. Pick exactly \
+     one. (`ui-oled-bench` became a standalone Display backend in Phase C; the old \
+     Phase A/B `ui-oled-bench`+`ui-semihosting` pairing is no longer valid.)"
+);
+
+#[cfg(all(feature = "ui-oled-bench", feature = "ui-noop"))]
+compile_error!(
+    "UI backends `ui-oled-bench` and `ui-noop` are mutually exclusive. Pick exactly \
+     one. (`ui-oled-bench` became a standalone Display backend in Phase C; the old \
+     Phase A/B `ui-oled-bench`+`ui-noop` pairing is no longer valid.)"
+);
+
 // At least one UI backend must be selected when targeting actual hardware
 // or QEMU. (Pure `cargo test -p sphincs-tz-secure --tests` builds run on
 // the host with neither stm32u585 nor any UI backend — those are exempt
@@ -862,11 +883,13 @@ compile_error!(
         feature = "ui-semihosting",
         feature = "ui-noop",
         feature = "ui-lcd",
+        feature = "ui-oled-bench",
     ))
 ))]
 compile_error!(
     "Exactly one UI backend must be selected: `ui-semihosting`, `ui-noop`, \
-     or `ui-lcd`. (`ui-capture` composes with any backend.)"
+     `ui-lcd`, or `ui-oled-bench` (bench-only SSD1306, PROD_FORBIDDEN). \
+     (`ui-capture` composes with any backend.)"
 );
 
 // ---------------------------------------------------------------------------

@@ -97,6 +97,20 @@ pub const SE050_I2C_SCL_PIN: u32 = 8;
 pub const SE050_I2C_SDA_PIN: u32 = 9;
 pub const SE050_I2C_AF: u32 = 4;
 
+/// Bench-only SSD1306 OLED, bit-banged I2C. **`ui-oled-bench` only.**
+///
+/// The historical pins from before the backend was removed — PB8/PB9, the
+/// Arduino-header I2C1 lines. **These are also this board's secure-element
+/// bus**, so the bench OLED and a real SE backend cannot coexist here: both
+/// would configure the same two pads, one as AF4 open-drain for the I2C1
+/// peripheral and one as a GPIO for bit-banging. `hw::soft_i2c` rejects that
+/// combination at compile time; use `mock-se` for OLED builds on this board.
+///
+/// (pq1 has no such problem — it bit-bangs on PB3/PA3, which nothing else
+/// claims.)
+pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOB_S, 8));
+pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOB_S, 9));
+
 /// The SE I2C buses to bring up: exactly one, shared by both chips.
 pub const SE_I2C_BUSES: &[SeI2cBus] = &[SeI2cBus {
     name: "I2C1 (OPTIGA 0x30 + SE050 0x48)",
