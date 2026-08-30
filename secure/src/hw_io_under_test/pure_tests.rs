@@ -668,6 +668,60 @@ fn positive_uart_flush_waits_tc() {
 // pinned in the driver is the *property* (active-low, pull-up), which is
 // board-independent and must never change.
 
+/// The bench OLED's panel height is a board constant, and FIVE things derive
+/// from it — framebuffer length, page count, multiplex ratio, COM-pin config
+/// and text row pitch. Three of those fail in ways that look like a broken
+/// display rather than a wrong byte, so pin the values per board and check the
+/// arithmetic independently.
+#[test]
+fn positive_oled_geometry_derives_from_board_height() {
+    assert!(BOARD_IOTA2_SRC.contains("pub const OLED_HEIGHT_PX: usize = 32;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const OLED_HEIGHT_PX: usize = 64;"));
+
+    const OLED_SRC: &str = include_str!("../ui/oled.rs");
+    // Everything must be derived, not restated.
+    assert!(OLED_SRC.contains("const HEIGHT: usize = crate::board::OLED_HEIGHT_PX;"));
+    assert!(OLED_SRC.contains("const PAGES: usize = HEIGHT / 8;"));
+    assert!(OLED_SRC.contains("const FB_LEN: usize = WIDTH * PAGES;"));
+    assert!(OLED_SRC.contains("const ROW_PITCH: i32 = (HEIGHT / DISPLAY_ROWS) as i32;"));
+    assert!(OLED_SRC.contains("const COM_PINS_CFG: u8 = if HEIGHT == 32 { 0x02 } else { 0x12 };"));
+    assert!(OLED_SRC.contains("0xA8, (HEIGHT - 1) as u8,"));
+    // And the framebuffer really is sized by it.
+    assert!(OLED_SRC.contains("buf: [u8; FB_LEN],"));
+
+    // Independent arithmetic for both panels.
+    for (h, pages, fb_len, pitch, com) in [
+        (32usize, 4usize, 512usize, 8i32, 0x02u8),
+        (64, 8, 1024, 16, 0x12),
+    ] {
+        assert_eq!(h / 8, pages, "page count for {h}px");
+        assert_eq!(128 * (h / 8), fb_len, "framebuffer length for {h}px");
+        assert_eq!((h / 4) as i32, pitch, "row pitch for {h}px (DISPLAY_ROWS = 4)");
+        assert_eq!(if h == 32 { 0x02u8 } else { 0x12 }, com, "COM pins for {h}px");
+    }
+}
+
+/// `render_secret_row` is the constant-time glyph path for seed-wizard rows.
+/// It used to be hardcoded to `&mut [u8; 512]` with a `page >= 4` guard, which
+/// silently excluded pages 4..8 on a 128x64 panel — the secret rows would just
+/// not render. It must now bound on the slice length instead.
+#[test]
+fn negative_secret_row_is_not_hardcoded_to_a_four_page_panel() {
+    const SECRET_SRC: &str = include_str!("../ui/secret_text.rs");
+    assert!(
+        SECRET_SRC.contains("pub fn render_secret_row(fb: &mut [u8], page: usize, text: &[u8])"),
+        "render_secret_row must take a slice, not a fixed-size 128x32 buffer"
+    );
+    assert!(
+        SECRET_SRC.contains("if (page + 1) * DISPLAY_W_PX > fb.len() {"),
+        "the page bound must come from the buffer length, not a hardcoded 4"
+    );
+    assert!(
+        !SECRET_SRC.contains("if page >= 4 {"),
+        "the hardcoded four-page guard drops secret rows on a 128x64 panel"
+    );
+}
+
 #[test]
 fn positive_buttons_pins_per_board() {
     // iota2: LEFT = PC1, RIGHT = PA8 (CN13 jumpers).

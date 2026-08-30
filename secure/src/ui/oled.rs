@@ -65,28 +65,59 @@ const SSD1306_ADDR_ALT: u8 = 0x3D;
 static mut SSD1306_ADDR: u8 = SSD1306_ADDR_PRIMARY;
 
 // ---------------------------------------------------------------------------
+// Geometry, derived from `board::OLED_HEIGHT_PX`
+// ---------------------------------------------------------------------------
+
+/// Panel height. 32 and 64 are the two SSD1306 geometries.
+const HEIGHT: usize = crate::board::OLED_HEIGHT_PX;
+/// Panel width — fixed for every SSD1306 variant this driver targets.
+const WIDTH: usize = 128;
+/// The SSD1306 addresses memory in 8-pixel-tall pages.
+const PAGES: usize = HEIGHT / 8;
+/// Framebuffer length: one byte per 8-pixel column segment.
+const FB_LEN: usize = WIDTH * PAGES;
+/// Vertical pitch between the four text rows. 8 px on a 128x32 (the rows fill
+/// the panel exactly); 16 px on a 128x64, which spreads the same four rows
+/// over the taller panel rather than leaving the bottom half blank.
+const ROW_PITCH: i32 = (HEIGHT / DISPLAY_ROWS) as i32;
+
+const _: () = assert!(
+    HEIGHT == 32 || HEIGHT == 64,
+    "board::OLED_HEIGHT_PX must be 32 or 64 — the SSD1306 geometries"
+);
+const _: () = assert!(
+    HEIGHT % 8 == 0 && HEIGHT % DISPLAY_ROWS == 0,
+    "OLED height must divide evenly by the 8 px page height and by DISPLAY_ROWS"
+);
+
+/// `0xDA` COM-pin configuration: sequential with no remap on a 128x32,
+/// alternative on a 128x64. Getting this wrong is the classic symptom of
+/// "every other row is missing" or "the image is squashed into half the panel".
+const COM_PINS_CFG: u8 = if HEIGHT == 32 { 0x02 } else { 0x12 };
+/// `0x81` contrast. 128x32 modules run cooler and need less drive.
+const CONTRAST: u8 = if HEIGHT == 32 { 0x8F } else { 0xCF };
+
+// ---------------------------------------------------------------------------
 // Minimal 128×32 framebuffer in SSD1306 page format (4 pages × 128 bytes).
 // Implements `DrawTarget` so embedded-graphics can render text directly.
 // ---------------------------------------------------------------------------
 
 struct Framebuf {
-    buf: [u8; 512],
+    buf: [u8; FB_LEN],
 }
 
 impl Framebuf {
     const fn new() -> Self {
-        Self { buf: [0; 512] }
+        Self { buf: [0; FB_LEN] }
     }
 
     fn clear(&mut self) {
-        self.buf = [0; 512];
+        self.buf = [0; FB_LEN];
     }
 
-    /// Read-only access to the raw 512-byte SSD1306 page buffer.
-    /// Used by `ui::capture` (feature-gated) to hash the exact pixels
-    /// that will be pushed to the OLED.
+    /// Read-only access to the raw SSD1306 page buffer (`FB_LEN` bytes).
     #[cfg(feature = "ui-capture")]
-    fn pages(&self) -> &[u8; 512] {
+    fn pages(&self) -> &[u8] {
         &self.buf
     }
 }
@@ -100,12 +131,12 @@ impl DrawTarget for Framebuf {
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
         for Pixel(coord, color) in pixels {
-            if coord.x >= 0 && coord.x < 128 && coord.y >= 0 && coord.y < 32 {
+            if coord.x >= 0 && coord.x < WIDTH as i32 && coord.y >= 0 && coord.y < HEIGHT as i32 {
                 let x = coord.x as usize;
                 let y = coord.y as usize;
                 let page = y / 8;
                 let bit = y % 8;
-                let idx = page * 128 + x;
+                let idx = page * WIDTH + x;
                 if color == BinaryColor::On {
                     self.buf[idx] |= 1 << bit;
                 } else {
@@ -119,7 +150,7 @@ impl DrawTarget for Framebuf {
 
 impl OriginDimensions for Framebuf {
     fn size(&self) -> Size {
-        Size::new(128, 32)
+        Size::new(WIDTH as u32, HEIGHT as u32)
     }
 }
 
@@ -169,19 +200,21 @@ impl Display {
         // here during init and only read afterwards.
         unsafe { SSD1306_ADDR = addr };
 
-        // SSD1306 initialization sequence (128×32, charge-pump enabled).
+        // SSD1306 initialization sequence (charge-pump enabled). Three entries
+        // depend on panel height — multiplex ratio, COM-pin config, contrast —
+        // and all three come from `board::OLED_HEIGHT_PX`.
         // 0xAE (display OFF) was already sent during the address probe.
         let init_cmds: &[u8] = &[
             0xD5, 0x80, // Clock divide / oscillator frequency
-            0xA8, 0x1F, // Multiplex ratio = 31 (32 lines)
+            0xA8, (HEIGHT - 1) as u8, // Multiplex ratio = height - 1
             0xD3, 0x00, // Display offset = 0
             0x40,       // Start line = 0
             0x8D, 0x14, // Charge pump ON
             0x20, 0x00, // Horizontal addressing mode
             0xA1,       // Segment remap (col 127 → SEG0)
             0xC8,       // COM scan direction remapped
-            0xDA, 0x02, // COM pins: sequential, no L/R remap (128x32)
-            0x81, 0x8F, // Contrast (128x32 modules run cooler)
+            0xDA, COM_PINS_CFG, // COM pins: sequential (32) / alternative (64)
+            0x81, CONTRAST, // Contrast (height-dependent)
             0xD9, 0xF1, // Pre-charge period
             0xDB, 0x40, // VCOMH deselect level
             0xA4,       // Output follows RAM
@@ -193,8 +226,8 @@ impl Display {
         }
 
         // Set full-screen column/page window for bulk writes.
-        hw::soft_i2c::write(addr, &[0x00, 0x21, 0x00, 0x7F]); // col 0–127
-        hw::soft_i2c::write(addr, &[0x00, 0x22, 0x00, 0x03]); // page 0–3
+        hw::soft_i2c::write(addr, &[0x00, 0x21, 0x00, (WIDTH - 1) as u8]); // all columns
+        hw::soft_i2c::write(addr, &[0x00, 0x22, 0x00, (PAGES - 1) as u8]); // all pages
 
         // Clear display.
         self.fb.clear();
@@ -233,7 +266,7 @@ impl Display {
         let style = MonoTextStyle::new(&FONT_5X8, BinaryColor::On);
         for (i, row) in self.rows.iter().enumerate() {
             let s = super::ascii_str(row);
-            let _ = Text::with_baseline(s, Point::new(0, i as i32 * 8), style, Baseline::Top)
+            let _ = Text::with_baseline(s, Point::new(0, i as i32 * ROW_PITCH), style, Baseline::Top)
                 .draw(&mut self.fb);
         }
         self.flush_fb();
@@ -275,12 +308,12 @@ impl Display {
                 continue;
             }
             let s = super::ascii_str(row);
-            let _ = Text::with_baseline(s, Point::new(0, i as i32 * 8), style, Baseline::Top)
+            let _ = Text::with_baseline(s, Point::new(0, i as i32 * ROW_PITCH), style, Baseline::Top)
                 .draw(&mut self.fb);
         }
         // Render secret rows via the constant-time blit. We use the
-        // raw fb buffer via a small accessor; `Framebuf::buf_mut`
-        // returns `&mut [u8; 512]` keyed to the SSD1306 page layout.
+        // raw fb buffer, which is `FB_LEN` bytes in SSD1306 page layout —
+        // 512 on a 128x32, 1024 on a 128x64.
         for &(page, text) in secret_rows {
             super::secret_text::render_secret_row(&mut self.fb.buf, page, text);
         }
@@ -327,7 +360,7 @@ impl Display {
             if sweep < 128 {
                 let _ = Line::new(
                     Point::new(sweep as i32, 0),
-                    Point::new(sweep as i32, 31),
+                    Point::new(sweep as i32, HEIGHT as i32 - 1),
                 )
                 .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
                 .draw(&mut self.fb);
@@ -381,7 +414,7 @@ impl Display {
 
     /// Send the pixel framebuffer to the SSD1306.
     ///
-    /// Four pages of 128 bytes, 129 bytes per transaction including the 0x40
+    /// `PAGES` pages of `WIDTH` bytes, one transaction each including the 0x40
     /// data control byte. (The original also mirrored the same buffer to a
     /// host RTT viewer under `ui-mirror`; that backend was removed with this
     /// file and its feature no longer exists.)
@@ -389,14 +422,14 @@ impl Display {
         let addr = unsafe { SSD1306_ADDR };
 
         // Reset the address window to the full screen.
-        hw::soft_i2c::write(addr, &[0x00, 0x21, 0x00, 0x7F]);
-        hw::soft_i2c::write(addr, &[0x00, 0x22, 0x00, 0x03]);
+        hw::soft_i2c::write(addr, &[0x00, 0x21, 0x00, (WIDTH - 1) as u8]);
+        hw::soft_i2c::write(addr, &[0x00, 0x22, 0x00, (PAGES - 1) as u8]);
 
-        for page in 0..4 {
-            let start = page * 128;
-            let mut chunk = [0u8; 129];
+        for page in 0..PAGES {
+            let start = page * WIDTH;
+            let mut chunk = [0u8; WIDTH + 1];
             chunk[0] = 0x40; // Co=0, D/C#=1 -> data stream
-            chunk[1..].copy_from_slice(&self.fb.buf[start..start + 128]);
+            chunk[1..].copy_from_slice(&self.fb.buf[start..start + WIDTH]);
             hw::soft_i2c::write(addr, &chunk);
         }
     }

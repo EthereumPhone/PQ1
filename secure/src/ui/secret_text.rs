@@ -67,17 +67,26 @@ fn ct_glyph_col(ch: u8, col: usize) -> u8 {
 /// for this row — embedded-graphics is still used for non-secret rows
 /// (titles, prompts, status bars) where the address-leak is irrelevant.
 ///
-/// `page`: which 8-pixel-tall row (0..4 on a 128×32 OLED).
+/// `page`: which 8-pixel-tall row (0..4 on a 128×32, 0..8 on a 128×64).
 /// `text`: ASCII bytes; non-printable characters render as blank (the
 ///   scan still happens for every position to keep the access pattern
 ///   identical to the all-printable case).
-/// `fb`: mutable reference to the 512-byte SSD1306 page buffer.
+/// `fb`: the SSD1306 page buffer — `128 * (height / 8)` bytes. Taken as a
+///   slice rather than a fixed `[u8; 512]` so the same routine serves a
+///   128x32 (4 pages) and a 128x64 (8 pages); the caller's panel height is a
+///   board constant.
 ///
 /// Writes column-bytes `fb[page * 128 + p]` for `p in 0..128`. Each
 /// column-byte is OR'd with the existing value, so callers must clear
 /// the framebuffer first (the standard `Display::flush` shape).
-pub fn render_secret_row(fb: &mut [u8; 512], page: usize, text: &[u8]) {
-    if page >= 4 {
+///
+/// Constant-time property is unaffected by the length change: the loop below
+/// always runs `DISPLAY_W_PX` iterations and the secrecy lives in
+/// `ct_glyph_col`'s 96-entry scan, not in the buffer bound.
+pub fn render_secret_row(fb: &mut [u8], page: usize, text: &[u8]) {
+    // Bounds guard replacing the old `page >= 4`: reject any row that would
+    // not fit rather than assuming a page count.
+    if (page + 1) * DISPLAY_W_PX > fb.len() {
         return;
     }
     let base = page * DISPLAY_W_PX;

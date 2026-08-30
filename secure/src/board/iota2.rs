@@ -109,6 +109,18 @@ pub const SE050_I2C_AF: u32 = 4;
 /// (pq1 bit-bangs on PB3/PA3 instead, which no *secure element* claims — but
 /// PB3 there is the SCA scope trigger, so that board has its own exclusivity
 /// rule. Both are enforced in `hw::soft_i2c`.)
+/// Height in pixels of the SSD1306 wired to this board's bench setup.
+///
+/// Strictly a property of the **module you plugged in**, not of the board —
+/// it lives here because that is where the rest of the bench-OLED wiring is
+/// described, and because it must be a compile-time constant (it sizes the
+/// framebuffer). The historical bench module (128x32). Four text rows at 8 px pitch.
+///
+/// Only 32 and 64 are valid: those are the SSD1306 geometries, and both
+/// divide evenly by 8 (the page height) and by `DISPLAY_ROWS`. Enforced by a
+/// `const assert!` in `ui::oled`.
+pub const OLED_HEIGHT_PX: usize = 32;
+
 pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOB_S, 8));
 pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOB_S, 9));
 

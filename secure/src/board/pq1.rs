@@ -268,6 +268,18 @@ pub const RGB_EN: Option<(u32, u32)> = Some((GPIOB_S, 12));
 /// **Collides with [`SCA_TRIGGER`]**, which also wants PB3 — the two bench
 /// features are mutually exclusive, enforced by a `compile_error!` in
 /// `hw::soft_i2c`.
+/// Height in pixels of the SSD1306 wired to this board's bench setup.
+///
+/// Strictly a property of the **module you plugged in**, not of the board —
+/// it lives here because that is where the rest of the bench-OLED wiring is
+/// described, and because it must be a compile-time constant (it sizes the
+/// framebuffer). The module actually on the bench (128x64). Four text rows at 16 px pitch.
+///
+/// Only 32 and 64 are valid: those are the SSD1306 geometries, and both
+/// divide evenly by 8 (the page height) and by `DISPLAY_ROWS`. Enforced by a
+/// `const assert!` in `ui::oled`.
+pub const OLED_HEIGHT_PX: usize = 64;
+
 pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOB_S, 3));
 pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOA_S, 3));
 
