@@ -64,6 +64,15 @@ const SSD1306_ADDR_ALT: u8 = 0x3D;
 /// Resolved address (set during init).
 static mut SSD1306_ADDR: u8 = SSD1306_ADDR_PRIMARY;
 
+/// Probe window: `PROBE_ROUNDS * PROBE_GAP_MS` ms during which the display may
+/// appear. Sized for a human holding wires against bare pads, not for a
+/// soldered connection — there is no connector for the OLED on this board, and
+/// a window of tens of milliseconds is unhittable by hand. A miss then looks
+/// exactly like a dead module, which sends you re-checking wiring that was
+/// fine.
+const PROBE_ROUNDS: u32 = 300;
+const PROBE_GAP_MS: u32 = 40;
+
 // ---------------------------------------------------------------------------
 // Geometry, derived from `board::OLED_HEIGHT_PX`
 // ---------------------------------------------------------------------------
@@ -184,20 +193,46 @@ impl Display {
         // without its bus being configured.
         hw::soft_i2c::init();
 
-        // Probe for the display on both possible I2C addresses.
-        // Try primary address first (0x3C), then alternate (0x3D).
-        let addr = if hw::soft_i2c::write(SSD1306_ADDR_PRIMARY, &[0x00, 0xAE]) {
-            secure_log!("[S][OLED] found display at 0x{:02x}", SSD1306_ADDR_PRIMARY);
-            SSD1306_ADDR_PRIMARY
-        } else if hw::soft_i2c::write(SSD1306_ADDR_ALT, &[0x00, 0xAE]) {
-            secure_log!("[S][OLED] found display at 0x{:02x}", SSD1306_ADDR_ALT);
-            SSD1306_ADDR_ALT
+        // Probe both possible addresses, retrying across a multi-second
+        // window. See PROBE_ROUNDS for why the window is that wide.
+        secure_log!(
+            "[S][OLED] probing 0x3C/0x3D for ~{} s — make contact NOW",
+            (PROBE_ROUNDS * PROBE_GAP_MS) / 1000
+        );
+
+        let mut found: Option<u8> = None;
+        let mut round: u32 = 0;
+        while round < PROBE_ROUNDS && found.is_none() {
+            if hw::soft_i2c::write(SSD1306_ADDR_PRIMARY, &[0x00, 0xAE]) {
+                found = Some(SSD1306_ADDR_PRIMARY);
+            } else if hw::soft_i2c::write(SSD1306_ADDR_ALT, &[0x00, 0xAE]) {
+                found = Some(SSD1306_ADDR_ALT);
+            } else {
+                delay_ms(PROBE_GAP_MS);
+                round += 1;
+            }
+        }
+
+        // NOTE: every `secure_log!` here is a STATEMENT. The macro expands to
+        // `#[cfg] { .. }` blocks, and an attribute on a block is only legal in
+        // statement position — as a match-arm expression it fails with
+        // "attributes on expressions are experimental".
+        let addr = if let Some(a) = found {
+            secure_log!(
+                "[S][OLED] found display at 0x{:02x} after {} ms",
+                a,
+                round * PROBE_GAP_MS
+            );
+            a
         } else {
-            secure_log!("[S][OLED] no display at 0x3C/0x3D on the bit-banged bus — skipping");
+            secure_log!(
+                "[S][OLED] no display at 0x3C/0x3D after ~{} s — check contact",
+                (PROBE_ROUNDS * PROBE_GAP_MS) / 1000
+            );
             return;
         };
-        // SAFETY: single-threaded secure world; this static is written once
-        // here during init and only read afterwards.
+        // SAFETY: single-threaded secure world; written once here during init
+        // and only read afterwards.
         unsafe { SSD1306_ADDR = addr };
 
         // SSD1306 initialization sequence (charge-pump enabled). Three entries
