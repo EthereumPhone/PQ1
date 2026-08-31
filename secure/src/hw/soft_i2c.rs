@@ -1,12 +1,15 @@
 //! Bit-banged I2C master for the bench OLED. **Not for secure elements.**
 //!
-//! Exists for one reason: the pq1 production board exposes exactly two free
-//! GPIOs — `PB3` (the `SWO` pin on the debug header) and `PA3` (the `RX` pad,
-//! free because the console is TX-only) — and **no I2C peripheral can reach
-//! that pair**. `PB3`'s AF4 is `I2C1_SDA`, but that is the same peripheral the
-//! OPTIGA occupies and a peripheral has one SDA pin; `PA3` has no I2C
-//! alternate function at all (DS13086 Rev 10, Tables 28/29). PB8/PB9, the
-//! natural choice, are not brought out on the board.
+//! Exists for one reason: the pq1 production board brings out almost nothing,
+//! and **no I2C peripheral can reach the pins it does bring out**. The pair in
+//! use is `PA2`/`PA3` — the `TX` and `RX` pads — which offer only `USART2`
+//! (AF7) and `LPUART1` (AF8), no I2C (DS13086 Rev 10, Tables 28/29). PB8/PB9,
+//! the natural choice, are not brought out at all.
+//!
+//! They were chosen over the electrically-equivalent PB3 for a physical
+//! reason: PA2/PA3 are **bare pads** that take a crocodile clip, where PB3 is
+//! a 1.27 mm header pin beside `SWCLK`. On this board, solderability is a
+//! design constraint.
 //!
 //! So: software I2C, at roughly 100 kHz, which an SSD1306 pushing a 16x4
 //! character grid does not remotely strain.
@@ -85,6 +88,23 @@ const _: () = {
         "`ui-oled-bench` and `sca-trigger` both claim the same pin (PB3 on pq1). \
          They are mutually exclusive: the trigger would toggle the display clock \
          during a capture, and the display would corrupt the trigger edge. Pick one."
+    );
+};
+
+// On pq1 the OLED sits on the debug console's own pads (PA2/PA3) — they are
+// the only pins on the board reachable without solder. That is fine because
+// the console and the OLED show the same 16x4 text and you would not run
+// both, but it must not happen silently: two drivers configuring one pad,
+// one as USART AF and one as a bit-banged GPIO, is a bug that presents as
+// "the display sometimes works".
+#[cfg(feature = "uart-console")]
+const _: () = {
+    let tx = (board::CONSOLE_TX_PORT, board::CONSOLE_TX_PIN);
+    assert!(
+        !(tx.0 == SCL.0 && tx.1 == SCL.1) && !(tx.0 == SDA.0 && tx.1 == SDA.1),
+        "`ui-oled-bench` and `uart-console` claim the same pin (PA2 on pq1). \
+         They are mutually exclusive — both render the same 16x4 text, so pick \
+         one. Semihosting works alongside either."
     );
 };
 
