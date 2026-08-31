@@ -339,9 +339,10 @@ mod stm32 {
     //   lives in NS; pulling USB control into the secure world would
     //   require re-architecting transport, which is way out of scope.
     //   GPIO security (PA11/PA12 = D+/D-) is governed separately by
-    //   GPIOA_SECCFGR; UCPD1 handshake is done from secure world at (iota2 only — pq1 routes no
-    //   CC line to the MCU and compiles that path out entirely)
-    //   boot and never touched again.
+    //   GPIOA_SECCFGR. The UCPD1 handshake is done from the secure world at
+    //   boot and never touched again — on iota2 only, since pq1 routes no CC
+    //   line to the MCU and compiles that path out entirely. UCPD1 itself is
+    //   Secure on both boards (bit 19, above); it is only OTG that stays NS.
     // - AES (bit 11): no current consumer (we use SAES); marked
     //   SECURE defensively so a stale NS-side AES driver can't
     //   accidentally race a secure SAES op.
