@@ -199,16 +199,21 @@ stm32u585 = ["sphincs-tz-shared/stm32u585", "hw-sha256"]
 #   board-pq1    AL_A66_MB_V10 production board, STM32U585CIU6 (48-pin
 #                UFQFPN — only PA0-15, PB0-15 and PC13 are bonded).
 #
-# Selection is *opt-in to pq1*: `board-pq1` picks pq1, and anything else
-# gets iota2. That asymmetry is deliberate. This manifest has `default = []`
-# and all ~200 Makefile recipes pass an explicit `--features` list, so
-# making iota2 the absence of `board-pq1` leaves every existing bench flow
-# byte-identical rather than needing 200 edits. `board-iota2` therefore
-# carries no implications — it exists so a recipe can name its board — and
-# `secure/src/board/mod.rs` hard-errors if both are set.
+# Naming a board is MANDATORY on every `stm32u585` build: `secure/src/board/
+# mod.rs` hard-errors if neither feature is set, and if both are.
 #
-# Use `make <target> BOARD=pq1`, which sets the feature and the probe-rs
-# chip name together.
+# This used to read "selection is *opt-in to pq1* ... `board-iota2` therefore
+# carries no implications". That model was retracted in a15561b4 and the text
+# is preserved here only as a warning, because the belief it encoded is what
+# caused the bug: `#[cfg(feature = "board-pq1")] compile_error!` fences are
+# SILENT when the feature is absent, so a recipe that omitted the board did not
+# fail — it compiled the iota2 pin map and every pq1 fence went quiet. That is
+# how `build-hw-prodtest BOARD=pq1` came to compile iota2 pins onto pq1
+# silicon. `board-iota2` is load-bearing; treating it as inert is what let
+# seven build sites drift.
+#
+# Use `make <target> BOARD=pq1`, which sets the feature and the probe-rs chip
+# name together with `override`, so neither can be detached from the other.
 board-iota2 = []
 board-pq1 = []
 

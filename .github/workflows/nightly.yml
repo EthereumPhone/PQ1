@@ -243,11 +243,30 @@ jobs:
           toolchain: stable
           targets: thumbv8m.main-none-eabi
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-      - name: cargo check — secure world (dual-SE hardened bench set)
+      # BOARD (2026-08-31): every stm32u585 secure build must now name its
+      # board — see the compile_error! in secure/src/board/mod.rs. This step
+      # had no board term, so from a15561b4 until this commit the job failed at
+      # its FIRST step and everything below it (the NS check, the prodtest
+      # image, the factory-runner tests) silently never ran.
+      - name: cargo check — secure world, iota2 (dual-SE hardened bench set)
         run: |
           cargo check --locked -p sphincs-tz-secure --target thumbv8m.main-none-eabi \
             --no-default-features \
-            --features dual-se,optiga-hw-counter,saes-dhuk,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested
+            --features dual-se,optiga-hw-counter,saes-dhuk,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested,board-iota2
+      # pq1 is compile-checked SEPARATELY rather than as a matrix axis, because
+      # the two boards cannot share a feature set: `ui-lcd` pulls in
+      # `hw::spi_hw`, which is an unconditional compile_error! on pq1 until its
+      # LCD is ported (its SPI2/PB12-15 map is RGB_EN + the I2C2 backlight bus +
+      # LCM_EN there). So pq1 checks with `ui-noop`.
+      #
+      # This step is the one that would have caught the pq1 defects found in the
+      # 2026-08-31 review: `pin_diag`'s hardcoded PA4/PD5/PE0 reset path only
+      # becomes a compile error once something actually builds the board.
+      - name: cargo check — secure world, pq1 (no ui-lcd; see above)
+        run: |
+          cargo check --locked -p sphincs-tz-secure --target thumbv8m.main-none-eabi \
+            --no-default-features \
+            --features dual-se,optiga-hw-counter,saes-dhuk,ui-noop,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested,board-pq1
       - name: cargo check — non-secure world (USB)
         run: |
           cargo check --locked -p sphincs-tz-nonsecure --target thumbv8m.main-none-eabi \
@@ -378,6 +397,14 @@ jobs:
           find "$(dirname "$m")" -maxdepth 1 -name '*.maude' -exec cp {} "$HOME/.local/bin/" \;
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "MAUDE_LIB=$HOME/.local/bin" >> "$GITHUB_ENV"
+      # The self-test runs FIRST and is not decoration: it plants nine broken
+      # baseline/output shapes and asserts each is caught. If the checker is ever
+      # broken into always-returning-PASS, this step goes red instead of quietly
+      # certifying nothing. Every sibling gate's CI step asserts its self-test
+      # first; this job's docstring claimed CI ran it while no workflow did
+      # (#667, wired 2026-08-20).
+      - name: protocol-models verdict checker self-test (negative controls)
+        run: python3 scripts/check_protocol_models.py --self-test
       - name: verify-protocol-models (proverif + tamarin — the 8 symbolic models)
         run: |
           eval "$(opam env)"

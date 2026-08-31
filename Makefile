@@ -28,17 +28,26 @@ TARGET = thumbv8m.main-none-eabi
 #
 # Usage:  make test-key-speed BOARD=pq1
 #
-# CHIP is derived from BOARD but stays independently overridable, because the
-# probe-rs target spec only needs to match flash/RAM geometry (both parts are
-# 2 MB dual-bank / 786 KB SRAM).
+# CHIP and BOARD_FEATURE are derived from BOARD with `override`, which is
+# load-bearing: a plain `?=` (or even `:=`) loses to a command-line assignment,
+# because make gives command-line variables precedence over every makefile
+# assignment except an overridden one. Before 2026-08-31 both used `?=`, so
+#
+#     make flash-hw-usb-test BOARD=pq1 BOARD_FEATURE=board-iota2
+#
+# selected the pq1 probe target and compiled the iota2 pin map — handing
+# PA15/PB5/PB15 (SE_RST, SE1_EN, LCM_EN on that board) to the non-secure world
+# on pq1 silicon. The Rust exact-one fence in `secure/src/board/mod.rs` cannot
+# catch that: it sees exactly one board feature and passes. The two must not be
+# separable, so they no longer are.
 BOARD ?= iota2
 
 ifeq ($(BOARD),iota2)
-CHIP          ?= STM32U585AIIx
-BOARD_FEATURE ?= board-iota2
+override CHIP          := STM32U585AIIx
+override BOARD_FEATURE := board-iota2
 else ifeq ($(BOARD),pq1)
-CHIP          ?= STM32U585CIUx
-BOARD_FEATURE ?= board-pq1
+override CHIP          := STM32U585CIUx
+override BOARD_FEATURE := board-pq1
 else
 $(error BOARD must be `iota2` or `pq1`, got `$(BOARD)`)
 endif
@@ -152,15 +161,27 @@ endif
 
 # Thread the board selection into every $(FEATURES)-driven secure build.
 # Only hardware builds have a board: the QEMU mps2-an505 target has no pin
-# map, and `secure/src/board/` is gated on `stm32u585`. `board-iota2` is
-# inert by construction (the board module treats "not board-pq1" as iota2),
-# so appending it unconditionally cannot change an existing build — it only
-# makes the recipe's board explicit. `override` matches the ERC-7730 gate
-# above: an invocation must not be able to select a chip with BOARD=pq1
-# while the image is still built with the iota2 pin map.
+# map, and `secure/src/board/` is gated on `stm32u585`.
+#
+# `board-iota2` is NOT "inert by construction" — that was the retracted
+# opt-in-to-pq1 model, and believing it is what left seven recipes without a
+# board term. Since a15561b4 naming a board is mandatory and `board-iota2` is
+# load-bearing.
+#
+# If FEATURES already names a board we do not append, but we no longer stay
+# silent about it either: a FEATURES board that disagrees with BOARD is the
+# same wrong-image hazard as the BOARD_FEATURE override closed above, and it
+# is a hard error rather than a silently mismatched build.
 ifneq (,$(findstring stm32u585,$(FEATURES)))
 ifeq (,$(findstring board-,$(FEATURES)))
 override FEATURES := $(FEATURES),$(BOARD_FEATURE)
+else
+ifeq (,$(findstring $(BOARD_FEATURE),$(FEATURES)))
+$(error FEATURES names a board that disagrees with BOARD=$(BOARD). \
+  FEATURES=$(FEATURES) but BOARD implies $(BOARD_FEATURE). \
+  CHIP would be $(CHIP) while the image is built for the other board's pin map. \
+  Drop the board- token from FEATURES and select with BOARD=iota2|pq1.)
+endif
 endif
 endif
 
@@ -1410,7 +1431,7 @@ se050-stress-list:
 # by the flash target below AND the `se050-scp03-axis-parity` gate, finding F7,
 # so the two can never drift). `bhk` keeps the Tier-2 split (owner decision
 # 2026-07-14: SE050 on BHK, OPTIGA PBS on DHUK).
-SE050_ROTATE_FEATURES := se050-rotate-scp03,bhk,stm32u585,ui-lcd,debug-log,e2e-test
+SE050_ROTATE_FEATURES := se050-rotate-scp03,bhk,stm32u585,ui-lcd,debug-log,e2e-test,$(BOARD_FEATURE)
 
 .PHONY: se050-scp03-axis-parity
 se050-scp03-axis-parity: ## F7: SE050 SCP03 ceremony-vs-ship key-derivation axis parity gate
@@ -2529,7 +2550,7 @@ build-rdp2-self-lock: ## Prove self-lock is rejected outside mode-production (wo
 	@echo "==> build-rdp2-self-lock: checking non-production anti-footgun"
 	@set -eu; out="$$(mktemp)"; trap 'rm -f "$$out"' EXIT; \
 		if cargo check -p sphincs-tz-secure --no-default-features \
-			--features "stm32u585,dual-se,ui-lcd,usb,saes-dhuk,se050-derived-scp03,bhk,rdp2-self-lock,iwdg,legacy-fw-rollback-unsafe,erc7730-dev-unattested" \
+			--features "stm32u585,dual-se,ui-lcd,usb,saes-dhuk,se050-derived-scp03,bhk,rdp2-self-lock,iwdg,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)" \
 			--target $(TARGET) >"$$out" 2>&1; then \
 			cat "$$out"; \
 			echo "build-rdp2-self-lock: FAIL — unsafe non-production self-lock build succeeded" >&2; \
