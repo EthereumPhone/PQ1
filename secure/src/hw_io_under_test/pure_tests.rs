@@ -1629,3 +1629,141 @@ fn positive_buttons_bit_positions_match_pin_numbers() {
     assert!(BUTTONS_SRC.contains("const LEFT_BIT: u32 = 1 << board::BTN_LEFT_PIN;"));
     assert!(BUTTONS_SRC.contains("const RIGHT_BIT: u32 = 1 << board::BTN_RIGHT_PIN;"));
 }
+
+// ---------------------------------------------------------------------------
+// Consumption gates
+// ---------------------------------------------------------------------------
+//
+// Established by mutation testing on 2026-08-31: four separate mutations to
+// driver code passed the ENTIRE 2627-test suite. Every gate in this file that
+// covered them pinned that an expression EXISTS, never that anything CONSUMES
+// it — so deriving a value correctly and then ignoring it was invisible.
+//
+//   uart.rs   move `t -= 1` after the loop      -> infinite hang on wedged TEACK
+//   i2c_hw.rs delete both config_i2c_pin calls  -> SCL/SDA never configured
+//   i2c_hw.rs hardcode the APB1 RCC offsets     -> I2C4 never clocked (pq1 SE050 dead)
+//   buttons.rs hardcode the GPIO clock mask     -> wrong port clocked
+//
+// Two further mutations from the same review were CAUGHT by existing gates and
+// are deliberately not re-covered here: inverting uart's AFRL/AFRH selection,
+// and swapping pq1's two SE bus pin tables.
+//
+// Brace-matching below is textual and would be confused by a `{` inside a
+// string literal or comment within the scanned block. None of the four blocks
+// contains one; if that changes, these gates fail loudly rather than silently.
+
+/// Extract the `{...}` block that follows `marker`, by brace matching.
+fn block_after<'a>(src: &'a str, marker: &str) -> &'a str {
+    let start = src
+        .find(marker)
+        .unwrap_or_else(|| panic!("marker vanished from source: {marker}"));
+    let open = start + marker.len() - 1; // marker ends with the `{`
+    let bytes = src.as_bytes();
+    assert_eq!(bytes[open], b'{', "marker must end with its opening brace");
+    let mut depth = 0usize;
+    for i in open..src.len() {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &src[open..=i];
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("unbalanced braces after marker: {marker}");
+}
+
+/// The UART's TEACK wait must stay BOUNDED — the decrement has to be inside
+/// the loop, not merely present in the function.
+///
+/// `hw::uart::init` spins on TEACK because the first byte is silently dropped
+/// on STM32U5 otherwise. Its own comment says "Bounded so we don't hang if the
+/// peripheral is in a wedged state". Moving `t -= 1;` after the loop keeps
+/// every token the old gates looked for — the `while`, the counter, the
+/// `return`, the `t -= 1` — while making the loop genuinely infinite. That
+/// mutation passed all 2627 tests.
+#[test]
+fn negative_uart_teack_wait_decrement_is_inside_the_loop() {
+    let body = block_after(UART_SRC, "while REG.isr.read() & ISR_TEACK == 0 {");
+    assert!(
+        body.contains("t -= 1;"),
+        "the TEACK spin must decrement its bound INSIDE the loop body — a \
+         decrement after the loop leaves `hw::uart::init` hanging forever on a \
+         wedged peripheral. Loop body was:\n{body}"
+    );
+    assert!(
+        body.contains("if t == 0 {"),
+        "the TEACK spin must still bail out when the bound is exhausted"
+    );
+}
+
+/// `i2c_hw::init_bus` must actually CONSUME the board's per-bus description.
+///
+/// Three independent mutations of this function were invisible to the suite:
+/// deleting both pin-configuration calls, and hardcoding either RCC offset.
+/// The last one is the sharpest — on pq1 the SE050 lives on I2C4, whose enable
+/// and reset bits are in a DIFFERENT RCC register than I2C1/I2C2's, so a
+/// hardcoded APB1ENR1 offset leaves that bus unclocked and the SE050 dead,
+/// with the board map still looking perfectly correct.
+#[test]
+fn negative_i2c_hw_init_bus_consumes_the_board_bus_record() {
+    let body = block_after(I2C_HW_SRC, "fn init_bus(bus: &board::SeI2cBus) {");
+
+    // The pins must be configured, from the bus record.
+    for call in [
+        "config_i2c_pin(bus.port, bus.scl_pin, bus.af);",
+        "config_i2c_pin(bus.port, bus.sda_pin, bus.af);",
+    ] {
+        assert!(
+            body.contains(call),
+            "`init_bus` must configure its pins from the board record — missing \
+             `{call}`. Without it SCL/SDA keep their reset state and the bus is \
+             silently dead, which no other gate in this file can see."
+        );
+    }
+
+    // The RCC registers must be derived per-bus, never hardcoded.
+    for field in ["bus.rcc_enr_off", "bus.rcc_rstr_off"] {
+        assert!(
+            body.contains(field),
+            "`init_bus` must take its RCC register from `{field}` — a hardcoded \
+             offset works for I2C1/I2C2 and silently fails for pq1's I2C4, \
+             leaving the SE050 unclocked."
+        );
+    }
+    for field in ["bus.rcc_en_bit", "bus.rcc_rst_bit"] {
+        assert!(body.contains(field), "`init_bus` must use `{field}`");
+    }
+    assert!(
+        body.contains("board::gpio_rcc_bit(bus.port)"),
+        "`init_bus` must derive the GPIO clock bit from the bus's own port"
+    );
+}
+
+/// `hw::buttons::init` must clock the ports the BOARD names, not a literal.
+///
+/// Replacing `set_bits(gpio_clocks)` with `set_bits(1 << 7)` — clocking GPIOH
+/// instead of whichever ports carry the buttons — passed the whole suite,
+/// because the gate covering this checked only that the `gpio_clocks`
+/// derivation expression existed somewhere in the file.
+#[test]
+fn negative_buttons_clock_enable_consumes_the_derived_mask() {
+    let body = block_after(BUTTONS_SRC, "pub unsafe fn init() {");
+    assert!(
+        body.contains("REG.rcc_ahb2enr1.set_bits(gpio_clocks);"),
+        "`buttons::init` must enable exactly the derived `gpio_clocks` mask; a \
+         literal there clocks the wrong port and the buttons read as never \
+         pressed — or, on pq1, touches a pin the SE rail depends on."
+    );
+    // And the derivation must still come from the board map.
+    assert!(
+        body.contains("board::gpio_rcc_bit(board::BTN_LEFT_PORT)")
+            && body.contains("board::gpio_rcc_bit(board::BTN_RIGHT_PORT)"),
+        "`gpio_clocks` must be derived from the board's own button ports, inside \
+         `init` — a derivation that lives elsewhere and is never consumed here is \
+         exactly the defect this gate exists for"
+    );
+}
