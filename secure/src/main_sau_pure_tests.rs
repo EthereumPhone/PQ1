@@ -868,7 +868,8 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
         "| SECCFGR1_I2C1_BIT",
         "| SECCFGR1_I2C2_BIT",
         "| SECCFGR1_BOARD_IMAGE",
-        "| SECCFGR1_UCPD1_BIT;",
+        "| SECCFGR1_UCPD1_BIT",
+        "| SECCFGR1_TIM2_BIT;",
     ] {
         assert!(
             SAU_SRC.contains(term),
@@ -880,13 +881,19 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
     // the secure world owns it at boot. A cleared bit has no functional symptom
     // on either board — only NS reachability changes.
     assert!(SAU_SRC.contains("const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;"));
+    // TIM2 (bit 0) carries the production-mandatory consumption mask. Leaving
+    // it unattributed lets NS clear TIM2_CR1.CEN and flat-line the PWM with no
+    // secure-side symptom — the secure world writes CCR1 and never reads back
+    // that the counter still runs.
+    assert!(SAU_SRC.contains("const SECCFGR1_TIM2_BIT: u32 = 1 << 0;"));
+    assert!(SAU_SRC.contains("| SECCFGR1_TIM2_BIT;"));
     assert!(SAU_SRC.contains("const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;"));
     assert!(SAU_SRC.contains("let seccfgr1 = SECCFGR1_IMAGE;"));
     for arm in [
-        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 19),",                        // iota2, no iwdg
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",             // iota2 + iwdg
-        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",            // pq1, no iwdg
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),", // pq1 + iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 13) | (1 << 14) | (1 << 19),",                        // iota2, no iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",             // iota2 + iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",            // pq1, no iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),", // pq1 + iwdg
     ] {
         // EXACTLY once, not merely present. With the trailing comma these four
         // are mutually non-containing; without it the two iota2 arms were
@@ -918,7 +925,8 @@ fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
         "| SECCFGR1_I2C1_BIT",
         "| SECCFGR1_I2C2_BIT",
         "| SECCFGR1_BOARD_IMAGE",
-        "| SECCFGR1_UCPD1_BIT;",
+        "| SECCFGR1_UCPD1_BIT",
+        "| SECCFGR1_TIM2_BIT;",
     ] {
         assert!(
             SAU_SRC.contains(term),
@@ -934,8 +942,8 @@ fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
     // Found by the 2026-08-31 adversarial review; it was introduced by the
     // commit that added the pq1 arms.
     for arm in [
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",
     ] {
         assert_eq!(
             SAU_SRC.matches(arm).count(),

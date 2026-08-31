@@ -313,6 +313,35 @@ mod stm32 {
     // either board (`grep -r UCPD nonsecure/` is empty).
     const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;
 
+    // TIM2 (bit 0, `GTZC_CFGR1_TIM2_Pos` — CMSIS stm32u585xx.h:20025).
+    //
+    // TIM2 CH1 drives the `consumption-mask` PWM, which `nsc/mod.rs` makes
+    // MANDATORY for every production hardware build: without it the
+    // SPHINCS+C10 keygen/sign window runs with an undiluted power signature
+    // and a bench CPA/DPA attacker reads the WOTS/FORS secrets out of it.
+    //
+    // A countermeasure the non-secure world can switch off is not a
+    // countermeasure. With TIM2 unattributed, NS reaches the timer through its
+    // own peripheral alias and clears `TIM2_CR1.CEN` — the PWM stops, the mask
+    // goes flat, and NOTHING in the secure world notices, because the secure
+    // side only ever writes CCR1 and never reads back that the counter is
+    // still running. This repo's own audit recorded that trace in
+    // `docs/security/audits/tz-tamper-debug-20260611-141459.md:142,154`; it
+    // predates the board port and was surfaced again by the 2026-08-31 review.
+    //
+    // NS has no legitimate use for TIM2 (`grep -rn TIM2 nonsecure/` is empty),
+    // so securing it costs nothing and removes the off-switch. As with UCPD1,
+    // final exploitability was NOT reproduced on silicon here — the audit
+    // above argues it and this closes it either way.
+    //
+    // NOTE the sibling that is deliberately NOT secured: TIM3 (bit 1). Nothing
+    // uses it on either board today. It is named here only because pq1 cannot
+    // run the mask on TIM2/PA5 at all (PA5 is the LCD's SCK there), and TIM3
+    // has been floated as the replacement — see the fence in
+    // `hw/consumption_mask.rs`. If that ever lands, TIM3 must join this image
+    // in the same commit, or pq1 ships the exact hole this bit closes.
+    const SECCFGR1_TIM2_BIT: u32 = 1 << 0;
+
     // ---- SECCFGR2 (APB2) — SPI1 (trusted display) SECURE (finding F1) ----
     // Bit position per `GTZC_CFGR2_SPI1_Pos` in CMSIS `stm32u585xx.h` (= 1).
     //
@@ -472,23 +501,24 @@ mod stm32 {
             | SECCFGR1_I2C1_BIT
             | SECCFGR1_I2C2_BIT
             | SECCFGR1_BOARD_IMAGE
-            | SECCFGR1_UCPD1_BIT;
+            | SECCFGR1_UCPD1_BIT
+            | SECCFGR1_TIM2_BIT;
 
         #[cfg(all(feature = "iwdg", not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),
             "TZSC_SECCFGR1 IWDG image drifted — IWDG must be Secure alongside the SE buses. \
              Source closure is not #79 silicon denial evidence."
         );
         #[cfg(all(not(feature = "iwdg"), not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 13) | (1 << 14) | (1 << 19),
             "TZSC_SECCFGR1 image drifted — I2C1+I2C2 are the SE buses (invariant #3). \
              Update the pin ONLY with a matching gtzc-enforcement-hw receipt."
         );
         #[cfg(all(feature = "iwdg", feature = "board-pq1"))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
             "TZSC_SECCFGR1 pq1+IWDG image drifted — on pq1 the SE050 has its OWN bus (I2C4, \
              bit 16) and it MUST be Secure: a clear bit hands the non-secure world the SE050 \
              bus with no functional symptom whatsoever. Update ONLY with a matching \
@@ -496,7 +526,7 @@ mod stm32 {
         );
         #[cfg(all(not(feature = "iwdg"), feature = "board-pq1"))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
             "TZSC_SECCFGR1 pq1 image drifted — on pq1 the SE050 has its OWN bus (I2C4, bit 16) \
              and it MUST be Secure: a clear bit hands the non-secure world the SE050 bus with \
              no functional symptom whatsoever. Update ONLY with a matching gtzc-enforcement-hw \

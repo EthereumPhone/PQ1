@@ -22,7 +22,8 @@
 #![allow(dead_code)] // Full board inventory; consumed incrementally by drivers.
 
 use super::{
-    SeI2cBus, GPIOA_S, GPIOB_S, GPIOC_S, GPIOE_S, I2C1_S, RCC_APB1ENR1_OFF, RCC_APB1RSTR1_OFF,
+    SeI2cBus, GPIOA_S, GPIOB_S, GPIOC_S, GPIOD_S, GPIOE_S, I2C1_S, RCC_APB1ENR1_OFF,
+    RCC_APB1RSTR1_OFF,
     RCC_APB2ENR_OFF, RCC_I2C1EN_BIT, RCC_I2C1RST_BIT, RCC_USART1EN_BIT, SPI1_S, USART1_S,
 };
 
@@ -173,6 +174,20 @@ pub const USB_VBUS_SENSE: Option<(u32, u32)> = None;
 
 /// Board-specific pins that must never reach the non-secure world, beyond the
 /// ones `super` derives from the shared pin map. Nothing extra on this board.
+/// `sca-trigger` scope trigger — **PD2**, this board's historical hardcoded
+/// value, preserved byte-for-byte.
+///
+/// This constant did not exist until 2026-08-31. `hw/sca_trigger.rs` hardcoded
+/// `0x5202_0C00` (GPIOD_S) pin 2 and read no board constant, so the board port
+/// gave pq1 a `SCA_TRIGGER` (PB3, since port D is not bonded on the 48-pin
+/// package) that nothing consumed — the driver kept writing PD2 on both
+/// boards, while `hw/soft_i2c.rs` built its collision guard from the pq1 value.
+/// Guard and writer were looking at different pins.
+///
+/// Adding it here is what let the driver be ported without changing iota2
+/// behaviour: PD2 in, PD2 out.
+pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOD_S, 2));
+
 pub const EXTRA_RESERVED_PINS: &[(Option<(u32, u32)>, &str)] = &[];
 
 // ---------------------------------------------------------------------------

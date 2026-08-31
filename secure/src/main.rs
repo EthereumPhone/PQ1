@@ -187,6 +187,23 @@ mod pin_diag;
 // `LDO2_EN`, the supply enable for BOTH secure elements. A silent compile-out
 // would leave a bench user wondering why their sweep printed nothing, so this
 // is a loud refusal instead.
+// `boot-pulse` marks boot progress by toggling PE13 — Arduino D13 on the dev
+// board. `hw/boot_pulse.rs` hardcodes `GPIOE_BASE`/pin 13 and reads no board
+// constant (the same shape as `pin_diag` and, until this commit, `sca_trigger`).
+// Port E is not bonded on pq1's 48-pin package, so there the writes land on an
+// unimplemented port and the feature silently does nothing — a scope hunting a
+// boot marker that can never appear. pq1's only unclaimed pins (PA6, PA10,
+// PC13, PB4) are all `NC` on the board per the vendor pin table, so there is no
+// drop-in replacement to point it at either; picking one is a hardware call.
+#[cfg(all(feature = "boot-pulse", feature = "board-pq1"))]
+compile_error!(
+    "`boot-pulse` is iota2-only: hw/boot_pulse.rs hardcodes PE13 (Arduino D13) \
+     and port E is not bonded on pq1's 48-pin package, so it would toggle an \
+     unimplemented port and produce no edge at all. pq1's free pins (PA6, PA10, \
+     PC13, PB4) are all NC on the board, so there is no equivalent marker pin — \
+     choosing one is a hardware decision. Build boot-pulse with BOARD=iota2."
+);
+
 #[cfg(all(feature = "pin-diag-boot", feature = "board-pq1"))]
 compile_error!(
     "`pin-diag-boot` is an iota2-only diagnostic: it sweeps the Arduino header, \

@@ -57,6 +57,8 @@ const RCC_SRC: &str = include_str!("../hw/rcc.rs");
 const RNG_SRC: &str = include_str!("../hw/rng.rs");
 const RNG_EXACT_SRC: &str = include_str!("../rng_exact.rs");
 const BOOT_PULSE_SRC: &str = include_str!("../hw/boot_pulse.rs");
+const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
+const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
 const BOOT_STATE_SRC: &str = include_str!("../hw/boot_state.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
 
@@ -336,12 +338,50 @@ fn positive_consumption_mask_pwm_mode1() {
     assert!(CONSUMPTION_MASK_SRC.contains("pub const TIM_CCMR1_OC1PE: u32 = 1 << 3;"));
 }
 
+/// The scope trigger must come from the BOARD, and iota2's value must not move.
+///
+/// This gate used to assert the opposite — that `sca_trigger.rs` contained the
+/// literals `0x5202_0C00` and `2`. That is PD2, an iota2 pin: port D is not
+/// bonded at all on pq1's 48-pin package. So the gate was actively pinning the
+/// driver to a pin that cannot exist on the production board, and it passed
+/// throughout the board port while `board/pq1.rs` declared a DIFFERENT trigger
+/// (PB3) that nothing consumed — `hw/soft_i2c.rs` even built its collision
+/// guard from that unused value, so guard and writer disagreed.
+///
+/// Values are now pinned per board; the derivation is pinned in the driver.
 #[test]
-fn positive_sca_trigger_pin_pd2() {
-    // Default pin per module docstring. PD2 = Arduino D4 area on
-    // B-U585I-IOT02A — easy header access for a scope probe.
-    assert!(SCA_TRIGGER_SRC.contains("const TRIG_GPIO_PORT_BASE: u32 = 0x5202_0C00;"));
-    assert!(SCA_TRIGGER_SRC.contains("const TRIG_PIN: u8 = 2;"));
+fn positive_sca_trigger_comes_from_the_board_map() {
+    // Driver derives, never hardcodes.
+    for derived in [
+        "const HAS_TRIG: bool = crate::board::SCA_TRIGGER.is_some();",
+        "const TRIG_GPIO_PORT_BASE: u32 = match crate::board::SCA_TRIGGER {",
+        "const TRIG_PIN: u8 = match crate::board::SCA_TRIGGER {",
+    ] {
+        assert!(
+            SCA_TRIGGER_SRC.contains(derived),
+            "sca_trigger must derive its pin from board::SCA_TRIGGER; missing `{derived}`"
+        );
+    }
+    assert!(
+        !SCA_TRIGGER_SRC.contains("0x5202_0C00;"),
+        "sca_trigger must not hardcode a GPIO port base — PD2 does not exist on pq1"
+    );
+    assert!(
+        SCA_TRIGGER_SRC.contains("crate::board::gpio_rcc_bit(TRIG_GPIO_PORT_BASE)"),
+        "the trigger port's clock bit must be derived from the trigger port"
+    );
+
+    // VALUES, per board. iota2 keeps PD2 byte-for-byte (Arduino D4 area, easy
+    // scope access); pq1 uses PB3 because port D is not bonded there.
+    assert!(
+        BOARD_IOTA2_SRC.contains("pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOD_S, 2));"),
+        "iota2's scope trigger must stay PD2 — moving it silently invalidates \
+         every capture taken against the old pin"
+    );
+    assert!(
+        BOARD_PQ1_SRC.contains("pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOB_S, 3));"),
+        "pq1's scope trigger must stay PB3"
+    );
 }
 
 #[test]

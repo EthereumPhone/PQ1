@@ -11,6 +11,43 @@
 #![cfg_attr(feature = "gtzc-test", allow(dead_code, unused_imports))]
 #![cfg_attr(feature = "tzic-wipe-test", allow(dead_code, unused_imports))]
 
+
+// ---------------------------------------------------------------------------
+// Board selection — mirrors the secure world's rule
+// ---------------------------------------------------------------------------
+//
+// The NS crate has a board axis only so `gtzc_test`'s denial probe can cover
+// the peripherals a given board actually secures (pq1 gives the SE050 its own
+// I2C4 bus; iota2 has no equivalent). But `gtzc_test.rs` reads the axis as
+// `not(board-pq1) => iota2`, so an image built with NEITHER feature silently
+// claims to be iota2 — and until 2026-08-31 the Makefile did not forward the
+// board to NS at all, so `make e2e-hw BOARD=pq1` produced exactly that: a pq1
+// secure world paired with an NS world that skipped pq1's I2C4 probe and
+// reported a pass.
+//
+// Both-at-once is always wrong. Neither-when-it-matters is wrong only where
+// the axis is actually read, so the mandatory arm is scoped to `gtzc-test`
+// rather than to every `stm32u585` build — the secure side's rule is
+// crate-wide because its `board` module drives every pin; here it is not.
+#[cfg(all(feature = "board-iota2", feature = "board-pq1"))]
+compile_error!(
+    "board-iota2 and board-pq1 are mutually exclusive: pick exactly one \
+     (`make <target> BOARD=iota2|pq1`)."
+);
+
+#[cfg(all(
+    feature = "gtzc-test",
+    not(feature = "board-iota2"),
+    not(feature = "board-pq1")
+))]
+compile_error!(
+    "a `gtzc-test` build must name its board: pass `board-iota2` or `board-pq1`. \
+     Without one, gtzc_test.rs defaults to the iota2 probe list and SKIPS pq1's \
+     I2C4 (the SE050's own bus) while still reporting a pass — a GTZC receipt \
+     that never tested the bit it claims to cover. `make <target> BOARD=pq1` \
+     forwards the board to both worlds."
+);
+
 // Panic handler selection. The QEMU/test paths use semihosting so panics
 // surface via `make e2e` / `make play`; the USB hardware build halts
 // silently because semihosting without a debugger attached BKPTs and

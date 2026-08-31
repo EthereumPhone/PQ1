@@ -188,7 +188,14 @@ endif
 # Extract features relevant to the nonsecure crate (it doesn't know about
 # mock-se, debug-log, ui-semihosting, etc. — only the shared platform,
 # transport, test, and watchdog features below).
-NS_FEATURES_LIST := $(strip $(foreach f,stm32u585 e2e-test usb iwdg,$(if $(findstring $(f),$(FEATURES)),$(f))))
+#
+# The board is forwarded too (2026-08-31). It was not, so `make e2e-hw BOARD=pq1`
+# built secure=pq1 against NS=implicit-iota2 — and `nonsecure/src/gtzc_test.rs`
+# treats "not board-pq1" as iota2, so its denial probe silently skipped pq1's
+# I2C4 (the SE050's own bus) while reporting a pass. Only the gtzc recipe passed
+# the board by hand. Two worlds in one image must not disagree about the board.
+NS_FEATURES_LIST := $(strip $(foreach f,stm32u585 e2e-test usb iwdg,$(if $(findstring $(f),$(FEATURES)),$(f))) \
+  $(if $(findstring stm32u585,$(FEATURES)),$(BOARD_FEATURE)))
 comma := ,
 empty :=
 space := $(empty) $(empty)

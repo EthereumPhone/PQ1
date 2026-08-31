@@ -50,6 +50,48 @@
 
 #![allow(dead_code)]
 
+
+// ---------------------------------------------------------------------------
+// Board fence — the mask pin is iota2's, and pq1 has no drop-in replacement
+// ---------------------------------------------------------------------------
+//
+// This driver hardcodes TIM2 CH1 on PA5 AF1 and reads no board constant. It is
+// the one pin in the whole board port with no `board::` entry, so no
+// `const assert!` and no collision guard can see it.
+//
+// On iota2 PA5 is free and drives an LED — a real load, so the PWM does real
+// work on the supply rail. On pq1 PA5 is `LCD_SCK_PIN`, the trusted display's
+// SPI clock (see `board/pq1.rs`). Driving it as a 10 kHz PWM would fight the
+// display driver for the same pad.
+//
+// The obvious repoint is NOT available. An earlier version of the production
+// fence in `nsc/mod.rs` asserted "PA6 carries AF2 = TIM3_CH1 and is unused
+// there", offering it as the fix. PA6 *is* unclaimed — but the vendor pin table
+// for this board (`STM32U585CIU6TR Pin Functions.xls`, PIN 16) marks it **NC**,
+// and so are pq1's only other free pads: PA10 (PIN 31), PC13 (PIN 2), PB4
+// (PIN 40). A mask driving an unconnected pad toggles the GPIO cell but drives
+// no external load, so whether it still dilutes the signature enough to satisfy
+// the ship-blocker is a bench measurement, not a code review — and moving to
+// TIM3 additionally means securing TIM3 (GTZC SECCFGR1 bit 1) in the same
+// change, or pq1 ships with an NS-clearable countermeasure, which is precisely
+// the hole `SECCFGR1_TIM2_BIT` was added to close.
+//
+// So: a hard refusal rather than a silently-wrong pin. Production already
+// REQUIRES this feature (`nsc/mod.rs`), which means pq1 cannot build a shipping
+// image today — that is the honest state, and it was previously hidden by this
+// combination compiling cleanly onto the LCD's clock line.
+#[cfg(all(feature = "consumption-mask", feature = "board-pq1"))]
+compile_error!(
+    "`consumption-mask` is not portable to pq1 as written: it drives TIM2 CH1 \
+     PWM on PA5, which on that board is SPI1_SCK — the trusted display's clock \
+     (board::LCD_SCK_PIN). It would contend with the LCD driver for the pad. \
+     There is no drop-in replacement: pq1's only unclaimed pads (PA6, PA10, \
+     PC13, PB4) are all NC per the vendor pin table, so a mask there drives no \
+     load, and moving to TIM3 also requires adding GTZC SECCFGR1 bit 1 to the \
+     secure image. Repointing it is a hardware decision needing a bench \
+     measurement. Build with BOARD=iota2, or without `consumption-mask`."
+);
+
 #[cfg(feature = "consumption-mask")]
 use crate::hw::mmio::Reg32;
 

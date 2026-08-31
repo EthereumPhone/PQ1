@@ -702,9 +702,10 @@ compile_error!(
      undiluted power signature, exposing the WOTS/FORS secrets to a bench \
      CPA/DPA attacker. Enable `consumption-mask` (it implies `stm32u585`; its \
      TIM2-CH1 PWM mask runs on PA5 — free on iota2, but SPI1_SCK, the LCD \
-     clock, on pq1, so a shipping pq1 image needs the mask repointed first; \
-     PA6 carries AF2 = TIM3_CH1 and is unused there), or build a \
-     non-shipping test image with `e2e-test` / `dev-testkey`."
+     clock, on pq1, so a shipping pq1 image needs the mask repointed first — \
+     see the board fence in hw/consumption_mask.rs for why that is a hardware \
+     decision and not a constant swap), or build a non-shipping test image \
+     with `e2e-test` / `dev-testkey`."
 );
 
 // MEDIUM-1 ship-blocker (audit tz-tamper 20260611): a production hardware
