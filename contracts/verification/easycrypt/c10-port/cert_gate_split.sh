@@ -30,11 +30,20 @@ TMPD=$(mktemp -d) || { echo 'FAIL mktemp'; exit 1; }
 trap 'rm -rf "$TMPD"' EXIT
 # Expected inventory sizes, COMMITTED. A guard that recomputes its expectation
 # from the file it is checking cannot detect truncation of that file.
-EXPECT_PINS=1078
-# Committed count of top-level statements across the 38 certified roots.  Guards
+# 1078 -> 1101 on 2026-08-31: the 23 BadEncCountermodel.ec statements pinned on
+# promotion.  NOTE FOR THE NEXT PERSON: there are TWO committed counts and they
+# are NOT the same number.  EXPECT_PINS counts MANIFEST ROWS (1101, which
+# includes `op:`-prefixed rows); EXPECT_STMTS counts TOP-LEVEL STATEMENTS in the
+# cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
+# "statement pin file truncated" -- which is exactly what it did on the first
+# run of this promotion.
+EXPECT_PINS=1101
+# Committed count of top-level statements across the certified roots.  Guards
 # PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
-# somebody must say why.  896 measured 2026-08-20.
-EXPECT_STMTS=993
+# somebody must say why.  896 measured 2026-08-20; 993 after the 2026-08-25 pins;
+# 1016 on 2026-08-31 when cdrafts-split/BadEncCountermodel.ec was promoted into the
+# closure (+23 statements, all pinned in the same commit).
+EXPECT_STMTS=1016
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/
@@ -770,10 +779,11 @@ done < cert-controls-split.tsv
 # controls and the gate still reaches GREEN. Require the expected count.
 n_ctl=$(printf '%s\n' $ran | sort -u | grep -c .)
 # COUNT RAISED 5 -> 6 (2026-08-25) when scratch/encode_compat_derivable.ec was added.
+# COUNT RAISED 6 -> 10 (2026-08-31) with the four badenc countermodel controls.
 # A floor BELOW the actual control count cannot detect one being deleted: with six
 # controls and a `-ge 5` guard, dropping any single one still scores OK.  The floor
 # must track the inventory or it only catches total truncation.
-echo "controls executed (unique)=$n_ctl expected>=6"
+echo "controls executed (unique)=$n_ctl expected>=10"
 [ "$n_ctl" -ge 6 ] || { echo "FAIL control file truncated or empty (fail-open guard)"; fail=$((fail+1)); }
 
 # IDENTITY RE-VERIFICATION AT THE END (run 13, GPT-5.6).  The identity was

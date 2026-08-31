@@ -1,20 +1,36 @@
 (* #########################################################################
-   PROMOTED 2026-08-31 -- THIS COPY IS NO LONGER THE LIVE ONE.
-   The live, gate-covered copy is `cdrafts-split/BadEncCountermodel.ec`, a
-   closure member of cert_gate_split.sh.  EDIT THAT FILE, NOT THIS ONE.
-   This copy is retained as the experiment's record (it is what
-   experiments/wots-badenc/RESULT.md grades against) and its header still
-   carries the EXPERIMENT-base line numbers.
+   PROMOTED INTO THE CERTIFIED SPLIT CLOSURE 2026-08-31, byte-identical to
+   experiments/wots-badenc/base/BadEncCountermodel.ec except for this banner
+   and three corrected in-file citations (the file cited the EXPERIMENT's base
+   line numbers).  It compiled against
+   base-c10-split unchanged -- the promoted BODY is byte-identical to the
+   experiment's, verified by diff; only this banner and three corrected
+   citations differ.
 
-   NOTE FOR ANYONE READING THIS DIRECTORY: unlike `probe/WOTS_TW_ES.ec` in the
-   same experiment -- which contains a LIVE `admit` and must NEVER be promoted
-   or vendored -- this file was admit-free and WAS promoted.  The two are not
-   in the same category; check RESULT.md before copying anything from here.
+   WHY IT WAS PROMOTED.  It was proved on 2026-08-12 and left under
+   `experiments/`, which `cert_gate_split.sh`'s cone census DOES NOT COVER.  So
+   the one fact that stops a reader taking the BadEnc charge for a BOUND was
+   invisible to every gate and free to rot against the tree it describes.  The
+   charge landed in the closure on 2026-08-30 (`MEUFGCMA_WOTSTWESNPRF_Charged`,
+   WOTS_TW_ES.ec:6849); its countermodel now lands beside it.
+
+   INDEPENDENT REPRODUCTION.  Before finding this file, the same result was
+   re-derived from scratch against the CURRENT split tree with a different
+   adversary (globals rather than abstract ops) and independently compiled
+   GREEN -- same helper shape, same losslessness+hoare split, same statement.
+   That reproduction is kept at scratch/badenc_replay.ec and is NOT a closure
+   member: one statement of this fact belongs in the cone, not two.
+
+   READ THE SCOPE LINE BELOW ("CONDITIONAL, exactly as ...") BEFORE QUOTING
+   THIS.  The colliding pair is a HYPOTHESIS.  What is machine-checked is the
+   IMPLICATION; that such pairs exist at deployed geometry rests on the
+   target-sum antichain bound (2^123.76 < 2^128), which this tree states in
+   PROSE at WOTS_TW_ES.ec:711-725 and does NOT mechanize.
    ######################################################################### *)
 (* ==========================================================================
    COUNTERMODEL — the BadEnc term is 1, so it CANNOT be bounded at this layer.
 
-   The charged WOTS-TW bound (WOTS_TW_ES.ec, this fork) replaces MM45's admitted
+   The charged WOTS-TW bound (base-c10-split/WOTS_TW_ES.ec) replaces MM45's admitted
    encoder injectivity with an explicit summand
 
        Pr[Game4_WOTSTWES_BadEnc(A) : res /\ BadEncFlag.badenc].
@@ -25,7 +41,7 @@
    VACUOUS when applied to an arbitrary `Adv_MEUFGCMA_WOTSTWESNPRF`.
 
    WHY.  Verification reads the message ONLY through its codeword:
-   `pkWOTS_from_sigWOTS` (:2333) computes `em <- encode_msgWOTS m` (:2341) and
+   `pkWOTS_from_sigWOTS` (:2421) computes `em <- encode_msgWOTS m` (:2429) and
    its loop touches `em` alone.  So under an encoding collision a signature for
    `m` is *already* a signature for `m'`, and the adversary forges by replaying
    it.  Every other win conjunct falls out:
@@ -142,9 +158,12 @@ module (A_coll : Adv_MEUFGCMA_WOTSTWESNPRF) (O : Oracle_MEUFGCMA_WOTSTWESNPRF, O
                : res /\ BadEncFlag.badenc] = 1%r.
 
        `Game4_WOTSTWES_BadEnc` here is the SAME exported module whose
-       probability appears as the charged summand in the fork's WOTS-TW bound
-       (WOTS_TW_ES.ec :6771), so this is a bound on the term that is actually
-       paid, not on a look-alike.
+       probability appears as the charged summand in the split tree's WOTS-TW
+       bound `MEUFGCMA_WOTSTWESNPRF_Charged` (base-c10-split/WOTS_TW_ES.ec:6849,
+       summand at :6856), so this is a statement about the term that is actually
+       paid, not about a look-alike.
+       (Citation corrected on promotion 2026-08-31: it read `:6771`, which is an
+       experiment-base line number and lands mid-tactic in the split file.)
 
    STILL NOT PROVED, AND DELIBERATELY SO -- the theorem is CONDITIONAL:
      * `cm`, `cm'`, `wad0` are FREE ops.  The colliding pair is a HYPOTHESIS,

@@ -12,3 +12,16 @@ scratch/c10_spec_vacuity_canary.ec	MUST-FAIL	cannot prove goal (strict)
 cdrafts-split/C10SpecControls.ec	MUST-PASS	-
 scratch/tier0_degenerate_encoder_excluded.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/encode_compat_derivable.ec	MUST-PASS	-
+# --- countermodel controls, promoted 2026-08-31 alongside
+# --- cdrafts-split/BadEncCountermodel.ec (regenerate: scratch/mkctl_badenc_split.sh).
+# A/B/C each delete exactly ONE hypothesis of badenc_game_hoare + badenc_is_one;
+# D mutates the CONCLUSION 1%r -> 0%r.  Reasons observed, not assumed.
+# NOTE ON C: `nothing to rewrite` is shape-adjacent, and the gate's own PHASE 3
+# comment warns about exactly that.  It is nonetheless a genuine deletion failure:
+# the site it breaks is `by rewrite /P -hcol; move: hP; rewrite /P`, i.e. the ONLY
+# place `P cm` is consumed to produce the game's `P m /\ P m'` conjunct.  Verified
+# by reading the failing line, not inferred from the message.
+scratch/badenc_ctlA.ec	MUST-FAIL	[by]: cannot close goals
+scratch/badenc_ctlB.ec	MUST-FAIL	the given proof-term proves:
+scratch/badenc_ctlC.ec	MUST-FAIL	nothing to rewrite
+scratch/badenc_ctlD.ec	MUST-FAIL	[by]: cannot close goals

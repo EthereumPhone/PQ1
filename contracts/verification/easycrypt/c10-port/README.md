@@ -110,13 +110,24 @@ explicit named probability `Pr[Game4_WOTSTWES_BadEnc(…) : res /\ BadEncFlag.ba
 `ITSRC10`. **LEDGER 242 → 241**, the first assumption *removed* rather than relocated in
 this arc; taint closure **6 → 2**. `extract_op` remains.
 
+**That charged term is NOT a bound, and since 2026-08-31 a gate says so.** It is provably
+**1** for an explicit replay adversary given one `P`-satisfying encoding collision —
+`cdrafts-split/BadEncCountermodel.ec::badenc_is_one`, proved 2026-08-12 and promoted into
+the certified closure on 2026-08-31 (it had been sitting in `experiments/`, which the cone
+census does not cover). A bound must live one layer up, at +C, where the WOTS message is
+`ThC ps ad x c` and the adversary cannot choose it. Read that theorem's hypotheses: it is
+an **implication**, and that collisions exist at deployed geometry rests on the target-sum
+antichain bound (2^123.76 < 2^128) which this tree states in prose and does not mechanize.
+
 **The remaining admit.** PHASE 5 checks that **no named application path**
 reaches a headline result, and none does. That is *not* the same as proved containment:
 this artifact measured (2026-08-28) that a bare `smt()` reaches the admitted lemma without
 naming it, at **921 candidate sites** — and the headline proof itself contains bare `smt()`
 calls. No escaping path is exhibited, but the categorical phrasing "contained, neither
-reaching any headline" overstates what is checked. The admit-free replacement for the WOTS one is landed
-(`WOTS_TW_ES.ec::admit_free_caller_split`) but **deliberately not wired**.
+reaching any headline" overstates what is checked. The admit-free replacement for the WOTS
+one (`WOTS_TW_ES.ec::admit_free_caller_split`) **is wired** — `nhchwcoll_hchwpre_msg` is
+proved from it — and this sentence said "deliberately not wired" for a day after the
+promotion commit had wired it (corrected 2026-08-31).
 
 #### How the headline got here — dated history, kept deliberately
 
@@ -2935,3 +2946,130 @@ statements pinned = 1076/1076 | coverage 991/991 | added=0 removed=0 | ledger=24
 OK  taint containment: closure = 6 lemmas, none of the 7 headline results is in it
 OK  taint controls: pass=11 fail=0
 ```
+
+### UPDATE 2026-08-31 — the countermodel ENTERS the closure, and I audit the claims my own promotion commit left stale
+
+Two units, two gate runs (the second because of a trap recorded at the end). Neither
+unit proves anything new; both close gaps between what this artifact *says* and what
+its gates *check*.
+
+**Unit 1 — `BadEncCountermodel.ec` is now a certified closure member (34 → 35 roots).**
+
+The 2026-08-30 promotion replaced MM45's admitted encoder injectivity with an explicit
+charged term. The obvious next question — *how small is it?* — was already answered on
+2026-08-12, mechanised on 2026-08-13, and written up in the `UPDATE 2026-08-13 (later)`
+section above: **it is 1**, for an explicit replay adversary, given one `P`-satisfying
+encoding collision.
+
+That answer was sitting in `experiments/wots-badenc/base/`. **`cert_gate_split.sh`'s cone
+census does not cover `experiments/`.** So the single fact that stops a reader taking the
+charged summand for a *bound* was invisible to every gate, free to rot against the tree
+it describes, and — as it turned out — already carrying three citations to line numbers
+that exist only in the experiment's base. It is now `cdrafts-split/BadEncCountermodel.ec`.
+
+It compiled against `base-c10-split` **unchanged**; the promoted body is byte-identical to
+the experiment's copy (verified by `diff`), with only a banner and three corrected
+citations added. Four must-fail controls came with it
+(`scratch/badenc_ctl{A,B,C,D}.ec`, regenerated for the split tree by
+`scratch/mkctl_badenc_split.sh`), and they are registered in `cert-controls-split.tsv`
+with the reasons **observed**, not assumed. The control floor moved 6 → 10.
+
+**The pre-set criterion was LEDGER UNCHANGED AT 241, and it held.** The countermodel has
+0 admits and 0 axioms, so the only census movement is:
+
+| row | class | delta |
+|---|---|---|
+| `abstract-op cm` / `cm'` / `wad0` | **parameters** | 214 → 217 |
+| `defined-op pkfs_fun` | definitions | 423 → 424 |
+| `module A_coll` | meaning | 393 → 394 |
+
+Nothing removed. The three free ops landing in **parameters** is the point, not a
+formality: the colliding pair is a **hypothesis**, and the census is where that has to be
+visible. Statement coverage went 993 → 1016, all 23 new statements pinned in the same
+commit.
+
+**What this does and does not change.** Nothing about the headline. The artifact's
+position is unchanged and was already stated: there is no bound on the BadEnc term at the
+WOTS-TW layer *because it is 1*, and the bound has to live at +C where the message is
+`ThC ps ad x c` and the adversary cannot choose it. What changed is that a gate now
+enforces that this statement still exists and still says what it says.
+
+**Read the conditional.** `badenc_is_one` is an **implication**. That collisions exist at
+deployed geometry rests on the target-sum antichain bound (2^123.76 < 2^128), which this
+tree states in **prose** at `WOTS_TW_ES.ec:711-725` and does **not** mechanize. Exhibiting
+a deployed-geometry pair is still residual **Q2b**.
+
+**Unit 2 — three claims that my own 2026-08-30 commit falsified and left standing.**
+
+I checked what `7f3d747` actually did to each site rather than assuming it had simply
+missed them, and the truth is worse than "missed":
+
+| site | what the promotion commit did | what it left saying |
+|---|---|---|
+| `WOTS_TW_ES.ec:1492-1531` | **edited this exact block** — its only change here was `:6542` → `:6598`, a line-number refresh **inside** the sentence "NOTHING IS WIRED HERE, DELIBERATELY" | that sentence, plus "leaving the single missing obligation OPEN as exactly ONE admit" and "The open goal is precisely the T-COLL-RES obligation (Def 11)" |
+| `cert-taint-closure.tsv` | **deleted the four data rows** for chain A | every sentence describing those rows: "the cone's **two** admits", "THE TWO CHAINS" with chain A as an ADMIT, and "WIRING `_Unfolded` … IS THE NAMED REGRESSION this file guards against" |
+| `README.md:118` | untouched | the admit-free replacement "is landed … but **deliberately not wired**" — it *is* wired; `nhchwcoll_hchwpre_msg` is proved from it |
+
+The first row is the one worth keeping. **A citation was carefully maintained inside a
+claim the same commit was making false** — the diff is a *correction* to a sentence that
+should have been deleted. A line-number refresh reads as diligence and is exactly what
+makes the surrounding prose look freshly checked. The second row is the same shape at file
+scope: the data moved, the prose describing the data did not.
+
+All three replaced **at the sentence**, not annotated underneath — the failure this file
+recorded at `GprocChargedQWired.ec:436` was a retracted claim left standing with a
+correction below it. The `Def 11` label is dropped rather than re-cited: it was never
+checked against the definition it names.
+
+**Two things I got wrong, both caught by review rather than by me.**
+
+1. **I re-derived `badenc_is_one` from scratch before discovering it already existed.**
+   Independently, against the current split tree, with a different adversary
+   (module globals rather than free ops) — and it compiled GREEN, converging on the same
+   helper shape, the same losslessness + hoare split, and the same statement. **GPT-5.6
+   found the existing file**; I had not looked in `experiments/wots-badenc/base/` because
+   I was reading the charge as new. This is the fourth recorded instance of publishing
+   into a gap this tree had already filled. The reproduction is kept at
+   `scratch/badenc_replay.ec` as a receipt and is deliberately **not** a closure member:
+   one statement of this fact belongs in the cone, not two.
+2. **I wrote a forward reference to a lemma that did not exist.** While correcting the
+   stale block in `WOTS_TW_ES.ec` I cited ``badenc_replay_pr1 (:3390 ff.)`` — my own
+   in-progress name — as though it were landed. GPT-5.6 flagged it; it now cites
+   `cdrafts-split/BadEncCountermodel.ec::badenc_is_one`.
+
+Kimi K3 independently confirmed the claim and its buildability, and corrected the
+direction of one of my framings; GPT-5.6 additionally corrected "the term is provably 1"
+to its honest existential form — it is 1 **for that adversary under that interpretation**,
+not identically.
+
+**A gate trap worth recording: this gate commits TWO inventory counts and they are
+different numbers.** Run 1 came back RED on one line — `FAIL statement pin file
+truncated` — with everything substantive already green. The cause is that
+`EXPECT_PINS` counts **manifest rows** (1078 → 1101, `op:`-prefixed rows included)
+while `EXPECT_STMTS` counts **top-level statements in the cone files** (993 → 1016).
+I had bumped the second and not the first, and the failure message ("truncated")
+describes a completely different fault from the one that occurred. Both constants now
+carry a comment saying the other exists. Fixing `EXPECT_PINS` edits
+`cert_gate_split.sh`, which is itself inside the hashed set, so the identity moved a
+second time within the hour — both values are in the `cert-identity.tsv` log.
+
+#### Receipt — run 2, GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02
+### PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (c666bc51...)
+statements pinned = 1101/1101 (manifest rows) | coverage 1016/1016 across 46 CONE files
+cone: keys 1563 = 1563 | ROWS 1642 = 1642 | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls executed (unique)=10  expected>=10        (4 of them new, all MUST-FAIL)
+OK   taint containment: closure = 2 lemmas, none of the 7 headline results is in it
+OK   taint controls: pass=11 fail=0
+OK   inputs unchanged across the run (c666bc514cf43c4dc195ebf0ac5f8b43)
+```
+
+**Read `ledger=241` as the point of the run.** A promotion that added a closure member,
+23 pinned statements, four controls and five census rows moved the assumption count by
+**zero**. That is what a countermodel entering the cone should look like: it adds
+*parameters* and *content*, never an assumption.

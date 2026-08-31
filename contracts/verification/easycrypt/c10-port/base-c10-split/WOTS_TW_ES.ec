@@ -1470,8 +1470,13 @@ qed.
 (* downstream OF THE CONCLUSION changes. The cost lands entirely on the   *)
 (* single caller (:6233 in the vendored numbering), which is the forgery  *)
 (* site: M-EUF-GCMA hands it m <> m' and says nothing about codewords.    *)
-(* That gap IS the T-COLL-RES event (Def 11) and must be discharged by a  *)
-(* game hop BEFORE the case split -- case-split-only is UNSOUND.          *)
+(* CLOSED 2026-08-30.  That gap is the ENCODING-COLLISION event.  It is    *)
+(* discharged not by proof but by CHARGING: the caller's conclusion became *)
+(* a disjunction and the collision branch is carried as a named            *)
+(* probability in MEUFGCMA_WOTSTWESNPRF_Charged.  Case-split-only would    *)
+(* still be UNSOUND; that is not what was done.  (Earlier text here named  *)
+(* this "T-COLL-RES (Def 11)" -- dropped, the label was never checked      *)
+(* against the cited definition and does not survive review.)             *)
 (* ===================================================================== *)
 lemma nhchwcoll_hchwpre (ps : pseed) (ad : adrs) (m m' : msgWOTS) (sig sig' : sigWOTS) :
      P m
@@ -1489,45 +1494,56 @@ move: (nchwcoll i _); first by rewrite mem_range.
 by rewrite negb_and ltem_emp.
 qed.
 
-(* ===================================================================== *)
-(* CHAIN-EXPERIMENT BRIDGE. Exposes the ORIGINAL (message-inequality)     *)
-(* interface so the downstream chain can be compiled unchanged, while     *)
-(* leaving the single missing obligation OPEN as exactly ONE admit.       *)
-(*                                                                        *)
-(* Deliberately NOT an injectivity axiom: if any DOWNSTREAM site needs    *)
-(* injectivity it must now FAIL, rather than silently borrowing it from a *)
-(* global axiom. That is the whole point of this run.                     *)
-(*                                                                        *)
-(* The open goal is precisely the T-COLL-RES obligation (Def 11): for a   *)
-(* MANY-TO-ONE encoding, m <> m' does not give encode m <> encode m'.     *)
-(* The real repair discharges it in a game hop BEFORE the case split.     *)
-(* ===================================================================== *)
 (* ==========================================================================
-   THE ADMIT-FREE ROUTE PAST THE GAP ABOVE.  Landed 2026-08-29; proved 2026-08-12
-   in scratch/wots_admit_is_injectivity.ec and kept out of the cone until now, where
-   nothing gate-protected it.
+   THE ADMIT-FREE ROUTE, AND IT IS NOW THE ONLY ROUTE.  Proved 2026-08-12 in
+   scratch/wots_admit_is_injectivity.ec, landed here 2026-08-29 out of the cone,
+   WIRED 2026-08-30 when `nhchwcoll_hchwpre_msg` below was rewritten to call it.
 
-   WHY IT MATTERS.  `nhchwcoll_hchwpre_msg` is not merely unproven -- it is REFUTABLE.
-   `is_chwcoll` (:763) and `is_chwpre` (:808) share the conjunct
+   CORRECTED 2026-08-31.  The block that stood here was written while the admit was
+   still present and was left standing by the promotion commit that removed it.  It
+   said "leaving the single missing obligation OPEN as exactly ONE admit", "The open
+   goal is precisely the T-COLL-RES obligation (Def 11)", and "NOTHING IS WIRED HERE,
+   DELIBERATELY".  All three were false the moment that commit landed.  Replaced at
+   the sentence rather than annotated, because a retracted claim left standing with a
+   correction underneath is this tree's recorded failure mode.
+
+   WHY IT MATTERED.  `nhchwcoll_hchwpre_msg` was not merely unproven -- it was
+   REFUTABLE.  `is_chwcoll` (:763) and `is_chwpre` (:808) share the conjunct
    `BaseW.val em'.[i] < BaseW.val em.[i]`, which under `em = em'` is `x < x`, false at
    every index.  So a collision `encode m = encode m'` makes `!has_chwcoll` HOLD while
-   `has_chwpre` FAILS, for any sig/sig' and independent of ps -- the whole five-hypothesis
-   lemma is false there.  And the missing step it stands in for, encoder injectivity, is
-   IMPOSSIBLE at C10's geometry (:711-725: the largest antichain of {0..7}^43 is
-   2^123.76 < 2^128, and the encoding is deliberately many-to-one).
+   `has_chwpre` FAILS, for any sig/sig' and independent of ps -- the whole
+   five-hypothesis lemma was false there.  And the missing step it stood in for,
+   encoder injectivity, is IMPOSSIBLE at C10's geometry (:711-725: the largest
+   antichain of {0..7}^43 is 2^123.76 < 2^128, and the encoding is deliberately
+   many-to-one).
 
-   SO THE REPAIR IS NOT "DISCHARGE THE ADMIT".  It is: replace it with a DISJUNCTION whose
-   left branch is the BadEnc event, lift that disjunction at the Game4 caller, and charge
-   the branch.  These two lemmas are the first half, and they cost nothing: both are proved
-   from the ALREADY-COMPLETE `nhchwcoll_hchwpre` (:1476), which needs `encode m <> encode m'`
-   as a HYPOTHESIS rather than deriving it.
+   SO THE REPAIR WAS NOT "DISCHARGE THE ADMIT".  It was: replace it with a DISJUNCTION
+   whose left branch is the encoding-collision event, lift that disjunction at the
+   Game4 caller, and CHARGE the branch as a named probability.  The two lemmas below
+   are the first half, and they cost nothing: both are proved from the
+   ALREADY-COMPLETE `nhchwcoll_hchwpre` (:1476), which takes `encode m <> encode m'`
+   as a HYPOTHESIS rather than deriving it.  The second half is
+   `MEUFGCMA_WOTSTWESNPRF_Charged` (:6833).
 
-   NOTHING IS WIRED HERE, DELIBERATELY.  The remaining work -- splitting Game4 before :6598,
-   using the codeword-level lemma only in the unequal-codeword branch, and exporting a
-   B-free bound -- is a separate unit.  Merely wiring the existing `_Unfolded` would be a
-   REGRESSION: it promotes the refutable lemma into the headline.  PHASE 5 exists to catch
-   exactly that, and these two lemmas must stay OUT of its taint closure -- they apply
-   :1476, never :1505.  That is checked, not assumed.
+   WHAT THE CHARGE DOES AND DOES NOT BUY.  It buys admit-freeness and nothing else:
+   the new term `Pr[Game4_WOTSTWES_BadEnc(A) : res /\ BadEncFlag.badenc]` is carried
+   UNREDUCED, exactly as this artifact carries `Pr[M.F.ITSRC10 ..]`.  It is NOT small
+   at this layer -- see `cdrafts-split/BadEncCountermodel.ec::badenc_is_one`, which
+   proves it equals 1 for an explicit replay adversary given any single
+   P-satisfying encoding collision.  (That file was promoted into the closure on
+   2026-08-31; before then it sat in experiments/, which the cone census does not
+   cover.)  Bounding it
+   is where +C seed-withholding is finally the right argument, because one layer up
+   the messages are `ThC ps ad x c` and `encode o ThC ps ad .` is seed-keyed; see the
+   note above `Game4_WOTSTWES_BadEnc` (:3325) and experiments/wots-badenc/RESULT.md
+   step 4.  That is a separate research unit and is NOT attempted here.
+
+   PHASE 5 NOTE.  `EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded` used to be the named
+   regression this file warned about, because wiring it promoted a refutable lemma
+   into the headline.  That warning NO LONGER HAS AN ADDRESSEE: with the admit gone,
+   the whole chain left the taint closure (6 rows -> 2, both now in
+   cdrafts-split/FORS_C_TreePort.ec).  PHASE 5 still guards the closure in both
+   directions; it just no longer guards THIS.
    ========================================================================== *)
 lemma admit_free_caller_split
       (ps : pseed) (ad : adrs) (m m' : msgWOTS) (sig sig' : sigWOTS) :

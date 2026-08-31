@@ -32,3 +32,4 @@ GprocQWired
 DarkSide
 DarkSideC10
 GprocChargedQWired
+BadEncCountermodel

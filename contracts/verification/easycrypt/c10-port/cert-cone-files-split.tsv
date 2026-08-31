@@ -2,7 +2,8 @@
 # Enforced by PHASE 1h (tools/stmt_coverage.py): a file ENTERING or LEAVING the cone is
 # a fatal, human-visible delta.  Without this the coverage check would silently absorb a
 # new cone file by enumerating whatever it found that day.
-# 45 files = the 38 roots + 7 transitively required.
+# 46 files = the 39 roots + 7 transitively required.
+# (BadEncCountermodel.ec added 2026-08-31 -- promoted from experiments/wots-badenc.)
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
 base-c10-split/FORS_ES.ec
@@ -13,6 +14,7 @@ base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca
 base-c10-split/SPHINCS_PLUS.ec
 base-c10-split/TweakableHashFunctions.eca
 base-c10-split/WOTS_TW_ES.ec
+cdrafts-split/BadEncCountermodel.ec
 cdrafts-split/C10DeployedCapstone.ec
 cdrafts-split/C10DeployedGeometry.ec
 cdrafts-split/C10DeployedInstance.ec

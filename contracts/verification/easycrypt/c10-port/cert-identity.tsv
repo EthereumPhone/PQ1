@@ -1101,5 +1101,37 @@
 #   Updated to the live 242/217/345/389/1193 with a dated note; the superseded
 #   value stays recoverable in git and in the dated entries below it.
 # tree	hash
-split	534572bd7147c4f0cc1227d5c2ccaa6b
+# 2026-08-31.  split 534572bd7147c4f0cc1227d5c2ccaa6b -> c666bc514cf43c4dc195ebf0ac5f8b43.
+#   PROMOTION OF cdrafts-split/BadEncCountermodel.ec INTO THE CLOSURE, plus the
+#   stale-claim repairs the 2026-08-30 promotion commit left behind.
+#   The countermodel was proved 2026-08-12 and left under experiments/, which the
+#   cone census DOES NOT COVER -- so the one fact that stops the charged BadEnc term
+#   being read as a BOUND was invisible to every gate.  Inputs that moved:
+#     + cdrafts-split/BadEncCountermodel.ec        (new closure member, 0 admits)
+#     + scratch/badenc_ctl{A,B,C,D}.ec             (4 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                      (34 -> 35 roots)
+#     ~ cert-cone-files-split.tsv                  (45 -> 46 files)
+#     ~ cert-controls-split.tsv                    (6 -> 10 controls)
+#     ~ cert-statements-split.tsv                  (+23 pins)
+#     ~ cert-baseline-split.tsv                    (re-baselined; see its header)
+#     ~ cert-taint-closure.tsv                     (header described TWO chains; one left
+#                                                   on 2026-08-30 and the prose did not)
+#     ~ cert_gate_split.sh                         (EXPECT_STMTS 993 -> 1016, controls >=10)
+#   LEDGER UNCHANGED AT 241 -- the pre-set criterion.  The countermodel adds three
+#   abstract-op PARAMETER rows (cm, cm', wad0 -- the collision is a HYPOTHESIS and the
+#   census is where that belongs), one definition and one module.  Nothing removed.
+#   Value taken from the gate's own `### INPUTS_SHA256` line, not recomputed by hand:
+#   that hand-recomputation failed three times on 2026-08-25 (collation + stale file list).
+#
+#   SECOND-PASS NOTE.  The first value recorded here (a536067d...) was superseded
+#   within the hour: run 1 came back RED on the single line
+#   `FAIL statement pin file truncated`, because this gate commits TWO counts and
+#   they are different numbers -- EXPECT_PINS counts MANIFEST ROWS (1078 -> 1101)
+#   and EXPECT_STMTS counts TOP-LEVEL STATEMENTS (993 -> 1016).  I had bumped only
+#   the second.  Fixing EXPECT_PINS edits cert_gate_split.sh, which is itself in the
+#   hashed set, so the identity moved again.  Everything else in run 1 was already
+#   green: ledger=241, cone added=0 removed=0, coverage 1016/1016, controls 10/10
+#   (all four new countermodel controls discriminated), taint closure 2.
+#
+split	c666bc514cf43c4dc195ebf0ac5f8b43
 fork	9c2d21280c84d52c30b22111151f1135
