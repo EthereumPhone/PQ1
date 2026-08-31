@@ -426,14 +426,46 @@ fn positive_usb_pa11_pa12_af10() {
 
 #[test]
 fn positive_usb_ns_pin_classification_only_usb_and_tcpp03() {
-    // The ONLY pins that get marked NS via GPIOA SECCFGR are PA11/12/15.
-    assert!(USB_HW_SRC.contains(
-        "REG.gpioa_seccfgr.clear_bits((1 << 11) | (1 << 12) | (1 << 15)); // PA11,12,15 = NS"
-    ));
-    // The ONLY pins that get marked NS via GPIOB SECCFGR are PB5/PB15.
-    assert!(USB_HW_SRC.contains(
-        "REG.gpiob_seccfgr.clear_bits((1 << 5) | (1 << 15)); // PB5,15 = NS"
-    ));
+    // This gate used to REQUIRE the literal statements
+    //   gpioa_seccfgr.clear_bits((1 << 11) | (1 << 12) | (1 << 15))
+    //   gpiob_seccfgr.clear_bits((1 << 5) | (1 << 15))
+    // i.e. it encoded "PA15, PB5 and PB15 MUST be non-secure" as a positive
+    // requirement. On pq1 those three pins are SE_RST, SE1_EN and LCM_EN, so
+    // the gate actively obstructed the correct fix. The mask is now a board
+    // constant and this asserts SHAPE here, VALUES per board below.
+    //
+    // NOTE: a shape assertion is not a value assertion. On its own this says
+    // nothing about which pins are handed over — the value gates are the two
+    // board-file assertions below PLUS the `const assert!`s in board/mod.rs,
+    // and neither alone is sufficient.
+    assert!(USB_HW_SRC.contains("REG.gpioa_seccfgr.clear_bits(board::USB_NS_PINS_A);"));
+    assert!(USB_HW_SRC.contains("REG.gpiob_seccfgr.clear_bits(board::USB_NS_PINS_B);"));
+    // No literal mask may be re-inlined.
+    assert_eq!(
+        USB_HW_SRC.matches("board::USB_NS_PINS_").count(),
+        2,
+        "usb_hw must take both NS masks from the board map, exactly once each"
+    );
+
+    // VALUES, per board — both, so neither loses coverage. Full statements
+    // with semicolons so a second cfg'd definition cannot hide.
+    assert!(BOARD_IOTA2_SRC
+        .contains("pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12) | (1 << 15);"));
+    assert!(BOARD_IOTA2_SRC.contains("pub const USB_NS_PINS_B: u32 = (1 << 5) | (1 << 15);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_B: u32 = 0;"));
+    for src in [BOARD_IOTA2_SRC, BOARD_PQ1_SRC] {
+        assert_eq!(
+            src.matches("pub const USB_NS_PINS_").count(),
+            2,
+            "each board defines exactly one A mask and one B mask"
+        );
+    }
+
+    // The pq1 masks must not contain the three pins that are its SE/display
+    // control lines — stated explicitly because this is the whole point.
+    assert!(!BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12) | (1 << 15);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_B: u32 = 0;"));
 }
 
 #[test]
@@ -986,51 +1018,62 @@ fn negative_buttons_does_not_use_ns_aliases() {
 
 #[test]
 fn negative_usb_must_not_mark_i2c1_pins_pb8_pb9_ns() {
-    // The expected GPIOB SECCFGR clear pattern is exactly `(1 << 5) | (1 << 15)`.
-    // Any extra bit — especially PB8 or PB9 — would expose the SE050 I2C1 bus.
-    assert!(
-        USB_HW_SRC.contains("REG.gpiob_seccfgr.clear_bits((1 << 5) | (1 << 15))"),
-        "usb_hw::init must clear GPIOB SECCFGR bits exactly PB5 and PB15",
-    );
+    // The exactly-once count is the anti-second-call gate and is KEPT
+    // verbatim: a second clear_bits call is how extra pins would leak to NS,
+    // and that property survives the move to a symbolic mask unchanged.
     let gpiob_seccfgr_calls = USB_HW_SRC.matches("gpiob_seccfgr.clear_bits").count();
     assert_eq!(
         gpiob_seccfgr_calls, 1,
         "usb_hw::init must call gpiob_seccfgr.clear_bits exactly once (extra calls would expose SE buses to NS)",
     );
-    // Pin-by-pin reject: scan for any clear-bits expression containing PB8/PB9/PB12-14.
-    for pin in [8u32, 9, 12, 13, 14] {
-        let needle = format!("(1 << {pin})");
-        // Allow `(1 << 14)` if the surrounding line is a clock-enable on AHB2 (USB OTG FS = bit 14),
-        // which is unambiguously a different register. Reject only if it appears within a
-        // *_seccfgr.clear_bits call.
-        let pattern = format!("seccfgr.clear_bits({needle})");
-        assert!(
-            !USB_HW_SRC.contains(&pattern),
-            "usb_hw must NOT mark PB{pin} as NS — it would expose a secure bus (PB8/9 = SE050 I2C1, PB12-14 = SPI2)",
-        );
-    }
+
+    // The per-pin reject loop that used to live here has been DELETED, not
+    // relaxed, because it never worked. It built the needle
+    //     format!("seccfgr.clear_bits({}
+    // ...)", "(1 << 8)")  ->  `seccfgr.clear_bits((1 << 8))`
+    // which requires that term to be the ENTIRE argument. Against any real
+    // multi-pin mask the next characters are " |", so it never matched.
+    // Verified by running its own logic against a line deliberately marking
+    // PB8 non-secure: it caught nothing. It had been green since it was
+    // written while testing nothing, and its panic message claimed to prevent
+    // exactly the breach it could not see.
+    //
+    // Its replacement is `board::ns_forbidden_mask` + the `const assert!`s in
+    // board/mod.rs, which are strictly stronger: they are value checks rather
+    // than text checks, they derive from the same constants the drivers
+    // consume, they fire on every hardware build of either board, and they
+    // cover PB6/PB7 — the SE050's own I2C4 bus on pq1 — which this loop never
+    // did, because it was written when both secure elements shared I2C1.
+    //
+    // Same migration as `negative_buttons_must_not_touch_swd_pins_pa13_pa14`
+    // in this file. Do NOT reintroduce a symbolic look-alike here: a
+    // `contains("clear_bits(SOME_MASK)")` plus the surviving count would be
+    // fully green while testing nothing, which is the specific trap.
+    assert!(
+        BOARD_MOD_SRC.contains("pub const fn ns_forbidden_mask(port: u32) -> u32 {"),
+        "the value gate for the NS mask must exist in the board layer"
+    );
+    assert!(BOARD_MOD_SRC.contains("USB_NS_PINS_B & ns_forbidden_mask(GPIOB_S) == 0,"));
+    // ...and it must fold in the secure-element buses, which is what covers
+    // PB8/PB9 on both boards and PB6/PB7 on pq1.
+    assert!(BOARD_MOD_SRC.contains("mask |= (1 << bus.scl_pin) | (1 << bus.sda_pin);"));
 }
 
 #[test]
 fn negative_usb_must_not_mark_arbitrary_gpioa_pins_ns() {
-    // The expected GPIOA SECCFGR clear pattern is exactly PA11/PA12/PA15.
-    assert!(
-        USB_HW_SRC.contains("REG.gpioa_seccfgr.clear_bits((1 << 11) | (1 << 12) | (1 << 15))"),
-        "usb_hw::init must clear GPIOA SECCFGR bits exactly PA11, PA12, PA15",
-    );
+    // Exactly-once count kept verbatim — see the GPIOB twin for why, and for
+    // why the per-pin reject loop that used to follow it was deleted rather
+    // than relaxed (it was structurally incapable of matching).
     let gpioa_seccfgr_calls = USB_HW_SRC.matches("gpioa_seccfgr.clear_bits").count();
     assert_eq!(
         gpioa_seccfgr_calls, 1,
-        "usb_hw::init must call gpioa_seccfgr.clear_bits exactly once",
+        "usb_hw::init must call gpioa_seccfgr.clear_bits exactly once (extra calls would expose secure pins to NS)",
     );
-    // Pin-by-pin reject for PA8 (RIGHT button), PA9 (UART TX), PA13/PA14 (SWD).
-    for pin in [8u32, 9, 13, 14] {
-        let pattern = format!("gpioa_seccfgr.clear_bits((1 << {pin}))");
-        assert!(
-            !USB_HW_SRC.contains(&pattern),
-            "usb_hw must NOT mark PA{pin} as NS — it would expose a secure peripheral pin",
-        );
-    }
+    assert!(BOARD_MOD_SRC.contains("USB_NS_PINS_A & ns_forbidden_mask(GPIOA_S) == 0,"));
+    // SWDIO/SWCLK are in the forbidden table by name, so a mask containing
+    // them fails the build rather than this test.
+    assert!(BOARD_MOD_SRC.contains("(Some((GPIOA_S, 13)), \"SWDIO\")"));
+    assert!(BOARD_MOD_SRC.contains("(Some((GPIOA_S, 14)), \"SWCLK\")"));
 }
 
 // ═════════════════════════════════════════════════════════════════════

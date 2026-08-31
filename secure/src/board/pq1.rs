@@ -290,6 +290,23 @@ pub const OLED_HEIGHT_PX: usize = 64;
 pub const OLED_SCL: Option<(u32, u32)> = Some((GPIOA_S, 2));
 pub const OLED_SDA: Option<(u32, u32)> = Some((GPIOA_S, 3));
 
+/// GPIOA / GPIOB pins this board's USB front end hands to the NON-SECURE
+/// world via `GPIOx_SECCFGR`. Consumed by `hw::usb_hw::init`; checked against
+/// this board's reserved lines by the `const assert!`s in `super`.
+///
+/// **Only USB D-/D+.** iota2 additionally hands over PA15, PB5 and PB15 for
+/// its UCPD CC lines and TCPP03 enable. On this board those three pins are
+/// `SE_RST`, `SE1_EN` and `LCM_EN` — both secure elements' control lines and
+/// the trusted display's backlight — so handing them to NS is a direct
+/// invariant #4 breach. There is nothing to remap them to either: the AW35602
+/// owns CC and orientation, and no CC line reaches the MCU.
+///
+/// This is a strict SUBSET of the set iota2 was validated with, on the same
+/// die, for the same peripheral — so it cannot introduce a new hazard, only
+/// (at worst) fail to enumerate, which is testable.
+pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12);
+pub const USB_NS_PINS_B: u32 = 0;
+
 /// `FLAGB` — PB10, the AW35602 USB port-protection fault flag (input).
 /// Nothing reads it today.
 pub const USB_FAULT_FLAG: Option<(u32, u32)> = Some((GPIOB_S, 10));
@@ -300,6 +317,20 @@ pub const USB_VBUS_SENSE: Option<(u32, u32)> = Some((GPIOA_S, 9));
 /// exist here; PB3 (`SWO`) is the repoint — it is already on the 10-pin
 /// debug header, is unused by the firmware, and is dead at RDP-2.
 pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOB_S, 3));
+
+/// Board-specific pins that must never reach the non-secure world, beyond the
+/// ones `super` derives from the shared pin map.
+///
+/// Written as references to the existing named constants, never as fresh
+/// literals, so this table tracks the pin map instead of duplicating it.
+pub const EXTRA_RESERVED_PINS: &[(Option<(u32, u32)>, &str)] = &[
+    (RGB_EN, "RGB LED driver enable"),
+    (Some((AUX_I2C_PORT, AUX_I2C_SCL_PIN)), "I2C2 SCL (backlight + RGB drivers)"),
+    (Some((AUX_I2C_PORT, AUX_I2C_SDA_PIN)), "I2C2 SDA (backlight + RGB drivers)"),
+    (USB_FAULT_FLAG, "AW35602 fault flag (FLAGB)"),
+    (USB_VBUS_SENSE, "USB VBUS sense"),
+    (SCA_TRIGGER, "side-channel scope trigger"),
+];
 
 /// Pins bonded but unassigned, available for future use.
 pub const FREE_PINS: &[(u32, u32)] = &[(GPIOA_S, 6), (GPIOA_S, 10), (GPIOC_S, 13)];

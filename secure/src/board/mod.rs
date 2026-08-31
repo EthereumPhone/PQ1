@@ -243,3 +243,130 @@ pub struct SeI2cBus {
 /// their reset clock-source setting (`RCC_CCIPR1` `I2C1SEL`/`I2C4SEL` = 00),
 /// and `hw::rcc::init` leaves the APB1 prescaler at /1, so both see 160 MHz.
 pub const I2C_TIMING_400KHZ: u32 = 0x1090_378F;
+
+// ---------------------------------------------------------------------------
+// Non-secure hand-off guard
+// ---------------------------------------------------------------------------
+//
+// `hw::usb_hw::init` clears bits in `GPIOx_SECCFGR`, handing those pads to the
+// non-secure world. Which pads is a board fact (`USB_NS_PINS_A`/`_B`), and
+// getting it wrong has **no functional symptom** — the secure world keeps
+// working either way; only NS's reach changes. So the value is checked here,
+// at compile time, against the board's own pin map.
+//
+// This lives in the board layer rather than in `hw::usb_hw` on purpose: this
+// module is gated on `stm32u585` alone, whereas `hw::usb_hw` also needs the
+// `usb` feature. Putting the check here fires it on EVERY hardware build of
+// either board, including ones with no USB at all.
+//
+// It replaces a per-pin source-text reject loop in `hw_io_under_test` that was
+// **structurally incapable of firing**: its needle was
+// `seccfgr.clear_bits((1 << 8))`, which requires that term to be the entire
+// argument, so against any real multi-pin mask — where the next characters are
+// ` |` — it never matched. Verified by reproducing its own logic against a
+// deliberately hostile line: it caught nothing. That gate had been green since
+// it was written while testing nothing, and its panic message claimed to
+// prevent exactly the breach it could not see.
+//
+// The idiom (table -> `const fn` fold -> exact `const assert!`) follows
+// `hw::buttons`'s pin-collision guard, which in turn follows the
+// exact-equality asserts in `sau::configure_gtzc`.
+
+/// Pins that must never be handed to the non-secure world, with why.
+///
+/// Every entry references the SAME constant a driver consumes, so the table
+/// tracks the pin map rather than duplicating it. `None` entries — a line this
+/// board does not have — fold away.
+const NS_FORBIDDEN: &[(Option<(u32, u32)>, &str)] = &[
+    (SE_RAIL_EN, "SE supply enable (LDO2_EN)"),
+    (OPTIGA_RST, "OPTIGA reset (SE_RST)"),
+    (SE050_EN, "SE050 enable (SE1_EN)"),
+    (LCD_BACKLIGHT_EN, "trusted-display backlight (LCM_EN)"),
+    (LCD_TE, "trusted-display tearing-effect input"),
+    (Some((LCD_SPI_PORT, LCD_CS_PIN)), "trusted-display SPI CS"),
+    (Some((LCD_SPI_PORT, LCD_SCK_PIN)), "trusted-display SPI SCK"),
+    (Some((LCD_SPI_PORT, LCD_MOSI_PIN)), "trusted-display SPI MOSI"),
+    (Some((LCD_DC_PORT, LCD_DC_PIN)), "trusted-display D/C"),
+    (Some((LCD_RST_PORT, LCD_RST_PIN)), "trusted-display reset"),
+    (
+        Some((CONSOLE_TX_PORT, CONSOLE_TX_PIN)),
+        "debug console UART TX",
+    ),
+    (Some((BTN_LEFT_PORT, BTN_LEFT_PIN)), "trusted-UI LEFT button"),
+    (
+        Some((BTN_RIGHT_PORT, BTN_RIGHT_PIN)),
+        "trusted-UI RIGHT button",
+    ),
+    (Some((GPIOA_S, 13)), "SWDIO"),
+    (Some((GPIOA_S, 14)), "SWCLK"),
+];
+
+/// Every pin on `port` that must stay secure, as a bit mask.
+///
+/// Folds three sources: the table above, every secure-element I2C bus (which
+/// is what covers PB8/PB9 on both boards **and PB6/PB7 — the SE050's own I2C4
+/// bus on pq1 — that no previous gate covered at all**), and the board's own
+/// extras.
+#[must_use]
+pub const fn ns_forbidden_mask(port: u32) -> u32 {
+    let mut mask = 0u32;
+
+    let mut i = 0;
+    while i < NS_FORBIDDEN.len() {
+        if let Some((p, pin)) = NS_FORBIDDEN[i].0 {
+            if p == port {
+                mask |= 1 << pin;
+            }
+        }
+        i += 1;
+    }
+
+    let mut b = 0;
+    while b < SE_I2C_BUSES.len() {
+        let bus = &SE_I2C_BUSES[b];
+        if bus.port == port {
+            mask |= (1 << bus.scl_pin) | (1 << bus.sda_pin);
+        }
+        b += 1;
+    }
+
+    let mut e = 0;
+    while e < EXTRA_RESERVED_PINS.len() {
+        if let Some((p, pin)) = EXTRA_RESERVED_PINS[e].0 {
+            if p == port {
+                mask |= 1 << pin;
+            }
+        }
+        e += 1;
+    }
+
+    mask
+}
+
+const _: () = assert!(
+    USB_NS_PINS_A & ns_forbidden_mask(GPIOA_S) == 0,
+    "USB_NS_PINS_A hands a reserved line to the non-secure world. On pq1 the \
+     classic case is PA15 — SE_RST, the OPTIGA's reset — which usb_hw also puts \
+     into ANALOG mode. See NS_FORBIDDEN in board/mod.rs for the full set and \
+     why each is reserved."
+);
+const _: () = assert!(
+    USB_NS_PINS_B & ns_forbidden_mask(GPIOB_S) == 0,
+    "USB_NS_PINS_B hands a reserved line to the non-secure world. On pq1 the \
+     classic cases are PB5 (SE1_EN, the SE050 enable) and PB15 (LCM_EN, the \
+     trusted display's backlight). See NS_FORBIDDEN in board/mod.rs."
+);
+
+/// Functional floor: USB D-/D+ must be in the mask on every board.
+///
+/// Deliberately separate from the guard above so the two can be reasoned about
+/// independently — this one says "USB will work", those say "nothing else
+/// leaks". Note the justification in `hw::usb_hw` for needing NS attribution
+/// at all is questionable (RM0456's gate is one-directional: a non-secure
+/// peripheral can reach a secure pin), but PA11/PA12 is the set iota2 was
+/// empirically validated with, and narrowing it further is an experiment, not
+/// a port.
+const _: () = assert!(
+    USB_NS_PINS_A & ((1 << 11) | (1 << 12)) == (1 << 11) | (1 << 12),
+    "USB D-/D+ (PA11/PA12) must be in the non-secure mask"
+);

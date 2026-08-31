@@ -3891,13 +3891,25 @@ fn main() -> ! {
         }
     }
 
-    // Initialize USB OTG FS hardware (clocks, GPIO, UCPD) when targeting
-    // real hardware with USB enabled.  Must run after rcc::init() and
-    // sau::init() (GTZC has marked USB OTG as NS by this point).
+    // Initialize USB OTG FS hardware when targeting real hardware with USB
+    // enabled.  Must run after rcc::init() and sau::init() (GTZC has marked
+    // USB OTG as NS by this point).
+    //
+    // WHAT gets initialized is board-dependent, so the log line is too: iota2
+    // additionally brings up UCPD1 CC detection and the TCPP03-M20 enable,
+    // neither of which exists on pq1 (no CC line reaches the MCU there, and
+    // port protection is an AW35602 strapped on-board). See `hw::usb_hw::init`.
     #[cfg(all(feature = "stm32u585", feature = "usb"))]
     unsafe {
         hw::usb_hw::init();
-        secure_log!("[S] USB OTG FS hardware initialized (GPIO, UCPD, VDDUSB)");
+        secure_log!(
+            "[S] USB OTG FS hardware initialized ({})",
+            if cfg!(feature = "board-pq1") {
+                "GPIO, VDDUSB"
+            } else {
+                "GPIO, UCPD, TCPP03, VDDUSB"
+            }
+        );
     }
 
     // The mailbox transport (QEMU) needs its CMD/RESULT/DONE words

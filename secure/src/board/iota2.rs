@@ -150,6 +150,32 @@ pub const SE050_EN: Option<(u32, u32)> = None;
 pub const SE_RAIL_EN: Option<(u32, u32)> = None;
 
 // ---------------------------------------------------------------------------
+// USB front end
+// ---------------------------------------------------------------------------
+
+/// GPIOA / GPIOB pins this board's USB front end hands to the NON-SECURE
+/// world via `GPIOx_SECCFGR`. Consumed by `hw::usb_hw::init`; checked against
+/// this board's reserved lines by the `const assert!`s in `super`.
+///
+/// **Frozen at the five bits this board was validated with.** A security
+/// review found PA15 / PB5 / PB15 are almost certainly unnecessary here too —
+/// PB5 is driven only from secure code and PA15/PB15 exist solely for UCPD CC
+/// — but narrowing them is a behaviour change on the working bench board and
+/// must be landed separately, bench-verified, not smuggled in on a port for a
+/// different board.
+pub const USB_NS_PINS_A: u32 = (1 << 11) | (1 << 12) | (1 << 15);
+pub const USB_NS_PINS_B: u32 = (1 << 5) | (1 << 15);
+
+/// No port-protection fault flag is routed to the MCU on this board.
+pub const USB_FAULT_FLAG: Option<(u32, u32)> = None;
+/// VBUS is not routed to the MCU here; NS bypasses VBUS sensing anyway.
+pub const USB_VBUS_SENSE: Option<(u32, u32)> = None;
+
+/// Board-specific pins that must never reach the non-secure world, beyond the
+/// ones `super` derives from the shared pin map. Nothing extra on this board.
+pub const EXTRA_RESERVED_PINS: &[(Option<(u32, u32)>, &str)] = &[];
+
+// ---------------------------------------------------------------------------
 // Buttons — active-low, internal pull-up
 // ---------------------------------------------------------------------------
 
