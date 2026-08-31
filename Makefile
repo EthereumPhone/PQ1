@@ -1300,7 +1300,7 @@ se050-admin-wipe-e2e:
 #                                    SE050_STRESS_ONLY filter)
 # `make se050-stress-list`         — host-side catalog dump (no flash)
 
-SE050_STRESS_FEATURES = se050-stress,ui-lcd,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,usb
+SE050_STRESS_FEATURES = se050-stress,ui-lcd,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,usb,$(BOARD_FEATURE)
 
 # Cache-bust the secure-crate build whenever the SE050_STRESS_* env vars
 # change. cargo doesn't include env vars in its fingerprint, so without
@@ -2402,7 +2402,7 @@ _repro_one:
 # wizard), so the earlier "bhk yields zero-keyed derivations without phase-2B"
 # caveat no longer applies. It is not correct-to-ship evidence: handoff,
 # recovery/KVN, E140 ordering, and silicon gates remain open.
-RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock
+RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,$(BOARD_FEATURE)
 
 # MED-2 ship gate (audits/tz-tamper-debug-20260611). Resolve the ACTUAL feature
 # set cargo would compile for the shipping image and fail if any never-ship
@@ -2458,7 +2458,7 @@ override PROD_REQUIRED := mode-production stm32u585 se050 optiga-trust-m dual-se
 # exact actor/order relative to the final pairing rotation is OPEN, so this
 # feature list grants no authority to flash or ratchet hardware. See
 # secure/Cargo.toml and docs/archive/production-todo-retired-2026-07-19.md.
-override PROD_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock
+override PROD_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,$(BOARD_FEATURE)
 
 # Exact machine-readable provenance string emitted by dbgen only after a real
 # ERC-8176 EAS verification implementation has authenticated every leaf.
@@ -3670,7 +3670,7 @@ decoy-flicker-lcd-hw:
 # not passing component tests. Communication and button tests are required.
 # Keep these feature lists exact and synchronized with the machine-readable
 # receipt emitted by tools/factory-prodtest-runner.py.
-override PRODTEST_SECURE_FEATURES := prodtest,dev-testkey,saes-dhuk
+override PRODTEST_SECURE_FEATURES := prodtest,dev-testkey,saes-dhuk,$(BOARD_FEATURE)
 override PRODTEST_NONSECURE_FEATURES := stm32u585,usb,prodtest
 #
 # Use this target to validate the prodtest build compiles cleanly;

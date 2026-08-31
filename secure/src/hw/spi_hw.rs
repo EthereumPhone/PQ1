@@ -21,6 +21,35 @@
 //! secure (no GTZC/SECCFGR changes) — the non-secure world never touches
 //! the trusted display's bus.
 
+// ---------------------------------------------------------------------------
+// Board fence — this driver is `iota2`-only until the pq1 LCD port lands.
+// ---------------------------------------------------------------------------
+//
+// This file has NO `board::` references: it hardcodes SPI2 on PB12-PB15, or
+// SPI1 on PE12-PE15 under `spi1-arduino`. Both are wrong on pq1, and the PB
+// variant is actively harmful there — PB12 is `RGB_EN`, PB13/PB14 are the I2C2
+// lines to the backlight and RGB LED drivers, and PB15 is `LCM_EN`. Driving
+// those as SPI would fight three other peripherals. (The PE variant is merely
+// inert: port E is not bonded on the 48-pin package.)
+//
+// pq1's LCD is SPI1 on PA4 (CS) / PA5 (SCK) / PA7 (MOSI) with no MISO, so the
+// pins are neither contiguous nor on the same port as either existing variant
+// — see `board::LCD_*`. Porting is a real change, not a base-address swap.
+//
+// This fence is deliberately added at the same time as the board-selection
+// rule in `board/mod.rs` became mandatory-explicit. Before that, `prodtest`
+// (which implies `ui-lcd`) never carried `board-pq1`, so this file's hazard
+// was hidden behind a build that silently claimed to be iota2. Making the
+// board explicit turns that into a compile error here rather than four
+// silently-wrong pins on the bench.
+#[cfg(feature = "board-pq1")]
+compile_error!(
+    "hw/spi_hw.rs still uses the iota2 pin map and is unsafe on pq1: its SPI2 variant \
+     drives PB12-PB15, which on pq1 are RGB_EN, the I2C2 bus to the backlight/RGB LED \
+     drivers, and LCM_EN. pq1's LCD is SPI1 on PA4/PA5/PA7 (no MISO) — see board::LCD_*. \
+     Port the pins before enabling `ui-lcd` on pq1."
+);
+
 use crate::hw::mmio::Reg32;
 
 // ---------------------------------------------------------------------------

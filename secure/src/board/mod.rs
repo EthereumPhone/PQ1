@@ -24,21 +24,51 @@
 //!
 //! ## Selection
 //!
-//! `board-pq1` opts in; anything else gets `iota2`. This is deliberate:
-//! `secure/Cargo.toml` has `default = []` and every one of the ~200
-//! Makefile recipes passes an explicit `--features` list, so making
-//! `iota2` the *absence* of `board-pq1` keeps every existing bench flow
-//! byte-identical instead of requiring 200 edits. `board-iota2` still
-//! exists as an explicit, self-documenting no-op for recipes that want to
-//! name their board, and selecting both is a hard error.
+//! **Every `stm32u585` build must name its board.** `board-pq1` selects pq1,
+//! `board-iota2` selects the dev board, neither is a compile error, and both
+//! is a compile error.
+//!
+//! That mandatory-explicit rule replaced an earlier "opt-in to pq1" design in
+//! which `board-iota2` was an inert no-op and the *absence* of `board-pq1`
+//! meant iota2. The intent was to avoid editing ~200 recipes, and it worked
+//! for the recipes that go through `$(FEATURES)`. It failed for four that
+//! hardcode their own feature list: `make build-hw-prodtest BOARD=pq1`
+//! produced `--features prodtest,dev-testkey,saes-dhuk` — no board — so this
+//! module silently selected the **iota2 pin map for pq1 silicon**, and every
+//! `#[cfg(feature = "board-pq1")] compile_error!` fence (`hw/usb_hw.rs`,
+//! `hw/buttons.rs`, `hw/spi_hw.rs`) went quiet at the same moment, because a
+//! fence keyed on a feature cannot fire when that feature is absent.
+//!
+//! `prodtest` implies `usb`, `ui-lcd` and `gpio-buttons`, and the prodtest
+//! boot path calls `hw::usb_hw::init()` — so the *factory* flow was the one
+//! that reached the hazard. The lesson is worth keeping: an opt-in selector
+//! makes "forgot to choose" indistinguishable from a valid choice, and every
+//! guard downstream inherits that blind spot.
 //!
 //! Build with `make <target> BOARD=pq1`, which sets both the cargo
 //! feature and the probe-rs chip name.
 
 #[cfg(all(feature = "board-iota2", feature = "board-pq1"))]
 compile_error!(
-    "board-iota2 and board-pq1 are mutually exclusive — pick exactly one \
-     (or neither, which selects iota2). Use `make <target> BOARD=pq1`."
+    "board-iota2 and board-pq1 are mutually exclusive — pick exactly one. \
+     Use `make <target> BOARD=iota2|pq1`."
+);
+
+// A build that names no board is the dangerous case, not a convenience: it
+// silently gets the iota2 pin map AND silences every board-keyed fence at the
+// same time. Refuse it.
+#[cfg(all(
+    feature = "stm32u585",
+    not(feature = "board-iota2"),
+    not(feature = "board-pq1")
+))]
+compile_error!(
+    "every stm32u585 build must name its board: pass `board-iota2` or `board-pq1`. \
+     `make <target> BOARD=iota2|pq1` does this for recipes that build their feature \
+     list from $(FEATURES); a recipe with a HARDCODED --features list must append \
+     $(BOARD_FEATURE) itself. Without a board this module defaults to the iota2 pin \
+     map and every `#[cfg(feature = \"board-pq1\")]` fence goes silent — which is how \
+     `build-hw-prodtest BOARD=pq1` used to compile iota2 pins onto pq1 silicon."
 );
 
 #[cfg(feature = "board-pq1")]
