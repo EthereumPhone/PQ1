@@ -49,8 +49,18 @@ const GPIOA_S: u32 = 0x5202_0000;
 const GPIOB_S: u32 = 0x5202_0400;
 
 // ---------------------------------------------------------------------------
-// UCPD1 registers — secure alias (APB1 peripherals are secure with TZEN=1;
-// writes via NS alias 0x4000_xxxx are silently ignored).
+// UCPD1 registers — secure alias.
+//
+// This block used to claim "APB1 peripherals are secure with TZEN=1; writes via
+// NS alias 0x4000_xxxx are silently ignored". That was false, and it was the
+// kind of false that reads as a guarantee: TZEN=1 secures GPIO by default, but
+// APB peripheral attribution belongs to GTZC TZSC, and UCPD1's bit (SECCFGR1
+// bit 19) was never in `sau::configure_gtzc`'s image — so the NS alias was
+// live. It is set now, on both boards, and pinned by the exact-equality asserts
+// in `sau.rs`; see the rationale on `SECCFGR1_UCPD1_BIT` there for why pq1
+// cares even though it compiles `init_ucpd` out (PA15/PB15 are SE_RST and
+// LCM_EN on that board, and UCPD1 is a second handle on those pads that
+// GPIOx_SECCFGR does not cover).
 // ---------------------------------------------------------------------------
 const UCPD1: u32 = 0x5000_DC00;
 

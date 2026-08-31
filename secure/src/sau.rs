@@ -282,6 +282,37 @@ mod stm32 {
     #[cfg(feature = "board-pq1")]
     const SECCFGR1_I2C4_BIT: u32 = 1 << 16;
 
+    // UCPD1 (bit 19, `GTZC_CFGR1_UCPD1_Pos` — CMSIS stm32u585xx.h:20063).
+    //
+    // Secured on BOTH boards, for two different reasons.
+    //
+    // On `iota2` UCPD1 is driven from the secure world at boot (`hw::usb_hw::
+    // init_ucpd`, Type-C CC detection) and never touched again; NS has no
+    // business there. That file used to *assert* this was already the case —
+    // "APB1 peripherals are secure with TZEN=1; writes via NS alias are
+    // silently ignored" — which is false. TZEN=1 secures GPIO by default;
+    // APB peripheral attribution is GTZC's, and bit 19 was never set. The
+    // comment claimed a guarantee this register did not deliver.
+    //
+    // On `pq1` it matters more, and in a way no GPIO gate can see. That board
+    // routes NO CC line to the MCU, so `init_ucpd` is compiled out — but the
+    // pads UCPD1 owns are still physically wired to something: PA15 is
+    // `SE_RST`, the OPTIGA's reset, and PB15 is `LCM_EN`, the trusted
+    // display's backlight. `board::ns_forbidden_mask` keeps those two pins out
+    // of the USB non-secure mask, but that guards `GPIOx_SECCFGR` only. An
+    // NS-reachable UCPD1 is a second, independent handle on the same two pads
+    // via the CC analog front-end and the dead-battery Rd, underneath the
+    // layer that assert protects. ST's HAL also documents `PWR_UCPDR` as
+    // secure only when UCPD1 is secure in GTZC, so this bit gates the
+    // dead-battery control too.
+    //
+    // Whether that analog path can pull a secure GPIO output hard enough to
+    // actually reset the OPTIGA is NOT established — it needs RM0456 plus a
+    // scope on pq1 silicon. This closes the attribution hole regardless,
+    // because the cost is one bit and NS has no legitimate use for UCPD1 on
+    // either board (`grep -r UCPD nonsecure/` is empty).
+    const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;
+
     // ---- SECCFGR2 (APB2) — SPI1 (trusted display) SECURE (finding F1) ----
     // Bit position per `GTZC_CFGR2_SPI1_Pos` in CMSIS `stm32u585xx.h` (= 1).
     //
@@ -308,7 +339,8 @@ mod stm32 {
     //   lives in NS; pulling USB control into the secure world would
     //   require re-architecting transport, which is way out of scope.
     //   GPIO security (PA11/PA12 = D+/D-) is governed separately by
-    //   GPIOA_SECCFGR; UCPD1 handshake is done from secure world at
+    //   GPIOA_SECCFGR; UCPD1 handshake is done from secure world at (iota2 only — pq1 routes no
+    //   CC line to the MCU and compiles that path out entirely)
     //   boot and never touched again.
     // - AES (bit 11): no current consumer (we use SAES); marked
     //   SECURE defensively so a stale NS-side AES driver can't
@@ -435,24 +467,27 @@ mod stm32 {
         #[cfg(not(feature = "board-pq1"))]
         const SECCFGR1_BOARD_IMAGE: u32 = 0;
 
-        const SECCFGR1_IMAGE: u32 =
-            SECCFGR1_IWDG_IMAGE | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT | SECCFGR1_BOARD_IMAGE;
+        const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE
+            | SECCFGR1_I2C1_BIT
+            | SECCFGR1_I2C2_BIT
+            | SECCFGR1_BOARD_IMAGE
+            | SECCFGR1_UCPD1_BIT;
 
         #[cfg(all(feature = "iwdg", not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14),
+            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),
             "TZSC_SECCFGR1 IWDG image drifted — IWDG must be Secure alongside the SE buses. \
              Source closure is not #79 silicon denial evidence."
         );
         #[cfg(all(not(feature = "iwdg"), not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 13) | (1 << 14),
+            SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 19),
             "TZSC_SECCFGR1 image drifted — I2C1+I2C2 are the SE buses (invariant #3). \
              Update the pin ONLY with a matching gtzc-enforcement-hw receipt."
         );
         #[cfg(all(feature = "iwdg", feature = "board-pq1"))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16),
+            SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
             "TZSC_SECCFGR1 pq1+IWDG image drifted — on pq1 the SE050 has its OWN bus (I2C4, \
              bit 16) and it MUST be Secure: a clear bit hands the non-secure world the SE050 \
              bus with no functional symptom whatsoever. Update ONLY with a matching \
@@ -460,7 +495,7 @@ mod stm32 {
         );
         #[cfg(all(not(feature = "iwdg"), feature = "board-pq1"))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16),
+            SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
             "TZSC_SECCFGR1 pq1 image drifted — on pq1 the SE050 has its OWN bus (I2C4, bit 16) \
              and it MUST be Secure: a clear bit hands the non-secure world the SE050 bus with \
              no functional symptom whatsoever. Update ONLY with a matching gtzc-enforcement-hw \

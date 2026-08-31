@@ -860,21 +860,42 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
     // the `const _: () = assert!(SECCFGR1_IMAGE == ...)` below fails the BUILD,
     // not just this test, if the composition drifts. Pin the composition and
     // all four cfg arms of its value (iwdg x board).
-    assert!(SAU_SRC.contains(
-        "SECCFGR1_IWDG_IMAGE | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT | SECCFGR1_BOARD_IMAGE;"
-    ));
+    // Multi-line since UCPD1 joined the composition (2026-08-31) — pin each
+    // term so the assertion survives rustfmt reflow instead of silently
+    // becoming a needle that matches nothing.
+    for term in [
+        "const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE",
+        "| SECCFGR1_I2C1_BIT",
+        "| SECCFGR1_I2C2_BIT",
+        "| SECCFGR1_BOARD_IMAGE",
+        "| SECCFGR1_UCPD1_BIT;",
+    ] {
+        assert!(
+            SAU_SRC.contains(term),
+            "SECCFGR1_IMAGE composition drifted — missing `{term}`"
+        );
+    }
+    // UCPD1 (bit 19) is secured on BOTH boards. On pq1 it is a second handle on
+    // PA15/PB15 (SE_RST / LCM_EN) that GPIOx_SECCFGR does not cover; on iota2
+    // the secure world owns it at boot. A cleared bit has no functional symptom
+    // on either board — only NS reachability changes.
+    assert!(SAU_SRC.contains("const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;"));
     assert!(SAU_SRC.contains("const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;"));
     assert!(SAU_SRC.contains("let seccfgr1 = SECCFGR1_IMAGE;"));
     for arm in [
-        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14)",                        // iota2, no iwdg
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14)",             // iota2 + iwdg
-        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16)",            // pq1, no iwdg
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16)", // pq1 + iwdg
+        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 19),",                        // iota2, no iwdg
+        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",             // iota2 + iwdg
+        "SECCFGR1_IMAGE == (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",            // pq1, no iwdg
+        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),", // pq1 + iwdg
     ] {
-        assert!(
-            SAU_SRC.contains(arm),
-            "the SECCFGR1 image must stay compile-time-pinned for every \
-             iwdg x board combination; missing arm: {arm}"
+        // EXACTLY once, not merely present. With the trailing comma these four
+        // are mutually non-containing; without it the two iota2 arms were
+        // prefixes of the two pq1 arms and could be deleted undetected.
+        assert_eq!(
+            SAU_SRC.matches(arm).count(),
+            1,
+            "the SECCFGR1 image must stay compile-time-pinned EXACTLY once for every \
+             iwdg x board combination; arm not found exactly once: {arm}"
         );
     }
 }
@@ -890,16 +911,39 @@ fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
     // iwdg and board choices stay orthogonal instead of needing one hand-
     // written total per combination.
     assert!(SAU_SRC.contains("const SECCFGR1_IWDG_IMAGE: u32 = SECCFGR1_IWDG_BIT;"));
-    assert!(SAU_SRC.contains(
-        "SECCFGR1_IWDG_IMAGE | SECCFGR1_I2C1_BIT | SECCFGR1_I2C2_BIT | SECCFGR1_BOARD_IMAGE;"
-    ));
+    // The composition is multi-line since UCPD1 joined it, so pin each term
+    // rather than one flat string that reflows on the next edit.
+    for term in [
+        "const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE",
+        "| SECCFGR1_I2C1_BIT",
+        "| SECCFGR1_I2C2_BIT",
+        "| SECCFGR1_BOARD_IMAGE",
+        "| SECCFGR1_UCPD1_BIT;",
+    ] {
+        assert!(
+            SAU_SRC.contains(term),
+            "SECCFGR1_IMAGE composition drifted — missing `{term}`"
+        );
+    }
     // Both boards' iwdg-on totals stay pinned — bit 7 must be present in each.
-    assert!(SAU_SRC.contains(
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14)"
-    ));
-    assert!(SAU_SRC.contains(
-        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16)"
-    ));
+    //
+    // The trailing comma is load-bearing. Without it the iota2 needle is a
+    // character-for-character PREFIX of the pq1 one (which continues
+    // ` | (1 << 16)`), so `.contains()` matched the pq1 arm and BOTH iota2
+    // const asserts could be deleted from sau.rs with this test still green.
+    // Found by the 2026-08-31 adversarial review; it was introduced by the
+    // commit that added the pq1 arms.
+    for arm in [
+        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",
+        "SECCFGR1_IMAGE == (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",
+    ] {
+        assert_eq!(
+            SAU_SRC.matches(arm).count(),
+            1,
+            "iwdg-on SECCFGR1 arm must appear EXACTLY once (a prefix match means \
+             a sibling arm can be deleted undetected): `{arm}`"
+        );
+    }
     assert!(IWDG_SRC.contains("const IWDG_SECURE_ALIAS: u32 = 0x5000_3000;"));
     assert!(!IWDG_SRC.contains("const IWDG: u32 = 0x4000_3000;"));
 
