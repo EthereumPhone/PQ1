@@ -468,6 +468,91 @@ fn positive_usb_ns_pin_classification_only_usb_and_tcpp03() {
     assert!(BOARD_PQ1_SRC.contains("pub const USB_NS_PINS_B: u32 = 0;"));
 }
 
+/// The OTHER half of the pq1 USB hazard: the pins are protected by a
+/// `const assert!` at the SECCFGR layer, but the MODER/BSRR writes that put
+/// those same pads into UCPD analog mode — or drive them — are protected only
+/// by `#[cfg(not(feature = "board-pq1"))]`, and NOTHING pinned those cfgs.
+///
+/// This is not hypothetical. On 2026-08-31, while merging two doc comments in
+/// `usb_hw.rs`, a find/replace spanned one of these attributes and deleted it.
+/// The crate compiled and all 2625 host tests passed, because the function it
+/// gated (`cc_open_then_reset`) has no caller. It was caught by counting the
+/// attribute afterwards, not by any gate. Hence this one.
+///
+/// What is at stake on pq1, per `board/pq1.rs`:
+///   PA15 -> ANALOG  is `SE_RST`, the OPTIGA's reset
+///   PB15 -> ANALOG  is `LCM_EN`, the trusted display's backlight
+///   PB5  driven     is `SE1_EN`, the SE050's enable
+#[test]
+fn negative_usb_board_pq1_exclusions_are_pinned() {
+    const CFG: &str = "#[cfg(not(feature = \"board-pq1\"))]";
+
+    // Five: two call sites inside `init`, plus the three fn definitions.
+    // A bare count is the cheap half — a deletion anywhere drops it to 4.
+    assert_eq!(
+        USB_HW_SRC.matches(CFG).count(),
+        5,
+        "usb_hw.rs must keep exactly 5 `board-pq1` exclusions (2 call sites in \
+         init + `enable_tcpp03` + `cc_open_then_reset` + `init_ucpd`). A lower \
+         count means an exclusion was deleted and pq1 now executes an iota2 \
+         pin path; a higher count means a new one appeared unreviewed."
+    );
+
+    // The expensive half: each hazardous write must actually SIT INSIDE a
+    // board-gated function, not merely coexist in a file that contains a cfg
+    // somewhere. Checked positionally — the write's offset must fall after a
+    // gated `fn` header and before the next un-gated top-level `fn`.
+    let gated_spans: Vec<(usize, usize)> = {
+        let mut spans = Vec::new();
+        let mut from = 0usize;
+        while let Some(rel) = USB_HW_SRC[from..].find(CFG) {
+            let cfg_at = from + rel;
+            // Only the three definitions open a span; the two call sites inside
+            // `init` are followed by a call, not by `fn`.
+            let after = &USB_HW_SRC[cfg_at + CFG.len()..];
+            let head: String = after.chars().take(80).collect();
+            if head.trim_start().starts_with("fn ")
+                || head.trim_start().starts_with("#[inline")
+                || head.trim_start().starts_with("pub unsafe fn ")
+            {
+                // Span ends at the next top-level `}` followed by a blank line
+                // and a non-indented item — approximated by the next "\n}\n".
+                let end_rel = after.find("\n}\n").map(|e| cfg_at + CFG.len() + e + 3);
+                spans.push((cfg_at, end_rel.unwrap_or(USB_HW_SRC.len())));
+            }
+            from = cfg_at + CFG.len();
+        }
+        spans
+    };
+    assert_eq!(
+        gated_spans.len(),
+        3,
+        "expected exactly three board-gated FUNCTION definitions in usb_hw.rs"
+    );
+
+    for hazard in [
+        "REG.gpioa_moder.set_bits(0b11 << 30);", // PA15 -> analog = pq1 SE_RST
+        "REG.gpiob_moder.set_bits(0b11 << 30);", // PB15 -> analog = pq1 LCM_EN
+        "REG.gpiob_bsrr.write(1 << 5);",         // PB5 driven    = pq1 SE1_EN
+    ] {
+        let at = USB_HW_SRC
+            .find(hazard)
+            .unwrap_or_else(|| panic!("hazardous write vanished from usb_hw.rs: {hazard}"));
+        assert_eq!(
+            USB_HW_SRC.matches(hazard).count(),
+            1,
+            "`{hazard}` must appear exactly once — a second copy could sit outside a gate"
+        );
+        assert!(
+            gated_spans.iter().any(|&(lo, hi)| at > lo && at < hi),
+            "`{hazard}` is NOT inside a `board-pq1`-excluded function. On pq1 that \
+             pin is a secure element's reset/enable or the trusted display's \
+             backlight; putting it in UCPD analog mode or driving it from the USB \
+             path is exactly what the board split exists to prevent."
+        );
+    }
+}
+
 #[test]
 fn positive_usb_tcpp03_pb5_drive_high() {
     assert!(USB_HW_SRC.contains("REG.gpiob_bsrr.write(1 << 5);"));

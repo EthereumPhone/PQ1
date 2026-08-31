@@ -14,10 +14,14 @@
 //! running the actual production bytes):
 //!   * `apdu.rs`   — every metadata builder, parser, and `ApduBuf`
 //!     method runs natively. Functions with `IfxState` / `ShieldedConnection`
-//!     arguments compile thanks to the stubs in `mod.rs`.
+//!     arguments compile thanks to the stubs in `mod.rs`, and the
+//!     protected-command path (`send_command_protected` via `get_random`,
+//!     `get_data_object`, `generate_auth_code`, …) executes against the
+//!     scripted PRL peer (`prl_tests.rs`).
 //!   * `shield.rs` — `wrap_command` / `unwrap_response` / `derive_session_keys`
 //!     / `aes128_ccm_*` / `tls_prf_sha256` / `build_aad` / `build_nonce` all
-//!     run natively.
+//!     run natively; the full `establish()` handshake runs against the
+//!     scripted peer with byte-exact golden-vector pins.
 //!
 //! Files that this scaffold pins via `include_str!`:
 //!   * `mod.rs`     — driver / lifecycle constants, FI bool usage, OID range
@@ -85,6 +89,8 @@ const SHIELD_SRC: &str = include_str!("../optiga/shield.rs");
 const IFX_SRC: &str = include_str!("../optiga/ifx_i2c.rs");
 const I2C_SRC: &str = include_str!("../optiga/i2c.rs");
 const MOD_SRC: &str = include_str!("../optiga/mod.rs");
+const RESET_PIN_SRC: &str = include_str!("../optiga/reset_pin.rs");
+const MAIN_SRC_FOR_PIN_DIAG: &str = include_str!("../main.rs");
 
 #[test]
 fn transient_e120_authorization_is_caller_supplied_and_never_platform_only() {
@@ -1866,4 +1872,672 @@ fn negative_shield_handshake_error_stays_split_by_evidence() {
         "ensure_shield must map a transport-class handshake failure onto \
          OptigaError::Transport so is_inconclusive() sees it"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Runtime coverage — session lifecycle, wrap/unwrap error paths, and
+// the host loopback round-trip.
+//
+// These tests drive the path-included production bytes through the
+// public surface plus the `#[cfg(test)]` hooks (`activate_for_test`,
+// `sequence_state_for_test`, `ccm_encrypt_for_test`,
+// `aes128_ccm_decrypt_into`). The loopback keys both directions
+// identically, so it proves self-consistency only. Protocol
+// conformance of `establish()` / `derive_session_keys` /
+// `tls_prf_sha256` / `send_command_protected` against a scripted PRL
+// peer (with independently implemented protocol math, anchored to
+// OpenSSL-computed golden vectors) lives in `prl_tests.rs` — see
+// `prl_peer.rs` for the peer.
+// ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn positive_shield_zeroize_session_clears_live_state() {
+    // zeroize_session is the lock / idle-wipe / panic-path scrub of the
+    // AES-128-CCM session keys (audit MEDIUM-1). After it runs, both
+    // direction counters must be back at their complement-bound initial
+    // values, `active` must be false, and the PBS must be RETAINED — it
+    // is the long-lived pairing root that re-derives the next session.
+    let mut sc = make_active_shield(0x5C);
+    assert!(sc.active);
+    assert_eq!(sc.sequence_state_for_test(), (7, !7u32, 100, !100u32));
+
+    sc.zeroize_session();
+
+    assert!(!sc.active, "zeroize_session must close the session");
+    assert_eq!(
+        sc.sequence_state_for_test(),
+        (0, u32::MAX, 0, u32::MAX),
+        "both counters must reset to the value/complement initial state"
+    );
+    assert!(
+        sc.pbs_loaded,
+        "PBS is intentionally retained across zeroize_session (re-derivable pairing root)"
+    );
+
+    // Both directions refuse to run on the scrubbed state.
+    let mut out = [0u8; 64];
+    assert!(matches!(
+        sc.wrap_command(b"x", &mut out),
+        Err(shield::ShieldError::NotActive)
+    ));
+    let mut receipt = crate::fi::OK_SENTINEL;
+    assert!(matches!(
+        sc.unwrap_response(&[0u8; 16], &mut out, &mut receipt),
+        Err(shield::ShieldError::NotActive)
+    ));
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+
+    // A fresh activation (the host-side stand-in for ensure_shield's
+    // re-handshake) must still work on the zeroized instance.
+    sc.activate_for_test([0x5C; 16], [0x5C; 4], 7, 100);
+    let mut wrapped = [0u8; 64];
+    assert!(
+        sc.wrap_command(b"after-wipe", &mut wrapped).is_ok(),
+        "zeroize_session must leave the connection re-handshakeable"
+    );
+}
+
+#[test]
+fn negative_shield_wrap_past_nonce_threshold_forces_renegotiation() {
+    // ASSUMPTION ATTACKED: the final reference-permitted master sequence
+    // is 0xFFFF_FFF0; the NEXT transaction must force a session close so
+    // a CCM nonce can never wrap/reuse. Pin the boundary exactly: a wrap
+    // AT the threshold succeeds, the following one fails and closes.
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x77; 16], [0x77; 4], 0xFFFF_FFF0, 100);
+    let mut out = [0u8; 64];
+    let len = sc
+        .wrap_command(b"last-permitted", &mut out)
+        .expect("sequence == PRL_SEQUENCE_THRESHOLD is still permitted");
+    assert_eq!(&out[..5], &[0x23, 0xFF, 0xFF, 0xFF, 0xF0]);
+    assert_eq!(len, 5 + 14 + 8);
+    assert!(sc.active, "a permitted wrap must not close the session");
+
+    let res = sc.wrap_command(b"one-too-many", &mut out);
+    assert!(
+        matches!(res, Err(shield::ShieldError::NotActive)),
+        "the wrap past the nonce threshold must fail closed"
+    );
+    assert!(
+        !sc.active,
+        "crossing the threshold must deactivate so the caller re-handshakes"
+    );
+}
+
+#[test]
+fn negative_shield_wrap_refused_when_receive_state_at_threshold() {
+    // ASSUMPTION ATTACKED: the receive direction's last authenticated
+    // counter is bound by the same threshold (minus the bounded retry
+    // window). A transaction begun when the last slave sequence has
+    // already reached it must be refused before any ciphertext leaves.
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x66; 16], [0x66; 4], 7, 0xFFFF_FFF0);
+    let mut out = [0u8; 64];
+    let res = sc.wrap_command(b"x", &mut out);
+    assert!(matches!(res, Err(shield::ShieldError::NotActive)));
+    assert!(
+        !sc.active,
+        "a receive-side counter at the threshold must close the session"
+    );
+
+    // One step below the threshold the same session shape still wraps.
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x66; 16], [0x66; 4], 7, 0xFFFF_FFEF);
+    assert!(
+        sc.wrap_command(b"x", &mut out).is_ok(),
+        "last slave sequence == threshold-1 stays inside the reference window"
+    );
+}
+
+#[test]
+fn negative_shield_wrap_undersized_output_is_buffer_overflow() {
+    // ASSUMPTION ATTACKED: wrap_command must refuse to emit a truncated
+    // record when the caller's buffer cannot hold header + payload + tag.
+    // A silent truncation would authenticate a fragment the chip then
+    // parses as a complete APDU.
+    let mut sc = make_active_shield(0xAA);
+    let plaintext = [0x5Au8; 32];
+    // Exact fit is 5 + 32 + 8 = 45 bytes; one short must fail.
+    let mut short = [0u8; 44];
+    let res = sc.wrap_command(&plaintext, &mut short);
+    assert!(
+        matches!(res, Err(shield::ShieldError::BufferOverflow)),
+        "a 44-byte buffer for a 45-byte record must be BufferOverflow"
+    );
+    assert!(
+        sc.active,
+        "a caller-side sizing error must not kill the session"
+    );
+
+    let mut exact = [0u8; 45];
+    assert_eq!(
+        sc.wrap_command(&plaintext, &mut exact).unwrap(),
+        45,
+        "the exact-size buffer must succeed"
+    );
+}
+
+#[test]
+fn negative_shield_wrap_oversized_plaintext_is_buffer_overflow() {
+    // ASSUMPTION ATTACKED: the internal staging buffer is 600 bytes for
+    // ciphertext + tag, so plaintext above 592 bytes must be refused even
+    // when the CALLER's output buffer is large enough. Without this guard
+    // the encrypt loop writes past the staging array.
+    let mut sc = make_active_shield(0xBB);
+    let plaintext = [0x11u8; 593]; // 593 + 8 = 601 > 600
+    let mut out = [0u8; 700]; // the caller buffer is NOT the constraint
+    let res = sc.wrap_command(&plaintext, &mut out);
+    assert!(
+        matches!(res, Err(shield::ShieldError::BufferOverflow)),
+        "plaintext that overflows the 600-byte staging buffer must be refused"
+    );
+
+    // Boundary: exactly 592 bytes of plaintext fills the staging buffer.
+    let plaintext = [0x11u8; 592];
+    assert_eq!(
+        sc.wrap_command(&plaintext, &mut out).unwrap(),
+        5 + 592 + 8,
+        "592-byte plaintext exactly fits ciphertext+tag in 600 bytes"
+    );
+}
+
+#[test]
+fn negative_shield_unwrap_rejects_non_record_sctr() {
+    // ASSUMPTION ATTACKED (HIGH-M16): only full-protection record frames
+    // (SCTR = 0x23) are valid responses to a wrapped command. A handshake
+    // SCTR must be refused before the sequence window or CCM are even
+    // consulted — otherwise a MITM could substitute frame types at will.
+    let key = [0x31u8; 16];
+    let nonce_base = [0x31u8; 4];
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test(key, nonce_base, 101, 100);
+    let plaintext = [0x5Au8; 12];
+    let mut record = [0u8; 64];
+    let record_len = make_protected_response(&key, &nonce_base, 101, &plaintext, &mut record);
+    // Re-write the SCTR to a handshake value; the gate must fire before
+    // any tag verification is consulted.
+    record[0] = 0x08;
+
+    let mut out = [0xA5u8; 12];
+    let mut receipt = crate::fi::OK_SENTINEL;
+    let res = sc.unwrap_response(&record[..record_len], &mut out, &mut receipt);
+    assert!(
+        matches!(res, Err(shield::ShieldError::DecryptFailed)),
+        "a non-record SCTR must be rejected as DecryptFailed"
+    );
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+    assert_eq!(out, [0u8; 12], "output must be wiped on refusal");
+    assert_eq!(
+        sc.sequence_state_for_test().2,
+        100,
+        "the authenticated baseline must not move"
+    );
+}
+
+#[test]
+fn negative_shield_unwrap_undersized_output_is_buffer_overflow() {
+    // ASSUMPTION ATTACKED: unwrap_response must refuse to write a
+    // truncated plaintext when the caller's buffer is smaller than the
+    // authenticated payload — and the refusal must come BEFORE any
+    // decryption or counter publication.
+    let key = [0x41u8; 16];
+    let nonce_base = [0x41u8; 4];
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test(key, nonce_base, 101, 100);
+    let plaintext = [0x5Au8; 12];
+    let mut record = [0u8; 64];
+    let record_len = make_protected_response(&key, &nonce_base, 101, &plaintext, &mut record);
+
+    let mut short = [0xA5u8; 11];
+    let mut receipt = crate::fi::OK_SENTINEL;
+    let res = sc.unwrap_response(&record[..record_len], &mut short, &mut receipt);
+    assert!(
+        matches!(res, Err(shield::ShieldError::BufferOverflow)),
+        "an 11-byte buffer for a 12-byte payload must be BufferOverflow"
+    );
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+    assert_eq!(
+        sc.sequence_state_for_test().2,
+        100,
+        "a caller-side sizing error must not advance the authenticated baseline"
+    );
+
+    // Exact fit succeeds and publishes the counter.
+    let mut exact = [0u8; 12];
+    let mut receipt = crate::fi::FAIL_SENTINEL;
+    assert_eq!(
+        sc.unwrap_response(&record[..record_len], &mut exact, &mut receipt)
+            .unwrap(),
+        12
+    );
+    assert_eq!(exact, plaintext);
+    assert_eq!(receipt, crate::fi::OK_SENTINEL);
+}
+
+#[test]
+fn positive_shield_wrap_unwrap_round_trip_recovers_plaintext() {
+    // Loopback: `activate_for_test` keys both directions identically, so
+    // a wrapped command unwrapped by the SAME session must recover the
+    // original payload byte-for-byte — the host-side mirror of the
+    // OPTIGA PRL record path, exercising the real production
+    // wrap_command → unwrap_response byte flow end to end.
+    let key = [0x29u8; 16];
+    let nonce_base = [0x29u8; 4];
+    let mut sc = shield::ShieldedConnection::new();
+    // Transmit starts at 101 so the looped-back record lands inside the
+    // 1..=3 response window above the receive baseline (100).
+    sc.activate_for_test(key, nonce_base, 101, 100);
+
+    let plaintext = b"pqsigner-loopback";
+    let mut record = [0u8; 128];
+    let record_len = sc.wrap_command(plaintext, &mut record).unwrap();
+    assert_eq!(&record[..5], &[0x23, 0, 0, 0, 101]);
+
+    let mut out = [0u8; 64];
+    let mut receipt = crate::fi::FAIL_SENTINEL;
+    let n = sc
+        .unwrap_response(&record[..record_len], &mut out, &mut receipt)
+        .expect("same-session loopback must authenticate");
+    assert_eq!(n, plaintext.len());
+    assert_eq!(&out[..n], plaintext);
+    assert_eq!(receipt, crate::fi::OK_SENTINEL);
+    assert_eq!(
+        sc.sequence_state_for_test(),
+        (102, !102u32, 101, !101u32),
+        "both directions advance exactly once"
+    );
+}
+
+#[test]
+fn negative_shield_replayed_record_and_wrong_key_both_fail() {
+    // ASSUMPTION ATTACKED: (a) an I2C MITM replays a captured record —
+    // the sequence window must refuse it once the baseline has advanced
+    // past the record's sequence; (b) a record protected under a
+    // DIFFERENT key (the wrong direction of an asymmetric session, or a
+    // foreign session entirely) must fail CCM authentication with the
+    // caller's buffer wiped.
+    let key = [0x29u8; 16];
+    let nonce_base = [0x29u8; 4];
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test(key, nonce_base, 101, 100);
+
+    let plaintext = b"replay-me";
+    let mut record = [0u8; 128];
+    let record_len = sc.wrap_command(plaintext, &mut record).unwrap();
+    let mut out = [0u8; 9];
+    let mut receipt = crate::fi::FAIL_SENTINEL;
+    sc.unwrap_response(&record[..record_len], &mut out, &mut receipt)
+        .unwrap();
+
+    // (a) Replay: the same bytes a second time must fail — the
+    // authenticated baseline is now 101 and 101 > 101 is false.
+    out.fill(0xA5);
+    receipt = crate::fi::OK_SENTINEL;
+    assert!(matches!(
+        sc.unwrap_response(&record[..record_len], &mut out, &mut receipt),
+        Err(shield::ShieldError::DecryptFailed)
+    ));
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+    assert_eq!(out, [0u8; 9]);
+
+    // (b) Foreign key: the SCTR and the sequence window both pass, so
+    // the CCM tag verification is the only guard left.
+    let mut foreign = [0u8; 128];
+    let foreign_len =
+        make_protected_response(&[0x99; 16], &nonce_base, 101, plaintext, &mut foreign);
+    let mut sc2 = shield::ShieldedConnection::new();
+    sc2.activate_for_test(key, nonce_base, 101, 100);
+    out.fill(0xA5);
+    receipt = crate::fi::OK_SENTINEL;
+    assert!(matches!(
+        sc2.unwrap_response(&foreign[..foreign_len], &mut out, &mut receipt),
+        Err(shield::ShieldError::DecryptFailed)
+    ));
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+    assert_eq!(out, [0u8; 9], "failed authentication must wipe the output");
+    assert_eq!(
+        sc2.sequence_state_for_test().2,
+        100,
+        "a failed authentication must not advance the baseline"
+    );
+}
+
+#[test]
+fn negative_shield_establish_without_pbs_is_refused() {
+    // ASSUMPTION ATTACKED: the handshake must not run without a loaded
+    // PBS — otherwise derive_session_keys would key the session on the
+    // all-zero buffer and every record would be trivially forgeable.
+    let mut sc = shield::ShieldedConnection::new();
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let res = unsafe { sc.establish(&mut ifx) };
+    assert!(matches!(res, Err(shield::ShieldError::NoPbs)));
+    assert!(!sc.active);
+}
+
+#[test]
+fn negative_shield_establish_transport_fault_is_not_a_pbs_verdict() {
+    // ASSUMPTION ATTACKED (D1): a MasterHello transceive failure must
+    // surface as HandshakeTransport — "the chip may not have seen the
+    // hello", NOT HandshakeRejected — so rotate_pbs_to_salted can never
+    // read a bus fault as "wrong PBS" and fall through to the E140
+    // rewrite (the brick path). The stub transport fails every PRL
+    // transceive with IfxError::Timeout, which is exactly this class.
+    let mut sc = shield::ShieldedConnection::new();
+    sc.load_pbs(&[0x42; 64]);
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let res = unsafe { sc.establish(&mut ifx) };
+    assert!(
+        matches!(res, Err(shield::ShieldError::HandshakeTransport)),
+        "a failed MasterHello transceive must classify as transport, not rejection"
+    );
+    assert!(!sc.active, "a failed handshake must not open the session");
+}
+
+#[test]
+fn negative_shield_ccm_decrypt_rejects_undersized_inputs_before_writing() {
+    // ASSUMPTION ATTACKED: aes128_ccm_decrypt_into must fail-initialize
+    // the receipt and return WITHOUT writing when the framed input
+    // cannot contain a tag (< 8 bytes) or the caller's buffer cannot
+    // hold the carried payload.
+    let key = [0x11u8; 16];
+    let nonce = [0x22u8; 8];
+    let aad = [0x23u8, 0, 0, 0, 7, 0, 24];
+
+    // Fewer bytes than one CCM tag: no payload can exist.
+    let mut out = [0xA5u8; 8];
+    let mut receipt = crate::fi::OK_SENTINEL;
+    shield::aes128_ccm_decrypt_into(&key, &nonce, &aad, &[0u8; 7], &mut out, &mut receipt);
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+    assert_eq!(out, [0xA5u8; 8], "no write may happen without a full tag");
+
+    // Output buffer shorter than the carried ciphertext.
+    let ct = [0u8; 20]; // 12 payload + 8 tag, but the sink only holds 4
+    let mut small = [0xA5u8; 4];
+    let mut receipt = crate::fi::OK_SENTINEL;
+    shield::aes128_ccm_decrypt_into(&key, &nonce, &aad, &ct, &mut small, &mut receipt);
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+    assert_eq!(
+        small,
+        [0xA5u8; 4],
+        "oversized ciphertext must not spill past the caller buffer"
+    );
+}
+
+#[test]
+fn positive_shield_ccm_multi_block_aad_is_fully_authenticated() {
+    // ASSUMPTION ATTACKED: AAD longer than one CBC-MAC block (14 bytes
+    // fit beside the 2-byte length in B_1) must chain through the
+    // remaining-AAD-blocks loop; a refactor that drops the continuation
+    // blocks would silently accept records whose trailing AAD bytes were
+    // never authenticated.
+    let key = [0x51u8; 16];
+    let nonce = [0x61u8; 8];
+    let aad = [0x77u8; 40]; // 40 > 14: forces the multi-block AAD path
+    let plaintext = [0x5Au8; 24];
+    let mut record = [0u8; 64];
+    let record_len = shield::ccm_encrypt_for_test(&key, &nonce, &aad, &plaintext, &mut record);
+
+    let mut out = [0u8; 24];
+    let mut receipt = crate::fi::FAIL_SENTINEL;
+    shield::aes128_ccm_decrypt_into(
+        &key,
+        &nonce,
+        &aad,
+        &record[..record_len],
+        &mut out,
+        &mut receipt,
+    );
+    assert_eq!(receipt, crate::fi::OK_SENTINEL);
+    assert_eq!(out, plaintext);
+
+    // The trailing AAD bytes are authenticated: flipping the last one
+    // must fail the tag.
+    let mut aad_bad = aad;
+    aad_bad[39] ^= 1;
+    out.fill(0xA5);
+    let mut receipt = crate::fi::OK_SENTINEL;
+    shield::aes128_ccm_decrypt_into(
+        &key,
+        &nonce,
+        &aad_bad,
+        &record[..record_len],
+        &mut out,
+        &mut receipt,
+    );
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+    assert_eq!(out, [0u8; 24]);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Runtime coverage — OptigaError classification, the IFX→OPTIGA error
+// mapping, ApduBuf u8 appends, and the transport-failure surface of the
+// public APDU commands against the hard-down `ifx_i2c` stub.
+// ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn positive_optiga_error_inconclusive_classification() {
+    // D1: the inconclusive set is exactly the physical/framing faults —
+    // the chip may not have seen the command, or its reply was mangled,
+    // so the error says "I don't know". Everything else is an answer:
+    // chip verdicts, shield verdicts, or our own bugs.
+    for e in [
+        apdu::OptigaError::I2c,
+        apdu::OptigaError::Transport,
+        apdu::OptigaError::Crc,
+    ] {
+        assert!(e.is_inconclusive(), "{e:?} must be inconclusive");
+    }
+    for e in [
+        apdu::OptigaError::Shield,
+        apdu::OptigaError::Status(0xFF),
+        apdu::OptigaError::Status(0x00),
+        apdu::OptigaError::PinIncorrect,
+        apdu::OptigaError::PinLocked,
+        apdu::OptigaError::NotProvisioned,
+        apdu::OptigaError::BufferOverflow,
+    ] {
+        assert!(
+            !e.is_inconclusive(),
+            "{e:?} is an answer, not 'I don't know'"
+        );
+    }
+}
+
+#[test]
+fn positive_ifx_error_maps_to_documented_optiga_error() {
+    // The IFX transport error mapping: a CRC mismatch is the ONLY
+    // variant with a dedicated OptigaError (a framing-integrity fault,
+    // kept distinct so diagnostics can name it); every other wire fault
+    // collapses to Transport.
+    use super::ifx_i2c::IfxError;
+    assert!(matches!(
+        apdu::OptigaError::from(IfxError::Crc),
+        apdu::OptigaError::Crc
+    ));
+    for e in [
+        IfxError::I2c,
+        IfxError::Nack,
+        IfxError::Timeout,
+        IfxError::FrameTooLarge,
+        IfxError::BadResponse,
+        IfxError::ReSynch,
+    ] {
+        assert!(
+            matches!(apdu::OptigaError::from(e), apdu::OptigaError::Transport),
+            "every non-CRC IFX fault must map to Transport"
+        );
+    }
+    // And the whole mapped set stays inside the inconclusive class (D1):
+    // a bus-layer failure must never be mistaken for a chip verdict.
+    assert!(apdu::OptigaError::from(IfxError::Crc).is_inconclusive());
+    assert!(apdu::OptigaError::from(IfxError::Timeout).is_inconclusive());
+}
+
+#[test]
+fn positive_apdu_buf_write_u8_appends_and_updates_inlen() {
+    let mut ab = apdu::ApduBuf::new(0x8C, 0x00);
+    ab.write_u8(0xDE).write_u8(0xAD);
+    let bytes = ab.finish();
+    assert_eq!(bytes.len(), 6, "header(4) + 2 payload bytes");
+    assert_eq!(bytes[4], 0xDE, "first write_u8 lands at cursor 4");
+    assert_eq!(bytes[5], 0xAD, "second write_u8 appends, not overwrites");
+    assert_eq!(bytes[2..4], [0x00, 0x02], "InLen tracks the u8 appends");
+}
+
+#[test]
+fn positive_apdu_buf_write_u8_fills_exactly_to_capacity() {
+    // The fixed buffer is 768 bytes with a 4-byte header, so exactly 764
+    // payload bytes fit. Fill to capacity through write_u8 alone: the
+    // last byte must land at index 767 and InLen must be 764 (0x02FC) —
+    // the InLen high byte is exercised non-trivially here.
+    let mut ab = apdu::ApduBuf::new(0x82, 0x40);
+    for i in 0..764u32 {
+        ab.write_u8((i & 0xFF) as u8);
+    }
+    let bytes = ab.finish();
+    assert_eq!(bytes.len(), 768);
+    assert_eq!(bytes[767], (763 & 0xFF) as u8);
+    assert_eq!(bytes[2..4], [0x02, 0xFC], "InLen = 764 in big-endian");
+}
+
+#[test]
+#[should_panic]
+fn negative_apdu_buf_write_u8_past_capacity_panics() {
+    // ASSUMPTION ATTACKED: ApduBuf is a fixed 768-byte stack buffer with
+    // no grow path; a 765th payload byte must refuse loudly (the array
+    // bounds check panics), never wrap or silently truncate into a
+    // malformed APDU the chip would then act on.
+    let mut ab = apdu::ApduBuf::new(0x82, 0x40);
+    for _ in 0..765 {
+        ab.write_u8(0xAA);
+    }
+}
+
+#[test]
+fn negative_open_application_transport_fault_surfaces_transport() {
+    // ASSUMPTION ATTACKED: with the stub transport hard-down
+    // (IfxError::Timeout on every frame), open_application must surface
+    // Err(OptigaError::Transport) via the From<IfxError> mapping — and
+    // must never be mistaken for a chip verdict.
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let res = unsafe { apdu::open_application(&mut ifx) };
+    assert!(
+        matches!(res, Err(apdu::OptigaError::Transport)),
+        "a transport-layer Timeout must map to OptigaError::Transport"
+    );
+    assert!(
+        res.unwrap_err().is_inconclusive(),
+        "OpenApplication failing on the bus says nothing about chip state (D1)"
+    );
+}
+
+#[test]
+fn negative_get_random_never_falls_back_to_plaintext_transport() {
+    // ASSUMPTION ATTACKED (entropy provenance): get_random must route
+    // through the protected PRL path unconditionally. With no active
+    // shielded session it must REFUSE (Shield) — silently downgrading
+    // to the plaintext transceive would let an I2C MITM substitute a
+    // fixed "random" challenge.
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let mut sc = shield::ShieldedConnection::new();
+    let mut out = [0xA5u8; 16];
+    let res = unsafe { apdu::get_random(&mut ifx, &mut sc, &mut out) };
+    assert!(
+        matches!(res, Err(apdu::OptigaError::Shield)),
+        "no active session => get_random must fail, never send plaintext"
+    );
+    assert!(
+        !res.unwrap_err().is_inconclusive(),
+        "Shield is an authoritative verdict, not a bus fault"
+    );
+    assert_eq!(out, [0xA5u8; 16], "caller buffer untouched on refusal");
+}
+
+#[test]
+fn negative_get_random_transport_fault_surfaces_transport() {
+    // With an active session the wrap succeeds and the failure moves to
+    // the wire: the stub PRL transceive hard-fails, which must surface
+    // as Transport (inconclusive) — never as a shield/verdict error.
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x31; 16], [0x31; 4], 7, 100);
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let mut out = [0xA5u8; 16];
+    let res = unsafe { apdu::get_random(&mut ifx, &mut sc, &mut out) };
+    assert!(
+        matches!(res, Err(apdu::OptigaError::Transport)),
+        "a PRL transceive Timeout must map through From<IfxError> to Transport"
+    );
+    assert_eq!(
+        out,
+        [0xA5u8; 16],
+        "no partial bytes reach the caller on a bus fault"
+    );
+}
+
+/// The OPTIGA silicon reset must never reach a hardcoded iota2 pin on pq1.
+///
+/// `pin_diag::run` hardcodes PA4/PD5/PE0 and reads no board constant. It was
+/// the live reset path from BOTH `OptigaTrustM::init` and
+/// `hard_reset_and_reinit` (the runtime write-throttle workaround), while the
+/// board-aware `optiga::reset_pin` sat unused behind a retired feature. On pq1
+/// that pulses PE0 (unbonded on the 48-pin package), never touches the real
+/// reset (PA15), and strobes PA4 — `LCD_CS`, the trusted display's
+/// chip-select — under a comment calling it "disconnected, harmless".
+///
+/// Fixed 2026-08-31 by board-splitting both call sites. This pins the split.
+#[test]
+fn negative_optiga_reset_path_is_board_split() {
+    // 1. The hardcoded module cannot compile for pq1 at all.
+    assert!(
+        MAIN_SRC_FOR_PIN_DIAG.contains("not(feature = \"board-pq1\"),\n    not(test)\n))]\nmod pin_diag;"),
+        "`mod pin_diag` must stay excluded on board-pq1 — it hardcodes the iota2 \
+         pin map (PA4/PD5/PE0) and reads no board constant."
+    );
+
+    // 2. Every `pin_diag::run()` call is board-gated. Counting both together
+    //    is the point: there are TWO call sites and the review found only one
+    //    of them first.
+    let runs = MOD_SRC.matches("crate::pin_diag::run();").count();
+    assert_eq!(runs, 2, "expected exactly two pin_diag::run() call sites in optiga/mod.rs");
+    let gated = MOD_SRC
+        .matches("not(feature = \"board-pq1\")")
+        .count();
+    assert!(
+        gated >= 2,
+        "each of the {runs} `pin_diag::run()` call sites must carry a \
+         `not(feature = \"board-pq1\")` gate; found only {gated} such gates"
+    );
+
+    // 3. pq1 gets a real pulse rather than nothing — an unreset OPTIGA that is
+    //    merely never pulsed would look like a wiring fault, not a code bug.
+    assert_eq!(
+        MOD_SRC.matches("reset_pin::hard_pulse()").count(),
+        2,
+        "both board-split call sites must reach `reset_pin::hard_pulse()` on pq1"
+    );
+
+    // 4. And that pulse is board-derived, not another hardcoded pin.
+    assert!(
+        RESET_PIN_SRC.contains("pub unsafe fn hard_pulse()"),
+        "`reset_pin::hard_pulse` must exist — optiga/mod.rs cited this name in a \
+         comment for months before anyone wrote the function."
+    );
+    for derived in [
+        "const HAS_RST: bool = crate::board::OPTIGA_RST.is_some();",
+        "const RST_PORT: u32 = match crate::board::OPTIGA_RST {",
+        "const RST_PIN: u32 = match crate::board::OPTIGA_RST {",
+    ] {
+        assert!(
+            RESET_PIN_SRC.contains(derived),
+            "reset_pin must derive its pin from board::OPTIGA_RST; missing `{derived}`"
+        );
+    }
+    // No hardcoded GPIO base may reappear in the board-aware path.
+    for banned in ["0x5202_0C00", "0x5202_1000", "GPIOD_BASE", "GPIOE_BASE"] {
+        assert!(
+            !RESET_PIN_SRC.contains(banned),
+            "reset_pin.rs must not hardcode a GPIO port (`{banned}`) — that is the \
+             exact defect that made pin_diag unportable."
+        );
+    }
 }
