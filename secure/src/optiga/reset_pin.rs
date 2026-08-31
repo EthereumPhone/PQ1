@@ -141,3 +141,49 @@ pub unsafe fn init() {
     cortex_m::asm::delay(160_000 * 50);
 }
 
+/// Datasheet-bounded RST low time: 10 us <= t_low <= 2.5 ms (OPTIGA Trust M
+/// V3 datasheet v3.70, Table 14). 64_000 cycles at 160 MHz = 400 us, the
+/// same value `pin_diag::RST_LOW_CYCLES` uses on iota2.
+const RST_LOW_CYCLES: u32 = 64_000;
+
+/// Drive a full LOW->HIGH reset pulse on the board's OPTIGA RST line.
+///
+/// This is the board-aware equivalent of the reset half of `pin_diag::run`,
+/// and it exists because that function is **not** board-aware: it hardcodes
+/// the iota2 map (`PA4`/`PD5`/`PE0`) and never reads [`crate::board::
+/// OPTIGA_RST`]. On pq1 that would pulse PE0 — a pin the 48-pin package does
+/// not bond — leave the real reset (PA15) untouched, and drive PA4, which is
+/// `LCD_CS` there, under a comment calling it "disconnected, harmless".
+///
+/// What is deliberately NOT carried over: pin_diag's two "decoy" pulses on
+/// PA4 and PD5. Those are iota2 artifacts from the bring-up sweep that
+/// identified which header pin the RST wire was actually on; they are inert
+/// on that board because both pads are unconnected there. They are not inert
+/// on pq1, so reproducing them would be reproducing the bug.
+///
+/// Timing matches pin_diag exactly: 50 ms idle-high priming, a 400 us low
+/// pulse, then 100 ms trailing idle high before the caller's own settle.
+/// No-op on a board with no RST line.
+///
+/// # Safety
+/// Same contract as [`init`]: single-threaded secure-world boot path, and
+/// only this pin's bits in the RST port are touched.
+pub unsafe fn hard_pulse() {
+    if !HAS_RST {
+        return;
+    }
+    // SAFETY: caller contract, forwarded to the helpers; BSRR is a
+    // write-only atomic set/reset register so the low/high edges need no RMW.
+    unsafe {
+        init(); // clock + push-pull output high + 50 ms priming settle
+
+        let bsrr = (RST_PORT + 0x18) as *mut u32;
+        write_volatile(bsrr, 1u32 << (RST_PIN + 16)); // reset bit n -> drive LOW
+        cortex_m::asm::delay(RST_LOW_CYCLES);
+        write_volatile(bsrr, 1u32 << RST_PIN); // set bit n -> release HIGH
+
+        // Trailing idle high, matching `pin_diag::run`'s 100 ms.
+        cortex_m::asm::delay(160_000 * 100);
+    }
+}
+

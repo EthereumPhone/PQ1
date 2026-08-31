@@ -166,8 +166,34 @@ mod rng_strong_fold;
 // test suite (and the Miri leg).
 mod consumption_mask_prng;
 mod pin;
-#[cfg(all(feature = "stm32u585", feature = "optiga-trust-m", not(test)))]
+// `pin_diag` hardcodes the iota2 pin map (PA4/PD5/PE0 + the Arduino-header
+// sweep) and reads no board constant, so it is compiled out on pq1 entirely
+// rather than left as a runtime trap. pq1's OPTIGA reset goes through
+// `optiga::reset_pin::hard_pulse`, which derives its pin from
+// `board::OPTIGA_RST`. See the BOARD-SPLIT note at its former call site in
+// `optiga/mod.rs`.
+#[cfg(all(
+    feature = "stm32u585",
+    feature = "optiga-trust-m",
+    not(feature = "board-pq1"),
+    not(test)
+))]
 mod pin_diag;
+
+// `pin-diag-boot` runs `pin_diag::header_sweep`, which pulses every plausible
+// Arduino-header pin to identify which STM32 pad a jumper is physically on.
+// That is a dev-board procedure with no pq1 counterpart — and it is not merely
+// meaningless there, it is destructive: the sweep drives PA8, which on pq1 is
+// `LDO2_EN`, the supply enable for BOTH secure elements. A silent compile-out
+// would leave a bench user wondering why their sweep printed nothing, so this
+// is a loud refusal instead.
+#[cfg(all(feature = "pin-diag-boot", feature = "board-pq1"))]
+compile_error!(
+    "`pin-diag-boot` is an iota2-only diagnostic: it sweeps the Arduino header, \
+     which pq1 does not have, and it drives PA8 — the SE rail enable (LDO2_EN) \
+     on that board — which would cut power to both secure elements mid-sweep. \
+     Build the sweep with BOARD=iota2, or scope pq1's reset directly (PA15)."
+);
 #[cfg(not(test))]
 mod sau;
 mod secure_element;

@@ -133,8 +133,20 @@ impl OptigaTrustM {
             // pulses + 50 ms priming" sequence is what empirically
             // produces a visible edge on this silicon / call-stack
             // (documented in `pin_diag.rs` module-level doc).
-            #[cfg(feature = "stm32u585")]
+            //
+            // BOARD-SPLIT (2026-08-31). That reasoning is iota2's, and so are
+            // the pins: `pin_diag::run` hardcodes PA4/PD5/PE0 and never reads
+            // `board::OPTIGA_RST`. On pq1 it would pulse PE0 (unbonded on the
+            // 48-pin package), never touch the real reset (PA15), and drive
+            // PA4 — which is the trusted display's `LCD_CS` there — under a
+            // comment calling it "disconnected, harmless". So iota2 keeps the
+            // empirically-validated sequence unchanged, and pq1 gets the
+            // board-aware pulse, which is that same sequence minus the two
+            // decoy pulses that only make sense on the dev board.
+            #[cfg(all(feature = "stm32u585", not(feature = "board-pq1")))]
             crate::pin_diag::run();
+            #[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
+            reset_pin::hard_pulse();
 
             // Post-reset settle: datasheet v3.70 Tables 13/14 require the
             // host to wait tSTARTUP ≥ 15 ms after power-on or the RST
@@ -194,7 +206,10 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// Pulse the RST line low via PE0 (Arduino D6) and re-run OpenApplication.
+    /// Pulse the board's OPTIGA RST line low and re-run OpenApplication.
+    ///
+    /// The pin is iota2's PE0 (Arduino D6) or pq1's PA15 (`SE_RST`) — see the
+    /// BOARD-SPLIT note on the pulse call below.
     ///
     /// Needed as a workaround for the 2-writes-per-session throttle on
     /// this specific OPTIGA Trust M dev board: after the chip accepts
@@ -204,17 +219,41 @@ impl OptigaTrustM {
     /// (strict locks, per-session counters) resets.
     #[cfg(feature = "stm32u585")]
     fn hard_reset_and_reinit(&mut self) -> Result<(), OptigaError> {
-        secure_log!("[OPTIGA] hard-pulsing RST (PE0/D6) to clear session throttle");
+        secure_log!("[OPTIGA] hard-pulsing RST to clear session throttle");
         // Uses `pin_diag::run` instead of the cleaner `reset_pin::init +
         // hard_pulse` pair: an identical-looking implementation in
         // reset_pin.rs produces no visible edge on the logic analyzer when
         // called from this context — the pin_diag path (which additionally
         // enables GPIOA/GPIOD clocks and runs a priming delay) works
         // reliably. Root-caused to a silicon/timing quirk we haven't
-        // fully isolated yet; documented in reset_pin.rs. The extra
-        // toggles of the disconnected candidate pins (PA4/PD5/PE0) are
-        // harmless because those pins aren't wired to anything.
+        // fully isolated yet; documented in reset_pin.rs.
+        //
+        // BOARD-SPLIT (2026-08-31). The sentence that used to end this
+        // paragraph — "the extra toggles of the disconnected candidate pins
+        // (PA4/PD5/PE0) are harmless because those pins aren't wired to
+        // anything" — is an iota2 statement, and this function runs at
+        // RUNTIME (clearing the write throttle mid-session), not just at
+        // boot. On pq1 PA4 is `LCD_CS`, the trusted display's chip-select,
+        // and PE0 is not bonded at all, so on that board the "harmless"
+        // decoys would strobe the display's CS during a signing session
+        // while the real reset (PA15) went untouched.
+        //
+        // iota2 therefore keeps the empirically-validated path unchanged;
+        // pq1 gets the board-aware pulse. CAVEAT, stated because the comment
+        // above is a warning about exactly this: the reset_pin path is the
+        // one that "produces no visible edge ... from this context" on iota2.
+        // Whether that quirk reproduces on pq1 silicon is UNTESTED — the
+        // throttle workaround has never run on that board. If pq1 shows the
+        // 2-writes-per-session throttle failing to clear, this is the first
+        // place to scope.
+        #[cfg(not(feature = "board-pq1"))]
         crate::pin_diag::run();
+        #[cfg(feature = "board-pq1")]
+        // SAFETY: secure-world boot/session path, single-threaded; touches
+        // only the RST pin's bits in its own port.
+        unsafe {
+            reset_pin::hard_pulse()
+        };
         self.ifx = ifx_i2c::IfxState::new();
         self.ready = false;
         // An RST pulse wipes the chip's PRL session. Reflect that on the
