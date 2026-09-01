@@ -253,20 +253,25 @@ jobs:
           cargo check --locked -p sphincs-tz-secure --target thumbv8m.main-none-eabi \
             --no-default-features \
             --features dual-se,optiga-hw-counter,saes-dhuk,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested,board-iota2
-      # pq1 is compile-checked SEPARATELY rather than as a matrix axis, because
-      # the two boards cannot share a feature set: `ui-lcd` pulls in
-      # `hw::spi_hw`, which is an unconditional compile_error! on pq1 until its
-      # LCD is ported (its SPI2/PB12-15 map is RGB_EN + the I2C2 backlight bus +
-      # LCM_EN there). So pq1 checks with `ui-noop`.
+      # pq1 is compile-checked SEPARATELY rather than as a matrix axis so the
+      # feature set can track what that board actually supports.
       #
-      # This step is the one that would have caught the pq1 defects found in the
-      # 2026-08-31 review: `pin_diag`'s hardcoded PA4/PD5/PE0 reset path only
-      # becomes a compile error once something actually builds the board.
-      - name: cargo check — secure world, pq1 (no ui-lcd; see above)
+      # It now carries `ui-lcd` and `consumption-mask`. The earlier version of
+      # this step used `ui-noop` and omitted the mask, with a comment saying
+      # `ui-lcd` was "an unconditional compile_error! on pq1 until its LCD is
+      # ported" — that was true when written and was falsified by the same
+      # branch two commits later (c7cf2db7 ported the LCD, 4dee0b65 the mask).
+      # The result was that the branch's two newest ports had ZERO CI build
+      # coverage, which is exactly what this job exists to prevent.
+      #
+      # This step is what catches pq1-only defects: a hardcoded iota2 pin map
+      # (e.g. `pin_diag`'s PA4/PD5/PE0 reset path) only becomes a compile error
+      # once something actually builds the board.
+      - name: cargo check — secure world, pq1 (LCD + consumption mask)
         run: |
           cargo check --locked -p sphincs-tz-secure --target thumbv8m.main-none-eabi \
             --no-default-features \
-            --features dual-se,optiga-hw-counter,saes-dhuk,ui-noop,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested,board-pq1
+            --features dual-se,optiga-hw-counter,saes-dhuk,ui-lcd,consumption-mask,stm32u585,usb,legacy-fw-rollback-unsafe,erc7730-dev-unattested,board-pq1
       - name: cargo check — non-secure world (USB)
         run: |
           cargo check --locked -p sphincs-tz-nonsecure --target thumbv8m.main-none-eabi \

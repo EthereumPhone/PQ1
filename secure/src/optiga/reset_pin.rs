@@ -142,8 +142,12 @@ pub unsafe fn init() {
 }
 
 /// Datasheet-bounded RST low time: 10 us <= t_low <= 2.5 ms (OPTIGA Trust M
-/// V3 datasheet v3.70, Table 14). 64_000 cycles at 160 MHz = 400 us, the
-/// same value `pin_diag::RST_LOW_CYCLES` uses on iota2.
+/// V3 datasheet v3.70, Table 14). 64_000 cycles is 0.4 ms NOMINAL at 160 MHz
+/// but ~1.2 ms wall-clock: `cortex_m::asm::delay` costs about three cycles per
+/// iteration. `pin_diag::RST_LOW_CYCLES` documents that calibration and uses
+/// the same value; an earlier version of this comment quoted the nominal
+/// figure past the source that corrects it. ~1.2 ms is comfortably inside the
+/// 10 us..2.5 ms window from both sides.
 const RST_LOW_CYCLES: u32 = 64_000;
 
 /// Drive a full LOW->HIGH reset pulse on the board's OPTIGA RST line.

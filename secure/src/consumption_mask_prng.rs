@@ -19,6 +19,29 @@
 
 #![allow(dead_code)]
 
+// ---------------------------------------------------------------------------
+// STATUS (2026-09-01): this module has NO production caller in the committed
+// tree, so its tests below do NOT cover the PRNG the firmware actually runs.
+// ---------------------------------------------------------------------------
+//
+// `hw/consumption_mask.rs` still carries its own inline `static mut PRNG_STATE`
+// and a duplicate xorshift. The two implementations look equivalent, but the
+// assurance is false: deleting the reseed or corrupting the shift in the LIVE
+// driver leaves every test in this file green.
+//
+// How it got this way, since the state is odd on purpose: this file is a
+// concurrent session's refactor. It was committed alone in e537e7cf because
+// `main.rs` already declared `mod consumption_mask_prng;` and the branch could
+// not build from a clean checkout without it; 4dee0b65 then reconstructed
+// `hw/consumption_mask.rs` from HEAD's inline version so that commit would
+// carry only its own board-port hunks. Net effect: the module is in, the call
+// is not.
+//
+// Resolve by landing the driver side of that refactor (making the driver call
+// `seed`/`advance` here) and deleting the inline duplicate — one commit, both
+// halves. Until then, read these tests as covering a reference implementation,
+// not the shipped one.
+
 /// sca-1 (Trezor-port): re-seed period, in SysTick ticks (~1 s at 1 kHz).
 pub(crate) const RESEED_PERIOD_TICKS: u32 = 1024;
 

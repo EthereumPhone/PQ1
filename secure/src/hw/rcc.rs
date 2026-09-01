@@ -28,6 +28,8 @@ struct RccRegs {
     ahb3enr: Reg32,
     ccipr5: Reg32,
     pwr_vosr: Reg32,
+    #[cfg(feature = "board-pq1")]
+    pwr_ucpdr: Reg32,
     flash_acr: Reg32,
     icache_cr: Reg32,
 }
@@ -45,6 +47,8 @@ const REG: RccRegs = unsafe {
         ahb3enr: Reg32::new(RCC + 0x94),
         ccipr5: Reg32::new(RCC + 0xE0),
         pwr_vosr: Reg32::new(PWR + 0x0C),
+        #[cfg(feature = "board-pq1")]
+        pwr_ucpdr: Reg32::new(PWR + 0x2C),
         flash_acr: Reg32::new(FLASH + 0x00),
         icache_cr: Reg32::new(ICACHE + 0x00),
     }
@@ -91,6 +95,37 @@ pub unsafe fn init() -> u32 {
     // ---- 1. Enable PWR clock ----
     REG.ahb3enr.set_bits(1 << 2);
     cortex_m::asm::dsb();
+
+    // ---- 1b. Release the USB Type-C dead-battery pull-downs (pq1 only) ----
+    //
+    // Out of reset the STM32 engages a dead-battery Rd on the UCPD CC pads.
+    // ST's own note (stm32u5xx_hal_pwr_ex.c, HAL_PWREx_EnableUCPDDeadBattery):
+    // "After exiting reset, the USB Type-C (dead battery) behavior is enabled,
+    // which may have a pull-down effect on CC1 and CC2 pins. It is recommended
+    // to disable it in ALL CASES, either to stop this pull-down or to handover
+    // control to the UCPD."
+    //
+    // On this MCU those pads are PA15 and PB15. On pq1 they are not CC lines at
+    // all: PA15 is `SE_RST`, the OPTIGA's reset, and PB15 is `LCM_EN`, the
+    // display backlight enable. pq1 routes no CC line to the MCU and therefore
+    // compiles `usb_hw::init_ucpd` out entirely — which is the ONLY place the
+    // `PWR_UCPDR.UCPD_DBDIS` write lived, so on that board the Rd was never
+    // released. Between reset and `se_power::init` driving PA15 high, an
+    // internal pull-down sat on the OPTIGA's reset line.
+    //
+    // Done here rather than in `usb_hw` because that module is gated on the
+    // `usb` feature while this is a property of the die on every pq1 boot, and
+    // `rcc::init` runs first.
+    //
+    // iota2 is deliberately NOT touched. There the pads ARE the CC lines, and
+    // `init_ucpd` sets DBDIS *after* configuring `UCPD1_CR` so there is never a
+    // window with no Rd presented — releasing it early would break USB-C-to-
+    // USB-C attach detection, a bug already found and fixed once on that board.
+    #[cfg(feature = "board-pq1")]
+    {
+        REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS
+        cortex_m::asm::dsb();
+    }
 
     // ---- 2. Enable HSI16 ----
     REG.cr.set_bits(HSION);

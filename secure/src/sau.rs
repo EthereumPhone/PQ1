@@ -461,7 +461,10 @@ mod stm32 {
         // Intentionally LEFT NS (the NS world legitimately needs them):
         //   - OTG (SECCFGR3 bit 10): USB HID transport to companion
         //   - GPIO banks: governed per-pin by GPIOx_SECCFGR, not TZSC
-        //   - TIM / USART / etc.: NS-side UI + debug logging (SPI1 is now
+        //   - USART / etc.: NS-side UI + debug logging. NOT the timers:
+        //     TIM2 and TIM3 are SECURED above (they carry the consumption
+        //     mask, which production mandates), so this line no longer
+        //     covers them. (SPI1 is now
         //     secured above; SPI2 stays NS on the non-LCD Tropic bench build)
         //
         // Other peripherals (SDMMC, OCTOSPI, FDCAN, etc.) keep their

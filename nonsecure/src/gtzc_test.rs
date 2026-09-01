@@ -42,6 +42,13 @@ struct Probe {
 }
 
 /// Every peripheral marked SECURE in `secure/src/sau.rs`, for THIS board.
+///
+/// This list and `sau.rs`'s `SECCFGR*_IMAGE` must move together. The pass
+/// criterion is `delta == PROBES.len()`, so a peripheral secured in the image
+/// but missing here does not weaken the receipt — it makes the receipt SILENT
+/// about it while still printing PASS. That has now happened twice (I2C4, then
+/// TIM2/TIM3/UCPD1); the const asserts in `sau.rs` carry the instruction
+/// "update the pin ONLY with a matching gtzc-enforcement-hw receipt".
 /// Order matches the SECCFGR1 → SECCFGR3 ordering in the source file so
 /// log scraping is predictable.
 ///
@@ -76,6 +83,22 @@ const PROBES: &[Probe] = &[
     // `0x5000_8400` secure alias in `secure/src/board/mod.rs`.
     #[cfg(feature = "board-pq1")]
     Probe { addr: 0x4000_8400, label: "I2C4_CR1"  },
+    // APB1 — TIM2, TIM3, UCPD1. Added 2026-09-01 with the commits that put
+    // them in the SECCFGR1 image; before that this list covered seven
+    // peripherals while the image secured ten, so the receipt printed
+    // "7/7 PASS" for a configuration it had never probed. That is the same
+    // defect the I2C4 row above was added to fix, re-created three bits later.
+    //
+    // TIM2/TIM3 carry the `consumption-mask` PWM, which production MANDATES:
+    // an NS world that can reach the timer can clear `CR1.CEN` and flat-line
+    // the mask with no secure-side symptom. UCPD1 owns PA15/PB15 — `SE_RST`
+    // and `LCM_EN` on pq1 — a second handle on those pads underneath the
+    // per-pin `GPIOx_SECCFGR` layer. NS aliases = secure alias with bit 28
+    // cleared: TIM2_S 0x5000_0000, TIM3_S 0x5000_0400, UCPD1 0x5000_DC00
+    // (`secure/src/board/mod.rs`, `secure/src/hw/usb_hw.rs`).
+    Probe { addr: 0x4000_0000, label: "TIM2_CR1"  },
+    Probe { addr: 0x4000_0400, label: "TIM3_CR1"  },
+    Probe { addr: 0x4000_DC00, label: "UCPD1_CFG1" },
 ];
 
 /// NS-side entry point under `--features gtzc-test`.

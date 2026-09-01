@@ -363,17 +363,15 @@ mod secure_fi_pin_rng_pure_tests;
 
 // ── Host-side crash/fault matrix for the PIN-lockout wallet wipe ──
 //
-// Covers the lockout-wipe path end to end as host tests:
-// `nsc/cmd_request_unlock.rs::trigger_lockout_wipe` (step order + the
-// discarded `factory_reset_admin` result), the OPTIGA/SE050/dual-SE
-// wipe legs (arm-before-work, sentinel-first, conditional page-125
-// erase, survivor detection), `hw/flash.rs` pages 124/125 (counter +
-// wipe flag), and the `main.rs` boot-time wipe-resume triggers. The
-// production files are `#[cfg(not(test))]`, so the suite pairs an
-// executable model (fault-injectable `MockSecureElement` + a flash
-// mirror) with `include_str!` source-text pins. See
-// `reports/tests/secure-lockout-wipe-fi.md` for the inventory.
-#[cfg(test)]
+// NOTE (2026-09-01): the lockout-wipe FI suite this paragraph described is NOT
+// in the tree. `mod secure_lockout_wipe_fi_pure_tests;` was removed in e537e7cf
+// because its file is untracked and its `WipeFault` / `inject_wipe_fault`
+// dependency lives in another session's uncommitted `secure_element.rs`, so the
+// branch could not build from a clean checkout. The 19 tests it contained are
+// therefore NOT running. The description was left behind pointing at coverage
+// that does not exist; it is replaced by this note rather than deleted so the
+// gap stays visible. Restore the `mod` line in the commit that lands the file
+// and its dependency together.
 
 // ── Test-only re-includes for the `secure-nsc-core` slice ──
 //

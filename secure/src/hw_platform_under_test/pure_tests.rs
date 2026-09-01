@@ -54,6 +54,7 @@ const TAMP_SRC: &str = include_str!("../hw/tamp.rs");
 const CONSUMPTION_MASK_SRC: &str = include_str!("../hw/consumption_mask.rs");
 const SCA_TRIGGER_SRC: &str = include_str!("../hw/sca_trigger.rs");
 const RCC_SRC: &str = include_str!("../hw/rcc.rs");
+const USB_HW_SRC_PLAT: &str = include_str!("../hw/usb_hw.rs");
 const RNG_SRC: &str = include_str!("../hw/rng.rs");
 const RNG_EXACT_SRC: &str = include_str!("../rng_exact.rs");
 const BOOT_PULSE_SRC: &str = include_str!("../hw/boot_pulse.rs");
@@ -373,6 +374,48 @@ fn positive_consumption_mask_pin_and_timer_come_from_the_board() {
     // And the AF-vs-pin mapping is checkable only on silicon, so the driver
     // ships a self-test that catches a timer that never reaches the pad.
     assert!(CONSUMPTION_MASK_SRC.contains("pub fn selftest_pin_toggles() -> bool {"));
+
+    // Every timer register handle must be built from `TIM` — the board-derived
+    // base — not from a literal. Constants being right is not the property:
+    // changing ONE handle to `board::TIM2_S + 0x34` passed all 2609 tests, and
+    // on pq1 that writes the duty to an unclocked TIM2 while TIM3 free-runs at
+    // whatever duty it last held, i.e. a deterministic mask with no symptom.
+    // Demonstrated by mutation 2026-09-01.
+    for handle in [
+        "tim_cr1: Reg32::new(TIM + 0x00),",
+        "tim_egr: Reg32::new(TIM + 0x14),",
+        "tim_ccmr1: Reg32::new(TIM + 0x18),",
+        "tim_ccer: Reg32::new(TIM + 0x20),",
+        "tim_psc: Reg32::new(TIM + 0x28),",
+        "tim_arr: Reg32::new(TIM + 0x2C),",
+        "tim_ccr1: Reg32::new(TIM + 0x34),",
+    ] {
+        assert!(
+            CONSUMPTION_MASK_SRC.contains(handle),
+            "every mask timer register must derive from the board's `TIM` base; \
+             missing `{handle}`"
+        );
+    }
+    for banned in ["Reg32::new(board::TIM2_S", "Reg32::new(board::TIM3_S", "Reg32::new(0x5000_"] {
+        assert!(
+            !CONSUMPTION_MASK_SRC.contains(banned),
+            "`{banned}` pins the mask to one specific timer — use the board's `TIM`"
+        );
+    }
+    // Likewise the GPIO side: the pad handles must come from PORT.
+    for handle in [
+        "gpio_moder: Reg32::new(PORT + 0x00),",
+        "gpio_otyper: Reg32::new(PORT + 0x04),",
+        "gpio_ospeedr: Reg32::new(PORT + 0x08),",
+        "gpio_pupdr: Reg32::new(PORT + 0x0C),",
+    ] {
+        assert!(CONSUMPTION_MASK_SRC.contains(handle), "mask GPIO handle drifted: `{handle}`");
+    }
+    // The AFR half is chosen by pin number here too — the mask pin is 5 on
+    // iota2 and 6 on pq1, both below 8, but a future move above 7 must not
+    // silently write the wrong word.
+    assert!(CONSUMPTION_MASK_SRC.contains("gpio_afr: Reg32::new(PORT + if PIN < 8 { 0x20 } else { 0x24 }),"));
+
 }
 
 #[test]
@@ -2031,5 +2074,50 @@ fn negative_rng_serializes_isr_and_checks_after_dr() {
             .count()
             >= 2,
         "exact word-to-output copy must have two caller receipt gates"
+    );
+}
+
+/// pq1 must release the USB Type-C dead-battery Rd; iota2 must NOT do it early.
+///
+/// Out of reset the die engages a dead-battery pull-down on the UCPD CC pads —
+/// PA15 and PB15. ST says to disable it "in all cases". On pq1 those pads are
+/// `SE_RST` (the OPTIGA's reset) and `LCM_EN` (the display backlight), and that
+/// board compiles `usb_hw::init_ucpd` out, which was the ONLY place the
+/// `PWR_UCPDR.UCPD_DBDIS` write lived — so the Rd sat on the OPTIGA's reset line
+/// from power-on until `se_power::init` drove PA15 high.
+///
+/// The asymmetry is deliberate and is the whole point of the gate: on iota2
+/// those pads ARE the CC lines and `init_ucpd` sets DBDIS *after* configuring
+/// `UCPD1_CR`, so there is never a window with no Rd presented. Releasing it
+/// early there re-breaks USB-C-to-USB-C attach detection.
+#[test]
+fn negative_pq1_releases_ucpd_dead_battery_early_iota2_does_not() {
+    assert!(
+        RCC_SRC.contains("#[cfg(feature = \"board-pq1\")]\n        pwr_ucpdr: Reg32::new(PWR + 0x2C),"),
+        "rcc must own a PWR_UCPDR handle on pq1 (PWR + 0x2C)"
+    );
+    assert!(
+        RCC_SRC.contains("REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"),
+        "pq1 must set PWR_UCPDR.UCPD_DBDIS during rcc::init — before any pad use"
+    );
+    // Guarded so iota2 keeps init_ucpd's ordering.
+    //
+    // Checked as ONE contiguous string, not by scanning backwards for a nearby
+    // `#[cfg]`. The first version of this assertion did the latter and was
+    // VACUOUS: deleting the guard let `rfind` walk back to the `#[cfg]` on the
+    // `pwr_ucpdr` struct field and the check still passed. Caught by its own
+    // control, 2026-09-01 — the same defect this whole commit is fixing.
+    assert!(
+        RCC_SRC.contains(
+            "    #[cfg(feature = \"board-pq1\")]\n    {\n        REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"
+        ),
+        "the DBDIS write must sit directly under its own board-pq1 guard — \
+         releasing the dead-battery Rd early on iota2 breaks USB-C attach \
+         detection there, which was already found and fixed once on that board"
+    );
+    // And iota2's ordering is untouched: usb_hw still does it after CR config.
+    assert!(
+        USB_HW_SRC_PLAT.contains("REG.pwr_ucpdr.set_bits(1 << 0); // UCPD_DBDIS"),
+        "iota2's init_ucpd must still release dead-battery after UCPD1_CR"
     );
 }

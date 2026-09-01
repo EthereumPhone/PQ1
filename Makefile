@@ -265,7 +265,7 @@ play-hw-display: ## Interactive OLED + arrow-key forwarding (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -293,7 +293,7 @@ play-hw-lcd:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -320,7 +320,7 @@ play-hw-duress-ui:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -570,7 +570,7 @@ test-key-speed: ## DWT-timed signing bench on HW
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features bench-key-speed,stm32u585
+			-p sphincs-tz-nonsecure --features bench-key-speed,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -638,7 +638,7 @@ test-update-hw: ## Firmware-update (CMD_FW_*) E2E on HW (non-destructive)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features fwup-hw-test,stm32u585
+			-p sphincs-tz-nonsecure --features fwup-hw-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -690,7 +690,7 @@ e2e-hw: ## Unified-sign E2E on real STM32U585 (probe-rs)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -715,7 +715,7 @@ e2e-hw-display:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -754,7 +754,7 @@ e2e-hw-dual-se:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -862,7 +862,7 @@ oled-bench-hw: ## Bench SSD1306 over bit-banged I2C on PB3/PA3 (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features stm32u585
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -883,7 +883,7 @@ se-i2c-probe-hw: ## Non-destructive SE I2C address probe: does each chip ACK? (H
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -921,7 +921,7 @@ gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585,$(BOARD_FEATURE)
+			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585,,$(BOARD_FEATURE)$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -985,7 +985,7 @@ tzic-wipe-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features tzic-wipe-test,stm32u585
+			-p sphincs-tz-nonsecure --features tzic-wipe-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -1028,7 +1028,7 @@ build-hw-usb-test:
 		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> USB test build ready (auto-provisioned, no semihosting)."
 
 # Flash auto-provisioned USB build.
@@ -1051,7 +1051,7 @@ build-hw-usb-test-debug:
 		-p sphincs-tz-secure --no-default-features --features mock-se,ui-noop,stm32u585,usb,e2e-test,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> mock-se USB test (debug) build ready."
 
 # SE050 + USB build with auto-provisioning for testing.
@@ -1063,7 +1063,7 @@ build-hw-se050-usb-test:
 		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> SE050 + USB test build ready."
 
 flash-hw-se050-usb-test: build-hw-se050-usb-test
@@ -1084,7 +1084,7 @@ build-hw-se050-usb-test-debug:
 		-p sphincs-tz-secure --no-default-features --features se050,ui-noop,stm32u585,usb,e2e-test,debug-log,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> SE050 + USB test (debug) build ready."
 
 flash-hw-se050-usb-test-debug: build-hw-se050-usb-test-debug
@@ -1109,7 +1109,7 @@ flash-hw-se050-buttons:
 		-p sphincs-tz-secure --no-default-features --features se050,gpio-buttons,debug-log,ui-semihosting,stm32u585,usb,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
-	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb
+	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -1455,7 +1455,7 @@ flash-hw-se050-rotate-scp03:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -1501,7 +1501,7 @@ build-hw-se050-oled:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> SE050 + OLED interactive build ready."
 
 # Standalone build: no debug-log, no semihosting. Safe to run with only
@@ -1513,7 +1513,7 @@ build-hw-se050-oled-standalone:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Standalone build ready (no semihosting, USB-C only)."
 
 flash-hw-se050-oled-standalone: build-hw-se050-oled-standalone
@@ -1575,7 +1575,7 @@ build-hw-dual-se-oled-standalone:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE standalone build ready (no semihosting, USB-C only, LcsO=Creation)."
 
 flash-hw-dual-se-oled-standalone: build-hw-dual-se-oled-standalone
@@ -1604,7 +1604,7 @@ build-hw-dual-se-lcd-standalone:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE LCD standalone build ready (no semihosting, USB-C only, LcsO=Creation)."
 
 flash-hw-dual-se-lcd-standalone: build-hw-dual-se-lcd-standalone
@@ -1633,7 +1633,7 @@ build-hw-dual-se-lcd-standalone-debug:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE LCD standalone DEBUG build ready (debug-log ON, ST-LINK powered)."
 
 flash-hw-dual-se-lcd-standalone-debug: build-hw-dual-se-lcd-standalone-debug
@@ -1681,7 +1681,7 @@ build-hw-dual-se-oled-standalone-debug:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Dual-SE standalone DEBUG build ready (debug-log ON, USB-C + ST-LINK)."
 
 flash-hw-dual-se-oled-standalone-debug: build-hw-dual-se-oled-standalone-debug
@@ -1721,7 +1721,7 @@ build-hw-optiga-oled-standalone:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Standalone OPTIGA build ready (no semihosting, USB-C only, LcsO=Creation)."
 
 flash-hw-optiga-oled-standalone: build-hw-optiga-oled-standalone
@@ -1779,7 +1779,7 @@ optiga-factory-reset-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -1831,7 +1831,7 @@ optiga-preprovision-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,e2e-test
+		-p sphincs-tz-nonsecure --features stm32u585,e2e-test,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -1870,7 +1870,7 @@ flash-hw-optiga-oled-standalone-testkey:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
@@ -1901,7 +1901,7 @@ flash-hw-optiga-oled-testkey:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
 	@echo "==> Configuring TrustZone option bytes..."
@@ -2683,7 +2683,7 @@ flash-hw-optiga-bringup:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -2729,7 +2729,7 @@ flash-hw-optiga-bringup-write-only:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -2765,7 +2765,7 @@ flash-hw-optiga-unlock-test:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -2817,7 +2817,7 @@ optiga-hw-counter-e2e: ## Provision E120 LUC + drive PIN cycles (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -2838,7 +2838,7 @@ optiga-admin-wipe-e2e:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -2903,7 +2903,7 @@ dual-se-multi-unlock-e2e:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -2939,7 +2939,7 @@ dual-se-admin-wipe-e2e:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -2987,7 +2987,7 @@ dual-se-bhk-e2e:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3037,7 +3037,7 @@ duress-timing-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3060,7 +3060,7 @@ duress-probe-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3084,7 +3084,7 @@ duress-provision-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3107,7 +3107,7 @@ pin-gate-hw-counter-e2e: ## Three-way MCU+OPTIGA+SE050 PIN-sync E2E (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3132,7 +3132,7 @@ pin-gate-wipe-e2e: ## 10 wrong PINs -> factory-reset both SEs (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3183,7 +3183,7 @@ wipe-for-wizard: ## Dev: wipe both SEs + page 124, halt (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3214,7 +3214,7 @@ pin-diag-boot-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3262,7 +3262,7 @@ bench-masked-sha-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3290,7 +3290,7 @@ saes-self-test-hw: ## SAES SW + DHUK round-trip + fingerprint (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3340,7 +3340,7 @@ saes-self-test-hw-rdp1:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing at RDP0..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3430,7 +3430,7 @@ pin-gate-e2e: ## MCU PIN pre-commit/reset E2E (HW; no E120 counter or reboot rec
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3461,7 +3461,7 @@ flash-hw-optiga-shield-handshake-only:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features e2e-test,stm32u585
+		-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3648,7 +3648,7 @@ decoy-flicker-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3677,7 +3677,7 @@ decoy-flicker-lcd-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3832,7 +3832,7 @@ build-hw-lcd-bringup:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585
+		-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> LCD bring-up build ready (Phase A — no init call site yet)."
 	@echo "    Next: add a hw::lcd_nv3007::init() + fill_screen() call"
 	@echo "    in main.rs behind a lcd-test feature gate, mirror"
@@ -3853,7 +3853,7 @@ lcd-test-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3878,7 +3878,7 @@ splash-test-hw:
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
-		-p sphincs-tz-nonsecure --features stm32u585,usb
+		-p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3913,7 +3913,7 @@ fw-rollback-hw: dev-pubkey-fixture
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-	  -p sphincs-tz-nonsecure --features stm32u585
+	  -p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -4024,7 +4024,7 @@ fwup-transport-hw: dev-pubkey-fixture fwup-transport-fixture
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	  cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-	    -p sphincs-tz-nonsecure --features stm32u585,usb
+	    -p sphincs-tz-nonsecure --features stm32u585,usb,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -4084,7 +4084,7 @@ fwup-transport-hw-iwdg: dev-pubkey-fixture fwup-transport-fixture
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	  cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-	    -p sphincs-tz-nonsecure --features stm32u585,usb,iwdg
+	    -p sphincs-tz-nonsecure --features stm32u585,usb,iwdg,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)

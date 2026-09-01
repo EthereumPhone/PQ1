@@ -427,6 +427,23 @@ fn positive_spi_hw_af_is_selected_per_pin() {
     );
     assert!(SPI_HW_SRC.contains("const fn afr_shift(pin: u32) -> u32 {"));
     assert!(SPI_HW_SRC.contains("(pin % 8) * 4"));
+
+    // The helpers EXISTING is not the property. `afr_off` must be the thing
+    // that feeds the AFR register handle. Hardcoding `PORT + 0x24` at this one
+    // site sends pq1's PA4/PA5/PA7 nibbles to AFRH instead of AFRL — the SPI
+    // pins are never configured — and every assertion above still passed.
+    // Demonstrated by mutation 2026-09-01.
+    assert!(
+        SPI_HW_SRC.contains("let afr = unsafe { Reg32::new(PORT + afr_off(pin)) };"),
+        "the AFR handle must be built from `afr_off(pin)`; a literal offset here \
+         silently writes the wrong AFR half for any pin below 8"
+    );
+    for banned in ["Reg32::new(PORT + 0x24)", "Reg32::new(PORT + 0x20)"] {
+        assert!(
+            !SPI_HW_SRC.contains(banned),
+            "`{banned}` hardcodes an AFR half — use afr_off(pin)"
+        );
+    }
     // Each SPI pin is configured individually — pq1's are non-contiguous.
     for call in [
         "config_af_pin(board::LCD_SCK_PIN);",
@@ -1796,6 +1813,19 @@ fn negative_i2c_hw_init_bus_consumes_the_board_bus_record() {
         body.contains("board::gpio_rcc_bit(bus.port)"),
         "`init_bus` must derive the GPIO clock bit from the bus's own port"
     );
+
+    // And `init` must actually CALL it, for every bus the board declares.
+    // Without this the whole gate above sits one call-edge below the defect it
+    // names: replacing init()'s loop with `let _ = board::SE_I2C_BUSES;` leaves
+    // BOTH secure elements uninitialised and passed all 2609 tests.
+    // Demonstrated by mutation 2026-09-01.
+    let init_body = block_after(I2C_HW_SRC, "pub fn init() {");
+    assert!(
+        init_body.contains("for bus in board::SE_I2C_BUSES {") && init_body.contains("init_bus(bus);"),
+        "`i2c_hw::init` must iterate `board::SE_I2C_BUSES` and call `init_bus` for \
+         each — a board record that is read and then dropped leaves every secure \
+         element's bus dead, with no host-visible symptom. init body was:\n{init_body}"
+    );
 }
 
 /// `hw::buttons::init` must clock the ports the BOARD names, not a literal.
@@ -1845,7 +1875,18 @@ fn negative_lcd_nv3007_control_pins_come_from_the_board() {
             "lcd_nv3007 must derive its control pins from the board; missing `{derived}`"
         );
     }
-    for banned in ["0x5202_1000", "0x5202_0C00", "0x5602_0C8C"] {
+    // Ban EVERY GPIO base, not just iota2's. The original list was
+    // [GPIOE, GPIOD, RCC] — precisely the ports pq1's LCD does NOT use — so it
+    // could only catch an iota2-shaped hardcode. pq1's LCD lives on GPIOA
+    // (SPI) and GPIOB (DC/RST/backlight); hardcoding either passed the gate.
+    for banned in [
+        "0x5202_0000", // GPIOA — pq1 LCD SPI
+        "0x5202_0400", // GPIOB — pq1 LCD DC/RST/backlight
+        "0x5202_0800", // GPIOC
+        "0x5202_0C00", // GPIOD
+        "0x5202_1000", // GPIOE — iota2 LCD
+        "0x5602_0C8C", // RCC AHB2ENR1
+    ] {
         assert!(
             !LCD_NV3007_SRC.contains(banned),
             "lcd_nv3007 must not hardcode a GPIO/RCC address (`{banned}`) — port E \

@@ -352,4 +352,12 @@ pub const EXTRA_RESERVED_PINS: &[(Option<(u32, u32)>, &str)] = &[
 ];
 
 /// Pins bonded but unassigned, available for future use.
-pub const FREE_PINS: &[(u32, u32)] = &[(GPIOA_S, 6), (GPIOA_S, 10), (GPIOC_S, 13)];
+/// Unclaimed pads. PA6 LEFT this list on 2026-09-01 when the consumption mask
+/// took it (TIM3_CH1/AF2); PB4 was never in it. All of these are `NC` on the
+/// board per the vendor pin table, so anything driven here reaches no load.
+///
+/// NOT a collision guard: nothing folds this list into a `const assert!`, so
+/// adding a pin here that a driver already owns fails silently. Check
+/// `NS_FORBIDDEN` in `board/mod.rs` and the per-driver guards before claiming
+/// a pad.
+pub const FREE_PINS: &[(u32, u32)] = &[(GPIOA_S, 10), (GPIOC_S, 13), (GPIOB_S, 4)];
