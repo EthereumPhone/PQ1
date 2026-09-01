@@ -2237,17 +2237,25 @@ fsbl: ## Build legacy bench FSBL (32 KB regression gate; not candidate approval)
 	@# `cargo build -p pqsigner-fsbl` without either env var now fails the
 	@# build instead of silently embedding the public dev key; `fsbl-release`
 	@# sets neither and supplies a real pubkey via FSBL_VENDOR_PUBKEY.
-	@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
+	@# `-Z emit-stack-sizes` adds a NON-ALLOC `.stack_sizes` section carrying one
+	@# frame size per function, which the geometry gate below turns into an upper
+	@# bound on stack depth. Verified non-perturbing: the LOAD span is byte-identical
+	@# with and without it (0x06EC0 both ways), so the flag cannot change the thing
+	@# it is there to measure.
+	@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS) -Z emit-stack-sizes" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/fsbl \
 			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe
 	@echo "==> FSBL built: $(FSBL_ELF)"
-	@# Legacy-linker regression gate only. It protects the current 32 KB bench
-	@# image from overflow; it does not close Draft 1.1's physical LOAD-span or
-	@# independent RAM/worst-case-stack gates.
+	@# Geometry gate. Measures the PHYSICAL LOAD span (not `size -B` text+data,
+	@# which undercounts by any inter-segment alignment gap) and derives the
+	@# flash PAGE RANGE that WRP would have to cover — the quantity invariant #10
+	@# actually depends on, since WRP protects pages and RDP-2 freezes the option
+	@# bytes forever. Neither selects nor approves a geometry: Draft 1.1's 40 KiB
+	@# envelope is not adopted, and the WRP/option-byte ceremony stays open.
+	@python3 scripts/check_fsbl_geometry.py $(FSBL_ELF) --linker fsbl/memory-stm32u585.x
+	@# Budget warning against the declared region, kept from the previous gate.
 	@arm-none-eabi-size -B $(FSBL_ELF) | awk -v cap=32768 -v warn=95 'NR==2 { \
 	  used=$$1+$$2; pct=used*100.0/cap; \
-	  printf "==> FSBL: %d B of %d B (%.1f%% of 32 KB), %d B free\n", used, cap, pct, cap-used; \
-	  if (used>cap) { print "==> FSBL: FAIL — exceeds the legacy 32 KB linker region"; exit 1 } \
 	  if (pct>=warn) { printf "==> FSBL: WARN — over %d%% of the legacy bench budget (only %d B headroom)\n", warn, cap-used } \
 	}'
 
