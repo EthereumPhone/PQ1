@@ -316,6 +316,25 @@ pub const USB_VBUS_SENSE: Option<(u32, u32)> = Some((GPIOA_S, 9));
 /// Scope / ChipWhisperer sync trigger. `iota2` uses PD2, which does not
 /// exist here; PB3 (`SWO`) is the repoint — it is already on the 10-pin
 /// debug header, is unused by the firmware, and is dead at RDP-2.
+/// Consumption-mask PWM — **PA6, TIM3_CH1, AF2**.
+///
+/// TIM2_CH1's pins are all taken here: PA0 is `LEFT KEY`, PA5 is the LCD's
+/// `SCK`, PA15 is `SE_RST`. PA6 is one of this board's four unclaimed pads
+/// (with PA10, PC13, PB4) and is the only one of them on a general-purpose
+/// timer channel, so the mask moves to TIM3 — which is why
+/// `sau::configure_gtzc` secures TIM3 as well as TIM2.
+///
+/// **PA6 is `NC` on this board** (vendor pin table, PIN 16), so the PWM drives
+/// no external load. That is the same situation as iota2's PA5, which is also
+/// unloaded — see the note there. It is NOT a regression introduced by this
+/// board, and it is NOT a claim that the mask is effective; that is the open
+/// bench item in `docs/hardware/evt-silicon-validation.md` §9.
+pub const MASK_PWM_PORT: u32 = GPIOA_S;
+pub const MASK_PWM_PIN: u32 = 6;
+pub const MASK_PWM_AF: u32 = 2;
+pub const MASK_TIM_BASE: u32 = super::TIM3_S;
+pub const MASK_TIM_RCC_EN_BIT: u32 = super::RCC_TIM3EN_BIT;
+
 pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOB_S, 3));
 
 /// Board-specific pins that must never reach the non-secure world, beyond the

@@ -158,6 +158,18 @@ pub const SPI1_S: u32 = 0x5001_3000;
 /// SPI2 (SVD: `0x4000_3800`).
 pub const SPI2_S: u32 = 0x5000_3800;
 
+/// `TIM2` — APB1 secure alias. General-purpose timer, 32-bit.
+pub const TIM2_S: u32 = 0x5000_0000;
+/// `TIM3` — APB1 secure alias, 0x400 above TIM2 (CMSIS `TIM3_BASE_S`).
+/// 16-bit, which the mask's 16_000-count period fits.
+pub const TIM3_S: u32 = 0x5000_0400;
+/// `TIM2EN` / `TIM2` — `RCC_APB1ENR1` bit 0, `GTZC1_TZSC_SECCFGR1` bit 0.
+pub const RCC_TIM2EN_BIT: u32 = 1 << 0;
+pub const TZSC_SECCFGR1_TIM2SEC: u32 = 1 << 0;
+/// `TIM3EN` / `TIM3` — `RCC_APB1ENR1` bit 1, `GTZC1_TZSC_SECCFGR1` bit 1.
+pub const RCC_TIM3EN_BIT: u32 = 1 << 1;
+pub const TZSC_SECCFGR1_TIM3SEC: u32 = 1 << 1;
+
 /// `USART1EN` — `RCC_APB2ENR` bit 14.
 pub const RCC_USART1EN_BIT: u32 = 1 << 14;
 /// `USART2EN` — `RCC_APB1ENR1` bit 17.
@@ -297,6 +309,17 @@ const NS_FORBIDDEN: &[(Option<(u32, u32)>, &str)] = &[
     (
         Some((CONSOLE_TX_PORT, CONSOLE_TX_PIN)),
         "debug console UART TX",
+    ),
+    // The consumption-mask PWM. Added 2026-09-01, when the mask finally got a
+    // board constant: until then it hardcoded PA5, which is the trusted
+    // display's SPI clock on pq1, and it was the ONE pin in the board port
+    // that no guard could see precisely because it had no `board::` entry to
+    // fold. Reserved for the same reason as the rest — a production build MUST
+    // carry `consumption-mask`, so handing its pin to NS would let the
+    // non-secure world drive the countermeasure's own output.
+    (
+        Some((MASK_PWM_PORT, MASK_PWM_PIN)),
+        "consumption-mask PWM output",
     ),
     (Some((BTN_LEFT_PORT, BTN_LEFT_PIN)), "trusted-UI LEFT button"),
     (

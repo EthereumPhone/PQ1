@@ -1186,7 +1186,12 @@ fn main() -> ! {
     #[cfg(all(feature = "stm32u585", feature = "consumption-mask"))]
     {
         hw::consumption_mask::init();
-        secure_log!("[S] Consumption mask initialised (TIM2 CH1 PWM on PA5)");
+        secure_log!(
+            "[S] Consumption mask initialised (timer 0x{:08x} CH1 PWM on port 0x{:08x} pin {})",
+            crate::board::MASK_TIM_BASE,
+            crate::board::MASK_PWM_PORT,
+            crate::board::MASK_PWM_PIN
+        );
     }
     #[cfg(all(feature = "ui-lcd", not(feature = "se050")))]
     {

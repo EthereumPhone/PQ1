@@ -59,6 +59,7 @@ const RNG_EXACT_SRC: &str = include_str!("../rng_exact.rs");
 const BOOT_PULSE_SRC: &str = include_str!("../hw/boot_pulse.rs");
 const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
 const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
+const BOARD_MOD_SRC_PLAT: &str = include_str!("../board/mod.rs");
 const BOOT_STATE_SRC: &str = include_str!("../hw/boot_state.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
 
@@ -324,12 +325,54 @@ fn positive_tamp_reason_from_sr_covers_crypto_fault() {
 }
 
 #[test]
-fn positive_consumption_mask_pa5_pwm_tim2_ch1() {
-    // Trezor convention; PA5 is the only pin claimed by this module.
-    // TIM2 ch1 AF1 on PA5.
-    assert!(CONSUMPTION_MASK_SRC.contains("pub const TIM2: u32 = 0x5000_0000;"));
-    assert!(CONSUMPTION_MASK_SRC.contains("pub const GPIOA: u32 = 0x5202_0000;"));
+fn positive_consumption_mask_pin_and_timer_come_from_the_board() {
+    // Was: the hardcoded `TIM2 = 0x5000_0000` and `GPIOA = 0x5202_0000`. Both
+    // are iota2 facts, and PA5 is the trusted display's SPI clock on pq1 — so
+    // this gate pinned the mask to a pin that would have contended with the
+    // LCD driver. It was also the ONLY pin in the board port with no `board::`
+    // entry, which is why no collision guard could see the clash.
+    for derived in [
+        "pub const PORT: u32 = board::MASK_PWM_PORT;",
+        "pub const PIN: u32 = board::MASK_PWM_PIN;",
+        "pub const AF: u32 = board::MASK_PWM_AF;",
+        "pub const TIM: u32 = board::MASK_TIM_BASE;",
+        "pub const RCC_APB1ENR1_TIMEN: u32 = board::MASK_TIM_RCC_EN_BIT;",
+    ] {
+        assert!(
+            CONSUMPTION_MASK_SRC.contains(derived),
+            "consumption_mask must derive its pin/timer from the board; missing `{derived}`"
+        );
+    }
     assert!(CONSUMPTION_MASK_SRC.contains("const TIMER_PERIOD: u32 = 16_000;"));
+
+    // Per-board values. iota2 keeps TIM2_CH1/PA5/AF1 exactly.
+    for (src, name, want) in [
+        (BOARD_IOTA2_SRC, "iota2", [
+            "pub const MASK_PWM_PIN: u32 = 5;",
+            "pub const MASK_PWM_AF: u32 = 1;",
+            "pub const MASK_TIM_BASE: u32 = super::TIM2_S;",
+        ]),
+        (BOARD_PQ1_SRC, "pq1", [
+            "pub const MASK_PWM_PIN: u32 = 6;",
+            "pub const MASK_PWM_AF: u32 = 2;",
+            "pub const MASK_TIM_BASE: u32 = super::TIM3_S;",
+        ]),
+    ] {
+        for w in want {
+            assert!(src.contains(w), "{name} mask pin/timer drifted: missing `{w}`");
+        }
+    }
+
+    // The mask pin must never be one the board already uses for something
+    // else. This is the check that did not exist when the mask pointed at PA5.
+    assert!(
+        !BOARD_PQ1_SRC.contains("pub const MASK_PWM_PIN: u32 = 5;"),
+        "pq1's PA5 is LCD_SCK_PIN — the mask must not claim it"
+    );
+
+    // And the AF-vs-pin mapping is checkable only on silicon, so the driver
+    // ships a self-test that catches a timer that never reaches the pad.
+    assert!(CONSUMPTION_MASK_SRC.contains("pub fn selftest_pin_toggles() -> bool {"));
 }
 
 #[test]
@@ -824,12 +867,23 @@ fn negative_tamp_pwr_alias_matches_secure_backup_domain() {
 }
 
 #[test]
-fn negative_consumption_mask_tim2_is_secure_alias() {
-    // TIM2 secure alias 0x5000_0000. NS alias is 0x4000_0000. A
-    // wrong alias here would silently produce a non-functional PWM
-    // (writes are dropped under TZ's default-secure GTZC config).
-    assert!(CONSUMPTION_MASK_SRC.contains("pub const TIM2: u32 = 0x5000_0000;"));
-    assert!(!CONSUMPTION_MASK_SRC.contains("pub const TIM2: u32 = 0x4000_0000;"));
+fn negative_consumption_mask_timer_is_secure_alias() {
+    // The timer base moved to the board map; both boards' must be the SECURE
+    // alias (0x5000_xxxx). The NS alias is 0x4000_xxxx, and a wrong alias here
+    // silently produces a non-functional PWM — writes are dropped under the
+    // default-secure GTZC config, with no error anywhere.
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TIM2_S: u32 = 0x5000_0000;"));
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TIM3_S: u32 = 0x5000_0400;"));
+    for ns in ["0x4000_0000", "0x4000_0400"] {
+        assert!(
+            !BOARD_MOD_SRC_PLAT.contains(ns),
+            "the mask timer must use the SECURE alias, never the NS one (`{ns}`)"
+        );
+    }
+    // Both timers are secured in GTZC, so NS cannot stop whichever the board
+    // uses by clearing CR1.CEN.
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TZSC_SECCFGR1_TIM2SEC: u32 = 1 << 0;"));
+    assert!(BOARD_MOD_SRC_PLAT.contains("pub const TZSC_SECCFGR1_TIM3SEC: u32 = 1 << 1;"));
 }
 
 #[test]

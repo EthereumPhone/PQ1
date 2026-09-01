@@ -190,6 +190,21 @@ pub const USB_VBUS_SENSE: Option<(u32, u32)> = None;
 ///
 /// Adding it here is what let the driver be ported without changing iota2
 /// behaviour: PD2 in, PD2 out.
+/// Consumption-mask PWM — **PA5, TIM2_CH1, AF1**. Unchanged: this is the
+/// Trezor-convention pin the mask has always used on this board.
+///
+/// Note what it is NOT: a driven load. Nothing on the dev board is wired to
+/// PA5 — `hw/consumption_mask.rs` chose it because no driver claimed it. How
+/// much a PWM on an unloaded pad actually dilutes the die's power signature is
+/// an open bench question for BOTH boards, already recorded in
+/// `docs/hardware/evt-silicon-validation.md` ("must sit near/across the die
+/// supply to matter"). Nothing here changes that either way.
+pub const MASK_PWM_PORT: u32 = GPIOA_S;
+pub const MASK_PWM_PIN: u32 = 5;
+pub const MASK_PWM_AF: u32 = 1;
+pub const MASK_TIM_BASE: u32 = super::TIM2_S;
+pub const MASK_TIM_RCC_EN_BIT: u32 = super::RCC_TIM2EN_BIT;
+
 pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOD_S, 2));
 
 pub const EXTRA_RESERVED_PINS: &[(Option<(u32, u32)>, &str)] = &[];
