@@ -25,3 +25,20 @@ scratch/badenc_ctlA.ec	MUST-FAIL	[by]: cannot close goals
 scratch/badenc_ctlB.ec	MUST-FAIL	the given proof-term proves:
 scratch/badenc_ctlC.ec	MUST-FAIL	nothing to rewrite
 scratch/badenc_ctlD.ec	MUST-FAIL	[by]: cannot close goals
+# --- WotsLegCharged controls, added 2026-09-01 (regenerate: scratch/mkctl_wlc.sh).
+# A drops the GRIND-REACHABILITY premise, B drops forger losslessness, C drops ONE
+# of the six WOTS-TW separations from F.  Reasons observed, not assumed.
+# HONEST LIMITATION: A and B fail with the SAME message ("this proof-term proves:"),
+# so the gate's reason check cannot tell them apart -- it only confirms each failed
+# at a PROOF-TERM mismatch rather than a parse error or a missing require.  What
+# distinguishes them is WHICH premise was deleted, which is fixed by the generator,
+# not by the message.  Recorded rather than papered over.
+# TRAP, paid for on the first run (RED, 1 failure): the gate matches the reason against
+# the FIRST `[critical]` line only (`grep -a '^\[critical\]' | head -1`), and EasyCrypt
+# WRAPS long module lists across lines.  C's declared reason was originally
+# "is not allowed to use the modules(s)" -- true of the diagnostic, but on its SECOND
+# line, so the gate scored it as failing for the wrong reason.  Declare a substring of
+# the FIRST line, and avoid line numbers in it (they drift when the file is edited).
+scratch/wlc_ctlA.ec	MUST-FAIL	this proof-term proves:
+scratch/wlc_ctlB.ec	MUST-FAIL	this proof-term proves:
+scratch/wlc_ctlC.ec	MUST-FAIL	the module Top.WOTS_C_Interactive.R_int_WOTSTW

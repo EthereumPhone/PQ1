@@ -1,3 +1,11 @@
+# UNCHANGED 2026-09-01, and that is the notable part.  cdrafts-split/WotsLegCharged.ec
+# entered the closure (roots 35 -> 36, cone files 46 -> 47) and this census did NOT move:
+# added=0 removed=0, ledger=241, total=1642, byte-identical body.  The file declares no
+# op, no axiom, no module -- only seven lemmas, and lemmas are not census rows.  A new
+# certified member that costs ZERO assumptions is what a proof-side unit should look like;
+# its cost is in STATEMENTS (1016 -> 1023, all pinned) and in two new PREMISES that live
+# in the theorem, not the census (grind reachability + forger losslessness).
+#
 # CONE BASELINE -- SPLIT tree.  RE-BASELINED 2026-08-31.
 # WHY: cdrafts-split/BadEncCountermodel.ec was PROMOTED into the closure from
 # experiments/wots-badenc/, which the cone census does not cover.  It is the

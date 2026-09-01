@@ -108,7 +108,11 @@ conclusion is now the BadEnc disjunction, and MM45's admitted injectivity is rep
 explicit named probability `Pr[Game4_WOTSTWES_BadEnc(…) : res /\ BadEncFlag.badenc]` in
 `MEUFGCMA_WOTSTWESNPRF_Charged` — carried **unreduced**, exactly as this artifact carries
 `ITSRC10`. **LEDGER 242 → 241**, the first assumption *removed* rather than relocated in
-this arc; taint closure **6 → 2**. `extract_op` remains — and **closing it is explicitly NOT
+this arc; taint closure **6 → 2**. The deployed WOTS leg is now **charged** too —
+`WotsLegCharged.ec::wots_leg_charged_at_deployed` (2026-09-01) replaces `GprocQWired`'s
+opaque WOTS summand with the four named UD/TCR/PRE/encoding-collision terms at the
+deployed adversary, at the price of six extra separations on `F` and an explicit
+**grind-reachability** premise. `extract_op` remains — and **closing it is explicitly NOT
 the next unit**: it targets a *local mirror* game, not the headline's term, which the fully
 proven Gproc route already reaches. See `UPDATE 2026-09-01` and `scratch/scope_fextractop_VERDICT.md`.
 
@@ -3207,3 +3211,105 @@ OK   inputs unchanged across the run
 
 Every number is identical to the 2026-08-31 run except `INPUTS_SHA256`. That is the
 point of this entry: the census could not see the change, and the identity could.
+
+### UPDATE 2026-09-01 (later) — the deployed WOTS leg is CHARGED, and it cost the census nothing
+
+`WotsLegCharged.ec` is a closure member. It is step 5 of
+`scratch/scope_fextractop_VERDICT.md` — the unit that verdict recommended in 2026-08 and
+then disqualified, for a reason that expired on 2026-08-30.
+
+#### What it says
+
+`GprocQWired.ec` carries the WOTS-TW game as an **opaque summand of its statement**. The
+new theorem replaces it with the four **named** terms of `MEUFGCMA_WOTSTWESNPRF_Charged`,
+at the deployed adversary:
+
+```
+Pr[M_EUF_GCMA_WOTSTWESNPRF(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))), …) : res]
+  ≤  (w−2)·|UD(false) − UD(true)|  +  TCR  +  ( PRE + Pr[Game4_WOTSTWES_BadEnc … : res /\ badenc] )
+```
+
+Composing with the deployed capstone is then transitivity. **0 admits, 0 axioms**, seven
+lemmas.
+
+#### The census did not move. At all.
+
+| | before | after |
+|---|---|---|
+| closure roots | 35 | **36** |
+| cone files | 46 | **47** |
+| statements | 1016 | **1023** (all 7 pinned) |
+| census `added` / `removed` | — | **0 / 0** |
+| `ledger` / `total` | 241 / 1642 | **241 / 1642** |
+
+The baseline **body is byte-identical**. The file declares no op, no axiom and no module —
+only lemmas, and lemmas are not census rows. A certified member that costs zero
+assumptions is what a proof-side unit should look like.
+
+#### The cost is in the THEOREM, which is where it belongs
+
+Three premises the deployed capstone does not carry:
+
+1. **Six extra module separations on `F`** — the WOTS-TW internals the charged bound
+   needs. Formally a **narrowing**: the theorem applies to fewer adversaries.
+   `GprocQWired.ec` already takes this exact trade twice and prices it in its own words,
+   *"the price of replacing an unreduced Q with three named hardness advantages."*
+2. **Grind reachability**: `forall m, is_lossless (dcond dmkey (good_fors m))`.
+   `R_top_C`'s CMA oracle draws `mk <$ dcond dmkey (good_fors m)`, and a **conditional**
+   distribution is lossless only if its condition is reachable. Nothing in the closure
+   supplies that. **This is the "+C" grind assumption made visible.** It was always
+   implicitly required by the deployed instantiation — it simply had nowhere to appear,
+   because nothing had ever tried to instantiate the charged bound there. It is a
+   hypothesis and is deliberately **not** axiomatised.
+3. Ordinary **forger losslessness**, which the deployed capstone also lacks.
+
+#### What it does not do
+
+**It bounds nothing.** Four named terms in place of one opaque game is assumption-surface
+progress, not a number. And `BadEncCountermodel.ec::badenc_is_one` still does **not**
+apply here: that theorem is about `A_coll`; this term sits at a different composed
+adversary whose value is **open**. That is precisely the +C-layer question the tree
+records as unresolved.
+
+#### Two structural facts worth keeping
+
+* **`R_top_C.choose` needs no adversary premise.** It never calls the forger — it is a
+  four-deep loop nest over `ddgstblock` and `OC.query`. Only `forge` reaches the
+  adversary, and only there does the grind premise bite. That is why the two obligations
+  decomposed so unevenly.
+* **The borrowed obligation proofs only work with `A_ht` abstract.**
+  `XmssmtCC_All.ec:8915-8979` opens with `proc; inline *`, which leaves the `A_ht` call
+  standing for a `call` step. Instantiated at the *concrete* `R_top_C(F)`, `inline *`
+  inlines the adversary too and the expected call is not there — my first assembly failed
+  exactly so. Keeping them generic (`composed_choose_ll` / `composed_forge_ll`) and
+  instantiating afterwards let the borrowed scripts stay **byte-identical** rather than
+  re-derived.
+
+#### Controls, with a limitation stated rather than papered over
+
+`scratch/wlc_ctl{A,B,C}.ec` (regenerate: `scratch/mkctl_wlc.sh`) drop the grind premise,
+forger losslessness, and one of the six separations. All three must fail; the floor moved
+10 → 13. **A and B fail with the same message** (`this proof-term proves:`), so the gate's
+reason check can only confirm each hit a proof-term mismatch rather than a parse error or
+a missing require. What distinguishes them is which premise the generator deleted, not the
+diagnostic. Recorded in `cert-controls-split.tsv` next to the rows.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (cfb502be...)
+pins 1108/1108 | coverage 1023/1023 across 47 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 13/13 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+**A gate trap, paid for on the first run.** It came back RED on one line —
+`FAIL control scratch/wlc_ctlC.ec: failed for the WRONG reason`. The gate matches a
+control's declared reason against the **first** `[critical]` line only, and EasyCrypt
+**wraps long module lists across lines**. C's declared reason
+(`is not allowed to use the modules(s)`) is genuinely in the diagnostic — on its *second*
+line. I had observed the message through `cut -c1-150` and read the wrap point as its end.
+Declare a substring of the first line, and keep line numbers out of it: they drift.

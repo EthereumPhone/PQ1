@@ -2,7 +2,8 @@
 # Enforced by PHASE 1h (tools/stmt_coverage.py): a file ENTERING or LEAVING the cone is
 # a fatal, human-visible delta.  Without this the coverage check would silently absorb a
 # new cone file by enumerating whatever it found that day.
-# 46 files = the 39 roots + 7 transitively required.
+# 47 files = the 40 roots + 7 transitively required.
+# (WotsLegCharged.ec added 2026-09-01 -- the deployed WOTS leg, charged.)
 # (BadEncCountermodel.ec added 2026-08-31 -- promoted from experiments/wots-badenc.)
 base-c10-split/BinaryTrees.ec
 base-c10-split/FL_SL_XMSS_MT_ES.ec
@@ -47,6 +48,7 @@ cdrafts-split/WOTS_C_Multi.ec
 cdrafts-split/WOTS_C_Real.ec
 cdrafts-split/WOTS_C_Reduction.ec
 cdrafts-split/WOTS_C_Scheme.ec
+cdrafts-split/WotsLegCharged.ec
 cdrafts-split/XMSSMT_C_Scheme.ec
 cdrafts-split/XmssmtCCCharged.ec
 cdrafts-split/XmssmtCC_All.ec

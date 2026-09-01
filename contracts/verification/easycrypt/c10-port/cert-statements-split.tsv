@@ -1189,3 +1189,11 @@ cdrafts-split/BadEncCountermodel.ec::size_pkfs_fun	bfb9fbe7eb87b80668dd1d982a4f8
 cdrafts-split/BadEncCountermodel.ec::verify_encode_transfer	481a3a44caf8fee493efa84dc55016ae
 cdrafts-split/BadEncCountermodel.ec::verify_ll	42980a7588782ac83d562aa1402c78f8
 cdrafts-split/BadEncCountermodel.ec::verify_replay_valid	f7e1a0bd303fcb9e6fd0b746df153faf
+# --- WotsLegCharged.ec, pinned on promotion 2026-09-01 (7 statements). ---
+cdrafts-split/WotsLegCharged.ec::composed_choose_ll	4983e42a8288a235911b5906ab149435
+cdrafts-split/WotsLegCharged.ec::composed_forge_ll	27d18f697dbfcc7055ded9c71938c4ce
+cdrafts-split/WotsLegCharged.ec::fors_sign_ll	3411783917707fba0835f13239d7d1ce
+cdrafts-split/WotsLegCharged.ec::gen_leaves_ll	b5e4ac8d9ae8eb01f8ab2e60f2a33712
+cdrafts-split/WotsLegCharged.ec::rtopc_choose_ll	5c6837b459d3d9815703877af86b4371
+cdrafts-split/WotsLegCharged.ec::rtopc_forge_ll	a2613f5007f69565313fc14120d4a4a7
+cdrafts-split/WotsLegCharged.ec::wots_leg_charged_at_deployed	b8feb97aa0060101095f18e01a0c12fd

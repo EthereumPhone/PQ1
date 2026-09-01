@@ -1152,5 +1152,41 @@
 #   conjunct IS the current `two_encodings` lemma restated, not a corollary of an
 #   ambient axiom.  Verified at source before writing, not inherited.
 #
-split	8578b60483c251febe4da794895e22a3
+# 2026-09-01 (second).  split 8578b60483c251febe4da794895e22a3 -> cfb502beee345f7198eb995477781230.
+#   cdrafts-split/WotsLegCharged.ec ENTERS THE CLOSURE -- the deployed WOTS leg, charged.
+#   It replaces GprocQWired's OPAQUE WOTS summand with the four NAMED terms of
+#   MEUFGCMA_WOTSTWESNPRF_Charged at the deployed adversary.  Step 5 of
+#   scratch/scope_fextractop_VERDICT.md, unblocked when admit B was removed 2026-08-30.
+#   Inputs that moved:
+#     + cdrafts-split/WotsLegCharged.ec      (new closure member; 0 admits, 0 axioms)
+#     + scratch/wlc_ctl{A,B,C}.ec            (3 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                (35 -> 36 roots)
+#     ~ cert-cone-files-split.tsv            (46 -> 47 files)
+#     ~ cert-controls-split.tsv              (10 -> 13 controls)
+#     ~ cert-statements-split.tsv            (+7 pins)
+#     ~ cert_gate_split.sh                   (EXPECT_STMTS 1016->1023, EXPECT_PINS 1101->1108,
+#                                             controls floor >=13)
+#     ~ cert-baseline-split.tsv              (HEADER ONLY -- see below)
+#   THE CENSUS DID NOT MOVE AT ALL.  added=0 removed=0, ledger=241, total=1642, and the
+#   baseline BODY is byte-identical: the new member declares no op, no axiom and no
+#   module, only seven lemmas, and lemmas are not census rows.  A certified member that
+#   costs ZERO assumptions is the point.  Its real cost is elsewhere and is visible in the
+#   THEOREM rather than the census: six extra module separations on F (a NARROWING that
+#   GprocQWired.ec already takes twice), GRIND REACHABILITY
+#   (`forall m, is_lossless (dcond dmkey (good_fors m))` -- the "+C" grind assumption made
+#   explicit, supplied by nothing in the closure), and ordinary forger losslessness, which
+#   the deployed capstone also lacks.
+#
+#   SECOND-PASS NOTE.  The first value recorded here (4b56c96f...) was superseded within
+#   the hour: run 1 came back RED on ONE line -- `FAIL control scratch/wlc_ctlC.ec: failed
+#   for the WRONG reason`.  Cause: the gate matches a control's declared reason against the
+#   FIRST `[critical]` line only, and EasyCrypt WRAPS long module lists across lines.  C's
+#   declared reason ("is not allowed to use the modules(s)") is genuinely in the diagnostic
+#   -- on its SECOND line.  I had truncated the message with `cut -c1-150` when observing
+#   it and read the wrap point as the end.  Declared reason is now a substring of the FIRST
+#   line and carries no line number (those drift).  Everything else in run 1 was green:
+#   census added=0 removed=0, ledger=241, coverage 1023/1023, pins 1108/1108, controls
+#   13/13 executed with A and B both discriminating.
+#
+split	cfb502beee345f7198eb995477781230
 fork	9c2d21280c84d52c30b22111151f1135
