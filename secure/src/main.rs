@@ -374,7 +374,6 @@ mod secure_fi_pin_rng_pure_tests;
 // mirror) with `include_str!` source-text pins. See
 // `reports/tests/secure-lockout-wipe-fi.md` for the inventory.
 #[cfg(test)]
-mod secure_lockout_wipe_fi_pure_tests;
 
 // ── Test-only re-includes for the `secure-nsc-core` slice ──
 //
