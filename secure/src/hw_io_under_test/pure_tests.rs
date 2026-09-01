@@ -51,6 +51,7 @@ const UART_SRC: &str = include_str!("../hw/uart.rs");
 const BOARD_IOTA2_SRC: &str = include_str!("../board/iota2.rs");
 const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
 const BOARD_MOD_SRC: &str = include_str!("../board/mod.rs");
+const LCD_NV3007_SRC: &str = include_str!("../hw/lcd_nv3007.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
 
@@ -309,29 +310,70 @@ fn positive_i2c2_probe_halts_after_scan() {
 // ═════════════════════════════════════════════════════════════════════
 
 #[test]
-fn positive_spi_hw_default_spi2_base() {
-    assert!(SPI_HW_SRC.contains("pub const SPI_BASE: u32 = 0x5000_3800; // SPI2"));
-}
+fn positive_spi_hw_base_and_pins_come_from_the_board() {
+    // These four gates used to pin the driver's HARDCODED literals: SPI2's
+    // base, SPI1's base, `GPIO_BASE = 0x5202_0400 // GPIOB`, `GPIO_BASE =
+    // 0x5202_1000 // GPIOE`, and `CS_PIN = 12`. Every one of those is an iota2
+    // fact. pq1's panel is SPI1 on PA4/PA5/PA7, so the gates were pinning the
+    // driver to a configuration that board cannot use — the same shape as the
+    // `sca_trigger` PD2 gate. Values are pinned per board below; the driver is
+    // pinned to DERIVE.
+    for derived in [
+        "pub const SPI_BASE: u32 = board::LCD_SPI_BASE;",
+        "pub const CS_PIN: u32 = board::LCD_CS_PIN;",
+        "const PORT: u32 = board::LCD_SPI_PORT;",
+        "const AF: u32 = board::LCD_SPI_AF;",
+    ] {
+        assert!(
+            SPI_HW_SRC.contains(derived),
+            "spi_hw must derive its pin map from the board; missing `{derived}`"
+        );
+    }
+    for banned in ["0x5000_3800", "0x5001_3000", "0x5202_0400", "0x5202_1000"] {
+        assert!(
+            !SPI_HW_SRC.contains(banned),
+            "spi_hw must not hardcode a peripheral or GPIO base (`{banned}`)"
+        );
+    }
 
-#[test]
-fn positive_spi_hw_arduino_spi1_base() {
-    assert!(SPI_HW_SRC.contains("pub const SPI_BASE: u32 = 0x5001_3000; // SPI1"));
+    // VALUES per board. iota2 keeps its validated Arduino-header map.
+    for (src, name, want) in [
+        (BOARD_IOTA2_SRC, "iota2", [
+            "pub const LCD_SPI_PORT: u32 = GPIOE_S;",
+            "pub const LCD_CS_PIN: u32 = 12;",
+            "pub const LCD_SCK_PIN: u32 = 13;",
+            "pub const LCD_MOSI_PIN: u32 = 15;",
+        ]),
+        (BOARD_PQ1_SRC, "pq1", [
+            "pub const LCD_SPI_PORT: u32 = GPIOA_S;",
+            "pub const LCD_CS_PIN: u32 = 4;",
+            "pub const LCD_SCK_PIN: u32 = 5;",
+            "pub const LCD_MOSI_PIN: u32 = 7;",
+        ]),
+    ] {
+        for w in want {
+            assert!(src.contains(w), "{name} LCD pin map drifted: missing `{w}`");
+        }
+    }
+    // Both boards run the panel on SPI1 (`ui-lcd` implies `spi1-arduino`), so
+    // the APB2 enable/reset bits are shared rather than per board.
+    assert!(SPI_HW_SRC.contains("const SPI_EN_BIT: u32 = board::RCC_SPI1EN_BIT;"));
+    assert!(SPI_HW_SRC.contains("const SPI_RST_BIT: u32 = board::RCC_SPI1RST_BIT;"));
+
+    // The MISO type must stay uniform, or the driver cannot consume both.
+    assert!(BOARD_IOTA2_SRC.contains("pub const LCD_MISO_PIN: Option<u32> = Some(14);"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_MISO_PIN: Option<u32> = None;"));
 }
 
 #[test]
 fn positive_spi_hw_rcc_secure_alias() {
-    assert!(SPI_HW_SRC.contains("const RCC_S: u32 = 0x5602_0C00;"));
-}
-
-#[test]
-fn positive_spi_hw_gpiob_default_gpioe_arduino() {
-    assert!(SPI_HW_SRC.contains("const GPIO_BASE: u32 = 0x5202_0400; // GPIOB"));
-    assert!(SPI_HW_SRC.contains("const GPIO_BASE: u32 = 0x5202_1000; // GPIOE"));
-}
-
-#[test]
-fn positive_spi_hw_cs_pin_12() {
-    assert!(SPI_HW_SRC.contains("pub const CS_PIN: u32 = 12;"));
+    // The literal moved to the board layer with the rest of the pin map; what
+    // matters is still that the SECURE alias is used, since GPIO/RCC clock
+    // enables are secure-only under TZEN=1 and NS-alias writes silently drop.
+    assert!(SPI_HW_SRC.contains("const RCC_S: u32 = board::RCC_S;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_S: u32 = 0x5602_0C00;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_APB2RSTR_OFF: u32 = 0x7C;"));
+    assert!(BOARD_MOD_SRC.contains("pub const RCC_SPI1RST_BIT: u32 = 1 << 12;"));
 }
 
 #[test]
@@ -350,7 +392,6 @@ fn positive_spi_hw_cfg1_baud_gated_dsize_8bit() {
     // the line and corrupts 40 MHz edges), ÷32 (5 MHz) conservative for non-LCD
     // builds. DSIZE = 7 (8-bit); only MBR nibble [30:28] moves.
     assert!(SPI_HW_SRC.contains("const MBR: u32 = 0b010;")); // ÷8 → 20 MHz (ui-lcd)
-    assert!(SPI_HW_SRC.contains("const MBR: u32 = 0b100;")); // ÷32 → 5 MHz (default)
     assert!(SPI_HW_SRC.contains("REG.spi_cfg1.write((MBR << 28) | 7);"));
 }
 
@@ -375,11 +416,25 @@ fn positive_spi_hw_cs_asserts_low_via_bsrr_reset() {
 }
 
 #[test]
-fn positive_spi_hw_af5_for_sck_miso_mosi() {
-    // AF5 for pins 13 (SCK), 14 (MISO), 15 (MOSI).
-    assert!(SPI_HW_SRC.contains("(5 << 20)"));
-    assert!(SPI_HW_SRC.contains("(5 << 24)"));
-    assert!(SPI_HW_SRC.contains("(5 << 28)"));
+fn positive_spi_hw_af_is_selected_per_pin() {
+    // Was: the three AFRH nibble literals `(5 << 20/24/28)` for pins 13/14/15.
+    // That only works for pins >= 8. pq1's SPI pins are 5 and 7, whose AF
+    // nibbles live in AFRL (0x20), so the gate had to become structural.
+    assert!(SPI_HW_SRC.contains("const fn afr_off(pin: u32) -> u32 {"));
+    assert!(
+        SPI_HW_SRC.contains("if pin < 8 {\n        0x20\n    } else {\n        0x24\n    }"),
+        "AFR half must be chosen by pin number: AFRL (0x20) below 8, AFRH (0x24) above"
+    );
+    assert!(SPI_HW_SRC.contains("const fn afr_shift(pin: u32) -> u32 {"));
+    assert!(SPI_HW_SRC.contains("(pin % 8) * 4"));
+    // Each SPI pin is configured individually — pq1's are non-contiguous.
+    for call in [
+        "config_af_pin(board::LCD_SCK_PIN);",
+        "config_af_pin(board::LCD_MOSI_PIN);",
+        "if let Some(miso) = board::LCD_MISO_PIN {",
+    ] {
+        assert!(SPI_HW_SRC.contains(call), "spi_hw must configure `{call}`");
+    }
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -1766,4 +1821,52 @@ fn negative_buttons_clock_enable_consumes_the_derived_mask() {
          `init` — a derivation that lives elsewhere and is never consumed here is \
          exactly the defect this gate exists for"
     );
+}
+
+/// The NV3007 driver's control pins must come from the board, not from GPIOE.
+///
+/// `spi_hw` was only half the LCD port. `lcd_nv3007` independently hardcoded
+/// `GPIOE_S`/`GPIOD_S`, DC = pin 7 and RES = pin 14 — plus ten dead register
+/// handles for a PD15 reset abandoned during bring-up. Port E is not bonded on
+/// pq1 at all, so with only `spi_hw` ported the build went GREEN while DC and
+/// RES still pointed at a port that does not exist on that package. A passing
+/// build is not a port.
+#[test]
+fn negative_lcd_nv3007_control_pins_come_from_the_board() {
+    for derived in [
+        "const DC_PORT: u32 = board::LCD_DC_PORT;",
+        "const DC_PIN: u32 = board::LCD_DC_PIN;",
+        "const RES_PORT: u32 = board::LCD_RST_PORT;",
+        "const RES_PIN: u32 = board::LCD_RST_PIN;",
+        "const RES_DRIVABLE: bool = board::LCD_RST_IS_DRIVABLE;",
+    ] {
+        assert!(
+            LCD_NV3007_SRC.contains(derived),
+            "lcd_nv3007 must derive its control pins from the board; missing `{derived}`"
+        );
+    }
+    for banned in ["0x5202_1000", "0x5202_0C00", "0x5602_0C8C"] {
+        assert!(
+            !LCD_NV3007_SRC.contains(banned),
+            "lcd_nv3007 must not hardcode a GPIO/RCC address (`{banned}`) — port E \
+             does not exist on pq1's 48-pin package"
+        );
+    }
+    // It must clock the ports its own pins live on: `spi_hw` only enables the
+    // SPI port, which on pq1 is a DIFFERENT port from DC/RES/backlight.
+    assert!(LCD_NV3007_SRC.contains("board::gpio_rcc_bit(DC_PORT) | board::gpio_rcc_bit(RES_PORT)"));
+    // Reset strategy follows the board: a real pin pulse where one is wired.
+    assert!(
+        LCD_NV3007_SRC.contains("if RES_DRIVABLE {")
+            && LCD_NV3007_SRC.contains("hard_reset();"),
+        "a board whose reset pin reaches the panel must get a real pulse, not SWRESET"
+    );
+    // pq1's backlight enable must actually be asserted.
+    assert!(LCD_NV3007_SRC.contains("if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {"));
+
+    // Per-board values.
+    assert!(BOARD_IOTA2_SRC.contains("pub const LCD_RST_IS_DRIVABLE: bool = false;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_RST_IS_DRIVABLE: bool = true;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_DC_PIN: u32 = 0;"));
+    assert!(BOARD_PQ1_SRC.contains("pub const LCD_RST_PIN: u32 = 1;"));
 }

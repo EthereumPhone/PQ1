@@ -104,6 +104,10 @@ pub const RCC_APB1ENR2_OFF: u32 = 0xA0;
 pub const RCC_APB2ENR_OFF: u32 = 0xA4;
 /// `RCC_APB1RSTR1` offset — peripheral resets matching `APB1ENR1`.
 pub const RCC_APB1RSTR1_OFF: u32 = 0x74;
+/// `RCC_APB2RSTR` offset. Verified against the CMSIS `RCC_TypeDef` layout by
+/// anchoring on the known-good `AHB2ENR1 = 0x8C`: the same arithmetic
+/// reproduces `APB1ENR1 = 0x9C`, `APB2ENR = 0xA4` and `APB1RSTR1 = 0x74`.
+pub const RCC_APB2RSTR_OFF: u32 = 0x7C;
 /// `RCC_APB1RSTR2` offset — peripheral resets matching `APB1ENR2`.
 pub const RCC_APB1RSTR2_OFF: u32 = 0x78;
 
@@ -164,6 +168,8 @@ pub const RCC_I2C1EN_BIT: u32 = 1 << 21;
 pub const RCC_I2C4EN_BIT: u32 = 1 << 1;
 /// `SPI1EN` — `RCC_APB2ENR` bit 12.
 pub const RCC_SPI1EN_BIT: u32 = 1 << 12;
+/// `SPI1RST` — `RCC_APB2RSTR` bit 12 (same position as the enable).
+pub const RCC_SPI1RST_BIT: u32 = 1 << 12;
 
 // ---------------------------------------------------------------------------
 // GTZC1 TZSC security bits, for `sau::configure_gtzc`.

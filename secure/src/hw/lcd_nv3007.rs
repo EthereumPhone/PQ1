@@ -66,6 +66,7 @@
 
 #![cfg(feature = "ui-lcd")]
 
+use crate::board;
 use crate::hw::mmio::{Reg32, RoReg32};
 use crate::hw::spi_hw::{cs_assert, cs_deassert, SPI_BASE};
 
@@ -97,57 +98,65 @@ pub const Y_OFFSET: u16 = 0;
 // GPIOE bank as DC + the SPI pins (proven to drive), on the solid CN13
 // connector. The panel is write-only so MISO is free. See docs/hardware/nv3007-wiring.md.
 
-/// DC (Data/Command) pin position on GPIOE (PE7 = Arduino D4). Drive HIGH
-/// for data, LOW for command. Configured as push-pull output by `init()`.
-const DC_PIN: u32 = 7;
+/// DC (Data/Command). HIGH = data, LOW = command. Push-pull output.
+/// iota2: PE7 (Arduino D4). pq1: PB0, vendor net "LCM DC".
+const DC_PORT: u32 = board::LCD_DC_PORT;
+const DC_PIN: u32 = board::LCD_DC_PIN;
 
-/// RES (hardware reset, active-low) pin position on GPIOE (PE14 = Arduino
-/// D12 / CN13 pin 5, the unused SPI1_MISO). Driven by [`hard_reset`] during
-/// init. Push-pull output (overrides spi_hw's AF on PE14).
-const RES_PIN: u32 = 14;
+/// RES (hardware reset, active-low).
+///
+/// iota2: PE14 — the panel's reset is strapped to 3V3 there, so this pin is
+/// NOT the panel reset; configuring it as an output merely overrides spi_hw's
+/// AF5 (SPI1_MISO), which is harmless because the panel is write-only. That
+/// board resets via the `SWRESET` command instead. pq1: PB1, vendor net
+/// "LCM RST", genuinely driven by the MCU — see [`board::LCD_RST_IS_DRIVABLE`].
+const RES_PORT: u32 = board::LCD_RST_PORT;
+const RES_PIN: u32 = board::LCD_RST_PIN;
 
-/// Bit mask in `GPIOE_BSRR` for DC = HIGH (data).
+/// Whether the board's reset pin actually reaches the panel. Selects a real
+/// reset pulse over the `SWRESET` command in [`init`].
+const RES_DRIVABLE: bool = board::LCD_RST_IS_DRIVABLE;
+
+/// BSRR masks for DC.
 const DC_HIGH_BS: u32 = 1 << DC_PIN;
-/// Bit mask in `GPIOE_BSRR` for DC = LOW (command).
 const DC_LOW_BR: u32 = 1 << (DC_PIN + 16);
 
-/// Bit masks in `GPIOE_BSRR` for RES (PE14).
+/// BSRR masks for RES.
 const RES_HIGH_BS: u32 = 1 << RES_PIN;
 const RES_LOW_BR: u32 = 1 << (RES_PIN + 16);
 
 // ---------------------------------------------------------------------------
-// MMIO handles — GPIOE secure alias (extends what spi_hw already touches)
+// MMIO handles — all ports come from the board map
 // ---------------------------------------------------------------------------
 //
-// `hw::spi_hw::init()` already enables the GPIOE clock and binds PE12-PE15
-// (CS, SCK, MISO, MOSI). This module extends the configuration by setting
-// PE7 (DC) as a push-pull output on GPIOE, and PD15 (RES) as a push-pull
-// output on GPIOD — for which it must also enable the GPIOD clock (spi_hw
-// only enabled GPIOE). We do NOT re-touch PE12-PE15 here.
-
-const GPIOE_S: u32 = 0x5202_1000;
-/// GPIOD secure alias — RES is PD15 (Arduino D2).
-const GPIOD_S: u32 = 0x5202_0C00;
-/// RCC AHB2ENR1 (secure alias) — GPIODEN is bit 3 (matches `pin_diag` +
-/// `spi_hw`'s `RCC_S + 0x8C`).
-const RCC_AHB2ENR1: u32 = 0x5602_0C8C;
-const GPIODEN_BIT: u32 = 3;
+// `hw::spi_hw::init()` enables the clock for the SPI port only. On iota2 the
+// DC and RES pins happen to sit on that same port (GPIOE); on pq1 the SPI is
+// on port A while DC/RES/backlight are all on port B, so this module enables
+// whatever extra port clocks its own pins need.
+//
+// The previous version hardcoded `GPIOE_S` plus a `GPIOD_S` block for a PD15
+// reset that had been abandoned during bring-up — ten dead register handles
+// with no consumer anywhere in the file.
 
 struct LcdRegs {
-    gpioe_moder: Reg32,
-    gpioe_otyper: Reg32,
-    gpioe_ospeedr: Reg32,
-    gpioe_pupdr: Reg32,
-    gpioe_bsrr: Reg32,
+    // DC port.
+    dc_moder: Reg32,
+    dc_otyper: Reg32,
+    dc_ospeedr: Reg32,
+    dc_pupdr: Reg32,
+    dc_bsrr: Reg32,
 
-    // GPIOD — RES on PD15.
-    gpiod_moder: Reg32,
-    gpiod_otyper: Reg32,
-    gpiod_ospeedr: Reg32,
-    gpiod_pupdr: Reg32,
-    gpiod_bsrr: Reg32,
+    // RES port. The same physical registers as the DC ones when a board puts
+    // both pins on one port (iota2 does; pq1 also does, on a different port
+    // from the SPI). Aliasing is fine: every write below is a disjoint-bit RMW
+    // or a single-bit BSRR store.
+    res_moder: Reg32,
+    res_otyper: Reg32,
+    res_ospeedr: Reg32,
+    res_pupdr: Reg32,
+    res_bsrr: Reg32,
 
-    // RCC AHB2ENR1 — to enable the GPIOD clock (GPIODEN).
+    // RCC AHB2ENR1 — to clock whatever ports the pins above live on.
     rcc_ahb2enr1: Reg32,
 
     // SPI peripheral — same base as `spi_hw::SPI_BASE`. We use direct
@@ -169,19 +178,19 @@ struct LcdRegs {
 // removed 2026-07-14).
 const REG: LcdRegs = unsafe {
     LcdRegs {
-        gpioe_moder: Reg32::new(GPIOE_S + 0x00),
-        gpioe_otyper: Reg32::new(GPIOE_S + 0x04),
-        gpioe_ospeedr: Reg32::new(GPIOE_S + 0x08),
-        gpioe_pupdr: Reg32::new(GPIOE_S + 0x0C),
-        gpioe_bsrr: Reg32::new(GPIOE_S + 0x18),
+        dc_moder: Reg32::new(DC_PORT + 0x00),
+        dc_otyper: Reg32::new(DC_PORT + 0x04),
+        dc_ospeedr: Reg32::new(DC_PORT + 0x08),
+        dc_pupdr: Reg32::new(DC_PORT + 0x0C),
+        dc_bsrr: Reg32::new(DC_PORT + 0x18),
 
-        gpiod_moder: Reg32::new(GPIOD_S + 0x00),
-        gpiod_otyper: Reg32::new(GPIOD_S + 0x04),
-        gpiod_ospeedr: Reg32::new(GPIOD_S + 0x08),
-        gpiod_pupdr: Reg32::new(GPIOD_S + 0x0C),
-        gpiod_bsrr: Reg32::new(GPIOD_S + 0x18),
+        res_moder: Reg32::new(RES_PORT + 0x00),
+        res_otyper: Reg32::new(RES_PORT + 0x04),
+        res_ospeedr: Reg32::new(RES_PORT + 0x08),
+        res_pupdr: Reg32::new(RES_PORT + 0x0C),
+        res_bsrr: Reg32::new(RES_PORT + 0x18),
 
-        rcc_ahb2enr1: Reg32::new(RCC_AHB2ENR1),
+        rcc_ahb2enr1: Reg32::new(board::RCC_S + board::RCC_AHB2ENR1_OFF),
 
         spi_cr1: Reg32::new(SPI_BASE + 0x00),
         spi_cr2: Reg32::new(SPI_BASE + 0x04),
@@ -217,46 +226,88 @@ const MAX_CHUNK: u16 = 65_534;
 
 #[inline(always)]
 fn dc_low() {
-    REG.gpioe_bsrr.write(DC_LOW_BR);
+    REG.dc_bsrr.write(DC_LOW_BR);
 }
 
 #[inline(always)]
 fn dc_high() {
-    REG.gpioe_bsrr.write(DC_HIGH_BS);
+    REG.dc_bsrr.write(DC_HIGH_BS);
 }
 
 #[inline(always)]
 fn res_low() {
-    REG.gpioe_bsrr.write(RES_LOW_BR);
+    REG.res_bsrr.write(RES_LOW_BR);
 }
 
 #[inline(always)]
 fn res_high() {
-    REG.gpioe_bsrr.write(RES_HIGH_BS);
+    REG.res_bsrr.write(RES_HIGH_BS);
 }
 
-/// Configure DC (PE7) and RES (PE14) as push-pull outputs at very-high
-/// speed — both on GPIOE. Both start HIGH so RES doesn't accidentally
-/// reset the LCD before [`hard_reset`] sequences it.
+/// Configure DC and RES as push-pull outputs at very-high speed, and assert
+/// the backlight enable where the board has one.
 ///
-/// Assumes [`hw::spi_hw::init()`] has already enabled the GPIOE clock.
-/// RES = PE14 overrides spi_hw's AF (SPI1_MISO) — harmless, the panel is
-/// write-only so MISO is unused.
+/// Both pins start HIGH so RES does not hold the panel in reset before
+/// [`hard_reset`] sequences it.
+///
+/// `spi_hw::init()` has already clocked the SPI port; this additionally clocks
+/// whatever ports DC, RES and the backlight enable live on. On iota2 those are
+/// all the SPI port (GPIOE) so the extra enables are same-value writes; on pq1
+/// the SPI is on port A and these are on port B.
+///
+/// RES is configured on BOTH boards even though only pq1 drives a real panel
+/// reset: on iota2 the pin is PE14, whose only other role is spi_hw's AF5
+/// (SPI1_MISO) on a write-only panel. Keeping the write preserves that board's
+/// register sequence exactly.
 fn init_dc_res_gpios() {
-    // DC = PE7, RES = PE14 — both GPIOE: output, push-pull, very-high speed.
-    REG.gpioe_moder.modify(|v| {
-        (v & !(0b11 << (DC_PIN * 2)) & !(0b11 << (RES_PIN * 2)))
-            | (0b01 << (DC_PIN * 2))
-            | (0b01 << (RES_PIN * 2))
-    });
-    REG.gpioe_otyper.clear_bits((1 << DC_PIN) | (1 << RES_PIN));
-    REG.gpioe_ospeedr.set_bits((0b11 << (DC_PIN * 2)) | (0b11 << (RES_PIN * 2)));
-    REG.gpioe_pupdr.modify(|v| {
-        v & !(0b11 << (DC_PIN * 2)) & !(0b11 << (RES_PIN * 2))
-    });
+    // Clock every port this module touches.
+    let mut clocks = board::gpio_rcc_bit(DC_PORT) | board::gpio_rcc_bit(RES_PORT);
+    if let Some((port, _)) = board::LCD_BACKLIGHT_EN {
+        clocks |= board::gpio_rcc_bit(port);
+    }
+    REG.rcc_ahb2enr1.set_bits(clocks);
+    cortex_m::asm::dsb();
 
-    // Start both HIGH (RES deasserted, DC = data) at boot.
-    REG.gpioe_bsrr.write(DC_HIGH_BS | RES_HIGH_BS);
+    // DC: output, push-pull, very-high speed, no pull.
+    let dc2 = DC_PIN * 2;
+    let dcf = 0b11u32 << dc2;
+    REG.dc_moder.modify(|v| (v & !dcf) | (0b01 << dc2));
+    REG.dc_otyper.clear_bits(1 << DC_PIN);
+    REG.dc_ospeedr.set_bits(dcf);
+    REG.dc_pupdr.modify(|v| v & !dcf);
+
+    // RES: same treatment.
+    let res2 = RES_PIN * 2;
+    let resf = 0b11u32 << res2;
+    REG.res_moder.modify(|v| (v & !resf) | (0b01 << res2));
+    REG.res_otyper.clear_bits(1 << RES_PIN);
+    REG.res_ospeedr.set_bits(resf);
+    REG.res_pupdr.modify(|v| v & !resf);
+
+    // Start both HIGH (RES deasserted, DC = data).
+    REG.dc_bsrr.write(DC_HIGH_BS);
+    REG.res_bsrr.write(RES_HIGH_BS);
+
+    // Backlight enable, where the board has one (pq1: PB15 = "LCM EN").
+    //
+    // NOTE: on pq1 this alone may not light the panel. LCM_EN gates an
+    // AW99703 LED-driver IC whose brightness is set over I2C2 at 0x36, and
+    // there is no driver for that chip in the tree yet. Asserting the enable
+    // is necessary, not obviously sufficient — see `board/pq1.rs`.
+    if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {
+        // SAFETY: `port` is a GPIO base from the board map; these are that
+        // block's real MODER/OTYPER/OSPEEDR/BSRR registers, touched with
+        // disjoint-bit RMW on this pin alone.
+        unsafe {
+            let two = pin * 2;
+            let field = 0b11u32 << two;
+            Reg32::new(port + 0x18).write(1 << pin); // drive high before enabling the output
+            Reg32::new(port + 0x00).modify(|v| (v & !field) | (0b01 << two));
+            Reg32::new(port + 0x04).clear_bits(1 << pin);
+            Reg32::new(port + 0x08).set_bits(field);
+            Reg32::new(port + 0x18).write(1 << pin);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -709,13 +760,19 @@ pub fn fill_rect(x0: u16, y0: u16, w: u16, h: u16, color: u16) {
 ///
 /// Assumes [`hw::spi_hw::init()`] has already run (SPI1 + CS/SCK/MOSI).
 pub fn init() {
-    // RES is tied to 3V3 on this board (PD15/PE14 both proved un-drivable),
-    // so use a software SWRESET instead of hard_reset()'s pin pulse, and init
-    // SPI ourselves — main.rs does not init SPI1 for ui-lcd. Mirrors the
-    // validated lcd_test_loop bring-up sequence.
+    // main.rs does not init SPI for ui-lcd, so do it here.
     crate::hw::spi_hw::init();
     init_dc_res_gpios();
-    write_cmd(0x01); // SWRESET
+
+    // Reset the panel the way this board can. iota2 has its RES strapped to
+    // 3V3 (PD15 and PE14 both proved un-drivable during bring-up), so it
+    // issues the SWRESET command; pq1 routes LCM_RST to PB1 and gets a real
+    // pin pulse, which also resets state SWRESET leaves alone.
+    if RES_DRIVABLE {
+        hard_reset();
+    } else {
+        write_cmd(0x01); // SWRESET
+    }
     delay_ms(150);
     run_init_sequence();
     fill_screen(0x0000);

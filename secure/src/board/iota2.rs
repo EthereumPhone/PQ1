@@ -62,7 +62,11 @@ pub const LCD_SPI_PORT: u32 = GPIOE_S;
 pub const LCD_SPI_AF: u32 = 5;
 pub const LCD_CS_PIN: u32 = 12;
 pub const LCD_SCK_PIN: u32 = 13;
-pub const LCD_MISO_PIN: u32 = 14;
+/// MISO — PE14. `Option` so the two boards share one type: pq1 routes no
+/// MISO at all (its PA6, the MISO position in SPI1's pin group, is `NC` on
+/// the board). The panel is write-only in both cases; iota2 merely happens to
+/// have the pad wired.
+pub const LCD_MISO_PIN: Option<u32> = Some(14);
 pub const LCD_MOSI_PIN: u32 = 15;
 
 /// Data/command select — PE7 (Arduino `D4`).

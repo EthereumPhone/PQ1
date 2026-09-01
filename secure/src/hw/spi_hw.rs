@@ -1,129 +1,111 @@
 //! SPI hardware initialization for the NV3007 LCD on STM32U585.
 //!
-//! Two pin configurations are supported, selected by the `spi1-arduino`
-//! cargo feature:
+//! Every pin, the peripheral base and the alternate-function number come from
+//! [`crate::board`], so the two boards differ only in their pin map:
 //!
-//! ## Default: SPI2 on PB12–PB15 (direct wiring)
-//!   PB12 = CS   (GPIO output, active-low)
-//!   PB13 = SCK  (SPI2_SCK, AF5)
-//!   PB14 = MISO (SPI2_MISO, AF5)
-//!   PB15 = MOSI (SPI2_MOSI, AF5)
-//!
-//! ## `spi1-arduino`: SPI1 on PE12–PE15 (Arduino R3 headers)
-//! Used for the NV3007 LCD wired to the Arduino headers (e.g. stacked
-//! on top of the OM-SE050ARD). `ui-lcd` implies this feature.
+//! ## `iota2` — SPI1 on the Arduino headers (PE12–PE15)
 //!   PE12 = CS   (GPIO output, active-low)
 //!   PE13 = SCK  (SPI1_SCK, AF5)
 //!   PE14 = MISO (SPI1_MISO, AF5)
 //!   PE15 = MOSI (SPI1_MOSI, AF5)
 //!
+//! ## `pq1` — SPI1 on port A (PA4/PA5/PA7)
+//!   PA4  = CS   (GPIO output, active-low)   vendor net "LCM SPI CS"
+//!   PA5  = SCK  (SPI1_SCK, AF5)             vendor net "LCM SPI LCK"
+//!   PA7  = MOSI (SPI1_MOSI, AF5)            vendor net "LCM SPI MOSI"
+//!   (no MISO — PA6, the MISO position of SPI1's pin group, is `NC`)
+//!
+//! Three things about pq1 that the old hardcoded form could not express, and
+//! which are the reason this driver was fenced off that board until now:
+//! the pins are **non-contiguous** (5 and 7, PA6 skipped), they sit **below
+//! pin 8** so their alternate-function nibbles are in `AFRL` rather than
+//! `AFRH`, and there is **no MISO** at all.
+//!
+//! The panel is write-only on both boards regardless: `lcd_nv3007` discards RX
+//! and `MASRX = 0` stops an unread RxFIFO throttling TX (RM0456 §68.8.1), so a
+//! floating/absent MISO costs nothing.
+//!
 //! All configuration runs in the secure world.  The SPI peripheral stays
 //! secure (no GTZC/SECCFGR changes) — the non-secure world never touches
 //! the trusted display's bus.
 
-// ---------------------------------------------------------------------------
-// Board fence — this driver is `iota2`-only until the pq1 LCD port lands.
-// ---------------------------------------------------------------------------
-//
-// This file has NO `board::` references: it hardcodes SPI2 on PB12-PB15, or
-// SPI1 on PE12-PE15 under `spi1-arduino`. Both are wrong on pq1, and the PB
-// variant is actively harmful there — PB12 is `RGB_EN`, PB13/PB14 are the I2C2
-// lines to the backlight and RGB LED drivers, and PB15 is `LCM_EN`. Driving
-// those as SPI would fight three other peripherals. (The PE variant is merely
-// inert: port E is not bonded on the 48-pin package.)
-//
-// pq1's LCD is SPI1 on PA4 (CS) / PA5 (SCK) / PA7 (MOSI) with no MISO, so the
-// pins are neither contiguous nor on the same port as either existing variant
-// — see `board::LCD_*`. Porting is a real change, not a base-address swap.
-//
-// This fence is deliberately added at the same time as the board-selection
-// rule in `board/mod.rs` became mandatory-explicit. Before that, `prodtest`
-// (which implies `ui-lcd`) never carried `board-pq1`, so this file's hazard
-// was hidden behind a build that silently claimed to be iota2. Making the
-// board explicit turns that into a compile error here rather than four
-// silently-wrong pins on the bench.
-#[cfg(feature = "board-pq1")]
-compile_error!(
-    "hw/spi_hw.rs still uses the iota2 pin map and is unsafe on pq1: its SPI2 variant \
-     drives PB12-PB15, which on pq1 are RGB_EN, the I2C2 bus to the backlight/RGB LED \
-     drivers, and LCM_EN. pq1's LCD is SPI1 on PA4/PA5/PA7 (no MISO) — see board::LCD_*. \
-     Port the pins before enabling `ui-lcd` on pq1."
-);
 
+use crate::board;
 use crate::hw::mmio::Reg32;
 
 // ---------------------------------------------------------------------------
-// RCC registers (secure alias — TZEN=1)
+// Everything below comes from `crate::board`
 // ---------------------------------------------------------------------------
-const RCC_S: u32 = 0x5602_0C00;
-
-// ---------------------------------------------------------------------------
-// GPIO base addresses (secure alias)
-// ---------------------------------------------------------------------------
-#[cfg(not(feature = "spi1-arduino"))]
-const GPIO_BASE: u32 = 0x5202_0400; // GPIOB
-#[cfg(feature = "spi1-arduino")]
-const GPIO_BASE: u32 = 0x5202_1000; // GPIOE
-
-/// AHB2ENR1 bit to enable the GPIO clock.
-#[cfg(not(feature = "spi1-arduino"))]
-const GPIO_CLK_BIT: u32 = 1; // GPIOBEN
-#[cfg(feature = "spi1-arduino")]
-const GPIO_CLK_BIT: u32 = 4; // GPIOEEN
-
-// ---------------------------------------------------------------------------
-// SPI registers (secure alias)
 //
-// SPI2: APB1 @ 0x5000_3800   (default, PB12-PB15)
-// SPI1: APB2 @ 0x5001_3000   (spi1-arduino, PE12-PE15)
-// ---------------------------------------------------------------------------
-#[cfg(not(feature = "spi1-arduino"))]
-pub const SPI_BASE: u32 = 0x5000_3800; // SPI2
+// This file used to hardcode two pin sets behind `spi1-arduino`: SPI2 on
+// PB12-PB15, or SPI1 on PE12-PE15. Both are iota2's, and neither survives on
+// pq1, whose panel is SPI1 on **PA4 (CS) / PA5 (SCK) / PA7 (MOSI)** with no
+// MISO — a non-contiguous group on a different port, below pin 8 (so the
+// alternate-function nibbles live in AFRL, not AFRH). Vendor pin table:
+// PA4 = "LCM SPI CS", PA5 = "LCM SPI LCK", PA7 = "LCM SPI MOSI", and PA6 —
+// the MISO position of SPI1's pin group — is `NC`.
+//
+// The SPI2 branch is gone rather than ported: `hw/mod.rs` compiles this module
+// only under `all(stm32u585, ui-lcd)`, and `ui-lcd = ["spi1-arduino", ...]`,
+// so `not(spi1-arduino)` was unreachable here. Same for the `not(ui-lcd)`
+// baud-rate arm below.
 
-#[cfg(feature = "spi1-arduino")]
-pub const SPI_BASE: u32 = 0x5001_3000; // SPI1
+const RCC_S: u32 = board::RCC_S;
+
+/// SPI1 lives on APB2 on both boards.
+const SPI_EN_BIT: u32 = board::RCC_SPI1EN_BIT;
+const SPI_RST_BIT: u32 = board::RCC_SPI1RST_BIT;
+
+/// The peripheral base, from the board map.
+pub const SPI_BASE: u32 = board::LCD_SPI_BASE;
+
+/// CS pin, from the board map. PE12 on iota2, PA4 on pq1.
+pub const CS_PIN: u32 = board::LCD_CS_PIN;
+
+const PORT: u32 = board::LCD_SPI_PORT;
+const AF: u32 = board::LCD_SPI_AF;
+
+/// `AFRL` (0x20) for pins 0..7, `AFRH` (0x24) for 8..15 — the pq1 pins are the
+/// first in this driver's history to land in the low half.
+const fn afr_off(pin: u32) -> u32 {
+    if pin < 8 {
+        0x20
+    } else {
+        0x24
+    }
+}
+/// Nibble position of `pin` within its AFR word.
+const fn afr_shift(pin: u32) -> u32 {
+    (pin % 8) * 4
+}
 
 struct SpiHwRegs {
     rcc_ahb2enr1: Reg32,
-    #[cfg(not(feature = "spi1-arduino"))]
-    rcc_apb1enr1: Reg32,
-    #[cfg(not(feature = "spi1-arduino"))]
-    rcc_apb1rstr1: Reg32,
-    #[cfg(feature = "spi1-arduino")]
     rcc_apb2enr: Reg32,
-    #[cfg(feature = "spi1-arduino")]
     rcc_apb2rstr: Reg32,
     gpio_moder: Reg32,
     gpio_otyper: Reg32,
     gpio_ospeedr: Reg32,
     gpio_bsrr: Reg32,
-    gpio_afrh: Reg32,
     spi_cr1: Reg32,
     spi_cfg1: Reg32,
     spi_cfg2: Reg32,
     spi_ier: Reg32,
 }
 
-// SAFETY: each address is a real, 4-byte-aligned MMIO register touched
-// once during boot by this driver. Shared RCC + GPIO registers are
-// accessed via disjoint-bit RMW; `gpio_bsrr` is a write-only atomic-set
-// register (BSRR), used here only with single-bit writes.
+// SAFETY: each address is a real, 4-byte-aligned MMIO register touched once
+// during boot by this driver. Shared RCC + GPIO registers are accessed via
+// disjoint-bit RMW; `gpio_bsrr` is a write-only atomic-set register (BSRR),
+// used here only with single-bit writes.
 const REG: SpiHwRegs = unsafe {
     SpiHwRegs {
-        rcc_ahb2enr1: Reg32::new(RCC_S + 0x8C),
-        #[cfg(not(feature = "spi1-arduino"))]
-        rcc_apb1enr1: Reg32::new(RCC_S + 0x9C),
-        #[cfg(not(feature = "spi1-arduino"))]
-        rcc_apb1rstr1: Reg32::new(RCC_S + 0x74),
-        #[cfg(feature = "spi1-arduino")]
-        rcc_apb2enr: Reg32::new(RCC_S + 0xA4),
-        #[cfg(feature = "spi1-arduino")]
-        rcc_apb2rstr: Reg32::new(RCC_S + 0x7C),
-        gpio_moder: Reg32::new(GPIO_BASE + 0x00),
-        gpio_otyper: Reg32::new(GPIO_BASE + 0x04),
-        gpio_ospeedr: Reg32::new(GPIO_BASE + 0x08),
-        gpio_bsrr: Reg32::new(GPIO_BASE + 0x18),
-        gpio_afrh: Reg32::new(GPIO_BASE + 0x24),
+        rcc_ahb2enr1: Reg32::new(RCC_S + board::RCC_AHB2ENR1_OFF),
+        rcc_apb2enr: Reg32::new(RCC_S + board::RCC_APB2ENR_OFF),
+        rcc_apb2rstr: Reg32::new(RCC_S + board::RCC_APB2RSTR_OFF),
+        gpio_moder: Reg32::new(PORT + 0x00),
+        gpio_otyper: Reg32::new(PORT + 0x04),
+        gpio_ospeedr: Reg32::new(PORT + 0x08),
+        gpio_bsrr: Reg32::new(PORT + 0x18),
         spi_cr1: Reg32::new(SPI_BASE + 0x00),
         spi_cfg1: Reg32::new(SPI_BASE + 0x08),
         spi_cfg2: Reg32::new(SPI_BASE + 0x0C),
@@ -131,82 +113,64 @@ const REG: SpiHwRegs = unsafe {
     }
 };
 
-/// CS pin = bit 12 in BSRR (PB12 or PE12).
-pub const CS_PIN: u32 = 12;
+/// Put one pin into alternate-function mode at [`AF`], push-pull, very-high
+/// speed. Touches only this pin's bits.
+fn config_af_pin(pin: u32) {
+    let two = pin * 2;
+    let field = 0b11u32 << two;
+    REG.gpio_moder.modify(|v| (v & !field) | (0b10 << two)); // 10 = AF
+    REG.gpio_otyper.clear_bits(1 << pin); // push-pull
+    REG.gpio_ospeedr.set_bits(field); // 11 = very high speed
+    // SAFETY: `PORT` is a GPIO base from the board map and `afr_off` yields
+    // one of that block's two real AFR registers.
+    let afr = unsafe { Reg32::new(PORT + afr_off(pin)) };
+    let sh = afr_shift(pin);
+    afr.modify(|v| (v & !(0xF << sh)) | (AF << sh));
+}
 
 /// Initialize SPI hardware and CS GPIO from the secure world.
 ///
 /// Must be called after `rcc::init()` (clocks running at 160 MHz).
 pub fn init() {
-    // ---- 1. Enable GPIO clock (AHB2ENR1) ----
-    REG.rcc_ahb2enr1.set_bits(1 << GPIO_CLK_BIT);
+    // ---- 1. Enable the GPIO port clock (AHB2ENR1) ----
+    REG.rcc_ahb2enr1.set_bits(board::gpio_rcc_bit(PORT));
     cortex_m::asm::dsb();
 
-    // ---- 2. Enable SPI clock ----
-    #[cfg(not(feature = "spi1-arduino"))]
+    // ---- 2. Enable the SPI clock (SPI1 on APB2, bit 12) ----
+    REG.rcc_apb2enr.set_bits(SPI_EN_BIT);
+    cortex_m::asm::dsb();
+
+    // ---- 3. Reset the SPI peripheral ----
+    REG.rcc_apb2rstr.set_bits(SPI_RST_BIT);
+    cortex_m::asm::dsb();
+    REG.rcc_apb2rstr.clear_bits(SPI_RST_BIT);
+    cortex_m::asm::dsb();
+
+    // ---- 4. CS as a GPIO output, push-pull, high (deasserted) ----
+    // Driven high BEFORE the mode switch so the panel never sees a spurious
+    // select while the pad is being configured.
+    REG.gpio_bsrr.write(1 << CS_PIN);
     {
-        // SPI2 on APB1: bit 14
-        REG.rcc_apb1enr1.set_bits(1 << 14);
-        cortex_m::asm::dsb();
+        let two = CS_PIN * 2;
+        let field = 0b11u32 << two;
+        REG.gpio_moder.modify(|v| (v & !field) | (0b01 << two)); // 01 = output
+        REG.gpio_otyper.clear_bits(1 << CS_PIN);
+        REG.gpio_ospeedr.set_bits(field);
     }
-    #[cfg(feature = "spi1-arduino")]
-    {
-        // SPI1 on APB2: bit 12
-        REG.rcc_apb2enr.set_bits(1 << 12);
-        cortex_m::asm::dsb();
-    }
-
-    // ---- 3. Reset SPI peripheral ----
-    #[cfg(not(feature = "spi1-arduino"))]
-    {
-        REG.rcc_apb1rstr1.set_bits(1 << 14);
-        cortex_m::asm::dsb();
-        REG.rcc_apb1rstr1.clear_bits(1 << 14);
-        cortex_m::asm::dsb();
-    }
-    #[cfg(feature = "spi1-arduino")]
-    {
-        REG.rcc_apb2rstr.set_bits(1 << 12);
-        cortex_m::asm::dsb();
-        REG.rcc_apb2rstr.clear_bits(1 << 12);
-        cortex_m::asm::dsb();
-    }
-
-    // ---- 4. Configure pin 12 (CS) as GPIO output, push-pull, high (deasserted) ----
-    // MODER: bits [25:24] → 01 (general purpose output)
-    REG.gpio_moder.modify(|v| (v & !(0b11 << 24)) | (0b01 << 24));
-
-    // OTYPER: bit 12 → 0 (push-pull)
-    REG.gpio_otyper.clear_bits(1 << 12);
-
-    // OSPEEDR: bits [25:24] → 11 (very high speed)
-    REG.gpio_ospeedr.set_bits(0b11 << 24);
-
-    // Start with CS high (deasserted) — BSRR atomic set, BS12.
     REG.gpio_bsrr.write(1 << CS_PIN);
 
-    // ---- 5. Configure pins 13 (SCK), 14 (MISO), 15 (MOSI) as AF5 ----
-    // MODER: bits [27:26]=13, [29:28]=14, [31:30]=15 → 10 (AF)
-    REG.gpio_moder.modify(|v| {
-        (v & !(0b11 << 26) & !(0b11 << 28) & !(0b11 << 30))
-            | (0b10 << 26)  // pin 13 AF
-            | (0b10 << 28)  // pin 14 AF
-            | (0b10 << 30)  // pin 15 AF
-    });
-
-    // OTYPER: SCK and MOSI push-pull (bits 13,15 → 0), MISO is input
-    REG.gpio_otyper.clear_bits((1 << 13) | (1 << 15));
-
-    // OSPEEDR: pins 13, 14, 15 → 11 (very high speed)
-    REG.gpio_ospeedr.set_bits((0b11 << 26) | (0b11 << 28) | (0b11 << 30));
-
-    // AFRH: pin13 = AF5 (bits [23:20]), pin14 = AF5 (bits [27:24]), pin15 = AF5 (bits [31:28])
-    REG.gpio_afrh.modify(|v| {
-        (v & !(0xF << 20) & !(0xF << 24) & !(0xF << 28))
-            | (5 << 20)   // pin 13 = AF5
-            | (5 << 24)   // pin 14 = AF5
-            | (5 << 28)   // pin 15 = AF5
-    });
+    // ---- 5. SCK / MOSI (and MISO where the board routes one) as AF ----
+    // Configured per pin rather than as one contiguous run: pq1's are 5 and 7
+    // with a gap, and they sit in AFRL while iota2's 13/14/15 sit in AFRH.
+    config_af_pin(board::LCD_SCK_PIN);
+    config_af_pin(board::LCD_MOSI_PIN);
+    if let Some(miso) = board::LCD_MISO_PIN {
+        // Only iota2 has one. The panel is write-only either way — the driver
+        // discards RX and `MASRX = 0` keeps an unread RxFIFO from throttling
+        // TX (RM0456 §68.8.1) — so pq1's absent MISO changes nothing but the
+        // pad configuration.
+        config_af_pin(miso);
+    }
 
     // ---- 6. Configure SPI peripheral ----
     // SSI (bit 12) must be 1 before MASTER mode is set in CFG2, otherwise
@@ -247,10 +211,10 @@ pub fn init() {
     // clean 20 MHz below (this faster clock is splash-preview-only).
     #[cfg(feature = "splash-test")]
     const MBR: u32 = 0b000; // ÷2  → 80 MHz (splash preview, ~13 ms full repaint; HW-validated)
-    #[cfg(all(feature = "ui-lcd", not(feature = "splash-test")))]
+    // The `not(ui-lcd)` ÷32 arm that used to sit here was unreachable: this
+    // module only compiles under `ui-lcd`.
+    #[cfg(not(feature = "splash-test"))]
     const MBR: u32 = 0b010; // ÷8  → 20 MHz (NV3007 trusted UI, ~48 ms full repaint)
-    #[cfg(not(feature = "ui-lcd"))]
-    const MBR: u32 = 0b100; // ÷32 → 5 MHz  (conservative shared-bus default)
     REG.spi_cfg1.write((MBR << 28) | 7);
     // ÷8 = 20 MHz (SCK half-period 25 ns = 2.5× the NV3007 10 ns setup/hold).
     // The raw fill demo ran fine at ÷4 (40 MHz), but the *UI* showed intermittent
