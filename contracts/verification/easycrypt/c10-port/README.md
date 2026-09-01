@@ -108,7 +108,9 @@ conclusion is now the BadEnc disjunction, and MM45's admitted injectivity is rep
 explicit named probability `Pr[Game4_WOTSTWES_BadEnc(…) : res /\ BadEncFlag.badenc]` in
 `MEUFGCMA_WOTSTWESNPRF_Charged` — carried **unreduced**, exactly as this artifact carries
 `ITSRC10`. **LEDGER 242 → 241**, the first assumption *removed* rather than relocated in
-this arc; taint closure **6 → 2**. `extract_op` remains.
+this arc; taint closure **6 → 2**. `extract_op` remains — and **closing it is explicitly NOT
+the next unit**: it targets a *local mirror* game, not the headline's term, which the fully
+proven Gproc route already reaches. See `UPDATE 2026-09-01` and `scratch/scope_fextractop_VERDICT.md`.
 
 **That charged term is NOT a bound, and since 2026-08-31 a gate says so.** It is provably
 **1** for an explicit replay adversary given one `P`-satisfying encoding collision —
@@ -3073,3 +3075,135 @@ OK   inputs unchanged across the run (c666bc514cf43c4dc195ebf0ac5f8b43)
 23 pinned statements, four controls and five census rows moved the assumption count by
 **zero**. That is what a countermodel entering the cone should look like: it adds
 *parameters* and *content*, never an assumption.
+
+### UPDATE 2026-09-01 — the last admit is the WRONG target, and the right one turns out to be six module separations away
+
+No new theorem. Two measurements and a correction, and the first measurement is worth
+more than a theorem would have been.
+
+#### I was about to attack the wrong thing
+
+`extract_op` (`FORS_C_TreePort.ec:1485`) is the sole remaining admit. Removing it would
+read as the natural sequel to 2026-08-30 — LEDGER 241 → 240, the cone admit-free. Before
+deriving anything I applied the discipline recorded the previous day (list
+`experiments/*/` and read by **name**, rather than grepping for a statement) and found
+`scratch/scope_fextractop_VERDICT.md`: two independent reviewers, 2026-08-12, every
+citation re-verified at source.
+
+**Its answer is: do not close it.** `FORS_C_TreePort.ec:186` defines its **own local
+mirror** `module SM_DT_OpenPRE`. The headline carries the *real*
+`FTWES.F_OpenPRE.SM_DT_OpenPRE` (`GprocQWired.ec:123`), which the **fully proven** Gproc
+route already reaches (`GprocT1Opre.ec:2168`). So `extract_op` targets a *different game
+object* than the theorem's term, and closing it would move nothing — costed there at
+8–15 engineer-days for zero headline movement. Its stated disposition is retire/archive.
+
+That disposition is still unexecuted, and it is **not** a drive-by: removal is fatal to
+the gate by design and would shrink the certified surface by ~100 statements. Owner call.
+
+#### The unit that verdict recommended is now unblocked, and it was never costed correctly
+
+The verdict's recommended next unit had five steps. **Steps 1–4 landed on 2026-08-30** —
+the BadEnc disjunction, the Game4 split, the codeword-level lemma confined to the unequal
+branch, and the B-free `MEUFGCMA_WOTSTWESNPRF_Charged`. Step 5 — propagate to a parallel
+deployed theorem — was explicitly disqualified, in these words:
+
+> Merely wiring `_Unfolded` (4-7 days): **promotes B into the headline** — it would make a
+> live admit load-bearing. A regression, not progress.
+
+Admit B was *removed* on 2026-08-30. `_Unfolded` is admit-free and left the taint closure
+the same day. **The stated regression has no addressee.**
+
+So: why is `EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded` applied by nothing? The tree records
+that fact in several places and nowhere says why. It is six lines of its own restriction
+set, which the unfold adds over the plain lemma:
+
+```
+-FC_UD.O_SMDTUD_Default, -FC_TCR.O_SMDTTCR_Default, -FC_PRE.O_SMDTPRE_Default,
+-R_SMDTUDC_Game23WOTSTWES, -R_SMDTTCRC_Game34WOTSTWES, -R_SMDTPREC_Game4WOTSTWES
+```
+
+Those six are absent from the deployed forger `F` (`GprocQWired.ec:67`), so `R_top_C(F)`
+cannot be shown disjoint from them. **This is a compile, not an argument**
+(`scratch/probe_unfold_deployed.ec`):
+
+```
+_Unfolded at R_top_C(F), deployed F verbatim
+    [critical] the module Top.RtopCSoundness.R_top_C(F) is not allowed
+               to use the modules(s)   F                      __EC_RC=1
+
++ exactly those six added to F, nothing else changed          __EC_RC=0
+```
+
+**And a cheaper route also typechecks there.** The deployed theorem carries the WOTS game
+as a **summand of its statement**, not as an applied lemma — so
+`MEUFGCMA_WOTSTWESNPRF_Charged` can be applied *directly* at
+`R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))` and transitivity alone yields a
+charged deployed capstone. The hypertree scaffold does not need re-porting at all, which
+is what the 4–7 day figure assumed.
+
+Adding six separations to `F` is a **narrowing** — the theorem would apply to fewer
+adversaries. `GprocQWired.ec` already does exactly this twice and prices it in its own
+words: *"formally a NARROWING of the hypothesis … the price of replacing an unreduced Q
+with three named hardness advantages."* Same trade, one leg over.
+
+#### What is NOT established, stated because the temptation runs the other way
+
+* **Nothing is bounded.** A charged deployed theorem would name four terms where one
+  opaque game stands. Assumption-surface progress, not a number.
+* **`badenc_is_one` does NOT apply to this instantiation.** That theorem is about
+  `A_coll`. The deployed BadEnc term sits at
+  `R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))` — a *different object*. Whether
+  it is 1, small, or anything else there is **open**, and is exactly the +C-layer question
+  the tree records as unresolved. Writing "this makes the deployed bound's vacuity
+  visible" would be the `c10_embg_inj`-vs-`encode_msgWOTS` error one level up, which the
+  2026-08-12 verdict already scores against me.
+* **A probe typechecking is not a proof.** Both `have :=` forms pass the restriction and
+  arity checks. The **losslessness obligations are not discharged by them**, and the
+  deployed theorem carries *no losslessness premises at all* — `XmssmtCC_All.ec:8913+`
+  proves them for the abstract `A_ht` only. That gap is the real remaining cost and is
+  named rather than estimated. Full write-up:
+  `scratch/FINDING-unfold-is-unblocked-at-the-deployed-adversary.md`.
+
+#### Correction — a stale axiom citation in two closure files
+
+`C10DeployedCapstone.ec:381` and `SphincsC10Content.ec:827` each carried an honesty note
+saying CONCLUSION 6 is *"already derivable from MM45's own **unconditional**
+`two_encodings` **AXIOM** (`WOTS_TW_ES.ec:571`)"*. Three things wrong against the
+certified tree:
+
+| claim | fact |
+|---|---|
+| `two_encodings` is an **axiom** | it is a **lemma**, `base-c10-split/WOTS_TW_ES.ec:726` — demoted when the split base proved it from the concrete `P`, retiring encoding axiom 1 |
+| it is **unconditional** | it carries `P m => P m'` |
+| at **`:571`** | `:571` lands inside `chS`; that line number is from the OLD unsplit `base-c10`, where the axiom did live at `:579` |
+
+**The verdict survives — conclusion 6 is still contentless — but for a simpler reason,
+verified at source rather than inherited:** `predC` is *defined* as `P`
+(`cdrafts-split/WOTS_C_Real.ec:279`, `op predC (d : msgWOTS) : bool = P d`), so that
+conjunct **is** the current `two_encodings` lemma restated, not a corollary of an ambient
+axiom. Both notes now say so, replaced at the sentence.
+
+#### A gate property worth knowing: comments are not free
+
+I assumed a comment-only edit could not move `INPUTS_SHA256`, and acted on it before
+measuring. Wrong: the census came back **byte-identical** (`added=0 removed=0`, and the
+fresh cone output diffs zero lines against the committed baseline, `# line N` annotations
+included) and **the identity still moved**. `cert_gate_split.sh:116` sha256s the
+*contents* of every cone file — deliberately, per the comment above it, because an earlier
+version omitted six library files and an edit inside them that kept census rows intact
+would have passed unnoticed. Recorded in `cert-identity.tsv`.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (8578b604...)
+pins 1101/1101 | coverage 1016/1016 across 46 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 10/10 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+Every number is identical to the 2026-08-31 run except `INPUTS_SHA256`. That is the
+point of this entry: the census could not see the change, and the identity could.

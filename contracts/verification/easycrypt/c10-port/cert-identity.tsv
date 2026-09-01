@@ -1133,5 +1133,24 @@
 #   green: ledger=241, cone added=0 removed=0, coverage 1016/1016, controls 10/10
 #   (all four new countermodel controls discriminated), taint closure 2.
 #
-split	c666bc514cf43c4dc195ebf0ac5f8b43
+# 2026-09-01.  split c666bc514cf43c4dc195ebf0ac5f8b43 -> 8578b60483c251febe4da794895e22a3.
+#   COMMENT-ONLY, in two closure files, and the census is BYTE-IDENTICAL across it
+#   (added=0 removed=0, and the fresh cone output diffs ZERO lines against the
+#   committed baseline, `# line N` annotations included).  The identity still moves,
+#   and that is BY DESIGN: cert_gate_split.sh:116 sha256sums the CONTENTS of every
+#   cone file, precisely so an edit that keeps census rows intact cannot pass
+#   unnoticed.  Worth stating because the natural assumption -- "comments are free"
+#   -- is wrong here, and I acted on it before measuring.
+#   WHAT CHANGED.  C10DeployedCapstone.ec:381 and SphincsC10Content.ec:827 carried an
+#   honesty note claiming CONCLUSION 6 is "already derivable from MM45's own
+#   UNCONDITIONAL `two_encodings` AXIOM (WOTS_TW_ES.ec:571)".  Three falsehoods against
+#   the certified tree: `two_encodings` is a LEMMA (base-c10-split/WOTS_TW_ES.ec:726),
+#   it is NOT unconditional (`P m => P m'`), and :571 lands inside `chS` -- that line
+#   number is from the OLD unsplit base-c10, where the axiom did live at :579.
+#   The VERDICT is unchanged (conclusion 6 is still contentless) and now carries the
+#   real reason: `predC` is DEFINED as `P` (cdrafts-split/WOTS_C_Real.ec:279), so the
+#   conjunct IS the current `two_encodings` lemma restated, not a corollary of an
+#   ambient axiom.  Verified at source before writing, not inherited.
+#
+split	8578b60483c251febe4da794895e22a3
 fork	9c2d21280c84d52c30b22111151f1135

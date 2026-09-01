@@ -825,10 +825,26 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CONTENTFUL
                HONESTY NOTE (2026-07-25, established by running the control
                scratch/trackV_probe_C6_without_N1.ec, which COMPILED): unlike
                conclusions 2-5, THIS conclusion is NOT premise-dependent.  It is
-               already derivable from MM45's own unconditional `two_encodings`
-               AXIOM (WOTS_TW_ES.ec:571), because `encode_msgWOTS d <>
-               encode_msgWOTS d'` forces `d <> d'`.  It is retained only to
-               display the relationship; it adds NO content here.
+               retained only to display the relationship; it adds NO content here.
+
+               THE VERDICT STANDS BUT ITS STATED REASON WAS STALE, corrected
+               2026-09-01.  This note used to read "already derivable from MM45's
+               own UNCONDITIONAL `two_encodings` AXIOM (WOTS_TW_ES.ec:571),
+               because `encode_msgWOTS d <> encode_msgWOTS d'` forces `d <> d'`".
+               Three things in that sentence are false of the certified tree:
+                 * `two_encodings` is a LEMMA, not an axiom
+                   (base-c10-split/WOTS_TW_ES.ec:726) -- it was demoted when the
+                   split base proved it from the concrete `P`, retiring encoding
+                   axiom 1;
+                 * it is NOT unconditional -- it carries `P m => P m'`;
+                 * `:571` resolves inside `chS` in the split file.  That line
+                   number is from the OLD unsplit base-c10, where the axiom did
+                   live at :579.
+               The conclusion is contentless for a SIMPLER reason: `predC` is
+               DEFINED as `P` (cdrafts-split/WOTS_C_Real.ec:279,
+               `op predC (d : msgWOTS) : bool = P d`), so this conjunct IS the
+               current `two_encodings` lemma, restated.  Not a corollary of an
+               ambient axiom -- the same statement.
                The INFORMATIVE version is PART B above
                (`constsum_encoding_is_two_encodings`), which is quantified over an
                ARBITRARY encoding E and therefore genuinely shows that a
