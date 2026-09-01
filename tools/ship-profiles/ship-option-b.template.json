@@ -1,0 +1,55 @@
+{
+  "name": "ship-option-b",
+  "description": "TEMPLATE for the adopted Option B ship state (owner decision 2026-07-21).",
+  "status": "TEMPLATE — not checkable. The tool refuses any profile with PENDING fields.",
+  "flow": [
+    "Option B, per docs/security/fw-rollback-draft12-candidate-2026-07-21.md §2.1:",
+    "the factory flashes everything, prodtests, provisions, and sets",
+    "WRP+SECWM+TZEN+BOOT_LOCK, but KEEPS RDP-0 so a user with a probe can dump flash",
+    "against the published build. First field boot heals option-byte drift, requires",
+    "physical confirmation, and sets RDP-2 LAST. Nothing trust-bearing runs before",
+    "that lock: no seed, no wallet-key derivation, no final SE pairing credentials.",
+    "",
+    "So a device verified with this profile is expected to read RDP=0xAA (Level 0).",
+    "An RDP-2 device cannot be verified this way at all — by design, the window for",
+    "external verification is before first power."
+  ],
+  "option_bytes": {
+    "RDP": "0xAA",
+    "TZEN": "0x1",
+    "SWAP_BANK": "0x0",
+    "nSWBOOT0": "0x1",
+    "SECBOOTADD0": "0x180000",
+    "BOOT_LOCK": "PENDING_OWNER_DECISION",
+    "SECWM1_PSTRT": "0x0",
+    "SECWM1_PEND": "PENDING_SLOT_LAYOUT",
+    "HDP1EN": "PENDING_OWNER_DECISION",
+    "WRP1A_PSTRT": "PENDING_GEOMETRY_SELECTION",
+    "WRP1A_PEND": "PENDING_GEOMETRY_SELECTION",
+    "WRP1B_PSTRT": "PENDING_GEOMETRY_SELECTION",
+    "WRP1B_PEND": "PENDING_GEOMETRY_SELECTION",
+    "SECWM2_PSTRT": "PENDING_SLOT_LAYOUT",
+    "SECWM2_PEND": "PENDING_SLOT_LAYOUT",
+    "HDP2EN": "PENDING_OWNER_DECISION"
+  },
+  "flash": [],
+  "blocked_on": [
+    "GEOMETRY SELECTION — WRP takes a PAGE RANGE. `make fsbl` derives it from the",
+    "  linked image (today: pages 0..3, span 28,352 B). Draft 1.1's 40 KiB / pages",
+    "  0..4 envelope is not adopted; adopting it now freezes page 4 while empty.",
+    "  Until 32 K vs 40 K is chosen, WRP1A_PSTRT/PEND cannot be written down.",
+    "NON-MONOLITHIC SHIPPING IMAGE — there is no target that flashes the FSBL in the",
+    "  slot layout. A bench board holds the MONOLITHIC secure world at 0x0C000000",
+    "  (LOAD paddr=0x0c000000, memsz=0x5ac30), so WRP over pages 0..3 today would",
+    "  protect the first 32 KB of that image, not an FSBL. `flash[]` stays empty for",
+    "  the same reason: there is no shipping-layout digest to pin yet.",
+    "BOTH-BANK POLICY — SWAP_BANK/SECWM2/HDP2 and whether the FSBL is staged in both",
+    "  banks' frozen range (issues #42/#43/#44) are unresolved.",
+    "FI-HARDENED FSBL IMAGE VERIFY (EF-swarm F15) and the silicon receipts."
+  ],
+  "ordering": [
+    "WRP-set MUST precede RDP-2. Invariant #10: 'RDP-2 with unprotected FSBL pages",
+    "permanently forfeits the guarantee for that die.' This tool verifies a",
+    "snapshot; it does not and cannot enforce the ordering of a burn it never performs."
+  ]
+}

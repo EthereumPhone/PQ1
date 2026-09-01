@@ -2230,6 +2230,23 @@ measure: build-hw-dual-se-oled-standalone ## Build + print the 8 BIP-39 measurem
 # is not the Draft-1.1 candidate resource gate: that candidate proposes a
 # 40,960-byte hard ceiling plus separate physical LOAD-span and RAM/stack gates.
 .PHONY: fsbl
+.PHONY: verify-ship-state
+verify-ship-state: ## Read-only: check a board's option bytes + flash against a declared profile
+	@# The EXTERNAL half of invariant #10(a) — "ship at RDP-0 so anyone can verify
+	@# flash + option bytes over SWD, connect-under-reset, before first power".
+	@# Read-only by construction: every programmer invocation is checked against an
+	@# allow-list before it runs, and a write verb aborts rather than being filtered.
+	@#
+	@# Option B (owner decision 2026-07-21) is what makes this the load-bearing
+	@# check: the device ships at RDP-0 precisely so this can be run, and only
+	@# self-locks to RDP-2 on first field boot. On-device self-verification at
+	@# RDP-0 is worth zero against interdiction (Draft 1.2 §2.2) — the code doing
+	@# the checking is the flash an attacker can rewrite. This tool is off-device.
+	@#
+	@#   make verify-ship-state                       # current bench profile
+	@#   make verify-ship-state PROFILE=<path>.json
+	python3 tools/verify_ship_state.py $(if $(PROFILE),$(PROFILE),tools/ship-profiles/bench-rdp0-tzen.json)
+
 fsbl: ## Build legacy bench FSBL (32 KB regression gate; not candidate approval)
 	@echo "==> Building FSBL (FSBL_VENDOR_PUBKEY=$${FSBL_VENDOR_PUBKEY:-<dev fixture>})"
 	@# FSBL_ALLOW_DEV_KEY opts this dev target into fsbl/build.rs's committed
