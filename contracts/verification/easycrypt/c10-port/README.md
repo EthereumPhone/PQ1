@@ -258,9 +258,9 @@ headline swap:
   numerically meaningful bound* — stands even for the Q-wired ones. Correcting
   the `Q` sentence does not make the headline numeric; it moves the honest
   residual onto the term that genuinely cannot be reduced.
-* Each cone contains **two admits**, every one pinned by statement digest:
-  * split — `nhchwcoll_hchwpre_msg` (`base-c10-split/WOTS_TW_ES.ec`), inherited
-    from MM45; and `extract_op` (`cdrafts-split/FORS_C_TreePort.ec`), the
+* The split cone contains **ONE admit**; the fork cone still contains two. Every
+  one is pinned by statement digest:
+  * split — `extract_op` (`cdrafts-split/FORS_C_TreePort.ec`), the
     OpenPRE branch of the FORS bad-event cascade. `extract_op`'s own comment
     names four un-discharged parts (R-KEY, R-SIM, R-INDEX, R-OPEN) and records
     that closing it needs **exposed randomized leaf keygen** — an upstream
@@ -399,17 +399,30 @@ this snapshot specifically so this finding travels with the artifact.
   verified **non-load-bearing** for the headline: `FORS_C_TreePort.ec:1511`
   (a leaf nothing requires) and `base-c10-split/WOTS_TW_ES.ec:1513` (feeds a
   theorem the capstone never applies).
-  **RE-VERIFIED 2026-08-24 against the NEW headline.** This claim is
-  capstone-relative, so changing the headline could have invalidated it — the
-  `:1513` admit becomes load-bearing for anything that *reduces*
-  `M_EUF_GCMA_WOTSTWESNPRF` by applying the existing WOTS theorem. Measured on
-  both statements: `GROUNDED` **and** `CHARGED_QWIRED` each carry
-  `M_EUF_GCMA_WOTSTWESNPRF` **unreduced on the RHS**, so neither applies that
-  theorem and both admits stay non-load-bearing. Checked rather than carried
-  over.
-* `Pr[M.F.ITSRC10 ..]` and `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` are carried
-  unreduced. Reducing the latter must NOT be done by applying the existing WOTS
-  theorem — that consumes the `:1513` admit and would make it load-bearing.
+  **SUPERSEDED 2026-09-02 — and by my own work, which is why it is worth
+  spelling out.** This bullet carried a `RE-VERIFIED 2026-08-24` measurement:
+  *"the `:1513` admit becomes load-bearing for anything that reduces
+  `M_EUF_GCMA_WOTSTWESNPRF` by applying the existing WOTS theorem … `GROUNDED`
+  and `CHARGED_QWIRED` each carry it unreduced on the RHS, so neither applies
+  that theorem and both admits stay non-load-bearing."* Two of its three claims
+  have since expired: **the `:1513` admit no longer exists** (removed
+  2026-08-30), and **a statement now does reduce that term** —
+  `GprocWotsNamed.ec` (2026-09-01) applies the **charged** theorem, which is
+  admit-free. The conclusion nevertheless still holds, for a better reason: the
+  remaining admit is not activated by any of it.
+* `Pr[M.F.ITSRC10 ..]` is carried unreduced and remains the honest headline
+  blocker. `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` is carried unreduced **in this
+  family**, and is **named** in the parallel
+  `GprocWotsNamed.ec::…_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED` at the price of two
+  extra premises.
+  **The prohibition that used to close this bullet is RETRACTED (2026-09-02).**
+  It read: *"Reducing the latter must NOT be done by applying the existing WOTS
+  theorem — that consumes the `:1513` admit and would make it load-bearing."*
+  Sound when written; no addressee since 2026-08-30. Note this is the **same**
+  prohibition as `GprocChargedQWired.ec:39-42`, which was retracted in the `.ec`
+  file on 2026-09-01 **without noticing it was also stated here** — found the
+  next day by a deliberate sweep. A stale prohibition never fails a gate; it
+  only forecloses work, silently.
 * Residual Q2b (pinning `encode_msgWOTS` to the deployed digit map) is open;
   see `scratch/scope_q2b_VERDICT.md`. It is fidelity, not a security term.
 
@@ -3398,3 +3411,64 @@ pins 1109/1109 | coverage 1024/1024 across 48 CONE files | added=0 removed=0
 controls 15/15 | taint closure 2 | taint controls 11/11
 OK   inputs unchanged across the run
 ```
+
+### UPDATE 2026-09-02 — a deliberate sweep for EXPIRED PROHIBITIONS, and it caught one of mine
+
+No new theorem. An audit, run because the same defect had turned up three times by accident
+in a week and accident is not a method.
+
+#### The defect class
+
+Three constraints, each **sound when written**, each still being obeyed after the thing its
+reason named had been removed:
+
+| | constraint | why it expired |
+|---|---|---|
+| `cert-taint-closure.tsv` | wiring `_Unfolded` "promotes a REFUTABLE lemma into the headline" | the WOTS admit was removed 2026-08-30; the chain left the closure |
+| `C10DeployedCapstone.ec` / `SphincsC10Content.ec` | conclusion 6 follows from "MM45's **unconditional** `two_encodings` **AXIOM** (`:571`)" | it is a lemma, it is not unconditional, and `:571` is an old-base line number |
+| `GprocChargedQWired.ec:39-42` | reducing the WOTS game "must NOT be done by applying the existing WOTS theorem, which consumes the admit at `:1513`" | that admit was removed; the charged theorem is admit-free |
+
+**A stale prohibition never fails a gate.** It only forecloses work, silently. The third one
+had blocked the deployed headline for two days after it stopped applying — `GprocWotsNamed.ec`
+was writable that whole time.
+
+#### The sweep
+
+Targeted question rather than a keyword hunt: *what else did the 2026-08-30 admit removal
+invalidate?*, across all 37 closure roots. It found **one** stale line in the closure —
+`GprocChargedQWired.ec:51`, "It activates NEITHER of the closure's **two** admits"; there is
+one — and **three stale current claims on this README**:
+
+1. "Each cone contains **two admits**" — the split cone has one.
+2. A `RE-VERIFIED 2026-08-24` measurement concluding that no capstone applies the WOTS
+   theorem, "so … both admits stay non-load-bearing". **Two of its three claims expired**:
+   the `:1513` admit is gone, and `GprocWotsNamed.ec` now *does* reduce that term. Its
+   conclusion still holds, for a better reason.
+3. **The same prohibition as `GprocChargedQWired.ec:39-42`, restated here** — retracted in
+   the `.ec` file on 2026-09-01 **without noticing it was also on the front page**, and found
+   the next day only by the sweep.
+
+That third one is the honest sting: I corrected a claim in one place, left an identical copy
+standing on the artifact's front page, and had just written a memory about exactly this.
+
+#### Two non-leads, recorded so they are not re-attempted
+
+* `WOTS_C_Interactive.ec:164`'s "+C S-TCR term is BLOCKED" **already retracts itself in
+  place** (`RECONCILIATION UPDATE 2026-07-09`) — correct practice, not drift.
+* `stcr_reduction_wip.ec:234` records that `Pr[S_TCR_C_Int_MA(A)] <= Pr[SM_DT_TCR_C(R'(A))]`
+  **does not hold**. The S-TCR leg is *not* a sibling win to the WOTS one.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (7ec2a554...)
+pins 1109/1109 | coverage 1024/1024 across 48 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 15/15 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+Comment-only in one closure file, so the census is byte-identical and only the identity
+moves — `cert_gate_split.sh:116` hashes cone-file contents by design.

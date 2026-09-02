@@ -1214,5 +1214,25 @@
 #   2026-08-30, when that admit was REMOVED rather than contained.  What the new member
 #   applies is the CHARGED theorem, which is admit-free.  Replaced at the sentence.
 #
-split	463f365eb9bf6644b0c922ca79a53ad4
+# 2026-09-02.  split 463f365eb9bf6644b0c922ca79a53ad4 -> 7ec2a554e69e87ddf867c31312d1ee2b.
+#   COMMENT-ONLY in ONE closure file (GprocChargedQWired.ec:51), found by a DELIBERATE
+#   SWEEP rather than by accident.  It read "It activates NEITHER of the closure's two
+#   admits."  There is ONE: the WOTS admit was REMOVED 2026-08-30 and `extract_op` is the
+#   remainder.  Census byte-identical, as it must be for a comment; the identity moves
+#   because cert_gate_split.sh:116 hashes cone-file CONTENTS (see the 2026-09-01 entry).
+#
+#   WHY A SWEEP.  Three expired PROHIBITIONS turned up by accident inside one week -- the
+#   `_Unfolded` regression warning, the `two_encodings` "unconditional axiom" citations,
+#   and GprocChargedQWired.ec:39-42's ban on reducing the WOTS game.  All were sound when
+#   written and all had the same trigger: the 2026-08-30 admit removal.  A stale
+#   prohibition NEVER fails a gate -- it just quietly forecloses work -- so the third one
+#   had blocked the deployed headline for two days after it stopped applying.
+#   The sweep asked the targeted question ("what else did that removal invalidate?")
+#   across all 37 closure roots.  RESULT: this ONE line, plus three stale current claims
+#   on the vendored README (admit count; the RE-VERIFIED 2026-08-24 "neither applies that
+#   theorem" measurement, which GprocWotsNamed.ec falsified YESTERDAY; and the same
+#   expired prohibition restated on the front page, which I retracted in the .ec file the
+#   same day without noticing it was also there).  The cluster is now closed.
+#
+split	7ec2a554e69e87ddf867c31312d1ee2b
 fork	9c2d21280c84d52c30b22111151f1135

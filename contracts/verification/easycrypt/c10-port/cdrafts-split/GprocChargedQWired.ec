@@ -48,7 +48,10 @@
        has had NO ADDRESSEE since 2026-08-30: the admit at :1513 was REMOVED, not
        contained, and what the parallel statement applies is the CHARGED theorem,
        which is admit-free.  Replaced at the sentence rather than annotated.
-     * It activates NEITHER of the closure's two admits.
+     * It activates the closure's remaining admit NOT AT ALL.
+       (Corrected 2026-09-02: this read "NEITHER of the closure's two admits".  The
+       WOTS one was REMOVED on 2026-08-30 -- see WotsLegCharged.ec -- so there is one,
+       `extract_op` in FORS_C_TreePort.ec, and it is not activated here either.)
      * The grind-failure summand is an AVAILABILITY charge, not a security loss;
        see experiments/tcollres-leg/FINDING-n2-is-independent.md section 5.  It is
        carried here because CHARGED carries it, and carrying it is what buys the
