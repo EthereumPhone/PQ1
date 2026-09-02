@@ -2230,6 +2230,103 @@ measure: build-hw-dual-se-oled-standalone ## Build + print the 8 BIP-39 measurem
 # is not the Draft-1.1 candidate resource gate: that candidate proposes a
 # 40,960-byte hard ceiling plus separate physical LOAD-span and RAM/stack gates.
 .PHONY: fsbl
+# ---------------------------------------------------------------------------
+# NON-MONOLITHIC BOOT PROOF — FSBL verifies a manifest and branches into slot A
+# ---------------------------------------------------------------------------
+#
+# Every bench flow to date has been MONOLITHIC: SECBOOTADD0 points at
+# 0x0C000000 and the secure world IS the boot image, linked there. The FSBL's
+# slot-selection, manifest-verify and branch code has therefore never executed
+# on silicon — no other target even flashes the FSBL to a board.
+#
+# This target builds and flashes the four pieces at their real addresses:
+#
+#   0x0C000000  FSBL                (pages 0-3)
+#   0x0C008000  Manifest A          (page 4)
+#   0x0C00A000  Manifest B          (page 5)   left ERASED — one candidate only
+#   0x0C00C000  Boot state          (page 6)   left ERASED
+#   0x0C00E000  Secure slot A       (pages 7-64)
+#   0x08100000  NS slot A           (bank 2)
+#
+# LEGACY layout, deliberately. `pqsigner-geometry` freezes a different map and
+# the cutover is issue #540 (FA-1.1 consumer rewiring). This proof exercises the
+# FSBL that EXISTS rather than pre-empting that decision — see
+# secure/memory-stm32u585-slot-a.x. Two things make that the right order: the
+# FSBL page count cannot be finalised until the rollback backend fixes the final
+# FSBL size, and the handoff machinery proved here is needed by BOTH layouts.
+#
+# NOTHING IRREVERSIBLE. No WRP, no RDP-2, no option-byte change beyond the
+# TZEN/SECWM/SECBOOTADD0 set every bench target already uses. The board stays
+# reflashable.
+#
+# Requires a signed bundle. Generate one once with a throwaway key:
+#   cargo run --release -p fwsign -- keygen --out <key>
+#   cargo run --release -p fwsign -- pubkey --key <key> --out <pubkey.bin>
+#   printf '<fingerprint>' > <policy.sha256>
+#   ... then BOOTPROOF_KEY=<key> BOOTPROOF_PUBKEY=<pubkey.bin> \
+#       BOOTPROOF_POLICY=<policy.sha256> make bootproof-hw
+# `fwsign` prompts for the passphrase on a TTY.
+BOOTPROOF_DIR ?= target/bootproof
+
+.PHONY: bootproof-build
+bootproof-build: ## Build FSBL + slot-A secure + NS for the non-monolithic boot proof
+	@test -n "$(BOOTPROOF_PUBKEY)" || { echo "set BOOTPROOF_PUBKEY=<vendor-pubkey.bin>"; exit 1; }
+	@mkdir -p $(BOOTPROOF_DIR)
+	@echo "==> FSBL (vendor key $(BOOTPROOF_PUBKEY))"
+	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
+		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/fsbl \
+			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe
+	@echo "==> secure world LINKED AT SLOT A (0x0C00E000)"
+	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) PQSIGNER_SECURE_SLOT=a $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features mock-se,ui-noop,stm32u585,e2e-test,debug-log,legacy-fw-rollback-unsafe,erc7730-dev-unattested,$(BOARD_FEATURE)
+	@echo "==> non-secure world"
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/ns \
+			-p sphincs-tz-nonsecure --features stm32u585,$(BOARD_FEATURE)
+	@echo "==> measurements (the bytes the manifest will bind):"
+	@cargo run --release -p fwmeasure --quiet -- $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl | head -3 | sed 's/^/    fsbl   /'
+	@cargo run --release -p fwmeasure --quiet -- $(BOOTPROOF_DIR)/secure/$(TARGET)/release/sphincs-tz-secure | head -3 | sed 's/^/    secure /'
+	@cargo run --release -p fwmeasure --quiet -- $(BOOTPROOF_DIR)/ns/$(TARGET)/release/sphincs-tz-nonsecure | head -3 | sed 's/^/    ns     /'
+
+.PHONY: bootproof-sign
+bootproof-sign: bootproof-build ## Sign the slot-A manifest (prompts for the key passphrase)
+	@test -n "$(BOOTPROOF_KEY)" -a -n "$(BOOTPROOF_POLICY)" || { echo "set BOOTPROOF_KEY and BOOTPROOF_POLICY"; exit 1; }
+	@rm -f $(BOOTPROOF_DIR)/bundle
+	cargo run --release -p fwsign -- sign --legacy-bench-unsafe \
+		--key $(BOOTPROOF_KEY) \
+		--fsbl $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl \
+		--secure $(BOOTPROOF_DIR)/secure/$(TARGET)/release/sphincs-tz-secure \
+		--nonsecure $(BOOTPROOF_DIR)/ns/$(TARGET)/release/sphincs-tz-nonsecure \
+		--trusted-fingerprint $(BOOTPROOF_POLICY) \
+		--version 1 --slot 0 \
+		--build-id $$(printf 'pq1-nonmonolithic-bootproof' | sha256sum | cut -d' ' -f1) \
+		--out $(BOOTPROOF_DIR)/bundle
+	@rm -rf $(BOOTPROOF_DIR)/unpacked && mkdir -p $(BOOTPROOF_DIR)/unpacked
+	@tar -xf $(BOOTPROOF_DIR)/bundle -C $(BOOTPROOF_DIR)/unpacked
+	@cargo run --release -p fwsign --quiet -- inspect --bundle $(BOOTPROOF_DIR)/bundle | head -10
+
+.PHONY: bootproof-hw
+bootproof-hw: ## Flash the non-monolithic image and watch the FSBL verify + branch
+	@test -f $(BOOTPROOF_DIR)/unpacked/manifest.bin || { echo "run `make bootproof-sign` first"; exit 1; }
+	@echo "==> Erasing manifest B (page 5) + boot state (page 6) so ONE candidate validates"
+	@probe-rs erase --chip $(CHIP) 2>/dev/null || true
+	@echo "==> FSBL -> 0x0C000000"
+	@probe-rs download --chip $(CHIP) $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl
+	@echo "==> Manifest A -> 0x0C008000"
+	@probe-rs download --chip $(CHIP) --binary-format bin --base-address 0x0C008000 $(BOOTPROOF_DIR)/unpacked/manifest.bin
+	@echo "==> Secure slot A -> 0x0C00E000"
+	@probe-rs download --chip $(CHIP) --binary-format bin --base-address 0x0C00E000 $(BOOTPROOF_DIR)/unpacked/secure.bin
+	@echo "==> NS slot A -> 0x08100000"
+	@probe-rs download --chip $(CHIP) --binary-format bin --base-address 0x08100000 $(BOOTPROOF_DIR)/unpacked/nonsecure.bin
+	@echo "==> Option bytes: TZEN + SECWM + SECBOOTADD0 (NO WRP, NO RDP-2)"
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@echo "==> Running. Expect the FSBL to verify manifest A and branch into slot A."
+	@probe-rs run --chip $(CHIP) $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl
+
 .PHONY: verify-ship-state
 verify-ship-state: ## Read-only: check a board's option bytes + flash against a declared profile
 	@# The EXTERNAL half of invariant #10(a) — "ship at RDP-0 so anyone can verify

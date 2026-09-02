@@ -594,9 +594,18 @@ fn advertised_ship_and_irreversible_factory_gates_fail_loudly() {
 /// `se050-derived-scp03`) and the current dev-unattested ERC-7730
 /// catalogue marker. It compiles the full secure image, so a successful
 /// check proves the real-key fence does not over-reach.
+///
+/// `board-iota2` is REQUIRED, not decorative: since a15561b4 every `stm32u585`
+/// build must name its board (`secure/src/board/mod.rs`). This is the only
+/// fixture here that expects a SUCCESSFUL build, so it is the only one the
+/// board rule can break — the rejection fixtures below are unaffected because
+/// their `build.rs` fences fire before the board `compile_error!` is reached.
+/// Missed by the 2026-08-31 sweep, which covered Makefile targets and CI
+/// workflows but not test code that shells out to cargo with its own feature
+/// list.
 const SECURE_BENCH_FEATURES: &str = concat!(
     "se050,gpio-buttons,ui-lcd,stm32u585,usb,legacy-fw-rollback-unsafe,",
-    "erc7730-dev-unattested,consumption-mask,se050-derived-scp03"
+    "erc7730-dev-unattested,consumption-mask,se050-derived-scp03,board-iota2"
 );
 
 #[test]

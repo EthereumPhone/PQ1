@@ -104,14 +104,26 @@ fn main() {
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     // Copy the appropriate memory.x for QEMU or real STM32U585
-    let mem_x = if stm32u585 {
+    // PQSIGNER_SECURE_SLOT=a links the secure world at A/B slot A
+    // (0x0C00_E000) instead of monolithically at the boot base, so the FSBL
+    // can verify a manifest and branch into it. Bench boot proof only — see
+    // memory-stm32u585-slot-a.x. Unset (the default) is byte-identical to
+    // every previous build.
+    let slot = env::var("PQSIGNER_SECURE_SLOT").unwrap_or_default();
+    let mem_x = if !stm32u585 {
+        "memory.x"
+    } else if slot == "a" {
+        "memory-stm32u585-slot-a.x"
+    } else if slot.is_empty() {
         "memory-stm32u585.x"
     } else {
-        "memory.x"
+        panic!("PQSIGNER_SECURE_SLOT must be unset or `a`, got `{slot}`");
     };
     fs::copy(mem_x, out_dir.join("memory.x")).unwrap();
+    println!("cargo:rerun-if-env-changed=PQSIGNER_SECURE_SLOT");
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=memory-stm32u585.x");
+    println!("cargo:rerun-if-changed=memory-stm32u585-slot-a.x");
 
     // Find cortex-m-rt's link.x. On QEMU we redirect .gnu.sgstubs to a
     // separate NSC region (QEMU 8.2.2 SG workaround). On real STM32U585
