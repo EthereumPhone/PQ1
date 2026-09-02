@@ -37,13 +37,13 @@ trap 'rm -rf "$TMPD"' EXIT
 # cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
 # "statement pin file truncated" -- which is exactly what it did on the first
 # run of this promotion.
-EXPECT_PINS=1108
+EXPECT_PINS=1109
 # Committed count of top-level statements across the certified roots.  Guards
 # PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
 # somebody must say why.  896 measured 2026-08-20; 993 after the 2026-08-25 pins;
 # 1016 on 2026-08-31 when cdrafts-split/BadEncCountermodel.ec was promoted into the
 # closure (+23 statements, all pinned in the same commit).
-EXPECT_STMTS=1023
+EXPECT_STMTS=1024
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/
@@ -781,10 +781,11 @@ n_ctl=$(printf '%s\n' $ran | sort -u | grep -c .)
 # COUNT RAISED 5 -> 6 (2026-08-25) when scratch/encode_compat_derivable.ec was added.
 # COUNT RAISED 6 -> 10 (2026-08-31) with the four badenc countermodel controls.
 # COUNT RAISED 10 -> 13 (2026-09-01) with the three WotsLegCharged controls.
+# COUNT RAISED 13 -> 15 (2026-09-01) with the two GprocWotsNamed controls.
 # A floor BELOW the actual control count cannot detect one being deleted: with six
 # controls and a `-ge 5` guard, dropping any single one still scores OK.  The floor
 # must track the inventory or it only catches total truncation.
-echo "controls executed (unique)=$n_ctl expected>=13"
+echo "controls executed (unique)=$n_ctl expected>=15"
 [ "$n_ctl" -ge 6 ] || { echo "FAIL control file truncated or empty (fail-open guard)"; fail=$((fail+1)); }
 
 # IDENTITY RE-VERIFICATION AT THE END (run 13, GPT-5.6).  The identity was

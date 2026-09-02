@@ -1197,3 +1197,5 @@ cdrafts-split/WotsLegCharged.ec::gen_leaves_ll	b5e4ac8d9ae8eb01f8ab2e60f2a33712
 cdrafts-split/WotsLegCharged.ec::rtopc_choose_ll	5c6837b459d3d9815703877af86b4371
 cdrafts-split/WotsLegCharged.ec::rtopc_forge_ll	a2613f5007f69565313fc14120d4a4a7
 cdrafts-split/WotsLegCharged.ec::wots_leg_charged_at_deployed	b8feb97aa0060101095f18e01a0c12fd
+# --- GprocWotsNamed.ec, pinned on promotion 2026-09-01 (1 statement). ---
+cdrafts-split/GprocWotsNamed.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED	ff11289036ebf282e3d985faee4010cd

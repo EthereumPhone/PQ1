@@ -112,7 +112,9 @@ this arc; taint closure **6 → 2**. The deployed WOTS leg is now **charged** to
 `WotsLegCharged.ec::wots_leg_charged_at_deployed` (2026-09-01) replaces `GprocQWired`'s
 opaque WOTS summand with the four named UD/TCR/PRE/encoding-collision terms at the
 deployed adversary, at the price of six extra separations on `F` and an explicit
-**grind-reachability** premise. `extract_op` remains — and **closing it is explicitly NOT
+**grind-reachability** premise. `GprocWotsNamed.ec` then composes it into the deployed
+headline itself, so a fifth family member exists whose WOTS leg is **named rather than
+opaque** — at 4 premises instead of 2. Quote the 2-premise statement unless you want that. `extract_op` remains — and **closing it is explicitly NOT
 the next unit**: it targets a *local mirror* game, not the headline's term, which the fully
 proven Gproc route already reaches. See `UPDATE 2026-09-01` and `scratch/scope_fextractop_VERDICT.md`.
 
@@ -3313,3 +3315,86 @@ control's declared reason against the **first** `[critical]` line only, and Easy
 (`is not allowed to use the modules(s)`) is genuinely in the diagnostic — on its *second*
 line. I had observed the message through `cut -c1-150` and read the wrap point as its end.
 Declare a substring of the first line, and keep line numbers out of it: they drift.
+
+### UPDATE 2026-09-01 (third) — the deployed headline's WOTS game is NAMED, and a prohibition against doing it is retracted
+
+`GprocWotsNamed.ec` is a closure member. It is
+`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS` — this artifact's
+recommended quotation surface — with its **one opaque** `Pr[M_EUF_GCMA_WOTSTWESNPRF …]`
+replaced by the four **named** terms of `WotsLegCharged.ec::wots_leg_charged_at_deployed`:
+UD / TCR / PRE / encoding-collision. The proof is transitivity against that lemma and
+nothing else.
+
+#### The prohibition this supersedes
+
+`GprocChargedQWired.ec:39-42` forbade exactly this move, in these words:
+
+> Reducing it … **must NOT be done by applying the existing WOTS theorem, which consumes
+> the admit at `base-c10-split/WOTS_TW_ES.ec:1513`** and would make a presently
+> non-load-bearing admit LOAD-BEARING.
+
+That was **correct when written** and has had **no addressee since 2026-08-30**, when the
+admit at `:1513` was *removed* rather than contained. What the new member applies is the
+**charged** theorem, which is admit-free. The bullet is corrected at the sentence, with
+the retraction stated rather than the old text quietly deleted.
+
+This is the **third** correctly-reasoned constraint in a week found outliving its premise
+(after the `_Unfolded` regression warning and the `two_encodings` "unconditional axiom"
+citations). The pattern is consistent enough to be a workflow item, not a hindsight
+observation: **when a commit removes something, re-check every constraint whose stated
+reason names it.**
+
+#### Cost, and why it is a parallel member
+
+| | before | after |
+|---|---|---|
+| closure roots | 36 | **37** |
+| cone files | 47 | **48** |
+| statements | 1023 | **1024** |
+| census `added` / `removed` | — | **0 / 0** |
+| `ledger` / `total` | 241 / 1642 | **241 / 1642** |
+| **premises** | 2 | **4** |
+
+**The census did not move, for the second promotion running.** Both `WotsLegCharged.ec`
+and `GprocWotsNamed.ec` are pure lemma files, and lemmas are not census rows. The entire
+price is premises, and premises live in the theorem where a reader can see them: six extra
+module separations on `F`, grind reachability, and forger losslessness — all inherited
+verbatim from `WotsLegCharged.ec`.
+
+Because premises went 2 → 4, this is a **parallel** member, not an edit.
+`GprocChargedQWired.ec`'s own PLACEMENT note takes exactly that route, and the 2-premise
+statement stays quotable. **Quote the older one unless you specifically want the WOTS leg
+named.**
+
+#### What it does not do
+
+**It bounds nothing.** Four named terms in place of one opaque game is assumption-surface
+progress, not a number. `Pr[M.F.ITSRC10 …]` is still carried unreduced and is still the
+honest headline blocker; the new encoding-collision term is **also** unreduced, and
+`badenc_is_one` does **not** bound it at this composed adversary.
+
+#### Controls, and one I nearly banked wrongly
+
+`scratch/gwn_ctl{A,B}.ec` drop the charged WOTS leg and the deployed statement from the
+composition. Both must fail; floor 13 → 15. **A is the one that matters**: if the
+composition still went through without the charged leg, the substitution would be doing
+nothing and the theorem would be vacuous. It fails with `cannot prove goal (strict)`.
+
+During development the same pair of controls produced a **false negative I nearly
+accepted**: one of them returned a nonzero exit code because *the file had never been
+written* — a generation loop was killed by a timeout partway through. A nonzero code from
+a missing file is exactly the "passed for the wrong reason" failure the gate's PHASE 3
+exists to catch, and I read it as a result. Re-run properly, it fails for the right
+reason. **Read why a control failed; an exit code is not a receipt.**
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (463f365e...)
+pins 1109/1109 | coverage 1024/1024 across 48 CONE files | added=0 removed=0
+  ledger=241  parameters=217  bindings=366  meaning=394  definitions=424  total=1642
+controls 15/15 | taint closure 2 | taint controls 11/11
+OK   inputs unchanged across the run
+```

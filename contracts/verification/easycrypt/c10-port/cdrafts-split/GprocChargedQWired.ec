@@ -36,11 +36,18 @@
      * Nothing numeric improves.  `Pr[M.F.ITSRC10 ..]` is still carried UNREDUCED
        and remains the honest headline term; scratch/_countermodel.ec proves no
        parameter-independent bound on it is provable as that game is axiomatized.
-     * The WOTS-TW game `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` is still carried as an
-       unreduced GAME probability.  Reducing it is the separate collision
-       campaign, and it must NOT be done by applying the existing WOTS theorem,
-       which consumes the admit at base-c10-split/WOTS_TW_ES.ec:1513 and would
-       make a presently non-load-bearing admit LOAD-BEARING.
+     * The WOTS-TW game `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` is still carried HERE as
+       an unreduced GAME probability.  It is NAMED in the parallel statement
+       `GprocWotsNamed.ec::EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED`
+       (2026-09-01), at the price of two extra premises; quote THIS one unless
+       you want the leg named.
+       CORRECTED 2026-09-01.  This bullet used to end: "it must NOT be done by
+       applying the existing WOTS theorem, which consumes the admit at
+       base-c10-split/WOTS_TW_ES.ec:1513 and would make a presently
+       non-load-bearing admit LOAD-BEARING."  That was correct when written and
+       has had NO ADDRESSEE since 2026-08-30: the admit at :1513 was REMOVED, not
+       contained, and what the parallel statement applies is the CHARGED theorem,
+       which is admit-free.  Replaced at the sentence rather than annotated.
      * It activates NEITHER of the closure's two admits.
      * The grind-failure summand is an AVAILABILITY charge, not a security loss;
        see experiments/tcollres-leg/FINDING-n2-is-independent.md section 5.  It is

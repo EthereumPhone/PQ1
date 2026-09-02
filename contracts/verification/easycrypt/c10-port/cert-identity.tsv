@@ -1188,5 +1188,31 @@
 #   census added=0 removed=0, ledger=241, coverage 1023/1023, pins 1108/1108, controls
 #   13/13 executed with A and B both discriminating.
 #
-split	cfb502beee345f7198eb995477781230
+# 2026-09-01 (third).  split cfb502beee345f7198eb995477781230 -> 463f365eb9bf6644b0c922ca79a53ad4.
+#   cdrafts-split/GprocWotsNamed.ec ENTERS THE CLOSURE -- the deployed headline with the
+#   WOTS-TW GAME NAMED.  It is EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS
+#   with its one OPAQUE `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` replaced by the four named terms of
+#   WotsLegCharged.ec::wots_leg_charged_at_deployed.  Proof: transitivity.
+#   Inputs that moved:
+#     + cdrafts-split/GprocWotsNamed.ec      (new closure member)
+#     + scratch/gwn_ctl{A,B}.ec              (2 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                (36 -> 37 roots)
+#     ~ cert-cone-files-split.tsv            (47 -> 48 files)
+#     ~ cert-controls-split.tsv              (13 -> 15 controls)
+#     ~ cert-statements-split.tsv            (+1 pin)
+#     ~ cert_gate_split.sh                   (EXPECT_STMTS 1023->1024, EXPECT_PINS 1108->1109,
+#                                             controls floor >=15)
+#     ~ cdrafts-split/GprocChargedQWired.ec  (COMMENT ONLY -- see below)
+#   THE CENSUS DID NOT MOVE, for the second promotion running: added=0 removed=0,
+#   ledger=241, total=1642, baseline body byte-identical.  Both new members are pure
+#   lemma files; lemmas are not census rows.  The price is premises (2 -> 4) and is
+#   visible in the THEOREM.
+#   THE COMMENT CHANGE IS A RETRACTION, not decoration.  GprocChargedQWired.ec:39-42 said
+#   reducing the WOTS game "must NOT be done by applying the existing WOTS theorem, which
+#   consumes the admit at base-c10-split/WOTS_TW_ES.ec:1513 and would make a presently
+#   non-load-bearing admit LOAD-BEARING".  Correct when written; NO ADDRESSEE since
+#   2026-08-30, when that admit was REMOVED rather than contained.  What the new member
+#   applies is the CHARGED theorem, which is admit-free.  Replaced at the sentence.
+#
+split	463f365eb9bf6644b0c922ca79a53ad4
 fork	9c2d21280c84d52c30b22111151f1135

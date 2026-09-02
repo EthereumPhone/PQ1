@@ -42,3 +42,10 @@ scratch/badenc_ctlD.ec	MUST-FAIL	[by]: cannot close goals
 scratch/wlc_ctlA.ec	MUST-FAIL	this proof-term proves:
 scratch/wlc_ctlB.ec	MUST-FAIL	this proof-term proves:
 scratch/wlc_ctlC.ec	MUST-FAIL	the module Top.WOTS_C_Interactive.R_int_WOTSTW
+# --- GprocWotsNamed controls, added 2026-09-01 (regenerate: scratch/mkctl_gwn.sh).
+# A drops the CHARGED WOTS LEG from the composition; B drops the deployed statement.
+# A IS THE ONE THAT MATTERS: a green compile there would mean the substitution of four
+# named terms for the opaque game does nothing, i.e. the theorem is vacuous.
+# Reasons observed, not assumed.
+scratch/gwn_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/gwn_ctlB.ec	MUST-FAIL	cannot prove goal (strict)
