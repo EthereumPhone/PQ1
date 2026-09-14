@@ -68,6 +68,11 @@ HEADLINE = [
     'EUFCMA_SPHINCS_PLUS_C10_GROUNDED',
     'EUFCMA_SPHINCS_PLUS_C10_QWIRED',
     'gproc_Q_bound',
+    # Added 2026-09-14.  WOTSNAMED (GprocWotsNamed.ec, 2026-09-01) was landed WITHOUT this
+    # edit -- exactly the silent coverage hole the note above warns about; it went 13 days
+    # unchecked for taint.  TCOLLNAMED (GprocTCollNamed.ec) is added with the variant itself.
+    'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED',
+    'EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_TCOLLNAMED',
 ]
 
 def strip_comments(s):

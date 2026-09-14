@@ -1,44 +1,4 @@
-(* ==========================================================================
-   GprocWotsNamed.ec -- the deployed headline with the WOTS-TW GAME NAMED.
-   Landed 2026-09-01.
-
-   WHAT IT IS.  `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS`
-   (GprocChargedQWired.ec:341) is this artifact's recommended quotation surface,
-   and it carries `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` as ONE OPAQUE GAME.  The
-   theorem below is that statement with the opaque game replaced by the FOUR
-   NAMED terms of `WotsLegCharged.ec::wots_leg_charged_at_deployed`:
-   UD / TCR / PRE / encoding-collision.  Proof: transitivity, nothing else.
-
-   THE PROHIBITION THIS SUPERSEDES, and why it is no longer binding.
-   GprocChargedQWired.ec:39-42 says, of exactly this move:
-       "Reducing it ... must NOT be done by applying the existing WOTS theorem,
-        which consumes the admit at base-c10-split/WOTS_TW_ES.ec:1513 and would
-        make a presently non-load-bearing admit LOAD-BEARING."
-   That was correct when written and has had NO ADDRESSEE since 2026-08-30: the
-   admit at :1513 was REMOVED, not contained, and what is applied here is the
-   CHARGED theorem, which is admit-free.  The note has been corrected in place.
-
-   PARALLEL, NOT AN EDIT.  GprocChargedQWired.ec's own PLACEMENT note takes a new
-   file rather than editing its predecessor, so both surfaces stay quotable.  Same
-   here: the 2-premise deployed statement is untouched and remains the thing to
-   quote when the extra premises are not wanted.
-
-   THE PRICE: premises 2 -> 4.  Six extra module separations on F (a NARROWING),
-   GRIND REACHABILITY, and forger losslessness -- all three inherited verbatim
-   from WotsLegCharged.ec, whose header explains each.  Quote the older statement
-   unless you specifically want the WOTS leg named.
-
-   IT BOUNDS NOTHING.  Four named terms in place of one opaque game is
-   assumption-surface progress, not a number.  `Pr[M.F.ITSRC10 ..]` is still
-   carried unreduced and is still the honest headline blocker; the new
-   encoding-collision term is ALSO unreduced, and `badenc_is_one` does NOT bound
-   it at this composed adversary.
-
-   CONTROLS: scratch/gwn_ctl{A,B}.ec drop the charged WOTS leg and the deployed
-   statement respectively from the composition.  Both MUST fail -- and the FIRST
-   is the one that matters: if the composition still went through without the
-   charged leg, the substitution would be doing nothing.
-   ========================================================================== *)
+(* PROBE -- NOT A RESULT.  Does the T_COLL composition typecheck at the deployed F? *)
 require import AllCore List Distr StdBigop StdOrder IntDiv.
 require import SPHINCS_PLUS XmssmtCC_All RtopCSoundness FxChain GprocFORSC10 GprocVI.
 require WOTS_C_Real WOTS_C_Scheme XMSSMT_C_Scheme WOTS_C_Interactive.
@@ -46,10 +6,7 @@ require FORS_C10 FORS_C10_Multi DigitalSignatures.
 require import BitEncoding. import BS2Int BitChunking.
 require import GFailCharged XmssmtCCCharged SphincsC10CapstoneCharged.
 require import GprocT1Opre GprocT2Trh GprocT3Trco GprocQBound.
-require import GprocQWired.   (* CORRECTED 2026-09-14: this said "reuse its WitnessF for
-   the anti-vacuity check", copied from GprocChargedQWired.ec, where it is true.  THIS
-   file uses WitnessF zero times and has no anti-vacuity check; its controls are
-   scratch/gwn_ctl{A,B}.ec. *)
+require import GprocQWired.   (* reuse its WitnessF for the anti-vacuity check *)
 (* c10_n / c10_len / c10_k / c10_r for the DEPLOYED variant below.  Same import
    GprocQWired.ec:55 uses, and both files are ALREADY closure members, so this adds
    no new file to the cone -- verified after the edit (CONE_FILES stays 45). *)
@@ -67,8 +24,10 @@ import EmsgWOTS.
 import XMSSMT_C_Scheme.
 import WOTS_C_Interactive.
 require import GprocChargedQWired WotsLegCharged.
+require import GprocWotsNamed.
+require import TCollResEnum BadEncToTColl BadEncStep4.
 
-lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
+lemma PROBE_TCOLLNAMED
   (F <: Adv_EUFCMA_C{ -R_int_STCRC, -R_int_WOTSTW,
              -O_MEUFGCMA_WOTSC_Default, -O_MEUFGCMA_WOTSTWESNPRF,
              -STCRC_WC.O_STCRC_Default, -FC.O_THFC_Default, -O_THFC_MA, -G0_INT,
@@ -91,7 +50,8 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
              (* the six WOTS-TW internals the charged leg needs -- a NARROWING *)
              -FC_UD.O_SMDTUD_Default, -FC_TCR.O_SMDTTCR_Default,
              -FC_PRE.O_SMDTPRE_Default, -R_SMDTUDC_Game23WOTSTWES,
-             -R_SMDTTCRC_Game34WOTSTWES, -R_SMDTPREC_Game4WOTSTWES })
+             -R_SMDTTCRC_Game34WOTSTWES, -R_SMDTPREC_Game4WOTSTWES,
+             -O_TCollEnum_Default, -R_TCOLL })
   &m :
      (* GRIND REACHABILITY -- the "+C" grind assumption, made explicit.  See
         WotsLegCharged.ec's header for why nothing in the closure supplies it. *)
@@ -138,8 +98,8 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
                         FC_TCR.O_SMDTTCR_Default, FC.O_THFC_Default).main() @ &m : res]
                + ( Pr[FC_PRE.SM_DT_PRE_C(R_SMDTPREC_Game4WOTSTWES(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))),
                         FC_PRE.O_SMDTPRE_Default, FC.O_THFC_Default).main() @ &m : res]
-                 + Pr[Game4_WOTSTWES_BadEnc(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))).main() @ &m
-                        : res /\ BadEncFlag.badenc] ) )
+                 + Pr[T_COLL_RES_ENUM(R_TCOLL(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))),
+                        O_TCollEnum_Default, FC.O_THFC_Default).main() @ &m : res] ) )
            + Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))),
                                STCRC_WC.O_STCRC_Default).main() @ &m : res]
            + Pr[FSSLXMTWES.PKCOC_TCR.SM_DT_TCR_C(R_SMDTTCRCPKCO_C(R_top_C(F)),
@@ -154,7 +114,7 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
                                   O_MEUFGCMA_WOTSC_Default.qs] ).
 proof.
 move=> hgrind Fll hc hsz.
-have h1 := EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS F &m hc hsz.
-have h2 := wots_leg_charged_at_deployed F &m hgrind Fll.
+have h1 := EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED F &m hgrind Fll hc hsz.
+have h2 := badenc_le_tcoll (R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))) &m hc.
 smt().
 qed.

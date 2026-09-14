@@ -35,3 +35,8 @@ GprocChargedQWired
 BadEncCountermodel
 WotsLegCharged
 GprocWotsNamed
+TCollResEnum
+BadEncSplit
+BadEncToTColl
+BadEncStep4
+GprocTCollNamed

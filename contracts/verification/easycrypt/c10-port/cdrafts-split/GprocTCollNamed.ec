@@ -1,43 +1,86 @@
 (* ==========================================================================
-   GprocWotsNamed.ec -- the deployed headline with the WOTS-TW GAME NAMED.
-   Landed 2026-09-01.
+   GprocTCollNamed.ec -- the deployed headline with the WOTS encoding-collision
+   term MOVED to the +C layer.  Landed 2026-09-14.
 
-   WHAT IT IS.  `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS`
-   (GprocChargedQWired.ec:341) is this artifact's recommended quotation surface,
-   and it carries `Pr[M_EUF_GCMA_WOTSTWESNPRF ..]` as ONE OPAQUE GAME.  The
-   theorem below is that statement with the opaque game replaced by the FOUR
-   NAMED terms of `WotsLegCharged.ec::wots_leg_charged_at_deployed`:
-   UD / TCR / PRE / encoding-collision.  Proof: transitivity, nothing else.
+   WHAT IT IS.  GprocWotsNamed.ec's
+   `EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED`
+   names the WOTS-TW game as four terms, one of which is
+       Pr[Game4_WOTSTWES_BadEnc(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))))
+          : res /\ BadEncFlag.badenc].
+   The theorem below is that statement with THAT term replaced by
+       Pr[T_COLL_RES_ENUM(R_TCOLL(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))),
+                          O_TCollEnum_Default, FC.O_THFC_Default) : res]
+   through `BadEncStep4.ec::badenc_le_tcoll`.  Proof: transitivity, nothing else.
 
-   THE PROHIBITION THIS SUPERSEDES, and why it is no longer binding.
-   GprocChargedQWired.ec:39-42 says, of exactly this move:
-       "Reducing it ... must NOT be done by applying the existing WOTS theorem,
-        which consumes the admit at base-c10-split/WOTS_TW_ES.ec:1513 and would
-        make a presently non-load-bearing admit LOAD-BEARING."
-   That was correct when written and has had NO ADDRESSEE since 2026-08-30: the
-   admit at :1513 was REMOVED, not contained, and what is applied here is the
-   CHARGED theorem, which is admit-free.  The note has been corrected in place.
+   WHY.  The tree has recorded the raw term as a DEBT since 2026-08-13
+   (scratch/FINDING-seed-withholding-is-not-the-lever.md, section 3, condition 2 --
+   that file's NUMERIC claims were later retracted; condition 2 is about PLACEMENT and
+   is unaffected):
+     "the named-assumption term must eventually REPLACE the raw
+      `Game4_WOTSTWES_BadEnc` term at the headline.  Until it does ... an
+      undischarged debt".
+   At the WOTS-TW layer the adversary CHOOSES the WOTS message, so it can hand over a
+   colliding pair; BadEncCountermodel.ec::badenc_is_one proves that term equals 1 for an
+   explicit replay adversary -- NOT this deployed instantiation, whose value there is not
+   established.  At the +C layer the adversary picks the preimage (m', ctr') but not the
+   digest, and a win needs a SECOND surface preimage, under `ThC ps ad`, of a codeword
+   the target oracle recorded (TCollResEnum.ec::tcoll_win_needs_coll): a search, not a
+   hand-over.  That is an EVENT-level fact -- it says a win requires a collision, not
+   that collisions are absent or hard.  This file performs the replacement the debt
+   names.
 
-   PARALLEL, NOT AN EDIT.  GprocChargedQWired.ec's own PLACEMENT note takes a new
-   file rather than editing its predecessor, so both surfaces stay quotable.  Same
-   here: the 2-premise deployed statement is untouched and remains the thing to
-   quote when the extra premises are not wanted.
+   A LOOSER INEQUALITY -- READ THIS FIRST.  `badenc_le_tcoll` is old <= new, so this
+   right-hand side is pointwise LARGER than WOTSNAMED's, and F is narrower by one
+   separation.  As an inequality this theorem is STRICTLY WEAKER than WOTSNAMED: it is
+   a corollary of it.  Quote WOTSNAMED when you want the tighter statement.  What this
+   one buys is WHICH term is carried -- a standalone, named +C game with a proved win
+   characterisation, in place of an internal game probability of the WOTS-TW proof.
+   Assumption-surface progress, not a number.
 
-   THE PRICE: premises 2 -> 4.  Six extra module separations on F (a NARROWING),
-   GRIND REACHABILITY, and forger losslessness -- all three inherited verbatim
-   from WotsLegCharged.ec, whose header explains each.  Quote the older statement
-   unless you specifically want the WOTS leg named.
+   THE PRICE IN THE HYPOTHESES: ONE module separation, ZERO new premises.
+   `badenc_le_tcoll` needs `c <= p_tgts`, which the headline already carries.  MEASURED with
+   scratch/probe_tcoll_compose.ec rather than assumed:
+     * dropping `-O_TCollEnum_Default` fails the restriction check: load-bearing;
+     * `-R_TCOLL`, which `badenc_le_tcoll` also lists, is NOT added because it is
+       IMPLIED.  `R_TCOLL.O_wrap` declares no `var` of its own; its only state comes from
+       `include var O_MEUFGCMA_WOTSC_Default`, and `include var` SHARES the included
+       module's globals rather than copying them -- the base tree relies on exactly
+       that (`O_Game34_WOTSTWES_AltX` appends to `qs` through `include var
+       O_MEUFGCMA_WOTSTWESNPRF`, and `Game4_WOTSTWES_BadEnc` reads that module's log;
+       BadEncStep4.ec:488 names it `O_MEUFGCMA_WOTSTWESNPRF.qs{1}`).  F already excludes
+       `O_MEUFGCMA_WOTSC_Default`, so `-R_TCOLL` would exclude nothing more.  Measured:
+       without it the composition compiles.
 
-   IT BOUNDS NOTHING.  Four named terms in place of one opaque game is
-   assumption-surface progress, not a number.  `Pr[M.F.ITSRC10 ..]` is still
-   carried unreduced and is still the honest headline blocker; the new
-   encoding-collision term is ALSO unreduced, and `badenc_is_one` does NOT bound
-   it at this composed adversary.
+   IT BOUNDS NOTHING -- READ THIS BEFORE QUOTING.
+     * `T_COLL_RES_ENUM` is an UNBOUNDED hardness assumption, and there is NO NUMBER to
+       quote for it.  The constant-sum surface count |C_T| = 2^114.0941 is machine-checked
+       (experiments/wots-badenc/count/ -- NOT a closure member), but no derivation turns a
+       surface size into an advantage bound against an adversary that holds the keyed
+       collection oracle and chooses its own counter.  Every figure this tree has attached
+       to the term -- ~2^-72, 2^-82, 2^-78.09 -- was RETRACTED or WITHDRAWN (vendored
+       README, CORRECTION 2026-08-14 (final) and CONCLUSION 2026-08-18).
+     * Do NOT read the move as "the deployment keeps the WOTS message key-determined".
+       That is FALSE at the verifier: the layer-0 WOTS message is built from FORS secrets
+       and auth paths read out of the signature (sphincs-c10/src/hypertree.rs:386-419).
+     * `T_COLL_RES_ENUM` has NO disjointness conjunct (TCollResEnum.ec, FAITHFULNESS
+       NOTES): its win set is LARGER than the S-TCR(+C) template's, so the assumption is
+       STRICTLY STRONGER than a THF assumption.  Sound to charge, expensive to believe.
+     * Like every hardness term in this statement, it means something only for
+       RESOURCE-BOUNDED adversaries, which this development does not formalise: `find`
+       receives `ps` and `thfc` is an ambient op, so an unbounded adversary wins whenever
+       a second surface preimage of a recorded codeword exists.  That encoder collisions
+       exist AT ALL rests on a target-sum antichain count the tree states in prose and does
+       not mechanise; that a GIVEN recorded codeword has a second preimage is stated
+       nowhere.
+     * `Pr[M.F.ITSRC10 ..]` is still carried unreduced and is still the honest headline
+       blocker.
 
-   CONTROLS: scratch/gwn_ctl{A,B}.ec drop the charged WOTS leg and the deployed
-   statement respectively from the composition.  Both MUST fail -- and the FIRST
-   is the one that matters: if the composition still went through without the
-   charged leg, the substitution would be doing nothing.
+   PARALLEL, NOT AN EDIT.  GprocWotsNamed.ec's STATEMENT is untouched and stays quotable
+   (one stale preamble comment in that file was corrected the same day; see its line 49).
+
+   CONTROLS: scratch/gtn_ctl{A,B,C}.ec.  A drops `badenc_le_tcoll` from the composition
+   -- the one that matters: if the theorem still went through, the substitution would
+   be doing nothing.  B drops the WOTSNAMED statement.  C drops `-O_TCollEnum_Default`.
    ========================================================================== *)
 require import AllCore List Distr StdBigop StdOrder IntDiv.
 require import SPHINCS_PLUS XmssmtCC_All RtopCSoundness FxChain GprocFORSC10 GprocVI.
@@ -46,10 +89,7 @@ require FORS_C10 FORS_C10_Multi DigitalSignatures.
 require import BitEncoding. import BS2Int BitChunking.
 require import GFailCharged XmssmtCCCharged SphincsC10CapstoneCharged.
 require import GprocT1Opre GprocT2Trh GprocT3Trco GprocQBound.
-require import GprocQWired.   (* CORRECTED 2026-09-14: this said "reuse its WitnessF for
-   the anti-vacuity check", copied from GprocChargedQWired.ec, where it is true.  THIS
-   file uses WitnessF zero times and has no anti-vacuity check; its controls are
-   scratch/gwn_ctl{A,B}.ec. *)
+require import GprocQWired.   (* inherited preamble; this file has no WitnessF check *)
 (* c10_n / c10_len / c10_k / c10_r for the DEPLOYED variant below.  Same import
    GprocQWired.ec:55 uses, and both files are ALREADY closure members, so this adds
    no new file to the cone -- verified after the edit (CONE_FILES stays 45). *)
@@ -67,8 +107,10 @@ import EmsgWOTS.
 import XMSSMT_C_Scheme.
 import WOTS_C_Interactive.
 require import GprocChargedQWired WotsLegCharged.
+require import GprocWotsNamed.
+require import TCollResEnum BadEncToTColl BadEncStep4.
 
-lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
+lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_TCOLLNAMED
   (F <: Adv_EUFCMA_C{ -R_int_STCRC, -R_int_WOTSTW,
              -O_MEUFGCMA_WOTSC_Default, -O_MEUFGCMA_WOTSTWESNPRF,
              -STCRC_WC.O_STCRC_Default, -FC.O_THFC_Default, -O_THFC_MA, -G0_INT,
@@ -91,7 +133,11 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
              (* the six WOTS-TW internals the charged leg needs -- a NARROWING *)
              -FC_UD.O_SMDTUD_Default, -FC_TCR.O_SMDTTCR_Default,
              -FC_PRE.O_SMDTPRE_Default, -R_SMDTUDC_Game23WOTSTWES,
-             -R_SMDTTCRC_Game34WOTSTWES, -R_SMDTPREC_Game4WOTSTWES })
+             -R_SMDTTCRC_Game34WOTSTWES, -R_SMDTPREC_Game4WOTSTWES,
+             (* the ONE separation badenc_le_tcoll adds -- a NARROWING, and
+                load-bearing (scratch/gtn_ctlC.ec).  Its other new one,
+                -R_TCOLL, is IMPLIED by -O_MEUFGCMA_WOTSC_Default above. *)
+             -O_TCollEnum_Default })
   &m :
      (* GRIND REACHABILITY -- the "+C" grind assumption, made explicit.  See
         WotsLegCharged.ec's header for why nothing in the closure supplies it. *)
@@ -128,7 +174,7 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
              + Pr[FTWES.TRCOC_TCR.SM_DT_TCR_C(R_TRCO_Gproc(R_fors_p(F)),
                     FTWES.TRCOC_TCR.O_SMDTTCR_Default,
                     FTWES.TRCOC.O_THFC_Default).main() @ &m : res] ) )
-       + ( (* ---- the WOTS-TW game, NAMED (was one opaque Pr[..]) ---- *)
+       + ( (* ---- the WOTS-TW game, NAMED ---- *)
              (   (w - 2)%r
                  * `|Pr[FC_UD.SM_DT_UD_C(R_SMDTUDC_Game23WOTSTWES(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))),
                         FC_UD.O_SMDTUD_Default, FC.O_THFC_Default).main(false) @ &m : res]
@@ -138,8 +184,9 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
                         FC_TCR.O_SMDTTCR_Default, FC.O_THFC_Default).main() @ &m : res]
                + ( Pr[FC_PRE.SM_DT_PRE_C(R_SMDTPREC_Game4WOTSTWES(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))),
                         FC_PRE.O_SMDTPRE_Default, FC.O_THFC_Default).main() @ &m : res]
-                 + Pr[Game4_WOTSTWES_BadEnc(R_int_WOTSTW(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F)))).main() @ &m
-                        : res /\ BadEncFlag.badenc] ) )
+                 (* ---- encoding collision, MOVED to the +C layer (was Game4_WOTSTWES_BadEnc) ---- *)
+                 + Pr[T_COLL_RES_ENUM(R_TCOLL(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))),
+                        O_TCollEnum_Default, FC.O_THFC_Default).main() @ &m : res] ) )
            + Pr[S_TCR_C_Int_MA(R_int_STCRC(R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))),
                                STCRC_WC.O_STCRC_Default).main() @ &m : res]
            + Pr[FSSLXMTWES.PKCOC_TCR.SM_DT_TCR_C(R_SMDTTCRCPKCO_C(R_top_C(F)),
@@ -154,7 +201,7 @@ lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED
                                   O_MEUFGCMA_WOTSC_Default.qs] ).
 proof.
 move=> hgrind Fll hc hsz.
-have h1 := EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS F &m hc hsz.
-have h2 := wots_leg_charged_at_deployed F &m hgrind Fll.
+have h1 := EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_WOTSNAMED F &m hgrind Fll hc hsz.
+have h2 := badenc_le_tcoll (R_MEUFGCMAWOTSC_EUFNAGCMA_C(R_top_C(F))) &m hc.
 smt().
 qed.

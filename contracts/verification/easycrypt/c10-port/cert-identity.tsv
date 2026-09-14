@@ -1234,5 +1234,43 @@
 #   expired prohibition restated on the front page, which I retracted in the .ec file the
 #   same day without noticing it was also there).  The cluster is now closed.
 #
-split	7ec2a554e69e87ddf867c31312d1ee2b
+# 2026-09-14.  split 7ec2a554e69e87ddf867c31312d1ee2b -> 6aeac74105b8ebd64aa81768d8b6f256.
+#   PROMOTION OF THE T_COLL_RES_ENUM CHAIN (4 files) INTO THE CLOSURE, plus a fix to the
+#   gate's own control-count guard.  Inputs that moved:
+#     + cdrafts-split/{TCollResEnum,BadEncSplit,BadEncToTColl,BadEncStep4}.ec  (0 admits, 0 axioms)
+#     + scratch/{tcoll,bered,bes4}_ctl*.ec          (21 MUST-FAIL controls, in $CTL_SRC)
+#     ~ closure-c10-split.txt                        (37 -> 41 roots)
+#     ~ cert-cone-files-split.tsv                    (48 -> 52 files)
+#     ~ cert-controls-split.tsv                      (15 -> 36 controls)
+#     ~ cert-statements-split.tsv                    (+57 pins)
+#     ~ cert-baseline-split.tsv                      (re-baselined; LEDGER 241 UNCHANGED)
+#     ~ cert_gate_split.sh                           (EXPECT_PINS 1109 -> 1166, EXPECT_STMTS
+#                                                    1024 -> 1081, EXPECT_CTLS = 36 NEW)
+#   THE GUARD FIX.  PHASE 3 printed `expected>=15` and tested `-ge 6`: the count comments
+#   were raised three times and the number never was, so up to nine control ROWS could be
+#   deleted under a GREEN receipt.  Now an equality against a committed EXPECT_CTLS.
+#   Value computed by executing the gate's own CTL_SRC..INPUTS_SHA256 lines verbatim inside
+#   ec-grind with LC_ALL=C (scratch/calc_inputs_id.sh); the gate run compares it itself.
+#
+# 2026-09-14 (Run 2).  split 6aeac74105b8ebd64aa81768d8b6f256 -> e848ec55b7d178f5565fdc09d60d11af.
+#   GprocTCollNamed.ec ENTERS THE CLOSURE: the deployed headline with the WOTS encoding-
+#   collision term carried as Pr[T_COLL_RES_ENUM(..)] instead of the raw BadEnc game.  Run 1
+#   (6aeac741..., the promotion alone) was GREEN; this run adds its consumer.  Inputs that moved:
+#     + cdrafts-split/GprocTCollNamed.ec     (1 lemma, 0 admits, 0 axioms)
+#     + scratch/gtn_ctl{A,B,C}.ec             (3 MUST-FAIL controls)
+#     ~ closure 41 -> 42; cone files 52 -> 53; controls 36 -> 39; pins +1
+#     ~ cert-baseline-split.tsv              (census UNCHANGED; line annotations and the
+#                                             CONE_FILES block regenerated)
+#     ~ tools/taint_closure.py               (HEADLINE 7 -> 9: WOTSNAMED was never registered)
+#     ~ cert_gate_split.sh                   (EXPECT_PINS 1167, EXPECT_STMTS 1082, EXPECT_CTLS 39)
+#     ~ BadEncCountermodel.ec, TCollResEnum.ec, GprocWotsNamed.ec   (COMMENT-ONLY)
+#   THE CORRECTIONS.  "C10's WOTS layer never encodes an adversary-chosen value" was RETRACTED
+#   on 2026-08-14 -- false at the verifier (sphincs-c10/src/hypertree.rs:386-419) -- and the
+#   retraction NAMED BadEncCountermodel.ec's header as carrying it.  That file was promoted on
+#   2026-08-31 without the fix, and TCollResEnum.ec repeated the sentence.  Both corrected at the
+#   sentence.  GprocWotsNamed.ec:49 described a WitnessF anti-vacuity check the file does not have.
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+split	e848ec55b7d178f5565fdc09d60d11af
 fork	9c2d21280c84d52c30b22111151f1135

@@ -37,13 +37,24 @@ trap 'rm -rf "$TMPD"' EXIT
 # cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
 # "statement pin file truncated" -- which is exactly what it did on the first
 # run of this promotion.
-EXPECT_PINS=1109
+EXPECT_PINS=1167
+# 1166 -> 1167 on 2026-09-14: GprocTCollNamed.ec (one lemma).
+# 1109 -> 1166 on 2026-09-14: the 57 statements of the promoted T_COLL_RES_ENUM chain.
 # Committed count of top-level statements across the certified roots.  Guards
 # PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
 # somebody must say why.  896 measured 2026-08-20; 993 after the 2026-08-25 pins;
 # 1016 on 2026-08-31 when cdrafts-split/BadEncCountermodel.ec was promoted into the
 # closure (+23 statements, all pinned in the same commit).
-EXPECT_STMTS=1024
+EXPECT_STMTS=1082
+# 1081 -> 1082 on 2026-09-14: GprocTCollNamed.ec (one lemma, pinned in the same commit).
+# 1024 -> 1081 on 2026-09-14 (+57, the T_COLL_RES_ENUM chain; all pinned in the same commit).
+# COMMITTED CONTROL COUNT (added 2026-09-14).  The PHASE 3 guard used to be
+# `[ "$n_ctl" -ge 6 ]` while PRINTING `expected>=15`: the "COUNT RAISED 6 -> 10 -> 13
+# -> 15" comments were bumped three times and the NUMBER never was, so deleting up to
+# nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
+# itself, authored in this tree.  Now an equality against a committed constant, the
+# same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
+EXPECT_CTLS=39
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/
@@ -785,8 +796,11 @@ n_ctl=$(printf '%s\n' $ran | sort -u | grep -c .)
 # A floor BELOW the actual control count cannot detect one being deleted: with six
 # controls and a `-ge 5` guard, dropping any single one still scores OK.  The floor
 # must track the inventory or it only catches total truncation.
-echo "controls executed (unique)=$n_ctl expected>=15"
-[ "$n_ctl" -ge 6 ] || { echo "FAIL control file truncated or empty (fail-open guard)"; fail=$((fail+1)); }
+# COUNT RAISED 15 -> 36 (2026-09-14) with the 21 T_COLL_RES_ENUM chain controls, and the
+# floor made REAL: see EXPECT_CTLS at the top of this file for what it replaced.
+# COUNT RAISED 36 -> 39 (2026-09-14) with the three GprocTCollNamed controls.
+echo "controls executed (unique)=$n_ctl expected=$EXPECT_CTLS"
+[ "$n_ctl" -eq "$EXPECT_CTLS" ] || { echo "FAIL control inventory: ran $n_ctl unique controls, committed expectation is $EXPECT_CTLS"; fail=$((fail+1)); }
 
 # IDENTITY RE-VERIFICATION AT THE END (run 13, GPT-5.6).  The identity was
 # computed ONCE, before a compile phase that runs for the better part of an

@@ -1,3 +1,20 @@
+> **SUPERSEDED IN PART — read before quoting anything below.** (banner added 2026-09-14)
+> Two load-bearing claims in this file were **retracted on 2026-08-14 (final)** and the
+> numbers that replaced them were **withdrawn on 2026-08-18**:
+> * *"C10's WOTS layer never encodes an adversary-chosen value / key-determined nodes"* is
+>   **FALSE at the verifier**: the FORS secrets and auth paths that form the WOTS message are
+>   read from the signature (`sphincs-c10/src/hypertree.rs`).
+> * *"~2^71.95 / ~2^-72, there is no bound to find"* priced the oracle's grinding as adversary
+>   work and ignored that one collision side must be a RECORDED entry — retracted.  The
+>   `2^-82` / `2^-78.09` figures that replaced it were in turn **withdrawn**: a surface
+>   cardinality does not yield an advantage bound without a model nobody has derived.
+> Standing position: `Pr[T_COLL_RES_ENUM]` is an **unbounded assumption**; the surface count
+> is a theorem; **no derivation connects them.**  Sources: `scratch/FINDING-both-my-claims-were-wrong.md`,
+> `scratch/FINDING-do-not-import-the-policy-cap.md`, and the vendored README's
+> *CORRECTION 2026-08-14 (final)* and *CONCLUSION 2026-08-18*.
+> Why this banner exists: on 2026-09-14 this file was read as current and its retracted
+> numbers were drafted into a new theorem header before the README's corrections were found.
+
 # FINDING — `Pr[T_COLL_RES_ENUM]` cannot be usefully bounded, and that is the result
 
 2026-08-14. Written in response to "bound `Pr[T_COLL_RES_ENUM]`". The short

@@ -49,3 +49,51 @@ scratch/wlc_ctlC.ec	MUST-FAIL	the module Top.WOTS_C_Interactive.R_int_WOTSTW
 # Reasons observed, not assumed.
 scratch/gwn_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/gwn_ctlB.ec	MUST-FAIL	cannot prove goal (strict)
+# --- T_COLL_RES_ENUM chain controls, promoted 2026-09-14 with cdrafts-split/{TCollResEnum,
+# --- BadEncSplit,BadEncToTColl,BadEncStep4}.ec.  Regenerate: scratch/mkctl_{tcoll,bered,bes4}.sh.
+# The mutation specs are copied BY SCRIPT from the experiment generators, and
+# scratch/check_tcoll_ctls_match.py asserts each control equals the experiment control
+# with comments stripped (21/21).  All 21 were RE-RUN against the LIVE trees before
+# promotion (WOTS_C_Real.ec and WOTS_TW_ES.ec had changed since 2026-08-14): every
+# first [critical] line matched the experiment receipt exactly.  Reasons observed.
+# HONEST LIMITATION, same as the wlc controls: many share "this proof-term proves:" or
+# "cannot prove goal (strict)", so the reason check confirms the KIND of failure
+# (a proof-term mismatch / an unprovable goal, not a parse error or a missing require);
+# WHICH fact was deleted is fixed by the generator, not by the message.
+# tcoll_ctlF "not an equation to rewrite" is shape-adjacent, like badenc_ctlC: it breaks
+# `rewrite -h5` in tcoll_win_needs_coll, the only consumer of tcoll_wf's second conjunct.
+# bered_ctlZ is the anti-fail-open canary (`lemma NEGCTL : false` by `trivial`).
+# bes4_ctlG is a NECESSITY control on a proof step (s4_transfer removed from
+# badenc_le_tcoll's closing smt), not an information deletion -- see BadEncStep4.ec.
+scratch/tcoll_ctlA.ec	MUST-FAIL	this proof-term proves:
+scratch/tcoll_ctlB.ec	MUST-FAIL	this proof-term proves:
+scratch/tcoll_ctlC.ec	MUST-FAIL	this proof-term proves:
+scratch/tcoll_ctlD.ec	MUST-FAIL	the given proof-term proves:
+scratch/tcoll_ctlE.ec	MUST-FAIL	[by]: cannot close goals
+scratch/tcoll_ctlF.ec	MUST-FAIL	not an equation to rewrite
+scratch/bered_ctlA.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlB.ec	MUST-FAIL	[by]: cannot close goals
+scratch/bered_ctlC.ec	MUST-FAIL	[by]: cannot close goals
+scratch/bered_ctlD.ec	MUST-FAIL	[by]: cannot close goals
+scratch/bered_ctlE.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlF.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlG.ec	MUST-FAIL	this proof-term proves:
+scratch/bered_ctlZ.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/bes4_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/bes4_ctlB.ec	MUST-FAIL	this proof-term proves:
+scratch/bes4_ctlC.ec	MUST-FAIL	this proof-term proves:
+scratch/bes4_ctlD.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/bes4_ctlE.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/bes4_ctlF.ec	MUST-FAIL	this proof-term proves:
+scratch/bes4_ctlG.ec	MUST-FAIL	cannot prove goal (strict)
+# --- GprocTCollNamed controls, added 2026-09-14 (regenerate: scratch/mkctl_gtn.sh).
+# A drops `badenc_le_tcoll` from the composition -- THE ONE THAT MATTERS: a green compile
+# would mean the T_COLL term replaces the BadEnc term without doing anything.  B drops the
+# WOTSNAMED statement.  C drops the ONE new separation, -O_TCollEnum_Default, from F.
+# C's first generator left a dangling comma and failed with `parse error` -- a SYNTAX failure
+# that proves nothing about the restriction.  Caught by reading the reason before
+# registering; regenerated, it fails at the restriction check.  Reasons observed; C's
+# declared substring is from the FIRST [critical] line, which EasyCrypt wraps.
+scratch/gtn_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/gtn_ctlB.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/gtn_ctlC.ec	MUST-FAIL	the module Top.XmssmtCC_All.R_MEUFGCMAWOTSC_EUFNAGCMA_C

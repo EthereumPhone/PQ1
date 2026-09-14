@@ -1,3 +1,47 @@
+# UNCHANGED 2026-09-14 (Run 2) -- cdrafts-split/GprocTCollNamed.ec entered the closure (roots
+# 41 -> 42, cone files 52 -> 53) and the census did NOT move: added=0 removed=0, ledger=241,
+# total=1677.  The file declares one lemma and nothing else, as predicted in
+# scratch/PREDICTION-tcollnamed-2026-09-14.md.
+# The file BELOW was nonetheless regenerated, for two cosmetic reasons the gate cannot see
+# (it reads only the first three tab fields of NF>=3 rows):
+#   * the `# line NN` annotations of 50 rows in BadEncCountermodel.ec (10) and TCollResEnum.ec
+#     (40) moved, because comment-only corrections in those headers shifted their lines;
+#   * the `### CONE_FILES` block must say 53, or it goes stale exactly as it did on 2026-09-01.
+# Asserted before writing: the (file, kind:digest, name) fields are identical row for row.
+#
+# RE-BASELINED 2026-09-14.  THE T_COLL_RES_ENUM CHAIN ENTERED THE CLOSURE (roots 37 -> 41).
+# cdrafts-split/{TCollResEnum,BadEncSplit,BadEncToTColl,BadEncStep4}.ec, promoted from
+# experiments/wots-badenc/{tcoll,red}/, where they were proved 2026-08-13/14 and never
+# promoted.  CODE IDENTICAL to the experiment copies (asserted by
+# scratch/promote_tcoll_chain.py); comment edits only.  They carry `badenc_le_tcoll`:
+#     Pr[Game4_WOTSTWES_BadEnc(R_int_WOTSTW(A)) : res /\ badenc]
+#       <= Pr[T_COLL_RES_ENUM(R_TCOLL(A), O_TCollEnum_Default, FC.O_THFC_Default) : res]
+# uniformly over +C adversaries A, under `c <= p_tgts`.  It MOVES the charge; it bounds nothing.
+#
+# NO CONSUMER YET, deliberately.  Composing it into the deployed headline is a SEPARATE
+# gate run, so a RED census here is attributable to the promotion alone.  A
+# certification-root-only closure member has precedent: FORS_C_TreePort.ec is one.
+#
+# PREDICTED BEFORE COMPUTING (scratch/PREDICTION-tcoll-promotion-2026-09-14.md), GRADED:
+#   ledger       241 -> 241   predicted 241      HELD  (0 admit/axiom tokens in all four)
+#   parameters   217 -> 221   predicted 221      HELD  (abstract ops wad, wm, wm', wctr': the
+#                                                       witness pair is a HYPOTHESIS, as cm/cm')
+#   bindings     366 -> 366   predicted 366      HELD  (no clones)
+#   meaning      394 -> 406   predicted 403 +-3  AT THE EDGE.  The 3 rows over the point
+#                             estimate are the section `declare module`s (A in BadEncToTColl,
+#                             A in BadEncStep4, B in TCollResEnum): they ARE census rows --
+#                             the one uncertainty the prediction named.
+#   definitions  424 -> 443   predicted ~442 +-3 HELD  (18 ops + defined-type tcoll_entry)
+#   removed        0          predicted 0        HELD
+# added=35, total 1642 -> 1677.
+#
+# ALSO REGENERATED: the `### CONE_FILES` block below.  It still read 46 after
+# WotsLegCharged/GprocWotsNamed took the cone to 48 on 2026-09-01 -- this file's BODY did
+# not move that day, so nobody regenerated its header.  The gate reads only the NF>=3
+# rows, so it was cosmetic; it now comes straight from tools/cert_cone.py (52).
+#
+# --- previous entries, kept for history ---
+#
 # UNCHANGED 2026-09-01, and that is the notable part.  cdrafts-split/WotsLegCharged.ec
 # entered the closure (roots 35 -> 36, cone files 46 -> 47) and this census did NOT move:
 # added=0 removed=0, ledger=241, total=1642, byte-identical body.  The file declares no
@@ -31,7 +75,7 @@
 # first assumption REMOVED, as opposed to relocated, in this arc.  The only ADDED rows
 # were `module` (BadEncFlag, Game4_WOTSTWES_BadEnc, Game4_WOTSTWES_Alt,
 # O_Game34_WOTSTWES_AltX and two anonymous A), which are MEANING rows, not ledger.
-### CONE_FILES=46
+### CONE_FILES=53
 #   base-c10-split/BinaryTrees.ec
 #   base-c10-split/FL_SL_XMSS_MT_ES.ec
 #   base-c10-split/FORS_ES.ec
@@ -43,6 +87,9 @@
 #   base-c10-split/TweakableHashFunctions.eca
 #   base-c10-split/WOTS_TW_ES.ec
 #   cdrafts-split/BadEncCountermodel.ec
+#   cdrafts-split/BadEncSplit.ec
+#   cdrafts-split/BadEncStep4.ec
+#   cdrafts-split/BadEncToTColl.ec
 #   cdrafts-split/C10DeployedCapstone.ec
 #   cdrafts-split/C10DeployedGeometry.ec
 #   cdrafts-split/C10DeployedInstance.ec
@@ -63,18 +110,22 @@
 #   cdrafts-split/GprocT1Opre.ec
 #   cdrafts-split/GprocT2Trh.ec
 #   cdrafts-split/GprocT3Trco.ec
+#   cdrafts-split/GprocTCollNamed.ec
 #   cdrafts-split/GprocVI.ec
+#   cdrafts-split/GprocWotsNamed.ec
 #   cdrafts-split/Grind.ec
 #   cdrafts-split/RtopCSoundness.ec
 #   cdrafts-split/STCR_C.ec
 #   cdrafts-split/SphincsC10CapstoneCharged.ec
 #   cdrafts-split/SphincsC10CapstoneWired.ec
 #   cdrafts-split/SphincsC10Content.ec
+#   cdrafts-split/TCollResEnum.ec
 #   cdrafts-split/WOTS_C_Interactive.ec
 #   cdrafts-split/WOTS_C_Multi.ec
 #   cdrafts-split/WOTS_C_Real.ec
 #   cdrafts-split/WOTS_C_Reduction.ec
 #   cdrafts-split/WOTS_C_Scheme.ec
+#   cdrafts-split/WotsLegCharged.ec
 #   cdrafts-split/XMSSMT_C_Scheme.ec
 #   cdrafts-split/XmssmtCCCharged.ec
 #   cdrafts-split/XmssmtCC_All.ec
@@ -1214,11 +1265,26 @@ base-c10-split/WOTS_TW_ES.ec	module:87c4f34fd130	O_DistRCHi	# line 4786
 base-c10-split/WOTS_TW_ES.ec	module:94dfa2312ace	R	# line 4818
 base-c10-split/WOTS_TW_ES.ec	module:e21cf1d8598b	SM_DT_UD_Ci	# line 4912
 base-c10-split/WOTS_TW_ES.ec	module:1a0289cf30ad	SM_DT_UD_Cir	# line 4939
-cdrafts-split/BadEncCountermodel.ec	abstract-op:407f8e9869b2	cm	# line 82
-cdrafts-split/BadEncCountermodel.ec	abstract-op:25d3912403f7	cm'	# line 83
-cdrafts-split/BadEncCountermodel.ec	abstract-op:b50ceecec46e	wad0	# line 84
-cdrafts-split/BadEncCountermodel.ec	defined-op:0f2379f3a56f	pkfs_fun	# line 215
-cdrafts-split/BadEncCountermodel.ec	module:ee5dc55d7bc4	A_coll	# line 115
+cdrafts-split/BadEncCountermodel.ec	abstract-op:407f8e9869b2	cm	# line 93
+cdrafts-split/BadEncCountermodel.ec	abstract-op:25d3912403f7	cm'	# line 94
+cdrafts-split/BadEncCountermodel.ec	abstract-op:b50ceecec46e	wad0	# line 95
+cdrafts-split/BadEncCountermodel.ec	defined-op:0f2379f3a56f	pkfs_fun	# line 226
+cdrafts-split/BadEncCountermodel.ec	module:ee5dc55d7bc4	A_coll	# line 126
+cdrafts-split/BadEncSplit.ec	defined-op:24fb243bf22a	COLL	# line 112
+cdrafts-split/BadEncSplit.ec	defined-op:4f2e93272132	EncBridge	# line 149
+cdrafts-split/BadEncStep4.ec	defined-op:e37408ba175b	s4_qs_ts	# line 235
+cdrafts-split/BadEncStep4.ec	defined-op:0145ff50ef85	s4_wads_ts	# line 242
+cdrafts-split/BadEncStep4.ec	defined-op:2d4da9efc915	s4_ts_enc	# line 246
+cdrafts-split/BadEncStep4.ec	defined-op:37521a78d02a	s4_qs_ts_pend	# line 363
+cdrafts-split/BadEncStep4.ec	defined-op:b897c449b57c	s4_wads_ts_pend	# line 368
+cdrafts-split/BadEncStep4.ec	module:de9e9ea647e6	A	# line 673
+cdrafts-split/BadEncToTColl.ec	defined-op:8079e78b42da	qs_ThC_images	# line 197
+cdrafts-split/BadEncToTColl.ec	defined-op:997649db13cf	wads_parallel	# line 204
+cdrafts-split/BadEncToTColl.ec	defined-op:f93961b7ad1d	badenc_target	# line 234
+cdrafts-split/BadEncToTColl.ec	module:3ab8854e6791	R_TCOLL	# line 100
+cdrafts-split/BadEncToTColl.ec	module:66df9a626025	O_wrap	# line 103
+cdrafts-split/BadEncToTColl.ec	module:83e1f9184386	AA	# line 160
+cdrafts-split/BadEncToTColl.ec	module:d5b79be98dff	A	# line 310
 cdrafts-split/C10DeployedGeometry.ec	defined-op:9fb98081dd8d	c10_n	# line 66
 cdrafts-split/C10DeployedGeometry.ec	defined-op:51a2b549384e	c10_log2_w	# line 67
 cdrafts-split/C10DeployedGeometry.ec	defined-op:e19e9578444e	c10_w	# line 68
@@ -1603,6 +1669,26 @@ cdrafts-split/SphincsC10CapstoneWired.ec	operand:2d7d4786e261	C.g	# line 448
 cdrafts-split/SphincsC10CapstoneWired.ec	clone-discharge:list:dmkey_ll,eqiks_g,ge1_a,ge1_k,neqisvs_g,rng_g,size_g,uniq_g|realize:dmkey_ll,eqiks_g,ge1_a,ge1_k,neqisvs_g,rng_g,size_g,uniq_g	C	# line 448
 cdrafts-split/SphincsC10Content.ec	defined-op:2dd12d49c72f	embg	# line 421
 cdrafts-split/SphincsC10Content.ec	defined-op:c2414c77f6f8	dmsgWOTS	# line 528
+cdrafts-split/TCollResEnum.ec	defined-type:444a0298a3bb	tcoll_entry	# line 228
+cdrafts-split/TCollResEnum.ec	defined-op:9aaed584cc28	EncNonInjOnSurface	# line 357
+cdrafts-split/TCollResEnum.ec	defined-op:559da783d034	EncNonInjOnThCSurface	# line 401
+cdrafts-split/TCollResEnum.ec	defined-op:6c9a595a3330	tcoll_wf	# line 413
+cdrafts-split/TCollResEnum.ec	abstract-op:689099c17d44	wad	# line 479
+cdrafts-split/TCollResEnum.ec	abstract-op:260f47d987ea	wm	# line 480
+cdrafts-split/TCollResEnum.ec	abstract-op:142c682feeaa	wm'	# line 481
+cdrafts-split/TCollResEnum.ec	abstract-op:cdc858fcdd74	wctr'	# line 482
+cdrafts-split/TCollResEnum.ec	defined-op:d3698224a36a	wdg	# line 485
+cdrafts-split/TCollResEnum.ec	defined-op:12002d836b29	wdg'	# line 486
+cdrafts-split/TCollResEnum.ec	defined-op:d976282d2700	W_distinct	# line 488
+cdrafts-split/TCollResEnum.ec	defined-op:fd8493ed9c77	W_collides	# line 489
+cdrafts-split/TCollResEnum.ec	defined-op:2b7de30d3753	W_gated	# line 490
+cdrafts-split/TCollResEnum.ec	module-type:25b5ab18f016	Oracle_TCollEnum	# line 230
+cdrafts-split/TCollResEnum.ec	module:85820f02f5f8	O_TCollEnum_Default	# line 237
+cdrafts-split/TCollResEnum.ec	module-type:d784a7c3878c	Adv_TCollResEnum	# line 276
+cdrafts-split/TCollResEnum.ec	module:953130edc6c9	T_COLL_RES_ENUM	# line 284
+cdrafts-split/TCollResEnum.ec	module:dc2f185dc3e2	B	# line 285
+cdrafts-split/TCollResEnum.ec	module:fd1648b33ed6	B	# line 430
+cdrafts-split/TCollResEnum.ec	module:7a440a48ff45	B_wit	# line 515
 cdrafts-split/WOTS_C_Interactive.ec	defined-op:ac1e7ee583ff	dfC0	# line 407
 cdrafts-split/WOTS_C_Interactive.ec	defined-op:d14b19e63967	dfC1	# line 408
 cdrafts-split/WOTS_C_Interactive.ec	defined-op:9f5e6022d348	projq	# line 1028

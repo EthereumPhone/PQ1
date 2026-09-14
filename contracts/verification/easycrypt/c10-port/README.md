@@ -114,7 +114,11 @@ opaque WOTS summand with the four named UD/TCR/PRE/encoding-collision terms at t
 deployed adversary, at the price of six extra separations on `F` and an explicit
 **grind-reachability** premise. `GprocWotsNamed.ec` then composes it into the deployed
 headline itself, so a fifth family member exists whose WOTS leg is **named rather than
-opaque** — at 4 premises instead of 2. Quote the 2-premise statement unless you want that. `extract_op` remains — and **closing it is explicitly NOT
+opaque** — at 4 premises instead of 2. Quote the 2-premise statement unless you want that.
+**Since 2026-09-14 a sixth,** `GprocTCollNamed.ec`, carries that encoding-collision term one
+layer up as `Pr[T_COLL_RES_ENUM(…)]` (via `badenc_le_tcoll`), at one more separation and no new
+premise. It is **strictly weaker as an inequality** — a corollary of the fifth — and buys *which*
+term is carried, not a number. See `UPDATE 2026-09-14`. `extract_op` remains — and **closing it is explicitly NOT
 the next unit**: it targets a *local mirror* game, not the headline's term, which the fully
 proven Gproc route already reaches. See `UPDATE 2026-09-01` and `scratch/scope_fextractop_VERDICT.md`.
 
@@ -123,7 +127,10 @@ proven Gproc route already reaches. See `UPDATE 2026-09-01` and `scratch/scope_f
 `cdrafts-split/BadEncCountermodel.ec::badenc_is_one`, proved 2026-08-12 and promoted into
 the certified closure on 2026-08-31 (it had been sitting in `experiments/`, which the cone
 census does not cover). A bound must live one layer up, at +C, where the WOTS message is
-`ThC ps ad x c` and the adversary cannot choose it. Read that theorem's hypotheses: it is
+`ThC ps ad x c`: the adversary picks the *preimage*, not the digest, so a collision must be
+found rather than handed over. That layer's game, `T_COLL_RES_ENUM`, has been a closure member
+since 2026-09-14 and is **also unbounded** — no derivation connects its surface count to an
+advantage. Read that theorem's hypotheses: it is
 an **implication**, and that collisions exist at deployed geometry rests on the target-sum
 antichain bound (2^123.76 < 2^128) which this tree states in prose and does not mechanize.
 
@@ -960,6 +967,8 @@ previous version made exactly this conflation*.
 **And the term is not in the certified statement at all.** VERIFIED: `grep -rn
 T_COLL_RES_ENUM cdrafts-split/ base-c10-split/` returns nothing; the certified
 capstone RHS (`SphincsC10CapstoneWired.ec:595-604`) carries four other terms.
+*[Superseded 2026-09-14: `T_COLL_RES_ENUM` is now a closure member and appears on the right-hand
+side of `GprocTCollNamed.ec`'s headline — see `UPDATE 2026-09-14`.]*
 
 **The query count fails independently.** VERIFIED on the live closure member
 (`XmssmtCC_All.ec:752`): `R_MEUFGCMAWOTSC_EUFNAGCMA_C.choose` computes and stores
@@ -3472,3 +3481,130 @@ OK   inputs unchanged across the run
 
 Comment-only in one closure file, so the census is byte-identical and only the identity
 moves — `cert_gate_split.sh:116` hashes cone-file contents by design.
+
+### UPDATE 2026-09-14 — the encoding-collision term is carried at +C; a proved chain that sat in `experiments/` for a month is promoted; two gate holes closed
+
+`GprocTCollNamed.ec` is a closure member.
+`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS_TCOLLNAMED` is the WOTSNAMED
+statement with `Pr[Game4_WOTSTWES_BadEnc(R_int_WOTSTW(…)) : res /\ badenc]` replaced by
+`Pr[T_COLL_RES_ENUM(R_TCOLL(…), O_TCollEnum_Default, FC.O_THFC_Default) : res]`. The proof is
+transitivity against `BadEncStep4.ec::badenc_le_tcoll`. It discharges a debt this tree recorded
+on 2026-08-13: *"the named-assumption term must eventually REPLACE the raw
+`Game4_WOTSTWES_BadEnc` term at the headline."*
+
+#### Read this before quoting it
+
+* **Strictly weaker as an inequality.** `badenc_le_tcoll` is *old ≤ new*, so this right-hand side
+  is pointwise larger than WOTSNAMED's, and `F` is narrower by one separation. It is a corollary
+  of WOTSNAMED. **Quote WOTSNAMED for the tighter statement.** This one buys *which* term is
+  carried: a standalone, named +C game with a proved win characterisation, instead of an
+  internal game probability of the WOTS-TW proof.
+* **It bounds nothing.** `T_COLL_RES_ENUM` is an unbounded assumption; `CONCLUSION 2026-08-18`
+  stands unchanged. The surface count `2^114.0941` is machine-checked in
+  `experiments/wots-badenc/count/`, which is **not** a closure member.
+* **Event-level, not hardness.** `tcoll_win_needs_coll` proves that every win exhibits two
+  distinct `ThC` images at a common `(ps, ad)` with equal codewords — no bookkeeping win. It
+  does not say such collisions are absent or hard. `find` receives `ps` and `thfc` is an ambient
+  op, so, like every hardness term here, it is meaningful only for resource-bounded adversaries.
+* **Strictly stronger than a THF assumption.** `T_COLL_RES_ENUM` has no disjointness conjunct.
+
+#### The proof already existed — for a month
+
+`badenc_le_tcoll` was proved admit-free on **2026-08-14** in `experiments/wots-badenc/red/`, with
+`TCollResEnum.ec`, `BadEncSplit.ec` and `BadEncToTColl.ec`, and **never promoted** — the cone
+census does not cover `experiments/`, so nothing noticed. On 2026-09-14 all four compiled,
+unchanged, against the live trees. They were promoted in a **separate gate run** so that a RED
+census would be attributable to the promotion alone; the composition followed in a second.
+Code is identical to the experiment copies (asserted by `scratch/promote_tcoll_chain.py`);
+comments only — five moved citations updated, three expired claims corrected at the sentence.
+
+| | before | Run 1 (promotion) | Run 2 (composition) |
+|---|---|---|---|
+| closure roots | 37 | 41 | **42** |
+| cone files | 48 | 52 | **53** |
+| statements / pins | 1024 / 1109 | 1081 / 1166 | **1082 / 1167** |
+| controls | 15 | 36 | **39** |
+| **ledger** | 241 | 241 | **241** |
+| parameters | 217 | 221 | **221** |
+| meaning / definitions | 394 / 424 | 406 / 443 | **406 / 443** |
+| census added / removed | — | 35 / 0 (re-baselined) | **0 / 0** |
+
+Both runs were **predicted before the census was computed**
+(`scratch/PREDICTION-tcoll-promotion-2026-09-14.md`, `scratch/PREDICTION-tcollnamed-2026-09-14.md`)
+and graded in `cert-baseline-split.tsv`'s header. Everything held; `meaning` landed at the edge of
+its stated range because section `declare module`s turned out to be census rows — the one
+uncertainty the prediction named. The four new parameters are `TCollResEnum`'s witness data
+(`wad`, `wm`, `wm'`, `wctr'`): a hypothesised collision pair, visible in the census as it should be.
+
+#### The price in the hypotheses: one separation, zero premises
+
+`badenc_le_tcoll` needs `c <= p_tgts`, which the headline already carries. It lists two module
+separations; only `-O_TCollEnum_Default` is load-bearing (`scratch/gtn_ctlC.ec` fails at the
+restriction check without it). `-R_TCOLL` is **implied**: `R_TCOLL.O_wrap` declares no `var` of its
+own, and `include var` shares the included module's globals — the base tree relies on exactly that
+(`O_Game34_WOTSTWES_AltX` appends to `O_MEUFGCMA_WOTSTWESNPRF.qs`). Adding it would have been a
+separation that excludes nothing.
+
+#### Two gate holes, both of my making
+
+1. **The PHASE 3 control floor was decoration.** It printed `expected>=15` and tested
+   `[ "$n_ctl" -ge 6 ]`. The "COUNT RAISED 6 → 10 → 13 → 15" comments were bumped three times;
+   the number never was, so up to nine control rows could be deleted under a GREEN receipt. It is
+   now an equality against a committed `EXPECT_CTLS`.
+2. **`GprocWotsNamed.ec` was never registered with the taint checker.** `tools/taint_closure.py`
+   says in so many words that a headline missing from `HEADLINE` "is NOT checked for taint … the
+   two edits belong in the same commit". I landed WOTSNAMED on 2026-09-01 without that edit; it
+   went 13 days unchecked. Both named headlines are registered now (7 → 9); neither is tainted.
+
+#### A retracted claim was sitting in the certified closure
+
+*"C10's WOTS layer never encodes an adversary-chosen value"* was **retracted on 2026-08-14**
+(`CORRECTION 2026-08-14 (final)`): it holds for the honest signer and is **false at the verifier**,
+which builds the layer-0 WOTS message from FORS secrets and auth paths read out of the signature
+(`sphincs-c10/src/hypertree.rs:386-419`, re-verified). That correction **named
+`BadEncCountermodel.ec`'s header** as carrying the sentence — and I promoted that file into the
+closure on 2026-08-31 without fixing it. `TCollResEnum.ec` repeated it. Both are corrected at the
+sentence.
+
+How it surfaced is the part worth keeping: drafting this unit's header, I quoted *"~2^71.95, there
+is no bound to find"* and the key-determined claim from `scratch/FINDING-tcollres-cannot-be-bounded.md`
+— a file whose claims were retracted **the day it was written** and which carried no banner. Caught
+only because I read this README's section list before writing a vendor entry. Both stale FINDINGs
+now carry SUPERSEDED banners. Also corrected: `GprocWotsNamed.ec:49` described a `WitnessF`
+anti-vacuity check the file does not have (a comment copied from a sibling).
+
+#### Controls
+
+* **21 promoted controls** — generated *by script* from the experiment generators, checked equal to
+  the experiment's own controls with comments stripped (21/21), and re-run against the live trees:
+  every first `[critical]` line identical to the experiment receipt. Two latent generator defects
+  were fixed on the way: an anti-mutation guard comparing `tail -n +8` against a six-line banner
+  (so it could never fire), and a comment saying "five" for seven controls.
+* **3 new controls** `scratch/gtn_ctl{A,B,C}.ec`. **A drops `badenc_le_tcoll`** — the one that
+  matters; it fails, so the substitution does work. C's first version failed with `parse error`
+  because the generator left a dangling comma: a syntax failure proving nothing. Caught by reading
+  the reason before registering it.
+
+#### Review
+
+Kimi K3, adversarial statement review (the GPT-5.6 MCP was unavailable this session — **one leg,
+not two**, so there is no convergence check). It confirmed the instantiation and the `-R_TCOLL`
+argument, and found: retracted content in the draft header, the undisclosed looser inequality, an
+overstated "the adversary does not choose" and the stale `WitnessF` comment. All adopted.
+
+#### Receipt — GREEN
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (e848ec55...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls 39/39 | taint closure 2, 9 headline results checked | taint controls 11/11
+OK   inputs unchanged across the run
+```
+
+Run 1 (the promotion alone), for the record: `RESULT: GREEN`, identity `6aeac741…`, pins 1166/1166,
+coverage 1081/1081 across 52 cone files, added=0 removed=0 against the re-baseline, ledger 241,
+controls 36/36, taint closure 2, taint controls 11/11.

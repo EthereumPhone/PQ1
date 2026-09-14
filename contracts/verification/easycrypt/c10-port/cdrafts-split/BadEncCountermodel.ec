@@ -61,12 +61,23 @@
    term has to be bounded one layer UP, at +C, where the WOTS message is
    `ThC ps ad x c` and the adversary cannot choose it freely.
 
-   *** THE DEPLOYED WALLET IS NOT AFFECTED, AND THIS IS NOT AN ATTACK. ***
-   C10's WOTS layer never encodes an adversary-chosen value — it encodes
-   key-determined internal nodes (sphincs-c10/src/fors.rs:265-268;
-   `compute_fors_pk` takes no message argument).  The adversary below is a
-   MODEL-LEVEL object that the deployment gives no one the ability to build.
-   Classification is unchanged: proof-technique limitation, not a vulnerability.
+   *** NO ATTACK IS KNOWN AND THIS FILE EXHIBITS NONE -- BUT NOT FOR THE REASON
+   THIS HEADER USED TO GIVE. ***   [CORRECTED 2026-09-14]
+   It said: "C10's WOTS layer never encodes an adversary-chosen value -- it encodes
+   key-determined internal nodes (sphincs-c10/src/fors.rs:265-268; `compute_fors_pk`
+   takes no message argument)."  That is true of the honest SIGNER and FALSE at the
+   VERIFIER, which is what a forgery game is about: `verify` reads the FORS secrets
+   and auth paths out of the signature (sphincs-c10/src/hypertree.rs:386, :394),
+   rebuilds the roots from them (:401), forms `fors_pk` (:416) and uses it as the
+   layer-0 WOTS message (:419), with the counter also read from the signature (:433).
+   The sentence was retracted in the vendored README on 2026-08-14 ("CORRECTION
+   2026-08-14 (final)", scratch/FINDING-both-my-claims-were-wrong.md), which named
+   THIS header as carrying it; the file was promoted on 2026-08-31 without the fix.
+   What survives: the adversary below is handed its colliding pair as a HYPOTHESIS,
+   so it is a MODEL-LEVEL object and nothing here is an attack.  What does NOT
+   survive is any claim that the deployment makes the WOTS message key-determined.
+   The leg rests on an UNBOUNDED assumption at the +C layer
+   (cdrafts-split/TCollResEnum.ec), not on message-side structure.
 
    CONDITIONAL, exactly as `admit_refuted_by_surface_collision` is:
    `encode_msgWOTS` is free here, so the colliding pair is a HYPOTHESIS.  At
