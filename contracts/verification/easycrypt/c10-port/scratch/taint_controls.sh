@@ -178,5 +178,9 @@ T10PY
 grade "T10 clone scanner blinded" "clone-route guard is vacuous"
 
 echo
+# FORMAT CONTRACT (2026-09-14): cert_gate_split.sh PHASE 5 PARSES the next line and requires
+# fail=0 and pass = EXPECT_TAINT_CTLS, with as many UNIQUE `  OK   ` lines.  Adding a control
+# means bumping that constant.  A control that silently stops running is RED there -- the
+# exit status below only catches a control that runs and FAILS.
 echo "taint controls: pass=$pass fail=$fail"
 [ "$fail" -eq 0 ] || exit 1

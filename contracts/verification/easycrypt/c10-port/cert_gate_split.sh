@@ -55,6 +55,21 @@ EXPECT_STMTS=1082
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
 EXPECT_CTLS=39
+# COMMITTED TAINT-CONTROL COUNT (added 2026-09-14).  PHASE 5 trusted scratch/
+# taint_controls.sh's EXIT STATUS, which is nonzero only when a control FAILS.  A control
+# that never RUNS -- a deleted block, a blinded `grade` call, an early `exit 0` -- scored
+# nothing, and the gate echoed `OK   taint controls: ... pass=10 fail=0`.  Demonstrated
+# against the pre-fix lines, not argued (scratch/PREDICTION-taint-count-guard-2026-09-14.md).
+# Same class as the PHASE 3 floor directly above, fixed the same day.  PHASE 5 now PARSES
+# the summary and requires fail=0, pass = this constant, and as many UNIQUE `OK` lines
+# (PHASE 3 counts unique names too: a deleted control replaced by a copy of another must
+# not score).  11 = the T0 baseline + graded controls T1..T10.
+EXPECT_TAINT_CTLS=11
+# The guard above is itself exercised by scratch/taint_count_controls.sh, which executes
+# the gate's own PHASE 5 lines against weakened copies of the controls script.  Its
+# summary must read exactly pass=EXPECT_TAINT_COUNT_CTLS fail=0, so skipping one of ITS
+# variants is caught here rather than by trusting another exit status.
+EXPECT_TAINT_COUNT_CTLS=4
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/
@@ -125,7 +140,7 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
 # proof, and PHASE 2b/2c only canary two specific behaviours of it.
 INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 echo "### INPUTS_SHA256 $INPUTS_ID"
 # AND NOW COMPARE IT.  This line was printed and checked by nothing: an identity
 # receipt that no run can fail on is decoration.  The expected value lives in
@@ -926,11 +941,17 @@ echo '### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundnes
 # an "over-approximation" (as this header did until 2026-08-27) implied a margin it does not
 # have -- Kimi K3 adversarial review.  It does NOT see a bare `smt()` that takes
 # a lemma from ambient context without naming it, nor reachability through a clone
-# instantiation or a module argument.  The over-approximation direction is the safe one for
+# instantiation or a module argument.
 # Three FURTHER parser holes were found on 2026-08-27 by GPT-5.6 and Kimi K3 -- one-line
 # proofs, bare-basename overwrites, and a line-initial-only terminator (314 of 951 qed.
 # lines) -- all now fixed and guarded by a parser-coverage assertion plus controls T5-T8.
-# The two holes above remain, and both are unsafe-direction.
+# The two holes above remain, and both are unsafe-direction.  [UPDATE 2026-09-14: the CLONE
+# half is no longer silent.  Since 2026-08-28 (a822d6d) tools/taint_closure.py REFUSES any
+# clone of an admit-containing theory (controls T9, T10).  It still does not FOLLOW taint
+# through a clone -- the guard is refusal, not tracking.  Bare smt() and module arguments
+# remain unguarded here.  Removed the same day: an orphaned half-sentence, "The
+# over-approximation direction is the safe one for", left behind when that claim was
+# retracted on 2026-08-27.]
 #
 # The specific regression guarded: wiring EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded into the
 # headline. That promotes a REFUTABLE lemma (a collision falsifies nhchwcoll_hchwpre_msg
@@ -942,16 +963,47 @@ if [ -f tools/taint_closure.py ] && [ -f cert-taint-closure.tsv ]; then
     echo "$out" | sed 's/^/     /'; fail=$((fail+1))
   fi
   # AND PROVE THE CHECK CAN GO RED.  A containment check that cannot fail is decoration;
-  # these five mutations each DELETE a specific piece of information and must be rejected
-  # FOR THE DECLARED REASON, graded on the message and not merely on exit status.
+  # each of T1..T10 DELETES a specific piece of information and must be rejected FOR THE
+  # DECLARED REASON, graded on the message and not merely on exit status.  (Until
+  # 2026-09-14 this comment said "these five mutations" while the set grew to ten.)
+  #
+  # And COUNT THEM (2026-09-14).  These lines used to trust the script's exit status,
+  # which is nonzero only when a control FAILS; a control that never RAN scored nothing
+  # and this phase still printed OK.  See EXPECT_TAINT_CTLS at the top of this file.
   if [ -f scratch/taint_controls.sh ]; then
-    if cout=$(bash scratch/taint_controls.sh 2>&1); then
-      echo "OK   taint controls: $(printf '%s' "$cout" | tail -1)"
-    else
+    # BEGIN taint-controls-count  (executed verbatim by scratch/taint_count_controls.sh)
+    crc=0; cout=$(bash scratch/taint_controls.sh 2>&1) || crc=$?
+    ctail=$(printf '%s\n' "$cout" | tail -1)
+    cpass=$(printf '%s\n' "$ctail" | sed -n 's/^taint controls: pass=\([0-9][0-9]*\) fail=[0-9][0-9]*$/\1/p')
+    cfail=$(printf '%s\n' "$ctail" | sed -n 's/^taint controls: pass=[0-9][0-9]* fail=\([0-9][0-9]*\)$/\1/p')
+    cuniq=$(( $(printf '%s\n' "$cout" | grep -E '^  OK   ' | sort -u | wc -l) ))
+    if [ -z "$cpass" ] || [ -z "$cfail" ]; then
+      echo "FAIL taint controls: summary line NOT PARSED (early exit or format drift); last line: $ctail"; fail=$((fail+1))
+    elif [ "$crc" -ne 0 ] || [ "$cfail" -ne 0 ]; then
       echo "FAIL taint controls did not all discriminate:"; printf '%s\n' "$cout" | sed 's/^/       /'; fail=$((fail+1))
+    elif [ "$cpass" -ne "$EXPECT_TAINT_CTLS" ] || [ "$cuniq" -ne "$EXPECT_TAINT_CTLS" ]; then
+      echo "FAIL taint control inventory: pass=$cpass unique=$cuniq, committed expectation is $EXPECT_TAINT_CTLS (a control that never RUNS scores nothing)"; fail=$((fail+1))
+    else
+      echo "OK   taint controls: pass=$cpass unique=$cuniq fail=0 expected=$EXPECT_TAINT_CTLS"
     fi
+    # END taint-controls-count
   else
     echo "FAIL scratch/taint_controls.sh missing -- the containment check is unvalidated"; fail=$((fail+1))
+  fi
+  # AND PROVE THAT GUARD CAN GO RED.  The inventory check above is new code in the cheapest
+  # place there is to weaken a gate.  scratch/taint_count_controls.sh executes its exact
+  # lines against four copies of taint_controls.sh (unmutated / a grade call blinded / an
+  # early `exit 0` / a control replaced by a duplicate of another) and grades each on the
+  # message.  Its own summary is compared EXACTLY, not trusted by exit status.
+  if [ -f scratch/taint_count_controls.sh ]; then
+    krc=0; kout=$(bash scratch/taint_count_controls.sh 2>&1) || krc=$?
+    if [ "$krc" -eq 0 ] && [ "$(printf '%s\n' "$kout" | tail -1)" = "taint count controls: pass=$EXPECT_TAINT_COUNT_CTLS fail=0" ]; then
+      echo "OK   taint count controls: pass=$EXPECT_TAINT_COUNT_CTLS fail=0 expected=$EXPECT_TAINT_COUNT_CTLS"
+    else
+      echo "FAIL taint-control inventory guard is unvalidated (want pass=$EXPECT_TAINT_COUNT_CTLS fail=0):"; printf '%s\n' "$kout" | sed 's/^/       /'; fail=$((fail+1))
+    fi
+  else
+    echo "FAIL scratch/taint_count_controls.sh missing -- the inventory guard is unvalidated"; fail=$((fail+1))
   fi
 else
   echo "FAIL taint inputs missing (tools/taint_closure.py / cert-taint-closure.tsv)"; fail=$((fail+1))
@@ -961,7 +1013,7 @@ fi
 # past the compile is caught, and it costs one second.
 INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 if [ "$INPUTS_ID_END" != "$INPUTS_ID" ]; then
   echo "FAIL inputs CHANGED DURING THE RUN: start $INPUTS_ID, end $INPUTS_ID_END"
   fail=$((fail+1))

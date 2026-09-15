@@ -1272,5 +1272,21 @@
 #   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
 #   the gate run compares it itself.
 #
-split	e848ec55b7d178f5565fdc09d60d11af
+# 2026-09-14 (Run 3).  split e848ec55b7d178f5565fdc09d60d11af -> 6a06e77153057c7c54f3ab060c200e6f.
+#   GATE-ONLY UNIT: no .ec file moved, so the census, ledger and closure cannot have.
+#   THE HOLE.  PHASE 5 trusted scratch/taint_controls.sh's exit status, which is nonzero only
+#   when a control FAILS.  A control that never RUNS scored nothing: with T9's grade call
+#   blinded, the pre-fix lines printed `OK   taint controls: taint controls: pass=10 fail=0`
+#   and left fail=0 -- executed, not argued.  Same class as Run 1's PHASE 3 floor.
+#   Inputs that moved:
+#     ~ cert_gate_split.sh           (EXPECT_TAINT_CTLS = 11 NEW, EXPECT_TAINT_COUNT_CTLS = 4 NEW;
+#                                     PHASE 5 parses pass/fail and counts UNIQUE OK lines;
+#                                     two stale PHASE 5 header claims corrected)
+#     + scratch/taint_count_controls.sh  (runs the gate's own PHASE 5 lines against 4 copies:
+#                                         unmutated / grade blinded / early exit 0 / duplicate)
+#     ~ scratch/taint_controls.sh    (COMMENT-ONLY: the summary line's format contract)
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+split	6a06e77153057c7c54f3ab060c200e6f
 fork	9c2d21280c84d52c30b22111151f1135

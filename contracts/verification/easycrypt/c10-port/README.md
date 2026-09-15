@@ -302,7 +302,7 @@ closure files). A container recipe is in `../docker/`.
 # $PATH, so a bare `bash cert_gate_split.sh` from a host shell silently uses whatever
 # EasyCrypt is installed there and produces a PLAUSIBLE BUT WRONG receipt.
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
-  cd /work && bash cert_gate_split.sh'"   # 38 targets, 1078 pins, 1637 census rows
+  cd /work && bash cert_gate_split.sh'"   # 42 targets, 1167 pins, 1677 census rows (2026-09-14)
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
   cd /work && bash cert_gate_fork.sh'"    # 19 targets,  9 pins, 1089 census rows
 ```
@@ -312,6 +312,9 @@ sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C;
 **Check the header lines before believing any receipt.** A valid run prints
 `### TOOLCHAIN GIT hash: r2026.02` and `### PROVERS <hash> 25 configurations`.
 If it says `r2026.06` / `6 configurations`, it ran on the host — discard it.
+If it says `TOOLCHAIN UNKNOWN` / `0 configurations`, the login shell was skipped and
+opam never put `easycrypt` on `PATH` (every target FAILs within seconds): the
+`bash -lc 'eval $(opam env); …'` above is load-bearing, not decoration (2026-09-14).
 This paragraph exists because the block above previously showed a bare
 `bash cert_gate_split.sh`, which contradicted the r2026.02 requirement stated
 one line earlier and duly produced a host-toolchain run on 2026-08-25.
@@ -334,6 +337,11 @@ phase is what catches that), that named results are `lemma` and not `axiom`,
 statement digests, a require-cone census compared as a multiset against a
 committed baseline with additions *and* removals fatal, two census-regression
 canaries, and controls checked for polarity **and declared failure reason**.
+Later phases, each described in its dated UPDATE below, add both drivers (`compile`
+and `cli`), statement coverage, the policy-cap quarantine, the FORS+C grinding margin,
+and taint containment. Control inventories are equalities against committed constants
+(`EXPECT_CTLS`, `EXPECT_TAINT_CTLS`, `EXPECT_TAINT_COUNT_CTLS`), not floors and not a
+trusted exit status (2026-09-14).
 
 ## Layout
 
@@ -3608,3 +3616,81 @@ OK   inputs unchanged across the run
 Run 1 (the promotion alone), for the record: `RESULT: GREEN`, identity `6aeac741…`, pins 1166/1166,
 coverage 1081/1081 across 52 cone files, added=0 removed=0 against the re-baseline, ledger 241,
 controls 36/36, taint closure 2, taint controls 11/11.
+
+### UPDATE 2026-09-14 (later) — PHASE 5 now COUNTS its taint controls; a control that never ran scored OK
+
+**A gate-only unit.** No `.ec` file moved, so the census, the ledger and the closure could not
+have changed, and did not.
+
+#### The hole — the same shape as gate hole 1 above, one phase later
+
+PHASE 5 ran `scratch/taint_controls.sh` and trusted its **exit status**. That script exits nonzero
+only when a control runs and **fails**. A control that never **runs** — a deleted block, a blinded
+`grade` call, an early `exit 0` — scored nothing, and the gate printed `OK`. This was **executed,
+not argued**: the pre-fix lines, run against a copy with `: ` prefixed to T9's `grade` call, printed
+
+    OK   taint controls: taint controls: pass=10 fail=0
+
+and left the gate's fail counter at 0.
+
+#### The fix
+
+* `EXPECT_TAINT_CTLS=11` (the T0 baseline + T1..T10), committed **in the gate** rather than in the
+  controls script, so one edit to that script cannot shrink its own expectation.
+* PHASE 5 parses the summary line and requires `fail=0`, `pass=11` **and 11 unique `OK` lines**.
+  PHASE 3 counts unique names for the same reason: a deleted control replaced by a copy of another
+  must not score. An unparseable summary is its own FAIL.
+* **The guard is itself controlled.** `scratch/taint_count_controls.sh`, run by the gate, extracts
+  the gate's own lines between `BEGIN/END taint-controls-count` markers and `eval`s them, under the
+  gate's shell options, against four real copies of `taint_controls.sh`:
+
+  | variant | what it deletes | gate verdict (graded on the message) |
+  |---|---|---|
+  | V0 | nothing | `OK … pass=11 unique=11` |
+  | V1 | T9's `grade` call | `FAIL taint control inventory: pass=10 unique=10` |
+  | V2 | everything after T0 (`exit 0`) | `FAIL … summary line NOT PARSED` |
+  | V3 | T10, replaced by a copy of T9 | `FAIL taint control inventory: pass=11 unique=10` |
+
+  Its own summary is compared **exactly** against `EXPECT_TAINT_COUNT_CTLS=4`, so the regress stops
+  at the hashed gate instead of at another trusted exit status.
+* **Not driven by any variant:** the branch for a control that runs and genuinely *fails*. Named,
+  not closed; a V4 that breaks the taint tool under one control would close it.
+
+Two stale PHASE 5 header claims were corrected on the way. *"These five mutations"*: there are ten.
+*"The two holes above remain"*: the clone half has been **refused** since `a822d6d` (2026-08-28;
+controls T9, T10), though taint is still not *followed* through a clone. An orphaned half-sentence
+left by the 2026-08-27 retraction of the "safe direction" claim was removed.
+
+#### The same shape, looked for elsewhere in this gate
+
+Among the sub-scripts whose output the gate captures, the only other control runner is PHASE 4's
+`forsc_grinding_margin.py --self-test`; the rest (`sweep.py`, `stmt_coverage.py`,
+`policy_cap_fence.py`, `taint_closure.py --check`) are checks, and `policy_cap_fence.py` carries an
+exact `EXPECT_DECLS`. PHASE 4 counts its lines **inline**, but as floors (`-lt 4`, `-lt 3`), and it
+prints `4/4` and `3/3` as literals rather than the measured counts. That is not a live fail-open for
+accidental drift: the script is in the hashed input set, and it is still byte-identical to
+`contracts/verification/scripts/forsc_grinding_margin.py` here (re-checked). But the gate comment
+*"the byte-identity cert-margin-split.tsv asserts"* overstates: that manifest holds the seven figures
+and no hash, so the byte-identity is enforced only indirectly, by `INPUTS_SHA256`. **Open, small.**
+
+#### Prediction and receipt
+
+Predicted before computing (`scratch/PREDICTION-taint-count-guard-2026-09-14.md`); every figure held.
+One operator error is disclosed there: the first launch skipped the login shell, so opam never put
+`easycrypt` on `PATH` — `TOOLCHAIN UNKNOWN`, `0 configurations`, every target FAIL within seconds.
+It was killed and discarded, then relaunched as in *Reproducing the GREEN*. It is not a receipt.
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (6a06e771...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls 39/39 | taint closure 2, 9 headline results checked
+OK   taint controls: pass=11 unique=11 fail=0 expected=11
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260914_run3.log`.
