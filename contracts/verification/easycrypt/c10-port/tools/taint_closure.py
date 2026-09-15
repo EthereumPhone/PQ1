@@ -31,6 +31,13 @@ mitigations, both implemented below:
 soundness proof of exclusion.  A name absent from the closure is absent from the true
 closure ONLY modulo the two holes above -- and both are unsafe-direction.
 
+[UPDATE 2026-09-15: for the ONE admit left (FORS_C_TreePort.ec::extract_op) neither hole
+applies, for a reason this tool does NOT compute: that theory is OUTSIDE every headline
+environment.  EasyCrypt reports its symbols unknown after `require GprocTCollNamed.` (whose
+cone holds the other five headline files), checked two-sided on every gate run by PHASE 3
+controls scratch/_scope_*.ec.  The holes stay stated because they bite for any future admit
+in a theory a headline file DOES require.]
+
 Usage:  taint_closure.py            -> print the closure
         taint_closure.py --check    -> compare against cert-taint-closure.tsv, exit 1 on drift
 """

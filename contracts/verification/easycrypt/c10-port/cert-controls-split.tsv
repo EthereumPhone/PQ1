@@ -97,3 +97,19 @@ scratch/bes4_ctlG.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/gtn_ctlA.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/gtn_ctlB.ec	MUST-FAIL	cannot prove goal (strict)
 scratch/gtn_ctlC.ec	MUST-FAIL	the module Top.XmssmtCC_All.R_MEUFGCMAWOTSC_EUFNAGCMA_C
+# --- SCOPE-ISOLATION controls for the last admit, added 2026-09-15.
+# FORS_C_TreePort.ec holds extract_op, the only admit.  Each NEGATIVE requires a headline theory
+# and names a TreePort symbol; EasyCrypt must report it UNKNOWN -- the theory is not loaded in the
+# headline environment, so no tactic (bare smt() included) can use the admit.  Each has a MUST-PASS
+# twin differing by ONE require (FORS_C_TreePort added), so the negative fails for SCOPE and not
+# for syntax.  _scope_env_n_m shows `require GprocTCollNamed.` makes a dependency 3 require-hops
+# deep resolvable, so the negatives test the FULL environment, not a smaller one.  GprocTCollNamed
+# alone: the other five headline files are in its require-cone -- stops being true if the family
+# stops being a chain.  TRIPWIRE: if any file in that cone ever requires FORS_C_TreePort, the
+# negatives COMPILE and this phase goes RED.  The census would not notice that edit (TreePort is
+# already a closure root).  Reasons observed 2026-09-15 in ec-grind (r2026.02), not assumed.
+scratch/_scope_neg_op_GprocTCollNamed.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_lemma.ec	MUST-FAIL	unknown lemma `FORS_C_TreePort.extract_op'
+scratch/_scope_pos_op.ec	MUST-PASS	-
+scratch/_scope_pos_lemma.ec	MUST-PASS	-
+scratch/_scope_env_n_m.ec	MUST-PASS	-

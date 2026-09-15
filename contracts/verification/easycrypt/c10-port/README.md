@@ -144,6 +144,16 @@ one (`WOTS_TW_ES.ec::admit_free_caller_split`) **is wired** — `nhchwcoll_hchwp
 proved from it — and this sentence said "deliberately not wired" for a day after the
 promotion commit had wired it (corrected 2026-08-31).
 
+> **UPDATE 2026-09-15 — the paragraph above describes an admit that no longer exists.** Its reach
+> demonstration used `nhchwcoll_hchwpre_msg`, the WOTS admit removed on 2026-08-30; the 921 figure
+> counts bare `smt()` sites cone-wide. For **`extract_op`, the admit that remains**, containment is
+> **scope-level**, not name-level. Its theory `FORS_C_TreePort` is not loaded in any headline
+> environment, so no tactic there can use it: not named, not a bare `smt()`, not a clone, not a module
+> argument. EasyCrypt itself reports its symbols unknown in each of the six headline environments
+> (measured). The gate re-checks this on every run through `GprocTCollNamed`, whose require-cone holds
+> the other five; that chain is **not yet gated itself**. It all rests on EasyCrypt building a file's
+> environment from its `require` closure. See `UPDATE 2026-09-15`.
+
 #### How the headline got here — dated history, kept deliberately
 
 The blocks below are the audit trail, including the claims this file has had to withdraw.
@@ -3694,3 +3704,135 @@ OK   inputs unchanged across the run
 ```
 
 Full log: `scratch/gate_20260914_run3.log`.
+
+### UPDATE 2026-09-15 — the last admit is OUT OF SCOPE for every headline result; the gate checks it two-sided through the headline chain; PHASE 4 now reports what it counted
+
+**No closure `.ec` file moved.** The census, the ledger and the closure are unchanged.
+
+#### What was established — by EasyCrypt, not by this repo's parser
+
+`extract_op` (`cdrafts-split/FORS_C_TreePort.ec:1485`) is the only admit left. Its theory is
+**not loaded in any headline environment**, so no tactic in a headline file can use it: not a named
+application, not a bare `smt()`, not a clone, not a module argument. Each of those routes needs the
+theory in the environment, and only `require` puts it there.
+
+This was **probed before anything was built**, with all ten predictions written first
+(`scratch/PREDICTION-scope-isolation-probes-2026-09-15.md`). All held:
+
+| probe | requires | body | result |
+|---|---|---|---|
+| negative, ×6 (one per headline file) | the headline theory | `op probe_scope : bool = FORS_C_TreePort.fverify_structural.` | ``unknown variable or constant: `FORS_C_TreePort.fverify_structural'`` |
+| negative, lemma | `GprocTCollNamed` | `have _ := FORS_C_TreePort.extract_op.` | ``unknown lemma `FORS_C_TreePort.extract_op'`` |
+| positive twins ×2 | the same **plus `FORS_C_TreePort`** | the same bodies | compile |
+| environment witnesses ×2 | `GprocTCollNamed` | a symbol of `WOTS_TW_ES`, 3 require-hops away | compile |
+
+The environment witnesses are what make the negatives mean something. Requiring a headline theory
+makes even its indirect dependencies resolvable by qualified name. So if `FORS_C_TreePort` sat anywhere
+in a headline's dependency set, its name would resolve too, as the twins show it does once required.
+Without the witnesses, a negative probe could be failing in an environment *smaller* than the headline
+file's own.
+
+**Why a name-resolution probe, and not the 2026-08-28 smt reach test.** `extract_op`'s statement is
+built from `G_Tree`, `R_op`, `O_OP_Default` and `fverify_structural`, all defined in `FORS_C_TreePort.ec`,
+so it cannot even be written outside that theory. The 2026-08-28 probes both began with
+`require import SPHINCS_PLUS`. They reached the admit they measured through exactly the channel these
+probes show to be closed for this one.
+
+**What it rests on.** EasyCrypt builds a file's environment from its `require` closure plus the prelude,
+with no ambient loading from the include path, and a tactic can only use facts in that environment. The
+probes are consistent with that. They do not prove EasyCrypt implements it.
+
+#### What is now gated — five PHASE 3 controls, `EXPECT_CTLS` 39 → 44
+
+| control | polarity | role |
+|---|---|---|
+| `scratch/_scope_neg_op_GprocTCollNamed.ec` | MUST-FAIL | a `FORS_C_TreePort` operator is unknown in the headline environment |
+| `scratch/_scope_neg_lemma.ec` | MUST-FAIL | the admitted lemma itself is unknown there |
+| `scratch/_scope_pos_op.ec` | MUST-PASS | twin, one `require` apart: the negative fails for scope, not syntax |
+| `scratch/_scope_pos_lemma.ec` | MUST-PASS | twin for the lemma form |
+| `scratch/_scope_env_n_m.ec` | MUST-PASS | environment witness |
+
+**One negative, not six:** the other five headline files are all in `GprocTCollNamed`'s own require-cone,
+so its environment contains theirs. That stops being true if the headline family stops being a chain.
+
+**This control set is the tripwire.** If any file in that cone ever requires `FORS_C_TreePort`, the
+negatives compile and the gate goes RED. The census would *not* catch that edit on its own:
+`FORS_C_TreePort` is already a closure root, so neither the cone file list nor statement coverage would
+move, only the input identity.
+
+**What it does not guard: the chain.** All six headline files are closure roots
+(`closure-c10-split.txt`). If one of them dropped out of `GprocTCollNamed`'s cone, nothing would go RED,
+and that file could then require `FORS_C_TreePort` unobserved. So the gated statement today is narrower
+than the measured one:
+
+* *measured, per file:* the admit's theory is unknown in each of the six headline environments;
+* *gated on every run:* it is unknown in `GprocTCollNamed`'s environment, and the other five inherit
+  that only through a require chain the gate does not check.
+
+Per-file negatives close the gap; they are the next unit.
+
+The negatives key on two symbol names. Renaming both would keep them failing for the declared reason
+even if the theory entered the cone, but the renames would move PHASE 2's census rows (a defined
+predicate and the admit's enclosing lemma), and census changes are fatal. That is defence in depth,
+not a gap.
+
+#### What this changes, and what it does not
+
+* **Changes:** for `extract_op`, PHASE 5's two holes still named "unguarded" (bare `smt()`, module
+  arguments) do not apply. That is measured for all six files; the gate enforces it through the chain
+  above. The clone route has been refused since 2026-08-28. Both headers now say so.
+* **Does not:** bound anything; retire the admit (that remains an owner decision, see `UPDATE 2026-09-01`);
+  or cover a *future* admit placed in a theory a headline file does require. The general holes stay
+  stated in the PHASE 5 and `tools/taint_closure.py` headers for that reason.
+
+#### PHASE 4 — the small item named in the previous update is closed
+
+The margin phase tested floors (`-lt 4`, `-lt 3`) and printed `4/4` and `3/3` as literals. It now
+compares exactly against `EXPECT_MARGIN_GUARDS=4` and `EXPECT_MARGIN_SELFTESTS=3` and prints the measured
+count. Two texts that said more than was known are corrected:
+* the comment *"the byte-identity cert-margin-split.tsv asserts"* — that manifest holds no hash;
+* the receipt's *"(guardrails demonstrably fire)"* — the phase's own 2026-08-11 retraction says
+  `--self-test` never executes guard blocks 1–3.
+
+The new decision lines were checked in isolation against doctored output: 3 and 5 guardrail lines FAIL,
+2 and 4 self-test lines FAIL, and 4 and 3 pass. That is an isolated check of those lines, the same kind
+`EXPECT_WATCHED` records, and it is not wired into the gate.
+
+#### Review
+
+Kimi K3 reviewed this claim adversarially, run against a disposable copy of the tree so that a
+running gate's hashed inputs could not be touched. The copy's only changes afterwards were build
+artifacts (`.eco`, `__pycache__`), and a checksum comparison against the tree found no source
+difference. GPT-5.6's MCP was unavailable, so this is **one leg**. Its probes ran on the host
+EasyCrypt, not the pinned container: they **corroborate, they do not certify**. It:
+* reproduced all five controls' `[critical]` lines byte-for-byte;
+* re-ran the negative probe against each of the six headline theories (all reject);
+* recomputed the cone with an independent, looser require scan (zero differences);
+* tried the bypass routes directly. `import` or `export` of an unrequired theory, a `Top.`-qualified
+  name, `clone`, `hint exact`, and `require` inside a section are all refused.
+
+Verdict: **holds**, with one hole, the unguarded chain above. Adopted: the caveat is in the claim
+itself, not only in header comments, and per-file negatives are the next unit.
+
+#### Prediction and receipt
+
+Predicted before the run (`scratch/PREDICTION-scope-controls-2026-09-15.md`).
+
+```
+### RESULT: GREEN                       (0 FAIL lines)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (0ee26aa9...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+OK   control scratch/_scope_neg_op_GprocTCollNamed.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_neg_lemma.ec (MUST-FAIL, rejected for the DECLARED reason)
+OK   control scratch/_scope_pos_op.ec / _scope_pos_lemma.ec / _scope_env_n_m.ec (MUST-PASS)
+controls executed (unique)=44 expected=44
+OK   margin guardrails 4/4 (happy path)
+OK   margin negative controls 3/3 (--self-test: the model inverts; guard blocks 1-3 NOT exercised)
+taint closure 2, 9 headline results checked | taint controls pass=11 unique=11 | count controls pass=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260915_run4.log`. Kimi's review: `scratch/REVIEW-kimi-scope-isolation-2026-09-15.log`.

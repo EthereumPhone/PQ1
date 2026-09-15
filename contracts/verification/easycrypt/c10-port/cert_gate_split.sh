@@ -54,7 +54,9 @@ EXPECT_STMTS=1082
 # nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
-EXPECT_CTLS=39
+EXPECT_CTLS=44
+# 39 -> 44 on 2026-09-15: the five scope-isolation controls scratch/_scope_*.ec for the last
+# admit (2 MUST-FAIL, their 2 MUST-PASS twins, 1 environment witness).
 # COMMITTED TAINT-CONTROL COUNT (added 2026-09-14).  PHASE 5 trusted scratch/
 # taint_controls.sh's EXIT STATUS, which is nonzero only when a control FAILS.  A control
 # that never RUNS -- a deleted block, a blinded `grade` call, an early `exit 0` -- scored
@@ -70,6 +72,13 @@ EXPECT_TAINT_CTLS=11
 # summary must read exactly pass=EXPECT_TAINT_COUNT_CTLS fail=0, so skipping one of ITS
 # variants is caught here rather than by trusting another exit status.
 EXPECT_TAINT_COUNT_CTLS=4
+# COMMITTED MARGIN-SCRIPT LINE COUNTS (2026-09-15).  PHASE 4 tested FLOORS (`-lt 4`, `-lt 3`)
+# and printed `4/4` and `3/3` as LITERALS, so its receipt reported a measurement it never
+# made.  Not a live fail-open -- tools/forsc_grinding_margin.py is in the hashed input set --
+# but a receipt line must say what was counted.  Now equalities that print the measured
+# count.  MEASURED 2026-09-15: 4 guardrail OK lines, 3 self-test `ok:` lines.
+EXPECT_MARGIN_GUARDS=4
+EXPECT_MARGIN_SELFTESTS=3
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
 # partly a measurement of the default rather than of the proofs.  cdrafts-split/
@@ -866,16 +875,23 @@ if [ -f tools/forsc_grinding_margin.py ] && [ -f cert-margin-split.tsv ]; then
     # It does NOT enforce that guard blocks 1-3 are live branch logic.  That gap
     # is OPEN and NAMED (owner decision 2026-08-11: doc-retraction only -- the
     # fix requires editing the vendored script, which would break the
-    # byte-identity cert-margin-split.tsv asserts; correct fix is upstream-first
+    # byte-identity with PQSigner_OS's copy; correct fix is upstream-first
     # in PQSigner_OS, then re-vendor and re-pin).
+    # [CORRECTED 2026-09-15: the line above said "the byte-identity cert-margin-split.tsv
+    # asserts".  That manifest holds the seven figures and NO hash, and nothing in this gate
+    # compares the script with upstream.  It is pinned only by INPUTS_SHA256; it was
+    # re-checked byte-identical to PQ1 origin/master on 2026-09-15.]
+    # BEGIN margin-guard-count  (decision lines only; see EXPECT_MARGIN_GUARDS)
     g_ok=$(printf '%s\n' "$m_out" | grep -c '^\[guardrail [0-9]*\] .*: OK')
-    if [ "$g_ok" -lt 4 ]; then
-      echo "FAIL margin script printed only $g_ok/4 guardrail lines at OK"
+    if [ "$g_ok" -ne "$EXPECT_MARGIN_GUARDS" ]; then
+      echo "FAIL margin script printed $g_ok guardrail lines at OK, committed expectation is $EXPECT_MARGIN_GUARDS"
       fail=$((fail+1))
     else
-      echo "OK   margin guardrails 4/4 (happy path)"
+      echo "OK   margin guardrails $g_ok/$EXPECT_MARGIN_GUARDS (happy path)"
     fi
+    # END margin-guard-count
     st_out=$(python3 tools/forsc_grinding_margin.py --self-test 2>&1); st_rc=$?
+    # BEGIN margin-selftest-count  (decision lines only; see EXPECT_MARGIN_SELFTESTS)
     st_ok=$(printf '%s\n' "$st_out" | grep -c '^  ok: ')
     if [ "$st_rc" -ne 0 ]; then
       echo "FAIL margin --self-test exited $st_rc -- a guardrail did NOT fire when it must"
@@ -883,11 +899,14 @@ if [ -f tools/forsc_grinding_margin.py ] && [ -f cert-margin-split.tsv ]; then
       fail=$((fail+1))
     elif ! printf '%s\n' "$st_out" | grep -q '^=== self-test PASS ==='; then
       echo "FAIL margin --self-test did not report PASS"; fail=$((fail+1))
-    elif [ "$st_ok" -lt 3 ]; then
-      echo "FAIL margin --self-test ran only $st_ok/3 negative controls"; fail=$((fail+1))
+    elif [ "$st_ok" -ne "$EXPECT_MARGIN_SELFTESTS" ]; then
+      echo "FAIL margin --self-test printed $st_ok 'ok:' lines, committed expectation is $EXPECT_MARGIN_SELFTESTS"; fail=$((fail+1))
     else
-      echo "OK   margin negative controls 3/3 (guardrails demonstrably fire)"
+      # Was "(guardrails demonstrably fire)" until 2026-09-15 -- the RETRACTION above says
+      # --self-test never executes guard blocks 1-3, so the receipt line said more than it knew.
+      echo "OK   margin negative controls $st_ok/$EXPECT_MARGIN_SELFTESTS (--self-test: the model inverts; guard blocks 1-3 NOT exercised)"
     fi
+    # END margin-selftest-count
     get() { printf '%s\n' "$m_out" | sed -n "$1" | head -1; }
     m_forsc=$(get 's/.*FORS+C work factor (binom. mixture): *\([0-9.]*\) bits.*/\1/p')
     m_plain=$(get 's/.*plain FORS, same method *: *\([0-9.]*\) bits.*/\1/p')
@@ -952,6 +971,16 @@ echo '### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundnes
 # remain unguarded here.  Removed the same day: an orphaned half-sentence, "The
 # over-approximation direction is the safe one for", left behind when that claim was
 # retracted on 2026-08-27.]
+# [UPDATE 2026-09-15: for the ONE admit left, the bare-smt() and module-argument holes do
+# not apply either -- by SCOPE, not by parsing.  extract_op's theory, FORS_C_TreePort, is in
+# no headline file's environment: EasyCrypt itself reports its symbols UNKNOWN after
+# `require GprocTCollNamed.` (PHASE 3 controls scratch/_scope_neg_op_GprocTCollNamed.ec and
+# scratch/_scope_neg_lemma.ec, each with a MUST-PASS twin one require apart, and
+# scratch/_scope_env_n_m.ec showing a dependency 3 require-hops deep DOES resolve there).  The
+# other five headline files are in GprocTCollNamed's own cone.  A tactic can only use facts in
+# its environment, so no route -- named, smt, clone, module argument -- reaches the admit.
+# TCB: EasyCrypt's require/environment semantics.  The holes stay stated above because they
+# still bite for any future admit in a theory a headline file DOES require.]
 #
 # The specific regression guarded: wiring EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded into the
 # headline. That promotes a REFUTABLE lemma (a collision falsifies nhchwcoll_hchwpre_msg

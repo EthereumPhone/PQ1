@@ -1288,5 +1288,28 @@
 #   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
 #   the gate run compares it itself.
 #
-split	6a06e77153057c7c54f3ab060c200e6f
+# 2026-09-15 (Run 4).  split 6a06e77153057c7c54f3ab060c200e6f -> 0ee26aa9eec7f63450c2956abd77a7cc.
+#   NO CLOSURE .ec FILE MOVED.  Two gate-local changes, run together.
+#   A. THE LAST ADMIT IS OUT OF SCOPE, and that is now a gated, two-sided fact.  extract_op's
+#      theory FORS_C_TreePort is in no headline environment: EasyCrypt reports its symbols
+#      UNKNOWN after `require GprocTCollNamed.`, whose cone holds the other five headline files.
+#      Probed first (scratch/PREDICTION-scope-isolation-probes-2026-09-15.md, 10/10 as
+#      predicted), then registered.  This is what upgrades PHASE 5 for this admit from
+#      name-level to scope-level: bare smt(), clone and module-argument routes all need the
+#      theory loaded.  TCB: EasyCrypt's require/environment semantics.
+#   B. PHASE 4 floors -> equalities.  `-lt 4` / `-lt 3` printed literal `4/4` / `3/3`; now `-ne`
+#      against EXPECT_MARGIN_GUARDS=4 / EXPECT_MARGIN_SELFTESTS=3, printing the measured count.
+#      Two false texts corrected: "the byte-identity cert-margin-split.tsv asserts" (no hash
+#      there) and the receipt's "(guardrails demonstrably fire)", which the phase's own
+#      2026-08-11 retraction says --self-test cannot show.
+#   Inputs that moved:
+#     + scratch/_scope_{neg_op_GprocTCollNamed,neg_lemma,pos_op,pos_lemma,env_n_m}.ec  (in $CTL_SRC)
+#     ~ cert-controls-split.tsv      (39 -> 44 controls)
+#     ~ cert_gate_split.sh           (EXPECT_CTLS 44; EXPECT_MARGIN_GUARDS/SELFTESTS NEW; PHASE 4
+#                                     equalities; PHASE 5 header scope note)
+#     ~ tools/taint_closure.py       (COMMENT-ONLY: the scope note in its header)
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+split	0ee26aa9eec7f63450c2956abd77a7cc
 fork	9c2d21280c84d52c30b22111151f1135
