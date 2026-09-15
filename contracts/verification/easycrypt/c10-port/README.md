@@ -153,6 +153,8 @@ promotion commit had wired it (corrected 2026-08-31).
 > (measured). The gate re-checks this on every run through `GprocTCollNamed`, whose require-cone holds
 > the other five; that chain is **not yet gated itself**. It all rests on EasyCrypt building a file's
 > environment from its `require` closure. See `UPDATE 2026-09-15`.
+> **[Later the same day:** the chain caveat is closed. Each of the six headline files now has its own
+> negative scope control, so the gate no longer relies on the chain. See `UPDATE 2026-09-15 (later)`.**]**
 
 #### How the headline got here — dated history, kept deliberately
 
@@ -3769,7 +3771,8 @@ than the measured one:
 * *gated on every run:* it is unknown in `GprocTCollNamed`'s environment, and the other five inherit
   that only through a require chain the gate does not check.
 
-Per-file negatives close the gap; they are the next unit.
+Per-file negatives close the gap; they are the next unit. **[Closed the same day — see
+`UPDATE 2026-09-15 (later)`.]**
 
 The negatives key on two symbol names. Renaming both would keep them failing for the declared reason
 even if the theory entered the cone, but the renames would move PHASE 2's census rows (a defined
@@ -3836,3 +3839,53 @@ OK   inputs unchanged across the run
 ```
 
 Full log: `scratch/gate_20260915_run4.log`. Kimi's review: `scratch/REVIEW-kimi-scope-isolation-2026-09-15.log`.
+
+### UPDATE 2026-09-15 (later) — scope isolation is gated PER HEADLINE FILE; the chain caveat is closed
+
+**No closure `.ec` file moved.**
+
+The previous update gated `extract_op`'s scope isolation through `GprocTCollNamed` alone, and said
+why that was narrower than what had been measured. All six headline files are closure roots, so one
+could leave `GprocTCollNamed`'s cone with nothing going RED, then require `FORS_C_TreePort`. Kimi K3
+found that gap. It is now closed: `scratch/_scope_neg_op_<H>.ec` is registered for **each** of the six
+headline theories (`EXPECT_CTLS` 44 → 49), with the same declared reason as before,
+``unknown variable or constant: `FORS_C_TreePort.fverify_structural'``.
+
+**No new positive twins, and why.** The five new negatives share `_scope_pos_op.ec`: their body is
+byte-identical to it. PHASE 3 grades any failure *other* than the declared unknown-symbol one as WRONG
+REASON, which is RED: a `probe_scope` name clash, a syntax error, or the headline theory failing to load.
+A per-file twin would add rows, not information.
+
+**The tripwire, restated.** If any headline file, or any file in its require-cone, ever requires
+`FORS_C_TreePort`, that file's negative compiles and the gate goes RED — no chain involved.
+
+**Still not covered, named:** a *seventh* headline file. Nothing links the `HEADLINE` list in
+`tools/taint_closure.py` to these control rows. A new headline file without a probe would be checked for
+named taint by PHASE 5, but not for scope. That has happened once already, in a different form:
+WOTSNAMED went 13 days unregistered for taint.
+
+Predicted before computing (`scratch/PREDICTION-scope-perfile-2026-09-15.md`). The ten scope controls
+were graded 10/10 in ec-grind before the gate run.
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (37dab7b0...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+OK   control scratch/_scope_neg_op_{GprocTCollNamed,GprocChargedQWired,SphincsC10CapstoneWired,
+                                    GprocQWired,GprocQBound,GprocWotsNamed}.ec
+                                    (MUST-FAIL, rejected for the DECLARED reason) x6
+controls executed (unique)=49 expected=49
+margin 4/4 and 3/3 | taint closure 2, 9 headline results | taint controls 11/11 | count controls 4
+OK   inputs unchanged across the run
+```
+
+**Run history, disclosed.** The first launch of this run was a host-side `docker exec` with its log
+redirected on the host. The harness stopped it under memory pressure. Only the host client died: the
+in-container gate kept compiling into a dead pipe and could never have produced a receipt. It was killed
+inside the container and its partial log deleted. The receipt above is from a relaunch *detached* inside
+the container (`docker exec -d`, log written inside the container, an exit marker appended).
+
+Full log: `scratch/gate_20260915_run5.log`.

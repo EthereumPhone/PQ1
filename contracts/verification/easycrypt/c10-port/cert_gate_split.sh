@@ -54,7 +54,10 @@ EXPECT_STMTS=1082
 # nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
-EXPECT_CTLS=44
+EXPECT_CTLS=49
+# 44 -> 49 on 2026-09-15 (later): a per-file scope negative for each of the other five headline
+# files.  Kimi K3 review: they had inherited isolation through GprocTCollNamed's require chain,
+# which nothing gated (all six are closure roots).
 # 39 -> 44 on 2026-09-15: the five scope-isolation controls scratch/_scope_*.ec for the last
 # admit (2 MUST-FAIL, their 2 MUST-PASS twins, 1 environment witness).
 # COMMITTED TAINT-CONTROL COUNT (added 2026-09-14).  PHASE 5 trusted scratch/
@@ -981,6 +984,11 @@ echo '### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundnes
 # its environment, so no route -- named, smt, clone, module argument -- reaches the admit.
 # TCB: EasyCrypt's require/environment semantics.  The holes stay stated above because they
 # still bite for any future admit in a theory a headline file DOES require.]
+# [UPDATE 2026-09-15 (later): gated PER FILE now, not through the chain.  Kimi K3 found all six
+# headline files are closure roots, so one could leave GprocTCollNamed's cone with nothing going
+# RED and then require FORS_C_TreePort.  scratch/_scope_neg_op_<H>.ec is now registered for each
+# of the six.  NOT covered: a SEVENTH headline file with no probe -- nothing links the HEADLINE
+# list in tools/taint_closure.py to these controls yet.]
 #
 # The specific regression guarded: wiring EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded into the
 # headline. That promotes a REFUTABLE lemma (a collision falsifies nhchwcoll_hchwpre_msg

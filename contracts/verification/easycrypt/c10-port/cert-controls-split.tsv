@@ -113,3 +113,18 @@ scratch/_scope_neg_lemma.ec	MUST-FAIL	unknown lemma `FORS_C_TreePort.extract_op'
 scratch/_scope_pos_op.ec	MUST-PASS	-
 scratch/_scope_pos_lemma.ec	MUST-PASS	-
 scratch/_scope_env_n_m.ec	MUST-PASS	-
+# --- PER-FILE scope negatives, added 2026-09-15 (later).  The block above relied on the other five
+# headline files sitting in GprocTCollNamed's require-cone.  Kimi K3 (adversarial review) found that
+# chain UNGUARDED: all six headline files are closure roots, so one could leave the cone with nothing
+# going RED and then require FORS_C_TreePort.  Each headline file now has its OWN negative.  They
+# share the op-form twin _scope_pos_op.ec: the body is byte-identical, and any failure OTHER than the
+# declared unknown-symbol one (a name clash, a syntax error, the headline theory failing to load) is
+# graded WRONG REASON, i.e. RED -- so per-file twins would add rows, not information.  Reasons
+# observed in ec-grind for all six theories in the 2026-09-15 feasibility run.
+# NOT COVERED: a SEVENTH headline file -- nothing yet links tools/taint_closure.py's HEADLINE list to
+# these rows.
+scratch/_scope_neg_op_GprocChargedQWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_SphincsC10CapstoneWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GprocQWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GprocQBound.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_GprocWotsNamed.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

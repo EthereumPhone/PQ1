@@ -1311,5 +1311,21 @@
 #   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
 #   the gate run compares it itself.
 #
-split	0ee26aa9eec7f63450c2956abd77a7cc
+# 2026-09-15 (Run 5).  split 0ee26aa9eec7f63450c2956abd77a7cc -> 37dab7b0d09385a39036c0a82c7e0f82.
+#   NO CLOSURE .ec FILE MOVED.  Scope isolation of extract_op is now gated PER HEADLINE FILE.
+#   Run 4 gated it through GprocTCollNamed alone, on the grounds that the other five headline
+#   files sit in its require-cone.  Kimi K3's review found that chain UNGUARDED: all six are
+#   closure roots, so one could leave the cone with nothing going RED and then require
+#   FORS_C_TreePort.  Each headline file now has its own negative, sharing the op-form twin (a
+#   byte-identical body; any other failure is graded WRONG REASON, i.e. RED).  NOT covered: a
+#   seventh headline file -- nothing links taint_closure.py's HEADLINE list to these rows.
+#   Inputs that moved:
+#     + scratch/_scope_neg_op_{GprocChargedQWired,SphincsC10CapstoneWired,GprocQWired,
+#                              GprocQBound,GprocWotsNamed}.ec   (in $CTL_SRC)
+#     ~ cert-controls-split.tsv      (44 -> 49 controls)
+#     ~ cert_gate_split.sh           (EXPECT_CTLS 49; PHASE 5 header per-file note)
+#   Pre-run: scratch/_run_scope_ctls.sh graded 10/10 in ec-grind.  Value computed by executing
+#   the gate's own lines in ec-grind (scratch/calc_inputs_id.sh); the gate run compares it itself.
+#
+split	37dab7b0d09385a39036c0a82c7e0f82
 fork	9c2d21280c84d52c30b22111151f1135
