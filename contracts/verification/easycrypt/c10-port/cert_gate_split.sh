@@ -69,7 +69,10 @@ EXPECT_CTLS=49
 # the summary and requires fail=0, pass = this constant, and as many UNIQUE `OK` lines
 # (PHASE 3 counts unique names too: a deleted control replaced by a copy of another must
 # not score).  11 = the T0 baseline + graded controls T1..T10.
-EXPECT_TAINT_CTLS=11
+EXPECT_TAINT_CTLS=15
+# 11 -> 15 on 2026-09-15 (later): T11..T14, the controls for the scope-probe linkage check in
+# tools/taint_closure.py (row deleted / row matcher blinded / probe requires the wrong headline
+# theory / declared reason drops the admit theory).
 # The guard above is itself exercised by scratch/taint_count_controls.sh, which executes
 # the gate's own PHASE 5 lines against weakened copies of the controls script.  Its
 # summary must read exactly pass=EXPECT_TAINT_COUNT_CTLS fail=0, so skipping one of ITS
@@ -989,6 +992,11 @@ echo '### PHASE 5 — TAINT CONTAINMENT (named-application drift; NOT a soundnes
 # RED and then require FORS_C_TreePort.  scratch/_scope_neg_op_<H>.ec is now registered for each
 # of the six.  NOT covered: a SEVENTH headline file with no probe -- nothing links the HEADLINE
 # list in tools/taint_closure.py to these controls yet.]
+# [UPDATE 2026-09-15 (third): LINKED.  tools/taint_closure.py --check now requires an EXACT
+# bijection between the files that declare HEADLINE results and the scratch/_scope_neg_op_<H>.ec
+# rows.  Each row must be MUST-FAIL, name every admit theory in its declared reason, and have a
+# probe that requires its own headline theory.  A seventh headline file with no probe is RED
+# here.  Controls T11..T14.]
 #
 # The specific regression guarded: wiring EUFNAGCMA_FLSLXMSSMTTWCESNPRF_Unfolded into the
 # headline. That promotes a REFUTABLE lemma (a collision falsifies nhchwcoll_hchwpre_msg

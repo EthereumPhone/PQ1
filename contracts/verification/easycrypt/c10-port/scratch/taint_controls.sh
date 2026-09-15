@@ -20,6 +20,14 @@ farm() {  # build a fresh symlink farm; $1 (optional) = file to make a REAL copy
     mkdir -p "$T/w/$(dirname "$f")"
     if [ "${1:-}" = "$f" ]; then cp "$ROOT/$f" "$T/w/$f"; else ln -s "$ROOT/$f" "$T/w/$f"; fi
   done < "$ROOT/cert-cone-files-split.tsv"
+  # Added 2026-09-15 with the scope-probe linkage check, which reads the controls manifest and the
+  # probes.  Without these the T0 baseline would go RED for the WRONG reason.
+  cp "$ROOT/cert-controls-split.tsv" "$T/w/"
+  mkdir -p "$T/w/scratch"
+  for f in "$ROOT"/scratch/_scope_neg_op_*.ec; do
+    rel="scratch/$(basename "$f")"
+    if [ "${1:-}" = "$rel" ]; then cp "$f" "$T/w/$rel"; else ln -s "$f" "$T/w/$rel"; fi
+  done
 }
 
 grade() {  # $1 name  $2 expected-substring
@@ -176,6 +184,56 @@ open(p,'w').write(s.replace(frag, "ZZNEVERMATCHESZZ"))
 
 T10PY
 grade "T10 clone scanner blinded" "clone-route guard is vacuous"
+
+echo "=== T11 SCOPE-PROBE LINKAGE (added 2026-09-15): a headline file whose scope probe is"
+echo "        UNREGISTERED must be refused -- a new headline file would otherwise get none ==="
+farm
+python3 - "$T/w/cert-controls-split.tsv" <<'T11PY'
+import sys
+p=sys.argv[1]; L=open(p).read().split('\n')
+hit=[i for i,l in enumerate(L) if l.startswith('scratch/_scope_neg_op_GprocQBound.ec\t')]
+assert len(hit)==1, 'T11 mutation target not found -- control would be vacuous'
+del L[hit[0]]
+open(p,'w').write('\n'.join(L))
+T11PY
+grade "T11 scope probe row deleted" "headline file GprocQBound has no scope probe"
+
+echo "=== T12 SCOPE-PROBE SCANNER VACUITY: if the row matcher stops matching it must FAIL,"
+echo "        not pass an empty linkage ==="
+farm
+python3 - "$T/w/tools/taint_closure.py" <<'T12PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+frag="_scope_neg_op_([A-Za-z0-9_]+)"
+assert s.count(frag)==1, 'T12 mutation target not found -- control would be vacuous'
+open(p,'w').write(s.replace(frag, "ZZNEVERMATCHESZZ([A-Za-z0-9_]+)"))
+T12PY
+grade "T12 scope-probe row matcher blinded" "scope-probe linkage is vacuous"
+
+echo "=== T13 a probe that requires the WRONG headline theory must be refused -- a copy-paste"
+echo "        probe passes PHASE 3 while testing nothing about its own file ==="
+farm scratch/_scope_neg_op_GprocWotsNamed.ec
+python3 - "$T/w/scratch/_scope_neg_op_GprocWotsNamed.ec" <<'T13PY'
+import sys
+p=sys.argv[1]; s=open(p).read()
+old="require GprocWotsNamed."
+assert s.count(old)==1, 'T13 mutation target not found -- control would be vacuous'
+open(p,'w').write(s.replace(old, "require GprocQBound."))
+T13PY
+grade "T13 scope probe requires the wrong headline theory" "does not require its headline theory GprocWotsNamed"
+
+echo "=== T14 a scope row whose declared reason no longer names the admit theory must be refused ==="
+farm
+python3 - "$T/w/cert-controls-split.tsv" <<'T14PY'
+import sys
+p=sys.argv[1]; L=open(p).read().split('\n')
+hit=[i for i,l in enumerate(L) if l.startswith('scratch/_scope_neg_op_GprocQWired.ec\t')]
+assert len(hit)==1, 'T14 mutation target not found -- control would be vacuous'
+path, kind, _r = L[hit[0]].split('\t')
+L[hit[0]] = '\t'.join([path, kind, 'unknown variable or constant'])
+open(p,'w').write('\n'.join(L))
+T14PY
+grade "T14 scope row reason no longer names the admit theory" "declared reason does not name admit theory FORS_C_TreePort"
 
 echo
 # FORMAT CONTRACT (2026-09-14): cert_gate_split.sh PHASE 5 PARSES the next line and requires

@@ -123,6 +123,12 @@ scratch/_scope_env_n_m.ec	MUST-PASS	-
 # observed in ec-grind for all six theories in the 2026-09-15 feasibility run.
 # NOT COVERED: a SEVENTH headline file -- nothing yet links tools/taint_closure.py's HEADLINE list to
 # these rows.
+# [UPDATE 2026-09-15 (third): COVERED.  tools/taint_closure.py --check now requires an EXACT bijection
+# between the files declaring HEADLINE results and the scratch/_scope_neg_op_<H>.ec rows here: each
+# row MUST-FAIL, its reason naming every admit theory, its probe requiring its own headline theory.
+# A new headline file with no row, or a row for a file that declares none, is RED in PHASE 5.
+# Controls T11..T14 in scratch/taint_controls.sh.  Rows in this file are read by that check: keep the
+# path shape scratch/_scope_neg_op_<HeadlineTheory>.ec.]
 scratch/_scope_neg_op_GprocChargedQWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_SphincsC10CapstoneWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_GprocQWired.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

@@ -34,6 +34,12 @@ variant() {
   for x in "$ROOT"/*; do
     b=$(basename "$x"); [ "$b" = scratch ] || ln -s "$x" "$T/r/$b"
   done
+  # The controls read more of scratch/ since 2026-09-15 (the scope probes, for the linkage check).
+  # Link ALL of it except the copy under test -- a farm carrying only taint_controls.sh turned T0
+  # RED for the WRONG reason and failed V0/V1/V3 on the first sandbox run of that change.
+  for x in "$ROOT"/scratch/*; do
+    b=$(basename "$x"); [ "$b" = taint_controls.sh ] || ln -s "$x" "$T/r/scratch/$b"
+  done
   cp "$ROOT/scratch/taint_controls.sh" "$T/r/scratch/taint_controls.sh"
   mut=$(cat)
   if [ -n "$mut" ] && ! python3 -c "$mut" "$T/r/scratch/taint_controls.sh"; then

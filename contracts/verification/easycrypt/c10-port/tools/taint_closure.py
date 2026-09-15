@@ -38,12 +38,21 @@ cone holds the other five headline files), checked two-sided on every gate run b
 controls scratch/_scope_*.ec.  The holes stay stated because they bite for any future admit
 in a theory a headline file DOES require.]
 
+[UPDATE 2026-09-15 (later): --check also enforces SCOPE-PROBE LINKAGE.  The files that declare
+HEADLINE results must be in EXACT BIJECTION with the scratch/_scope_neg_op_<H>.ec rows of
+cert-controls-split.tsv; each row MUST-FAIL, its declared reason naming every admit theory, and
+its probe requiring its own headline theory.  A new headline file with no probe, or a probe left
+for a file that no longer declares one, is RED here.  Controls T11..T14 in taint_controls.sh.]
+
 Usage:  taint_closure.py            -> print the closure
         taint_closure.py --check    -> compare against cert-taint-closure.tsv, exit 1 on drift
 """
 import re, sys, os
 
 CONE_MANIFEST = 'cert-cone-files-split.tsv'
+# Read by scope_linkage() only (added 2026-09-15).
+CONTROLS_MANIFEST = 'cert-controls-split.tsv'
+SCOPE_PROBE = re.compile(r'^scratch/_scope_neg_op_([A-Za-z0-9_]+)\.ec$')
 MANIFEST      = 'cert-taint-closure.tsv'
 
 # COMMITTED CONSTANTS -- these live in the TOOL, not only in the manifest.  A guard that
@@ -236,6 +245,57 @@ def closure():
                     tainted[nm] = e; changed = True; break
     return lemmas, admitted, tainted
 
+def scope_linkage(lemmas, admitted):
+    """SCOPE-PROBE LINKAGE (added 2026-09-15).  The PHASE 3 scope controls prove, per headline file,
+    that the admit's theory is UNKNOWN in that file's environment.  Nothing tied those rows to
+    HEADLINE, so a new headline file got no probe and PHASE 5 said nothing.  That is the same class
+    as WOTSNAMED going 13 days unregistered for taint.  Enforced here as an EXACT BIJECTION, not a
+    subset: a probe left for a file that no longer declares a headline is refused too.
+    Deliberately NOT checked, because PHASE 3 already makes it RED: a probe that references another
+    symbol, or requires the admit theory itself, COMPILES -- and a MUST-FAIL that compiles fails."""
+    probs = []
+    hbases = {os.path.splitext(os.path.basename(k[0]))[0] for k in lemmas if k[1] in HEADLINE}
+    theories = sorted({os.path.splitext(os.path.basename(f))[0] for (f, _n) in admitted})
+    if not os.path.exists(CONTROLS_MANIFEST):
+        return [f'{CONTROLS_MANIFEST} missing -- scope-probe linkage cannot be checked'], len(hbases), 0
+    rows, scanned = {}, 0
+    for l in open(CONTROLS_MANIFEST):
+        l = l.rstrip('\n')
+        if not l.strip() or l.startswith('#'): continue
+        scanned += 1
+        parts = l.split('\t')
+        m = SCOPE_PROBE.match(parts[0])
+        if m:
+            if m.group(1) in rows: probs.append(f'scope probe for {m.group(1)} registered twice')
+            rows[m.group(1)] = (parts[0], parts[1] if len(parts) > 1 else '', parts[2] if len(parts) > 2 else '')
+    if scanned == 0:
+        return [f'{CONTROLS_MANIFEST} has no rows -- scope-probe linkage would be vacuous'], len(hbases), 0
+    if not rows:
+        return ['scope-probe linkage is vacuous: no scratch/_scope_neg_op_<H>.ec rows matched in '
+                f'{CONTROLS_MANIFEST} -- the row matcher is broken or the probes were removed'], len(hbases), 0
+    for b in sorted(hbases - set(rows)):
+        probs.append(f'headline file {b} has no scope probe '
+                     f'(expected scratch/_scope_neg_op_{b}.ec as MUST-FAIL in {CONTROLS_MANIFEST})')
+    for b in sorted(set(rows) - hbases):
+        probs.append(f'scope probe {rows[b][0]} is registered for {b}, which declares no HEADLINE result')
+    for b in sorted(set(rows) & hbases):
+        path, kind, reason = rows[b]
+        if kind != 'MUST-FAIL':
+            probs.append(f'scope probe {path} is {kind!r}, not MUST-FAIL')
+        for t in theories:
+            if f'{t}.' not in reason:
+                probs.append(f'scope probe {path}: declared reason does not name admit theory {t}')
+        if not os.path.exists(path):
+            probs.append(f'scope probe file missing: {path}'); continue
+        src = strip_comments(open(path).read())
+        reqs = set()
+        for rm in re.finditer(r"(?<![A-Za-z0-9_'])require\s+([^.]*)\.", src, re.S):
+            body = rm.group(1).replace('import', ' ').replace('export', ' ')
+            reqs.update(re.findall(r"[A-Za-z][A-Za-z0-9_']*", body))
+        if b not in reqs:
+            probs.append(f'scope probe {path} does not require its headline theory {b}')
+    return probs, len(hbases), len(rows)
+
 def main():
     lemmas, admitted, tainted = closure()
     rows=sorted((lemmas[k][0], lemmas[k][1], k[1], tainted[k]) for k in tainted)
@@ -251,6 +311,8 @@ def main():
     for k in tainted:
         if k[1] in HEADLINE:
             problems.append(f'HEADLINE IS TAINTED: {k[1]} ({k[0]}) transitively applies an admitted lemma')
+    link_probs, n_hfiles, n_probes = scope_linkage(lemmas, admitted)
+    problems += link_probs
     if not os.path.exists(MANIFEST):
         problems.append(f'{MANIFEST} missing -- the closure is unpinned')
     else:
@@ -281,6 +343,8 @@ def main():
         return 1
     print(f'OK   taint containment: closure = {len(rows)} lemmas, none of the {len(HEADLINE)} '
           f'headline results is in it (name-level, NOT a soundness proof -- see the tool header)')
+    print(f'OK   scope-probe linkage: {n_hfiles} headline files <-> {n_probes} registered scope probes '
+          f'(exact bijection)')
     return 0
 
 sys.exit(main())

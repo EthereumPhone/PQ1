@@ -3860,7 +3860,7 @@ A per-file twin would add rows, not information.
 `FORS_C_TreePort`, that file's negative compiles and the gate goes RED — no chain involved.
 
 **Still not covered, named:** a *seventh* headline file. Nothing links the `HEADLINE` list in
-`tools/taint_closure.py` to these control rows. A new headline file without a probe would be checked for
+`tools/taint_closure.py` to these control rows. **[Closed the same day — see `UPDATE 2026-09-15 (third)`.]** A new headline file without a probe would be checked for
 named taint by PHASE 5, but not for scope. That has happened once already, in a different form:
 WOTSNAMED went 13 days unregistered for taint.
 
@@ -3889,3 +3889,56 @@ inside the container and its partial log deleted. The receipt above is from a re
 the container (`docker exec -d`, log written inside the container, an exit marker appended).
 
 Full log: `scratch/gate_20260915_run5.log`.
+
+### UPDATE 2026-09-15 (third) — the headline list and the scope probes are LINKED, as an exact bijection
+
+**No closure `.ec` file moved.**
+
+The previous update left one thing named but unchecked: nothing tied the per-file scope probes to the
+list of headline results. So a new headline file would get no probe, and PHASE 5 would say nothing.
+That class has happened here before: WOTSNAMED went 13 days unregistered for taint. `tools/taint_closure.py
+--check` now enforces the link:
+
+* **Exact bijection, not a subset.** The files that declare `HEADLINE` results must equal the files named
+  by `scratch/_scope_neg_op_<H>.ec` rows in `cert-controls-split.tsv`. A missing probe is RED, and so is a
+  probe left registered for a file that no longer declares a headline.
+* Each such row is `MUST-FAIL`, and its declared reason names every admit theory the tool finds.
+* Each probe `require`s **its own** headline theory. A copy-pasted probe pointed at the wrong file would
+  still pass PHASE 3 while testing nothing about its own file.
+* An empty manifest, or zero matching rows, is a vacuity FAIL.
+
+Deliberately **not** checked here, because PHASE 3 already turns it RED: a probe that references some
+other symbol, or requires the admit's theory itself, compiles, and a `MUST-FAIL` that compiles fails.
+
+Four new controls, each deleting one piece of information and graded on the message
+(`EXPECT_TAINT_CTLS` 11 → 15):
+
+| control | deletes | RED because |
+|---|---|---|
+| T11 | the `GprocQBound` probe row | `headline file GprocQBound has no scope probe` |
+| T12 | the row matcher (blinded) | `scope-probe linkage is vacuous` |
+| T13 | `GprocWotsNamed`'s probe now requires `GprocQBound` | `does not require its headline theory GprocWotsNamed` |
+| T14 | `GprocQWired`'s row reason drops the theory | `declared reason does not name admit theory FORS_C_TreePort` |
+
+**A prediction miss, recorded.** Built and tested in a sandbox before the tree was touched
+(`scratch/PREDICTION-scope-linkage-2026-09-15.md`). The prediction said `taint_count_controls.sh` would
+not need to change. It did. Its own farm carried only `taint_controls.sh` into `scratch/`, so the new
+probe files were missing there. The unmutated baseline went RED for the wrong reason, and three of its
+four variants failed. Fix: link all of `scratch/` except the copy under test.
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (1bfdb2c4...)
+closure 42/42 | cli 46 files, 0 disagreements
+pins 1167/1167 | coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls executed (unique)=49 expected=49 | margin 4/4 and 3/3
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260915_run6.log`.
