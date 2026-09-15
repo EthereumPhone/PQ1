@@ -1,0 +1,6 @@
+test_sibling_axiom_cannot_be_subsumed (__main__.CensusTests.test_sibling_axiom_cannot_be_subsumed) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 21.697s
+
+OK

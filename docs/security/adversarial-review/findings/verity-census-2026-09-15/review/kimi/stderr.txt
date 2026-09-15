@@ -1,0 +1,1054 @@
+789b8e1f fix(verity): census fresh elaborated axioms and admitted declarations
+ebb590d0 fix(fv): enforce exact axiom inventories and model evidence
+d15426e3 fsbl: non-monolithic boot proof — link the secure world at slot A, sign it, flash it
+0f9ed217 tools: read-only ship-state verifier — the external half of invariant #10(a)
+8cddca83 fsbl: measure the geometry — physical LOAD span, derived WRP page range, bounded stack
+---
+ .github/workflows/verity-fv.yml                    |  48 +++++
+ .../verification/scripts/check_verity_inventory.py | 200 +++++++++++++++++++++
+ .../scripts/dump_verity_inventory.lean             |  33 ++++
+ .../verification/scripts/test_verity_inventory.py  | 144 +++++++++++++++
+ contracts/verity/Makefile                          |  62 ++-----
+ contracts/verity/README.md                         |  19 +-
+ contracts/verity/TRUST_ASSUMPTIONS.md              |  36 +++-
+ contracts/verity/assurance_inventory.json          | 165 +++++++++++++++++
+ .../findings/verity-census-2026-09-15.md           |  67 +++++++
+ .../findings/verity-census-2026-09-15/ci.log       |  23 +++
+ .../gate-enforcement-self-test.log                 |   2 +
+ .../verity-census-2026-09-15/gate-enforcement.log  |  38 ++++
+ scripts/gate_enforcement.json                      |  13 ++
+ 13 files changed, 789 insertions(+), 61 deletions(-)
+diff --git a/contracts/verification/scripts/check_verity_inventory.py b/contracts/verification/scripts/check_verity_inventory.py
+new file mode 100644
+index 00000000..d9faee94
+--- /dev/null
++++ b/contracts/verification/scripts/check_verity_inventory.py
+@@ -0,0 +1,200 @@
++#!/usr/bin/env python3
++"""Fresh Part B elaboration and exact Part A quarantine for Verity (#673).
++
++The installed, pinned Lean compiler/stdlib and this gate are trusted. No Lake,
++project cache, caller-selected toolchain, or imported Verity package is used.
++The semantic boundary is exported declarations, including private/generated
++ones; discarded anonymous examples are not claims exported by a module.
++"""
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++from pathlib import Path
++import pwd
++import resource
++import subprocess
++import tempfile
++
++from check_verity_holes import VERITY, check
++
++SCRIPTS = Path(__file__).resolve().parent
++TOOLCHAIN = "leanprover/lean4:v4.22.0"
++GITHASH = "ba2cbbf09d4978f416e0ebd1fceeebc2c4138c05"
++MODULES = [f"PQSigner/Verifier/{name}.lean" for name in
++           ("Params", "Address", "Hash", "Wots", "Merkle", "Fors", "Hypertree", "Top")]
++QUARANTINE = [f"PQSigner/{name}.lean" for name in
++              ("Common", "PQMultiOwnable", "PQSmartWalletFactory", "PQSmartWallet", "Theorems")]
++ALLOWED = {"propext", "Classical.choice", "Quot.sound",
++           "PQSigner.Verifier.Hash.sha256_size", "PQSigner.Verifier.Hash.sha256_deterministic"}
++
++
++def digest(data: bytes) -> str:
++    return hashlib.sha256(data).hexdigest()
++
++
++def unique(pairs):
++    result = {}
++    for key, value in pairs:
++        if key in result:
++            raise ValueError(f"duplicate JSON key: {key}")
++        result[key] = value
++    return result
++
++
++def load_json(data):
++    return json.loads(data, object_pairs_hook=unique)
++
++
++def source_snapshot(directory: Path) -> dict[str, bytes]:
++    """Account for every project Lean source; reject links and unlisted roots."""
++    found = {}
++    if directory.is_symlink():
++        raise ValueError("symlinked Verity directory")
++    def error(exc):
++        raise exc
++    for parent, dirs, names in os.walk(directory, onerror=error):
++        # Lake outputs/packages are deliberately outside the compilation boundary.
++        if Path(parent) == directory:
++            dirs[:] = [d for d in dirs if d != ".lake"]
++        for name in dirs + names:
++            path = Path(parent) / name
++            if path.is_symlink():
++                raise ValueError(f"symlink in Verity source: {path}")
++        for name in names:
++            path = Path(parent) / name
++            if path.suffix == ".lean":
++                found[path.relative_to(directory).as_posix()] = path.read_bytes()
++    expected = set(MODULES + QUARANTINE + ["lakefile.lean"])
++    if set(found) != expected:
++        raise ValueError(f"source coverage mismatch: missing {sorted(expected - found.keys())}; "
++                         f"unlisted {sorted(found.keys() - expected)}")
++    for name in ("lean-toolchain", "assurance_inventory.json"):
++        path = directory / name
++        if path.is_symlink():
++            raise ValueError(f"symlinked census input: {name}")
++        found[name] = path.read_bytes()
++    return found
++
++
++def run(command: list[str], directory: Path, env: dict[str, str]) -> bytes:
++    # Bound execution and output independently. File-backed output avoids an
++    # unbounded capture_output allocation for compiler diagnostics/expressions.
++    def limits():
++        resource.setrlimit(resource.RLIMIT_CPU, (110, 110))
++        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
++        resource.setrlimit(resource.RLIMIT_FSIZE, (8 * 1024**2, 8 * 1024**2))
++    with tempfile.TemporaryFile() as output:
++        result = subprocess.run(command, cwd=directory, env=env, stdout=output,
++                                stderr=subprocess.STDOUT, timeout=120, check=False, preexec_fn=limits)
++        size = output.tell()
++        if size > 8 * 1024 * 1024:
++            raise ValueError("Lean census output exceeds 8 MiB")
++        output.seek(0)
++        data = output.read()
++    if result.returncode:
++        raise ValueError(f"Lean command {command[1:]} failed ({result.returncode}): {data.decode(errors='replace')[:4000]}")
++    return data
++
++
++def fresh_inventory(snapshot: dict[str, bytes]) -> dict:
++    if snapshot["lean-toolchain"].decode().strip() != TOOLCHAIN:
++        raise ValueError("Verity toolchain changed; review the census pin")
++    # Do not resolve `lean` from PATH or honor ELAN_TOOLCHAIN/LEAN_PATH/LD_*.
++    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
++    lean = home / ".elan/toolchains/leanprover--lean4---v4.22.0/bin/lean"
++    collector = (SCRIPTS / "dump_verity_inventory.lean").read_bytes()
++    with tempfile.TemporaryDirectory(prefix="verity-census-") as temp:
++        root = Path(temp)
++        env = {"PATH": f"{lean.parent}:/usr/bin:/bin", "HOME": str(root),
++               "LEAN_PATH": str(root), "LANG": "C.UTF-8"}
++        if run([str(lean), "-j1", "--githash"], root, env).decode().strip() != GITHASH:
++            raise ValueError("installed Lean revision differs from the pinned census compiler")
++        for name in MODULES:
++            path = root / name
++            path.parent.mkdir(parents=True, exist_ok=True)
++            path.write_bytes(snapshot[name])
++        for name in MODULES:
++            run([str(lean), "-j1", "-DautoImplicit=false", "-DrelaxedAutoImplicit=false",
++                 "-o", str((root / name).with_suffix(".olean")), name], root, env)
++        dump = root / "Census.lean"
++        dump.write_bytes(collector)
++        modules = [name[:-5].replace("/", ".") for name in MODULES]
++        result = load_json(run([str(lean), "-j1", "--run", str(dump), *modules], root, env))
++    if collector != (SCRIPTS / "dump_verity_inventory.lean").read_bytes():
++        raise ValueError("census collector changed during execution")
++    return result
++
++
++def signature(declaration: dict, *, body: bool = False) -> dict:
++    result = {key: declaration[key] for key in ("name", "module", "levels", "unsafe", "partial")}
++    result["type_sha256"] = digest(declaration["type"].encode())
++    if body:
++        result["value_sha256"] = digest(declaration["value"].encode())
++    return result
++
++
++def by_name(items: list[dict]) -> dict[str, dict]:
++    result = {}
++    for item in items:
++        if item["name"] in result:
++            raise ValueError(f"duplicate declaration: {item['name']}")
++        result[item["name"]] = item
++    return result
++
++
++def validate(snapshot: dict[str, bytes], inventory: dict) -> dict:
++    baseline = load_json(snapshot["assurance_inventory.json"])
++    if set(baseline) != {"schema_version", "toolchain", "lean_githash", "quarantine_sha256",
++                         "environment_axioms", "admitted_declarations", "partial_declarations"}:
++        raise ValueError("invalid census baseline fields")
++    if (baseline["schema_version"], baseline["toolchain"], baseline["lean_githash"]) != (1, TOOLCHAIN, GITHASH):
++        raise ValueError("invalid census baseline version/toolchain")
++    if baseline["quarantine_sha256"] != {name: digest(snapshot[name]) for name in QUARANTINE}:
++        raise ValueError("unverified Part A source quarantine changed; explicit review required")
++    expected_modules = [name[:-5].replace("/", ".") for name in MODULES]
++    if inventory["schema_version"] != 1 or inventory["modules"] != expected_modules:
++        raise ValueError("elaborated module coverage mismatch")
++    axioms = by_name([signature(d) for d in inventory["axioms"]])
++    if axioms != by_name(baseline["environment_axioms"]):
++        raise ValueError("elaborated axiom identity/type census changed")
++    declarations = by_name(inventory["declarations"])
++    if {d["module"] for d in declarations.values()} != set(expected_modules):
++        raise ValueError("missing project declarations in elaborated census")
++    admitted = by_name(baseline["admitted_declarations"])
++    partials = sorted(d["name"] for d in declarations.values() if d["partial"])
++    if partials != baseline["partial_declarations"] or any(d["unsafe"] for d in declarations.values()):
++        raise ValueError("unsafe/partial declaration census changed")
++    for name, d in declarations.items():
++        dependencies = set(d["axioms"])
++        extra = dependencies - ALLOWED - {"sorryAx"}
++        if extra:
++            raise ValueError(f"{name}: unapproved transitive axioms {sorted(extra)}")
++        if "sorryAx" in dependencies and (name not in admitted or signature(d, body=True) != admitted[name]):
++            raise ValueError(f"{name}: unapproved or changed admitted declaration")
++    for name, allowed in admitted.items():
++        if name not in declarations or signature(declarations[name]) != {k: v for k, v in allowed.items() if k != "value_sha256"}:
++            raise ValueError(f"admitted obligation removed or its statement changed: {name}")
++    return {"compiled_modules": len(MODULES), "exported_declarations": len(declarations),
++            "environment_axioms": len(axioms), "project_axioms": len(ALLOWED) - 3,
++            "admitted_declarations": sum("sorryAx" in d["axioms"] for d in declarations.values()),
++            "unverified_part_a_files": len(QUARANTINE)}
++
++
++def census(directory: Path = VERITY) -> dict:
++    before = source_snapshot(directory)
++    raw_mentions = check(directory)
++    inventory = fresh_inventory(before)
++    result = validate(before, inventory)
++    if source_snapshot(directory) != before:
++        raise ValueError("Verity sources or census baseline changed during execution")
++    return {**result, "raw_hole_mentions": raw_mentions}
++
++
++if __name__ == "__main__":
++    try:
++        print("PASS: Verity assurance census " + json.dumps(census(), sort_keys=True))
++        print("Part A is source-pinned, uncompiled and unverified (11 holes, one CREATE2 axiom).")
++    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
++        raise SystemExit(f"VERITY CENSUS FAILURE: {exc}")
+/- Semantic census of freshly compiled Verity modules. No source-token inference. -/
+import Lean
+open Lean
+
+def declarationOrigin (env : Environment) (name : Name) : String :=
+  match env.getModuleIdxFor? name with
+  | some i => env.header.moduleNames[i.toNat]!.toString
+  | none => "<current>"
+
+def declarationFields (env : Environment) (name : Name) (info : ConstantInfo) :=
+  [("name", toJson name.toString), ("module", toJson (declarationOrigin env name)),
+   ("type", toJson (repr info.type).pretty),
+   ("levels", toJson (info.levelParams.map Name.toString)),
+   ("unsafe", toJson info.isUnsafe), ("partial", toJson info.isPartial)]
+
+def main (args : List String) : IO Unit := do
+  initSearchPath (← findSysroot)
+  let env ← importModules (args.toArray.map fun s => { module := s.toName }) {} 0
+  let mut axioms : Array Json := #[]
+  let mut declarations : Array Json := #[]
+  for (name, info) in env.constants.toList do
+    let fields := declarationFields env name info
+    if info matches .axiomInfo _ then
+      axioms := axioms.push (Json.mkObj fields)
+    if args.contains (declarationOrigin env name) then
+      let (_, state) := ((CollectAxioms.collect name).run env).run {}
+      declarations := declarations.push (Json.mkObj (fields ++ [
+        ("value", toJson (if state.axioms.contains ``sorryAx then
+          info.value? (allowOpaque := true) |>.map fun e => (repr e).pretty else none)),
+        ("axioms", toJson (state.axioms.map Name.toString))]))
+  IO.println (Json.mkObj [("schema_version", toJson (1 : Nat)),
+    ("modules", toJson args), ("axioms", Json.arr axioms),
+    ("declarations", Json.arr declarations)]).compress
+diff --git a/.github/workflows/verity-fv.yml b/.github/workflows/verity-fv.yml
+new file mode 100644
+index 00000000..a3ed5265
+--- /dev/null
++++ b/.github/workflows/verity-fv.yml
+@@ -0,0 +1,48 @@
++name: Verity assurance census
++
++on:
++  push:
++    branches: [master]
++    paths:
++      - 'contracts/verity/**'
++      - 'contracts/verification/scripts/**'
++      - '.github/workflows/verity-fv.yml'
++      - 'scripts/gate_enforcement.json'
++  pull_request:
++    paths:
++      - 'contracts/verity/**'
++      - 'contracts/verification/scripts/**'
++      - '.github/workflows/verity-fv.yml'
++      - 'scripts/gate_enforcement.json'
++
++permissions:
++  contents: read
++
++concurrency:
++  group: verity-fv-${{ github.ref }}
++  cancel-in-progress: true
++
++jobs:
++  census:
++    runs-on: ubuntu-latest
++    timeout-minutes: 20
++    steps:
++      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
++        with:
++          persist-credentials: false
++      - name: Install pinned Lean toolchain
++        run: |
++          set -euo pipefail
++          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
++          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
++          curl --proto '=https' --tlsv1.2 -fsSL \
++            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
++            -o elan-init.sh
++          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
++          sh elan-init.sh -y --default-toolchain none
++          rm -f elan-init.sh
++          "$HOME/.elan/bin/elan" toolchain install leanprover/lean4:v4.22.0
++      - name: Fresh semantic census and source quarantine
++        run: make -C contracts/verity verify-verity-census
++      - name: Executable census regression controls
++        run: make -C contracts/verity test-census
+diff --git a/contracts/verity/Makefile b/contracts/verity/Makefile
+index 75336493..c5d8cda4 100644
+--- a/contracts/verity/Makefile
++++ b/contracts/verity/Makefile
+@@ -1,39 +1,19 @@
+-# Verity build helpers.
+-#
+-# Targets:
+-#   build         — `lake build`, builds everything
+-#   verify-stats  — emit VERIFICATION_STATUS.md (theorem/axiom/sorry counts)
+-#   emit-yul      — emit Yul for downstream `solc` consumption
+-#   clean         — `lake clean`
+-#   ci            — `build` + sorry ratchet (fails if any file's sorry count
+-#                   exceeds its baseline — census 12 on 2026-08-20, issue #673)
+-#
+-# Requires: lean (via elan), lake. See README.md §6.
+-
+-LEAN_FILES := $(shell find PQSigner -name '*.lean')
+-
+-.PHONY: build verify-stats emit-yul clean ci
++# Part B is pure Lean. Part A remains an unbuildable, source-pinned scaffold.
++.PHONY: build verify-stats verify-verity-census test-census emit-yul clean ci
+ 
+ build:
+ 	lake build
+ 
+-verify-stats:
+-	@echo "# VERIFICATION_STATUS — PQSigner Verity port" > VERIFICATION_STATUS.md
+-	@echo "" >> VERIFICATION_STATUS.md
+-	@echo "Generated: $$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> VERIFICATION_STATUS.md
+-	@echo "" >> VERIFICATION_STATUS.md
+-	@echo "| Metric | Value |" >> VERIFICATION_STATUS.md
+-	@echo "|--------|-------|" >> VERIFICATION_STATUS.md
+-	@echo "| Theorems | $$(grep -c '^theorem ' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "| Sorry sites | $$(grep -c 'sorry$$' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "| Axiom sites | $$(grep -c '^axiom ' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "| Opaque sites | $$(grep -c '^opaque ' $(LEAN_FILES)) |" >> VERIFICATION_STATUS.md
+-	@echo "" >> VERIFICATION_STATUS.md
+-	@echo "Per-file theorem counts:" >> VERIFICATION_STATUS.md
+-	@for f in $(LEAN_FILES); do \
+-		echo "  - $$f: $$(grep -c '^theorem ' $$f)" >> VERIFICATION_STATUS.md; \
+-	done
+-	@cat VERIFICATION_STATUS.md
++# Authoritative, fresh eight-module build + semantic census + Part A quarantine.
++# Does not read Lake caches or download/build the unused Verity dependency.
++verify-verity-census:
++	@/usr/bin/python3 -E -S ../verification/scripts/check_verity_inventory.py
++
++verify-stats: verify-verity-census
++
++test-census:
++	@/usr/bin/python3 -E -S ../verifica
+tion/scripts/test_axiom_inventory.py
++	@/usr/bin/python3 -E -S ../verification/scripts/test_verity_inventory.py
+ 
+ emit-yul:
+ 	@echo "TODO: invoke Verity's Yul emitter. Requires P1-P3 spike done."
+@@ -43,20 +23,4 @@ clean:
+ 	lake clean
+ 	rm -f VERIFICATION_STATUS.md
+ 
+-# ── Sorry ratchet (issue #673) ─────────────────────────────────────────
+-# Baseline census 2026-08-20: 12 live sorries — PQSigner/Theorems.lean ×11,
+-# PQSigner/Verifier/Merkle.lean ×1 (yul_swap_selector_in_known_set;
+-# documented, non-essential). Do NOT add to these; discharging one only
+-# ever lowers a count — that is always allowed, bump the baseline down in
+-# the same commit.
+-#
+-# Why not `grep -c 'sorry$'`: over multiple files that yields one
+-# `path:count` line per file, so `[ "$SORRY_COUNT" -gt 0 ]` errored into
+-# PASS (12 live sorries once passed this gate); `sorry$` also misses
+-# trailing-comment sites (`:= sorry  -- note`, e.g. Theorems.lean:297),
+-# and a bare word-grep would count comment prose (Theorems.lean:9,16).
+-# Every raw sorry/admit mention counts, including comments and strings. Source
+-# prose uses other wording to avoid false positives. There are no comment
+-# allowances or lexical guesses. Per-file budgets include unbuilt Part A.
+-ci: build
+-	@/usr/bin/python3 -E -S ../verification/scripts/check_verity_holes.py
++ci: verify-verity-census test-census
+diff --git a/contracts/verity/README.md b/contracts/verity/README.md
+index f3b4da20..f0c53d17 100644
+--- a/contracts/verity/README.md
++++ b/contracts/verity/README.md
+@@ -8,7 +8,7 @@ every chain) and #7 (monotonic per-chain caps) — from "enforced by
+ Solidity `require` + Foundry unit tests" to "machine-checked Lean
+ theorem".
+ 
+-**Status (2026-05-11, second pass)**: Part B (SPHINCS+C10 verifier
++**Status (2026-09-15)**: Part B (SPHINCS+C10 verifier
+ port) landed as buildable pure-Lean. Part A (smart-wallet contracts)
+ is documented intent — it imports modules (`Verity.Prelude`,
+ `Verity.Hash.Sha256`, `Verity.External.Call`, etc.) that **Verity
+@@ -20,6 +20,14 @@ point for getting Part A to compile.
+ | **A** | `PQMultiOwnable` storage + writers, `PQSmartWalletFactory` salt + digest, `PQSmartWallet` dispatch. Files at `PQSigner/{Common,PQMultiOwnable,PQSmartWalletFactory,PQSmartWallet,Theorems}.lean`. | **Does not build** — imports fictional Verity modules. Blocked on Verity Phase 0 (see `docs/archive/verity-v0.1.0-primitive-map.md`). Kept in-tree as the spec for what Verity v0.2.x+ must support. Lakefile root entry removed from default target. |
+ | **B** | SPHINCS+C10 verifier (pure-Lean reference impl of `sphincs-c10/`). Files at `PQSigner/Verifier/{Params,Address,Hash,Wots,Merkle,Fors,Hypertree,Top}.lean`. ~40 closed theorems on closeable invariants + 2 documented axioms + 1 documented sorry. | **Builds clean** under Lean 4.22.0. `make build` succeeds. |
+ 
++The blocking `verity-fv.yml` workflow runs the fresh census and its regression
++controls. `assurance_inventory.json` records the exact environment axiom set and
++the sole admitted Part B declaration, plus hashes of all five unverified Part A
++files. New exported admissions (including macro-generated ones), axiom changes,
++and unlisted source files fail the gate. `make verify-stats` reports this same
++census. A passing gate does not discharge the existing 12 source holes or prove
++wallet/implementation equivalence; see [TRUST_ASSUMPTIONS.md](TRUST_ASSUMPTIONS.md).
++
+ See [docs/archive/handoff-verity-c10-verifier.md](../../docs/archive/handoff-verity-c10-verifier.md)
+ for the original multi-quarter plan and
+ [docs/archive/verity-v0.1.0-primitive-map.md](../../docs/archive/verity-v0.1.0-primitive-map.md)
+@@ -233,11 +241,14 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf
+ source ~/.elan/env
+ lake update
+ 
+-# Build + verify all theorems:
++# Build the eight Part B modules only (Part A is excluded):
+ lake build                        # ~20 min first build, ~10s incremental
+ 
+-# Stats (matches Verity's 
+own VERIFICATION_STATUS.md format):
+-make verify-stats
++# Fresh Part B semantic census + exact unverified Part A inventory:
++make verify-verity-census
++
++# Census plus executable regression controls (also enforced in CI):
++make ci
+ 
+ # Compile + emit Yul (for differential testing):
+ make emit-yul
+diff --git a/contracts/verity/TRUST_ASSUMPTIONS.md b/contracts/verity/TRUST_ASSUMPTIONS.md
+index d9127ad3..b35adac6 100644
+--- a/contracts/verity/TRUST_ASSUMPTIONS.md
++++ b/contracts/verity/TRUST_ASSUMPTIONS.md
+@@ -4,11 +4,31 @@ What the Verity port of the PQSigner smart-wallet contracts **does and
+ does not** verify. Matches Verity's own convention
+ ([`lfglabs-dev/verity/TRUST_ASSUMPTIONS.md`](https://github.com/lfglabs-dev/verity/blob/main/TRUST_ASSUMPTIONS.md)).
+ 
+-A `lake build` success means **the theorems in `Theorems.lean` hold
+-under the assumptions enumerated below**. None of those assumptions
+-are checked by Lean; each is an axiom or an external dependency.
+-
+-## What IS verified
++A default `lake build` compiles only the eight pure-Lean **Part B** modules.
++It does **not** build `Theorems.lean` or establish any Part A wallet obligation.
++Part A imports APIs absent from the pinned Verity release and remains unverified.
++
++`make verify-verity-census` freshly compiles all eight Part B modules with pinned
++Lean 4.22.0 and inventories their exported declarations (including private and
++generated declarations). It checks every declaration's transitive axiom closure,
++not just theorem names or source keywords. The checked baseline contains 15
++environment axioms, of which two are project axioms, and one admitted Part B
++helper: `PQSigner.Verifier.Merkle.yul_swap_selector_in_known_set`. Its name,
++statement and admitted body are pinned; new dependents cannot inherit that
++exception. A proof discharging the same statement is allowed.
++
++The five unbuildable Part A sources are instead pinned byte-for-byte. Their
++11 source holes and CREATE2 axiom are **uncompiled, unverified obligations**.
++Changing that quarantine or any census allowance requires an explicit reviewed
++baseline change. The raw per-file hole count remains an additional backstop.
++
++The installed pinned Lean compiler, standard library, Python gate and reviewed
++baseline are trusted. This is an exported-environment census, not an independent
++kernel implementation, audit of transient anonymous examples, or proof of
++Rust/Yul/Solidity equivalence. Lake caches and Part A cannot supply proof evidence
++to this gate. See `assurance_inventory.json` for exact identities and hashes.
++
++## Part A intended obligations — not verified
+ 
+ | Theorem | Statement | Implies CLAUDE.md invariant |
+ |---------|-----------|------------------------------|
+@@ -26,13 +46,13 @@ are checked by Lean; each is an axiom or an external dependency.
+ 
+ ## What is NOT verified (trusted axioms)
+ 
+-> **Lean axiom census (2026-08-20, issue #673):** the tree declares exactly
++> **Source axiom census (issue #673):** the tree declares exactly
+ > **3 `axiom`s** — `sha256_size` + `sha256_deterministic`
+ > (`PQSigner/Verifier/Hash.lean:40,47`; item 2 below) and
+ > **`predict_matches_create`** (`PQSigner/PQSmartWalletFactory.lean:65`;
+ > item 4 below — a content-bearing CREATE2 address-prediction claim, not
+-> merely a call-shape bridge). Older notes saying "2 axioms" predate this
+-> census (they counted only the Hash.lean pair).
++> merely a call-shape bridge). Only the Hash pair is elaborated by the Part B
++> gate; the factory axiom is covered by the unverified Part A source quarantine.
+ 
+ 1. **`SPHINCsC10Asm.sol` correctness.** Modelled as opaque oracle
+    `c10Verify : ByteVec → ByteVec → ByteVec → ByteVec → Bool`. We
+diff --git a/scripts/gate_enforcement.json b/scripts/gate_enforcement.json
+index 90b1a678..4e485487 100644
+--- a/scripts/gate_enforcement.json
++++ b/scripts/gate_enforcement.json
+@@ -501,6 +501,19 @@
+       "runs_in": "nightly.yml",
+       "enforcement": "local_documented",
+       "why": "The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB/6m03s, no
+_hidden_value 13.05 GiB/7m55s, cow_presign_precedence 11.50 GiB/3m56s; all VERIFY SUCCESSFULLY, measured locally 2026-07-31) exceed what a hosted runner can absorb. Instrumented CI evidence 2026-07-31: the runner has 15,989 MB RAM with 14,497 MB available and 145 GB disk with 86 GB free, so DISK IS NOT THE CAUSE - it is memory. The kill lands between 'Runtime Postprocess Equation' and 'Solving with ...', i.e. inside CBMC's formula construction and BEFORE any SAT solver is invoked; a kissat experiment was therefore reverted, since the solver never runs. (That experiment's local peak-RSS numbers were also unsound: an external solver runs out-of-process and /usr/bin/time -v reports a per-process maximum, not an aggregate.) Excluded because an OOM kills the runner and suppresses every later mandatory gate in the same job - same reasoning as verify-extracted-heavy (53c19f21); continue-on-error cannot save a dead runner. The 100-byte bound is deliberately NOT reduced: shrinking a proof's bound to earn a green check is coverage loss disguised as a pass. Larger hosted runners are unavailable (Team/Enterprise-only; this org is free-plan; hosted-runners API 404s). Run via `make kani-heavy`; the other 170 harnesses stay blocking in nightly."
++    },
++    {
++      "id": "verify-verity-census",
++      "make": "make -C contracts/verity verify-verity-census",
++      "polices_paths": [
++        "contracts/verity/**",
++        "contracts/verification/scripts/**",
++        ".github/workflows/verity-fv.yml",
++        "scripts/gate_enforcement.json"
++      ],
++      "runs_in": "verity-fv.yml",
++      "enforcement": "per_pr_blocking",
++      "note": "Fresh Part B exported-environment axiom/admission census and exact unverified Part A source quarantine (#673)."
+     }
+   ],
+   "_completeness_waived": {
+{
+  "schema_version": 1,
+  "toolchain": "leanprover/lean4:v4.22.0",
+  "lean_githash": "ba2cbbf09d4978f416e0ebd1fceeebc2c4138c05",
+  "quarantine_sha256": {
+    "PQSigner/Common.lean": "e62d9a7c1048da3e6462d964e7cde03b1e7cd0a709f8a941cb6380842702691b",
+    "PQSigner/PQMultiOwnable.lean": "2f6fa7ff6dc7cd5f98a493018ebd60224f8ba3b48b03f94b26f6310056d9278f",
+    "PQSigner/PQSmartWalletFactory.lean": "2c0bb359fd476477112b084ef2df6ca00c6ef5f0c13b837047e30fbfcd8b2783",
+    "PQSigner/PQSmartWallet.lean": "de1ed57c21dcdd9f731ff118c6ea18efe6044c5087ffacbd38c3b6347cafb6a2",
+    "PQSigner/Theorems.lean": "0ce18de2961f3489849ab0d0113c7b2c8b70a4b6046f3a044795c752330a4f6e"
+  },
+  "environment_axioms": [
+    {
+      "name": "Classical.choice",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "b397a38f2e3297ccf1ef8ab5ecffc761be2a059068208d290ea54b8f9de6cac9"
+    },
+    {
+      "name": "Lean.ofReduceBool",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "8fd9ef600b8f58fa2c8df3101069e81af5b59b93ac4c6d8d80a22600d0adc36d"
+    },
+    {
+      "name": "Lean.ofReduceNat",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "d29a0f4dcb3bbf104e289e510282be1db58ac21e1bc1ab27e300555d0cfcc2a3"
+    },
+    {
+      "name": "Lean.trustCompiler",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "f5d8a8840f30c2d0e5b651a20789cb4c8d616d4ba312057d224114a13a157b90"
+    },
+    {
+      "name": "PQSigner.Verifier.Hash.sha256_deterministic",
+      "module": "PQSigner.Verifier.Hash",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "40bbe5f4d34c505b78caa02c2d5fb1122ce6c32d35f30a63d44f4f65109cc83e"
+    },
+    {
+      "name": "PQSigner.Verifier.Hash.sha256_size",
+      "module": "PQSigner.Verifier.Hash",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "d561101a6f1f70f6d15ffc7a5894fc77c8b3dcb56c581f26611c9053cef58d31"
+    },
+    {
+      "name": "Quot.lcInv",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "8d50e2d6b794e0ad75932c0e315a6c85c579986534a1ca847f227758496c00c3"
+    },
+    {
+      "name": "Quot.sound",
+      "module": "Init.Core",
+      "levels": [
+        "u"
+      ],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "4e6f4679e517ad3442b0203e5f20654a37e1a8485a0afeeb7a13842b4e741181"
+    },
+    {
+      "name": "lcAny",
+      "module": "Init.Prelude",
+      "levels": [],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "name": "lcCast",
+      "module": "Init.Prelude",
+      "levels": [
+        "u",
+        "v"
+      ],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "2cc1a2f7e096f80576058e7994e73ba09479a02e58e5253f44a03ad1ae715d19"
+    },
+    {
+      "name": "lcErased",
+      "module": "Init.Prelude",
+      "levels": [],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "name": "lcProof",
+      "module": "Init.Prelude",
+      "levels": [],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "86aee7e35e1fd308b56be1d77d552090a4204b25ca11239583a45683a6644b5d"
+    },
+    {
+      "name": "lcUnreachable",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "0c692a112a79532741c643618c94942e0463234fa6dae869bd342f6c597b6bfd"
+    },
+    {
+      "name": "propext",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "6dd2fb585e097c2daca28461895349b3b7f30de6620363a0d18f1a71943a9a83"
+    },
+    {
+      "name": "sorryAx",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "5c15e0102ef885b4a3b583f4c396ee59d8b470ab16311833b4b5f24ace13a826"
+    }
+  ],
+  "admitted_declarations": [
+    {
+      "name": "PQSigner.Verifier.Merkle.yul_swap_selector_in_known_set",
+      "module": "PQSigner.Verifier.Merkle",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "0144cf0bbb7021cdfb1cd545221b43d433c4309af4818e8fd7d44246a5febf64",
+      "value_sha256": "5838bef97a6e6da4dba7e73d5ba97b2e15aa59d15ce23330d81c4cefe8fad62e"
+    }
+  ],
+  "partial_declarations": [
+    "PQSigner.Verifier.Fors.reconstructForsRoot.ascend._unsafe_rec",
+    "PQSigner.Verifier.Hash.chainHash.loop._unsafe_rec",
+    "PQSigner.Verifier.Hypertree.SigReader.takeN_values.loop._unsafe_rec",
+    "PQSigner.Verifier.Hypertree.runLayers.loop._unsafe_rec",
+    "PQSigner.Verifier.Merkle.verifyAuthPathLoop._unsafe_rec"
+  ]
+}
+#!/usr/bin/env python3
+"""Executable negative controls against the actual pinned Lean compiler."""
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import check_verity_inventory as gate
+
+
+class CensusTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = gate.source_snapshot(gate.VERITY)
+        cls.good = gate.fresh_inventory(cls.source)
+
+    def compile_change(self, text, *, name="Top", prepend=False):
+        source = dict(self.source)
+        path = f"PQSigner/Verifier/{name}.lean"
+        source[path] = ((text.encode() + source[path]) if prepend else (source[path] + text.encode()))
+        # Compilation must succeed; an elaboration error is not rejection evidence.
+        return source, gate.fresh_inventory(source)
+
+    def test_baseline_and_cache_independence(self):
+        self.assertEqual(gate.validate(self.source, self.good)["admitted_declarations"], 1)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, data in self.source.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            cached = root / ".lake/build/lib/lean/PQSigner/Verifier/Top.olean"
+            cached.parent.mkdir(parents=True)
+            cached.write_bytes(b"deliberately stale invalid compiled artifact")
+            with patch.dict("os.environ", {"LEAN_PATH": str(cached.parent), "ELAN_TOOLCHAIN": "invalid", "LEAN_SYSROOT": "/nonexistent"}):
+                self.assertEqual(gate.census(root)["compiled_modules"], 8)
+
+    def test_closed_proof_is_allowed(self):
+        source, inventory = self.compile_change("\ntheorem census_positive : 2 + 2 = 4 := by decide\n")
+        gate.validate(source, inventory)
+
+    def test_macro_named_private_and_suppressed_holes(self):
+        for declaration in ("theorem census_new", "private theorem census_private",
+                            "set_option warn.sorry false in\ntheorem census_suppressed"):
+            with self.subTest(declaration=declaration):
+                source, inventory = self.compile_change(f"\n{declaration} : False := by stop trivial\n")
+                with self.assertRaisesRegex(ValueError, "unapproved or changed admitted"):
+                    gate.validate(source, inventory)
+
+    def test_transitive_hole_dependency(self):
+        source, inventory = self.compile_change("\n def census_alias := @PQSigner.Verifier.Merkle.yul_swap_selector_in_known_set\n")
+        with self.assertRaisesRegex(ValueError, "unapproved or changed admitted"):
+            gate.validate(source, inventory)
+
+    def test_axiom_identity_and_type(self):
+        source, inventory = self.compile_change("\naxiom census_new_axiom : True\n")
+        with self.assertRaisesRegex(ValueError, "axiom identity/type"):
+            gate.validate(source, inventory)
+        source = dict(self.source)
+        p = "PQSigner/Verifier/Hash.lean"
+        self.assertIn(b"axiom sha256_deterministic", source[p])
+        # Add an optional argument: callers still elaborate, but the axiom type changes.
+        source[p] = source[p].replace(b"axiom sha256_deterministic (a b : ByteVec) (h : a = b)",
+            b"axiom sha256_deterministic (a b : ByteVec) (h : a = b) (extra : True := True.intro)")
+        with self.assertRaisesRegex(ValueError, "axiom identity/type"):
+            gate.validate(source, gate.fresh_inventory(source))
+
+    def test_generated_hole(self):
+        # This elaborator emits a declaration without any source proof-hole keyword.
+        code = '''import Lean
+open Lean Elab Command in
+elab "census_emit" : command => do
+  liftCoreM <| addAndCompile <| Declaration.thmDecl {
+    name := `census_generated, levelParams := [], type := mkConst ``False,
+    value := mkApp2 (mkConst (Name.mkSimple ("sor" ++ "ryAx")) [Level.zero])
+      (mkConst ``False) (mkConst ``Bool.true) }
+census_emit
+'''
+        source = dict(self.source)
+        path = "PQSigner/Verifier/Top.lean"
+        source[path] = b"import Lean\n" + source[path] + code.removeprefix("import Lean\n").encode()
+        inventory = gate.fresh_inventory(source)
+        generated = next(d for d in inventory["declarations"] if d["name"] == "census_generated")
+        self.assertIn("sorryAx", generated["axioms"])
+        with self.assertRaisesRegex(ValueError, "axiom identity/type|unapproved or changed admitted"):
+            gate.validate(source, inventory)
+
+    def test_changed_or_removed_admitted_obligation(self):
+        p = "PQSigner/Verifier/Merkle.lean"
+        for mutation in ("statement", "body", "delete"):
+            with self.subTest(mutation=mutation):
+                source = dict(self.source)
+                if mutation == "statement":
+                    source[p] = source[p].replace(
+                        b"(idx &&& 1) <<< 5 = 0 \xe2\x88\xa8 (idx &&& 1) <<< 5 = 0x20 := by",
+                        b"False := by")
+                elif mutation == "body":
+                    source[p] = source[p].replace(b"  sorry\n", b"  have injected : False := by stop trivial\n  exact injected.elim\n")
+                else:
+                    start = source[p].index(b"theorem yul_swap_selector_in_known_set")
+                    start = source[p].rfind(b"/--", 0, start)
+                    end = source[p].index(b"/-! ### Determinism", start)
+                    source[p] = source[p][:start] + source[p][end:]
+                self.assertNotEqual(source[p], self.source[p])
+                with self.assertRaisesRegex(ValueError, "admitted"):
+                    gate.validate(source, gate.fresh_inventory(source))
+
+    def test_part_a_quarantine_and_duplicate_manifest(self):
+        for name in gate.QUARANTINE:
+            source = dict(self.source)
+            source[name] += b"\n-- changed source-only obligation\n"
+            with self.assertRaisesRegex(ValueError, "quarantine"):
+                gate.validate(source, self.good)
+        source = dict(self.source)
+        source["assurance_inventory.json"] = b'{"schema_version":1,"schema_version":1}'
+        with self.assertRaisesRegex(ValueError, "duplicate JSON"):
+            gate.validate(source, self.good)
+
+    def test_source_coverage_links_and_drift(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, data in self.source.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            extra = root / "Orphan.lean"
+            extra.write_text("axiom hidden : False\n")
+            with self.assertRaisesRegex(ValueError, "coverage mismatch"):
+                gate.source_snapshot(root)
+            extra.unlink()
+            extra.symlink_to(root / gate.MODULES[0])
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                gate.source_snapshot(root)
+            extra.unlink()
+            def mutate(snapshot):
+                (root / gate.MODULES[0]).write_bytes(snapshot[gate.MODULES[0]] + b"\n")
+                return self.good
+            with patch.object(gate, "fresh_inventory", side_effect=mutate):
+                with self.assertRaisesRegex(ValueError, "changed during execution"):
+                    gate.census(root)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
+#!/usr/bin/env python3
+"""Per-file proof-hole ratchet for the Verity research scaffold (#673)."""
+from pathlib import Path
+import os
+import sys
+
+from lean_source import keyword_count
+
+VERITY = Path(__file__).resolve().parents[2] / "verity"
+BASELINE = {"PQSigner/Theorems.lean": 11, "PQSigner/Verifier/Merkle.lean": 1}
+
+
+def check(directory: Path) -> int:
+    source = directory / "PQSigner"
+    if source.is_symlink():
+        raise ValueError("symlinked Verity source root")
+    files = []
+    for parent, dirs, names in os.walk(source):
+        for name in dirs + names:
+            path = Path(parent) / name
+            if path.is_symlink():
+                raise ValueError(f"symlink in Verity source tree: {path}")
+        files.extend(Path(parent) / name for name in names if name.endswith(".lean"))
+    if not files:
+        raise ValueError("empty Verity source tree")
+    total = 0
+    for path in sorted(files):
+        data = path.read_bytes()
+        count = keyword_count(data.decode("utf-8"), "(?:sorry|admit|sorryAx|proof_wanted)")
+        name = path.relative_to(directory).as_posix()
+        baseline = BASELINE.get(name, 0)
+        if count > baseline:
+            raise ValueError(f"{name}: {count} raw proof-hole mentions exceed baseline {baseline}")
+        total += count
+    return total
+
+
+if __name__ == "__main__":
+    try:
+        total = check(VERITY)
+        print(f"PASS: Verity sorry/admit ratchet ({total} accounted holes, baseline 12)")
+    except (OSError, ValueError) as exc:
+        print(f"VERITY HOLE FAILURE: {exc}", file=sys.stderr)
+        sys.exit(1)
+fatal: path 'contracts/verification/findings/verity-census-2026-09-15/ci.log' does not exist in '789b8e1ff35110590a0cc5c9177de9869e3464f6'
+===
+docs/security/adversarial-review/findings/verity-census-2026-09-15.md
+docs/security/adversarial-review/findings/verity-census-2026-09-15/ci.log
+docs/security/adversarial-review/findings/verity-census-2026-09-15/gate-enforcement-self-test.log
+docs/security/adversarial-review/findings/verity-census-2026-09-15/gate-enforcement.log
+make: Entering directory '/tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verity'
+PASS: Verity assurance census {"admitted_declarations": 1, "compiled_modules": 8, "environment_axioms": 15, "exported_declarations": 213, "project_axioms": 2, "raw_hole_mentions": 12, "unverified_part_a_files": 5}
+Part A is source-pinned, uncompiled and unverified (11 holes, one CREATE2 axiom).
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.413s
+
+OK
+test_axiom_identity_and_type (__main__.CensusTests.test_axiom_identity_and_type) ... ok
+test_baseline_and_cache_independence (__main__.CensusTests.test_baseline_and_cache_independence) ... ok
+test_changed_or_removed_admitted_obligation (__main__.CensusTests.test_changed_or_removed_admitted_obligation) ... ok
+test_closed_proof_is_allowed (__main__.CensusTests.test_closed_proof_is_allowed) ... ok
+test_generated_hole (__main__.CensusTests.test_generated_hole) ... ok
+test_macro_named_private_and_suppressed_holes (__main__.CensusTests.test_macro_named_private_and_suppressed_holes) ... ok
+test_part_a_quarantine_and_duplicate_manifest (__main__.CensusTests.test_part_a_quarantine_and_duplicate_manifest) ... ok
+test_source_coverage_links_and_drift (__main__.CensusTests.test_source_coverage_links_and_drift) ... ok
+test_transitive_hole_dependency (__main__.CensusTests.test_transitive_hole_dependency) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 170.900s
+
+OK
+make: Leaving directory '/tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verity'
+===
+789b8e1f:scripts/gate_enforcement.json:507:      "make": "make -C contracts/verity verify-verity-census",
+# Verity assurance census remediation — 2026-09-15
+
+## Verity follow-up selected — 2026-09-15 (#673)
+
+Active surface: Verity assurance census. Phase B/C is limited to three slices:
+(1) compile all eight Part B modules in fresh isolated output and inspect every
+exported declaration's transitive axiom closure, with exact axiom identities and
+an identity/type/body pin for the one existing admitted declaration;
+(2) bind all five unbuildable Part A source files by exact path and bytes,
+including the factory assumption and eleven existing source holes, reporting
+this quarantine as unverified rather than as a semantic proof result;
+(3) wire the complete gate into blocking CI, preserve the raw census as a
+conservative backstop, and correct the contradictory Verity build/trust claims.
+No proof body, parameter, firmware or contract behavior is in scope.
+
+Acceptance requires actual gate controls for named/private/metaprogrammed and
+transitively consumed admissions (including `stop`), added/changed axioms,
+relocated or enlarged baseline holes, unbuilt/orphan files, stale outputs,
+source/environment/manifest drift, and positive closed proofs. The fresh build
+uses only the pinned Lean distribution plus copied Part B source; project Lake
+caches and the unavailable Part A dependency cannot grant evidence. Part A
+remains frozen until its separate port is explicitly selected.
+
+The next boundary is one combined candidate freeze after the focused controls,
+Verity ci and relevant FV/CI wiring checks pass, followed by the mandatory
+bounded SOL/Opus/Kimi wave. No per-slice review or broader assurance campaign is
+added. The existing combined owner-triggered playbook remains deferred in #509.
+
+## Implementation boundary
+
+`make -C contracts/verity verify-verity-census` now uses a temporary source copy,
+the installed Lean 4.22.0 compiler at revision
+`ba2cbbf09d4978f416e0ebd1fceeebc2c4138c05`, and fresh output for every Part B
+module. It inventories 213 exported declarations, including private/generated
+ones, and all 15 environment axioms. Every project declaration's full transitive
+closure is checked. The two Hash axioms have exact identity/type pins. The sole
+admitted Part B helper has identity/type/body pins and cannot lend its allowance
+to a new dependent. Five compiler-generated partial helper identities are also
+fixed. The 12 raw source mentions remain a conservative backstop.
+
+Part A's five source hashes cover its eleven holes and the source-only CREATE2
+axiom without claiming elaboration. Unlisted Lean sources, links, changed inputs,
+changed axiom signatures and changed admitted obligations fail the gate. The
+installed compiler/stdlib, gate and reviewed baseline remain trusted. This is
+not an independent kernel check or an audit of transient anonymous examples.
+No existing Lean proof source changes in this remediation.
+
+The dedicated `verity-fv.yml` workflow invokes both the census and executable
+controls on changes to their full source/tooling surface. The new target is
+enrolled in the gate-enforcement manifest. `verify-stats` delegates to this same
+census; the previous multiline grep statistics are removed. Trust documentation
+now explicitly says that the Part A obligations are not verified.
+
+## Phase C evidence / Phase D closure checklist
+
+Green on the combined candidate: `make -C contracts/verity ci` (fresh census,
+six existing raw-inventory regression groups, nine semantic-census groups with
+compiler-backed negative controls); `python3 scripts/check_gate_enforcement.py`
+(all 33 enrolled gates); its `--self-test`; and
+`actionlint .github/workflows/verity-fv.yml`. The semantic groups took 170.900 s.
+100644 blob 50657bbb96583a97533190050962ec069713c1bb	contracts/verification/scripts/axiom_inventory_extracted.json
+100644 blob 47b261c0a012f1965d56f3e6a3832a556333bf98	contracts/verification/scripts/axiom_inventory_lean.json
+100644 blob 5cc055fe5e9d2c49e6c8994435b42f1b90a9cb5f	contracts/verification/scripts/check_axiom_closure.py
+100644 blob b39152ce1ccc71a71d503f63e434c81833508c41	contracts/verification/scripts/check_axiom_inventory.py
+100644 blob ce24864ad1218e62e76e84eb5592cf06db130d7b	contracts/verification/scripts/check_c10_source_pin.py
+100644 blob 77ed54396cc2efd8fb8df8ef2cc3f29459865746	contracts/verification/scripts/check_c10_transcription.py
+100644 blob aefb00e7604e01a061dea8f1763cff9c0029565a	contracts/verification/scripts/check_c10_transcription_ast.py
+100755 blob aea231bbf74e128389d9c9306eb75553fd40e25e	contracts/verification/scripts/check_easycrypt.sh
+100644 blob c5f8a88a5b1431dc5f5df66b65f69b37b7101eee	contracts/verification/scripts/check_extraction_freshness.py
+100644 blob c814cfb48c8983c95500c4f2bdc99e19aa98a612	contracts/verification/scripts/check_extraction_regen_output.py
+100755 blob 76499880493116c801f6e26aadf5fb1ca6bdd010	contracts/verification/scripts/check_forge_results.py
+100644 blob df0d6c32c609565588833e96db1e7f76a76f181b	contracts/verification/scripts/check_hw_assumptions.py
+100644 blob 30d05bffd4627d8cc913d92e8878a1c4186ac955	contracts/verification/scripts/check_lean_proto_domain.py
+100644 blob 9ae6e0bc01257e66081e948feb55c10179db4fb1	contracts/verification/scripts/check_ledger_consistency.py
+100755 blob fa73c8d34fc4693312280162c31572914206e949	contracts/verification/scripts/check_linker_memory_map.py
+100644 blob 7829b54e6f3a0b611b886ce352f8772e39e43dd8	contracts/verification/scripts/check_make_argv.py
+100644 blob ce149656a868568a3a00d4c174d7cbf263cf8e35	contracts/verification/scripts/check_proof_mutations.py
+100755 blob 408ef27876c09c314e2b37fa600b97619e22b1c1	contracts/verification/scripts/check_rollback_freeze_pin.py
+100644 blob e7218c52de80745c514244253c5734eb9b3aa313	contracts/verification/scripts/check_sphincs_digest_field_order.py
+100755 blob d67e9d04e5853f75c43d5548a82535d81b396a1a	contracts/verification/scripts/check_storage_mutators.sh
+100644 blob 9c2194c2ae261468106d5d1a5836afcfe858c7c7	contracts/verification/scripts/check_vendored_spec.py
+100644 blob feaf4784274b43cf7e254e89cf0b7e2b6721a319	contracts/verification/scripts/check_verity_holes.py
+100644 blob d9faee94534ab830c55cd42ce9a79efffa2dcdbd	contracts/verification/scripts/check_verity_inventory.py
+100644 blob a4283532ea68e11f9a9facd0a98d7786c4aaa934	contracts/verification/scripts/dedup_extraction.py
+100644 blob 4c63d9e71e43d9f541451a61b145b78f3ea20bcc	contracts/verification/scripts/dump_axiom_inventory.lean
+100644 blob 5cb381f3a57ce0941acc773b754b0a7bb14d2c6d	contracts/verification/scripts/dump_verity_inventory.lean
+100644 blob c3f501bf2ba940c588199e8fcbfab7d460c7e14a	contracts/verification/scripts/ec_axioms.py
+100755 blob a6f9bc0881ccd6f271a64ae8ab25c0a9e90fd385	contracts/verification/scripts/ec_sweep.py
+100755 blob f5cd3b885dd720191799378a68b70153c94c8927	contracts/verification/scripts/format_axiom_status.py
+100755 blob bd2fae963a067626a1d239ea76e5c4624b37b74f	contracts/verification/scripts/forsc_grinding_margin.py
+100644 blob 22125be27b315db78f35bf942ece342655cc594f	contracts/verification/scripts/fv-external-tools.env
+100644 blob 54093bb1c770e45ec72e9d2a733dfc5f0cb4a1f9	contracts/verification/scripts/gap1_differential.py
+100644 blob 47963f1596b052c4ef74d1831a4c4bfd769d7883	contracts/verification/scripts/gen_cavp_vectors.py
+100644 blob c23306eb058329576af1632ede4041e234748c75	contracts/verification/scripts/gen_mutant_corpus.py
+100644 blob 91311d2cc29f9eeb20290d90d61f2b3b4984b198	contracts/verification/scripts/independent_c10_signer.py
+100644 blob abee486f1e0761e752da95c12fc8227f67707532	contracts/verification/scripts/known_trivial_theorems.txt
+100644 blob ddd67e9ca1ac0cfa706605adb9b353aa0d46b16d	contracts/verification/scripts/known_true_axioms.txt
+100644 blob e06f86c05be23c85836584941b87e9aa44ab0f1e	contracts/verification/scripts/lean_source.py
+100755 blob 9493eda29494e843dd927507c058e0295d931484	contracts/verification/scripts/lint_axioms.sh
+100755 blob cb4a2f70765502e49c75ea6118d576bba2d11d83	contracts/verification/scripts/lint_extracted_axiom_census.sh
+100755 blob f57900f57e5032bf46e6fe64c4d8a40e3817e30b	contracts/verification/scripts/lint_fv_invariants.sh
+100755 blob 347d1d1cf6582419ca28ba88cc9f9ecbdc38b02a	contracts/verification/scripts/lint_placeholders.py
+100644 blob 3def01676a1c3fc3c76d67d665505598669ee6c4	contracts/verification/scripts/run_authoritative_make.sh
+100755 blob a13e63814326ebb21f43b8022d5d1c3806025e72	contracts/verification/scripts/run_lean4checker.sh
+100644 blob 8681b5ab4a29aa354abd3eb527cf58c0c2f61e4a	contracts/verification/scripts/test_axiom_inventory.py
+100644 blob 0dcf281dee327e6688d9c89ead5d9881c1d2417c	contracts/verification/scripts/test_c10_transcription_ast_negative.py
+100644 blob 86354b5ea7d16b239784a6610db1e439b66fc8ee	contracts/verification/scripts/test_verity_inventory.py
+100755 blob 67a4e7f257e37a819b7fede6412f7d31935d7019	contracts/verification/scripts/verify-three-claims.sh
+import Lake
+open Lake DSL
+
+-- Verity formal-verification port of the PQSigner smart-wallet contracts.
+--
+-- Pinned to Verity v0.1.0 (Lean 4.22.0). The dependency line points at
+-- the upstream tag rather than a fork — we do not modify Verity itself.
+require verity from git
+  "https://github.com/lfglabs-dev/verity.git" @ "v0.1.0"
+
+package «pqsigner-verity» where
+  leanOptions := #[
+    ⟨`autoImplicit, false⟩,
+    ⟨`relaxedAutoImplicit, false⟩
+  ]
+
+-- Part B — Pure-Lean reference implementation of the SPHINCS+C10
+-- verifier. This is the buildable, machine-checked deliverable from
+-- 2026-05-11. No dependency on the Verity EDSL — uses only Lean stdlib
+-- types (Nat, Array UInt8, UInt32, UInt64). The Verity dependency
+-- above is kept for future use when Verity v0.2.x lands the Phase-0
+-- primitives (precompile.sha256, calldata.read, bitfield ops,
+-- memory.scratch) that the on-chain Yul verifier needs. See
+-- `docs/archive/handoff-verity-c10-verifier.md` §4 Phase 0 and
+-- `docs/archive/verity-v0.1.0-primitive-map.md`.
+@[default_target]
+lean_lib «Verifier» where
+  roots := #[
+    `PQSigner.Verifier.Params,
+    `PQSigner.Verifier.Address,
+    `PQSigner.Verifier.Hash,
+    `PQSigner.Verifier.Wots,
+    `PQSigner.Verifier.Merkle,
+    `PQSigner.Verifier.Fors,
+    `PQSigner.Verifier.Hypertree,
+    `PQSigner.Verifier.Top
+  ]
+
+-- Part A — Aspirational Lean port of the smart-wallet contracts
+-- (PQMultiOwnable, PQSmartWalletFactory, PQSmartWallet dispatch).

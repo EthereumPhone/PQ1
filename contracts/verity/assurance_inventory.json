@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "toolchain": "leanprover/lean4:v4.22.0",
+  "lean_githash": "ba2cbbf09d4978f416e0ebd1fceeebc2c4138c05",
+  "quarantine_sha256": {
+    "PQSigner/Common.lean": "e62d9a7c1048da3e6462d964e7cde03b1e7cd0a709f8a941cb6380842702691b",
+    "PQSigner/PQMultiOwnable.lean": "2f6fa7ff6dc7cd5f98a493018ebd60224f8ba3b48b03f94b26f6310056d9278f",
+    "PQSigner/PQSmartWalletFactory.lean": "2c0bb359fd476477112b084ef2df6ca00c6ef5f0c13b837047e30fbfcd8b2783",
+    "PQSigner/PQSmartWallet.lean": "de1ed57c21dcdd9f731ff118c6ea18efe6044c5087ffacbd38c3b6347cafb6a2",
+    "PQSigner/Theorems.lean": "0ce18de2961f3489849ab0d0113c7b2c8b70a4b6046f3a044795c752330a4f6e"
+  },
+  "environment_axioms": [
+    {
+      "name": "Classical.choice",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "b397a38f2e3297ccf1ef8ab5ecffc761be2a059068208d290ea54b8f9de6cac9"
+    },
+    {
+      "name": "Lean.ofReduceBool",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "8fd9ef600b8f58fa2c8df3101069e81af5b59b93ac4c6d8d80a22600d0adc36d"
+    },
+    {
+      "name": "Lean.ofReduceNat",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "d29a0f4dcb3bbf104e289e510282be1db58ac21e1bc1ab27e300555d0cfcc2a3"
+    },
+    {
+      "name": "Lean.trustCompiler",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "f5d8a8840f30c2d0e5b651a20789cb4c8d616d4ba312057d224114a13a157b90"
+    },
+    {
+      "name": "PQSigner.Verifier.Hash.sha256_deterministic",
+      "module": "PQSigner.Verifier.Hash",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "40bbe5f4d34c505b78caa02c2d5fb1122ce6c32d35f30a63d44f4f65109cc83e"
+    },
+    {
+      "name": "PQSigner.Verifier.Hash.sha256_size",
+      "module": "PQSigner.Verifier.Hash",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "d561101a6f1f70f6d15ffc7a5894fc77c8b3dcb56c581f26611c9053cef58d31"
+    },
+    {
+      "name": "Quot.lcInv",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "8d50e2d6b794e0ad75932c0e315a6c85c579986534a1ca847f227758496c00c3"
+    },
+    {
+      "name": "Quot.sound",
+      "module": "Init.Core",
+      "levels": [
+        "u"
+      ],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "4e6f4679e517ad3442b0203e5f20654a37e1a8485a0afeeb7a13842b4e741181"
+    },
+    {
+      "name": "lcAny",
+      "module": "Init.Prelude",
+      "levels": [],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "name": "lcCast",
+      "module": "Init.Prelude",
+      "levels": [
+        "u",
+        "v"
+      ],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "2cc1a2f7e096f80576058e7994e73ba09479a02e58e5253f44a03ad1ae715d19"
+    },
+    {
+      "name": "lcErased",
+      "module": "Init.Prelude",
+      "levels": [],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "name": "lcProof",
+      "module": "Init.Prelude",
+      "levels": [],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "86aee7e35e1fd308b56be1d77d552090a4204b25ca11239583a45683a6644b5d"
+    },
+    {
+      "name": "lcUnreachable",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": true,
+      "partial": false,
+      "type_sha256": "0c692a112a79532741c643618c94942e0463234fa6dae869bd342f6c597b6bfd"
+    },
+    {
+      "name": "propext",
+      "module": "Init.Core",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "6dd2fb585e097c2daca28461895349b3b7f30de6620363a0d18f1a71943a9a83"
+    },
+    {
+      "name": "sorryAx",
+      "module": "Init.Prelude",
+      "levels": [
+        "u"
+      ],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "5c15e0102ef885b4a3b583f4c396ee59d8b470ab16311833b4b5f24ace13a826"
+    }
+  ],
+  "admitted_declarations": [
+    {
+      "name": "PQSigner.Verifier.Merkle.yul_swap_selector_in_known_set",
+      "module": "PQSigner.Verifier.Merkle",
+      "levels": [],
+      "unsafe": false,
+      "partial": false,
+      "type_sha256": "0144cf0bbb7021cdfb1cd545221b43d433c4309af4818e8fd7d44246a5febf64",
+      "value_sha256": "5838bef97a6e6da4dba7e73d5ba97b2e15aa59d15ce23330d81c4cefe8fad62e"
+    }
+  ],
+  "partial_declarations": [
+    "PQSigner.Verifier.Fors.reconstructForsRoot.ascend._unsafe_rec",
+    "PQSigner.Verifier.Hash.chainHash.loop._unsafe_rec",
+    "PQSigner.Verifier.Hypertree.SigReader.takeN_values.loop._unsafe_rec",
+    "PQSigner.Verifier.Hypertree.runLayers.loop._unsafe_rec",
+    "PQSigner.Verifier.Merkle.verifyAuthPathLoop._unsafe_rec"
+  ]
+}

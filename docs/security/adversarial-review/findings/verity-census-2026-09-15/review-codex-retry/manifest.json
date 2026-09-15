@@ -1,0 +1,138 @@
+{
+  "base": "ebb590d0ffd2b84b2b07939c85fd31af8e0b8412",
+  "created_at": "2026-09-15T12:15:16.627039+00:00",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-verity-census-20260915-ld01keqz/target",
+      "/home/nicola/repos/PQSigner_OS/.git"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.0,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/tmp/pq-verity-census-20260915-ld01keqz/review-prompt.txt",
+    "sha256": "dff8e2f04bbfd5f2faf91a8a452f1e4cb2c2593b5928fee8cdbb65baae2b9252"
+  },
+  "reviewers": {
+    "codex": {
+      "artifact_bytes": 435948,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--ro-bind",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "/home/nicola/repos/PQSigner_OS/.git",
+        "--chdir",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-verity-census-20260915-ld01keqz/target",
+        "-o",
+        "/tmp/pq-verity-census-20260915-ld01keqz/review-codex-retry/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 900.172,
+      "ended_at": "2026-09-15T12:15:16.405202+00:00",
+      "environment_overrides": {},
+      "exit_code": -15,
+      "extraction_error": "Codex did not create report.txt",
+      "hashes": {
+        "prompt_sha256": "dff8e2f04bbfd5f2faf91a8a452f1e4cb2c2593b5928fee8cdbb65baae2b9252",
+        "report_sha256": null,
+        "runtime_sha256": "bb184442ceecca039ad69c75ad8689d62a97fb7c3c586c727b8536aea896966f",
+        "stderr_sha256": "8b9c32c189ab456208300fa5236b22786ad5b4cd05625817c76654e0d276be5e"
+      },
+      "paths": {
+        "directory": "/tmp/pq-verity-census-20260915-ld01keqz/review-codex-retry/codex",
+        "prompt": "/tmp/pq-verity-census-20260915-ld01keqz/review-codex-retry/codex/prompt.txt",
+        "report": "/tmp/pq-verity-census-20260915-ld01keqz/review-codex-retry/codex/report.txt",
+        "stderr": "/tmp/pq-verity-census-20260915-ld01keqz/review-codex-retry/codex/stderr.txt"
+      },
+      "report_words": null,
+      "started_at": "2026-09-15T12:00:16.233547+00:00",
+      "status": "timed_out"
+    }
+  },
+  "schema_version": 1,
+  "stage": "merge",
+  "surface": "Verity assurance census",
+  "target": {
+    "commit_after": "789b8e1ff35110590a0cc5c9177de9869e3464f6",
+    "commit_before": "789b8e1ff35110590a0cc5c9177de9869e3464f6",
+    "drift": false,
+    "path": "/tmp/pq-verity-census-20260915-ld01keqz/target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "4f07e82949f7a6f5962807736db637727211f011",
+    "tree_before": "4f07e82949f7a6f5962807736db637727211f011"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-15T12:00:16.233475+00:00"
+}

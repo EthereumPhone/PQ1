@@ -4,11 +4,46 @@ What the Verity port of the PQSigner smart-wallet contracts **does and
 does not** verify. Matches Verity's own convention
 ([`lfglabs-dev/verity/TRUST_ASSUMPTIONS.md`](https://github.com/lfglabs-dev/verity/blob/main/TRUST_ASSUMPTIONS.md)).
 
-A `lake build` success means **the theorems in `Theorems.lean` hold
-under the assumptions enumerated below**. None of those assumptions
-are checked by Lean; each is an axiom or an external dependency.
+A default `lake build` compiles only the eight pure-Lean **Part B** modules.
+It does **not** build `Theorems.lean` or establish any Part A wallet obligation.
+Part A imports APIs absent from the pinned Verity release and remains unverified.
 
-## What IS verified
+`make verify-verity-census` freshly compiles all eight Part B modules with pinned
+Lean 4.22.0 and inventories their exported declarations (including private and
+generated declarations). It checks every declaration's transitive axiom closure,
+not just theorem names or source keywords. Before the census, a separate
+lean4checker kernel replay validates all 208 safe, non-partial Part B constants
+against a separate environment imported from the pinned Lean distribution.
+Constructors/recursors are compared with kernel-generated metadata. The five
+existing partial compiler helpers are inventoried but excluded from replay;
+unsafe project declarations are rejected. Ordinary `.olean` imports alone do
+not recheck declarations added with kernel checking disabled.
+
+Each module's original private declaration data is checked before using the
+merged environment: duplicate project names and stdlib redeclarations fail, and
+the merged constants must equal that per-module union. This prevents a theorem
+from silently subsuming an axiom declared in a sibling module.
+
+The checked baseline contains 15
+environment axioms, of which two are project axioms, and one admitted Part B
+helper: `PQSigner.Verifier.Merkle.yul_swap_selector_in_known_set`. Its name,
+statement and admitted body are pinned; new dependents cannot inherit that
+exception. A proof discharging the same statement is allowed.
+
+The five unbuildable Part A sources are instead pinned byte-for-byte. Their
+11 source holes and CREATE2 axiom are **uncompiled, unverified obligations**.
+Changing that quarantine or any census allowance requires an explicit reviewed
+baseline change. The raw per-file hole count remains an additional backstop.
+
+The installed pinned Lean compiler, standard library, Python gate and reviewed
+baseline are trusted. The gate does not sandbox compiler-time Lean IO or provide
+a host filesystem isolation boundary. Toolchain/artifact custody during such IO
+is part of the deferred build-assurance review, not established by this census. This is an exported-environment census, not an independent
+kernel implementation, audit of transient anonymous examples, or proof of
+Rust/Yul/Solidity equivalence. Lake caches and Part A cannot supply proof evidence
+to this gate. See `assurance_inventory.json` for exact identities and hashes.
+
+## Part A intended obligations — not verified
 
 | Theorem | Statement | Implies CLAUDE.md invariant |
 |---------|-----------|------------------------------|
@@ -26,13 +61,13 @@ are checked by Lean; each is an axiom or an external dependency.
 
 ## What is NOT verified (trusted axioms)
 
-> **Lean axiom census (2026-08-20, issue #673):** the tree declares exactly
+> **Source axiom census (issue #673):** the tree declares exactly
 > **3 `axiom`s** — `sha256_size` + `sha256_deterministic`
 > (`PQSigner/Verifier/Hash.lean:40,47`; item 2 below) and
 > **`predict_matches_create`** (`PQSigner/PQSmartWalletFactory.lean:65`;
 > item 4 below — a content-bearing CREATE2 address-prediction claim, not
-> merely a call-shape bridge). Older notes saying "2 axioms" predate this
-> census (they counted only the Hash.lean pair).
+> merely a call-shape bridge). Only the Hash pair is elaborated by the Part B
+> gate; the factory axiom is covered by the unverified Part A source quarantine.
 
 1. **`SPHINCsC10Asm.sol` correctness.** Modelled as opaque oracle
    `c10Verify : ByteVec → ByteVec → ByteVec → ByteVec → Bool`. We

@@ -1,0 +1,6 @@
+test_unchecked_declaration_is_rejected_by_kernel (__main__.CensusTests.test_unchecked_declaration_is_rejected_by_kernel) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 19.608s
+
+OK

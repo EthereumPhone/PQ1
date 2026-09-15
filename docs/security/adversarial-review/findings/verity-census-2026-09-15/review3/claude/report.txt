@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: fdabe5eb9b953706681b1276eba3d3c48db12c2e / 839e6bf8d646c34048ff90b1c5211c8b68ad764e
+FINDINGS: none
+GAPS: `replay'` does not kernel-check a raw `quotInfo` constant (I confirmed `quotDecl` is silently accepted on an already-initialized env), but my single attempt to get one written into an exported `.olean` failed, and nothing that depends on such a constant can pass replay — so this bypass is not demonstrated.

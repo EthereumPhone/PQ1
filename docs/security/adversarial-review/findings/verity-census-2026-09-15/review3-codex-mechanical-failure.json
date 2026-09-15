@@ -1,0 +1,18 @@
+{
+  "reason": "all source commands fail before execution: nested Bubblewrap namespace unavailable",
+  "failed_commands": 2,
+  "processes": [
+    {
+      "pid": 825501,
+      "pgid": 825501,
+      "argv0": "/usr/bin/bwrap"
+    },
+    {
+      "pid": 825504,
+      "pgid": 825501,
+      "argv0": "/home/nicola/.local/bin/codex"
+    }
+  ],
+  "signal": "SIGTERM",
+  "retry": "one same-model mechanical retry permitted; no provider-policy refusal observed"
+}

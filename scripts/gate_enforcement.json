@@ -501,6 +501,19 @@
       "runs_in": "nightly.yml",
       "enforcement": "local_documented",
       "why": "The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB/6m03s, no_hidden_value 13.05 GiB/7m55s, cow_presign_precedence 11.50 GiB/3m56s; all VERIFY SUCCESSFULLY, measured locally 2026-07-31) exceed what a hosted runner can absorb. Instrumented CI evidence 2026-07-31: the runner has 15,989 MB RAM with 14,497 MB available and 145 GB disk with 86 GB free, so DISK IS NOT THE CAUSE - it is memory. The kill lands between 'Runtime Postprocess Equation' and 'Solving with ...', i.e. inside CBMC's formula construction and BEFORE any SAT solver is invoked; a kissat experiment was therefore reverted, since the solver never runs. (That experiment's local peak-RSS numbers were also unsound: an external solver runs out-of-process and /usr/bin/time -v reports a per-process maximum, not an aggregate.) Excluded because an OOM kills the runner and suppresses every later mandatory gate in the same job - same reasoning as verify-extracted-heavy (53c19f21); continue-on-error cannot save a dead runner. The 100-byte bound is deliberately NOT reduced: shrinking a proof's bound to earn a green check is coverage loss disguised as a pass. Larger hosted runners are unavailable (Team/Enterprise-only; this org is free-plan; hosted-runners API 404s). Run via `make kani-heavy`; the other 170 harnesses stay blocking in nightly."
+    },
+    {
+      "id": "verify-verity-census",
+      "make": "make -C contracts/verity verify-verity-census",
+      "polices_paths": [
+        "contracts/verity/**",
+        "contracts/verification/scripts/**",
+        ".github/workflows/verity-fv.yml",
+        "scripts/gate_enforcement.json"
+      ],
+      "runs_in": "verity-fv.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "Fresh Part B exported-environment axiom/admission census and exact unverified Part A source quarantine (#673)."
     }
   ],
   "_completeness_waived": {

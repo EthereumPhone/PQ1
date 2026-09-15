@@ -8,7 +8,7 @@ every chain) and #7 (monotonic per-chain caps) — from "enforced by
 Solidity `require` + Foundry unit tests" to "machine-checked Lean
 theorem".
 
-**Status (2026-05-11, second pass)**: Part B (SPHINCS+C10 verifier
+**Status (2026-09-15)**: Part B (SPHINCS+C10 verifier
 port) landed as buildable pure-Lean. Part A (smart-wallet contracts)
 is documented intent — it imports modules (`Verity.Prelude`,
 `Verity.Hash.Sha256`, `Verity.External.Call`, etc.) that **Verity
@@ -19,6 +19,17 @@ point for getting Part A to compile.
 |------|----------------|--------------|
 | **A** | `PQMultiOwnable` storage + writers, `PQSmartWalletFactory` salt + digest, `PQSmartWallet` dispatch. Files at `PQSigner/{Common,PQMultiOwnable,PQSmartWalletFactory,PQSmartWallet,Theorems}.lean`. | **Does not build** — imports fictional Verity modules. Blocked on Verity Phase 0 (see `docs/archive/verity-v0.1.0-primitive-map.md`). Kept in-tree as the spec for what Verity v0.2.x+ must support. Lakefile root entry removed from default target. |
 | **B** | SPHINCS+C10 verifier (pure-Lean reference impl of `sphincs-c10/`). Files at `PQSigner/Verifier/{Params,Address,Hash,Wots,Merkle,Fors,Hypertree,Top}.lean`. ~40 closed theorems on closeable invariants + 2 documented axioms + 1 documented sorry. | **Builds clean** under Lean 4.22.0. `make build` succeeds. |
+
+The blocking `verity-fv.yml` workflow runs the fresh census and its regression
+controls, including rejection of declarations inserted with kernel checking
+disabled. A separate kernel replay precedes the census (208 safe, non-partial
+Part B constants; five existing partial compiler helpers are inventoried only).
+`assurance_inventory.json` records the exact environment axiom set and
+the sole admitted Part B declaration, plus hashes of all five unverified Part A
+files. New exported admissions (including macro-generated ones), axiom changes,
+duplicate declaration names across modules, and unlisted source files fail the gate. `make verify-stats` reports this same
+census. A passing gate does not discharge the existing 12 source holes or prove
+wallet/implementation equivalence; see [TRUST_ASSUMPTIONS.md](TRUST_ASSUMPTIONS.md).
 
 See [docs/archive/handoff-verity-c10-verifier.md](../../docs/archive/handoff-verity-c10-verifier.md)
 for the original multi-quarter plan and
@@ -233,11 +244,14 @@ curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf 
 source ~/.elan/env
 lake update
 
-# Build + verify all theorems:
+# Build the eight Part B modules only (Part A is excluded):
 lake build                        # ~20 min first build, ~10s incremental
 
-# Stats (matches Verity's own VERIFICATION_STATUS.md format):
-make verify-stats
+# Fresh Part B semantic census + exact unverified Part A inventory:
+make verify-verity-census
+
+# Census plus executable regression controls (also enforced in CI):
+make ci
 
 # Compile + emit Yul (for differential testing):
 make emit-yul

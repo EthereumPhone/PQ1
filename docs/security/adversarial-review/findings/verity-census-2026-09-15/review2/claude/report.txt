@@ -1,0 +1,21 @@
+VERDICT: GO
+TARGET: 6096de0b6620a55a52da98298d155620dc5d51db / 47b7c15cc76d12eb474ceef69520d08867822575
+FINDINGS: none
+GAPS: Not probed: Lean source code runs during elaboration, and nothing stops it writing files (e.g. `#eval` replacing `~/.elan/.../bin/lean` after the githash check, or planting fake `.olean` files in the writable temp root, which `LEAN_PATH` searches before the Lean install, per 4.22 `Lean/Util/Path.lean:93,100`). That stays inside the stated trusted-toolchain boundary, but `TRUST_ASSUMPTIONS.md` never says it.
+
+What I checked, source-first, against the five focus points (not part of the required format):
+1. **Fresh build and census.** `check_verity_inventory.py` writes only the 8 snapshotted module bytes into a temp root. It calls the Lean binary by absolute path, taken from the passwd home directory (not `$HOME`) and checked by githash, with a fixed environment. `.lake` and Lake are never read. The census covers every exported declaration, including private and generated ones, and computes each one's full transitive axiom set. I re-ran it with `-B` so no `__pycache__` was written: PASS, 213/208/15/2/1, 13.9 s. The target tree stayed clean, so the ~15 compiles in CI fit well inside the 110 s per-command CPU limit and the 20-minute job limit.
+2. **Kernel replay.**
+   - `replay'` adds every safe, non-partial constant through `addDeclCore` and compares constructors and recursors against what the kernel regenerates.
+   - `sameConstant` throws on any change to a name also found in the separately imported `Lean` environment.
+   - In 4.22, `isPartial` is true only for definitions marked partial (`Declaration.lean:450`), and the five partial names are pinned exactly. None of them is replayed, so any safe declaration that uses one fails replay with an unknown constant.
+   - Any unsafe declaration fails.
+   - `Lean.ofReduceBool` and `Lean.trustCompiler` are not allowed, which closes the `native_decide` route.
+3. **Axioms and admissions.** The whole-environment axiom set is compared by name, module, universe levels, flags and a hash of the type. Any declaration whose closure reaches `sorryAx` must match the pinned name, type and body hash. That rejects new, private, generated and downstream admissions, and the tests cover each case. Labelled `sorry` terms record source position (`Meta/Sorry.lean:42`), so edits above the pinned theorem will break its body hash. That breaks safe (the gate fails), so it is not a finding.
+4. **Source coverage and Part A.** The set of `.lean` files must match exactly, symlinks are rejected, and the five Part A files are byte-hashed. The printed "11 holes, one CREATE2 axiom" cannot drift because those bytes are pinned. `lakefile.lean` is listed but not pinned; it feeds nothing into the gate.
+5. **CI and claims.**
+   - The workflow's path filters cover everything the gate reads, including `lean_source.py` and `check_verity_holes.py`.
+   - The elan installer is pinned by hash, and the Lean toolchain it installs is checked by githash.
+   - `test_axiom_inventory.py` needs no extra toolchains; its Lake calls are only in `main()`.
+   - The `gate_enforcement.json` entry matches the workflow.
+   - The README and `TRUST_ASSUMPTIONS.md` statements about replay scope, the 208/5 split, the one admitted declaration and "not independent kernel / not equivalence" match the code.

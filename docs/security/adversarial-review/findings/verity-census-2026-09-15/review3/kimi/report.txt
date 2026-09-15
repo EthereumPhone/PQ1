@@ -1,0 +1,14 @@
+VERDICT: GO
+TARGET: fdabe5eb9b953706681b1276eba3d3c48db12c2e / 839e6bf8d646c34048ff90b1c5211c8b68ad764e
+
+FINDINGS: none
+
+GAPS: within the 15-minute box I reviewed source-first and independently verified the vendored replay, but did not re-execute `make -C contracts/verity ci` (fresh 8-module compile exceeds the box); its green state is taken from the supplied evidence.
+
+Review notes supporting GO (each reviewed claim traced to code):
+
+1. **Fresh census before coalescing** — `dump_verity_inventory.lean:40-68` walks each module's original `ModuleData` (constNames/constants length, name/info agreement), rejects cross-module duplicates and redeclarations of the trusted `import Lean` environment, then requires the aggregate environment's non-trusted constants to equal that per-module union (size + `sameConstant` on every kernel-relevant field). Sibling-subsumption is covered by `test_sibling_axiom_cannot_be_subsumed`.
+2. **Kernel replay** — `VerityCensusReplay.lean` is byte-identical (`diff` clean) to the pinned upstream `leanprover/lean4checker@0531c5e6` (v4.22.0) `Lean4Checker/Replay.lean`; it replays via `Kernel.Environment.addDeclCore` into an env imported only from the pinned distribution, skipping unsafe/partial. The Python gate rejects any unsafe project declaration (`check_verity_inventory.py:171`), pins the five partial helpers by exact sorted name list, and cross-checks the replay count from both sides (`:173-175`, 213−5=208). Partial helpers are opaque to dependents, so safe declarations replay without referencing them — consistent with green.
+3. **Axiom/admission pins** — exact dict equality on 15 environment-axiom signatures (`:163-165`), transitive-closure check per declaration against a 5-entry allowlist plus `sorryAx` (`:176-182`), and identity/type/body pins on the sole admitted declaration including the removal/statement-change direction (`:183-185`); generated-declaration and transitive-dependents injection are executable negative tests.
+4. **Coverage/quarantine** — `source_snapshot` rejects symlinks, unlisted/extra `.lean` roots, and pins the five Part A files byte-for-byte; the raw hole ratchet keeps per-file budgets with no comment allowances; the PASS prose ("11 holes, one CREATE2 axiom") matches `TRUST_ASSUMPTIONS.md` and `check_verity_holes.BASELINE`.
+5. **Toolchain/cache/CI** — direct elan-toolchain binary with scrubbed env (PATH/HOME/LEAN_PATH replaced, so `ELAN_TOOLCHAIN`/`LEAN_PATH`/`LD_*` poisoning is structurally impossible, tested), `--githash` pin `ba2cbbf0…`, duplicate-JSON-key rejection, output/resource bounds fail-closed, TOCTOU re-snapshot plus collector/replay re-read (`:129-130`,`:198-199`), and `verity-fv.yml` (hash-pinned elan installer, census + regression controls on the policing paths) matches the new `per_pr_blocking` gate entry. Trust claims in TRUST_ASSUMPTIONS.md/README accurately exclude elaboration-IO sandboxing and Part A verification.

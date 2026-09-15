@@ -1,0 +1,4 @@
+make: Entering directory '/home/nicola/repos/PQSigner_OS/contracts/verity'
+PASS: Verity assurance census {"admitted_declarations": 1, "compiled_modules": 8, "environment_axioms": 15, "exported_declarations": 213, "kernel_rechecked_declarations": 208, "project_axioms": 2, "raw_hole_mentions": 12, "unverified_part_a_files": 5}
+Part A is source-pinned, uncompiled and unverified (11 holes, one CREATE2 axiom).
+make: Leaving directory '/home/nicola/repos/PQSigner_OS/contracts/verity'

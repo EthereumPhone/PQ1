@@ -1,0 +1,22 @@
+You are one independent reviewer in an owner-authorized defensive code review. Do not launch agents or other models.
+Review PQSigner OS for MERGE.
+Target: /tmp/pq-verity-census-20260915-ld01keqz/target
+Commit: 6096de0b6620a55a52da98298d155620dc5d51db
+Tree: 47b7c15cc76d12eb474ceef69520d08867822575
+Compare: ebb590d0ffd2b84b2b07939c85fd31af8e0b8412..6096de0b6620a55a52da98298d155620dc5d51db
+Focus only on the Verity assurance census (#673):
+1. Complete fresh Part B build, kernel replay, and exported-declaration axiom/admission census.
+2. Kernel replay rejects unchecked invalid declarations and trusted-stdlib overrides; five existing partial compiler helpers are explicitly census-only and unsafe declarations fail.
+3. Exact axiom identities/types and existing admitted-obligation identity/type/body pins; new/private/generated/transitive admissions fail.
+4. Exact source coverage and honest byte-pinned quarantine of five unbuildable Part A files, including the CREATE2 assumption.
+5. Pinned toolchain, cache independence, input/drift failures, blocking CI triggers/commands, and accurate build/trust claims.
+Evidence already green: make -C contracts/verity ci (8 modules, 213 declarations, 208 kernel-rechecked, 15 environment axioms, 2 Part B axioms, 1 admitted declaration; 6 raw regression groups and 10 semantic groups, including compiled unchecked-False injection rejected by replay); gate-enforcement all 33 entries plus self-test; actionlint for the new workflow. The upstream replay source matches pinned lean4checker v4.22.0.
+Non-goals: discharging existing obligations, unavailable Verity API port, pinning ordinary closed theorem statements, firmware/contract behavior, implementation equivalence, hardware/shipment or hosted branch-protection configuration. The installed pinned Lean kernel/stdlib and reviewed checker/baseline remain trusted.
+Inspect the code diff and affected callers source-first. Read TRUST_ASSUMPTIONS.md for the claim boundary. Keep target immutable; focused tests may write temporary outputs outside it. No target edits, hardware, external writes, agents, prior reports, status prose, or playbook catalogs. Exclude docs/security/adversarial-review/findings/ from reading: it contains archived evidence, not review input. Ignore style/optional hardening. You have 15 minutes and 800 words. Check elapsed time between tool groups and reserve the last 3 minutes for synthesis; return a compact partial verdict with GAP before the deadline if necessary.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 6096de0b6620a55a52da98298d155620dc5d51db / 47b7c15cc76d12eb474ceef69520d08867822575
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+Use at most three findings. FIX requires a source anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.

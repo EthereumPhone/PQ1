@@ -1,0 +1,23 @@
+make: Entering directory '/tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verity'
+PASS: Verity assurance census {"admitted_declarations": 1, "compiled_modules": 8, "environment_axioms": 15, "exported_declarations": 213, "project_axioms": 2, "raw_hole_mentions": 12, "unverified_part_a_files": 5}
+Part A is source-pinned, uncompiled and unverified (11 holes, one CREATE2 axiom).
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.413s
+
+OK
+test_axiom_identity_and_type (__main__.CensusTests.test_axiom_identity_and_type) ... ok
+test_baseline_and_cache_independence (__main__.CensusTests.test_baseline_and_cache_independence) ... ok
+test_changed_or_removed_admitted_obligation (__main__.CensusTests.test_changed_or_removed_admitted_obligation) ... ok
+test_closed_proof_is_allowed (__main__.CensusTests.test_closed_proof_is_allowed) ... ok
+test_generated_hole (__main__.CensusTests.test_generated_hole) ... ok
+test_macro_named_private_and_suppressed_holes (__main__.CensusTests.test_macro_named_private_and_suppressed_holes) ... ok
+test_part_a_quarantine_and_duplicate_manifest (__main__.CensusTests.test_part_a_quarantine_and_duplicate_manifest) ... ok
+test_source_coverage_links_and_drift (__main__.CensusTests.test_source_coverage_links_and_drift) ... ok
+test_transitive_hole_dependency (__main__.CensusTests.test_transitive_hole_dependency) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 170.900s
+
+OK
+make: Leaving directory '/tmp/pq-verity-census-20260915-ld01keqz/target/contracts/verity'
