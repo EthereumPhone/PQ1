@@ -4649,6 +4649,10 @@ PROTOCOL_MODELS ?= proverif,tamarin,cryptoverif
 verify-protocol-models: ## anti-vacuity: assert the protocol models' verdicts vs baseline
 	PROTOCOL_MODELS="$(PROTOCOL_MODELS)" python3 scripts/check_protocol_models.py
 
+.PHONY: verify-cryptoverif
+verify-cryptoverif: ## local-only computational protocol verdict gate
+	PROTOCOL_MODELS=cryptoverif python3 scripts/check_protocol_models.py
+
 # Gate-enforcement lint — closes catalog class G1 (fv-adversarial-review-playbook
 # Part A2). Asserts every soundness gate in scripts/gate_enforcement.json actually
 # FIRES on the diff it polices (invoked by a job, path-triggered on its surface,
@@ -4660,6 +4664,7 @@ verify-protocol-models: ## anti-vacuity: assert the protocol models' verdicts vs
 .PHONY: verify-gate-enforcement
 verify-gate-enforcement: ## G1: assert every soundness gate is actually CI-enforced on its surface
 	@python3 scripts/check_gate_enforcement.py --self-test
+	@python3 scripts/test_gate_enforcement.py
 	python3 scripts/check_gate_enforcement.py
 
 # ---------------------------------------------------------------------------

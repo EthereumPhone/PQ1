@@ -1,0 +1,427 @@
+31a219f7 fix(fv): require complete recursive gate path coverage
+5f4b68de fix(fv): close PR trigger and gate coverage review findings
+711080e3 fix(fv): pin CI invocation contracts and gate registrations
+ .github/workflows/lean-fv.yml                      |   15 +
+ Makefile                                           |    5 +
+ contracts/verification/scripts/check_easycrypt.sh  |    7 +-
+ .../findings/fv-gate-enforcement-2026-09-15.md     |  162 +++
+ .../codex-mechanical-failure.json                  |   15 +
+ .../easycrypt-pins-corrected.log                   |   16 +
+ .../easycrypt-pins.log                             |   16 +
+ .../fv-gate-enforcement-2026-09-15/gates-final.log |   98 ++
+ .../gates-initial.log                              |   94 ++
+ .../fv-gate-enforcement-2026-09-15/gates-wave3.log |  100 ++
+ .../reproduce-review2.py                           |   28 +
+ .../reproduced-review-findings.json                |   27 +
+ .../review-codex-retry-dry-run.json                |   99 ++
+ .../review-codex-retry/codex/prompt.txt            |   21 +
+ .../review-codex-retry/codex/report.txt            |    7 +
+ .../review-codex-retry/codex/runtime.jsonl         |   67 ++
+ .../review-codex-retry/codex/stderr.txt            |    1 +
+ .../review-codex-retry/manifest.json               |  138 +++
+ .../review-dry-run.json                            |  205 ++++
+ .../review-prompt.txt                              |   21 +
+ .../review-receipts.json                           |   27 +
+ .../review/claude/prompt.txt                       |   21 +
+ .../review/claude/report.txt                       |    4 +
+ .../review/claude/runtime.json                     |    1 +
+ .../review/claude/stderr.txt                       |    0
+ .../review/codex/prompt.txt                        |   21 +
+ .../review/codex/runtime.jsonl                     |   18 +
+ .../review/codex/stderr.txt                        |    1 +
+ .../review/kimi/prompt.txt                         |   21 +
+ .../review/kimi/report.txt                         |   18 +
+ .../review/kimi/runtime.jsonl                      |   31 +
+ .../review/kimi/stderr.txt                         |  820 ++++++++++++++
+ .../review/manifest.json                           |  280 +++++
+ .../review2-allowlist-reproductions.json           |   16 +
+ .../review2-codex-mechanical-failure.json          |   15 +
+ .../review2-codex-retry/codex/prompt.txt           |   21 +
+ .../review2-codex-retry/codex/report.txt           |    5 +
+ .../review2-codex-retry/codex/runtime.jsonl        |   62 ++
+ .../review2-codex-retry/codex/stderr.txt           |    2 +
+ .../review2-codex-retry/manifest.json              |  138 +++
+ .../review2-prompt.txt                             |   21 +
+ .../review2-receipts.json                          |   33 +
+ .../review2-reproductions.json                     |   27 +
+ .../review2/claude/prompt.txt                      |   21 +
+ .../review2/claude/report.txt                      |   14 +
+ .../review2/claude/runtime.json                    |    1 +
+ .../review2/claude/stderr.txt                      |    0
+ .../review2/codex/prompt.txt                       |   21 +
+ .../review2/codex/runtime.jsonl                    |   12 +
+ .../review2/codex/stderr.txt                       |    1 +
+ .../review2/kimi/prompt.txt                        |   21 +
+ .../review2/kimi/report.txt                        |   24 +
+ .../review2/kimi/runtime.jsonl                     |   39 +
+ .../review2/kimi/stderr.txt                        | 1146 +++++++++++++++++++
+ .../review2/manifest.json                          |  280 +++++
+ scripts/check_gate_enforcement.py                  |  590 ++++++++--
+ scripts/gate_enforcement.json                      | 1154 +++++++++++++++++++-
+ scripts/test_gate_enforcement.py                   |  243 +++++
+ 58 files changed, 6167 insertions(+), 145 deletions(-)
+diff --git a/.github/workflows/lean-fv.yml b/.github/workflows/lean-fv.yml
+index d2f8c330..db34de9a 100644
+--- a/.github/workflows/lean-fv.yml
++++ b/.github/workflows/lean-fv.yml
+@@ -38,6 +38,11 @@ on:
+       # in an extracted rank merged unscanned (extracted-F2, V10, 2026-07-02). The build
+       # leg stays lean/-only; the lints scan the extracted sources as files.
+       - 'contracts/verification/extracted/Extracted/**'
++      # EasyCrypt pin-ledger surface: verify-easycrypt-pins is toolchain-free and
++      # wired into this workflow (2026-08-20, #664) — the gate must FIRE on edits
++      # to the .ec files / axiom_pins.txt it polices (the F1 class: it ran in NO
++      # workflow while ~15 straight master commits touched easycrypt/**).
++      - 'contracts/verification/easycrypt/**'
+   pull_request:
+     paths:
+       - 'contracts/verification/lean/**'
+@@ -48,6 +53,8 @@ on:
+       - '.github/workflows/lean-fv.yml'
+       # Extracted §33 escape-hatch scan (extracted-F2) — see the push trigger above.
+       - 'contracts/verification/extracted/Extracted/**'
++      # EasyCrypt pin-ledger surface (verify-easycrypt-pins, #664) — see above.
++      - 'contracts/verification/easycrypt/**'
+ 
+ permissions:
+   contents: read
+@@ -119,3 +126,11 @@ jobs:
+         # mutators; a new resetter added to Storage.lean would type-check green
+         # beside them. No other gate (closures/ledger/proof-mutation) can catch it.
+         run: make -C contracts/verification verify-storage-mutators
++      - name: verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)
++        # Wired 2026-08-20 (#664): the pin ledger (admit/axiom COUNT + SEMANTIC
++        # name->statement pin) is toolchain-free — no EasyCrypt container, ~2 s —
++        # yet ran in NO workflow while ~15 straight master commits were EasyCrypt
++        # pin work. The make target asserts its own negative control first (a
++        # dmkey_ll:false weakening MUST fire), then the dry-run pin check.
++        # easycrypt/** added to this workflow's paths filter the same day.
++        run: make -C contracts/verification verify-easycrypt-pins
+diff --git a/Makefile b/Makefile
+index 4ebd5a76..297a77be 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4649,6 +4649,10 @@ PROTOCOL_MODELS ?= proverif,tamarin,cryptoverif
+ verify-protocol-models: ## anti-vacuity: assert the protocol models' verdicts vs baseline
+ 	PROTOCOL_MODELS="$(PROTOCOL_MODELS)" python3 scripts/check_protocol_models.py
+ 
++.PHONY: verify-cryptoverif
++verify-cryptoverif: ## local-only computational protocol verdict gate
++	PROTOCOL_MODELS=cryptoverif python3 scripts/check_protocol_models.py
++
+ # Gate-enforcement lint — closes catalog class G1 (fv-adversarial-review-playbook
+ # Part A2). Asserts every soundness gate in scripts/gate_enforcement.json actually
+ # FIRES on the diff it polices (invoked by a job, path-triggered on its surface,
+@@ -4660,6 +4664,7 @@ verify-protocol-models: ## anti-vacuity: assert the protocol models' verdicts vs
+ .PHONY: verify-gate-enforcement
+ verify-gate-enforcement: ## G1: assert every soundness gate is actually CI-enforced on its surface
+ 	@python3 scripts/check_gate_enforcement.py --self-test
++	@python3 scripts/test_gate_enforcement.py
+ 	python3 scripts/check_gate_enforcement.py
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/contracts/verification/scripts/check_easycrypt.sh b/contracts/verification/scripts/check_easycrypt.sh
+index aea231bb..8e923639 100755
+--- a/contracts/verification/scripts/check_easycrypt.sh
++++ b/contracts/verification/scripts/check_easycrypt.sh
+@@ -41,10 +41,9 @@
+ #      does. Both axiom-bearing files (FORS_C10.ec, STCR_C.ec) are stdlib-only, so
+ #      this runs toolchain-free in --dry-run.
+ #
+-# NOT RUN IN CI. It needs an opam switch with EasyCrypt r2026.02 + Alt-Ergo 2.6.0
+-# (see ../easycrypt/PROVENANCE.md). Treat it like `verify-kontrol`: a local /
+-# nightly gate. `--dry-run` checks the pins (counts + semantics) without a
+-# toolchain. Enrolled in scripts/gate_enforcement.json as `local_documented`.
++# Compilation remains local: it needs the pinned EasyCrypt/prover setup
++# (see ../easycrypt/PROVENANCE.md). The toolchain-free --self-test and --dry-run
++# pin checks ARE run per PR by verify-easycrypt-pins in lean-fv.yml (#664).
+ #
+ # TOOLCHAIN CAVEAT (verified 2026-07-10). The STDLIB-ONLY +C chain compiles as a
+ # target with Alt-Ergo 2.6.0 ALONE. The MM45-CHAIN drafts `require import
+  1362 scripts/check_gate_enforcement.py
+  1588 scripts/gate_enforcement.json
+   243 scripts/test_gate_enforcement.py
+  3193 total
+ scripts/check_gate_enforcement.py | 590 +++++++++++++++++++++++++++++++-------
+ 1 file changed, 493 insertions(+), 97 deletions(-)
+gates: 65
+waived: {}
+{
+ "id": "verify-gate-enforcement",
+ "make": "make verify-gate-enforcement",
+ "polices_paths": [
+  "scripts/check_gate_enforcement.py",
+  "scripts/test_gate_enforcement.py",
+  "scripts/gate_enforcement.json",
+  "Makefile",
+  ".github/workflows/**"
+ ],
+ "runs_in": "ci.yml",
+ "enforcement": "per_pr_blocking",
+ "required_context": {
+  "step": {
+   "name": "verify-gate-enforcement",
+   "run": "python3 -m pip install --quiet pyyaml\nmake verify-gate-enforcement\n"
+  },
+  "job_equals": {
+   "runs-on": "ubuntu-latest"
+  },
+  "job_absent": [
+   "container",
+   "env",
+   "if",
+   "needs",
+   "strategy",
+   "defaults",
+   "continue-on-error"
+  ],
+  "workflow_context": {}
+ }
+}
+verify-easycrypt-pins -> per_pr_blocking lean-fv.yml ["contracts/verification/easycrypt/**", "contracts/verification/scripts/check_easycrypt.sh", ".github/workflows/lean-fv.yml", "contracts/verification/scripts/ec_sweep.py", "contracts/verification/scripts/ec_axioms.py", "contracts/verification/Makefile"]
+verify-protocol-models -> nightly nightly.yml ["contracts/verification/proverif/**", "contracts/verification/tamarin/**", "scripts/check_protocol_models.py"]
+verify-cryptoverif -> local_documented None ["contracts/verification/cryptoverif/**", "scripts/check_protocol_models.py", "Makefile"]
+kani -> nightly nightly.yml ["tx/src/**", "pqsigner-erc7730/src/**", "fw-manifest/src/**", "aa/src/**", "shared/src/**", "domain/src/**", "tx-core/src/**"]
+name: Lean FV (SphincsCVerify)
+
+# CI gate for the Lean formal-verification suite. Until 2026-06-18 NONE of the
+# `lake`/`elan` verify-* checks ran in CI (the main ci.yml `paths-ignore`s
+# `**/*.lean` + `contracts/verification/**`), so the kernel axiom-cleanliness, the
+# H-2/H-3 axiom-closure gates, and the 0-`sorry` discipline were review-time only.
+# This dedicated workflow uses a POSITIVE `paths:` filter so it runs exactly when the
+# Lean sources / scripts change, and enforces:
+#   * `lake build SphincsCVerify` — 0 errors, 0 `sorry` (the kernel rejects either).
+#   * `verify-fv-lints` — the four FV-invariant sub-lints, incl. the EXACT-set
+#     theft_free (c.2) + offchain (c.1) axiom-closure tripwires and the opaque-guard.
+#   * `verify-audit` — sorry count + the #print-axioms dump (theft_free = exactly its
+#     11 documented axioms; execC10Asm_eq / deployed_verifier_refines_spec gated).
+#
+# SCOPE: `SphincsCVerify` is MATHLIB-FREE, so this needs only elan + a `lake` build
+# (no multi-GB mathlib cache). The `extracted/` (§33 Aeneas) project DOES import
+# mathlib (different toolchain) and is gated by the sibling `lean-extracted.yml`
+# workflow (heavier: pins v4.30 + pulls the prebuilt mathlib cache).
+# The build includes high-heartbeat lemmas (Interpreter/Phases.lean), so it is slow;
+# the `.lake` cache amortizes unchanged modules across runs.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'contracts/verification/lean/**'
+      - 'contracts/verification/scripts/**'
+      # Ledger/assurance docs: so verify-ledger-consistency actually FIRES on
+      # AXIOM_STATUS.json-only edits (FV adversarial-review F1, 2026-07-01 —
+      # these edits previously matched no positive path and were path-ignored
+      # by ci.yml, so the gate advertised to police ledger drift never ran).
+      - 'contracts/verification/docs/**'
+      - 'contracts/verification/Makefile'
+      - '.github/workflows/lean-fv.yml'
+      # Extracted §33 tree: verify-fv-lints' escape-hatch/opaque-guard grep scans
+      # extracted/Extracted/ too (lint_fv_invariants.sh:77,151), but this workflow
+      # never TRIGGERED on extracted-only edits — so a native_decide/@[extern]/new-axiom
+      # in an extracted rank merged unscanned (extracted-F2, V10, 2026-07-02). The build
+      # leg stays lean/-only; the lints scan the extracted sources as files.
+      - 'contracts/verification/extracted/Extracted/**'
+      # EasyCrypt pin-ledger surface: verify-easycrypt-pins is toolchain-free and
+      # wired into this workflow (2026-08-20, #664) — the gate must FIRE on edits
+      # to the .ec files / axiom_pins.txt it polices (the F1 class: it ran in NO
+      # workflow while ~15 straight master commits touched easycrypt/**).
+      - 'contracts/verification/easycrypt/**'
+  pull_request:
+    paths:
+      - 'contracts/verification/lean/**'
+      - 'contracts/verification/scripts/**'
+      # Ledger/assurance docs (FV review F1) — see the push trigger above.
+      - 'contracts/verification/docs/**'
+      - 'contracts/verification/Makefile'
+      - '.github/workflows/lean-fv.yml'
+      # Extracted §33 escape-hatch scan (extracted-F2) — see the push trigger above.
+      - 'contracts/verification/extracted/Extracted/**'
+      # EasyCrypt pin-ledger surface (verify-easycrypt-pins, #664) — see above.
+      - 'contracts/verification/easycrypt/**'
+
+permissions:
+  contents: read
+298:	verify-easycrypt-pins verify-easycrypt-docker verify-forsc-margin \
+573:# `make verify-easycrypt-pins` checks the ledger with no toolchain at all.
+574:.PHONY: verify-easycrypt verify-easycrypt-full verify-easycrypt-pins
+588:verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolchain) + negative control
+# `admit` compiles exit 0 silently. Also asserts the pinned admit/axiom ledger
+# with a NESTING-AWARE sweeper (scripts/ec_sweep.py).
+# NOT CI-gated: needs an opam switch with EasyCrypt r2026.02 + Alt-Ergo 2.6.0.
+# `make verify-easycrypt-pins` checks the ledger with no toolchain at all.
+.PHONY: verify-easycrypt verify-easycrypt-full verify-easycrypt-pins
+verify-easycrypt: ## EasyCrypt PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
+	@/usr/bin/bash scripts/check_easycrypt.sh
+
+# F5 (2026-07-16): "full" is now DISTINCT from partial and HONEST — it requires
+# all 21 .ec compiled with ZERO skips (implies FORCE_MM45=1) and FAILS if the
+# MM45 reference proofs / toolchain are absent, instead of the old behaviour
+# where a skipped-11-of-21 run could still print a success banner.
+verify-easycrypt-full: ## EasyCrypt FULL verification — 21/21, zero skips (needs MM45 toolchain)
+	@/usr/bin/bash scripts/check_easycrypt.sh --full
+
+# F5: ledger (admit/axiom COUNT + SEMANTIC name->statement pin) with NO toolchain,
+# preceded by the wired-in negative control (a `dmkey_ll : false` weakening and a
+# delete-one-add-one, both count-preserving, MUST fire the semantic pin).
+verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolchain) + negative control
+	@/usr/bin/bash scripts/check_easycrypt.sh --self-test
+	@/usr/bin/bash scripts/check_easycrypt.sh --dry-run
+
+# 2026-07-17: the C10-CONCRETE capstone (easycrypt/drafts/SPHINCS_C_c10.ec — the FORS leg
+# routed through the concrete FORS_C10_Multi, not the abstract FORS_C_Multi) is VERIFIED only
+# in MM45's confirmed toolchain (EC r2026.02 + Z3 4.13.4 + Alt-Ergo 2.6.0), which does NOT build
+# locally. This target reproduces the container gate: compile EVERY closure file AS A TARGET
+# (sound — EC `require` does not re-verify deps) + 3 honesty controls (htree, ITSRC10, good_pos
+# strict-positivity). Needs a local MM45 checkout (C10_PORT_DIR, with its FV-SPHINCSPLUS-EC
+# submodule — third-party, NOT vendored) + docker. Absent either, it prints the committed
+# receipt, which is the primary evidence. STILL a conditional composition (hfx/hbridge/htree
+# carried); see easycrypt/docker/GATE-RECEIPT-2026-07-17.log.
+C10_PORT_DIR ?= $(HOME)/repos/c10-eufcma-port
+DOCKER ?= docker
+.PHONY: verify-easycrypt-docker
+verify-easycrypt-docker: ## EasyCrypt C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
+	@if ! $(DOCKER) info >/dev/null 2>&1; then \
+	  echo "SKIP: docker unavailable — the committed receipt (primary evidence) follows:"; echo; \
+	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
+	@if [ ! -d "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC/proofs" ]; then \
+	  echo "SKIP: MM45 base absent at $(C10_PORT_DIR) (third-party, not vendored) — receipt follows:"; echo; \
+	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
+	$(DOCKER) build -t fv-sphincsplus-ec:r2026.02 "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC"
+	@B64=$$(base64 -w0 easycrypt/docker/gate-c10-capstone.sh); \
+	 $(DOCKER) run --rm -v "$(C10_PORT_DIR)":/work:ro fv-sphincsplus-ec:r2026.02 \
+	   bash -c "echo $$B64 | base64 -d > /tmp/g.sh && bash /tmp/g.sh"
+
+# FORS+C GRINDING MARGIN (bounds the blast radius of the A5-ITSR literature gap:
+# the published SPHINCS+C paper has NO FORS+C security theorem). Pins that FORS+C
+# is never weaker than plain FORS at C10's params, and FAILS if the removed
+# forced-zero tree is ever shrunk (t_last < t), which would invert the inequality.
+# No Lean build needed — pure arithmetic over params.rs constants.
+      - name: lake build SphincsCVerify (0 errors / 0 sorry)
+        run: cd contracts/verification/lean && lake build SphincsCVerify
+      - name: verify-fv-lints (axiom-closure exact-set + opaque-guard + escape-hatch)
+        run: make -C contracts/verification verify-fv-lints
+      - name: verify-audit (sorry count + #print axioms dump)
+        run: make -C contracts/verification verify-audit
+      - name: verify-ledger-consistency (AXIOM_STATUS.json falsifiable vs live dump)
+        # Cheap given the build above: re-runs the dump + cross-checks the advertised
+        # closures / signature-pins / counts / no-undocumented-axiom / C9 witness
+        # coverage against the live Lean truth + the lint_fv pin. Ships its own
+        # --self-test negative control (asserted first). The SLOW sibling
+        # verify-proof-mutation runs in nightly.yml, not here.
+        # GitHub Runner launches the setuid sudo binary directly as the custom
+        # shell, before any caller-influenced Bash or dynamic loader can suppress
+        # the body. sudo immediately drops back to the hosted runner account and
+        # env -i starts the only Bash. `exec` preserves sudo as the launcher's
+        # parent, which the launcher verifies before requiring the exact receipt.
+        shell: /usr/bin/sudo -n -u runner -- /usr/bin/env -i /usr/bin/bash --noprofile --norc -p -e -o pipefail {0}
+        run: |
+          exec /usr/bin/bash --noprofile --norc -p \
+            contracts/verification/scripts/run_authoritative_make.sh \
+            make -C contracts/verification verify-ledger-consistency
+      - name: verify-storage-mutators (I-3 closed-world — no unverified cap-counter mutator)
+        # Grep-based closed-world lint (no build) — was UNWIRED (FV review, 2026-07-01):
+        # reachable_implies_combinedCap / no_reset_path are sound only if the
+        # Reachable/no-decrease constructors are the COMPLETE set of Storage
+        # mutators; a new resetter added to Storage.lean would type-check green
+        # beside them. No other gate (closures/ledger/proof-mutation) can catch it.
+        run: make -C contracts/verification verify-storage-mutators
+      - name: verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)
+        # Wired 2026-08-20 (#664): the pin ledger (admit/axiom COUNT + SEMANTIC
+        # name->statement pin) is toolchain-free — no EasyCrypt container, ~2 s —
+        # yet ran in NO workflow while ~15 straight master commits were EasyCrypt
+        # pin work. The make target asserts its own negative control first (a
+        # dmkey_ll:false weakening MUST fire), then the dry-run pin check.
+        # easycrypt/** added to this workflow's paths filter the same day.
+        run: make -C contracts/verification verify-easycrypt-pins
+== verify-easycrypt-pins
+{
+ "step": {
+  "name": "verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)",
+  "run": "make -C contracts/verification verify-easycrypt-pins"
+ },
+ "job_equals": {
+  "runs-on": "ubuntu-latest"
+ },
+ "job_absent": [
+  "container",
+  "env",
+  "if",
+  "needs",
+  "strategy",
+  "defaults",
+  "continue-on-error"
+ ],
+ "workflow_context": {}
+}
+== verify-ledger-consistency
+{
+ "step": {
+  "name": "verify-ledger-consistency (AXIOM_STATUS.json falsifiable vs live dump)",
+  "shell": "/usr/bin/sudo -n -u runner -- /usr/bin/env -i /usr/bin/bash --noprofile --norc -p -e -o pipefail {0}",
+  "run": "exec /usr/bin/bash --noprofile --norc -p \\\n  contracts/verification/scripts/run_authoritative_make.sh \\\n  make -C contracts/verification verify-ledger-consistency\n"
+ },
+ "job_equals": {
+  "runs-on": "ubuntu-latest"
+ },
+ "job_absent": [
+  "container",
+  "env",
+  "if",
+  "needs",
+  "strategy",
+  "defaults",
+  "continue-on-error"
+ ],
+ "workflow_context": {}
+}
+== prod-check-ship
+{
+ "step": {
+  "name": "prove prod-check-ship is quarantined",
+  "shell": "bash",
+  "run": "set -euo pipefail\nif output=\"$(make prod-check-ship 2>&1)\"; then\n  printf '%s\\n' \"$output\"\n  echo \"ERROR: production gate unexpectedly passed\"\n  exit 1\nfi\nprintf '%s\\n' \"$output\"\ngrep -Fq \"prod-feature-check: PASS\" <<<\"$output\"\ngrep -Fq \"reviewed production rollback backend is not implemented\" <<<\"$output\"\n"
+ },
+ "job_equals": {
+  "runs-on": "ubuntu-latest"
+ },
+ "job_absent": [
+  "container",
+  "env",
+  "if",
+  "needs",
+  "strategy",
+  "defaults",
+  "continue-on-error"
+ ],
+ "workflow_context": {}
+}
+== verify-protocol-models
+{
+ "step": {
+  "name": "verify-protocol-models (proverif + tamarin \u2014 the 8 symbolic models)",
+  "run": "eval \"$(opam env)\"\nmake verify-protocol-models PROTOCOL_MODELS=proverif,tamarin\n"
+ },
+ "job_equals": {
+  "runs-on": "ubuntu-latest"
+ },
+ "job_absent": [
+  "container",
+  "env",
+  "if",
+  "needs",
+  "strategy",
+  "defaults",
+  "continue-on-error"
+ ],
+ "workflow_context": {}
+}
+exit=0
+  semantic axiom pin: exact (name -> statement) set matches axiom_pins.txt
+
+=== PINS OK (dry-run; proofs NOT compiled) ===
+make: Leaving directory '/tmp/pq-fv-gates-20260915-u0_8a4pb/target/contracts/verification'
+/home/nicola/.local/bin/actionlint
+ACTIONLINT_OK
+31a219f71b28f3f39b83715931d9fb2c4c93e332
+f50fda40b8a39f68a302022beb1a5df4b7b36cb1

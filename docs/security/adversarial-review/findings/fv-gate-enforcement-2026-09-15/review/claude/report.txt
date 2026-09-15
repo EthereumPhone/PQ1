@@ -1,0 +1,4 @@
+VERDICT: GO
+TARGET: 711080e35f13ef7d764d377eba7951be5c51d3ec / 9d224a17e50da55d26e3723d5794b7b08d220854
+FINDINGS: none
+GAPS: Two older gaps, both outside this diff: per-PR gates still pass with `pull_request: types: [closed]` (the base commit also exits 0), and the completeness regex misses `kani-*`/`miri-*` targets (`make kani-escape-new` isn't flagged).

@@ -1,0 +1,22 @@
+Review PQSigner OS formal-verification CI tooling for MERGE correctness. Do not launch agents or other models.
+Target: /tmp/pq-fv-gates-20260915-u0_8a4pb/target
+Commit: 31a219f71b28f3f39b83715931d9fb2c4c93e332
+Tree: f50fda40b8a39f68a302022beb1a5df4b7b36cb1
+Compare: 9762ea7c41de15b86191184bb2c2baa0caf68e58..31a219f71b28f3f39b83715931d9fb2c4c93e332
+Surface: CI gate enforcement and registration (#663/#664).
+1. All 65 registered identities and enforcement levels are independently pinned; deletion, duplicate registration, demotion or a completeness waiver must fail.
+2. All 37 blocking gates require the complete parsed invocation step, runner/job context and workflow environment/defaults; a printed, skipped, masked or similarly named command must not satisfy the reviewed step contract. Existing production checks deliberately expect failure and retain their exact wrappers.
+3. Both per-PR and nightly enforcement, trigger/path coverage, precise target-name matching and declared local workflow metadata remain correct; the existing authoritative ledger context must not regress.
+4. Per-PR requires pull_request for opened/synchronize/reopened; push alone or closed-only must fail. Protocol nightly coverage is only ProVerif/Tamarin; CryptoVerif has an explicit local-only wrapper. EasyCrypt pin coverage includes its model surface and helper/control closure.
+5. Executable regression controls run through make verify-gate-enforcement, and this checker now verifies its own CI invocation. The path-coverage negative control must reach its intended diagnostic. Keep the Kani/extraction protected inventory unchanged.
+6. Path inclusion must not treat a literal directory or single-star filter as recursive coverage. Per-PR gates reject nonempty paths-ignore; EasyCrypt reverse coverage independently requires its model directory and helpers. The same conservative inclusion matcher serves Kani crate coverage.
+Evidence green: make verify-gate-enforcement (existing self-test; 15 regression groups in 73.792 seconds; 65-gate check); make -C contracts/verification verify-easycrypt-pins (negative controls + exact pin ledger, no proof compilation); actionlint on lean-fv.yml. No proof or firmware behavior changes.
+The checker policy, reviewed manifest contracts and existing setup steps remain trusted source. This is static source-wiring assurance, not arbitrary shell interpretation, a proof-engine run, third-party action/tool custody, hosted branch protection, hardware or shipment assurance. Other working-tree CI jobs and Kani repair are outside this candidate.
+Inspect the diff and affected callers source-first for concrete correctness blockers. Keep the target immutable. Use read-only commands; focused tests may use temporary outputs outside the target. No target edits, hardware, external writes, agents, prior reports, status prose or playbook catalogs. Do not read docs/security/adversarial-review/findings/: those archived reports are not review input. Ignore style and optional hardening. You have 15 minutes and 800 words. Check elapsed time between tool groups; reserve the final three minutes for synthesis and return a compact GAP before the deadline if necessary.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 31a219f71b28f3f39b83715931d9fb2c4c93e332 / f50fda40b8a39f68a302022beb1a5df4b7b36cb1
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+At most three findings. FIX needs a source anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.

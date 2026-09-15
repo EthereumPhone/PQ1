@@ -1,0 +1,24 @@
+VERDICT: GO
+TARGET: c6c9f004a911049eb11fd50ce3f06b92a24d4536 / c4d7d801797a806607f77280dac5c8a81166a6f1
+FINDINGS: none
+GAPS: none
+
+Evidence (read-only; the temporary copies under /tmp were deleted, and the target is still clean):
+- **Checker on HEAD:** `python3 scripts/check_gate_enforcement.py` exits 0 over 65 gates: 27 per-PR, 10 nightly (37 blocking), 28 local. I didn't rerun the 76-second self-test or unit tests, only read them.
+- **Registrations (claim 1):** `registration_failures` compares the whole id→level map against the pinned policy and requires `_completeness_waived == {}`. It runs before anything else, so deleting, duplicating or demoting a gate fails. The manifest went from 33 to 65 rows with none removed. The base waiver for `verify-gate-enforcement` is gone.
+- **Step contracts (claim 2):** `invokes_target` counts a step only if all of these match exactly: the step itself, the workflow `defaults`/`env`, the job's `runs-on`, and the absence of `container`, `env`, `if`, `needs`, `strategy`, `defaults` and `continue-on-error`. I read all 37 pinned runs. The two expected-failure wrappers (`prod-check-ship`, `prod-erc7730-provenance-check`) have no `||` on the invocation line.
+- **Existing contexts:** the ledger `required_context` only gained keys. The Kani, Kani-mutation and extraction-freshness `polices_paths` are byte-identical to base; only a `required_context` was added to each.
+- **Unit-test fixture:** re-dumping each of the 11 workflows unchanged still passes the checker. So the negative tests fail because of their mutation, not because of the rewrite.
+- **Protocol split and EasyCrypt closure (claim 4):** the nightly step pins `PROTOCOL_MODELS=proverif,tamarin`, and `verify-cryptoverif` selects only cryptoverif. `check_easycrypt.sh` calls only `ec_sweep.py` and `ec_axioms.py`, and `ec_axioms.py` imports only `ec_sweep`. The verification Makefile has no includes, and all of these paths are covered.
+- **Edge cases:**
+  - `paths: []` fails.
+  - `branches-ignore: [master]` fails.
+  - A bare-string `on: pull_request` crashes the checker with exit 1. That is valid GitHub syntax, but the result is a failure, not a false pass.
+
+Limits I saw that are within your stated scope, not blockers:
+- A newly inserted earlier step that writes to `$GITHUB_ENV` isn't caught. The docstring disclaims setup-step custody and shell interpretation.
+- A PR that replaces the checker's own `ci.yml` step can't be caught in CI. Only hosted branch protection could catch that.
+- These were already there before this change, and nothing in today's workflows gets past them:
+  - The completeness pass only globs `*.yml`.
+  - It takes one target per `make` line.
+  - It reads `make kani-foo` as `kani`.

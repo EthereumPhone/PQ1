@@ -1,0 +1,7 @@
+VERDICT: FIX
+TARGET: 31a219f71b28f3f39b83715931d9fb2c4c93e332 / f50fda40b8a39f68a302022beb1a5df4b7b36cb1
+FINDINGS:
+- HIGH scripts/check_gate_enforcement.py:408 — nightly enforcement checks only for a `schedule` key, not a valid nightly cadence; synthetic `verify-proof-mutation` workflows with `schedule: []` and annual cron `0 0 1 1 *` both returned no failures, allowing all ten nightly gates to be disabled or demoted while green; pin reviewed schedules or validate nonempty daily cadence with negative controls.
+- HIGH scripts/check_gate_enforcement.py:507 — protected-branch checks use Python `fnmatch`, whose grammar differs from GitHub’s `+`/`?` filter grammar; `branches-ignore: ['master+']` was accepted for `master` although GitHub treats `+` as repetition and excludes that branch, allowing per-PR gates to skip protected master; use a GitHub-compatible matcher or conservatively reject unsupported metacharacters.
+- MEDIUM scripts/check_gate_enforcement.py:692 — completeness captures only the first soundness goal after each `make`; `SOUNDNESS_TARGET.finditer('make verify-a verify-b')` returned only `verify-a`, so a second CI soundness target can escape registration/policy enforcement; enumerate every Make goal or reject multi-goal invocations and add a regression control.
+GAPS: none

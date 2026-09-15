@@ -1,0 +1,16 @@
+[
+  {
+    "case": "EasyCrypt allowlist narrowed",
+    "replacement": "contracts/verification/easycrypt",
+    "manifest_surface": "contracts/verification/easycrypt/**",
+    "checker_exit": 0,
+    "actionlint_exit": 0
+  },
+  {
+    "case": "EasyCrypt allowlist narrowed",
+    "replacement": "contracts/verification/easycrypt/*",
+    "manifest_surface": "contracts/verification/easycrypt/**",
+    "checker_exit": 0,
+    "actionlint_exit": 0
+  }
+]

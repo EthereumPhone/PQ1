@@ -1,0 +1,7 @@
+VERDICT: FIX
+TARGET: 711080e35f13ef7d764d377eba7951be5c51d3ec / 9d224a17e50da55d26e3723d5794b7b08d220854
+FINDINGS:
+- HIGH scripts/check_gate_enforcement.py:429 — `per_pr_blocking` fails only when both push and pull-request triggers are absent; deleting `pull_request` from live `lean-fv.yml` left `check_gate()` returning `[]`, so no PR execution is required; require a pull-request trigger and add this negative control.
+- MEDIUM scripts/gate_enforcement.json:313 — the manifest claims CryptoVerif is nightly-policed, but `.github/workflows/nightly.yml:359` explicitly excludes it and line 416 selects only `proverif,tamarin`; CryptoVerif changes receive no proof run while the checker reports coverage; remove that path from the nightly contract and record CryptoVerif as local-only.
+- MEDIUM scripts/gate_enforcement.json:1291 — the EasyCrypt contract omits `ec_sweep.py` and `ec_axioms.py`, although `check_easycrypt.sh:95` and `:112` execute them; replacing broad workflow paths with the union of declared Lean-gate paths omitted both helpers while every gate check returned clean, allowing future path narrowing to skip checker changes; add both helpers to `polices_paths` and regression-test their removal.
+GAPS: none

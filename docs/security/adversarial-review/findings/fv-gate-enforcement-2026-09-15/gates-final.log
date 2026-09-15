@@ -1,0 +1,98 @@
+=== --self-test (negative controls) ===
+    [ok]   miri                       per-PR blocking, no-path-filter
+    [ok]   miri                       per-PR blocking, no-path-filter
+    [ok]   miri                       nightly, paths cover policed surface
+    [note] miri                       local-only (not CI-gated): deliberately local for now.
+    [note] miri                       local-only (not CI-gated): tracked in #663 (demoted 2026-08-20).
+    [note] miri                       local-only (not CI-gated): tracked in #663 (demoted 2026-08-20).
+    [note] miri                       local-only (not CI-gated): tracked in #663 (demoted 2026-08-20).
+  self-test OK: allowlist gap caught (2), duplicate YAML/JSON keys rejected, exact authoritative ledger runner/step/context suppression controls verified, branch/ordered-path/workflow-self trigger suppressions rejected, paths-ignore denylist logic verified (directly), kani-reverse gap caught (1), kani-mutation-reverse gap caught (2), extraction-reverse gap caught (1), #663 invocation-integrity/suppression controls caught (10 per-PR + 4 nightly), local-reason + stale-runs_in controls caught.
+test_checker_checks_its_own_ci_step (__main__.GateControls.test_checker_checks_its_own_ci_step) ... ok
+test_context_cannot_be_removed (__main__.GateControls.test_context_cannot_be_removed) ... ok
+test_duplicate_registration_and_waiver (__main__.GateControls.test_duplicate_registration_and_waiver) ... ok
+test_easycrypt_helper_and_control_paths (__main__.GateControls.test_easycrypt_helper_and_control_paths) ... ok
+test_every_blocking_level_is_pinned (__main__.GateControls.test_every_blocking_level_is_pinned) ... ok
+test_every_registration_is_required (__main__.GateControls.test_every_registration_is_required) ... ok
+test_live_fixture_and_unrelated_step (__main__.GateControls.test_live_fixture_and_unrelated_step) ... ok
+test_local_workflow_metadata (__main__.GateControls.test_local_workflow_metadata) ... ok
+test_printed_command_for_every_blocking_gate (__main__.GateControls.test_printed_command_for_every_blocking_gate) ... ok
+test_protocol_family_scope_and_local_wrapper (__main__.GateControls.test_protocol_family_scope_and_local_wrapper) ... ok
+test_pull_request_trigger_and_activity_coverage (__main__.GateControls.test_pull_request_trigger_and_activity_coverage) ... ok
+test_shell_forms_on_both_blocking_tiers (__main__.GateControls.test_shell_forms_on_both_blocking_tiers) ... ok
+test_step_job_and_workflow_suppression (__main__.GateControls.test_step_job_and_workflow_suppression) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 55.727s
+
+OK
+python3 scripts/check_gate_enforcement.py
+=== verify-gate-enforcement (65 gates) ===
+    G1: does each soundness gate actually RUN on the diff it polices?
+
+    [ok]   classical-crypto-boundary  per-PR blocking, no-path-filter
+    [ok]   verify-ledger-consistency  per-PR blocking, paths cover policed surface
+    [ok]   verify-fv-lints            per-PR blocking, paths cover policed surface
+    [ok]   verify-audit               per-PR blocking, paths cover policed surface
+    [ok]   verify-storage-mutators    per-PR blocking, paths cover policed surface
+    [ok]   verify-proof-mutation      nightly, paths cover policed surface
+    [ok]   miri                       per-PR blocking, no-path-filter
+    [ok]   kani                       nightly, paths cover policed surface
+    [ok]   verify-kani-mutation       nightly, paths cover policed surface
+    [ok]   verify-protocol-models     nightly, paths cover policed surface
+    [ok]   verify-repro               nightly, paths cover policed surface
+    [note] checkct                    local-only (not CI-gated): the `checkct` job in nightly.yml is workflow_dispatch-only + continue-on-error (
+    [ok]   verify-transcription       per-PR blocking, paths cover policed surface
+    [ok]   verify-extracted           per-PR blocking, paths cover policed surface
+    [ok]   verify-extract-differential nightly, paths cover policed surface
+    [ok]   verify-extraction-freshness per-PR blocking, paths cover policed surface
+    [note] verify-extraction-regen    local-only (not CI-gated): F1 (2026-07-16): the REAL regen check — re-runs charon->aeneas + diff for every 
+    [note] verify-lean4checker        local-only (not CI-gated): Independent kernel/environment replay (~40-60 min per sweep; manual pre-release 
+    [ok]   verify-spec-vendored-fidelity nightly, paths cover policed surface
+    [note] verify-extracted-heavy     local-only (not CI-gated): FormatDecimalSpec kernel type-checking needs about 42 GB RSS (measured 2026-07-0
+    [note] verify-bytecode            local-only (not CI-gated): the Halmos+z3 symbolic discharge of A3.2/A3.3/A3.4 needs the patched halmos tool
+    [ok]   verify-kani-census         per-PR blocking, no-path-filter
+    [note] verify-easycrypt           local-only (not CI-gated): F5 (2026-07-16) enrolls the EasyCrypt +C port gate — previously the ONLY formal-
+    [note] verify-three-claims        local-only (not CI-gated): a LOCAL end-to-end convenience bundle (kernel + audit + lints + forge + Halmos/C
+    [ok]   verify-hw-assumptions      per-PR blocking, no-path-filter
+    [note] verify-mmio-addresses      local-only (not CI-gated): diffs the hand-transcribed MMIO bases against ST's own CMSIS stm32u585xx.h, whic
+    [ok]   prod-check-ship            per-PR blocking, no-path-filter
+    [ok]   verify-rollback-freeze-pin per-PR blocking, no-path-filter
+    [ok]   prod-erc7730-provenance-check per-PR blocking, no-path-filter
+    [ok]   e2e                        per-PR blocking, no-path-filter
+    [ok]   invisible-unicode          per-PR blocking, paths cover policed surface
+    [note] kani-heavy                 local-only (not CI-gated): The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB
+    [ok]   build-hw                   per-PR blocking, no-path-filter
+    [ok]   build-hw-prodtest          nightly, paths cover policed surface
+    [ok]   size-report                per-PR blocking, no-path-filter
+    [ok]   check-erc7730-descriptors  per-PR blocking, no-path-filter
+    [ok]   check-solidity-constants   per-PR blocking, no-path-filter
+    [ok]   check-research-bundles     per-PR blocking, no-path-filter
+    [ok]   erc7730-cross-parity       per-PR blocking, no-path-filter
+    [ok]   erc8176-coverage-test      per-PR blocking, no-path-filter
+    [ok]   test-erc7730-proxy-drift   per-PR blocking, no-path-filter
+    [ok]   erc7730-proxy-drift        nightly, paths cover policed surface
+    [ok]   ui-golden-render           nightly, paths cover policed surface
+    [ok]   verify-easycrypt-pins      per-PR blocking, paths cover policed surface
+    [note] verify-easycrypt-full      local-only (not CI-gated): FULL EasyCrypt verification (21/21 .ec compiled as targets, ZERO skips) needs th
+    [note] verify-easycrypt-docker    local-only (not CI-gated): the C10-concrete capstone reproduces MM45's confirmed toolchain (EC r2026.02 + Z
+    [note] verify-tla                 local-only (not CI-gated): needs a local tla2tools.jar + JRE; the jar is deliberately NOT vendored or auto-
+    [note] verify-verus               local-only (not CI-gated): the all-length Verus flash-journal crash-safety pilot needs a rustc-pinned prebu
+    [note] verify-crux-ns-ptr         local-only (not CI-gated): the crux-mir implementation-diversity check (ns_ptr_validate vs an independent u
+    [note] verify-lean-proto-domain   local-only (not CI-gated): P7 domain-tag drift lint (Lean factoryAddSlotDomain == proto::FACTORY_ADD_SLOT_D
+    [note] verify-linker-map          local-only (not CI-gated): P1.9 TrustZone memory-map drift gate (.x == proto == sau.rs == Lean). Pure sourc
+    [note] verify-halmos              local-only (not CI-gated): same constraint as verify-bytecode (which invokes the same halmos/run_halmos.sh)
+    [note] verify-kontrol             local-only (not CI-gated): Kontrol/KEVM symbolic proofs on the deployed bytecode need a K backend (`kup ins
+    [note] verify-parse-transcription local-only (not CI-gated): the A3.1 in-kernel Yul-parse leg (parseYul c10Source = some c10ProgramFull + eli
+    [note] verify-interp              local-only (not CI-gated): the A3.1 interpreter<->bytecode KAT+bulk replay needs the full Lean build + `lak
+    [note] verify-cavp                local-only (not CI-gated): NIST CAVP SHA-256 conformance: regenerates the embedded vector module (python, i
+    [note] verify-primitive-kat       local-only (not CI-gated): the per-primitive tweakable-hash KAT (Rust<->Python<->Yul three-way) needs cargo
+    [note] verify-bulk                local-only (not CI-gated): the bulk executable-spec differential needs the Lean build + `lake exe verify-bu
+    [note] verify-exec-gate           local-only (not CI-gated): the Claim-4 trace-gate closure gate lake-builds the TxFlow + Spec.Theorems dep c
+    [note] verify-forsc-margin        local-only (not CI-gated): the FORS+C grinding-margin guardrail (never weaker than plain FORS at C10 params
+    [note] verify-independent-signer  local-only (not CI-gated): leg (2) — the Rust cross-verifier accepting FRESH independent-signer output — al
+    [note] verify-pins                local-only (not CI-gated): tools/verify_pins.sh supply-chain pin audit (Cargo.lock checksums, git rev= pins
+    [ok]   verify-verity-census       per-PR blocking, paths cover policed surface
+    [ok]   verify-gate-enforcement    per-PR blocking, no-path-filter
+    [note] verify-cryptoverif         local-only (not CI-gated): CryptoVerif requires its local executable/library setup. The nightly protocol jo
+
+OK: all 65 gates fire on the surface they police (or are documented local-only).

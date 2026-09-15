@@ -1,0 +1,820 @@
+711080e3 fix(fv): pin CI invocation contracts and gate registrations
+9762ea7c fix(verity): enforce a fresh kernel-rechecked assurance census
+ebb590d0 fix(fv): enforce exact axiom inventories and model evidence
+711080e35f13ef7d764d377eba7951be5c51d3ec
+ .github/workflows/lean-fv.yml                      |   15 +
+ Makefile                                           |    1 +
+ .../findings/fv-gate-enforcement-2026-09-15.md     |   79 ++
+ .../easycrypt-pins.log                             |   16 +
+ .../gates-initial.log                              |   94 ++
+ scripts/check_gate_enforcement.py                  |  445 +++++++-
+ scripts/gate_enforcement.json                      | 1142 +++++++++++++++++++-
+ scripts/test_gate_enforcement.py                   |  154 +++
+ 8 files changed, 1866 insertions(+), 80 deletions(-)
+diff --git a/.github/workflows/lean-fv.yml b/.github/workflows/lean-fv.yml
+index d2f8c330..db34de9a 100644
+--- a/.github/workflows/lean-fv.yml
++++ b/.github/workflows/lean-fv.yml
+@@ -38,6 +38,11 @@ on:
+       # in an extracted rank merged unscanned (extracted-F2, V10, 2026-07-02). The build
+       # leg stays lean/-only; the lints scan the extracted sources as files.
+       - 'contracts/verification/extracted/Extracted/**'
++      # EasyCrypt pin-ledger surface: verify-easycrypt-pins is toolchain-free and
++      # wired into this workflow (2026-08-20, #664) — the gate must FIRE on edits
++      # to the .ec files / axiom_pins.txt it polices (the F1 class: it ran in NO
++      # workflow while ~15 straight master commits touched easycrypt/**).
++      - 'contracts/verification/easycrypt/**'
+   pull_request:
+     paths:
+       - 'contracts/verification/lean/**'
+@@ -48,6 +53,8 @@ on:
+       - '.github/workflows/lean-fv.yml'
+       # Extracted §33 escape-hatch scan (extracted-F2) — see the push trigger above.
+       - 'contracts/verification/extracted/Extracted/**'
++      # EasyCrypt pin-ledger surface (verify-easycrypt-pins, #664) — see above.
++      - 'contracts/verification/easycrypt/**'
+ 
+ permissions:
+   contents: read
+@@ -119,3 +126,11 @@ jobs:
+         # mutators; a new resetter added to Storage.lean would type-check green
+         # beside them. No other gate (closures/ledger/proof-mutation) can catch it.
+         run: make -C contracts/verification verify-storage-mutators
++      - name: verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)
++        # Wired 2026-08-20 (#664): the pin ledger (admit/axiom COUNT + SEMANTIC
++        # name->statement pin) is toolchain-free — no EasyCrypt container, ~2 s —
++        # yet ran in NO workflow while ~15 straight master commits were EasyCrypt
++        # pin work. The make target asserts its own negative control first (a
++        # dmkey_ll:false weakening MUST fire), then the dry-run pin check.
++        # easycrypt/** added to this workflow's paths filter the same day.
++        run: make -C contracts/verification verify-easycrypt-pins
+diff --git a/Makefile b/Makefile
+index 4ebd5a76..c7b13c1e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4660,6 +4660,7 @@ verify-protocol-models: ## anti-vacuity: assert the protocol models' verdicts vs
+ .PHONY: verify-gate-enforcement
+ verify-gate-enforcement: ## G1: assert every soundness gate is actually CI-enforced on its surface
+ 	@python3 scripts/check_gate_enforcement.py --self-test
++	@python3 scripts/test_gate_enforcement.py
+ 	python3 scripts/check_gate_enforcement.py
+ 
+ # ---------------------------------------------------------------------------
+  1341 scripts/check_gate_enforcement.py
+   154 scripts/test_gate_enforcement.py
+  1574 scripts/gate_enforcement.json
+  3069 total
+diff --git a/scripts/check_gate_enforcement.py b/scripts/check_gate_enforcement.py
+index 0c285ffc..d9b4894a 100755
+--- a/scripts/check_gate_enforcement.py
++++ b/scripts/check_gate_enforcement.py
+@@ -24,8 +24,8 @@ asserts the wiring matches the declared enforcement:
+     cannot downgrade, relocate, containerize, condition away, or no-op a
+     load-bearing launcher.
+   * nightly — the `runs_in` workflow invokes it AND has a `schedule` trigger.
+-  * local_documented — deliberately not CI-gated; a NOTE, never a FAIL (must carry a
+-    `why`). Surfaced so the non-enforcement is VISIBLE, not silent.
++  * local_documented — deliberately not CI-gated; a NOTE when its registration,
++    reason and optional workflow metadata are valid. Invalid metadata fails.
+ 
+ Robustness (mirrors the sibling gates): a gate whose target no workflow invokes is a
+ HARD FAIL (unwired); the invocation check inspects STEP-level `if:`/`continue-on-error`
+@@ -36,9 +36,21 @@ the manifest — the G1META-1 class). Reverse checks derive the full `make kani`
+ crate surface and every source file in `kani_mutations.json`, so their declared
+ path inventories cannot silently lag the executable gates. Ships `--self-test`
+ negative controls for each reverse check. Read-only — never mutates.
+-KNOWN OUT-OF-SCOPE evasions (fail-closed / documented, not modelled): a gate invoked via
+-`uses:` a reusable workflow (no inline `run` text) reads as UNWIRED (a false FAIL, safe
+-direction); matrix-`exclude` on the invoking job is not modelled.
++
++The #663/#664 contract pins every blocking gate's complete parsed step,
++runner, and absent job controls, rejecting changed shell text/conditions and
++workflow-level defaults/environment. This includes deliberate expected-failure
++wrappers already present in production configuration CI. The checker policy pins
++all registered identities and enforcement levels, including this checker itself;
++a manifest-only deletion/demotion or completeness waiver fails. A local gate's
++reason still requires a date or issue reference as documentation hygiene, not as
++approval. Declared local runs_in metadata must correspond to an invocation.
++
++The reviewed checker policy, manifest contracts, and workflow setup remain
++trusted source. These checks do not interpret arbitrary shell programs, prove
++hosted branch-protection settings, verify third-party action implementations,
++or establish that earlier setup steps cannot alter tools or runner state.
++Context/policy changes require review; they cannot be authorized by this lint.
+ 
+ Exit: 0 = every gate enforced as declared; 1 = an enforcement gap (unwired /
+ path-uncovered / non-blocking); 2 = harness/manifest error (missing file, YAML parse).
+@@ -65,6 +77,76 @@ EXTRACTION_REGISTRY = (
+ )
+ REQUIRED_BLOCKING_BRANCH = "master"
+ 
++# Reviewed registration/level policy: update deliberately with the manifest.
++# This prevents a manifest-only removal or demotion; it is not review authority.
++ENFORCEMENT_POLICY = {
++    "build-hw": "per_pr_blocking",
++    "build-hw-prodtest": "nightly",
++    "check-erc7730-descriptors": "per_pr_blocking",
++    "check-research-bundles": "per_pr_blocking",
++    "check-solidity-constants": "per_pr_blocking",
++    "checkct": "local_documented",
++    "classical-crypto-boundary": "per_pr_blocking",
++    "e2e": "per_pr_blocking",
++    "erc7730-cross-parity": "per_pr_blocking",
++    "erc7730-proxy-drift": "nightly",
++    "erc8176-coverage-test": "per_pr_blocking",
++    "invisible-unicode": "per_pr_blocking",
++    "kani": "nightly",
++    "kani-heavy": "local_documented",
++    "miri": "per_pr_blocking",
++    "prod-check-ship": "per_pr_blocking",
++    "prod-erc7730-provenance-check": "per_pr_blocking",
++    "size-report": "per_pr_blocking",
++    "test-erc7730-proxy-drift": "per_pr_blocking",
++    "ui-golden-render": "nightly",
++    "verify-audit": "per_pr_blocking",
++    "verify-bulk": "local_documented",
++    "verify-bytecode": "local_documented",
++    "verify-cavp": "local_documented",
++    "verify-crux-ns-ptr": "local_documented",
++    "verify-easycrypt": "local_documented",
++    "verify-easycrypt-docker": "local_documented",
++    "verify-easycrypt-full": "local_documented",
++    "verify-easycrypt-pins": "per_pr_blocking",
++    "verify-exec-gate": "local_documented",
++    "verify-extract-differential": "nightly",
++    "verify-extracted": "per_pr_blocking",
++    "verify-extracted-heavy": "local_documented",
++    "verify-extraction-freshness": "per_pr_blocking",
++    "verify-extraction-regen": "local_documented",
++    "verify-forsc-margin": "local_documented",
++    "verify-fv-lints": "per_pr_blocking",
++    "verify-gate-enforcement": "per_pr_blocking",
++    "verify-halmos": "local_documented",
++    "verify-hw-assumptions": "per_pr_blocking",
++    "verify-independent-signer": "local_documented",
++    "verify-interp": "local_documented",
++    "verify-kani-census": "per_pr_blocking",
++    "verify-kani-mutation": "nightly",
++    "verify-kontrol": "local_documented",
++    "verify-lean-proto-domain": "local_documented",
++    "verify-lean4checker": "local_documented",
++    "verify-ledger-consistency": "per_pr_blocking",
++    "verify-linker-map": "local_documented",
++    "verify-mmio-addresses": "local_documented",
++    "verify-parse-transcription": "local_documented",
++    "verify-pins": "local_documented",
++    "verify-primitive-kat": "local_documented",
++    "verify-proof-mutation": "nightly",
++    "verify-protocol-models": "nightly",
++    "verify-repro": "nightly",
++    "verify-rollback-freeze-pin": "per_pr_blocking",
++    "verify-spec-vendored-fidelity": "nightly",
++    "verify-storage-mutators": "per_pr_blocking",
++    "verify-three-claims": "local_documented",
++    "verify-tla": "local_documented",
++    "verify-transcription": "per_pr_blocking",
++    "verify-verity-census": "per_pr_blocking",
++    "verify-verus": "local_documented"
++}
++
++
+ 
+ def _reject_duplicate_json_keys(pairs: list[tuple[object, object]]) -> dict:
+     """Fail closed on duplicate JSON object keys instead of last-value-wins."""
+@@ -171,27 +253,102 @@ def _dispatch_only(cond: str) -> bool:
+     return "workflow_dispatch" in cond and "schedule" not in cond
+ 
+ 
++_FALSE_IF = re.compile(r"^\s*(?:false|\$\{\{\s*false\s*\}\})\s*$", re.IGNORECASE)
++
++
++def _if_is_false(value: object) -> bool:
++    """A statically-false `if:` (YAML bool False, 'false', '${{ false }}') — the
++    job/step NEVER runs, so an invocation declared there is void (#663)."""
++    if value is False:
++        return True
++    if isinstance(value, str):
++        return bool(_FALSE_IF.match(value))
++    return False
++
++
++def _strip_trailing_comment(line: str) -> str:
++    """Shell comment rules, approximated for a lint: an UNQUOTED `#` at a word
++    boundary (start of line or after whitespace) starts a comment that eats the
++    rest of the line — including any surviving `make <gate>` text. Single and
++    double quotes are tracked so `grep '#x'` / `echo "a #b"` are not corrupted.
++    A gate neutralized to `true # make gate` is NOT an invocation (#663)."""
++    out: list[str] = []
++    in_squote = False
++    in_dquote = False
++    for i, ch in enumerate(line):
++        if in_squote:
++            if ch == "'":
++                in_squote = False
++            out.append(ch)
++        elif in_dquote:
++            if ch == '"':
++            if ch == '"':
++                in_dquote = False
++            out.append(ch)
++        elif ch == "'":
++            in_squote = True
++            out.append(ch)
++        elif ch == '"':
++            in_dquote = True
++            out.append(ch)
++        elif ch == "#" and (i == 0 or line[i - 1] in " \t"):
++            break
++        else:
++            out.append(ch)
++    return "".join(out)
++
++
++def _logical_lines(run: str) -> list[str]:
++    """A `run:` block -> logical shell lines: comments stripped (full-line and
++    trailing, quote-aware — see _strip_trailing_comment) and backslash
++    continuations joined. A `make <gate>` mention that survives only inside a
++    comment is NOT an invocation (#663 comment-invocation neutralizations)."""
++    out: list[str] = []
++    buf: str | None = None
++    for raw in run.splitlines():
++        line = _strip_trailing_comment(raw)
++        if buf is None and not line.strip():
++            continue
++        cur = line if buf is None else buf + line
++        stripped = cur.rstrip()
++        if stripped.endswith("\\"):
++            buf = stripped[:-1] + " "
++            continue
++        out.append(cur)
++        buf = None
++    if buf is not None:
++        out.append(buf)
++    return out
++
++
+ def invokes_target(
+     wf: dict, target: str, required_context: dict | None = None
+-) -> tuple[bool, bool, bool]:
+-    """Scan every job's steps for a `make [-C dir] <target>` invocation. If
+-    `required_context` is supplied, only its exact parsed step on the pinned runner
+-    with every forbidden job key absent counts. Returns (invoked, non_blocking,
+-    dispatch_only) where the two flags OR together the JOB-level and the matching
+-    STEP-level `continue-on-error` / `if:` (a non-blocking or workflow_dispatch-gated
+-    STEP defeats a per-PR gate just as a job-level one does)."""
+-    pat = re.compile(r"\bmake\b[^\n]*\b" + re.escape(target) + r"\b")
++) -> tuple[bool, bool, bool, bool, bool]:
++    """Scan every job's steps for a `make [-C dir] <target>` invocation, line-wise
++    over comment-stripped `run:` blocks. If `required_context` is supplied, only
++    its exact parsed step on the pinned runner with every forbidden job key absent
++    counts. Returns (invoked, non_blocking, dispatch_only, if_false, short_circuit)
++    where the flags OR together the JOB-level and the matching STEP-level
++    `continue-on-error` / `if:` / `||`-on-the-invocation-line (a non-blocking,
++    workflow_dispatch-gated, statically-disabled, or `|| true`-neutralized STEP
++    defeats a blocking gate just as a job-level one does). One CLEAN invocation is
++    enough; a gate whose every invocation is neutralized reports the first
++    match's suppression flags."""
++    pat = re.compile(r"\bmake\b[^\n]*(?<![A-Za-z0-9_-])" + re.escape(target) + r"(?![A-Za-z0-9_-])")
++    matches: list[tuple[bool, bool, bool, bool]] = []
+     for job in (wf.get("jobs") or {}).values():
+         if not isinstance(job, dict):
+             continue
+         job_coe = bool(job.get("continue-on-error"))
+         job_dispatch_only = _dispatch_only(str(job.get("if", "")))
++        job_if_false = _if_is_false(job.get("if"))
+         for s in job.get("steps") or []:
+             if not isinstance(s, dict):
+                 continue
+             run = str(s.get("run", ""))
+             exact_context = required_context is None or (
+                 s == required_context["step"]
++                and {key: wf[key] for key in ("defaults", "env") if key in wf}
++                    == required_context.get("workflow_context", {})
+                 and all(
+                     key in job and job[key] == value
+                     for key, value in required_context["job_equals"].items()
+@@ -200,11 +357,24 @@ def invokes_target(
+                     key in job for key in required_context["job_absent"]
+                 )
+             )
+-            if pat.search(run) and exact_context:
+-                coe = job_coe or bool(s.get("continue-on-error"))
+-                dispatch_only = job_dispatch_only or _dispatch_only(str(s.get("if", "")))
+-                return True, coe, dispatch_only
+-    return False, False, False
++            if not exact_context:
++                continue
++            for line in _logical_lines(run):
++                if pat.search(line):
++                    coe = job_coe or bool(s.get("continue-on-error"))
++                    dispatch_only = job_dispatch_only or _dispatch_only(
++                        str(s.get("if", ""))
++                    )
++                    if_false = job_if_false or _if_is_false(s.get("if"))
++                    short_circuit = "||" in line
++                    matches.append((coe, dispatch_only, if_false, short_circuit))
++                    break  # one invocation line per step is enough
++    if not matches:
++        return False, False, False, False, False
++    for m in matches:
++        if not any(m):
++            return True, False, False, False, False
++    return (True, *matches[0])
+ 
+ 
+ def triggers(wf: dict) -> dict:
+@@ -359,18 +529,46 @@ def _per_pr_trigger_failures(
+     return fails, has_ignore_filter
+ 
+ 
+-def check_gate(g: dict) -> list[str]:
++_WF_UNSET = object()
++
++# A local reason cites a date or issue for discoverability. This is metadata
++# hygiene only; ENFORCEMENT_POLICY independently prevents manifest-only demotion.
++_ISSUE_OR_DATE_REF = re.compile(r"(#\d+|\b\d{4}-\d{2}-\d{2}\b)")
++
++
++def check_gate(g: dict, _wf_override: object = _WF_UNSET) -> list[str]:
+     fails = []
+     target = g["id"]
+     enforcement = g["enforcement"]
+     runs_in = g.get("runs_in")
+     wf_path = REPO_ROOT / ".github" / "workflows" / runs_in if runs_in else None
+-    wf = load_workflow(wf_path) if wf_path else None
++    if _wf_override is not _WF_UNSET:
++        wf = _wf_override
++    else:
++        wf = load_workflow(wf_path) if wf_path else None
+ 
+     if enforcement == "local_documented":
+-        if not g.get("why"):
++        why = g.get("why") or ""
++        if not why:
+             fails.append(f"{target}: enforcement=local_documented but no `why` — undisclosed non-gate.")
+-        print(f"    [note] {target:26s} local-only (not CI-gated): {g.get('why','')[:80]}")
++        elif not _ISSUE_OR_DATE_REF.search(why):
++            fails.append(
++                f"{target}: local_documented `why` carries no dated issue "
++                "reference (#NNN or YYYY-MM-DD) for its local-only status."
++            )
++        if runs_in:
++            if wf is None:
++                fails.append(
++                    f"{target}: local_documented declares runs_in={runs_in} but "
++                    "that workflow file is absent — stale metadata (#664)."
++                )
++            elif not invokes_target(wf, target)[0]:
++                fails.append(
++                    f"{target}: local_documented declares runs_in={runs_in} but "
++                    f"no step there invokes `make {target}` — stale/wrong "
++                    "runs_in (#664)."
++                )
++        print(f"    [note] {target:26s} local-only (not CI-gated): {why[:80]}")
+         return fails
+ 
+     if wf is None:
+@@ -378,6 +576,8 @@ def check_gate(g: dict) -> list[str]:
+         return fails
+ 
+     required_context = g.get("required_context")
++    if required_context is None:
++        return [f"{target}: blocking gate requires an exact required_context contract"]
+     if required_context is not None:
+         required_step = (
+             required_context.get("step")
+@@ -396,12 +596,14 @@ def check_gate(g: dict) -> list[str]:
+         )
+         malformed = (
+             not isinstance(required_context, dict)
+-            or set(required_context) != {"step", "job_equals", "job_absent"}
++            or not {"step", "job_equals", "job_absent"} <= set(required_context)
++            or not set(required_context) <= {"step", "job_equals", "job_absent", "workflow_context"}
++            or not isinstance(required_context.get("workflow_context", {}), dict)
++            or not set(required_context.get("workflow_context", {})) <= {"defaults", "env"}
+             or not isinstance(required_step, dict)
+             or not isinstance(required_step.get("run"), str)
+             or not required_step["run"]
+-            or not isinstance(required_step.get("shell"), str)
+-            or not required_step["shell"]
++            or ("shell" in required_step and (not isinstance(required_step["shell"], str) or not required_step["shell"]))
+             or not isinstance(job_equals, dict)
+             or not job_equals
+             or not isinstance(job_absent, list)
+@@ -417,7 +619,9 @@ def check_gate(g: dict) -> list[str]:
+             )
+             return fails
+ 
+-    invoked, coe, dispatch_only = invokes_target(wf, target, required_context)
++    invoked, coe, dispatch_only, if_false, short_circuit = invokes_target(
++        wf, target, required_context
++    )
+     if not invoked:
+         if required_context is not None and invokes_target(wf, target)[0]:
+             fails.append(
+@@ -436,6 +640,24 @@ def check_gate(g: dict) -> list[str]:
+ 
+     tg = triggers(wf)
+     has_ignore_filter = False
++    if enforcement in ("per_pr_blocking", "nightly"):
++        # Invocation-integrity checks apply to BOTH blocking tiers (#663): a
++        # coe'd / dispatch-gated / statically-disabled / `|| true`-neutralized
++        # nightly gate is exactly the checkct false-green pattern.
++        if coe:
++            fails.append(f"{target}: {enforcement} but its job/step is `continue-on-error: true` (non-blocking).")
++        if dispatch_only:
++            fails.append(f"{target}: {enforcement} but its job/step is workflow_dispatch-gated (never fires on its trigger).")
++        if if_false:
++            fails.append(
++                f"{target}: {enforcement} but its invoking job/step carries a "
++                "statically-false `if:` — the invocation never runs (#663)."
++            )
++        if short_circuit:
++            fails.append(
++                f"{target}: {enforcement} but its invocation line carries a `||` "
++                "short-circuit (e.g. `|| true`) — a gate failure exits 0 (#663)."
++            )
+     if enforcement == "per_pr_blocking":
+         trigger_fails, has_ignore_filter = _per_pr_trigger_failures(
+             target,
+@@ -444,10 +666,6 @@ def check_gate(g: dict) -> list[str]:
+             tg,
+         )
+         fails += trigger_fails
+-        if coe:
+-            fails.append(f"{target}: per_pr_blocking but its job/step is `continue-on-error: true` (non-blocking).")
+-        if dispatch_only:
+-            fails.append(f"{target}: per_pr_blocking but its job/step is workflow_dispatch-gated (never fires on PRs).")
+     elif enforcement == "nightly":
+         if not tg["schedule"]:
+             fails.append(f"{target}: enforcement=nightly but {runs_in} has no `schedule` trigger.")
+@@ -471,7 +689,8 @@ SOUNDNESS_TARGET = re.compile(r"\bmake\b[^\n]*?\b(verify-[a-z0-9-]+|kani|miri)\b
+ 
+ def invoked_soundness_targets() -> dict:
+     """target -> set(workflow filenames) for every soundness `make` target actually
+-    invoked in a `run:` step (comments/`env` outside run blocks are NOT matched)."""
++    invoked in a `run:` step (comment-only lines are NOT invocations — same
++    line-wise scan as invokes_target)."""
+     found: dict = {}
+     for p in sorted((REPO_ROOT / ".github/workflows").glob("*.yml")):
+         wf = load_workflow(p) or {}
+@@ -481,8 +700,9 @@ def invoked_soundness_targets() -> dict:
+             for s in job.get("steps") or []:
+                 if not isinstance(s, dict):
+                     continue
+-                for m in SOUNDNESS_TARGET.finditer(str(s.get("run", ""))):
+-                    found.setdefault(m.group(1), set()).add(p.name)
++                for line in _logical_lines(str(s.get("run", ""))):
++                    for m in SOUNDNESS_TARGET.finditer(line):
++                        found.setdefault(m.group(1), set()).add(p.name)
+     return found
+ 
+ 
+@@ -637,6 +857,22 @@ def _extraction_rust_files() -> list[str]:
+     return rust_files
+ 
+ 
++def registration_failures(manifest: dict) -> list[str]:
++    gates = manifest.get("gates")
++    if not isinstance(gates, list) or any(not isinstance(g, dict) for g in gates):
++        return ["POLICY: gates must be a list of objects"]
++    ids = [g.get("id") for g in gates]
++    if any(not isinstance(name, str) for name in ids) or len(ids) != len(set(ids)):
++        return ["POLICY: gate identities must be unique strings"]
++    actual = {g["id"]: g.get("enforcement") for g in gates}
++    fails = []
++    if actual != ENFORCEMENT_POLICY:
++        fails.append("POLICY: registered identities/enforcement differ from the reviewed checker policy")
++        fails.append("POLICY: registered identities/enforcement differ from the reviewed checker policy")
++    if manifest.get("_completeness_waived") != {}:
++        fails.append("POLICY: no completeness waivers are authorized")
++    return fails
++
++
+ def main() -> int:
+     self_test = "--self-test" in sys.argv[1:]
+     try:
+@@ -644,6 +880,10 @@ def main() -> int:
+     except (OSError, ValueError) as e:
+         print(f"HARNESS ERROR: cannot read {MANIFEST}: {e}", file=sys.stderr)
+         return 2
++    policy_fails = registration_failures(manifest)
++    if policy_fails:
++        print("\n".join(policy_fails), file=sys.stderr)
++        return 1
+     gates = manifest["gates"]
+ 
+     if self_test:
+@@ -912,6 +1152,138 @@ def main() -> int:
+                 file=sys.stderr,
+             )
+             return 2
++        # #663 negative controls — the invocation-integrity / suppression suite.
++        # Each synthetic workflow MUST be caught, and the clean wiring MUST pass,
++        # or the harness is void.
++        def _synth_wf(step_extra=None, run="make miri\n", job_extra=None, on=None):
++            step = {"run": run}
++            if step_extra:
++                step.update(step_extra)
++            job = {"runs-on": "ubuntu-latest", "steps": [step]}
++            if job_extra:
++                job.update(job_extra)
++            return {
++                "on": on if on is not None else {"push": None, "pull_request": None},
++                "jobs": {"j": job},
++            }
++
++        synth_gate = {
++            "id": "miri",
++            "make": "make miri",
++            "enforcement": "per_pr_blocking",
++            "runs_in": "ci.yml",
++            "polices_paths": [],
++            "required_context": {"step": {"run": "make miri\n"},
++                                 "job_equals": {"runs-on": "ubuntu-latest"},
++                                 "job_absent": ['container', 'env', 'if', 'needs', 'strategy', 'defaults', 'continue-on-error']},
++        }
++        suppression_mutations = {
++            "step continue-on-error": _synth_wf(step_extra={"continue-on-error": True}),
++            "job continue-on-error": _synth_wf(job_extra={"continue-on-error": True}),
++            "dispatch-gated step": _synth_wf(
++                step_extra={"if": "github.event_name == 'workflow_dispatch'"}
++            ),
++            "step if:false": _synth_wf(step_extra={"if": False}),
++            "job if:false": _synth_wf(job_extra={"if": False}),
++            "step if:'false' string": _synth_wf(step_extra={"if": "${{ false }}"}),
++            "|| true neutralization": _synth_wf(run="make miri || true\n"),
++            "|| : neutralization": _synth_wf(run="make miri || :\n"),
++            "comment-only invocation": _synth_wf(run="# make miri\n"),
++            "trailing-comment neutralization": _synth_wf(run="true # make miri\n"),
++        }
++        for label, broken_wf in suppression_mutations.items():
++            if not check_gate(synth_gate, _wf_override=broken_wf):
++                print(
++                    f"  SELF-TEST FAILED: {label} on a per-PR gate NOT caught — "
++                    "harness void.",
++                    file=sys.stderr,
++                )
++                return 2
++        quoted_hash = _synth_wf(run="make miri # the UB gate\necho '#sentinel'\n")
++        quoted_gate = json.loads(json.dumps(synth_gate))
++        quoted_gate["required_context"]["step"] = quoted_hash["jobs"]["j"]["steps"][0]
++        if check_gate(quoted_gate, _wf_override=quoted_hash):
++            print(
++                "  SELF-TEST FAILED: invocation with a trailing/quoted `#` was "
++                "REJECTED — comment stripping over-fires.",
++                file=sys.stderr,
++            )
++            return 2
++        if check_gate(synth_gate, _wf_override=_synth_wf()):
++            print(
++                "  SELF-TEST FAILED: clean synthetic per-PR wiring was REJECTED — "
++                "the invocation-integrity checks over-fire.",
++                file=sys.stderr,
++            )
++            return 2
++        # The same suppressions must be caught on the nightly tier too (#663-a —
++        # previously only per_pr_blocking was checked).
++        nightly_on = {"schedule": [{"cron": "27 4 * * *"}], "workflow_dispatch": None}
++        synth_nightly = {**synth_gate, "enforcement": "nightly", "runs_in": "nightly.yml"}
++        nightly_mutations = {
++            "nightly step continue-on-error": _synth_wf(
++                step_extra={"continue-on-error": True}, on=nightly_on
++            ),
++            "nightly || true": _synth_wf(run="make miri || true\n", on=nightly_on),
++            "nightly step if:false": _synth_wf(step_extra={"if": False}, on=nightly_on),
++            "nightly comment-only invocation": _synth_wf(run="# make miri\n", on=nightly_on),
++        }
++        for label, broken_wf in nightly_mutations.items():
++            if not check_gate(synth_nightly, _wf_override=broken_wf):
++                print(
++                    f"  SELF-TEST FAILED: {label} NOT caught — harness void.",
++                    file=sys.stderr,
++                )
++                return 2
++        if check_gate(synth_nightly, _wf_override=_synth_wf(on=nightly_on)):
++            print(
++                "  SELF-TEST FAILED: clean synthetic nightly wiring was REJECTED.",
++                file=sys.stderr,
++            )
++            return 2
++        # Local metadata hygiene: a reason needs a date or issue reference;
++        # stale/absent runs_in must fail. Full CLI controls separately require
++        # the independently pinned enforcement policy before this function.
++        demoted = {
++            "id": "miri",
++            "make": "make miri",
++            "enforcement": "local_documented",
++            "why": "deliberately local for now.",
++        }
++        if not check_gate(demoted, _wf_override=None):
++            print(
++                "  SELF-TEST FAILED: an undated/unreferenced demotion to "
++                "local_documented NOT caught — harness void.",
++                file=sys.stderr,
++            )
++            return 2
++        dated = {**demoted, "why": "tracked in #663 (demoted 2026-08-20)."}
++        if check_gate(dated, _wf_override=None):
++            print(
++                "  SELF-TEST FAILED: a dated issue-referenced local_documented "
++                "was REJECTED — the demotion guard over-fires.",
++                file=sys.stderr,
++            )
++            return 2
++        stale_runs_in = {**dated, "runs_in": "nightly.yml"}
++        if not check_gate(
++            stale_runs_in,
++            _wf_override={"jobs": {"j": {"steps": [{"run": "echo hi\n"}]}}},
++        ):
++            print(
++                "  SELF-TEST FAILED: local_documented runs_in naming a workflow "
++                "with no invocation NOT caught.",
++                file=sys.stderr,
++            )
++            return 2
++        absent_runs_in = {**dated, "runs_in": "does-not-exist.yml"}
++        if not check_gate(absent_runs_in):
++            print(
++                "  SELF-TEST FAILED: local_documented runs_in naming an absent "
++                "workflow NOT caught.",
++                file=sys.stderr,
++            )
++            return 2
+         print(f"  self-test OK: allowlist gap caught ({len(fa)}), duplicate YAML/JSON "
+               "keys rejected, exact authoritative ledger runner/step/context "
+               "suppression controls verified, branch/ordered-path/workflow-self "
+@@ -919,7 +1291,10 @@ def main() -> int:
+               "paths-ignore denylist logic verified "
+               f"(directly), kani-reverse gap caught ({len(rc)}), "
+               f"kani-mutation-reverse gap caught ({len(rm)}), "
+-              f"extraction-reverse gap caught ({len(rext)}).")
++              f"extraction-reverse gap caught ({len(rext)}), "
++              "#663 invocation-integrity/suppression controls caught "
++              f"({len(suppression_mutations)} per-PR + {len(nightly_mutations)} nightly), "
++              "local-reason + stale-runs_in controls caught.")
+         return 0
+ 
+     print(f"=== verify-gate-enforcement ({len(gates)} gates) ===")
+@@ -956,7 +1331,7 @@ def main() -> int:
+         for m in all_fails:
+             print(f"  - {m}", file=sys.stderr)
+         print("\nThis is catalog class G1 (false assurance). Wire the gate / widen its `paths:` / make it "
+-              "blocking, or (if intentionally local) set enforcement=local_documented with a `why`.", file=sys.stderr)
++              "blocking, or update the reviewed registration policy and documented local contract.", file=sys.stderr)
+         return 1
+     print(f"OK: all {len(gates)} gates fire on the surface they police (or are documented local-only).")
+     return 0
+total gates: 64
+Counter({'per_pr_blocking': 27, 'local_documented': 27, 'nightly': 10})
+unique: True
+policy entries: 64
+policy==manifest: True
+blocking count: 37
+has _completeness_waived: True {}
+    [ok]   ui-golden-render           nightly, paths cover policed surface
+    [ok]   verify-easycrypt-pins      per-PR blocking, paths cover policed surface
+    [note] verify-easycrypt-full      local-only (not CI-gated): FULL EasyCrypt verification (21/21 .ec compiled as targets, ZERO skips) needs th
+    [note] verify-easycrypt-docker    local-only (not CI-gated): the C10-concrete capstone reproduces MM45's confirmed toolchain (EC r2026.02 + Z
+    [note] verify-tla                 local-only (not CI-gated): needs a local tla2tools.jar + JRE; the jar is deliberately NOT vendored or auto-
+    [note] verify-verus               local-only (not CI-gated): the all-length Verus flash-journal crash-safety pilot needs a rustc-pinned prebu
+    [note] verify-crux-ns-ptr         local-only (not CI-gated): the crux-mir implementation-diversity check (ns_ptr_validate vs an independent u
+    [note] verify-lean-proto-domain   local-only (not CI-gated): P7 domain-tag drift lint (Lean factoryAddSlotDomain == proto::FACTORY_ADD_SLOT_D
+    [note] verify-linker-map          local-only (not CI-gated): P1.9 TrustZone memory-map drift gate (.x == proto == sau.rs == Lean). Pure sourc
+    [note] verify-halmos              local-only (not CI-gated): same constraint as verify-bytecode (which invokes the same halmos/run_halmos.sh)
+    [note] verify-kontrol             local-only (not CI-gated): Kontrol/KEVM symbolic proofs on the deployed bytecode need a K backend (`kup ins
+    [note] verify-parse-transcription local-only (not CI-gated): the A3.1 in-kernel Yul-parse leg (parseYul c10Source = some c10ProgramFull + eli
+    [note] verify-interp              local-only (not CI-gated): the A3.1 interpreter<->bytecode KAT+bulk replay needs the full Lean build + `lak
+    [note] verify-cavp                local-only (not CI-gated): NIST CAVP SHA-256 conformance: regenerates the embedded vector module (python, i
+    [note] verify-primitive-kat       local-only (not CI-gated): the per-primitive tweakable-hash KAT (Rust<->Python<->Yul three-way) needs cargo
+    [note] verify-bulk                local-only (not CI-gated): the bulk executable-spec differential needs the Lean build + `lake exe verify-bu
+    [note] verify-exec-gate           local-only (not CI-gated): the Claim-4 trace-gate closure gate lake-builds the TxFlow + Spec.Theorems dep c
+    [note] verify-forsc-margin        local-only (not CI-gated): the FORS+C grinding-margin guardrail (never weaker than plain FORS at C10 params
+    [note] verify-independent-signer  local-only (not CI-gated): leg (2) — the Rust cross-verifier accepting FRESH independent-signer output — al
+    [note] verify-pins                local-only (not CI-gated): tools/verify_pins.sh supply-chain pin audit (Cargo.lock checksums, git rev= pins
+    [ok]   verify-verity-census       per-PR blocking, paths cover policed surface
+    [ok]   verify-gate-enforcement    per-PR blocking, no-path-filter
+
+OK: all 64 gates fire on the surface they police (or are documented local-only).
+EXIT=0
+old gates: 33
+added: 31
+['build-hw', 'build-hw-prodtest', 'check-erc7730-descriptors', 'check-research-bundles', 'check-solidity-constants', 'erc7730-cross-parity', 'erc7730-proxy-drift', 'erc8176-coverage-test', 'size-report', 'test-erc7730-proxy-drift', 'ui-golden-render', 'verify-bulk', 'verify-cavp', 'verify-crux-ns-ptr', 'verify-easycrypt-docker', 'verify-easycrypt-full', 'verify-easycrypt-pins', 'verify-exec-gate', 'verify-forsc-margin', 'verify-gate-enforcement', 'verify-halmos', 'verify-independent-signer', 'verify-interp', 'verify-kontrol', 'verify-lean-proto-domain', 'verify-linker-map', 'verify-parse-transcription', 'verify-pins', 'verify-primitive-kat', 'verify-tla', 'verify-verus']
+removed: []
+changed existing: ['checkct', 'classical-crypto-boundary', 'e2e', 'invisible-unicode', 'kani', 'kani-heavy', 'miri', 'prod-check-ship', 'prod-erc7730-provenance-check', 'verify-audit', 'verify-bytecode', 'verify-easycrypt', 'verify-extract-differential', 'verify-extracted', 'verify-extracted-heavy', 'verify-extraction-freshness', 'verify-fv-lints', 'verify-hw-assumptions', 'verify-kani-census', 'verify-kani-mutation', 'verify-ledger-consistency', 'verify-proof-mutation', 'verify-protocol-models', 'verify-repro', 'verify-rollback-freeze-pin', 'verify-spec-vendored-fidelity', 'verify-storage-mutators', 'verify-transcription', 'verify-verity-census']
+all 37 blocking gates pinned: step+job_equals+job_absent OK
+{
+ "id": "verify-easycrypt-pins",
+ "make": "make -C contracts/verification verify-easycrypt-pins",
+ "polices_paths": [
+  "contracts/verification/easycrypt/**",
+  "contracts/verification/scripts/check_easycrypt.sh",
+  ".github/workflows/lean-fv.yml"
+ ],
+ "runs_in": "lean-fv.yml",
+ "enforcement": "per_pr_blocking",
+ "note": "Toolchain-free EasyCrypt admit/axiom ledger: count pins + SEMANTIC name->statement pin + a wired-in negative control (a dmkey_ll:false weakening MUST fire). 1.9 s locally, verified green 2026-08-20 against 666e3725 \u2014 no container needed. Wired into lean-fv.yml 2026-08-20 (#664): it ran in NO workflow while the last ~15 master commits were EasyCrypt pin work. easycrypt/** added to the lean-fv.yml paths filter the same day so the gate FIRES on its policed surface (the F1 class).",
+ "required_context": {
+  "step": {
+   "name": "verify-easycrypt-pins (toolchain-free E
+SELF: ci.yml per_pr_blocking {"name": "verify-gate-enforcement", "run": "python3 -m pip install --quiet pyyaml\nmake verify-gate-enforcement\n"}
+prod-check-ship -> "set -euo pipefail\nif output=\"$(make prod-check-ship 2>&1)\"; then\n  printf '%s\\n' \"$output\"\n  echo \"ERROR: production gate unexpectedly passed\"\n  exi
+prod-erc7730-provenance-check -> "set -euo pipefail\nif output=\"$(make prod-erc7730-provenance-check 2>&1)\"; then\n  printf '%s\\n' \"$output\"\n  echo \"ERROR: ERC-7730 production provenance
+298:	verify-easycrypt-pins verify-easycrypt-docker verify-forsc-margin \
+299-	verify-proof-mutation verify-lean4checker verify-kontrol verify-halmos \
+300-	verify-bulk verify-interp verify-transcription verify-parse-transcription \
+301-	verify-independent-signer verify-primitive-kat verify-cavp verify-build \
+302-	verify-audit verify-three-claims verify-exec-gate verify-bytecode-setup \
+303-	verify-bytecode verify-clean verify-extraction-freshness \
+304-	verify-extraction-regen verify-extraction-regen-self-test \
+305-	verify-extract-differential verify-extracted verify-extracted-heavy \
+306-	verify-spec-vendored-fidelity verify-rollback-freeze-pin
+307-# This is also the exact parser-guard inventory below.  Its self-test compares
+308-# it bidirectionally with every concrete `verify*:` definition in this file.
+309-.PHONY: $(_FV_EVIDENCE_TARGETS)
+310-
+--
+573:# `make verify-easycrypt-pins` checks the ledger with no toolchain at all.
+574:.PHONY: verify-easycrypt verify-easycrypt-full verify-easycrypt-pins
+575-verify-easycrypt: ## EasyCrypt PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
+576-	@/usr/bin/bash scripts/check_easycrypt.sh
+577-
+578-# F5 (2026-07-16): "full" is now DISTINCT from partial and HONEST — it requires
+579-# all 21 .ec compiled with ZERO skips (implies FORCE_MM45=1) and FAILS if the
+580-# MM45 reference proofs / toolchain are absent, instead of the old behaviour
+581-# where a skipped-11-of-21 run could still print a success banner.
+582-verify-easycrypt-full: ## EasyCrypt FULL verification — 21/21, zero skips (needs MM45 toolchain)
+583-	@/usr/bin/bash scripts/check_easycrypt.sh --full
+584-
+585-# F5: ledger (admit/axiom COUNT + SEMANTIC name->statement pin) with NO toolchain,
+586-# preceded by the wired-in negative control (a `dmkey_ll : false` weakening and a
+--
+588:verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolchain) + negative control
+ACTIONLINT_OK
+gates pinning workflow env/defaults: ['invisible-unicode']
+local gates with no Makefile target: []
+local gates declaring runs_in: []
+37 ('container', 'continue-on-error', 'defaults', 'env', 'if', 'needs', 'strategy')
+pinned steps not found verbatim: []
+trigger tiers consistent
+# F5: ledger (admit/axiom COUNT + SEMANTIC name->statement pin) with NO toolchain,
+# preceded by the wired-in negative control (a `dmkey_ll : false` weakening and a
+# delete-one-add-one, both count-preserving, MUST fire the semantic pin).
+verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolchain) + negative control
+	@/usr/bin/bash scripts/check_easycrypt.sh --self-test
+	@/usr/bin/bash scripts/check_easycrypt.sh --dry-run
+
+# 2026-07-17: the C10-CONCRETE capstone (easycrypt/drafts/SPHINCS_C_c10.ec — the FORS leg
+# routed through the concrete FORS_C10_Multi, not the abstract FORS_C_Multi) is VERIFIED only
+# in MM45's confirmed toolchain (EC r2026.02 + Z3 4.13.4 + Alt-Ergo 2.6.0), which does NOT build
+# locally. This target reproduces the container gate: compile EVERY closure file AS A TARGET
+# (sound — EC `require` does not re-verify deps) + 3 honesty controls (htree, ITSRC10, good_pos
+# strict-positivity). Needs a local MM45 checkout (C10_PORT_DIR, with its FV-SPHINCSPLUS-EC
+# submodule — third-party, NOT vendored) + docker. Absent either, it prints the committed
+# receipt, which is the primary evidence. STILL a conditional composition (hfx/hbridge/htree
+# carried); see easycrypt/docker/GATE-RECEIPT-2026-07-17.log.
+C10_PORT_DIR ?= $(HOME)/repos/c10-eufcma-port
+DOCKER ?= docker
+.PHONY: verify-easycrypt-docker
+verify-easycrypt-docker: ## EasyCrypt C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
+	@if ! $(DOCKER) info >/dev/null 2>&1; then \
+	  echo "SKIP: docker unavailable — the committed receipt (primary evidence) follows:"; echo; \
+	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
+	@if [ ! -d "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC/proofs" ]; then \
+	  echo "SKIP: MM45 base absent at $(C10_PORT_DIR) (third-party, not vendored) — receipt follows:"; echo; \
+	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
+669:    elif enforcement == "nightly":
+670-        if not tg["schedule"]:
+671:            fails.append(f"{target}: enforcement=nightly but {runs_in} has no `schedule` trigger.")
+672-
+673-    if not fails:
+674-        def _present_no_filter(t):
+675-            return isinstance(tg[t], dict) and tg[t]["paths"] is None and tg[t]["paths_ignore"] is None
+676-        if any(_present_no_filter(t) for t in ("push", "pull_request")):
+677-            cov = "no-path-filter"
+678-        elif has_ignore_filter:
+679-            cov = "paths-ignore filter (policed surface not excluded)"
+5:The other anti-vacuity gates (verify-proof-mutation, verify-ledger-consistency,
+11:is exactly as dangerous as a hollow proof (F1: `verify-ledger-consistency` never
+130:    "verify-ledger-consistency": "per_pr_blocking",
+892:        broken_allow = {"id": "verify-ledger-consistency", "make": "x", "enforcement": "per_pr_blocking",
+901:                "  ledger:\n"
+903:                "      - run: make verify-ledger-consistency\n"
+928:        ledger_gate = next(
+929:            (g for g in gates if g["id"] == "verify-ledger-consistency"), None
+931:        if ledger_gate is None or not isinstance(
+932:            ledger_gate.get("required_context"), dict
+0
+9:  self-test OK: allowlist gap caught (1), duplicate YAML/JSON keys rejected, exact authoritative ledger runner/step/context suppression controls verified, branch/ordered-path/workflow-self trigger suppressions rejected, paths-ignore denylist logic verified (directly), kani-reverse gap caught (1), kani-mutation-reverse gap caught (2), extraction-reverse gap caught (1), #663 invocation-integrity/suppression controls caught (10 per-PR + 4 nightly), local-reason + stale-runs_in controls caught.
+22:Ran 10 tests in 50.824s
+24:OK
+94:OK: all 64 gates fire on the surface they police (or are documented local-only).
+
+real	0m6.675s
+user	0m5.573s
+sys	0m1.119s
+EXIT=0
+  semantic axiom pin: exact (name -> statement) set matches axiom_pins.txt
+
+=== PINS OK (dry-run; proofs NOT compiled) ===
+make: Leaving directory '/tmp/pq-fv-gates-20260915-u0_8a4pb/target/contracts/verification'

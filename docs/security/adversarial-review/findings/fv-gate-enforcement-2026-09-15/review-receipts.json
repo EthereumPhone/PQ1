@@ -1,0 +1,27 @@
+{
+  "target": {
+    "base": "9762ea7c41de15b86191184bb2c2baa0caf68e58",
+    "commit": "711080e35f13ef7d764d377eba7951be5c51d3ec",
+    "tree": "9d224a17e50da55d26e3723d5794b7b08d220854"
+  },
+  "reviewers": [
+    {
+      "reviewer": "claude",
+      "seconds": 611.668,
+      "words": 41,
+      "report_sha256": "f2a91e374e5e6c9718fbae0b7d0c7cad4744e3f12d157bec9f7ed3958317c0bf"
+    },
+    {
+      "reviewer": "kimi",
+      "seconds": 419.41,
+      "words": 365,
+      "report_sha256": "c897b7a164d8f02504cd551d87cc5b72043d9324f8f20ec2a7f558ea27a5a948"
+    },
+    {
+      "reviewer": "codex",
+      "seconds": 556.857,
+      "words": 146,
+      "report_sha256": "948befc564fba5d5b088aa426c3936c59487aa30e0f557a0fbd65229628e4557"
+    }
+  ]
+}

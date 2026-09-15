@@ -1,0 +1,6 @@
+VERDICT: FIX
+TARGET: 9200e83d199dfa6a43423de67cbd0cc33326a693 / 38ceabb2dff6ce00b115c900d91222834c2b642b
+FINDINGS:
+- HIGH scripts/check_gate_enforcement.py:525 — protected-branch exclusion uses Python `fnmatch`, which does not implement Actions’ zero-directory globstar semantics; `branches-ignore: ['**/master']` is valid Actions syntax that excludes `master`, yet `_per_pr_trigger_failures(...)` returns no failure; use an Actions-compatible matcher or conservatively reject this pattern and add allow/ignore regression controls.
+- HIGH scripts/check_gate_enforcement.py:409 — every non-mapping event value is normalized to an enabled, unfiltered trigger; a workflow containing `pull_request: false` is rejected by actionlint and cannot provide PR enforcement, yet `check_gate(...)` returns success; require the event node to be null or a mapping and add scalar/list negative controls.
+GAPS: none

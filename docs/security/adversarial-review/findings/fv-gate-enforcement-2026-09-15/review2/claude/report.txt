@@ -1,0 +1,14 @@
+VERDICT: FIX
+TARGET: 5f4b68de3b4dca96b9c7e6244cf576a009a3c916 / 82387d2164e82217aeb9152e4b7ced427e79d583
+FINDINGS:
+- MEDIUM scripts/check_gate_enforcement.py:874 — The new EasyCrypt check (`easycrypt_pin_coverage`) protects only the five helper/control paths: `check_easycrypt.sh`, `ec_sweep.py`, `ec_axioms.py`, the verification Makefile and `lean-fv.yml`. It does not protect the model surface itself, `contracts/verification/easycrypt/**`, which holds the `.ec` drafts and `axiom_pins.txt` that `--dry-run` reads. The per-PR trigger check only compares the workflow's `paths:` against whatever the manifest lists. So if one change drops `easycrypt/**` from both the manifest row and `lean-fv.yml`, the checker stays green. That brings back exactly the #664 F1 problem this change fixed (the pin gate not firing on `easycrypt/**` edits), and it contradicts the claim that EasyCrypt pin coverage includes its model surface. **Evidence:** I copied the same fixture files the test uses into `/tmp`. Baseline exit was 0. I removed `contracts/verification/easycrypt/**` from the `verify-easycrypt-pins` `polices_paths` and from both the push and pull_request `paths` in `lean-fv.yml`. The checker still exited 0, printing `[ok] verify-easycrypt-pins per-PR blocking, paths cover policed surface` and `OK: all 65 gates…`. `scripts/test_gate_enforcement.py:171-181` removes only the five helper paths, so no test covers this. **Smallest fix:** add `contracts/verification/easycrypt/**` to the `required` list in `easycrypt_pin_coverage`, and add it to the `names` list in `test_easycrypt_helper_and_control_paths`.
+
+GAPS: I checked these source-first and found no defect:
+- **Blocking contracts:** the step, runner, workflow env/defaults and `job_absent` pins all match for the 37 blocking gates.
+- **Registration policy:** deletion, duplicates, demotion and waivers are all rejected.
+- **PR activity types:** pull_request must include opened, synchronize and reopened.
+- **Protocol split:** the nightly run is pinned to `PROTOCOL_MODELS=proverif,tamarin`, and `verify-cryptoverif` is a local-only wrapper.
+- **Checker self-checks:** the checker now checks its own CI step, the path-coverage control looks for its `does NOT cover` message, and the ledger self-test controls are unchanged.
+- **Kani/extraction reverse checks:** their call sites are unchanged.
+
+I did not re-run the full `make verify-gate-enforcement` suite.

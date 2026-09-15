@@ -1,0 +1,12 @@
+{
+  "reviewed_commit": "c6c9f004a911049eb11fd50ce3f06b92a24d4536",
+  "reviewed_tree": "c4d7d801797a806607f77280dac5c8a81166a6f1",
+  "source_blobs_equal": true,
+  "original_unrelated_items_preserved": 110,
+  "original_scoped_items": 3,
+  "integration_gate": "PASS: 18 groups in 81.152s; self-test and 65 registrations",
+  "source_and_report_whitespace": "PASS",
+  "raw_evidence_whitespace_notices": 91,
+  "raw_evidence": "Original bytes preserved, including diff excerpts and terminal whitespace.",
+  "unstaged_manifest": "Original Kani mutation coverage/note and bytecode deployment note preserved; no unrelated source staged."
+}

@@ -1,0 +1,24 @@
+All checks verified. Review complete — no blockers found.
+
+**What I inspected** (diff 9762ea7c..5f4b68de, source-first): `scripts/check_gate_enforcement.py` (+490), `scripts/gate_enforcement.json` (+1154), `scripts/test_gate_enforcement.py` (new, 199), `Makefile`, `.github/workflows/lean-fv.yml`, `contracts/verification/scripts/check_easycrypt.sh`. Skipped the archived findings/ paths as instructed.
+
+**Requirement trace:**
+
+1. **Registration pinning** — `ENFORCEMENT_POLICY` (scripts/check_gate_enforcement.py:82) independently pins all 65 identities/levels; `registration_failures` (:890) requires exact dict equality, unique string ids, and `_completeness_waived == {}`. Verified live: manifest == policy, 65 gates (27 per-PR + 10 nightly blocking, 28 local). Tests cover per-gate deletion, per-gate demotion, duplicate, waiver (test_gate_enforcement.py:111-139).
+
+2. **Blocking step contracts** — all 37 blocking gates carry `required_context`; absence hard-fails (:596). Exact parsed-step equality + `job_equals` runner + `job_absent` + workflow `defaults`/`env` pin (:350-361); the one non-empty `workflow_context` (invisible-unicode) matches the live workflow env exactly. Invocation scanning is line-wise over quote-aware comment-stripped, backslash-joined logical lines; suppression flags (coe, dispatch-only, statically-false `if:`, `||` short-circuit) now apply to both blocking tiers. Precise name matching uses lookbehind/lookahead (`make miri-other` ≠ `miri`; `verify-kani-mutation` ≠ `kani`) — confirmed by reasoning through the regex at :338. Prod quarantine wrappers (`prod-check-ship`, `prod-erc7730-provenance-check`) retain their exact expected-failure `if output="$(make ...)"` text with `shell: bash`; `shell` stays mandatory-when-present (:624).
+
+3. **Trigger/coverage/metadata** — path/branch coverage, ordered-negative rejection, and paths-ignore denylist logic unchanged; nightly tier gained the invocation-integrity checks (:657-674). Local `why` requires a #NNN/YYYY-MM-DD ref; declared local `runs_in` must exist and invoke the target (no local gate currently declares one). `verify-ledger-consistency`'s authoritative context was extended (defaults/continue-on-error absent, workflow_context), not regressed.
+
+4. **PR trigger + families** — `pull_request` is mandatory (push alone fails); `types` when present must ⊇ {opened, synchronize, reopened} (:433-447), with five failing mutations plus a clean-pass control tested. Protocol nightly pins `PROTOCOL_MODELS=proverif,tamarin` in the exact step; the `protocol-family-scope` reverse check fails any cryptoverif claim, and the `verify-cryptoverif` local wrapper is asserted via `make -n`. EasyCrypt pin gate polices `easycrypt/**` plus the 5-path helper/control closure, reverse-checked by `easycrypt_pin_coverage` (:874).
+
+5. **Executable controls** — `make verify-gate-enforcement` runs --self-test, then the unittest suite, then the live check; the checker's own ci.yml step is exact-pinned and mutation-tested. The path-coverage negative control now asserts the specific `does NOT cover` diagnostic (self-test prints "allowlist gap caught (2)"). Kani/mutation/extraction reverse checks all still fire (self-test output confirms 1/2/1 caught).
+
+**Evidence reproduced locally**: `make verify-gate-enforcement` → exit 0 ("OK: all 65 gates"); `make -C contracts/verification verify-easycrypt-pins` → PINS OK after its negative control; `actionlint .github/workflows/lean-fv.yml` → clean; `git status` clean, HEAD = 5f4b68de.
+
+Minor non-blocking observations: the shell-form tier tests mostly bite via exact-step mismatch rather than per-class detection (the --self-test synth controls, including the quoted-`#` precision and clean-wiring acceptance controls, do exercise the detectors); absent `_completeness_waived` key fails closed as an unauthorized waiver. Neither affects merge correctness.
+
+VERDICT: GO
+TARGET: 5f4b68de3b4dca96b9c7e6244cf576a009a3c916 / 82387d2164e82217aeb9152e4b7ced427e79d583
+FINDINGS: none
+GAPS: none

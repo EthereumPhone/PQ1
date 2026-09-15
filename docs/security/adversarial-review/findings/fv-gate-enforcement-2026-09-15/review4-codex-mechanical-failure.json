@@ -1,0 +1,16 @@
+{
+  "reason": "source-reading commands failed before execution: nested Bubblewrap namespace unavailable; metadata-only git status succeeded",
+  "failed_commands": 6,
+  "successful_metadata_commands": 1,
+  "processes": [
+    {
+      "pid": 998539,
+      "pgid": 998539
+    },
+    {
+      "pid": 998542,
+      "pgid": 998539
+    }
+  ],
+  "signal": "SIGTERM"
+}

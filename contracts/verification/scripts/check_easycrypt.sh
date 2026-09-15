@@ -41,10 +41,9 @@
 #      does. Both axiom-bearing files (FORS_C10.ec, STCR_C.ec) are stdlib-only, so
 #      this runs toolchain-free in --dry-run.
 #
-# NOT RUN IN CI. It needs an opam switch with EasyCrypt r2026.02 + Alt-Ergo 2.6.0
-# (see ../easycrypt/PROVENANCE.md). Treat it like `verify-kontrol`: a local /
-# nightly gate. `--dry-run` checks the pins (counts + semantics) without a
-# toolchain. Enrolled in scripts/gate_enforcement.json as `local_documented`.
+# Compilation remains local: it needs the pinned EasyCrypt/prover setup
+# (see ../easycrypt/PROVENANCE.md). The toolchain-free --self-test and --dry-run
+# pin checks ARE run per PR by verify-easycrypt-pins in lean-fv.yml (#664).
 #
 # TOOLCHAIN CAVEAT (verified 2026-07-10). The STDLIB-ONLY +C chain compiles as a
 # target with Alt-Ergo 2.6.0 ALONE. The MM45-CHAIN drafts `require import

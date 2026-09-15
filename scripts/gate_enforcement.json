@@ -1,5 +1,5 @@
 {
-  "_comment": "verify-gate-enforcement manifest — closes catalog class G1 (gate-enforcement vacuity) from docs/verification/fv-adversarial-review-playbook.md Part A2. Each soundness/anti-vacuity gate declares WHAT source surface it polices, WHICH workflow must run it, and its ENFORCEMENT level. check_gate_enforcement.py asserts the live CI wiring matches — a gate that is green-when-run but never RUNS on the diff it polices (wrong `paths:` filter, `continue-on-error`, workflow_dispatch-only, or unwired) is exactly as dangerous as a hollow proof (the 2026-07-01 F1 finding: verify-ledger-consistency never fired on AXIOM_STATUS.json-only edits). enforcement: 'per_pr_blocking' = must run on push/pull_request, non-continue-on-error, and the trigger `paths:` must COVER polices_paths; 'nightly' = must be invoked by a scheduled workflow; 'local_documented' = deliberately not CI-gated (a NOTE, never a failure) — must carry a `why`. polices_paths are repo-relative prefixes/globs the gate is responsible for.",
+  "_comment": "verify-gate-enforcement manifest — closes catalog class G1 (gate-enforcement vacuity) from docs/verification/fv-adversarial-review-playbook.md Part A2. Each soundness/anti-vacuity gate declares WHAT source surface it polices, WHICH workflow must run it, and its ENFORCEMENT level. check_gate_enforcement.py asserts the live CI wiring matches — a gate that is green-when-run but never RUNS on the diff it polices (wrong `paths:` filter, `continue-on-error`, workflow_dispatch-only, `|| true` on the invocation line, a statically-false `if:`, a comment-only invocation, or unwired) is exactly as dangerous as a hollow proof (the 2026-07-01 F1 finding: verify-ledger-consistency never fired on AXIOM_STATUS.json-only edits; the 2026-08-20 #663 neutralization classes). enforcement: 'per_pr_blocking' = must run on push/pull_request, non-continue-on-error, and the trigger `paths:` must COVER polices_paths; 'nightly' = must be invoked by a scheduled workflow (blocking checks apply to this tier too); 'local_documented' = deliberately not CI-gated (a NOTE, never a failure) — must carry a `why` with a DATED ISSUE REFERENCE (#NNN or YYYY-MM-DD), and any declared `runs_in` must name a workflow that actually invokes the target. polices_paths are repo-relative prefixes/globs the gate is responsible for. Blocking gates pin the complete parsed invocation step and runner context. The independent ENFORCEMENT_POLICY in the checker pins every registered identity and level; editing this manifest alone cannot remove/demote a gate. All policy/context updates require source review. No arbitrary shell-execution or hosted-settings proof is claimed.",
   "workflows_dir": ".github/workflows",
   "gates": [
     {
@@ -16,7 +16,26 @@
       ],
       "runs_in": "ci.yml",
       "enforcement": "per_pr_blocking",
-      "note": "Invariant #5 scoped exception: external ERC-8176 EAS signatures are verified only by host dbgen; exact packages/features/edges and verify-only production source are pinned."
+      "note": "Invariant #5 scoped exception: external ERC-8176 EAS signatures are verified only by host dbgen; exact packages/features/edges and verify-only production source are pinned.",
+      "required_context": {
+        "step": {
+          "name": "Host-only ERC-8176 classical-verifier boundary",
+          "run": "make classical-crypto-boundary"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-ledger-consistency",
@@ -45,8 +64,11 @@
           "env",
           "if",
           "needs",
-          "strategy"
-        ]
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
       },
       "note": "F1 (2026-07-01): docs/** was ABSENT from lean-fv.yml paths, so ledger-only edits never triggered it. The declared surface now also includes the workflow, Make target, checker, and authoritative launcher themselves. The exact required_context pins the GitHub-hosted runner and forbids containers, removal, conditional suppression, hostile startup state, or a no-op shell from bypassing the load-bearing authoritative launcher."
     },
@@ -59,7 +81,26 @@
       ],
       "runs_in": "lean-fv.yml",
       "enforcement": "per_pr_blocking",
-      "note": "the escape-hatch/opaque-guard lints scan BOTH lean/ and extracted/Extracted/ (lint_fv_invariants.sh:77,151); extracted/Extracted/** added to lean-fv.yml paths 2026-07-02 (extracted-F2) so an extracted-only edit triggers the scan."
+      "note": "the escape-hatch/opaque-guard lints scan BOTH lean/ and extracted/Extracted/ (lint_fv_invariants.sh:77,151); extracted/Extracted/** added to lean-fv.yml paths 2026-07-02 (extracted-F2) so an extracted-only edit triggers the scan.",
+      "required_context": {
+        "step": {
+          "name": "verify-fv-lints (axiom-closure exact-set + opaque-guard + escape-hatch)",
+          "run": "make -C contracts/verification verify-fv-lints"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-audit",
@@ -68,7 +109,26 @@
         "contracts/verification/lean/**"
       ],
       "runs_in": "lean-fv.yml",
-      "enforcement": "per_pr_blocking"
+      "enforcement": "per_pr_blocking",
+      "required_context": {
+        "step": {
+          "name": "verify-audit (sorry count +",
+          "run": "make -C contracts/verification verify-audit"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-storage-mutators",
@@ -78,7 +138,26 @@
       ],
       "runs_in": "lean-fv.yml",
       "enforcement": "per_pr_blocking",
-      "note": "was UNWIRED before 2026-07-01 (grep .github/ = 0); wired into lean-fv.yml 5c623c5d."
+      "note": "was UNWIRED before 2026-07-01 (grep .github/ = 0); wired into lean-fv.yml 5c623c5d.",
+      "required_context": {
+        "step": {
+          "name": "verify-storage-mutators (I-3 closed-world — no unverified cap-counter mutator)",
+          "run": "make -C contracts/verification verify-storage-mutators"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-proof-mutation",
@@ -89,7 +168,26 @@
       ],
       "runs_in": "nightly.yml",
       "enforcement": "nightly",
-      "note": "slow (a full lake build per mutation) -> nightly, not per-PR (documented in nightly.yml)."
+      "note": "slow (a full lake build per mutation) -> nightly, not per-PR (documented in nightly.yml).",
+      "required_context": {
+        "step": {
+          "name": "make verify-proof-mutation (default tier; reverts every mutation)",
+          "run": "make -C contracts/verification verify-proof-mutation"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "miri",
@@ -100,7 +198,26 @@
         "tx-core/src/**"
       ],
       "runs_in": "ci.yml",
-      "enforcement": "per_pr_blocking"
+      "enforcement": "per_pr_blocking",
+      "required_context": {
+        "step": {
+          "name": "cargo miri test (FI / tx-core / NS-ptr)",
+          "run": "make miri"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "kani",
@@ -116,7 +233,26 @@
       ],
       "runs_in": "nightly.yml",
       "enforcement": "nightly",
-      "note": "173 active standalone #[kani::proof] harnesses across 27 files, pinned by exact file/function identity (source-generated census refreshed 2026-07-23 at the FV Phase-D closure boundary; scripts/kani_census.py -> scripts/kani_census.lock.json; was hand-typed '93/17' 2026-07-01); minutes -> nightly. polices_paths must list every crate `make kani` runs `cargo kani -p` on (Makefile: pqsigner-tx-core, pqsigner-domain, pqsigner-tx, pqsigner-erc7730, sphincs-tz-shared, pqsigner-aa, fw-manifest) — the 2026-07-01 Kani review caught domain/src + tx-core/src missing here."
+      "note": "173 active standalone #[kani::proof] harnesses across 27 files, pinned by exact file/function identity (source-generated census refreshed 2026-07-23 at the FV Phase-D closure boundary; scripts/kani_census.py -> scripts/kani_census.lock.json; was hand-typed '93/17' 2026-07-01); minutes -> nightly. polices_paths must list every crate `make kani` runs `cargo kani -p` on (Makefile: pqsigner-tx-core, pqsigner-domain, pqsigner-tx, pqsigner-erc7730, sphincs-tz-shared, pqsigner-aa, fw-manifest) — the 2026-07-01 Kani review caught domain/src + tx-core/src missing here.",
+      "required_context": {
+        "step": {
+          "name": "make kani",
+          "run": "/usr/bin/time -v make kani"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-kani-mutation",
@@ -147,17 +283,57 @@
       ],
       "runs_in": "nightly.yml",
       "enforcement": "nightly",
-      "note": "CURATED per-slice anti-vacuity subset: 43 mutation groups (10 quick/30 default/3 full) across 21 of the 27 harness-bearing files (39 distinct harnesses individually mutation-screened; 162 active harnesses reside in those enrolled files). It does NOT screen every harness for vacuity — 11 harnesses in 6 files (domain/src/lib.rs, pqsigner-erc7730 display/primitives.rs + ir.rs + render/calldata_topology.rs + render/nested.rs + render/visibility.rs) have ZERO mutation coverage; do not read this as comprehensive Kani-vacuity coverage. check_gate_enforcement.py reverse-derives all 21 mutated source identities from scripts/kani_mutations.json and requires polices_paths to cover them plus the manifest itself. The full exact-identity census + enrolled/outside split is generated by scripts/kani_census.py (make verify-kani-census, per-PR) into kani_census.lock.json; refreshed 2026-07-23 at the FV Phase-D closure boundary. scripts/kani_mutations.json self-policed since 2026-07-19 (F13: the manifest you'd edit to fake mutation coverage must itself be policed)."
+      "note": "CURATED per-slice anti-vacuity subset: 43 mutation groups (10 quick/30 default/3 full) across 21 of the 27 harness-bearing files (39 distinct harnesses individually mutation-screened; 162 active harnesses reside in those enrolled files). It does NOT screen every harness for vacuity — 11 harnesses in 6 files (domain/src/lib.rs, pqsigner-erc7730 display/primitives.rs + ir.rs + render/calldata_topology.rs + render/nested.rs + render/visibility.rs) have ZERO mutation coverage; do not read this as comprehensive Kani-vacuity coverage. check_gate_enforcement.py reverse-derives all 21 mutated source identities from scripts/kani_mutations.json and requires polices_paths to cover them plus the manifest itself. The full exact-identity census + enrolled/outside split is generated by scripts/kani_census.py (make verify-kani-census, per-PR) into kani_census.lock.json; refreshed 2026-07-23 at the FV Phase-D closure boundary. scripts/kani_mutations.json self-policed since 2026-07-19 (F13: the manifest you'd edit to fake mutation coverage must itself be policed).",
+      "required_context": {
+        "step": {
+          "name": "make verify-kani-mutation",
+          "run": "/usr/bin/time -v make verify-kani-mutation"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-protocol-models",
       "make": "make verify-protocol-models",
       "polices_paths": [
         "contracts/verification/proverif/**",
-        "contracts/verification/tamarin/**"
+        "contracts/verification/tamarin/**",
+        "scripts/check_protocol_models.py"
       ],
       "runs_in": "nightly.yml",
-      "enforcement": "nightly"
+      "enforcement": "nightly",
+      "required_context": {
+        "step": {
+          "name": "verify-protocol-models (proverif + tamarin — the 8 symbolic models)",
+          "run": "eval \"$(opam env)\"\nmake verify-protocol-models PROTOCOL_MODELS=proverif,tamarin\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      },
+      "note": "CI selects only PROTOCOL_MODELS=proverif,tamarin. The computational CryptoVerif model has a separate local-only verify-cryptoverif registration; this row claims no CryptoVerif proof execution."
     },
     {
       "id": "verify-repro",
@@ -167,7 +343,26 @@
         "nonsecure/src/**"
       ],
       "runs_in": "nightly.yml",
-      "enforcement": "nightly"
+      "enforcement": "nightly",
+      "required_context": {
+        "step": {
+          "name": "make verify-repro",
+          "run": "make verify-repro"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "checkct",
@@ -177,9 +372,8 @@
         "domain/src/kdf.rs",
         "sphincs-c10/src/**"
       ],
-      "runs_in": "nightly.yml",
       "enforcement": "local_documented",
-      "why": "the `checkct` job is workflow_dispatch-only + continue-on-error (WIP): the opam-released binsec can't build the ARM decoder + checkct plugin together; needs a from-source binsec in a clean CI switch. Validated gate is LOCAL `make checkct`. Tracked in nightly.yml comment + tools/sca/DONJON-RUST-TOOLING.md."
+      "why": "the `checkct` job in nightly.yml is workflow_dispatch-only + continue-on-error (WIP) and invokes cargo-checkct directly, NOT `make checkct` — so no workflow carries this target (runs_in dropped 2026-08-20, #664). The opam-released binsec can't build the ARM decoder + checkct plugin together (diagnosed 2026-06-29); needs a from-source binsec in a clean CI switch. Validated gate is LOCAL `make checkct`. Tracked in the nightly.yml comment + tools/sca/DONJON-RUST-TOOLING.md."
     },
     {
       "id": "verify-transcription",
@@ -201,7 +395,26 @@
       ],
       "runs_in": "a31-transcription.yml",
       "enforcement": "per_pr_blocking",
-      "note": "Dedicated positive-filter workflow for the A3.1 source<->transcription checks plus the Rust/Solidity/Lean signed-digest field-order pin; ci.yml is also unfiltered and invokes the same authoritative target. The Lean proof and axiom-closure legs are enforced separately by lean-fv.yml."
+      "note": "Dedicated positive-filter workflow for the A3.1 source<->transcription checks plus the Rust/Solidity/Lean signed-digest field-order pin; ci.yml is also unfiltered and invokes the same authoritative target. The Lean proof and axiom-closure legs are enforced separately by lean-fv.yml.",
+      "required_context": {
+        "step": {
+          "name": "transcription-fidelity checks (positional lint + structural AST + negative controls)",
+          "run": "make -C contracts/verification verify-transcription"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-extracted",
@@ -211,7 +424,26 @@
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",
-      "note": "§33 Aeneas-extracted no-sorry/no-sorryAx gate. per-PR on extracted/**; the Rust SOURCE crates the extraction mirrors are covered by the extract-* regen-diff sweep (nightly, below). Enrolled 2026-07-02 (was absent — extracted-F1)."
+      "note": "§33 Aeneas-extracted no-sorry/no-sorryAx gate. per-PR on extracted/**; the Rust SOURCE crates the extraction mirrors are covered by the extract-* regen-diff sweep (nightly, below). Enrolled 2026-07-02 (was absent — extracted-F1).",
+      "required_context": {
+        "step": {
+          "name": "verify-extracted (lake build + axiom-discipline gate, <16 GB)",
+          "run": "make -C contracts/verification verify-extracted LAKEFLAGS=-j1"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-extract-differential",
@@ -222,7 +454,26 @@
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "nightly",
-      "note": "executes extracted-Lean vs executed-Rust (signed_preimage, 6 vectors) — the only layer catching a consistently-wrong translation. Wired into lean-extracted.yml nightly 2026-07-02 (was in NO workflow — extracted-F1)."
+      "note": "executes extracted-Lean vs executed-Rust (signed_preimage, 6 vectors) — the only layer catching a consistently-wrong translation. Wired into lean-extracted.yml nightly 2026-07-02 (was in NO workflow — extracted-F1).",
+      "required_context": {
+        "step": {
+          "name": "verify-extract-differential",
+          "run": "make -C contracts/verification verify-extract-differential"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-extraction-freshness",
@@ -244,7 +495,26 @@
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",
-      "note": "F1 (2026-07-16): TOOLCHAIN-FREE sha256 tripwire. The extract-* regen-diff targets need the charon/aeneas toolchain (~/.local/share/pqsigner-lean, absent on CI), so current Rust could drift from the committed extraction while verify-build/verify-extracted stayed green on the stale .lean (4 of 15 extractions were already stale when this was written). Pins sha256(committed generated Lean)+sha256(mirrored Rust file) per extraction (contracts/verification/extraction_registry.json) and FAILS on drift. tx-merkle is WAIVED-STALE (Aeneas can no longer translate its hardened verify_proof; tracked FV15-F1). The real toolchain-gated regen is verify-extraction-regen (local_documented). 2026-07-19 (F3/F4/F13): the registry now self-polices — extraction_registry.json is in polices_paths + lean-extracted.yml paths so a registry-only edit triggers this gate; the checker hard-fails on a shrunk/malformed registry (required_targets floor, list length-match) and on any on-disk Extracted/*/Funs.lean module missing from the registry (completeness floor — this enrolled PinState/SlotKdf, extracted from domain/src, now also in polices_paths)."
+      "note": "F1 (2026-07-16): TOOLCHAIN-FREE sha256 tripwire. The extract-* regen-diff targets need the charon/aeneas toolchain (~/.local/share/pqsigner-lean, absent on CI), so current Rust could drift from the committed extraction while verify-build/verify-extracted stayed green on the stale .lean (4 of 15 extractions were already stale when this was written). Pins sha256(committed generated Lean)+sha256(mirrored Rust file) per extraction (contracts/verification/extraction_registry.json) and FAILS on drift. tx-merkle is WAIVED-STALE (Aeneas can no longer translate its hardened verify_proof; tracked FV15-F1). The real toolchain-gated regen is verify-extraction-regen (local_documented). 2026-07-19 (F3/F4/F13): the registry now self-polices — extraction_registry.json is in polices_paths + lean-extracted.yml paths so a registry-only edit triggers this gate; the checker hard-fails on a shrunk/malformed registry (required_targets floor, list length-match) and on any on-disk Extracted/*/Funs.lean module missing from the registry (completeness floor — this enrolled PinState/SlotKdf, extracted from domain/src, now also in polices_paths).",
+      "required_context": {
+        "step": {
+          "name": "verify-extraction-freshness (F1 sha256 tripwire)",
+          "run": "make -C contracts/verification verify-extraction-freshness"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-extraction-regen",
@@ -273,7 +543,26 @@
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "nightly",
-      "note": "vendored-spec fidelity (the ADRS version bridge). Wired into lean-extracted.yml nightly 2026-07-02 (was in NO workflow — extracted-F1)."
+      "note": "vendored-spec fidelity (the ADRS version bridge). Wired into lean-extracted.yml nightly 2026-07-02 (was in NO workflow — extracted-F1).",
+      "required_context": {
+        "step": {
+          "name": "verify-spec-vendored-fidelity",
+          "run": "make -C contracts/verification verify-spec-vendored-fidelity"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-extracted-heavy",
@@ -282,7 +571,7 @@
         "contracts/verification/extracted/Extracted/FormatDecimalSpec.lean"
       ],
       "enforcement": "local_documented",
-      "why": "FormatDecimalSpec kernel type-checking needs about 42 GB RSS. It is deliberately absent from the 16 GB hosted workflow: even a continue-on-error attempt can terminate the runner and suppress later mandatory evidence. Authoritative validation runs locally or on a >=48 GB runner. The mandatory extracted suite remains blocking."
+      "why": "FormatDecimalSpec kernel type-checking needs about 42 GB RSS (measured 2026-07-07; carved out of the default target the same day). It is deliberately absent from the 16 GB hosted workflow: even a continue-on-error attempt can terminate the runner and suppress later mandatory evidence. Authoritative validation runs locally or on a >=48 GB runner. The mandatory extracted suite remains blocking."
     },
     {
       "id": "verify-bytecode",
@@ -290,9 +579,8 @@
       "polices_paths": [
         "contracts/smart-wallet/src/**"
       ],
-      "runs_in": "ci.yml",
       "enforcement": "local_documented",
-      "why": "the Halmos+z3 symbolic discharge of A3.2/A3.3/A3.4 needs the patched halmos toolchain + is slow (kept local/manual per ci.yml:20-23). Per-PR protection against wallet-bytecode drift is the codehash-freeze test/PinnedCodehashes.t.sol in the `contracts` job (forces a conscious re-pin); nothing auto-re-runs Halmos after a re-pin. Kontrol/KEVM is the independent transcription-free cross-check, also local. Corrected 2026-07-02: was advertised as 'the fast CI gate' but runs in NO workflow (HALMOS-FAST-CI-GATE-FALSE)."
+      "why": "the Halmos+z3 symbolic discharge of A3.2/A3.3/A3.4 needs the patched halmos toolchain + is slow (kept local/manual per ci.yml:20-23). Per-PR protection against wallet-bytecode drift is the codehash-freeze test/PinnedCodehashes.t.sol in the `contracts` job (forces a conscious re-pin); nothing auto-re-runs Halmos after a re-pin. Kontrol/KEVM is the independent transcription-free cross-check, also local. Corrected 2026-07-02: was advertised as 'the fast CI gate' but runs in NO workflow (HALMOS-FAST-CI-GATE-FALSE). The incorrect runs_in entry is removed under #664; no workflow invokes this make target."
     },
     {
       "id": "verify-kani-census",
@@ -309,7 +597,26 @@
       ],
       "runs_in": "ci.yml",
       "enforcement": "per_pr_blocking",
-      "note": "F11 (introduced 2026-07-16; refreshed 2026-07-23): source-generated exact file/function Kani harness census (scripts/kani_census.py -> kani_census.lock.json) from active standalone attributes, plus file/harness and unique material find/replace manifest-rot checks. Pure Python (no cargo kani), so it runs per-PR in the gate-enforcement job (ci.yml), unlike the slow nightly `kani`/`verify-kani-mutation`. Closes the stale/hand-maintained-census and comment false-positive gaps (was '93 harnesses/17 files' in prose; live is 173/27, 11 harnesses in 6 files with no mutation coverage). scripts/kani_census.lock.json self-policed since 2026-07-19 (F13: the lock file you'd edit to fake the harness count must itself be policed; ci.yml has no paths filter, so it always fires)."
+      "note": "F11 (introduced 2026-07-16; refreshed 2026-07-23): source-generated exact file/function Kani harness census (scripts/kani_census.py -> kani_census.lock.json) from active standalone attributes, plus file/harness and unique material find/replace manifest-rot checks. Pure Python (no cargo kani), so it runs per-PR in the gate-enforcement job (ci.yml), unlike the slow nightly `kani`/`verify-kani-mutation`. Closes the stale/hand-maintained-census and comment false-positive gaps (was '93 harnesses/17 files' in prose; live is 173/27, 11 harnesses in 6 files with no mutation coverage). scripts/kani_census.lock.json self-policed since 2026-07-19 (F13: the lock file you'd edit to fake the harness count must itself be policed; ci.yml has no paths filter, so it always fires).",
+      "required_context": {
+        "step": {
+          "name": "verify-kani-census",
+          "run": "make verify-kani-census"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-easycrypt",
@@ -318,7 +625,7 @@
         "contracts/verification/easycrypt/**"
       ],
       "enforcement": "local_documented",
-      "why": "F5 (2026-07-16) enrolls the EasyCrypt +C port gate — previously the ONLY formal-verification surface absent from this manifest, so its skips/admits/axioms/dependency state were invisible to the G1-G5 controls. Needs the pinned opam ec-r2026 switch (EasyCrypt r2026.02 + Alt-Ergo 2.6.0) + the MM45 reference proofs, so it stays local-only. Split into three targets: verify-easycrypt (PARTIAL: stdlib +C chain, MM45-chain skipped loudly), verify-easycrypt-full (FULL: 21/21 zero skips, fails if MM45 refs absent), verify-easycrypt-pins (toolchain-free ledger: admit/axiom COUNT + SEMANTIC name->statement pin + a wired-in negative control that a dmkey_ll:false weakening MUST fire). The toolchain-free pin (verify-easycrypt-pins) can be CI-wired later if desired; the full compile cannot (no MM45 docker on runners)."
+      "why": "F5 (2026-07-16) enrolls the EasyCrypt +C port gate — previously the ONLY formal-verification surface absent from this manifest, so its skips/admits/axioms/dependency state were invisible to the G1-G5 controls. Needs the pinned opam ec-r2026 switch (EasyCrypt r2026.02 + Alt-Ergo 2.6.0) + the MM45 reference proofs, so it stays local-only. Split into three targets: verify-easycrypt (PARTIAL: stdlib +C chain, MM45-chain skipped loudly), verify-easycrypt-full (FULL: 21/21 zero skips, fails if MM45 refs absent), verify-easycrypt-pins (toolchain-free ledger: admit/axiom COUNT + SEMANTIC name->statement pin + a wired-in negative control that a dmkey_ll:false weakening MUST fire). The toolchain-free pin (verify-easycrypt-pins) is CI-wired per-PR in lean-fv.yml since 2026-08-20 (#664); the full compile cannot be (no MM45 docker on runners)."
     },
     {
       "id": "verify-three-claims",
@@ -342,7 +649,26 @@
       ],
       "runs_in": "ci.yml",
       "enforcement": "per_pr_blocking",
-      "note": "HW-ASSUME ledger hygiene (C3 evidence anchors resolve into secure/, shared/, hal/ + the Makefiles; C5 is a tree-wide bidirectional id sweep). Deliberately in ci.yml invariant-gates and NOT lean-fv.yml: that workflow's paths filter watches contracts/verification/** only, so an edit to an anchored firmware file would never trigger it there (ci.yml:74-83). Enrolled 2026-07-19 (F50 — was invoked at ci.yml:83 but absent from this manifest; the completeness pass caught it)."
+      "note": "HW-ASSUME ledger hygiene (C3 evidence anchors resolve into secure/, shared/, hal/ + the Makefiles; C5 is a tree-wide bidirectional id sweep). Deliberately in ci.yml invariant-gates and NOT lean-fv.yml: that workflow's paths filter watches contracts/verification/** only, so an edit to an anchored firmware file would never trigger it there (ci.yml:74-83). Enrolled 2026-07-19 (F50 — was invoked at ci.yml:83 but absent from this manifest; the completeness pass caught it).",
+      "required_context": {
+        "step": {
+          "name": "HW-ASSUME ledger falsifiable (anchors / real tests / bidirectional ids)",
+          "run": "make -C contracts/verification verify-hw-assumptions"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-mmio-addresses",
@@ -370,7 +696,27 @@
       ],
       "runs_in": "ci.yml",
       "enforcement": "per_pr_blocking",
-      "note": "During the rollback quarantine, CI first resolves the canonical required/forbidden production feature set, then requires prod-check-ship to fail for the exact open rollback-backend reason and executes the secure/FSBL/factory negative-compilation/process suite. Draft 1.1 is an unapproved research candidate, not the selected backend. Enrolled so the meta-gate catches the quarantine step being removed or made non-blocking."
+      "note": "During the rollback quarantine, CI first resolves the canonical required/forbidden production feature set, then requires prod-check-ship to fail for the exact open rollback-backend reason and executes the secure/FSBL/factory negative-compilation/process suite. Draft 1.1 is an unapproved research candidate, not the selected backend. Enrolled so the meta-gate catches the quarantine step being removed or made non-blocking.",
+      "required_context": {
+        "step": {
+          "name": "prove prod-check-ship is quarantined",
+          "shell": "bash",
+          "run": "set -euo pipefail\nif output=\"$(make prod-check-ship 2>&1)\"; then\n  printf '%s\\n' \"$output\"\n  echo \"ERROR: production gate unexpectedly passed\"\n  exit 1\nfi\nprintf '%s\\n' \"$output\"\ngrep -Fq \"prod-feature-check: PASS\" <<<\"$output\"\ngrep -Fq \"reviewed production rollback backend is not implemented\" <<<\"$output\"\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "verify-rollback-freeze-pin",
@@ -385,7 +731,26 @@
       ],
       "runs_in": "ci.yml",
       "enforcement": "per_pr_blocking",
-      "note": "Frozen Draft 1.1/1.2 digest pin (2026-07-26 ratification condition 3: any byte change reopens the gate; fb66a1e5's HW-CONFIRM->HW-ASSUME rename proved drift can go unnoticed for six days). Deliberately in ci.yml invariant-gates and NOT lean-fv.yml: that workflow's paths filter watches contracts/verification/** only, so docs/security-only drift would never trigger it there. Green means the bytes match the receipt; it asserts NOTHING about approval — the receipt's GATE STATE note carries that. Enrolled 2026-08-06: the merge wave caught the CI-wired gate escaping this manifest (G1META-1 completeness)."
+      "note": "Frozen Draft 1.1/1.2 digest pin (2026-07-26 ratification condition 3: any byte change reopens the gate; fb66a1e5's HW-CONFIRM->HW-ASSUME rename proved drift can go unnoticed for six days). Deliberately in ci.yml invariant-gates and NOT lean-fv.yml: that workflow's paths filter watches contracts/verification/** only, so docs/security-only drift would never trigger it there. Green means the bytes match the receipt; it asserts NOTHING about approval — the receipt's GATE STATE note carries that. Enrolled 2026-08-06: the merge wave caught the CI-wired gate escaping this manifest (G1META-1 completeness).",
+      "required_context": {
+        "step": {
+          "name": "Rollback Draft 1.1/1.2 frozen-pair digest pin",
+          "run": "make -C contracts/verification verify-rollback-freeze-pin"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "prod-erc7730-provenance-check",
@@ -444,7 +809,27 @@
       ],
       "runs_in": "ci.yml",
       "enforcement": "per_pr_blocking",
-      "note": "CI executes one capability-bound drift verification over the production/E2E ERC-20 inputs, companion blobs, exact cfg-selected root sections, ERC-7730 outputs, and generated receipts, then requires the current dev-unattested catalogue to fail for the exact production-provenance reason. This remains independent of the rollback quarantine so neither blocker can mask the other."
+      "note": "CI executes one capability-bound drift verification over the production/E2E ERC-20 inputs, companion blobs, exact cfg-selected root sections, ERC-7730 outputs, and generated receipts, then requires the current dev-unattested catalogue to fail for the exact production-provenance reason. This remains independent of the rollback quarantine so neither blocker can mask the other.",
+      "required_context": {
+        "step": {
+          "name": "prove ERC-7730 production provenance is quarantined",
+          "shell": "bash",
+          "run": "set -euo pipefail\nif output=\"$(make prod-erc7730-provenance-check 2>&1)\"; then\n  printf '%s\\n' \"$output\"\n  echo \"ERROR: ERC-7730 production provenance unexpectedly passed\"\n  exit 1\nfi\nprintf '%s\\n' \"$output\"\ngrep -Fq \"prod-erc7730-provenance-check: FAIL\" <<<\"$output\"\ngrep -Fq \"catalogue provenance is 'dev-unattested'\" <<<\"$output\"\ngrep -Fq \"required 'erc8176-verified'\" <<<\"$output\"\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "e2e",
@@ -475,7 +860,26 @@
       ],
       "runs_in": "ci.yml",
       "enforcement": "per_pr_blocking",
-      "note": "CI boots the combined secure/nonsecure image under QEMU and requires the unified-sign E2E sentinel, including positive ERC-7730 clear-sign rendering and cross-deployment hard refusal."
+      "note": "CI boots the combined secure/nonsecure image under QEMU and requires the unified-sign E2E sentinel, including positive ERC-7730 clear-sign rendering and cross-deployment hard refusal.",
+      "required_context": {
+        "step": {
+          "name": "make e2e",
+          "run": "make e2e"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
     },
     {
       "id": "invisible-unicode",
@@ -490,7 +894,34 @@
       ],
       "runs_in": "workflow-security.yml",
       "enforcement": "per_pr_blocking",
-      "note": "Zero-width (U+200B..U+200F/U+FEFF) and bidi override/isolate (U+202A..U+202E, U+2066..U+2069) codepoints are invisible to git diff and to code review. Two attacks share that mechanism: TrapDoor-style poisoning of the AI-instruction files every coding agent executes, and Trojan Source (CVE-2021-42574). Baseline 2026-07-31 is ZERO hits over 3841 tracked text files with NO allowlist — the two pre-existing hits were fixed, not exempted, because an allowlist here is a place to hide the payload. Carries a two-sided self-test (5 payload classes fire, 3 benign inputs stay silent); ordinary non-ASCII is deliberately allowed or the gate would be red on day one and disabled by the end of the week."
+      "note": "Zero-width (U+200B..U+200F/U+FEFF) and bidi override/isolate (U+202A..U+202E, U+2066..U+2069) codepoints are invisible to git diff and to code review. Two attacks share that mechanism: TrapDoor-style poisoning of the AI-instruction files every coding agent executes, and Trojan Source (CVE-2021-42574). Baseline 2026-07-31 is ZERO hits over 3841 tracked text files with NO allowlist — the two pre-existing hits were fixed, not exempted, because an allowlist here is a place to hide the payload. Carries a two-sided self-test (5 payload classes fire, 3 benign inputs stay silent); ordinary non-ASCII is deliberately allowed or the gate would be red on day one and disabled by the end of the week.",
+      "required_context": {
+        "step": {
+          "name": "invisible-unicode (zero-width + Trojan Source)",
+          "run": "make invisible-unicode"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {
+          "env": {
+            "ACTIONLINT_VERSION": "1.7.7",
+            "ACTIONLINT_SHA256": "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757",
+            "GITLEAKS_VERSION": "8.24.0",
+            "GITLEAKS_SHA256": "cb49b7de5ee986510fe8666ca0273a6cc15eb82571f2f14832c9e8920751f3a4",
+            "ZIZMOR_VERSION": "1.28.0"
+          }
+        }
+      }
     },
     {
       "id": "kani-heavy",
@@ -498,9 +929,584 @@
       "polices_paths": [
         "tx/src/multisend.rs"
       ],
-      "runs_in": "nightly.yml",
       "enforcement": "local_documented",
-      "why": "The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB/6m03s, no_hidden_value 13.05 GiB/7m55s, cow_presign_precedence 11.50 GiB/3m56s; all VERIFY SUCCESSFULLY, measured locally 2026-07-31) exceed what a hosted runner can absorb. Instrumented CI evidence 2026-07-31: the runner has 15,989 MB RAM with 14,497 MB available and 145 GB disk with 86 GB free, so DISK IS NOT THE CAUSE - it is memory. The kill lands between 'Runtime Postprocess Equation' and 'Solving with ...', i.e. inside CBMC's formula construction and BEFORE any SAT solver is invoked; a kissat experiment was therefore reverted, since the solver never runs. (That experiment's local peak-RSS numbers were also unsound: an external solver runs out-of-process and /usr/bin/time -v reports a per-process maximum, not an aggregate.) Excluded because an OOM kills the runner and suppresses every later mandatory gate in the same job - same reasoning as verify-extracted-heavy (53c19f21); continue-on-error cannot save a dead runner. The 100-byte bound is deliberately NOT reduced: shrinking a proof's bound to earn a green check is coverage loss disguised as a pass. Larger hosted runners are unavailable (Team/Enterprise-only; this org is free-plan; hosted-runners API 404s). Run via `make kani-heavy`; the other 170 harnesses stay blocking in nightly."
+      "why": "The three 100-byte-symbolic multiSend harnesses (per_record_page_bound 12.71 GiB/6m03s, no_hidden_value 13.05 GiB/7m55s, cow_presign_precedence 11.50 GiB/3m56s; all VERIFY SUCCESSFULLY, measured locally 2026-07-31) exceed what a hosted runner can absorb. Instrumented CI evidence 2026-07-31: the runner has 15,989 MB RAM with 14,497 MB available and 145 GB disk with 86 GB free, so DISK IS NOT THE CAUSE - it is memory. The kill lands between 'Runtime Postprocess Equation' and 'Solving with ...', i.e. inside CBMC's formula construction and BEFORE any SAT solver is invoked; a kissat experiment was therefore reverted, since the solver never runs. (That experiment's local peak-RSS numbers were also unsound: an external solver runs out-of-process and /usr/bin/time -v reports a per-process maximum, not an aggregate.) Excluded because an OOM kills the runner and suppresses every later mandatory gate in the same job - same reasoning as verify-extracted-heavy (53c19f21); continue-on-error cannot save a dead runner. The 100-byte bound is deliberately NOT reduced: shrinking a proof's bound to earn a green check is coverage loss disguised as a pass. Larger hosted runners are unavailable (Team/Enterprise-only; this org is free-plan; hosted-runners API 404s). Run via `make kani-heavy`; the other 170 harnesses stay blocking in nightly. runs_in=nightly.yml dropped 2026-08-20 (#664) — no workflow invokes the target."
+    },
+    {
+      "id": "build-hw",
+      "make": "make build-hw",
+      "polices_paths": [
+        "secure/src/**",
+        "nonsecure/src/**",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "stm32u585 smoke-image build — the only CI leg that links the secure+nonsecure pair with the CMSE implib, so veneer-symbol drift fails here (F45). Enrolled 2026-08-20 (#664 — was invoked in ci.yml but absent from this manifest, so deleting the step passed silently).",
+      "required_context": {
+        "step": {
+          "name": "thumbv8m secure+nonsecure pair link (CMSE implib)",
+          "run": "make build-hw"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "build-hw-prodtest",
+      "make": "make build-hw-prodtest",
+      "polices_paths": [
+        "secure/src/**",
+        "nonsecure/src/**",
+        "tools/factory-prodtest-runner.py",
+        "tools/test_factory_prodtest_runner.py",
+        "Makefile"
+      ],
+      "runs_in": "nightly.yml",
+      "enforcement": "nightly",
+      "note": "TZP-10 (#481): the factory prodtest feature set (secure prodtest,dev-testkey,saes-dhuk / nonsecure stm32u585,usb,prodtest) full release cross-build — factory-image bit-rot would otherwise surface only at the line. Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "make build-hw-prodtest (factory prodtest image compiles)",
+          "run": "make build-hw-prodtest"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "size-report",
+      "make": "make size-report",
+      "polices_paths": [
+        "fwmeasure/src/**",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "TZP-11 (#482): secure-slot capacity gate — fwmeasure's strict --require-secure-slot check enforces the 464 KiB A/B slot bound on the linked image (staged from build-hw's ELFs in the same ci.yml job). Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "Secure-slot capacity gate (make size-report)",
+          "run": "mkdir -p target/pqsigner-release\ncp target/secure/thumbv8m.main-none-eabi/release/sphincs-tz-secure target/pqsigner-release/secure.elf\ncp target/nonsecure/thumbv8m.main-none-eabi/release/sphincs-tz-nonsecure target/pqsigner-release/nonsecure.elf\nmake size-report\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "check-erc7730-descriptors",
+      "make": "make check-erc7730-descriptors",
+      "polices_paths": [
+        "dbgen/src/**",
+        "xtask/src/**",
+        "pqsigner-erc7730/src/**",
+        "secure/data/erc7730-registry/**",
+        "secure/data/erc7730-e2e/**",
+        "secure/src/db_roots.rs",
+        "tools/companion-stub/test_erc7730_trailer.py",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "Descriptor-catalog drift gate: the firmware-pinned ERC7730_DESCRIPTORS_ROOT must match a fresh dbgen build, and every compiled IR re-parses through the on-device parser with its Merkle proof re-verified. Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "ERC-7730 descriptor catalog in-sync (drift gate)",
+          "run": "make check-erc7730-descriptors"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "check-solidity-constants",
+      "make": "make check-solidity-constants",
+      "polices_paths": [
+        "proto/src/**",
+        "xtask/src/**",
+        "contracts/smart-wallet/src/generated/PqsignerProto.sol",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "proto -> Solidity freshness: PqsignerProto.sol must be a byte-for-byte render of the current proto constants (the on-chain verifier depends on them). Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "proto -> Solidity constants in-sync (PqsignerProto.sol drift)",
+          "run": "make check-solidity-constants"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "check-research-bundles",
+      "make": "make check-research-bundles",
+      "polices_paths": [
+        "docs/security/research-bundles/**",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "Generated security research bundles must stay in sync with their Markdown sources (docs are executable review input). Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "security research bundles in-sync (drift gate)",
+          "run": "python3 -m pip install --quiet markdown-it-py==3.0.0\nmake check-research-bundles\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "erc7730-cross-parity",
+      "make": "make erc7730-cross-parity",
+      "polices_paths": [
+        "tools/erc7730-parity/**",
+        "tools/cross_parity_erc7730.py",
+        "tools/cross_parity_erc8213.py",
+        "pqsigner-erc7730/src/**",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "Independent clear-signing cross-implementation parity (ERC-7730 official resolver + ERC-8213 lock-pinned Keccak), via the lock-frozen uv project. Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "ERC-7730 / ERC-8213 independent parity gate",
+          "run": "python -m pip install --quiet uv==0.11.21\nmake erc7730-cross-parity\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "erc8176-coverage-test",
+      "make": "make erc8176-coverage-test",
+      "polices_paths": [
+        "tools/erc8176_eas_coverage.py",
+        "tools/test_erc8176_eas_coverage.py",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "Deterministic/offline ERC-8176 coverage-checker regressions: malformed, revoked, and expired EAS rows must never contribute to a descriptor's trusted-attester threshold. Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "ERC-8176 coverage checker regressions (offline)",
+          "run": "make erc8176-coverage-test"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "test-erc7730-proxy-drift",
+      "make": "make test-erc7730-proxy-drift",
+      "polices_paths": [
+        "tools/erc7730_proxy_drift.py",
+        "tools/test_erc7730_proxy_drift.py",
+        "Makefile"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "Offline advisory proxy-monitor suite (also run inside the weekly erc7730-proxy-drift.yml observation job; the per-PR blocking leg is ci.yml). Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "ERC-7730 proxy-drift monitor (offline tests only)",
+          "run": "make test-erc7730-proxy-drift"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "erc7730-proxy-drift",
+      "make": "make erc7730-proxy-drift",
+      "polices_paths": [
+        "tools/erc7730_proxy_drift.py",
+        "Makefile",
+        ".github/workflows/erc7730-proxy-drift.yml"
+      ],
+      "runs_in": "erc7730-proxy-drift.yml",
+      "enforcement": "nightly",
+      "note": "Weekly read-only Ethereum observation of evidence-bound proxies (requires ERC7730_RPC_1). ADVISORY by design: DRIFT/UNKNOWN rows print ::warning and upload a report; the job never blocks. Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "Read-only Ethereum observation",
+          "env": {
+            "ERC7730_RPC_1": "https://ethereum-rpc.publicnode.com"
+          },
+          "run": "make erc7730-proxy-drift\npython3 - <<'PY'\nimport json\nimport os\nfrom pathlib import Path\n\nreport = json.loads(Path(\"target/erc7730-proxy-drift.json\").read_text())\nsummary = report[\"summary\"]\nrows = [\n    \"## ERC-7730 proxy drift (advisory only)\",\n    \"\",\n    f\"MATCH: {summary['MATCH']} · DRIFT: {summary['DRIFT']} · UNKNOWN: {summary['UNKNOWN']}\",\n    \"\",\n    \"This observation grants no signing, catalogue, release, or production authority.\",\n]\nwith open(os.environ[\"GITHUB_STEP_SUMMARY\"], \"a\", encoding=\"utf-8\") as output:\n    output.write(\"\\n\".join(rows) + \"\\n\")\nif summary[\"DRIFT\"]:\n    print(f\"::warning::{summary['DRIFT']} watched ERC-7730 proxy row(s) drifted\")\nif summary[\"UNKNOWN\"]:\n    print(f\"::warning::{summary['UNKNOWN']} watched ERC-7730 proxy row(s) are unknown\")\nPY\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "ui-golden-render",
+      "make": "make ui-golden-render",
+      "polices_paths": [
+        "secure/src/ui/**",
+        "tests/ui_golden_render_fixtures.json",
+        "tools/ui_fixture.py",
+        "Makefile"
+      ],
+      "runs_in": "nightly.yml",
+      "enforcement": "nightly",
+      "note": "Render-only golden gate: renders the curated screen corpus via the production renderers under QEMU and diffs [UI-FP] fingerprints (seconds). The full 24-scenario `make ui-golden` stays a LOCAL/manual gate. Enrolled 2026-08-20 (#664).",
+      "required_context": {
+        "step": {
+          "name": "make ui-golden-render",
+          "run": "make ui-golden-render"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "verify-easycrypt-pins",
+      "make": "make -C contracts/verification verify-easycrypt-pins",
+      "polices_paths": [
+        "contracts/verification/easycrypt/**",
+        "contracts/verification/scripts/check_easycrypt.sh",
+        ".github/workflows/lean-fv.yml",
+        "contracts/verification/scripts/ec_sweep.py",
+        "contracts/verification/scripts/ec_axioms.py",
+        "contracts/verification/Makefile"
+      ],
+      "runs_in": "lean-fv.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "Toolchain-free EasyCrypt admit/axiom ledger: count pins + SEMANTIC name->statement pin + a wired-in negative control (a dmkey_ll:false weakening MUST fire). 1.9 s locally, verified green 2026-08-20 against 666e3725 — no container needed. Wired into lean-fv.yml 2026-08-20 (#664): it ran in NO workflow while the last ~15 master commits were EasyCrypt pin work. easycrypt/** added to the lean-fv.yml paths filter the same day so the gate FIRES on its policed surface (the F1 class).",
+      "required_context": {
+        "step": {
+          "name": "verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)",
+          "run": "make -C contracts/verification verify-easycrypt-pins"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "verify-easycrypt-full",
+      "make": "make -C contracts/verification verify-easycrypt-full",
+      "polices_paths": [
+        "contracts/verification/easycrypt/**",
+        "contracts/verification/scripts/check_easycrypt.sh"
+      ],
+      "enforcement": "local_documented",
+      "why": "FULL EasyCrypt verification (21/21 .ec compiled as targets, ZERO skips) needs the pinned opam ec-r2026 switch (EasyCrypt r2026.02 + Alt-Ergo 2.6.0) AND the MM45 reference proofs, and FAILS by design when either is absent — so it cannot run on a stock runner (F5 split, 2026-07-16). The toolchain-free ledger leg (verify-easycrypt-pins) is per-PR in lean-fv.yml. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-easycrypt-docker",
+      "make": "make -C contracts/verification verify-easycrypt-docker",
+      "polices_paths": [
+        "contracts/verification/easycrypt/**"
+      ],
+      "enforcement": "local_documented",
+      "why": "the C10-concrete capstone reproduces MM45's confirmed toolchain (EC r2026.02 + Z3 4.13.4 + Alt-Ergo 2.6.0) in docker and needs a local MM45 checkout (C10_PORT_DIR with its FV-SPHINCSPLUS-EC submodule — third-party, not vendored); absent either it prints the committed 2026-07-17 gate receipt and SKIP-exits 0, which as a CI step would be a permanent green no-op. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-tla",
+      "make": "make -C contracts/verification verify-tla",
+      "polices_paths": [
+        "contracts/verification/tla/**"
+      ],
+      "enforcement": "local_documented",
+      "why": "needs a local tla2tools.jar + JRE; the jar is deliberately NOT vendored or auto-fetched (the validated build is a TLA+ Tools nightly, sha256-pinned to the 2026-07-15 run — a hard pin against 'download latest' would fail for everyone), so no stock runner can run it. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-verus",
+      "make": "make -C contracts/verification verify-verus",
+      "polices_paths": [
+        "contracts/verification/verus/**"
+      ],
+      "enforcement": "local_documented",
+      "why": "the all-length Verus flash-journal crash-safety pilot needs a rustc-pinned prebuilt Verus at VERUS_DIR (see contracts/verification/scripts/fv-external-tools.env); not vendored, so no stock runner can run it. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-crux-ns-ptr",
+      "make": "make -C contracts/verification verify-crux-ns-ptr",
+      "polices_paths": [
+        "contracts/verification/crux/**",
+        "shared/src/ns_ptr_validate.rs"
+      ],
+      "enforcement": "local_documented",
+      "why": "the crux-mir implementation-diversity check (ns_ptr_validate vs an independent u64 oracle) needs the schema-8 mir-json rlibs + the SAW-bundle crux-mir-comp locally (see contracts/verification/scripts/fv-external-tools.env); not vendored. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-lean-proto-domain",
+      "make": "make -C contracts/verification verify-lean-proto-domain",
+      "polices_paths": [
+        "contracts/verification/scripts/check_lean_proto_domain.py",
+        "contracts/verification/lean/SphincsCVerify/Wallet/Factory.lean",
+        "proto/src/lib.rs"
+      ],
+      "enforcement": "local_documented",
+      "why": "P7 domain-tag drift lint (Lean factoryAddSlotDomain == proto::FACTORY_ADD_SLOT_DOMAIN). Pure Python, no lake build — CI-wirable; enrolled local_documented 2026-08-20 (#664) pending an explicit wiring decision rather than a silent absence from every workflow."
+    },
+    {
+      "id": "verify-linker-map",
+      "make": "make -C contracts/verification verify-linker-map",
+      "polices_paths": [
+        "contracts/verification/scripts/check_linker_memory_map.py",
+        "nonsecure/memory-stm32u585.x",
+        "secure/memory-stm32u585.x",
+        "proto/src/lib.rs",
+        "secure/src/sau.rs",
+        "contracts/verification/lean/SphincsCVerify/Platform/MemoryMap.lean"
+      ],
+      "enforcement": "local_documented",
+      "why": "P1.9 TrustZone memory-map drift gate (.x == proto == sau.rs == Lean). Pure source parse with a wired-in --self-test, no build — CI-wirable; enrolled local_documented 2026-08-20 (#664) pending an explicit wiring decision."
+    },
+    {
+      "id": "verify-halmos",
+      "make": "make -C contracts/verification verify-halmos",
+      "polices_paths": [
+        "contracts/verification/halmos/**",
+        "contracts/smart-wallet/src/**"
+      ],
+      "enforcement": "local_documented",
+      "why": "same constraint as verify-bytecode (which invokes the same halmos/run_halmos.sh): the patched halmos toolchain + long symbolic runs stay local/manual (HALMOS-FAST-CI-GATE-FALSE, corrected 2026-07-02). Per-PR bytecode-drift protection is the codehash-freeze + deploy-profile pins in ci.yml (#672). Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-kontrol",
+      "make": "make -C contracts/verification verify-kontrol",
+      "polices_paths": [
+        "contracts/verification/kontrol/**",
+        "contracts/smart-wallet/src/**"
+      ],
+      "enforcement": "local_documented",
+      "why": "Kontrol/KEVM symbolic proofs on the deployed bytecode need a K backend (`kup install kontrol` via nix, or the RV docker image); ~5 min build+prove when present, uninstallable on a stock runner. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-parse-transcription",
+      "make": "make -C contracts/verification verify-parse-transcription",
+      "polices_paths": [
+        "contracts/verification/lean/SphincsCVerify/Interpreter/**",
+        "contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol"
+      ],
+      "enforcement": "local_documented",
+      "why": "the A3.1 in-kernel Yul-parse leg (parseYul c10Source = some c10ProgramFull + elision bridge). Its kernel modules are compiled by lean-fv.yml's `lake build SphincsCVerify` via the root import, and its byte-pin leg runs per-PR in verify-transcription; this focused target (+ its closure echo) stays a local convenience (Makefile note, 2026-07-04). Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-interp",
+      "make": "make -C contracts/verification verify-interp",
+      "polices_paths": [
+        "contracts/verification/lean/SphincsCVerify/Interpreter/**",
+        "contracts/verification/lean/scripts/**"
+      ],
+      "enforcement": "local_documented",
+      "why": "the A3.1 interpreter<->bytecode KAT+bulk replay needs the full Lean build + `lake exe verify-interp` over the corpus — heavy; the lighter transcription legs run per-PR (a31-transcription.yml + ci.yml). Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-cavp",
+      "make": "make -C contracts/verification verify-cavp",
+      "polices_paths": [
+        "contracts/verification/cavp/**",
+        "contracts/verification/scripts/gen_cavp_vectors.py",
+        "contracts/verification/lean/SphincsCVerify/Spec/Sha256Impl.lean"
+      ],
+      "enforcement": "local_documented",
+      "why": "NIST CAVP SHA-256 conformance: regenerates the embedded vector module (python, idempotent) then `lake exe verify-cavp` over all ShortMsg/LongMsg + Monte Carlo vectors — needs the Lean toolchain + build; runs in no workflow today. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-primitive-kat",
+      "make": "make -C contracts/verification verify-primitive-kat",
+      "polices_paths": [
+        "sphincs-c10/**",
+        "contracts/verification/scripts/independent_c10_signer.py",
+        "contracts/smart-wallet/test/c10_primitive_kat_vectors.json"
+      ],
+      "enforcement": "local_documented",
+      "why": "the per-primitive tweakable-hash KAT (Rust<->Python<->Yul three-way) needs cargo (sim-internals) + python3 + forge on PATH — heavier than the per-PR budget. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-bulk",
+      "make": "make -C contracts/verification verify-bulk",
+      "polices_paths": [
+        "contracts/verification/lean/SphincsCVerify/BulkVectors.lean",
+        "contracts/verification/lean/scripts/gen_bulk_lean.py",
+        "sphincs-c10/tests/gen_bulk_vectors.rs"
+      ],
+      "enforcement": "local_documented",
+      "why": "the bulk executable-spec differential needs the Lean build + `lake exe verify-bulk` over the committed BulkVectors.lean artifact (the GEN=1 corpus regen is a separate local flow). Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-exec-gate",
+      "make": "make -C contracts/verification verify-exec-gate",
+      "polices_paths": [
+        "contracts/verification/lean/SphincsCVerify/Wallet/TxFlow.lean",
+        "contracts/verification/lean/SphincsCVerify/Spec/Theorems.lean",
+        "contracts/verification/scripts/check_axiom_closure.py",
+        "contracts/verification/lean/scripts/axiom_closure_claim4_manifest.txt"
+      ],
+      "enforcement": "local_documented",
+      "why": "the Claim-4 trace-gate closure gate lake-builds the TxFlow + Spec.Theorems dep closure and enforces kernel-only axioms on the dump — needs the Lean toolchain; runs in no workflow today. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-forsc-margin",
+      "make": "make -C contracts/verification verify-forsc-margin",
+      "polices_paths": [
+        "contracts/verification/scripts/forsc_grinding_margin.py",
+        "sphincs-c10/src/params.rs"
+      ],
+      "enforcement": "local_documented",
+      "why": "the FORS+C grinding-margin guardrail (never weaker than plain FORS at C10 params; fails if the removed forced-zero tree is ever shrunk). Pure-Python arithmetic over params.rs with a wired-in --self-test, no build — CI-wirable; enrolled local_documented 2026-08-20 (#664) pending an explicit wiring decision."
+    },
+    {
+      "id": "verify-independent-signer",
+      "make": "make -C contracts/verification verify-independent-signer",
+      "polices_paths": [
+        "contracts/verification/scripts/independent_c10_signer.py",
+        "sphincs-c10/tests/independent_signer_xcheck.rs"
+      ],
+      "enforcement": "local_documented",
+      "why": "leg (2) — the Rust cross-verifier accepting FRESH independent-signer output — already runs per-PR in the ci.yml host-tests job (`cargo test -p sphincs-c10 --test independent_signer_xcheck --release`); the full target adds the pure-Python byte-equivalence leg (~5 s) locally. Enrolled 2026-08-20 (#664)."
+    },
+    {
+      "id": "verify-pins",
+      "make": "make verify-pins",
+      "polices_paths": [
+        "tools/verify_pins.sh",
+        "Cargo.lock",
+        "contracts/smart-wallet/foundry.lock",
+        "rust-toolchain.toml"
+      ],
+      "enforcement": "local_documented",
+      "why": "tools/verify_pins.sh supply-chain pin audit (Cargo.lock checksums, git rev= pins, foundry.lock matching checked-out libs, dated-nightly rust-toolchain). Every release-path target depends on it, but no workflow invokes it directly; its deploy-profile codehash-pin substance runs per-PR in the ci.yml contracts jobs. Enrolled 2026-08-20 (#664)."
     },
     {
       "id": "verify-verity-census",
@@ -513,10 +1519,70 @@
       ],
       "runs_in": "verity-fv.yml",
       "enforcement": "per_pr_blocking",
-      "note": "Fresh Part B exported-environment axiom/admission census and exact unverified Part A source quarantine (#673)."
+      "note": "Fresh Part B exported-environment axiom/admission census and exact unverified Part A source quarantine (#673).",
+      "required_context": {
+        "step": {
+          "name": "Fresh semantic census and source quarantine",
+          "run": "make -C contracts/verity verify-verity-census"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "verify-gate-enforcement",
+      "make": "make verify-gate-enforcement",
+      "polices_paths": [
+        "scripts/check_gate_enforcement.py",
+        "scripts/test_gate_enforcement.py",
+        "scripts/gate_enforcement.json",
+        "Makefile",
+        ".github/workflows/**"
+      ],
+      "runs_in": "ci.yml",
+      "enforcement": "per_pr_blocking",
+      "required_context": {
+        "step": {
+          "name": "verify-gate-enforcement",
+          "run": "python3 -m pip install --quiet pyyaml\nmake verify-gate-enforcement\n"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
+      "id": "verify-cryptoverif",
+      "make": "make verify-cryptoverif",
+      "polices_paths": [
+        "contracts/verification/cryptoverif/**",
+        "scripts/check_protocol_models.py",
+        "Makefile"
+      ],
+      "enforcement": "local_documented",
+      "why": "CryptoVerif requires its local executable/library setup. The nightly protocol job deliberately selects only proverif,tamarin; this wrapper selects the computational model alone through the existing verdict checker. Explicit local-only registration added for #664 on 2026-09-15; no fresh computational proof is claimed by source-wiring checks."
     }
   ],
-  "_completeness_waived": {
-    "verify-gate-enforcement": "the G1 lint itself (this checker); it runs in ci.yml and does not police a proof surface — it polices the manifest. Waiving avoids self-reference."
-  }
+  "_completeness_waived": {}
 }

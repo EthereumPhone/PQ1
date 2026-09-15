@@ -1,0 +1,15 @@
+{
+  "reason": "all source commands failed before execution: nested Bubblewrap namespace unavailable",
+  "failed_commands": 2,
+  "processes": [
+    {
+      "pid": 873363,
+      "pgid": 873363
+    },
+    {
+      "pid": 873366,
+      "pgid": 873363
+    }
+  ],
+  "signal": "SIGTERM"
+}
