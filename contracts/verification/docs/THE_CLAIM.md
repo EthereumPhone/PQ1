@@ -29,7 +29,9 @@ section below, do not ship it.
 > closure `{propext, Quot.sound}`) fence it. **The old detonator no longer
 > type-checks** (`cannot_forge … : BreaksHash`, not `False` — verified). So
 > **`theft_free` / `theft_free_bytecode` are SOUND again** (kernel-checked,
-> closure = the 11 cited axioms, no `sorryAx`). Details:
+> closure = the 10 cited axioms — was 11 until 2026-08-20, when A2
+> `entrypoint_honest` was proved kernel-only and demoted to a theorem —
+> no `sorryAx`). Details:
 > [`EUF_CMA_INCONSISTENCY.md`](EUF_CMA_INCONSISTENCY.md).
 >
 > **The two faithfulness follow-ups are now ALSO fixed (2026-06-14):** (1) the
@@ -63,7 +65,7 @@ section below, do not ship it.
 
 > **The PQSmartWallet's on-chain control flow is formally verified, and the
 > verification is connected to the deployed bytecode.** A Lean 4
-> kernel-checked theorem (`theft_free`, 0 `sorry`, an explicit 11-axiom
+> kernel-checked theorem (`theft_free`, 0 `sorry`, an explicit 10-axiom
 > base) proves theft-freedom over a faithful model of the wallet; and the
 > **wallet `validateUserOp` / `executeWithOffchainCount` /
 > `executeBatchWithOffchainCount`, the factory `createAccount`, and the
@@ -73,7 +75,7 @@ section below, do not ship it.
 > symbolic inputs — including a genuinely ∀-quantified owner index on every
 > money-moving path. The same four control-flow bridges are now **independently
 > re-discharged transcription-free by Kontrol/KEVM** — proven directly on the
-> deployed bytecode with no hand-written model mirror (30 KEVM proofs; see #2).** —
+> deployed bytecode with no hand-written model mirror (33 KEVM proofs; see #2).** —
 > "transcription-free" = no LeanModel.sol mirror; each proof still uses the concrete
 > valid wrapper + concrete owner role scoped in KONTROL_SCOPING.md (symbolic dynamic
 > calldata unsupported), so this is not uniform generality.
@@ -82,8 +84,10 @@ Specifically and defensibly:
 
 1. **Kernel proof (REINSTATED 2026-06-14 after the EUF-CMA fix).** `theft_free`
    and its claim corollaries are `sorry`-free and kernel-checked, with the
-   11-axiom closure now **consistent** (the restated `EUF_CMA_SPHINCSplusC`
-   concludes the opaque `BreaksHash` reduction, not `False`). The 11-axiom base
+   10-axiom closure now **consistent** (the restated `EUF_CMA_SPHINCSplusC`
+   concludes the opaque `BreaksHash` reduction, not `False`; the closure was
+   11 axioms until A2 `entrypoint_honest` was proved kernel-only from the
+   `handleOp` definition and demoted to a theorem on 2026-08-20). The 10-axiom base
    is reported by `#print axioms`, which is known to **under-report** in the
    pinned Lean v4.22.0; the independent check is `make verify-lean4checker`
    (kernel/environment **replay** — not an axiom-closure recomputation; its
@@ -98,7 +102,9 @@ Specifically and defensibly:
    actually says: it is a **conjunction** — conjunct 1 (the safety guarantee:
    no wallet balance decrease without the deployed verifier accepting an
    installed-owner C10 signature over the op's `sphincsDigest`) is **EUF-CMA-free**,
-   resting on A2 (`entrypoint_honest`) + A3.1 (`solidityVerifier_compiles_correctly`)
+   resting on A3.1 (`solidityVerifier_compiles_correctly`) plus the now-PROVED
+   `entrypoint_honest` theorem (A2 — kernel-only since 2026-08-20, no longer an
+   axiom)
    — A1/A4 ride along in the printed axiom closure as **non-consumed** TCB
    markers, not semantic premises of conjunct 1 (deleting their `have` bindings
    leaves `theft_free` proven; see Scope, below); conjunct 2 (producing such a
@@ -127,9 +133,13 @@ Specifically and defensibly:
    owner-table) are now ALSO proven directly on the deployed bytecode by **KEVM
    symbolic execution via Kontrol** — an engine independent of Halmos, with **no
    hand-written `LeanModel.sol` mirror in the loop** — so the property is stated
-   once and checked against the bytecode itself. 30 KEVM proofs across 5
+   once and checked against the bytecode itself. 33 KEVM proofs across 5
    harnesses (`contracts/verification/kontrol/`): A3.4 = 12/12, A3.2-exec = 8/8,
-   A3.3 = 6/6, A3.2-validate (the non-bypass I-1) = 4/4. This **retires the
+   A3.3 = 6/6, A3.2-validate (the non-bypass I-1) = 7/7 (corrected 2026-08-20 —
+   this read 30 total / 4/4 validate, stale since the 2026-07-17
+   calldata-validation expansion added the bad-offset / bad-innerlen /
+   bad-tailpad reject rules; see KONTROL_SCOPING.md + run_kontrol.sh
+   EXPECTED_PROOFS). This **retires the
    `LeanModel.sol` hand-transcription element from the TCB** for all four
    control-flow axioms (Halmos stays as the fast **local/manual** gate — NOT CI-run;
    the per-PR bytecode-drift tripwire is the codehash-freeze `PinnedCodehashes.t.sol`,
@@ -227,13 +237,15 @@ injected real defects were caught, most at compile time), but the scope is the
   is now `∀ c, evmDeliversCall c` (opaque predicate) instead of `: True` — it
   *names* the EVM-delivery assumption it always stood for. **Honest scope
   (corrected by faithfulness-audit pass-2):** A4 (and A1) are present in
-  `theft_free`'s 11-name closure as NON-CONSUMED TCB markers (surfaced via
+  `theft_free`'s 10-name closure as NON-CONSUMED TCB markers (surfaced via
   `have` bindings so `#print axioms` self-documents the on-chain TCB), NOT
-  semantic premises — `theft_free`'s genuine 9 premises are A2 + A3.1 + A5(×4)
-  + kernel (deleting the markers leaves it proven). (A2 is consumed here, but
-  the in-Lean `entrypoint_honest` is itself a tautology over the `handleOp`
-  model; the genuine open EntryPoint assumption is the deployed-bytecode
-  discharge — see the A2 precision under "NOT claimable".) A4's content-bearing *type*
+  semantic premises — `theft_free`'s genuine 8 premises are A3.1 + A5(×4)
+  + kernel (deleting the markers leaves it proven). (A2 was the ninth until
+  2026-08-20: the in-Lean `entrypoint_honest` was always a tautology over the
+  `handleOp` model and is now PROVED kernel-only as a theorem — it no longer
+  appears in any closure; the genuine open EntryPoint assumption is the
+  deployed-bytecode faithfulness of `handleOp` — see the A2 precision under
+  "NOT claimable".) A4's content-bearing *type*
   is the real gain; the earlier "load-bearing in theft_free" wording was an
   over-claim. The `lint_axioms` gate now reports zero `: True`-typed axioms.
   The §33 Aeneas-extracted tree carries **three** uninterpreted total-function
@@ -359,19 +371,24 @@ the digit explosion. Corrected analysis + closure path + effort in
 [`A3_1_CLOSURE_PATH.md`](A3_1_CLOSURE_PATH.md); history in
 [`A3_1_VERIFIER_GAP.md`](A3_1_VERIFIER_GAP.md).
 
-Also still cited-TCB by decision (not "proven to bytecode"): **A2** EntryPoint
-v0.6 honesty, **A4** EVM-executes-per-spec (incl. the emitted-CALL byte
+Also still cited-TCB by decision (not "proven to bytecode"): **A4** EVM-executes-per-spec (incl. the emitted-CALL byte
 delivery on the execute path), **A5** SPHINCS+C10 EUF-CMA (Barbosa et al.;
 the `+C` transition is a cited argument), **A1** SHA-256 precompile = FIPS.
+(**A2** was removed from this list 2026-08-20: `entrypoint_honest` is now a
+kernel-proved theorem, not a cited axiom — what remains cited is the
+`handleOp` model's faithfulness to the deployed EntryPoint v0.6, below.)
 
-A precision on **A2**: the in-Lean `entrypoint_honest` axiom is, against the
+A precision on **A2**: the in-Lean `entrypoint_honest` was, against the
 Lean EntryPoint model, a **tautology over `handleOp`** — its conclusion (a
 wallet-balance decrement implies `validateSignature` returned success with the
 matching post-storage) follows directly from `handleOp`'s own definition (the
 failure branch leaves the state untouched, so a decrement forces the success
-branch, where `walletStorage := s'`). It therefore adds no logical strength
-*inside* the model and could be restated as a `theorem`; what it carries is a
-**name** for the boundary. The genuine, still-open assumption it stands in for
+branch, where `walletStorage := s'`). The 2026-08-20 adversarial pass made
+that concrete: it is now **PROVED kernel-only as a `theorem`** in
+`Bridge/EntryPoint.lean` (closure `{propext, Classical.choice, Quot.sound}`),
+no longer an axiom — the A2 ledger row and its closure presence are gone.
+What the old axiom carried was a **name** for the boundary, and that boundary
+is unchanged: the genuine, still-open assumption it stands in for
 is the **bytecode-discharge of the deployed EntryPoint v0.6** — that the
 on-chain EntryPoint actually behaves like `handleOp`, including the
 validation-phase prefund debit (`missingAccountFunds`) and the
@@ -403,9 +420,13 @@ In dependency order:
    Kontrol/KEVM does NOT qualify** — despite now being installed and used for the
    control-flow axioms, KEVM's `0x02` precompile is SMT-uninterpreted on symbolic
    input (`Sha256raw`), so it hits the same wall as Halmos (confirmed
-   2026-06-15). Even Verity stops at Yul, leaving A1/A2/A4 as cited-TCB.
-3. **Optionally** reduce A2/A4 from cited-TCB to bytecode (Kontrol against the
-   deployed EntryPoint) — a large, separate engagement.
+   2026-06-15). Even Verity stops at Yul, leaving A1/A4 (and the `handleOp`
+   model's faithfulness) as cited-TCB.
+3. **Optionally** discharge the EntryPoint-model faithfulness + A4 on bytecode
+   (Kontrol against the deployed EntryPoint) — a large, separate engagement.
+   (This was worded "reduce A2/A4 from cited-TCB" before A2's 2026-08-20
+   demotion; the residual open item is the model↔deployed-EntryPoint link,
+   not any Lean axiom.)
 
 Until step 1 lands, the maximal honest headline is the **✅ Claimable**
 block above — "control flow proven to bytecode; verifier validated by

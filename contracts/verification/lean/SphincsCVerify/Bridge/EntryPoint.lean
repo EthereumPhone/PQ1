@@ -1,7 +1,8 @@
 /-
 Bridge/EntryPoint: model of ERC-4337 EntryPoint v0.6 as a transition
-system, plus the single new axiom `entrypoint_honest` (A2 in
-`docs/TRUST_ASSUMPTIONS.md`).
+system, plus the `entrypoint_honest` theorem (formerly the A2 axiom in
+`docs/TRUST_ASSUMPTIONS.md`; PROVED kernel-only 2026-08-20 — it follows
+from the `handleOp` definition alone).
 
 This module is the load-bearing bridge from the on-chain EntryPoint
 behaviour to the wallet-side `validateUserOp` we have modelled in
@@ -20,10 +21,10 @@ behaviour to the wallet-side `validateUserOp` we have modelled in
 
 We do not model the EntryPoint's internal accounting (paymaster pre-
 charges, refunds, nonce-management). That lives inside the TCB.
-Auditors who want to eliminate A2 can replay the OpenZeppelin /
-ChainSecurity / Spearbit audits, or extend this Lean model to mirror
-the EntryPoint v0.6 source. The audited+immutable+18-months-mainnet
-status is the practical justification for axiomatising.
+The audited+immutable+18-months-mainnet status is the practical
+justification for trusting `handleOp` as a FAITHFUL model of the
+deployed EntryPoint v0.6 — the theorem below is proved from this model,
+so what the audits back is the model's faithfulness, not a proof axiom.
 -/
 
 import SphincsCVerify.Spec.Bytes
@@ -88,9 +89,9 @@ def deployedVerifier
     The `effects` argument represents the wallet-initiated balance
     changes that occur on the success path (the wallet's
     `executeWithOffchainCount` calling `target.call{value: value}` and
-    the EVM moving value out of `walletAddress`). It is bound by A2
-    (`entrypoint_honest`) to only act if `validateSignature` returns
-    success.
+    the EVM moving value out of `walletAddress`). `entrypoint_honest`
+    below proves (was: "is bound by A2 to") they only act if
+    `validateSignature` returns success.
 
     Concretely:
 
@@ -119,9 +120,9 @@ def handleOp
         balance := fun a => effects a (σ.balance a)
         walletCalled := true }
 
-/-! ## A2 — `entrypoint_honest`
+/-! ## A2 — `entrypoint_honest` (PROVED 2026-08-20, formerly an axiom)
 
-The trust axiom: EntryPoint v0.6 is unhackable. Concretely:
+The bridge premise: EntryPoint v0.6 is honest dispatch. Concretely:
 
   (1) **Honest dispatch.** The wallet's execution path runs iff
       `validateUserOp` returned success.
@@ -135,26 +136,50 @@ The trust axiom: EntryPoint v0.6 is unhackable. Concretely:
       and `chainId`, so the bridge is exact at the wallet boundary.
 
 For the theft-freedom proof we only need (1) and (2). (3) is included
-for documentation and to keep the axiom self-contained.
+for documentation and to keep the statement self-contained.
 
-**Mitigation.** Audited (OpenZeppelin / ChainSecurity / Spearbit) and
-immutable contract at the canonical EntryPoint v0.6 address; ≥18
-months of mainnet operation as of 2026-05. -/
+**Status.** This used to be trust axiom A2 ("audited (OpenZeppelin /
+ChainSecurity / Spearbit) and immutable contract at the canonical
+EntryPoint v0.6 address; ≥18 months of mainnet operation as of
+2026-05"). The 2026-08-20 adversarial pass found it PROVABLE from the
+`handleOp` definition — the failure arm never moves the balance, so a
+decrease forces the success arm — and it is now a kernel-checked
+theorem with closure {propext, Classical.choice, Quot.sound}. The
+audit/mainnet citation remains the justification that `handleOp`
+faithfully models the deployed contract; it no longer underwrites a
+logical premise. -/
 
-/-- **A2 — EntryPoint v0.6 honest dispatch.**
+/-- **A2 — EntryPoint v0.6 honest dispatch — PROVED, not axiomed.**
 
     If executing one UserOp via `handleOp σ op effects` decreases the
     wallet's balance, then `validateSignature` returned success on the
     wallet's pre-state, with the post-storage exactly equal to the
-    storage component of the resulting state. -/
-axiom entrypoint_honest
+    storage component of the resulting state.
+
+    This was the A2 trust axiom until 2026-08-20, when the adversarial
+    pass observed it is provable kernel-only from the `handleOp`
+    definition: on the failure arm the state is returned unchanged, so a
+    strict balance decrease is `Nat.lt_irrefl`-absurd; on the success arm
+    the equation holds definitionally. Closure: the kernel triple
+    {propext, Classical.choice, Quot.sound} — NO project axiom. The
+    statement is retained (under the same name, so `theft_free` and its
+    transports are unchanged at the use site) because it is the exact
+    bridge premise the theft-freedom proof consumes; what changed is
+    that it no longer costs a TCB axiom. The cited EntryPoint v0.6
+    audit/mainnet evidence now backs only the FAITHFULNESS of `handleOp`
+    as a model of the deployed contract (V11 territory), not a logical
+    premise of the proof. -/
+theorem entrypoint_honest
     (σ : State) (op : UserOperation) (effects : Address → Nat → Nat) :
     (handleOp σ op effects).balance σ.walletAddress < σ.balance σ.walletAddress →
     validateSignature
       σ.walletStorage op σ.entryPointAddress σ.chainId
       deployedVerifier
       = (Result.success,
-         (handleOp σ op effects).walletStorage)
+         (handleOp σ op effects).walletStorage) := by
+  intro hdec
+  unfold handleOp at hdec ⊢
+  split at hdec <;> split <;> simp_all
 
 /-! ## `entrypoint_no_replay` — REMOVED 2026-06-14.
 

@@ -1,0 +1,8 @@
+=== verify-protocol-models (families: cryptoverif) ===
+    Assert each design-layer model's per-query/per-lemma verdict IDENTITY vs the
+    committed baseline; nonzero prover exit is a failure (F7, 2026-07-16).
+
+--> cryptoverif
+    [ok  ] seed_split_secrecy.cv    queries proved=1/1 (identity: 1 queries pinned; baseline from CryptoVerif 2.12)
+
+OK: all in-scope protocol models match their per-query/per-lemma identity baseline (for the families run).

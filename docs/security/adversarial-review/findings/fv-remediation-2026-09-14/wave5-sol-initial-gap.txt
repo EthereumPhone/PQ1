@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: b616e22d11ef0aa3689bc574a96fe24b7d63cca7 / ef385c4516afcc67429bb71ee124a9c767b153b0
+FINDINGS: none
+GAPS: Source-read commands could not execute because the sandbox failed to create its required namespace (`bwrap: No permissions to create new namespace`).

@@ -1,0 +1,16 @@
+==> [lint_fv] (a) escape-hatch gate (comment-stripped, proof paths only)
+    PASS — no escape-hatch constructs on proof paths
+==> [lint_fv] (b) BreaksHash firewall (no `¬ BreaksHash`)
+    PASS — no `¬ BreaksHash` / `BreaksHash → …` / `(h : BreaksHash)` on any source path
+==> [lint_fv] (c) Gap-3 + theft_free axiom-closure tripwire
+    PASS (c.1) — offchain closure = EXACTLY {keccak_sha256_cross_separation} + kernel (no missing, no extra)
+    PASS (c.2) — theft_free closure = EXACTLY expected A1/A3.1/A4/A5 + kernel triple (no missing, no extra; A2 proved kernel-only 2026-08-20, no longer an axiom)
+==> [lint_fv] (d) opaque-guard (trivial must NOT inhabit evmDeliversCall default)
+    PASS — `trivial` correctly rejected (evmDeliversCall stays opaque)
+==> [lint_fv] (e) vacuous-axiom gate (repo-wide: no `axiom … : True`)
+    PASS — no `axiom … : True` anywhere under contracts/
+
+==> [lint_fv] PASS — all five FV-invariant sub-lints green
+    (a) escape-hatch  (b) BreaksHash firewall
+    (c) Gap-3 + theft_free closure  (d) opaque-guard
+    (e) vacuous-axiom (repo-wide)

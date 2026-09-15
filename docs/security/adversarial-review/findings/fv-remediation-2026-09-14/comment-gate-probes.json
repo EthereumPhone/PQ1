@@ -1,0 +1,210 @@
+[
+  {
+    "label": "comment-before-axiom-0",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-axiom-1",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-axiom-2",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-axiom-3",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-axiom-4",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-hole-0",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-hole-1",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-hole-2",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-before-hole-3",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "comment-after-axiom-0",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-axiom-1",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-axiom-2",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-axiom-3",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-axiom-4",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-hole-0",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-hole-1",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-hole-2",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  },
+  {
+    "label": "comment-after-hole-3",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  }
+]

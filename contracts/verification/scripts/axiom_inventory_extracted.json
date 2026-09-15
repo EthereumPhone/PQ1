@@ -1,0 +1,366 @@
+{
+  "source": {
+    "Extracted/AxiomCheck.lean": {
+      "sha256": "263629c3569e3f8f3125f7f9b7585798cd43ec08dc44f5e3ce138de823b4764e",
+      "axiom_mentions": 78
+    },
+    "Extracted/AxiomCheckFormatDecimal.lean": {
+      "sha256": "e79c14b72dab3f2e77833edafabbd5b333ff671def875ee6beca4216c354aabc",
+      "axiom_mentions": 4
+    },
+    "Extracted/AxiomCheckNegativeControl.lean": {
+      "sha256": "8846e829cea89e95fd18cbaa6fdfb686df6918d34bba469031c132f7a08c9db5",
+      "axiom_mentions": 10
+    },
+    "Extracted/Bip39RoundtripSpec.lean": {
+      "sha256": "6fe490458be0e01b6d6d30b0558795ed05fc48f0d097debeb2ec1da0e2cfacdd",
+      "axiom_mentions": 1
+    },
+    "Extracted/Bits.lean": {
+      "sha256": "356a3e8fd41a9a15c01b9d16384aa3cdaa86b649698054e8ff6917184c737bd7",
+      "axiom_mentions": 1
+    },
+    "Extracted/Decode/FunsExternal.lean": {
+      "sha256": "5f7100dc15c9f5ed33a0123f86623ec586fd7734842b35ed0c85145a4bbf22c7",
+      "axiom_mentions": 2
+    },
+    "Extracted/DecodeItemSpec.lean": {
+      "sha256": "270058dc51f65f7794a8f7b059b7e4cc997471b5dd6ffb720b82229096a94c30",
+      "axiom_mentions": 2
+    },
+    "Extracted/Eip1271/FunsExternal.lean": {
+      "sha256": "5f67bcedee9481ff7c6b3d11bfc082e6c0e0b7562f3702d3072f30205de6a3a2",
+      "axiom_mentions": 2
+    },
+    "Extracted/FormatDecimal/Div10Spec.lean": {
+      "sha256": "aebfd6589de169fc2f5bad37a0dc8b9288a4f1e1f0e4a0ffa59ed1ca57c3c312",
+      "axiom_mentions": 2
+    },
+    "Extracted/FormatDecimal/EmitSpec.lean": {
+      "sha256": "21d9709f7c1bb1a16abb4debfff0f008aead568ae67049eb8a99802369a72b4a",
+      "axiom_mentions": 2
+    },
+    "Extracted/FormatDecimal/ExtractDigitsSpec.lean": {
+      "sha256": "cdf70f33b508a9ffab24cb75765ffa949f3a36064056fca2b762b70fb6d5ef62",
+      "axiom_mentions": 2
+    },
+    "Extracted/FormatDecimal/FormatDecimalSpec.lean": {
+      "sha256": "33d00999afd8ed1f2a4082f42b3fbd9b3e5707e815aa48ba19c0b5f6d36df098",
+      "axiom_mentions": 2
+    },
+    "Extracted/FormatDecimal/RoundCarrySpec.lean": {
+      "sha256": "f25ab5fadf3a686eb732853c2d33c90c05a3dcf40e9bc783c070c4b3a5c13e32",
+      "axiom_mentions": 2
+    },
+    "Extracted/FormatDecimal/TrimFracSpec.lean": {
+      "sha256": "66018fe746152c7e0c02706014a395df0e2370e51f5aebe5b76b96af9f27a752",
+      "axiom_mentions": 2
+    },
+    "Extracted/FwManifestSpec.lean": {
+      "sha256": "e8eabfd99772466c48fdd92cac84eae301b805a2f2640b6c1249be896d9dadf0",
+      "axiom_mentions": 1
+    },
+    "Extracted/Hash/FunsExternal.lean": {
+      "sha256": "8968274b785d536340924fc7f1344fdecfaee2c170cbdb87c3db4164a36e0bfe",
+      "axiom_mentions": 3
+    },
+    "Extracted/HashPure.lean": {
+      "sha256": "750a69f7e57e38298a41caf90b593ba925867246b7f54d2a6c689bdcc8018870",
+      "axiom_mentions": 2
+    },
+    "Extracted/HashSpecs/ChainHash.lean": {
+      "sha256": "b5bc8e80170c3b94233f672bee5011d5e2d67278b721b04f3cc5658fdaa2956d",
+      "axiom_mentions": 1
+    },
+    "Extracted/HashSpecs/Th.lean": {
+      "sha256": "beebfacb679ca09df285271b6b78bbde2800d3c28f170a5fcce1fad3f679f395",
+      "axiom_mentions": 1
+    },
+    "Extracted/HashSpecs/ThMulti.lean": {
+      "sha256": "4c5661995c204f1d93f2c4eb25594c9a19ff88b0c7dbd17f22423ceb22fba5bd",
+      "axiom_mentions": 1
+    },
+    "Extracted/HashSpecs/ThPair.lean": {
+      "sha256": "5fe467ae20bf082dc7ed0a811f3fcf0b18b46a18509b887521536aa0455a24ae",
+      "axiom_mentions": 1
+    },
+    "Extracted/HashSpecs/Truncate.lean": {
+      "sha256": "a5823d0b2b538ec11e47de81bc589794272d67754ae9aae5ba301163ce425689",
+      "axiom_mentions": 1
+    },
+    "Extracted/HashSpecs/WotsDigest.lean": {
+      "sha256": "08129d5d5e36a0b87e9234d9a76879f273a2caf48a066511b435e78cdbc03da5",
+      "axiom_mentions": 1
+    },
+    "Extracted/HashSpecs.lean": {
+      "sha256": "d4ba843cc9d1c3bbce9c8cb393a7ae5741d264459e362cb4dc02ba2a9051aa8c",
+      "axiom_mentions": 2
+    },
+    "Extracted/Merkle/FunsExternal.lean": {
+      "sha256": "8c437e7c07ec58a81e03dc3be0e6feed532cdf48f3af945bcbe1022bc32fccad",
+      "axiom_mentions": 1
+    },
+    "Extracted/PinState/FunsExternal.lean": {
+      "sha256": "6fc451e06019763fec178ce00aaea040a62b7b35249bf37d3cf548170ca7cdfa",
+      "axiom_mentions": 1
+    },
+    "Extracted/PinState/TypesExternal.lean": {
+      "sha256": "9644edb552d15adedb08b5f470e08457d26be2981d71bde8b98d362c9c2cb29b",
+      "axiom_mentions": 4
+    },
+    "Extracted/PkFromSig/FunsExternal.lean": {
+      "sha256": "60562c2c0eef84e5ea156cedf835de8e95230cb18bcc0364e90647a090b638d5",
+      "axiom_mentions": 1
+    },
+    "Extracted/Rlp/FunsExternal.lean": {
+      "sha256": "6d73a90a480ca6ed1d9bc2de8d44378d28d92880c9c3004b14cffc58989635e5",
+      "axiom_mentions": 2
+    },
+    "Extracted/SetSliceLemmas.lean": {
+      "sha256": "4d1bf238e3dd21c5cec17387e0dd851d867b5c4f4b27868c279e6c64be50dc7c",
+      "axiom_mentions": 1
+    },
+    "Extracted/Sha256Pure.lean": {
+      "sha256": "2d7a63e698118eb840db49e0da56f2d5a21510d1ec38b2dfe4114d262fec2aa7",
+      "axiom_mentions": 4
+    },
+    "Extracted/Sha256Vendored.lean": {
+      "sha256": "64a4208942c71ccca9d5e3f2d576b6bc036fed7f81a8f6f343ac371fc67a3a61",
+      "axiom_mentions": 2
+    },
+    "Extracted/SlotKdf/FunsExternal.lean": {
+      "sha256": "4b9ac21ca5aa0b88ccb0539d84aa754407ef6ce6e7884a3f1231b6e5b075492f",
+      "axiom_mentions": 5
+    },
+    "Extracted/SlotKdf/SlotKdfSpec.lean": {
+      "sha256": "0debaa69e2d15dc3f83258316321dba6c14fe2313ab40ed8d9a22e24d928e91f",
+      "axiom_mentions": 1
+    },
+    "Extracted/TxMerkle/FunsExternal.lean": {
+      "sha256": "714d3f4834e9371a2d5cc74a025eaa507040febc8b82ecbe1bc6fd251e35f5b0",
+      "axiom_mentions": 1
+    },
+    "Extracted/UserOp/FunsExternal.lean": {
+      "sha256": "03c0c8f5a3c94285348b83fd826206cdc35153011934b78f75f69349250f80dd",
+      "axiom_mentions": 4
+    },
+    "Extracted/UserOpEquiv.lean": {
+      "sha256": "06c8667f575abea995907908d2e57535cd11b7e13ed0ccabf33b17c77273ef36",
+      "axiom_mentions": 1
+    },
+    "Extracted/UserOpEquivByteLayout.lean": {
+      "sha256": "d26ce34702a278b179fcf2aa50418d22596324b7afc29f150b234976214eb4e3",
+      "axiom_mentions": 1
+    },
+    "Extracted.lean": {
+      "sha256": "9e856c60e109984dd90a0a07ecb1ae8fc87a32522016344ac5dd9f22f986e452",
+      "axiom_mentions": 1
+    }
+  },
+  "elaborated": [
+    {
+      "levels": [],
+      "module": "Aeneas.Std.Core.Fmt",
+      "name": "Aeneas.Std.core.fmt.Formatter",
+      "unsafe": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Std.Core.Panic",
+      "name": "Aeneas.Std.core.panic.panic_info.PanicInfo",
+      "unsafe": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Std.Core.Pin",
+      "name": "Aeneas.Std.core.pin.Pin",
+      "unsafe": false,
+      "type_sha256": "9fecb1a8a5e289629896c3956d094f3d58b45a83e8ff605290be9ce77462dd67"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Std.Core.Pin",
+      "name": "Aeneas.Std.core.pin.helper.PinHelper",
+      "unsafe": false,
+      "type_sha256": "9fecb1a8a5e289629896c3956d094f3d58b45a83e8ff605290be9ce77462dd67"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Std.Core.Atomic",
+      "name": "Aeneas.Std.core.sync.atomic.AtomicBool",
+      "unsafe": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Std.Core.Atomic",
+      "name": "Aeneas.Std.core.sync.atomic.AtomicU32",
+      "unsafe": false,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Std.String",
+      "name": "Aeneas.Std.get_target",
+      "unsafe": false,
+      "type_sha256": "eac96332346ca85b887b10900a7683e62a240458b263abc9928a5a9304bbd682"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Std.String",
+      "name": "Aeneas.Std.get_target.spec",
+      "unsafe": false,
+      "type_sha256": "41e684dc286da7e8ec2dce0f49f17001714d818adf58ec4cdf3842374853f2df"
+    },
+    {
+      "levels": [],
+      "module": "Aeneas.Tactic.Step.StepArraySpec",
+      "name": "Aeneas.StepArraySpec.Tests.const_array_spec._native.native_decide.ax_1_1",
+      "unsafe": false,
+      "type_sha256": "1ea114fa15cdd54690d1fe918b1e92ec9fbb33c6ffc1c0ce53035706e0be9cd7"
+    },
+    {
+      "levels": [
+        "u"
+      ],
+      "module": "Init.Prelude",
+      "name": "Classical.choice",
+      "unsafe": false,
+      "type_sha256": "8a52bd60c11e0ca1a7dde28e8e0b41819f0717d6bb4489c823063e2308065e91"
+    },
+    {
+      "levels": [],
+      "module": "Init.Core",
+      "name": "Lean.ofReduceBool",
+      "unsafe": false,
+      "type_sha256": "8fd9ef600b8f58fa2c8df3101069e81af5b59b93ac4c6d8d80a22600d0adc36d"
+    },
+    {
+      "levels": [],
+      "module": "Init.Core",
+      "name": "Lean.ofReduceNat",
+      "unsafe": false,
+      "type_sha256": "d29a0f4dcb3bbf104e289e510282be1db58ac21e1bc1ab27e300555d0cfcc2a3"
+    },
+    {
+      "levels": [],
+      "module": "Init.Core",
+      "name": "Lean.trustCompiler",
+      "unsafe": false,
+      "type_sha256": "f5d8a8840f30c2d0e5b651a20789cb4c8d616d4ba312057d224114a13a157b90"
+    },
+    {
+      "levels": [
+        "u"
+      ],
+      "module": "Init.Prelude",
+      "name": "Quot.lcInv",
+      "unsafe": true,
+      "type_sha256": "52459a4e21a02bbea20cd5ee3c219f0fcdc7c43f097af79149f3b931e72e4b44"
+    },
+    {
+      "levels": [
+        "u"
+      ],
+      "module": "Init.Core",
+      "name": "Quot.sound",
+      "unsafe": false,
+      "type_sha256": "54ef3e688b48f0f08f4a3cb121b77f99bfb7e51c29a0c22721755ca0b97d0aa2"
+    },
+    {
+      "levels": [],
+      "module": "Extracted.SlotKdf.FunsExternal",
+      "name": "hmac_sha512_pure_bytes",
+      "unsafe": false,
+      "type_sha256": "f4622ba1c95ac29b9fcf291673dd30ff1fe92920ef7b9f3b963a8c056ec3ca50"
+    },
+    {
+      "levels": [
+        "u"
+      ],
+      "module": "Init.Prelude",
+      "name": "isScalarObj",
+      "unsafe": true,
+      "type_sha256": "9dd69f3ec3b0750f7b50e255e36804558a5d8aecf7093d32432e86a60f822a7d"
+    },
+    {
+      "levels": [],
+      "module": "Extracted.UserOp.FunsExternal",
+      "name": "keccak256_pure",
+      "unsafe": false,
+      "type_sha256": "049c6bb6ee2f041a752ff6e298bcc8098d2198af62184ec7545da049429acb92"
+    },
+    {
+      "levels": [],
+      "module": "Init.Prelude",
+      "name": "lcAny",
+      "unsafe": true,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "levels": [
+        "u",
+        "v"
+      ],
+      "module": "Init.Prelude",
+      "name": "lcCast",
+      "unsafe": true,
+      "type_sha256": "2cc1a2f7e096f80576058e7994e73ba09479a02e58e5253f44a03ad1ae715d19"
+    },
+    {
+      "levels": [],
+      "module": "Init.Prelude",
+      "name": "lcErased",
+      "unsafe": true,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "levels": [],
+      "module": "Init.Prelude",
+      "name": "lcProof",
+      "unsafe": true,
+      "type_sha256": "86aee7e35e1fd308b56be1d77d552090a4204b25ca11239583a45683a6644b5d"
+    },
+    {
+      "levels": [
+        "u"
+      ],
+      "module": "Init.Prelude",
+      "name": "lcUnreachable",
+      "unsafe": true,
+      "type_sha256": "0c692a112a79532741c643618c94942e0463234fa6dae869bd342f6c597b6bfd"
+    },
+    {
+      "levels": [],
+      "module": "Init.Prelude",
+      "name": "lcVoid",
+      "unsafe": true,
+      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
+    },
+    {
+      "levels": [],
+      "module": "Init.Core",
+      "name": "propext",
+      "unsafe": false,
+      "type_sha256": "6e75551305933a1e35fbfc950050d2344403b07dd2046e5fea3a9d6d8004032d"
+    },
+    {
+      "levels": [],
+      "module": "Extracted.SlotKdf.FunsExternal",
+      "name": "sha256_pure_bytes",
+      "unsafe": false,
+      "type_sha256": "049c6bb6ee2f041a752ff6e298bcc8098d2198af62184ec7545da049429acb92"
+    },
+    {
+      "levels": [
+        "u"
+      ],
+      "module": "Init.Prelude",
+      "name": "sorryAx",
+      "unsafe": false,
+      "type_sha256": "5c15e0102ef885b4a3b583f4c396ee59d8b470ab16311833b4b5f24ace13a826"
+    }
+  ]
+}

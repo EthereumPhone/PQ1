@@ -1,0 +1,202 @@
+[
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 0,
+    "source": "macro \":/-\" : command => `(#check True)\n:/- axiom X : False -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 1,
+    "source": "macro \"/--x\" : command => `(#check True)\n/--x axiom X : False -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 2,
+    "source": "macro \":--\" : command => `(#check True)\n:-- axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 3,
+    "source": "macro \":\u00ab\" s:str : command => `(#check $s)\n:\u00ab \"\u00bb--\" axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "\"\u00bb--\" : String\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 4,
+    "source": "macro \"x\\u002f\\u002d\" : command => `(#check True)\nmacro \"\\u002d\\u002f\" : command => `(#check True)\nx/-axiom X : False -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\nTrue : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "axiom",
+    "index": 5,
+    "source": "macro \"x\\u002d\\u002d\" : command => `(#check True)\nx--axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 0,
+    "source": "macro \":/-\" : command => `(#check True)\n:/- theorem X : False := by sorry -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:12: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 1,
+    "source": "macro \"/--x\" : command => `(#check True)\n/--x theorem X : False := by sorry -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:13: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 2,
+    "source": "macro \":\u00ab\" s:str : command => `(#check $s)\n:\u00ab \"\u00bb--\" theorem X : False := by sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "\"\u00bb--\" : String\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:17: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "kind": "hole",
+    "index": 3,
+    "source": "macro \"x\\u002d\\u002d\" : command => `(#check True)\nx--theorem X : False := by sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:11: warning: declaration uses 'sorry'\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 0,
+    "source": "macro \":/-\" : command => `(#check True)\n:/- axiom X : False -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 1,
+    "source": "macro \"/--x\" : command => `(#check True)\n/--x axiom X : False -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 2,
+    "source": "macro \":--\" : command => `(#check True)\n:-- axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 3,
+    "source": "macro \":\u00ab\" s:str : command => `(#check $s)\n:\u00ab \"\u00bb--\" axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "\"\u00bb--\" : String\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 4,
+    "source": "macro \"x\\u002f\\u002d\" : command => `(#check True)\nmacro \"\\u002d\\u002f\" : command => `(#check True)\nx/-axiom X : False -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\nTrue : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "axiom",
+    "index": 5,
+    "source": "macro \"x\\u002d\\u002d\" : command => `(#check True)\nx--axiom X : False\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n'X' depends on axioms: [X]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 0,
+    "source": "macro \":/-\" : command => `(#check True)\n:/- theorem X : False := by sorry -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:12: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 1,
+    "source": "macro \"/--x\" : command => `(#check True)\n/--x theorem X : False := by sorry -- -/\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:13: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 2,
+    "source": "macro \":\u00ab\" s:str : command => `(#check $s)\n:\u00ab \"\u00bb--\" theorem X : False := by sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "\"\u00bb--\" : String\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:17: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "kind": "hole",
+    "index": 3,
+    "source": "macro \"x\\u002d\\u002d\" : command => `(#check True)\nx--theorem X : False := by sorry\n",
+    "status": 0,
+    "old_count": 0,
+    "new_count": 1,
+    "output": "True : Prop\n/tmp/pq-fv-fixes-20260914-iddnxo7n/CustomProbe.lean:2:11: warning: declaration uses `sorry`\n'X' depends on axioms: [sorryAx]\n"
+  }
+]

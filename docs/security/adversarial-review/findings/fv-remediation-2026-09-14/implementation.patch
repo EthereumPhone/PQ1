@@ -1,0 +1,1935 @@
+diff --git a/contracts/verification/Makefile b/contracts/verification/Makefile
+index faacc64d..f46cc7f4 100644
+--- a/contracts/verification/Makefile
++++ b/contracts/verification/Makefile
+@@ -354,6 +354,7 @@ verify-lean-proto-domain: ## Lean factory domain tag == proto (P7)
+ # documented in the script header).
+ verify-fv-lints: verify-build ## FV anti-vacuity sub-lints (escape-hatch/closures/opaque-guard)
+ 	@/usr/bin/bash scripts/lint_fv_invariants.sh
++	@$(_FV_PYTHON3) scripts/test_axiom_inventory.py
+ 	@evilbin=$$(mktemp -d /tmp/pq-fvlint-planted-python3.XXXXXX); \
+ 	sentinel=$$(mktemp -u /tmp/pq-fvlint-planted-sentinel.XXXXXX); \
+ 	printf '#!/bin/sh\ntouch "%s"\nexit 0\n' "$$sentinel" >$$evilbin/python3; \
+@@ -490,6 +491,7 @@ TLA_JAR_SHA256 := 58d44845a37a8d776deaf8cf3a623213b59d311bc0ec287bcdfbe148dd11bb
+ 
+ .PHONY: verify-tla
+ verify-tla: ## TLA+/TLC models (page-123 crash-atomicity, combined budget, PIN reconcile)
++	@$(_FV_PYTHON3) tla/check_tlc.py --self-test
+ 	@command -v java >/dev/null 2>&1 || { echo "ERROR: java not found — TLC needs a JRE."; exit 1; }
+ 	@if [ ! -f "$(TLA_JAR)" ]; then \
+ 		echo "ERROR: tla2tools.jar not found at $(TLA_JAR)."; \
+@@ -1745,8 +1747,9 @@ verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
+ 	@# The census pins the inventory to the 3 disclosed hash postulates +
+ 	@# the quarantined NegativeControl.Evil (and checks the quarantine stays
+ 	@# unimported). Comment-stripped, fail-closed, no lake needed.
+-	@echo "=== Extracted axiom census (every ^axiom disclosed: 3 hash postulates + quarantined NegativeControl.Evil) ==="
++	@echo "=== Extracted exact source and elaborated axiom census ==="
+ 	@/usr/bin/bash scripts/lint_extracted_axiom_census.sh
++	@$(_FV_PYTHON3) scripts/test_axiom_inventory.py
+ 	@echo "=== Axiom closure of the §33 theorems (expect propext, Classical.choice, Quot.sound + the three disclosed hash-boundary postulates: keccak256_pure, sha256_pure_bytes, hmac_sha512_pure_bytes — NB sha256_pure is a kernel THEOREM, not an axiom) ==="
+ 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/AxiomCheck.lean 2>&1 | tee /tmp/pq_axiomcheck.out
+ 	@# F3 (2026-07-16): EXACT PER-HEADLINE axiom allowlist, not just a `grep sorryAx`.
+diff --git a/contracts/verification/docs/ASSURANCE_CASE.md b/contracts/verification/docs/ASSURANCE_CASE.md
+index ed3b5639..4e64fd69 100644
+--- a/contracts/verification/docs/ASSURANCE_CASE.md
++++ b/contracts/verification/docs/ASSURANCE_CASE.md
+@@ -128,7 +128,7 @@ G0  theft-free + integrity (theft_free / theft_free_bytecode)
+ │
+ ├─ S4  the substrate behaves (SHA-256 / EVM / EntryPoint)
+ │   ├─ A1  precompile 0x02 = FIPS-180-4 ................. T
+-│   ├─ A2  deployed EntryPoint v0.6 = handleOp .......... T  (in-Lean marker is a K tautology)
++│   ├─ A2  deployed EntryPoint v0.6 = handleOp .......... T  (in-model theorem proved K; deployment faithfulness external)
+ │   ├─ A4  EVM delivers emitted call bytes .............. T  (non-consumed marker in theft_free)
+ │   └─ A6  Lean kernel ................................... X
+ │
+@@ -147,7 +147,9 @@ G0  theft-free + integrity (theft_free / theft_free_bytecode)
+   returned success with a verifier-true installed-owner C10 sig over the op digest;
+   no bypass, role-split (bootstrap vs slot) enforced, one-shot per credit.
+ - **Artifact (K).** `theft_free` / `theft_free_bytecode` (closure: kernel triple +
+-  A1,A2,A3.1,A4,A5×4 + A3.2 for the bytecode form); Claim-4 gate
++  A1,A3.1,A4,A5×4 + A3.2 for the bytecode form). A2 is an external
++  deployment-faithfulness assumption; `entrypoint_honest` is proved in-model
++  and contributes no closure axiom. Claim-4 gate:
+   `every_call_gated_by_verifier`, `no_call_without_prior_verifier_acceptance`.
+ - **Artifact (B).** Halmos pointwise-equivalence `HalmosValidateUserOpEquiv` +
+   `HalmosExecuteEquiv` and Kontrol `KontrolValidateUserOp`/`KontrolExecute` on
+@@ -303,7 +305,7 @@ Detail in `TRUST_ASSUMPTIONS.md`; summarized in §4 with evidence types.
+ | Axiom | Statement (informal) | Type | In `theft_free` closure? | Defeater / elimination |
+ |-------|----------------------|------|--------------------------|-------------------------|
+ | **A1** | precompile `0x02` = FIPS-180-4 SHA-256 | **T** | named **non-consumed** marker | geth/reth/… consensus conformance; KAT parity test. Eliminate = verify a client's SHA-256 (Appel/VST). |
+-| **A2** | deployed EntryPoint v0.6 ≡ `handleOp` | **T** | **consumed** (the in-Lean `entrypoint_honest` is a *tautology* over the model — the genuine assumption is the deployed-bytecode discharge) | OZ/ChainSecurity/Spearbit audits + ≥18-mo immutable mainnet. Eliminate = Kontrol vs deployed EntryPoint (8–12 mo). |
++| **A2** | deployed EntryPoint v0.6 ≡ `handleOp` | **T** | **external assumption, not a closure axiom**: the in-Lean `entrypoint_honest` is a proved theorem over the model | OZ/ChainSecurity/Spearbit audits + ≥18-mo immutable mainnet. Eliminate = Kontrol vs deployed EntryPoint (8–12 mo). |
+ | **A3.1** | verifier bytecode = Lean Yul model | **C** | consumed | corpus + mutant (G2). Eliminate = interpreter-refinement (active). |
+ | **A3.2/3.3/3.4** | wallet/factory/owner-table bytecode = Lean model | **B** | A3.2 in `theft_free_bytecode` | Halmos + Kontrol on pinned codehashes; deploy-profile reproduces live Base Mainnet exactly. |
+ | **A4** | EVM delivers emitted call bytes | **T** | named **non-consumed** marker | KEVM / consensus conformance. |
+@@ -311,10 +313,14 @@ Detail in `TRUST_ASSUMPTIONS.md`; summarized in §4 with evidence types.
+ | **A6** | Lean kernel checks proofs | **X** | always | `propext`, `Classical.choice`, `Quot.sound`. |
+ 
+ **Minimal shared TCB of all three claims:** A6 + A5 + A1 + A2 + A4 + A3.1–A3.4.
+-The **`theft_free` kernel content** rests on A2 + A3.1 + A5×4 + kernel; A1 and A4
++The **`theft_free` kernel content** rests on A3.1 + A5×4 + kernel; A1 and A4
+ are **non-consumed named markers** (deleting their `have` bindings leaves
+ `theft_free` proven) — they document the on-chain substrate boundary without being
+-logical premises of the bare safety conjunct.
++logical premises of the bare safety conjunct. A2's `entrypoint_honest` is proved
++from the in-Lean `handleOp` model and contributes no additional axiom. Applying
++that model to the deployed EntryPoint still requires external faithfulness
++evidence; this deployment assumption is distinct from the theorem's kernel
++premises (see [THE_CLAIM.md](THE_CLAIM.md)).
+ 
+ ---
+ 
+diff --git a/contracts/verification/docs/TRUST_ASSUMPTIONS.md b/contracts/verification/docs/TRUST_ASSUMPTIONS.md
+index 5518e3a4..060ed9d6 100644
+--- a/contracts/verification/docs/TRUST_ASSUMPTIONS.md
++++ b/contracts/verification/docs/TRUST_ASSUMPTIONS.md
+@@ -37,19 +37,17 @@ is false.
+ 
+ * **Lean.** `Bridge/EntryPoint.lean::entrypoint_honest`
+ * **Two distinct statements — keep them separate.**
+-  * **(In-Lean) `entrypoint_honest` is a TAUTOLOGY over the ~10-line
++  * **(In-Lean) `entrypoint_honest` is a proved theorem over the
+     model `handleOp`.** Its conclusion ("a wallet-balance decrement
+     implies `validateSignature` returned success, with the resulting
+     storage as post-state") is *provable from the definition of
+     `handleOp`*: the failure branch returns `σ` unchanged (so no
+     balance decrease is possible), and the success branch sets
+     `walletStorage` to exactly the `validateSignature` post-state. It
+-    is declared as an `axiom` (not a `theorem`) only so it surfaces in
+-    `theft_free`'s `#print axioms` closure as the named A2 marker — it
+-    constrains nothing about the *real* contract and is **not** a
+-    load-bearing cryptographic premise consumed by the proof. Removing
+-    it would not create a logical gap that a genuine assumption fills;
+-    the model `handleOp` already entails it.
++    was demoted from an axiom to a theorem on 2026-08-20. Its proof uses
++    only the kernel premises and it no longer appears as an A2 axiom in
++    `theft_free`'s `#print axioms` closure. The theorem constrains nothing
++    about the *real* contract: the model `handleOp` already entails it.
+   * **(Cited-TCB) The genuine assumption is that the DEPLOYED
+     EntryPoint v0.6 bytecode at
+     `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789` actually behaves like
+@@ -64,9 +62,8 @@ is false.
+ * **Elimination path.** Model EntryPoint v0.6's real bytecode in Lean
+   and discharge the deployed-matches-`handleOp` assumption against KEVM
+   (Kontrol). This is the **separate** 8-12 month engagement; it
+-  targets the cited-TCB statement above, **not** the tautological
+-  in-Lean axiom (which proves nothing about the real contract and so
+-  cannot be "discharged"). Out of current scope.
++  targets the cited-TCB statement above. The in-Lean theorem is already
++  proved and supplies no deployment-faithfulness evidence. Out of current scope.
+ 
+ > **`entrypoint_no_replay` — REMOVED 2026-06-14 (phantom).** A prior
+ > A2-noreplay axiom (`(sender, nonce)` uniqueness) was deleted from the
+@@ -211,7 +208,7 @@ per-claim corollaries unprovable.
+ 
+ | Claim | Axioms cited in `#print axioms` of the corollary |
+ |-------|--------------------------------------------------|
+-| 1. Signature-to-execution binding | A6 (kernel) + `sha256_collision_resistance` (the A5-injective reduction). The full `theft_free` closure adds A1, A2, A3.1, A4, A5 (4 sub-axioms). **Scope of the in-kernel content:** the corollary binds the *signed digest* to the op's `callData` **field** (digest-uniqueness) and the `ownerIndex` (per-index transient credit) — it does NOT in-kernel prove that the bytes *executed* equal the bytes *signed*. That executed-call ⇄ signed-calldata binding rests on cited-TCB **A2** (deployed EntryPoint v0.6 relays `op.callData` verbatim to the wallet) + **A4** (the EVM forwards those bytes to the target). |
++| 1. Signature-to-execution binding | A6 (kernel) + `sha256_collision_resistance` (the A5-injective reduction). The full `theft_free` closure adds A1, A3.1, A4, A5 (4 sub-axioms); A2 is an external deployment assumption, not a closure axiom. **Scope of the in-kernel content:** the corollary binds the *signed digest* to the op's `callData` **field** (digest-uniqueness) and the `ownerIndex` (per-index transient credit) — it does NOT in-kernel prove that the bytes *executed* equal the bytes *signed*. That executed-call ⇄ signed-calldata binding rests on cited-TCB **A2** (deployed EntryPoint v0.6 relays `op.callData` verbatim to the wallet) + **A4** (the EVM forwards those bytes to the target). |
+ | 2. Owner-set integrity + init atomicity | A6 only (`initialize_called_exactly_once` and `owner_set_nonempty_after_init` are purely structural). For bytecode-level enforcement, A3.4 (MultiOwnable) + A3.2 (Wallet) + A3.3 (Factory) are discharged by Halmos (see A3.* — the prior Certora rule-sets are superseded/alternative paths). |
+ | 3. Execution faithfulness + value flow | A6 only (`executeBatch_faithful` is purely operational over the `Execute` model's `(targets, values, datas)` arguments). For bytecode-level enforcement, A3.2 (Wallet) is discharged by Halmos against pinned `PQSmartWallet` codehash. **Scope:** the in-kernel theorem proves the model dispatches its arguments faithfully and in order; that those arguments equal the *signed* batch (and reach the real callee) rests on cited-TCB A2 + A4, not on the kernel. |
+ 
+diff --git a/contracts/verification/scripts/axiom_inventory_extracted.json b/contracts/verification/scripts/axiom_inventory_extracted.json
+new file mode 100644
+index 00000000..50657bbb
+--- /dev/null
++++ b/contracts/verification/scripts/axiom_inventory_extracted.json
+@@ -0,0 +1,366 @@
++{
++  "source": {
++    "Extracted/AxiomCheck.lean": {
++      "sha256": "263629c3569e3f8f3125f7f9b7585798cd43ec08dc44f5e3ce138de823b4764e",
++      "axiom_mentions": 78
++    },
++    "Extracted/AxiomCheckFormatDecimal.lean": {
++      "sha256": "e79c14b72dab3f2e77833edafabbd5b333ff671def875ee6beca4216c354aabc",
++      "axiom_mentions": 4
++    },
++    "Extracted/AxiomCheckNegativeControl.lean": {
++      "sha256": "8846e829cea89e95fd18cbaa6fdfb686df6918d34bba469031c132f7a08c9db5",
++      "axiom_mentions": 10
++    },
++    "Extracted/Bip39RoundtripSpec.lean": {
++      "sha256": "6fe490458be0e01b6d6d30b0558795ed05fc48f0d097debeb2ec1da0e2cfacdd",
++      "axiom_mentions": 1
++    },
++    "Extracted/Bits.lean": {
++      "sha256": "356a3e8fd41a9a15c01b9d16384aa3cdaa86b649698054e8ff6917184c737bd7",
++      "axiom_mentions": 1
++    },
++    "Extracted/Decode/FunsExternal.lean": {
++      "sha256": "5f7100dc15c9f5ed33a0123f86623ec586fd7734842b35ed0c85145a4bbf22c7",
++      "axiom_mentions": 2
++    },
++    "Extracted/DecodeItemSpec.lean": {
++      "sha256": "270058dc51f65f7794a8f7b059b7e4cc997471b5dd6ffb720b82229096a94c30",
++      "axiom_mentions": 2
++    },
++    "Extracted/Eip1271/FunsExternal.lean": {
++      "sha256": "5f67bcedee9481ff7c6b3d11bfc082e6c0e0b7562f3702d3072f30205de6a3a2",
++      "axiom_mentions": 2
++    },
++    "Extracted/FormatDecimal/Div10Spec.lean": {
++      "sha256": "aebfd6589de169fc2f5bad37a0dc8b9288a4f1e1f0e4a0ffa59ed1ca57c3c312",
++      "axiom_mentions": 2
++    },
++    "Extracted/FormatDecimal/EmitSpec.lean": {
++      "sha256": "21d9709f7c1bb1a16abb4debfff0f008aead568ae67049eb8a99802369a72b4a",
++      "axiom_mentions": 2
++    },
++    "Extracted/FormatDecimal/ExtractDigitsSpec.lean": {
++      "sha256": "cdf70f33b508a9ffab24cb75765ffa949f3a36064056fca2b762b70fb6d5ef62",
++      "axiom_mentions": 2
++    },
++    "Extracted/FormatDecimal/FormatDecimalSpec.lean": {
++      "sha256": "33d00999afd8ed1f2a4082f42b3fbd9b3e5707e815aa48ba19c0b5f6d36df098",
++      "axiom_mentions": 2
++    },
++    "Extracted/FormatDecimal/RoundCarrySpec.lean": {
++      "sha256": "f25ab5fadf3a686eb732853c2d33c90c05a3dcf40e9bc783c070c4b3a5c13e32",
++      "axiom_mentions": 2
++    },
++    "Extracted/FormatDecimal/TrimFracSpec.lean": {
++      "sha256": "66018fe746152c7e0c02706014a395df0e2370e51f5aebe5b76b96af9f27a752",
++      "axiom_mentions": 2
++    },
++    "Extracted/FwManifestSpec.lean": {
++      "sha256": "e8eabfd99772466c48fdd92cac84eae301b805a2f2640b6c1249be896d9dadf0",
++      "axiom_mentions": 1
++    },
++    "Extracted/Hash/FunsExternal.lean": {
++      "sha256": "8968274b785d536340924fc7f1344fdecfaee2c170cbdb87c3db4164a36e0bfe",
++      "axiom_mentions": 3
++    },
++    "Extracted/HashPure.lean": {
++      "sha256": "750a69f7e57e38298a41caf90b593ba925867246b7f54d2a6c689bdcc8018870",
++      "axiom_mentions": 2
++    },
++    "Extracted/HashSpecs/ChainHash.lean": {
++      "sha256": "b5bc8e80170c3b94233f672bee5011d5e2d67278b721b04f3cc5658fdaa2956d",
++      "axiom_mentions": 1
++    },
++    "Extracted/HashSpecs/Th.lean": {
++      "sha256": "beebfacb679ca09df285271b6b78bbde2800d3c28f170a5fcce1fad3f679f395",
++      "axiom_mentions": 1
++    },
++    "Extracted/HashSpecs/ThMulti.lean": {
++      "sha256": "4c5661995c204f1d93f2c4eb25594c9a19ff88b0c7dbd17f22423ceb22fba5bd",
++      "axiom_mentions": 1
++    },
++    "Extracted/HashSpecs/ThPair.lean": {
++      "sha256": "5fe467ae20bf082dc7ed0a811f3fcf0b18b46a18509b887521536aa0455a24ae",
++      "axiom_mentions": 1
++    },
++    "Extracted/HashSpecs/Truncate.lean": {
++      "sha256": "a5823d0b2b538ec11e47de81bc589794272d67754ae9aae5ba301163ce425689",
++      "axiom_mentions": 1
++    },
++    "Extracted/HashSpecs/WotsDigest.lean": {
++      "sha256": "08129d5d5e36a0b87e9234d9a76879f273a2caf48a066511b435e78cdbc03da5",
++      "axiom_mentions": 1
++    },
++    "Extracted/HashSpecs.lean": {
++      "sha256": "d4ba843cc9d1c3bbce9c8cb393a7ae5741d264459e362cb4dc02ba2a9051aa8c",
++      "axiom_mentions": 2
++    },
++    "Extracted/Merkle/FunsExternal.lean": {
++      "sha256": "8c437e7c07ec58a81e03dc3be0e6feed532cdf48f3af945bcbe1022bc32fccad",
++      "axiom_mentions": 1
++    },
++    "Extracted/PinState/FunsExternal.lean": {
++      "sha256": "6fc451e06019763fec178ce00aaea040a62b7b35249bf37d3cf548170ca7cdfa",
++      "axiom_mentions": 1
++    },
++    "Extracted/PinState/TypesExternal.lean": {
++      "sha256": "9644edb552d15adedb08b5f470e08457d26be2981d71bde8b98d362c9c2cb29b",
++      "axiom_mentions": 4
++    },
++    "Extracted/PkFromSig/FunsExternal.lean": {
++      "sha256": "60562c2c0eef84e5ea156cedf835de8e95230cb18bcc0364e90647a090b638d5",
++      "axiom_mentions": 1
++    },
++    "Extracted/Rlp/FunsExternal.lean": {
++      "sha256": "6d73a90a480ca6ed1d9bc2de8d44378d28d92880c9c3004b14cffc58989635e5",
++      "axiom_mentions": 2
++    },
++    "Extracted/SetSliceLemmas.lean": {
++      "sha256": "4d1bf238e3dd21c5cec17387e0dd851d867b5c4f4b27868c279e6c64be50dc7c",
++      "axiom_mentions": 1
++    },
++    "Extracted/Sha256Pure.lean": {
++      "sha256": "2d7a63e698118eb840db49e0da56f2d5a21510d1ec38b2dfe4114d262fec2aa7",
++      "axiom_mentions": 4
++    },
++    "Extracted/Sha256Vendored.lean": {
++      "sha256": "64a4208942c71ccca9d5e3f2d576b6bc036fed7f81a8f6f343ac371fc67a3a61",
++      "axiom_mentions": 2
++    },
++    "Extracted/SlotKdf/FunsExternal.lean": {
++      "sha256": "4b9ac21ca5aa0b88ccb0539d84aa754407ef6ce6e7884a3f1231b6e5b075492f",
++      "axiom_mentions": 5
++    },
++    "Extracted/SlotKdf/SlotKdfSpec.lean": {
++      "sha256": "0debaa69e2d15dc3f83258316321dba6c14fe2313ab40ed8d9a22e24d928e91f",
++      "axiom_mentions": 1
++    },
++    "Extracted/TxMerkle/FunsExternal.lean": {
++      "sha256": "714d3f4834e9371a2d5cc74a025eaa507040febc8b82ecbe1bc6fd251e35f5b0",
++      "axiom_mentions": 1
++    },
++    "Extracted/UserOp/FunsExternal.lean": {
++      "sha256": "03c0c8f5a3c94285348b83fd826206cdc35153011934b78f75f69349250f80dd",
++      "axiom_mentions": 4
++    },
++    "Extracted/UserOpEquiv.lean": {
++      "sha256": "06c8667f575abea995907908d2e57535cd11b7e13ed0ccabf33b17c77273ef36",
++      "axiom_mentions": 1
++    },
++    "Extracted/UserOpEquivByteLayout.lean": {
++      "sha256": "d26ce34702a278b179fcf2aa50418d22596324b7afc29f150b234976214eb4e3",
++      "axiom_mentions": 1
++    },
++    "Extracted.lean": {
++      "sha256": "9e856c60e109984dd90a0a07ecb1ae8fc87a32522016344ac5dd9f22f986e452",
++      "axiom_mentions": 1
++    }
++  },
++  "elaborated": [
++    {
++      "levels": [],
++      "module": "Aeneas.Std.Core.Fmt",
++      "name": "Aeneas.Std.core.fmt.Formatter",
++      "unsafe": false,
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Std.Core.Panic",
++      "name": "Aeneas.Std.core.panic.panic_info.PanicInfo",
++      "unsafe": false,
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Std.Core.Pin",
++      "name": "Aeneas.Std.core.pin.Pin",
++      "unsafe": false,
++      "type_sha256": "9fecb1a8a5e289629896c3956d094f3d58b45a83e8ff605290be9ce77462dd67"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Std.Core.Pin",
++      "name": "Aeneas.Std.core.pin.helper.PinHelper",
++      "unsafe": false,
++      "type_sha256": "9fecb1a8a5e289629896c3956d094f3d58b45a83e8ff605290be9ce77462dd67"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Std.Core.Atomic",
++      "name": "Aeneas.Std.core.sync.atomic.AtomicBool",
++      "unsafe": false,
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Std.Core.Atomic",
++      "name": "Aeneas.Std.core.sync.atomic.AtomicU32",
++      "unsafe": false,
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Std.String",
++      "name": "Aeneas.Std.get_target",
++      "unsafe": false,
++      "type_sha256": "eac96332346ca85b887b10900a7683e62a240458b263abc9928a5a9304bbd682"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Std.String",
++      "name": "Aeneas.Std.get_target.spec",
++      "unsafe": false,
++      "type_sha256": "41e684dc286da7e8ec2dce0f49f17001714d818adf58ec4cdf3842374853f2df"
++    },
++    {
++      "levels": [],
++      "module": "Aeneas.Tactic.Step.StepArraySpec",
++      "name": "Aeneas.StepArraySpec.Tests.const_array_spec._native.native_decide.ax_1_1",
++      "unsafe": false,
++      "type_sha256": "1ea114fa15cdd54690d1fe918b1e92ec9fbb33c6ffc1c0ce53035706e0be9cd7"
++    },
++    {
++      "levels": [
++        "u"
++      ],
++      "module": "Init.Prelude",
++      "name": "Classical.choice",
++      "unsafe": false,
++      "type_sha256": "8a52bd60c11e0ca1a7dde28e8e0b41819f0717d6bb4489c823063e2308065e91"
++    },
++    {
++      "levels": [],
++      "module": "Init.Core",
++      "name": "Lean.ofReduceBool",
++      "unsafe": false,
++      "type_sha256": "8fd9ef600b8f58fa2c8df3101069e81af5b59b93ac4c6d8d80a22600d0adc36d"
++    },
++    {
++      "levels": [],
++      "module": "Init.Core",
++      "name": "Lean.ofReduceNat",
++      "unsafe": false,
++      "type_sha256": "d29a0f4dcb3bbf104e289e510282be1db58ac21e1bc1ab27e300555d0cfcc2a3"
++    },
++    {
++      "levels": [],
++      "module": "Init.Core",
++      "name": "Lean.trustCompiler",
++      "unsafe": false,
++      "type_sha256": "f5d8a8840f30c2d0e5b651a20789cb4c8d616d4ba312057d224114a13a157b90"
++    },
++    {
++      "levels": [
++        "u"
++      ],
++      "module": "Init.Prelude",
++      "name": "Quot.lcInv",
++      "unsafe": true,
++      "type_sha256": "52459a4e21a02bbea20cd5ee3c219f0fcdc7c43f097af79149f3b931e72e4b44"
++    },
++    {
++      "levels": [
++        "u"
++      ],
++      "module": "Init.Core",
++      "name": "Quot.sound",
++      "unsafe": false,
++      "type_sha256": "54ef3e688b48f0f08f4a3cb121b77f99bfb7e51c29a0c22721755ca0b97d0aa2"
++    },
++    {
++      "levels": [],
++      "module": "Extracted.SlotKdf.FunsExternal",
++      "name": "hmac_sha512_pure_bytes",
++      "unsafe": false,
++      "type_sha256": "f4622ba1c95ac29b9fcf291673dd30ff1fe92920ef7b9f3b963a8c056ec3ca50"
++    },
++    {
++      "levels": [
++        "u"
++      ],
++      "module": "Init.Prelude",
++      "name": "isScalarObj",
++      "unsafe": true,
++      "type_sha256": "9dd69f3ec3b0750f7b50e255e36804558a5d8aecf7093d32432e86a60f822a7d"
++    },
++    {
++      "levels": [],
++      "module": "Extracted.UserOp.FunsExternal",
++      "name": "keccak256_pure",
++      "unsafe": false,
++      "type_sha256": "049c6bb6ee2f041a752ff6e298bcc8098d2198af62184ec7545da049429acb92"
++    },
++    {
++      "levels": [],
++      "module": "Init.Prelude",
++      "name": "lcAny",
++      "unsafe": true,
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "levels": [
++        "u",
++        "v"
++      ],
++      "module": "Init.Prelude",
++      "name": "lcCast",
++      "unsafe": true,
++      "type_sha256": "2cc1a2f7e096f80576058e7994e73ba09479a02e58e5253f44a03ad1ae715d19"
++    },
++    {
++      "levels": [],
++      "module": "Init.Prelude",
++      "name": "lcErased",
++      "unsafe": true,
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "levels": [],
++      "module": "Init.Prelude",
++      "name": "lcProof",
++      "unsafe": true,
++      "type_sha256": "86aee7e35e1fd308b56be1d77d552090a4204b25ca11239583a45683a6644b5d"
++    },
++    {
++      "levels": [
++        "u"
++      ],
++      "module": "Init.Prelude",
++      "name": "lcUnreachable",
++      "unsafe": true,
++      "type_sha256": "0c692a112a79532741c643618c94942e0463234fa6dae869bd342f6c597b6bfd"
++    },
++    {
++      "levels": [],
++      "module": "Init.Prelude",
++      "name": "lcVoid",
++      "unsafe": true,
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "levels": [],
++      "module": "Init.Core",
++      "name": "propext",
++      "unsafe": false,
++      "type_sha256": "6e75551305933a1e35fbfc950050d2344403b07dd2046e5fea3a9d6d8004032d"
++    },
++    {
++      "levels": [],
++      "module": "Extracted.SlotKdf.FunsExternal",
++      "name": "sha256_pure_bytes",
++      "unsafe": false,
++      "type_sha256": "049c6bb6ee2f041a752ff6e298bcc8098d2198af62184ec7545da049429acb92"
++    },
++    {
++      "levels": [
++        "u"
++      ],
++      "module": "Init.Prelude",
++      "name": "sorryAx",
++      "unsafe": false,
++      "type_sha256": "5c15e0102ef885b4a3b583f4c396ee59d8b470ab16311833b4b5f24ace13a826"
++    }
++  ]
++}
+diff --git a/contracts/verification/scripts/axiom_inventory_lean.json b/contracts/verification/scripts/axiom_inventory_lean.json
+new file mode 100644
+index 00000000..47b261c0
+--- /dev/null
++++ b/contracts/verification/scripts/axiom_inventory_lean.json
+@@ -0,0 +1,312 @@
++{
++  "source": {
++    "SphincsCVerify/Bridge/EntryPoint.lean": {
++      "sha256": "251429dbaf135f2d9558a420fbc819078b9ddedf6dae0cced829ce0e4eebc492",
++      "axiom_mentions": 11
++    },
++    "SphincsCVerify/Bridge/Refinement.lean": {
++      "sha256": "0df9bedb0ab466884e8c9850ec1a2e33046fe9341cf0357a6f02e6d7d3360adc",
++      "axiom_mentions": 36
++    },
++    "SphincsCVerify/Bridge/SolidityVerifier.lean": {
++      "sha256": "de4a00dcd3be1881c599f5026d200beda554613a857e720aab40b85d3d02c5f7",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Crypto/Assumptions.lean": {
++      "sha256": "eff7bc6ab3afbe335b7c353fbe0ff3f55167cfa8012d0e7ad6a4d620b95ae490",
++      "axiom_mentions": 19
++    },
++    "SphincsCVerify/Crypto/EUFCMA.lean": {
++      "sha256": "3af2ca905c2456bb784a62fab864d9a079bcf5173736539fd20f4b38e6ee7b50",
++      "axiom_mentions": 12
++    },
++    "SphincsCVerify/Crypto/Quantitative.lean": {
++      "sha256": "17db8547199681a7ed8ccce5d2f8fbe64232c0bc4f69175e562ac290a32d0aa9",
++      "axiom_mentions": 2
++    },
++    "SphincsCVerify/Interpreter/C10Parse.lean": {
++      "sha256": "2ad073b800cf72424a656c20d5353b9574ece9b15e0efa7194012ac4fee158fa",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Interpreter/C10Program.lean": {
++      "sha256": "031db8f780a5d233c05a839b479738a86427f60472fa2ee73e72e755f968fdc5",
++      "axiom_mentions": 4
++    },
++    "SphincsCVerify/Interpreter/C10Source.lean": {
++      "sha256": "7a042cd2f098ada2a9a7054b3daa3681fcf9fc84a8ba8d8b171f1048ede5fbe2",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Interpreter/Climb.lean": {
++      "sha256": "0fe536bcc33a101f828022aa348d24a2511b9f007fcb7297bc6d6f9a751cee96",
++      "axiom_mentions": 2
++    },
++    "SphincsCVerify/Interpreter/ClimbLoop.lean": {
++      "sha256": "687f820d0a643c9cccf594942137c3690cc5e9c1843e086e61396bab1af4dea5",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Interpreter/Memory.lean": {
++      "sha256": "22c9d1532e3d1bf4bd215897c95832bf290c1c7946764b62433092cb20eae84f",
++      "axiom_mentions": 3
++    },
++    "SphincsCVerify/Interpreter/Phases.lean": {
++      "sha256": "31791ea7d3f53187850d9fc680f89047966e4112805f0ea817c64f1667208400",
++      "axiom_mentions": 2
++    },
++    "SphincsCVerify/Interpreter/Sha256Bridge.lean": {
++      "sha256": "6e361c3fc006c7a114081af120ed7df942181d98c80ecf73b8e97386094a0904",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Interpreter/Yul.lean": {
++      "sha256": "6c8a81f20b826e1ae0e4124ad0c7996b95edb2bbe4ea479c0d32a8aa846b865a",
++      "axiom_mentions": 2
++    },
++    "SphincsCVerify/Interpreter/YulParse.lean": {
++      "sha256": "215a19eb4fb9f66e63db3d856643424f03b6015521450684d9f09bbc6bc081fd",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Spec/Hash.lean": {
++      "sha256": "08a5b6abfe95f82acb985d99cfe74be50f67a19e05b99efeb5641b3efeaed695",
++      "axiom_mentions": 6
++    },
++    "SphincsCVerify/Spec/Sha256Impl.lean": {
++      "sha256": "4caf8a66b84a0981264bda8c57d65df91bfdb00f925006275ad8c9aee26badbc",
++      "axiom_mentions": 2
++    },
++    "SphincsCVerify/Spec/Theorems.lean": {
++      "sha256": "164fe5825909317dc362f07e1262ff55bcaa145b066678f7edadb04ae5ea2853",
++      "axiom_mentions": 41
++    },
++    "SphincsCVerify/Verifier/Equivalence.lean": {
++      "sha256": "6a2bedef2aff2669bb1bf57932bb91546d98e4466b07f51412a3842a4934f18b",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Wallet/CreditLedger.lean": {
++      "sha256": "4a9a6f71af55264eace1c89bba478e515fa477fcf23184c45b4a4345447788e4",
++      "axiom_mentions": 2
++    },
++    "SphincsCVerify/Wallet/Invariants.lean": {
++      "sha256": "d97a8b3c7f0a2f8773ab9ccbdbcffd1595be879addaa44ff05585b80d2be847e",
++      "axiom_mentions": 6
++    },
++    "SphincsCVerify/Wallet/OffchainBinding.lean": {
++      "sha256": "12fe61a2f1cb5b2db0787673fac42e3a2aa25d49d321df71e0f5197f4442c495",
++      "axiom_mentions": 6
++    },
++    "SphincsCVerify/Wallet/SphincsDigestSpec.lean": {
++      "sha256": "c3a008f2f4d9b00ee77c66c9c602292cd14436d069bd644d1a14761dd5c5830b",
++      "axiom_mentions": 1
++    },
++    "SphincsCVerify/Wallet/UpgradeSafety.lean": {
++      "sha256": "513d4e4074bb05452b787a3ae93c35be0480b3db392b77478c5c5762cb5071f1",
++      "axiom_mentions": 2
++    },
++    "SphincsCVerify.lean": {
++      "sha256": "7bc63e62a3cd69d75121c8b239ba1e9bb08728166678606f88f9666d479f9cf8",
++      "axiom_mentions": 2
++    }
++  },
++  "elaborated": [
++    {
++      "unsafe": false,
++      "name": "Classical.choice",
++      "module": "Init.Prelude",
++      "levels": [
++        "u"
++      ],
++      "type_sha256": "b397a38f2e3297ccf1ef8ab5ecffc761be2a059068208d290ea54b8f9de6cac9"
++    },
++    {
++      "unsafe": false,
++      "name": "Lean.ofReduceBool",
++      "module": "Init.Core",
++      "levels": [],
++      "type_sha256": "8fd9ef600b8f58fa2c8df3101069e81af5b59b93ac4c6d8d80a22600d0adc36d"
++    },
++    {
++      "unsafe": false,
++      "name": "Lean.ofReduceNat",
++      "module": "Init.Core",
++      "levels": [],
++      "type_sha256": "d29a0f4dcb3bbf104e289e510282be1db58ac21e1bc1ab27e300555d0cfcc2a3"
++    },
++    {
++      "unsafe": false,
++      "name": "Lean.trustCompiler",
++      "module": "Init.Core",
++      "levels": [],
++      "type_sha256": "f5d8a8840f30c2d0e5b651a20789cb4c8d616d4ba312057d224114a13a157b90"
++    },
++    {
++      "unsafe": true,
++      "name": "Quot.lcInv",
++      "module": "Init.Prelude",
++      "levels": [
++        "u"
++      ],
++      "type_sha256": "8d50e2d6b794e0ad75932c0e315a6c85c579986534a1ca847f227758496c00c3"
++    },
++    {
++      "unsafe": false,
++      "name": "Quot.sound",
++      "module": "Init.Core",
++      "levels": [
++        "u"
++      ],
++      "type_sha256": "4e6f4679e517ad3442b0203e5f20654a37e1a8485a0afeeb7a13842b4e741181"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.evm_bytecode_executes_correctly",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "e44350f63d0d65146569a38d406d5d3c37be875fb2fcc556bd2e1dddc79b3f40"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "ba6a62fe4f4f3b931869fa08d51acb35c571c6126d9501940c391e15cd121bc2"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.solidityFactory_compiles_correctly",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "1346aec74df11e6691e2cb1c95a915232456ce067b4d76f3dd7b07c93c37e828"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.solidityMultiOwnable_compiles_correctly",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "925939fc45876e79cba872e07deed0d848faa4b1d5bd11e8b3a9eba6edc0c083"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "6801dd6058ae0d9df6d736144f6dcf969f3a4b293f8b5f86512170b4dcf132fc"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.solidityWalletExecuteBatch_compiles_correctly",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "3483b90e1b9af1447cf4b356bb4c45818fcb70322867099a84f874615ef5a2ee"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.solidityWalletExecute_compiles_correctly",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "da68a3a9a5d4ff1b8eb14407e959afea0f6dbb2cd6a9aac7f87bfaae4d7a713c"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Bridge.solidityWallet_compiles_correctly",
++      "module": "SphincsCVerify.Bridge.Refinement",
++      "levels": [],
++      "type_sha256": "0aa76ee145979f54735124d5eab041e16753f3ee1d1c3767262dd69b54ffb9cd"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC",
++      "module": "SphincsCVerify.Crypto.EUFCMA",
++      "levels": [],
++      "type_sha256": "b66e7e5ac21f8d537259349cf7bb9ddfe656dd60c8a334f73827c01d1b13fff7"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Crypto.ITSR_F",
++      "module": "SphincsCVerify.Crypto.Assumptions",
++      "levels": [],
++      "type_sha256": "96a9c3b3899462da8367cca3ef744d5c0d60cb375d66f91965db8da048fae3d3"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Crypto.SM_DT_TCR_F",
++      "module": "SphincsCVerify.Crypto.Assumptions",
++      "levels": [],
++      "type_sha256": "b88d9e4a9734735cfad4842379a4967599ec9144f786fab5561936d47693f997"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Crypto.hMsg_random_oracle",
++      "module": "SphincsCVerify.Crypto.Assumptions",
++      "levels": [],
++      "type_sha256": "05ce3290966c72eb64288fbe7184bcc35a2584f636f5392cfdc2e515ce25e79b"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Crypto.sha256_collision_resistance",
++      "module": "SphincsCVerify.Crypto.Assumptions",
++      "levels": [],
++      "type_sha256": "624b004dad056cbecfb0bab03fb8e0d0b8c5efae0ffa0942a6fa98078b40b739"
++    },
++    {
++      "unsafe": false,
++      "name": "SphincsCVerify.Wallet.OffchainBinding.keccak_sha256_cross_separation",
++      "module": "SphincsCVerify.Wallet.OffchainBinding",
++      "levels": [],
++      "type_sha256": "27ff9f5f7e59f94c6b26c267194199a48acf50c3e5647e0f748f608f53a9c086"
++    },
++    {
++      "unsafe": true,
++      "name": "lcAny",
++      "module": "Init.Prelude",
++      "levels": [],
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "unsafe": true,
++      "name": "lcCast",
++      "module": "Init.Prelude",
++      "levels": [
++        "u",
++        "v"
++      ],
++      "type_sha256": "2cc1a2f7e096f80576058e7994e73ba09479a02e58e5253f44a03ad1ae715d19"
++    },
++    {
++      "unsafe": true,
++      "name": "lcErased",
++      "module": "Init.Prelude",
++      "levels": [],
++      "type_sha256": "b4611575b2b62eb57ff8b514cf96bf01666158b035ac2fcc89065136260d1e05"
++    },
++    {
++      "unsafe": true,
++      "name": "lcProof",
++      "module": "Init.Prelude",
++      "levels": [],
++      "type_sha256": "86aee7e35e1fd308b56be1d77d552090a4204b25ca11239583a45683a6644b5d"
++    },
++    {
++      "unsafe": true,
++      "name": "lcUnreachable",
++      "module": "Init.Prelude",
++      "levels": [
++        "u"
++      ],
++      "type_sha256": "0c692a112a79532741c643618c94942e0463234fa6dae869bd342f6c597b6bfd"
++    },
++    {
++      "unsafe": false,
++      "name": "propext",
++      "module": "Init.Core",
++      "levels": [],
++      "type_sha256": "6dd2fb585e097c2daca28461895349b3b7f30de6620363a0d18f1a71943a9a83"
++    },
++    {
++      "unsafe": false,
++      "name": "sorryAx",
++      "module": "Init.Prelude",
++      "levels": [
++        "u"
++      ],
++      "type_sha256": "5c15e0102ef885b4a3b583f4c396ee59d8b470ab16311833b4b5f24ace13a826"
++    }
++  ]
++}
+diff --git a/contracts/verification/scripts/check_axiom_inventory.py b/contracts/verification/scripts/check_axiom_inventory.py
+new file mode 100644
+index 00000000..b39152ce
+--- /dev/null
++++ b/contracts/verification/scripts/check_axiom_inventory.py
+@@ -0,0 +1,114 @@
++#!/usr/bin/env python3
++"""Exact source and elaborated axiom inventory (F1/#676, F4/#675).
++
++Source pins deliberately bind whole axiom-bearing modules, including namespace,
++modifiers, type context and multiplicity. This is stricter and simpler than a
++home-grown declaration parser. The census counts every raw substring "axiom",
++including prose, strings and #print axioms; all matching modules are pinned.
++All source paths, including the root and unbuilt heavy modules, are scanned.
++An intentional edit to a pinned module requires a
++reviewed re-pin. There is no automatic update mode.
++
++The elaborated inventory pins every axiom present in the default root environment
++(including dependency declarations), not merely those used by headline proofs.
++Presence of a dependency's sorryAx here is NOT permission to use it: existing
++per-theorem closure gates remain mandatory. This is not an independent kernel.
++"""
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import os
++from pathlib import Path
++import pwd
++import subprocess
++import sys
++
++from lean_source import keyword_count
++
++SCRIPTS = Path(__file__).resolve().parent
++PROJECTS = {"lean": "SphincsCVerify", "extracted": "Extracted"}
++QUARANTINE = "Extracted/AxiomCheckNegativeControl.lean"
++
++
++def source_inventory(project: Path, root: str) -> dict:
++    rootfile = project / f"{root}.lean"
++    if not rootfile.is_file() or not (project / root).is_dir() or (project / root).is_symlink():
++        raise ValueError(f"missing Lean project root: {root}")
++    paths = [rootfile]
++    for directory, dirs, files in os.walk(project / root):
++        for name in dirs + files:
++            if (Path(directory) / name).is_symlink():
++                raise ValueError(f"symlink in Lean source tree: {directory}/{name}")
++        paths.extend(Path(directory) / name for name in files if name.endswith(".lean"))
++    inventory = {}
++    for path in sorted(paths):
++        if path.is_symlink():
++            raise ValueError(f"symlink in Lean source tree: {path}")
++        data = path.read_bytes()
++        source = data.decode("utf-8")
++        rel = path.relative_to(project).as_posix()
++        # The component must occur literally even in quoted/multi-module imports.
++        # Reject prose references too rather than interpreting extensible syntax.
++        if rel != QUARANTINE and "AxiomCheckNegativeControl" in source:
++            raise ValueError(f"quarantine reference in {rel}")
++        count = keyword_count(source, "axiom")
++        if count:
++            inventory[rel] = {"sha256": hashlib.sha256(data).hexdigest(), "axiom_mentions": count}
++    return inventory
++
++
++def elaborated_inventory(rows: list) -> list:
++    seen = set()
++    out = []
++    for row in rows:
++        if set(row) != {"name", "module", "type", "levels", "unsafe"} or row["name"] in seen:
++            raise ValueError("malformed/duplicate elaborated axiom row")
++        seen.add(row["name"])
++        entry = {k: v for k, v in row.items() if k != "type"}
++        entry["type_sha256"] = hashlib.sha256(row["type"].encode()).hexdigest()
++        out.append(entry)
++    if not out:
++        raise ValueError("empty elaborated inventory")
++    return sorted(out, key=lambda row: row["name"])
++
++
++def compare(expected, actual, label: str) -> None:
++    if actual != expected:
++        raise ValueError(f"{label} inventory drift\nexpected: {json.dumps(expected, sort_keys=True)}"
++                         f"\nactual: {json.dumps(actual, sort_keys=True)}")
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("project", choices=PROJECTS)
++    args = parser.parse_args()
++    try:
++        root = PROJECTS[args.project]
++        project = SCRIPTS.parent / args.project
++        expected = json.loads((SCRIPTS / f"axiom_inventory_{args.project}.json").read_text())
++        if set(expected) != {"source", "elaborated"}:
++            raise ValueError("invalid inventory manifest schema")
++        compare(expected["source"], source_inventory(project, root), "source")
++        home = Path(pwd.getpwuid(os.getuid()).pw_dir)
++        lake = home / ".elan/bin/lake"
++        env = dict(os.environ, HOME=str(home), ELAN_HOME=str(home / ".elan"))
++        for name in ("ELAN_TOOLCHAIN", "LD_PRELOAD", "LD_AUDIT", "LD_LIBRARY_PATH"):
++            env.pop(name, None)
++        # Rebuild before reading oleans, including standalone invocations.
++        subprocess.run([str(lake), "build"], cwd=project, env=env, check=True, timeout=1800)
++        run = subprocess.run([
++            str(lake), "env", "lean", "--run", str(SCRIPTS / "dump_axiom_inventory.lean"), root,
++        ], cwd=project, env=env, check=True, capture_output=True, text=True, timeout=120)
++        compare(expected["elaborated"], elaborated_inventory(json.loads(run.stdout)), "elaborated")
++        print(f"PASS: {root} exact axiom inventory ({len(expected['source'])} source modules, "
++              f"{len(expected['elaborated'])} environment axioms including dependencies)")
++        return 0
++    except (ValueError, OSError, subprocess.SubprocessError) as exc:
++        print(f"AXIOM INVENTORY FAILURE: {exc}", file=sys.stderr)
++        return 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/contracts/verification/scripts/check_proof_mutations.py b/contracts/verification/scripts/check_proof_mutations.py
+index a907c5e8..ce149656 100644
+--- a/contracts/verification/scripts/check_proof_mutations.py
++++ b/contracts/verification/scripts/check_proof_mutations.py
+@@ -109,7 +109,7 @@ EXPECTED_MUTATION_ID_SET_SHA256 = (
+     "bf901ee7432f4d73f4f567117e96d13b40205b30361e89e735dd3edc70e2965e"
+ )
+ EXPECTED_MUTATION_DEFINITIONS_SHA256 = (
+-    "170dad9e5c5f42322fde80aca28986df13cf221f6dc7b24cd6b88553fbc68e15"
++    "1ce0292e6817e6d88ba9fbc5afc60e24c067043adc95d04ed94d4ea85dd77a3f"
+ )
+ EXPECTED_TIER_COUNTS = {"quick": 2, "default": 8, "full": 13}
+ 
+diff --git a/contracts/verification/scripts/check_verity_holes.py b/contracts/verification/scripts/check_verity_holes.py
+new file mode 100644
+index 00000000..feaf4784
+--- /dev/null
++++ b/contracts/verification/scripts/check_verity_holes.py
+@@ -0,0 +1,44 @@
++#!/usr/bin/env python3
++"""Per-file proof-hole ratchet for the Verity research scaffold (#673)."""
++from pathlib import Path
++import os
++import sys
++
++from lean_source import keyword_count
++
++VERITY = Path(__file__).resolve().parents[2] / "verity"
++BASELINE = {"PQSigner/Theorems.lean": 11, "PQSigner/Verifier/Merkle.lean": 1}
++
++
++def check(directory: Path) -> int:
++    source = directory / "PQSigner"
++    if source.is_symlink():
++        raise ValueError("symlinked Verity source root")
++    files = []
++    for parent, dirs, names in os.walk(source):
++        for name in dirs + names:
++            path = Path(parent) / name
++            if path.is_symlink():
++                raise ValueError(f"symlink in Verity source tree: {path}")
++        files.extend(Path(parent) / name for name in names if name.endswith(".lean"))
++    if not files:
++        raise ValueError("empty Verity source tree")
++    total = 0
++    for path in sorted(files):
++        data = path.read_bytes()
++        count = keyword_count(data.decode("utf-8"), "(?:sorry|admit|sorryAx|proof_wanted)")
++        name = path.relative_to(directory).as_posix()
++        baseline = BASELINE.get(name, 0)
++        if count > baseline:
++            raise ValueError(f"{name}: {count} raw proof-hole mentions exceed baseline {baseline}")
++        total += count
++    return total
++
++
++if __name__ == "__main__":
++    try:
++        total = check(VERITY)
++        print(f"PASS: Verity sorry/admit ratchet ({total} accounted holes, baseline 12)")
++    except (OSError, ValueError) as exc:
++        print(f"VERITY HOLE FAILURE: {exc}", file=sys.stderr)
++        sys.exit(1)
+diff --git a/contracts/verification/scripts/dump_axiom_inventory.lean b/contracts/verification/scripts/dump_axiom_inventory.lean
+new file mode 100644
+index 00000000..4c63d9e7
+--- /dev/null
++++ b/contracts/verification/scripts/dump_axiom_inventory.lean
+@@ -0,0 +1,19 @@
++/- Enumerate declarations, not theorem dependency closures. Shared by both pinned Lean versions. -/
++import Lean
++open Lean
++
++def main (args : List String) : IO Unit := do
++  initSearchPath (← findSysroot)
++  let env ← importModules (args.toArray.map fun s => { module := s.toName }) {} 0
++  let mut rows : Array Json := #[]
++  for (name, info) in env.constants.toList do
++    if let .axiomInfo value := info then
++      let origin := match env.getModuleIdxFor? name with
++        | some i => env.header.moduleNames[i.toNat]!.toString
++        | none => "<current>"
++      rows := rows.push <| Json.mkObj [
++        ("name", toJson name.toString), ("module", toJson origin),
++        ("type", toJson (repr value.type).pretty),
++        ("levels", toJson (value.levelParams.map Name.toString)),
++        ("unsafe", toJson value.isUnsafe)]
++  IO.println (Json.arr rows).compress
+diff --git a/contracts/verification/scripts/lean_source.py b/contracts/verification/scripts/lean_source.py
+new file mode 100644
+index 00000000..e06f86c0
+--- /dev/null
++++ b/contracts/verification/scripts/lean_source.py
+@@ -0,0 +1,14 @@
++"""Conservative raw-source mention census, intentionally independent of parsing.
++
++Lean's extensible tokens can contain apparent comment/literal delimiters. Never
++strip comments or guess word boundaries: either could erase real declarations.
++A mention in prose or a string counts too. Whole-module axiom pins bind all
++matching source; Verity applies its unchanged per-file budget without comment
++allowances. The Lean build and elaborated inventory remain mandatory checks.
++"""
++import re
++
++
++def keyword_count(source: str, words: str) -> int:
++    """Count every raw substring match, using linear fixed-pattern scans."""
++    return sum(1 for _ in re.finditer(words, source))
+diff --git a/contracts/verification/scripts/lint_axioms.sh b/contracts/verification/scripts/lint_axioms.sh
+index c189dc43..9493eda2 100755
+--- a/contracts/verification/scripts/lint_axioms.sh
++++ b/contracts/verification/scripts/lint_axioms.sh
+@@ -37,6 +37,9 @@ unset LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH
+ LAKE="${FV_HOME}/.elan/bin/lake"
+ FV_PYTHON3="/usr/bin/python3 -E -S"
+ 
++# The placeholder allowlist is not an axiom inventory. Enforce both.
++${FV_PYTHON3} "${SCRIPT_DIR}/check_axiom_inventory.py" lean || exit 1
++
+ err() {
+   printf 'lint_axioms.sh: %s\n' "$*" >&2
+ }
+diff --git a/contracts/verification/scripts/lint_extracted_axiom_census.sh b/contracts/verification/scripts/lint_extracted_axiom_census.sh
+index 48583fd5..cb4a2f70 100755
+--- a/contracts/verification/scripts/lint_extracted_axiom_census.sh
++++ b/contracts/verification/scripts/lint_extracted_axiom_census.sh
+@@ -1,195 +1,5 @@
+ #!/usr/bin/env bash
+-#
+-# lint_extracted_axiom_census.sh — project-wide axiom INVENTORY gate for the
+-# §33 Aeneas-extracted tree (contracts/verification/extracted/Extracted/).
+-#
+-# Every `axiom` declaration in the tree must be one of the DISCLOSED set:
+-#
+-#   keccak256_pure           UserOp/FunsExternal.lean  (aa/userop keccak boundary)
+-#   sha256_pure_bytes        SlotKdf/FunsExternal.lean (slot-KDF SHA-256 boundary)
+-#   hmac_sha512_pure_bytes   SlotKdf/FunsExternal.lean (bip39 HMAC-SHA512 boundary)
+-#
+-# plus the QUARANTINED negative control `axiom Evil : False`, which may exist
+-# ONLY in Extracted/AxiomCheckNegativeControl.lean — the file that is
+-# deliberately NOT imported by Extracted.lean (never built; elaborated
+-# standalone by the verify-extracted negative-control step only).
+-#
+-# Why this exists (issue #676): the verify-extracted closure gate checks the
+-# `#print axioms` closures of MANIFEST-LISTED headline theorems. An axiom that
+-# no listed headline consumes — a fresh undisclosed TCB injection, or a
+-# planted `axiom X : False` parked in the tree waiting to be wired into a
+-# proof later — is INVISIBLE to a closure check. This census makes the axiom
+-# inventory itself exact: any new `axiom` anywhere under Extracted/ fails CI
+-# unless it is disclosed here (same fail-closed culture as lint_axioms.sh).
+-# The scan is COMMENT-STRIPPED (-- line comments + nested /- -/ blocks, the
+-# same proven stripper as lint_fv_invariants.sh) so prose mentioning the word
+-# "axiom" (e.g. Sha256Pure.lean's header) cannot false-positive, and an
+-# attacker cannot HIDE a real axiom inside a comment-looking construct that
+-# Lean would still parse (Lean has no such construct — comments never
+-# elaborate — but stripping makes the scan match the language exactly).
+-#
+-# Run from anywhere; resolves the repo root from its own location.
+-#
+-# Exit codes:
+-#   0  inventory == disclosed set exactly (PASS)
+-#   1  undisclosed axiom / quarantine violation; details on stderr (FAIL)
+-#   2  internal error (missing tooling / no tree found — never fail open)
+-#
+-# Tooling required: /usr/bin/python3, grep, find, sort. Invoked from
+-# `make verify-extracted` (CI: .github/workflows/lean-extracted.yml).
+-
++# Exact source + elaborated declaration inventory; closure checks remain separate.
+ set -euo pipefail
+-
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+-EXTRACTED_SRC="${REPO_ROOT}/contracts/verification/extracted/Extracted"
+-QUARANTINE_FILE="${EXTRACTED_SRC}/AxiomCheckNegativeControl.lean"
+-
+-err() { printf 'lint_extracted_axiom_census.sh: %s\n' "$*" >&2; }
+-
+-for tool in /usr/bin/python3 grep find sort; do
+-  if ! command -v "$tool" >/dev/null 2>&1; then
+-    err "missing required tool: $tool"
+-    exit 2
+-  fi
+-done
+-
+-# The comment-stripper IS this gate's evidence interpreter: a PATH-planted
+-# `python3` exiting 0 with no output would leave the stripped corpus empty
+-# and the census would pass vacuously. Pin it like the Makefile/lint_fv do.
+-FV_PYTHON3="/usr/bin/python3 -E -S"
+-
+-if [ ! -d "${EXTRACTED_SRC}" ]; then
+-  err "extracted source tree missing: ${EXTRACTED_SRC}"
+-  exit 2
+-fi
+-
+-# Comment-stripped corpus, one `path:lineno:content` line per non-blank
+-# stripped line (same stripper + argv-passing convention as
+-# lint_fv_invariants.sh: the PROGRAM comes from the heredoc on stdin, the
+-# FILE LIST from argv — piping the list into stdin would discard it).
+-strip_comments_py() {
+-  ${FV_PYTHON3} - "$@" <<'PYEOF'
+-import sys
+-
+-def strip_comments(text):
+-    out_lines = []
+-    in_block = 0  # nested /- -/ depth
+-    for line in text.splitlines():
+-        i = 0
+-        buf = []
+-        while i < len(line):
+-            if in_block > 0:
+-                close_at = line.find("-/", i)
+-                if close_at == -1:
+-                    i = len(line)
+-                else:
+-                    in_block -= 1
+-                    i = close_at + 2
+-            else:
+-                open_at = line.find("/-", i)
+-                cmt_at = line.find("--", i)
+-                if open_at == -1 and cmt_at == -1:
+-                    buf.append(line[i:]); i = len(line)
+-                elif cmt_at != -1 and (open_at == -1 or cmt_at < open_at):
+-                    buf.append(line[i:cmt_at]); i = len(line)
+-                else:
+-                    buf.append(line[i:open_at]); in_block += 1; i = open_at + 2
+-        out_lines.append("".join(buf))
+-    return out_lines
+-
+-for path in sys.argv[1:]:
+-    try:
+-        with open(path, "r", encoding="utf-8") as fh:
+-            text = fh.read()
+-    except OSError as exc:
+-        sys.stderr.write(f"strip_comments: cannot read {path}: {exc}\n")
+-        continue
+-    for n, ln in enumerate(strip_comments(text), start=1):
+-        if ln.strip():
+-            sys.stdout.write(f"{path}:{n}:{ln}\n")
+-PYEOF
+-}
+-
+-# shellcheck disable=SC2046
+-STRIPPED="$(strip_comments_py $(find "${EXTRACTED_SRC}" -name '*.lean' | sort))" \
+-  || { err "comment-stripper failed"; exit 2; }
+-
+-# Fail CLOSED on a suspiciously tiny corpus: a census that inspected nothing
+-# must not be able to report success (anti-fail-open, same as lint_fv (a)).
+-if [ "${#STRIPPED}" -lt 64 ]; then
+-  err "INTERNAL: comment-stripper produced a suspiciously tiny corpus (${#STRIPPED} bytes) — refusing to lint vacuously"
+-  exit 2
+-fi
+-
+-# 1. Enumerate every `axiom <name>` declaration (file:line:name), tree-wide.
+-DECLS="$(printf '%s\n' "${STRIPPED}" \
+-  | sed -nE 's/^([^:]+):([0-9]+):[[:space:]]*axiom[[:space:]]+([A-Za-z0-9_'"'"']+).*/\1:\2:\3/p' \
+-  | sort)" || true
+-
+-# Fail CLOSED on an empty inventory: the tree is KNOWN to carry three hash
+-# postulates + the quarantined Evil, so zero matches means a broken scan,
+-# not a clean tree.
+-if [ -z "${DECLS//[[:space:]]/}" ]; then
+-  err "INTERNAL: no axiom declarations found under ${EXTRACTED_SRC} — refusing to report PASS (tree layout changed?)"
+-  exit 2
+-fi
+-
+-EXIT=0
+-
+-# 2. Every declaration must be disclosed. `Evil` is disclosed ONLY inside the
+-#    quarantined negative-control file.
+-UNDISCLOSED=""
+-while IFS= read -r decl; do
+-  [ -z "${decl//[[:space:]]/}" ] && continue
+-  file="${decl%%:*}"
+-  rest="${decl#*:}"; line="${rest%%:*}"; name="${rest#*:}"
+-  case "${name}" in
+-    keccak256_pure|sha256_pure_bytes|hmac_sha512_pure_bytes)
+-      continue ;;
+-    Evil)
+-      if [ "${file}" = "${QUARANTINE_FILE}" ]; then
+-        continue
+-      fi
+-      UNDISCLOSED="${UNDISCLOSED}  ${file}:${line}: axiom ${name} (quarantine violation — Evil may exist ONLY in AxiomCheckNegativeControl.lean)"$'\n'
+-      ;;
+-    *)
+-      UNDISCLOSED="${UNDISCLOSED}  ${file}:${line}: axiom ${name}"$'\n'
+-      ;;
+-  esac
+-done <<< "${DECLS}"
+-
+-if [ -n "${UNDISCLOSED}" ]; then
+-  err ""
+-  err "FAIL: undisclosed axiom declaration(s) under extracted/Extracted/:"
+-  printf '%s' "${UNDISCLOSED}" >&2
+-  err ""
+-  err "The §33 closure gate only sees axioms CONSUMED by manifest-listed"
+-  err "headlines; this census pins the inventory itself. Either remove the"
+-  err "declaration, or — if it is a genuine new hash-boundary postulate —"
+-  err "disclose it in lint_extracted_axiom_census.sh AND in"
+-  err "extracted/axiom_closure_manifest.txt with a justification."
+-  EXIT=1
+-fi
+-
+-# 3. Quarantine integrity: the negative-control module must stay UNIMPORTED
+-#    (if it ever entered the build graph, `axiom Evil : False` would be one
+-#    `import` away from every headline — exactly what the quarantine exists
+-#    to prevent).
+-IMPORT_HITS="$(printf '%s\n' "${STRIPPED}" \
+-  | { grep -E '^([^:]+):[0-9]+:[[:space:]]*import[[:space:]]+Extracted\.AxiomCheckNegativeControl' || true; } \
+-  | { grep -v 'AxiomCheckNegativeControl.lean:' || true; })"
+-if [ -n "${IMPORT_HITS//[[:space:]]/}" ]; then
+-  err ""
+-  err "FAIL: the quarantined negative-control module is IMPORTED (quarantine broken):"
+-  printf '%s\n' "${IMPORT_HITS}" | sed 's/^/    /' >&2
+-  err "AxiomCheckNegativeControl.lean must stay outside the build graph."
+-  EXIT=1
+-fi
+-
+-if [ "${EXIT}" -eq 0 ]; then
+-  N="$(printf '%s\n' "${DECLS}" | grep -c .)"
+-  printf '==> [lint_extracted_axiom_census] PASS — %d axiom declaration(s), all disclosed (3 hash postulates + quarantined NegativeControl.Evil)\n' "${N}"
+-fi
+-
+-exit "${EXIT}"
++exec /usr/bin/python3 -E -S "$SCRIPT_DIR/check_axiom_inventory.py" extracted
+diff --git a/contracts/verification/scripts/lint_fv_invariants.sh b/contracts/verification/scripts/lint_fv_invariants.sh
+index 89969cb2..f57900f5 100755
+--- a/contracts/verification/scripts/lint_fv_invariants.sh
++++ b/contracts/verification/scripts/lint_fv_invariants.sh
+@@ -92,6 +92,9 @@ require /usr/bin/python3
+ # (wave-4 Opus 5 HIGH, reviewer-reproduced).  Pin it like the Makefile does.
+ FV_PYTHON3="/usr/bin/python3 -E -S"
+ 
++# F4/#675: reject every undisclosed axiom, even outside headline closures.
++${FV_PYTHON3} "${SCRIPT_DIR}/check_axiom_inventory.py" lean || exit 1
++
+ for d in "${LEAN_DIR}" "${EXTRACTED_DIR}"; do
+   if [ ! -d "$d" ]; then
+     err "source tree missing: $d"
+diff --git a/contracts/verification/scripts/test_axiom_inventory.py b/contracts/verification/scripts/test_axiom_inventory.py
+new file mode 100644
+index 00000000..8681b5ab
+--- /dev/null
++++ b/contracts/verification/scripts/test_axiom_inventory.py
+@@ -0,0 +1,190 @@
++#!/usr/bin/env python3
++"""Regression probes for hidden declarations and proof-hole aliases."""
++import copy
++import json
++from pathlib import Path
++import shutil
++import tempfile
++import unittest
++
++import check_axiom_inventory as census
++from check_verity_holes import check as check_holes
++from lean_source import keyword_count
++
++
++# These are complete, buildable Lean commands, including custom syntax probes.
++COMMENT_AXIOMS = [
++    "/-/- -/ axiom X : False -- -/\n",
++    "/--/ -- -/ axiom X : False\n",
++    "def n : Nat := 0axiom X : False\n",
++    "def c : Char := 'a'axiom X : False\n",
++    'macro "中" : command => `(#check True)\n中axiom X : False\n',
++]
++COMMENT_HOLES = [
++    "/-/- -/ theorem X : False := by sorry -- -/\n",
++    "/--/ -- -/ theorem X : False := by sorry\n",
++    'postfix:max "中" => id\ntheorem X : False := sorry中\n',
++    'syntax:1024 num term:1024 : term\n'
++    'macro_rules | `($n:num $t:term) => `($t)\n'
++    'theorem X : False := 0sorry\n',
++]
++
++
++CUSTOM_AXIOMS = [
++    'macro ":/-" : command => `(#check True)\n:/- axiom X : False -- -/\n',
++    'macro "/--x" : command => `(#check True)\n/--x axiom X : False -- -/\n',
++    'macro ":--" : command => `(#check True)\n:-- axiom X : False\n',
++    'macro ":«" s:str : command => `(#check $s)\n:« "»--" axiom X : False\n',
++    r'macro "x\u002f\u002d" : command => `(#check True)' + "\n" +
++    r'macro "\u002d\u002f" : command => `(#check True)' + "\nx/-axiom X : False -/\n",
++    r'macro "x\u002d\u002d" : command => `(#check True)' + "\nx--axiom X : False\n",
++]
++CUSTOM_HOLES = [
++    'macro ":/-" : command => `(#check True)\n:/- theorem X : False := by sorry -- -/\n',
++    'macro "/--x" : command => `(#check True)\n/--x theorem X : False := by sorry -- -/\n',
++    'macro ":«" s:str : command => `(#check $s)\n:« "»--" theorem X : False := by sorry\n',
++    r'macro "x\u002d\u002d" : command => `(#check True)' + "\nx--theorem X : False := by sorry\n",
++]
++
++class SourceTests(unittest.TestCase):
++    def test_comments_and_strings(self):
++        for prefix in [
++            'import Lean\nopen Lean Parser\ndef p : Parser := leading_parser"\\" -- " ',
++            'example : String := by refine\'"\' -- " ',
++            'def a := s! "{ "--" }" ',
++            'def a := s! /- gap -/ "{ "--" }" ',
++            'def a := s!\n"{ "--" }" ',
++            'def a : String := dbg_trace "{ "--" }"; "" ',
++            'def a := r"\\" def b := "--" ',
++            'def s := "-- /-"\n',
++            'def s := r##"-- /- " quoted"##\n',
++            'def s := s!"{ "-- /-" }"\n',
++            'def «/-» := 1\n',
++            "def c := '\"'\n",
++        ]:
++            self.assertEqual(keyword_count(prefix + "private axiom X : False", "axiom"), 1)
++        # Comments, quoted text and even incomplete syntax are never erased.
++        self.assertEqual(keyword_count("-- admit\n/- sorry /- admit -/ sorry -/", "(?:sorry|admit)"), 4)
++        self.assertEqual(keyword_count('/- axiom /- axiom -/ axiom -/ axiom X : False', "axiom"), 4)
++        self.assertEqual(keyword_count('/- unclosed axiom', "axiom"), 1)
++
++    def test_comment_and_token_boundaries(self):
++        for source in COMMENT_AXIOMS + CUSTOM_AXIOMS:
++            self.assertEqual(keyword_count(source, "axiom"), 1)
++        for source in COMMENT_HOLES + CUSTOM_HOLES:
++            self.assertEqual(keyword_count(source, "(?:sorry|admit|sorryAx|proof_wanted)"), 1)
++        # Deliberate over-counting binds dump modules and cannot hide a keyword.
++        self.assertEqual(keyword_count("#print axioms t", "axiom"), 1)
++
++    def test_source_mutations(self):
++        for project, root in census.PROJECTS.items():
++            original = census.SCRIPTS.parent / project
++            expected = json.loads((census.SCRIPTS / f"axiom_inventory_{project}.json").read_text())["source"]
++            with tempfile.TemporaryDirectory() as temp:
++                target = Path(temp)
++                shutil.copytree(original / root, target / root)
++                shutil.copy2(original / f"{root}.lean", target / f"{root}.lean")
++                self.assertEqual(census.source_inventory(target, root), expected)
++                # New, deliberately unimported modules must also be counted.
++                probe = target / root / "CensusProbe.lean"
++                for extra in COMMENT_AXIOMS + CUSTOM_AXIOMS + [
++                    'import Lean\nopen Lean Parser\ndef p : Parser := leading_parser"\\" -- " axiom X : False\n',
++                    'example : String := by refine\'"\' -- " axiom X : False\n',
++                    'def a := s! "{ "--" }" axiom X : False\n',
++                    'def a := s! /- gap -/ "{ "--" }" axiom X : False\n',
++                    'def a := s!\n"{ "--" }" axiom X : False\n',
++                    'def a : String := dbg_trace "{ "--" }"; "" axiom X : False\n',
++                    'def a := r"\\" def b := "--" private axiom X : False\n',
++                    "private axiom X : False\n",
++                    "namespace Other\naxiom keccak256_pure : False\nend Other\n",
++                    'def s := s!"{ "--" }"\nprivate axiom X : False\n',
++                    "axiom X : True axiom Y : False\n",
++                ]:
++                    probe.write_text(extra)
++                    with self.assertRaises(ValueError):
++                        census.compare(expected, census.source_inventory(target, root), "source")
++                probe.unlink()
++                pinned = target / ("SphincsCVerify/Bridge/Refinement.lean" if project == "lean"
++                                   else "Extracted/SlotKdf/FunsExternal.lean")
++                data = pinned.read_bytes()
++                for changed in [data + b"\nprivate axiom X : False\n", data.replace(b"axiom ", b"private axiom ", 1),
++                                b"namespace Changed\n" + data + b"\nend Changed\n"]:
++                    pinned.write_bytes(changed)
++                    with self.assertRaises(ValueError):
++                        census.compare(expected, census.source_inventory(target, root), "source")
++                pinned.write_bytes(data)
++                # Quarantine imports in the root, including second-on-line imports.
++                rootfile = target / f"{root}.lean"
++                for extra in ["import Extracted.AxiomCheckNegativeControl\n",
++                              "import Lean Extracted.AxiomCheckNegativeControl\n",
++                              "import Extracted.«AxiomCheckNegativeControl»\n",
++                              "/-/- -/ import Extracted.AxiomCheckNegativeControl -- -/\n"]:
++                    rootfile.write_text(extra)
++                    with self.assertRaises(ValueError):
++                        census.source_inventory(target, root)
++
++    def test_elaborated_inventory(self):
++        row = {"name": "Private.X", "module": "Module", "type": "False", "levels": [], "unsafe": False}
++        expected = census.elaborated_inventory([row])
++        for key, value in [("name", "Other.X"), ("module", "OtherModule"), ("type", "True")]:
++            mutant = copy.deepcopy(row)
++            mutant[key] = value
++            with self.assertRaises(ValueError):
++                census.compare(expected, census.elaborated_inventory([mutant]), "elaborated")
++        for rows in [[], [row, row]]:
++            with self.assertRaises(ValueError):
++                census.elaborated_inventory(rows)
++
++    def test_verity_prose_is_not_an_allowance(self):
++        original = census.SCRIPTS.parents[1] / "verity"
++        with tempfile.TemporaryDirectory() as temp:
++            root = Path(temp)
++            shutil.copytree(original / "PQSigner", root / "PQSigner")
++            self.assertEqual(check_holes(root), 12)
++            path = root / "PQSigner/Theorems.lean"
++            data = path.read_bytes()
++            path.write_bytes(data + b"\ntheorem Extra : False := by sorry\n")
++            with self.assertRaises(ValueError):
++                check_holes(root)
++            path.write_bytes(data)
++            # There is no exemption that could turn comments into extra holes.
++            probe = root / "PQSigner/ProseProbe.lean"
++            probe.write_text("-- sorry in prose\n")
++            with self.assertRaises(ValueError):
++                check_holes(root)
++            probe.write_text('def text := "admit"\n')
++            with self.assertRaises(ValueError):
++                check_holes(root)
++
++    def test_verity_aliases(self):
++        with tempfile.TemporaryDirectory() as temp:
++            root = Path(temp)
++            (root / "PQSigner").mkdir()
++            path = root / "PQSigner/Probe.lean"
++            path.write_text("-- ordinary prose\nexample : True := by trivial\n")
++            self.assertEqual(check_holes(root), 0)
++            for code in COMMENT_HOLES + CUSTOM_HOLES + [
++                         'import Lean\nopen Lean Parser\ndef p : Parser := leading_parser"\\" -- " theorem X : False := by admit',
++                         'import Lean\nopen Lean Parser\ndef p : Parser := leading_parser"\\" -- " theorem X : False := by sorry',
++                         'example : String := by refine\'"\' -- " theorem X : False := by admit',
++                         'example : String := by refine\'"\' -- " theorem X : False := by sorry',
++                         'def a := s! "{ "--" }" theorem X : False := by admit',
++                         'def a := s! "{ "--" }" theorem X : False := by sorry',
++                         'def a := s! /- gap -/ "{ "--" }" theorem X : False := by admit',
++                         'def a := s! /- gap -/ "{ "--" }" theorem X : False := by sorry',
++                         'def a := s!\n"{ "--" }" theorem X : False := by admit',
++                         'def a := s!\n"{ "--" }" theorem X : False := by sorry',
++                         'def a : String := dbg_trace "{ "--" }"; "" theorem X : False := by admit',
++                         'def a : String := dbg_trace "{ "--" }"; "" theorem X : False := by sorry',
++                         'def a := r"\\" def b := "--" theorem X : False := by admit',
++                         'def a := r"\\" def b := "--" theorem X : False := by sorry',
++                         "example : False := by admit", "example : False := by sorry",
++                         'example : False := by\n  let s := "--"; admit',
++                         'example : False := by\n  let s := s!"{ "--" }"; admit']:
++                path.write_text(code)
++                with self.assertRaises(ValueError):
++                    check_holes(root)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/contracts/verification/tla/check_tlc.py b/contracts/verification/tla/check_tlc.py
+new file mode 100644
+index 00000000..1009b762
+--- /dev/null
++++ b/contracts/verification/tla/check_tlc.py
+@@ -0,0 +1,165 @@
++#!/usr/bin/env python3
++"""Shared TLC acceptance gate: exact config inventory and completed outcomes.
++
++The validated TLC build returns 0 for success and 12 for invariant violations.
++Other statuses are tool errors, even if an expected banner was already printed.
++"""
++from __future__ import annotations
++
++import argparse
++import hashlib
++import os
++from pathlib import Path
++import re
++import subprocess
++import sys
++import tempfile
++import unittest
++
++HERE = Path(__file__).resolve().parent
++SUITES = {
++    "page123": ("Page123Compaction", [
++        ("sigsfirst_skip", None),
++        ("sigslast_skip", "INV_SIGS_COMPACTION_LOCAL"),
++        ("sigsfirst_mayvalid", "INV_SIGS_COMPACTION_LOCAL"),
++        ("endtoend_sigsfirst_skip", "INV_SIGS_NO_ROLLBACK"),
++        ("partial_erase_sigsfirst", "INV_SIGS_COMPACTION_LOCAL"),
++        ("cnt_sigsfirst_skip", "INV_CNT_NO_ROLLBACK"),
++    ]),
++    "combined": ("CombinedBudget", [
++        ("cb_onchain_cap", None), ("cb_margin_noreset", None),
++        ("cb_margin_reset", "INV_MARGIN_BOUNDED"),
++    ]),
++    "pin": ("PinReconcileDirectional", [
++        ("pin_benign_leads", None), ("pin_alive", "INV_ALIVE_NONVACUOUS"),
++        ("pin_rollback_caught", None), ("pin_leg_bypass", "INV_NO_LEG_BYPASS"),
++        ("pin_dir_nofalsewipe", None), ("pin_sym_falsewipe", "INV_NO_FALSE_WIPE"),
++        ("pin_dir_residual", "INV_CATCHES_RESET"), ("pin_sym_catches", None),
++    ]),
++}
++EXPECTED_CONFIGS = {f"{cfg}.cfg" for _, cases in SUITES.values() for cfg, _ in cases}
++
++
++def check_pins(directory: Path) -> None:
++    pins: dict[str, str] = {}
++    for line in (directory / "cfg_pins.sha256").read_text().splitlines():
++        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_]+\.cfg)", line)
++        if match is None:
++            raise ValueError(f"malformed or noncanonical config pin: {line!r}")
++        digest, name = match.groups()
++        if name in pins:
++            raise ValueError(f"duplicate config pin: {name}")
++        pins[name] = digest
++    actual = {p.name for p in directory.glob("*.cfg")}
++    if pins.keys() != EXPECTED_CONFIGS or actual != EXPECTED_CONFIGS:
++        raise ValueError("config paths must match the exact 17-config suite inventory")
++    for name, digest in pins.items():
++        path = directory / name
++        if path.is_symlink() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
++            raise ValueError(f"config hash drift or symlink: {name}")
++
++
++def check_result(status: int, output: str, invariant: str | None) -> None:
++    lines = output.splitlines()
++    success = [line for line in lines if "No error has been found" in line]
++    violations = [line for line in lines if "is violated" in line]
++    errors = [line for line in lines if line.startswith("Error:")]
++    finished = [line for line in lines if re.fullmatch(r"Finished in .+ at .+", line)]
++    if len(finished) != 1 or not lines or lines[-1] != finished[0]:
++        raise ValueError("TLC did not report exactly one final completion")
++    if invariant is None:
++        if status != 0 or len(success) != 1 or violations or errors:
++            raise ValueError(f"expected completed success; process status {status}")
++    else:
++        expected = f"Error: Invariant {invariant} is violated."
++        if (status != 12 or success or violations != [expected]
++                or errors != [expected, "Error: The behavior up to this point is:"]):
++            raise ValueError(f"expected only {invariant} violation with status 12; got {status}")
++
++
++class GateTests(unittest.TestCase):
++    def test_results(self):
++        done = "Finished in 00s at 2026-09-14 00:00:00\n"
++        good = "Model checking completed. No error has been found.\n" + done
++        bad = ("Error: Invariant INV_TEST is violated.\n"
++               "Error: The behavior up to this point is:\n" + done)
++        check_result(0, good, None)
++        check_result(12, bad, "INV_TEST")
++        for status, output, inv in [
++            (42, good, None), (42, bad, "INV_TEST"), (0, bad, "INV_TEST"),
++            (12, bad, "INV_OTHER"), (0, good + bad, None),
++            (12, good + bad, "INV_TEST"), (0, good + "Error: crash\n", None),
++            (0, good.replace(done, ""), None), (12, bad + bad, "INV_TEST"),
++        ]:
++            with self.subTest(status=status, output=output, invariant=inv):
++                with self.assertRaises(ValueError):
++                    check_result(status, output, inv)
++
++    def test_pins(self):
++        with tempfile.TemporaryDirectory() as temp:
++            directory = Path(temp)
++            for name in EXPECTED_CONFIGS:
++                (directory / name).write_bytes((HERE / name).read_bytes())
++            manifest = (HERE / "cfg_pins.sha256").read_text()
++            pinfile = directory / "cfg_pins.sha256"
++            pinfile.write_text(manifest)
++            check_pins(directory)
++            rows = manifest.splitlines()
++            for corrupt in [
++                "\n".join([rows[0]] + rows[:-1]) + "\n",  # duplicate + omission, same count
++                "\n".join(rows[:-1]) + "\n", manifest + rows[0] + "\n",
++                manifest.replace("  ", "  ./", 1), manifest.replace("  ", "  ../", 1),
++            ]:
++                pinfile.write_text(corrupt)
++                with self.assertRaises(ValueError):
++                    check_pins(directory)
++            pinfile.write_text(manifest)
++            target = directory / "cb_onchain_cap.cfg"
++            target.write_text(target.read_text().replace("INVARIANT INV_ONCHAIN_CAP", ""))
++            with self.assertRaises(ValueError):
++                check_pins(directory)
++
++
++def main() -> int:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("suite", choices=SUITES, nargs="?")
++    parser.add_argument("--self-test", action="store_true")
++    args = parser.parse_args()
++    if args.self_test:
++        result = unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(GateTests))
++        return int(not result.wasSuccessful())
++    if args.suite is None:
++        parser.error("suite is required")
++    try:
++        check_pins(HERE)
++        jar = Path(os.environ.get("TLA2TOOLS", str(Path.home() / "tla2tools.jar")))
++        if not jar.is_file():
++            raise ValueError(f"tla2tools.jar missing: {jar}; set TLA2TOOLS")
++        model, cases = SUITES[args.suite]
++        failed = False
++        # Keep TLC state/trace artifacts out of the source tree.
++        with tempfile.TemporaryDirectory(prefix="pq-tlc-") as temp:
++            for cfg, invariant in cases:
++                run = subprocess.run([
++                    "java", "-cp", str(jar.resolve()), "tlc2.TLC", "-config",
++                    str(HERE / f"{cfg}.cfg"), "-deadlock", "-noGenerateSpecTE",
++                    str(HERE / f"{model}.tla"),
++                ], cwd=temp, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
++                    text=True, timeout=300)
++                output = run.stdout
++                try:
++                    check_result(run.returncode, output, invariant)
++                except ValueError as exc:
++                    failed = True
++                    print(f"  [FAIL] {cfg}: {exc}\n{output}", file=sys.stderr)
++                else:
++                    print(f"  [ok] {cfg}: {invariant or 'HOLD'} (exit {run.returncode})")
++        print("=== MISMATCH ===" if failed else f"=== all {len(cases)} expected outcomes matched ===")
++        return int(failed)
++    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
++        print(f"TLC GATE FAILURE: {exc}", file=sys.stderr)
++        return 2
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/contracts/verification/tla/run.sh b/contracts/verification/tla/run.sh
+index 4c8bd6e3..ba4bcfbb 100755
+--- a/contracts/verification/tla/run.sh
++++ b/contracts/verification/tla/run.sh
+@@ -1,41 +1,5 @@
+ #!/usr/bin/env bash
+-# Run the page-123 compaction crash-atomicity TLC pilot (see README.md).
+-# Needs tla2tools.jar; override its path with TLA2TOOLS=/path/to/tla2tools.jar.
+-set -uo pipefail
++# Shared exact-config / process-result gate (issues #668, F2/F5).
++set -euo pipefail
+ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-JAR="${TLA2TOOLS:-$HOME/tla2tools.jar}"
+-[ -f "$JAR" ] || { echo "tla2tools.jar not found at $JAR — set TLA2TOOLS=... (fetch: https://github.com/tlaplus/tlaplus/releases)"; exit 2; }
+-# #668 (2026-08-20, FV red-team): this harness classifies TLC stdout but used to
+-# pin nothing about the .cfg CONTENT — a Slots/MaxCount shrink or an INVARIANT
+-# deletion stayed green. Every .cfg is now sha256-pinned in cfg_pins.sha256 and
+-# verified BEFORE TLC runs (fail closed on drift, a missing cfg, or an un-pinned
+-# new cfg). Re-pin after a DELIBERATE cfg change:
+-#   (cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)
+-if [ ! -f "$HERE/cfg_pins.sha256" ] || \
+-   [ "$(ls -1 "$HERE"/*.cfg | wc -l)" -ne "$(wc -l < "$HERE/cfg_pins.sha256")" ] || \
+-   ! (cd "$HERE" && sha256sum --check --status cfg_pins.sha256); then
+-  echo "CFG PIN FAILURE — a .cfg drifted from cfg_pins.sha256, is missing, or is un-pinned:"
+-  (cd "$HERE" && sha256sum --check cfg_pins.sha256 2>&1 | grep -v ': OK$') || true
+-  echo "If the change is deliberate: (cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)"
+-  exit 2
+-fi
+-run() {
+-  local cfg="$1" expect="$2"
+-  local out; out=$(java -cp "$JAR" tlc2.TLC -config "$HERE/$cfg.cfg" -deadlock "$HERE/Page123Compaction.tla" 2>&1)
+-  local got
+-  if echo "$out" | grep -q 'No error has been found'; then got="PASS"; else
+-     if echo "$out" | grep -q 'is violated'; then got="VIOLATED"; else got="ERROR"; fi; fi
+-  local mark; [ "$got" = "$expect" ] && mark="ok  " || mark="FAIL"
+-  printf '  [%s] %-26s expect=%-9s got=%s\n' "$mark" "$cfg" "$expect" "$got"
+-  [ "$got" = "$expect" ]
+-}
+-echo "=== page-123 compaction crash-atomicity — TLC pilot ==="
+-rc=0
+-run sigsfirst_skip           PASS     || rc=1   # F3 SIGS-first ordering CONFIRMED (under torn=Skip premise)
+-run sigslast_skip            VIOLATED || rc=1   # negative control: wrong order breaks it (non-vacuity)
+-run sigsfirst_mayvalid       VIOLATED || rc=1   # FINDING 1: no per-entry integrity tag; relies on torn-QW=undecodable HW premise
+-run endtoend_sigsfirst_skip  VIOLATED || rc=1   # FINDING 2: local tally resets on total loss; backstopped by inv-#9 + on-chain cap
+-run partial_erase_sigsfirst   VIOLATED || rc=1   # NON-ATOMIC ERASE: a torn partial erase rolls a registered slot back even under SigsFirst — proves erase-atomicity is load-bearing (the Verus pilot ASSUMES it)
+-run cnt_sigsfirst_skip       VIOLATED || rc=1   # documented SIGS-vs-COUNT asymmetry (non-vacuity)
+-echo; [ $rc = 0 ] && echo "=== all 6 expected outcomes matched ===" || echo "=== MISMATCH — investigate ==="
+-exit $rc
++exec /usr/bin/python3 -I "$HERE/check_tlc.py" page123
+diff --git a/contracts/verification/tla/run_combined.sh b/contracts/verification/tla/run_combined.sh
+index 52548e7d..105008f1 100755
+--- a/contracts/verification/tla/run_combined.sh
++++ b/contracts/verification/tla/run_combined.sh
+@@ -1,34 +1,5 @@
+ #!/usr/bin/env bash
+-# P1.5 combined budget-lifetime composition (closes Finding 2 of the page-123
+-# crash-atomicity pilot). Self-checking; needs tla2tools.jar (TLA2TOOLS=... or $HOME).
+-set -uo pipefail
++# Shared exact-config / process-result gate (issues #668, F2/F5).
++set -euo pipefail
+ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-JAR="${TLA2TOOLS:-$HOME/tla2tools.jar}"
+-[ -f "$JAR" ] || { echo "tla2tools.jar not found ($JAR) — set TLA2TOOLS=..."; exit 2; }
+-# #668 (2026-08-20, FV red-team): this harness classifies TLC stdout but used to
+-# pin nothing about the .cfg CONTENT — a Slots/MaxCount shrink or an INVARIANT
+-# deletion stayed green. Every .cfg is now sha256-pinned in cfg_pins.sha256 and
+-# verified BEFORE TLC runs (fail closed on drift, a missing cfg, or an un-pinned
+-# new cfg). Re-pin after a DELIBERATE cfg change:
+-#   (cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)
+-if [ ! -f "$HERE/cfg_pins.sha256" ] || \
+-   [ "$(ls -1 "$HERE"/*.cfg | wc -l)" -ne "$(wc -l < "$HERE/cfg_pins.sha256")" ] || \
+-   ! (cd "$HERE" && sha256sum --check --status cfg_pins.sha256); then
+-  echo "CFG PIN FAILURE — a .cfg drifted from cfg_pins.sha256, is missing, or is un-pinned:"
+-  (cd "$HERE" && sha256sum --check cfg_pins.sha256 2>&1 | grep -v ': OK$') || true
+-  echo "If the change is deliberate: (cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)"
+-  exit 2
+-fi
+-run() {
+-  local cfg="$1" expect="$2"
+-  local out; out=$(java -cp "$JAR" tlc2.TLC -config "$HERE/$cfg.cfg" -deadlock "$HERE/CombinedBudget.tla" 2>&1)
+-  local got; if echo "$out"|grep -q 'No error has been found'; then got=HOLD; elif echo "$out"|grep -q 'is violated'; then got=VIOLATED; else got=ERROR; fi
+-  local mark; [ "$got" = "$expect" ] && mark="ok  " || mark="FAIL"
+-  printf '  [%s] %-20s expect=%-9s got=%s\n' "$mark" "$cfg" "$expect" "$got"; [ "$got" = "$expect" ]
+-}
+-echo "=== P1.5 combined budget-lifetime composition ==="
+-rc=0
+-run cb_onchain_cap     HOLD     || rc=1   # on-chain cap = backstop, holds across torn resets
+-run cb_margin_noreset  HOLD     || rc=1   # NEGATIVE CONTROL: no reset => slot-key margin bounded
+-run cb_margin_reset    VIOLATED || rc=1   # residual: a torn reset erodes the view-only few-time margin
+-echo; [ $rc = 0 ] && echo "=== all 3 expected outcomes matched ===" || echo "=== MISMATCH ==="; exit $rc
++exec /usr/bin/python3 -I "$HERE/check_tlc.py" combined
+diff --git a/contracts/verification/tla/run_pin.sh b/contracts/verification/tla/run_pin.sh
+index bd52c663..3fec51e7 100755
+--- a/contracts/verification/tla/run_pin.sh
++++ b/contracts/verification/tla/run_pin.sh
+@@ -1,44 +1,5 @@
+ #!/usr/bin/env bash
+-# P1.6 directional PIN-rollback reconcile — faithful model of the DEPLOYED
+-# `reconcile_pin_attempts` (secure/src/nsc/mod.rs), replacing the overstating
+-# symmetric tamarin model (pin_lockstep.spthy, finding PM-1).
+-# Self-checking; needs tla2tools.jar (TLA2TOOLS=... or $HOME/tla2tools.jar).
+-set -uo pipefail
++# Shared exact-config / process-result gate (issues #668, F2/F5).
++set -euo pipefail
+ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-JAR="${TLA2TOOLS:-$HOME/tla2tools.jar}"
+-[ -f "$JAR" ] || { echo "tla2tools.jar not found ($JAR) — set TLA2TOOLS=..."; exit 2; }
+-# #668 (2026-08-20, FV red-team): this harness classifies TLC stdout but used to
+-# pin nothing about the .cfg CONTENT — a Slots/MaxCount shrink or an INVARIANT
+-# deletion stayed green. Every .cfg is now sha256-pinned in cfg_pins.sha256 and
+-# verified BEFORE TLC runs (fail closed on drift, a missing cfg, or an un-pinned
+-# new cfg). Re-pin after a DELIBERATE cfg change:
+-#   (cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)
+-if [ ! -f "$HERE/cfg_pins.sha256" ] || \
+-   [ "$(ls -1 "$HERE"/*.cfg | wc -l)" -ne "$(wc -l < "$HERE/cfg_pins.sha256")" ] || \
+-   ! (cd "$HERE" && sha256sum --check --status cfg_pins.sha256); then
+-  echo "CFG PIN FAILURE — a .cfg drifted from cfg_pins.sha256, is missing, or is un-pinned:"
+-  (cd "$HERE" && sha256sum --check cfg_pins.sha256 2>&1 | grep -v ': OK$') || true
+-  echo "If the change is deliberate: (cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)"
+-  exit 2
+-fi
+-run() {
+-  local cfg="$1" expect="$2"
+-  local out; out=$(java -cp "$JAR" tlc2.TLC -config "$HERE/$cfg.cfg" -deadlock "$HERE/PinReconcileDirectional.tla" 2>&1)
+-  local got; if echo "$out"|grep -q 'No error has been found'; then got=HOLD; elif echo "$out"|grep -q 'is violated'; then got=VIOLATED; else got=ERROR; fi
+-  local mark; [ "$got" = "$expect" ] && mark="ok  " || mark="FAIL"
+-  printf '  [%s] %-22s expect=%-9s got=%s\n' "$mark" "$cfg" "$expect" "$got"; [ "$got" = "$expect" ]
+-}
+-echo "=== P1.6 directional PIN-rollback reconcile (deployed) ==="
+-rc=0
+-echo "-- sanity / anti-vacuity (honest-only) --"
+-run pin_benign_leads    HOLD     || rc=1   # honest two-phase play keeps mcu >= se (derives the benign invariant)
+-run pin_alive           VIOLATED || rc=1   # anti-vacuity: a surviving honest boot IS reachable (not always-wipe)
+-echo "-- deployed positive guarantee + residual #2 --"
+-run pin_rollback_caught HOLD     || rc=1   # se>mcu (page-124 rollback) with leg up => WIPE (what reconcile is FOR)
+-run pin_leg_bypass      VIOLATED || rc=1   # residual #2: glitch the leg down => a real rollback goes undetected
+-echo "-- THE CROSSING (directional vs symmetric negative control) --"
+-run pin_dir_nofalsewipe HOLD     || rc=1   # directional never false-wipes the mcu==se+1 power-cut state ...
+-run pin_sym_falsewipe   VIOLATED || rc=1   # ... but symmetric DOES false-wipe it  (availability cost)
+-run pin_dir_residual    VIOLATED || rc=1   # directional does NOT catch an SE-silicon reset (the residual) ...
+-run pin_sym_catches     HOLD     || rc=1   # ... but symmetric DOES catch it        (detection benefit)
+-echo; [ $rc = 0 ] && echo "=== all 8 expected outcomes matched ===" || echo "=== MISMATCH ==="; exit $rc
++exec /usr/bin/python3 -I "$HERE/check_tlc.py" pin
+diff --git a/contracts/verity/Makefile b/contracts/verity/Makefile
+index 33eefbe5..75336493 100644
+--- a/contracts/verity/Makefile
++++ b/contracts/verity/Makefile
+@@ -55,29 +55,8 @@ clean:
+ # PASS (12 live sorries once passed this gate); `sorry$` also misses
+ # trailing-comment sites (`:= sorry  -- note`, e.g. Theorems.lean:297),
+ # and a bare word-grep would count comment prose (Theorems.lean:9,16).
+-# The awk below counts whole-word `sorry` OUTSIDE comments (`--` line and
+-# nested `/- ... -/` block comments stripped), aggregated per file.
+-# Gate semantics: FAIL if any file exceeds its baseline (covers both
+-# "total increased" and "a new file gained a sorry"); print the live count.
++# Every raw sorry/admit mention counts, including comments and strings. Source
++# prose uses other wording to avoid false positives. There are no comment
++# allowances or lexical guesses. Per-file budgets include unbuilt Part A.
+ ci: build
+-	@echo "==> sorry ratchet: baseline 12 (Theorems.lean 11 + Verifier/Merkle.lean 1), census 2026-08-20"
+-	@fail=0; total=0; \
+-	for f in $(LEAN_FILES); do \
+-		n=$$(awk 'BEGIN{depth=0;count=0}{out="";i=1;nc=length($$0);while(i<=nc){two=substr($$0,i,2);if(depth>0){if(two=="/-"){depth++;i+=2}else if(two=="-/"){depth--;i+=2}else{i++}}else{if(two=="/-"){depth++;i+=2}else if(two=="--"){break}else{out=out substr($$0,i,1);i++}}}m=split(out,tok,/[^A-Za-z0-9_]+/);for(j=1;j<=m;j++)if(tok[j]=="sorry")count++}END{print count+0}' "$$f"); \
+-		total=$$((total + n)); \
+-		base=0; \
+-		case "$$f" in \
+-			PQSigner/Theorems.lean) base=11 ;; \
+-			PQSigner/Verifier/Merkle.lean) base=1 ;; \
+-		esac; \
+-		if [ "$$n" -gt "$$base" ]; then \
+-			echo "FAIL: $$f has $$n sorry sites (baseline $$base)"; \
+-			fail=1; \
+-		fi; \
+-	done; \
+-	echo "live census: $$total sorry sites (baseline 12)"; \
+-	if [ "$$fail" -ne 0 ]; then \
+-		echo "FAIL: sorry ratchet tripped — census grew or a new file gained a sorry (issue #673)"; \
+-		exit 1; \
+-	fi; \
+-	echo "PASS: sorry ratchet satisfied ($$total live, baseline 12)"
++	@/usr/bin/python3 -E -S ../verification/scripts/check_verity_holes.py
+diff --git a/contracts/verity/PQSigner/Theorems.lean b/contracts/verity/PQSigner/Theorems.lean
+index 4e15a420..6ec90849 100644
+--- a/contracts/verity/PQSigner/Theorems.lean
++++ b/contracts/verity/PQSigner/Theorems.lean
+@@ -6,14 +6,14 @@ The 13 invariant theorems specified in the plan. Numbering matches
+ §"Step 1" / "Step 2" / "Step 4".
+ 
+ **Proof status (initial skeleton)**: every theorem statement is final
+-and matches the Solidity spec. Proofs are `sorry`-stubbed where they
++and matches the Solidity spec. Proofs are unfinished where they
+ depend on Verity primitives the Step 0 spike must validate (P1
+ namespaced storage, P2 ABI decode, P3 extCall frame). Proofs marked
+ **provable now** below should close by `rfl` / `decide` / direct
+ induction over the writers in `PQMultiOwnable.lean`.
+ 
+ Run `lake build` to see which proofs Lean accepts; the gap between
+-"final" and "by sorry" is the remaining work.
++"final" and unfinished proof bodies are the remaining work.
+ -/
+ 
+ import PQSigner.PQMultiOwnable
+diff --git a/contracts/verity/PQSigner/Verifier/Hypertree.lean b/contracts/verity/PQSigner/Verifier/Hypertree.lean
+index b88f314a..706e6b14 100644
+--- a/contracts/verity/PQSigner/Verifier/Hypertree.lean
++++ b/contracts/verity/PQSigner/Verifier/Hypertree.lean
+@@ -12,7 +12,7 @@
+   2026-08-11 was a vacuous `axiom … : True` (deleted; see below) — that
+   requires inducting over Rust semantics, which Lean cannot do
+   without either FFI or a verified Rust-to-Lean bridge. The
+-  obligation is NOT stated in Lean at all (it was never a `sorry` either —
++  obligation is NOT stated in Lean at all (it never had an unfinished proof body either —
+   that wording was wrong); it is witnessed only EMPIRICALLY by the multi-vector
+   KAT diff harness at `contracts/smart-wallet/test/c10_test_vectors.json`,
+   which is a test, not a proof.
+diff --git a/contracts/verity/PQSigner/Verifier/Top.lean b/contracts/verity/PQSigner/Verifier/Top.lean
+index c9efb77e..2bfa6d56 100644
+--- a/contracts/verity/PQSigner/Verifier/Top.lean
++++ b/contracts/verity/PQSigner/Verifier/Top.lean
+@@ -166,7 +166,7 @@ theorem hmsg_domain_separator_matches_yul :
+         target_sum_lt_max, target_sum_enforced,
+         chain_iterates_w_minus_1_minus_digit_steps,
+         accepted_digit_sum_eq_205)
+-      - Merkle: 3 closed + 1 sorry (yul_swap_selector_in_known_set is
++      - Merkle: 3 closed + 1 open proof (yul_swap_selector_in_known_set is
+         documented + non-essential; the load-bearing
+         branchless_swap_equivalent_to_branching_swap closes by rfl)
+       - Fors: 9 closed (fors_indices_length_eq_K,
+@@ -196,9 +196,9 @@ theorem hmsg_domain_separator_matches_yul :
+     (PQSmartWalletFactory.lean:65) — a content-bearing CREATE2
+     address-prediction claim over Solady `LibClone`, inventoried in
+     contracts/verity/TRUST_ASSUMPTIONS.md item 4. Sorry count 1 → 12: the
+-    Merkle.lean site above plus 11 `sorry`-stubbed bodies in
++    Merkle.lean site above plus 11 unfinished bodies in
+     PQSigner/Theorems.lean (wallet-side, outside the `Verifier.*` tree this
+-    tally otherwise covers); the old zero-sorry CI gate silently passed all
++    tally otherwise covers); the old zero-hole CI gate silently passed all
+     12 (fail-open `grep -c` over multiple files) and is now a pinned-ratchet
+     gate in contracts/verity/Makefile (`make -C contracts/verity ci`).
+     EARLIER CORRECTION 2026-08-11 — the "axioms" are NOT the two Lean↔Rust
+diff --git a/scripts/check_protocol_models.py b/scripts/check_protocol_models.py
+index abc26754..38be0a30 100644
+--- a/scripts/check_protocol_models.py
++++ b/scripts/check_protocol_models.py
+@@ -307,9 +307,16 @@ def parse_cryptoverif(output: str) -> dict[str, bool]:
+     `RESULT Could not prove …` lines (#666). The bare `All queries proved`
+     banner stays green when a query is DELETED; the identity dict does not."""
+     identity: dict[str, bool] = {}
+-    for m in re.finditer(r"^RESULT (Proved|Could not prove) (.+?)\.?\s*$",
+-                         output, re.MULTILINE):
+-        identity[m.group(2)] = m.group(1) == "Proved"
++    for line in output.splitlines():
++        if not re.match(r"\s*RESULT\b", line):
++            continue
++        m = re.fullmatch(r"RESULT (Proved|Could not prove) (\S(?:.*\S)?)\.?", line)
++        if m is None:
++            raise HarnessError(f"malformed CryptoVerif RESULT line: {line!r}")
++        query = m.group(2).removesuffix(".")
++        if query in identity:
++            raise HarnessError(f"duplicate CryptoVerif RESULT for {query!r}")
++        identity[query] = m.group(1) == "Proved"
+     return identity
+ 
+ 
+@@ -562,6 +569,24 @@ def self_test() -> int:
+     cv_flipped = "RESULT Could not prove secrecy of seed\n"
+     expect_fire("cryptoverif query unproved", diff_identity(cv, cvbase, parse_cryptoverif(cv_flipped)))
+ 
++    for label, corrupt in [
++        ("failure then success", cv_flipped + cv_clean),
++        ("success then failure", cv_clean + cv_flipped),
++        ("duplicate success", cv_clean + cv_clean),
++        ("punctuation duplicate", cv_clean + "RESULT Proved secrecy of seed.\n"),
++        ("malformed result", cv_clean + "RESULT Unknown secrecy of seed\n"),
++        ("empty result", cv_clean + "RESULT Proved \n"),
++        ("indented result", cv_clean + " RESULT Proved secrecy of seed\n"),
++    ]:
++        try:
++            parse_cryptoverif(corrupt)
++        except HarnessError as exc:
++            expect_fire(f"cryptoverif {label}", [str(exc)])
++        else:
++            expect_fire(f"cryptoverif {label}", [])
++    expect_fire("cryptoverif unexpected query", diff_identity(
++        cv, cvbase, parse_cryptoverif(cv_clean + "RESULT Proved secrecy of other\n")))
++
+     print("=== self-test PASS ===" if ok else "=== self-test FAILED ===")
+     return 0 if ok else 1
+ 

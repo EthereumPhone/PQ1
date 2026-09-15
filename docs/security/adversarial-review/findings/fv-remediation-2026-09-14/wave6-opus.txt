@@ -1,0 +1,38 @@
+VERDICT: GO
+TARGET: b616e22d11ef0aa3689bc574a96fe24b7d63cca7 / ef385c4516afcc67429bb71ee124a9c767b153b0
+FINDINGS: none
+GAPS: I did not rerun Lean builds, unittest or `make` gates (read-only review); `by stop` (Lean 4.22 `Init/Tactics.lean:1144`) and `mkSorry`-style constructors create holes with no raw substring, but that pre-dates this diff and is outside the stated raw-mention contract.
+
+Checks behind the verdict:
+
+1. **Counter (`lean_source.py`).** `keyword_count` is now just `re.finditer` over the source. It removes no comments, guesses no word boundaries and has no scanner budget. None of the patterns can overlap each other, so the non-overlapping count is exact. `sorryAx` is still counted once, through `sorry`. Nothing else uses the removed `without_comments`, `MAX_STATES` or `MAX_STACK`; the only other hit was the test file, which the diff updates.
+
+2. **Quarantine (`check_axiom_inventory.py:54`).** Any file other than the control module that contains `AxiomCheckNegativeControl` is now rejected outright. In the tree, only the control module itself mentions that name. Bad UTF-8 raises `UnicodeDecodeError`, which is a `ValueError`, so both gates still fail closed.
+
+3. **Source pins.** I recomputed `source_inventory` with `python3 -B` (no build, nothing written):
+   - Both projects match their JSON exactly: 26 lean and 39 extracted modules.
+   - Both elaborated sections are byte-identical to the parent commit (27 rows each).
+   - The seven modules that were already pinned keep their sha256; only their mention counts went up.
+   - The diff changes no file under `lean/` or `extracted/`.
+   - I listed every mention in the new or re-counted modules that isn't a `--` line or `#print axioms`. They are all prose inside doc comments. Every real `axiom` declaration is in a module that was already pinned and is unchanged. No new source axiom is admitted.
+
+4. **Verity.**
+   - Raw counts are Theorems.lean 11 and Merkle.lean 1, with nothing elsewhere under `PQSigner/`.
+   - The 11 are real hole sites at lines 51–301, including the `def Reachable := sorry` at line 297; Merkle's one is at line 138. So prose grants no extra budget.
+   - The budget table `BASELINE` and the `count > baseline` check are unchanged. `total` is now added after the check, which doesn't change the outcome.
+   - All six rewordings sit inside `/-! … -/` doc comments: Theorems 1–17, Hypertree 1–19, and Top from 148 to the closing `-/`. No statement or proof body is touched, and the meaning is kept ("1 open proof", "unfinished bodies", "zero-hole gate").
+   - Remaining prose ("Sorry count", "sorries") doesn't match the case-sensitive patterns.
+   - The `Makefile` comment line references (`Theorems.lean:9,16`) and the verification `Makefile:1749` "Comment-stripped" note are now stale. That's documentation only, not a blocker.
+
+5. **Callers and gate wiring.**
+   - `lint_axioms.sh:41`, `lint_fv_invariants.sh:96` and `lint_extracted_axiom_census.sh:5` still call the checker, and nothing hashes the changed scripts.
+   - `verify-fv-lints` (line 357) and `verify-extracted` (line 1752) still run `test_axiom_inventory.py`.
+   - `verify-extracted` keeps its `declaration uses` build check, its exact closure manifest and both negative controls.
+   - Verity `ci: build` is unchanged, the heavy lib split in both lakefiles is unchanged, and no auto-update path exists.
+   - Nothing parses the old "live holes" output string.
+
+6. **Tests.** The new cases feed the custom-token tricks (lookalike comment/string delimiters) to both gates, check a pinned module that holds a real axiom, and include a Verity check that prose or string mentions can't add to the hole budget. The removed budget and malformed-input tests only covered code that no longer exists.
+
+7. **Outside the scanned folders.** The root executables in `lean/` contain no mentions. `extracted/lakefile.lean` has one `axiom` mention, but lakefiles were never part of the root-and-subtree scope. This was the same before the change.
+
+The working tree was still clean after all commands.

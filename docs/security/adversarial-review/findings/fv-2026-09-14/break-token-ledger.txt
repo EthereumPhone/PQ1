@@ -1,0 +1,5 @@
+=== verify-ledger-consistency (advertised AXIOM_STATUS.json vs live Lean truth) ===
+  closures tracked: 18 | axioms documented: 16 | signature pins: 5 | witnesses: 5
+  NOTE: live source is `#print axioms` (under-reports in lean v4.22.0); verify-lean4checker is NOT a completeness backstop: it replays the SAME version-matched C++ kernel and cannot see the #8840 omission shape (corrected 2026-08-11; see run_lean4checker.sh:28-33). The allowlist backstop is TRACKED AND NOT IMPLEMENTED.
+
+OK: every advertised closure, exact full-ledger/row/artifact schema and value, count, status/method tally, and headline-statement pin matches the live Lean truth.

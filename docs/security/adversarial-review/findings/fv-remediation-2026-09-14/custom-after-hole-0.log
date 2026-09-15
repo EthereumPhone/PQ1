@@ -1,0 +1,12 @@
+make: Entering directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verity'
+lake build
+⚠ [6/10] Replayed PQSigner.Verifier.Merkle
+warning: PQSigner/Verifier/Merkle.lean:130:8: declaration uses 'sorry'
+✔ [8/10] Built PQSigner.Verifier.Hypertree
+⚠ [9/10] Built PQSigner.Verifier.Top
+info: PQSigner/Verifier/Top.lean:213:0: True : Prop
+warning: PQSigner/Verifier/Top.lean:213:12: declaration uses 'sorry'
+Build completed successfully.
+VERITY HOLE FAILURE: PQSigner/Verifier/Top.lean: 1 raw proof-hole mentions exceed baseline 0
+make: *** [Makefile:62: ci] Error 1
+make: Leaving directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verity'

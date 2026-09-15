@@ -1,0 +1,5 @@
+VERDICT: FIX
+TARGET: 98446edc2b37cc5874f54cfe1091264ddc44eb3f / 01e56934a227bf3969e35c46b3e7b6f19fd5c39e
+FINDINGS:
+- BLOCKER contracts/verification/scripts/lean_source.py:121 — Python `\w` does not model Lean token boundaries, so valid adjacent tokens suppress genuine keywords before scanning; `中axiom X : False` after a `中` command macro elaborates under both pinned Lean versions while `keyword_count(..., "axiom") == 0`, letting an unimported module evade both source and default elaborated inventories, and `example : False := 0sorry` under a valid `num term` macro elaborates with “declaration uses sorry” while the hole census returns zero, bypassing Verity CI; replace the symmetric `\w` lookarounds with conservative Lean-aware asymmetric boundaries or count every surviving substring, and add both probes as regressions.
+GAPS: none

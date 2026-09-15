@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 1fb541057aa0244e8a6ce526de6e35fd16de0b2a / ba33e1143822f0bf36676539b723e8d14a668077
+FINDINGS: none
+GAPS: Source-read commands could not execute because bwrap lacked permission to create a namespace.

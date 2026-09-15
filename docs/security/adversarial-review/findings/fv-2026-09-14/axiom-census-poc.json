@@ -1,0 +1,23 @@
+[
+  {
+    "variant": "plain-control",
+    "lean_rc": 0,
+    "lean_output": "'CensusBypass.allClaims' depends on axioms: [CensusBypass.UndisclosedFalse]\n",
+    "census_rc": 1,
+    "census_output": "lint_extracted_axiom_census.sh: \nlint_extracted_axiom_census.sh: FAIL: undisclosed axiom declaration(s) under extracted/Extracted/:\n  /tmp/pq-fv-review-20260914-gx635_x9/axiom-poc/contracts/verification/extracted/Extracted/CensusBypass.lean:2: axiom UndisclosedFalse\nlint_extracted_axiom_census.sh: \nlint_extracted_axiom_census.sh: The \u00a733 closure gate only sees axioms CONSUMED by manifest-listed\nlint_extracted_axiom_census.sh: headlines; this census pins the inventory itself. Either remove the\nlint_extracted_axiom_census.sh: declaration, or \u2014 if it is a genuine new hash-boundary postulate \u2014\nlint_extracted_axiom_census.sh: disclose it in lint_extracted_axiom_census.sh AND in\nlint_extracted_axiom_census.sh: extracted/axiom_closure_manifest.txt with a justification.\n"
+  },
+  {
+    "variant": "private-axiom",
+    "lean_rc": 0,
+    "lean_output": "'CensusBypass.allClaims' depends on axioms: [_private._stdin.0.CensusBypass.UndisclosedFalse]\n",
+    "census_rc": 0,
+    "census_output": "==> [lint_extracted_axiom_census] PASS \u2014 4 axiom declaration(s), all disclosed (3 hash postulates + quarantined NegativeControl.Evil)\n"
+  },
+  {
+    "variant": "allowed-short-name",
+    "lean_rc": 0,
+    "lean_output": "'CensusBypass.allClaims' depends on axioms: [CensusBypass.keccak256_pure]\n",
+    "census_rc": 0,
+    "census_output": "==> [lint_extracted_axiom_census] PASS \u2014 5 axiom declaration(s), all disclosed (3 hash postulates + quarantined NegativeControl.Evil)\n"
+  }
+]

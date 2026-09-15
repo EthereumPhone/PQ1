@@ -27,7 +27,8 @@ The split is deliberate:
     it ourselves.
 
 The headline `theft_free` composes all of the above:
-  * `Bridge.EntryPoint.entrypoint_honest` (A2) — a wallet-balance
+  * `Bridge.EntryPoint.entrypoint_honest` (A2 — PROVED kernel-only
+    2026-08-20, formerly an axiom) — a wallet-balance
     decrement implies `validateSignature` returned success.
   * `Wallet.Invariants.validateSignature_only_via_verify` (I-1) — a
     successful validate implies the deployed verifier accepted.
@@ -248,7 +249,8 @@ signature valid under an installed owner key over the canonical
 firmware-compatible signing).
 
 The proof composes:
-  - A2 (`entrypoint_honest`): balance decrement → validateSignature
+  - A2 (`entrypoint_honest`, a kernel-only theorem since 2026-08-20):
+    balance decrement → validateSignature
     returned `(Result.success, _)`.
   - I-1 (`validateSignature_only_via_verify`): a successful validate
     implies the verifier function accepted.
@@ -275,7 +277,8 @@ open SphincsCVerify.Crypto
     `op.signature`, under an installed owner key, over the canonical
     `sphincsDigest(op)`.
 
-    Modulo A1–A5 (the listed axioms). -/
+    Modulo A1, A3.1, A4, A5 (the listed axioms; A2 `entrypoint_honest`
+    is a proved kernel-only theorem since 2026-08-20, not an axiom). -/
 theorem theft_free
     (op : UserOperation)
     (σ σ' : Bridge.EntryPoint.State)
@@ -334,9 +337,13 @@ theorem theft_free
     -- bindings are NOT consumed by the safety argument — deleting them (axioms
     -- retained) leaves `theft_free` proven, and the proof closes via
     -- `rw [hbridge]; exact hverify` (A3.1 + the EUF-CMA conjunct). So
-    -- `theft_free`'s genuine SEMANTIC premises are A2 (entrypoint_honest) +
-    -- A3.1 (solidityVerifier_compiles_correctly) + A5 (EUF-CMA ×4) + the kernel
-    -- triple — NINE axioms; A4/A1 are real-world TCB surfaced here for
+    -- `theft_free`'s genuine SEMANTIC premises are A3.1
+    -- (solidityVerifier_compiles_correctly) + A5 (EUF-CMA ×4) + the kernel
+    -- triple — EIGHT axioms since 2026-08-20 (A2 `entrypoint_honest` was
+    -- PROVED kernel-only that day — it follows from the `handleOp`
+    -- definition — so it no longer appears in any `#print axioms`
+    -- closure; before the demotion the count was NINE);
+    -- A4/A1 are real-world TCB surfaced here for
     -- completeness, not logical content of the model theorem. (The earlier
     -- "A4 is now LOAD-BEARING" wording was an over-claim; A4's content-bearing
     -- *type* genuinely names the assumption, but it is still a non-consumed

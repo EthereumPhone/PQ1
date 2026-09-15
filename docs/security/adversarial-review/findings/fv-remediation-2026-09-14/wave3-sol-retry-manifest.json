@@ -1,0 +1,134 @@
+{
+  "base": "88818c79d83e8f73177d43c8edbc6393ce1e1ad2",
+  "created_at": "2026-09-14T16:15:10.808795+00:00",
+  "executables": {
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-fv-fixes-20260914-iddnxo7n/conservative-target"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.0,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": true,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    }
+  },
+  "prompt_source": {
+    "path": "/tmp/pq-fv-fixes-20260914-iddnxo7n/prompt-conservative.txt",
+    "sha256": "ff913106e959fb58ef87e57df38d0b31639f3fac8c334c2227da48d2070c5824"
+  },
+  "reviewers": {
+    "codex": {
+      "artifact_bytes": 588875,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/conservative-target",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/conservative-target",
+        "--chdir",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/conservative-target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--enable",
+        "use_legacy_landlock",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/conservative-target",
+        "-o",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry3/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 399.554,
+      "ended_at": "2026-09-14T16:15:10.589779+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "ff913106e959fb58ef87e57df38d0b31639f3fac8c334c2227da48d2070c5824",
+        "report_sha256": "f2d906754ad0d4ed973b30371d0e3243048599c0a839c410554131c63a64ecce",
+        "runtime_sha256": "b55559d02e2b242f18595482f90106d8333f542aa3a285586f23c7fba8c33434",
+        "stderr_sha256": "3c3d017f62f385f828da87792dcf1232cd4c93409f63eb33cf1d7ea030855aa1"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry3/codex",
+        "prompt": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry3/codex/prompt.txt",
+        "report": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry3/codex/report.txt",
+        "stderr": "/tmp/pq-fv-fixes-20260914-iddnxo7n/codex-retry3/codex/stderr.txt"
+      },
+      "report_words": 108,
+      "started_at": "2026-09-14T16:08:31.035633+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "implementation",
+  "surface": "FV-remediation",
+  "target": {
+    "commit_after": "98446edc2b37cc5874f54cfe1091264ddc44eb3f",
+    "commit_before": "98446edc2b37cc5874f54cfe1091264ddc44eb3f",
+    "drift": false,
+    "path": "/tmp/pq-fv-fixes-20260914-iddnxo7n/conservative-target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "01e56934a227bf3969e35c46b3e7b6f19fd5c39e",
+    "tree_before": "01e56934a227bf3969e35c46b3e7b6f19fd5c39e"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "codex": "codex-cli 0.146.0"
+    }
+  },
+  "wave_started_at": "2026-09-14T16:08:31.035557+00:00"
+}

@@ -1,0 +1,11 @@
+VERDICT: GO
+TARGET: b616e22d11ef0aa3689bc574a96fe24b7d63cca7 / ef385c4516afcc67429bb71ee124a9c767b153b0
+FINDINGS: none
+GAPS: none
+
+Verification performed source-first (read-only; HEAD == target, clean tree):
+
+- Raw census: `contracts/verification/scripts/lean_source.py:13` — `keyword_count` is a single `re.finditer` pass over the raw decoded source; the entire 133-line comment/string/interpolation scanner is deleted, so no lexical erasure or boundary guessing remains. Unittests confirm comment-, string-, custom-macro-token-, and unclosed-syntax probes all count (`/- unclosed axiom` → 1; `-- admit\n/- sorry …` → 4).
+- Source pins: I re-ran the `source_inventory` logic read-only against the live tree for both projects — byte-exact match with the JSONs (26 lean / 39 extracted pins, both roots and unbuilt modules included; quarantine module pinned at 10 raw mentions). No non-quarantine file contains the raw `AxiomCheckNegativeControl` substring; `check_axiom_inventory.py:54` now rejects any raw occurrence. Both elaborated inventories are byte-identical across the commit range (sha256 of canonical JSON equal, 27 rows each), so the added prose/string pins grant no new source axiom. `compare` stays exact dict equality; argparse exposes no update mode — re-pins require a reviewed edit.
+- Verity: live `check()` returns 12 = `Theorems.lean` 11 + `Verifier/Merkle.lean` 1, zero in every other file; `BASELINE` unchanged. The six rewordings (Theorems ×2, Hypertree ×1, Top ×3) touch only doc-comment lines — the diff shows no proof statement/body changes; residual capital-“Sorry” prose does not match the lowercase census. `Makefile` `ci: build` target is unchanged (comment-only edit); per-file 11+1 budget with zero elsewhere and no comment allowance holds.
+- Preservation: only the ten files changed; `lake build` + `dump_axiom_inventory.lean` elaborated flow, env scrubbing, timeouts, and default/heavy split untouched; the counter is a linear fixed-pattern scan. All six unittest groups pass against the live tree, including retained quarantine-import, mutation, alias, and prose-is-not-an-allowance controls.

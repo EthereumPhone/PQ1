@@ -1,0 +1,25 @@
+You are one independent reviewer in an owner-authorized defensive code review. Do not launch agents or other models.
+Review PQSigner OS for implementation acceptance of this bounded FV remediation.
+Target: /tmp/pq-fv-fixes-20260914-iddnxo7n/target
+Commit: eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e
+Tree: 8120c3bd802ed6106f5f3926e1efdc11952c6f32
+Compare: aab89656690cf4b15a543b21e58a3ad4f918ec16..eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e
+Focus only on FV evidence acceptance in this diff:
+1. Exact source and elaborated axiom inventories must reject additional/private/namespaced axioms, changed types or origins, and imports of the extracted negative-control module. Preserve the default/heavy proof build split and existing closure checks.
+2. TLC must require the unique complete pinned configuration set and completed expected process/result outcomes, including intentional invariant violations. Duplicates, omissions, abnormal exits and contradictory results must fail.
+3. CryptoVerif must reject missing, duplicate, conflicting, malformed or unexpected query results.
+4. The proof-mutation definition pin must match the reviewed existing 13 definitions, selecting the unchanged eight default controls.
+5. Verity's per-file proof-hole budget must cover sorry/admit, including unbuilt scaffold files, without increasing the existing 12-hole budget.
+6. A2 assurance prose must distinguish the proved in-model theorem from the external deployment-faithfulness assumption.
+
+Evidence already green: Both Lean default builds and exact inventories; full verify-extracted closure/negative controls; FV lints, placeholder lint and authoritative same-UID sudo/env-i ledger gate; eight default proof mutations; all 17 real TLC outcomes; CryptoVerif live and parser self-test; Verity ci (existing 12 holes); 62-gate enforcement. Coordinator probes reject private axioms, an unconditional BreaksHash axiom, a generated axiom without an axiom keyword, new admit proofs, duplicate/omitted config pins and real TLC output forced to exit 42.
+Non-goals: new proofs, independent kernel checking, full heavy extracted proof rebuild, Verity production integration, firmware/hardware/deployment changes, broader assurance campaigns.
+
+Inspect the diff and affected callers source-first for concrete blockers. Keep the target immutable and use read-only commands. No hardware, external writes, prior reports, status prose, playbook catalogs or follow-up model turns. Ignore style and optional hardening. You have 15 minutes and 800 words; use your configured deepest reasoning.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e / 8120c3bd802ed6106f5f3926e1efdc11952c6f32
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+Use at most three findings. FIX requires an anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.

@@ -12,7 +12,7 @@
   2026-08-11 was a vacuous `axiom … : True` (deleted; see below) — that
   requires inducting over Rust semantics, which Lean cannot do
   without either FFI or a verified Rust-to-Lean bridge. The
-  obligation is NOT stated in Lean at all (it was never a `sorry` either —
+  obligation is NOT stated in Lean at all (it never had an unfinished proof body either —
   that wording was wrong); it is witnessed only EMPIRICALLY by the multi-vector
   KAT diff harness at `contracts/smart-wallet/test/c10_test_vectors.json`,
   which is a test, not a proof.

@@ -1,0 +1,32 @@
+VERDICT: GO
+TARGET: b616e22d11ef0aa3689bc574a96fe24b7d63cca7 / ef385c4516afcc67429bb71ee124a9c767b153b0
+FINDINGS: none
+GAPS: none
+
+Checks behind the verdict (read-only; HEAD and tree match the target and the working tree is still clean):
+
+1. **The raw counter erases nothing.** `lean_source.py:12-14` is now just `sum(1 for _ in re.finditer(words, source))`. The fixed-pattern scan takes linear time. The old comment-stripping code, its work budget and the separate pre-scan are all gone. Nothing in the repo still uses `without_comments`, `MAX_STATES` or `MAX_STACK`. The only importers are `check_axiom_inventory.py`, `check_verity_holes.py` and the test file.
+
+2. **Pins match the source exactly, and nothing new is a real axiom.**
+   - I recomputed `source_inventory` for both projects against the committed JSON. Both match, with 26 pinned modules for `lean` and 39 for `extracted`.
+   - Compared with the parent commit's JSON, no pin was removed. Where a module was already pinned, only its count went up; its sha256 is unchanged.
+   - Both 27-row elaborated inventories are byte-identical to the parent's.
+   - For the 22 + 34 newly pinned modules, I read every line that looks like an axiom declaration. All are prose, for example "former content axiom", "no new axiom" and "the A2 trust axiom until 2026-08-20". None is an actual declaration.
+   - The quarantine check (`check_axiom_inventory.py:54-55`) now rejects any raw `AxiomCheckNegativeControl` substring outside the control module. That is stricter than the old check, which normalised the name first and matched only the full dotted module name. The census passes, so no other file in either tree mentions it.
+   - The walk still covers the root file plus the whole subtree, and still rejects symlinks. The heavy `ExtractedFormatDecimalHeavy` globs sit under `Extracted/FormatDecimal`, so they are scanned.
+
+3. **Verity budget is unchanged and fully used by real holes.**
+   - `BASELINE` is still `{Theorems: 11, Merkle: 1}` with zero elsewhere, and the check is still `count > baseline`.
+   - The current raw counts are 11 and 1, with 0 in every other file, for a total of 12.
+   - All 12 mentions are real proof holes, including the `def Reachable … := sorry` at line 297. So a prose mention cannot free up room for an extra hole.
+   - Before the rewording the counts were Theorems 13, Hypertree 1 and Top 3; now they are 11, 0 and 0. All six edits sit inside `/-! … -/` or `/- … -/` comment blocks, and the diff touches no proof statements or bodies.
+   - The "Sorry count 1 → 12" line in Top.lean is capitalised, and neither Lean nor the gate's regex treats that as `sorry`.
+   - There is no `PQSigner.lean` root file outside the subtree that the check walks.
+
+4. **Callers and the build split are unchanged.**
+   - `verify-extracted` still runs the build, then the "declaration uses sorry" grep, then `lint_extracted_axiom_census.sh`, the tests, and the per-headline closure checks.
+   - `verify-fv-lints` still runs `lint_fv_invariants.sh` (which calls the census for `lean`) plus the tests.
+   - Verity `ci: build` still runs the hole ratchet.
+   - `check_axiom_inventory.py` still runs `lake build` on the default target only.
+   - No automatic re-pin path exists. A file that is not valid UTF-8 raises `ValueError`, so the gate fails closed.
+   - The new test group replaces the old scanner-budget test. It covers raw prose and string mentions failing Verity, the 12-hole baseline, and the custom-token axiom and hole inputs.

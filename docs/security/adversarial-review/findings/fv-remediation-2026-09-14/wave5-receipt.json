@@ -1,0 +1,139 @@
+{
+  "identity": {
+    "target": "/tmp/pq-fv-fixes-20260914-iddnxo7n/raw-target",
+    "commit": "b616e22d11ef0aa3689bc574a96fe24b7d63cca7",
+    "tree": "ef385c4516afcc67429bb71ee124a9c767b153b0",
+    "base": "1fb541057aa0244e8a6ce526de6e35fd16de0b2a",
+    "original_base": "aab89656690cf4b15a543b21e58a3ad4f918ec16",
+    "paths": [
+      "contracts/verification/Makefile",
+      "contracts/verification/docs/ASSURANCE_CASE.md",
+      "contracts/verification/docs/TRUST_ASSUMPTIONS.md",
+      "contracts/verification/scripts/axiom_inventory_extracted.json",
+      "contracts/verification/scripts/axiom_inventory_lean.json",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "contracts/verification/scripts/check_proof_mutations.py",
+      "contracts/verification/scripts/check_verity_holes.py",
+      "contracts/verification/scripts/dump_axiom_inventory.lean",
+      "contracts/verification/scripts/lean_source.py",
+      "contracts/verification/scripts/lint_axioms.sh",
+      "contracts/verification/scripts/lint_extracted_axiom_census.sh",
+      "contracts/verification/scripts/lint_fv_invariants.sh",
+      "contracts/verification/scripts/test_axiom_inventory.py",
+      "contracts/verification/tla/check_tlc.py",
+      "contracts/verification/tla/run.sh",
+      "contracts/verification/tla/run_combined.sh",
+      "contracts/verification/tla/run_pin.sh",
+      "contracts/verity/Makefile",
+      "contracts/verity/PQSigner/Theorems.lean",
+      "contracts/verity/PQSigner/Verifier/Hypertree.lean",
+      "contracts/verity/PQSigner/Verifier/Top.lean",
+      "scripts/check_protocol_models.py"
+    ],
+    "correction_paths": [
+      "contracts/verification/scripts/lean_source.py",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "contracts/verification/scripts/test_axiom_inventory.py",
+      "contracts/verification/scripts/axiom_inventory_lean.json",
+      "contracts/verification/scripts/axiom_inventory_extracted.json",
+      "contracts/verification/scripts/check_verity_holes.py",
+      "contracts/verity/Makefile",
+      "contracts/verity/PQSigner/Theorems.lean",
+      "contracts/verity/PQSigner/Verifier/Top.lean",
+      "contracts/verity/PQSigner/Verifier/Hypertree.lean"
+    ],
+    "stage": "implementation",
+    "surface": "FV evidence acceptance"
+  },
+  "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+  "reviewers": [
+    {
+      "reviewer": "sol-initial-gap",
+      "launcher_status": "completed",
+      "active_seconds": 15.833,
+      "started_at": "2026-09-14T16:43:48.714956+00:00",
+      "ended_at": "2026-09-14T16:44:04.547474+00:00",
+      "words": 30,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": "044afe1d6ab517cf4c6c029d973da5ff91f9b99e88c6a7f7dbd892877e19cb28",
+        "runtime_sha256": "9b485ba2b30755f4650712b9de96ca58dbd0c85a51500302856ded5c34c44a04",
+        "stderr_sha256": "6518437fc87c35b5989523f9eef7c28ee6728d8107f57652a7028b2afdc3c14f"
+      },
+      "utc_elapsed_seconds": 15.832518,
+      "verdict": "GAP",
+      "report": "wave5-sol-initial-gap.txt"
+    },
+    {
+      "reviewer": "opus",
+      "launcher_status": "completed",
+      "active_seconds": 285.079,
+      "started_at": "2026-09-14T16:43:48.715541+00:00",
+      "ended_at": "2026-09-15T10:03:32.962821+00:00",
+      "words": 545,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": "8fd5bc098354323f65b1158144b8389db3b937e3adc1fd9edad37bc6889df72f",
+        "runtime_sha256": "863c38be950320c6896fe26c20b0362a79d71c1bfd5ea9f74782d0e2abd5511e",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "utc_elapsed_seconds": 62384.24728,
+      "verdict": "GO",
+      "report": "wave5-opus.txt"
+    },
+    {
+      "reviewer": "kimi",
+      "launcher_status": "completed",
+      "active_seconds": 381.598,
+      "started_at": "2026-09-14T16:43:48.715874+00:00",
+      "ended_at": "2026-09-15T10:05:09.482263+00:00",
+      "words": 205,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": "47274814d94920aacf0840cd58a39fc0905ac29136761c2b09cd8c71bf90ed84",
+        "runtime_sha256": "303357717ef13bd92ee0080f77e357e1847ea4239fb7608bf4cf499bddab2b31",
+        "stderr_sha256": "5e624f9467d2bc4ad7a332436c4e011624297e6f44af454ddce808d764251636"
+      },
+      "utc_elapsed_seconds": 62480.766389,
+      "verdict": "GO",
+      "report": "wave5-kimi.txt"
+    },
+    {
+      "reviewer": "sol",
+      "launcher_status": "failed",
+      "active_seconds": 654.453,
+      "started_at": "2026-09-14T16:44:34.923405+00:00",
+      "ended_at": "2026-09-15T10:10:28.544293+00:00",
+      "words": null,
+      "hashes": {
+        "prompt_sha256": "7c03fc052c0b225cf62ac85de96d5e2df32e712eca76dce726ca48ef872843de",
+        "report_sha256": null,
+        "runtime_sha256": "3666d8a783246486e0cabc5a08083d1c3923423431f26be658b28e1e1bccfc33",
+        "stderr_sha256": "733710d996fa2fcabe92b8f88ad5ab1b455f020794f55805e9e669521427c7e0"
+      },
+      "utc_elapsed_seconds": 62753.620888,
+      "verdict": "GAP",
+      "report": null,
+      "reason": "Codex did not create report.txt"
+    }
+  ],
+  "coordinator_status": "FIXES_IMPLEMENTED_REVIEW_GAP",
+  "reason": "Overnight host suspension exceeded the 900-second wall-clock cap. Opus/Kimi returned GO; SOL retry was terminated with no final report. No compliant final-wave acceptance is claimed.",
+  "canonical_matches_frozen_product_files": 23,
+  "combined_patch_sha256": "5c47d3e7ff0d55dba3eab81b3578b5774f1e1aa4f216deea67141aebb5970c73",
+  "next_step": "Owner-authorized fresh bounded three-reviewer wave on the unchanged frozen candidate",
+  "gate_receipts": [
+    "raw-gates.json",
+    "final-gates.json",
+    "proof-mutations.log",
+    "negative-probes.json",
+    "lexical-compiler-probes.json",
+    "lexical-gate-probes.json",
+    "comment-compiler-probes.json",
+    "comment-gate-probes.json",
+    "custom-compiler-probes.json",
+    "custom-gate-probes.json"
+  ],
+  "scope": "local source remediation; no merge, hardware or shipment authority",
+  "deferred_playbook_issue": "https://github.com/EthereumPhone/PQ1/issues/509"
+}

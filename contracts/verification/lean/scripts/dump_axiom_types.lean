@@ -27,9 +27,11 @@ import SphincsCVerify
 #check @SphincsCVerify.Bridge.solidityVerifier_compiles_correctly
 #check @SphincsCVerify.Bridge.evm_bytecode_executes_correctly
 
--- EntryPoint v0.6 axiom (A2) — has propositional content but states a
--- property of the Lean `handleOp` fiction, not the deployed contract.
-#check @SphincsCVerify.Bridge.EntryPoint.entrypoint_honest
+-- EntryPoint v0.6 A2 — DEMOTED 2026-08-20: `entrypoint_honest` was found
+-- PROVABLE kernel-only from the `handleOp` definition and is now a
+-- `theorem`, not an axiom, so it no longer belongs in this axiom census.
+-- (Its closure is {propext, Classical.choice, Quot.sound}; see
+-- Bridge/EntryPoint.lean.)
 
 -- Cryptographic axioms (A5).
 #check @SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC

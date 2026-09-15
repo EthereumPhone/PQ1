@@ -354,6 +354,7 @@ verify-lean-proto-domain: ## Lean factory domain tag == proto (P7)
 # documented in the script header).
 verify-fv-lints: verify-build ## FV anti-vacuity sub-lints (escape-hatch/closures/opaque-guard)
 	@/usr/bin/bash scripts/lint_fv_invariants.sh
+	@$(_FV_PYTHON3) scripts/test_axiom_inventory.py
 	@evilbin=$$(mktemp -d /tmp/pq-fvlint-planted-python3.XXXXXX); \
 	sentinel=$$(mktemp -u /tmp/pq-fvlint-planted-sentinel.XXXXXX); \
 	printf '#!/bin/sh\ntouch "%s"\nexit 0\n' "$$sentinel" >$$evilbin/python3; \
@@ -490,6 +491,7 @@ TLA_JAR_SHA256 := 58d44845a37a8d776deaf8cf3a623213b59d311bc0ec287bcdfbe148dd11bb
 
 .PHONY: verify-tla
 verify-tla: ## TLA+/TLC models (page-123 crash-atomicity, combined budget, PIN reconcile)
+	@$(_FV_PYTHON3) tla/check_tlc.py --self-test
 	@command -v java >/dev/null 2>&1 || { echo "ERROR: java not found — TLC needs a JRE."; exit 1; }
 	@if [ ! -f "$(TLA_JAR)" ]; then \
 		echo "ERROR: tla2tools.jar not found at $(TLA_JAR)."; \
@@ -1739,6 +1741,15 @@ verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@cd $(EXTRACTED_DIR) && $(LAKE) build 2>&1 | tee /tmp/pq_extracted_build.out
 	@if grep -E "Extracted/[^ ]*\.lean:.*declaration uses" /tmp/pq_extracted_build.out; then \
 	  echo "FAIL: an Extracted/ declaration uses 'sorry' (incomplete proof)"; exit 1; fi
+	@# #676 (2026-08-20): project-wide axiom INVENTORY census — the closure
+	@# gate below only sees axioms CONSUMED by manifest-listed headlines, so
+	@# an unconsumed/planted `axiom` anywhere under Extracted/ was invisible.
+	@# The census pins the inventory to the 3 disclosed hash postulates +
+	@# the quarantined NegativeControl.Evil (and checks the quarantine stays
+	@# unimported). Comment-stripped, fail-closed, no lake needed.
+	@echo "=== Extracted exact source and elaborated axiom census ==="
+	@/usr/bin/bash scripts/lint_extracted_axiom_census.sh
+	@$(_FV_PYTHON3) scripts/test_axiom_inventory.py
 	@echo "=== Axiom closure of the §33 theorems (expect propext, Classical.choice, Quot.sound + the three disclosed hash-boundary postulates: keccak256_pure, sha256_pure_bytes, hmac_sha512_pure_bytes — NB sha256_pure is a kernel THEOREM, not an axiom) ==="
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/AxiomCheck.lean 2>&1 | tee /tmp/pq_axiomcheck.out
 	@# F3 (2026-07-16): EXACT PER-HEADLINE axiom allowlist, not just a `grep sorryAx`.

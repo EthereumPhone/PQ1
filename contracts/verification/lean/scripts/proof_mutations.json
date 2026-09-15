@@ -34,10 +34,10 @@
       "v_class": "V4",
       "expect": "build_fails",
       "file": "SphincsCVerify/Bridge/EntryPoint.lean",
-      "find": "axiom entrypoint_honest",
-      "replace": "axiom entrypoint_honest_MUT",
-      "rationale": "A2 is consumed by theft_free's first line (hSuccess := entrypoint_honest ...). Renaming must break theft_free.",
-      "ledger_claim": "A2 status_detail: a genuine SEMANTIC premise of theft_free."
+      "find": "theorem entrypoint_honest",
+      "replace": "theorem entrypoint_honest_MUT",
+      "rationale": "A2 is consumed by theft_free's first line (hSuccess := entrypoint_honest ...). Renaming must break theft_free. (A2 was demoted from axiom to PROVED kernel-only theorem 2026-08-20; the load-bearing check still applies — the theorem is the bridge premise theft_free consumes.)",
+      "ledger_claim": "STALE pre-2026-08-20 claim removed: this used to cite 'A2 status_detail: a genuine SEMANTIC premise of theft_free', which the A2 ledger row never actually said (it said 'Per user decision: A2 stays as-is (Lean fiction)') — and the row itself is now gone because A2 is a proved theorem, not an axiom."
     },
     {
       "id": "A5-EUFCMA-load-bearing",
@@ -73,7 +73,6 @@
         "theorem": "SphincsCVerify.Spec.Theorems.theft_free",
         "expect_axioms": [
           "Classical.choice", "Quot.sound", "propext",
-          "SphincsCVerify.Bridge.EntryPoint.entrypoint_honest",
           "SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4",
           "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly",
           "SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC",
@@ -82,8 +81,8 @@
           "SphincsCVerify.Crypto.hMsg_random_oracle"
         ]
       },
-      "rationale": "Executes the ledger's CORRECTED claim verbatim: A4 is a NON-CONSUMED marker — deleting its `have` binding leaves theft_free PROVEN, and A4 (evm_bytecode_executes_correctly) DROPS from the closure (to exactly these 10 names). EXACT-SET, not count: confirms the precise axiom that left, not merely that one did.",
-      "ledger_claim": "critical_alert / A4 status_detail: 'deleting that binding (axiom retained) leaves theft_free proven (closure drops to 9 ... A1/A4 as named non-consumed TCB markers).'"
+      "rationale": "Executes the ledger's CORRECTED claim verbatim: A4 is a NON-CONSUMED marker — deleting its `have` binding leaves theft_free PROVEN, and A4 (evm_bytecode_executes_correctly) DROPS from the closure (to exactly these 9 names). EXACT-SET, not count: confirms the precise axiom that left, not merely that one did.",
+      "ledger_claim": "critical_alert / A4 status_detail: 'deleting that binding (axiom retained) leaves theft_free proven (closure drops to 8 ... A1/A4 as named non-consumed TCB markers).'"
     },
     {
       "id": "A1-marker-closure-drop",
@@ -97,7 +96,6 @@
         "theorem": "SphincsCVerify.Spec.Theorems.theft_free",
         "expect_axioms": [
           "Classical.choice", "Quot.sound", "propext",
-          "SphincsCVerify.Bridge.EntryPoint.entrypoint_honest",
           "SphincsCVerify.Bridge.evm_bytecode_executes_correctly",
           "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly",
           "SphincsCVerify.Crypto.EUF_CMA_SPHINCSplusC",
@@ -106,8 +104,8 @@
           "SphincsCVerify.Crypto.hMsg_random_oracle"
         ]
       },
-      "rationale": "Symmetric to A4: A1 (precompile_0x02_is_FIPS_180_4) is a non-consumed marker; commenting its `have` leaves theft_free proven and DROPS A1 from the closure (to exactly these 10 names).",
-      "ledger_claim": "A1 status_detail: 'a named NON-CONSUMED cited-TCB marker ... deleting both markers leaves theft_free proven over its 9 genuine premises.'"
+      "rationale": "Symmetric to A4: A1 (precompile_0x02_is_FIPS_180_4) is a non-consumed marker; commenting its `have` leaves theft_free proven and DROPS A1 from the closure (to exactly these 9 names).",
+      "ledger_claim": "A1 status_detail: 'a named NON-CONSUMED cited-TCB marker ... deleting both markers leaves theft_free proven over its 8 genuine premises.'"
     },
     {
       "id": "A3.4-non-load-bearing",

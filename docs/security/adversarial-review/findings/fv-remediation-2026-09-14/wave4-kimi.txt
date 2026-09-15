@@ -1,0 +1,14 @@
+All checks complete. Summary of what I verified source-first:
+
+**Diff mechanics (focus 1+2).** In `lean_source.py:58-75`, the `/-` branch now explores both body-start interpretations (`i+2` conventional, `i+3` doc-comment). Retention is a union over explored states via the `keep` difference array, and the `i+2` path is unchanged — so the new code strictly supersedes old retention; it cannot erase code the old code kept. In the doc-comment case the skipped char `i+2` is `-`, which cannot open a nested `/-`, so no interpretation is lost. `keyword_count` (`lean_source.py:124-133`) now counts every surviving substring; this strictly overcounts versus the old `(?<![\w'])...(?![\w'])` wrapper, and the raw-source pre-filter plus MAX_STATES/MAX_STACK fail-closed budget are intact.
+
+**Empirical lexical confirmation.** Both probes compile as live axioms under both pinned toolchains via `lean --stdin`: `/-/- -/ axiom X : False -- -/` and `/--/ -- -/ axiom X : False` each yield `'X' depends on axioms: [X]` on v4.22.0 and v4.30.0-rc2 — exactly the cases the old scanner erased. Genuine block/line comments still erase, real axioms still count.
+
+**Manifest (focus 3).** `source_inventory` output equals both JSON `source` sections byte-for-byte semantically (sha256 + `axiom_mentions` match actual files). Both `elaborated` arrays are identical to the parent commit (27 rows each). No remaining `axiom_tokens` consumer anywhere; the only manifest readers are the two lint shells via `check_axiom_inventory.py`. Old-vs-new counter diff across all three trees shows changes only in the two newly pinned `#print axioms` modules (0→66, 0→3), NegativeControl (1→2, itself a `#print axioms` module), and `lean/scripts/*.lean`, which lie outside the census roots (`SphincsCVerify`, `Extracted`) — pre-existing scope, unchanged by this diff.
+
+**Verity (focus 4).** `check_verity_holes.py` untouched; live run gives 12 holes within the per-file 11+1 baseline, and Verity counts are identical under old and new counters. Closure/elaborated-compare path, quarantine check (including the new `/-/- -/ import Extracted.AxiomCheckNegativeControl -- -/` rootfile probe), and default/heavy split are unmodified. All 6 unittest groups pass (16.5s).
+
+VERDICT: GO
+TARGET: 1fb541057aa0244e8a6ce526de6e35fd16de0b2a / ba33e1143822f0bf36676539b723e8d14a668077
+FINDINGS: none
+GAPS: lake build + elaborated dump not re-run locally; relied on byte-identical elaborated inventories and the reported green ci.

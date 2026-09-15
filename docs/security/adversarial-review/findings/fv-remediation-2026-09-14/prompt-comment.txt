@@ -1,0 +1,23 @@
+You are one independent reviewer in an owner-authorized defensive code review. Do not launch agents or other models.
+Review PQSigner OS for implementation acceptance of a bounded FV gate correction.
+Target: /tmp/pq-fv-fixes-20260914-iddnxo7n/comment-target
+Commit: 1fb541057aa0244e8a6ce526de6e35fd16de0b2a
+Tree: ba33e1143822f0bf36676539b723e8d14a668077
+Compare: 98446edc2b37cc5874f54cfe1091264ddc44eb3f..1fb541057aa0244e8a6ce526de6e35fd16de0b2a
+Focus on the five changed files and affected source-inventory/Verity callers:
+1. Lean outer block comments, doc comments and nested comments must not hide real axiom or proof-hole mentions. The conservative scanner retains the union of possible interpretations and may reject/overcount; it must not erase actual code because of a mistaken lexical interpretation.
+2. Do not suppress mentions through token-boundary guesses: numeric/character literals and extensible ASCII/Unicode syntax can abut keywords. Count every surviving substring. Preserve the existing literal/interpolation and budget rejection controls.
+3. The source manifest now uses axiom_mentions. Added pins for two existing #print axioms modules and changed counts must match unchanged source bytes; both complete elaborated inventories must stay unchanged. Cover root, unimported/unbuilt source and quarantine references.
+4. Preserve actual Verity ci and its 11+1 hole budget, existing closure/acceptance checks, and default/heavy build split. No new assumptions or proof holes.
+
+Evidence already green: nine complete comment/token-adjacency inputs compile under both pinned Lean versions (18 compilations). All nine pass the old applicable extracted inventory or actual default-built Verity ci and are rejected by the corrected gates. Six unittest groups pass, including quarantine, prior raw/character/interpolation cases and scanner resource failure. Clean verify-extracted with all exact closure controls, verify-fv-lints, and Verity ci pass. JSON formatting was subsequently restored to the original key order with parsed equality verified. Earlier unchanged evidence: authoritative ledger, eight proof mutations, 17 TLC outcomes/corruption controls, live CryptoVerif/parser controls, and 62-gate enforcement.
+Non-goals: new proofs, independent kernel checker, heavy build, firmware/hardware/deployment, broader assurance or documentation polish.
+
+Inspect the exact diff and affected callers source-first for concrete blockers. Keep target and Git immutable; use read-only commands only. No web/network, hardware, external writes, prior reports, status prose, playbook catalogs, follow-up model turns, style nits or optional hardening. If source-read tools cannot execute, return GAP immediately. Use your configured deepest reasoning. You have 15 minutes and 800 words.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 1fb541057aa0244e8a6ce526de6e35fd16de0b2a / ba33e1143822f0bf36676539b723e8d14a668077
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+Use at most three findings. FIX requires an anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.

@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e / 8120c3bd802ed6106f5f3926e1efdc11952c6f32
+FINDINGS: none
+GAPS: Workspace inspection was impossible because every read-only command failed before execution when bubblewrap could not create its sandbox namespace; the target identity, diff, affected callers, and acceptance mechanisms remain unreviewed.

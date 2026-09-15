@@ -1,0 +1,23 @@
+VERDICT: FIX
+TARGET: 98446edc2b37cc5874f54cfe1091264ddc44eb3f / 01e56934a227bf3969e35c46b3e7b6f19fd5c39e
+FINDINGS:
+- BLOCKER contracts/verification/scripts/lean_source.py:58-59 — **The scanner starts reading a block comment one character too early.** The scanner starts scanning the comment body at `i + 2`. Lean 4.22's `whitespace` (`Lean/Parser/Basic.lean:572-576`) does two things differently. For a plain `/-`, it skips the character right after `/-` before scanning. For `/--` and `/-!`, it reads those three characters as a token and scans from `i + 3`. Two examples show the mismatch:
+  - In `/-/- -/ …`, the scanner counts the second `/-` as a nested comment and runs the comment past where Lean ends it.
+  - In `/--/ -- -/ …`, the scanner ends the comment at offset 4. It then sees `--` as a line comment and blanks out real code.
+  
+  Neither case needs any other path to go wrong, so exploring several interpretations does not save it. **Evidence (read-only, `lean --stdin`, no files written):**
+  - `/-/- -/ axiom X : False -- -/` and `/--/ -- -/ axiom Y : False` both compile with exit 0 on 4.22.0 and 4.30.0-rc2. `#print axioms` gives `[X]` and `[Y]`.
+  - `/--/ -- -/ theorem Z : False := by sorry` compiles with exit 0 and gives `[sorryAx]`.
+  - For all three inputs, `keyword_count` returns 0 for `axiom` and 0 for `(?:sorry|admit|sorryAx|proof_wanted)`.
+  - Appending the hidden `sorry` to `PQSigner/Theorems.lean` in memory still counts 11. The 11 budget holds with an extra real hole, and a new unbuilt `PQSigner/*.lean` file counts 0.
+  - Consequence: Verity `ci` (`check_verity_holes.py`) and `source_inventory` for unimported modules both accept a real axiom or `sorry`.
+  - The same bug can hide an `import Extracted.AxiomCheckNegativeControl` inside a leading plain comment, so the quarantine check is also bypassable.
+  
+  **Smallest fix:** start the body scan at `min(i + 3, size)`, which is exactly what Lean does in all three cases. Alternatively, queue both `i + 2` and `i + 3`, which is safe because retained text is a union. Add the three inputs above to `test_comments_and_strings`, `test_source_mutations` and `test_verity_aliases`. No real Lean source under `contracts/verity` or `contracts/verification` contains `/-/-` or `/--/`, so the manifests and baselines stay the same.
+- HIGH contracts/verification/scripts/lean_source.py:121 (and the pre-check at :124) — **The word-boundary check hides keywords glued to a number or character literal.** The pattern `(?<![\w'])` treats a digit or `'` as part of an identifier. Lean ends a number or character literal there and can start a new command straight after it. **Evidence:**
+  - `def n : Nat := 0axiom X : False` and `def c : Char := 'a'axiom Y : False` both compile with exit 0 on 4.22.0 and 4.30.0-rc2, with `#print axioms` giving `[X]` and `[Y]`.
+  - `keyword_count(…, "axiom")` returns 0 for both, so an unimported module containing either line is left out of the source inventory.
+  - The same glue works for a command-position `proof_wanted`, if that command is available. Glued `sorry`/`admit` in term position fails to parse (Lean needs whitespace between application arguments), so I did not show a Verity `sorry` bypass this way.
+  
+  **Smallest fix:** keep only non-digit word characters in the lookbehind, i.e. `(?<![^\W\d])`. This over-counts identifiers like `x0axiom` but never hides a keyword. Keywords glued after `'` need a conservative rule too: count them, or drop `'` from the lookbehind. Add both lines as mutation tests. No real source matches `[0-9](axiom|sorry|admit|sorryAx|proof_wanted)`, so the pinned counts do not change.
+GAPS: none

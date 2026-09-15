@@ -26,6 +26,14 @@ are checked by Lean; each is an axiom or an external dependency.
 
 ## What is NOT verified (trusted axioms)
 
+> **Lean axiom census (2026-08-20, issue #673):** the tree declares exactly
+> **3 `axiom`s** — `sha256_size` + `sha256_deterministic`
+> (`PQSigner/Verifier/Hash.lean:40,47`; item 2 below) and
+> **`predict_matches_create`** (`PQSigner/PQSmartWalletFactory.lean:65`;
+> item 4 below — a content-bearing CREATE2 address-prediction claim, not
+> merely a call-shape bridge). Older notes saying "2 axioms" predate this
+> census (they counted only the Hash.lean pair).
+
 1. **`SPHINCsC10Asm.sol` correctness.** Modelled as opaque oracle
    `c10Verify : ByteVec → ByteVec → ByteVec → ByteVec → Bool`. We
    assume:

@@ -134,8 +134,10 @@ import SphincsCVerify
 -- Headline theorem — should depend on exactly:
 --   propext, Classical.choice, Quot.sound  (Lean kernel)
 --   SM_DT_TCR_F, ITSR_F, hMsg_random_oracle, EUF_CMA_SPHINCSplusC  (A5)
---   precompile_0x02_is_FIPS_180_4 (A1), entrypoint_honest (A2),
+--   precompile_0x02_is_FIPS_180_4 (A1),
 --   solidityVerifier_compiles_correctly (A3.1), evm_bytecode_executes_correctly (A4)
+-- (A2 `entrypoint_honest` is a PROVED kernel-only theorem since 2026-08-20 —
+-- no longer an axiom, so it no longer appears in any closure.)
 #print axioms SphincsCVerify.Spec.Theorems.theft_free
 
 -- Bytecode-transported headline — theft_free's closure plus

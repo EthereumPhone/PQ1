@@ -1,0 +1,28 @@
+make: Entering directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification'
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.005s
+
+OK
+tla2tools.jar sha256 matches the validated build.
+  [ok] sigsfirst_skip: HOLD (exit 0)
+  [ok] sigslast_skip: INV_SIGS_COMPACTION_LOCAL (exit 12)
+  [ok] sigsfirst_mayvalid: INV_SIGS_COMPACTION_LOCAL (exit 12)
+  [ok] endtoend_sigsfirst_skip: INV_SIGS_NO_ROLLBACK (exit 12)
+  [ok] partial_erase_sigsfirst: INV_SIGS_COMPACTION_LOCAL (exit 12)
+  [ok] cnt_sigsfirst_skip: INV_CNT_NO_ROLLBACK (exit 12)
+=== all 6 expected outcomes matched ===
+  [ok] cb_onchain_cap: HOLD (exit 0)
+  [ok] cb_margin_noreset: HOLD (exit 0)
+  [ok] cb_margin_reset: INV_MARGIN_BOUNDED (exit 12)
+=== all 3 expected outcomes matched ===
+  [ok] pin_benign_leads: HOLD (exit 0)
+  [ok] pin_alive: INV_ALIVE_NONVACUOUS (exit 12)
+  [ok] pin_rollback_caught: HOLD (exit 0)
+  [ok] pin_leg_bypass: INV_NO_LEG_BYPASS (exit 12)
+  [ok] pin_dir_nofalsewipe: HOLD (exit 0)
+  [ok] pin_sym_falsewipe: INV_NO_FALSE_WIPE (exit 12)
+  [ok] pin_dir_residual: INV_CATCHES_RESET (exit 12)
+  [ok] pin_sym_catches: HOLD (exit 0)
+=== all 8 expected outcomes matched ===
+make: Leaving directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification'

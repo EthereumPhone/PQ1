@@ -24,8 +24,18 @@ everyone. Attribution over false precision.
 Each `run_*.sh` is **self-checking**: it asserts an expected verdict per config,
 including the deliberately `VIOLATED` ones that are the negative controls (a
 wrong-order compaction must break; a symmetric PIN model must false-wipe). A
-green means *all expected outcomes matched* — not *no violations found*. 16
-expected outcomes across the three models as of 2026-07-17.
+green means *all expected outcomes matched* — not *no violations found*. 17
+expected outcomes across the three models (6 + 3 + 8) as of 2026-08-20.
+
+Every `.cfg` is additionally **sha256-pinned** in `cfg_pins.sha256` (#668,
+2026-08-20): the run scripts verify the pins *before* invoking TLC and fail
+closed on any drift, a missing cfg, or an un-pinned new cfg — a `Slots`/
+`MaxCount` shrink or an `INVARIANT` deletion used to stay green because only
+TLC's stdout was classified. Re-pin after a *deliberate* cfg change:
+
+```sh
+(cd contracts/verification/tla && sha256sum *.cfg > cfg_pins.sha256)
+```
 
 Before this target existed (work-todo C5) there was no way to re-run any of
 this: the only jar on the box lived in a scratch directory belonging to a
@@ -57,7 +67,7 @@ TLA2TOOLS=/path/to/tla2tools.jar ./run.sh
 # (or drop tla2tools.jar in $HOME). https://github.com/tlaplus/tlaplus/releases
 ```
 
-`run.sh` is a self-checking harness: it asserts each of the 5 pinned configs
+`run.sh` is a self-checking harness: it asserts each of the 6 pinned configs
 produces its expected PASS/VIOLATED outcome and exits non-zero on any mismatch
 (the same anti-vacuity discipline as the repo's other FV gates). The wrong
 replay order (`sigslast_skip.cfg`) MUST reproduce the rollback, or the model is
@@ -69,6 +79,7 @@ vacuous.
 | `sigslast_skip` | SigsLast | Skip | `INV_SIGS_COMPACTION_LOCAL` | VIOLATED — negative control |
 | `sigsfirst_mayvalid` | SigsFirst | MayValid | `INV_SIGS_COMPACTION_LOCAL` | VIOLATED — no per-entry integrity tag (Finding 1) |
 | `endtoend_sigsfirst_skip` | SigsFirst | Skip | `INV_SIGS_NO_ROLLBACK` | VIOLATED — local reset, backstopped by inv#9+on-chain (Finding 2) |
+| `partial_erase_sigsfirst` | SigsFirst | Skip (+ partial erase) | `INV_SIGS_COMPACTION_LOCAL` | VIOLATED — a torn partial erase rolls a slot back even under SigsFirst (erase-atomicity is load-bearing) |
 | `cnt_sigsfirst_skip` | SigsFirst | Skip | `INV_CNT_NO_ROLLBACK` | VIOLATED — documented residual |
 
 Not CI-gated (needs a JVM + tla2tools.jar; TLA+ is a new, local tool for the

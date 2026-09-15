@@ -1,0 +1,218 @@
+[
+  {
+    "project": "lean",
+    "case": "leading-parser",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "lean",
+    "case": "leading-parser",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:3:49: warning: declaration uses 'sorry'\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "case": "refine-apostrophe",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "lean",
+    "case": "refine-apostrophe",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:46: warning: declaration uses 'sorry'\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "case": "interpolation-space",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "lean",
+    "case": "interpolation-space",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:31: warning: declaration uses 'sorry'\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "case": "interpolation-comment",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "lean",
+    "case": "interpolation-comment",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:41: warning: declaration uses 'sorry'\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "case": "interpolation-newline",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "lean",
+    "case": "interpolation-newline",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:2:19: warning: declaration uses 'sorry'\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "lean",
+    "case": "trace-interpolation",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "lean",
+    "case": "trace-interpolation",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:51: warning: declaration uses 'sorry'\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "leading-parser",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "leading-parser",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:3:49: warning: declaration uses `sorry`\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "refine-apostrophe",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "refine-apostrophe",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:46: warning: declaration uses `sorry`\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "interpolation-space",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "interpolation-space",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:31: warning: declaration uses `sorry`\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "interpolation-comment",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "interpolation-comment",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:41: warning: declaration uses `sorry`\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "interpolation-newline",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "interpolation-newline",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:2:19: warning: declaration uses `sorry`\n'Hidden' depends on axioms: [sorryAx]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "trace-interpolation",
+    "kind": "axiom",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "'t' depends on axioms: [Hidden]\n"
+  },
+  {
+    "project": "extracted",
+    "case": "trace-interpolation",
+    "kind": "admit",
+    "old_count": 0,
+    "new_count": 1,
+    "status": 0,
+    "output": "/tmp/pq-fv-fixes-20260914-iddnxo7n/LexicalProbe.lean:1:51: warning: declaration uses `sorry`\n'Hidden' depends on axioms: [sorryAx]\n"
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "project": "lean",
+    "source_before": {
+      "SphincsCVerify/Bridge/Refinement.lean": {
+        "sha256": "0df9bedb0ab466884e8c9850ec1a2e33046fe9341cf0357a6f02e6d7d3360adc",
+        "axiom_tokens": 8
+      },
+      "SphincsCVerify/Crypto/Assumptions.lean": {
+        "sha256": "eff7bc6ab3afbe335b7c353fbe0ff3f55167cfa8012d0e7ad6a4d620b95ae490",
+        "axiom_tokens": 4
+      },
+      "SphincsCVerify/Crypto/EUFCMA.lean": {
+        "sha256": "3af2ca905c2456bb784a62fab864d9a079bcf5173736539fd20f4b38e6ee7b50",
+        "axiom_tokens": 1
+      },
+      "SphincsCVerify/Wallet/OffchainBinding.lean": {
+        "sha256": "12fe61a2f1cb5b2db0787673fac42e3a2aa25d49d321df71e0f5197f4442c495",
+        "axiom_tokens": 1
+      }
+    },
+    "source_after": {
+      "SphincsCVerify/Bridge/Refinement.lean": {
+        "sha256": "0df9bedb0ab466884e8c9850ec1a2e33046fe9341cf0357a6f02e6d7d3360adc",
+        "axiom_mentions": 8
+      },
+      "SphincsCVerify/Crypto/Assumptions.lean": {
+        "sha256": "eff7bc6ab3afbe335b7c353fbe0ff3f55167cfa8012d0e7ad6a4d620b95ae490",
+        "axiom_mentions": 4
+      },
+      "SphincsCVerify/Crypto/EUFCMA.lean": {
+        "sha256": "3af2ca905c2456bb784a62fab864d9a079bcf5173736539fd20f4b38e6ee7b50",
+        "axiom_mentions": 1
+      },
+      "SphincsCVerify/Wallet/OffchainBinding.lean": {
+        "sha256": "12fe61a2f1cb5b2db0787673fac42e3a2aa25d49d321df71e0f5197f4442c495",
+        "axiom_mentions": 1
+      }
+    },
+    "elaborated_unchanged": true
+  },
+  {
+    "project": "extracted",
+    "source_before": {
+      "Extracted/AxiomCheckNegativeControl.lean": {
+        "sha256": "8846e829cea89e95fd18cbaa6fdfb686df6918d34bba469031c132f7a08c9db5",
+        "axiom_tokens": 1
+      },
+      "Extracted/SlotKdf/FunsExternal.lean": {
+        "sha256": "4b9ac21ca5aa0b88ccb0539d84aa754407ef6ce6e7884a3f1231b6e5b075492f",
+        "axiom_tokens": 2
+      },
+      "Extracted/UserOp/FunsExternal.lean": {
+        "sha256": "03c0c8f5a3c94285348b83fd826206cdc35153011934b78f75f69349250f80dd",
+        "axiom_tokens": 1
+      }
+    },
+    "source_after": {
+      "Extracted/AxiomCheck.lean": {
+        "sha256": "263629c3569e3f8f3125f7f9b7585798cd43ec08dc44f5e3ce138de823b4764e",
+        "axiom_mentions": 66
+      },
+      "Extracted/AxiomCheckFormatDecimal.lean": {
+        "sha256": "e79c14b72dab3f2e77833edafabbd5b333ff671def875ee6beca4216c354aabc",
+        "axiom_mentions": 3
+      },
+      "Extracted/AxiomCheckNegativeControl.lean": {
+        "sha256": "8846e829cea89e95fd18cbaa6fdfb686df6918d34bba469031c132f7a08c9db5",
+        "axiom_mentions": 2
+      },
+      "Extracted/SlotKdf/FunsExternal.lean": {
+        "sha256": "4b9ac21ca5aa0b88ccb0539d84aa754407ef6ce6e7884a3f1231b6e5b075492f",
+        "axiom_mentions": 2
+      },
+      "Extracted/UserOp/FunsExternal.lean": {
+        "sha256": "03c0c8f5a3c94285348b83fd826206cdc35153011934b78f75f69349250f80dd",
+        "axiom_mentions": 1
+      }
+    },
+    "elaborated_unchanged": true
+  }
+]

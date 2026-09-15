@@ -1,0 +1,93 @@
+{
+  "identity": {
+    "target": "/tmp/pq-fv-fixes-20260914-iddnxo7n/comment-target",
+    "commit": "1fb541057aa0244e8a6ce526de6e35fd16de0b2a",
+    "tree": "ba33e1143822f0bf36676539b723e8d14a668077",
+    "base": "98446edc2b37cc5874f54cfe1091264ddc44eb3f",
+    "original_base": "aab89656690cf4b15a543b21e58a3ad4f918ec16",
+    "paths": [
+      "contracts/verification/Makefile",
+      "contracts/verification/docs/ASSURANCE_CASE.md",
+      "contracts/verification/docs/TRUST_ASSUMPTIONS.md",
+      "contracts/verification/scripts/axiom_inventory_extracted.json",
+      "contracts/verification/scripts/axiom_inventory_lean.json",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "contracts/verification/scripts/check_proof_mutations.py",
+      "contracts/verification/scripts/check_verity_holes.py",
+      "contracts/verification/scripts/dump_axiom_inventory.lean",
+      "contracts/verification/scripts/lean_source.py",
+      "contracts/verification/scripts/lint_axioms.sh",
+      "contracts/verification/scripts/lint_extracted_axiom_census.sh",
+      "contracts/verification/scripts/lint_fv_invariants.sh",
+      "contracts/verification/scripts/test_axiom_inventory.py",
+      "contracts/verification/tla/check_tlc.py",
+      "contracts/verification/tla/run.sh",
+      "contracts/verification/tla/run_combined.sh",
+      "contracts/verification/tla/run_pin.sh",
+      "contracts/verity/Makefile",
+      "scripts/check_protocol_models.py"
+    ],
+    "correction_paths": [
+      "contracts/verification/scripts/lean_source.py",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "contracts/verification/scripts/test_axiom_inventory.py",
+      "contracts/verification/scripts/axiom_inventory_lean.json",
+      "contracts/verification/scripts/axiom_inventory_extracted.json"
+    ],
+    "stage": "implementation",
+    "surface": "FV evidence acceptance"
+  },
+  "prompt_sha256": "f016aef7966385a1a7d9ce8d080448acf4df492fa78da0b731ae85104c446f19",
+  "reviewers": [
+    {
+      "reviewer": "sol-initial-gap",
+      "verdict": "GAP",
+      "seconds": 20.437,
+      "words": 22,
+      "report_sha256": "ce7b529a47db6e5c54acad015940e11967c57c8d2119f26f775a2344c80e543f",
+      "report": "wave4-sol-initial-gap.txt",
+      "gaps": "GAPS: Source-read commands could not execute because bwrap lacked permission to create a namespace."
+    },
+    {
+      "reviewer": "opus",
+      "verdict": "FIX",
+      "seconds": 263.734,
+      "words": 579,
+      "report_sha256": "7981a553c8db1dcbd6cf67628afc51e9bea06a9b3af4c90037a63d204aecbfe4",
+      "report": "wave4-opus.txt",
+      "gaps": "GAPS: none\n\n**What checked out:**\n- **Manifests:** `source_inventory` still equals both manifest `source` sections, including the 66 and 3 pins for the two `#print axioms` modules. The diff leaves both `elaborated` sections unchanged.\n- **Verity:** `check_verity_holes` counts 12 holes against the 11+1 baseline.\n- **Quarantine:** these tricks can't precede an `import`, so the quarantine check isn't affected."
+    },
+    {
+      "reviewer": "kimi",
+      "verdict": "GO",
+      "seconds": 299.181,
+      "words": 336,
+      "report_sha256": "dd1528069b292893c849c34976399650f571f97c282706bdcfd8c899fbeb0239",
+      "report": "wave4-kimi.txt",
+      "gaps": "GAPS: lake build + elaborated dump not re-run locally; relied on byte-identical elaborated inventories and the reported green ci."
+    },
+    {
+      "reviewer": "sol",
+      "verdict": "FIX",
+      "seconds": 337.018,
+      "words": 91,
+      "report_sha256": "c7a79701b8d1ef85cc15068c738a6afc4c5aea9461a5c080eb330b20dabbed06",
+      "report": "wave4-sol.txt",
+      "gaps": "GAPS: none"
+    }
+  ],
+  "canonical_matches_frozen_product_files": 20,
+  "combined_patch_sha256": "d3f32297e59953d92a34ec559c5c38af7702bfac60b130ae5713f205c97a0a30",
+  "gate_receipts": [
+    "comment-gates.json",
+    "final-gates.json",
+    "proof-mutations.log",
+    "negative-probes.json",
+    "lexical-compiler-probes.json",
+    "lexical-gate-probes.json",
+    "comment-compiler-probes.json",
+    "comment-gate-probes.json"
+  ],
+  "scope": "source implementation acceptance; no merge, hardware or shipment authority",
+  "deferred_playbook_issue": "https://github.com/EthereumPhone/PQ1/issues/509"
+}

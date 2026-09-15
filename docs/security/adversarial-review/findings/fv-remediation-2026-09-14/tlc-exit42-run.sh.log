@@ -1,0 +1,554 @@
+  [FAIL] sigsfirst_skip: expected completed success; process status 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 4 and seed 9149758425544698847 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255361] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/Page123Compaction.tla
+Parsing file /tmp/tlc-722474083394795332/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-722474083394795332/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-722474083394795332/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Parsing file /tmp/tlc-722474083394795332/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module Page123Compaction
+Linting of module Page123Compaction
+Starting... (2026-09-14 16:36:19)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:19.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 9.5E-11
+84776 states generated, 35238 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 28.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 6 and the 95th percentile is 4).
+Finished in 01s at (2026-09-14 16:36:20)
+
+  [FAIL] sigslast_skip: expected only INV_SIGS_COMPACTION_LOCAL violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 21 and seed 7864181291796258454 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255443] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/Page123Compaction.tla
+Parsing file /tmp/tlc-8210441600995982105/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-8210441600995982105/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-8210441600995982105/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Parsing file /tmp/tlc-8210441600995982105/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module Page123Compaction
+Linting of module Page123Compaction
+Starting... (2026-09-14 16:36:20)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:21.
+Error: Invariant INV_SIGS_COMPACTION_LOCAL is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 0 @@ b :> 0)
+
+State 2: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"]>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 1 @@ b :> 0)
+
+State 3: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 4: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 1 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 5: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 6: <StartCompact line 164, col 5 to line 174, col 42 of module Page123Compaction>
+/\ mode = "compact"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = << [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"] >>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 7: <ReplayClean line 218, col 5 to line 223, col 51 of module Page123Compaction>
+/\ mode = "compact"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 1
+/\ rq = << [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"] >>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"]>>
+/\ cpUnsafe = TRUE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+418 states generated, 223 distinct states found, 22 states left on queue.
+The depth of the complete state graph search is 7.
+Finished in 00s at (2026-09-14 16:36:21)
+
+  [FAIL] sigsfirst_mayvalid: expected only INV_SIGS_COMPACTION_LOCAL violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 42 and seed -5108031983633547168 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255483] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/Page123Compaction.tla
+Parsing file /tmp/tlc-13437509653795680082/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-13437509653795680082/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-13437509653795680082/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Parsing file /tmp/tlc-13437509653795680082/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module Page123Compaction
+Linting of module Page123Compaction
+Starting... (2026-09-14 16:36:21)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:21.
+Error: Invariant INV_SIGS_COMPACTION_LOCAL is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 0 @@ b :> 0)
+
+State 2: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"]>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 1 @@ b :> 0)
+
+State 3: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 4: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 1 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 5: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 6: <StartCompact line 164, col 5 to line 174, col 42 of module Page123Compaction>
+/\ mode = "compact"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = << [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 7: <CrashTornValid line 250, col 5 to line 259, col 41 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 0, kind |-> "e"]>>
+/\ cpUnsafe = TRUE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+420 states generated, 225 distinct states found, 24 states left on queue.
+The depth of the complete state graph search is 7.
+Finished in 00s at (2026-09-14 16:36:21)
+
+  [FAIL] endtoend_sigsfirst_skip: expected only INV_SIGS_NO_ROLLBACK violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 123 and seed 2883142436072875385 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255522] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/Page123Compaction.tla
+Parsing file /tmp/tlc-8085548589765095499/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-8085548589765095499/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-8085548589765095499/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Parsing file /tmp/tlc-8085548589765095499/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module Page123Compaction
+Linting of module Page123Compaction
+Starting... (2026-09-14 16:36:22)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:22.
+Error: Invariant INV_SIGS_NO_ROLLBACK is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 0 @@ b :> 0)
+
+State 2: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"]>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 1 @@ b :> 0)
+
+State 3: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 4: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 1 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 5: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 6: <StartCompact line 164, col 5 to line 174, col 42 of module Page123Compaction>
+/\ mode = "compact"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = << [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 7: <CrashBetween line 228, col 5 to line 232, col 57 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 8: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"]>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+490 states generated, 289 distinct states found, 64 states left on queue.
+The depth of the complete state graph search is 8.
+Finished in 00s at (2026-09-14 16:36:22)
+
+  [FAIL] partial_erase_sigsfirst: expected only INV_SIGS_COMPACTION_LOCAL violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 47 and seed 3969191899550864012 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255562] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/Page123Compaction.tla
+Parsing file /tmp/tlc-15195280801098185522/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-15195280801098185522/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-15195280801098185522/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Parsing file /tmp/tlc-15195280801098185522/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module Page123Compaction
+Linting of module Page123Compaction
+Starting... (2026-09-14 16:36:22)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:22.
+Error: Invariant INV_SIGS_COMPACTION_LOCAL is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 0 @@ b :> 0)
+
+State 2: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"]>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 1 @@ b :> 0)
+
+State 3: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 4: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 1 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 5: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 6: <StartCompactNA line 187, col 5 to line 196, col 48 of module Page123Compaction>
+/\ mode = "erasing"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = << [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 7: <CrashPartialErase line 207, col 5 to line 214, col 41 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"]>>
+/\ cpUnsafe = TRUE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+420 states generated, 316 distinct states found, 115 states left on queue.
+The depth of the complete state graph search is 7.
+Finished in 00s at (2026-09-14 16:36:22)
+
+  [FAIL] cnt_sigsfirst_skip: expected only INV_CNT_NO_ROLLBACK violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 86 and seed 2973292795015399162 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255613] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/Page123Compaction.tla
+Parsing file /tmp/tlc-8854447447302490798/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Parsing file /tmp/tlc-8854447447302490798/Sequences.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Sequences.tla)
+Parsing file /tmp/tlc-8854447447302490798/FiniteSets.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/FiniteSets.tla)
+Parsing file /tmp/tlc-8854447447302490798/TLC.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/TLC.tla)
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module TLC
+Semantic processing of module Page123Compaction
+Linting of module Page123Compaction
+Starting... (2026-09-14 16:36:23)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:23.
+Error: Invariant INV_CNT_NO_ROLLBACK is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 0 @@ b :> 0)
+
+State 2: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"]>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 1 @@ b :> 0)
+
+State 3: <AppendSigs(a) line 132, col 5 to line 138, col 60 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 0 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 4: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 1 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 5: <AppendCnt(a) line 141, col 5 to line 148, col 59 of module Page123Compaction>
+/\ mode = "run"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = <<>>
+/\ preSigs = (a :> 0 @@ b :> 0)
+/\ page = << [s |-> a, t |-> "SIGS", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 1, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 6: <StartCompact line 164, col 5 to line 174, col 42 of module Page123Compaction>
+/\ mode = "compact"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 0
+/\ rq = << [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+State 7: <ReplayClean line 218, col 5 to line 223, col 51 of module Page123Compaction>
+/\ mode = "compact"
+/\ chwm = (a :> 2 @@ b :> 0)
+/\ ri = 1
+/\ rq = << [s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"],
+   [s |-> a, t |-> "CNT", c |-> 2, kind |-> "e"] >>
+/\ preSigs = (a :> 2 @@ b :> 0)
+/\ page = <<[s |-> a, t |-> "SIGS", c |-> 2, kind |-> "e"]>>
+/\ cpUnsafe = FALSE
+/\ hwm = (a :> 2 @@ b :> 0)
+
+418 states generated, 223 distinct states found, 22 states left on queue.
+The depth of the complete state graph search is 7.
+Finished in 00s at (2026-09-14 16:36:23)
+
+=== MISMATCH ===

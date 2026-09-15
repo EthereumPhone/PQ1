@@ -1,0 +1,27 @@
+VERDICT: FIX
+TARGET: 88818c79d83e8f73177d43c8edbc6393ce1e1ad2 / 5e36ac92d2387ffefc0d1ee6459c70699ae32774
+FINDINGS:
+- BLOCKER contracts/verification/scripts/lean_source.py:50 — **The diff adds a new way to hide an axiom or `admit`.** The widened pattern `r(#*)"` is tried at every `r` in the file, not only where a new token starts. Lean reads a raw string only at a token start, so in `leading_parser"…"` it reads a keyword followed by an ordinary string with escapes. The scanner instead reads a raw string that ends early. Any `--` inside Lean's real string then looks like a comment, and the scanner blanks out real code after it.
+  - **Evidence (read-only `lean --stdin`, both pinned toolchains v4.22.0 and v4.30.0-rc2):**
+    - Test input: `import Lean` / `open Lean Parser` / `def p : Parser := leading_parser"\" -- " axiom X : False`, then `theorem t : False := X` and `#print axioms t`.
+    - Lean elaborates it with no errors and prints `'t' depends on axioms: [X]`.
+    - The same input with `theorem Y : False := by admit` elaborates with only the sorry warning: `'Y' depends on axioms: [sorryAx]`.
+    - On both lines, `keyword_count` from the parent commit `eb398b7b` finds 1. At `88818c79` it finds **0**.
+  - **Consequence:**
+    - `source_inventory` in `check_axiom_inventory.py:54` misses an undisclosed axiom in unimported or unbuilt extracted source. The elaborated inventory never loads that source, so nothing else catches it.
+    - `check_verity_holes.py:28`, which the Verity `ci` recipe at `verity/Makefile:62` runs, stops counting an added `admit`/`sorry`, including in unbuilt Part A files.
+    - This breaks acceptance items 1 and 2.
+  - **Smallest fix:** take the raw-string branch only at a token start, i.e. when `i == 0` or `source[i-1]` is not a Lean identifier-rest character (alphanumeric, `_`, `'`, `!`, `?`, letter-like or subscript). Add the two `leading_parser"\" -- "` lines to the source, CensusProbe and hole-check lists in `test_axiom_inventory.py`.
+- HIGH contracts/verification/scripts/lean_source.py:51 — **An older scanner bug with the same cause hides tokens in valid Lean.** This one predates the diff. The char-literal pattern is tried at every `'`, including a `'` that belongs to a name. In `refine'"' -- "`, Lean reads the keyword `refine'` followed by the string `"' -- "`. The scanner instead reads a character literal `'"'`, then treats the `--` as a comment and blanks the rest of the line.
+  - **Evidence (both toolchains):**
+    - `example : String := by refine'"' -- " axiom X : False` elaborates with no errors; `t` then depends on `[X]`.
+    - The variant ending `theorem Y : False := by admit` gives `[sorryAx]`.
+    - Both the old and new scanners count 0.
+  - **Consequence:** the same inventory and Verity hole-check bypass as above. The fix therefore does not yet meet item 1's "must not hide" requirement.
+  - **Smallest fix:** apply the same token-start check before trying the char-literal pattern, and add `refine'"' -- " axiom …` and `… by admit` regression cases.
+
+Items 3 and 4 hold:
+- **Docs:** `ASSURANCE_CASE.md` (lines 131, 150–152, 308, 319) and `TRUST_ASSUMPTIONS.md` (lines 40–50, 211, 217) consistently describe `entrypoint_honest` as a proved in-model theorem that adds no closure axiom. Both keep deployed-EntryPoint faithfulness as an external assumption, and `axiom_inventory_lean.json` has no `entrypoint_honest` entry.
+- **Budgets:** the per-file budget of 11+1, the default/heavy build split and the inventory manifests are unchanged by the diff.
+
+GAPS: I did not run the full `make` gates or the unittest suite (both write build/cache files). The two hiding inputs were checked only by direct Lean elaboration and in-memory scanner calls.

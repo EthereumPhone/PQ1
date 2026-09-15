@@ -119,17 +119,25 @@ REQUIRED_SUMMARY_KEYS = frozenset(
 #   axiom values:    [axiom id, sorted [field, value] pairs except artifacts]
 #   artifact values: [axiom id, artifact index, sorted [field, value] pairs]
 # Update only alongside an inspected, intentional AXIOM_STATUS change.
+# RE-PINNED 2026-08-20 for the intentional 2026-08-20 ledger edit (issues
+# #674/#678): A2 (`entrypoint_honest`) demoted from axiom to kernel-proved
+# theorem — its ledger row + its 3 closure presences removed (schema/value
+# drift) — plus the A3.2 kontrol evidence refresh (stale 4/4 → 7/7) and the
+# two A3.2 certora-rule-set artifacts marked historical/unexecuted (new
+# `evidence` field — artifact schema drift). Also absorbs the two earlier
+# unpinned ledger edits that left C16 red on master (the 66cf2eba U+200B
+# removal in A5-ITSR noted in 7cf06a0e's commit message + one more).
 EXPECTED_AXIOM_SCHEMA_SHA256 = (
-    "13f1c6284e8f7a8cbd4293ec74013481a63b40df309ac81e2c353ed6d6453204"
+    "e236341847edfe07334cd99239eac7596d70b4f25f377c81f663b16415615a50"
 )
 EXPECTED_ARTIFACT_SCHEMA_SHA256 = (
-    "150f3fb7c7fddea81bd78930806845da826440b3e0e5607c65294bdf3d07a4c7"
+    "fa023a607167fa08afb7b6e7dc79bb8c11bb50c05c55afd4d6fb80f20cc07c05"
 )
 EXPECTED_AXIOM_VALUE_SHA256 = (
-    "9de0abe0577c69a30dad2844accf04f12081d755f58477424e2c035cdba78f74"
+    "6891215b18a003668d191227c02299f1f89553c7f289f57f28b25bd556d9142d"
 )
 EXPECTED_ARTIFACT_VALUE_SHA256 = (
-    "addc699297832bf74f78d19b5114a979237d327b235b47514fe4421b002ad4e5"
+    "3e102b39f55a62f843a408e415109f7fb01af9d1b98d769478cfb0bb5335db47"
 )
 EXPECTED_LEDGER_TOP_LEVEL_FIELDS = frozenset({
     "axioms",
@@ -151,10 +159,9 @@ EXPECTED_LEDGER_TOP_LEVEL_FIELDS = frozenset({
     "witness_coverage_doc",
 })
 EXPECTED_LEDGER_VALUE_SHA256 = (
-    "d1dc37814c2f0a5ef7bf503cfb341b42b0a93720e2502f0e44eeb1609bfffe5d"
+    "52a465c150893ea9579888d21b6046ff81c258465eb41e94566066040cd22eca"
 )
 EXPECTED_ARTIFACT_METHOD_STATUS_COUNTS = {
-    ("cited-tcb", "audit-citation"): 1,
     ("cited-tcb", "citation"): 2,
     ("cited-tcb", "computed-margin"): 1,
     ("cited-tcb", "foundry-parity"): 2,
@@ -273,8 +280,11 @@ EXPECTED_CLOSURES_KEYS = {
 }
 # The flagship `theft_free` trust base (A1..A5, non-kernel). Deleting any of
 # these from `axioms[]` silently shrinks the advertised assumption set.
+# (A2 `entrypoint_honest` was removed from this floor 2026-08-20: it is now
+# a PROVED kernel-only theorem in Bridge/EntryPoint.lean, not an axiom —
+# its load-bearingness is enforced by the proof-mutation gate's
+# A2-load-bearing rename check, not by a ledger row.)
 MANDATORY_AXIOM_NAMES = {
-    "SphincsCVerify.Bridge.EntryPoint.entrypoint_honest",              # A2
     "SphincsCVerify.Bridge.solidityVerifier_compiles_correctly",       # A3.1
     "SphincsCVerify.Bridge.precompile_0x02_is_FIPS_180_4",             # A1
     "SphincsCVerify.Bridge.evm_bytecode_executes_correctly",           # A4

@@ -1,0 +1,270 @@
+{
+  "base": "eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e",
+  "created_at": "2026-09-14T15:00:58.868865+00:00",
+  "executables": {
+    "claude": {
+      "path": "/home/nicola/.local/bin/claude",
+      "sha256": "3a624a5a7cd79bbad4d32bd7db36f1197ecf458bc5bf1e2aed81834a01ad3ef0",
+      "version": "2.1.270 (Claude Code)"
+    },
+    "codex": {
+      "path": "/home/nicola/.local/bin/codex",
+      "sha256": "3188814c35471432d4123203e0eb38e5bddc60226e3d7ddf0e59e649ea140022",
+      "version": "codex-cli 0.154.0"
+    },
+    "kimi": {
+      "path": "/home/nicola/.kimi-code/bin/kimi",
+      "sha256": "e1d5003ae182200ecc3c0631aba7e7eaeba1601a0cf690770aa0184b59227bb7",
+      "version": "0.40.1"
+    }
+  },
+  "interrupted": false,
+  "isolation": {
+    "executable": {
+      "path": "/usr/bin/bwrap",
+      "sha256": "52231e1caf55bcbc667b269f49c63599a6f7db4767ae6a039580d0ff853db712",
+      "version": "bubblewrap 0.9.0"
+    },
+    "kind": "bubblewrap-read-only-candidate",
+    "read_only_paths": [
+      "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target"
+    ]
+  },
+  "isolation_boundary": {
+    "host_write_scope": "paths outside protected mounts remain writable; scratch-only behavior is instructed, not OS-enforced",
+    "limitation": "mutual blindness, host secrets, symlink escapes, and shared network are outside this local isolation boundary",
+    "output_separation": "per-reviewer directories under one local UID",
+    "target_enforcement": "Bubblewrap read-only candidate/Git mounts plus Git drift check"
+  },
+  "launch_skew_seconds": 0.000884,
+  "max_artifact_bytes": 16777216,
+  "max_report_words": 800,
+  "mode": "review",
+  "preflight": {
+    "claude": {
+      "api_provider": "firstParty",
+      "authentication": "logged_in",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "xhigh",
+      "requested_model": "opus",
+      "status": "passed"
+    },
+    "codex": {
+      "authentication": "logged_in",
+      "legacy_landlock": false,
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "ultra",
+      "requested_model": "gpt-5.6-sol",
+      "status": "passed"
+    },
+    "kimi": {
+      "authentication": "provider_configured",
+      "remote_model_identity": "unverified_until_runtime",
+      "requested_effort": "max",
+      "requested_model": "kimi-code/k3",
+      "resolved_model": "k3",
+      "resolved_provider": "managed:kimi-code",
+      "status": "passed",
+      "supported_efforts": [
+        "low",
+        "high",
+        "max"
+      ]
+    }
+  },
+  "prompt_source": {
+    "path": "/tmp/pq-fv-fixes-20260914-iddnxo7n/prompt-corrected.txt",
+    "sha256": "d9faf0d82e7a73ac653b762547400091df3e815db58c72d429547f83a93d7670"
+  },
+  "reviewers": {
+    "claude": {
+      "artifact_bytes": 9650,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "--chdir",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "--",
+        "/home/nicola/.local/bin/claude",
+        "-p",
+        "--model",
+        "opus",
+        "--effort",
+        "xhigh",
+        "--permission-mode",
+        "plan",
+        "--no-session-persistence",
+        "--output-format",
+        "json"
+      ],
+      "duration_seconds": 414.097,
+      "ended_at": "2026-09-14T15:00:58.648609+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "d9faf0d82e7a73ac653b762547400091df3e815db58c72d429547f83a93d7670",
+        "report_sha256": "a9137ce07afec0ffee03b1f5607b354ae5cc7349e568c994955c4daddef5d46d",
+        "runtime_sha256": "ef9f7db28453ed4786ba7d833eb7277f454d930edacc97825afa1a067055ebc4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/claude",
+        "prompt": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/claude/prompt.txt",
+        "report": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/claude/report.txt",
+        "stderr": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/claude/stderr.txt"
+      },
+      "report_words": 572,
+      "started_at": "2026-09-14T14:54:04.551658+00:00",
+      "status": "completed"
+    },
+    "codex": {
+      "artifact_bytes": 2544,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "--chdir",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "--",
+        "/home/nicola/.local/bin/codex",
+        "exec",
+        "--model",
+        "gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=\"ultra\"",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--json",
+        "-C",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "-o",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/codex/report.txt",
+        "-"
+      ],
+      "duration_seconds": 15.43,
+      "ended_at": "2026-09-14T14:54:19.981161+00:00",
+      "environment_overrides": {},
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "d9faf0d82e7a73ac653b762547400091df3e815db58c72d429547f83a93d7670",
+        "report_sha256": "424f94025df3f95214a1240d34a09319225d3e70a7ccf46d0d887ade3f090aa8",
+        "runtime_sha256": "bb399a2a63b92b61100003d7512e590ca25910418124318abaca8d4fe4a211c6",
+        "stderr_sha256": "c10bda420e5c81cd5d414f30ca7f9ba4289cc627e76806083f1bcffefc9c9207"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/codex",
+        "prompt": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/codex/prompt.txt",
+        "report": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/codex/report.txt",
+        "stderr": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/codex/stderr.txt"
+      },
+      "report_words": 23,
+      "started_at": "2026-09-14T14:54:04.551115+00:00",
+      "status": "completed"
+    },
+    "kimi": {
+      "artifact_bytes": 68500,
+      "command": [
+        "/usr/bin/bwrap",
+        "--die-with-parent",
+        "--bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--ro-bind",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "--chdir",
+        "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+        "--",
+        "/home/nicola/.kimi-code/bin/kimi",
+        "--model",
+        "kimi-code/k3",
+        "--output-format",
+        "stream-json",
+        "--prompt",
+        "<PROMPT_FROM_REVIEWER_DIR>"
+      ],
+      "duration_seconds": 358.603,
+      "ended_at": "2026-09-14T15:00:03.154884+00:00",
+      "environment_overrides": {
+        "KIMI_MODEL_THINKING_EFFORT": "max"
+      },
+      "exit_code": 0,
+      "extraction_error": null,
+      "hashes": {
+        "prompt_sha256": "d9faf0d82e7a73ac653b762547400091df3e815db58c72d429547f83a93d7670",
+        "report_sha256": "b8640dd8719702188e906d818d1da88fe5c192ebb2af06f5ac89d28bf663d554",
+        "runtime_sha256": "1746395be83e795cb7fcbf06bd03d810e6bf0a8fc5807f53a7026fc5169ef960",
+        "stderr_sha256": "9e15ccc6a83f6801ca1ef970357b5a6d2bf14baf168a1b2edcbe4d05d88ca936"
+      },
+      "paths": {
+        "directory": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/kimi",
+        "prompt": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/kimi/prompt.txt",
+        "report": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/kimi/report.txt",
+        "stderr": "/tmp/pq-fv-fixes-20260914-iddnxo7n/wave2/kimi/stderr.txt"
+      },
+      "report_words": 204,
+      "started_at": "2026-09-14T14:54:04.551996+00:00",
+      "status": "completed"
+    }
+  },
+  "schema_version": 1,
+  "stage": "implementation",
+  "surface": "FV-remediation",
+  "target": {
+    "commit_after": "88818c79d83e8f73177d43c8edbc6393ce1e1ad2",
+    "commit_before": "88818c79d83e8f73177d43c8edbc6393ce1e1ad2",
+    "drift": false,
+    "path": "/tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target",
+    "status_after": "",
+    "status_before": "",
+    "tree_after": "5e36ac92d2387ffefc0d1ee6459c70699ae32774",
+    "tree_before": "5e36ac92d2387ffefc0d1ee6459c70699ae32774"
+  },
+  "timeout_seconds": 900,
+  "version_contract": {
+    "mismatches": {
+      "claude": {
+        "expected": "2.1.220 (Claude Code)",
+        "observed": "2.1.270 (Claude Code)"
+      },
+      "codex": {
+        "expected": "codex-cli 0.146.0",
+        "observed": "codex-cli 0.154.0"
+      },
+      "kimi": {
+        "expected": "0.31.1",
+        "observed": "0.40.1"
+      }
+    },
+    "override_used": true,
+    "tested_versions": {
+      "bwrap": "bubblewrap 0.9.0",
+      "claude": "2.1.220 (Claude Code)",
+      "codex": "codex-cli 0.146.0",
+      "kimi": "0.31.1"
+    }
+  },
+  "wave_started_at": "2026-09-14T14:54:04.551051+00:00"
+}

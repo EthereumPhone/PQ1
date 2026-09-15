@@ -1,0 +1,10 @@
+{
+  "authorized_on": "2026-09-15",
+  "owner_instruction": "sorry. I had to shut my laptop. You can continue.",
+  "scope": "one fresh bounded three-reviewer wave on unchanged b616e22d; Phase D source implementation acceptance",
+  "preflight": "offline adapter self-test passed; concrete default and Landlock-retry dry runs inspected",
+  "elapsed_clock": "Linux CLOCK_BOOTTIME (includes host suspension), plus UTC receipt validation",
+  "wrapper_sha256": "3deac01321fae0d3bf335539290c3b0e6cbe1c0a7867e87847c476c76b6b7bcb",
+  "launcher_sha256": "1300e931b5d91464b48bcc27e8f654947c86ab173b53fe117a42d44104b86911",
+  "retry_reason": "Initial SOL source-read command failed before execution because nested Bubblewrap could not create a namespace; Codex doctor passed; sole same-model retry uses legacy Landlock and unchanged outer read-only mount."
+}

@@ -1,0 +1,184 @@
+{
+  "authorized_on": "2026-09-15",
+  "owner_instruction": "push the fixes",
+  "branch": "feat/pq1-board-target",
+  "remote": "origin",
+  "remote_repository": "EthereumPhone/PQ1",
+  "base_commit": "d15426e3dcf04e68fb97a6a2800ec2690d12ed8d",
+  "review_snapshot": "b616e22d11ef0aa3689bc574a96fe24b7d63cca7",
+  "review_tree": "ef385c4516afcc67429bb71ee124a9c767b153b0",
+  "fix_files": 23,
+  "prerequisite_files": 14,
+  "product_files": {
+    "contracts/verification/Makefile": {
+      "sha256": "9eddf3c2942672f9ea38d99fe185c1fc2fa8f28b2279cf3f90829676363c7086",
+      "mode": "0o664"
+    },
+    "contracts/verification/docs/ASSURANCE_CASE.md": {
+      "sha256": "b5d34f891f32fa5a6ef43f6c6b94d8cdf9789457b02c09daa66fc3f5b02285ce",
+      "mode": "0o664"
+    },
+    "contracts/verification/docs/AXIOM_STATUS.json": {
+      "sha256": "102a23a3bc9eec12ee24d9b3ab0e51a0270b04e8f52c42af05ee569b9f59faab",
+      "mode": "0o664"
+    },
+    "contracts/verification/docs/THE_CLAIM.md": {
+      "sha256": "779b9b6953e5a36bd48b8025e25838fd3c81bd000998d65bf236fd7a9bed2427",
+      "mode": "0o664"
+    },
+    "contracts/verification/docs/TRUST_ASSUMPTIONS.md": {
+      "sha256": "048e4623ca57b054c4b81e2fc9422614511bd874e1502b3c03c700e629865a8c",
+      "mode": "0o664"
+    },
+    "contracts/verification/lean/README.md": {
+      "sha256": "9e0ea845a1dc93cba13f09920cab4c1c110d345da9ec0b814d4539d1d9ecc5b5",
+      "mode": "0o664"
+    },
+    "contracts/verification/lean/SphincsCVerify/Bridge/EntryPoint.lean": {
+      "sha256": "251429dbaf135f2d9558a420fbc819078b9ddedf6dae0cced829ce0e4eebc492",
+      "mode": "0o664"
+    },
+    "contracts/verification/lean/SphincsCVerify/Bridge/Refinement.lean": {
+      "sha256": "0df9bedb0ab466884e8c9850ec1a2e33046fe9341cf0357a6f02e6d7d3360adc",
+      "mode": "0o664"
+    },
+    "contracts/verification/lean/SphincsCVerify/Spec/Theorems.lean": {
+      "sha256": "164fe5825909317dc362f07e1262ff55bcaa145b066678f7edadb04ae5ea2853",
+      "mode": "0o664"
+    },
+    "contracts/verification/lean/scripts/dump_axiom_types.lean": {
+      "sha256": "ea8de2741314d41eb9814d7bcd3d60214898fed49facefe73730fc8d070341b4",
+      "mode": "0o664"
+    },
+    "contracts/verification/lean/scripts/dump_axioms.lean": {
+      "sha256": "0465f9e13217be935386eb75397cce5387cde3ddb968275240043e3b8e414c87",
+      "mode": "0o664"
+    },
+    "contracts/verification/lean/scripts/proof_mutations.json": {
+      "sha256": "dfb3ecb4413b7d0339e9c40d563c7a4dbf70e9ba232dc4488decdd26d96045a7",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/axiom_inventory_extracted.json": {
+      "sha256": "34e38806b230d519423d986eaf1fa7af7a3e233698aec3568e116ccdb40559b2",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/axiom_inventory_lean.json": {
+      "sha256": "068d09b438f49c016cca5382861e72a4c5c32044e56bd79b4829db46827abc25",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/check_axiom_inventory.py": {
+      "sha256": "4b037d6fc52b80deccab7d29ddf4e9429b377cace86f4ddb92b5feb00a7ab1b3",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/check_ledger_consistency.py": {
+      "sha256": "2c4e1a23542e68f55b01450260a1c056de07a66448bdc723086e3cdd0f95ae6c",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/check_proof_mutations.py": {
+      "sha256": "3f52bb48a91e0280a73950f5344b3ce5eae39b7ff9414e90751414da05a03cdc",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/check_verity_holes.py": {
+      "sha256": "648d2d590897fdf853287fcaf1b08181cc519b2e0d67d3a3fbeda0e4e8903310",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/dump_axiom_inventory.lean": {
+      "sha256": "67c998b3b505c90c765133c7cfc0880c2ab0444ca90ee678a2fb9c6d01e366d3",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/known_true_axioms.txt": {
+      "sha256": "8db6bfaa143ccc2b01734e0828231c42a871691d94f71aa7402909b81f87447f",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/lean_source.py": {
+      "sha256": "747ab90df6da26e8e41599e9925de8a82fffc1c8432de04b1361a0cc9e283c9c",
+      "mode": "0o664"
+    },
+    "contracts/verification/scripts/lint_axioms.sh": {
+      "sha256": "77579cda4ce56f755facc995c7262b1a89758666c684a6da1274423411101a7b",
+      "mode": "0o775"
+    },
+    "contracts/verification/scripts/lint_extracted_axiom_census.sh": {
+      "sha256": "5014e8549710aea35714ea78912ad3b0d404cff1fa300fec4652367ba35b8209",
+      "mode": "0o775"
+    },
+    "contracts/verification/scripts/lint_fv_invariants.sh": {
+      "sha256": "bf3735a5db79cbd9f4df94e32f2e3efcbdf9414403f10719fbc4063113b8e35a",
+      "mode": "0o775"
+    },
+    "contracts/verification/scripts/test_axiom_inventory.py": {
+      "sha256": "6bf46e30265d2bd5d966915db8a37150d9091c53e20307b90d2b9c9749615119",
+      "mode": "0o664"
+    },
+    "contracts/verification/tla/README.md": {
+      "sha256": "ace4ae320a7b91bb82f865c4b69c0f523c8afe807bbdf4c864b9610ce4082fdb",
+      "mode": "0o664"
+    },
+    "contracts/verification/tla/cfg_pins.sha256": {
+      "sha256": "c7b21ca508b3f2d117f2ed423dcb3b0716ea19104dc8643f8419dfb82766bc78",
+      "mode": "0o664"
+    },
+    "contracts/verification/tla/check_tlc.py": {
+      "sha256": "5481eaa8cc8fb1f1fbd69b212aa64950701ebe50ba2f57d21c4bc70931191d0d",
+      "mode": "0o664"
+    },
+    "contracts/verification/tla/run.sh": {
+      "sha256": "1e3138544eb109ac37dbb176f930ef86d4c94297c7fc321ca7ccb6b0acead706",
+      "mode": "0o775"
+    },
+    "contracts/verification/tla/run_combined.sh": {
+      "sha256": "ea06042082374960a835e62a93bbc78ff52b2ba5eb51e9eef1624951be285d2b",
+      "mode": "0o775"
+    },
+    "contracts/verification/tla/run_pin.sh": {
+      "sha256": "9be410e3fa8be461e0a1a5b43e476861b4695491dfdb5fbe7974b16a0e67ea0c",
+      "mode": "0o775"
+    },
+    "contracts/verity/Makefile": {
+      "sha256": "d95aa53e8dc7d3a6f137bde744441cc05cf62cefe23e6e3f4f09180be31fc959",
+      "mode": "0o664"
+    },
+    "contracts/verity/PQSigner/Theorems.lean": {
+      "sha256": "0ce18de2961f3489849ab0d0113c7b2c8b70a4b6046f3a044795c752330a4f6e",
+      "mode": "0o664"
+    },
+    "contracts/verity/PQSigner/Verifier/Hypertree.lean": {
+      "sha256": "8237588f68d0815da9b6d089f55a9c2b174b84a676f0cc2b6c0c85b75d0b6217",
+      "mode": "0o664"
+    },
+    "contracts/verity/PQSigner/Verifier/Top.lean": {
+      "sha256": "e8b0dc0569695d144e1bf072833631ecffd4d8eb3295d5e5cb300de3614fa775",
+      "mode": "0o664"
+    },
+    "contracts/verity/TRUST_ASSUMPTIONS.md": {
+      "sha256": "e73ef2e58e8cd75873f787e91926d5a3a2ebed41469547d255ec730841eba0df",
+      "mode": "0o664"
+    },
+    "scripts/check_protocol_models.py": {
+      "sha256": "26a06abb202fbdb457e218b90963b2bcdf8bdf03046d17213b8e973a70d89fac",
+      "mode": "0o664"
+    }
+  },
+  "reviewed_lean_verity_files_preserved": 191,
+  "reviewed_tlc_model_config_inputs_preserved": true,
+  "prerequisites": [
+    "contracts/verification/docs/AXIOM_STATUS.json",
+    "contracts/verification/docs/THE_CLAIM.md",
+    "contracts/verification/lean/README.md",
+    "contracts/verification/lean/SphincsCVerify/Bridge/EntryPoint.lean",
+    "contracts/verification/lean/SphincsCVerify/Bridge/Refinement.lean",
+    "contracts/verification/lean/SphincsCVerify/Spec/Theorems.lean",
+    "contracts/verification/lean/scripts/dump_axiom_types.lean",
+    "contracts/verification/lean/scripts/dump_axioms.lean",
+    "contracts/verification/lean/scripts/proof_mutations.json",
+    "contracts/verification/scripts/check_ledger_consistency.py",
+    "contracts/verification/scripts/known_true_axioms.txt",
+    "contracts/verification/tla/README.md",
+    "contracts/verification/tla/cfg_pins.sha256",
+    "contracts/verity/TRUST_ASSUMPTIONS.md"
+  ],
+  "validation": "landing-gates.json",
+  "evidence_reused": "Eight proof mutations and adversarial negative controls: all exercised source inputs preserved from the reviewed snapshot. Landing gate-enforcement rerun uses the unchanged branch checker/CI pair; unrelated pending CI/Kani/hardware edits are excluded.",
+  "publication_identity": "The Git commit carrying this receipt binds the selected source files and evidence. The six GitHub finding threads record the pushed commit.",
+  "scope": "FV source implementation only; no hardware, deployment or shipment authority; #673 semantic census and #509 combined assurance remain open."
+}

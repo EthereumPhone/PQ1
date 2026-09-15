@@ -1,0 +1,20 @@
+VERDICT: GO
+TARGET: eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e / 8120c3bd802ed6106f5f3926e1efdc11952c6f32
+FINDINGS: none
+GAPS: none
+
+Source-first verification of each acceptance claim:
+
+1. **Axiom inventories** — `check_axiom_inventory.py` pins whole axiom-bearing modules (sha256 + token count) across the full walk, including the quarantined `AxiomCheckNegativeControl.lean` and the heavy modules (they live under `Extracted/`, confirmed via lakefile globs); rejects symlinks, quarantine references, and non-UTF-8. Elaborated pin binds name/module/type_sha256/levels/unsafe for all 27 environment axioms per project with duplicate/malformed/empty rejection; private or namespaced axioms produce distinct names → drift → fail. I recomputed both source inventories read-only: exact match. Default/heavy split intact (`defaultTargets = ["SphincsCVerify"]`; `ExtractedFormatDecimalHeavy` is non-default); closure gates and `lint_axioms.sh` placeholder scan remain additive, not replaced.
+
+2. **TLC** — `check_tlc.py` enforces the exact 17-config set against both the manifest and the on-disk glob (I re-verified `sha256sum --check cfg_pins.sha256`: OK, 17/17), rejects duplicate/malformed/path-traversal pin lines and symlinks, and requires per-case completion: status 0 + exactly one success banner, or status 12 + exactly the expected violation plus the exact two `Error:` lines, with a single terminal `Finished in` line as the last output line. Contradictory, duplicated, truncated, or exit-42 outputs all raise; self-test proves it and runs in `verify-tla` before the pinned-jar (sha256-pinned) runs.
+
+3. **CryptoVerif** — `parse_cryptoverif` now strict-`fullmatch`es every `RESULT` line, raising on malformed, indented, empty, or duplicate (incl. punctuation-normalized) results; missing/unexpected/flipped queries fail via `diff_identity`; self-test covers all seven corruption classes and is wired into nightly CI.
+
+4. **Mutation pin** — I recomputed the canonical definition digest from `proof_mutations.json`: `1ce0292e…` matches the new constant exactly; the ID-set digest is unchanged; 13 definitions with enforced tier selection quick 2 / default 8 / full 13.
+
+5. **Verity holes** — `check_verity_holes.py` walks all `.lean` under `PQSigner/` (identical scope to the retired `find`-based `LEAN_FILES`, so unbuilt scaffold is covered), counts `sorry|admit|sorryAx|proof_wanted` with the comment/string-aware scanner, per-file budgets 11+1=12, any other file at 0 — budget not increased.
+
+6. **A2 prose** — `ASSURANCE_CASE.md` now states `entrypoint_honest` is a proved in-model theorem contributing no kernel premise, while deployed-EntryPoint faithfulness remains an external assumption; the minimal-TCB sentence was updated consistently.
+
+Non-blocking nits: `check_result`'s `not lines` clause is dead (already covered by `len(finished) != 1`); a bare `RESULT Proved .` normalizes to an empty query caught only at diff time, not parse time. Neither weakens any acceptance property.

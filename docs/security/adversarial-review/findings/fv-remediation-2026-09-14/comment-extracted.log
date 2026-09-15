@@ -1,0 +1,2450 @@
+make: Entering directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification'
+⚠ [1507/1767] Replayed Aeneas.Std.Slice
+warning: Aeneas/Std/Slice.lean:364:4: declaration uses `sorry`
+warning: Aeneas/Std/Slice.lean:587:8: declaration uses `sorry`
+⚠ [1585/1767] Replayed Aeneas.Std.StringIter
+warning: Aeneas/Std/StringIter.lean:13:4: declaration uses `sorry`
+⚠ [1685/1767] Replayed Extracted.Bits
+warning: Extracted/Bits.lean:17:32: unused variable `hx`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: Extracted/Bits.lean:34:37: This simp argument is unused:
+  Nat.le_of_lt
+
+Hint: Omit it from the simp argument list.
+  simp [hv, hj, Nat.not_lt.mpr hj,̵ ̵N̵a̵t̵.̵l̵e̵_̵o̵f̵_̵l̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [1688/1767] Replayed Extracted.ForsLoop
+warning: Extracted/ForsLoop.lean:32:13: This simp argument is unused:
+  core.iter.range.StepUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [̵c̵o̵r̵e̵.̵i̵t̵e̵r̵.̵r̵a̵n̵g̵e̵.̵S̵t̵e̵p̵U̵s̵i̵z̵e̵,̵ ̵c̵o̵r̵e̵.̵c̵m̵p̵.̵P̵a̵r̵t̵i̵a̵l̵O̵r̵d̵U̵s̵i̵z̵e̵,̵[̲c̲o̲r̲e̲.̲c̲m̲p̲.̲P̲a̲r̲t̲i̲a̲l̲O̲r̲d̲U̲s̲i̲z̲e̲,̲ core.clone.CloneUsize,
+  ̲  ̲ ̲ ̲core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+  ̲  ̲ ̲ ̲core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:32:40: This simp argument is unused:
+  core.cmp.PartialOrdUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.iter.range.StepUsize, c̵o̵r̵e̵.̵c̵m̵p̵.̵P̵a̵r̵t̵i̵a̵l̵O̵r̵d̵U̵s̵i̵z̵e̵,̵core.clone.CloneUsize,
+      core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+      core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:33:13: This simp argument is unused:
+  core.clone.CloneUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.iter.range.StepUsize, core.cmp.PartialOrdUsize,
+      c̵o̵r̵e̵.̵c̵l̵o̵n̵e̵.̵C̵l̵o̵n̵e̵U̵s̵i̵z̵e̵,̵ ̵core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+  ̲  ̲ ̲ ̲core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:83:8: 'first
+| scalar_tac
+| (refine ⟨?_, ?_⟩ <;> scalar_tac)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:83:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:105:4: 'first
+| scalar_tac
+| (rw [Nat.shiftLeft_eq, Nat.one_mul, Nat.mod_eq_of_lt hlt64]; omega)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:105:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:120:4: 'first
+| (apply read_bits_le_terminates <;> scalar_tac)
+| scalar_tac
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:120:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:149:8: 'first
+| (apply read_bits_le_terminates <;> scalar_tac)
+| scalar_tac
+| (refine ⟨?_, ?_⟩ <;> scalar_tac)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:149:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:166:4: 'first
+| (apply extract_fors_indices_loop_terminates <;> scalar_tac)
+| scalar_tac
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:166:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:188:7: 'rw [Nat.shiftLeft_eq, Nat.one_mul, Nat.mod_eq_of_lt hlt64]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:188:67: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:190:6: 'trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:188:67: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:190:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:185:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:206:7: 'apply read_bits_le_in_range' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:206:39: 'scalar_tac' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:209:6: 'trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:206:39: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:209:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:204:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:250:8: 'first
+| (apply read_bits_le_in_range <;> scalar_tac)
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:251:43: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:249:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:284:4: 'first
+| (apply extract_fors_indices_loop_in_range)
+| scalar_tac
+| (intro j hj; simp_all)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:284:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1690/1767] Replayed Extracted.ForsExtract
+warning: Extracted/ForsExtract.lean:72:13: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this ⊢
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:94:77: This simp argument is unused:
+  UScalar.bv
+
+Hint: Omit it from the simp argument list.
+  simp only [core.num.Usize.wrapping_sub, UScalar.wrapping_sub, UScalar.val, U̵S̵c̵a̵l̵a̵r̵.̵b̵v̵,̵UScalarTy.Usize,
+      BitVec.toNat_sub, show UScalarTy.Usize.numBits = System.Platform.numBits from rfl]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:95:13: This simp argument is unused:
+  UScalarTy.Usize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.num.Usize.wrapping_sub, UScalar.wrapping_sub, UScalar.val, UScalar.bv,
+      U̵S̵c̵a̵l̵a̵r̵T̵y̵.̵U̵s̵i̵z̵e̵,̵ ̵BitVec.toNat_sub, show UScalarTy.Usize.numBits = System.Platform.numBits from rfl]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:114:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsExtract.lean:170:76: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/ForsExtract.lean:172:69: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:226:2: Too many ids provided ([none, none]): expected ≤ 1 ids, got 2
+warning: Extracted/ForsExtract.lean:227:2: Too many ids provided ([none, none]): expected ≤ 1 ids, got 2
+warning: Extracted/ForsExtract.lean:329:4: 'first
+| (apply extract_fors_indices_loop_value)
+| scalar_tac
+| (intro j hj; simp_all)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsExtract.lean:329:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1697/1767] Replayed Extracted.SetSliceLemmas
+warning: Extracted/SetSliceLemmas.lean:22:10: This simp argument is unused:
+  List.take_append
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵L̵i̵s̵t̵.̵t̵a̵k̵e̵_̵a̵p̵p̵e̵n̵d̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/SetSliceLemmas.lean:40:46: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:40:76: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:40:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:40:76: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:84: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:84: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1698/1767] Replayed Extracted.Eip1271Equiv
+warning: Extracted/Eip1271Equiv.lean:16:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:37: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵hth, hnm, hve, hcb, hvc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:70: This simp argument is unused:
+  hve
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hv̵e̵,̵ ̵h̵cb, hvc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:75: This simp argument is unused:
+  hcb
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hc̵b̵,̵ ̵h̵vc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:80: This simp argument is unused:
+  hvc
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb,̵ ̵h̵v̵c̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:32:75: This simp argument is unused:
+  hcb
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hc̵b̵,̵ ̵h̵vc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:32:80: This simp argument is unused:
+  hvc
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb,̵ ̵h̵v̵c̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:38:80: This simp argument is unused:
+  hvc
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb,̵ ̵h̵v̵c̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:19:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:22:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:26:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:28:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:32:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:34:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:38:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:39:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:19:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:22:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:26:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:28:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:32:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:34:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:38:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:39:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:25:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:25:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:31:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:31:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:37:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:37:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:55:15: This simp argument is unused:
+  BitVec.toBEBytes_length
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, List.length_map, B̵i̵t̵V̵e̵c̵.̵t̵o̵B̵E̵B̵y̵t̵e̵s̵_̵l̵e̵n̵g̵t̵h̵,̵ ̵l1, l2, l3, l5,
+  ̲  ̲ ̲ ̲ ̲ ̲Std.U64.numBits]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:55:56: This simp argument is unused:
+  Std.U64.numBits
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, List.length_map, BitVec.toBEBytes_length,
+  ̲  ̲ ̲ ̲ ̲ ̲l1, l2, l3, l̵5̵,̵ ̵S̵t̵d̵.̵U̵6̵4̵.̵n̵u̵m̵B̵i̵t̵s̵]̵l̲5̲]̲
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:73:32: This simp argument is unused:
+  Array.length_to_slice
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.length,̵ ̵A̵r̵r̵a̵y̵.̵l̵e̵n̵g̵t̵h̵_̵t̵o̵_̵s̵l̵i̵c̵e̵] at *
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:71:4: 'first
+| scalar_tac
+| (simp only [Slice.length, Array.length_to_slice] at *; scalar_tac)
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:70:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:92:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:97:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:64: 'simp only [List.length_append, hth, hfh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:109: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:64: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:109: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:105:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:112:106: This simp argument is unused:
+  hsh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append,
+  ̲  ̲ ̲ ̲hpre, hds,̵ ̵h̵s̵h̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:110:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:64: 'simp only [List.length_append, hpre, hds, hsh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:115: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:112:115: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:64: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:115: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:112:115: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:112:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:112:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:146:32: This simp argument is unused:
+  Array.length_to_slice
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.length,̵ ̵A̵r̵r̵a̵y̵.̵l̵e̵n̵g̵t̵h̵_̵t̵o̵_̵s̵l̵i̵c̵e̵] at *
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:144:4: 'first
+| scalar_tac
+| (simp only [Slice.length, Array.length_to_slice] at *; scalar_tac)
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:143:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1701/1767] Replayed Extracted.WotsDigits
+warning: Extracted/WotsDigits.lean:20:37: This simp argument is unused:
+  Nat.le_of_lt
+
+Hint: Omit it from the simp argument list.
+  simp [hv, hj, Nat.not_lt.mpr hj,̵ ̵N̵a̵t̵.̵l̵e̵_̵o̵f̵_̵l̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/WotsDigits.lean:22:56: unused variable `h1`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: Extracted/WotsDigits.lean:55:72: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/WotsDigits.lean:109:71: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/WotsDigits.lean:110:77: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [1704/1767] Replayed Extracted.FwManifestSpec
+warning: Extracted/FwManifestSpec.lean:27:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:37:49: This simp argument is unused:
+  hsh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, htag, hver, hs̵h̵,̵ ̵h̵nh]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:37:54: This simp argument is unused:
+  hnh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, htag, hver, hsh,̵ ̵h̵n̵h̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:40:54: This simp argument is unused:
+  hnh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, htag, hver, hsh,̵ ̵h̵n̵h̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:30:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:31:6: 'simp only [List.length_append, htag, hver, hsh, hnh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:31:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:33:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:34:6: 'simp only [List.length_append, htag, hver, hsh, hnh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:34:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:37:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:40:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:41:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:42:6: 'simp only [List.length_append, htag, hver, hsh, hnh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:42:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:30:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:31:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:31:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:33:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:34:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:34:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:37:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:40:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:41:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:42:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:42:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:36:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:36:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:39:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:39:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:63:32: This simp argument is unused:
+  Array.length_to_slice
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.length,̵ ̵A̵r̵r̵a̵y̵.̵l̵e̵n̵g̵t̵h̵_̵t̵o̵_̵s̵l̵i̵c̵e̵] at *
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:66:66: This simp argument is unused:
+  l_tag
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.len_val, Array.length_to_slice,̵ ̵l̵_̵t̵a̵g̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:70:51: This simp argument is unused:
+  hslen
+
+Hint: Omit it from the simp argument list.
+  simp only [s12_post, s11_post, s10_post3, s9_post, s8_post, s7_post3, s6_post, s5_post,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵a_post,
+  ̲  ̲ ̲ ̲s4_post3, s3_post, s2_post, s1_post3, s_post,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵Array.val_to_slice, Array.repeat_val,
+  ̲ h̵s̵l̵e̵n̵,̵  ̲ ̲sec_off_post, ns_off_post]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:61:4: 'first
+| scalar_tac
+| (simp only [Slice.length, Array.length_to_slice] at *; scalar_tac)
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:60:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1707/1767] Replayed Extracted.Bip39RoundtripSpec
+warning: Extracted/Bip39RoundtripSpec.lean:66:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:128:13: 'skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:129:8: 'skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:128:13: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:129:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:148:12: 'first
+| (exfalso; omega)
+| omega
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:157:42: 'first
+| (exfalso; omega)
+| omega
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:148:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Bip39RoundtripSpec.lean:157:38: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1711/1767] Replayed Extracted.RlpIntSpec
+warning: Extracted/RlpIntSpec.lean:46:63: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:113:19: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:110:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:110:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/RlpIntSpec.lean:190:19: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:187:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:187:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/RlpIntSpec.lean:259:36: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/RlpIntSpec.lean:289:41: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/RlpIntSpec.lean:248:89: This simp argument is unused:
+  lift
+
+Hint: Omit it from the simp argument list.
+  simp only [SharedASlice.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter,̵ ̵l̵i̵f̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:249:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:259:51: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:276:66: 'rfl' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:289:56: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:259:51: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/RlpIntSpec.lean:289:56: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/RlpIntSpec.lean:350:51: 'rfl' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+⚠ [1714/1767] Replayed Extracted.U256MulSpec
+warning: Extracted/U256MulSpec.lean:89:60: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/U256MulSpec.lean:91:58: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/U256MulSpec.lean:97:39: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/U256MulSpec.lean:99:40: This simp argument is unused:
+  Std.U64.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵6̵4̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/U256MulSpec.lean:92:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/U256MulSpec.lean:92:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/U256MulSpec.lean:202:57: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/U256MulSpec.lean:193:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/U256MulSpec.lean:228:4: 'skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/U256MulSpec.lean:228:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1724/1767] Replayed Extracted.HashSpecs.Truncate
+warning: Extracted/HashSpecs/Truncate.lean:25:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1728/1767] Replayed Extracted.HashSpecs.ThMulti
+warning: Extracted/HashSpecs/ThMulti.lean:168:73: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/HashSpecs/ThMulti.lean:165:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1729/1767] Replayed Extracted.HashSpecs.ChainHash
+warning: Extracted/HashSpecs/ChainHash.lean:88:19: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/HashSpecs/ChainHash.lean:164:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1731/1767] Replayed Extracted.MerkleVerifySpec
+warning: Extracted/MerkleVerifySpec.lean:85:56: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/MerkleVerifySpec.lean:88:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:88:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/MerkleVerifySpec.lean:133:36: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/MerkleVerifySpec.lean:141:36: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/MerkleVerifySpec.lean:142:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:178:18: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:192:18: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:178:18: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/MerkleVerifySpec.lean:192:18: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/MerkleVerifySpec.lean:142:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/MerkleVerifySpec.lean:204:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:204:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1735/1767] Replayed Extracted.TxMerkleSpec
+warning: Extracted/TxMerkleSpec.lean:50:29: This simp argument is unused:
+  hf
+
+Hint: Omit it from the simp argument list.
+  simp [h̵f̵,̵ ̵ih, List.allM]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/TxMerkleSpec.lean:50:37: This simp argument is unused:
+  List.allM
+
+Hint: Omit it from the simp argument list.
+  simp [hf, ih,̵ ̵L̵i̵s̵t̵.̵a̵l̵l̵M̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/TxMerkleSpec.lean:50:48: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/TxMerkleSpec.lean:129:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/TxMerkleSpec.lean:129:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/TxMerkleSpec.lean:226:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/TxMerkleSpec.lean:226:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1743/1767] Replayed Extracted.PkFromSigSpec
+warning: Extracted/PkFromSigSpec.lean:135:33: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/PkFromSigSpec.lean:136:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/PkFromSigSpec.lean:149:46: 'norm_num' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/PkFromSigSpec.lean:149:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/PkFromSigSpec.lean:136:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/PkFromSigSpec.lean:202:33: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/PkFromSigSpec.lean:246:66: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/PkFromSigSpec.lean:215:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/PkFromSigSpec.lean:320:8: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+⚠ [1744/1767] Replayed Extracted.UserOpEquiv
+warning: Extracted/UserOpEquiv.lean:37:35: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/UserOpEquiv.lean:66:6: 'simp only [userop.WORD]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/UserOpEquiv.lean:66:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1747/1767] Replayed Extracted.SpecBridge
+warning: Extracted/SpecBridge.lean:35:8: This simp argument is unused:
+  UInt8.toNat_ofNat
+
+Hint: Omit it from the simp argument list.
+  simp only [SphincsCVerify.Spec.Adrs.make, SphincsCVerify.Spec.ByteVec.cast,
+       ̵ ̵ ̵ ̵SphincsCVerify.Spec.ByteVec.append, SphincsCVerify.Spec.ByteVec.ofU32BE,
+       ̵ ̵ ̵ ̵SphincsCVerify.Spec.ByteVec.ofU64BE, specMakeAdrs, u32be, u64be,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵Array.toList_append,
+  ̲  ̲ ̲ ̲List.map_append, List.map_cons, List.map_nil,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵U̵I̵n̵t̵8̵.̵t̵o̵Nat_̵o̵f̵N̵a̵t̵,̵ ̵N̵a̵t̵.shiftRight_eq_div_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [1758/1767] Replayed Extracted.FormatDecimal.Div10Spec
+warning: Extracted/FormatDecimal/Div10Spec.lean:87:60: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:95:60: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:99:34: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:96:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:96:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:180:24: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+ℹ [1765/1767] Replayed Extracted.AxiomCheck
+info: Extracted/AxiomCheck.lean:44:0: 'Extracted.Equiv.slot_entropy_hashes_canonical_preimage' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:45:0: 'Extracted.Equiv.derive_c10_slot_seeds_byte_layout' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:46:0: 'Extracted.Equiv.slot_master_byte_layout' depends on axioms: [propext, sha256_pure_bytes, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:47:0: 'Extracted.Equiv.derive_c10_master_byte_layout' depends on axioms: [hmac_sha512_pure_bytes,
+ propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:50:0: 'Extracted.Equiv.slotEntropyPreimage_chain_inj' depends on axioms: [propext, Quot.sound]
+info: Extracted/AxiomCheck.lean:51:0: 'Extracted.Equiv.slotEntropyPreimage_slot_inj' depends on axioms: [propext, Quot.sound]
+info: Extracted/AxiomCheck.lean:52:0: 'Extracted.Equiv.slot_entropy_crosschain_reduction' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:56:0: 'Div10Spec.div10_inplace_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:61:0: 'ExtractDigitsSpec.extract_digits_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:62:0: 'ExtractDigitsSpec.extract_digits_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:63:0: 'ExtractDigitsSpec.is_zero_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:68:0: 'RoundCarrySpec.round_carry_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:69:0: 'RoundCarrySpec.round_carry_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:70:0: 'RoundCarrySpec.decValue_set' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:75:0: 'TrimFracSpec.trim_frac_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:76:0: 'TrimFracSpec.trim_frac_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:88:0: 'EmitSpec.emit_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:89:0: 'EmitSpec.emit_int_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:90:0: 'EmitSpec.emit_frac_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:91:0: 'EmitSpec.fmt_emit_loop0_eq_loop2' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:92:0: 'EmitSpec.emitBytes_length' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:93:0: 'EmitSpec.emitBytes_ascii' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:94:0: 'EmitSpec.emitBytes_dot_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:95:0: 'EmitSpec.emitBytes_head_digit' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:96:0: 'EmitSpec.emitBytes_no_leading_zero' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:97:0: 'Extracted.Equiv.deserialize_pin_state_rejects_bad_len' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:98:0: 'Extracted.Equiv.make_adrs_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:99:0: 'Extracted.Equiv.set_chain_index_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:100:0: 'Extracted.Equiv.compute_user_op_hash_terminates' depends on axioms: [keccak256_pure,
+ propext,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:101:0: 'Extracted.Equiv.compute_user_op_hash_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:102:0: 'Extracted.Equiv.firmware_make_adrs_matches_vendored' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:103:0: 'Extracted.Equiv.next_usize_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:104:0: 'Extracted.Equiv.read_bits_le_loop_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:105:0: 'Extracted.Equiv.extract_ht_index_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:106:0: 'Extracted.Equiv.extract_fors_indices_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:107:0: 'Extracted.Equiv.extract_ht_index_in_range' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:108:0: 'Extracted.Equiv.extract_fors_indices_in_range' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:109:0: 'Extracted.Equiv.lor_eq_add_disjoint' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:110:0: 'Extracted.Equiv.read_bits_le_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:111:0: 'Extracted.Equiv.extract_ht_index_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:112:0: 'Extracted.Equiv.extract_fors_indices_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:113:0: 'Extracted.Equiv.domain_separator_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:114:0: 'Extracted.Equiv.replay_safe_hash_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:115:0: 'Extracted.Equiv.extract_digits_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:116:0: 'Extracted.Equiv.extract_digits_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:117:0: 'Extracted.Equiv.signed_preimage_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:120:0: 'Extracted.Equiv.preimage_layout_injective' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:121:0: 'Extracted.Equiv.layout_domain_tag_prefix' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:122:0: 'Extracted.Equiv.signed_preimage_authorizes_one_firmware' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:123:0: 'Extracted.Equiv.roundtrip_11_id' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:124:0: 'Extracted.Equiv.beValue_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:125:0: 'Extracted.Equiv.bytes_to_u64_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:126:0: 'Extracted.Equiv.bytes_to_u256_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:127:0: 'Extracted.Equiv.saturating_mul_u64_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:128:0: 'Extracted.Equiv.verify_auth_path_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:129:0: 'Extracted.Equiv.verify_proof_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:130:0: 'Extracted.Equiv.decode_length_be_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:131:0: 'Extracted.Equiv.decode_item_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:132:0: 'Extracted.Equiv.pk_from_sig_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:133:0: 'sha256_pure' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:134:0: 'sphincs_c10.hash.truncate_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:135:0: 'sphincs_c10.hash.th_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:136:0: 'sphincs_c10.hash.th_pair_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:137:0: 'sphincs_c10.hash.wots_digest_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:138:0: 'sphincs_c10.hash.th_multi_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:139:0: 'sphincs_c10.hash.chain_hash_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+Build completed successfully (1767 jobs).
+=== Extracted exact source and elaborated axiom census ===
+⚠ [1507/1767] Replayed Aeneas.Std.Slice
+warning: Aeneas/Std/Slice.lean:364:4: declaration uses `sorry`
+warning: Aeneas/Std/Slice.lean:587:8: declaration uses `sorry`
+⚠ [1585/1767] Replayed Aeneas.Std.StringIter
+warning: Aeneas/Std/StringIter.lean:13:4: declaration uses `sorry`
+⚠ [1685/1767] Replayed Extracted.Bits
+warning: Extracted/Bits.lean:17:32: unused variable `hx`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: Extracted/Bits.lean:34:37: This simp argument is unused:
+  Nat.le_of_lt
+
+Hint: Omit it from the simp argument list.
+  simp [hv, hj, Nat.not_lt.mpr hj,̵ ̵N̵a̵t̵.̵l̵e̵_̵o̵f̵_̵l̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [1688/1767] Replayed Extracted.ForsLoop
+warning: Extracted/ForsLoop.lean:32:13: This simp argument is unused:
+  core.iter.range.StepUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [̵c̵o̵r̵e̵.̵i̵t̵e̵r̵.̵r̵a̵n̵g̵e̵.̵S̵t̵e̵p̵U̵s̵i̵z̵e̵,̵ ̵c̵o̵r̵e̵.̵c̵m̵p̵.̵P̵a̵r̵t̵i̵a̵l̵O̵r̵d̵U̵s̵i̵z̵e̵,̵[̲c̲o̲r̲e̲.̲c̲m̲p̲.̲P̲a̲r̲t̲i̲a̲l̲O̲r̲d̲U̲s̲i̲z̲e̲,̲ core.clone.CloneUsize,
+  ̲  ̲ ̲ ̲core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+  ̲  ̲ ̲ ̲core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:32:40: This simp argument is unused:
+  core.cmp.PartialOrdUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.iter.range.StepUsize, c̵o̵r̵e̵.̵c̵m̵p̵.̵P̵a̵r̵t̵i̵a̵l̵O̵r̵d̵U̵s̵i̵z̵e̵,̵core.clone.CloneUsize,
+      core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+      core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:33:13: This simp argument is unused:
+  core.clone.CloneUsize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.iter.range.StepUsize, core.cmp.PartialOrdUsize,
+      c̵o̵r̵e̵.̵c̵l̵o̵n̵e̵.̵C̵l̵o̵n̵e̵U̵s̵i̵z̵e̵,̵ ̵core.iter.range.StepUsize.forward_checked, core.clone.impls.CloneUsize.clone,
+  ̲  ̲ ̲ ̲core.cmp.impls.PartialOrdUsize.lt, liftFun1, liftFun2, bind_tc_ok]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsLoop.lean:83:8: 'first
+| scalar_tac
+| (refine ⟨?_, ?_⟩ <;> scalar_tac)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:83:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:105:4: 'first
+| scalar_tac
+| (rw [Nat.shiftLeft_eq, Nat.one_mul, Nat.mod_eq_of_lt hlt64]; omega)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:105:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:120:4: 'first
+| (apply read_bits_le_terminates <;> scalar_tac)
+| scalar_tac
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:120:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:149:8: 'first
+| (apply read_bits_le_terminates <;> scalar_tac)
+| scalar_tac
+| (refine ⟨?_, ?_⟩ <;> scalar_tac)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:149:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:166:4: 'first
+| (apply extract_fors_indices_loop_terminates <;> scalar_tac)
+| scalar_tac
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:166:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:188:7: 'rw [Nat.shiftLeft_eq, Nat.one_mul, Nat.mod_eq_of_lt hlt64]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:188:67: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:190:6: 'trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:188:67: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:190:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:185:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:206:7: 'apply read_bits_le_in_range' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:206:39: 'scalar_tac' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:209:6: 'trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:206:39: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:209:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:204:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:250:8: 'first
+| (apply read_bits_le_in_range <;> scalar_tac)
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:251:43: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/ForsLoop.lean:249:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsLoop.lean:284:4: 'first
+| (apply extract_fors_indices_loop_in_range)
+| scalar_tac
+| (intro j hj; simp_all)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsLoop.lean:284:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1690/1767] Replayed Extracted.ForsExtract
+warning: Extracted/ForsExtract.lean:72:13: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this ⊢
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:94:77: This simp argument is unused:
+  UScalar.bv
+
+Hint: Omit it from the simp argument list.
+  simp only [core.num.Usize.wrapping_sub, UScalar.wrapping_sub, UScalar.val, U̵S̵c̵a̵l̵a̵r̵.̵b̵v̵,̵UScalarTy.Usize,
+      BitVec.toNat_sub, show UScalarTy.Usize.numBits = System.Platform.numBits from rfl]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:95:13: This simp argument is unused:
+  UScalarTy.Usize
+
+Hint: Omit it from the simp argument list.
+  simp only [core.num.Usize.wrapping_sub, UScalar.wrapping_sub, UScalar.val, UScalar.bv,
+      U̵S̵c̵a̵l̵a̵r̵T̵y̵.̵U̵s̵i̵z̵e̵,̵ ̵BitVec.toNat_sub, show UScalarTy.Usize.numBits = System.Platform.numBits from rfl]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:114:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/ForsExtract.lean:170:76: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/ForsExtract.lean:172:69: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/ForsExtract.lean:226:2: Too many ids provided ([none, none]): expected ≤ 1 ids, got 2
+warning: Extracted/ForsExtract.lean:227:2: Too many ids provided ([none, none]): expected ≤ 1 ids, got 2
+warning: Extracted/ForsExtract.lean:329:4: 'first
+| (apply extract_fors_indices_loop_value)
+| scalar_tac
+| (intro j hj; simp_all)
+| simp_all
+| trivial' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/ForsExtract.lean:329:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1697/1767] Replayed Extracted.SetSliceLemmas
+warning: Extracted/SetSliceLemmas.lean:22:10: This simp argument is unused:
+  List.take_append
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵L̵i̵s̵t̵.̵t̵a̵k̵e̵_̵a̵p̵p̵e̵n̵d̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/SetSliceLemmas.lean:40:46: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:40:76: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:40:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:40:76: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:84: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:66: '(try (congr 1 <;> omega))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:96: '(try omega)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:95:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:97:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:84: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:101:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:66: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:102:96: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/SetSliceLemmas.lean:99:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1698/1767] Replayed Extracted.Eip1271Equiv
+warning: Extracted/Eip1271Equiv.lean:16:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:37: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵hth, hnm, hve, hcb, hvc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:70: This simp argument is unused:
+  hve
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hv̵e̵,̵ ̵h̵cb, hvc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:75: This simp argument is unused:
+  hcb
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hc̵b̵,̵ ̵h̵vc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:26:80: This simp argument is unused:
+  hvc
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb,̵ ̵h̵v̵c̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:32:75: This simp argument is unused:
+  hcb
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hc̵b̵,̵ ̵h̵vc]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:32:80: This simp argument is unused:
+  hvc
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb,̵ ̵h̵v̵c̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:38:80: This simp argument is unused:
+  hvc
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb,̵ ̵h̵v̵c̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:19:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:22:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:26:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:28:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:32:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:34:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:38:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:39:46: '(try (congr 1))' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:6: 'simp only [List.length_append, List.length_replicate, hth, hnm, hve, hcb, hvc]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:89: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:19:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:20:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:22:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:23:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:26:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:28:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:29:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:32:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:34:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:35:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:38:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:39:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:40:89: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:25:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:25:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:31:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:31:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:37:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:37:62: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:55:15: This simp argument is unused:
+  BitVec.toBEBytes_length
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, List.length_map, B̵i̵t̵V̵e̵c̵.̵t̵o̵B̵E̵B̵y̵t̵e̵s̵_̵l̵e̵n̵g̵t̵h̵,̵ ̵l1, l2, l3, l5,
+  ̲  ̲ ̲ ̲ ̲ ̲Std.U64.numBits]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:55:56: This simp argument is unused:
+  Std.U64.numBits
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, List.length_replicate, List.length_map, BitVec.toBEBytes_length,
+  ̲  ̲ ̲ ̲ ̲ ̲l1, l2, l3, l̵5̵,̵ ̵S̵t̵d̵.̵U̵6̵4̵.̵n̵u̵m̵B̵i̵t̵s̵]̵l̲5̲]̲
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:73:32: This simp argument is unused:
+  Array.length_to_slice
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.length,̵ ̵A̵r̵r̵a̵y̵.̵l̵e̵n̵g̵t̵h̵_̵t̵o̵_̵s̵l̵i̵c̵e̵] at *
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:71:4: 'first
+| scalar_tac
+| (simp only [Slice.length, Array.length_to_slice] at *; scalar_tac)
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:70:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:92:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:97:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:64: 'simp only [List.length_append, hth, hfh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:109: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:64: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:97:109: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:105:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:112:106: This simp argument is unused:
+  hsh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append,
+  ̲  ̲ ̲ ̲hpre, hds,̵ ̵h̵s̵h̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:110:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:64: 'simp only [List.length_append, hpre, hds, hsh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:115: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:112:115: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:64: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:110:115: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:112:115: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Eip1271Equiv.lean:112:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:112:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Eip1271Equiv.lean:146:32: This simp argument is unused:
+  Array.length_to_slice
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.length,̵ ̵A̵r̵r̵a̵y̵.̵l̵e̵n̵g̵t̵h̵_̵t̵o̵_̵s̵l̵i̵c̵e̵] at *
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/Eip1271Equiv.lean:144:4: 'first
+| scalar_tac
+| (simp only [Slice.length, Array.length_to_slice] at *; scalar_tac)
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Eip1271Equiv.lean:143:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1701/1767] Replayed Extracted.WotsDigits
+warning: Extracted/WotsDigits.lean:20:37: This simp argument is unused:
+  Nat.le_of_lt
+
+Hint: Omit it from the simp argument list.
+  simp [hv, hj, Nat.not_lt.mpr hj,̵ ̵N̵a̵t̵.̵l̵e̵_̵o̵f̵_̵l̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/WotsDigits.lean:22:56: unused variable `h1`
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: Extracted/WotsDigits.lean:55:72: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/WotsDigits.lean:109:71: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/WotsDigits.lean:110:77: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [1704/1767] Replayed Extracted.FwManifestSpec
+warning: Extracted/FwManifestSpec.lean:27:53: This simp argument is unused:
+  List.length_replicate
+
+Hint: Omit it from the simp argument list.
+  simp [List.length_setSlice!, List.length_append, L̵i̵s̵t̵.̵l̵e̵n̵g̵t̵h̵_̵r̵e̵p̵l̵i̵c̵a̵t̵e̵,̵ ̵*]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:37:49: This simp argument is unused:
+  hsh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, htag, hver, hs̵h̵,̵ ̵h̵nh]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:37:54: This simp argument is unused:
+  hnh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, htag, hver, hsh,̵ ̵h̵n̵h̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:40:54: This simp argument is unused:
+  hnh
+
+Hint: Omit it from the simp argument list.
+  simp only [List.length_append, htag, hver, hsh,̵ ̵h̵n̵h̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:30:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:31:6: 'simp only [List.length_append, htag, hver, hsh, hnh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:31:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:33:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:34:6: 'simp only [List.length_append, htag, hver, hsh, hnh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:34:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:37:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:40:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:41:46: '(try congr 1)' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:42:6: 'simp only [List.length_append, htag, hver, hsh, hnh]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:42:63: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:30:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:31:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:31:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:33:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:34:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:34:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:37:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:40:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:41:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:42:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:42:63: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/FwManifestSpec.lean:36:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:36:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:39:42: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:39:60: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FwManifestSpec.lean:63:32: This simp argument is unused:
+  Array.length_to_slice
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.length,̵ ̵A̵r̵r̵a̵y̵.̵l̵e̵n̵g̵t̵h̵_̵t̵o̵_̵s̵l̵i̵c̵e̵] at *
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:66:66: This simp argument is unused:
+  l_tag
+
+Hint: Omit it from the simp argument list.
+  simp only [Slice.len_val, Array.length_to_slice,̵ ̵l̵_̵t̵a̵g̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:70:51: This simp argument is unused:
+  hslen
+
+Hint: Omit it from the simp argument list.
+  simp only [s12_post, s11_post, s10_post3, s9_post, s8_post, s7_post3, s6_post, s5_post,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵a_post,
+  ̲  ̲ ̲ ̲s4_post3, s3_post, s2_post, s1_post3, s_post,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵ ̵Array.val_to_slice, Array.repeat_val,
+  ̲ h̵s̵l̵e̵n̵,̵  ̲ ̲sec_off_post, ns_off_post]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FwManifestSpec.lean:61:4: 'first
+| scalar_tac
+| (simp only [Slice.length, Array.length_to_slice] at *; scalar_tac)
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FwManifestSpec.lean:60:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1707/1767] Replayed Extracted.Bip39RoundtripSpec
+warning: Extracted/Bip39RoundtripSpec.lean:66:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:128:13: 'skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:129:8: 'skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:128:13: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:129:8: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:148:12: 'first
+| (exfalso; omega)
+| omega
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:157:42: 'first
+| (exfalso; omega)
+| omega
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/Bip39RoundtripSpec.lean:148:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/Bip39RoundtripSpec.lean:157:38: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1711/1767] Replayed Extracted.RlpIntSpec
+warning: Extracted/RlpIntSpec.lean:46:63: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:113:19: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:110:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:110:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/RlpIntSpec.lean:190:19: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:187:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:187:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/RlpIntSpec.lean:259:36: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/RlpIntSpec.lean:289:41: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/RlpIntSpec.lean:248:89: This simp argument is unused:
+  lift
+
+Hint: Omit it from the simp argument list.
+  simp only [SharedASlice.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter,̵ ̵l̵i̵f̵t̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/RlpIntSpec.lean:249:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:259:51: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:276:66: 'rfl' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:289:56: 'omega' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/RlpIntSpec.lean:259:51: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/RlpIntSpec.lean:289:56: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/RlpIntSpec.lean:350:51: 'rfl' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+⚠ [1714/1767] Replayed Extracted.U256MulSpec
+warning: Extracted/U256MulSpec.lean:89:60: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/U256MulSpec.lean:91:58: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/U256MulSpec.lean:97:39: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/U256MulSpec.lean:99:40: This simp argument is unused:
+  Std.U64.size
+
+Hint: Omit it from the simp argument list.
+  simp only [̵S̵t̵d̵.̵U̵6̵4̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/U256MulSpec.lean:92:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/U256MulSpec.lean:92:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/U256MulSpec.lean:202:57: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/U256MulSpec.lean:193:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/U256MulSpec.lean:228:4: 'skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/U256MulSpec.lean:228:4: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1724/1767] Replayed Extracted.HashSpecs.Truncate
+warning: Extracted/HashSpecs/Truncate.lean:25:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1728/1767] Replayed Extracted.HashSpecs.ThMulti
+warning: Extracted/HashSpecs/ThMulti.lean:168:73: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/HashSpecs/ThMulti.lean:165:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1729/1767] Replayed Extracted.HashSpecs.ChainHash
+warning: Extracted/HashSpecs/ChainHash.lean:88:19: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/HashSpecs/ChainHash.lean:164:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1731/1767] Replayed Extracted.MerkleVerifySpec
+warning: Extracted/MerkleVerifySpec.lean:85:56: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/MerkleVerifySpec.lean:88:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:88:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/MerkleVerifySpec.lean:133:36: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/MerkleVerifySpec.lean:141:36: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/MerkleVerifySpec.lean:142:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:178:18: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:192:18: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:178:18: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/MerkleVerifySpec.lean:192:18: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/MerkleVerifySpec.lean:142:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/MerkleVerifySpec.lean:204:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/MerkleVerifySpec.lean:204:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1735/1767] Replayed Extracted.TxMerkleSpec
+warning: Extracted/TxMerkleSpec.lean:50:29: This simp argument is unused:
+  hf
+
+Hint: Omit it from the simp argument list.
+  simp [h̵f̵,̵ ̵ih, List.allM]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/TxMerkleSpec.lean:50:37: This simp argument is unused:
+  List.allM
+
+Hint: Omit it from the simp argument list.
+  simp [hf, ih,̵ ̵L̵i̵s̵t̵.̵a̵l̵l̵M̵]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/TxMerkleSpec.lean:50:48: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/TxMerkleSpec.lean:129:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/TxMerkleSpec.lean:129:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/TxMerkleSpec.lean:226:12: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/TxMerkleSpec.lean:226:8: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+⚠ [1743/1767] Replayed Extracted.PkFromSigSpec
+warning: Extracted/PkFromSigSpec.lean:135:33: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/PkFromSigSpec.lean:136:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/PkFromSigSpec.lean:149:46: 'norm_num' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/PkFromSigSpec.lean:149:46: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+warning: Extracted/PkFromSigSpec.lean:136:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/PkFromSigSpec.lean:202:33: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/PkFromSigSpec.lean:246:66: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/PkFromSigSpec.lean:215:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/PkFromSigSpec.lean:320:8: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+⚠ [1744/1767] Replayed Extracted.UserOpEquiv
+warning: Extracted/UserOpEquiv.lean:37:35: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/UserOpEquiv.lean:66:6: 'simp only [userop.WORD]' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/UserOpEquiv.lean:66:6: this tactic is never executed
+
+Note: This linter can be disabled with `set_option linter.unreachableTactic false`
+⚠ [1747/1767] Replayed Extracted.SpecBridge
+warning: Extracted/SpecBridge.lean:35:8: This simp argument is unused:
+  UInt8.toNat_ofNat
+
+Hint: Omit it from the simp argument list.
+  simp only [SphincsCVerify.Spec.Adrs.make, SphincsCVerify.Spec.ByteVec.cast,
+       ̵ ̵ ̵ ̵SphincsCVerify.Spec.ByteVec.append, SphincsCVerify.Spec.ByteVec.ofU32BE,
+       ̵ ̵ ̵ ̵SphincsCVerify.Spec.ByteVec.ofU64BE, specMakeAdrs, u32be, u64be,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵Array.toList_append,
+  ̲  ̲ ̲ ̲List.map_append, List.map_cons, List.map_nil,
+  ̵  ̵ ̵ ̵ ̵ ̵ ̵ ̵U̵I̵n̵t̵8̵.̵t̵o̵Nat_̵o̵f̵N̵a̵t̵,̵ ̵N̵a̵t̵.shiftRight_eq_div_pow]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [1758/1767] Replayed Extracted.FormatDecimal.Div10Spec
+warning: Extracted/FormatDecimal/Div10Spec.lean:87:60: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:95:60: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:99:34: This simp argument is unused:
+  Std.U8.size
+
+Hint: Omit it from the simp argument list.
+  simp [̵S̵t̵d̵.̵U̵8̵.̵s̵i̵z̵e̵]̵ ̵at this
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:96:16: 'first
+| scalar_tac
+| skip' tactic does nothing
+
+Note: This linter can be disabled with `set_option linter.unusedTactic false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:96:12: Used `tac1 <;> tac2` where `(tac1; tac2)` would suffice
+
+Note: This linter can be disabled with `set_option linter.unnecessarySeqFocus false`
+warning: Extracted/FormatDecimal/Div10Spec.lean:180:24: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+ℹ [1765/1767] Replayed Extracted.AxiomCheck
+info: Extracted/AxiomCheck.lean:44:0: 'Extracted.Equiv.slot_entropy_hashes_canonical_preimage' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:45:0: 'Extracted.Equiv.derive_c10_slot_seeds_byte_layout' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:46:0: 'Extracted.Equiv.slot_master_byte_layout' depends on axioms: [propext, sha256_pure_bytes, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:47:0: 'Extracted.Equiv.derive_c10_master_byte_layout' depends on axioms: [hmac_sha512_pure_bytes,
+ propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:50:0: 'Extracted.Equiv.slotEntropyPreimage_chain_inj' depends on axioms: [propext, Quot.sound]
+info: Extracted/AxiomCheck.lean:51:0: 'Extracted.Equiv.slotEntropyPreimage_slot_inj' depends on axioms: [propext, Quot.sound]
+info: Extracted/AxiomCheck.lean:52:0: 'Extracted.Equiv.slot_entropy_crosschain_reduction' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:56:0: 'Div10Spec.div10_inplace_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:61:0: 'ExtractDigitsSpec.extract_digits_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:62:0: 'ExtractDigitsSpec.extract_digits_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:63:0: 'ExtractDigitsSpec.is_zero_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:68:0: 'RoundCarrySpec.round_carry_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:69:0: 'RoundCarrySpec.round_carry_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:70:0: 'RoundCarrySpec.decValue_set' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:75:0: 'TrimFracSpec.trim_frac_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:76:0: 'TrimFracSpec.trim_frac_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:88:0: 'EmitSpec.emit_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:89:0: 'EmitSpec.emit_int_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:90:0: 'EmitSpec.emit_frac_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:91:0: 'EmitSpec.fmt_emit_loop0_eq_loop2' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:92:0: 'EmitSpec.emitBytes_length' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:93:0: 'EmitSpec.emitBytes_ascii' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:94:0: 'EmitSpec.emitBytes_dot_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:95:0: 'EmitSpec.emitBytes_head_digit' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:96:0: 'EmitSpec.emitBytes_no_leading_zero' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:97:0: 'Extracted.Equiv.deserialize_pin_state_rejects_bad_len' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:98:0: 'Extracted.Equiv.make_adrs_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:99:0: 'Extracted.Equiv.set_chain_index_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:100:0: 'Extracted.Equiv.compute_user_op_hash_terminates' depends on axioms: [keccak256_pure,
+ propext,
+ Classical.choice,
+ Quot.sound]
+info: Extracted/AxiomCheck.lean:101:0: 'Extracted.Equiv.compute_user_op_hash_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:102:0: 'Extracted.Equiv.firmware_make_adrs_matches_vendored' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:103:0: 'Extracted.Equiv.next_usize_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:104:0: 'Extracted.Equiv.read_bits_le_loop_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:105:0: 'Extracted.Equiv.extract_ht_index_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:106:0: 'Extracted.Equiv.extract_fors_indices_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:107:0: 'Extracted.Equiv.extract_ht_index_in_range' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:108:0: 'Extracted.Equiv.extract_fors_indices_in_range' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:109:0: 'Extracted.Equiv.lor_eq_add_disjoint' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:110:0: 'Extracted.Equiv.read_bits_le_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:111:0: 'Extracted.Equiv.extract_ht_index_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:112:0: 'Extracted.Equiv.extract_fors_indices_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:113:0: 'Extracted.Equiv.domain_separator_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:114:0: 'Extracted.Equiv.replay_safe_hash_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:115:0: 'Extracted.Equiv.extract_digits_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:116:0: 'Extracted.Equiv.extract_digits_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:117:0: 'Extracted.Equiv.signed_preimage_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:120:0: 'Extracted.Equiv.preimage_layout_injective' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:121:0: 'Extracted.Equiv.layout_domain_tag_prefix' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:122:0: 'Extracted.Equiv.signed_preimage_authorizes_one_firmware' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:123:0: 'Extracted.Equiv.roundtrip_11_id' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:124:0: 'Extracted.Equiv.beValue_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:125:0: 'Extracted.Equiv.bytes_to_u64_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:126:0: 'Extracted.Equiv.bytes_to_u256_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:127:0: 'Extracted.Equiv.saturating_mul_u64_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:128:0: 'Extracted.Equiv.verify_auth_path_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:129:0: 'Extracted.Equiv.verify_proof_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:130:0: 'Extracted.Equiv.decode_length_be_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:131:0: 'Extracted.Equiv.decode_item_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:132:0: 'Extracted.Equiv.pk_from_sig_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:133:0: 'sha256_pure' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:134:0: 'sphincs_c10.hash.truncate_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:135:0: 'sphincs_c10.hash.th_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:136:0: 'sphincs_c10.hash.th_pair_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:137:0: 'sphincs_c10.hash.wots_digest_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:138:0: 'sphincs_c10.hash.th_multi_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: Extracted/AxiomCheck.lean:139:0: 'sphincs_c10.hash.chain_hash_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+Build completed successfully (1767 jobs).
+PASS: Extracted exact axiom inventory (5 source modules, 27 environment axioms including dependencies)
+......
+----------------------------------------------------------------------
+Ran 6 tests in 17.623s
+
+OK
+=== Axiom closure of the §33 theorems (expect propext, Classical.choice, Quot.sound + the three disclosed hash-boundary postulates: keccak256_pure, sha256_pure_bytes, hmac_sha512_pure_bytes — NB sha256_pure is a kernel THEOREM, not an axiom) ===
+'Extracted.Equiv.slot_entropy_hashes_canonical_preimage' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+'Extracted.Equiv.derive_c10_slot_seeds_byte_layout' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+'Extracted.Equiv.slot_master_byte_layout' depends on axioms: [propext, sha256_pure_bytes, Classical.choice, Quot.sound]
+'Extracted.Equiv.derive_c10_master_byte_layout' depends on axioms: [hmac_sha512_pure_bytes,
+ propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+'Extracted.Equiv.slotEntropyPreimage_chain_inj' depends on axioms: [propext, Quot.sound]
+'Extracted.Equiv.slotEntropyPreimage_slot_inj' depends on axioms: [propext, Quot.sound]
+'Extracted.Equiv.slot_entropy_crosschain_reduction' depends on axioms: [propext,
+ sha256_pure_bytes,
+ Classical.choice,
+ Quot.sound]
+'Div10Spec.div10_inplace_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ExtractDigitsSpec.extract_digits_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ExtractDigitsSpec.extract_digits_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'ExtractDigitsSpec.is_zero_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'RoundCarrySpec.round_carry_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'RoundCarrySpec.round_carry_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'RoundCarrySpec.decValue_set' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TrimFracSpec.trim_frac_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'TrimFracSpec.trim_frac_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emit_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emit_int_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emit_frac_loop_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.fmt_emit_loop0_eq_loop2' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emitBytes_length' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emitBytes_ascii' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emitBytes_dot_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emitBytes_head_digit' depends on axioms: [propext, Classical.choice, Quot.sound]
+'EmitSpec.emitBytes_no_leading_zero' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.deserialize_pin_state_rejects_bad_len' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.make_adrs_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.set_chain_index_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.compute_user_op_hash_terminates' depends on axioms: [keccak256_pure,
+ propext,
+ Classical.choice,
+ Quot.sound]
+'Extracted.Equiv.compute_user_op_hash_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.firmware_make_adrs_matches_vendored' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.next_usize_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.read_bits_le_loop_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_ht_index_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_fors_indices_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_ht_index_in_range' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_fors_indices_in_range' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.lor_eq_add_disjoint' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.read_bits_le_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_ht_index_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_fors_indices_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.domain_separator_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.replay_safe_hash_spec' depends on axioms: [keccak256_pure, propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_digits_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.extract_digits_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.signed_preimage_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.preimage_layout_injective' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.layout_domain_tag_prefix' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.signed_preimage_authorizes_one_firmware' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.roundtrip_11_id' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.beValue_lt' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.bytes_to_u64_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.bytes_to_u256_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.saturating_mul_u64_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.verify_auth_path_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.verify_proof_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.decode_length_be_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.decode_item_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Extracted.Equiv.pk_from_sig_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'sha256_pure' depends on axioms: [propext, Classical.choice, Quot.sound]
+'sphincs_c10.hash.truncate_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'sphincs_c10.hash.th_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'sphincs_c10.hash.th_pair_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'sphincs_c10.hash.wots_digest_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'sphincs_c10.hash.th_multi_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+'sphincs_c10.hash.chain_hash_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+OK: all 66 headline closures match the per-headline manifest (no unlisted/missing headline, no undisclosed axiom, no sorryAx).
+=== NEGATIVE CONTROL: a consumed axiom Evil:False MUST be rejected by the closure gate ===
+OK: closure gate correctly REJECTS the Evil:False canary (per-headline allowlist enforcement is live)
+=== NEGATIVE CONTROL: an under-reported (shrunk) headline closure MUST be rejected by the closure gate ===
+OK: closure gate correctly REJECTS an under-reported (shrunk) headline closure
+=== NEGATIVE CONTROL: a duplicated dump record MUST be rejected by the closure gate ===
+OK: closure gate correctly REJECTS a duplicated dump record
+OK: extracted/ axiom-discipline gate passed — per-headline closure verified, no sorryAx, negative control has teeth
+NB: FormatDecimalSpec (M7 WYSIWYS, ~42 GB kernel-TC) is CARVED OUT of this
+    16 GB-safe gate — verify it with 'make verify-extracted-heavy' on ≥48 GB RAM.
+make: Leaving directory '/tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification'

@@ -1,0 +1,5 @@
+{
+  "path": "contracts/verification/docs/TRUST_ASSUMPTIONS.md",
+  "baseline_sha256": "60e3139cea868c55e1f883ba529f19fdb44020e54b6b41ce72e97c1e4020f7e2",
+  "reason": "SOL reproduced stale A2 premise claim in the document linked by the corrected assurance case"
+}

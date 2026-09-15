@@ -1,0 +1,23 @@
+You are one independent reviewer in an owner-authorized defensive code review. Do not launch agents or other models.
+Review PQSigner OS for implementation acceptance of an FV gate correction.
+Target: /tmp/pq-fv-fixes-20260914-iddnxo7n/raw-target
+Commit: b616e22d11ef0aa3689bc574a96fe24b7d63cca7
+Tree: ef385c4516afcc67429bb71ee124a9c767b153b0
+Compare: 1fb541057aa0244e8a6ce526de6e35fd16de0b2a..b616e22d11ef0aa3689bc574a96fe24b7d63cca7
+Focus on the ten changed files and affected source-inventory/Verity gate callers:
+1. Every raw axiom or sorry/admit/sorryAx/proof_wanted substring must count, regardless of extensible Lean tokens, apparent comments, literals or boundaries. No lexical erasure or comment allowance is permitted. Conservative over-counting is intentional.
+2. Axiom source pins must exactly match raw mentions and module bytes across the root and subtree, including unimported/unbuilt files. Additional pins for prose/string mentions must not add any actual source axiom; both full elaborated inventories must remain unchanged. Raw quarantine component references must be rejected outside the control module.
+3. Actual Verity ci must retain its per-file 11+1 budget, zero elsewhere. The six comment rewordings in three Lean files must preserve proof statements/bodies and assurance meaning while removing prose mentions from the raw census. No comment/hash exceptions or proof-hole budget increase.
+4. Preserve existing build, exact closure and acceptance checks, the default/heavy build split, and bounded processing (the counter is a fixed-pattern linear scan). Re-pins require review; no auto-update acceptance path.
+
+Evidence already green: ten custom-token inputs compile under both pinned Lean versions (20 compilations); all ten pass the old applicable actual gate and fail the final raw-mention gate. Six unittest groups pass, retaining earlier literal/interpolation/comment/token-boundary/quarantine controls and testing that prose/string mentions cannot grant a Verity hole. Clean verify-extracted, verify-fv-lints, and Verity ci pass. Main/extracted source inventories have 26/39 pinned modules and unchanged 27-row elaborated inventories; Verity still counts 12. Earlier unchanged evidence: authoritative ledger, eight proof mutations, 17 TLC outcomes/corruption controls, live CryptoVerif/parser controls, and 62-gate enforcement.
+Non-goals: new proofs, independent kernel checker, elaborating heavy/unimported modules, firmware/hardware/deployment, broader assurance or documentation polish.
+
+Inspect the exact diff and affected callers source-first for concrete blockers. Keep target and Git immutable; use read-only commands only. No web/network, hardware, external writes, prior reports, status prose, playbook catalogs, follow-up model turns, style nits or optional hardening. If source-read tools cannot execute, return GAP immediately. Use your configured deepest reasoning. You have 15 minutes and 800 words.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: b616e22d11ef0aa3689bc574a96fe24b7d63cca7 / ef385c4516afcc67429bb71ee124a9c767b153b0
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+Use at most three findings. FIX requires an anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.

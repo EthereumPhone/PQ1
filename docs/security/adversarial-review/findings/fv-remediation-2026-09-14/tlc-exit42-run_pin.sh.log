@@ -1,0 +1,315 @@
+  [FAIL] pin_benign_leads: expected completed success; process status 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 116 and seed 1404447335382373217 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255767] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-1904137206178835304/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:25)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:25.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 0.0
+14 states generated, 14 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 8.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 2 and the 95th percentile is 2).
+Finished in 00s at (2026-09-14 16:36:25)
+
+  [FAIL] pin_alive: expected only INV_ALIVE_NONVACUOUS violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 49 and seed 4208375065681612118 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255803] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-9480293422041097295/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:25)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:25.
+Error: Invariant INV_ALIVE_NONVACUOUS is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = FALSE
+/\ mcuReset = FALSE
+
+State 2: <Boot line 139, col 5 to line 144, col 65 of module PinReconcileDirectional>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = TRUE
+/\ legUp = TRUE
+/\ pendingSe = FALSE
+/\ mcuReset = FALSE
+
+3 states generated, 3 distinct states found, 1 states left on queue.
+The depth of the complete state graph search is 2.
+Finished in 00s at (2026-09-14 16:36:25)
+
+  [FAIL] pin_rollback_caught: expected completed success; process status 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 5 and seed 6096467885021364732 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255842] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-13388916186226346477/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:25)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:26.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 5.9E-15
+669 states generated, 280 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 12.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 5 and the 95th percentile is 4).
+Finished in 00s at (2026-09-14 16:36:26)
+
+  [FAIL] pin_leg_bypass: expected only INV_NO_LEG_BYPASS violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 57 and seed -10617927883121769 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255875] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-4378009966775502390/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:26)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:26.
+Error: Invariant INV_NO_LEG_BYPASS is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = FALSE
+/\ mcuReset = FALSE
+
+State 2: <AttemptPrecharge line 86, col 5 to line 90, col 64 of module PinReconcileDirectional>
+/\ mcu = 1
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = TRUE
+/\ mcuReset = FALSE
+
+State 3: <AttemptSeBump line 95, col 5 to line 99, col 65 of module PinReconcileDirectional>
+/\ mcu = 1
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 1
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = FALSE
+/\ mcuReset = FALSE
+
+State 4: <ResetMcu line 108, col 5 to line 112, col 54 of module PinReconcileDirectional>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 1
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = FALSE
+/\ mcuReset = TRUE
+
+State 5: <DisableLeg line 126, col 5 to line 128, col 73 of module PinReconcileDirectional>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 1
+/\ booted = FALSE
+/\ legUp = FALSE
+/\ pendingSe = FALSE
+/\ mcuReset = TRUE
+
+State 6: <Boot line 139, col 5 to line 144, col 65 of module PinReconcileDirectional>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 1
+/\ booted = TRUE
+/\ legUp = FALSE
+/\ pendingSe = FALSE
+/\ mcuReset = TRUE
+
+136 states generated, 71 distinct states found, 30 states left on queue.
+The depth of the complete state graph search is 6.
+Finished in 00s at (2026-09-14 16:36:26)
+
+  [FAIL] pin_dir_nofalsewipe: expected completed success; process status 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 110 and seed -1916090124213105171 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255913] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-17271633644804805739/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:26)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:26.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 0.0
+14 states generated, 14 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 8.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 2 and the 95th percentile is 2).
+Finished in 00s at (2026-09-14 16:36:26)
+
+  [FAIL] pin_sym_falsewipe: expected only INV_NO_FALSE_WIPE violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 58 and seed -603839995750697891 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255948] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-12877259540830107620/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:27)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:27.
+Error: Invariant INV_NO_FALSE_WIPE is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = FALSE
+/\ mcuReset = FALSE
+
+State 2: <AttemptPrecharge line 86, col 5 to line 90, col 64 of module PinReconcileDirectional>
+/\ mcu = 1
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = TRUE
+/\ mcuReset = FALSE
+
+State 3: <Boot line 139, col 5 to line 144, col 65 of module PinReconcileDirectional>
+/\ mcu = 1
+/\ wiped = TRUE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = TRUE
+/\ legUp = TRUE
+/\ pendingSe = TRUE
+/\ mcuReset = FALSE
+
+5 states generated, 5 distinct states found, 2 states left on queue.
+The depth of the complete state graph search is 3.
+Finished in 00s at (2026-09-14 16:36:27)
+
+  [FAIL] pin_dir_residual: expected only INV_CATCHES_RESET violation with status 12; got 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 27 and seed 5874215343751832332 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 255982] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-12394506124262865789/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:27)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:27.
+Error: Invariant INV_CATCHES_RESET is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ mcu = 0
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = FALSE
+/\ mcuReset = FALSE
+
+State 2: <AttemptPrecharge line 86, col 5 to line 90, col 64 of module PinReconcileDirectional>
+/\ mcu = 1
+/\ wiped = FALSE
+/\ seReset = FALSE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = TRUE
+/\ mcuReset = FALSE
+
+State 3: <ResetSe line 118, col 5 to line 121, col 67 of module PinReconcileDirectional>
+/\ mcu = 1
+/\ wiped = FALSE
+/\ seReset = TRUE
+/\ se = 0
+/\ booted = FALSE
+/\ legUp = TRUE
+/\ pendingSe = TRUE
+/\ mcuReset = FALSE
+
+State 4: <Boot line 139, col 5 to line 144, col 65 of module PinReconcileDirectional>
+/\ mcu = 1
+/\ wiped = FALSE
+/\ seReset = TRUE
+/\ se = 0
+/\ booted = TRUE
+/\ legUp = TRUE
+/\ pendingSe = TRUE
+/\ mcuReset = FALSE
+
+36 states generated, 25 distinct states found, 16 states left on queue.
+The depth of the complete state graph search is 4.
+Finished in 00s at (2026-09-14 16:36:27)
+
+  [FAIL] pin_sym_catches: expected completed success; process status 42
+TLC2 Version 2026.07.15.134331 (rev: 227f61b)
+Warning: Please run the Java VM, which executes TLC with a throughput optimized garbage collector, by passing the "-XX:+UseParallelGC" property.
+(Use the -nowarning option to disable this warning.)
+Running breadth-first search Model-Checking with fp 43 and seed -3162154637561148387 with 1 worker on 24 cores with 23056MB heap and 64MB offheap memory [pid: 256020] (Linux 6.17.0-1032-oem amd64, Ubuntu 21.0.12 64bit, MSBDiskFPSet, DiskStateQueue).
+Parsing file /tmp/pq-fv-fixes-20260914-iddnxo7n/checks/contracts/verification/tla/PinReconcileDirectional.tla
+Parsing file /tmp/tlc-7084144300314032430/Naturals.tla (jar:file:/home/nicola/tla2tools.jar!/tla2sany/StandardModules/Naturals.tla)
+Semantic processing of module Naturals
+Semantic processing of module PinReconcileDirectional
+Linting of module PinReconcileDirectional
+Starting... (2026-09-14 16:36:27)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-09-14 16:36:28.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 5.9E-15
+669 states generated, 280 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 12.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 5 and the 95th percentile is 4).
+Finished in 00s at (2026-09-14 16:36:28)
+
+=== MISMATCH ===

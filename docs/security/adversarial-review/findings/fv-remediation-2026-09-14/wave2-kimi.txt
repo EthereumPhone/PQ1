@@ -1,0 +1,10 @@
+All checks complete. Evidence summary: diff touches exactly the four stated files; tree hash matches; working tree clean.
+
+- **Scanner** (`lean_source.py:50`): `#+`→`#*` correctly accepts zero-delimiter raw strings; endmark logic (`'"' + group(1)`) is delimiter-count-exact; unterminated raw strings raise (conservative rejection). Verified in-memory: the old hiding input `r"\" axiom X : False` now counts the axiom; nested comments, `s!"{...}"` interpolation, `r##"..."##`, quoted identifiers all still handled; the only behavioral delta vs `#+` is zero-`#` inputs previously parsed as ordinary strings (escape-processing) now parse as raw — that is the precise Lean semantics and the fix.
+- **Callers**: `check_axiom_inventory.py` walks rootfile + whole tree (unimported modules included) and pins elaborated inventory; both use the fixed scanner, no logic change. `check_verity_holes.py` keeps `BASELINE {Theorems.lean:11, Merkle.lean:1}`, pattern includes `admit`, walks the full PQSigner tree (unbuilt Part A covered). Verity `Makefile` `ci` = `build` + `python3 -E -S check_verity_holes.py`; no budget increase anywhere in the diff.
+- **Docs**: `entrypoint_honest` is a genuine theorem (`Bridge/EntryPoint.lean:172`, proved by `unfold/split/simp_all`, no sorry); absent from `axiom_inventory_lean.json`; ASSURANCE_CASE.md (lines 131, 150, 308) and TRUST_ASSUMPTIONS.md (A2 section, claim-1 row) consistently state proved-in-model/no-closure-axiom/external-deployment-faithfulness; arithmetic consistent with `Theorems.lean` (8 semantic, 10-name closure incl. A1/A4 markers) and `known_true_axioms.txt`.
+
+VERDICT: GO
+TARGET: 88818c79d83e8f73177d43c8edbc6393ce1e1ad2 / 5e36ac92d2387ffefc0d1ee6459c70699ae32774
+FINDINGS: none
+GAPS: none

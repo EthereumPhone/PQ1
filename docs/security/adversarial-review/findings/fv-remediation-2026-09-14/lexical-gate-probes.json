@@ -1,0 +1,186 @@
+[
+  {
+    "label": "lexical-before-extracted-leading-parser",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-before-verity-leading-parser",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-before-extracted-refine-apostrophe",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-before-verity-refine-apostrophe",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-before-extracted-interpolation-comment",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-before-verity-interpolation-comment",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-before-extracted-trace-interpolation",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-before-verity-trace-interpolation",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 0,
+    "expected": 0
+  },
+  {
+    "label": "lexical-after-extracted-leading-parser",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "lexical-after-verity-leading-parser",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  },
+  {
+    "label": "lexical-after-extracted-refine-apostrophe",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "lexical-after-verity-refine-apostrophe",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  },
+  {
+    "label": "lexical-after-extracted-interpolation-comment",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "lexical-after-verity-interpolation-comment",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  },
+  {
+    "label": "lexical-after-extracted-trace-interpolation",
+    "command": [
+      "/usr/bin/python3",
+      "-E",
+      "-S",
+      "contracts/verification/scripts/check_axiom_inventory.py",
+      "extracted"
+    ],
+    "status": 1,
+    "expected": 1
+  },
+  {
+    "label": "lexical-after-verity-trace-interpolation",
+    "command": [
+      "make",
+      "-C",
+      "contracts/verity",
+      "ci"
+    ],
+    "status": 2,
+    "expected": 1
+  }
+]

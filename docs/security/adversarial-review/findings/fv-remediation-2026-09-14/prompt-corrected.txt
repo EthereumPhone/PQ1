@@ -1,0 +1,23 @@
+You are one independent reviewer in an owner-authorized defensive code review. Do not launch agents or other models.
+Review PQSigner OS for implementation acceptance of a bounded FV correction.
+Target: /tmp/pq-fv-fixes-20260914-iddnxo7n/corrected-target
+Commit: 88818c79d83e8f73177d43c8edbc6393ce1e1ad2
+Tree: 5e36ac92d2387ffefc0d1ee6459c70699ae32774
+Compare: eb398b7b85cffc14ed1c45dfb7c1cfdfafb89a1e..88818c79d83e8f73177d43c8edbc6393ce1e1ad2
+Focus on the four changed files and affected source-inventory/Verity gate callers:
+1. Lean raw strings with zero or more # delimiters, escaped-looking contents, ordinary/interpolated strings and nested comments must not hide axiom or sorry/admit tokens from the conservative scanner.
+2. The extracted inventory must reject undisclosed axioms in unimported source as well as preserve its elaborated inventory. Verity's real ci recipe must reject added holes, including admit, while preserving its existing per-file 11+1 budget and unbuilt-scaffold coverage.
+3. ASSURANCE_CASE.md and its linked TRUST_ASSUMPTIONS.md must consistently describe entrypoint_honest as a proved in-model theorem that adds no A2 closure axiom; deployed EntryPoint faithfulness remains an external assumption.
+4. Preserve all existing acceptance checks and the default/heavy Lean build split. No assumption or proof-hole budget increase.
+
+Evidence already green: the exact zero-# raw-string inputs elaborate in both pinned Lean versions; corrected extracted inventory and actual Verity ci now reject them. Clean full verify-extracted, verify-fv-lints (including source/alias regressions), and Verity ci pass after correction. Unchanged evidence from the same source inputs: authoritative ledger, placeholder lint, eight default proof mutations, all 17 TLC outcomes and malformed/exit-42 controls, live CryptoVerif and parser controls, and 62-gate enforcement.
+Non-goals: new proofs, independent kernel checker, heavy extracted rebuild, firmware/hardware/deployment, broader assurance or unrelated documentation.
+
+Inspect the exact diff and affected callers source-first for concrete blockers. Keep target and Git immutable; use read-only commands only. No web/network, hardware, external writes, prior reports, status prose, playbook catalogs, follow-up model turns, style nits or optional hardening. If source-read tools cannot execute, return GAP immediately. Use your configured deepest reasoning. You have 15 minutes and 800 words.
+Return exactly:
+VERDICT: GO | FIX | GAP
+TARGET: 88818c79d83e8f73177d43c8edbc6393ce1e1ad2 / 5e36ac92d2387ffefc0d1ee6459c70699ae32774
+FINDINGS:
+- <BLOCKER|HIGH|MEDIUM> <file:line> — <mechanism>; <evidence>; <smallest fix>
+GAPS: none | <one line>
+Use at most three findings. FIX requires an anchor, mechanism, consequence and falsifiable evidence. If none, write FINDINGS: none.
