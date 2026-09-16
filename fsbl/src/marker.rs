@@ -108,6 +108,16 @@ pub enum Stage {
     ImgNsCmp = 11,
     /// `sau::init()` returned — the bank-2 NS alias is now readable by the core.
     SauConfigured = 12,
+    /// About to consult the tz-1 option-byte tripwire.
+    Tz1Entering = 13,
+    /// tz-1 verdict; payload = 1 if the option bytes matched (boot continues).
+    Tz1Verdict = 14,
+    /// `render_fingerprint` entered.
+    RenderEntered = 15,
+    /// `Lcd::init()` returned — SPI + panel init survived.
+    LcdInited = 16,
+    /// Fingerprint rows drawn and flushed; only the hold delay remains.
+    RenderFlushed = 17,
 }
 
 /// Record `stage` with a 32-bit `payload` for context (e.g. the floor value).
@@ -133,7 +143,7 @@ pub fn record(stage: Stage, payload: u32) {
         wr(SECCR, PG);
         let dst = MARKER_PAGE + 16 * (stage as usize);
         for (i, word) in qw.iter().enumerate() {
-            // `stage <= 12` bounds the target to the first 208 bytes of the
+            // `stage <= 17` bounds the target to the first 288 bytes of the
             // erased 8 KB page, 16-byte aligned as the controller requires.
             wr(dst + i * 4, *word);
         }

@@ -180,6 +180,20 @@ fn main() -> ! {
     // Placed before the fingerprint render so a tripped board shows nothing at
     // all rather than words implying a good boot. See `optbytes` for the
     // single-fault trade-off this accepts.
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::Tz1Entering, 0);
+    #[cfg(feature = "stage-marker")]
+    {
+        // Record the verdict BEFORE acting on it: a halt here is invisible
+        // otherwise, and mistaking a tz-1 rejection for an LCD stall already
+        // cost one wrong diagnosis.
+        let ok = optbytes::persistent_confirmed_match();
+        marker::record(marker::Stage::Tz1Verdict, u32::from(ok));
+        if !ok {
+            halt();
+        }
+    }
+    #[cfg(not(feature = "stage-marker"))]
     if !optbytes::persistent_confirmed_match() {
         halt();
     }
@@ -189,6 +203,9 @@ fn main() -> ! {
     // can't fake the words" property: the slot we are about to enter
     // never gets to display anything before the user has already seen
     // FSBL's verdict for THESE bytes. See `docs/security/measured-boot.md`.
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::RenderEntered, 0);
+
     render::render_fingerprint(&secure_digest);
 
     // SAFETY: we verified the slot's manifest signature and image
