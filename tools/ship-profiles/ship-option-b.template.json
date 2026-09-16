@@ -35,8 +35,10 @@
   "flash": [],
   "blocked_on": [
     "GEOMETRY SELECTION — WRP takes a PAGE RANGE. `make fsbl` derives it from the",
-    "  linked image (today: pages 0..3, span 28,352 B). Draft 1.1's 40 KiB / pages",
-    "  0..4 envelope is not adopted; adopting it now freezes page 4 while empty.",
+    "  linked image (today: pages 0..3, span 28,704 B). The frozen registry's",
+    "  40 KiB / pages 0..4 envelope landed as the pqsigner-geometry crate but the",
+    "  bench linker is not migrated to it (cutover #540); adopting 40 KiB before",
+    "  that cutover freezes page 4 while empty.",
     "  Until 32 K vs 40 K is chosen, WRP1A_PSTRT/PEND cannot be written down.",
     "NON-MONOLITHIC SHIPPING IMAGE — there is no target that flashes the FSBL in the",
     "  slot layout. A bench board holds the MONOLITHIC secure world at 0x0C000000",

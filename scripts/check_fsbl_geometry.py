@@ -6,7 +6,7 @@ Why this exists
 `make fsbl` gated on `arm-none-eabi-size -B` text+data. That is not what
 occupies flash. `size -B` sums section sizes; the physical span is the extent
 of the ELF's LOAD segments, which additionally covers inter-segment alignment
-gaps. For the current image the two differ by 4 bytes (28,348 vs 28,352) — small,
+gaps. For the current image the two differ by 4 bytes (28,700 vs 28,704) — small,
 but the quantity was simply wrong, and the repo's own resource receipt
 (`docs/security/fw-rollback-fsbl-resource-map-2026-07.md`) reports them as two
 separate rows for exactly that reason ("Initialized bytes" 38,856 vs "Physical
