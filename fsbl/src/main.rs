@@ -79,6 +79,7 @@ mod fi;
 mod glyphs;
 mod manifest;
 mod nv3007;
+mod optbytes;
 mod otp;
 mod render;
 mod slot;
@@ -132,6 +133,19 @@ fn main() -> ! {
     let Some((slot, secure_digest)) = pick_slot(img_ok_a, img_ok_b) else {
         halt();
     };
+
+    // tz-1 (#366; KEEP decided 2026-07-23; Draft 1.2 §3 row 2): read the option
+    // bytes back before the slot branch and halt on a PERSISTENT mismatch —
+    // never write one (Draft 1.2 §1 C1). Scope is the CONFIRMED subset (TZEN /
+    // phase-appropriate RDP / both watermarks / secure boot address); `WRP1A`
+    // and the OEM locks stay read-only-advisory while their layouts are
+    // unpinned, because a fail-closed arm there would halt every genuine board.
+    // Placed before the fingerprint render so a tripped board shows nothing at
+    // all rather than words implying a good boot. See `optbytes` for the
+    // single-fault trade-off this accepts.
+    if !optbytes::persistent_confirmed_match() {
+        halt();
+    }
 
     // Render the 8-BIP-39-word firmware fingerprint on the LCD before
     // branching. This is the trust root for the "subsequent updates

@@ -47,6 +47,14 @@ fw-manifest = { workspace = true }
 # already does, so a single-fault bypass on either gate is impossible.
 pqsigner-fi = { workspace = true }
 
+# tz-1 option-byte tripwire (#366): the ship/locked option-byte PROFILE and its
+# pure compare functions live in `shared::lockdown`, host-tested there, so this
+# stage and the secure world's first-boot Phase A check ONE definition instead
+# of two drifting copies. no_std; its only deps are pqsigner-proto and
+# pqsigner-fi (already above), and `lockdown` is consts + const fns, so the
+# image cost is the call sites.
+sphincs-tz-shared = { workspace = true }
+
 # SHA-256 for the verify_digest path and the slot-image re-hash.
 # sha2 is gated behind fw-manifest's default-off std feature, but the
 # direct dep here ensures we can call it from verify.rs too.

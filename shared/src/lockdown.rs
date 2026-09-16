@@ -84,6 +84,12 @@ pub const OPTR_TZEN: u32 = 1 << 31;
 /// first-boot flow only programs `0xCC` (Level 2) after this verifies.
 pub const SHIP_RDP_BYTE: u8 = 0xAA;
 
+/// Expected `FLASH_OPTR.RDP` byte once the device has locked ITSELF (Level 2).
+/// Pairs with [`SHIP_RDP_BYTE`]: those are the only two RDP bytes a genuine
+/// unit may present, and which one is expected depends on the lifecycle phase
+/// (see [`phase_profile`]).
+pub const LOCKED_RDP_BYTE: u8 = 0xCC;
+
 /// `SECWM1R1` value that marks all of bank 1 secure (`PSTRT=0, PEND=0x7F`).
 pub const SECWM1_ALL_SECURE: u32 = 0x007F_0000;
 /// `SECWM2R1` value that marks all of bank 2 non-secure (`PSTRT=0x7F > PEND=0`).
@@ -153,6 +159,30 @@ pub const SHIP_PROFILE_U585: ShipProfile = ShipProfile {
     boot_addr: 0x0C00_0000,
     rdp_byte: SHIP_RDP_BYTE,
 };
+
+/// The same profile AFTER the first-boot lock ceremony: identical boot address,
+/// `RDP = 0xCC`. Draft 1.2 §3 row 2 requires the every-boot read-back to compare
+/// against the *phase-appropriate* profile, so a locked unit presenting the ship
+/// byte — or a ship unit presenting `0xCC` — is a mismatch in both directions.
+pub const LOCKED_PROFILE_U585: ShipProfile = ShipProfile {
+    boot_addr: 0x0C00_0000,
+    rdp_byte: LOCKED_RDP_BYTE,
+};
+
+/// Pick the phase-appropriate profile from the live `FLASH_OPTR`.
+///
+/// `RDP == 0xCC` selects the locked profile. EVERY other byte selects the
+/// pre-ceremony ship profile (`0xAA`), including an erased or garbage byte,
+/// which [`rdp_level_from_byte`] maps to Level 1. That is the fail-closed
+/// direction: a tampered RDP byte is compared against `0xAA`, mismatches, and
+/// surfaces as [`ObField::Rdp`] instead of selecting a profile that accepts it.
+#[must_use]
+pub const fn phase_profile(optr: u32) -> &'static ShipProfile {
+    match rdp_level_from_byte((optr & 0xFF) as u8) {
+        RdpLevel::L2 => &LOCKED_PROFILE_U585,
+        _ => &SHIP_PROFILE_U585,
+    }
+}
 
 /// Verify `FLASH_OPTR` matches the ship profile's TZEN + RDP fields.
 ///
@@ -293,9 +323,186 @@ pub const fn verify_ship_profile(
     Ok(())
 }
 
+/// Verify ONLY the option-byte fields whose register layout is CONFIRMED:
+/// `TZEN`, `RDP` (against the caller's phase profile), both secure watermarks,
+/// and the secure boot address.
+///
+/// Deliberately WEAKER than [`verify_ship_profile`], and not a substitute for
+/// it. It omits the two pin-gated predicates ([`wrp1a_covers_fsbl`],
+/// [`oem_locks_absent`]) which fail CLOSED while [`WRP1A_MASK_PINNED`] /
+/// [`OEM_LOCK_MASK_PINNED`] are `false`.
+///
+/// Why the split exists. First-boot Phase A MUST keep calling
+/// `verify_ship_profile`: it gates an irreversible RDP-2 burn, where "cannot
+/// confirm WRP is set" must halt. The every-boot FSBL tripwire (tz-1) cannot
+/// use that verdict — a fail-closed `WRP1A` arm would halt every genuine board,
+/// since bench units carry no WRP at all and no unit has a pinned layout yet —
+/// so it checks this confirmed subset instead.
+///
+/// The limit, stated plainly: a unit whose WRP was cleared before RDP-2 PASSES
+/// this subset. Closing [`WRP1A_MASK_PINNED`] (issue #46) is what buys that
+/// detection; until then the tripwire covers TZEN / RDP / watermarks / boot
+/// address only.
+#[must_use]
+pub const fn verify_confirmed_fields(
+    optr: u32,
+    secwm1r1: u32,
+    secwm2r1: u32,
+    secbootadd0r: u32,
+    p: &ShipProfile,
+) -> Result<(), ObField> {
+    if let Err(f) = optr_matches_ship(optr, p) {
+        return Err(f);
+    }
+    if !secwm_bank1_all_secure(secwm1r1) {
+        return Err(ObField::Secwm1);
+    }
+    if !secwm_bank2_all_ns(secwm2r1) {
+        return Err(ObField::Secwm2);
+    }
+    if !secboot_selects(secbootadd0r, p.boot_addr) {
+        return Err(ObField::SecBootAdd0);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A well-formed LOCKED-state OPTR: TZEN set, RDP=0xCC.
+    const GOOD_OPTR_LOCKED: u32 = OPTR_TZEN | 0xCC;
+    /// The `SECBOOTADD0R` value that selects the FSBL base.
+    const GOOD_SECBOOT: u32 = 0x0018_0000;
+
+    #[test]
+    fn phase_profile_tracks_the_rdp_byte() {
+        assert_eq!(phase_profile(GOOD_OPTR).rdp_byte, SHIP_RDP_BYTE);
+        assert_eq!(phase_profile(GOOD_OPTR_LOCKED).rdp_byte, LOCKED_RDP_BYTE);
+        // Only 0xCC may select the locked profile; every other byte (erased,
+        // garbage, 0x55) selects the ship profile so the compare fails closed.
+        for b in 0u16..=255 {
+            let b = b as u8;
+            assert_eq!(
+                phase_profile(OPTR_TZEN | u32::from(b)).rdp_byte == LOCKED_RDP_BYTE,
+                b == LOCKED_RDP_BYTE,
+                "only 0xCC may select the locked profile (byte {b:#04x})"
+            );
+        }
+    }
+
+    #[test]
+    fn confirmed_subset_accepts_both_phases_and_rejects_cross_phase() {
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &SHIP_PROFILE_U585
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &LOCKED_PROFILE_U585
+            ),
+            Ok(())
+        );
+        // Cross-phase mismatches must be caught in BOTH directions.
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &LOCKED_PROFILE_U585
+            ),
+            Err(ObField::Rdp)
+        );
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR_LOCKED,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &SHIP_PROFILE_U585
+            ),
+            Err(ObField::Rdp)
+        );
+    }
+
+    #[test]
+    fn confirmed_subset_rejects_each_confirmed_field() {
+        let chk = |optr, w1, w2, sb| verify_confirmed_fields(optr, w1, w2, sb, &SHIP_PROFILE_U585);
+        assert_eq!(
+            chk(
+                GOOD_OPTR & !OPTR_TZEN,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT
+            ),
+            Err(ObField::Tzen)
+        );
+        assert_eq!(
+            chk(GOOD_OPTR, 0, SECWM2_ALL_NS, GOOD_SECBOOT),
+            Err(ObField::Secwm1)
+        );
+        assert_eq!(
+            chk(GOOD_OPTR, SECWM1_ALL_SECURE, 0, GOOD_SECBOOT),
+            Err(ObField::Secwm2)
+        );
+        assert_eq!(
+            chk(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, 0),
+            Err(ObField::SecBootAdd0)
+        );
+    }
+
+    /// The load-bearing DIFFERENCE between the two comparators, pinned in both
+    /// directions so neither can drift into the other: the confirmed subset
+    /// ignores WRP1A / OEM locks by design, while the full ship-profile check
+    /// still fails closed on them today.
+    #[test]
+    fn confirmed_subset_ignores_unpinned_fields_but_full_check_does_not() {
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                &SHIP_PROFILE_U585
+            ),
+            Ok(()),
+            "the subset must not depend on WRP1A / OEM state"
+        );
+        assert_eq!(
+            verify_ship_profile(
+                GOOD_OPTR,
+                SECWM1_ALL_SECURE,
+                SECWM2_ALL_NS,
+                GOOD_SECBOOT,
+                GOOD_WRP1A,
+                0,
+                &SHIP_PROFILE_U585
+            ),
+            Err(ObField::Wrp1a),
+            "full check fails closed while WRP1A_MASK_PINNED is false"
+        );
+        // The CONSTANT is the thing under test: tz-1's reduced scope is only
+        // justified while the WRP1A layout is unpinned, so this trips the day
+        // the pin flips. clippy flags asserting on a constant; that is the point.
+        #[allow(clippy::assertions_on_constants)]
+        {
+            assert!(
+                !WRP1A_MASK_PINNED,
+                "WRP1A_MASK_PINNED flipped — revisit tz-1's scope and this control"
+            );
+        }
+    }
 
     /// Legacy bench FSBL base; the target shipping entry remains gated by the
     /// production geometry, WRP/option-byte ceremony, and silicon receipts.

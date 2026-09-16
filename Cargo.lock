@@ -1203,6 +1203,7 @@ dependencies = [
  "sha2",
  "sphincs-c10",
  "sphincs-tz-bip39",
+ "sphincs-tz-shared",
 ]
 
 [[package]]

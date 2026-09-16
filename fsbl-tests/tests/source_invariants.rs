@@ -105,6 +105,67 @@ fn negative_main_renders_fingerprint_before_branching() {
 }
 
 // ---------------------------------------------------------------------------
+// 2b. tz-1 option-byte tripwire is wired BEFORE the branch, acts on its
+//     verdict, and never writes an option byte
+//
+// Decided KEEP 2026-07-23 (#366 row `tz-1`), specified by Draft 1.2 §3 row 2.
+// The FSBL is the only stage that survives a firmware update, so a tripwire
+// that is computed-but-ignored, wired after the branch, or that grows a WRITE
+// path (Draft 1.2 §1 corollary C1) would be worse than none: it would read as
+// coverage while providing none.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn negative_tz1_tripwire_runs_before_branch_and_never_writes() {
+    let src = read_workspace_file("fsbl/src/main.rs");
+
+    let call_idx = src
+        .find("optbytes::persistent_confirmed_match()")
+        .expect("fsbl/src/main.rs must consult the tz-1 option-byte tripwire (#366 row tz-1)");
+    let branch_idx = src
+        .find("branch::into_slot(slot)")
+        .expect("fsbl/src/main.rs must call branch::into_slot(slot) on the success path");
+    assert!(
+        call_idx < branch_idx,
+        "tz-1 MUST be consulted BEFORE the slot branch (Draft 1.2 §3 row 2): \
+         found the tripwire at byte {call_idx} and the branch at byte {branch_idx}"
+    );
+
+    // The verdict must GATE the halt in one contiguous block. A version that
+    // computes the boolean and drops it type-checks, passes a `contains` check
+    // for the call, and tripwires nothing.
+    assert!(
+        src.contains("if !optbytes::persistent_confirmed_match() {\n        halt();\n    }"),
+        "the tz-1 verdict must gate `halt()` in one contiguous block — computing \
+         it and ignoring it is a vacuous tripwire"
+    );
+
+    let ob = read_workspace_file("fsbl/src/optbytes.rs");
+    assert!(
+        !ob.contains("write_volatile("),
+        "tz-1 must NEVER write an option byte: the FSBL has no option-byte write \
+         path and must not grow one (Draft 1.2 §1 corollary C1)"
+    );
+    assert!(
+        ob.contains("lockdown::verify_confirmed_fields(")
+            && ob.contains("lockdown::phase_profile("),
+        "tz-1 must reuse the shared `lockdown` profile + comparator so this stage \
+         and first-boot Phase A cannot drift apart"
+    );
+    assert_eq!(
+        ob.matches("fi::check_true_into_sentinel(confirmed_fields_match)")
+            .count(),
+        2,
+        "tz-1 halts only on a PERSISTENT mismatch — that needs exactly two \
+         independent sentinel-gated passes"
+    );
+    assert!(
+        ob.contains("fi::scrub_sentinel_register();"),
+        "the paired sentinel callsites need the stale-r0 scrub between them"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // 3. FSBL NV3007 LCD driver keeps the hardware-validated constants
 //
 // The OLED backend was removed 2026-06-30; the boot fingerprint now renders
