@@ -318,7 +318,7 @@
       "required_context": {
         "step": {
           "name": "verify-protocol-models (proverif + tamarin — the 8 symbolic models)",
-          "run": "eval \"$(opam env)\"\nmake verify-protocol-models PROTOCOL_MODELS=proverif,tamarin\n"
+          "run": "eval \"$(opam env)\"\npython3 scripts/check_protocol_models.py --self-test\nmake verify-protocol-models PROTOCOL_MODELS=proverif,tamarin\n"
         },
         "job_equals": {
           "runs-on": "ubuntu-latest"
@@ -1670,6 +1670,17 @@
         ],
         "workflow_context": {}
       }
+    },
+    {
+      "id": "verify-kani-mutation-heavy",
+      "make": "make verify-kani-mutation-heavy",
+      "polices_paths": [
+        "tx/src/multisend.rs",
+        "scripts/check_kani_mutations.py",
+        "scripts/kani_mutations.json"
+      ],
+      "enforcement": "local_documented",
+      "why": "2026-09-16 master integration: non-cumulative heavy mutation tier plus canary, also invoked by make kani-heavy. The selected no_hidden_value harness has measured peak RSS 13.05 GiB; keep this mutation baseline and mutant replay local, outside hosted CI. See #662 for the memory boundary."
     }
   ],
   "_completeness_waived": {}

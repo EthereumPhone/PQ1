@@ -4037,7 +4037,7 @@ sbom-firmware:
 # MMIO, and NS-pointer deref are thumbv8m/hardware-cfg'd OUT of the host
 # build, so these do NOT cover those — see work-todo §34.
 # ---------------------------------------------------------------------------
-.PHONY: kani miri ui-golden
+.PHONY: kani kani-heavy miri ui-golden
 kani-heavy: ## Kani harnesses excluded from `make kani` (peak RSS near the 16 GB runner ceiling)
 	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
 	@echo "==> Kani (HEAVY): harnesses whose peak RSS sits near the hosted-runner"
@@ -4053,6 +4053,7 @@ kani-heavy: ## Kani harnesses excluded from `make kani` (peak RSS near the 16 GB
 	cargo kani -p pqsigner-tx --features kani-heavy \
 		--harness per_record_page_bound --harness no_hidden_value \
 		--harness cow_presign_precedence
+	$(MAKE) verify-kani-mutation-heavy
 
 kani: ## Bounded model-checking on firmware decoders/counters
 	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
@@ -4089,7 +4090,7 @@ kani: ## Bounded model-checking on firmware decoders/counters
 # crate + runs one harness per mutation, ~1-4 min each) → nightly, not per-PR.
 #   make verify-kani-mutation                 # quick + default mutation tiers
 #   make verify-kani-mutation MUTATIONS=quick # canary + the fast fw-manifest/aa ones
-.PHONY: verify-kani-mutation
+.PHONY: verify-kani-mutation verify-kani-mutation-heavy
 # C2: hand-transcribed MMIO base addresses vs ST's OWN CMSIS header. Peripheral
 # bases are typed in by hand from RM0456 and a wrong nibble is SILENT — the TAMP
 # driver sat at the wrong base for an unknown period precisely because nothing
@@ -4104,6 +4105,10 @@ verify-mmio-addresses: ## hand-typed MMIO bases vs ST's CMSIS stm32u585xx.h
 verify-kani-mutation: ## anti-vacuity: break a decoder, expect a Kani harness to turn red
 	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
 	python3 scripts/check_kani_mutations.py
+
+verify-kani-mutation-heavy: ## Local-only high-memory Kani mutation checks plus the canary
+	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
+	python3 scripts/check_kani_mutations.py --tier heavy
 
 # F11 (2026-07-16) — SOURCE-GENERATED Kani harness census. The published counts
 # (173 harnesses / 27 files; 11 harnesses in 6 files with no mutation coverage)

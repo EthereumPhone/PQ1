@@ -4,6 +4,8 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -23,6 +25,21 @@ def fixture():
 
 
 class ContractTests(unittest.TestCase):
+    def test_proof_controls_reject_a_false_green_driver_with_optimization(self):
+        with tempfile.TemporaryDirectory() as temp:
+            driver = Path(temp) / 'easycrypt'
+            driver.write_text('#!/bin/sh\nexit 0\n')
+            driver.chmod(0o755)
+            for optimize in ('0', '1', '2'):
+                with self.subTest(optimize=optimize):
+                    env = dict(os.environ, PATH=temp + os.pathsep + os.environ['PATH'],
+                               PYTHONOPTIMIZE=optimize)
+                    result = subprocess.run([sys.executable, 'tools/split_proof_controls.py'],
+                                            env=env, text=True, capture_output=True, timeout=20)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn('broken dependency must fail its own proof', result.stderr)
+                    self.assertNotIn('OK proof controls', result.stdout)
+
     def test_duplicate_replacing_deleted_pin_is_rejected(self):
         with fixture() as p:
             (p / 'cert_gate_split.sh').write_text('EXPECT_PINS=2\n')

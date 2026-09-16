@@ -42,3 +42,15 @@ EasyCrypt contract checks pass. New split input identity:
 `e64e9594831f9b2df2ccdaeaf5f8c213`. A complete fresh pinned-image replay and the
 combined bounded source review are still required before master publication.
 The old 45-file green receipt is not a receipt for this newer proof artifact.
+
+## Combined review correction
+
+The first integration wave identified the absent documented heavy Kani mutation
+entrypoint and the missing nightly protocol negative-control invocation. Both
+are corrected, with an explicit local-only heavy registration and regression
+controls. The EasyCrypt control helper also uses explicit failures so Python
+optimization cannot remove result checks; this was not reachable through the
+currently pinned container environment but is corrected in this same batch.
+The proof sources and assumptions remain unchanged. Split identity is now
+`ec0cec4a59a4eef2b6862c56f8475f09`; the interrupted `e64e9594831f9b2df2ccdaeaf5f8c213` replay is superseded, not green evidence.
+The updated candidate requires the combined review and complete replay again.

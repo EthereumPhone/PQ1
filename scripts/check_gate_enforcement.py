@@ -129,6 +129,7 @@ ENFORCEMENT_POLICY = {
     "verify-interp": "local_documented",
     "verify-kani-census": "per_pr_blocking",
     "verify-kani-mutation": "nightly",
+    "verify-kani-mutation-heavy": "local_documented",
     "verify-kontrol": "local_documented",
     "verify-lean-proto-domain": "local_documented",
     "verify-lean4checker": "local_documented",

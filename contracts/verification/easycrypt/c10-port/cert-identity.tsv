@@ -1367,5 +1367,10 @@
 # isolation/linkage and exact taint/margin counts. Add full dependency replay,
 # checked immutable toolchain and pin-alias/EOF controls. Fresh full replay
 # required for this identity; prior 45-file receipts do not certify it.
-split	e64e9594831f9b2df2ccdaeaf5f8c213
+split	ec0cec4a59a4eef2b6862c56f8475f09
 fork	9c2d21280c84d52c30b22111151f1135
+
+# 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
+# Explicit proof-control failures replace optimization-removable assertions;
+# regressions reject an always-success driver under PYTHONOPTIMIZE=0/1/2.
+# The 53 proof files, pins, statement counts and cryptographic assumptions are unchanged.

@@ -256,6 +256,26 @@ class GateControls(unittest.TestCase):
         self.assertEqual(command.returncode, 0, command.stderr)
         self.assertIn('PROTOCOL_MODELS=cryptoverif python3 scripts/check_protocol_models.py', command.stdout)
 
+    def test_protocol_negative_controls_are_required_in_nightly(self):
+        row = next(r for r in BLOCKING if r['id'] == 'verify-protocol-models')
+        def omit_control(wf, job, step):
+            step['run'] = step['run'].replace(
+                'python3 scripts/check_protocol_models.py --self-test\n', '')
+        self.change_workflow(row, omit_control)
+        self.assertIn('verify-protocol-models:', self.run_checker())
+
+    def test_heavy_mutation_entrypoints_are_local_and_executable(self):
+        row = next(r for r in self.manifest['gates'] if r['id'] == 'verify-kani-mutation-heavy')
+        self.assertEqual(row['enforcement'], 'local_documented')
+        self.assertNotIn('runs_in', row)
+        for target in ('verify-kani-mutation-heavy', 'kani-heavy'):
+            with self.subTest(target=target):
+                command = subprocess.run(['make', '-n', '--no-print-directory', target],
+                                         cwd=self.root, text=True, capture_output=True, timeout=20)
+                self.assertEqual(command.returncode, 0, command.stderr)
+                self.assertEqual(command.stdout.count(
+                    'python3 scripts/check_kani_mutations.py --tier heavy'), 1)
+
     def test_scheduled_tier_cadence_is_pinned(self):
         workflows = {row['runs_in']: row for row in BLOCKING if row['enforcement'] == 'nightly'}
         self.assertEqual(set(workflows), set(gate.SCHEDULE_POLICY))

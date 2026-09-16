@@ -381,6 +381,7 @@ jobs:
       - name: verify-protocol-models (proverif + tamarin — the 8 symbolic models)
         run: |
           eval "$(opam env)"
+          python3 scripts/check_protocol_models.py --self-test
           make verify-protocol-models PROTOCOL_MODELS=proverif,tamarin
 
   easycrypt-split:
