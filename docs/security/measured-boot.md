@@ -239,9 +239,10 @@ stage timestamp except the one after the hold was identical to the cycle.
 
 **Observation window: ~10 s** (owner decision, 2026-09-16), 77% of the boot.
 Longer buys the user reading time for the 8 words at the cost of boot latency;
-that trade is a policy choice, not a performance defect. **Note `CLAUDE.md`'s
-Lifecycle section still says "~3 s" and is now wrong** — it was accurate only
-while the hold was 3 s, and was never edited (project contract file).
+that trade is a policy choice, not a performance defect. `CLAUDE.md`'s
+Lifecycle line was updated to match (2026-09-16); it had said "~3 s", which was
+accurate only while the hold was 3 s. **If the hold changes again, that line
+changes too** — it is the one figure about this page that lives outside it.
 
 Three superseded estimates are recorded here deliberately — "~3 s", then
 "~12 s hold / ~800 ms per image" after a 4× rescale, then the measured 39.4 s.
