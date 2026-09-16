@@ -1,0 +1,21 @@
+{
+  "branch": "fix/fv-evidence-20260916",
+  "base": "43cf620873b54670bbfbee6355685057856fad69",
+  "local_integration_base": "7a00a92eeeb723b070ba2c3a0021bcb173edf810",
+  "excluded_local_commits": [
+    "7a00a92eeeb723b070ba2c3a0021bcb173edf810",
+    "d69323043e1a7f313dcd9004275d6b437a079c21",
+    "9de381ddfccfa07da196396bf571373ff83202f3",
+    "6300012acc340f822c7800eedce4406f62dcce2c",
+    "fe2678a95b3c610580fcd10115904773e017d8b2",
+    "d52679ac76b8a1bbc373a1749b8185fea8bb372f",
+    "fda147c2990264d90630f267004df442884a4839",
+    "c886d12dbaab8a2d5dbaef12a795afa49239c610"
+  ],
+  "checks": {
+    "kani_census": 0,
+    "gate_enforcement_with_20_regression_groups": 0,
+    "split_integrity": 0
+  },
+  "full_replay_input_identity": "df34cee6a883deafc1aef86c89d8c464"
+}

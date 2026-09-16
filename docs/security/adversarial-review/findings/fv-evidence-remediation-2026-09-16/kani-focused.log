@@ -1,0 +1,6 @@
+canary
+(True, 'outcome=kani_fails expect=kani_fails')
+cowswap_field_offset
+(True, 'outcome=kani_fails expect=kani_fails')
+native_amount_exactness_helper_gate_dropped
+(True, 'outcome=kani_fails expect=kani_fails')

@@ -134,3 +134,5 @@ jobs:
         # dmkey_ll:false weakening MUST fire), then the dry-run pin check.
         # easycrypt/** added to this workflow's paths filter the same day.
         run: make -C contracts/verification verify-easycrypt-pins
+      - name: verify-easycrypt-split-pins (current vendored split integrity)
+        run: make -C contracts/verification verify-easycrypt-split-pins

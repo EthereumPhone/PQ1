@@ -32,8 +32,16 @@ survive) — it pins the specific load-bearing behaviours. Add an entry whenever
 new load-bearing harness lands.
 
 Usage:
-    check_kani_mutations.py [--tier quick|default|full] [--list]
-Environment: MUTATIONS=quick|default|full overrides the tier (default: default).
+    check_kani_mutations.py [--tier quick|default|full|heavy] [--list]
+Environment: MUTATIONS=quick|default|full|heavy overrides the tier (default: default).
+
+TIERS: quick ⊆ default ⊆ full are cumulative. `heavy` is NON-cumulative and
+LOCAL-ONLY: `--tier heavy` runs ONLY the heavy entries (plus the always-on
+canary) and every other tier SKIPS them — so the nightly default lane never
+sees them. Heavy entries pin cfg(feature = "kani-heavy")-gated harnesses whose
+peak RSS (no_hidden_value 13.05 GiB / 7m55s, measured 2026-07-31) can OOM a
+16 GB hosted runner and suppress the rest of the job's evidence (issue #662).
+Run them via `make verify-kani-mutation-heavy` / `make kani-heavy`, never CI.
 
 Exit: 0 = every mutation was caught as expected; 1 = a survivor (vacuous harness)
       found; 2 = harness/manifest error (mutation didn't apply, canary survived,
@@ -44,6 +52,7 @@ from __future__ import annotations
 import atexit
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -54,7 +63,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 MANIFEST = SCRIPT_DIR / "kani_mutations.json"
 
-TIER_ORDER = {"quick": 0, "default": 1, "full": 2}
+TIER_ORDER = {"quick": 0, "default": 1, "full": 2, "heavy": 3}
+# `heavy` sits ABOVE full in the order so the cumulative quick/default/full
+# selections (the CI/nightly lanes) always skip heavy entries; the heavy tier
+# itself is non-cumulative (see main()).
 
 # Global so the signal/atexit handler can restore a half-applied mutation.
 _ACTIVE: tuple[Path, str] | None = None
@@ -87,12 +99,65 @@ class HarnessError(Exception):
     pass
 
 
+def validate_manifest(muts: list[dict]) -> None:
+    ids = [m.get('id') for m in muts]
+    if ids.count('canary') != 1 or len(set(ids)) != len(ids):
+        raise HarnessError('manifest needs exactly one canary and unique mutation ids')
+    for m in muts:
+        name = m.get('harness_path', '')
+        if (not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+', name)
+                or name.split('::')[-1] != m.get('harness')):
+            raise HarnessError(f"{m['id']}: missing or inconsistent fully qualified harness_path")
+        if m.get('expect') != 'kani_fails' or m.get('tier') not in TIER_ORDER:
+            raise HarnessError(f"{m['id']}: invalid expectation or tier")
+        flags = m.get('z_flags', [])
+        # Only feature selection is currently needed. Do not allow a manifest
+        # flag to override --exact, output format, or verification execution.
+        if flags and not (isinstance(flags, list) and len(flags) == 2
+                          and flags[0] == '--features' and isinstance(flags[1], str)
+                          and re.fullmatch(r'[A-Za-z0-9_,/-]+', flags[1])):
+            raise HarnessError(f"{m['id']}: unsupported z_flags")
+        heavy_feature = bool(flags and any(f.split('/')[-1] == 'kani-heavy'
+                                          for f in flags[1].split(',')))
+        if heavy_feature != (m['tier'] == 'heavy'):
+            raise HarnessError(f"{m['id']}: kani-heavy feature and local heavy tier must agree")
+
+
+def classify_kani(out: str, returncode: int, harness: str) -> str:
+    """Accept one completed Kani 0.67 regular-format result, bound to its name.
+
+    A marker alone is insufficient: compile errors, interrupted runs, multiple
+    selected harnesses and unrelated failures are harness errors, never credit.
+    Unknown future output formats fail closed and require an explicit update.
+    """
+    # A completed failure and a later tool error can both use exit 1. Inspect
+    # both streams in full, including diagnostics after the result summary.
+    out = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', out)
+    fatal = re.search(r'^\s*(?:error(?:\[[^\]]+\])?:|fatal(?: error)?:|'
+                      r'thread\s+.*\bpanicked\b|Traceback \(most recent call last\):)',
+                      out, re.M | re.I)
+    if fatal:
+        raise HarnessError(f'{harness}: fatal tool diagnostic accompanies verification output')
+    names = re.findall(r'^Checking harness (.+)\.\.\.$', out, re.M)
+    verdicts = re.findall(r'^VERIFICATION:- (SUCCESSFUL|FAILED)$', out, re.M)
+    totals = re.findall(r'^Complete - (\d+) successfully verified harnesses, '
+                        r'(\d+) failures, (\d+) total\.$', out, re.M)
+    for verdict, code, summary, outcome in (
+            ('SUCCESSFUL', 0, ('1', '0', '1'), 'kani_passes'),
+            ('FAILED', 1, ('0', '1', '1'), 'kani_fails')):
+        if names == [harness] and verdicts == [verdict] and totals == [summary] and returncode == code:
+            return outcome
+    raise HarnessError(f'{harness}: incomplete, ambiguous or inconsistent Kani result '
+                       f'(exit {returncode}); tail: {out[-800:]}')
+
+
 def run_kani(crate: str, harness: str, z_flags: list[str]) -> tuple[str, str]:
     """Run one Kani harness. Returns (outcome, tail) where outcome is
     "kani_fails" (harness reported VERIFICATION:- FAILED), "kani_passes"
     (VERIFICATION:- SUCCESSFUL), or raises HarnessError if kani did not produce
     a verdict (compile error / crash / missing tool)."""
-    cmd = ["cargo", "kani", "-p", crate, *z_flags, "--harness", harness]
+    cmd = ["cargo", "kani", "-p", crate, *z_flags, "--harness", harness,
+           "--exact", "--output-format", "regular"]
     try:
         cp = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=1800)
     except FileNotFoundError:
@@ -101,15 +166,7 @@ def run_kani(crate: str, harness: str, z_flags: list[str]) -> tuple[str, str]:
         raise HarnessError(f"kani timed out on {crate}::{harness} (>1800s).")
     out = cp.stdout + cp.stderr
     tail = out[-800:].strip()
-    if "VERIFICATION:- FAILED" in out:
-        return "kani_fails", tail
-    if "VERIFICATION:- SUCCESSFUL" in out:
-        return "kani_passes", tail
-    # No verdict line: compile error, wrong harness name, or crash.
-    raise HarnessError(
-        f"{crate}::{harness}: kani produced no VERIFICATION verdict "
-        f"(compile error / unknown harness?). tail: …{tail[-400:]}"
-    )
+    return classify_kani(out, cp.returncode, harness), tail
 
 
 def apply_and_test(mut: dict) -> tuple[bool, str]:
@@ -141,13 +198,19 @@ def apply_and_test(mut: dict) -> tuple[bool, str]:
     if mutated == orig:
         raise HarnessError(f"{mut['id']}: applying the mutation changed nothing.")
 
+    baseline, _ = run_kani(mut['crate'], mut['harness_path'], mut.get('z_flags', []))
+    if baseline != 'kani_passes':
+        raise HarnessError(f"{mut['id']}: unmodified baseline did not pass; no mutation credit")
+    if path.read_text(encoding='utf-8') != orig:
+        raise HarnessError(f"{mut['id']}: source changed during baseline verification")
+
     try:
         _ACTIVE = (path, orig)
         path.write_text(mutated, encoding="utf-8")
         if path.read_text(encoding="utf-8") == orig:
             raise HarnessError(f"{mut['id']}: write did not take effect.")
 
-        outcome, tail = run_kani(mut["crate"], mut["harness"], mut.get("z_flags", []))
+        outcome, tail = run_kani(mut["crate"], mut["harness_path"], mut.get("z_flags", []))
         matched = outcome == mut["expect"]
         detail = f"outcome={outcome} expect={mut['expect']}"
         if not matched:
@@ -167,12 +230,22 @@ def main() -> int:
     if "--tier" in args:
         tier = args[args.index("--tier") + 1]
     if tier not in TIER_ORDER:
-        print(f"ERROR: unknown tier {tier!r} (quick|default|full)", file=sys.stderr)
+        print(f"ERROR: unknown tier {tier!r} (quick|default|full|heavy)", file=sys.stderr)
         return 2
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     muts = manifest["mutations"]
-    sel = [m for m in muts if TIER_ORDER[m.get("tier", "default")] <= TIER_ORDER[tier]]
+    try:
+        validate_manifest(muts)
+    except HarnessError as exc:
+        print(f'ERROR: {exc}', file=sys.stderr)
+        return 2
+    if tier == "heavy":
+        # Non-cumulative: the heavy tier is exactly the cfg(kani-heavy)-gated,
+        # local-only entries (issue #662) — not the whole CI suite plus them.
+        sel = [m for m in muts if m.get("tier", "default") == "heavy"]
+    else:
+        sel = [m for m in muts if TIER_ORDER[m.get("tier", "default")] <= TIER_ORDER[tier]]
     # Canary is ALWAYS included regardless of tier.
     if not any(m["id"] == "canary" for m in sel):
         sel = [m for m in muts if m["id"] == "canary"] + sel
@@ -214,7 +287,7 @@ def main() -> int:
         if m["id"] == "canary":
             canary_ok = matched
 
-    if canary_ok is False:
+    if canary_ok is not True:
         print("\n=== HARNESS BROKEN: the canary mutation was NOT caught. The mutation "
               "harness cannot detect a fault — ALL results are void. ===", file=sys.stderr)
         return 2

@@ -1,0 +1,2720 @@
+775133e8 fix(fv): reject fatal Kani diagnostics and provision the nightly gate
+b969690e fix(fv): handle abstract requires and close tier and pin alias gaps
+cd43416c fix(fv): bind Kani mutation results and replay the complete EasyCrypt split
+d52679ac docs(fsbl): refresh the geometry figures and correct the "not adopted" claim
+fda147c2 feat(fsbl): tz-1 — option-byte read-back tripwire before every slot branch
+ .github/workflows/lean-fv.yml                      |   2 +
+ .github/workflows/nightly.yml                      |  29 +++++
+ Makefile                                           |   3 +-
+ contracts/verification/Makefile                    |  26 ++--
+ contracts/verification/docs/FV_SURFACE_MAP.md      |  16 +--
+ contracts/verification/docs/REVIEW_PROVENANCE.md   |   7 +
+ .../easycrypt/c10-port/cert-identity.tsv           |   2 +-
+ .../easycrypt/c10-port/cert-statements-split.tsv   |   1 -
+ .../easycrypt/c10-port/cert-toolchain-split.json   |  31 +++++
+ .../easycrypt/c10-port/cert_gate_split.sh          | 115 ++++++----------
+ .../easycrypt/c10-port/tools/split_contract.py     | 137 ++++++++++++++++++++
+ .../c10-port/tools/split_proof_controls.py         |  60 +++++++++
+ .../easycrypt/c10-port/tools/stmt_coverage.py      |   2 +-
+ .../c10-port/tools/test_split_contract.py          |  91 +++++++++++++
+ .../easycrypt/docker/gate-c10-capstone.sh          |  12 +-
+ contracts/verification/scripts/check_easycrypt.sh  |  15 ++-
+ .../verification/scripts/run_easycrypt_split.py    |  25 ++++
+ docs/STATUS.md                                     |   5 +
+ .../findings/fv-evidence-remediation-2026-09-16.md | 137 ++++++++++++++++++++
+ scripts/check_gate_enforcement.py                  |  10 ++
+ scripts/check_kani_mutations.py                    | 107 ++++++++++++---
+ scripts/gate_enforcement.json                      | 102 ++++++++++++++-
+ scripts/kani_census.lock.json                      |  12 +-
+ scripts/kani_census.py                             | 102 ++++++++++++++-
+ scripts/kani_mutations.json                        | 144 ++++++++++++++-------
+ scripts/test_gate_enforcement.py                   |  18 +++
+ scripts/test_kani_census.py                        | 103 +++++++++++++++
+ scripts/test_kani_mutations.py                     | 109 ++++++++++++++++
+ 28 files changed, 1241 insertions(+), 182 deletions(-)
+diff --git a/scripts/check_kani_mutations.py b/scripts/check_kani_mutations.py
+index 209590b6..6e1dcf4b 100755
+--- a/scripts/check_kani_mutations.py
++++ b/scripts/check_kani_mutations.py
+@@ -32,8 +32,16 @@ survive) — it pins the specific load-bearing behaviours. Add an entry whenever
+ new load-bearing harness lands.
+ 
+ Usage:
+-    check_kani_mutations.py [--tier quick|default|full] [--list]
+-Environment: MUTATIONS=quick|default|full overrides the tier (default: default).
++    check_kani_mutations.py [--tier quick|default|full|heavy] [--list]
++Environment: MUTATIONS=quick|default|full|heavy overrides the tier (default: default).
++
++TIERS: quick ⊆ default ⊆ full are cumulative. `heavy` is NON-cumulative and
++LOCAL-ONLY: `--tier heavy` runs ONLY the heavy entries (plus the always-on
++canary) and every other tier SKIPS them — so the nightly default lane never
++sees them. Heavy entries pin cfg(feature = "kani-heavy")-gated harnesses whose
++peak RSS (no_hidden_value 13.05 GiB / 7m55s, measured 2026-07-31) can OOM a
++16 GB hosted runner and suppress the rest of the job's evidence (issue #662).
++Run them via `make verify-kani-mutation-heavy` / `make kani-heavy`, never CI.
+ 
+ Exit: 0 = every mutation was caught as expected; 1 = a survivor (vacuous harness)
+       found; 2 = harness/manifest error (mutation didn't apply, canary survived,
+@@ -44,6 +52,7 @@ from __future__ import annotations
+ import atexit
+ import json
+ import os
++import re
+ import signal
+ import subprocess
+ import sys
+@@ -54,7 +63,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
+ REPO_ROOT = SCRIPT_DIR.parent
+ MANIFEST = SCRIPT_DIR / "kani_mutations.json"
+ 
+-TIER_ORDER = {"quick": 0, "default": 1, "full": 2}
++TIER_ORDER = {"quick": 0, "default": 1, "full": 2, "heavy": 3}
++# `heavy` sits ABOVE full in the order so the cumulative quick/default/full
++# selections (the CI/nightly lanes) always skip heavy entries; the heavy tier
++# itself is non-cumulative (see main()).
+ 
+ # Global so the signal/atexit handler can restore a half-applied mutation.
+ _ACTIVE: tuple[Path, str] | None = None
+@@ -87,12 +99,65 @@ class HarnessError(Exception):
+     pass
+ 
+ 
++def validate_manifest(muts: list[dict]) -> None:
++    ids = [m.get('id') for m in muts]
++    if ids.count('canary') != 1 or len(set(ids)) != len(ids):
++        raise HarnessError('manifest needs exactly one canary and unique mutation ids')
++    for m in muts:
++        name = m.get('harness_path', '')
++        if (not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)+', name)
++                or name.split('::')[-1] != m.get('harness')):
++            raise HarnessError(f"{m['id']}: missing or inconsistent fully qualified harness_path")
++        if m.get('expect') != 'kani_fails' or m.get('tier') not in TIER_ORDER:
++            raise HarnessError(f"{m['id']}: invalid expectation or tier")
++        flags = m.get('z_flags', [])
++        # Only feature selection is currently needed. Do not allow a manifest
++        # flag to override --exact, output format, or verification execution.
++        if flags and not (isinstance(flags, list) and len(flags) == 2
++                          and flags[0] == '--features' and isinstance(flags[1], str)
++                          and re.fullmatch(r'[A-Za-z0-9_,/-]+', flags[1])):
++            raise HarnessError(f"{m['id']}: unsupported z_flags")
++        heavy_feature = bool(flags and any(f.split('/')[-1] == 'kani-heavy'
++                                          for f in flags[1].split(',')))
++        if heavy_feature != (m['tier'] == 'heavy'):
++            raise HarnessError(f"{m['id']}: kani-heavy feature and local heavy tier must agree")
++
++
++def classify_kani(out: str, returncode: int, harness: str) -> str:
++    """Accept one completed Kani 0.67 regular-format result, bound to its name.
++
++    A marker alone is insufficient: compile errors, interrupted runs, multiple
++    selected harnesses and unrelated failures are harness errors, never credit.
++    Unknown future output formats fail closed and require an explicit update.
++    """
++    # A completed failure and 
+a later tool error can both use exit 1. Inspect
++    # both streams in full, including diagnostics after the result summary.
++    out = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', out)
++    fatal = re.search(r'^\s*(?:error(?:\[[^\]]+\])?:|fatal(?: error)?:|'
++                      r'thread\s+.*\bpanicked\b|Traceback \(most recent call last\):)',
++                      out, re.M | re.I)
++    if fatal:
++        raise HarnessError(f'{harness}: fatal tool diagnostic accompanies verification output')
++    names = re.findall(r'^Checking harness (.+)\.\.\.$', out, re.M)
++    verdicts = re.findall(r'^VERIFICATION:- (SUCCESSFUL|FAILED)$', out, re.M)
++    totals = re.findall(r'^Complete - (\d+) successfully verified harnesses, '
++                        r'(\d+) failures, (\d+) total\.$', out, re.M)
++    for verdict, code, summary, outcome in (
++            ('SUCCESSFUL', 0, ('1', '0', '1'), 'kani_passes'),
++            ('FAILED', 1, ('0', '1', '1'), 'kani_fails')):
++        if names == [harness] and verdicts == [verdict] and totals == [summary] and returncode == code:
++            return outcome
++    raise HarnessError(f'{harness}: incomplete, ambiguous or inconsistent Kani result '
++                       f'(exit {returncode}); tail: {out[-800:]}')
++
++
+ def run_kani(crate: str, harness: str, z_flags: list[str]) -> tuple[str, str]:
+     """Run one Kani harness. Returns (outcome, tail) where outcome is
+     "kani_fails" (harness reported VERIFICATION:- FAILED), "kani_passes"
+     (VERIFICATION:- SUCCESSFUL), or raises HarnessError if kani did not produce
+     a verdict (compile error / crash / missing tool)."""
+-    cmd = ["cargo", "kani", "-p", crate, *z_flags, "--harness", harness]
++    cmd = ["cargo", "kani", "-p", crate, *z_flags, "--harness", harness,
++           "--exact", "--output-format", "regular"]
+     try:
+         cp = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=1800)
+     except FileNotFoundError:
+@@ -101,15 +166,7 @@ def run_kani(crate: str, harness: str, z_flags: list[str]) -> tuple[str, str]:
+         raise HarnessError(f"kani timed out on {crate}::{harness} (>1800s).")
+     out = cp.stdout + cp.stderr
+     tail = out[-800:].strip()
+-    if "VERIFICATION:- FAILED" in out:
+-        return "kani_fails", tail
+-    if "VERIFICATION:- SUCCESSFUL" in out:
+-        return "kani_passes", tail
+-    # No verdict line: compile error, wrong harness name, or crash.
+-    raise HarnessError(
+-        f"{crate}::{harness}: kani produced no VERIFICATION verdict "
+-        f"(compile error / unknown harness?). tail: …{tail[-400:]}"
+-    )
++    return classify_kani(out, cp.returncode, harness), tail
+ 
+ 
+ def apply_and_test(mut: dict) -> tuple[bool, str]:
+@@ -141,13 +198,19 @@ def apply_and_test(mut: dict) -> tuple[bool, str]:
+     if mutated == orig:
+         raise HarnessError(f"{mut['id']}: applying the mutation changed nothing.")
+ 
++    baseline, _ = run_kani(mut['crate'], mut['harness_path'], mut.get('z_flags', []))
++    if baseline != 'kani_passes':
++        raise HarnessError(f"{mut['id']}: unmodified baseline did not pass; no mutation credit")
++    if path.read_text(encoding='utf-8') != orig:
++        raise HarnessError(f"{mut['id']}: source changed during baseline verification")
++
+     try:
+         _ACTIVE = (path, orig)
+         path.write_text(mutated, encoding="utf-8")
+         if path.read_text(encoding="utf-8") == orig:
+             raise HarnessError(f"{mut['id']}: write did not take effect.")
+ 
+-        outcome, tail = run_kani(mut["crate"], mut["harness"], mut.get("z_flags", []))
++        outcome, tail = run_kani(mut["crate"], mut["harness_path"], mut.get("z_flags", []))
+         matched = outcome == mut["expect"]
+         detail = f"outcome={outcome} expect={mut['expect']}"
+         if not matched:
+@@ -167,12 +230,22 @@ def main() -> int:
+     if "--tier" in args:
+         tier = args[args.index("--tier") + 1]
+     if tier not in TIER_ORDER:
+-        print(f"ERROR: unknown tier {tier!r} (quick|default|full)", file=sys.stderr)
++        print(f"ERROR: unknown tier {tier!r} (quick|default|full|heavy)", file=sys.stderr)
+         return 2
+ 
+     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+     muts = manifest["mutations"]
+-    sel = [m for m in muts if TIER_ORDER[m.get("tier", "default")] <= TIER_ORDER[tier]]
++    try:
++        validate_manifest(muts)
++    except HarnessError as exc:
++        print(f'ERROR: {exc}', file=sys.stderr)
++        return 2
++    if tier == "heavy":
++        # Non-cumulative: the heavy tier is exactly the cfg(kani-heavy)-gated,
++        # local-only entries (issue #662) — not the whole CI suite plus them.
++        sel = [m for m in muts if m.get("tier", "default") == "heavy"]
++    else:
++        sel = [m for m in muts if TIER_ORDER[m.get("tier", "default")] <= TIER_ORDER[tier]]
+     # Canary is ALWAYS included regardless of tier.
+     if not any(m["id"] == "canary" for m in sel):
+         sel = [m for m in muts if m["id"] == "canary"] + sel
+@@ -214,7 +287,7 @@ def main() -> int:
+         if m["id"] == "canary":
+             canary_ok = matched
+ 
+-    if canary_ok is False:
++    if canary_ok is not True:
+         print("\n=== HARNESS BROKEN: the canary mutation was NOT caught. The mutation "
+               "harness cannot detect a fault — ALL results are void. ===", file=sys.stderr)
+         return 2
+diff --git a/scripts/kani_census.py b/scripts/kani_census.py
+index 3c096373..f37433ee 100644
+--- a/scripts/kani_census.py
++++ b/scripts/kani_census.py
+@@ -128,6 +128,63 @@ def generate() -> dict:
+     }
+ 
+ 
++_FEATURE_REF = re.compile(r'\bfeature\s*=\s*"([^"]+)"')
++
++
++def _harness_cfg_features(source: str, harness: str) -> list[str]:
++    """``feature = "..."`` names from ``#[cfg(...)]`` attributes attached to
++    ``fn <harness>`` (walking up over the contiguous attribute/comment/blank
++    block above each same-named fn, unioned).
++
++    A cfg-gated harness (e.g. ``#[cfg(feature = "kani-heavy")]``) is compiled
++    OUT unless ``cargo kani`` gets a matching ``--features`` flag — without it
++    kani produces no VERIFICATION verdict and the mutation lane dies with a
++    HarnessError (issue #662). Only per-harness ``cfg`` attributes are seen;
++    a gate on an enclosing ``mod`` is not (none exist today).
++    """
++    fn_decl = re.compile(
++        r"^[ \t]*(?:(?:pub(?:\([^)]*\))?)[ \t]+)?"
++        r"(?:unsafe[ \t]+)?(?:async[ \t]+)?fn[ \t]+" + re.escape(harness) + r"\b"
++    )
++    # Normalize complete attributes first, so layout never hides a cfg gate.
++    source = re.sub(r"#\[[^\]]*\]", lambda m: " ".join(m.group().split()), source)
++    lines = source.splitlines()
++    features: list[str] = []
++    for i, line in enumerate(lines):
++        if not fn_decl.match(line):
++            continue
++        j = i - 1
++        while j >= 0:
++            s = lines[j].strip()
++            if not s or s.startswith("//"):
++                j -= 1
++                continue
++            if s.startswith("#["):
++                if re.match(r"#\[cfg(?:_attr)?\b", s) and _FEATURE_REF.search(s):
++                    if not re.fullmatch(r'#\[cfg\(\s*feature\s*=\s*"[^"]+"\s*\)\]', s):
++                        raise ValueError(f"unsupported feature cfg on {harness}: {s}")
++                    features.extend(_FEATURE_REF.findall(s))
++                j -= 1
++                continue
++            break
++    return sorted(set(features))
++
++
++def _z_flag_features(entry: dict) -> list[str]:
++    """Feature names an entry's ``z_flags`` passes via ``--features`` (both the
++    ``["--features", "a,b"]`` and ``["--features=a,b"]`` forms)."""
++    z_flags = entry.get("z_flags", [])
++    feats: list[str] = []
++    if not isinstance(z_flags, list):
++        return feats
++    for k, flag in enumerate(z_flags):
++        if flag == "--features" and k + 1 < len(z_flags):
++            feats.extend(x.strip() for x in str(z_flags[k + 1]).split(","))
++        elif isinstance(flag, str) and flag.startswith("--features="):
++            feats.extend(x.strip() for x in flag.split("=", 1)[1].split(","))
++    return [f for f in feats if f]
++
++
+ def manifest_rot(
+     census: dict,
+     *,
+@@ -141,6 +198,14 @
+@ def manifest_rot(
+     its replacement is a no-op. Otherwise a dead mutation can remain enrolled
+     in the published anti-vacuity count while never changing production code.
+ 
++    The harness may live in a DIFFERENT file than the mutation target (a shared
++    pure helper mutated where it is defined, pinned by a caller's harness —
++    e.g. ``native_amount_exactness_helper_gate_dropped``); it is only required
++    to exist in SOME git-tracked source. When the harness is cfg-gated
++    (``#[cfg(feature = "...")]``), the entry's ``z_flags`` must enable every
++    gating feature, else the slow lane compiles the harness out and dies with
++    a HarnessError instead of a verdict (issue #662).
++
+     ``manifest`` and ``repo_root`` are injectable only for the offline unit
+     tests; normal callers read the committed manifest under :data:`REPO_ROOT`.
+     """
+@@ -164,10 +229,14 @@ def manifest_rot(
+         if not path.exists():
+             fails.append(f"manifest `{mutation_id}`: file {f} does not exist (deleted/renamed).")
+             continue
+-        if h not in fh.get(f, []):
++        harness_file = f if h in fh.get(f, []) else next(
++            (hf for hf, hs in fh.items() if h in hs), None
++        )
++        if harness_file is None:
+             fails.append(
+-                f"manifest `{mutation_id}`: no `#[kani::proof] fn {h}` in {f} "
+-                f"(renamed/deleted harness — the mutation would misfire before Kani runs)."
++                f"manifest `{mutation_id}`: no `#[kani::proof] fn {h}` in {f} or any "
++                "other git-tracked source (renamed/deleted harness — the mutation "
++                "would misfire before Kani runs)."
+             )
+ 
+         find = m.get("find")
+@@ -192,6 +261,33 @@ def manifest_rot(
+                 f"manifest `{mutation_id}`: find string occurs {occurrences}x in {f}; "
+                 "expected exactly once."
+             )
++
++        # cfg-gate feature check (issue #662 class): a harness compiled out for
++        # lack of a `--features` flag yields no VERIFICATION verdict, so the
++        # slow lane dies with a HarnessError. Catch it statically here.
++        if harness_file is not None:
++            hsource = source
++            if harness_file != f:
++                try:
++                    hsource = (repo_root / harness_file).read_text(
++                        encoding="utf-8", errors="replace"
++                    )
++                except OSError:
++                    hsource = ""
++            try:
++                required = _harness_cfg_features(hsource, h)
++            except ValueError as exc:
++                fails.append(f"manifest `{mutation_id}`: {exc}")
++                continue
++            missing = [feat for feat in required if feat not in _z_flag_features(m)]
++            if missing:
++                fails.append(
++                    f"manifest `{mutation_id}`: harness {h} is cfg-gated on "
++                    f"feature(s) {required} in {harness_file} but the entry's z_flags "
++                    f"do not enable {missing} — `cargo kani` would compile the harness "
++                    f"OUT (no VERIFICATION verdict, the #662 nightly-lane death). Add "
++                    f'e.g. ["--features", "{missing[0]}"] to the entry\'s z_flags.'
++                )
+     return fails
+ 
+ 
+diff --git a/contracts/verification/easycrypt/c10-port/cert_gate_split.sh b/contracts/verification/easycrypt/c10-port/cert_gate_split.sh
+index ca062084..3ace3bb1 100644
+--- a/contracts/verification/easycrypt/c10-port/cert_gate_split.sh
++++ b/contracts/verification/easycrypt/c10-port/cert_gate_split.sh
+@@ -30,10 +30,9 @@ TMPD=$(mktemp -d) || { echo 'FAIL mktemp'; exit 1; }
+ trap 'rm -rf "$TMPD"' EXIT
+ # Expected inventory sizes, COMMITTED. A guard that recomputes its expectation
+ # from the file it is checking cannot detect truncation of that file.
+-EXPECT_PINS=1078
+-# Committed count of top-level statements across the 38 certified roots.  Guards
+-# PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
+-# somebody must say why.  896 measured 2026-08-20.
++EXPECT_PINS=1077
++# Committed count of top-level statements across the complete 45-file cone.
++# PHASE 1h requires an explicit update when this statement set changes.
+ EXPECT_STMTS=993
+ # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
+ # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
+@@ -105,7 +104,7 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
+ # proof, and PHASE 2b/2c only canary two specific behaviours of it.
+ INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
+     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
+-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
++  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+ echo "### INPUTS_SHA256 $INPUTS_ID"
+ # AND NOW COMPARE IT.  This line was printed and checked by nothing: an identity
+ # receipt that no run can fail on is decoration.  The expected value lives in
+@@ -122,24 +121,13 @@ elif [ "$INPUTS_ID" != "$want_id" ]; then
+ else
+   echo "OK   INPUTS_SHA256 matches the committed identity"
+ fi
+-echo "### TOOLCHAIN $(easycrypt cli </dev/null 2>&1 | grep -ao 'GIT hash: [^ ]*' | head -1 || echo UNKNOWN)"
+-# PROVER INVENTORY (added 2026-08-02, run 10).  Every `smt()` in the closure is
+-# discharged by whatever provers the local why3 config offers, at whatever
+-# timeout; NOTHING here pins them and the receipt recorded only the EasyCrypt
+-# git hash.  This container answers with 25 prover configurations (Alt-Ergo
+-# 2.4.3/2.5.4/2.6.0, CVC4 1.8, CVC5 1.0.9, Z3 4.8.17/4.12.6/4.13.4).  A third
+-# party with a different set can get a different verdict on the SAME tree.
+-# Direction of the risk is fail-CLOSED FOR A MISSING PROVER -- it loses a goal,
+-# it does not invent one.  That is NOT the same as sound: a DIFFERENT prover
+-# version with a soundness bug does invent one, and this receipt inherits the
+-# prover-soundness assumption the whole artifact already makes (run 12).  So:
+-# a reproducibility receipt, under an unchanged trust assumption.
+-# 2>&1, NOT 2>/dev/null: EasyCrypt prints `known provers:` on STDERR, so the
+-# first version of this line hashed the EMPTY STRING and printed
+-# `e3b0c44298fc1c14 0 configurations` -- the SAME empty-input defect run 8
+-# found in the identity hash, committed again by me two hours later.  A
+-# receipt field must be checked for its VALUE, never for its presence.
+-echo "### PROVERS $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | sha256sum | cut -c1-16) $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | tr ',' '\n' | grep -c .) configurations"
++# The fast per-PR identity check deliberately needs no proof toolchain.
++if [ "${1:-}" = "--identity-only" ]; then exit "$fail"; fi
++[ "$fail" -eq 0 ] || exit 1
++python3 tools/split_contract.py || exit 1
++python3 tools/split_contract.py --toolchain || exit 1
++python3 tools/split_proof_controls.py || exit 1
++python3 tools/split_contract.py --targets > "$TMPD/targets" || exit 1
+ 
+ # PHASE 0 -- INCLUDE-PATH AMBIGUITY.  resolve() in tools/cert_cone.py tries
+ # '.ec' then '.eca' and takes the LAST hit, but EasyCrypt's own preference when
+@@ -193,18 +181,18 @@ echo "### ECO_REMAINING=$left"
+ [ "$left" -eq 0 ] || { echo "FAIL stale .eco survived the purge ($left)"; fail=$((fail+1)); }
+ 
+ echo "### PHASE 1 — TARGETS"
+-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
+-  if easycrypt compile $ECFLAGS -I $B $B/$n.ec >/dev/null 2>&1; then echo "OK   base/$n"; else echo "FAIL base/$n"; fail=$((fail+1)); fi
+-done
+ n_seen=0
+-while read -r n || [ -n "$n" ]; do
+-  case "$n" in ''|\#*) continue;; esac
++while read -r f; do
+   n_seen=$((n_seen+1))
+-  if easycrypt compile $ECFLAGS $INC $D/$n.ec >/dev/null 2>&1; then echo "OK   $n"; else echo "FAIL $n"; fail=$((fail+1)); fi
+-done < closure-c10-split.txt
+-n_exp=$(grep -cve '^[[:space:]]*$' -e '^#' closure-c10-split.txt)
+-echo "### CLOSURE_COMPILED=$n_seen EXPECTED=$n_exp"
+-[ "$n_seen" -eq "$n_exp" ] || { echo "FAIL closure truncated"; fail=$((fail+1)); }
++  if easycrypt compile $ECFLAGS $INC "$f" >"$TMPD/compile.log" 2>&1; then
++    echo "OK   target $f"
++  else
++    echo "FAIL target $f"; tail -10 "$TMPD/compile.log"; fail=$((fail+1))
++  fi
++done < "$TMPD/targets"
++n_exp=$(wc -l < "$TMPD/targets")
++echo "### CONE_COMPILED=$n_seen EXPECTED=$n_exp"
++[ "$n_seen" -eq "$n_exp" ] && [ "$n_exp" -gt 0 ] || { echo "FAIL cone truncated"; fail=$((fail+1)); }
+ 
+ echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)"
+ # EasyCrypt returns rc=0 for a file that ENDS mid-proof.  Measured 2026-08-03:
+@@ -218,10 +206,11 @@ echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compila
+ # The probe is GENERATED from $CLOSURE so it cannot drift out of sync with the
+ # closure list the way a checked-in control file would.
+ { echo "require import AllCore."
+-  while read -r n || [ -n "$n" ]; do
+-    case "$n" in ''|\#*) continue;; esac
+-    echo "require import $n."
+-  done < $CLOSURE
++  while read -r f; do
++    n=$(basename "$f"); n="${n%.*}"
++    # Plain require also loads .eca abstract theories; import rejects those.
++    echo "require $n."
++  done < "$TMPD/targets"
+ } > "$TMPD/require_all.ec"
+ if easycrypt compile $ECFLAGS $INC "$TMPD/require_all.ec" >/dev/null 2>&1; then
+   echo "OK   all closure files are requirable"
+@@ -299,15 +288,15 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
+   # GprocT1Opre OTHER than the one just made deterministic are still budget-
+   # sensitive under the cli driver.  Not chased here; not load-bearing, since the
+   # leg passes at either budget.
+-  out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n')
++  if out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n'); then cli_rc=0; else cli_rc=$?; fi
+   d=$(printf '%s\n' "$out" | grep -c '^<tty>:' || true)
+   pr=$(printf '%s\n' "$out" | grep -c '^\[[0-9]*|' || true)
+   cli_run=$((cli_run+1))
+-  if [ "$pr" -lt 5 ]; then
++  if [ "$pr" -lt 1 ]; then
+     echo "FAIL $lbl (cli): only $pr commands processed -- the run did not happen"
+     fail=$((fail+1)); cli_bad=$((cli_bad+1)); return
+   fi
+-  if [ "$d" -eq 0 ]; then
++  if [ "$d" -eq 0 ] && [ "$cli_rc" -eq 0 ]; then
+     echo "OK   $lbl (cli, $pr cmds)"
+   else
+     echo "FAIL $lbl (cli): $d diagnostic(s) -- compile accepted what cli rejects"
+@@ -315,18 +304,11 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
+     fail=$((fail+1)); cli_bad=$((cli_bad+1))
+   fi
+ }
+-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
+-  cli_one "base/$n" -I $B < $B/$n.ec
+-done
+-while read -r n || [ -n "$n" ]; do
+-  case "$n" in ''|\#*) continue;; esac
+-  cli_one "$n" $INC < $D/$n.ec
+-done < $CLOSURE
++while read -r f; do
++  cli_one "$f" $INC < "$f"
++done < "$TMPD/targets"
+ echo "### CLI_FILES_RUN=$cli_run CLI_DISAGREEMENTS=$cli_bad"
+-# Same truncation guard PHASE 1 carries: a closure file that shrank to nothing
+-# would run zero cli checks and still reach GREEN.
+-cli_exp=$(( $(grep -cve '^[[:space:]]*$' -e '^#' $CLOSURE) + 4 ))
+-[ "$cli_run" -eq "$cli_exp" ] || { echo "FAIL cli phase ran $cli_run of $cli_exp files"; fail=$((fail+1)); }
++[ "$cli_run" -eq "$n_exp" ] || { echo "FAIL cli phase ran $cli_run of $n_exp files"; fail=$((fail+1)); }
+ 
+ # The open question that stood here is CLOSED: the four PHASE 1e failures were
+ # the -iterate default difference, not defects.  See the PHASE 1e header.
+@@ -493,36 +475,13 @@ echo "### PHASE 1c — STATEMENT DIGESTS (names are not enough)"
+ # could be weakened to `true` (proof `trivial`) and every other phase would still
+ # pass.  Verified by negative control: weakening it moves the digest
+ # 5bd600cb2661b4af2426525bb72e4058 -> 028803b8e5cd6fca33e562cecd495360.
+-if [ -f cert-statements-split.tsv ]; then
+-  n_stmt=0
+-  while IFS=$'\t' read -r key want || [ -n "${key:-}" ]; do
+-    case "${key:-}" in ''|\#*) continue;; esac
+-    n_stmt=$((n_stmt+1))
+-    got=$(python3 tools/stmt_digest.py "$key" | cut -f2)
+-    # AN UNRESOLVABLE PIN MUST FAIL, NOT AGREE WITH ITSELF (run 13d).  digest()
+-    # returned None for an `equiv`, the caller printed NOT-FOUND, and a manifest
+-    # row carrying the literal string NOT-FOUND compared EQUAL -- a pin that
+-    # looks pinned and targets nothing.  Caught while pinning GprocKg_sk_eq.
+-    case "$got" in
+-      NOT-FOUND|AMBIGUOUS-*|ambig*|nostmt)
+-        echo "FAIL statement pin does not resolve: $key -> $got"; fail=$((fail+1)); continue;;
+-    esac
+-    if [ "$got" = "$want" ]; then echo "OK   statement pinned: $key"
+-    else echo "FAIL statement CHANGED: $key"; echo "       want $want"; echo "       got  $got"; fail=$((fail+1)); fi
+-  done < cert-statements-split.tsv
+-  # Row-count guard: deleting a row would silently UNPIN that lemma.
+-  exp_stmt=$EXPECT_PINS   # COMMITTED CONSTANT, not recomputed from the manifest
+-  echo "statements pinned=$n_stmt expected=$exp_stmt (manifest rows)"
+-  [ "${n_stmt:-0}" -eq "${exp_stmt:-0}" ] && [ "${exp_stmt:-0}" -ge 1 ] || { echo "FAIL statement pin file truncated"; fail=$((fail+1)); }
+-else
+-  echo "FAIL cert-statements-split.tsv missing -- statements unpinned"; fail=$((fail+1))
+-fi
++python3 tools/split_contract.py --pins || fail=$((fail+1))
+ 
+ echo "### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)"
+ # PHASE 1c iterates the MANIFEST (`done < cert-statements-split.tsv`), so it verifies
+ # that every PINNED statement still says what it said -- and is STRUCTURALLY BLIND to a
+-# statement that was never pinned.  Pinning all 896 statements that exist today does
+-# NOT stop an 897th appearing tomorrow: the new one is simply absent from the manifest,
++# statement that was never pinned.  Pinning every statement that exists today does
++# NOT stop another appearing tomorrow: the new one is simply absent from the manifest,
+ # and absence is invisible to a loop that reads the manifest.
+ #
+ # That was the entire point of the exercise -- a prior adversarial review found that a
+@@ -935,7 +894,7 @@ fi
+ # past the compile is caught, and it costs one second.
+ INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
+     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
+-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/poli
+cy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
++  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+ if [ "$INPUTS_ID_END" != "$INPUTS_ID" ]; then
+   echo "FAIL inputs CHANGED DURING THE RUN: start $INPUTS_ID, end $INPUTS_ID_END"
+   fail=$((fail+1))
+diff --git a/contracts/verification/easycrypt/c10-port/tools/split_contract.py b/contracts/verification/easycrypt/c10-port/tools/split_contract.py
+new file mode 100644
+index 00000000..f3800c08
+--- /dev/null
++++ b/contracts/verification/easycrypt/c10-port/tools/split_contract.py
+@@ -0,0 +1,137 @@
++#!/usr/bin/env python3
++"""Fast split integrity, complete proof target order, and checked tool identity.
++
++These are evidence checks, not a proof of the model or its refinement to firmware.
++The standard library/solver implementation remains a trusted foundation.
++"""
++import argparse
++from collections import Counter
++import json
++import os
++from pathlib import Path
++import re
++import subprocess
++import sys
++
++import cert_cone
++import stmt_coverage
++import stmt_digest
++
++cert_cone.INCLUDE_DIRS = ['base-c10-split', 'cdrafts-split']
++
++
++def rows(path):
++    return [s for s in Path(path).read_text().splitlines()
++            if s.strip() and not s.startswith('#')]
++
++
++def targets():
++    """Check the exact pinned closure and return dependencies before consumers."""
++    pinned = rows('cert-cone-files-split.tsv')
++    if not pinned or len(pinned) != len(set(pinned)):
++        raise ValueError('empty or duplicate cone file inventory')
++    roots = stmt_coverage.roots()
++    for p in roots + pinned:
++        if not Path(p).is_file():
++            raise ValueError(f'missing proof source: {p}')
++    files = cert_cone.cone(roots)
++    if set(files) != set(pinned):
++        raise ValueError('computed cone differs from pinned file inventory')
++    ordered, active, done = [], set(), set()
++
++    def visit(p):
++        if p in active:
++            raise ValueError(f'cyclic require: {p}')
++        if p in done:
++            return
++        active.add(p)
++        for name in cert_cone.requires_of(p, files[p]):
++            q = cert_cone.resolve(name)
++            if q is not None:
++                visit(q)
++        active.remove(p)
++        done.add(p)
++        ordered.append(p)
++
++    for p in sorted(files):
++        visit(p)
++    return ordered
++
++
++def check_pins():
++    pins = [s.split('\t') for s in rows('cert-statements-split.tsv')]
++    if any(len(p) != 2 for p in pins):
++        raise ValueError('malformed statement pin row')
++    keys = [p[0] for p in pins]
++    duplicates = [k for k, n in Counter(keys).items() if n != 1]
++    if duplicates:
++        raise ValueError(f'duplicate statement pin key: {duplicates[0]}')
++    expected = re.findall(r'^EXPECT_PINS=(\d+)$', Path('cert_gate_split.sh').read_text(), re.M)
++    if len(expected) != 1 or len(keys) != int(expected[0]) or not keys:
++        raise ValueError('unique statement pin count differs from committed EXPECT_PINS')
++    # Lexically different aliases (./A.ec, dir/../A.ec) must not count as two
++    # declaration identities and substitute for a deleted op pin.
++    allowed_paths = set(rows('cert-cone-files-split.tsv'))
++    for key, want in pins:
++        op = key.startswith('op:')
++        path, name = (key[3:] if op else key).split('::')
++        if path not in allowed_paths:
++            raise ValueError(f'noncanonical or out-of-cone statement pin path: {path}')
++        got = (stmt_digest.digest_op if op else stmt_digest.digest)(path, name)
++        if not re.fullmatch(r'[0-9a-f]{32}', want) or got != want:
++            raise ValueError(f'statement pin changed or unresolved: {key}')
++    print(f'OK unique statement pins: {len(keys)}')
++
++
++def check_toolchain(config, lock):
++    hashes = re.findall(r'^git-hash: (.+)$', config, re.M)
++    inventories = re.findall(r'^known provers: (.+)$', config, re.M)
++    if hashes != [lock['easycrypt']] or len(inventories) != 1:
++        raise ValueError('missing or unexpected EasyCrypt identity / prover inventory')
++    provers = inventories[0].split(', ')
++    if sorted(provers) != sorted(lock['provers']) or len(provers) != len(set(provers)):
++        raise ValueError('unexpected solver identity inventory')
++    if os.environ.get('PQ_EASYCRYPT_IMAGE') != lock['image']:
++        raise ValueError('run full certification through the pinned container wrapper')
++
++
++def run(*args):
++    subprocess.run([sys.executable, *args], check=True)
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--targets', action='store_true')
++    parser.add_argument('--pins', action='store_true')
++    parser.add_argument('--toolchain', action='store_true')
++    args = parser.parse_args()
++    if args.targets:
++        print('\n'.join(targets()))
++    elif args.pins:
++        check_pins()
++    elif args.toolchain:
++        lock = json.loads(Path('cert-toolchain-split.json').read_text())
++        cp = subprocess.run(['easycrypt', 'config'], stdout=subprocess.PIPE,
++                            stderr=subprocess.STDOUT, text=True, check=True)
++        check_toolchain(cp.stdout, lock)
++        print(f"OK toolchain: {lock['easycrypt']}, {len(lock['provers'])} pinned prover configurations")
++        print(f"### IMAGE {lock['image']}")
++    else:
++        files = targets()
++        check_pins()
++        current = Counter(tuple(row[:3]) for row in cert_cone.census(cert_cone.cone(stmt_coverage.roots())))
++        expected = Counter(tuple(s.split('\t')[:3]) for s in rows('cert-baseline-split.tsv'))
++        if not current or current != expected:
++            raise ValueError('assumption/declaration census differs from pinned baseline')
++        run('tools/stmt_coverage.py')
++        run('tools/policy_cap_fence.py')
++        run('tools/taint_closure.py', '--check')
++        print(f'OK split static contract: {len(files)} files; proof execution not performed')
++    return 0
++
++
++if __name__ == '__main__':
++    try:
++        sys.exit(main())
++    except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as exc:
++        sys.exit(f'FAIL split contract: {exc}')
+diff --git a/contracts/verification/easycrypt/c10-port/tools/split_proof_controls.py b/contracts/verification/easycrypt/c10-port/tools/split_proof_controls.py
+new file mode 100644
+index 00000000..49654214
+--- /dev/null
++++ b/contracts/verification/easycrypt/c10-port/tools/split_proof_controls.py
+@@ -0,0 +1,60 @@
++#!/usr/bin/env python3
++"""Executable controls for imported bad proofs and unfinished proof EOFs."""
++from pathlib import Path
++import subprocess
++import tempfile
++
++
++def compile_file(path, include):
++    return subprocess.run(['easycrypt', 'compile', '-no-eco', '-timeout', '60',
++                           '-I', str(include), str(path)], text=True,
++                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
++
++
++def main():
++    with tempfile.TemporaryDirectory() as temp:
++        root = Path(temp)
++        original = Path('base-c10-split/BinaryTrees.ec').read_text()
++        needle = 'proof. by elim: bt => /#. qed.'
++        assert original.count(needle) == 1, 'dependency control anchor drift'
++        source = root / 'BinaryTrees.ec'
++        source.write_text(original)
++        cp = compile_file(source, root)
++        assert cp.returncode == 0, 'dependency control baseline failed: ' + cp.stdout[-1500:]
++        source.write_text(original.replace(needle, 'proof. by trivial. qed.'))
++        cp = compile_
+file(source, root)
++        assert cp.returncode == 1 and 'cannot close goals' in cp.stdout.lower(), (
++            'broken dependency must fail its own proof: ' + cp.stdout[-1500:])
++        consumer = root / 'Consumer.ec'
++        consumer.write_text('require import BinaryTrees.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 0, 'dependency import semantics changed: ' + cp.stdout[-1500:]
++        unfinished = root / 'Unfinished.ec'
++        unfinished.write_text('require import AllCore.\nlemma unfinished : true.\nproof.\n')
++        # Requiring the file must reject the open proof even if compile accepts EOF.
++        consumer.write_text('require Unfinished.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 1 and 'proof' in cp.stdout.lower(), (
++            'open proof must fail require: ' + cp.stdout[-1500:])
++        abstract = root / 'Abstract.eca'
++        abstract.write_text('require import AllCore.\nlemma checked : true.\nproof. trivial. qed.\n')
++        cp = compile_file(abstract, root)
++        assert cp.returncode == 0, 'abstract theory must compile directly: ' + cp.stdout[-1500:]
++        consumer.write_text('require Abstract.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 0, 'abstract theory must be requirable: ' + cp.stdout[-1500:]
++        consumer.write_text('require import Abstract.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 1 and 'cannot import an abstract theory' in cp.stdout, (
++            'abstract import control changed: ' + cp.stdout[-1500:])
++        abstract.write_text('require import AllCore.\nlemma checked : true.\nproof.\n')
++        consumer.write_text('require Abstract.\n')
++        cp = compile_file(consumer, root)
++        assert cp.returncode == 1 and 'proof' in cp.stdout.lower(), (
++            'abstract open proof must fail plain require: ' + cp.stdout[-1500:])
++    print('OK proof controls: direct dependency failure / import acceptance / '
++          'open-proof rejection / abstract require and EOF')
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/contracts/verification/scripts/run_easycrypt_split.py b/contracts/verification/scripts/run_easycrypt_split.py
+new file mode 100644
+index 00000000..c16f744f
+--- /dev/null
++++ b/contracts/verification/scripts/run_easycrypt_split.py
+@@ -0,0 +1,25 @@
++#!/usr/bin/env python3
++"""Run the vendored split gate in its immutable tool image on a disposable copy."""
++import json
++from pathlib import Path
++import re
++import subprocess
++import sys
++
++root = Path(__file__).resolve().parents[1] / 'easycrypt/c10-port'
++lock = json.loads((root / 'cert-toolchain-split.json').read_text())
++image = lock['image']
++if not re.fullmatch(r'ghcr.io/easycrypt/ec-test-box@sha256:[0-9a-f]{64}', image):
++    sys.exit('FAIL: EasyCrypt image must be pinned by digest')
++if sys.argv[1:] not in ([], ['--controls']):
++    sys.exit('usage: run_easycrypt_split.py [--controls]')
++command = ('python3 tools/split_contract.py --toolchain && python3 tools/split_proof_controls.py'
++           if sys.argv[1:] else 'bash cert_gate_split.sh')
++# No host toolchain, mutable tag, network, shared cache, or existing container.
++# Docker verifies the content digest on acquisition; no receipt supplied by the
++# caller can select another image. The child gate also checks observed identities.
++subprocess.run(['docker', 'run', '--rm', '--init', '--network', 'none',
++                '--env', f'PQ_EASYCRYPT_IMAGE={image}',
++                '--volume', f'{root}:/source:ro', image, 'bash', '-lc',
++                'set -e; eval "$(opam env)"; cp -R /source /tmp/proofs; '
++                'cd /tmp/proofs; ' + command], check=True)
+diff --git a/.github/workflows/lean-fv.yml b/.github/workflows/lean-fv.yml
+index db34de9a..6e7127b5 100644
+--- a/.github/workflows/lean-fv.yml
++++ b/.github/workflows/lean-fv.yml
+@@ -134,3 +134,5 @@ jobs:
+         # dmkey_ll:false weakening MUST fire), then the dry-run pin check.
+         # easycrypt/** added to this workflow's paths filter the same day.
+         run: make -C contracts/verification verify-easycrypt-pins
++      - name: verify-easycrypt-split-pins (current vendored split integrity)
++        run: make -C contracts/verification verify-easycrypt-split-pins
+diff --git a/.github/workflows/nightly.yml b/.github/workflows/nightly.yml
+index e0497bf3..ff68549b 100644
+--- a/.github/workflows/nightly.yml
++++ b/.github/workflows/nightly.yml
+@@ -414,3 +414,32 @@ jobs:
+         run: |
+           eval "$(opam env)"
+           make verify-protocol-models PROTOCOL_MODELS=proverif,tamarin
++
++  easycrypt-split:
++    name: EasyCrypt current split proof replay
++    runs-on: ubuntu-latest
++    timeout-minutes: 240
++    steps:
++      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
++        with:
++          persist-credentials: false
++      # The shared FV Makefile requires the pinned elan shim even for non-Lean gates.
++      - name: install elan (toolchain pinned by lean-toolchain)
++        run: |
++          # Pinned + verified, not `curl | sh` from a moving branch. `master`
++          # is mutable: whoever controls that ref controls the toolchain
++          # installer on every FV runner, which is the trust root the
++          # verification Makefile builds on. Pin the commit, check the bytes,
++          # and only then execute. (#562)
++          set -euo pipefail
++          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
++          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
++          curl --proto '=https' --tlsv1.2 -fsSL \
++            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
++            -o elan-init.sh
++          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
++          sh elan-init.sh -y --default-toolchain none
++          rm -f elan-init.sh
++          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
++      - name: verify-easycrypt-split (pinned toolchain, complete dependency closure)
++        run: make -C contracts/verification verify-easycrypt-split
+diff --git a/Makefile b/Makefile
+index 297a77be..3186260b 100644
+--- a/Makefile
++++ b/Makefile
+@@ -4377,7 +4377,7 @@ kani: ## Bounded model-checking on firmware decoders/counters
+ 	@echo "==> Kani: domain recovery parser (deserialize_pin_state)"
+ 	cargo kani -p pqsigner-domain --harness deserialize_pin_state_panic_free
+ 	@echo "==> Kani: ERC-20 calldata decoder (panic-free + transfer no-misdecode)"
+-	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + page-budget classification: per-record page bound + no-hidden-value WYSIWYS + CoW-first precedence [records_pages_total panic-freedom compositional] + accept/reject controls)"
++	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + classification accept/reject controls; three kani-heavy proofs run separately via make kani-heavy)"
+ 	@echo "         + CoW GPv2Order canonical decode (decode-soundness: accept<=>enum-in-range, verbatim field offsets + accept/reject controls)"
+ 	@echo "         + typed-call ABI walker (no-read-past-end soundness + accept/reject controls)"
+ 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
+@@ -4445,6 +4445,7 @@ verify-kani-mutation-heavy: ## anti-vacuity for the cfg(kani-heavy)-gated harnes
+ .PHONY: verify-kani-census
+ verify-kani-census: ## source-generated Kani harness census vs kani_census.lock.json (fast, no Kani toolchain)
+ 	@PYTHONDONTWRITEBYTECODE=1 python3 
+-B scripts/test_kani_census.py
++	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_mutations.py
+ 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/kani_census.py --check
+ 
+ miri: ## Miri UB check on host crates
+diff --git a/contracts/verification/Makefile b/contracts/verification/Makefile
+index f46cc7f4..3a66a63a 100644
+--- a/contracts/verification/Makefile
++++ b/contracts/verification/Makefile
+@@ -295,7 +295,7 @@ override _FV_EVIDENCE_TARGETS := \
+ 	verify verify-storage-mutators verify-lean-proto-domain verify-fv-lints \
+ 	verify-ledger-consistency verify-hw-assumptions verify-tla verify-linker-map \
+ 	verify-verus verify-crux-ns-ptr verify-easycrypt verify-easycrypt-full \
+-	verify-easycrypt-pins verify-easycrypt-docker verify-forsc-margin \
++	verify-easycrypt-pins verify-easycrypt-split-pins verify-easycrypt-split verify-easycrypt-docker verify-forsc-margin \
+ 	verify-proof-mutation verify-lean4checker verify-kontrol verify-halmos \
+ 	verify-bulk verify-interp verify-transcription verify-parse-transcription \
+ 	verify-independent-signer verify-primitive-kat verify-cavp verify-build \
+@@ -572,20 +572,20 @@ verify-crux-ns-ptr: ## crux-mir diversity check of ns_ptr_validate vs an indepen
+ # NOT CI-gated: needs an opam switch with EasyCrypt r2026.02 + Alt-Ergo 2.6.0.
+ # `make verify-easycrypt-pins` checks the ledger with no toolchain at all.
+ .PHONY: verify-easycrypt verify-easycrypt-full verify-easycrypt-pins
+-verify-easycrypt: ## EasyCrypt PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
++verify-easycrypt: ## HISTORICAL drafts PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
+ 	@/usr/bin/bash scripts/check_easycrypt.sh
+ 
+ # F5 (2026-07-16): "full" is now DISTINCT from partial and HONEST — it requires
+ # all 21 .ec compiled with ZERO skips (implies FORCE_MM45=1) and FAILS if the
+ # MM45 reference proofs / toolchain are absent, instead of the old behaviour
+ # where a skipped-11-of-21 run could still print a success banner.
+-verify-easycrypt-full: ## EasyCrypt FULL verification — 21/21, zero skips (needs MM45 toolchain)
++verify-easycrypt-full: ## HISTORICAL drafts FULL verification — 21/21, zero skips (needs MM45 toolchain)
+ 	@/usr/bin/bash scripts/check_easycrypt.sh --full
+ 
+ # F5: ledger (admit/axiom COUNT + SEMANTIC name->statement pin) with NO toolchain,
+ # preceded by the wired-in negative control (a `dmkey_ll : false` weakening and a
+ # delete-one-add-one, both count-preserving, MUST fire the semantic pin).
+-verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolchain) + negative control
++verify-easycrypt-pins: ## HISTORICAL drafts admit/axiom + semantic pin ledger (no toolchain) + negative control
+ 	@/usr/bin/bash scripts/check_easycrypt.sh --self-test
+ 	@/usr/bin/bash scripts/check_easycrypt.sh --dry-run
+ 
+@@ -601,13 +601,11 @@ verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolch
+ C10_PORT_DIR ?= $(HOME)/repos/c10-eufcma-port
+ DOCKER ?= docker
+ .PHONY: verify-easycrypt-docker
+-verify-easycrypt-docker: ## EasyCrypt C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
++verify-easycrypt-docker: ## HISTORICAL external C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
+ 	@if ! $(DOCKER) info >/dev/null 2>&1; then \
+-	  echo "SKIP: docker unavailable — the committed receipt (primary evidence) follows:"; echo; \
+-	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
++	  echo "ERROR: docker unavailable; historical receipt is not a new verification"; exit 1; fi
+ 	@if [ ! -d "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC/proofs" ]; then \
+-	  echo "SKIP: MM45 base absent at $(C10_PORT_DIR) (third-party, not vendored) — receipt follows:"; echo; \
+-	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
++	  echo "ERROR: historical MM45 base absent at $(C10_PORT_DIR)"; exit 1; fi
+ 	$(DOCKER) build -t fv-sphincsplus-ec:r2026.02 "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC"
+ 	@B64=$$(base64 -w0 easycrypt/docker/gate-c10-capstone.sh); \
+ 	 $(DOCKER) run --rm -v "$(C10_PORT_DIR)":
+/work:ro fv-sphincsplus-ec:r2026.02 \
+@@ -2215,3 +2213,13 @@ _extract-slotkdf-impl:
+ 	  && echo "OK: committed slot-kdf extraction matches the current Rust" \
+ 	  || { echo "DRIFT: domain/src/lib.rs slot-KDF path changed — re-extract, re-prove, re-commit"; exit 1; }
+ 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-slotkdf $${EXTRACTION_TMP_ROOT}/skout $${EXTRACTION_TMP_ROOT}/skout/Funs.fixed.lean
++
++# Current vendored split artifact (#670, #683-#686). Fast checks do not run proofs.
++.PHONY: verify-easycrypt-split-pins verify-easycrypt-split
++verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/assumption census and controls
++	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_split_contract.py
++	cd easycrypt/c10-port && $(_FV_PYTHON3) -B tools/split_contract.py
++	cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
++
++verify-easycrypt-split: ## Full current split proof replay in the pinned immutable toolchain image
++	$(_FV_PYTHON3) -B scripts/run_easycrypt_split.py
+diff --git a/contracts/verification/easycrypt/c10-port/cert-toolchain-split.json b/contracts/verification/easycrypt/c10-port/cert-toolchain-split.json
+new file mode 100644
+index 00000000..5229a1db
+--- /dev/null
++++ b/contracts/verification/easycrypt/c10-port/cert-toolchain-split.json
+@@ -0,0 +1,31 @@
++{
++  "image": "ghcr.io/easycrypt/ec-test-box@sha256:bf1a13e73d7fe18fccdcc91d1532c1a5a17cfc3a6a2a34619248c4f2710d0bb3",
++  "easycrypt": "r2026.02",
++  "provers": [
++    "Alt-Ergo@2.4.3",
++    "Alt-Ergo[FPA]@2.4.3",
++    "Alt-Ergo@2.5.4",
++    "Alt-Ergo[FPA]@2.5.4",
++    "Alt-Ergo[counterexamples]@2.5.4",
++    "Alt-Ergo@2.6.0",
++    "Alt-Ergo[BV]@2.6.0",
++    "Alt-Ergo[counterexamples]@2.6.0",
++    "CVC4@1.8.0",
++    "CVC4[counterexamples]@1.8.0",
++    "CVC4[strings]@1.8.0",
++    "CVC4[strings+counterexamples]@1.8.0",
++    "CVC5@1.0.9",
++    "CVC5[counterexamples]@1.0.9",
++    "CVC5[strings]@1.0.9",
++    "CVC5[strings+counterexamples]@1.0.9",
++    "Z3@4.8.17",
++    "Z3[counterexamples]@4.8.17",
++    "Z3[noBV]@4.8.17",
++    "Z3@4.12.6",
++    "Z3[counterexamples]@4.12.6",
++    "Z3[noBV]@4.12.6",
++    "Z3@4.13.4",
++    "Z3[counterexamples]@4.13.4",
++    "Z3[noBV]@4.13.4"
++  ]
++}
+diff --git a/contracts/verification/easycrypt/docker/gate-c10-capstone.sh b/contracts/verification/easycrypt/docker/gate-c10-capstone.sh
+index c42816d9..ad6aa514 100644
+--- a/contracts/verification/easycrypt/docker/gate-c10-capstone.sh
++++ b/contracts/verification/easycrypt/docker/gate-c10-capstone.sh
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env bash
+-# gate-c10-capstone.sh — SOUND capstone gate. Run INSIDE fv-sphincsplus-ec:r2026.02
++# Historical external capstone; current split uses cert_gate_split.sh.
++# gate-c10-capstone.sh — capstone gate. Run INSIDE fv-sphincsplus-ec:r2026.02
+ # (image ENTRYPOINT = `opam exec --`).  /work = c10-eufcma-port (mounted).
+ #
+ # SOUNDNESS: EasyCrypt `require` does NOT re-verify a dependency — it trusts the .eco
+@@ -69,6 +70,15 @@ for f in "${ORDER[@]}"; do
+   b=$(basename "$f")
+   if EC "$f" >"/tmp/g.$b.log" 2>&1; then echo "  ok    $b"; else echo "  FAIL  $b"; tail -4 "/tmp/g.$b.log"|sed 's/^/        /'; rcG=1; fi
+ done
++# Direct compilation is necessary but does not reject an unfinished EOF proof.
++[ "${#ORDER[@]}" -gt 0 ] || rcG=1
++for f in "${ORDER[@]}"; do
++  b=$(basename "$f"); printf 'require %s.\n' "${b%.*}" > "$W/RequireProbe.ec"
++  if ! EC "$W/RequireProbe.ec" > /tmp/require-probe.log 2>&1; then
++    echo "FAIL cannot require $b"; tail -4 /tmp/require-probe.log; rcG=1
++  fi
++  rm -f "$W/RequireProbe.eco"
++done
+ echo "== rcG=$rcG (expect 0) =="
+ 
+ fire() { # $1=label $2=file-that-must-fail  — expects the just-run EC to have FAILED
+diff --git a/contracts/verification/scripts/check_easycrypt.sh b/contracts/verification/scripts/check_easycrypt.sh
+index 8e923639..c87e23cf 100755
+--- a/contracts/verification/scripts/check_easycrypt.sh
++++ b/contracts/verification/scripts/check_easycrypt.sh
+@@ -1,5 +1,6 @@
+ #!/usr/bin/env bash
+ # ====================================
+=========================================
++# Historical drafts only. Current split: make verify-easycrypt-split[-pins].
+ # verify-easycrypt -- compile the SPHINCS+C EasyCrypt port and assert its ledger.
+ #
+ # WHY THIS EXISTS
+@@ -244,6 +245,8 @@ echo "[compile] every .ec as a TARGET (require does NOT re-verify)"
+ find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
+ skipped=0
+ compiled=0
++require_tmp=$(mktemp -d) || exit 1
++trap 'rm -rf "$require_tmp"' EXIT
+ for f in "$DRAFTS"/*.ec; do
+   b="$(basename "$f")"
+   bn="${b%.ec}"
+@@ -258,7 +261,17 @@ for f in "$DRAFTS"/*.ec; do
+     timeout 1800 easycrypt compile "${INC[@]}" "$f" >/dev/null 2>&1
+   fi
+   rc=$?
+-  if [ "$rc" != 0 ]; then bad "$b does not compile (exit $rc)"; else note "ok  $b"; compiled=$(( compiled + 1 )); fi
++  if [ "$rc" != 0 ]; then
++    bad "$b does not compile (exit $rc)"
++  else
++    # compile alone accepts EOF inside an unfinished proof on r2026.02.
++    printf 'require import %s.\n' "$bn" > "$require_tmp/RequireProbe.ec"
++    if timeout 1800 bash "$EC_SH" compile -no-eco "${INC[@]}" "$require_tmp/RequireProbe.ec" >/dev/null 2>&1; then
++      note "ok  $b (compiled and required)"; compiled=$(( compiled + 1 ))
++    else
++      bad "$b cannot be required (possibly an unfinished proof at EOF)"
++    fi
++  fi
+ done
+ find "$DRAFTS" -name '*.eco' -delete 2>/dev/null
+ [ "$skipped" != 0 ] && note "SKIPPED $skipped MM45-chain file(s) -- need z3 4.13.x / prebuilt SPHINCS_PLUS.eco (see header); NOT verified here"
+diff --git a/scripts/check_gate_enforcement.py b/scripts/check_gate_enforcement.py
+index aa17a0e9..05b9f027 100755
+--- a/scripts/check_gate_enforcement.py
++++ b/scripts/check_gate_enforcement.py
+@@ -112,6 +112,8 @@ ENFORCEMENT_POLICY = {
+     "verify-easycrypt-docker": "local_documented",
+     "verify-easycrypt-full": "local_documented",
+     "verify-easycrypt-pins": "per_pr_blocking",
++    "verify-easycrypt-split-pins": "per_pr_blocking",
++    "verify-easycrypt-split": "nightly",
+     "verify-exec-gate": "local_documented",
+     "verify-extract-differential": "nightly",
+     "verify-extracted": "per_pr_blocking",
+@@ -1349,6 +1351,14 @@ def main() -> int:
+     all_fails += completeness(manifest)
+     easycrypt_gate = next(g for g in gates if g["id"] == "verify-easycrypt-pins")
+     all_fails += easycrypt_pin_coverage(easycrypt_gate.get("polices_paths", []))
++    for gate_id, workflow in [('verify-easycrypt-split-pins', 'lean-fv.yml'),
++                              ('verify-easycrypt-split', 'nightly.yml')]:
++        split_gate = next(g for g in gates if g['id'] == gate_id)
++        for path in ('contracts/verification/easycrypt/c10-port/**',
++                     'contracts/verification/scripts/run_easycrypt_split.py',
++                     'contracts/verification/Makefile', f'.github/workflows/{workflow}'):
++            if not _covers(split_gate.get('polices_paths', []), path):
++                all_fails.append(f'easycrypt-split-reverse: {gate_id} does not cover {path}')
+     protocol_gate = next(g for g in gates if g["id"] == "verify-protocol-models")
+     if _covers(protocol_gate.get("polices_paths", []),
+                "contracts/verification/cryptoverif/seed_split_secrecy.cv"):
+diff --git a/scripts/gate_enforcement.json b/scripts/gate_enforcement.json
+index dc0eabd4..17deaad3 100644
+--- a/scripts/gate_enforcement.json
++++ b/scripts/gate_enforcement.json
+@@ -262,6 +262,7 @@
+         "aa/src/offchain_header.rs",
+         "aa/src/userop.rs",
+         "fw-manifest/src/lib.rs",
++        "pqsigner-erc7730/src/display/primitives.rs",
+         "pqsigner-erc7730/src/display/render/amount_decision.rs",
+         "pqsigner-erc7730/src/display/render/formatters.rs",
+         "pqsigner-erc7730/src/render/array.rs",
+@@ -283,7 +284,7 @@
+       ],
+       "runs_in": "nightly.yml",
+       "enforcement": "nightly",
+-      "note": "CURATED per-slice anti-vacuity subset: 43 mutation groups (10 quick/30 default/3 full) across 21 of the 27 harness-bearing files (39 distinct harnesses individually mutation-screened; 162 active harnesses reside in those enrolled files). It does NOT screen every harness for vacuity — 11 harnesses in 6 files (domain/src/lib.rs, pqsigner-erc7730 display/primitives.rs + ir.rs + render/calldata_topology.rs + render/nested.rs + render/visibility.rs) have ZERO mutation coverage; do not read this as comprehensive Kani-vacuity coverage. check_gate_enforcement.py reverse-derives all 21 mutated source identities from scripts/kani_mutations.json and requires polices_paths to cover them plus the manifest itself. The full exact-identity census + enrolled/outside split is generated by scripts/kani_census.py (make verify-kani-census, per-PR) into kani_census.lock.json; refreshed 2026-07-23 at the FV Phase-D closure boundary. scripts/kani_mutations.json self-policed since 2026-07-19 (F13: the manifest you'd edit to fake mutation coverage must itself be policed).",
++      "note": "Curated anti-vacuity subset: 43 groups (10 quick, 29 default, 3 full, 1 local heavy), 39 distinct harnesses. Source census: 173 harnesses in 27 files; 164 in 22 mutation-enrolled files and nine in five outside. Enrollment does not individually mutation-screen every harness in those files. Default runs 39 groups; full 42; heavy only its one group plus the canary. Each credit requires a passing original and one fully qualified --exact failing harness, with a completed coherent verdict. #659/#662/#677/#685, 2026-09-16.",
+       "required_context": {
+         "step": {
+           "name": "make verify-kani-mutation",
+@@ -593,11 +594,17 @@
+         "shared/src/**",
+         "domain/src/**",
+         "tx-core/src/**",
+-        "scripts/kani_census.lock.json"
++        "scripts/kani_census.lock.json",
++        "scripts/kani_census.py",
++        "scripts/test_kani_census.py",
++        "scripts/check_kani_mutations.py",
++        "scripts/test_kani_mutations.py",
++        "scripts/kani_mutations.json",
++        "Makefile"
+       ],
+       "runs_in": "ci.yml",
+       "enforcement": "per_pr_blocking",
+-      "note": "F11 (introduced 2026-07-16; refreshed 2026-07-23): source-generated exact file/function Kani harness census (scripts/kani_census.py -> kani_census.lock.json) from active standalone attributes, plus file/harness and unique material find/replace manifest-rot checks. Pure Python (no cargo kani), so it runs per-PR in the gate-enforcement job (ci.yml), unlike the slow nightly `kani`/`verify-kani-mutation`. Closes the stale/hand-maintained-census and comment false-positive gaps (was '93 harnesses/17 files' in prose; live is 173/27, 11 harnesses in 6 files with no mutation coverage). scripts/kani_census.lock.json self-policed since 2026-07-19 (F13: the lock file you'd edit to fake the harness count must itself be policed; ci.yml has no paths filter, so it always fires).",
++      "note": "Source-generated exact file/function census plus material mutation anchors and explicit feature-gate checks. 173 source harnesses /27 files; 164 in22 mutation-enrolled files, nine in five outside. Offline runner regressions cover exact attribution, baseline failure and restoration. Source count includes three kani-heavy harnesses excluded from make kani. #662/#677/#685, 2026-09-16.",
+       "required_context": {
+         "step": {
+           "name": "verify-kani-census",
+@@ -625,7 +632,7 @@
+         "contracts/verification/easycrypt/**"
+       ],
+       "enforcement": "local_documented",
+-      "why": "F5 (2026-07-16) enrolls the EasyCrypt +C port gate — previously the ONLY formal-verification surface absent from this manifest, so its skips/admits/axioms/dependency state were invisible to the G1-G5 controls. Needs the pinned opam ec-r2026 switch (EasyCrypt r2026.02 + Alt-Ergo 2.6.0) + the MM45 reference proofs, so it stays local-only. Split into three targets: verify-easycrypt (PARTIAL: stdlib +C chain, MM45-chain skipped loudly), verify-easycrypt-full (FULL: 21/21 zero skips, fails if MM45 refs absent), verify-easycrypt-pins (toolchain-free ledger: admit/axiom COUNT + SEMANTIC name->statement pin + a wired-in negative control that a dmkey_ll:false weakening MUST fire). The toolchain-free pin (verify-easycrypt-pins) is CI-wired per-PR in lean-fv.yml since 2026-08-20 (#664); the full compile cannot be (no MM45 docker on runners)."
++      "why": "Historical research path, retained local-only (2026-09-16, #670). This does not certify the current vendored split artifact. Checks historical drafts with a partial MM45-dependent mode."
+     },
+     {
+       "id": "verify-three-claims",
+@@ -1298,7 +1305,7 @@
+       ],
+       "runs_in": "lean-fv.yml",
+       "enforcement": "per_pr_blocking",
+-      "note": "Toolchain-free EasyCrypt admit/axiom ledger: count pins + SEMANTIC name->statement pin + a wired-in negative control (a dmkey_ll:false weakening MUST fire). 1.9 s locally, verified green 2026-08-20 against 666e3725 — no container needed. Wired into lean-fv.yml 2026-08-20 (#664): it ran in NO workflow while the last ~15 master commits were EasyCrypt pin work. easycrypt/** added to the lean-fv.yml paths filter the same day so the gate FIRES on its policed surface (the F1 class).",
++      "note": "Historical easycrypt/drafts admit/axiom ledger only; current split checks have a separate verify-easycrypt-split-pins registration (#670, 2026-09-16).",
+       "required_context": {
+         "step": {
+           "name": "verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)",
+@@ -1327,7 +1334,7 @@
+         "contracts/verification/scripts/check_easycrypt.sh"
+       ],
+       "enforcement": "local_documented",
+-      "why": "FULL EasyCrypt verification (21/21 .ec compiled as targets, ZERO skips) needs the pinned opam ec-r2026 switch (EasyCrypt r2026.02 + Alt-Ergo 2.6.0) AND the MM45 reference proofs, and FAILS by design when either is absent — so it cannot run on a stock runner (F5 split, 2026-07-16). The toolchain-free ledger leg (verify-easycrypt-pins) is per-PR in lean-fv.yml. Enrolled 2026-08-20 (#664)."
++      "why": "Historical research path, retained local-only (2026-09-16, #670). This does not certify the current vendored split artifact. Compiles all historical drafts; needs the local MM45 references and supported toolchain."
+     },
+     {
+       "id": "verify-easycrypt-docker",
+@@ -1336,7 +1343,7 @@
+         "contracts/verification/easycrypt/**"
+       ],
+       "enforcement": "local_documented",
+-      "why": "the C10-concrete capstone reproduces MM45's confirmed toolchain (EC r2026.02 + Z3 4.13.4 + Alt-Ergo 2.6.0) in docker and needs a local MM45 checkout (C10_PORT_DIR with its FV-SPHINCSPLUS-EC submodule — third-party, not vendored); absent either it prints the committed 2026-07-17 gate receipt and SKIP-exits 0, which as a CI step would be a permanent green no-op. Enrolled 2026-08-20 (#664)."
++      "why": "Historical research path, retained local-only (2026-09-16, #670). This does not certify the current vendored split artifact. Requires Docker and an external MM45 checkout; fails immediately if absent. The July receipt is historical evidence, not a new run."
+     },
+     {
+       "id": "verify-tla",
+@@ -1582,6 +1589,87 @@
+       ],
+       "enforcement": "local_documented",
+       "why": "CryptoVerif requires its local executable/library setup. The nightly protocol job deliberately selects only proverif,tamarin; this wrapper selects the computational model alone through the existing verdict checker. Explicit local-only registration added for #664 on 2026-09-15; no fresh computational proof is claimed by source-wiring checks."
++    },
++    {
++      "id": "verify-easycrypt-split-pins",
++      "make": "make -C contracts/verification verify-easycrypt-split-pins",
++      "polices_paths": [
++        "contracts/verification/easycrypt/c10-port/**",
++        "contracts/verification/scripts/run_easycrypt_split.py",
++        "contracts/verification/Makefile",
++        ".github/workflows/lean-fv.yml"
++      ],
++      "runs_in": "lean-fv.yml",
++      "enforcement": "per_pr_blocking",
++      "note": "Current split: unique pins, computed complete dependency inventory, assumption census, coverage, quarantine, named-application taint and checked input identity. No proof replay. #670/#683/#684, 2026-09-16.",
++      "required_context": {
++        "step": {
++          "name": "verify-easycrypt-split-pins (current vendored split integrity)",
++          "run": "make -C contracts/verification verify-easycrypt-split-pins"
++        },
++        "job_equals": {
++          "runs-on": "ubuntu-latest"
++        },
++        "job_absent": [
++          "container",
++          "env",
++          "if",
++          "needs",
++          "strategy",
++          "defaults",
++          "continue-on-error"
++        ],
++        "workflow_context": {}
++      }
++    },
++    {
++      "id": "verify-easycrypt-split",
++      "make": "make -C contracts/verification verify-easycrypt-split",
++      "polices_paths": [
++        "contracts/verification/easycrypt/c10-port/**",
++        "contracts/verification/scripts/run_easycrypt_split.py",
++        "contracts/verification/Makefile",
++        ".github/workflows/nightly.yml"
++      ],
++      "runs_in": "nightly.yml",
++      "enforcement": "nightly",
++      "note": "Full current split gate: immutable image digest, observed compiler and solver identities, complete 45-file closure compiled directly by both drivers, require/negative controls and all split census/pin/taint checks. Conditional research result, not firmware refinement or production assurance. #670/#683/#686, 2026-09-16.",
++      "required_context": {
++        "step": {
++          "name": "verify-easycrypt-split (pinned toolchain, complete dependency closure)",
++          "run": "make -C contracts/verification verify-easycrypt-split"
++        },
++        "job_equals": {
++          "runs-on": "ubuntu-latest",
++          "timeout-minutes": 240,
++          "steps": [
++            {
++              "uses": "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
++              "with": {
++                "persist-credentials": false
++              }
++            },
++            {
++              "name": "install elan (toolchain pinned by lean-toolchain)",
++              "run": "# Pinned + verified, not `curl | sh` from a moving branch. `master`\n# is mutable: whoever controls that ref controls the toolchain\n# installer on every FV runner, which is the trust root the\n# verification Makefile builds on. Pin the commit, check the bytes,\n# and only then execute. (#562)\nset -euo pipefail\nELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2\nELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53\ncurl --proto '=https' --tlsv1.2 -fsSL \\\n  \"https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh\" \\\n  -o elan-init.sh\necho \"${ELAN_SHA256}  elan-init.sh\" | sha256sum -c -\nsh elan-init.sh -y --default-toolchain none\nrm -f elan-init.sh\necho \"$HOME/.elan/bin\" >> \"$GITHUB_PATH\"\n"
++            },
++            {
++              "name": "verify-easycrypt-split (pinned toolchain, complete dependency closure)",
++              "run": "make -C contracts/verification verify-easycrypt-split"
++            }
++          ]
++        },
++        "job_absent": [
++          "container",
++          "env",
++          "if",
++          "needs",
++          "strategy",
++          "defaults",
++          "continue-on-error"
++        ],
++        "workflow_context": {}
++      }
+     }
+   ],
+   "_completeness_waived": {}
+name: Lean FV (SphincsCVerify)
+
+# CI gate for the Lean formal-verification suite. Until 2026-06-18 NONE of the
+# `lake`/`elan` verify-* checks ran in CI (the main ci.yml `paths-ignore`s
+# `**/*.lean` + `contracts/verification/**`), so the kernel axiom-cleanliness, the
+# H-2/H-3 axiom-closure gates, and the 0-`sorry` discipline were review-time only.
+# This dedicated workflow uses a POSITIVE `paths:` filter so it runs exactly when the
+# Lean sources / scripts change, and enforces:
+#   * `lake build SphincsCVerify` — 0 errors, 0 `sorry` (the kernel rejects either).
+#   * `verify-fv-lints` — the four FV-invariant sub-lints, incl. the EXACT-set
+#     theft_free (c.2) + offchain (c.1) axiom-closure tripwires and the opaque-guard.
+#   * `verify-audit` — sorry count + the #print-axioms dump (theft_free = exactly its
+#     11 documented axioms; execC10Asm_eq / deployed_verifier_refines_spec gated).
+#
+# SCOPE: `SphincsCVerify` is MATHLIB-FREE, so this needs only elan + a `lake` build
+# (no multi-GB mathlib cache). The `extracted/` (§33 Aeneas) project DOES import
+# mathlib (different toolchain) and is gated by the sibling `lean-extracted.yml`
+# workflow (heavier: pins v4.30 + pulls the prebuilt mathlib cache).
+# The build includes high-heartbeat lemmas (Interpreter/Phases.lean), so it is slow;
+# the `.lake` cache amortizes unchanged modules across runs.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'contracts/verification/lean/**'
+      - 'contracts/verification/scripts/**'
+      # Ledger/assurance docs: so verify-ledger-consistency actually FIRES on
+      # AXIOM_STATUS.json-only edits (FV adversarial-review F1, 2026-07-01 —
+      # these edits previously matched no positive path and were path-ignored
+      # by ci.yml, so the gate advertised to police ledger drift never ran).
+      - 'contracts/verification/docs/**'
+      - 'contracts/verification/Makefile'
+      - '.github/workflows/lean-fv.yml'
+      # Extracted §33 tree: verify-fv-lints' escape-hatch/opaque-guard grep scans
+      # extracted/Extracted/ too (lint_fv_invariants.sh:77,151), but this workflow
+      # never TRIGGERED on extracted-only edits — so a native_decide/@[extern]/new-axiom
+      # in an extracted rank merged unscanned (extracted-F2, V10, 2026-07-02). The build
+      # leg stays lean/-only; the lints scan the extracted sources as files.
+      - 'contracts/verification/extracted/Extracted/**'
+===
+name: Nightly (heavy gates)
+
+# Heavy verification gates that are too slow for the per-PR `ci.yml` but must
+# still run on a regular cadence (SOTA 2026-06 §3/§6; docs/STATUS.md §B):
+#
+#   * kani        — bounded model-checking of the parsers / cap-monotonicity
+#                   (downloads a checker via `cargo kani setup`, minutes).
+#   * verify-repro — two full release cross-builds + byte-diff of the secure +
+#                   nonsecure ELFs (the canonical reproducibility gate).
+#
+# Runs nightly + on manual dispatch. The fast invariant/host/secure/contracts
+# gates stay in ci.yml on every push/PR.
+#
+#   * checkct     — cargo-checkct (binsec relational-CT proof of the 5 secure
+#                   drivers + the by-design-INSECURE shuffle control). The
+#                   binsec OCaml backend is the heavy part (opam, minutes).
+#   * ui-golden-render — the render-only golden gate (the "dedicated
+#                   short-capture" the note below used to call for): renders the
+#                   curated screen corpus via the production renderers + diffs
+#                   [UI-FP] fingerprints, no keygen/sign (seconds, not minutes).
+#   * proof-mutation — proof-side cargo-mutants (anti-vacuity V4): delete each
+#                   load-bearing axiom / weaken a key lemma and assert the
+#                   rebuild reacts as AXIOM_STATUS.json claims. 8 full
+#                   `lake build`s — too slow for per-PR; the fast sibling
+#                   verify-ledger-consistency runs in lean-fv.yml.
+#
+# Still NOT here: the FULL `make ui-golden` (all 24 e2e scenarios over the QEMU
+# semihosting backend, 10+ min — the C10 signs over software SHA-256 dominate).
+# `ui-golden-render` (above) is the CI-viable replacement; the full e2e variant
+# stays a LOCAL/manual gate.
+50 cert-cone-files-split.tsv
+dup-basenames-rc=0
+# CERTIFIED CONE FILE LIST -- every file the 38 gate roots transitively require.
+# Enforced by PHASE 1h (tools/stmt_coverage.py): a file ENTERING or LEAVING the cone is
+# a fatal, human-visible delta.  Without this the coverage check would silently absorb a
+# new cone file by enumerating whatever it found that day.
+# 45 files = the 38 roots + 7 transitively required.
+4
+197:    its file/harness disappeared, its find string is empty/absent/ambiguous, or
+295:    """The comparable subset (drop only the duplicate helper index)."""
+41:      # EasyCrypt pin-ledger surface: verify-easycrypt-pins is toolchain-free and
+44:      # workflow while ~15 straight master commits touched easycrypt/**).
+45:      - 'contracts/verification/easycrypt/**'
+56:      # EasyCrypt pin-ledger surface (verify-easycrypt-pins, #664) — see above.
+57:      - 'contracts/verification/easycrypt/**'
+129:      - name: verify-easycrypt-pins (toolchain-free EasyCrypt admit/axiom ledger)
+135:        # easycrypt/** added to this workflow's paths filter the same day.
+136:        run: make -C contracts/verification verify-easycrypt-pins
+137:      - name: verify-easycrypt-split-pins (current vendored split integrity)
+138:        run: make -C contracts/verification verify-easycrypt-split-pins
+===
+33:  schedule:
+34:    - cron: '27 4 * * *'   # 04:27 UTC daily
+35:  workflow_dispatch:
+150:    # Manual-dispatch only (not the nightly schedule): it can't go green yet
+154:    if: github.event_name == 'workflow_dispatch'
+===
+90:        if: always()
+            if harness_file != f:
+                try:
+                    hsource = (repo_root / harness_file).read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                except OSError:
+                    hsource = ""
+            try:
+                required = _harness_cfg_features(hsource, h)
+            except ValueError as exc:
+                fails.append(f"manifest `{mutation_id}`: {exc}")
+                continue
+            missing = [feat for feat in required if feat not in _z_flag_features(m)]
+            if missing:
+                fails.append(
+                    f"manifest `{mutation_id}`: harness {h} is cfg-gated on "
+                    f"feature(s) {required} in {harness_file} but the entry's z_flags "
+                    f"do not enable {missing} — `cargo kani` would compile the harness "
+                    f"OUT (no VERIFICATION verdict, the #662 nightly-lane death). Add "
+                    f'e.g. ["--features", "{missing[0]}"] to the entry\'s z_flags.'
+                )
+    return fails
+
+
+def _canonical(c: dict) -> dict:
+    """The comparable subset (drop only the duplicate helper index)."""
+    return {k: v for k, v in c.items() if k != "_file_harnesses"}
+
+
+def do_check() -> int:
+    census = generate()
+    rot = manifest_rot(census)
+    if rot:
+        print(f"FAIL: kani_mutations.json has {len(rot)} stale/non-material entry issue(s):", file=sys.stderr)
+        for r in rot:
+            print(f"  - {r}", file=sys.stderr)
+        return 2
+    if not LOCK.exists():
+        print(f"FAIL: {LOCK} missing — run `kani_census.py --write` to create the census lock.", file=sys.stderr)
+        return 1
+    lock = json.loads(LOCK.read_text(encoding="utf-8"))
+    live = _canonical(census)
+    if _canonical(lock) != live:
+        print("FAIL: Kani census DRIFTED from the committed lock:", file=sys.stderr)
+        lf, cf = lock.get("files", {}), live["files"]
+        for f in sorted(set(lf) | set(cf)):
+            if lf.get(f) != cf.get(f):
+                print(f"  - {f}: lock={lf.get(f)} live={cf.get(f)}", file=sys.stderr)
+        if lock.get("totals") != live["totals"]:
+            print(f"  - totals: lock={lock.get('totals')}\n           live={live['totals']}", file=sys.stderr)
+        print("\nA harness was added/removed/renamed, or the mutation-enrolled split changed. "
+              "If intentional, run `kani_census.py --write` and update the census prose in docs/STATUS.md "
+              "+ FV_SURFACE_MAP.md.", file=sys.stderr)
+        return 1
+    t = live["totals"]
+    print(f"OK: Kani census matches the lock — {t['total_harnesses']} harnesses / {t['total_files']} files; "
+          f"{t['harnesses_in_enrolled_files']} in {t['mutation_enrolled_files']} mutation-enrolled files, "
+          f"{t['harnesses_outside_mutation']} in {t['files_outside_mutation']} outside; "
+          f"{t['mutation_groups_total']} mutation groups {t['mutation_groups_by_tier']}. Manifest consistent.")
+    return 0
+
+    ``// Kani `#[kani::proof]` harnesses ...``. Once active, the attribute binds
+    to the next active function declaration while allowing other attributes,
+    comments, and blank lines in between.
+    """
+    names: list[str] = []
+    pending = False
+    for line in text.splitlines():
+        if PROOF_ATTR.fullmatch(line):
+            pending = True
+            continue
+        if pending:
+            m = FN_DECL.match(line)
+            if m:
+                names.append(m.group(1))
+                pending = False
+    return names
+
+
+def generate() -> dict:
+    files: dict[str, int] = {}
+    file_harnesses: dict[str, list[str]] = {}
+    for rel in git_tracked_rs():
+        p = REPO_ROOT / rel
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        harnesses = harnesses_in(text)
+        if harnesses:
+            files[rel] = len(harnesses)
+            file_harnesses[rel] = harnesses
+
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    muts = manifest.get("mutations", [])
+    enrolled_files = sorted({m["file"] for m in muts})
+    enrolled_harnesses = sorted({f'{m["crate"]}::{m["harness"]}' for m in muts})
+    tiers: dict[str, int] = {}
+    for m in muts:
+        tiers[m.get("tier", "?")] = tiers.get(m.get("tier", "?"), 0) + 1
+
+    total_harnesses = sum(files.values())
+    harnesses_in_enrolled = sum(c for f, c in files.items() if f in set(enrolled_files))
+    outside_files = sorted(f for f in files if f not in set(enrolled_files))
+    harnesses_outside = sum(files[f] for f in outside_files)
+
+    return {
+        "schema": "fv-kani-census/v1",
+        "note": "F11 source-generated census (introduced 2026-07-16; refreshed 2026-07-23 "
+                "at the FV Phase-D closure boundary). Generated by scripts/kani_census.py --write "
+                "from git-tracked sources (active standalone #[kani::proof] attributes bound to "
+                "their exact function identities). kani_mutations.json is the MUTATION manifest "
+                "(load-bearing harnesses only); this lock is the FULL census + the enrolled/outside "
+                "split. Run `make verify-kani-census` (--check) on every PR; regenerate with --write.",
+        "files": files,
+        "harnesses": file_harnesses,
+        "totals": {
+            "total_files": len(files),
+            "total_harnesses": total_harnesses,
+            "mutation_enrolled_files": len(enrolled_files),
+            "harnesses_in_enrolled_files": harnesses_in_enrolled,
+            "files_outside_mutation": len(outside_files),
+            "harnesses_outside_mutation": harnesses_outside,
+            "mutation_groups_total": len(muts),
+            "mutation_groups_by_tier": tiers,
+            "distinct_enrolled_harnesses": len(enrolled_harnesses),
+        },
+        "files_outside_mutation": outside_files,
+        "_file_harnesses": file_harnesses,
+    }
+      #          image before building the workspace.
+      # Print both before and after so the next failure names its own cause
+      # instead of requiring another round of guessing.
+      - name: capacity before (RAM + disk)
+        run: |
+          echo "--- memory"; free -m
+          echo "--- disk";   df -h /
+      - name: make kani
+        run: /usr/bin/time -v make kani
+      - name: capacity after (RAM + disk, and any OOM kill)
+        if: always()
+        run: |
+          echo "--- memory"; free -m
+          echo "--- disk";   df -h /
+          echo "--- kernel OOM evidence (empty means it was NOT an OOM kill)"
+          sudo dmesg 2>/dev/null | grep -iE "out of memory|oom-kill|killed process" || echo "none"
+
+  kani-mutation:
+    # SPLIT OUT of the `kani` job 2026-08-01, for the same reason
+    # verify-extracted-heavy was split off the 16 GB runner: two independent
+    # gates sharing one job share one failure. When the harness suite OOM-killed
+    # the runner, this gate produced no evidence either — not because it was
+    # broken, but because it was standing behind something that died.
+    #
+    # Also 43 mutations x (recompile a crate + run one harness) is a multi-hour
+    # workload on its own. Running the two serially in one job is what pushed
+    # the combined job past four hours; in parallel each gets a full budget and
+    # its own timing, so the next timeout value can be set from evidence instead
+    # of guessed.
+    name: Kani mutation (anti-vacuity — break a decoder, expect a harness to redden)
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+46:    def test_accepts_one_material_mutation_bound_to_existing_harness(self) -> None:
+49:    def test_rejects_missing_file_or_harness(self) -> None:
+55:    def test_rejects_empty_absent_or_ambiguous_find_string(self) -> None:
+66:    def test_rejects_noop_or_non_string_replacement(self) -> None:
+72:    def test_harness_census_ignores_commented_proof_attribute(self) -> None:
+79:    def test_harness_census_binds_normal_standalone_attribute(self) -> None:
+134:    def test_cross_file_harness_pair_is_accepted(self) -> None:
+146:    def test_cfg_gated_harness_without_z_flags_fails_statically(self) -> None:
+161:    def test_cfg_gated_harness_with_matching_z_flags_passes(self) -> None:
+174:    def test_multiline_cfg_cannot_hide_required_feature(self) -> None:
+183:    def test_unsupported_feature_expression_fails_explicitly(self) -> None:
+n = 43
+Counter({'default': 29, 'quick': 10, 'full': 3, 'heavy': 1})
+{
+ "id": "canary",
+ "tier": "quick",
+ "crate": "fw-manifest",
+ "harness": "rollback_boundary",
+ "file": "fw-manifest/src/lib.rs",
+ "find": "self.fw_version() > rollback_floor",
+ "replace": "true",
+ "expect": "kani_fails",
+ "note": "verify_rollback always-accepts -> the rollback_boundary biconditional (is_ok() <=> version > floor) MUST break. If this SURVIVES, the harness machinery is broken (kani not running / output not parsed) and every result is void.",
+ "harness_path": "verification::rollback_boundary"
+}
+{
+ "id": "multisend_hidden_value",
+ "tier": "heavy",
+ "crate": "pqsigner-tx",
+ "harness": "no_hidden_value",
+ "file": "tx/src/multisend.rs",
+ "find": "!value_is_zero && !matches!(kind, MsRecordKind::PlainEth | MsRecordKind::EmptyCall)",
+ "replace": "!value_is_zero && !matches!(kind, MsRecordKind::PlainEth | MsRecordKind::EmptyCall | MsRecordKind::Blind)",
+ "expect": "kani_fails",
+ "z_flags": [
+  "--features",
+  "kani-heavy"
+ ],
+ "note": "excluding Blind from the value-page rule would silently drop a Blind record's non-zero native value -> the no-hidden-value WYSIWYS proof MUST break. MOVED TO THE heavy TIER 2026-08-20 (issue #662): the no_hidden_value harness has been #[cfg(feature = \"kani-heavy\")]-gated since 80937852 (13.05 GiB / 7m55s peak, measured 2026-07-31 \u2014 see the Makefile kani-heavy target), so the default-tier nightly lane compiled it OUT and died with a HarnessError (no VERIFICATION verdict). The z_flags re-enable the harness for the local heavy tier; the static census (verify-kani-census) now fails any cfg-gated harness whose entry lacks matching z_flags, so this class dies statically next time. NEVER wire the heavy tier into a 16 GB CI runner \u2014 an OOM kills the job and suppresses the rest of its evidence; run `make verify-kani-mutation-heavy` / `make kani-heavy` locally.",
+ "harness_path": "multisend::verification::no_hidden_value"
+}
+dup harness names: ['rollback_boundary', 'offchain_gate_accept_is_sound', 'format_decimal_exact_on_boundaries']
+cross-file dup harness names: NONE
+21:    def test_complete_exact_verdicts(self):
+25:    def test_collision_wrong_identity_truncation_and_crash(self):
+36:    def test_command_selects_exact_path(self):
+45:    def test_complete_failure_plus_tool_error_gets_no_credit(self):
+55:    def test_baseline_failure_gets_no_credit_and_never_mutates(self):
+67:    def test_mutation_is_bracketed_by_baseline_and_restore(self):
+86:    def test_real_manifest_and_removed_canary_or_overridden_selection(self):
+98:    def test_heavy_feature_cannot_enter_nightly_or_lose_its_flag(self):
+# COMMITTED ARTIFACT IDENTITY.  Added 2026-08-02 (adversarial review, run 10).
+#
+# INPUTS_SHA256 was PRINTED by both gates and COMPARED TO NOTHING, so no run
+# could ever fail on identity drift: the line was a receipt for a human who was
+# never asked to check it.  These are the expected values; the gates now fail if
+# the computed hash differs.
+#
+# THIS FILE IS DELIBERATELY OUTSIDE THE HASHED SET.  The hash covers the 32 cone
+# files plus cert-baseline*.tsv and cert-statements-*.tsv.  Section 35 of the
+# claims log records the trap: the log is itself a cone input of both gates, so
+# writing a receipt into it changes the value the receipt reports.  A pin stored
+# inside the hashed set would have the same defect.
+#
+# Changing a cone file or a manifest REQUIRES updating this file in the same
+# commit.  That is the point: re-baselining becomes a deliberate, reviewable act
+# rather than a silent one.  Recompute with LC_ALL=C (the collation pin -- see
+# section 35); host and container then agree by construction.
+#
+# RE-BASELINE LOG.  Every change to these values is deliberate and must say why.
+#
+# 2026-08-04 (run 22).  split d3aa0fa11aab42b1d8baeab44c2922a8 -> c976d979...,
+#   fork 211d6194fd972716eaeee792bcd74531 -> 3949c473....  THREE COMMENT AND
+#   RECEIPT CHANGES, NO PROOF CHANGE.  Both censuses were verified identical
+#   across the re-baseline (split 975 keys / 1055 rows, added=0 removed=0;
+#   fork 1009 / 1089, no delta), so the assumption set is untouched.
+#     (a) cert_gate_split.sh now prints ECO_PURGED alongside ECO_REMAINING.
+#         ECO_REMAINING=0 could not distinguish "nothing was stale" from "180
+#         stale objects were removed", and run 22 began as the second case.
+#     (b) scratch/tier0_degenerate_encoder_excluded.ec header corrected: it
+#         asserted a discriminating power the run-14 review disproved.  The
+#         control is retained and still MUST-FAIL for its declared reason;
+#         only the header changed.
+#     (c) C10DeployedGeometry.ec section 41 records (a), (b), and the fact that
+#         a zero census delta says nothing about a DEFINED op such as pkfors_of.
+#   Recomputed with LC_ALL=C on BOTH host and container; the split value agreed
+#   in both, which is the section-35 collation pin still holding.
+#
+# 2026-08-04 (run 23).  split c976d979... -> 058ef102..., fork 3949c473... ->
+#   7ab20d2a....  THIS ONE CHANGES THE ASSUMPTION SET ON PURPOSE -- read it.
+#     (a) cdrafts-split/FORS_C_TreePort.ec (1733 lines) ADMITTED TO THE SPLIT
+#         CLOSURE.  It was in NEITHER closure, so nothing in it was
+#         gate-enforced.  Split census 1055 -> 1155 rows (LEDGER 228->239,
+#         PARAMETERS 169->217, BINDINGS 334->341, MEANING 324->358).  The
+#         assumptions did not appear; they became VISIBLE.  Nine statements
+#         pinned, EXPECT_PINS 66 -> 75.  The new ledger admit is
+#         FORS_C_TreePort::extract_op (admit:3b102492d8ec) -- the OpenPRE branch,
+#         blocked on an UPSTREAM interface change, now impossible to lose track of.
+#     (b) BOTH gates: re-sort after `uniq -c` before `comm`.  `sort | uniq -c`
+#         orders by KEY then prefixes a COUNT, so the result is not whole-line
+#         sorted and `comm` -- which requires that -- warned on the live
+#         baselines.  I could NOT construct a wrong added/removed count in three
+#         attempts, so this is latent fragility, not a demonstrated defect; the
+#         fix is verified answer-preserving (added=100 both ways).  Fixed because
+#         a spurious sortedness warning on the census comparison would mask a
+#         real one.  The FORK census itself is unchanged at 1089 rows.
+#
+# 2026-08-04 (run 24).  split 058ef102... -> e3625fdd....  Fork UNCHANGED
+#   (7ab20d2a...): nothing in the fork's hashed set moved.
+#   Option (a): the instrumented three-flag Gproc game EUF_CMA_Gproc_V, plus
+#   gproc_V_eq / gproc_V_split / gproc_Q_decomposition.  Census +1 row, and it is
+#   a MEANING row (module:fbc0ec28fb21), not a LEDGER row -- LEDGER STAYS AT 239,
+#   so this commit adds three theorems and NO assumption.  EXPECT_PINS 75 -> 78.
+#   IT DOES NOT BOUND Q.  gproc_Q_decomposition is an exact equality whose
+#   decomposition step is probability algebra valid for ANY flags; its content is
+#   that the flags are MM45's (FORS_ES.ec:3216-3242), making each of the three
+#   terms a target for a known reduction.  Q = T1+T2+T3 with all three unreduced
+#   is still compatible with Q = 1.
+#
+# 2026-08-04 (run 25).  split e3625fdd... -> b09d8a8d....  Fork UNCHANGED.
+#   COMMENT-ONLY, retracting a false claim I put in the run-24 header: that the
+#   keygen bricks are "INERT ... not a step the template ever takes".  The grep
+#   fact (no consumers) and the CASCADE claim are true; the INFERENCE is false --
+#   every branch REDUCTION opens with a keygen correspondence in its simulation
+#   invariant (FORS_ES.ec:5951-5952 for TRCO, :4840-4841 for TRH), and the pk
+#   pool it characterises is `pkfors_of` verbatim.  Census UNCHANGED at 1156 rows
+#   (added=0 removed=0); only the identity moves, because the file is hashed.
+#
+# 2026-08-05 (run 26).  split b09d8a8d... -> 837da057....  Fork UNCHANGED.
+#   cdrafts-split/GprocVI.ec ADMITTED TO THE CLOSURE -- the V->VI hop, ADMIT-FREE.
+#   Census 1156 -> 1159, and all three added rows are MEANING (the module bodies
+#   GprocTreeVI, GprocKgVI, EUF_CMA_Gproc_VI).  LEDGER IS UNCHANGED AT 239: nine
+#   theorems entered the cone and not one new assumption.  EXPECT_PINS 78 -> 87.
+#   This is a PREREQUISITE for T3 (MM45 proves its TRH/TRCO branches over _VI,
+#   not _V), not a bound.  Q remains unbounded.
+#
+# 2026-08-08.  split 837da057... -> 091c5dbc...  Machinery-only re-baseline:
+#   cert_gate_split.sh gains PHASE 1e, which runs `easycrypt cli` over the four
+#   base targets and every closure file and requires ZERO ^<tty>: diagnostics.
+#   Reason: the two drivers disagree.  `tws_uniq` (scratch/_uniq.ec) passed
+#   `easycrypt compile` four times and failed under `cli` with "cannot prove
+#   goal (strict)" on the byte-identical file -- two steps closing on smt luck,
+#   one discharging three side conditions for `u` and failing on the
+#   identically-shaped ones for `v`.  No other phase can see this: the file
+#   compiles, the lemma is saved, the statement digest is unchanged, the census
+#   shows no admit, and an admit sweep reports 0.
+#   NO CERTIFIED SOURCE CHANGED in this re-baseline -- the delta is the gate
+#   script alone, which is inside the hashed set by design.
+#   Phase behaviour verified on four cases before adoption: clean file OK;
+#   incomplete proof FAIL with its diagnostic; bogus include FAIL; and
+#   easycrypt-not-on-PATH FAIL via the per-command prompt floor -- that last is
+#   the fail-open the floor exists for, since a run that never happens also
+#   emits zero diagnostics.
+#   Cost: roughly doubles PHASE 1's prover work (FORS_ES.ec alone ~7 min).
+#
+# 2026-08-08 (second).  split 091c5dbc... -> ee902c82395aa7fd83547627a66af55c.  Machinery-only again:
+#   cert_gate_split.sh gains PHASE 1f, and cert-watched-split.tsv +
+#   scratch/sweep.py join the hashed machinery set.
+#   PHASE 1f gates scratch/_t1.ec, _t2.ec, _t3.ec -- the Q = T1 + T2 + T3
+#   branch proofs -- which nothing gated before: T2 and T3 had been at admit=0
+#   for weeks with no mechanism to notice a break, and the cli defect that
+#   motivated PHASE 1e lived in exactly these files.  They are WATCHED, NOT
+#   CERTIFIED: absent from the closure, required by nothing, no census row, and
+#   T1 carries an admit by design.
+#   The MANIFEST is hashed; the WATCHED SOURCES are not.  Hashing work in
+#   progress would force a re-baseline on every edit, which trains the operator
+#   to re-baseline without reading -- worse than not hashing them.  Their
+#   integrity is asserted by exact counts plus statement digests instead.
+#   NO CERTIFIED SOURCE CHANGED.
+#
+# 2026-08-08 (third).  split ee902c82... -> 95756d06403aa6b0e752084db8d5750c.  CORRECTION, machinery only.
+#   PHASE 1e now runs `easycrypt cli -iterate`.  The four failures the previous
+#   entry recorded as an open question were NOT defects: `compile` iterates the
+#   smt call by default and `cli` does not, so the phase was comparing two smt
+#   regimes.  Diagnosed to a 41-line repro (compile OK / cli 1 diagnostic /
+#   `cli -iterate` 0), after ruling out timeout, prover parallelism and theory
+#   scoping BY MEASUREMENT.  All four files go to 0 diagnostics with -iterate.
+#   The claim that tws_uniq had been "closing on smt luck" is withdrawn; its
+#   grounding is kept because supplying a named fact beats relying on axiom
+#   selection, but it fixed no defect and nothing was ever unsound.
+#   NO CERTIFIED SOURCE CHANGED.
+#
+# 2026-08-08 (fourth).  split 95756d06... -> 5e33c0861979d804f0ae03a9326df261.  MANIFEST ONLY:
+#   cert-watched-split.tsv records _t1.ec at 2 admits (was 1), because
+#   Eqv_OCMA_sign -- the oracle equivalence for the forge call -- is now stated
+#   with its proof deferred, and its statement digest is pinned.
+#   The 95756d06 run was GREEN (28 cli files, 0 disagreements; 3 watched, 0
+#   failures), so this re-baseline moves off a verified receipt.
+#   NO CERTIFIED SOURCE CHANGED; no gate machinery changed.
+#
+# 2026-08-08 (fifth).  split 5e33c086... -> 9ed1c93a5477907a69a41ceeb577feb0.  MANIFEST ONLY:
+#   _t1.ec 2 -> 3 admits.  Eqv_OCMA_sign's LOOP now typechecks and its `while`
+#   applies -- the two sign loops align -- leaving the body and the entry/exit
+#   admitted.  Statement digests unchanged (3d9e3a2e... etc).
+#   NO CERTIFIED SOURCE, NO GATE MACHINERY CHANGED.
+#
+# 2026-08-09.  split 9ed1c93a... -> 4d616074049f35b7bee39767ca2596f0.  MANIFEST ONLY:
+#   _t1.ec 3 -> 2 admits.  Eqv_OCMA_sign's LOOP BODY is discharged; only the
+#   entry/exit remains.  Statement digests unchanged (3d9e3a2e... etc) -- the
+#   proof added two bound conjuncts to the `while` invariant, which is
+#   proof-internal, so pinning the statement while writing the proof worked as
+#   intended.
+#   Two must-fail controls RUN SERIALLY (the parallel-load lesson) and graded by
+#   FAILURE REASON, not by exit status:
+#     A  leaves-window index perturbed by +1  -> fails IN the hresult block,
+#        "[by]: cannot close goals".
+#     B  `tidx{2} < nr_trees 0` deleted from the invariant with the peel depth
+#        HELD FIXED (replaced by `tidx{2} <= tidx{2}`, same conjunction shape,
+#        so no intro pattern shifts) -> fails at the end of hchar, "cannot prove
+#        goal (strict)".  B is the one that matters: it shows the added bound is
+#        load-bearing rather than decoration.
+#   NO CERTIFIED SOURCE, NO GATE MACHINERY CHANGED.
+#
+# 2026-08-09 (second).  split 4d616074... -> 956c9acfd4ddd7398890f113855a4a28.  MANIFEST ONLY:
+#   _t1.ec 2 -> 1 admit.  Eqv_OCMA_sign IS FULLY PROVED -- entry, body and
+#   exit.  The single remaining admit is t1_opre_bound itself.  Statement
+#   digests unchanged (3d9e3a2e... etc): the proof strengthened the `while`
+#   invariant with the lidxs <-> os coverage relation, which is proof-internal.
+#   WHY THE INVARIANT HAD TO GROW, since "prove the entry and exit" sounds like
+#   it should not touch the body: a cli dump showed the exit obligation reads
+#   `forall sig_L os_R sigFORSTW_R, ... => <post mentioning os_R>` while the
+#   invariant never mentioned `os`.  That goal is not hard, it is UNPROVABLE --
+#   its conclusion constrains a variable its hypotheses do not name.  So the
+#   coverage relation moved into the invariant and all three parts were proved
+#   against the new one.
+#   Two must-fail controls, SERIAL, graded by FAILURE REASON:
+#     C  invariant tail off by one (drop (n+1) for drop n) -> fails in the BODY
+#        at the cov_step rewrite, "nothing to rewrite".
+#     D  `idxs.`2 < k` deleted from the coverage ranges with the conjunction
+#        shape HELD FIXED (becomes `idxs.`2 <= idxs.`2`) -> fails in the ENTRY
+#        at flat_inj, "the given proof-term proves 0 <= idxs.`2 < k, it does
+#        not apply to the goal".
+#   C and D fail in DIFFERENT halves, which is the point: they show the body's
+#   list bookkeeping and the entry's index inversion are each load-bearing, and
+#   neither is closing for the other's reason.
+#   NO CERTIFIED SOURCE, NO GATE MACHINERY CHANGED.
+#
+# 2026-08-09 (third).  split 956c9acf... -> 5cb564d13db1f92b6d47313ec757a9ab.  MANIFEST ONLY:
+#   Eqv_OCMA_sign's statement digest moves 3d9e3a2e -> b4fc971e, DELIBERATELY.
+#   Its post now restates its pre conjunct for conjunct: `call (: I)` against an
+#   abstract adversary needs `={arg} /\ I ==> ={res} /\ I`, and the first
+#   version dropped the leavess and xs characterisations from the post, so
+#   t1_opre_bound's forge call could not have used it.  Caught by trying to use
+#   the lemma, not by review -- which is the argument for landing the consumer.
+#   The sign call writes neither leavess, xs nor sks; the exit gained two
+#   `exact`s.  Admit count unchanged at 1.
+#   Between this and the previous entry, the heaviest smt step inside
+#   t1_opre_bound was GROUNDED (83653f5) -- watched source, outside the hashed
+#   set, so it moved no identity; it is what took the gate from RED to GREEN.
+#   NO CERTIFIED SOURCE, NO GATE MACHINERY CHANGED.
+#
+# 2026-08-10.  split 5cb564d1... -> 6d3c200eda6474194875caf8dc640097.  MANIFEST ONLY:
+#   cert-watched-split.tsv records scratch/_t1.ec at 1 -> 0 admits, because
+#   t1_opre_bound's win condition (T1-T5) is now DISCHARGED.  The T1 branch of
+#   Q = T1 + T2 + T3 is admit-free, as T2 and T3 already were.
+#   NO CERTIFIED SOURCE, NO GATE MACHINERY CHANGED.  The watched sources are
+#   deliberately outside the hashed set (see the header of that manifest), so
+#   the ~200 lines of new proof in scratch/_t1.ec move no identity by
+#   themselves; what moves it is the recorded expectation about them, which is
+#   exactly the property that makes the count an assertion rather than a note.
+#   All three pinned statement digests are UNCHANGED -- 035f68ac / 1666e835 /
+#   b4fc971e -- so nothing was proved by weakening what was claimed.
+#   The new helper t1_win leans only on GprocVI, FxChain and GprocFORSC10, all
+#   three IN closure-c10-split.txt and all three at admit=0 axiom=0 sorry=0
+#   (checked, not assumed -- the file's own note about pkfromsig_cf is that
+#   reaching for an uncertified lemma would pull it into the cone).
+#
+# 2026-08-10 (second).  split 6d3c200e... -> ed5ddead0a28bdc0f462af81e53c7ef7.
+#   THE BIGGEST DELIBERATE MOVE THIS FILE HAS RECORDED: T1/T2/T3 ARE PROMOTED
+#   INTO THE CERTIFIED CLOSURE, so this re-baseline covers CERTIFIED SOURCE and
+#   GATE MACHINERY, not just a manifest.  Four things moved:
+#   (1) closure-c10-split.txt 24 -> 28: GprocT1Opre, GprocT2Trh, GprocT3Trco
+#       (VERBATIM copies of scratch/_t1,_t2,_t3.ec -- no proof edits) and the new
+#       GprocQBound.ec, which composes them into `gproc_Q_bound`.
+#   (2) cert-statements-split.tsv 87 -> 95 pins; EXPECT_PINS moved with it.  The
+#       seven relocated digests are BYTE-IDENTICAL to the watched ones
+#       (035f68ac/1666e835/b4fc971e/ceea05ba/0a691522/d154db53/76a240c0), which
+#       is the check that relocation changed nothing but location.
+#   (3) cert-baseline-split.tsv +16 census rows, ALL module:/operand:/
+#       clone-discharge:.  ZERO new admit/axiom/declare-axiom rows -- promotion
+#       grounds the Q bound without growing the assumption set.
+#   (4) cert_gate_split.sh: the watched phase's `-ge 3` anti-truncation FLOOR
+#       became the committed EXPECT_WATCHED=0.  A floor cannot say "deliberately
+#       none left".  The replacement is strictly stronger (it also fires on an
+#       unexpected addition) and was tested in isolation at 0/1/3 rows; the
+#       integration case is honestly NOT covered -- see the note at the guard.
+#   cert-watched-split.tsv keeps its header and history but has ZERO data rows:
+#   the three files are covered by PHASE 1/1b/1c/1d/1e as closure TARGETS now,
+#   which is strictly more than the watched phase gave them.
+#   WHAT THIS DOES NOT DO: it does not discharge the capstone's H-TREE-MULTI
+#   premise.  SphincsC10CapstoneWired.ec:566 carries exactly `gproc_Q_bound`'s
+#   statement at R_fors_p(F), and its mtree_* reals ARE instantiable binders --
+#   but F is not declared disjoint from 9 of the 11 modules the composition
+#   needs, so it does not typecheck there.  Wiring it requires narrowing a
+#   headline theorem's hypothesis and is left as a deliberate decision.
+#
+# 2026-08-10 (third).  split ed5ddead... -> 084506685293796aaad5168edd0cfa67.
+#   THE Q LEG IS WIRED INTO THE CAPSTONE.  New closure member GprocQWired.ec
+#   (closure 28 -> 29, pins 95 -> 96, EXPECT_PINS with it).  Census delta ZERO --
+#   the file declares one lemma and no module/op, so it adds no baseline row and
+#   no assumption.
+#   WHAT MOVED, IN CONTENT: EUFCMA_SPHINCS_PLUS_C10_GROUNDED discharges the
+#   H-TREE-MULTI premise by instantiating the tree reals at Q ITSELF, so its RHS
+#   carries Q = Pr[EUF_CMA_Gproc_I(R_fors_p(F)) : res /\ !covered] unreduced --
+#   and that file says so in terms ("nothing here bounds it below 1, and if
+#   Q = 1 this bound is as uninformative as the free-real version was").
+#   EUFCMA_SPHINCS_PLUS_C10_QWIRED instantiates the SAME parametric capstone at
+#   the three branch advantages instead, discharging the premise via
+#   gproc_Q_bound -- by a REDUCTION rather than by reflexivity.  Q is replaced by
+#   one SM_DT_OpenPRE and two SM_DT_TCR_C terms.
+#   NOTHING IN SphincsC10CapstoneWired.ec IS EDITED: QWIRED derives from the
+#   parametric lemma, so every pinned digest in that file is unmoved and the
+#   GROUNDED lemma remains available beside it.
+#   THE PRICE, STATED: F carries nine more separations, so QWIRED applies to
+#   strictly fewer forgers than GROUNDED.  That narrowing is NECESSARY, not
+#   decorative -- removing even one (-EUF_CMA_Gproc_V) makes the proof fail with
+#   "the module R_fors_p(F) is not allowed to use the module(s) F".  And it does
+#   NOT make the bound numerically meaningful: Pr[M.F.ITSRC10 ..] is still
+#   carried unreduced and remains the honest headline term.
+#
+# 2026-08-11.  split 08450668... -> 42d12f2c959fb7f0dde179e30989e33f.
+#   TWO CHANGES, both from the 2026-08-10 adversarial review (GPT-5.6 + Kimi K3,
+#   run independently; they converged on the state being sound and diverged on
+#   what to do next, which is where the value was).
+#
+#   (1) QWIRED ANTI-VACUITY, COMMITTED AND GATED.  EUFCMA_SPHINCS_PLUS_C10_QWIRED
+#   adds NINE module separations to the forger F; every separation narrows the
+#   theorem, and an unsatisfiable set would make it vacuous -- proved, gated,
+#   GREEN, and about nothing.  Both reviewers judged the set inhabited and found
+#   no F <-> R(F) circularity (EasyCrypt restrictions are negative, one-directional
+#   accessibility constraints).  Both ALSO said an uncommitted argument has zero
+#   certification value, which was fair: the witness existed only as an untracked
+#   scratch probe.  It is now `WitnessF` + `qwired_at_witness` in GprocQWired.ec,
+#   pinned (EXPECT_PINS 96 -> 97).  The witness is STATEFUL and calls its oracle
+#   -- a stateless module satisfies any {-X} vacuously and would witness nothing.
+#   The lemma states the REAL instantiated bound, not `true`, so the pin protects
+#   something: weakening its RHS to 0%r makes the apply stop matching (checked).
+#   Census +1 row, module: (MEANING), no ledger movement.
+#
+#   (2) PHASE 4 -- THE GRINDING MARGIN IS NOW RECOMPUTED, NOT QUOTED.
+#   FORS_C10.ec:89-91 justifies the "black-box route is a dead end" verdict with
+#   "~28.1 vs ~130.6 bits, ~102 lost" and says in the same breath that the script
+#   is NOT in this checkout.  Both reviewers named that the weakest receipt in the
+#   repo.  tools/forsc_grinding_margin.py is vendored BYTE-IDENTICAL from
+#   PQSigner_OS, cert-margin-split.tsv pins seven figures, and PHASE 4 recomputes
+#   and compares them every run; both new files join the hashed machinery set.
+#   Controls run before commit, each failing for its own reason: corrupt a value
+#   -> "committed X, computed Y"; drop a row -> truncation guard fires; change the
+#   script's output format -> "NOT PARSED (format drift?)" rather than a silent
+#   pass.
+#   CORRECTED 2026-08-11 (same day, GPT-5.6 adversarial review): the line here
+#   first said the phase "asserts the script's own 4 guardrail self-tests
+#   actually ran".  THAT WAS FALSE -- and it was a false claim about a CONTROL,
+#   which is the worst place for one.  The four `[guardrail N] .. : OK` lines are
+#   the HAPPY PATH of a normal run; the script's real negative controls live
+#   behind `--self-test` (forsc_grinding_margin.py:275) and the phase never
+#   invoked them.  It does now, and requires exit 0, the PASS line, and all 3
+#   controls present.  Two further controls were run on THAT check: making self-test exit 1
+#   -> "a guardrail did NOT fire when it must"; deleting one control's line ->
+#   "ran only 2/3 negative controls".  The first attempt at the second control
+#   was itself VACUOUS (my pattern missed an f-string, so the file was unchanged
+#   and it "passed"); it was diagnosed and redone rather than accepted.
+#   RETRACTED 2026-08-11 (later the same day, GPT-5.6 adversarial review, second
+#   pass; VERIFIED against source before retracting).  The sentence removed above
+#   claimed that invoking `--self-test` means "a guardrail neutered to print OK
+#   unconditionally is caught".  THAT IS FALSE.  `self_test()`
+#   (forsc_grinding_margin.py:275) takes an EARLY, SEPARATE path: it recomputes
+#   `ratio = p_forsc(1)/p_plain_fors(1)` and `T_LAST < T` ITSELF, and never
+#   executes normal guardrails 1-3 at lines 342-378.  So replacing those three
+#   guard blocks with unconditional `print(... : OK)` and no `failures.append`
+#   would still pass (i) the happy-path 4/4 count, (ii) `--self-test`, and (iii)
+#   all seven pinned numbers.  What `--self-test` DOES prove is that the
+#   underlying arithmetic inverts when the removed tree is shrunk -- a real
+#   control over the MODEL, not over the guard blocks.  The seven pinned values
+#   and the happy-path count are what actually constrain those blocks, and they
+#   constrain the NUMBERS, not the branch logic.
+#   THIS IS THE THIRD FALSE CLAIM I HAVE MADE ABOUT PHASE 4's CONTROLS in one
+#   day (first: "the 4 OK lines are self-tests"; second: a vacuous negative
+#   control on the fix; third: this).  The pattern is asserting what a control
+#   covers from what it was WRITTEN to cover, without reading the path it takes.
+#   NOT FIXED, DELIBERATELY -- owner decision 2026-08-11, doc-retraction only.
+#   Making `--self-test` exercise guards 1-3 requires editing
+#   tools/forsc_grinding_margin.py, which would BREAK the byte-identity with
+#   PQSigner_OS asserted in cert-margin-split.tsv's header -- turning a "not
+#   frozen" provenance gap into an actively false provenance claim.  The correct
+#   fix is upstream-first (fix in PQSigner_OS, re-vendor, re-pin), which is a
+#   two-repo change and is NOT done here.  The gap is left OPEN and NAMED.
+#   RELATED, unfixed and named: the gate pins only the LOCAL copy of the script.
+#   Byte-identity with PQSigner_OS is true at this revision (md5 verified both
+#   ways) but is a present-tense fact, not an invariant -- no upstream commit or
+#   blob is pinned.
+#   THIS CERTIFIES NOTHING.  The figures are heuristic generic-adversary
+#   estimates that no EasyCrypt result carries; 130.6 is a per-candidate WORK
+#   FACTOR, not a security level, and the pinned adv_log2_qh128 = -2.6 row is the
+#   honest reading at a large query budget.  A5-ITSR remains cited-tcb.
+#
+#   CORRECTION TO THE 2026-08-10 ENTRY ABOVE, which this file should not carry
+#   uncorrected: that entry said the promotion's 16 rows were "ALL module:/
+#   operand:/clone-discharge:" and concluded "ZERO new admit/axiom rows -- the
+#   promotion grounds the Q bound without growing the assumption set".  The
+#   admit/axiom half is true.  The conclusion as phrased is NOT: cert_gate_split.sh
+#   :503 counts clone-discharge IN THE LEDGER, and the receipts show LEDGER
+#   239 -> 240.  The row is EI_OPRE (GprocT1Opre.ec:284), a `proof *` clone of the
+#   standard library's ExactIter with BOTH obligations realized `by trivial`, so
+#   no axiom was installed and the substance survives -- but "the assumption set
+#   did not grow" was the gate's own vocabulary used wrongly, and in this repo
+#   that is the defect, not a nitpick.  Caught by Kimi K3, confirmed against the
+#   receipts.
+#
+# 2026-08-11 (second).  split 13ddbe2a... -> 16381ec3fbac29139601ec4c460ed1a0.
+#   THE Q LEG REACHES THE DEPLOYED LEVEL -- by PARALLEL-AND-PROMOTE, not in place.
+#   Adversarial review 2026-08-11 (GPT-5.6 + Kimi K3, independent) found that
+#   EUFCMA_SPHINCS_PLUS_C10_QWIRED had NO CONSUMER: the deployed chain still
+#   applied GROUNDED, so the shipped headline carried the unreduced Q that
+#   gproc_Q_bound exists to replace.  Calling the deployed result "Q-wired" would
+#   have been false.  The two reviewers AGREED on that and SPLIT on the fix, which
+#   is where the value was: Kimi argued in-place (no consumers, no doc quotes);
+#   GPT-5.6 argued that QWIRED is not a same-domain strengthening -- it NARROWS F
+#   by nine separations AND replaces an exact Q with an upper bound that may be
+#   larger -- so mutating a published name would hide both changes at once.
+#   GPT-5.6's mechanism was taken, and it matches this repo's own precedent
+#   (Tier 0 Step 2: "The older lemma stays -- it is not repaired, it is superseded
+#   for quotation").
+#   ADDED, all in GprocQWired.ec so the dependency runs FORWARD along closure
+#   order (C10DeployedInstance #22, C10DeployedCapstone #23 -> GprocQWired #29;
+#   editing the deployed file instead would have forced a closure reorder):
+#     EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_QWIRED
+#     EUFCMA_SPHINCS_PLUS_C10_AT_DEPLOYED_PARAMS_PINNED_ENCODER_QWIRED  <- CANONICAL
+#     deployed_qwired_at_witness   (Kimi's addition: the anti-vacuity receipt
+#       belongs at the level people quote, not one layer down; stated as the REAL
+#       instantiated bound, not `true`, after I first wrote it the weak way)
+#   VERIFIED: the three new statements carry Q-terms=0 and three named SM-DT
+#   advantages; the legacy pair still carry Q and their digests are UNMOVED
+#   (5bd600cb, 0458787f).  EXPECT_PINS 97 -> 100; both new deployed lemmas also
+#   added to PHASE 1b's by-name lemma checks.  Census delta ZERO.
+#   WHAT IS STILL NOT BOUGHT: nothing numeric.  Pr[M.F.ITSRC10 ..] is unreduced
+#   and remains the honest headline term; cert-margin-split.tsv's pinned
+#   adv_log2_qh128 = -2.6 is what that means at a large query budget.
+#   DOWNSTREAM, NOT DONE ON PURPOSE: PQSigner_OS carries a vendored snapshot at
+#   contracts/verification/easycrypt/c10-port/, pinned at commit 16fe480
+#   (2026-08-05, "run 26"), whose README headlines GROUNDED and unreduced Q.
+#   GPT-5.6 flagged it as needing sync.  It does NOT contain GprocQWired.ec or
+#   even the T1/T2/T3 promotion, so its README is ACCURATE FOR ITS SNAPSHOT and
+#   editing it would introduce a false claim.  The correct action is a deliberate
+#   re-snapshot in that repo; recorded here as a follow-up, not smuggled in.
+#
+# 2026-08-11 (third).  split 16381ec3... -> 4dbffae7ff5013ba1cff25e0be430d14.
+#   cdrafts-split/DarkSide.ec PROMOTED INTO THE CLOSURE (closure 29 -> 30, pins
+#   100 -> 105).  It is the pure combinatorial core of the direct ("DarkSide")
+#   FORS+C argument, it has been admit-free for some time, and until now NOTHING
+#   GATED IT -- required by no closure member, absent from the closure list, out
+#   of the identity hash.  Its proofs could have broken silently.  Promotion is
+#   also the prerequisite for the hybrid ITSRC10 route both reviewers converged on.
+#   LEDGER 240 -> 241, AND THAT IS SAID UP FRONT because the 2026-08-10 promotion
+#   note got precisely this wrong.  The one added census row is LEDGER-class
+#   (refined-const), not a meaning-carrier: it is ge1_t, `const t : { int | 1 <= t }`
+#   -- a FORS tree has at least one leaf.  Benign, trivially true at C10
+#   (t = 2^11 = 2048), and counted as an assumption anyway, which is the point.
+#   PINNED: ds_ge_1t (the engine of "FORS+C <= FORS"), forsc_le_fors, and the
+#   three milestones cover_all_pr / cover_some_le / ds_le_linear.
+#   WHAT THIS DOES NOT DO, so the closure count is not misread: DarkSide is an
+#   ABSTRACT theory that NOTHING CLONES.  Its `t` is abstract, so these lemmas
+#   hold for all t >= 1 -- stronger, but not yet connected to C10's t = 2048.
+#   That connection is part of the "concrete numeric instantiation" still missing,
+#   alongside the binomial mixture and the ROM/query-budget coupling.  Promoting
+#   the file gates the PROOFS; it discharges nothing and bounds nothing.
+#
+# 2026-08-11 (fourth).  split 4dbffae7... -> 011968debcdde4b514e27a55c510a090.
+#   cdrafts-split/DarkSideC10.ec ADDED (closure 30 -> 31, pins 105 -> 107):
+#   the DarkSide theory CLONED AT SPHINCS_PLUS.t.
+#   WHY IT MATTERS.  DarkSide is an ABSTRACT theory and NOTHING CLONED IT, so
+#   every lemma in it held "for all t >= 1" and was connected to the C10
+#   development by nothing.  Promoting it yesterday gated its proofs; this clone
+#   is what makes them say something HERE.  `t <- SPHINCS_PLUS.t` is the same t
+#   the whole development uses (const t = 2 ^ a, SPHINCS_PLUS.ec:65; a = 11 at
+#   C10, so 2048).  Deliberately NOT the literal 2048 -- cloning at the numeral
+#   would give arithmetic about a number, cloning at the scheme's own t gives
+#   facts about the scheme.
+#   LEDGER 241 -> 242, DECLARED BEFORE THE RUN rather than found after it.  Of the
+#   two added rows one is ledger-class: clone-discharge:star|realize:ge1_t.  It
+#   REALIZES its obligation from the proven ge2_t (SPHINCS_PLUS.ec:180) -- control:
+#   replacing that realize with `trivial` fails with "[by]: cannot close goals",
+#   so the discharge is load-bearing -- and no axiom is installed.  It is counted
+#   in the ledger anyway, per cert_gate_split.sh:503, and reported as counted.
+#   The other row is operand:.. DS_C10.t (bindings).
+#   WHAT IT DOES NOT BUY: nothing quantitative, and nothing about ITSRC10.  Three
+#   pieces still stand between here and a tight FORS+C bound -- the binomial
+#   mixture over a fresh candidate's instance load, the numeric evaluation at the
+#   deployed usage cap, and the ROM / query-budget game plus a coupling theorem.
+#   The last is the hard one: the ITSRC10 game as axiomatized has an abstract
+#   `mco` and no query bound, so a legal model wins it with probability 1.
+#
+# 2026-08-11 (fifth).  split 011968de... -> 06faaed72493301055e496347e721cb8.
+#   THE MIXTURE STEP IS PROVEN -- part (A) of the last combinatorial milestone.
+#   cdrafts-split/DarkSide.ec gains mixture_le_moment: for ANY finitely-supported
+#   distribution on the non-negative integers,
+#       E_G[ DS(G)^m ]  <=  E_G[ (G/t)^m ]
+#   i.e. the mixture over instance load is discharged down to a RAW MOMENT.
+#   `ds_le_linear` is what this file calls the HANDLE (:317); this lemma is the
+#   USE of that handle -- a distinction worth keeping, since the description had
+#   already drifted a step once today.
+#   MACHINERY: in_ler_exp (support-restricted monotonicity of expectation,
+#   Distr.ec:3201) + hasE_finite + ds_le_linear + ds_bnd + ler_pexp.  The premise
+#   is `is_finite (support dG)` rather than a bare `hasE` DELIBERATELY: it is the
+#   one a caller can discharge, and hasE_finite then supplies both summability
+#   obligations internally.
+#   AND IT IS SHOWN DISCHARGEABLE, NOT ASSERTED: mixture_le_moment_finite_ex
+#   instantiates the whole thing at dinter 0 n.  A lemma whose hypothesis no
+#   caller can meet is a theorem about nothing, and this session already produced
+#   one of those (a capstone with no consumer); the witness ships in the same
+#   commit.  Control: halving the majorant makes the in_ler_exp application stop
+#   matching ("the given proof-term proves:"), so the bound is load-bearing.
+#   WHAT REMAINS -- and (A) must not be read as more than it is.  This does NOT
+#   evaluate the moment and says NOTHING about the binomial.  Part (B), the
+#   instantiation G ~ Bin(qs, 1/N) and its 12th raw moment, is untouched.
+#   CORRECTION 2026-08-11 (same day; GPT-5.6 and Kimi K3 found it independently):
+#   this entry FIRST said "EasyCrypt has no binomial distribution in its
+#   distributions/ theories at all, so both the distribution and its moments
+#   would be hand-built".  THAT IS FALSE.  The gate's own toolchain (r2026.02,
+#   in-container) has Distr.ec:2774 `mbin`, :2795 `dbin`, :2797 `dbin1E` (the
+#   exact PMF), :2801 `ll_dbin`, :2809 `supp_dbin`.  How I got it wrong is the
+#   useful part: I grepped for dbin, GOT A HIT IN Distr.ec, and dismissed it,
+#   then asserted absence from the FILENAME listing of distributions/ rather than
+#   from contents -- evidence against the hypothesis, discarded without following
+#   it.  Worse, DarkSide.ec:319 -- in the very file I was editing -- already
+#   writes `E_{G~dbin(1/N, qs)}[...]`, so the name was in front of me.
+#   CONSEQUENCES, since this changed the scoping materially: the prerequisite I
+#   called the main risk is already done.  `supp_dbin` gives finite support, which
+#   discharges mixture_le_moment's premise for the binomial directly, so (A)
+#   composes with dbin immediately.  What IS still absent from stdlib: Stirling
+#   numbers, a dlist-count-to-dbin coupling lemma, and concentration inequalities
+#   (the "no concentration inequalities" statement in DarkSide.ec's header stands).
+#   Beyond (B) the numeric
+#   evaluation and the ROM/query-budget coupling still stand between here and any
+#   ITSRC10 result.  Census delta ZERO; pins 107 -> 109.
+#
+# RE-BASELINE 2026-08-11 (third today): split 06faaed7... -> f14321e8...
+#   CAUSE, and it is entirely comment text: the countermodel/retraction commit
+#   edited four cone members (DarkSide.ec, FORS_C10.ec, FORS_C10_Multi.ec,
+#   GprocQBound.ec) and cert_gate_split.sh, all of which are inside the hashed
+#   set.  NOTHING SEMANTIC MOVED, and the run proves it rather than asserting it:
+#   CLOSURE_COMPILED=31/31, PHASE 1c statement digests unchanged, PHASE 2 census
+#   delta ZERO (no new admit/axiom/clone-discharge/refined-const of any class),
+#   PHASE 2b/2c canaries caught, PHASE 3 controls at declared polarity+reason,
+#   PHASE 4 margin 7/7 with negative controls 3/3.  The ONLY failure in the run
+#   was this drift line.  Receipt: 202 OK / 1 FAIL, toolchain r2026.02, 25
+#   prover configurations, in-container.
+#   PREDICTED BEFORE THE RUN, and the prediction is the point: I called digests
+#   unchanged, census delta zero, and INPUTS_SHA256 moving.  All three held.
+#   ONE PART OF THAT PREDICTION WAS WRONG and is recorded because the error class
+#   matters: I also claimed the split/fork rows were "documentary -- not read by
+#   any script".  FALSE.  cert_gate_split.sh:94 awk-reads the `split` row and
+#   compares it to the computed INPUTS_ID.  I had grepped the scripts for the
+#   HASH VALUE rather than for the MECHANISM, and concluded absence from a search
+#   for the wrong token -- the same error that produced the `dbin` retraction
+#   higher up this file.  Twice in one day, same shape.
+# RE-BASELINE 2026-08-12: split f14321e8... -> eb589caf...
+#   CAUSE: the CHARGED + Q-WIRED composition landed as closure member #32,
+#   cdrafts-split/GprocChargedQWired.ec (EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED
+#   + charged_qwired_at_witness), plus its two statement pins, its check_lemma
+#   line, EXPECT_PINS 109 -> 111, and the closure-list row.  Every one of those
+#   files is inside the hashed set, so the identity had to move.
+#   WHAT THE RUN PROVES, rather than what I asserted: CLOSURE_COMPILED=32/32,
+#   statements pinned=111/111, and -- the important row --
+#   `cone: keys now=1099 baseline=1099 | ROWS now=1179 baseline=1179 |
+#   added=0 removed=0`.  A NEW CLOSURE ROOT ADDED ZERO CENSUS ROWS, because
+#   everything it consumes was already in the cone: it is pure composition of
+#   EUFCMA_SPHINCS_PLUS_C10_CHARGED with gproc_Q_bound.  ledger stays 242.
+#   Receipt: 207 OK / 1 FAIL (this drift line only), r2026.02, 25 provers.
+#   PREDICTION SCORECARD, recorded because I lost it.  Before the run I predicted
+#   census additions NONZERO ("a new closure ROOT contributes its own rows") and
+#   said explicitly that I expected GPT-5.6's "expected PHASE-2 census delta zero"
+#   to be WRONG.  GPT-5.6 WAS RIGHT AND I WAS WRONG.  My model of the census was
+#   file-based; it is CONE-based, so a root whose dependencies are already
+#   covered contributes nothing.  Second prediction of the day I lost to the same
+#   reviewer -- the first was that the split/fork rows were "documentary".
+#
+# 2026-08-24 (second).  split cb901c18d79650eef742a8ddcd884094 -> 6eead428c24e60501204f9cd378fedf8.
+# 2026-08-25.  split 6eead428c24e60501204f9cd378fedf8 -> 88de8169ed19b856ddd270fedd287f90.
+# 2026-08-30.  split 9659a41c3602270a17a9340fb4136f50 -> 534572bd7147c4f0cc1227d5c2ccaa6b.
+#   WOTS-BADENC PROMOTED: the WOTS admit is REMOVED, not contained.
+#   LEDGER 242 -> 241, taint closure 6 -> 2, EXPECT_SEEDS 2 -> 1,
+#   pins 1076 -> 1078, statements 991 -> 993, census re-baselined.
+# 2026-08-29 (second).  split a3900ab8d4ac2d18956a97ee452029b3 -> 9659a41c3602270a17a9340fb4136f50.
+#   corrected my own overstatement: the pin is an injective RANK encoder,
+#   not the firmware's u32 -- the tree already said so at C10DeployedCapstone:150.
+# 2026-08-29.  split a2f591e8e93b26575e85692437a70f7f -> a3900ab8d4ac2d18956a97ee452029b3.
+#   admit-free replacement (admit_free_caller_split +
+#   caller_split_recovers_admit_under_badenc) landed in WOTS_TW_ES.ec; pins 1074->1076.
+# 2026-08-28 (second).  split b524583771bd089be5b1add06d90e3f7 -> a2f591e8e93b26575e85692437a70f7f.
+#   clone-route guard added (PHASE 5 hole 2 measured NOT LIVE, now enforced);
+#   controls 9 -> 11.
+# 2026-08-28.  split f2b459d0205e8b1c4fbf116e541d14be -> b524583771bd089be5b1add06d90e3f7.
+#   adversarial round (GPT-5.6 + Kimi K3): three taint-parser bugs fixed,
+#   parser-coverage guard added, controls 5 -> 9, thfc caveat + citation fixes.
+# 2026-08-27 (second).  split 7a40d9b1f07b29cb56bc56ce9ca74e3a -> f2b459d0205e8b1c4fbf116e541d14be.
+#   _TIGHT_AT_PINNED_ENCODER + pinned_encoder_is_not_degenerate added;
+#   taint_closure.py HEADLINE extended to 7 so the new capstone is covered.
+# 2026-08-27.  split b661e2a66fd8682d2648adadc2aad95f -> 7a40d9b1f07b29cb56bc56ce9ca74e3a.
+#   the three redundant deployed-parameter pins dropped from
+#   _TIGHT_AT_DEPLOYED_PARAMS (6 -> 2 premises); one statement digest moved.
+# 2026-08-26.  split 88de8169ed19b856ddd270fedd287f90 -> b661e2a66fd8682d2648adadc2aad95f.
+#   PHASE 5 taint containment: tools/taint_closure.py, cert-taint-closure.tsv,
+#   scratch/taint_controls.sh all JOIN the hashed set.
+#   encode_msgWOTS_C free op -> DEFINITION; `hencb` discharged from the headline
+#   NB: a86a4a72.. appears nowhere as a real identity -- it was produced by a STALE
+#   copy of the hashed-file list in scratch/encode-compat/inputs_id.sh, which had not
+#   picked up the three files PHASE 5 added.  That script now DERIVES the list.
+#   family; +1 op pin, +1 lemma pin, +1 control, control floor 5->6.
+#   THE CLEAN STATEMENT NOW EXISTS AT DEPLOYED PARAMETERS.  New lemma
+#   NB: two earlier values in this arc (ddd456c5.., 2bcbb7ce..) were computed on
+#   the HOST WITHOUT LC_ALL=C and are WRONG.  Identity hashing is collation-
+#   sensitive; take the value the GATE PRINTS inside ec-grind, do not recompute it.
+#   EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT_AT_DEPLOYED_PARAMS.
+#   THE GAP IT CLOSES, found by surveying the whole capstone family: EVERY deployed
+#   variant carried N2 -- AT_DEPLOYED_PARAMS, AT_DEPLOYED_PARAMS_PINNED_ENCODER and both
+#   their QWIRED forms -- while the only statement free of N2, of Q AND of the free real
+#   mkg_adv (CHARGED_QWIRED_TIGHT) was NOT deployed.  So the surface the product actually
+#   quotes, at C10's pinned parameters, was strictly WEAKER than the abstract headline.
+#   This is the first deployed statement that is N2-free AND Q-free AND free-real-free;
+#   all four properties measured on the statement text, not asserted.
+#   WHAT IS TRADED, STATED PLAINLY: the four ABSTRACT width disequalities are DISCHARGED
+#   by c10_dfC_separations_deployed (C10DeployedInstance.ec:294) from the four DEPLOYED
+#   parameter pins.  That is a TRADE, not an elimination -- the premise count stays 6.
+#   What it buys is that the premises are about DEPLOYED PARAMETERS (n=16, len=43, k=13,
+#   embedding width) rather than an abstract constant, which is the point of a deployed
+#   quotation surface.
+#   ZERO ASSUMPTION COST AGAIN: census 1634 -> 1634, added=0 removed=0, ledger 242, and
+#   CONE_FILES stays 45 -- the added `require import C10DeployedInstance` pulls in a file
+#   that was ALREADY a closure member, which was checked rather than assumed.
+#   TWO MISTAKES OF MINE, both caught by the compiler and recorded because the second is a
+#   method error: (1) c10_n was out of scope -- GprocChargedQWired required GprocQWired but
+#   not the deployed constants; fixed with the same import GprocQWired.ec:55 uses.  (2) I
+#   wrote the proof binders in AT_DEPLOYED_PARAMS_QWIRED's premise ORDER while the derived
+#   statement kept its PARENT's order, so every name was misaligned -- EasyCrypt said
+#   exactly that ("this proof-term proves: c <= p_tgts / but is expected to prove:
+#   n = c10_n") and the fix was read off the error rather than guessed.
+#   VACUITY CONTROL: replacing the ITSRC10 summand with 0%r in the deployed statement
+#   breaks the proof (RC=1, no .eco); restored, RC=0 with .eco.  The mutation was asserted
+#   to have applied before the run -- an earlier control in this session returned RC=0
+#   only because a regex miss meant nothing was mutated.
+#   EXPECT_PINS 1069 -> 1070, EXPECT_STMTS 985 -> 986.
+# 2026-08-24.  split f58333ec13efa4da5d9ea23a660c297a -> cb901c18d79650eef742a8ddcd884094.
+#   H1 RESOLVED -- THE PHANTOM `mkg_adv` SUMMAND IS DROPPED FROM THE HEADLINE.
+#   New lemma EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED_TIGHT in GprocChargedQWired.ec.
+#   FxChain.ec:2824-2834 has recorded this as an OPEN ACCOUNTING HAZARD against the
+#   capstone, in its own words: "mkg_adv becomes a PHANTOM summand: sound as an upper
+#   bound but SILENTLY ZEROABLE BY A CONSUMER, and double-paying if kept alongside the
+#   already-idealised dcond LHS.  Honest fix: drop mkg_adv from the +C FX PRF-term sum
+#   ...  Do NOT leave it as an in-chain MKG-PRF summand."  The headline still carried it.
+#   THE DISCHARGE IS TRIVIAL BECAUSE OF HOW THE TERM ENTERS, and that is worth stating:
+#   `mkg_adv` is a LEMMA PARAMETER -- universally quantified, constrained only by
+#   `0%r <= mkg_adv`.  A statement holding for EVERY admissible value holds at 0, and 0 is
+#   the TIGHTEST admissible value.  So the tightened form is sound, STRICTLY TIGHTER (a
+#   non-negative summand removed), has ONE FEWER premise, and contains NO FREE REAL.  The
+#   named hazard -- "silently zeroable by a consumer" -- is closed by doing the zeroing
+#   HERE, visibly, rather than leaving it available to whoever quotes the theorem.
+#   WHAT IT DOES *NOT* MEAN, and the same comment is explicit: "WHERE THE GENUINE mkg TERM
+#   LIVES (it is NOT zero)".  The real RO-idealisation cost sits at the MODEL-DEFINITION /
+#   pre-hop-1 boundary -- production's keyed salted grinder idealised to the
+#   uniform-conditioned `dcond` draw -- NOT between NPRFPRF and NPRFNPRF.  Dropping the
+#   in-chain summand does not make that idealisation free; it stops the chain DOUBLE-PAYING
+#   for something already priced in the model definition.  That boundary idealisation
+#   remains an open, documented assumption.
+#   STATEMENT DERIVED MECHANICALLY, not retyped: the parameter, the premise and the summand
+#   were deleted from the parent by script, asserting no `mkg_adv` token survives.
+#   VACUITY CONTROL, and it FAILED FIRST TIME FOR THE RIGHT REASON TO NOTICE: replacing the
+#   ITSRC10 summand with 0%r in the tightened statement must break the proof.  My first
+#   attempt at that control did not mutate the file at all (a regex miss), and the run
+#   returned RC=0 -- which I did NOT count as a pass.  Re-armed against the real text:
+#   RC=1, no .eco, "cannot prove goal (strict)".  Restored: RC=0, .eco.  So the lemma
+#   genuinely needs the term and the terminal smt() is not closing everything.
+#   COST: EXPECT_PINS 1068 -> 1069, EXPECT_STMTS 984 -> 985, and the CENSUS IS UNCHANGED
+#   (1634 rows, added=0 removed=0, ledger 242).  A strictly stronger theorem at ZERO
+#   assumption cost, so cert-baseline-split.tsv needed no edit.
+# 2026-08-22 (fork).  fork 7ab20d2ab0ba2c1f3942408a193b4836 -> 9c2d21280c84d52c30b22111151f1135.
+#   THE FORK BASELINE IS NOW GATE-VERIFIED, which it had not been since the split-side
+#   cert_cone.py changes.  It was regenerated MECHANICALLY on 2026-08-21 (shared
+#   cert_cone.py) and honestly marked NOT GATE-VERIFIED at the time; this closes that.
+#   FIRST RUN (scratch/gate_run_fork.log, __WALL_S=2718): CERT_FAILURES=1, and that ONE
+#   failure was the INPUTS_SHA256 drift line -- expected, since tools/cert_cone.py is in
+#   the fork gate's hashed set and had changed.  EVERYTHING ELSE PASSED:
+#     CLOSURE_COMPILED=19/19; CONE keys now=1377 baseline=1377; ROWS now=1456
+#     baseline=1456; CONE_ADMITS=2 (the fork's two known admits).
+#   THE CENSUS MATCHING EXACTLY IS THE POINT: the gate independently computed the same
+#   1456 rows I had generated, so the mechanical regeneration was CORRECT rather than
+#   merely plausible.  A regenerated baseline is otherwise only as trustworthy as the tool
+#   that produced it, which is precisely why it was marked unverified.
+#   NOTE the fork gate's cone spans THREE directories -- base-c10-fork, cdrafts-fork and
+#   experiments/tcollres-leg -- where the split gate spans two, so it hashes a wider set.
+#   Identity re-baselined here and the run repeated to confirm; receipt
+#   scratch/gate_run_fork2.log.
+# 2026-08-22 (ninth).  split 6b6cca95c72a262b5727283868e9d885 -> f58333ec13efa4da5d9ea23a660c297a.
+#   PARAMETERISED CLONE OPERAND BINDINGS ARE NOW CAPTURED.  Both the operand matcher and
+#   its TERMINATOR required the operand NAME to sit immediately before `<-`/`<=`, so a
+#   binding written with parameters -- `op P i <= ...`, `op valid_widxvalsgp adidxswgp <=
+#   ...` -- matched NEITHER.  Two consequences, the second worse than the first:
+#     * the binding carried NO census row at all (21 in the split cone); and
+#     * because the terminator had the same gap, a parameterised binding could not END its
+#       PREDECESSOR's value, so that predecessor's digest OVER-REACHED into it -- a row
+#       whose content was partly another binding's.
+#   The parameter list is now INSIDE the digest: it is part of the binding's meaning.
+#   MEASURED DELTA, and it decomposes exactly as predicted: census 1613 -> 1634, with
+#   42 rows added and 21 removed.  ALL 21 removed names REAPPEAR as added with a different
+#   digest (those are the predecessors, now shrunk to their true extent), and 21 are
+#   genuinely new -- Index.P, DigestBlock.P, SAPDL.P, DBHPL.P, WTWES.valid_widxvalsgp,
+#   WTWES.valid_fidxvalsgp among them.  BINDINGS 345 -> 366.  LEDGER STAYS 242.
+#   NON-PARAMETERISED ROWS ARE BYTE-UNCHANGED: group(3) is empty for them and the
+#   whitespace normalisation collapses the extra separator, so their digests do not move.
+#   Verified, not assumed -- that is why the removed count is 21 and not 339.
+#   CONTROL CD4: editing the VALUE of a parameterised binding moves a row (1 removed,
+#   1 added).  Suite now 4/4.
+#   Fork baseline regenerated mechanically alongside (shared cert_cone.py), still marked
+#   NOT GATE-VERIFIED.
+# 2026-08-21 (eighth).  split 09ad5233e393beb2813aacbc1f4a0c61 -> 6b6cca95c72a262b5727283868e9d885.
+#   *** THE DIAGNOSIS BELOW IS WRONG AND IS CORRECTED AT THE END OF THIS ENTRY. ***
+#   The CHANGE (ECFLAGS on the compile driver only) stands; the REASON I gave for it
+#   does not.  Read the correction before quoting any of it.
+#   ECFLAGS REMOVED FROM THE PHASE 1e CLI LEG.  It now applies to the COMPILE DRIVER ONLY.
+#   WHY: I kept it on the cli leg on a driver-comparability argument and priced it with a
+#   CONTROLLED A/B THAT WAS NOT REPRESENTATIVE.  My four sampled files were GprocT1Opre
+#   plus three TINY ones (GprocQBound, DarkSideC10, C10DeployedGeometry), giving +123 s,
+#   and I called that "the trustworthy number".  The real leg contains base/FORS_ES
+#   (2191 cmds), base/WOTS_TW_ES (2153) and WOTS_C_Interactive (744).
+#   MEASURED ON THE REAL GATE: 12 of 38 cli files in ~3 h 56 m, projecting ~12 h for the
+#   leg, against 87 min for the ENTIRE gate beforehand.  Run aborted at 4 h 20 m;
+#   scratch/gate_run_defn_ABORTED.log is that receipt, published rather than discarded.
+#   THE ERROR CLASS IS NEW AND WORTH NAMING SEPARATELY: the earlier three mistakes in this
+#   arc were UNCONTROLLED (varying two things at once).  This one was properly controlled
+#   -- same machine, alternating arms, one flag -- and still wrong, because the SAMPLE was
+#   not representative of the population it was used to predict.  Controlling the
+#   comparison and sampling the population are two different requirements.
+#   The comparability argument was also weaker than when I made it: GprocT1Opre's marginal
+#   step is now a named rewrite (has_predC), so the cli leg no longer needs a shared budget
+#   to agree with the compile driver.
+#
+#   CORRECTION, SAME DAY, BEFORE ANY OF THE ABOVE WAS PUSHED.  I attributed the aborted
+#   run's slowness to ECFLAGS on the cli leg and to an "unrepresentative A/B sample".
+#   BOTH CLAIMS ARE FALSE, and the disproof was already in the tree:
+#     * The 87-minute run (commit 1414c4c, cert_gate_split.sh:291) HAD `$ECFLAGS` on the
+#       cli leg and completed ALL 38 cli files in __WALL_S=5228.  The aborted run had the
+#       IDENTICAL cli configuration and managed 12 of 38 in ~3 h 46 m.  Same flag, ~10x
+#       different throughput -- so the flag cannot be the cause.
+#     * MEASURED COST OF THE CLI FLAG, instrumented on both sides: 5228 s (with) vs
+#       4728 s (without) = ~8 MINUTES.  That is consistent with the original A/B's
+#       +123 s on four files, so the A/B was NOT unrepresentative and the "sampling"
+#       error class I invented for it did not occur.
+#   WHAT ACTUALLY CAUSED THE ABORTED RUN'S SLOWNESS IS UNEXPLAINED.  I am not naming a
+#   cause: I have named four in this arc already (cli-leg non-determinism, gate-load
+#   contention, marginal default budget -- that one held -- and now sampling), and three
+#   were wrong.  Recording it as unexplained is the honest state.
+#   THE CHANGE STILL STANDS, on a smaller and now-measured basis: removing ECFLAGS from
+#   the cli leg saves ~8 min, and the driver-comparability argument for keeping it weakened
+#   once GprocT1Opre's marginal step became a named rewrite.  It was NOT worth aborting a
+#   run over, and I should have checked the previous receipt -- which was sitting in
+#   scratch/ -- before concluding.
+#
+#   AND THE "UNEXPLAINED" SLOWNESS IS NOW EXPLAINED -- BY THE OWNER, NOT BY ME.  The
+#   laptop was SUSPENDED (lid closed) during that run.  The 4 h 20 m was WALL-CLOCK
+#   INCLUDING SUSPEND; the gate was not slow, it was not running.  So there was never an
+#   anomaly to diagnose, and every candidate cause I proposed for it -- the cli flag, an
+#   unrepresentative sample -- was an explanation for a phenomenon that did not occur.
+#   THE METHOD ERROR, which is the reusable part: I derived a RATE ("12 of 38 files in
+#   3 h 56 m") from LOG MTIMES and WALL-CLOCK on a laptop.  Wall-clock is not elapsed
+#   compute.  The distinguishing measurement was available and cheap -- cumulative CPU
+#   time of the process (`ps -o times`), which does not advance across suspend -- and I
+#   did not take it.  Any future timing claim in this tree should quote CPU time, or at
+#   minimum be paired with it, before a rate is inferred.
+# 2026-08-21 (seventh).  split c474ae8e703333aff3dbf68d9dd0e07b -> 09ad5233e393beb2813aacbc1f4a0c61.
+#   THE BODIED-DEFINITION HOLE IS CLOSED ACROSS ALL 45 CONE FILES.  tools/cert_cone.py
+#   SKIPPED any op/const/type whose declaration had a body ("a definition, not a
+#   parameter"), PHASE 1h enumerates only STATEMENTS, and a statement naming a definition
+#   digests only the TOKEN -- so a bodied definition's logical content was watched by
+#   NOTHING.  MEASURED: redefining cdrafts-split/FORS_C.ec::predC_fors -- the FORS+C GATE
+#   PREDICATE -- to `true` left the carrying lemma's digest IDENTICAL and PHASE 1h green.
+#   FIX: bodied definitions now emit `defined-<kind>:<body-digest>` rows, the same idiom
+#   the census already uses for modules -- the digest is IN THE KIND FIELD, so a body edit
+#   is simultaneously a removed row and an added row, and PHASE 2 is fatal on both, while
+#   a NEW definition is an added row.  That closes BOTH directions with no per-declaration
+#   manifest, and -- unlike a pin -- covers the 90 declarations stmt_digest.py cannot
+#   resolve (84 None, 6 genuinely AMBIGUOUS).  `abbrev` and `pred` joined the scanner
+#   alternation; neither was in it at all, which is why `pred` bodies were invisible.
+#   census 1193 -> 1613 rows.  LEDGER STAYS 242: a definition is CONTENT, not an
+#   assumption, so DEFINITIONS is reported as a separate fifth class (422).  Folding it in
+#   would inflate the headline assumption count to 664 and make the honest number
+#   unreadable -- the same distinction the run-10 comment draws for modules.
+#   TWO REGRESSIONS CAUGHT BY ADVERSARIAL REVIEW BEFORE THE FIRST GATE RUN, both verified
+#   by me at source, and the first would have made this change ACTIVELY HARMFUL:
+#     (1) THE KEYWORD->NAME SEPARATOR WAS `\s*` -- zero whitespace accepted -- so any
+#         identifier whose prefix is a keyword and which sits at a line start or right
+#         after a dot parsed as a DECLARATION: `M.F.predC_fors` -> pred `C_fors`,
+#         `O.opened(i)` -> op `ened`, `op_registration =>` -> op `_registration`.  60 such
+#         artefacts across these trees.  They were mostly INVISIBLE while bodied matches
+#         were dropped by the `continue`; emitting rows would have promoted them to LIVE
+#         rows, and since PHASE 2 is fatal on additions AND removals, ordinary TACTIC edits
+#         would then red-light the gate naming declarations that do not exist.  Tightened
+#         to `\s+`; annotated ops (`op [lossless] dmkey`) still match because the required
+#         space precedes the `[`.  0 genuine declarations lost.  NOTE: this bug was ALREADY
+#         producing 2 bogus `abstract-op:...  en` rows in the COMMITTED baseline, which is
+#         why PARAMETERS drops 217 -> 215.
+#     (2) CLONE WITH-CLAUSE OPERANDS written `name <= value` have no `<-` in their head and
+#         their `<=` supplies the `=`, so they were classified as DEFINITIONS -- and
+#         _decl_span then ran from the operand name to the CLONE's terminating dot,
+#         swallowing later bindings and the `proof ...` clause.  27 in this cone.  Now
+#         suppressed by tracking clone statement spans; they are already censused by the
+#         `operand:` rows.
+#   CONTROLS (experiments/ptgts-pin/census_defn_controls.sh), 3/3 and in BOTH directions:
+#     CD1 predC_fors -> true moves a row (1 removed, 1 added) -- the attack is caught;
+#     CD2 a NEW bodied definition ADDS a row -- it is FORCED, not merely caught;
+#     CD3 NO-OP LEG: internal reformatting moves NOTHING.  CD3 initially FAILED and the
+#         TEST was at fault, not the design -- my "cosmetic" reflow appended whitespace
+#         BEFORE the terminating dot, turning `0.` into `0 .`.  Residual churn surface,
+#         documented: whitespace immediately before a terminator does move a digest.
+#   FORK BASELINE: cert-baseline.tsv regenerated MECHANICALLY (349 added, 2 removed)
+#   because tools/cert_cone.py is SHARED with cert_gate_fork.sh.  It is explicitly marked
+#   NOT GATE-VERIFIED in its own header -- regenerated so the fork gate does not go RED for
+#   a reason unrelated to its proofs, NOT because anyone confirmed it green.
+#   STILL OPEN, NAMED NOT IMPLIED CLOSED: the `operand:` rows digest the binding text but
+#   the reviewer showed parameterised bindings (`op f x y <= e`) are not fully captured;
+#   +21 rows would follow from widening that scanner.  A separate unit.
+# 2026-08-20/21 (sixth).  split e1bcca4dc6498db569bafb184889b449 -> c474ae8e703333aff3dbf68d9dd0e07b.
+#   ECFLAGS SCOPED, AND THIS TIME THE COST IS MEASURED RATHER THAN ASSERTED.  I had
+#   applied EC_TIMEOUT=60 to the compile driver, the PHASE 1e cli leg AND the PHASE 3
+#   control runner, and claimed the cost was "~nil" -- generalising from a measurement
+#   taken on ONE FILE in a DIFFERENT phase.  That was the third cost/cause I asserted
+#   from a single-file measurement in this arc, and the third one that was wrong.
+#   CONTROLLED A/B (experiments/wots-badenc/ecflags_ab.sh): same machine, same files,
+#   ALTERNATING arms so ambient drift is shared rather than loaded onto one side; the two
+#   arms differ in exactly one flag.  Deliberately NOT a comparison of two full gate runs,
+#   which would confound the flag with everything else that differs between runs -- the
+#   exact mistake that produced the retracted "contention" diagnosis.
+#     PHASE 3 CONTROLS (2 reps):     default  361 s   -timeout 60  7830 s   = 21.7x
+#         vac_probe_full   55 s -> 1271 s     probe_len46    38 s ->  687 s
+#         c10_spec_vacuity 41 s -> 1107 s     tier0_degen    46 s ->  750 s
+#         C10SpecControls (the sole MUST-PASS) unaffected: 159 ms -> 151 ms
+#       CAUSE, and it is semantic not just numeric: FOUR OF FIVE CONTROLS ARE MUST-FAIL.
+#       They exist to be REJECTED.  A larger per-prover-call budget cannot make a
+#       must-fail control more correct -- it can only make it take longer to fail.
+#       REMOVED from the control runner.
+#     PHASE 1e CLI (4 closure members): default 125 s   -timeout 60  248 s
+#       The ENTIRE +123 s sits on GprocT1Opre (119 -> 242 s); the other three are
+#       unchanged to within noise, two marginally FASTER.  ~2 min on the whole leg buys
+#       driver comparability -- without a shared budget a reported "driver disagreement"
+#       could be nothing but a budget disagreement, which this phase already caused once
+#       with -iterate.  KEPT.
+#   RESIDUAL NOTED, NOT CHASED: that +123 s concentration means goals in GprocT1Opre OTHER
+#   than the one just made deterministic remain budget-sensitive under the cli driver.
+#   Not load-bearing -- the leg passes at either budget.
+# 2026-08-20 (fifth).  split 4af03fe0f00f1f6520165012c58753ea -> e1bcca4dc6498db569bafb184889b449.
+#   THE BETTER FIX, TAKEN: cdrafts-split/GprocT1Opre.ec:1427 `by smt(allP hasP)` ->
+#   `by rewrite -/(predC _) has_predC.`  A PROOF-ONLY edit inside a certified file.
+#   WHY: that smt call discharged the all/has duality BY SEARCH and was MARGINAL at the
+#   toolchain default -- 7/10 passes measured.  `has_predC` (List.ec:568) states exactly
+#   the duality, so there is now NO SEARCH for a budget to run out of.
+#   MEASURED AT THE DEFAULT BUDGET (deliberately no -timeout -- the point is that the file
+#   should no longer DEPEND on the budget):
+#       smt, default          7/10 pass   104-155s
+#       smt, -timeout 60      8/8  pass   ~300s
+#       rewrite, default      5/5  pass   103-136s
+#   So it is both reliable AND ~3x faster than funding the search.
+#   PROOF-ONLY, PROVEN NOT ASSERTED: the statement digest of `find_fresh` is UNCHANGED
+#   (2726bead2cc6cbb00819af0d6de19c2b before and after).  With 1068 statement pins live,
+#   a digest move here would have meant I changed the THEOREM, not its proof.
+#   NEGATIVE CONTROL RUN BEFORE ADOPTING IT (scratch/_dupprobe_ctl.ec): the same tactic
+#   with the hypothesis `hna` DELETED FAILS ("cannot close goals", RC=1, no .eco).  A
+#   tactic that compiles is not the same as a tactic that uses its hypothesis.
+#   EC_TIMEOUT=60 IS KEPT, and is no longer load-bearing for this file.  It stays because
+#   committing the budget is independently valuable: without it the gate runs at whatever
+#   the toolchain default happens to be, and "proof failure or budget failure?" becomes
+#   unanswerable from the receipt.  Its cost is now ~nil, since -timeout is per prover
+#   call and this file no longer struggles.
+# 2026-08-20 (fourth).  split 3986daa80bd31722e051b65ba8f67251 -> 4af03fe0f00f1f6520165012c58753ea.
+#   THE PROVER BUDGET IS NOW A COMMITTED CONSTANT: EC_TIMEOUT=60, applied to every
+#   certified-file `easycrypt compile` AND to the PHASE 1e `cli` leg.  Before this the
+#   gate ran at whatever the toolchain default happened to be, so a receipt was partly a
+#   measurement of that default rather than of the proofs.
+#   THE DIAGNOSIS THAT PRECEDED IT WAS WRONG TWICE, and the corrections are the point:
+#     (a) "the cli leg is non-deterministic" -- FALSE: it later failed the COMPILE driver
+#         with CLI_DISAGREEMENTS=0 in the same run.  It is the FILE, not the leg.
+#     (b) "gate-load contention tips it over" -- FALSE, and this is the one I published.
+#         The failure REPRODUCES IN ISOLATION with the gate's exact flags: 1 fail in 3,
+#         no load at all.  My "3/3 clean cold" runs had silently been given `-timeout 60
+#         -max-provers 4`, i.e. 20x the budget, and I credited the absence of load rather
+#         than the extra budget -- an uncontrolled variable, in the same finding where I
+#         had written "one trial per arm, not a controlled measurement".  And PHASE 1
+#         compiles SEQUENTIALLY (cert_gate_split.sh:203 is a plain while-loop), so there
+#         was never file-level contention to blame.
+#   THE ACTUAL CAUSE: cdrafts-split/GprocT1Opre.ec:1427, inside `lemma find_fresh`, is
+#   `by smt(allP hasP)` proving the all/has duality.  It is MARGINAL at the default
+#   budget.  MEASURED, one variable at a time:
+#       default     7/10 pass  (2 fails across 7 full-gate runs, 1 fail in 3 isolated)
+#       -timeout 60 8/8  pass  (5 isolated + 3 earlier)
+#   Cost on that file: ~130s -> ~300s.  `-timeout` only, NOT `-max-provers`: -timeout is
+#   PER PROVER CALL so it costs nothing on goals that already close quickly, whereas
+#   capping parallel provers would slow all 34 files.
+#   THE BETTER FIX IS AVAILABLE AND NOT TAKEN HERE: `has_predC : has (predC p) s = ! all
+#   p s` exists (List.ec:568), so that smt call is doing by SEARCH what a named rewrite
+#   does deterministically -- the same shape the repo already fixed once for
+#   EncoderBridge.pow8.  Rewriting it would make the receipt independent of machine speed
+#   entirely.  Deliberately NOT done under a change scoped to the budget: it edits a proof
+#   inside a certified file and should be its own reviewed decision.
+# 2026-08-20 (third).  split 8157467568e9b7fe60b5b256f6f4d7d8 -> 3986daa80bd31722e051b65ba8f67251.
+#   THE 7 NON-ROOT CONE FILES ARE CLOSED.  PHASE 1h now enumerates the FULL 45-FILE CONE
+#   instead of the 38 roots; the 79 statements in the transitively-required files are
+#   pinned (EXPECT_STMTS 905 -> 984, EXPECT_PINS 932 -> 1068); and the cone FILE LIST is
+#   itself committed (cert-cone-files-split.tsv) so a file entering or leaving is fatal.
+#   One of the seven is cdrafts-split/FORS_C.ec -- project code, not vendored library.
+#   TWO BLOCKERS FOUND BY ADVERSARIAL REVIEW, both re-verified BY MEASUREMENT:
+#     (1) cert_cone.py's REQ scanner was LINE-ANCHORED, so `qed. require import X.` on one
+#         line LOADS X while the cone never sees it.  MEASURED: cone stayed 45, the file
+#         invisible.  This FALSIFIED the claim I had just written into the cone manifest
+#         ("a file ENTERING the cone is fatal") -- and it reached far past that claim,
+#         because the SAME function feeds INPUTS_SHA256, the PHASE 2 census AND PHASE 1h:
+#         all three went blind on one edit, and a cone manifest generated by that tool
+#         agreed with the blind spot BY CONSTRUCTION.  Fixed with a ZERO-WIDTH lookbehind,
+#         NOT `(?:^|\.)` -- that consumes the terminating dot and breaks a second require
+#         on the same line (control CV7c exists so a future "simplification" cannot pass).
+#         Behaviour-preserving: cone 45 -> 45, census 1193 -> 1193, so only this identity
+#         row moves.  Controls CV7b/CV7c.
+#     (2) BODIED DEFINITIONS ARE WATCHED BY NOTHING.  cert_cone.py:324 SKIPS any
+#         op/const/type whose declaration has a body ("a definition, not a parameter") and
+#         PHASE 1h enumerates only statements.  MEASURED on the +C GATE PREDICATE:
+#         redefining cdrafts-split/FORS_C.ec::predC_fors to `true` left the digest of the
+#         lemma carrying it (mco_C_predC) IDENTICAL and coverage fully green -- NOTHING
+#         MOVED.  That is the run-5 `emb_in` attack shape digest_op was written to stop,
+#         live in a file this change advertises as newly covered.  The 60 pinnable
+#         definitions in the 7 files are now pinned; control CV9 shows predC_fors moves.
+#   RESIDUAL, MEASURED AND NAMED RATHER THAN IMPLIED CLOSED: the bodied-definiti
+on hole
+#   spans ALL 45 cone files -- 661 op/const/abbrev declarations, of which 90 are NOT
+#   pinnable by the current tool (84 resolve to None, 6 are genuinely AMBIGUOUS, e.g. `P`
+#   declared four times in FL_SL_XMSS_MT_ES.ec).  What landed here pins CHANGES to the 60
+#   definitions in the 7 files; nothing yet FORCES a new definition to be pinned anywhere.
+#   Closing that class needs either a census row type for bodied definitions or an
+#   exception list with a committed total -- a separate unit, not smuggled into this one.
+# 2026-08-20 (second).  split 84ebde0d73e28e82a5cc01b4d95498df -> 8157467568e9b7fe60b5b256f6f4d7d8.
+#   TOTAL STATEMENT COVERAGE.  EXPECT_PINS 135 -> 932, new EXPECT_STMTS = 905, new
+#   PHASE 1h (tools/stmt_coverage.py).  Every top-level statement in all 38 certified
+#   roots is now pinned by digest.
+#   WHY THE PINS ALONE WOULD NOT HAVE WORKED.  PHASE 1c iterates the MANIFEST
+#   (`done < cert-statements-split.tsv`), so it is structurally BLIND to a statement
+#   that was never pinned: pinning the 905 that exist today does nothing about a 906th
+#   appearing tomorrow.  That was the entire point of the exercise, so PHASE 1h supplies
+#   the other direction -- enumerate FROM THE FILES, assert each has a row --
+#   with EXPECT_STMTS catching REMOVAL, which leaves every surviving pin valid and is
+#   invisible to both.  Control CV1 (add a lemma) is the one that justifies the work.
+#   TWO BLOCKERS FOUND BY ADVERSARIAL REVIEW BEFORE THE GATE RUN, both re-verified:
+#     (1) `pred` was pinnable by NEITHER digest path -- digest() takes only
+#         lemma/theorem/equiv/hoare/phoare, digest_op() lacked `pred`.  A pred BODY is
+#         pure logical content usable as a lemma HYPOTHESIS, and statements naming it
+#         digest only the TOKEN.  So appending `/\ c10_q_s = 65536` to a body installed
+#         that hypothesis in every statement using it with ZERO pin/coverage/census
+#         delta -- the exact attack PHASE 1g exists to stop, landing through a surface
+#         no phase watched.  FORS_C_TreePort.ec alone declares 9.  Fixed; the 9 bodies
+#         are pinned via the op: path; control CV5 shows the pred pin MOVES while the
+#         statement digest does NOT, which is what makes the pred row load-bearing.
+#     (2) Both new scans anchored declarations at line start, but EasyCrypt is
+#         whitespace-insensitive: `qed. lemma hidden : 1 = 1. proof. trivial. qed.` on
+#         ONE line is legal, saved and requirable -- uncounted, unreported and
+#         UNPINNABLE.  tools/cert_cone.py:162 already used the right `(?:^|\.)` idiom
+#         for axioms, so a mid-line AXIOM was caught by the census while a mid-line
+#         LEMMA was caught by nothing.  Fixed in digest(), digest_op() and the coverage
+#         scan; control CV6.  No mid-line statements exist today -- preventive.
+#   AND A DEFECT IN THE EXISTING PINS, surfaced by the anchoring fix: 11 of the 135
+#   pre-existing rows were OVER-BROAD.  Their lemmas have ONE-LINE proofs
+#   (`lemma foo : X. proof. by rewrite. qed.`), so the line-anchored `^\s*proof`
+#   terminator ran past them into NEIGHBOURING lemmas -- mem4_f's span was 331 chars
+#   covering four lemmas and their proofs.  11/11 swallowed a `qed.`.  Their digests are
+#   corrected here; that is why 11 committed values move in a change that is otherwise
+#   purely additive.
+#   THE STRIPPER ALSO SPLICED: comments were removed without a separator, so
+#   `lemma(* x *)foo` became `lemmafoo` and the declaration went invisible to every
+#   regex.  Now emits a separator and preserves newlines.
+#   COST: PHASE 1c is ~42 s for 932 rows (one python3 per row).  Accepted.
+# 2026-08-20.  split 2fcbf2ef683bb976940715ab59b6b232 -> 84ebde0d73e28e82a5cc01b4d95498df.
+#   ANTI-VACUITY FIX INSIDE THE FENCE ITSELF (tools/policy_cap_fence.py, hashed).
+#   MEASURED, not suspected: the fence as first published printed
+#   "OK   quarantine intact" WITH rc=0 against a cert-quarantine-split.tsv gutted
+#   to comments only.  `want_decls`/`want_reqs` both came back empty, so Q2 and Q4
+#   SILENTLY SKIPPED and the check reported green while checking nothing -- the
+#   exact vacuous-pass shape the controls in this tree exist to catch, reproduced
+#   inside a control I had just written.  Raised by the advisor reviewing the
+#   pushed fence; confirmed by gutting the manifest and running it.
+#   FIX: EXPECT_DECLS = 24 / EXPECT_REQS = 3 as COMMITTED CONSTANTS IN THE TOOL --
+#   not in the manifest they guard, which could then be zeroed by the same edit --
+#   checked as Q0 before any comparison.  New control C0 in fence_controls.sh
+#   REMOVES the manifest's rows and asserts the failure names Q0; the other five
+#   controls only ADD things, which is the direction that could never have found
+#   this.  Suite now 6/6 for the declared reason against a green baseline.
+#   Also: Q5 documented as a TRIPWIRE, not a rule -- `2 ^ 16` will eventually match
+#   legitimate arithmetic in some future certified file and there is deliberately
+#   no allowlist yet.
+# 2026-08-19 (second).  split bcb2f2956488ac7867cd0fbdb3606eec -> 2fcbf2ef683bb976940715ab59b6b232.
+#   THE POLICY-CAP FENCE BECOMES ENFORCED: new PHASE 1g (POLICY-CAP QUARANTINE)
+#   plus tools/policy_cap_fence.py and cert-quarantine-split.tsv, and EXPECT_PINS
+#   117 -> 135.  All of those are inside the hashed set, so the identity moved.
+#   WHY.  cdrafts-split/C10DeployedScope.ec names the DEPLOYMENT cap
+#   c10_q_s = 65536 = MAX_SLOT_USES.  That it never becomes a HYPOTHESIS held by
+#   INSPECTION and a header comment; a future closure member could `require` the
+#   file and nothing would notice.
+#   THE FIRST DESIGN WAS WRONG AND WAS KILLED BEFORE IMPLEMENTATION.  It was three
+#   token-greps (no inbound require / identifier confined / no `=>` in lemmas
+#   naming it).  A 54-agent adversarial review confirmed 33 bypasses.  Decisive,
+#   each re-verified by me: (a) RE-DECLARE THE VALUE under another name in the file
+#   that wants it -- the HOUSE IDIOM, C10DeployedGeometry.ec:66 and
+#   C10DeployedInstance.ec:44 both define c10_n = 16 and neither requires the
+#   other; (b) spell it in MODEL SYMBOLS as `l %/ 4`, since this very file proves
+#   l = 4 * c10_q_s, defeating token grep, literal grep AND human review; (c)
+#   `declare axiom` in a section, which carries no `=>`.  A grep keys on a NAME;
+#   the object of concern is a NUMBER IN A PREMISE POSITION.
+#   SO THE FENCE IS AN INVENTORY, in this gate's own ADDITIONS-ARE-FATAL idiom:
+#   the file's complete declaration set (24) and require set (3) are committed in
+#   cert-quarantine-split.tsv, and every one of its 24 declarations is now pinned
+#   by digest (it was 6 of 18 lemmas and 0 of 6 ops -- a value swap
+#   `c10_p_tgts : int = 262656 -> 65536` moved NO pin).
+#   NOT CLOSED, STATED IN THE TOOL AND THE MANIFEST: a NEW policy number introduced
+#   ELSEWHERE under another name.  That needs exhaustive statement pinning over all
+#   34 members (~623 statements) and is a separate project.
+#   THE FENCE'S OWN FILES ARE HASHED, in BOTH the start and end-of-run computations
+#   -- updating only one would make them disagree and spuriously trip "inputs
+#   CHANGED DURING THE RUN".  Without this the check could be blinded with no
+#   identity delta, which is the attack the run-10 comment above records.
+#   CONTROLS: experiments/ptgts-pin/fence_controls.sh -- five MUST-FAIL controls
+#   (inbound require, require-set drift, section hypothesis, declaration added,
+#   magnitude elsewhere), each asserted to fail FOR THE DECLARED REASON against a
+#   green baseline.
+# 2026-08-19.  split 45b788a6a623c698531c06c05a5c0e2b -> bcb2f2956488ac7867cd0fbdb3606eec.
+#   A FILE ENTERS THE CERTIFIED CLOSURE: cdrafts-split/C10DeployedScope.ec, the
+#   DEPLOYED-SCOPE facts.  closure-c10-split.txt 33 -> 34, EXPECT_PINS 111 -> 117
+#   (six statement pins), and the file is inside the hashed set, so the identity
+#   had to move.  A deliberate change to the certified tree.
+#   WHY.  The 2026-08-18 review round asked where the SCOPE of the certified
+#   statement is written down -- what stops a reader quoting it "at 2^16 uses".
+#   The answer was: an UNGATED experiment.  The facts bounding the statement's
+#   silence were prose.  They are now compiled on every gate run and pinned.
+#   PROMOTED BY MOVING, NOT COPYING.  experiments/ptgts-pin/PTgtsPin.ec was
+#   `git mv`d here and its ten dependents repointed, so exactly ONE definition of
+#   these facts exists in the tree.  A copy would have been a fresh drift
+#   surface -- the defect class this whole arc has been finding.
+#   WHAT THE RUN PROVES, rather than what I assert: CLOSURE_COMPILED=34/34,
+#   statements pinned=117/117, and the important row --
+#   `cone: keys now=1113 baseline=1113 | ROWS now=1193 baseline=1193 |
+#   added=0 removed=0`.  ZERO census rows of ANY class, so
+#   cert-baseline-split.tsv needed NO edit at all: this file contains only
+#   DEFINITIONS (`op x : int = <value>`) and PROVED lemmas, and a definition is
+#   not an assumption.  ledger stays 242.  The ONLY failure in the run was the
+#   drift line.  Receipt: RED (1 failure), r2026.02, 25 provers, in-container,
+#   scratch/gate_run1_scope.log.
+#   AND `added=0` WAS NOT TAKEN ON TRUST.  "added=0" is ambiguous between
+#   "nothing new entered" and "the census never looked at this file" -- the same
+#   absence-from-the-wrong-search shape recorded twice above.  Settled by
+#   MEASUREMENT (experiments/ptgts-pin/census_coverage_probe.sh): injecting
+#   `axiom census_probe_injected : 1 = 1.` into the new file moves ledger
+#   242 -> 243, and removing it restores 242.  The census covers the file.
+#   THE POLICY CAP IS NOT IMPORTED.  c10_q_s (= 65536 = MAX_SLOT_USES) occurs
+#   ONLY in the CONCLUSIONS of the section-5 lemmas, never as a hypothesis, and
+#   nothing in base-c10-split/ or cdrafts-split/ requires this file.  Both
+#   external reviewers rejected importing the deployment cap into the model on
+#   2026-08-15; naming it in a NEGATIVE statement about what it CANNOT be is the
+#   opposite move.  The fence is stated in the file header.
+#   TWO DEFECTS FIXED IN THE FILE BEFORE PROMOTION, both found by re-measuring
+#   rather than trusting: section 3(B) cited WOTS_C_Multi.ec:490-494 (stale --
+#   the phrase is at :233, D1_reduce at :523) and asserted "WOTS_C_Multi is NOT
+#   in closure-c10-split.txt", which BECAME FALSE on 2026-08-18 when that file
+#   was gated.  The section's CONCLUSION is unchanged, for the reason found the
+#   same day: the capstone does not consume D.1 at all.
+# 2026-08-18.  split eb589cafe306046da0a5d7ba0820c7e9 -> 45b788a6a623c698531c06c05a5c0e2b.
+#   A FILE ENTERS THE CERTIFIED CLOSURE: cdrafts-split/WOTS_C_Multi.ec, Thm D.1
+#   (multi-instance WOTS+C d-EU-naCMA).  closure-c10-split.txt 32 -> 33,
+#   CONE_FILES 43 -> 44.  This is a deliberate change to the certified tree.
+#   WHY.  `c <= p_tgts` is a premise carried by 11 of the closure members, in 48
+#   places.  The lemma that justifies its SHAPE -- D1_reduce, "the reduction
+#   places one S-TCR(+C) target per committed query" -- lived in a file that was
+#   in NEITHER closure-c10-split.txt NOR any cert-*.tsv.  The gate had never
+#   built it.  A premise whose justification nothing enforces is the sentence
+#   this script exists because of.
+#
+#   WHY THE ASSUMPTION SET IS UNTOUCHED -- the fact that makes this defensible,
+#   and it was verified BEFORE the re-baseline, not discovered after it:
+#     cone: keys 1099 -> 1113 | ROWS 1179 -> 1193 | added=14 removed=0
+#     ledger      242 -> 242   <- UNCHANGED; this is the number that matters
+#     parameters  217 -> 217
+#     bindings    345 -> 345
+#     meaning     375 -> 389
+#   All 14 added rows are MEANING-class (12 module:, 2 module-type:).  Not one
+#   admit, axiom, declare-axiom, refined-const, clone-discharge, op-annotation
+#   or clone-obligation row enters the cone.  The file's own ledger is zero
+#   (scratch/sweep.py: admit=0 axiom=0 sorry=0, comment-stripped and
+#   word-boundary; FORS_C_TreePort.ec reports 1 as a positive control).  The 14
+#   rows are exhaustively the file's own declarations: 8 top-level plus 6 inner
+#   `module AA = A(OC)`.
+#
+#   PREDICTION SCORECARD.  The brief predicted "13 rows ... and five AA".  It is
+#   14, with SIX AA -- one per game/reduction module, and there are six of those.
+#   The miscount was in the ENUMERATION, not in the class, and the ledger
+#   invariance that was made the acceptance condition held exactly.  Recorded
+#   because this file grades predictions rather than quietly correcting them.
+#
+#   COMMENT-ONLY SOURCE CHANGE, MECHANICALLY VERIFIED.  Four stale sites in
+#   WOTS_C_Multi.ec were corrected; no proof, statement or declaration moved.
+#   Checked by stripping comments from HEAD's copy and from the new copy with
+#   the gate's own comment-stripper and diffing: EMPTY.  Confirmed independently
+#   by the census -- the 14 added rows are BYTE-IDENTICAL before and after the
+#   comment edits, so no module body digest moved (the failure mode that would
+#   have shown up as an added+removed pair, both fatal).
+#
+#   AND THE BRIEF'S FACTUAL PREMISE FOR THAT FIX WAS ITSELF FALSE.  Read this,
+#   because a correction that installs a NEW false claim is worse than the stale
+#   one it replaces.  The brief -- and scratch/FINDING-c-le-ptgts-justification-
+#   is-ungated.md:64, which marks it "VERIFIED" -- says `D1_bridge_WOTSTW` "does
+#   not exist" and instructs the header to say the FC <-> STCRC_WC.Col
+#   reconciliation is "DEFERRED AND UNSTATED".  BOTH ARE WRONG.  `lemma
+#   D1_bridge_WOTSTW` is at cdrafts-split/WOTS_C_Bridge.ec:391 -- the SAME
+#   directory -- with `D1_MEUFNACMA_WOTSC_MM45` at :677, specialised as
+#   `D1_MEUFNACMA_WOTSC_MM45_embthfc` at WOTS_C_EmbDischarge.ec:174 and consumed
+#   at SPHINCS_C.ec:252.  The name was searched for INSIDE WOTS_C_Multi.ec and
+#   its absence THERE was reported as absence from the repo.  Absence concluded
+#   from the wrong scope -- the same error class this file already records twice
+#   (the `dbin` retraction, and the "split/fork rows are documentary"
+#   retraction).  The instructed sentence was NOT written.
+#
+#   WHAT THE HEADER SAYS INSTEAD IS MEASURED.  In the gate's own container
+#   (r2026.02, same include path, same session in which WOTS_C_Multi.ec compiled
+#   RC=0): `easycrypt compile cdrafts-split/WOTS_C_Bridge.ec` EXITS 1 with
+#   `[critical] .. line 659 .. cannot prove goal (strict)` -- a step INSIDE
+#   D1_bridge_WOTSTW's own proof (lemma :391, qed :665) -- reproduced twice at
+#   the same site, although that file's header claims "PROOF STATUS
+#   (2026-07-08): PROVED IN FULL -- ZERO admits".  So the bridge is: not in
+#   WOTS_C_Multi.ec, downstream of it, UNGATED (none of WOTS_C_Bridge /
+#   WOTS_C_EmbDischarge / SPHINCS_C is in closure-c10-split.txt), and
+#   non-compiling at this toolchain.  Whether that is a genuine break or a
+#   prover-budget artefact is NOT diagnosed here and is NOT claimed.
+#
+#   WHAT THIS DOES NOT BUY, so nobody quotes it as more.  Gating D1_reduce does
+#   NOT discharge `c <= p_tgts`; that premise is still carried explicitly by the
+#   11 members that need it, and SphincsC10CapstoneWired.ec already labels it an
+#   HONEST RESIDUAL.  It does not connect D.1 to MM45's black box.  And IT PINS
+#   NOTHING: cert-statements-split.tsv gains no row, so D1_reduce's and
+#   D1_MEUFNACMA_WOTSC's STATEMENTS stay unpinned -- their premises could be
+#   weakened with the census unmoved, because module bodies would not change.
+#   That is the run-4 lesson applied to this file, and it is NOT closed here:
+#   pinning them needs EXPECT_PINS 111 -> 113 in cert_gate_split.sh, which is
+#   gate machinery and was out of scope for this change.  Named rather than left
+#   silent; it is the obvious next unit.
+#   WHAT THE CLOSURE DOES NOW ENFORCE: the file compiles as a target (PHASE 1),
+#   is REQUIRABLE (1d, the ends-mid-proof defect), agrees under both drivers
+#   (1e, which had never seen it), and its declaration inventory is frozen
+#   against addition AND removal (PHASE 2).
+#
+#   ALSO IN THIS COMMIT: cert-baseline-split.tsv's summary line (:2) still read
+#   run 26's "LEDGER=239 PARAMETERS=217 BINDINGS=341 MEANING=362 TOTAL=1159",
+#   three re-baselines stale, because no script reads it (PHASE 2 strips ^#).
+#   Updated to the live 242/217/345/389/1193 with a dated note; the superseded
+#   value stays recoverable in git and in the dated entries below it.
+# tree	hash
+split	df34cee6a883deafc1aef86c89d8c464
+fork	9c2d21280c84d52c30b22111151f1135
+113:want_id=$(awk -F'\t' '!/^#/ && $1=="split"{print $2}' cert-identity.tsv 2>/dev/null)
+114:if [ -z "${want_id:-}" ]; then
+116:elif [ "$INPUTS_ID" != "$want_id" ]; then
+117:  echo "FAIL INPUTS_SHA256 DRIFT: committed $want_id, computed $INPUTS_ID"
+  # agree with the compile driver.
+  # (superseded) SAME COMMITTED BUDGET AS THE COMPILE DRIVER.
+  # The first observed failure of GprocT1Opre was on THIS leg (473 diagnostics), and
+  # leaving the two drivers on different budgets would mean a reported "driver
+  # disagreement" could be nothing but a BUDGET disagreement -- precisely the
+  # confusion the comment above records this phase already causing once, with
+  # -iterate.  That is a correctness argument, so it needs a cost to weigh against:
+  # controlled A/B on four closure members (ecflags_ab.sh) gives default 125 s vs
+  # -timeout 60 248 s, and the ENTIRE +123 s sits on GprocT1Opre (119->242 s); the
+  # other three are unchanged to within noise (two are marginally FASTER).  ~2 min
+  # on the whole leg buys driver comparability, so it stays.
+  # NOTE for whoever reads this next: that residual concentration means goals in
+  # GprocT1Opre OTHER than the one just made deterministic are still budget-
+  # sensitive under the cli driver.  Not chased here; not load-bearing, since the
+  # leg passes at either budget.
+  if out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n'); then cli_rc=0; else cli_rc=$?; fi
+  d=$(printf '%s\n' "$out" | grep -c '^<tty>:' || true)
+  pr=$(printf '%s\n' "$out" | grep -c '^\[[0-9]*|' || true)
+  cli_run=$((cli_run+1))
+  if [ "$pr" -lt 1 ]; then
+    echo "FAIL $lbl (cli): only $pr commands processed -- the run did not happen"
+    fail=$((fail+1)); cli_bad=$((cli_bad+1)); return
+  fi
+  if [ "$d" -eq 0 ] && [ "$cli_rc" -eq 0 ]; then
+    echo "OK   $lbl (cli, $pr cmds)"
+1
+6:set -u
+7:set -o pipefail
+11:#   45c4a166... in the container (LC_ALL unset -> POSIX)
+113:want_id=$(awk -F'\t' '!/^#/ && $1=="split"{print $2}' cert-identity.tsv 2>/dev/null)
+114:if [ -z "${want_id:-}" ]; then
+116:elif [ "$INPUTS_ID" != "$want_id" ]; then
+117:  echo "FAIL INPUTS_SHA256 DRIFT: committed $want_id, computed $INPUTS_ID"
+1104:split	df34cee6a883deafc1aef86c89d8c464
+53:        good = f"git-hash: {lock['easycrypt']}\nknown provers: {', '.join(lock['provers'])}\n"
+56:            for bad in ('', good.replace(lock['easycrypt'], 'unexpected'),
+===
++++ b/contracts/verification/docs/FV_SURFACE_MAP.md
++**Snapshot: 2026-07-23; Kani/EasyCrypt rows updated 2026-09-16** (reconciled after the 2026-07-19 deep review; previously 2026-07-15). This map owns the current inventory of proof and
++| 4 | Firmware Kani bounded proofs | 173 source harnesses in 27 files, locked by `kani_census.py`; 170 are included by default, three are `kani-heavy` only | Per-PR census/runner controls; nightly default mutation tier; local full/heavy tiers | Updated 2026-09-16 (#659/#662/#677/#685): 164 harnesses in 22 mutation-enrolled files, nine in five outside; 39 distinct harnesses have individual mutation entries. 43 groups: 10 quick, 29 default, three full, one heavy. Default selects 39, full 42; heavy selects its one group plus the canary. Mutation credit requires a passing original followed by one fully qualified, exactly selected failing harness. Focused local receipts are not a fresh full Kani campaign or hosted-CI success. |
++| 9 | EasyCrypt C10 cryptographic reductions | Vendored `easycrypt/c10-port` split model: conditional game reductions and explicit unreduced probability terms | `verify-easycrypt-split-pins` per PR; `verify-easycrypt-split` scheduled in `nightly.yml`, pinned immutable image and complete 45-file dependency replay | Updated 2026-09-16 (#670/#683–#686): 1,077 unique declaration pins, 993 statements; both drivers directly check dependencies, with require and broken-proof controls. One remaining admit is `FORS_C_TreePort.extract_op`. Named-application taint is not a proof of an admit-free headline; implicit SMT/clone dependencies and firmware serialization/bounded-grinding refinement remain outside that check. This is not a numerical security bound. Historical draft/docker targets retain their historical scope. |
++`verify-gate-enforcement` checks registered target identities, complete invocation
++steps and runner contexts, trigger coverage, and selected reverse-derived source
++surfaces. It does not prove arbitrary shell semantics or hosted CI success. The
++current split has separate fast and full registrations; historical draft pin
++checks remain enrolled separately and do not certify the split.
++++ b/docs/STATUS.md
++**Kani/EasyCrypt evidence correction (2026-09-16):** current gate scope and
++research limits are owned by the [FV surface map](../contracts/verification/docs/FV_SURFACE_MAP.md),
++rows 4 and 9. Historical draft receipts below do not certify the vendored split.
++Implementation/review evidence: [remediation record](security/adversarial-review/findings/fv-evidence-remediation-2026-09-16.md).
++
+module-dups-rc=0
+45
+1077
+4421:verify-kani-mutation: ## anti-vacuity: break a decoder, expect a Kani harness to turn red
+verify-kani-mutation: ## anti-vacuity: break a decoder, expect a Kani harness to turn red
+	@command -v cargo-kani >/dev/null 2>&1 || { echo "ERROR: cargo-kani not found. Install: cargo install --locked kani-verifier && cargo kani setup"; exit 1; }
+	python3 scripts/check_kani_mutations.py
+
+# Heavy-tier twin (issue #662): entries whose harnesses are cfg(feature =
+# "kani-heavy")-gated — the default/nightly tier compiles those OUT and dies
+# with a HarnessError, so they live in a non-cumulative heavy tier. Peak RSS
+# (no_hidden_value 13.05 GiB / 7m55s, measured 2026-07-31) sits near the 16 GB
+# hosted-runner ceiling: LOCAL ONLY, never wire into CI — an OOM kills the
+# runner and suppresses the rest of the job's evidence (same reasoning as
+127:      - name: make verify-kani-mutation
+128:        run: /usr/bin/time -v make verify-kani-mutation

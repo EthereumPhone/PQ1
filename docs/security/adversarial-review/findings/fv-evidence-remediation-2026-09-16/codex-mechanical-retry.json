@@ -1,0 +1,8 @@
+{
+  "completed_shell_commands": 3,
+  "namespace_failures": 3,
+  "stopped_process_groups": [
+    1344517
+  ],
+  "reason": "every completed tool command failed before execution in nested Bubblewrap; sole mechanical retry uses legacy Landlock with outer read-only mounts"
+}

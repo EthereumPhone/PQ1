@@ -295,7 +295,7 @@ override _FV_EVIDENCE_TARGETS := \
 	verify verify-storage-mutators verify-lean-proto-domain verify-fv-lints \
 	verify-ledger-consistency verify-hw-assumptions verify-tla verify-linker-map \
 	verify-verus verify-crux-ns-ptr verify-easycrypt verify-easycrypt-full \
-	verify-easycrypt-pins verify-easycrypt-docker verify-forsc-margin \
+	verify-easycrypt-pins verify-easycrypt-split-pins verify-easycrypt-split verify-easycrypt-docker verify-forsc-margin \
 	verify-proof-mutation verify-lean4checker verify-kontrol verify-halmos \
 	verify-bulk verify-interp verify-transcription verify-parse-transcription \
 	verify-independent-signer verify-primitive-kat verify-cavp verify-build \
@@ -572,20 +572,20 @@ verify-crux-ns-ptr: ## crux-mir diversity check of ns_ptr_validate vs an indepen
 # NOT CI-gated: needs an opam switch with EasyCrypt r2026.02 + Alt-Ergo 2.6.0.
 # `make verify-easycrypt-pins` checks the ledger with no toolchain at all.
 .PHONY: verify-easycrypt verify-easycrypt-full verify-easycrypt-pins
-verify-easycrypt: ## EasyCrypt PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
+verify-easycrypt: ## HISTORICAL drafts PARTIAL compile (stdlib +C chain; MM45-chain SKIPPED loudly) + pins
 	@/usr/bin/bash scripts/check_easycrypt.sh
 
 # F5 (2026-07-16): "full" is now DISTINCT from partial and HONEST — it requires
 # all 21 .ec compiled with ZERO skips (implies FORCE_MM45=1) and FAILS if the
 # MM45 reference proofs / toolchain are absent, instead of the old behaviour
 # where a skipped-11-of-21 run could still print a success banner.
-verify-easycrypt-full: ## EasyCrypt FULL verification — 21/21, zero skips (needs MM45 toolchain)
+verify-easycrypt-full: ## HISTORICAL drafts FULL verification — 21/21, zero skips (needs MM45 toolchain)
 	@/usr/bin/bash scripts/check_easycrypt.sh --full
 
 # F5: ledger (admit/axiom COUNT + SEMANTIC name->statement pin) with NO toolchain,
 # preceded by the wired-in negative control (a `dmkey_ll : false` weakening and a
 # delete-one-add-one, both count-preserving, MUST fire the semantic pin).
-verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolchain) + negative control
+verify-easycrypt-pins: ## HISTORICAL drafts admit/axiom + semantic pin ledger (no toolchain) + negative control
 	@/usr/bin/bash scripts/check_easycrypt.sh --self-test
 	@/usr/bin/bash scripts/check_easycrypt.sh --dry-run
 
@@ -601,13 +601,11 @@ verify-easycrypt-pins: ## EasyCrypt admit/axiom + semantic pin ledger (no toolch
 C10_PORT_DIR ?= $(HOME)/repos/c10-eufcma-port
 DOCKER ?= docker
 .PHONY: verify-easycrypt-docker
-verify-easycrypt-docker: ## EasyCrypt C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
+verify-easycrypt-docker: ## HISTORICAL external C10-capstone gate in MM45's r2026.02 docker image (needs C10_PORT_DIR + docker)
 	@if ! $(DOCKER) info >/dev/null 2>&1; then \
-	  echo "SKIP: docker unavailable — the committed receipt (primary evidence) follows:"; echo; \
-	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
+	  echo "ERROR: docker unavailable; historical receipt is not a new verification"; exit 1; fi
 	@if [ ! -d "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC/proofs" ]; then \
-	  echo "SKIP: MM45 base absent at $(C10_PORT_DIR) (third-party, not vendored) — receipt follows:"; echo; \
-	  cat easycrypt/docker/GATE-RECEIPT-2026-07-17.log; exit 0; fi
+	  echo "ERROR: historical MM45 base absent at $(C10_PORT_DIR)"; exit 1; fi
 	$(DOCKER) build -t fv-sphincsplus-ec:r2026.02 "$(C10_PORT_DIR)/FV-SPHINCSPLUS-EC"
 	@B64=$$(base64 -w0 easycrypt/docker/gate-c10-capstone.sh); \
 	 $(DOCKER) run --rm -v "$(C10_PORT_DIR)":/work:ro fv-sphincsplus-ec:r2026.02 \
@@ -2215,3 +2213,13 @@ _extract-slotkdf-impl:
 	  && echo "OK: committed slot-kdf extraction matches the current Rust" \
 	  || { echo "DRIFT: domain/src/lib.rs slot-KDF path changed — re-extract, re-prove, re-commit"; exit 1; }
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-slotkdf $${EXTRACTION_TMP_ROOT}/skout $${EXTRACTION_TMP_ROOT}/skout/Funs.fixed.lean
+
+# Current vendored split artifact (#670, #683-#686). Fast checks do not run proofs.
+.PHONY: verify-easycrypt-split-pins verify-easycrypt-split
+verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/assumption census and controls
+	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_split_contract.py
+	cd easycrypt/c10-port && $(_FV_PYTHON3) -B tools/split_contract.py
+	cd easycrypt/c10-port && /usr/bin/bash cert_gate_split.sh --identity-only
+
+verify-easycrypt-split: ## Full current split proof replay in the pinned immutable toolchain image
+	$(_FV_PYTHON3) -B scripts/run_easycrypt_split.py

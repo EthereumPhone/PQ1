@@ -184,6 +184,24 @@ class GateControls(unittest.TestCase):
                 row['polices_paths'].remove(name)
                 self.assertIn('easycrypt-pins-reverse:', self.run_checker())
 
+    def test_current_split_paths_cannot_be_removed_from_either_lane(self):
+        for gate_id in ('verify-easycrypt-split-pins', 'verify-easycrypt-split'):
+            row = next(r for r in BASELINE['gates'] if r['id'] == gate_id)
+            for name in row['polices_paths']:
+                with self.subTest(gate=gate_id, path=name):
+                    self.manifest = copy.deepcopy(BASELINE)
+                    changed = next(r for r in self.manifest['gates'] if r['id'] == gate_id)
+                    changed['polices_paths'].remove(name)
+                    self.assertIn('easycrypt-split-reverse:', self.run_checker())
+
+    def test_split_job_requires_its_shared_makefile_prerequisite(self):
+        row = next(r for r in BLOCKING if r['id'] == 'verify-easycrypt-split')
+        def remove_setup(wf, job, step):
+            job['steps'] = [s for s in job['steps']
+                            if s.get('name') != 'install elan (toolchain pinned by lean-toolchain)']
+        self.change_workflow(row, remove_setup)
+        self.run_checker()
+
     def test_per_pr_denylists_are_rejected(self):
         row = next(r for r in BLOCKING if r['id'] == 'miri')
         for event in ['push', 'pull_request']:

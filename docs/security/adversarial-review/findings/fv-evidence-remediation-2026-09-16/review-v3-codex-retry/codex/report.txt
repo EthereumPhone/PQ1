@@ -1,0 +1,4 @@
+VERDICT: GAP
+TARGET: 775133e8abd3452bca952336bc8e31e452a7f7f5 / 2766afb8829e5f38935718c01f8365e4758e9153
+FINDINGS: none
+GAPS: Full EasyCrypt replay for input identity df34cee6a883deafc1aef86c89d8c464 remains pending; its green result is required before landing.

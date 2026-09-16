@@ -87,5 +87,108 @@ fn ordinary_test() {}
         self.assertEqual(kani_census.harnesses_in(text), ["panic_free"])
 
 
+class CrossFileAndCfgGateTests(unittest.TestCase):
+    """Issue #659 (cross-file mutation/harness pairs) and #662 (cfg-gated
+    harnesses must carry matching z_flags)."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        helper = self.root / "crate/src/helper.rs"
+        helper.parent.mkdir(parents=True)
+        helper.write_text(
+            "pub fn decide(x: u32) -> bool {\n    x == 0 || x > 7\n}\n",
+            encoding="utf-8",
+        )
+        caller = self.root / "crate/src/caller.rs"
+        caller.write_text(
+            "#[kani::proof]\nfn decision_binds() {\n    assert!(true);\n}\n",
+            encoding="utf-8",
+        )
+        gated = self.root / "crate/src/gated.rs"
+        gated.write_text(
+            "/// doc comment between the gate and the proof attr\n"
+            "#[cfg(feature = \"kani-heavy\")]\n"
+            "#[kani::proof]\n"
+            "#[kani::unwind(101)]\n"
+            "fn heavy_harness() {\n    let guarded = true;\n}\n",
+            encoding="utf-8",
+        )
+        self.census = {
+            "_file_harnesses": {
+                "crate/src/caller.rs": ["decision_binds"],
+                "crate/src/gated.rs": ["heavy_harness"],
+            },
+        }
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def failures(self, entry: dict) -> list[str]:
+        return kani_census.manifest_rot(
+            self.census,
+            manifest={"mutations": [entry]},
+            repo_root=self.root,
+        )
+
+    def test_cross_file_harness_pair_is_accepted(self) -> None:
+        # #659: the mutation anchors a shared helper in helper.rs while the
+        # covering harness lives in caller.rs.
+        entry = {
+            "id": "x",
+            "file": "crate/src/helper.rs",
+            "harness": "decision_binds",
+            "find": "    x == 0 || x > 7",
+            "replace": "    x <= 0 || x > 7",
+        }
+        self.assertEqual(self.failures(entry), [])
+
+    def test_cfg_gated_harness_without_z_flags_fails_statically(self) -> None:
+        # #662: a cfg(kani-heavy)-gated harness with no --features flag would
+        # compile OUT in the slow lane (no verdict, HarnessError). Dies here.
+        entry = {
+            "id": "g",
+            "file": "crate/src/gated.rs",
+            "harness": "heavy_harness",
+            "find": "let guarded = true;",
+            "replace": "let guarded = false;",
+        }
+        fails = self.failures(entry)
+        self.assertEqual(len(fails), 1)
+        self.assertIn("cfg-gated", fails[0])
+        self.assertIn("kani-heavy", fails[0])
+
+    def test_cfg_gated_harness_with_matching_z_flags_passes(self) -> None:
+        entry = {
+            "id": "g",
+            "file": "crate/src/gated.rs",
+            "harness": "heavy_harness",
+            "find": "let guarded = true;",
+            "replace": "let guarded = false;",
+            "z_flags": ["--features", "kani-heavy"],
+        }
+        self.assertEqual(self.failures(entry), [])
+        entry_eq = dict(entry, z_flags=["--features=kani-heavy"])
+        self.assertEqual(self.failures(entry_eq), [])
+
+    def test_multiline_cfg_cannot_hide_required_feature(self) -> None:
+        p = self.root / 'crate/src/gated.rs'
+        p.write_text(p.read_text().replace('#[cfg(feature = "kani-heavy")]',
+                                          '#[cfg(\n    feature = "kani-heavy"\n)]'))
+        entry = dict(id='g', file='crate/src/gated.rs', harness='heavy_harness',
+                     find='let guarded = true;', replace='let guarded = false;')
+        self.assertIn('cfg-gated', self.failures(entry)[0])
+        self.assertEqual(self.failures(dict(entry, z_flags=['--features', 'kani-heavy'])), [])
+
+    def test_unsupported_feature_expression_fails_explicitly(self) -> None:
+        p = self.root / 'crate/src/gated.rs'
+        p.write_text(p.read_text().replace('cfg(feature = "kani-heavy")',
+                                          'cfg(not(feature = "kani-heavy"))'))
+        entry = dict(id='g', file='crate/src/gated.rs', harness='heavy_harness',
+                     find='let guarded = true;', replace='let guarded = false;',
+                     z_flags=['--features', 'kani-heavy'])
+        self.assertIn('unsupported feature cfg', self.failures(entry)[0])
+
+
 if __name__ == "__main__":
     unittest.main()

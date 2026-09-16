@@ -1,0 +1,6 @@
+VERDICT: FIX
+TARGET: b969690e628407635673db11b2ba376cd1cfd838 / 1bd2e4f194282bce10c73826b9c9c0c39608d151
+FINDINGS:
+- BLOCKER scripts/check_kani_mutations.py:140 — a coherent failing block plus an additional tool error is still classified as `kani_fails`; a synthetic completed verdict followed by `error: post-verification tool failure` returned mutation credit; reject extra fatal diagnostics/parse a delimited result and add this regression case.
+- BLOCKER .github/workflows/nightly.yml:422 — the new job only checks out before invoking a Makefile that unconditionally requires `~/.elan/bin/lake` at contracts/verification/Makefile:253; a clean runner lacking that uninstalled prerequisite exits before Docker or proof execution; install pinned elan in the job or remove/scope the Lean-only parse prerequisite for this target.
+GAPS: Full EasyCrypt replay for input identity df34cee6a883deafc1aef86c89d8c464 remains pending and must be green before landing.

@@ -4377,7 +4377,7 @@ kani: ## Bounded model-checking on firmware decoders/counters
 	@echo "==> Kani: domain recovery parser (deserialize_pin_state)"
 	cargo kani -p pqsigner-domain --harness deserialize_pin_state_panic_free
 	@echo "==> Kani: ERC-20 calldata decoder (panic-free + transfer no-misdecode)"
-	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + page-budget classification: per-record page bound + no-hidden-value WYSIWYS + CoW-first precedence [records_pages_total panic-freedom compositional] + accept/reject controls)"
+	@echo "         + Safe multiSend decoder (outer-frame canonical-acceptance soundness + inner record-walk exact-tiling/partition + field-fidelity soundness + classification accept/reject controls; three kani-heavy proofs run separately via make kani-heavy)"
 	@echo "         + CoW GPv2Order canonical decode (decode-soundness: accept<=>enum-in-range, verbatim field offsets + accept/reject controls)"
 	@echo "         + typed-call ABI walker (no-read-past-end soundness + accept/reject controls)"
 	@echo "         + Safe SafeTx decode (canonical typed-data: accept<=>operation-in-range, verbatim offsets; execTransaction: no-read-past-end + fixed-field soundness + accept/reject controls)"
@@ -4445,6 +4445,7 @@ verify-kani-mutation-heavy: ## anti-vacuity for the cfg(kani-heavy)-gated harnes
 .PHONY: verify-kani-census
 verify-kani-census: ## source-generated Kani harness census vs kani_census.lock.json (fast, no Kani toolchain)
 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_census.py
+	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/test_kani_mutations.py
 	@PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/kani_census.py --check
 
 miri: ## Miri UB check on host crates

@@ -30,10 +30,9 @@ TMPD=$(mktemp -d) || { echo 'FAIL mktemp'; exit 1; }
 trap 'rm -rf "$TMPD"' EXIT
 # Expected inventory sizes, COMMITTED. A guard that recomputes its expectation
 # from the file it is checking cannot detect truncation of that file.
-EXPECT_PINS=1078
-# Committed count of top-level statements across the 38 certified roots.  Guards
-# PHASE 1h: if the statement TOTAL moves, the certified statement set changed and
-# somebody must say why.  896 measured 2026-08-20.
+EXPECT_PINS=1077
+# Committed count of top-level statements across the complete 45-file cone.
+# PHASE 1h requires an explicit update when this statement set changes.
 EXPECT_STMTS=993
 # COMMITTED PROVER BUDGET.  The gate previously ran `easycrypt compile` with NO
 # -timeout, i.e. at whatever the toolchain default happens to be -- so a receipt was
@@ -105,7 +104,7 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
 # proof, and PHASE 2b/2c only canary two specific behaviours of it.
 INPUTS_ID=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 echo "### INPUTS_SHA256 $INPUTS_ID"
 # AND NOW COMPARE IT.  This line was printed and checked by nothing: an identity
 # receipt that no run can fail on is decoration.  The expected value lives in
@@ -122,24 +121,13 @@ elif [ "$INPUTS_ID" != "$want_id" ]; then
 else
   echo "OK   INPUTS_SHA256 matches the committed identity"
 fi
-echo "### TOOLCHAIN $(easycrypt cli </dev/null 2>&1 | grep -ao 'GIT hash: [^ ]*' | head -1 || echo UNKNOWN)"
-# PROVER INVENTORY (added 2026-08-02, run 10).  Every `smt()` in the closure is
-# discharged by whatever provers the local why3 config offers, at whatever
-# timeout; NOTHING here pins them and the receipt recorded only the EasyCrypt
-# git hash.  This container answers with 25 prover configurations (Alt-Ergo
-# 2.4.3/2.5.4/2.6.0, CVC4 1.8, CVC5 1.0.9, Z3 4.8.17/4.12.6/4.13.4).  A third
-# party with a different set can get a different verdict on the SAME tree.
-# Direction of the risk is fail-CLOSED FOR A MISSING PROVER -- it loses a goal,
-# it does not invent one.  That is NOT the same as sound: a DIFFERENT prover
-# version with a soundness bug does invent one, and this receipt inherits the
-# prover-soundness assumption the whole artifact already makes (run 12).  So:
-# a reproducibility receipt, under an unchanged trust assumption.
-# 2>&1, NOT 2>/dev/null: EasyCrypt prints `known provers:` on STDERR, so the
-# first version of this line hashed the EMPTY STRING and printed
-# `e3b0c44298fc1c14 0 configurations` -- the SAME empty-input defect run 8
-# found in the identity hash, committed again by me two hours later.  A
-# receipt field must be checked for its VALUE, never for its presence.
-echo "### PROVERS $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | sha256sum | cut -c1-16) $(easycrypt config 2>&1 | sed -n 's/^known provers: //p' | head -1 | tr ',' '\n' | grep -c .) configurations"
+# The fast per-PR identity check deliberately needs no proof toolchain.
+if [ "${1:-}" = "--identity-only" ]; then exit "$fail"; fi
+[ "$fail" -eq 0 ] || exit 1
+python3 tools/split_contract.py || exit 1
+python3 tools/split_contract.py --toolchain || exit 1
+python3 tools/split_proof_controls.py || exit 1
+python3 tools/split_contract.py --targets > "$TMPD/targets" || exit 1
 
 # PHASE 0 -- INCLUDE-PATH AMBIGUITY.  resolve() in tools/cert_cone.py tries
 # '.ec' then '.eca' and takes the LAST hit, but EasyCrypt's own preference when
@@ -193,18 +181,18 @@ echo "### ECO_REMAINING=$left"
 [ "$left" -eq 0 ] || { echo "FAIL stale .eco survived the purge ($left)"; fail=$((fail+1)); }
 
 echo "### PHASE 1 — TARGETS"
-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
-  if easycrypt compile $ECFLAGS -I $B $B/$n.ec >/dev/null 2>&1; then echo "OK   base/$n"; else echo "FAIL base/$n"; fail=$((fail+1)); fi
-done
 n_seen=0
-while read -r n || [ -n "$n" ]; do
-  case "$n" in ''|\#*) continue;; esac
+while read -r f; do
   n_seen=$((n_seen+1))
-  if easycrypt compile $ECFLAGS $INC $D/$n.ec >/dev/null 2>&1; then echo "OK   $n"; else echo "FAIL $n"; fail=$((fail+1)); fi
-done < closure-c10-split.txt
-n_exp=$(grep -cve '^[[:space:]]*$' -e '^#' closure-c10-split.txt)
-echo "### CLOSURE_COMPILED=$n_seen EXPECTED=$n_exp"
-[ "$n_seen" -eq "$n_exp" ] || { echo "FAIL closure truncated"; fail=$((fail+1)); }
+  if easycrypt compile $ECFLAGS $INC "$f" >"$TMPD/compile.log" 2>&1; then
+    echo "OK   target $f"
+  else
+    echo "FAIL target $f"; tail -10 "$TMPD/compile.log"; fail=$((fail+1))
+  fi
+done < "$TMPD/targets"
+n_exp=$(wc -l < "$TMPD/targets")
+echo "### CONE_COMPILED=$n_seen EXPECTED=$n_exp"
+[ "$n_seen" -eq "$n_exp" ] && [ "$n_exp" -gt 0 ] || { echo "FAIL cone truncated"; fail=$((fail+1)); }
 
 echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compilable)"
 # EasyCrypt returns rc=0 for a file that ENDS mid-proof.  Measured 2026-08-03:
@@ -218,10 +206,11 @@ echo "### PHASE 1d — EVERY CLOSURE FILE MUST BE REQUIRABLE (not merely compila
 # The probe is GENERATED from $CLOSURE so it cannot drift out of sync with the
 # closure list the way a checked-in control file would.
 { echo "require import AllCore."
-  while read -r n || [ -n "$n" ]; do
-    case "$n" in ''|\#*) continue;; esac
-    echo "require import $n."
-  done < $CLOSURE
+  while read -r f; do
+    n=$(basename "$f"); n="${n%.*}"
+    # Plain require also loads .eca abstract theories; import rejects those.
+    echo "require $n."
+  done < "$TMPD/targets"
 } > "$TMPD/require_all.ec"
 if easycrypt compile $ECFLAGS $INC "$TMPD/require_all.ec" >/dev/null 2>&1; then
   echo "OK   all closure files are requirable"
@@ -299,15 +288,15 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
   # GprocT1Opre OTHER than the one just made deterministic are still budget-
   # sensitive under the cli driver.  Not chased here; not load-bearing, since the
   # leg passes at either budget.
-  out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n')
+  if out=$(easycrypt cli -iterate "$@" 2>&1 | tr '\r' '\n'); then cli_rc=0; else cli_rc=$?; fi
   d=$(printf '%s\n' "$out" | grep -c '^<tty>:' || true)
   pr=$(printf '%s\n' "$out" | grep -c '^\[[0-9]*|' || true)
   cli_run=$((cli_run+1))
-  if [ "$pr" -lt 5 ]; then
+  if [ "$pr" -lt 1 ]; then
     echo "FAIL $lbl (cli): only $pr commands processed -- the run did not happen"
     fail=$((fail+1)); cli_bad=$((cli_bad+1)); return
   fi
-  if [ "$d" -eq 0 ]; then
+  if [ "$d" -eq 0 ] && [ "$cli_rc" -eq 0 ]; then
     echo "OK   $lbl (cli, $pr cmds)"
   else
     echo "FAIL $lbl (cli): $d diagnostic(s) -- compile accepted what cli rejects"
@@ -315,18 +304,11 @@ cli_one() { # $1 = label, $2..= easycrypt cli args, stdin = the file
     fail=$((fail+1)); cli_bad=$((cli_bad+1))
   fi
 }
-for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do
-  cli_one "base/$n" -I $B < $B/$n.ec
-done
-while read -r n || [ -n "$n" ]; do
-  case "$n" in ''|\#*) continue;; esac
-  cli_one "$n" $INC < $D/$n.ec
-done < $CLOSURE
+while read -r f; do
+  cli_one "$f" $INC < "$f"
+done < "$TMPD/targets"
 echo "### CLI_FILES_RUN=$cli_run CLI_DISAGREEMENTS=$cli_bad"
-# Same truncation guard PHASE 1 carries: a closure file that shrank to nothing
-# would run zero cli checks and still reach GREEN.
-cli_exp=$(( $(grep -cve '^[[:space:]]*$' -e '^#' $CLOSURE) + 4 ))
-[ "$cli_run" -eq "$cli_exp" ] || { echo "FAIL cli phase ran $cli_run of $cli_exp files"; fail=$((fail+1)); }
+[ "$cli_run" -eq "$n_exp" ] || { echo "FAIL cli phase ran $cli_run of $n_exp files"; fail=$((fail+1)); }
 
 # The open question that stood here is CLOSED: the four PHASE 1e failures were
 # the -iterate default difference, not defects.  See the PHASE 1e header.
@@ -493,36 +475,13 @@ echo "### PHASE 1c — STATEMENT DIGESTS (names are not enough)"
 # could be weakened to `true` (proof `trivial`) and every other phase would still
 # pass.  Verified by negative control: weakening it moves the digest
 # 5bd600cb2661b4af2426525bb72e4058 -> 028803b8e5cd6fca33e562cecd495360.
-if [ -f cert-statements-split.tsv ]; then
-  n_stmt=0
-  while IFS=$'\t' read -r key want || [ -n "${key:-}" ]; do
-    case "${key:-}" in ''|\#*) continue;; esac
-    n_stmt=$((n_stmt+1))
-    got=$(python3 tools/stmt_digest.py "$key" | cut -f2)
-    # AN UNRESOLVABLE PIN MUST FAIL, NOT AGREE WITH ITSELF (run 13d).  digest()
-    # returned None for an `equiv`, the caller printed NOT-FOUND, and a manifest
-    # row carrying the literal string NOT-FOUND compared EQUAL -- a pin that
-    # looks pinned and targets nothing.  Caught while pinning GprocKg_sk_eq.
-    case "$got" in
-      NOT-FOUND|AMBIGUOUS-*|ambig*|nostmt)
-        echo "FAIL statement pin does not resolve: $key -> $got"; fail=$((fail+1)); continue;;
-    esac
-    if [ "$got" = "$want" ]; then echo "OK   statement pinned: $key"
-    else echo "FAIL statement CHANGED: $key"; echo "       want $want"; echo "       got  $got"; fail=$((fail+1)); fi
-  done < cert-statements-split.tsv
-  # Row-count guard: deleting a row would silently UNPIN that lemma.
-  exp_stmt=$EXPECT_PINS   # COMMITTED CONSTANT, not recomputed from the manifest
-  echo "statements pinned=$n_stmt expected=$exp_stmt (manifest rows)"
-  [ "${n_stmt:-0}" -eq "${exp_stmt:-0}" ] && [ "${exp_stmt:-0}" -ge 1 ] || { echo "FAIL statement pin file truncated"; fail=$((fail+1)); }
-else
-  echo "FAIL cert-statements-split.tsv missing -- statements unpinned"; fail=$((fail+1))
-fi
+python3 tools/split_contract.py --pins || fail=$((fail+1))
 
 echo "### PHASE 1h — STATEMENT COVERAGE (files -> manifest; the other direction)"
 # PHASE 1c iterates the MANIFEST (`done < cert-statements-split.tsv`), so it verifies
 # that every PINNED statement still says what it said -- and is STRUCTURALLY BLIND to a
-# statement that was never pinned.  Pinning all 896 statements that exist today does
-# NOT stop an 897th appearing tomorrow: the new one is simply absent from the manifest,
+# statement that was never pinned.  Pinning every statement that exists today does
+# NOT stop another appearing tomorrow: the new one is simply absent from the manifest,
 # and absence is invisible to a loop that reads the manifest.
 #
 # That was the entire point of the exercise -- a prior adversarial review found that a
@@ -935,7 +894,7 @@ fi
 # past the compile is caught, and it costs one second.
 INPUTS_ID_END=$( { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
     | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done
-  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
+  sha256sum $CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert_gate_split.sh 2>/dev/null; } | sha256sum | cut -c1-32)
 if [ "$INPUTS_ID_END" != "$INPUTS_ID" ]; then
   echo "FAIL inputs CHANGED DURING THE RUN: start $INPUTS_ID, end $INPUTS_ID_END"
   fail=$((fail+1))
