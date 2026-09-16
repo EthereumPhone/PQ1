@@ -62,6 +62,59 @@ const ICACHE_SR: usize = 0x5003_0404;
 const ICACHE_CR_CACHEINV: u32 = 1 << 1;
 const ICACHE_SR_BUSYF: u32 = 1 << 0;
 
+// ---------------------------------------------------------------------------
+// DWT cycle counter — per-stage timestamps
+// ---------------------------------------------------------------------------
+//
+// Why: the FSBL boot budget was documented as "~3 s" and is really nearer 17 s
+// (4 MHz MSIS reset clock, see `crate::nv3007`'s header). Every component of
+// that figure is an ESTIMATE — the fingerprint hold from nop arithmetic, the
+// verify time from in-tree guesses that were themselves 4x out. Deciding
+// whether to raise the FSBL clock or port the HASH peripheral on estimates is
+// backwards, so the boot measures itself.
+//
+// Register sequence mirrors `secure/src/main.rs`, which is validated on this
+// silicon. `DSCSR.CDS` is deliberately NOT touched: that is only needed so the
+// NON-SECURE world can read DWT on TrustZone parts, and the FSBL is secure
+// throughout — one less register poked in the trust root.
+//
+// At 4 MHz the 32-bit counter wraps after ~1,073 s, far beyond any plausible
+// boot, so no wrap handling is needed. If CYCCNT is unavailable the payload
+// reads 0, which is distinguishable from a real measurement rather than
+// misleading.
+
+const DEMCR: usize = 0xE000_EDFC;
+const DEMCR_TRCENA: u32 = 1 << 24;
+const DWT_CTRL: usize = 0xE000_1000;
+const DWT_CYCCNT: usize = 0xE000_1004;
+const DWT_LAR: usize = 0xE000_1FB0;
+const DWT_LAR_UNLOCK: u32 = 0xC5AC_CE55;
+const DWT_CTRL_CYCCNTENA: u32 = 1 << 0;
+
+/// Parallel timing table inside the same erased page: one quad-word per stage
+/// at `TIMING_BASE + 16 * stage`, holding the `CYCCNT` value at the moment the
+/// stage was reached.
+///
+/// Deliberately a SEPARATE table rather than repurposing the payload word: the
+/// existing records carry stage-specific context (image hashes, the OTP floor,
+/// the tz-1 verdict) and a `!tag` integrity word the reader validates. Both
+/// tables fit trivially — 288 B each in an 8 KB page.
+const TIMING_BASE: usize = MARKER_PAGE + 0x400;
+
+/// Tag for a timing quad-word — `b"MGT"` so a reader can never confuse the two
+/// tables even if it lands on the wrong offset.
+const TIMING_TAG_BASE: u32 = 0x5447_4D00;
+
+/// Start the cycle counter. Call once, before the first [`record`], or that
+/// stage's timestamp is meaningless.
+pub fn init_cycle_counter() {
+    wr(DEMCR, rd(DEMCR) | DEMCR_TRCENA);
+    wr(DWT_LAR, DWT_LAR_UNLOCK);
+    wr(DWT_CYCCNT, 0);
+    wr(DWT_CTRL, rd(DWT_CTRL) | DWT_CTRL_CYCCNTENA);
+    cortex_m::asm::dsb();
+}
+
 #[inline(always)]
 fn rd(addr: usize) -> u32 {
     // SAFETY: fixed 4-byte-aligned MMIO in the secure FLASH/ICACHE blocks;
@@ -74,6 +127,12 @@ fn wr(addr: usize, val: u32) {
     // SAFETY: as `rd`; these registers are owned solely by this module while
     // it runs (interrupts are masked by the caller).
     unsafe { write_volatile(addr as *mut u32, val) }
+}
+
+/// Free-running cycle count, or 0 if the counter never started.
+#[inline(always)]
+fn cycles() -> u32 {
+    rd(DWT_CYCCNT)
 }
 
 /// How far the boot path got. Each variant programs one quad-word at
@@ -127,8 +186,16 @@ pub enum Stage {
 /// already distinguishes "not reached" (still `0xFF`) from "reached" (the tag),
 /// so no success signal is needed here.
 pub fn record(stage: Stage, payload: u32) {
+    // FIRST, before any flash work: this timestamps ARRIVAL at the stage, not
+    // completion of the programming below. Stage-to-stage deltas therefore
+    // still include one flash program plus one ICACHE invalidate each —
+    // ms-scale against a multi-second boot, but it is inside the measured
+    // window, so do not read a delta as pure compute time.
+    let t = cycles();
+
     let tag: u32 = 0x5247_4D00 | (stage as u32); // b"MGR" | stage
     let qw = [tag, payload, !tag, stage as u32];
+    let tqw = [TIMING_TAG_BASE | (stage as u32), t, !t, stage as u32];
 
     cortex_m::interrupt::free(|_| {
         while rd(SECSR) & BSY != 0 {
@@ -146,6 +213,14 @@ pub fn record(stage: Stage, payload: u32) {
             // `stage <= 17` bounds the target to the first 288 bytes of the
             // erased 8 KB page, 16-byte aligned as the controller requires.
             wr(dst + i * 4, *word);
+        }
+
+        // Second quad-word, same PG window: the controller programs per
+        // quad-word, and both targets are 16-byte aligned, so one unlock
+        // covers both tables.
+        let tdst = TIMING_BASE + 16 * (stage as usize);
+        for (i, word) in tqw.iter().enumerate() {
+            wr(tdst + i * 4, *word);
         }
 
         while rd(SECSR) & BSY != 0 {

@@ -113,6 +113,13 @@ fn main() -> ! {
     // Bench diagnostic (`stage-marker`): prove the FSBL executes at all. It
     // halts silently on rejection and has no logging, so this is the only
     // evidence available for the silent-rejection bug.
+    //
+    // Start the cycle counter FIRST so every stage below carries a timestamp.
+    // `MainEntered`'s own value excludes whatever ran before this point
+    // (reset vector, `cortex_m_rt` pre-main init) — small, but it means the
+    // table measures from here, not from reset.
+    #[cfg(feature = "stage-marker")]
+    marker::init_cycle_counter();
     #[cfg(feature = "stage-marker")]
     marker::record(marker::Stage::MainEntered, 0);
 

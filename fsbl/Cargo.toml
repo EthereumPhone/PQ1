@@ -45,6 +45,21 @@ lcd-test = []
 # `mode-production` (invariant #10 forbids an FSBL write path in a shipping
 # image). Writes only the ERASED manifest-B page, which `filter_valid` rejects
 # with BadMagic, so markers can never become a boot candidate.
+#
+# It writes TWO tables into that one 8 KB page, so a reader must dump at least
+# 0x520 bytes from 0x0C00A000 to see both:
+#   +0x000 + 16*n : [ b"MGR"|n, payload, !tag, n ]  the stage record
+#   +0x400 + 16*n : [ b"MGT"|n, CYCCNT,  !cyc, n ]  a DWT timestamp
+# The timestamps exist because every FSBL boot-time figure in this crate was an
+# ESTIMATE (and the pre-2026-09-16 ones were 4x out, having assumed 16 MHz on a
+# part that runs at the 4 MHz MSIS reset clock). Deciding whether to raise the
+# FSBL clock or port the HASH peripheral needs measurement, not arithmetic, so
+# the boot times itself. This also turns on DEMCR.TRCENA + DWT_CYCCNT — another
+# reason the feature is bench-only.
+#
+# Stages do NOT execute in index order, so deltas must be computed
+# chronologically (sort by CYCCNT); differencing consecutive table entries
+# yields negative nonsense.
 stage-marker = []
 
 [dependencies]
