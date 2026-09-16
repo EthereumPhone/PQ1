@@ -175,10 +175,13 @@ the threat model either way.
       `scripts/gate_enforcement.json`.
 - [ ] **Refresh `docs/STATUS.md:269` and `:329`** — both still say "pending
       exact-digest dual review + owner approval" against a two-generations-old
-      SHA. Milestone 0 closed 2026-07-26 at `6173fe59…64ee` and is **reopened
-      at current bytes** (`51be51b7…ebb8`) pending re-ratification — the
-      refresh must record that, not "closed". (Keep "implementation NO-GO":
-      the approval is specification-stage only.)
+      SHA. Milestone 0 closed 2026-07-26 at `6173fe59…64ee`, was reopened at
+      current bytes (`51be51b7…ebb8`) by `fb66a1e5`, and is re-closed there by
+      the owner de-minimis acceptance of 2026-09-16 (freeze receipt,
+      "Amendment 2026-09-16"). No reviewer has run against those bytes, so the
+      refresh must say owner-accepted at specification stage — never
+      "dual-approved", and never a bare "closed". (Keep "implementation
+      NO-GO": the approval is specification-stage only.)
 - [ ] **C4 is now-or-never: widen the FSBL fingerprint's INPUT SCOPE before the
       freeze.** Draft 1.2 §1 freezes the generator's mutability, not what it
       measures; §3 row 4 makes later changes a freeze-review event and invariant
