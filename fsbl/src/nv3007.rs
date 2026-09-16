@@ -85,24 +85,25 @@
 //! `secure/src/hw/rcc.rs`, which *enables HSI16 and switches SYSCLK to it* as
 //! its first step — pointless if reset were already HSI16.
 //!
-//! Consequences, now MEASURED rather than estimated (pq1, 2026-09-16, via the
-//! `stage-marker` DWT timestamps — see `crate::marker`'s header):
+//! **The FSBL now switches to HSI16 (16 MHz) at the top of `main`** — see
+//! [`crate::clock`]. Everything below is MEASURED (pq1, via the `stage-marker`
+//! DWT timestamps; `crate::marker`'s header carries the full budget):
 //!
-//!   * every [`delay_ms`] here runs **8× LONG**, not the 4× first estimated:
-//!     4,000 iterations at 8 cycles/iteration on a 4 MHz part is 8 ms per
-//!     nominal millisecond. Harmless for panel bring-up (reset / SLPOUT waits
-//!     are over-satisfied, never under) but expensive: the 850 ms of vendor
-//!     delays inside [`Lcd::init`] cost **6.8 s**, and `render.rs`'s 3,000 ms
-//!     hold costs **24.0 s**.
-//!   * [`Lcd::init`] therefore measures **8.41 s**, of which only ~1.6 s is
-//!     real SPI work. `MBR = ÷4` of a 4 MHz PCLK2 is a **1 MHz** SPI clock,
-//!     so the 121,552-byte repaint has a 0.97 s shifting floor.
-//!   * a [`spi_wait`] timeout costs ~10 s — which is why a wrong pin map
-//!     presents as a hang rather than as slowness.
+//!   * [`delay_ms`] derives its iteration count from the ACHIEVED clock, so
+//!     delays are now correct rather than 8× long. The 850 ms of NV3007 vendor
+//!     waits inside [`Lcd::init`] cost ~0.85 s as intended, and `render.rs`'s
+//!     3,000 ms hold measures **3.001 s** — a 0.03% calibration error.
+//!   * [`Lcd::init`] measures **1.188 s** (was 8.41 s), of which ~0.34 s is
+//!     real SPI work. `MBR = ÷4` of a 16 MHz PCLK2 is a **4 MHz** SPI clock,
+//!     so the 121,552-byte repaint has a ~0.24 s shifting floor.
+//!   * a [`spi_wait`] timeout costs ~2.5 s at 16 MHz (was ~10 s) — still long
+//!     enough that a wrong pin map presents as a hang rather than as slowness.
 //!
-//! Across the whole 39.4 s boot, 30.8 s (78%) is `delay_ms` nop-spinning and
-//! only 8.6 s is computation. The cheap win is the calibration constant, not a
-//! faster clock.
+//! Whole boot: **5.931 s**, from 39.367 s on the 4 MHz reset clock with the
+//! 8×-long loop. Compute terms scaled 4.0× (the clock); delay terms 8.0×
+//! (removing the calibration error). The hold is now the largest single term
+//! at 51%, so further speedup is a `FINGERPRINT_HOLD_MS` decision, not a
+//! code one.
 //!
 //! 1 MHz keeps a very large margin over the NV3007's 10 ns setup/hold spec,
 //! so the prescaler stays as-is; the panel is painted once at boot.
@@ -247,30 +248,42 @@ fn modify(addr: usize, f: impl FnOnce(u32) -> u32) {
     wr(addr, f(rd(addr)));
 }
 
-/// Blocking nop-counted delay — the SAME calibration the OLED path used, and
-/// deliberately NOT the secure driver's `cortex_m::asm::delay(160_000 * ms)`,
+/// Loop iterations per millisecond, derived from the clock [`crate::clock`]
+/// actually achieved. **Never hardcode this**: a constant that disagrees with
+/// the real clock is how the previous version came to run every delay 8× long
+/// (a 39.4 s boot), and calibrating for a clock the part did NOT reach would
+/// run them 4× SHORT — the one direction that violates the NV3007's vendor
+/// minimums.
+///
+/// The loop costs a MEASURED 8.00 cycles/iteration (pq1, 2026-09-16: a 3,000 ms
+/// nominal hold took exactly 24.003 s at 4 MHz, which pins it). So one
+/// millisecond is `hz / 8000` iterations — 500 at 4 MHz, 2,000 at 16 MHz.
+const CYCLES_PER_ITER: u32 = 8;
+
+#[inline(always)]
+fn iters_per_ms() -> u32 {
+    crate::clock::achieved_hz() / (1_000 * CYCLES_PER_ITER)
+}
+
+/// Blocking nop-counted delay, calibrated at run time from the achieved clock.
+/// Deliberately NOT the secure driver's `cortex_m::asm::delay(160_000 * ms)`,
 /// which assumes the 160 MHz PLL the FSBL never brings up.
 ///
-/// **The `4_000` is wrong by 8×, MEASURED.** It assumes 4 cycles/iteration at
-/// 16 MHz; the loop actually costs 8 cycles/iteration and the part runs at
-/// 4 MHz, so `delay_ms(1)` delivers **8 ms** and `delay_ms(150)` is 1.2 s
-/// (pq1, 2026-09-16 — the 3,000 ms hold measured 24.0 s, which pins
-/// cycles/iteration at 8.00).
+/// History worth keeping, because both errors were silent: the original
+/// hardcoded `4_000` assumed 4 cycles/iteration at 16 MHz. The part actually
+/// ran at 4 MHz and the loop actually costs 8 cycles/iteration, so every delay
+/// was **8×** nominal — the NV3007 reset/SLPOUT/DISPON waits cost 6.8 s and the
+/// fingerprint hold 24.0 s, together 78% of a 39.4 s boot. Deriving the figure
+/// instead of asserting it makes both the clock switch and the calibration
+/// self-consistent, and keeps a failed switch safe rather than dangerous.
 ///
-/// The error is in the SAFE direction for panel bring-up — every vendor
-/// minimum is over-satisfied, never under — which is why it is left alone here
-/// rather than retuned in passing: correcting it to `500` would bring the
-/// NV3007's reset / SLPOUT / DISPON waits down to exactly nominal and change
-/// panel timing that was validated on iota2, and **this bench has no panel
-/// attached to verify against**. It is pinned by
-/// `fsbl-tests/tests/source_invariants.rs`.
-///
-/// It is also the single biggest boot-time lever: 30.8 s of the 39.4 s boot is
-/// this loop spinning. Fixing the constant is worth ~27 s — far more than
-/// raising the clock, which would only touch the 8.6 s of real computation.
+/// VALIDATED on silicon: with the switch to HSI16 in place, a 3,000 ms nominal
+/// hold measures 3.001 s — 0.03% error — which confirms 8.00 cycles/iteration
+/// still holds at 16 MHz even though the loop bound is now a runtime value.
 pub fn delay_ms(ms: u32) {
+    let iters = iters_per_ms();
     for _ in 0..ms {
-        for _ in 0..4_000 {
+        for _ in 0..iters {
             cortex_m::asm::nop();
         }
     }

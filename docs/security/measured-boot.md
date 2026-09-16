@@ -203,35 +203,43 @@ signal would then be permanently tripped and ignored). See
   anyway. iota2 resets the panel with `SWRESET` (its RES is strapped to 3V3);
   pq1 drives `LCM_RST` on PB1 and gets a real reset pulse.
 
-**UPDATE 2026-09-16 — the boot is MEASURED at 39.4 s, not "~3 s".** The FSBL
-writes no RCC clock configuration, so it runs at the 4 MHz MSIS reset clock
-(`RCC_CFGR1.SW` = 00, `RCC_CSR.MSISSRANGE` = 4, whose vendor-SVD enumeration
-reads "range 4 around 4 MHz (reset value)"). The `delay_ms` nop loop assumes
-4 cycles/iteration at 16 MHz but costs 8 cycles/iteration at 4 MHz, so every
-delay is **8×** nominal.
+**UPDATE 2026-09-16 — the boot is MEASURED, and is now 5.9 s.** Timed on pq1
+with DWT `CYCCNT` per boot stage (`fsbl/src/marker.rs`, `stage-marker`),
+`MainEntered` → `Branching`:
 
-Timed on pq1 with DWT `CYCCNT` per boot stage (`fsbl/src/marker.rs`,
-`stage-marker`), `MainEntered` → `Branching`:
+| | now (HSI16) | share | before |
+|---|---|---|---|
+| fingerprint hold (`delay_ms(3000)`) | **3.001 s** | 51% | 24.003 s |
+| `Lcd::init()` | 1.188 s | 20% | 8.405 s |
+| SHA-256, secure image (385,568 B) | 1.167 s | 20% | 4.667 s |
+| `filter_valid` (CRC/digest/fpr/**C10 signature**/rollback) | 0.375 s | 6% | 1.498 s |
+| 16×4 glyph blit | 0.174 s | 3% | 0.697 s |
+| SHA-256, NS image (7,488 B) | 0.023 s | 0% | 0.092 s |
+| **total** | **5.931 s** | | **39.367 s** |
 
-| | measured | share |
-|---|---|---|
-| fingerprint hold (`delay_ms(3000)`) | **24.00 s** | 61% |
-| `Lcd::init()` (~6.8 s of it also `delay_ms`) | 8.41 s | 21% |
-| SHA-256, secure image (385,568 B) | 4.67 s | 12% |
-| `filter_valid` (CRC/digest/fpr/**C10 signature**/rollback) | 1.50 s | 4% |
-| 16×4 glyph blit | 0.70 s | 2% |
-| SHA-256, NS image (7,488 B) | 0.09 s | 0% |
-| **total** | **39.37 s** | |
+Two faults produced the 39.4 s figure, and both are fixed. The FSBL wrote no
+RCC configuration, so it ran at the 4 MHz MSIS reset clock (`RCC_CFGR1.SW` =
+00, `RCC_CSR.MSISSRANGE` = 4 — "range 4 around 4 MHz (reset value)" in the
+vendor SVD); and its `delay_ms` nop loop assumed 4 cycles/iteration at 16 MHz
+while actually costing 8 at 4 MHz, making every delay **8× nominal** — 30.8 s
+of that boot (78%) was nop-spinning. `fsbl/src/clock.rs` now switches to HSI16
+(bounded, fail-safe, no VOS or flash-latency change), and `delay_ms` derives
+its calibration from the clock actually achieved. The improvement decomposes
+exactly: compute terms 4.0× (the clock), delay terms 8.0× (the calibration).
 
-So **30.8 s (78%) is `delay_ms` nop-spinning and only 8.6 s is computation.**
-Two superseded estimates are recorded here deliberately: this page first said
-"~3 s", then "~12 s hold / ~800 ms per image" after a 4× rescale — the real
-hold is 24 s and real hashing 4.67 s. Do not rescale a figure on this page;
-measure it.
+The hold is honoured to 0.03% (3.001 s against 3,000 ms nominal), and the
+NV3007's reset / SLPOUT / DISPON waits are now the vendor nominals rather than
+8× over.
 
-The hold constant is deliberately unchanged — it is the user-visible boot-time
-trust window, so retuning it is an owner decision. Note `CLAUDE.md`'s Lifecycle
-section still says "~3 s".
+**Observation window: ~3 s**, and it is now the largest single term at 51% of
+the boot. The constant is deliberately unchanged — it is the user-visible
+boot-time trust window, so retuning it is an owner decision. Note `CLAUDE.md`'s
+Lifecycle section says "~3 s", which is now accurate by coincidence rather than
+by having been checked.
+
+Three superseded estimates are recorded here deliberately — "~3 s", then
+"~12 s hold / ~800 ms per image" after a 4× rescale, then the measured 39.4 s.
+Do not rescale a figure on this page; measure it.
 
 **pq1 backlight caveat.** On pq1 the panel may render correctly and still look
 dark: `LCM_EN` (PB15) only enables an AW99703 LED driver whose brightness is

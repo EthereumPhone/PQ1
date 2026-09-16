@@ -38,11 +38,11 @@
 //! ## Non-goals for this first cut
 //!
 //! * **HASH peripheral acceleration.** We use `sha2::Sha256` in
-//!   software. MEASURED on pq1 (2026-09-16): **4.67 s** for the 385,568 B
-//!   secure image and 0.09 s for the 7,488 B NS image — i.e. ~6.2 s per
-//!   512 KB, not the "~200 ms" (16 MHz assumption) or "~800 ms" (4x
-//!   scaling) this file claimed before. It is the largest COMPUTE term in
-//!   the boot, and the main reason to price the HASH port.
+//!   software. MEASURED on pq1 at HSI16: **1.167 s** for the 385,568 B
+//!   secure image and 0.023 s for the 7,488 B NS image (4.67 s / 0.09 s
+//!   before the clock switch). Porting the HASH peripheral would save
+//!   ~1.5 s of a 5.931 s boot for 1-2 KB in a WRP-frozen range — no longer
+//!   an obviously good trade. See `crate::marker` for the full budget.
 //! * **LCD error screen.** On catastrophic failure FSBL halts silently.
 //! * **Reviewed probation/rollback.** The legacy `TRIED` logic is not a
 //!   production safety net. Draft 1.1 proposes typed
@@ -79,6 +79,7 @@ use fw_manifest::{ManifestRef, TRY_ONCE_COMMITTED, TRY_ONCE_TRIED};
 mod board;
 mod boot_state;
 mod branch;
+mod clock;
 mod fi;
 mod glyphs;
 mod manifest;
@@ -110,18 +111,32 @@ fn main() -> ! {
     #[cfg(feature = "lcd-test")]
     nv3007::lcd_test_loop();
 
+    // Raise SYSCLK from the 4 MHz MSIS reset clock to HSI16 before anything
+    // else. This is the first thing in the boot because it must happen before
+    // any cycle-counted delay is calibrated and before the DWT timestamps
+    // below, so the whole boot is measured in ONE clock domain.
+    //
+    // Bounded and fail-safe by construction: on failure the part stays on
+    // MSIS, and `clock::achieved_hz()` reads that back from `CFGR1.SWS` so
+    // `nv3007::delay_ms` scales to the real clock — a clock that does not come
+    // up costs boot time rather than under-satisfying an NV3007 vendor
+    // minimum. See `clock` for why 16 MHz needs no VOS or flash-latency work,
+    // and why this module holds no state.
+    clock::init();
+
     // Bench diagnostic (`stage-marker`): prove the FSBL executes at all. It
     // halts silently on rejection and has no logging, so this is the only
     // evidence available for the silent-rejection bug.
     //
-    // Start the cycle counter FIRST so every stage below carries a timestamp.
-    // `MainEntered`'s own value excludes whatever ran before this point
-    // (reset vector, `cortex_m_rt` pre-main init) — small, but it means the
+    // Start the cycle counter after the clock switch so every stage below
+    // carries a timestamp in the same domain. `MainEntered`'s own value
+    // excludes whatever ran before this point (reset vector, `cortex_m_rt`
+    // pre-main init, and the clock switch itself) — small, but it means the
     // table measures from here, not from reset.
     #[cfg(feature = "stage-marker")]
     marker::init_cycle_counter();
     #[cfg(feature = "stage-marker")]
-    marker::record(marker::Stage::MainEntered, 0);
+    marker::record(marker::Stage::MainEntered, clock::achieved_hz());
 
     // Borrow both manifest pages directly from memory-mapped flash — NO RAM
     // copy. Copying both into stack-local `[u8; MANIFEST_SIZE]` (8 KB each)
@@ -230,8 +245,9 @@ fn main() -> ! {
 
 /// Run the full manifest verify chain. Returns Some iff all steps
 /// pass. The `fpr` and `signature` checks dominate runtime: the whole chain
-/// (CRC + digest + fpr + C10 signature + rollback) is **1.50 s** MEASURED on
-/// pq1 (2026-09-16, `stage-marker` DWT timestamps).
+/// (CRC + digest + fpr + C10 signature + rollback) is **0.375 s** MEASURED on
+/// pq1 at HSI16 (`stage-marker` DWT timestamps); it was 1.50 s on the 4 MHz
+/// reset clock.
 ///
 /// This comment previously said "a few ms each", then "~10 ms each" after I
 /// rescaled it for the 4 MHz clock without questioning whether the original

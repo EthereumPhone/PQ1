@@ -71,13 +71,13 @@ stage-marker = []
 # Wiring up the HASH peripheral here would require porting RCC init,
 # the HASH driver, and the `pqsigner_sha256_*` extern fns from the
 # secure crate. Software SHA-256 at 16 MHz takes about 1 s for a full
-# FSBL boot — MEASURED 2026-09-16 on pq1, superseding two wrong estimates
-# ("~1 s at 16 MHz", then "~4 s"): software SHA-256 costs 4.67 s for the
-# 385,568 B secure image plus 0.09 s for the NS image, and the C10 manifest
-# verify chain a further 1.50 s. So ~6.3 s of the 39.4 s boot is hashing —
-# the largest COMPUTE term, though only 16% of wall-clock because 78% of the
-# boot is `delay_ms` nop-spinning. The HW-SHA follow-up is worth ~6 s, not
-# the ~1 s originally implied.
+# FSBL boot — MEASURED on pq1, superseding two wrong estimates ("~1 s at
+# 16 MHz", then "~4 s"). At HSI16, software SHA-256 costs 1.167 s for the
+# 385,568 B secure image plus 0.023 s for the NS image, and the C10 manifest
+# verify chain 0.375 s — about 1.5 s of a 5.931 s boot. (On the 4 MHz reset
+# clock those were 4.67 / 0.09 / 1.50 s of a 39.4 s boot.) So the HW-SHA
+# follow-up is now worth only ~1.5 s, against 1-2 KB in a WRP-frozen range;
+# the largest remaining term is the 3.0 s fingerprint hold, a constant.
 sphincs-c10 = { workspace = true }
 
 # Manifest / boot-state layout. no_std, no alloc.

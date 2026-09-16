@@ -28,6 +28,22 @@
 use std::fs;
 use std::path::PathBuf;
 
+/// Source text with `//`-comment lines removed, for pins that must match CODE
+/// rather than prose.
+///
+/// This exists because the mistake it prevents happened three times in one
+/// afternoon: a `!contains(...)` pin fires on the very doc comment that
+/// explains why the thing is forbidden. A text pin cannot tell a prohibition
+/// from the thing prohibited. The wrong fix is to weaken the pattern until it
+/// stops matching the comment — that leaves a pin which passes for the wrong
+/// reason. Strip the comments instead, and keep the pattern exact.
+fn code_only(src: &str) -> String {
+    src.lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn read_workspace_file(rel: &str) -> String {
     // Walk up to the workspace root, same shape as footprint.rs.
     let mut p = std::env::current_dir().expect("cwd");
@@ -257,20 +273,97 @@ fn negative_nv3007_keeps_hardware_validated_constants() {
     // delay_ms MUST use the FSBL's nop calibration, NOT the secure driver's
     // 160 MHz `cortex_m::asm::delay` — the FSBL brings up no PLL, so the
     // secure form would run orders of magnitude long and read as a boot hang.
-    //
-    // RESOLVED (2026-09-16): the 4_000/ms constant is calibrated for 16 MHz,
-    // but the FSBL runs at 4 MHz. Established from the vendor SVD's reset
-    // values — RCC_CFGR1.SW = 00 (MSIS), RCC_CSR.MSISSRANGE = 4, and the SVD's
-    // own enumeration "range 4 around 4 MHz (reset value)" — with ICSCR1's
-    // MSISRANGE independently also 4, so MSIRGSEL does not change it. The
-    // constant is therefore ~4× long, which is the SAFE direction for panel
-    // init, and is pinned here rather than retuned so validated iota2 timing
-    // does not move. The user-visible consequence is that render.rs's 3,000 ms
-    // fingerprint hold is really ~12 s — an owner decision, not a cleanup.
+    // The hazard is the SECURE driver's form, `cortex_m::asm::delay(160_000 *
+    // ms)`, which assumes the 160 MHz PLL the FSBL never brings up. Do NOT
+    // broaden this to forbid `cortex_m::asm::delay` outright: `spi_end` uses
+    // `cortex_m::asm::delay(16)` as the ES0499 mitigation (let the last SCK
+    // pulse finish before dropping SPE), which is legitimate and
+    // clock-INVARIANT — SCK derives from the core clock through the same
+    // `MBR = ÷4`, so 16 core cycles is ~4 SCK periods at 4 MHz or 16 MHz
+    // alike. A blanket negative here failed on that line the first time.
+    // Match CODE, not prose — see `code_only`. This assertion fired on
+    // `delay_ms`'s own doc comment, which quotes the forbidden form verbatim
+    // in order to explain why it is forbidden.
+    let src_code = code_only(&src);
     assert!(
-        src.contains("for _ in 0..4_000 {"),
-        "nv3007::delay_ms must use the FSBL's nop calibration (4_000/ms), not the \
-         secure driver's 160 MHz cortex_m::asm::delay"
+        !src_code.contains("asm::delay(160_000"),
+        "nv3007::delay_ms must not use the secure driver's 160 MHz \
+         `cortex_m::asm::delay(160_000 * ms)` form — the FSBL brings up no PLL"
+    );
+    assert!(
+        src.contains("cortex_m::asm::nop();"),
+        "nv3007::delay_ms must stay a nop-counted loop"
+    );
+
+    // The calibration must be DERIVED from the clock actually achieved, never
+    // a hardcoded iteration count. This pin replaced a literal `4_000` pin on
+    // 2026-09-16, because that literal was itself the bug: it assumed 4
+    // cycles/iteration at 16 MHz, while the part ran at 4 MHz with a measured
+    // 8.00 cycles/iteration, so every delay was 8x nominal — 78% of a 39.4 s
+    // boot was this loop spinning.
+    //
+    // Deriving it is also a SAFETY property, not just tidiness. `clock::init`
+    // can fail and fall back to MSIS; a constant calibrated for 16 MHz would
+    // then run every NV3007 reset / SLPOUT / DISPON wait 4x SHORT, which is
+    // the one direction that violates a vendor minimum. Pinning the derivation
+    // keeps a failed clock switch merely slow instead of unsafe.
+    assert!(
+        src.contains("crate::clock::achieved_hz() / (1_000 * CYCLES_PER_ITER)"),
+        "nv3007::delay_ms must derive its iteration count from the ACHIEVED clock \
+         (`clock::achieved_hz()`), not from a hardcoded constant — a constant that \
+         disagrees with the real clock has already produced both an 8x-long boot and \
+         (on a failed clock switch) would produce 4x-short panel delays"
+    );
+    assert!(
+        src.contains("const CYCLES_PER_ITER: u32 = 8;"),
+        "the measured loop cost (8.00 cycles/iteration on pq1, pinned by a 3,000 ms \
+         nominal hold taking 24.003 s at 4 MHz) must stay explicit — it is the one \
+         empirical input to the calibration"
+    );
+
+    // And the clock module itself must stay BOUNDED. The FSBL becomes
+    // permanently unpatchable once WRP + RDP-2 land (invariant #10), so an
+    // unbounded spin on a clock-ready flag is a potential brick. The secure
+    // world's `rcc.rs` spins unbounded, which is fine there and NOT here.
+    // `clk_code` for the negative pins, raw `clk` for the positive ones: the
+    // module header documents the FLASH_ACR / VOS / `static mut` constraints in
+    // prose, so matching those words against the whole file fires on the
+    // explanation rather than on code. Both of the negatives below did exactly
+    // that before this was applied.
+    let clk = read_workspace_file("fsbl/src/clock.rs");
+    let clk_code = code_only(&clk);
+    assert!(
+        clk.contains("const SPIN_LIMIT: u32") && clk.contains("if spins > SPIN_LIMIT"),
+        "fsbl::clock must bound every readiness spin and give up on timeout — an \
+         unbounded wait here can brick a die whose FSBL is frozen by WRP + RDP-2. \
+         (secure/src/hw/rcc.rs spins unbounded, which is fine there and NOT here.)"
+    );
+    assert!(
+        !clk_code.contains("FLASH_ACR") && !clk_code.contains("VOS"),
+        "fsbl::clock must NOT touch flash latency or voltage scaling: 16 MHz is safe \
+         at reset VOS and reset latency (secure/src/hw/rcc.rs switches to HSI16 before \
+         configuring either), and every extra register poked in the trust root is risk"
+    );
+
+    // No mutable state in this module, for an image-layout reason that cost a
+    // failed geometry gate: the first version latched the achieved frequency in
+    // a `static mut` initialised to MSIS_HZ. A non-zero initialiser puts it in
+    // `.data`, which becomes a SECOND LOAD segment, and
+    // `scripts/check_fsbl_geometry.py` fails on more than one — the physical
+    // span and the derived WRP page range are only trustworthy for a
+    // single-segment image (invariant #10 leans on that derivation). `.bss`
+    // costs a segment too. Reading `CFGR1.SWS` costs none, and is also the more
+    // honest answer: it reports the clock in use rather than a remembered one.
+    assert!(
+        !clk_code.contains("static mut"),
+        "fsbl::clock must hold NO mutable state — a `static mut` with a non-zero \
+         initialiser lands in .data and creates a second LOAD segment, which fails \
+         the FSBL geometry gate. Derive the clock from CFGR1.SWS instead."
+    );
+    assert!(
+        clk.contains("pub fn achieved_hz() -> u32") && clk.contains("SWS_MASK == SWS_HSI16"),
+        "fsbl::clock::achieved_hz must read the live CFGR1.SWS, so a failed clock \
+         switch yields LONGER nop delays (safe) rather than 4x-short panel waits"
     );
 }
 

@@ -817,12 +817,16 @@ exactly as open as before. Nothing here bears on the ceremony in §3.
    last before the reset, and discriminate on a marker only the new build can
    write.
 
-A third, from the same day: the boot is MEASURED at **39.4 s** (DWT per-stage
-timestamps; 24.0 s fingerprint hold + 8.4 s `Lcd::init()` + 4.8 s image hashing
-+ 1.5 s C10 manifest verify + 0.7 s glyph blit), so a marker page read too
-early shows late stages "not reached" for purely timing reasons. The estimates
-that preceded this — "~3 s", then "~17 s" — were both wrong; 78% of the boot
-is `delay_ms` nop-spinning, because that loop is calibrated 8× long.
+A third, from the same day: **size the settle to the measured boot, and the
+boot has since changed.** It was measured at 39.4 s (78% of it `delay_ms`
+nop-spinning on the 4 MHz reset clock with an 8×-long loop), and after
+`fsbl/src/clock.rs` switched the FSBL to HSI16 and `delay_ms` was made to
+derive its calibration from the achieved clock, it measures **5.931 s**
+(3.0 s hold + 1.19 s `Lcd::init()` + 1.19 s image hashing + 0.38 s C10
+manifest verify + 0.17 s glyph blit). A marker page read too early shows late
+stages "not reached" for purely timing reasons, so re-check the current figure
+rather than reusing a remembered one — the estimates that preceded these were
+"~3 s" and "~17 s", both wrong.
 
 ---
 

@@ -70,24 +70,30 @@ const ICACHE_SR_BUSYF: u32 = 1 << 0;
 // and is MEASURED at 39.4 s. Deciding whether to raise the FSBL clock or port
 // the HASH peripheral on estimates is backwards, so the boot measures itself.
 //
-// First measurement (pq1, 2026-09-16, MainEntered -> Branching = 39.37 s):
+// CURRENT (pq1, HSI16 16 MHz, MainEntered -> Branching = 5.931 s):
 //
-//   24.00 s  61%  the fingerprint hold      (delay_ms(3000), PURE WAITING)
-//    8.41 s  21%  Lcd::init()               (~6.8 s of it also delay_ms)
-//    4.67 s  12%  SHA-256 over the secure image (385,568 B)
-//    1.50 s   4%  filter_valid (CRC/digest/fpr/C10 SIGNATURE/rollback)
-//    0.70 s   2%  the 16x4 glyph blit
-//    0.09 s   0%  SHA-256 over the NS image (7,488 B)
+//    3.001 s  51%  the fingerprint hold   (delay_ms(3000) — now EXACTLY nominal)
+//    1.188 s  20%  Lcd::init()            (~0.85 s vendor delays + ~0.34 s SPI)
+//    1.167 s  20%  SHA-256 over the secure image (385,568 B)
+//    0.375 s   6%  filter_valid (CRC/digest/fpr/C10 SIGNATURE/rollback)
+//    0.174 s   3%  the 16x4 glyph blit
+//    0.023 s   0%  SHA-256 over the NS image (7,488 B)
 //
-// Headline: 30.8 s (78%) is `delay_ms` nop-spinning, only 8.6 s is computation.
-// `delay_ms` runs 8x long — 4,000 iterations at 8 cycles/iteration on a 4 MHz
-// part is 8 ms per nominal millisecond, where the constant assumed 4 cycles at
-// 16 MHz. So the cheap win is the calibration constant, not the clock.
+// PRIOR, on the 4 MHz MSIS reset clock with the 8x-long delay loop = 39.367 s:
+// hold 24.003, Lcd::init 8.405, SHA 4.667, filter_valid 1.498, blit 0.697,
+// NS SHA 0.092 — i.e. 30.8 s (78%) was nop-spinning and only 8.6 s was work.
 //
-// Two independent checks that the 4 MHz clock is real rather than assumed: the
-// hold resolves to 8.00 cycles per nop-loop iteration, and software SHA-256 to
-// ~3,099 cycles/block. At 16 MHz those would be 32 cycles/iteration (impossible
-// for a loop containing one nop) and ~12,400 cycles/block (implausibly slow).
+// The 6.6x improvement decomposes exactly, which is why both changes were made
+// together: every COMPUTE term scaled 4.0x (the clock), and every DELAY term
+// 8.0x (removing the calibration error). `delay_ms` now derives its iteration
+// count from `clock::achieved_hz()`, and the measured hold of 3.001 s against
+// a 3,000 ms nominal validates that to 0.03% — which also confirms the loop
+// still costs 8.00 cycles/iteration with a runtime bound at 16 MHz.
+//
+// `MainEntered`'s payload carries `achieved_hz()`, so a dump states its own
+// cycles-to-seconds conversion. That is the only thing distinguishing "HSI16
+// took" from "the bounded switch quietly fell back to MSIS", since the
+// fail-safe design makes a fallback look like success.
 //
 // Register sequence mirrors `secure/src/main.rs`, which is validated on this
 // silicon. `DSCSR.CDS` is deliberately NOT touched: that is only needed so the
@@ -156,7 +162,10 @@ fn cycles() -> u32 {
 #[derive(Clone, Copy)]
 #[repr(u32)]
 pub enum Stage {
-    /// `main()` entered — proves the FSBL executes at all.
+    /// `main()` entered — proves the FSBL executes at all. Payload = the
+    /// clock frequency in Hz that `clock::init_and_latch` actually reached
+    /// (4,000,000 = MSIS reset clock, 16,000,000 = HSI16), so a dump states
+    /// its own cycles-to-seconds conversion instead of the reader assuming it.
     MainEntered = 0,
     /// Manifest pages borrowed and the OTP rollback floor read.
     FloorRead = 1,

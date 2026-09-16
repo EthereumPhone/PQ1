@@ -4,20 +4,22 @@
 //! bytes FSBL re-hashes from flash at boot. We stream-hash directly
 //! from the memory-mapped flash — no RAM copy — using the SHA-256
 //! software path (`sha2::Sha256`) since FSBL's HASH-peripheral setup
-//! is optional. In pure software this is **4.67 s** for the secure half
-//! (385,568 B) and 0.09 s for the NS half (7,488 B) — MEASURED on pq1,
-//! 2026-09-16, via the `stage-marker` DWT timestamps.
+//! is optional. In pure software this is **1.167 s** for the secure half
+//! (385,568 B) and 0.023 s for the NS half (7,488 B) — MEASURED on pq1 at
+//! HSI16 via the `stage-marker` DWT timestamps. It was 4.67 s / 0.09 s on the
+//! 4 MHz MSIS reset clock, i.e. exactly 4.0× slower.
 //!
-//! That is ~3,099 cycles per SHA-256 block at the FSBL's 4 MHz MSIS reset
-//! clock. Two superseded estimates lived here: "~200 ms" (which assumed
-//! 16 MHz) and then "~800 ms" (a 4x scaling of it). The real figure is ~6x
-//! the second, so image hashing is the largest COMPUTE term in the boot —
-//! though still only 12% of wall-clock, because 78% of the boot is `delay_ms`
-//! nop-spinning. See `crate::marker`'s header for the full budget.
+//! That is ~3,099 cycles per SHA-256 block either way. Two superseded
+//! estimates lived here: "~200 ms" (which assumed 16 MHz on a part then
+//! running at 4 MHz) and "~800 ms" (a 4× scaling of it). See
+//! `crate::marker`'s header for the full boot budget.
 //!
-//! This is what makes the HASH-peripheral port worth pricing: it would cut
-//! ~4.76 s of hashing here, plus most of the 1.50 s `filter_valid` cost
-//! (a C10 verify is almost entirely hashing).
+//! **This is also why the HASH-peripheral port is no longer worth its cost.**
+//! It would cut ~1.19 s of hashing here plus most of the 0.375 s
+//! `filter_valid` (a C10 verify is almost entirely hashing) — ~1.5 s of a
+//! 5.931 s boot, for 1–2 KB of driver in a range that WRP + RDP-2 freeze
+//! permanently. The largest remaining term is the 3.0 s fingerprint hold,
+//! which is a constant, not code.
 
 use fw_manifest::ManifestRef;
 use sha2::{Digest, Sha256};
