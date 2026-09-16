@@ -314,7 +314,7 @@ closure files). A container recipe is in `../docker/`.
 # $PATH, so a bare `bash cert_gate_split.sh` from a host shell silently uses whatever
 # EasyCrypt is installed there and produces a PLAUSIBLE BUT WRONG receipt.
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
-  cd /work && bash cert_gate_split.sh'"   # 42 targets, 1167 pins, 1677 census rows (2026-09-14)
+  cd /work && bash cert_gate_split.sh'"   # 42 targets, 1166 pins, 1677 census rows (2026-09-15)
 sg docker -c "docker exec ec-grind bash -lc 'eval \$(opam env); export LC_ALL=C; \
   cd /work && bash cert_gate_fork.sh'"    # 19 targets,  9 pins, 1089 census rows
 ```
@@ -3942,3 +3942,57 @@ OK   inputs unchanged across the run
 ```
 
 Full log: `scratch/gate_20260915_run6.log`.
+
+### UPDATE 2026-09-15 (fourth) — a duplicate pin row, and the fail-open behind it
+
+**No closure `.ec` file moved.** Every earlier receipt's `pins 1167/1167` counted one pin twice.
+
+`op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f` sat on **two identical rows** of
+`cert-statements-split.tsv` from `92ecb63` (2026-08-20), so `EXPECT_PINS` was one pin high for 26 days. The
+generator that wrote those rows was not committed. Neither checker produces the duplicate: `stmt_coverage.py`
+enumerates no `op` statements, and `digest_op` skips `<-` clone bindings.
+
+**The duplicate itself was harmless; what it exposed was not.** PHASE 1c counted *rows*. And 84 of the 1166
+unique keys are `op:` definition pins that PHASE 1h never enumerates. So deleting one of those rows and
+duplicating any other left the count intact, resolved every row, and passed both phases. This was
+**demonstrated on the pre-fix lines**, not argued. With `op:BinaryTrees.ec::height` deleted and another row
+duplicated:
+* PHASE 1c printed `statements pinned=1167 expected=1167` with 0 failures;
+* `stmt_coverage.py` printed `OK   coverage: all 1082 top-level statements … are pinned`;
+* so a definition was unpinned under a GREEN 1c **and** a GREEN 1h.
+
+This is the same class as PHASE 3's control inventory, which already counts unique names for this reason.
+
+**Fix.**
+* The duplicate row is replaced by a dated comment, and `EXPECT_PINS` goes 1167 → 1166.
+* A `pin-key-uniqueness` block before the PHASE 1c loop fails on any key that appears on more than one
+  row, and requires the unique key count to equal `EXPECT_PINS`.
+* The block was checked in isolation against three manifests. The same kind of check backs PHASE 4's and
+  `EXPECT_WATCHED`'s decision lines; it is not wired into the gate.
+
+| manifest | result |
+|---|---|
+| live, fixed | `OK   statement pin keys unique: 1166/1166` |
+| pre-fix, doctored | FAIL naming both duplicated keys; FAIL `1165 unique, committed expectation is 1166` |
+| pre-fix, as committed | FAIL naming `op:…OpenPRE_From_TCR_DSPR_THF.eca::f` |
+
+Predicted before computing (`scratch/PREDICTION-pin-dup-2026-09-15.md`).
+
+```
+### RESULT: GREEN                       (0 FAIL lines, __GATE_EXIT=0)
+### TOOLCHAIN GIT hash: r2026.02   PROVERS 0a5b3d54dcce300e 25 configurations
+OK   INPUTS_SHA256 matches the committed identity  (d8bf474f...)
+OK   statement pin keys unique: 1166/1166
+statements pinned=1166 expected=1166 (manifest rows)
+closure 42/42 | cli 46 files, 0 disagreements
+coverage 1082/1082 across 53 CONE files | added=0 removed=0
+  ledger=241  parameters=221  bindings=366  meaning=406  definitions=443  total=1677
+controls executed (unique)=49 expected=49 | margin 4/4 and 3/3
+OK   taint containment: closure = 2 lemmas, none of the 9 headline results is in it
+OK   scope-probe linkage: 6 headline files <-> 6 registered scope probes (exact bijection)
+OK   taint controls: pass=15 unique=15 fail=0 expected=15
+OK   taint count controls: pass=4 fail=0 expected=4
+OK   inputs unchanged across the run
+```
+
+Full log: `scratch/gate_20260915_run7.log`.

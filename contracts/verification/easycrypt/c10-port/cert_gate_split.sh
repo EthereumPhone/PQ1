@@ -37,7 +37,10 @@ trap 'rm -rf "$TMPD"' EXIT
 # cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
 # "statement pin file truncated" -- which is exactly what it did on the first
 # run of this promotion.
-EXPECT_PINS=1167
+EXPECT_PINS=1166
+# 1167 -> 1166 on 2026-09-15: a DUPLICATE row removed.  op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f
+# sat on two identical rows from 92ecb63 (2026-08-20), so this count was one pin HIGH for 26 days.
+# PHASE 1c now also requires the UNIQUE key count to equal it.
 # 1166 -> 1167 on 2026-09-14: GprocTCollNamed.ec (one lemma).
 # 1109 -> 1166 on 2026-09-14: the 57 statements of the promoted T_COLL_RES_ENUM chain.
 # Committed count of top-level statements across the certified roots.  Guards
@@ -544,6 +547,27 @@ echo "### PHASE 1c — STATEMENT DIGESTS (names are not enough)"
 # pass.  Verified by negative control: weakening it moves the digest
 # 5bd600cb2661b4af2426525bb72e4058 -> 028803b8e5cd6fca33e562cecd495360.
 if [ -f cert-statements-split.tsv ]; then
+  # BEGIN pin-key-uniqueness  (decision lines only; see EXPECT_PINS)
+  # DUPLICATE KEYS (added 2026-09-15).  The loop below counts ROWS, and 84 of the manifest's keys
+  # are op: definition pins that PHASE 1h never enumerates.  Deleting one of those rows and
+  # duplicating any other kept the row count, resolved every row, and scored GREEN.
+  # DEMONSTRATED on the pre-fix lines (op:base-c10-split/BinaryTrees.ec::height unpinned: 1c
+  # `pinned=1167 expected=1167`, 1h OK) in scratch/PREDICTION-pin-dup-2026-09-15.md.  Same class
+  # as PHASE 3's unique control count.  Row semantics match the loop: first tab field,
+  # non-empty, not starting with '#'.
+  pin_keys=$(awk -F'\t' '$1!="" && $1!~/^#/{print $1}' cert-statements-split.tsv)
+  pin_dups=$(printf '%s\n' "$pin_keys" | sort | uniq -d)
+  pin_uniq=$(printf '%s\n' "$pin_keys" | sort -u | grep -c .)
+  if [ -n "$pin_dups" ]; then
+    printf '%s\n' "$pin_dups" | sed 's/^/FAIL statement pin key on more than one row: /'
+    fail=$((fail+1))
+  fi
+  if [ "$pin_uniq" -ne "$EXPECT_PINS" ]; then
+    echo "FAIL statement pin keys: $pin_uniq unique, committed expectation is $EXPECT_PINS"; fail=$((fail+1))
+  else
+    echo "OK   statement pin keys unique: $pin_uniq/$EXPECT_PINS"
+  fi
+  # END pin-key-uniqueness
   n_stmt=0
   while IFS=$'\t' read -r key want || [ -n "${key:-}" ]; do
     case "${key:-}" in ''|\#*) continue;; esac

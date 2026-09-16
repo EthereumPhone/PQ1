@@ -1346,5 +1346,21 @@
 #   taint controls pass=15 fail=0, taint count controls pass=4 fail=0.  Value computed by executing
 #   the gate's own lines in ec-grind (scratch/calc_inputs_id.sh); the gate run compares it itself.
 #
-split	1bfdb2c42b39b297522fc856285be11a
+# 2026-09-15 (Run 7).  split 1bfdb2c42b39b297522fc856285be11a -> d8bf474fcbeb8a29f8a83fea86382b92.
+#   NO CLOSURE .ec FILE MOVED.  A DUPLICATE PIN ROW, and the fail-open it exposed.
+#   op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f sat on two identical rows from 92ecb63
+#   (2026-08-20), so EXPECT_PINS was one pin high.  PHASE 1c counted ROWS, and 84 of the 1166 unique
+#   keys are op: definition pins that PHASE 1h never enumerates.  DEMONSTRATED on the pre-fix lines:
+#   op:BinaryTrees.ec::height deleted and another row duplicated gave 1c `pinned=1167 expected=1167`,
+#   0 FAIL, and 1h OK -- a definition unpinned under a GREEN gate.  Same class as PHASE 3's unique
+#   count.  Fix: the duplicate row removed; EXPECT_PINS 1167 -> 1166; a pin-key-uniqueness block
+#   before the PHASE 1c loop (duplicate keys FAIL, and unique keys must equal EXPECT_PINS), checked
+#   in isolation against the live, doctored and HEAD manifests (scratch/PREDICTION-pin-dup-2026-09-15.md).
+#   Inputs that moved:
+#     ~ cert-statements-split.tsv    (1167 -> 1166 rows; the duplicate replaced by a dated comment)
+#     ~ cert_gate_split.sh           (EXPECT_PINS 1166; the pin-key-uniqueness block)
+#   Value computed by executing the gate's own lines in ec-grind (scratch/calc_inputs_id.sh);
+#   the gate run compares it itself.
+#
+split	d8bf474fcbeb8a29f8a83fea86382b92
 fork	9c2d21280c84d52c30b22111151f1135
