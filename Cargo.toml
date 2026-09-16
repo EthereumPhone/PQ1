@@ -13,8 +13,11 @@
 # are frozen by external standards, not our protocol.
 #
 # Intentionally NOT in the workspace:
-#   * tools/ob-configurator — STM32U585 option-byte unlocker, needs a
-#     different RUSTFLAGS / linker config than secure/nonsecure.
+#   * (tools/ob-configurator was DELETED 2026-09-16 — issue #37: it wrote the
+#     CubeProgrammer field value into the SECBOOTADD0 register, swapped the
+#     SECSR/SECCR offsets, and wrote command bits to registers that do not
+#     implement them. `make bootproof-hw` programs option bytes correctly via
+#     STM32_Programmer_CLI; recoverable from git history if ever needed.)
 #   * tools/oled-mirror — host-side RTT framebuffer viewer.
 #   * tools/*.py / *.js / *.sh — host scripts; not Rust.
 [workspace]

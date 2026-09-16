@@ -48,7 +48,8 @@ const FLASH_NS: u32 = 0x4002_2000;
 
 /// `FLASH_OPTR` offset (RM0456 §7.11) — RDP[7:0] in the low byte. And
 /// `FLASH_SECBOOTADD0R` offset (secure boot-address option register), confirmed
-/// by `tools/ob-configurator/src/main.rs:32` (`FLASH_S+0x4C`).
+/// as `FLASH_S+0x4C` by the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`,
+/// `FLASH_SECBOOTADD0R` addressOffset `0x4c`) and RM0456 §7.9.16.
 #[allow(dead_code)]
 const FLASH_OPTR_OFF: u32 = 0x40;
 #[allow(dead_code)]
@@ -72,9 +73,11 @@ pub use sphincs_tz_shared::lockdown::RdpLevel;
 ///
 /// NOTE (BOOT_LOCK/HDP1 follow-up): we check the RDP level and the boot
 /// *address* (`secboot_selects_fsbl`) — the reliable, code-confirmed signals.
-/// The `BOOT_LOCK` bit and `HDP1` polarity are doc-ambiguous
-/// (production-todo's `0x0C00_007C` vs the ob-configurator's `0x0018_0000`), so
-/// asserting them is a bench-confirmation follow-up (work-todo), not done here.
+/// `BOOT_LOCK` is bit 0 (RM0456 §7.9.16, pinned as
+/// `lockdown::SECBOOTADD0_BOOT_LOCK`); the apparent `0x0C00_007C` vs
+/// `0x0018_0000` contradiction was register-word vs CubeProgrammer field-value,
+/// not a disagreement about the bit (#214). `HDP1` polarity IS still
+/// doc-ambiguous, so asserting that remains a bench-confirmation follow-up.
 #[cfg(feature = "stm32u585")]
 #[allow(dead_code)]
 #[must_use]
@@ -369,18 +372,33 @@ pub unsafe fn write_quadword_verified(addr: u32, data: &[u8; 16]) -> Result<(), 
 // which is why it lives behind the same feature the `nsc/mod.rs` ship fence
 // forces on only for `mode-production`.
 //
-// Register offsets: the option-byte programming keys + OPTSTRT/OBL_LAUNCH/
-// OPTLOCK bit positions come from `tools/ob-configurator/src/main.rs` (which
-// ran the OB-commit on the bench), but the SECSR/SECCR *offsets* there are
-// swapped — this code uses the RM0456-correct `secsr=0x24 / seccr=0x2C`
-// already bound in `REG` above. WRP1AR / SECWM offsets + the OEM-lock status
-// register are BENCH-CONFIRM (RM0456) items — see the #36 deferred runbook.
+// Register offsets and the OPTSTRT/OBL_LAUNCH/OPTLOCK bit positions come from
+// the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`) and RM0456; they are
+// mirrored as host-tested constants in `sphincs_tz_shared::lockdown`
+// (`FLASH_NSCR_OFF`, `FLASH_OPTSTRT`, …). The former `tools/ob-configurator`
+// is NOT the authority for them — it swapped the SECSR/SECCR offsets and has
+// been deleted (#37). `secsr=0x24 / seccr=0x2C` as bound in `REG` above is
+// SVD-correct. WRP1AR / SECWM offsets + the OEM-lock status register are
+// BENCH-CONFIRM (RM0456) items — see the #36 deferred runbook.
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ KNOWN DEFECT #268 — the three option-byte accesses below use `seccr`.   │
+// │ Per the SVD, `OPTSTRT` (17), `OBL_LAUNCH` (27) and `OPTLOCK` (30) exist │
+// │ ONLY in `FLASH_NSCR` (0x28); `FLASH_SECCR` (0x2C) implements none of    │
+// │ them. So the commit is inert, the OPTLOCK check can never fire, and     │
+// │ `program_rdp_level2_and_launch` returns Ok(()) after failing to burn.   │
+// │ NOT fixed here by deliberate decision: this is the irreversible RDP-2   │
+// │ path and wants an owner decision plus a sacrificial-silicon plan, not a │
+// │ drive-by edit. `REG.nscr` is already bound and correct for the fix.     │
+// │ Never executed — `rdp2-self-lock` is production-quarantined.            │
+// │ Guarded by `negative_optbyte_commit_defect_268_is_marked_or_fixed`.     │
+// └─────────────────────────────────────────────────────────────────────────┘
 // ===========================================================================
 
 /// Option-byte key register offset (RM0456; `FLASH_S+0x10`).
 #[cfg(feature = "rdp2-self-lock")]
 const OPTKEYR_OFF: u32 = 0x10;
-/// Option-byte unlock keys (GP/RM0456; from `tools/ob-configurator`).
+/// Option-byte unlock keys (RM0456 §7.9.2 `FLASH_OPTKEYR`).
 #[cfg(feature = "rdp2-self-lock")]
 const OPT_KEY1: u32 = 0x0819_2A3B;
 #[cfg(feature = "rdp2-self-lock")]

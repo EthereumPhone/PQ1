@@ -50,11 +50,15 @@ pub const fn rdp_level_from_byte(rdp: u8) -> RdpLevel {
 /// for the same boot address") and deferred it as unconfirmed; RM0456 plus a
 /// bench read now confirm it.
 ///
-/// NOTE: `tools/ob-configurator/src/main.rs:123` writes the bare `0x0018_0000`,
-/// which under this layout encodes boot address `0x0018_0000 << 7`, not
-/// `0x0C00_0000`. Bench boards boot correctly because every Makefile recipe
-/// programs option bytes via `STM32_Programmer_CLI --optionbytes SECBOOTADD0=`,
-/// which encodes for us. That tool's write path is wrong and needs its own fix.
+/// NOTE on the two encodings, because conflating them is the whole bug:
+/// `0x0C00_007C` is the REGISTER word (address in bits `[31:7]`), while
+/// `0x0018_0000` is CubeProgrammer's OPTION-BYTE FIELD value (`addr >> 7`).
+/// Both describe boot address `0x0C00_0000`. Bench boards boot correctly
+/// because every Makefile recipe programs option bytes via
+/// `STM32_Programmer_CLI --optionbytes SECBOOTADD0=0x180000`, which takes the
+/// field form and encodes for us. Writing the field value straight to the
+/// register selects `0x0018_0000` instead — the defect that
+/// `tools/ob-configurator` carried until it was deleted (issue #37).
 const SECBOOTADD0_ADDR_SHIFT_MASK: u32 = 0xFFFF_FF80;
 /// `BOOT_LOCK` — bit 0 (RM0456 §7.9.16). Pinned here so the deferred
 /// BOOT_LOCK assertion has a confirmed bit to build on.
@@ -76,6 +80,76 @@ pub const fn secboot_selects(secbootadd0r: u32, expected_boot_addr: u32) -> bool
 }
 
 // ===========================================================================
+// Option-byte CONTROL registers — which register carries which command bit.
+//
+// This block exists because its absence was a live defect class. Everything
+// host-testable here previously covered only the option-byte VALUE registers
+// (`OPTR`, `SECWM*R1`, `SECBOOTADD0R`), so nothing in the workspace pinned
+// *which control register* a commit must be written to. Three separate places
+// then reached for the wrong one, and none was caught:
+//
+//   1. `tools/ob-configurator` declared `SECCR1 = FLASH_S + 0x24` and
+//      `SECSR = FLASH_S + 0x2C` — inverted — and wrote its commit bits there.
+//      Deleted (#37).
+//   2. `secure/src/hw/flash.rs`'s `program_rdp_level2_and_launch` writes
+//      `OPTSTRT` / `OBL_LAUNCH` and reads `OPTLOCK` from `SECCR`, which has
+//      none of those bits, so the irreversible RDP-2 burn cannot commit yet
+//      returns `Ok(())`. Reported, NOT fixed here (#268) — it sits next to an
+//      irreversible operation and wants an owner decision plus a sacrificial
+//      -silicon plan, so this module only supplies the facts to fix it against.
+//   3. The `flash.rs` provenance comments cited (1) as their authority.
+//
+// Enumerated from the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`,
+// 2026-09-16), listing EVERY field of each register rather than probing for
+// expected names — probing is what hid this. Note the SVD prefixes register
+// names (`FLASH_SECCR`, not `SECCR`); searching the bare name returns nothing
+// and reads as absence.
+//
+// The split is coherent, not an SVD gap: option bytes are global to the
+// device, so their control bits live in the NON-SECURE control register, while
+// `SECCR` carries the secure-only error/invalidate bits instead.
+// ===========================================================================
+
+/// `FLASH_NSSR` offset — non-secure status (adds `OPTWERR` bit 13 and the
+/// OEM-lock status bits, which `SECSR` does not carry).
+pub const FLASH_NSSR_OFF: u32 = 0x20;
+/// `FLASH_SECSR` offset — secure status. Error flags plus read-only `BSY`
+/// (bit 16) and `WDW` (bit 17). Carries NO command bits.
+pub const FLASH_SECSR_OFF: u32 = 0x24;
+/// `FLASH_NSCR` offset — non-secure control. **This is the register that owns
+/// every option-byte command bit** ([`FLASH_OPTSTRT`], [`FLASH_OBL_LAUNCH`],
+/// [`FLASH_OPTLOCK`]).
+pub const FLASH_NSCR_OFF: u32 = 0x28;
+/// `FLASH_SECCR` offset — secure control. Has `STRT` (16), `RDERRIE` (26),
+/// `INV` (29) and `LOCK` (31), and **none** of the option-byte command bits.
+pub const FLASH_SECCR_OFF: u32 = 0x2C;
+
+/// `OPTSTRT` — commit staged option bytes. `FLASH_NSCR` bit 17 ONLY.
+pub const FLASH_OPTSTRT: u32 = 1 << 17;
+/// `OBL_LAUNCH` — reload option bytes (triggers a system reset).
+/// `FLASH_NSCR` bit 27 ONLY.
+pub const FLASH_OBL_LAUNCH: u32 = 1 << 27;
+/// `OPTLOCK` — cleared by the `OPTKEYR` key sequence. `FLASH_NSCR` bit 30 ONLY.
+pub const FLASH_OPTLOCK: u32 = 1 << 30;
+/// `BSY` — bit 16 of both status registers, read-only in each.
+pub const FLASH_SR_BSY: u32 = 1 << 16;
+
+/// Does `reg_off` name the register that option-byte commands must be written
+/// to? Exactly one offset qualifies, so a driver can assert its own binding.
+#[must_use]
+pub const fn is_optbyte_command_register(reg_off: u32) -> bool {
+    reg_off == FLASH_NSCR_OFF
+}
+
+/// Can `bits` legally be written to `FLASH_SECCR`? The option-byte command
+/// bits cannot: `SECCR` does not implement bit 17, 27 or 30, so such a write
+/// is silently inert — it neither commits nor errors.
+#[must_use]
+pub const fn seccr_accepts(bits: u32) -> bool {
+    (bits & (FLASH_OPTSTRT | FLASH_OBL_LAUNCH | FLASH_OPTLOCK)) == 0
+}
+
+// ===========================================================================
 // Ship option-byte profile (work-todo #36 — first-boot RDP-2 self-lock).
 //
 // Devices ship at RDP-0 with a batch-uniform image; the first field boot
@@ -92,9 +166,11 @@ pub const fn secboot_selects(secbootadd0r: u32, expected_boot_addr: u32) -> bool
 //     registers read back with reserved bits set — this board reads
 //     0xFFFFFF80 / 0xFF80FFFF); SECBOOTADD0 address field at bits [31:7] with
 //     BOOT_LOCK at bit 0 (RM0456 7.9.16, ST production value 0x0C00_007C).
-//     `tools/ob-configurator` is NOT evidence for any of these: its raw writes
-//     encode SECBOOTADD0 wrongly (see `secboot_selects`) and it was previously
-//     mis-cited here as confirmation for the watermark word compares.
+//     Provenance is the vendor SVD (`STM32CubeProgrammer/SVD/STM32U585.svd`)
+//     plus RM0456 and a bench read — NOT the former `tools/ob-configurator`,
+//     which encoded SECBOOTADD0 wrongly (see `secboot_selects`), swapped the
+//     SECSR/SECCR offsets, and was once mis-cited here as confirmation for the
+//     watermark word compares. It was deleted rather than repaired (#37).
 //   BENCH-CONFIRM (exact bit positions are an RM0456 pin — see the #36
 //     deferred silicon-validation runbook): BOR_LEV field, WRP1A page span,
 //     and the OEM1/OEM2 key-lock status bits. These live behind the single
@@ -117,8 +193,7 @@ pub const SHIP_RDP_BYTE: u8 = 0xAA;
 pub const LOCKED_RDP_BYTE: u8 = 0xCC;
 
 /// `SECWM1R1` FIELD values that mark all of bank 1 secure (`PSTRT=0, PEND=0x7F`).
-/// This is what a programmer WRITES (see `tools/ob-configurator`), NOT what the
-/// register reads back: `SECWM1R1`/`SECWM2R1` are option-byte shadow registers
+/// This is what a programmer WRITES, NOT what the register reads back: `SECWM1R1`/`SECWM2R1` are option-byte shadow registers
 /// whose unprogrammed bits read as 1s (SVD reset value `0xFF00FF00`). A correctly
 /// configured pq1 board reads `0xFFFFFF80` / `0xFF80FFFF`. Compare FIELDS, never
 /// the whole word — see [`secwm_bank1_all_secure`].
@@ -649,6 +724,59 @@ mod tests {
         assert_eq!(optr_matches_ship(optr_l1, &SHIP_PROFILE_U585), Err(ObField::Rdp));
     }
 
+    /// The guard whose absence let three separate places write option-byte
+    /// command bits to the wrong FLASH register (see the block comment above
+    /// `FLASH_NSSR_OFF`). Enumerated from the vendor SVD 2026-09-16 by listing
+    /// EVERY field of each register — probing for expected names is what hid
+    /// this, since the SVD prefixes them (`FLASH_SECCR`, not `SECCR`).
+    #[test]
+    fn optbyte_command_bits_live_only_in_nscr() {
+        // Offsets, straight from the SVD's addressOffset fields.
+        assert_eq!(FLASH_NSSR_OFF, 0x20, "FLASH_NSSR");
+        assert_eq!(FLASH_SECSR_OFF, 0x24, "FLASH_SECSR");
+        assert_eq!(FLASH_NSCR_OFF, 0x28, "FLASH_NSCR");
+        assert_eq!(FLASH_SECCR_OFF, 0x2C, "FLASH_SECCR");
+        // Command bit positions.
+        assert_eq!(FLASH_OPTSTRT, 1 << 17, "OPTSTRT is NSCR bit 17");
+        assert_eq!(FLASH_OBL_LAUNCH, 1 << 27, "OBL_LAUNCH is NSCR bit 27");
+        assert_eq!(FLASH_OPTLOCK, 1 << 30, "OPTLOCK is NSCR bit 30");
+        assert_eq!(FLASH_SR_BSY, 1 << 16, "BSY is bit 16 of both status regs");
+
+        // Exactly ONE register may receive an option-byte command. The
+        // control/status registers are adjacent (0x20/0x24/0x28/0x2C), which
+        // is why an off-by-one-register bug is easy to write and invisible.
+        assert!(is_optbyte_command_register(FLASH_NSCR_OFF));
+        for off in [
+            FLASH_NSSR_OFF,
+            FLASH_SECSR_OFF,
+            FLASH_SECCR_OFF,
+            0x0C, // SECKEYR
+            0x10, // OPTKEYR
+            0x40, // OPTR
+            0x4C, // SECBOOTADD0R
+        ] {
+            assert!(
+                !is_optbyte_command_register(off),
+                "only FLASH_NSCR (0x28) owns the option-byte command bits; \
+                 offset {off:#04X} must not qualify"
+            );
+        }
+
+        // Two-sided. SECCR silently ignores each command bit — no commit, no
+        // error — which is exactly why the #268 defect reports success.
+        assert!(!seccr_accepts(FLASH_OPTSTRT), "SECCR has no bit 17");
+        assert!(!seccr_accepts(FLASH_OBL_LAUNCH), "SECCR has no bit 27");
+        assert!(!seccr_accepts(FLASH_OPTLOCK), "SECCR has no bit 30");
+        assert!(
+            !seccr_accepts(FLASH_OPTSTRT | (1 << 16)),
+            "a write mixing STRT with OPTSTRT is still not acceptable to SECCR"
+        );
+        // ...but it does implement STRT (16) and LOCK (31), so those pass.
+        assert!(seccr_accepts(1 << 16), "SECCR implements STRT");
+        assert!(seccr_accepts(1 << 31), "SECCR implements LOCK");
+        assert!(seccr_accepts(0), "a no-op write is trivially acceptable");
+    }
+
     #[test]
     fn secwm_window_exact_match() {
         // MEASURED silicon values are the positive case. The old test only ever
@@ -666,8 +794,8 @@ mod tests {
             secwm_bank2_all_ns(PQ1_SECWM2_RAW),
             "watermark-disabled bank 2 must PASS (regression: word compare)"
         );
-        // The written field values must also pass, so ob-configurator's writes
-        // and this reader cannot disagree.
+        // The written field values must also pass, so whatever programs the
+        // watermarks and this reader cannot disagree.
         assert!(secwm_bank1_all_secure(SECWM1_ALL_SECURE));
         assert!(secwm_bank2_all_ns(SECWM2_ALL_NS));
         // RM0456 production values (7.9.17 / 7.9.21) must pass too.

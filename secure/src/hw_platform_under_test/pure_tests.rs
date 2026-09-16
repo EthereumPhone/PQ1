@@ -52,6 +52,7 @@ const FLASH_SRC: &str = include_str!("../hw/flash.rs");
 const HAL_SRC: &str = include_str!("../../../hal/src/lib.rs");
 const TAMP_SRC: &str = include_str!("../hw/tamp.rs");
 const CONSUMPTION_MASK_SRC: &str = include_str!("../hw/consumption_mask.rs");
+const CONSUMPTION_MASK_PRNG_SRC: &str = include_str!("../consumption_mask_prng.rs");
 const SCA_TRIGGER_SRC: &str = include_str!("../hw/sca_trigger.rs");
 const RCC_SRC: &str = include_str!("../hw/rcc.rs");
 const USB_HW_SRC_PLAT: &str = include_str!("../hw/usb_hw.rs");
@@ -63,6 +64,73 @@ const BOARD_PQ1_SRC: &str = include_str!("../board/pq1.rs");
 const BOARD_MOD_SRC_PLAT: &str = include_str!("../board/mod.rs");
 const BOOT_STATE_SRC: &str = include_str!("../hw/boot_state.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
+
+// ═════════════════════════════════════════════════════════════════════
+// 0. NEGATIVE — the option-byte COMMAND register (known defect #268)
+// ═════════════════════════════════════════════════════════════════════
+
+/// `OPTSTRT` (bit 17), `OBL_LAUNCH` (27) and `OPTLOCK` (30) exist **only** in
+/// `FLASH_NSCR` (0x28) per the vendor SVD; `FLASH_SECCR` (0x2C) implements
+/// none of them. Writing them to `seccr` is therefore silently inert — it
+/// neither commits nor errors — so `program_rdp_level2_and_launch` stages
+/// `RDP=0xCC`, fails to burn it, reads a clean `SECSR`, and returns `Ok(())`.
+///
+/// The fix is deliberately NOT applied: that is the irreversible RDP-2 path
+/// and it wants an owner decision plus a sacrificial-silicon plan rather than
+/// a drive-by edit (issue #268). Nothing has executed it —
+/// `rdp2-self-lock` is production-quarantined.
+///
+/// This guard is therefore written to accept EITHER state, so it is green
+/// today and stays green after a future fix:
+///   * the writes still target `seccr` **and** the defect marker is present, or
+///   * the writes target `nscr` (fixed), needing no marker.
+/// It fails only if someone strips the marker while leaving the bug, or
+/// "fixes" some sites and not others — the mixed state that would make the
+/// burn's behaviour depend on which line was touched.
+#[test]
+fn negative_optbyte_commit_defect_268_is_marked_or_fixed() {
+    const SECCR_SITES: [&str; 3] = [
+        "REG.seccr.write(OPTSTRT)",
+        "REG.seccr.write(OBL_LAUNCH)",
+        "REG.seccr.read() & OPTLOCK",
+    ];
+    let still_on_seccr: Vec<&str> = SECCR_SITES
+        .iter()
+        .copied()
+        .filter(|s| FLASH_SRC.contains(s))
+        .collect();
+
+    if still_on_seccr.is_empty() {
+        // Fixed. Assert the fix actually moved to the right register rather
+        // than merely renaming the sites away from this pattern.
+        assert!(
+            FLASH_SRC.contains("REG.nscr.write(OPTSTRT)"),
+            "the SECCR option-byte writes are gone, but no `REG.nscr.write(OPTSTRT)` \
+             replaced them. Per the vendor SVD, FLASH_NSCR (0x28) is the ONLY register \
+             carrying OPTSTRT/OBL_LAUNCH/OPTLOCK — see \
+             `sphincs_tz_shared::lockdown::is_optbyte_command_register`."
+        );
+        return;
+    }
+
+    assert!(
+        FLASH_SRC.contains("KNOWN DEFECT #268"),
+        "flash.rs still writes option-byte command bits to SECCR ({still_on_seccr:?}) but \
+         the `KNOWN DEFECT #268` marker has been removed. Those bits exist only in \
+         FLASH_NSCR (0x28); SECCR (0x2C) implements none of them, so the irreversible \
+         RDP-2 burn cannot commit yet reports success. Either move all three accesses to \
+         `REG.nscr` (and update this test), or keep the marker."
+    );
+    assert_eq!(
+        still_on_seccr.len(),
+        SECCR_SITES.len(),
+        "PARTIAL fix: {} of {} option-byte accesses still target SECCR ({still_on_seccr:?}). \
+         A mixed state is worse than either end — the burn's behaviour would depend on which \
+         line was edited. Move all three or none.",
+        still_on_seccr.len(),
+        SECCR_SITES.len()
+    );
+}
 
 // ═════════════════════════════════════════════════════════════════════
 // 1. POSITIVE — flash page geometry (every page-number / address pin)
@@ -415,7 +483,6 @@ fn positive_consumption_mask_pin_and_timer_come_from_the_board() {
     // iota2 and 6 on pq1, both below 8, but a future move above 7 must not
     // silently write the wrong word.
     assert!(CONSUMPTION_MASK_SRC.contains("gpio_afr: Reg32::new(PORT + if PIN < 8 { 0x20 } else { 0x24 }),"));
-
 }
 
 #[test]
@@ -1130,19 +1197,21 @@ fn negative_consumption_mask_xorshift_seeded_from_hw_trng() {
     );
     let seed_body = extract_body(
         CONSUMPTION_MASK_SRC,
-        "unsafe fn seed_prng_from_rng() -> Result<(), ()> {",
+        "fn seed_prng_from_rng() -> Result<(), ()> {",
     );
     assert!(!seed_body.contains("rng_strong"));
     // Fail closed on a zero / failed seed (finding F12): the mask must NOT
     // substitute a fixed constant — that produced a deterministic, attacker-
-    // predictable PWM duty. A zero seed is an RNG fault and returns Err.
+    // predictable PWM duty. A zero seed is an RNG fault and returns Err; the
+    // rejection lives in the extracted `consumption_mask_prng` state machine.
     assert!(
-        CONSUMPTION_MASK_SRC.contains("if seed == 0 {\n        return Err(());\n    }"),
-        "consumption_mask must fail closed (Err) on a 0 seed, not substitute a constant"
+        CONSUMPTION_MASK_PRNG_SRC.contains("if seed == 0 {\n            return Err(());"),
+        "consumption_mask_prng must fail closed (Err) on a 0 seed, not substitute a constant"
     );
     assert!(
-        !CONSUMPTION_MASK_SRC.contains("0xDEADBEEF"),
-        "consumption_mask must not fall back to a fixed predictable seed constant (F12)"
+        !CONSUMPTION_MASK_SRC.contains("0xDEADBEEF")
+            && !CONSUMPTION_MASK_PRNG_SRC.contains("0xDEADBEEF"),
+        "consumption_mask(_prng) must not fall back to a fixed predictable seed constant (F12)"
     );
 }
 
