@@ -446,6 +446,40 @@ bytes"; the module header says so, and it should stay true.
 
 ---
 
+### UPDATE 2026-09-16 — the NV3007 LCD pin map is now SILICON-verified on pq1
+
+The LCD was the last pq1 pin-map port still only compile-verified. It is now
+exercised on the board.
+
+The FSBL had hardcoded iota2's panel wiring — SPI1 with AF5 on **port E** (PE12
+CS / PE13 SCK / PE15 MOSI / PE7 DC), one `GPIOE` clock enable, and `AFRH`
+nibbles. pq1 bonds only PA0–15, PB0–15 and PC13, so none of that reaches a pad
+there, and it failed **silently** in the way this section exists to catch: port
+E exists on the die, so the writes succeeded, drove nothing, and the FSBL
+branched having rendered no fingerprint. `fsbl/src/board/{mod,iota2,pq1}.rs` now
+supplies every pin, port base and AF number, with board selection mandatory and
+its fence unconditional.
+
+Three properties the old form could not express, each a silent failure on its
+own: the SPI pins are **non-contiguous** (PA4/PA5/PA7, PA6 skipped and `NC`),
+they sit **below pin 8** so their AF nibbles are in `AFRL` not `AFRH`, and
+DC/RST/EN are on **port B** while the SPI is on port A, so two GPIO port clocks
+are needed rather than one. pq1 also drives a real `LCM_RST` pulse on PB1
+(10/200/120 ms, mirroring `secure/src/hw/lcd_nv3007.rs`) where iota2 issues
+`SWRESET` against a RES line strapped to 3V3.
+
+**Receipt:** `spi_wait` timeout count = **0** across a full 142×428 RGB565
+repaint (121,552 bytes) plus the 16×4 glyph blit — i.e. SPI1 accepted every
+byte. See the §10 update below for the run that produced it.
+
+**What this does NOT prove:** that anything was *visible*. pq1's `LCM_EN` (PB15)
+only enables an AW99703 LED driver whose brightness is programmed over I2C2 at
+`0x36`, and there is no driver for it in the tree — the FSBL has no I2C stage by
+design. **A dark pq1 panel is therefore not evidence of a display fault.** The
+AW99703 datasheet is not in the repo; that driver is the open follow-up.
+
+---
+
 ## §2 — Clock, bus, and timing re-verification (NON-DEST, do first)
 
 Every busy-wait, timeout, baud divisor, and I2C/SPI timing word in the firmware is
@@ -704,6 +738,62 @@ needs a ChipWhisperer-Husky / ChipSHOUTER, which is **not yet on the bench**
 | 10.7 | **DHUK per-die uniqueness at RDP-2 — n=2, unmeasured at RDP2.** Distinct fingerprints seen at RDP-1; no board has ever been at RDP-2. Capture on the self-locked part | DESTRUCTIVE (RDP-2 self-lock is one-shot) | `hardware-assumption-boundary-2026-07-17.md:330-336`; `red-teaming.md:621-637`; issue **#33** |
 | 10.8 | **SWAP_BANK / bank-2 mirror** — SWAP_BANK=0, HDP2+SECWM2 over bank-2 FSBL range, stage identical FSBL in both banks' frozen range | DESTRUCTIVE | issues **#42, #43, #44** |
 | 10.9 | **USB-C warm-reset topology** — TCPP03 (PB5) is an on-board dev-kit part; if the EVT omits/changes it, the CC-open/dead-battery re-enumeration choreography must be re-derived | NON-DEST | `secure/src/hw/usb_hw.rs:91-100,209-346`; `fwup-transport-hw-iwdg` |
+
+---
+
+### UPDATE 2026-09-16 — 10.5 advanced: the non-monolithic boot proof RAN on pq1
+
+The FSBL verified slot A and **branched into it** on a pq1 board
+(AL_A66_MB_V10). This is the first time the non-monolithic boot path has
+executed on any silicon; `docs/firmware/firmware-update.md` had recorded
+hardware bring-up as "intentionally stopped".
+
+Instrumented with the default-off `stage-marker` feature (`fsbl/src/marker.rs`),
+which records one quad-word per boot stage into the erased manifest-B page, read
+back with CubeProgrammer `mode=UR`. **All 18 stages reached, none missing.**
+Load-bearing payloads:
+
+| stage | payload | what it establishes |
+|---|---|---|
+| `FloorRead` | 0 | OTP rollback floor is 0 — **no OTP has been consumed** |
+| `SlotAAdmitted` | 4097 | full admission chain passed (CRC, digest, fpr, C10 signature, rollback) |
+| `ImgSecureHashed` | `0xCE47B27A` | = `7ab247ce…` LE, the signed secure hash |
+| `ImgNsHashed` | `0x1EEAAC71` | = `71acea1e…` LE — the **SAU fix works**; this read as SHA-of-zeros before |
+| `ImgSecureCmp` / `ImgNsCmp` | 1 / 1 | `verify_images` matched both images against the manifest |
+| `Tz1Verdict` | 1 | the tz-1 option-byte tripwire passed (issue #270) |
+| `LcdInited` / `RenderFlushed` | — / 0 | panel init returned; zero SPI timeouts (see §1 update) |
+| `Branching` | 0 | **render returned and the FSBL branched into slot A** |
+
+**Device read-back receipts:** FSBL `4a8d28f7…` (29,616 B), manifest A
+`dfd66ca1…`, secure slot A `7ab247ce…` (385,568 B), NS slot A `71acea1e…`
+(7,488 B). Reproduced **byte-for-byte across two runs**, the second from a
+freshly erased marker page, with manifest A and the FSBL image both re-read as
+in-session controls.
+
+**Scope — this is evidence toward 10.5, not closure of it, and not production
+approval.** The build carried `stage-marker`, which gives the FSBL a
+flash-write path invariant #10 forbids in a shipping image; it was signed with
+the development vendor key; the board is at RDP-0 with **no WRP and no RDP-2**;
+the geometry is still the legacy pages-0..3 layout (cutover #540 open); and
+**no fault-injection sweep has touched this path** — §8.2 and §8.5 remain
+exactly as open as before. Nothing here bears on the ceremony in §3.
+
+**Two procedural traps, both of which produce convincing false readings:**
+
+1. **The marker page must be erased between runs.** Flash quad-words cannot be
+   reprogrammed, so a second run silently fails to record and you re-read the
+   *first* run's stages. Erase bank-1 sector 5 (`-e 5`); it is correctly
+   targeted — manifest A on sector 4 survives, verified.
+2. **A CubeProgrammer invocation releases the target on exit, so the FSBL runs
+   between commands.** Any read placed between the erase and the reset is
+   itself an opportunity for the page to be repopulated — which is how this
+   run's own "is-it-erased" pre-check came back already-written. Put the erase
+   last before the reset, and discriminate on a marker only the new build can
+   write.
+
+A third, from the same day: at the FSBL's actual 4 MHz reset clock the boot
+takes ~17 s (~4 s verify + ~1 s repaint + ~12 s fingerprint hold), so a marker
+page read too early shows late stages "not reached" for purely timing reasons.
 
 ---
 

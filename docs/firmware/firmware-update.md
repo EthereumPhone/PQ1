@@ -412,6 +412,38 @@ Status word mapping:
 | WRP1A in `ob-configurator`   | ⚠ out of scope — Phase 7 |
 | `make flash-hw-production`   | ⚠ out of scope — Phase 7 |
 
+**UPDATE 2026-09-16 — the FSBL half of the boot chain now has a silicon
+receipt; the update path above still does not.** Read the "Hardware bring-up"
+row narrowly: it means BEGIN / CHUNK / COMMIT and the slot flip have never been
+exercised on hardware, and that is still true.
+
+What *did* run, on a pq1 board (AL_A66_MB_V10), is the **non-monolithic boot
+path** this subsystem depends on: the FSBL admitted manifest A, re-hashed both
+slot images from flash and matched them against the signed manifest, passed the
+tz-1 option-byte tripwire, rendered the fingerprint, and **branched into slot
+A**. Device read-back receipts: FSBL `4a8d28f7…` (29,616 B), manifest A
+`dfd66ca1…`, secure slot A `7ab247ce…` (385,568 B), NS slot A `71acea1e…`
+(7,488 B). Reproduced byte-for-byte across two runs, the second from a freshly
+erased marker page, with both controls re-read in-session. Details and the
+procedural traps are in `docs/hardware/evt-silicon-validation.md`.
+
+That receipt is scoped: it used a `stage-marker` diagnostic build (which gives
+the FSBL a flash-write path production forbids) signed with the development
+vendor key, at RDP-0 with no WRP and no RDP-2, on the legacy pages-0..3
+geometry (cutover #540 still open), and no fault-injection sweep of
+`verify_images` has run (#591). It is evidence toward invariant #10's "silicon
+receipts" and "non-monolithic shipping image" gates, not closure of either.
+
+Two known latent bugs adjacent to this table, both found 2026-09-16:
+`tools/ob-configurator/src/main.rs:124` writes `0x0018_0000` directly to
+`FLASH_SECBOOTADD0R` (`FLASH_S + 0x4C`), but that register holds the boot
+address in bits `[31:7]`, so the correct word is `0x0C00_007C` (issue #37 states
+this explicitly: "the register *word* ≠ the boot *address*"); as written it
+selects `0x0018_0000`, and `shared::lockdown::secboot_selects` rejects it. The
+same `0x0C00_007C` vs `0x0018_0000` contradiction is the stated blocker on
+issue #214, and RM0456 §7.9.16 resolves it — `SECBOOTADD0_BOOT_LOCK` is bit 0,
+now pinned in `shared/src/lockdown.rs`.
+
 ## Known gotchas
 
 - **Signature reverify at COMMIT** — the signature check at BEGIN is
