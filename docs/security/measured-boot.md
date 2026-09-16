@@ -65,7 +65,7 @@ flash region    │   1. Read manifest A, manifest B         │
                 │      │ render::render_fingerprint    │   │
                 │      │   * SPI + NV3007 init         │   │
                 │      │   * firmware_fingerprint_lines│   │
-                │      │   * draw + flush + hold ~3 s  │   │
+                │      │   * draw + flush + hold ~12 s │   │
                 │      └───────────────────────────────┘   │
                 │   6. branch::into_slot(slot)             │
                 └──────────────────────────────────────────┘
@@ -123,7 +123,7 @@ The `bip39/tests/prefix5_roundtrip.rs` test pins these invariants
 ### First boot (initial provisioning)
 
 1. Power up the device for the first time.
-2. Observe the 8 words on the NV3007 LCD (~3 s, then the boot continues).
+2. Observe the 8 words on the NV3007 LCD (~12 s, then the boot continues).
 3. Independently rebuild the release commit (`./measure.sh` or
    `nix run .#measure`) on a separate trusted machine.
 4. Confirm the 8 words match. Record them on paper as the baseline.
@@ -193,9 +193,32 @@ signal would then be permanently tripped and ignored). See
   (init, draw, flush, hold).
 - `fsbl/src/nv3007.rs` — minimal NV3007 142×428 SPI LCD driver (ported from
   the bench-validated secure `ui-lcd` driver). Drops every secure-world dep
-  (`embedded-graphics`, `secure_log!`, `hw::mmio::Reg32`); 16 MHz-calibrated
-  `delay_ms`, SWRESET (RES tied to 3V3). The SSD1306 OLED driver was removed
-  2026-06-30 — only the NV3007 LCD ships.
+  (`embedded-graphics`, `secure_log!`, `hw::mmio::Reg32`). The SSD1306 OLED
+  driver was removed 2026-06-30 — only the NV3007 LCD ships.
+- `fsbl/src/board/{mod,iota2,pq1}.rs` — the LCD pin map, selected at compile
+  time; naming a board is mandatory and the fence is unconditional. Added
+  2026-09-16: the driver had hardcoded iota2's port-E wiring, which on pq1's
+  48-pin package writes to a port that exists on the die but drives no pad —
+  so the fingerprint render silently produced nothing and the FSBL branched
+  anyway. iota2 resets the panel with `SWRESET` (its RES is strapped to 3V3);
+  pq1 drives `LCM_RST` on PB1 and gets a real reset pulse.
+
+**UPDATE 2026-09-16 — boot timings on this page were understated by 4×.** The
+`delay_ms` nop loop is calibrated for 16 MHz, but the FSBL writes no RCC clock
+configuration and therefore runs at the 4 MHz MSIS reset clock (`RCC_CFGR1.SW`
+= 00, `RCC_CSR.MSISSRANGE` = 4, whose vendor-SVD enumeration reads "range 4
+around 4 MHz (reset value)"). Consequences: the fingerprint hold is ~12 s
+rather than 3 s, software SHA-256 image hashing is ~800 ms per image rather
+than ~200 ms, and the SPI clock is 1 MHz rather than 4 MHz, so a full-screen
+repaint costs ~1 s on its own. The hold constant is deliberately unchanged —
+it is the user-visible boot-time trust window, so retuning it is an owner
+decision. Note `CLAUDE.md`'s Lifecycle section still says "~3 s".
+
+**pq1 backlight caveat.** On pq1 the panel may render correctly and still look
+dark: `LCM_EN` (PB15) only enables an AW99703 LED driver whose brightness is
+programmed over I2C2 at `0x36`, and the FSBL has no I2C stage. Absence of
+visible words on pq1 is therefore not by itself evidence that measured boot
+failed.
 - `sphincs_tz_bip39::firmware_fingerprint_lines` — pure layout
   function shared between FSBL and `secure/src/measured_boot.rs`.
 

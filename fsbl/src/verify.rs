@@ -5,8 +5,13 @@
 //! from the memory-mapped flash — no RAM copy — using the SHA-256
 //! software path (`sha2::Sha256`) since FSBL's HASH-peripheral setup
 //! is optional. On a real board with HASH enabled this is ~10 ms for
-//! the secure half; in pure software at 16 MHz it's ~200 ms. Both
-//! are acceptable for boot.
+//! the secure half; in pure software it's ~800 ms. Both are acceptable
+//! for boot.
+//!
+//! (That figure was "~200 ms at 16 MHz" until 2026-09-16. The FSBL actually
+//! runs at the 4 MHz MSIS reset clock — see the SVD reset values quoted in
+//! `crate::nv3007`'s module header — so every software-SHA estimate in this
+//! crate was understated by 4×.)
 
 use fw_manifest::ManifestRef;
 use sha2::{Digest, Sha256};

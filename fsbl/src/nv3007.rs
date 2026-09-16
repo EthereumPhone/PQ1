@@ -62,30 +62,41 @@
 //! page reaching `LcdInited` and `RenderFlushed` with a zero timeout count —
 //! not visible pixels.
 //!
-//! ## Clocking — the reset default, whatever it is (FSBL has no RCC bring-up)
+//! ## Clocking — 4 MHz MSIS, NOT the 16 MHz this file used to claim
 //!
-//! The FSBL brings up no PLL before branching: it runs on whatever the reset
-//! clock is, so [`delay_ms`] is a nop loop rather than the secure driver's
-//! 160 MHz `cortex_m::asm::delay`, and the SPI prescaler (`MBR = ÷4`) is left
-//! conservative. The panel is painted once at boot, so throughput is a
-//! non-issue either way, and ÷4 of any reset-range clock has a large margin
-//! over the NV3007's 10 ns setup/hold spec.
+//! The FSBL brings up no PLL and writes no RCC clock configuration (only
+//! peripheral clock enables), so it runs at the reset clock throughout.
 //!
-//! **OPEN (2026-09-16) — this used to claim "16 MHz HSI reset default", and
-//! that claim is not established.** `secure/src/hw/rcc.rs` enables HSI16 and
-//! *switches* SYSCLK to it as its first step, which only makes sense if the
-//! reset clock is MSIS (`RCC_CFGR1.SW = 00`), not HSI16. If the FSBL runs on
-//! the MSIS reset range instead, every delay here is roughly 4× LONGER than
-//! nominal — the safe direction for panel init (reset and SLPOUT waits are
-//! over-satisfied, never under), with the real consequence being that the
-//! ~3 s fingerprint hold in `render.rs` is closer to ~12 s, and that
-//! `docs/security/measured-boot.md`'s "~3 s" figure is wrong.
+//! **Corrected 2026-09-16 — this file previously said "16 MHz HSI reset
+//! default", which is wrong by 4×.** From the vendor SVD's reset values
+//! (`STM32CubeProgrammer/SVD/STM32U585.svd`):
 //!
-//! Do not cite a figure here as fact until it is measured. It is being
-//! measured the honest way — the FSBL records `RCC_CFGR1` / `RCC_ICSCR1` /
-//! `RCC_CSR` into the `stage-marker` page itself, which (unlike a debugger
-//! sample after an attach that resets the core) cannot be a post-reset
-//! artifact.
+//! ```text
+//!   RCC_CFGR1 reset 0x0000_0000 -> SW[1:0] = 00      => SYSCLK is MSIS
+//!   RCC_ICSCR1 reset 0x4400_0000 -> MSIRGSEL(b23) = 0 => range from RCC_CSR
+//!   RCC_CSR   reset 0x0C00_4400 -> MSISSRANGE[15:12] = 4
+//!   SVD enumeration: "range 4 around 4 MHz (reset value)"
+//! ```
+//!
+//! Both range sources hold 4 at reset (`ICSCR1.MSISRANGE[31:28]` is also 4),
+//! so `MSIRGSEL` does not change the answer. Corroborated on the bench: a
+//! sampled `RCC_CR = 0x35` matches the SVD reset value exactly, consistent
+//! with the FSBL never touching it. The giveaway in-tree was always
+//! `secure/src/hw/rcc.rs`, which *enables HSI16 and switches SYSCLK to it* as
+//! its first step — pointless if reset were already HSI16.
+//!
+//! Consequences, all previously understated by 4×:
+//!
+//!   * every [`delay_ms`] here runs ~4× LONG. Harmless for panel bring-up
+//!     (reset / SLPOUT waits are over-satisfied, never under), but the
+//!     `render.rs` fingerprint hold is ~12 s, not 3 s.
+//!   * `MBR = ÷4` of a 4 MHz PCLK2 is a **1 MHz** SPI clock, not 4 MHz, so a
+//!     correct full-screen repaint still costs ~1 s on top of the hold.
+//!   * a [`spi_wait`] timeout costs ~10 s, not "a few seconds" — which is why
+//!     a wrong pin map presents as a hang rather than as slowness.
+//!
+//! 1 MHz keeps a very large margin over the NV3007's 10 ns setup/hold spec,
+//! so the prescaler stays as-is; the panel is painted once at boot.
 //!
 //! ## Reset — per board, selected by a const
 //!
@@ -229,14 +240,19 @@ fn modify(addr: usize, f: impl FnOnce(u32) -> u32) {
 
 /// Blocking nop-counted delay — the SAME calibration the OLED path used, and
 /// deliberately NOT the secure driver's `cortex_m::asm::delay(160_000 * ms)`,
-/// which assumes the 160 MHz PLL the FSBL never brings up and would run
-/// roughly an order of magnitude long (the 3 s fingerprint hold becoming ~30 s
-/// and reading as a boot hang).
+/// which assumes the 160 MHz PLL the FSBL never brings up.
 ///
-/// The `4_000` is pinned by `fsbl-tests/tests/source_invariants.rs`. Its
-/// nominal clock, however, is an OPEN question — see the module header: if the
-/// reset clock is MSIS rather than HSI16 these are ~4× long, which is the safe
-/// direction for panel timing but makes the fingerprint hold ~12 s, not 3 s.
+/// **The `4_000` is calibrated for 16 MHz, but the FSBL runs at 4 MHz MSIS**
+/// (see the module header for the SVD reset values that establish this), so
+/// every delay here is ~4× its nominal value: `delay_ms(150)` is ~600 ms.
+/// That is the SAFE direction for panel bring-up — every vendor minimum is
+/// over-satisfied — so the constant is left alone rather than retuned, which
+/// would change validated iota2 panel timing. It is pinned by
+/// `fsbl-tests/tests/source_invariants.rs`.
+///
+/// Where it is NOT harmless is the fingerprint hold: `render.rs` asks for
+/// 3,000 and gets ~12 s. That is a user-visible boot window, so changing it is
+/// an owner decision, not a cleanup.
 pub fn delay_ms(ms: u32) {
     for _ in 0..ms {
         for _ in 0..4_000 {
@@ -312,7 +328,7 @@ fn config_af_pin(pin: u32) {
 }
 
 // ---------------------------------------------------------------------------
-// SPI1 init (ports spi_hw::init for the spi1-arduino pinout, 16 MHz PCLK2)
+// SPI1 init (ports spi_hw::init, board-derived pinout, 4 MHz PCLK2)
 // ---------------------------------------------------------------------------
 
 fn spi1_init() {
@@ -350,7 +366,8 @@ fn spi1_init() {
     // 6. SPI peripheral. SSI=1 before MASTER (avoid false mode-fault), SPE=0.
     wr(SPI_CR1, 1 << 12);
     cortex_m::asm::dsb();
-    // CFG1: DSIZE=7 (8-bit), MBR=÷4 (bits [30:28]=0b001) → 16/4 = 4 MHz SPI.
+    // CFG1: DSIZE=7 (8-bit), MBR=÷4 (bits [30:28]=0b001) → 4/4 = 1 MHz SPI
+    // (PCLK2 is the 4 MHz MSIS reset clock, not the 16 MHz once assumed here).
     wr(SPI_CFG1, (0b001 << 28) | 7);
     // CFG2: MASTER (bit 22) + SSM (bit 26); Mode 0, MSB-first, full-duplex.
     wr(SPI_CFG2, (1 << 22) | (1 << 26));
@@ -424,8 +441,8 @@ fn spi_begin(tsize: u16) {
 
 /// Bounded poll of an SPI status flag. Spins until `flag` is set or the cap is
 /// hit, returning whether it was seen. On a healthy panel the flag is ready
-/// within microseconds, so the cap (~10M iterations ≈ a few seconds at the
-/// 16 MHz FSBL clock) never trips in normal operation — it exists only so a
+/// within microseconds, so the cap (~10M iterations ≈ **10 s** at the FSBL's
+/// 4 MHz MSIS clock) never trips in normal operation — it exists only so a
 /// STALLED SPI/LCD (dead panel, cracked ribbon, cold-solder joint) cannot hang
 /// the legacy bench bootloader forever: the FSBL arms no watchdog,
 /// so an unbounded `while` here would be an unrecoverable boot hang. On timeout

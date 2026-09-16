@@ -16,7 +16,7 @@
 //!    is the trust-chain property: the user sees FSBL's verdict for
 //!    the slot's bytes before the slot ever gets to display anything.
 //! 3. `fsbl/src/nv3007.rs` keeps the hardware-validated NV3007 constants
-//!    (`X_OFFSET=12`, SWRESET reset, the 16 MHz `delay_ms` calibration). The
+//!    (`X_OFFSET=12`, SWRESET reset, the `delay_ms` nop calibration). The
 //!    OLED backend was removed 2026-06-30; only the NV3007 SPI LCD ships, and
 //!    each of these pins silently breaks the boot fingerprint render if wrong.
 //! 4. `secure/src/measured_boot.rs` still calls `firmware_hash()` —
@@ -258,15 +258,15 @@ fn negative_nv3007_keeps_hardware_validated_constants() {
     // 160 MHz `cortex_m::asm::delay` — the FSBL brings up no PLL, so the
     // secure form would run orders of magnitude long and read as a boot hang.
     //
-    // OPEN (2026-09-16): the 4_000/ms constant is documented as "16 MHz HSI
-    // reset default", but `secure/src/hw/rcc.rs` *enables HSI16 and switches
-    // SYSCLK to it* as its first step, which only makes sense if reset SYSCLK
-    // is MSIS (RCC_CFGR1.SW = 00), not HSI16. If the FSBL actually runs on the
-    // MSIS reset range the constant is off by a factor of ~4 — in the SAFE
-    // direction (delays run LONG, so panel init timing is still satisfied),
-    // with the only real consequence being the ~3 s fingerprint hold becoming
-    // ~12 s. Pinned as a constant either way; the nominal-clock prose is not
-    // yet measured and must not be cited as fact.
+    // RESOLVED (2026-09-16): the 4_000/ms constant is calibrated for 16 MHz,
+    // but the FSBL runs at 4 MHz. Established from the vendor SVD's reset
+    // values — RCC_CFGR1.SW = 00 (MSIS), RCC_CSR.MSISSRANGE = 4, and the SVD's
+    // own enumeration "range 4 around 4 MHz (reset value)" — with ICSCR1's
+    // MSISRANGE independently also 4, so MSIRGSEL does not change it. The
+    // constant is therefore ~4× long, which is the SAFE direction for panel
+    // init, and is pinned here rather than retuned so validated iota2 timing
+    // does not move. The user-visible consequence is that render.rs's 3,000 ms
+    // fingerprint hold is really ~12 s — an owner decision, not a cleanup.
     assert!(
         src.contains("for _ in 0..4_000 {"),
         "nv3007::delay_ms must use the FSBL's nop calibration (4_000/ms), not the \

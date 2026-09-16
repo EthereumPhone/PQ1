@@ -15,10 +15,19 @@ use sphincs_tz_bip39::firmware_fingerprint_lines;
 
 use crate::nv3007::{delay_ms, Lcd};
 
-/// How long the FSBL fingerprint stays on the LCD before branching
-/// into the slot. 3 seconds at 16 MHz core clock — long enough for a
-/// human to glance + recognise the words; short enough that boot UX
-/// stays under 5 s end-to-end.
+/// How long the FSBL fingerprint stays on the LCD before branching into the
+/// slot — long enough for a human to glance at and recognise the words.
+///
+/// **This value is nominal, and the real hold is ~4× longer.** `nv3007`'s
+/// `delay_ms` is calibrated for 16 MHz while the FSBL actually runs at 4 MHz
+/// MSIS (see the SVD reset values quoted in the `nv3007` module header), so
+/// 3,000 here yields roughly **12 s** on silicon, not 3 s. The old "boot UX
+/// stays under 5 s end-to-end" claim was wrong for the same reason.
+///
+/// Deliberately NOT retuned: this is the user-visible boot-time trust window
+/// that `docs/security/measured-boot.md` and invariant #10 describe, so
+/// shortening it is an owner decision rather than a comment fix. A longer
+/// window is at least the safe direction — more time to read the words.
 pub const FINGERPRINT_HOLD_MS: u32 = 3_000;
 
 /// Drive the LCD end-to-end: init, render, flush, delay, return.
@@ -61,7 +70,8 @@ pub fn render_fingerprint(digest: &[u8; 32]) {
         crate::nv3007::spi_wait_timeouts(),
     );
 
-    // Hold ~3 s so the user can read the words. No button-wait — FSBL
+    // Hold so the user can read the words — ~12 s in practice at the 4 MHz
+    // reset clock, despite the 3,000 ms nominal. No button-wait — FSBL
     // doesn't init GPIO buttons; a power-cycle is the abort path.
     delay_ms(FINGERPRINT_HOLD_MS);
 }

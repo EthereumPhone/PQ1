@@ -56,9 +56,11 @@ stage-marker = []
 # Wiring up the HASH peripheral here would require porting RCC init,
 # the HASH driver, and the `pqsigner_sha256_*` extern fns from the
 # secure crate. Software SHA-256 at 16 MHz takes about 1 s for a full
-# FSBL boot (verify + image-hash both manifests + both slots). That's
-# acceptable as a boot budget; the HW-SHA acceleration is a tracked
-# follow-up optimization.
+# FSBL boot (verify + image-hash both manifests + both slots) — CORRECTED
+# 2026-09-16: that estimate assumed 16 MHz, but the FSBL runs at the 4 MHz
+# MSIS reset clock (SVD reset values, see fsbl/src/nv3007.rs's module
+# header), so it is nearer 4 s. Still acceptable as a boot budget, but the
+# HW-SHA acceleration follow-up is worth 4× more than previously stated.
 sphincs-c10 = { workspace = true }
 
 # Manifest / boot-state layout. no_std, no alloc.
