@@ -20,33 +20,83 @@
 //! requires the approved geometry, WRP/RDP ceremony, resource gates, and
 //! silicon evidence; this display parity alone does not establish it.
 //!
-//! ## Pin mapping (B-U585I-IOT02A, Arduino R3 headers + `spi1-arduino`)
+//! ## Pin mapping — from [`crate::board`], not hard-coded
+//!
+//! Every pin, port base and alternate-function number comes from the board
+//! map, mirroring `secure/src/hw/spi_hw.rs`. Naming a board is mandatory.
 //!
 //! ```text
-//!   PE12  CS   (D10 / CN13 pin 3, GPIO output active-low)
-//!   PE13  SCK  (D13 / CN13 pin 6, SPI1_SCK  AF5)
-//!   PE15  MOSI (D11 / CN13 pin 4, SPI1_MOSI AF5)
-//!   PE7   DC   (D4,  CN14 — Data/Command)
-//!   PE14  RES  (D12, CN13 pin 5 — tied to 3V3 on this board → SWRESET used)
-//!   3V3   VCC + BLK (backlight hard-wired)
+//!   iota2 (B-U585I-IOT02A, Arduino R3 headers)
+//!     PE12  CS   (D10 / CN13 pin 3, GPIO output active-low)
+//!     PE13  SCK  (D13 / CN13 pin 6, SPI1_SCK  AF5)
+//!     PE14  MISO (D12 — configured AF5, then overridden as RES; unread)
+//!     PE15  MOSI (D11 / CN13 pin 4, SPI1_MOSI AF5)
+//!     PE7   DC   (D4,  CN14 — Data/Command)
+//!     3V3   VCC + BLK (backlight hard-wired), RES strapped to 3V3
+//!
+//!   pq1 (AL_A66_MB_V10, 48-pin UFQFPN)
+//!     PA4   CS   ("LCM SPI CS",   GPIO output active-low)
+//!     PA5   SCK  ("LCM SPI LCK",  SPI1_SCK  AF5)
+//!     PA7   MOSI ("LCM SPI MOSI", SPI1_MOSI AF5)   — no MISO: PA6 is NC
+//!     PB0   DC   ("LCM DC")
+//!     PB1   RST  ("LCM RST")  — really driven here, so a real reset pulse
+//!     PB15  EN   ("LCM EN")   — gates an AW99703; see the note below
 //! ```
 //!
-//! ## Clocking — 16 MHz (FSBL has no RCC bring-up)
+//! Three pq1 properties broke the previous hard-coded form, and they are why
+//! this port exists: the panel is on **port A**, which is a port that on a
+//! 48-pin part *exists on the die but drives nothing* if you write the wrong
+//! one; the SPI pins are **non-contiguous** (4/5/7, PA6 skipped), so deriving
+//! them by offset from CS is wrong; and they sit **below pin 8**, so their AF
+//! nibbles are in `AFRL` while iota2's 12..15 are all in `AFRH`.
 //!
-//! The FSBL runs the MCU at the 16 MHz HSI reset default (it does not bring
-//! up the 160 MHz PLL before branching). So [`delay_ms`] is the same
-//! 16 MHz-calibrated nop loop the OLED path used (NOT the secure driver's
-//! 160 MHz `cortex_m::asm::delay`), and the SPI prescaler is chosen for a
-//! 16 MHz PCLK2 (`MBR=÷4 → 4 MHz`, a huge margin over the NV3007's 10 ns
-//! setup/hold spec — the panel is painted once at boot, so throughput is a
-//! non-issue).
+//! DC/RST/EN are on a **different port** from the SPI on pq1, so this driver
+//! clocks every port its own pins live on rather than assuming one.
 //!
-//! ## Reset — SWRESET, not a pin pulse
+//! ## Backlight — a dark pq1 panel is NOT a failure of this driver
 //!
-//! RES (PE14) is tied to 3V3 on this board (both PE14 and PD15 proved
-//! un-drivable at bring-up — see `lcd_nv3007.rs`), so the panel is held out
-//! of reset and we reset it in software with `0x01` (SWRESET), mirroring the
-//! validated secure `lcd::init()` sequence.
+//! `LCM_EN` (PB15) only enables an AW99703 LED-driver IC whose brightness is
+//! programmed over I2C2 at `0x36`, and there is no driver for that chip in the
+//! tree. The FSBL has no I2C stage by design, so it cannot program it. The
+//! success criterion for this display port is therefore the `stage-marker`
+//! page reaching `LcdInited` and `RenderFlushed` with a zero timeout count —
+//! not visible pixels.
+//!
+//! ## Clocking — the reset default, whatever it is (FSBL has no RCC bring-up)
+//!
+//! The FSBL brings up no PLL before branching: it runs on whatever the reset
+//! clock is, so [`delay_ms`] is a nop loop rather than the secure driver's
+//! 160 MHz `cortex_m::asm::delay`, and the SPI prescaler (`MBR = ÷4`) is left
+//! conservative. The panel is painted once at boot, so throughput is a
+//! non-issue either way, and ÷4 of any reset-range clock has a large margin
+//! over the NV3007's 10 ns setup/hold spec.
+//!
+//! **OPEN (2026-09-16) — this used to claim "16 MHz HSI reset default", and
+//! that claim is not established.** `secure/src/hw/rcc.rs` enables HSI16 and
+//! *switches* SYSCLK to it as its first step, which only makes sense if the
+//! reset clock is MSIS (`RCC_CFGR1.SW = 00`), not HSI16. If the FSBL runs on
+//! the MSIS reset range instead, every delay here is roughly 4× LONGER than
+//! nominal — the safe direction for panel init (reset and SLPOUT waits are
+//! over-satisfied, never under), with the real consequence being that the
+//! ~3 s fingerprint hold in `render.rs` is closer to ~12 s, and that
+//! `docs/security/measured-boot.md`'s "~3 s" figure is wrong.
+//!
+//! Do not cite a figure here as fact until it is measured. It is being
+//! measured the honest way — the FSBL records `RCC_CFGR1` / `RCC_ICSCR1` /
+//! `RCC_CSR` into the `stage-marker` page itself, which (unlike a debugger
+//! sample after an attach that resets the core) cannot be a post-reset
+//! artifact.
+//!
+//! ## Reset — per board, selected by a const
+//!
+//! On iota2 RES (PE14) is tied to 3V3 (both PE14 and PD15 proved un-drivable
+//! at bring-up — see `lcd_nv3007.rs`), so the panel is held out of reset and
+//! we reset it in software with `0x01` (SWRESET). On pq1 `LCM_RST` really is
+//! driven by the MCU (PB1), so it gets a genuine pulse via [`hard_reset`],
+//! which also resets state SWRESET leaves alone. [`board::LCD_RST_IS_DRIVABLE`]
+//! picks between them; being a `const`, the unused arm is
+//! dead-code-eliminated, so neither board carries the other's path. Both
+//! mirror the validated secure `lcd::init()` sequence.
 //!
 //! On QEMU this driver does not run: the FSBL only ever builds for
 //! `thumbv8m.main-none-eabi` (`fsbl/build.rs`), there is no QEMU FSBL path,
@@ -54,28 +104,27 @@
 
 use core::ptr::{read_volatile, write_volatile};
 
+use crate::board;
 use crate::glyphs::glyph_col;
 
 // ---------------------------------------------------------------------------
-// MMIO addresses (STM32U585 secure aliases — TZEN=1)
+// MMIO addresses (STM32U585 secure aliases — TZEN=1), derived from the board
 // ---------------------------------------------------------------------------
 
-const RCC_S: usize = 0x5602_0C00;
-const GPIOE_S: usize = 0x5202_1000;
-const SPI1: usize = 0x5001_3000;
+const SPI1: usize = board::LCD_SPI_BASE as usize;
 
 // RCC offsets
-const RCC_AHB2ENR1: usize = RCC_S + 0x8C; // GPIOEEN = bit 4
-const RCC_APB2ENR: usize = RCC_S + 0xA4; // SPI1EN  = bit 12
-const RCC_APB2RSTR: usize = RCC_S + 0x7C; // SPI1RST = bit 12
+const RCC_AHB2ENR1: usize = (board::RCC_S + board::RCC_AHB2ENR1_OFF) as usize;
+const RCC_APB2ENR: usize = (board::RCC_S + board::RCC_APB2ENR_OFF) as usize;
+const RCC_APB2RSTR: usize = (board::RCC_S + board::RCC_APB2RSTR_OFF) as usize;
 
-// GPIOE offsets
-const GPIOE_MODER: usize = GPIOE_S + 0x00;
-const GPIOE_OTYPER: usize = GPIOE_S + 0x04;
-const GPIOE_OSPEEDR: usize = GPIOE_S + 0x08;
-const GPIOE_PUPDR: usize = GPIOE_S + 0x0C;
-const GPIOE_BSRR: usize = GPIOE_S + 0x18;
-const GPIOE_AFRH: usize = GPIOE_S + 0x24; // AFR for pins 8..15
+/// Address of one GPIO register on an arbitrary port.
+///
+/// The previous form had a fixed `GPIOE_*` const per register, which cannot
+/// express pq1's split across two ports (SPI on A, control lines on B).
+const fn greg(port: u32, off: u32) -> usize {
+    (port + off) as usize
+}
 
 // SPI1 offsets (STM32U5 SPI v2, RM0456 §68.8)
 const SPI_CR1: usize = SPI1 + 0x00;
@@ -96,10 +145,14 @@ const IFCR_EOTC: u32 = 1 << 3;
 const IFCR_TXTFC: u32 = 1 << 4;
 const IFCR_OVRC: u32 = 1 << 6;
 
-// Pins on GPIOE
-const CS_PIN: u32 = 12;
-const DC_PIN: u32 = 7;
-const RES_PIN: u32 = 14;
+// Pins and their ports, from the board map. CS sits on the SPI port on both
+// boards; DC and RES do NOT (pq1 puts them on port B).
+const SPI_PORT: u32 = board::LCD_SPI_PORT;
+const CS_PIN: u32 = board::LCD_CS_PIN;
+const DC_PORT: u32 = board::LCD_DC_PORT;
+const DC_PIN: u32 = board::LCD_DC_PIN;
+const RES_PORT: u32 = board::LCD_RST_PORT;
+const RES_PIN: u32 = board::LCD_RST_PIN;
 
 /// TSIZE is CR2[15:0]; chunk every bulk transfer. Even so an RGB565 pixel is
 /// never split across the per-chunk SPE-toggle gap.
@@ -174,10 +227,16 @@ fn modify(addr: usize, f: impl FnOnce(u32) -> u32) {
     wr(addr, f(rd(addr)));
 }
 
-/// Blocking cycle-counted delay. ~ms at the FSBL's 16 MHz HSI core clock —
-/// the SAME calibration the OLED path used. NOT the secure driver's 160 MHz
-/// `cortex_m::asm::delay(160_000*ms)`, which at 16 MHz would run 10× too long
-/// (the 3 s fingerprint hold would become ~30 s and read as a boot hang).
+/// Blocking nop-counted delay — the SAME calibration the OLED path used, and
+/// deliberately NOT the secure driver's `cortex_m::asm::delay(160_000 * ms)`,
+/// which assumes the 160 MHz PLL the FSBL never brings up and would run
+/// roughly an order of magnitude long (the 3 s fingerprint hold becoming ~30 s
+/// and reading as a boot hang).
+///
+/// The `4_000` is pinned by `fsbl-tests/tests/source_invariants.rs`. Its
+/// nominal clock, however, is an OPEN question — see the module header: if the
+/// reset clock is MSIS rather than HSI16 these are ~4× long, which is the safe
+/// direction for panel timing but makes the fingerprint hold ~12 s, not 3 s.
 pub fn delay_ms(ms: u32) {
     for _ in 0..ms {
         for _ in 0..4_000 {
@@ -192,19 +251,64 @@ pub fn delay_ms(ms: u32) {
 
 #[inline(always)]
 fn dc_low() {
-    wr(GPIOE_BSRR, 1 << (DC_PIN + 16));
+    wr(greg(DC_PORT, board::GPIO_BSRR_OFF), 1 << (DC_PIN + 16));
 }
 #[inline(always)]
 fn dc_high() {
-    wr(GPIOE_BSRR, 1 << DC_PIN);
+    wr(greg(DC_PORT, board::GPIO_BSRR_OFF), 1 << DC_PIN);
 }
 #[inline(always)]
 fn cs_assert() {
-    wr(GPIOE_BSRR, 1 << (CS_PIN + 16));
+    wr(greg(SPI_PORT, board::GPIO_BSRR_OFF), 1 << (CS_PIN + 16));
 }
 #[inline(always)]
 fn cs_deassert() {
-    wr(GPIOE_BSRR, 1 << CS_PIN);
+    wr(greg(SPI_PORT, board::GPIO_BSRR_OFF), 1 << CS_PIN);
+}
+#[inline(always)]
+fn res_low() {
+    wr(greg(RES_PORT, board::GPIO_BSRR_OFF), 1 << (RES_PIN + 16));
+}
+#[inline(always)]
+fn res_high() {
+    wr(greg(RES_PORT, board::GPIO_BSRR_OFF), 1 << RES_PIN);
+}
+
+/// Configure one pin as a push-pull output at very-high speed, no pull.
+///
+/// Additionally clears `PUPDR`, which the previous hard-coded CS block did
+/// not. Every LCD pin on both boards has a `PUPDR` reset value of 00 and the
+/// FSBL sets no pulls, so this is a no-op in practice — it is here so that DC,
+/// RES, CS and the backlight enable all go through one reviewed path.
+fn config_output_pin(port: u32, pin: u32) {
+    let two = pin * 2;
+    let field = 0b11u32 << two;
+    modify(greg(port, board::GPIO_MODER_OFF), |v| {
+        (v & !field) | (0b01 << two)
+    });
+    modify(greg(port, board::GPIO_OTYPER_OFF), |v| v & !(1 << pin));
+    set_bits(greg(port, board::GPIO_OSPEEDR_OFF), field);
+    modify(greg(port, board::GPIO_PUPDR_OFF), |v| v & !field);
+}
+
+/// Configure one pin into alternate-function mode at [`board::LCD_SPI_AF`],
+/// push-pull, very-high speed. Touches only this pin's bits.
+///
+/// Uses [`board::afr_off`] so the nibble lands in `AFRL` for pins 0..7 and
+/// `AFRH` for 8..15 — the previous form wrote `AFRH` unconditionally, which
+/// silently mis-configured every pq1 pin.
+fn config_af_pin(pin: u32) {
+    let two = pin * 2;
+    let field = 0b11u32 << two;
+    modify(greg(SPI_PORT, board::GPIO_MODER_OFF), |v| {
+        (v & !field) | (0b10 << two)
+    });
+    modify(greg(SPI_PORT, board::GPIO_OTYPER_OFF), |v| v & !(1 << pin));
+    set_bits(greg(SPI_PORT, board::GPIO_OSPEEDR_OFF), field);
+    let sh = board::afr_shift(pin);
+    modify(greg(SPI_PORT, board::afr_off(pin)), |v| {
+        (v & !(0xF << sh)) | (board::LCD_SPI_AF << sh)
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -212,40 +316,36 @@ fn cs_deassert() {
 // ---------------------------------------------------------------------------
 
 fn spi1_init() {
-    // 1. GPIOE clock.
-    set_bits(RCC_AHB2ENR1, 1 << 4);
+    // 1. GPIO clock for the port the SPI pins live on.
+    set_bits(RCC_AHB2ENR1, board::gpio_rcc_bit(SPI_PORT));
     cortex_m::asm::dsb();
     // 2. SPI1 clock (APB2 bit 12).
-    set_bits(RCC_APB2ENR, 1 << 12);
+    set_bits(RCC_APB2ENR, board::RCC_SPI1EN_BIT);
     cortex_m::asm::dsb();
     // 3. Reset SPI1.
-    set_bits(RCC_APB2RSTR, 1 << 12);
+    set_bits(RCC_APB2RSTR, board::RCC_SPI1RST_BIT);
     cortex_m::asm::dsb();
-    modify(RCC_APB2RSTR, |v| v & !(1 << 12));
+    modify(RCC_APB2RSTR, |v| v & !board::RCC_SPI1RST_BIT);
     cortex_m::asm::dsb();
 
-    // 4. CS = PE12 GPIO output, push-pull, very-high speed, start HIGH.
-    modify(GPIOE_MODER, |v| (v & !(0b11 << 24)) | (0b01 << 24));
-    modify(GPIOE_OTYPER, |v| v & !(1 << 12));
-    set_bits(GPIOE_OSPEEDR, 0b11 << 24);
-    wr(GPIOE_BSRR, 1 << CS_PIN);
+    // 4. CS as a GPIO output, push-pull, very-high speed. Driven HIGH before
+    //    the mode switch (as `secure/src/hw/spi_hw.rs` does) so the panel
+    //    never sees a spurious select while the pad is being configured.
+    wr(greg(SPI_PORT, board::GPIO_BSRR_OFF), 1 << CS_PIN);
+    config_output_pin(SPI_PORT, CS_PIN);
+    wr(greg(SPI_PORT, board::GPIO_BSRR_OFF), 1 << CS_PIN);
 
-    // 5. SCK=PE13, MISO=PE14, MOSI=PE15 as AF5 (MISO is reconfigured to RES
-    //    output below — the panel is write-only).
-    modify(GPIOE_MODER, |v| {
-        (v & !(0b11 << 26) & !(0b11 << 28) & !(0b11 << 30))
-            | (0b10 << 26)
-            | (0b10 << 28)
-            | (0b10 << 30)
-    });
-    modify(GPIOE_OTYPER, |v| v & !((1 << 13) | (1 << 15)));
-    set_bits(GPIOE_OSPEEDR, (0b11 << 26) | (0b11 << 28) | (0b11 << 30));
-    modify(GPIOE_AFRH, |v| {
-        (v & !(0xF << 20) & !(0xF << 24) & !(0xF << 28))
-            | (5 << 20) // PE13 AF5
-            | (5 << 24) // PE14 AF5
-            | (5 << 28) // PE15 AF5
-    });
+    // 5. SCK / MOSI (and MISO where the board routes one) as AF.
+    //    Per pin rather than one contiguous run: pq1's are 5 and 7 with a gap
+    //    and sit in AFRL, while iota2's 13/14/15 are a run in AFRH.
+    config_af_pin(board::LCD_SCK_PIN);
+    config_af_pin(board::LCD_MOSI_PIN);
+    if let Some(miso) = board::LCD_MISO_PIN {
+        // iota2 only. The panel is write-only on both boards, so this pad's
+        // configuration is the only thing that changes — and on iota2
+        // `init_dc_res_gpios` then overrides this same pin as the RES output.
+        config_af_pin(miso);
+    }
 
     // 6. SPI peripheral. SSI=1 before MASTER (avoid false mode-fault), SPE=0.
     wr(SPI_CR1, 1 << 12);
@@ -258,21 +358,57 @@ fn spi1_init() {
     cortex_m::asm::dsb();
 }
 
-/// DC (PE7) + RES (PE14) as push-pull outputs, both starting HIGH (RES
-/// deasserted / DC=data). RES override of PE14's AF is harmless — write-only
-/// panel, MISO unused — and RES is externally tied to 3V3 anyway (SWRESET).
+/// DC + RES as push-pull outputs, both starting HIGH (RES deasserted, DC =
+/// data), plus the backlight enable where the board has one.
+///
+/// On iota2 DC and RES are both on the SPI port (already clocked by
+/// `spi1_init`), and RES overriding the MISO pad's AF is harmless — write-only
+/// panel — because that board's panel reset is strapped to 3V3. On pq1 they
+/// are on port B while the SPI is on port A, so the extra port clock is
+/// load-bearing: without it these writes reach an unclocked port and the pads
+/// never move.
 fn init_dc_res_gpios() {
-    modify(GPIOE_MODER, |v| {
-        (v & !(0b11 << (DC_PIN * 2)) & !(0b11 << (RES_PIN * 2)))
-            | (0b01 << (DC_PIN * 2))
-            | (0b01 << (RES_PIN * 2))
-    });
-    modify(GPIOE_OTYPER, |v| v & !((1 << DC_PIN) | (1 << RES_PIN)));
-    set_bits(GPIOE_OSPEEDR, (0b11 << (DC_PIN * 2)) | (0b11 << (RES_PIN * 2)));
-    modify(GPIOE_PUPDR, |v| {
-        v & !(0b11 << (DC_PIN * 2)) & !(0b11 << (RES_PIN * 2))
-    });
-    wr(GPIOE_BSRR, (1 << DC_PIN) | (1 << RES_PIN));
+    // Clock every port this function touches, in one write.
+    let mut clocks = board::gpio_rcc_bit(DC_PORT) | board::gpio_rcc_bit(RES_PORT);
+    if let Some((port, _)) = board::LCD_BACKLIGHT_EN {
+        clocks |= board::gpio_rcc_bit(port);
+    }
+    set_bits(RCC_AHB2ENR1, clocks);
+    cortex_m::asm::dsb();
+
+    config_output_pin(DC_PORT, DC_PIN);
+    config_output_pin(RES_PORT, RES_PIN);
+
+    // Start both HIGH (RES deasserted so `hard_reset` can sequence it).
+    wr(greg(DC_PORT, board::GPIO_BSRR_OFF), 1 << DC_PIN);
+    wr(greg(RES_PORT, board::GPIO_BSRR_OFF), 1 << RES_PIN);
+
+    // Backlight enable, where the board has one (pq1: PB15 = "LCM EN").
+    // Driven high BEFORE the output is enabled, matching the secure driver.
+    //
+    // NOTE: on pq1 this alone may not light the panel — LCM_EN gates an
+    // AW99703 whose brightness is set over I2C2 at 0x36, and the FSBL has no
+    // I2C stage. Necessary, not sufficient; see the module header.
+    if let Some((port, pin)) = board::LCD_BACKLIGHT_EN {
+        wr(greg(port, board::GPIO_BSRR_OFF), 1 << pin);
+        config_output_pin(port, pin);
+        wr(greg(port, board::GPIO_BSRR_OFF), 1 << pin);
+    }
+}
+
+/// Hardware reset pulse, for boards whose RES line actually reaches the panel.
+///
+/// Timing mirrors the validated secure driver
+/// (`secure/src/hw/lcd_nv3007.rs::hard_reset`): high 10 ms, low 200 ms, high
+/// 120 ms. Note these are `delay_ms` units, which are nop-calibrated — see
+/// the calibration note on [`delay_ms`].
+fn hard_reset() {
+    res_high();
+    delay_ms(10);
+    res_low();
+    delay_ms(200);
+    res_high();
+    delay_ms(120);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,11 +431,46 @@ fn spi_begin(tsize: u16) {
 /// so an unbounded `while` here would be an unrecoverable boot hang. On timeout
 /// we give up on this transfer and let boot proceed — a broken display renders
 /// nothing either way, so booting (device still usable over USB) beats hanging.
+/// Count of [`spi_wait`] polls that hit their bound. Diagnostic only
+/// (`stage-marker`), and deliberately NOT a control input: the bound and every
+/// caller's behaviour are unchanged, so enabling this cannot alter the control
+/// flow it measures.
+///
+/// Why it exists: `spi_send_byte` and `spi_end` DISCARD `spi_wait`'s result,
+/// so a wrong pin map — where SPI1 never receives its pins and `TXP` stops
+/// asserting once the FIFO fills — makes every byte burn the full bound with
+/// no trace anywhere. At 121,552 bytes for a single `fill_screen` that is on
+/// the order of 10^12 wait iterations: bounded in principle, and
+/// indistinguishable from a hang at any observation window anyone would use.
+/// A silent discarded timeout is what let a pin-map bug masquerade as a stall.
+#[cfg(feature = "stage-marker")]
+static mut SPI_WAIT_TIMEOUTS: u32 = 0;
+
+/// How many [`spi_wait`] polls have timed out. Zero on a correctly-mapped
+/// panel; large means SPI1 is not driving the pins it thinks it is.
+#[cfg(feature = "stage-marker")]
+pub fn spi_wait_timeouts() -> u32 {
+    // SAFETY: the FSBL is single-threaded and this stage runs with no
+    // interrupts enabled, so there is no concurrent accessor; `addr_of!`
+    // avoids taking a reference to a `static mut`, and the read is volatile so
+    // it cannot be folded away.
+    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(SPI_WAIT_TIMEOUTS)) }
+}
+
 #[inline]
 fn spi_wait(flag: u32) -> bool {
     for _ in 0..10_000_000u32 {
         if (rd(SPI_SR) & flag) != 0 {
             return true;
+        }
+    }
+    #[cfg(feature = "stage-marker")]
+    {
+        // SAFETY: as `spi_wait_timeouts` — single-threaded, sole accessor,
+        // volatile so the increment survives optimisation.
+        unsafe {
+            let p = core::ptr::addr_of_mut!(SPI_WAIT_TIMEOUTS);
+            core::ptr::write_volatile(p, core::ptr::read_volatile(p).saturating_add(1));
         }
     }
     false
@@ -586,7 +757,18 @@ impl Lcd {
     pub fn init(&mut self) {
         spi1_init();
         init_dc_res_gpios();
-        write_cmd(0x01); // SWRESET (RES tied to 3V3 → software reset)
+
+        // Reset the panel the way this board can. `LCD_RST_IS_DRIVABLE` is a
+        // const, so the unused arm is dead-code-eliminated — neither board
+        // pays for the other's path. iota2 has RES strapped to 3V3 (PE14 and
+        // PD15 both proved un-drivable at bring-up), so it issues SWRESET;
+        // pq1 routes LCM_RST to PB1 and gets a real pulse, which also resets
+        // state SWRESET leaves alone.
+        if board::LCD_RST_IS_DRIVABLE {
+            hard_reset();
+        } else {
+            write_cmd(0x01); // SWRESET (RES tied to 3V3 → software reset)
+        }
         delay_ms(150);
         run_init_sequence();
         fill_screen(BG);

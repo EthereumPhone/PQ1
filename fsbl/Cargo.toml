@@ -9,6 +9,20 @@ name = "pqsigner-fsbl"
 path = "src/main.rs"
 
 [features]
+# Physical board selection — MANDATORY, exactly one. `fsbl/src/board/mod.rs`
+# hard-errors when neither is set and when both are.
+#
+# The FSBL drives one board-dependent peripheral (the NV3007 LCD it renders the
+# boot fingerprint on), and a wrong pin map is SILENT on this die: port E is
+# addressable but unbonded on pq1's 48-pin package, so writes succeed, drive
+# nothing, and the FSBL branches into the slot having rendered nothing. There
+# is deliberately no default — see the `board/mod.rs` header for why the
+# secure crate retracted its earlier opt-in model.
+#
+# A recipe or test with a HARDCODED --features list must append
+# $(BOARD_FEATURE) itself; `make <target> BOARD=iota2|pq1` derives it.
+board-iota2 = []
+board-pq1 = []
 # Release-only hardening profile. Requires an absolute vendor-key snapshot
 # whose fingerprint exactly matches the reviewed workspace release policy.
 # `make fsbl-release` is the supported entry point.

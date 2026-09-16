@@ -95,7 +95,15 @@ fn fsbl_release_flash_sections_fit_in_32kb() {
             "-p",
             "pqsigner-fsbl",
             "--features",
-            "legacy-fw-rollback-unsafe",
+            // Board is MANDATORY (`fsbl/src/board/mod.rs`), so this gate must
+            // name one — and it names **pq1** deliberately. pq1 is the
+            // shipping board and the larger image (it drives a backlight
+            // enable and a real reset pulse, and its control lines are on a
+            // second GPIO port), so gating iota2 here would leave the board
+            // that actually has to fit in the region unmeasured. iota2 is
+            // still compiled in CI by the `rollback_ship_fences` build
+            // assertions, so neither pin map goes untested.
+            "legacy-fw-rollback-unsafe,board-pq1",
         ])
         .status()
         .expect("spawn cargo build");

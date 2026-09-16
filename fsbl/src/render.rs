@@ -30,6 +30,18 @@ pub const FINGERPRINT_HOLD_MS: u32 = 3_000;
 pub fn render_fingerprint(digest: &[u8; 32]) {
     let mut lcd = Lcd::new();
     lcd.init();
+
+    // `LcdInited` / `RenderFlushed` were DEFINED in `marker.rs` but never
+    // recorded anywhere, which made their absence from the marker page
+    // vacuous — every build ever flashed "failed to reach" them. Wiring them
+    // here is what makes the render observable at all: with only
+    // `RenderEntered` (main.rs) and `Branching` (after this returns), a stall
+    // anywhere inside this function is indistinguishable from any other.
+    // Splitting it separates panel bring-up from the glyph blit, which is the
+    // distinction the pq1 pin port needs to confirm.
+    #[cfg(feature = "stage-marker")]
+    crate::marker::record(crate::marker::Stage::LcdInited, 0);
+
     lcd.clear();
 
     let rows = firmware_fingerprint_lines(digest);
@@ -37,6 +49,17 @@ pub fn render_fingerprint(digest: &[u8; 32]) {
         lcd.draw_text(i, row);
     }
     lcd.flush();
+
+    // Payload = how many `spi_wait` polls timed out. On a correctly-mapped
+    // panel this is 0; a wrong pin map leaves SPI1 without its pins, so TXP
+    // never asserts once the FIFO fills and essentially every byte burns the
+    // full bound. Recording the count turns that from an invisible hang into
+    // a number. See `nv3007::spi_wait_timeouts`.
+    #[cfg(feature = "stage-marker")]
+    crate::marker::record(
+        crate::marker::Stage::RenderFlushed,
+        crate::nv3007::spi_wait_timeouts(),
+    );
 
     // Hold ~3 s so the user can read the words. No button-wait — FSBL
     // doesn't init GPIO buttons; a power-cycle is the abort path.

@@ -254,13 +254,176 @@ fn negative_nv3007_keeps_hardware_validated_constants() {
         "nv3007.rs must reset via SWRESET (0x01) — RES is tied to 3V3, a pin pulse is a no-op"
     );
 
-    // The FSBL runs at 16 MHz (HSI reset default, no PLL bring-up), so delay_ms
-    // MUST use the 16 MHz nop calibration — NOT the secure driver's 160 MHz
-    // `cortex_m::asm::delay`, which would run 10× long and read as a boot hang.
+    // delay_ms MUST use the FSBL's nop calibration, NOT the secure driver's
+    // 160 MHz `cortex_m::asm::delay` — the FSBL brings up no PLL, so the
+    // secure form would run orders of magnitude long and read as a boot hang.
+    //
+    // OPEN (2026-09-16): the 4_000/ms constant is documented as "16 MHz HSI
+    // reset default", but `secure/src/hw/rcc.rs` *enables HSI16 and switches
+    // SYSCLK to it* as its first step, which only makes sense if reset SYSCLK
+    // is MSIS (RCC_CFGR1.SW = 00), not HSI16. If the FSBL actually runs on the
+    // MSIS reset range the constant is off by a factor of ~4 — in the SAFE
+    // direction (delays run LONG, so panel init timing is still satisfied),
+    // with the only real consequence being the ~3 s fingerprint hold becoming
+    // ~12 s. Pinned as a constant either way; the nominal-clock prose is not
+    // yet measured and must not be cited as fact.
     assert!(
         src.contains("for _ in 0..4_000 {"),
-        "nv3007::delay_ms must use the FSBL's 16 MHz nop calibration (4_000/ms), not 160 MHz"
+        "nv3007::delay_ms must use the FSBL's nop calibration (4_000/ms), not the \
+         secure driver's 160 MHz cortex_m::asm::delay"
     );
+}
+
+// ---------------------------------------------------------------------------
+// 3b. The FSBL LCD is board-parameterised, and the board map cannot drift
+//
+// `pq1` bonds only PA0-15/PB0-15/PC13. Port E exists on the die but drives
+// nothing there, so the pre-port driver's hardcoded `GPIOE` writes SUCCEEDED
+// and moved no pads: the FSBL rendered nothing and branched anyway, silently
+// dropping the boot-fingerprint window invariant #10 rests on. These pins keep
+// the parameterisation in place and keep the FSBL's board map in step with the
+// secure world's.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn negative_fsbl_lcd_is_board_parameterised_not_hardcoded_to_port_e() {
+    let src = read_workspace_file("fsbl/src/nv3007.rs");
+
+    // Negative control: the old hardcoded port/pin constants must be GONE.
+    for gone in [
+        "const GPIOE_S: usize",
+        "const GPIOE_MODER: usize",
+        "const GPIOE_AFRH: usize",
+        "const CS_PIN: u32 = 12;",
+        "const DC_PIN: u32 = 7;",
+    ] {
+        assert!(
+            !src.contains(gone),
+            "nv3007.rs still hardcodes `{gone}` — the LCD pin map must come from \
+             `crate::board`, or a pq1 build drives port E, which is unbonded on \
+             its 48-pin package and fails SILENTLY"
+        );
+    }
+
+    // Positive: pins, port bases and the AF number all come from the board.
+    for needed in [
+        "use crate::board;",
+        "const SPI_PORT: u32 = board::LCD_SPI_PORT;",
+        "const CS_PIN: u32 = board::LCD_CS_PIN;",
+        "const DC_PORT: u32 = board::LCD_DC_PORT;",
+        "const RES_PORT: u32 = board::LCD_RST_PORT;",
+        "board::gpio_rcc_bit(SPI_PORT)",
+        "board::afr_off(pin)",
+        "config_af_pin(board::LCD_SCK_PIN);",
+        "config_af_pin(board::LCD_MOSI_PIN);",
+    ] {
+        assert!(
+            src.contains(needed),
+            "nv3007.rs must derive its LCD pin map from `crate::board` — missing `{needed}`"
+        );
+    }
+
+    // `afr_off` is the fix for the specific silent failure that pq1's pins are
+    // below 8 (AFRL) while iota2's are 12..15 (AFRH).
+    let board_mod = read_workspace_file("fsbl/src/board/mod.rs");
+    assert!(
+        board_mod.contains("if pin < 8 {") && board_mod.contains("0x20"),
+        "board::afr_off must select AFRL (0x20) for pins below 8 — pq1's LCD pins \
+         are 4/5/7 and the pre-port driver wrote AFRH unconditionally"
+    );
+
+    // Both reset paths are present and selected by a const, so the unused arm
+    // is dead-code-eliminated rather than reachable on the wrong board.
+    assert!(
+        src.contains("if board::LCD_RST_IS_DRIVABLE {") && src.contains("hard_reset();"),
+        "nv3007.rs must choose the reset path from `board::LCD_RST_IS_DRIVABLE` — \
+         iota2's RES is strapped to 3V3 (SWRESET), pq1 drives LCM_RST on PB1"
+    );
+    // pq1's pulse must match the timings validated in the secure driver.
+    assert!(
+        src.contains("res_high();")
+            && src.contains("delay_ms(10);")
+            && src.contains("res_low();")
+            && src.contains("delay_ms(200);")
+            && src.contains("delay_ms(120);"),
+        "nv3007::hard_reset must mirror secure/src/hw/lcd_nv3007.rs::hard_reset \
+         (high 10 ms, low 200 ms, high 120 ms)"
+    );
+}
+
+#[test]
+fn negative_fsbl_board_selection_is_mandatory_and_unconditional() {
+    let src = read_workspace_file("fsbl/src/board/mod.rs");
+
+    // Both fences must exist.
+    assert!(
+        src.contains("FSBL_BOARD_UNSET"),
+        "board/mod.rs must hard-error when NO board feature is set"
+    );
+    assert!(
+        src.contains("FSBL_BOARD_AMBIGUOUS"),
+        "board/mod.rs must hard-error when BOTH board features are set"
+    );
+
+    // The critical property: the no-board fence must NOT be gated on a
+    // platform feature. The secure world's equivalent is wrapped in
+    // `cfg(all(feature = "stm32u585", ...))`; the FSBL has no such feature, so
+    // copying that form would produce a fence that can never fire — the exact
+    // silent-guard bug that put iota2 pins on pq1 silicon via a recipe with a
+    // hardcoded --features list.
+    let unset_fence = src
+        .split("FSBL_BOARD_UNSET")
+        .next()
+        .expect("split always yields a first element");
+    let guard = unset_fence
+        .rfind("#[cfg(")
+        .map(|i| &unset_fence[i..])
+        .unwrap_or("");
+    assert!(
+        !guard.contains("stm32u585"),
+        "the FSBL's no-board fence must be UNCONDITIONAL — gating it on a platform \
+         feature the FSBL does not have makes it unreachable. Guard found: {guard}"
+    );
+}
+
+#[test]
+fn negative_fsbl_board_map_matches_the_secure_board_map() {
+    // The FSBL keeps a deliberately narrow COPY of the secure world's board
+    // map (LCD facts only), because hoisting the secure map into a shared
+    // crate would break the nine `include_str!` pins that read
+    // `secure/src/board/*.rs` by relative path. Drift is therefore caught
+    // here rather than prevented by construction: every `pub const LCD_` line
+    // in the FSBL's copy must appear VERBATIM in the secure file for the same
+    // board. Subset, not equality — the secure map also carries LCD_TE and
+    // much else the FSBL has no use for.
+    for board in ["iota2", "pq1"] {
+        let fsbl_src = read_workspace_file(&format!("fsbl/src/board/{board}.rs"));
+        let secure_src = read_workspace_file(&format!("secure/src/board/{board}.rs"));
+
+        let lcd_lines: Vec<&str> = fsbl_src
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with("pub const LCD_"))
+            .collect();
+
+        assert!(
+            lcd_lines.len() >= 10,
+            "fsbl/src/board/{board}.rs should declare the full LCD pin set; found only {} \
+             `pub const LCD_` lines — did a constant get renamed out of the drift check?",
+            lcd_lines.len()
+        );
+
+        for line in lcd_lines {
+            assert!(
+                secure_src.lines().map(str::trim).any(|s| s == line),
+                "fsbl/src/board/{board}.rs and secure/src/board/{board}.rs have DRIFTED.\n\
+                 This line is in the FSBL's copy but not in the secure map:\n    {line}\n\
+                 The two must agree: the FSBL renders the boot fingerprint the secure \
+                 world re-renders, on the same physical panel. Update whichever copy is \
+                 wrong — do not relax this test."
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

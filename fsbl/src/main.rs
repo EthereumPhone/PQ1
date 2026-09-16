@@ -73,6 +73,7 @@ use panic_halt as _;
 use cortex_m_rt::entry;
 use fw_manifest::{ManifestRef, TRY_ONCE_COMMITTED, TRY_ONCE_TRIED};
 
+mod board;
 mod boot_state;
 mod branch;
 mod fi;

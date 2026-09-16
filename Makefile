@@ -2285,7 +2285,7 @@ bootproof-build: ## Build FSBL + slot-A secure + NS for the non-monolithic boot 
 	@echo "==> FSBL (vendor key $(BOOTPROOF_PUBKEY))"
 	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/fsbl \
-			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe
+			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe,$(BOARD_FEATURE)
 	@echo "==> secure world LINKED AT SLOT A (0x0C00E000)"
 	@FSBL_VENDOR_PUBKEY=$(BOOTPROOF_PUBKEY) PQSIGNER_SECURE_SLOT=a $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir $(BOOTPROOF_DIR)/secure \
@@ -2368,7 +2368,7 @@ fsbl: ## Build legacy bench FSBL (32 KB regression gate; not candidate approval)
 	@# it is there to measure.
 	@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS) -Z emit-stack-sizes" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/fsbl \
-			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe
+			-p pqsigner-fsbl --features legacy-fw-rollback-unsafe,$(BOARD_FEATURE)
 	@echo "==> FSBL built: $(FSBL_ELF)"
 	@# Geometry gate. Measures the PHYSICAL LOAD span (not `size -B` text+data,
 	@# which undercounts by any inter-segment alignment gap) and derives the
@@ -2399,7 +2399,7 @@ fsbl-lcd-test-hw:
 	@echo "==> Building FSBL NV3007 LCD bring-up test (lcd-test short-circuit)..."
 	@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $(REPRO_FLAGS)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/fsbl \
-			-p pqsigner-fsbl --features lcd-test,legacy-fw-rollback-unsafe
+			-p pqsigner-fsbl --features lcd-test,legacy-fw-rollback-unsafe,$(BOARD_FEATURE)
 	@size $(FSBL_ELF) 2>/dev/null || arm-none-eabi-size $(FSBL_ELF)
 	@echo "==> Flashing FSBL to the boot base + running. Watch the LCD:"
 	@echo "    green -> red -> blue, then 8 words, repeating. Ctrl-C to detach."

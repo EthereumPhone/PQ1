@@ -182,14 +182,19 @@ fn rollback_backend_cannot_enter_production_or_factory_images() {
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "mode-production,legacy-fw-rollback-unsafe",
+        // The board feature is load-bearing for this NEGATIVE test, not
+        // incidental: `fsbl/src/board/mod.rs` hard-errors on a board-less
+        // build, and `assert_cargo_rejected` checks the build failed with the
+        // EXPECTED message. Without a board named here the build would still
+        // fail — for the wrong reason — and the fence below would be untested.
+        "mode-production,legacy-fw-rollback-unsafe,board-iota2",
         "FW_ROLLBACK_FSBL_PRODUCTION_BLOCKED",
     );
     assert_cargo_rejected(
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "lcd-test",
+        "lcd-test,board-iota2",
         "FW_ROLLBACK_FSBL_UNSAFE_OPT_IN_REQUIRED",
     );
     assert_cargo_rejected(
@@ -695,7 +700,9 @@ fn real_vendor_key_cannot_compose_with_legacy_backend_outside_production() {
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "legacy-fw-rollback-unsafe",
+        // `board-iota2` here and `board-pq1` in `footprint.rs`, so CI compiles
+        // BOTH pin maps. A single board everywhere would let the other one rot.
+        "legacy-fw-rollback-unsafe,board-iota2",
         &[("FSBL_VENDOR_PUBKEY", fixture_str.as_str())],
         &["FSBL_ALLOW_DEV_KEY"],
     );
@@ -716,7 +723,7 @@ fn real_vendor_key_cannot_compose_with_legacy_backend_outside_production() {
         &workspace,
         &target_dir,
         "pqsigner-fsbl",
-        "legacy-fw-rollback-unsafe",
+        "legacy-fw-rollback-unsafe,board-iota2",
         &[("FSBL_ALLOW_DEV_KEY", "1")],
         &["FSBL_VENDOR_PUBKEY"],
     );
