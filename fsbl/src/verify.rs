@@ -4,14 +4,20 @@
 //! bytes FSBL re-hashes from flash at boot. We stream-hash directly
 //! from the memory-mapped flash — no RAM copy — using the SHA-256
 //! software path (`sha2::Sha256`) since FSBL's HASH-peripheral setup
-//! is optional. On a real board with HASH enabled this is ~10 ms for
-//! the secure half; in pure software it's ~800 ms. Both are acceptable
-//! for boot.
+//! is optional. In pure software this is **4.67 s** for the secure half
+//! (385,568 B) and 0.09 s for the NS half (7,488 B) — MEASURED on pq1,
+//! 2026-09-16, via the `stage-marker` DWT timestamps.
 //!
-//! (That figure was "~200 ms at 16 MHz" until 2026-09-16. The FSBL actually
-//! runs at the 4 MHz MSIS reset clock — see the SVD reset values quoted in
-//! `crate::nv3007`'s module header — so every software-SHA estimate in this
-//! crate was understated by 4×.)
+//! That is ~3,099 cycles per SHA-256 block at the FSBL's 4 MHz MSIS reset
+//! clock. Two superseded estimates lived here: "~200 ms" (which assumed
+//! 16 MHz) and then "~800 ms" (a 4x scaling of it). The real figure is ~6x
+//! the second, so image hashing is the largest COMPUTE term in the boot —
+//! though still only 12% of wall-clock, because 78% of the boot is `delay_ms`
+//! nop-spinning. See `crate::marker`'s header for the full budget.
+//!
+//! This is what makes the HASH-peripheral port worth pricing: it would cut
+//! ~4.76 s of hashing here, plus most of the 1.50 s `filter_valid` cost
+//! (a C10 verify is almost entirely hashing).
 
 use fw_manifest::ManifestRef;
 use sha2::{Digest, Sha256};

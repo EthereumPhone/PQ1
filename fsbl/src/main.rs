@@ -38,11 +38,11 @@
 //! ## Non-goals for this first cut
 //!
 //! * **HASH peripheral acceleration.** We use `sha2::Sha256` in
-//!   software. At the FSBL's actual 4 MHz MSIS reset clock this is
-//!   ~800 ms per 512 KB image, ~1.6 s total — still an acceptable boot
-//!   delay, but 4× the "~200 ms / ~400 ms at 16 MHz" this file claimed
-//!   until 2026-09-16 (see `crate::nv3007`'s header for the SVD reset
-//!   values that establish the clock).
+//!   software. MEASURED on pq1 (2026-09-16): **4.67 s** for the 385,568 B
+//!   secure image and 0.09 s for the 7,488 B NS image — i.e. ~6.2 s per
+//!   512 KB, not the "~200 ms" (16 MHz assumption) or "~800 ms" (4x
+//!   scaling) this file claimed before. It is the largest COMPUTE term in
+//!   the boot, and the main reason to price the HASH port.
 //! * **LCD error screen.** On catastrophic failure FSBL halts silently.
 //! * **Reviewed probation/rollback.** The legacy `TRIED` logic is not a
 //!   production safety net. Draft 1.1 proposes typed
@@ -229,8 +229,14 @@ fn main() -> ! {
 }
 
 /// Run the full manifest verify chain. Returns Some iff all steps
-/// pass. The `fpr` and `signature` checks dominate runtime — they
-/// take ~10 ms each with software SHA-256 at the 4 MHz reset clock.
+/// pass. The `fpr` and `signature` checks dominate runtime: the whole chain
+/// (CRC + digest + fpr + C10 signature + rollback) is **1.50 s** MEASURED on
+/// pq1 (2026-09-16, `stage-marker` DWT timestamps).
+///
+/// This comment previously said "a few ms each", then "~10 ms each" after I
+/// rescaled it for the 4 MHz clock without questioning whether the original
+/// was ever credible. It was not — a software SPHINCS+C10 verify at 4 MHz
+/// cannot be milliseconds. Do not re-derive a figure here by scaling; measure.
 ///
 /// F-7 defense-in-depth hardening (matches secure-world's `verify_manifest`):
 /// the `verify_signature` call is wrapped in `fi::check_true_into_sentinel`,

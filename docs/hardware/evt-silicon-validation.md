@@ -817,9 +817,12 @@ exactly as open as before. Nothing here bears on the ceremony in §3.
    last before the reset, and discriminate on a marker only the new build can
    write.
 
-A third, from the same day: at the FSBL's actual 4 MHz reset clock the boot
-takes ~17 s (~4 s verify + ~1 s repaint + ~12 s fingerprint hold), so a marker
-page read too early shows late stages "not reached" for purely timing reasons.
+A third, from the same day: the boot is MEASURED at **39.4 s** (DWT per-stage
+timestamps; 24.0 s fingerprint hold + 8.4 s `Lcd::init()` + 4.8 s image hashing
++ 1.5 s C10 manifest verify + 0.7 s glyph blit), so a marker page read too
+early shows late stages "not reached" for purely timing reasons. The estimates
+that preceded this — "~3 s", then "~17 s" — were both wrong; 78% of the boot
+is `delay_ms` nop-spinning, because that loop is calibrated 8× long.
 
 ---
 

@@ -85,15 +85,24 @@
 //! `secure/src/hw/rcc.rs`, which *enables HSI16 and switches SYSCLK to it* as
 //! its first step — pointless if reset were already HSI16.
 //!
-//! Consequences, all previously understated by 4×:
+//! Consequences, now MEASURED rather than estimated (pq1, 2026-09-16, via the
+//! `stage-marker` DWT timestamps — see `crate::marker`'s header):
 //!
-//!   * every [`delay_ms`] here runs ~4× LONG. Harmless for panel bring-up
-//!     (reset / SLPOUT waits are over-satisfied, never under), but the
-//!     `render.rs` fingerprint hold is ~12 s, not 3 s.
-//!   * `MBR = ÷4` of a 4 MHz PCLK2 is a **1 MHz** SPI clock, not 4 MHz, so a
-//!     correct full-screen repaint still costs ~1 s on top of the hold.
-//!   * a [`spi_wait`] timeout costs ~10 s, not "a few seconds" — which is why
-//!     a wrong pin map presents as a hang rather than as slowness.
+//!   * every [`delay_ms`] here runs **8× LONG**, not the 4× first estimated:
+//!     4,000 iterations at 8 cycles/iteration on a 4 MHz part is 8 ms per
+//!     nominal millisecond. Harmless for panel bring-up (reset / SLPOUT waits
+//!     are over-satisfied, never under) but expensive: the 850 ms of vendor
+//!     delays inside [`Lcd::init`] cost **6.8 s**, and `render.rs`'s 3,000 ms
+//!     hold costs **24.0 s**.
+//!   * [`Lcd::init`] therefore measures **8.41 s**, of which only ~1.6 s is
+//!     real SPI work. `MBR = ÷4` of a 4 MHz PCLK2 is a **1 MHz** SPI clock,
+//!     so the 121,552-byte repaint has a 0.97 s shifting floor.
+//!   * a [`spi_wait`] timeout costs ~10 s — which is why a wrong pin map
+//!     presents as a hang rather than as slowness.
+//!
+//! Across the whole 39.4 s boot, 30.8 s (78%) is `delay_ms` nop-spinning and
+//! only 8.6 s is computation. The cheap win is the calibration constant, not a
+//! faster clock.
 //!
 //! 1 MHz keeps a very large margin over the NV3007's 10 ns setup/hold spec,
 //! so the prescaler stays as-is; the panel is painted once at boot.
@@ -242,17 +251,23 @@ fn modify(addr: usize, f: impl FnOnce(u32) -> u32) {
 /// deliberately NOT the secure driver's `cortex_m::asm::delay(160_000 * ms)`,
 /// which assumes the 160 MHz PLL the FSBL never brings up.
 ///
-/// **The `4_000` is calibrated for 16 MHz, but the FSBL runs at 4 MHz MSIS**
-/// (see the module header for the SVD reset values that establish this), so
-/// every delay here is ~4× its nominal value: `delay_ms(150)` is ~600 ms.
-/// That is the SAFE direction for panel bring-up — every vendor minimum is
-/// over-satisfied — so the constant is left alone rather than retuned, which
-/// would change validated iota2 panel timing. It is pinned by
+/// **The `4_000` is wrong by 8×, MEASURED.** It assumes 4 cycles/iteration at
+/// 16 MHz; the loop actually costs 8 cycles/iteration and the part runs at
+/// 4 MHz, so `delay_ms(1)` delivers **8 ms** and `delay_ms(150)` is 1.2 s
+/// (pq1, 2026-09-16 — the 3,000 ms hold measured 24.0 s, which pins
+/// cycles/iteration at 8.00).
+///
+/// The error is in the SAFE direction for panel bring-up — every vendor
+/// minimum is over-satisfied, never under — which is why it is left alone here
+/// rather than retuned in passing: correcting it to `500` would bring the
+/// NV3007's reset / SLPOUT / DISPON waits down to exactly nominal and change
+/// panel timing that was validated on iota2, and **this bench has no panel
+/// attached to verify against**. It is pinned by
 /// `fsbl-tests/tests/source_invariants.rs`.
 ///
-/// Where it is NOT harmless is the fingerprint hold: `render.rs` asks for
-/// 3,000 and gets ~12 s. That is a user-visible boot window, so changing it is
-/// an owner decision, not a cleanup.
+/// It is also the single biggest boot-time lever: 30.8 s of the 39.4 s boot is
+/// this loop spinning. Fixing the constant is worth ~27 s — far more than
+/// raising the clock, which would only touch the 8.6 s of real computation.
 pub fn delay_ms(ms: u32) {
     for _ in 0..ms {
         for _ in 0..4_000 {

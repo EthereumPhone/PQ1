@@ -203,16 +203,35 @@ signal would then be permanently tripped and ignored). See
   anyway. iota2 resets the panel with `SWRESET` (its RES is strapped to 3V3);
   pq1 drives `LCM_RST` on PB1 and gets a real reset pulse.
 
-**UPDATE 2026-09-16 — boot timings on this page were understated by 4×.** The
-`delay_ms` nop loop is calibrated for 16 MHz, but the FSBL writes no RCC clock
-configuration and therefore runs at the 4 MHz MSIS reset clock (`RCC_CFGR1.SW`
-= 00, `RCC_CSR.MSISSRANGE` = 4, whose vendor-SVD enumeration reads "range 4
-around 4 MHz (reset value)"). Consequences: the fingerprint hold is ~12 s
-rather than 3 s, software SHA-256 image hashing is ~800 ms per image rather
-than ~200 ms, and the SPI clock is 1 MHz rather than 4 MHz, so a full-screen
-repaint costs ~1 s on its own. The hold constant is deliberately unchanged —
-it is the user-visible boot-time trust window, so retuning it is an owner
-decision. Note `CLAUDE.md`'s Lifecycle section still says "~3 s".
+**UPDATE 2026-09-16 — the boot is MEASURED at 39.4 s, not "~3 s".** The FSBL
+writes no RCC clock configuration, so it runs at the 4 MHz MSIS reset clock
+(`RCC_CFGR1.SW` = 00, `RCC_CSR.MSISSRANGE` = 4, whose vendor-SVD enumeration
+reads "range 4 around 4 MHz (reset value)"). The `delay_ms` nop loop assumes
+4 cycles/iteration at 16 MHz but costs 8 cycles/iteration at 4 MHz, so every
+delay is **8×** nominal.
+
+Timed on pq1 with DWT `CYCCNT` per boot stage (`fsbl/src/marker.rs`,
+`stage-marker`), `MainEntered` → `Branching`:
+
+| | measured | share |
+|---|---|---|
+| fingerprint hold (`delay_ms(3000)`) | **24.00 s** | 61% |
+| `Lcd::init()` (~6.8 s of it also `delay_ms`) | 8.41 s | 21% |
+| SHA-256, secure image (385,568 B) | 4.67 s | 12% |
+| `filter_valid` (CRC/digest/fpr/**C10 signature**/rollback) | 1.50 s | 4% |
+| 16×4 glyph blit | 0.70 s | 2% |
+| SHA-256, NS image (7,488 B) | 0.09 s | 0% |
+| **total** | **39.37 s** | |
+
+So **30.8 s (78%) is `delay_ms` nop-spinning and only 8.6 s is computation.**
+Two superseded estimates are recorded here deliberately: this page first said
+"~3 s", then "~12 s hold / ~800 ms per image" after a 4× rescale — the real
+hold is 24 s and real hashing 4.67 s. Do not rescale a figure on this page;
+measure it.
+
+The hold constant is deliberately unchanged — it is the user-visible boot-time
+trust window, so retuning it is an owner decision. Note `CLAUDE.md`'s Lifecycle
+section still says "~3 s".
 
 **pq1 backlight caveat.** On pq1 the panel may render correctly and still look
 dark: `LCM_EN` (PB15) only enables an AW99703 LED driver whose brightness is

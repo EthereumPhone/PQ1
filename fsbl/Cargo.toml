@@ -71,11 +71,13 @@ stage-marker = []
 # Wiring up the HASH peripheral here would require porting RCC init,
 # the HASH driver, and the `pqsigner_sha256_*` extern fns from the
 # secure crate. Software SHA-256 at 16 MHz takes about 1 s for a full
-# FSBL boot (verify + image-hash both manifests + both slots) — CORRECTED
-# 2026-09-16: that estimate assumed 16 MHz, but the FSBL runs at the 4 MHz
-# MSIS reset clock (SVD reset values, see fsbl/src/nv3007.rs's module
-# header), so it is nearer 4 s. Still acceptable as a boot budget, but the
-# HW-SHA acceleration follow-up is worth 4× more than previously stated.
+# FSBL boot — MEASURED 2026-09-16 on pq1, superseding two wrong estimates
+# ("~1 s at 16 MHz", then "~4 s"): software SHA-256 costs 4.67 s for the
+# 385,568 B secure image plus 0.09 s for the NS image, and the C10 manifest
+# verify chain a further 1.50 s. So ~6.3 s of the 39.4 s boot is hashing —
+# the largest COMPUTE term, though only 16% of wall-clock because 78% of the
+# boot is `delay_ms` nop-spinning. The HW-SHA follow-up is worth ~6 s, not
+# the ~1 s originally implied.
 sphincs-c10 = { workspace = true }
 
 # Manifest / boot-state layout. no_std, no alloc.

@@ -66,12 +66,28 @@ const ICACHE_SR_BUSYF: u32 = 1 << 0;
 // DWT cycle counter — per-stage timestamps
 // ---------------------------------------------------------------------------
 //
-// Why: the FSBL boot budget was documented as "~3 s" and is really nearer 17 s
-// (4 MHz MSIS reset clock, see `crate::nv3007`'s header). Every component of
-// that figure is an ESTIMATE — the fingerprint hold from nop arithmetic, the
-// verify time from in-tree guesses that were themselves 4x out. Deciding
-// whether to raise the FSBL clock or port the HASH peripheral on estimates is
-// backwards, so the boot measures itself.
+// Why: the FSBL boot budget was documented as "~3 s", then estimated at ~17 s,
+// and is MEASURED at 39.4 s. Deciding whether to raise the FSBL clock or port
+// the HASH peripheral on estimates is backwards, so the boot measures itself.
+//
+// First measurement (pq1, 2026-09-16, MainEntered -> Branching = 39.37 s):
+//
+//   24.00 s  61%  the fingerprint hold      (delay_ms(3000), PURE WAITING)
+//    8.41 s  21%  Lcd::init()               (~6.8 s of it also delay_ms)
+//    4.67 s  12%  SHA-256 over the secure image (385,568 B)
+//    1.50 s   4%  filter_valid (CRC/digest/fpr/C10 SIGNATURE/rollback)
+//    0.70 s   2%  the 16x4 glyph blit
+//    0.09 s   0%  SHA-256 over the NS image (7,488 B)
+//
+// Headline: 30.8 s (78%) is `delay_ms` nop-spinning, only 8.6 s is computation.
+// `delay_ms` runs 8x long — 4,000 iterations at 8 cycles/iteration on a 4 MHz
+// part is 8 ms per nominal millisecond, where the constant assumed 4 cycles at
+// 16 MHz. So the cheap win is the calibration constant, not the clock.
+//
+// Two independent checks that the 4 MHz clock is real rather than assumed: the
+// hold resolves to 8.00 cycles per nop-loop iteration, and software SHA-256 to
+// ~3,099 cycles/block. At 16 MHz those would be 32 cycles/iteration (impossible
+// for a loop containing one nop) and ~12,400 cycles/block (implausibly slow).
 //
 // Register sequence mirrors `secure/src/main.rs`, which is validated on this
 // silicon. `DSCSR.CDS` is deliberately NOT touched: that is only needed so the
