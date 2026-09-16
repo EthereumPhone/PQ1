@@ -821,12 +821,14 @@ A third, from the same day: **size the settle to the measured boot, and the
 boot has since changed.** It was measured at 39.4 s (78% of it `delay_ms`
 nop-spinning on the 4 MHz reset clock with an 8×-long loop), and after
 `fsbl/src/clock.rs` switched the FSBL to HSI16 and `delay_ms` was made to
-derive its calibration from the achieved clock, it measures **5.931 s**
-(3.0 s hold + 1.19 s `Lcd::init()` + 1.19 s image hashing + 0.38 s C10
-manifest verify + 0.17 s glyph blit). A marker page read too early shows late
-stages "not reached" for purely timing reasons, so re-check the current figure
-rather than reusing a remembered one — the estimates that preceded these were
-"~3 s" and "~17 s", both wrong.
+derive its calibration from the achieved clock, the WORK dropped to 2.93 s
+(1.19 s `Lcd::init()` + 1.19 s image hashing + 0.38 s C10 manifest verify +
+0.17 s glyph blit). Wall-clock is then whatever `FINGERPRINT_HOLD_MS` adds:
+**12.932 s** at the current 10 s hold, 5.931 s at the earlier 3 s one. A
+marker page read too early shows late stages "not reached" for purely timing
+reasons, so re-check the current figure rather than reusing a remembered one —
+the estimates that preceded these were "~3 s" and "~17 s", both wrong, and the
+hold is a policy constant that can move again.
 
 ---
 

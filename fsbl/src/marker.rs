@@ -70,14 +70,17 @@ const ICACHE_SR_BUSYF: u32 = 1 << 0;
 // and is MEASURED at 39.4 s. Deciding whether to raise the FSBL clock or port
 // the HASH peripheral on estimates is backwards, so the boot measures itself.
 //
-// CURRENT (pq1, HSI16 16 MHz, MainEntered -> Branching = 5.931 s):
+// CURRENT (pq1, HSI16 16 MHz, MainEntered -> Branching = 12.932 s):
 //
-//    3.001 s  51%  the fingerprint hold   (delay_ms(3000) — now EXACTLY nominal)
-//    1.188 s  20%  Lcd::init()            (~0.85 s vendor delays + ~0.34 s SPI)
-//    1.167 s  20%  SHA-256 over the secure image (385,568 B)
-//    0.375 s   6%  filter_valid (CRC/digest/fpr/C10 SIGNATURE/rollback)
-//    0.174 s   3%  the 16x4 glyph blit
+//   10.002 s  77%  the fingerprint hold   (delay_ms(10_000), owner-set to 10 s)
+//    1.188 s   9%  Lcd::init()            (~0.85 s vendor delays + ~0.34 s SPI)
+//    1.167 s   9%  SHA-256 over the secure image (385,568 B)
+//    0.375 s   3%  filter_valid (CRC/digest/fpr/C10 SIGNATURE/rollback)
+//    0.174 s   1%  the 16x4 glyph blit
 //    0.023 s   0%  SHA-256 over the NS image (7,488 B)
+//
+// Actual WORK is 2.930 s; the rest is the deliberately-long trust window.
+// With the hold at its previous 3,000 ms the same boot measured 5.931 s.
 //
 // PRIOR, on the 4 MHz MSIS reset clock with the 8x-long delay loop = 39.367 s:
 // hold 24.003, Lcd::init 8.405, SHA 4.667, filter_valid 1.498, blit 0.697,
@@ -86,9 +89,13 @@ const ICACHE_SR_BUSYF: u32 = 1 << 0;
 // The 6.6x improvement decomposes exactly, which is why both changes were made
 // together: every COMPUTE term scaled 4.0x (the clock), and every DELAY term
 // 8.0x (removing the calibration error). `delay_ms` now derives its iteration
-// count from `clock::achieved_hz()`, and the measured hold of 3.001 s against
-// a 3,000 ms nominal validates that to 0.03% — which also confirms the loop
-// still costs 8.00 cycles/iteration with a runtime bound at 16 MHz.
+// count from `clock::achieved_hz()`, validated at two nominals: 3,000 ms ->
+// 3.001 s (+0.03%) and 10,000 ms -> 10.002 s (+0.02%). Linear across a 3.3x
+// range, which confirms 8.00 cycles/iteration at 16 MHz with a runtime bound.
+//
+// The boot is also cycle-DETERMINISTIC: across those two runs every stage 0..17
+// timestamp was identical to the cycle, and only stage 5 (after the hold) moved.
+// So an unexplained change in any other delta is a real change, not noise.
 //
 // `MainEntered`'s payload carries `achieved_hz()`, so a dump states its own
 // cycles-to-seconds conversion. That is the only thing distinguishing "HSI16

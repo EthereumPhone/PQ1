@@ -207,15 +207,19 @@ signal would then be permanently tripped and ignored). See
 with DWT `CYCCNT` per boot stage (`fsbl/src/marker.rs`, `stage-marker`),
 `MainEntered` → `Branching`:
 
-| | now (HSI16) | share | before |
+| | now (HSI16) | share | at 4 MHz |
 |---|---|---|---|
-| fingerprint hold (`delay_ms(3000)`) | **3.001 s** | 51% | 24.003 s |
-| `Lcd::init()` | 1.188 s | 20% | 8.405 s |
-| SHA-256, secure image (385,568 B) | 1.167 s | 20% | 4.667 s |
-| `filter_valid` (CRC/digest/fpr/**C10 signature**/rollback) | 0.375 s | 6% | 1.498 s |
-| 16×4 glyph blit | 0.174 s | 3% | 0.697 s |
+| fingerprint hold (`delay_ms(10_000)`) | **10.002 s** | 77% | — |
+| `Lcd::init()` | 1.188 s | 9% | 8.405 s |
+| SHA-256, secure image (385,568 B) | 1.167 s | 9% | 4.667 s |
+| `filter_valid` (CRC/digest/fpr/**C10 signature**/rollback) | 0.375 s | 3% | 1.498 s |
+| 16×4 glyph blit | 0.174 s | 1% | 0.697 s |
 | SHA-256, NS image (7,488 B) | 0.023 s | 0% | 0.092 s |
-| **total** | **5.931 s** | | **39.367 s** |
+| **total** | **12.932 s** | | **39.367 s** |
+
+Actual work is **2.930 s**; the remainder is the deliberately-long trust
+window. The hold was 3,000 ms (measuring 3.001 s, a 5.931 s boot) until it was
+raised to 10 s by owner decision on 2026-09-16.
 
 Two faults produced the 39.4 s figure, and both are fixed. The FSBL wrote no
 RCC configuration, so it ran at the 4 MHz MSIS reset clock (`RCC_CFGR1.SW` =
@@ -227,15 +231,17 @@ of that boot (78%) was nop-spinning. `fsbl/src/clock.rs` now switches to HSI16
 its calibration from the clock actually achieved. The improvement decomposes
 exactly: compute terms 4.0× (the clock), delay terms 8.0× (the calibration).
 
-The hold is honoured to 0.03% (3.001 s against 3,000 ms nominal), and the
+The hold is honoured to within 0.03% at both nominals tested — 3,000 ms →
+3.001 s and 10,000 ms → 10.002 s, linear across a 3.3× range — and the
 NV3007's reset / SLPOUT / DISPON waits are now the vendor nominals rather than
-8× over.
+8× over. The boot is also cycle-deterministic: across those two runs every
+stage timestamp except the one after the hold was identical to the cycle.
 
-**Observation window: ~3 s**, and it is now the largest single term at 51% of
-the boot. The constant is deliberately unchanged — it is the user-visible
-boot-time trust window, so retuning it is an owner decision. Note `CLAUDE.md`'s
-Lifecycle section says "~3 s", which is now accurate by coincidence rather than
-by having been checked.
+**Observation window: ~10 s** (owner decision, 2026-09-16), 77% of the boot.
+Longer buys the user reading time for the 8 words at the cost of boot latency;
+that trade is a policy choice, not a performance defect. **Note `CLAUDE.md`'s
+Lifecycle section still says "~3 s" and is now wrong** — it was accurate only
+while the hold was 3 s, and was never edited (project contract file).
 
 Three superseded estimates are recorded here deliberately — "~3 s", then
 "~12 s hold / ~800 ms per image" after a 4× rescale, then the measured 39.4 s.

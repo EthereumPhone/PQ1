@@ -92,18 +92,20 @@
 //!   * [`delay_ms`] derives its iteration count from the ACHIEVED clock, so
 //!     delays are now correct rather than 8× long. The 850 ms of NV3007 vendor
 //!     waits inside [`Lcd::init`] cost ~0.85 s as intended, and `render.rs`'s
-//!     3,000 ms hold measures **3.001 s** — a 0.03% calibration error.
+//!     hold is honoured to within 0.03% at both nominals tested
+//!     (3,000 ms → 3.001 s; 10,000 ms → 10.002 s).
 //!   * [`Lcd::init`] measures **1.188 s** (was 8.41 s), of which ~0.34 s is
 //!     real SPI work. `MBR = ÷4` of a 16 MHz PCLK2 is a **4 MHz** SPI clock,
 //!     so the 121,552-byte repaint has a ~0.24 s shifting floor.
 //!   * a [`spi_wait`] timeout costs ~2.5 s at 16 MHz (was ~10 s) — still long
 //!     enough that a wrong pin map presents as a hang rather than as slowness.
 //!
-//! Whole boot: **5.931 s**, from 39.367 s on the 4 MHz reset clock with the
-//! 8×-long loop. Compute terms scaled 4.0× (the clock); delay terms 8.0×
-//! (removing the calibration error). The hold is now the largest single term
-//! at 51%, so further speedup is a `FINGERPRINT_HOLD_MS` decision, not a
-//! code one.
+//! Whole boot: **12.932 s**, of which only 2.930 s is work — the rest is the
+//! fingerprint hold, deliberately set to 10 s so the user has time to read the
+//! 8 words. It was 39.367 s on the 4 MHz reset clock with the 8×-long loop,
+//! and 5.931 s at the interim 3 s hold. Compute terms scaled 4.0× (the clock);
+//! delay terms 8.0× (removing the calibration error). Boot time is now almost
+//! entirely a `FINGERPRINT_HOLD_MS` policy choice, not a code one.
 //!
 //! 1 MHz keeps a very large margin over the NV3007's 10 ns setup/hold spec,
 //! so the prescaler stays as-is; the panel is painted once at boot.
@@ -277,9 +279,11 @@ fn iters_per_ms() -> u32 {
 /// instead of asserting it makes both the clock switch and the calibration
 /// self-consistent, and keeps a failed switch safe rather than dangerous.
 ///
-/// VALIDATED on silicon: with the switch to HSI16 in place, a 3,000 ms nominal
-/// hold measures 3.001 s — 0.03% error — which confirms 8.00 cycles/iteration
-/// still holds at 16 MHz even though the loop bound is now a runtime value.
+/// VALIDATED on silicon at two nominals, so the constant rests on a measured
+/// slope rather than a single point: with HSI16 selected, a 3,000 ms hold
+/// measures 3.001 s (+0.03%) and a 10,000 ms hold 10.002 s (+0.02%) — linear
+/// across a 3.3× range, confirming 8.00 cycles/iteration at 16 MHz even though
+/// the loop bound is now a runtime value.
 pub fn delay_ms(ms: u32) {
     let iters = iters_per_ms();
     for _ in 0..ms {

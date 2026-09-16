@@ -74,10 +74,10 @@ stage-marker = []
 # FSBL boot — MEASURED on pq1, superseding two wrong estimates ("~1 s at
 # 16 MHz", then "~4 s"). At HSI16, software SHA-256 costs 1.167 s for the
 # 385,568 B secure image plus 0.023 s for the NS image, and the C10 manifest
-# verify chain 0.375 s — about 1.5 s of a 5.931 s boot. (On the 4 MHz reset
-# clock those were 4.67 / 0.09 / 1.50 s of a 39.4 s boot.) So the HW-SHA
-# follow-up is now worth only ~1.5 s, against 1-2 KB in a WRP-frozen range;
-# the largest remaining term is the 3.0 s fingerprint hold, a constant.
+# verify chain 0.375 s — about 1.5 s of a 12.932 s boot, of which 10.0 s is
+# the deliberate fingerprint hold. (On the 4 MHz reset clock those were
+# 4.67 / 0.09 / 1.50 s of a 39.4 s boot.) So the HW-SHA follow-up is worth
+# only ~1.5 s against 1-2 KB in a WRP-frozen range — not a good trade.
 sphincs-c10 = { workspace = true }
 
 # Manifest / boot-state layout. no_std, no alloc.

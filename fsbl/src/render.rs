@@ -18,22 +18,26 @@ use crate::nv3007::{delay_ms, Lcd};
 /// How long the FSBL fingerprint stays on the LCD before branching into the
 /// slot — long enough for a human to glance at and recognise the words.
 ///
-/// **MEASURED at 3.001 s** — i.e. this value is now honoured to 0.03%, since
-/// `nv3007::delay_ms` derives its calibration from `clock::achieved_hz()` and
-/// the FSBL runs at HSI16. It was 24.0 s before that fix (the loop was 8×
-/// long), and it is still the **largest single term in the boot** at 51% of
-/// 5.931 s.
+/// **Set to 10 s by owner decision (2026-09-16), MEASURED at 10.002 s** — a
+/// +0.02% error, since `nv3007::delay_ms` derives its calibration from
+/// `clock::achieved_hz()` and the FSBL runs at HSI16.
 ///
-/// So the next boot-time decision is this constant, not any code change:
-/// dropping it to 1,000 would put the whole boot near 3.9 s. It is the
-/// user-visible boot-time trust window described in
-/// `docs/security/measured-boot.md`, so that is an owner call.
+/// It is deliberately the dominant term: 10.002 s of a **12.932 s** boot
+/// (77%), against 2.930 s of actual work. This is the user-visible boot-time
+/// trust window described in `docs/security/measured-boot.md` — the seconds in
+/// which the user reads the 8 fingerprint words before the slot can display
+/// anything — so a longer hold buys reading time at the cost of boot latency.
+/// That trade is an owner call, not a performance bug; do not "optimise" it.
+///
+/// History: 3,000 nominal delivered 24.0 s when the delay loop ran 8× long,
+/// then 3.001 s once the clock switch and calibration were fixed. Changing
+/// this constant is the only lever on boot time that costs no code.
 ///
 /// Deliberately NOT retuned: this is the user-visible boot-time trust window
 /// that `docs/security/measured-boot.md` and invariant #10 describe, so
 /// shortening it is an owner decision rather than a comment fix. A longer
 /// window is at least the safe direction — more time to read the words.
-pub const FINGERPRINT_HOLD_MS: u32 = 3_000;
+pub const FINGERPRINT_HOLD_MS: u32 = 10_000;
 
 /// Drive the LCD end-to-end: init, render, flush, delay, return.
 ///
