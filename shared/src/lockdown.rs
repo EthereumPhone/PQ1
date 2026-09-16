@@ -34,12 +34,31 @@ pub const fn rdp_level_from_byte(rdp: u8) -> RdpLevel {
     }
 }
 
-/// The `SECBOOTADD0R` address field is `boot_address >> 7`, stored RIGHT-ALIGNED
-/// in the low bits (confirmed by `tools/ob-configurator` writing the bare
-/// `0x0018_0000` = `0x0C00_0000 >> 7` for the FSBL boot address, with no shift).
-/// The field occupies bits `[24:0]`; the high bits `[31:25]` hold control flags
-/// (an eventual `BOOT_LOCK` / reserved).
-const SECBOOTADD0_ADDR_MASK: u32 = 0x01FF_FFFF;
+/// `SECBOOTADD0R` layout, per **RM0456 §7.9.16** (offset `0x4C`, ST production
+/// value **`0x0C00_007C`**): `SECBOOTADD0[24:9]` occupies bits `[31:16]` and
+/// `SECBOOTADD0[8:0]` bits `[15:7]` — i.e. the 25-bit address field sits at
+/// bits `[31:7]` — with **`BOOT_LOCK` at bit 0** and bits `[6:1]` reserved.
+/// The boot address is therefore `field << 7`, so the register reconstructs it
+/// as `reg & !0x7F`.
+///
+/// The previous code masked the LOW 25 bits and compared them to
+/// `boot_addr >> 7`, which can never match real silicon: this board reads
+/// `0x0C00_007C` (the ST production value), whose low bits are `0x7C`. That
+/// mismatch halted the FSBL tz-1 tripwire on every boot and would have halted
+/// first-boot Phase A before the RDP-2 burn. The archived work-todo flagged the
+/// exact contradiction ("`0x0C00_007C` vs the ob-configurator's `0x0018_0000`
+/// for the same boot address") and deferred it as unconfirmed; RM0456 plus a
+/// bench read now confirm it.
+///
+/// NOTE: `tools/ob-configurator/src/main.rs:123` writes the bare `0x0018_0000`,
+/// which under this layout encodes boot address `0x0018_0000 << 7`, not
+/// `0x0C00_0000`. Bench boards boot correctly because every Makefile recipe
+/// programs option bytes via `STM32_Programmer_CLI --optionbytes SECBOOTADD0=`,
+/// which encodes for us. That tool's write path is wrong and needs its own fix.
+const SECBOOTADD0_ADDR_SHIFT_MASK: u32 = 0xFFFF_FF80;
+/// `BOOT_LOCK` — bit 0 (RM0456 §7.9.16). Pinned here so the deferred
+/// BOOT_LOCK assertion has a confirmed bit to build on.
+pub const SECBOOTADD0_BOOT_LOCK: u32 = 1 << 0;
 
 /// Does the `SECBOOTADD0R` register value select `expected_boot_addr` as the
 /// secure boot entry? A target shipping image must select the approved FSBL
@@ -50,7 +69,10 @@ const SECBOOTADD0_ADDR_MASK: u32 = 0x01FF_FFFF;
 /// doc-ambiguous) does not read as a wrong address.
 #[must_use]
 pub const fn secboot_selects(secbootadd0r: u32, expected_boot_addr: u32) -> bool {
-    (secbootadd0r & SECBOOTADD0_ADDR_MASK) == (expected_boot_addr >> 7)
+    // Reconstruct the address from bits [31:7]; BOOT_LOCK (bit 0) and the
+    // reserved bits [6:1] are deliberately ignored here, so SETTING BOOT_LOCK
+    // never reads as "wrong boot address".
+    (secbootadd0r & SECBOOTADD0_ADDR_SHIFT_MASK) == expected_boot_addr
 }
 
 // ===========================================================================
@@ -65,10 +87,14 @@ pub const fn secboot_selects(secbootadd0r: u32, expected_boot_addr: u32) -> bool
 // the published profile and the on-device check can never diverge.
 //
 // Register layout confidence (STM32U585, RM0456 §7.11):
-//   CONFIRMED (code-cross-checked): TZEN=bit31 of FLASH_OPTR; RDP=OPTR[7:0];
-//     SECWM1R1 all-secure = 0x007F_0000 and SECWM2R1 all-NS = 0x0000_007F
-//     (tools/ob-configurator/src/main.rs:104-114); SECBOOTADD0 via
-//     `secboot_selects`.
+//   CONFIRMED (RM0456 + bench read, 2026-09-16): TZEN=bit31 of FLASH_OPTR;
+//     RDP=OPTR[7:0]; SECWM*R1 PSTRT=[6:0]/PEND=[22:16] compared as FIELDS (the
+//     registers read back with reserved bits set — this board reads
+//     0xFFFFFF80 / 0xFF80FFFF); SECBOOTADD0 address field at bits [31:7] with
+//     BOOT_LOCK at bit 0 (RM0456 7.9.16, ST production value 0x0C00_007C).
+//     `tools/ob-configurator` is NOT evidence for any of these: its raw writes
+//     encode SECBOOTADD0 wrongly (see `secboot_selects`) and it was previously
+//     mis-cited here as confirmation for the watermark word compares.
 //   BENCH-CONFIRM (exact bit positions are an RM0456 pin — see the #36
 //     deferred silicon-validation runbook): BOR_LEV field, WRP1A page span,
 //     and the OEM1/OEM2 key-lock status bits. These live behind the single
@@ -90,10 +116,30 @@ pub const SHIP_RDP_BYTE: u8 = 0xAA;
 /// (see [`phase_profile`]).
 pub const LOCKED_RDP_BYTE: u8 = 0xCC;
 
-/// `SECWM1R1` value that marks all of bank 1 secure (`PSTRT=0, PEND=0x7F`).
+/// `SECWM1R1` FIELD values that mark all of bank 1 secure (`PSTRT=0, PEND=0x7F`).
+/// This is what a programmer WRITES (see `tools/ob-configurator`), NOT what the
+/// register reads back: `SECWM1R1`/`SECWM2R1` are option-byte shadow registers
+/// whose unprogrammed bits read as 1s (SVD reset value `0xFF00FF00`). A correctly
+/// configured pq1 board reads `0xFFFFFF80` / `0xFF80FFFF`. Compare FIELDS, never
+/// the whole word — see [`secwm_bank1_all_secure`].
 pub const SECWM1_ALL_SECURE: u32 = 0x007F_0000;
-/// `SECWM2R1` value that marks all of bank 2 non-secure (`PSTRT=0x7F > PEND=0`).
+/// `SECWM2R1` field values that mark all of bank 2 non-secure (`PSTRT=0x7F > PEND=0`).
 pub const SECWM2_ALL_NS: u32 = 0x0000_007F;
+
+/// `PSTRT` occupies bits `[6:0]` and `PEND` bits `[22:16]` of both `SECWM*R1`
+/// registers (SVD `FLASH_SECWM1R1`/`FLASH_SECWM2R1`). Every other bit is
+/// reserved and reads back as 1 on real silicon.
+const SECWM_PSTRT_MASK: u32 = 0x7F;
+const SECWM_PEND_SHIFT: u32 = 16;
+
+/// Extract `(PSTRT, PEND)` from a raw `SECWM*R1` read.
+#[must_use]
+pub const fn secwm_fields(secwmr1: u32) -> (u32, u32) {
+    (
+        secwmr1 & SECWM_PSTRT_MASK,
+        (secwmr1 >> SECWM_PEND_SHIFT) & SECWM_PSTRT_MASK,
+    )
+}
 
 /// BENCH-CONFIRM (RM0456): `FLASH_OPTR.BOR_LEV` field position. Best-effort
 /// per RM0456; pin against silicon in the #36 runbook before this field is
@@ -202,16 +248,27 @@ pub const fn optr_matches_ship(optr: u32, p: &ShipProfile) -> Result<(), ObField
     Ok(())
 }
 
-/// Is `secwm1r1` the "all bank 1 secure" value?
+/// Does `secwm1r1` mark all of bank 1 secure (`PSTRT=0, PEND=0x7F`)?
+///
+/// FIELD compare, not word compare. The previous `secwm1r1 == SECWM1_ALL_SECURE`
+/// form could never match real silicon — the reserved bits read as 1s — so it
+/// halted every boot that consulted it (the FSBL tz-1 tripwire) and would have
+/// halted first-boot Phase A before the RDP-2 burn on every genuine unit.
+/// Measured on pq1 (die 002f0023-30465002-2033314c): raw `0xFFFFFF80`, fields
+/// `PSTRT=0, PEND=0x7F`, matching CubeProgrammer's own decode.
 #[must_use]
 pub const fn secwm_bank1_all_secure(secwm1r1: u32) -> bool {
-    secwm1r1 == SECWM1_ALL_SECURE
+    let (pstrt, pend) = secwm_fields(secwm1r1);
+    pstrt == 0 && pend == 0x7F
 }
 
-/// Is `secwm2r1` the "all bank 2 non-secure" value?
+/// Does `secwm2r1` leave all of bank 2 non-secure (`PSTRT > PEND`, the
+/// watermark-disabled encoding)? Field compare, same reasoning as above;
+/// measured raw `0xFF80FFFF` => `PSTRT=0x7F, PEND=0`.
 #[must_use]
 pub const fn secwm_bank2_all_ns(secwm2r1: u32) -> bool {
-    secwm2r1 == SECWM2_ALL_NS
+    let (pstrt, pend) = secwm_fields(secwm2r1);
+    pstrt > pend
 }
 
 /// Does the WRP1A option register lock (write-protect) FSBL pages 0..=3?
@@ -373,7 +430,17 @@ mod tests {
     /// A well-formed LOCKED-state OPTR: TZEN set, RDP=0xCC.
     const GOOD_OPTR_LOCKED: u32 = OPTR_TZEN | 0xCC;
     /// The `SECBOOTADD0R` value that selects the FSBL base.
-    const GOOD_SECBOOT: u32 = 0x0018_0000;
+    /// RM0456 7.9.16 ST production value: address field in bits [31:7]
+    /// (0x0C00_0000 >> 7 = 0x180000), BOOT_LOCK clear, reserved bits [6:1] set.
+    /// The old fixture held the bare shifted value, which no STM32U585 reads.
+    const GOOD_SECBOOT: u32 = 0x0C00_007C;
+    /// RM0456 7.9.17 ST production value. "Reserved bits are read as 1", which
+    /// is why the watermark predicates compare FIELDS, never the whole word.
+    const ST_SECWM1_PRODUCTION: u32 = 0xFFFF_FF80;
+    /// This board's configured bank-2 value: watermark DISABLED (PSTRT > PEND).
+    /// RM0456 7.9.21's production default is 0xFFFF_FF80; we deliberately
+    /// program bank 2 the other way, and both must satisfy the predicate.
+    const PQ1_SECWM2_CONFIGURED: u32 = 0xFF80_FFFF;
 
     #[test]
     fn phase_profile_tracks_the_rdp_byte() {
@@ -530,13 +597,25 @@ mod tests {
 
     #[test]
     fn secboot_selects_fsbl_base_and_tolerates_control_bits() {
-        // The value tools/ob-configurator programs (0x0C00_0000 >> 7 = 0x180000).
-        assert_eq!(FSBL_BASE >> 7, 0x0018_0000);
-        assert!(secboot_selects(0x0018_0000, FSBL_BASE), "FSBL base must pass");
-        // Setting high control bits (e.g. an eventual BOOT_LOCK in [31:25]) must
-        // NOT flip the address check to "wrong address".
-        assert!(secboot_selects(0x0018_0000 | (1 << 31), FSBL_BASE), "BOOT_LOCK bit tolerated");
-        assert!(secboot_selects(0x0018_0000 | (1 << 25), FSBL_BASE), "high control bit tolerated");
+        // RM0456 7.9.16 ST production value, and what this board actually
+        // reads: address field in bits [31:7], BOOT_LOCK at bit 0.
+        const ST_PRODUCTION: u32 = 0x0C00_007C;
+        assert!(
+            secboot_selects(ST_PRODUCTION, FSBL_BASE),
+            "the ST production value must select the FSBL base (regression: low-mask compare)"
+        );
+        // BOOT_LOCK set must NOT read as a wrong address.
+        assert!(
+            secboot_selects(FSBL_BASE | SECBOOTADD0_BOOT_LOCK, FSBL_BASE),
+            "BOOT_LOCK tolerated"
+        );
+        // Reserved bits [6:1] likewise.
+        assert!(secboot_selects(FSBL_BASE | 0x7E, FSBL_BASE), "reserved bits tolerated");
+        // The OLD encoding must now FAIL — it addressed 0x0018_0000 << 7.
+        assert!(
+            !secboot_selects(0x0018_0000, FSBL_BASE),
+            "the bare shifted value is NOT a valid SECBOOTADD0R word"
+        );
         // A redirected / erased / off-by-one boot address must FAIL (the SL2
         // boot-redirect signal).
         assert!(!secboot_selects(0x0000_0000, FSBL_BASE), "erased/zero must fail");
@@ -572,11 +651,47 @@ mod tests {
 
     #[test]
     fn secwm_window_exact_match() {
+        // MEASURED silicon values are the positive case. The old test only ever
+        // fed in the idealised constants, so it stayed green while the
+        // predicate could not match any real board (reserved bits read as 1s).
+        const PQ1_SECWM1_RAW: u32 = 0xFFFF_FF80; // PSTRT=0,    PEND=0x7F
+        const PQ1_SECWM2_RAW: u32 = 0xFF80_FFFF; // PSTRT=0x7F, PEND=0
+        assert_eq!(secwm_fields(PQ1_SECWM1_RAW), (0, 0x7F));
+        assert_eq!(secwm_fields(PQ1_SECWM2_RAW), (0x7F, 0));
+        assert!(
+            secwm_bank1_all_secure(PQ1_SECWM1_RAW),
+            "a correctly configured board must PASS (regression: word compare)"
+        );
+        assert!(
+            secwm_bank2_all_ns(PQ1_SECWM2_RAW),
+            "watermark-disabled bank 2 must PASS (regression: word compare)"
+        );
+        // The written field values must also pass, so ob-configurator's writes
+        // and this reader cannot disagree.
         assert!(secwm_bank1_all_secure(SECWM1_ALL_SECURE));
-        assert!(!secwm_bank1_all_secure(SECWM1_ALL_SECURE | 1), "any deviation fails");
-        assert!(!secwm_bank1_all_secure(0), "erased fails");
         assert!(secwm_bank2_all_ns(SECWM2_ALL_NS));
-        assert!(!secwm_bank2_all_ns(SECWM2_ALL_NS ^ 0x0001_0000), "partial-secure bank2 fails");
+        // RM0456 production values (7.9.17 / 7.9.21) must pass too.
+        assert!(
+            secwm_bank1_all_secure(ST_SECWM1_PRODUCTION),
+            "RM0456 7.9.17 ST production value must pass"
+        );
+        assert!(
+            secwm_bank2_all_ns(PQ1_SECWM2_CONFIGURED),
+            "watermark-disabled bank 2 as configured on pq1 must pass"
+        );
+        // Two-sided: genuinely wrong spans must still FAIL.
+        assert!(
+            !secwm_bank1_all_secure(0xFFFF_FF81),
+            "PSTRT=1 leaves page 0 non-secure"
+        );
+        assert!(
+            !secwm_bank1_all_secure(0xFFFE_FF80),
+            "PEND=0x7E leaves the last page non-secure"
+        );
+        assert!(
+            !secwm_bank2_all_ns(0x007F_0000),
+            "PSTRT=0 <= PEND=0x7F would mark bank 2 SECURE"
+        );
     }
 
     #[test]
@@ -623,7 +738,7 @@ mod tests {
         assert_eq!(
             verify_ship_profile(
                 GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
-                FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585,
+                GOOD_SECBOOT, GOOD_WRP1A, 0, &SHIP_PROFILE_U585,
             ),
             if !WRP1A_MASK_PINNED {
                 Err(ObField::Wrp1a)
@@ -635,15 +750,15 @@ mod tests {
         );
         // Each corruption surfaces its own field, in fundamental-first order.
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR & !OPTR_TZEN, SECWM1_ALL_SECURE, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR & !OPTR_TZEN, SECWM1_ALL_SECURE, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
             Err(ObField::Tzen)
         );
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, 0, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, 0, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
             Err(ObField::Secwm1)
         );
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, 0, FSBL_BASE >> 7, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, 0, GOOD_SECBOOT, GOOD_WRP1A, 0, &SHIP_PROFILE_U585),
             Err(ObField::Secwm2)
         );
         assert_eq!(
@@ -652,13 +767,13 @@ mod tests {
         );
         // A removable WRP (UNLOCK=1) fails the WRP1A gate regardless of the pin.
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A | (1 << 31), 0, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A | (1 << 31), 0, &SHIP_PROFILE_U585),
             Err(ObField::Wrp1a)
         );
         // An OEM key present reaches the OEM gate only once WRP1A is pinned;
         // while WRP1A is unpinned the fail-closed WRP1A gate reports first.
         assert_eq!(
-            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, FSBL_BASE >> 7, GOOD_WRP1A, OEM2LOCK, &SHIP_PROFILE_U585),
+            verify_ship_profile(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, GOOD_SECBOOT, GOOD_WRP1A, OEM2LOCK, &SHIP_PROFILE_U585),
             if WRP1A_MASK_PINNED { Err(ObField::OemLock) } else { Err(ObField::Wrp1a) },
         );
     }
