@@ -2266,6 +2266,16 @@ measure: build-hw-dual-se-oled-standalone ## Build + print the 8 BIP-39 measurem
 #   ... then BOOTPROOF_KEY=<key> BOOTPROOF_PUBKEY=<pubkey.bin> \
 #       BOOTPROOF_POLICY=<policy.sha256> make bootproof-hw
 # `fwsign` prompts for the passphrase on a TTY.
+# Manifest version to sign. It must exceed the board's legacy OTP rollback
+# floor: `fsbl/src/otp.rs::rollback_floor` counts ZERO BITS across the 32 words
+# at 0x0BFA_0000, and `verify_rollback` is strict (`fw_version > floor`). On a
+# pristine die that region is all-0xFF => floor 0, so version 1 is admissible.
+# Check before blaming the floor, and VALIDATE THE READ with a known-good
+# control in the same session — a wedged ST-LINK returns all-zeros, which reads
+# as "floor 1024" and sent one bring-up session chasing a phantom:
+#   STM32_Programmer_CLI --connect port=SWD mode=UR --read 0x0BFA0000 0x80 otp.bin
+# (probe-rs with a reset-on-attach mode is NOT a reliable reader here.)
+BOOTPROOF_VERSION ?= 1
 BOOTPROOF_DIR ?= target/bootproof
 
 .PHONY: bootproof-build
@@ -2300,7 +2310,7 @@ bootproof-sign: bootproof-build ## Sign the slot-A manifest (prompts for the key
 		--secure $(BOOTPROOF_DIR)/secure/$(TARGET)/release/sphincs-tz-secure \
 		--nonsecure $(BOOTPROOF_DIR)/ns/$(TARGET)/release/sphincs-tz-nonsecure \
 		--trusted-fingerprint $(BOOTPROOF_POLICY) \
-		--version 1 --slot 0 \
+		--version $(BOOTPROOF_VERSION) --slot 0 \
 		--build-id $$(printf 'pq1-nonmonolithic-bootproof' | sha256sum | cut -d' ' -f1) \
 		--out $(BOOTPROOF_DIR)/bundle
 	@rm -rf $(BOOTPROOF_DIR)/unpacked && mkdir -p $(BOOTPROOF_DIR)/unpacked

@@ -26,6 +26,9 @@ pub fn verify_images(slot: Slot, m: &ManifestRef) -> Option<[u8; 32]> {
     let secure_len = m.secure_len() as usize;
     let ns_len = m.nonsecure_len() as usize;
 
+    #[cfg(feature = "stage-marker")]
+    crate::marker::record(crate::marker::Stage::ImgEntered, secure_len as u32);
+
     // Sanity: reject obviously-bogus lengths before hashing. A length
     // exceeding slot capacity is a signed-but-malformed manifest and
     // should never pass the verify step. Returning None here is
@@ -38,8 +41,21 @@ pub fn verify_images(slot: Slot, m: &ManifestRef) -> Option<[u8; 32]> {
         return None;
     }
 
+    #[cfg(feature = "stage-marker")]
+    crate::marker::record(crate::marker::Stage::ImgLensOk, ns_len as u32);
+
     let actual_secure = hash_flash_region(secure_base, secure_len);
+    #[cfg(feature = "stage-marker")]
+    crate::marker::record(
+        crate::marker::Stage::ImgSecureHashed,
+        u32::from_le_bytes([actual_secure[0], actual_secure[1], actual_secure[2], actual_secure[3]]),
+    );
     let actual_ns = hash_flash_region(ns_base, ns_len);
+    #[cfg(feature = "stage-marker")]
+    crate::marker::record(
+        crate::marker::Stage::ImgNsHashed,
+        u32::from_le_bytes([actual_ns[0], actual_ns[1], actual_ns[2], actual_ns[3]]),
+    );
 
     // F15 hardening: these two 32-byte image-hash equalities are the SOLE
     // boot-time binding between the bytes in flash and the vendor-SIGNED
@@ -56,6 +72,12 @@ pub fn verify_images(slot: Slot, m: &ManifestRef) -> Option<[u8; 32]> {
     // time) leaks nothing and keeps the FSBL footprint lean (no `subtle` dep).
     let secure_ok = actual_secure == *m.secure_hash();
     let ns_ok = actual_ns == *m.nonsecure_hash();
+
+    #[cfg(feature = "stage-marker")]
+    {
+        crate::marker::record(crate::marker::Stage::ImgSecureCmp, u32::from(secure_ok));
+        crate::marker::record(crate::marker::Stage::ImgNsCmp, u32::from(ns_ok));
+    }
     if !secure_ok {
         return None;
     }

@@ -166,6 +166,69 @@ fn negative_tz1_tripwire_runs_before_branch_and_never_writes() {
 }
 
 // ---------------------------------------------------------------------------
+// 2c. The FSBL configures SAU before it reads the NS slot image — and that fix
+//     is NOT feature-gated, while the stage-marker diagnostic IS.
+//
+// Measured root cause (2026-09-16): with TZEN=1 and the SAU disabled the whole
+// map defaults to Secure, so the FSBL's secure read of the bank-2 NS alias
+// (0x0810_0000, NS-watermarked by SECWM2) returns ZEROS. `verify_images` then
+// hashes zeros, the NS hash mismatches the signed manifest, no candidate is
+// admissible, and the FSBL halts SILENTLY (it has no logging). An instrumented
+// build recorded the NS hash the core computed as SHA-256 of 7,488 zero bytes
+// while SWD read the same address correctly.
+//
+// So: `sau::init()` must exist, must run BEFORE any admission step, and must
+// ship in every build. The marker module must do the opposite — never ship.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn negative_fsbl_configures_sau_before_reading_the_ns_slot() {
+    let src = read_workspace_file("fsbl/src/main.rs");
+
+    let sau_idx = src
+        .find("sau::init();")
+        .expect("fsbl/src/main.rs must call sau::init() — without it the core reads the NS slot as ZEROS");
+    let verify_idx = src
+        .find("verify::verify_images")
+        .expect("fsbl/src/main.rs must call verify::verify_images");
+    assert!(
+        sau_idx < verify_idx,
+        "sau::init() MUST run before verify_images reads the NS region: \
+         found sau::init at byte {sau_idx}, verify_images at byte {verify_idx}"
+    );
+
+    // The fix ships: `mod sau;` carries no cfg gate. A gated fix would make
+    // every default build hash zeros again, silently.
+    assert!(
+        src.contains("mod render;\nmod sau;\n"),
+        "`mod sau;` must be declared UNGATED (it is a fix, not a diagnostic)"
+    );
+    // The diagnostic does not ship.
+    assert!(
+        src.contains("#[cfg(feature = \"stage-marker\")]\nmod marker;"),
+        "`mod marker;` must stay behind the stage-marker feature — it gives the \
+         FSBL a flash-write path, which invariant #10 forbids in a shipping image"
+    );
+
+    let sau = read_workspace_file("fsbl/src/sau.rs");
+    assert!(
+        sau.contains("const NS_FLASH_BASE: u32 = 0x0810_0000;")
+            && sau.contains("const NS_FLASH_END: u32 = 0x081F_FFFF;"),
+        "the SAU NS-flash window must stay the bank-2 alias bounds that \
+         secure/src/sau.rs uses"
+    );
+    assert!(
+        sau.contains("(NS_FLASH_END & 0xFFFF_FFE0) | 1"),
+        "RLAR must set bit 0 (ENABLE) over the 32-byte-aligned inclusive limit; \
+         dropping the enable bit leaves the region inactive and the NS read zeroed"
+    );
+    assert!(
+        !sau.contains("| 1 << 1") && !sau.contains("| 2"),
+        "the FSBL's NS-flash region must not be marked NSC (bit 1)"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // 3. FSBL NV3007 LCD driver keeps the hardware-validated constants
 //
 // The OLED backend was removed 2026-06-30; the boot fingerprint now renders

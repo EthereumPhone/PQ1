@@ -23,6 +23,15 @@ legacy-fw-rollback-unsafe = []
 # silicon WITHOUT a signed slot. Never ships. Build/run via
 # `make fsbl-lcd-test-hw`.
 lcd-test = []
+# BENCH DIAGNOSTIC, default off, NEVER ships: gives the FSBL a flash-write path
+# so it can record how far it got before parking. The FSBL halts silently when
+# no slot is admissible (no logging by construction), and live core state is not
+# observable on this bench — the only attach mode that reproduces known-good
+# flash hashes also resets the core. `marker.rs` refuses to build under
+# `mode-production` (invariant #10 forbids an FSBL write path in a shipping
+# image). Writes only the ERASED manifest-B page, which `filter_valid` rejects
+# with BadMagic, so markers can never become a boot candidate.
+stage-marker = []
 
 [dependencies]
 # Signature verification — same crate the main firmware uses, so the

@@ -78,10 +78,13 @@ mod branch;
 mod fi;
 mod glyphs;
 mod manifest;
+#[cfg(feature = "stage-marker")]
+mod marker;
 mod nv3007;
 mod optbytes;
 mod otp;
 mod render;
+mod sau;
 mod slot;
 mod vendor_pubkey;
 mod verify;
@@ -103,6 +106,12 @@ fn main() -> ! {
     #[cfg(feature = "lcd-test")]
     nv3007::lcd_test_loop();
 
+    // Bench diagnostic (`stage-marker`): prove the FSBL executes at all. It
+    // halts silently on rejection and has no logging, so this is the only
+    // evidence available for the silent-rejection bug.
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::MainEntered, 0);
+
     // Borrow both manifest pages directly from memory-mapped flash — NO RAM
     // copy. Copying both into stack-local `[u8; MANIFEST_SIZE]` (8 KB each)
     // buffers held 16 KB live across the multi-KB-stack SPHINCS+C10 verify and
@@ -112,15 +121,34 @@ fn main() -> ! {
     // The pages are stable, readable flash throughout boot (verify_images
     // already streams the image regions straight from flash), so borrowing
     // them costs no stack. See `manifest::at`.
+    // Make the bank-2 NS alias readable by the core BEFORE any admission step
+    // touches it. Without this, `verify_images` hashes ZEROS for the NS image
+    // (secure access to an NS-watermarked page reads as zero with the SAU
+    // disabled), every candidate is rejected, and the FSBL halts silently.
+    // Measured root cause of the 2026-09-16 boot-proof failure; see sau.rs.
+    sau::init();
+
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::SauConfigured, 0);
+
     let m_a = manifest::at(Slot::A);
     let m_b = manifest::at(Slot::B);
 
     let floor = otp::rollback_floor();
 
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::FloorRead, floor);
+
     // Check each manifest through the full verify chain. A candidate
     // is `Some(&ManifestRef)` if it passes every step.
     let valid_a = filter_valid(&m_a, floor);
     let valid_b = filter_valid(&m_b, floor);
+
+    #[cfg(feature = "stage-marker")]
+    marker::record(
+        marker::Stage::SlotAAdmitted,
+        valid_a.map_or(0, ManifestRef::fw_version),
+    );
 
     // Check image hashes. A manifest can pass signature verification
     // but still fail if the actual slot contents were torn. On success
@@ -130,9 +158,18 @@ fn main() -> ! {
     let img_ok_a = valid_a.and_then(|m| verify::verify_images(Slot::A, m).map(|d| (m, d)));
     let img_ok_b = valid_b.and_then(|m| verify::verify_images(Slot::B, m).map(|d| (m, d)));
 
+    #[cfg(feature = "stage-marker")]
+    marker::record(
+        marker::Stage::SlotAImagesOk,
+        u32::from(img_ok_a.is_some()),
+    );
+
     let Some((slot, secure_digest)) = pick_slot(img_ok_a, img_ok_b) else {
         halt();
     };
+
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::SlotPicked, slot as u32);
 
     // tz-1 (#366; KEEP decided 2026-07-23; Draft 1.2 §3 row 2): read the option
     // bytes back before the slot branch and halt on a PERSISTENT mismatch —
@@ -157,6 +194,9 @@ fn main() -> ! {
     // SAFETY: we verified the slot's manifest signature and image
     // hash. Branching is the last thing FSBL does; control passes to
     // the slot's reset handler.
+    #[cfg(feature = "stage-marker")]
+    marker::record(marker::Stage::Branching, 0);
+
     unsafe { branch::into_slot(slot) }
 }
 
