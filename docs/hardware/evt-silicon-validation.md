@@ -468,15 +468,41 @@ are needed rather than one. pq1 also drives a real `LCM_RST` pulse on PB1
 (10/200/120 ms, mirroring `secure/src/hw/lcd_nv3007.rs`) where iota2 issues
 `SWRESET` against a RES line strapped to 3V3.
 
-**Receipt:** `spi_wait` timeout count = **0** across a full 142×428 RGB565
-repaint (121,552 bytes) plus the 16×4 glyph blit — i.e. SPI1 accepted every
-byte. See the §10 update below for the run that produced it.
+**Receipt — an A/B against the pre-port build, not a timeout count.** The same
+board, same 40 s settle, same freshly erased marker page, twice:
 
-**What this does NOT prove:** that anything was *visible*. pq1's `LCM_EN` (PB15)
-only enables an AW99703 LED driver whose brightness is programmed over I2C2 at
-`0x36`, and there is no driver for it in the tree — the FSBL has no I2C stage by
-design. **A dark pq1 panel is therefore not evidence of a display fault.** The
-AW99703 datasheet is not in the repo; that driver is the open follow-up.
+| build | `LcdInited` | `RenderFlushed` | `Branching` |
+|---|---|---|---|
+| `board-pq1` (ported, PA4/5/7 + PB0/1/15) | reached | reached, 0 timeouts | **reached** |
+| `board-iota2` (pre-port, port E) | **not reached** | **not reached** | **not reached** |
+
+The two marker pages differ at exactly the bytes for stage 16 (`LcdInited`) and
+stage 5 (`Branching`) — erased in the control, written in the ported run. The
+images were confirmed distinct at the binary level too: disassembling the
+`movw`/`movt` pairs shows the control referencing **GPIOE** only and the ported
+build referencing **GPIOA + GPIOB**.
+
+So the wrong pin map **hangs inside `Lcd::init()`** on this silicon, and the
+port fixes a real, measured defect. Two wrong explanations were eliminated by
+this control, both recorded because they are easy to re-derive:
+
+* *"It was only an early marker read"* (plausible once the ~17 s boot at 4 MHz
+  was understood) — **no**: the control got the identical 40 s and still never
+  returned from the render.
+* *"`TXP`/`EOT` come from the shift logic and `TSIZE`, not pad routing, so the
+  pin map cannot be observable"* — **also no**. That reasoning is right about
+  `spi_wait` specifically, which is why the timeout count is NOT the receipt,
+  but something else in `Lcd::init()` blocks when CS/DC sit on an unclocked,
+  unbonded port. **The precise mechanism is not yet identified** — do not assert
+  one without splitting `init()` further.
+
+**What this does NOT prove:** that anything was *visible*. There is **no panel
+attached to this bench board at all**, so visual confirmation is not available
+here by any means. Separately, pq1's `LCM_EN` (PB15) only enables an AW99703 LED
+driver whose brightness is programmed over I2C2 at `0x36`, and there is no
+driver for it in the tree — the FSBL has no I2C stage by design. The AW99703
+datasheet is not in the repo; that driver is the open follow-up, and it is only
+testable on a board that has a panel.
 
 ---
 
